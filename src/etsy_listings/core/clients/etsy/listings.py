@@ -1,0 +1,417 @@
+"""The signed-in Etsy surface: the listing writes Phase 3's stages make and
+the shop-section write the listing editor offers. The stage calls are
+`publish`'s poll target, `etsy_listing`'s single PATCH, `etsy_media`'s
+upload/reorder/variation-image calls, and the video upload/attach/delete
+`etsy_videos` places a listing's videos with. Placement is described in
+docs/features/etsy-listing-20260910/spec.md, decision 9.
+
+Built against
+[docs/research/printify-etsy-integration.md](../../../../docs/research/printify-etsy-integration.md)'s
+Phase 3 recon rather than the API reference alone, because two of its
+findings make the obvious implementation wrong:
+
+- **`image_ids` has two encodings, and only one is safe.** Sent as one
+  comma-separated value it reorders and detaches correctly; sent as repeated
+  form keys it answers `200` and destroys every image but one. Both look
+  identical from the response, so :meth:`update_listing` always joins a list
+  under that key into one string rather than letting `httpx` serialise it.
+- **The shop-scoped single-listing path 404s on `GET`.** `getListing` reads
+  the unscoped path (`/v3/application/listings/{id}`); the shop-scoped one is
+  for `PATCH`/`DELETE` only.
+
+Separate from :class:`~etsy_listings.core.clients.etsy.shops.EtsyShopClient` for
+the reason ADR-0024 gives: authority is a property of the type, so a caller
+resolving `setup`'s four unscoped reads cannot reach `updateListing` however
+much transport plumbing the two share. `shop_sections` and `return_policies`
+exist on **both** protocols despite being unscoped calls, because the two
+serve different lifecycles rather than different authority: `setup` needs
+them before a token exists at all (`EtsyShopClient`), while
+`EtsyShopCatalog` needs them from the one client `RunContext` actually
+carries once a run is signed in -- adding a second client field to
+`RunContext` just to reach two calls its `EtsyListingClient` could make
+over the same transport would be the wrong seam to add.
+"""
+
+from __future__ import annotations
+
+from collections.abc import Sequence
+from pathlib import PurePosixPath
+from typing import Any, Protocol
+
+from etsy_listings.core.clients.etsy.models import (
+    Inventory,
+    Listing,
+    ListingImage,
+    ListingVideo,
+    ProductionPartner,
+    ReturnPolicy,
+    ShippingProfile,
+    ShopSection,
+    VariationImageLink,
+)
+from etsy_listings.core.clients.etsy.transport import HTTP_NOT_FOUND, EtsyApiError, Transport
+
+HTTP_BAD_REQUEST = 400
+HTTP_CONFLICT = 409
+
+MAX_VIDEOS_TEXT = "The listing already has the maximum number of videos allowed."
+"""Etsy's words for **two** different refusals (decision 9, measured): a
+`409` when two videos are already active, and a `400` when the listing has
+spent its ten associations for the day -- on a listing holding none."""
+
+VIDEO_SLOTS = 2
+DAILY_VIDEO_ASSOCIATIONS = 10
+
+
+class VideoSlotsFullError(EtsyApiError):
+    """A `409`: the listing already holds :data:`VIDEO_SLOTS` active videos."""
+
+    def __init__(self, status_code: int = HTTP_CONFLICT, *, error: str = MAX_VIDEOS_TEXT) -> None:
+        super().__init__(
+            status_code,
+            error=error,
+            message=(
+                f"Etsy refused the video ({status_code}): the listing already has "
+                f"{VIDEO_SLOTS} active videos, the most it can hold."
+            ),
+        )
+
+
+class VideoBudgetExhaustedError(EtsyApiError):
+    """A `400` carrying "maximum number of videos": the listing's daily
+    budget of associations is spent (ADR-0045, decision 9).
+
+    Re-worded because Etsy's own text says the listing is full, and the
+    listing may hold no videos at all. The tool does not predict the budget;
+    it explains the refusal when it comes. A
+    :class:`~etsy_listings.core.errors.UserFacingError` through
+    :class:`EtsyApiError`, so a batch reports this listing and carries on
+    .
+    """
+
+    def __init__(
+        self, status_code: int = HTTP_BAD_REQUEST, *, error: str = MAX_VIDEOS_TEXT
+    ) -> None:
+        super().__init__(
+            status_code,
+            error=error,
+            message=(
+                f"Etsy refused the video ({status_code}): Etsy allows "
+                f"{DAILY_VIDEO_ASSOCIATIONS} video uploads or re-attaches per listing in "
+                f"24 hours, and this listing has used them. Etsy words this as "
+                f'"{error}" whatever the listing holds. Re-run tomorrow.'
+            ),
+        )
+
+
+def _video_refusal(exc: EtsyApiError) -> EtsyApiError:
+    """Name a refused upload or attach for what it is; anything else is
+    Etsy's own words, unchanged."""
+    if exc.status_code == HTTP_CONFLICT:
+        return VideoSlotsFullError(exc.status_code, error=exc.error)
+    if exc.status_code == HTTP_BAD_REQUEST and "maximum number of videos" in exc.error:
+        return VideoBudgetExhaustedError(exc.status_code, error=exc.error)
+    return exc
+
+
+VIDEO_CONTENT_TYPES = {".mp4": "video/mp4", ".mov": "video/quicktime"}
+"""ADR-0045's two video types -- of Etsy's seven, the two a browser previews --
+and the content type each is sent as."""
+
+MULTI_VIDEO = {"is_multi_video": "true"}
+"""On every upload and every attach. Without it Etsy's legacy mode makes
+every other video on the listing `inactive` (decision 9, measured)."""
+
+BATCH_LIMIT = 100
+"""Etsy's documented ceiling on `getListingsByListingIds`. Chunking is this
+module's job rather than the caller's -- a workspace with 150 listings is not
+a different question from one with five."""
+
+
+class EtsyListingClient(Protocol):
+    """Everything Phase 3's stages need from a signed-in Etsy connection:
+    `listings_w` for listing writes, `shops_w` for the editor's section
+    creation, plus the `shops_r` reads that resolve shop resources by name
+    (decision 2)."""
+
+    def get_listing(
+        self, listing_id: int, *, include_images: bool = False, include_videos: bool = False
+    ) -> Listing | None: ...
+
+    def listing_states(self, listing_ids: Sequence[int]) -> dict[int, str]: ...
+
+    def update_listing(self, shop_id: int, listing_id: int, patch: dict[str, Any]) -> Listing: ...
+
+    def upload_listing_image(
+        self,
+        shop_id: int,
+        listing_id: int,
+        *,
+        file_name: str,
+        contents: bytes,
+        rank: int,
+        alt_text: str = "",
+        overwrite: bool = False,
+        listing_image_id: int | None = None,
+    ) -> ListingImage: ...
+
+    def upload_listing_video(
+        self, shop_id: int, listing_id: int, *, file_name: str, contents: bytes
+    ) -> ListingVideo: ...
+
+    def attach_listing_video(
+        self, shop_id: int, listing_id: int, video_id: int
+    ) -> ListingVideo: ...
+
+    def delete_listing_video(self, shop_id: int, listing_id: int, video_id: int) -> None: ...
+
+    def get_listing_inventory(self, listing_id: int) -> Inventory: ...
+
+    def update_variation_images(
+        self, shop_id: int, listing_id: int, links: list[VariationImageLink]
+    ) -> None: ...
+
+    def get_listing_variation_images(
+        self, shop_id: int, listing_id: int
+    ) -> list[VariationImageLink]: ...
+
+    def shipping_profiles(self, shop_id: int) -> list[ShippingProfile]: ...
+
+    def production_partners(self, shop_id: int) -> list[ProductionPartner]: ...
+
+    def shop_sections(self, shop_id: int) -> list[ShopSection]: ...
+
+    def return_policies(self, shop_id: int) -> list[ReturnPolicy]: ...
+
+    def create_shop_section(self, shop_id: int, title: str) -> ShopSection: ...
+
+
+class HttpEtsyListingClient:
+    def __init__(self, transport: Transport) -> None:
+        self._transport = transport
+
+    # ------------------------------------------------------------- reads
+
+    def get_listing(
+        self, listing_id: int, *, include_images: bool = False, include_videos: bool = False
+    ) -> Listing | None:
+        # One comma-joined `includes`, never the key twice: which of two
+        # repeated keys Etsy honours is not something to leave to chance.
+        includes = [
+            name
+            for name, wanted in (("Images", include_images), ("Videos", include_videos))
+            if wanted
+        ]
+        params = {"includes": ",".join(includes)} if includes else None
+        try:
+            response = self._transport.get(f"/v3/application/listings/{listing_id}", params=params)
+        except EtsyApiError as exc:
+            if exc.status_code == HTTP_NOT_FOUND:
+                return None
+            raise
+        return Listing.model_validate(response.json())
+
+    def listing_states(self, listing_ids: Sequence[int]) -> dict[int, str]:
+        """Each of ``listing_ids``' Etsy-side ``state``, keyed by listing id.
+
+        One request per :data:`BATCH_LIMIT` ids rather than one per listing:
+        the caller is the listings UI asking about every listing in the
+        workspace at once, and a `getListing` apiece would make opening the
+        page cost a round trip per row.
+
+        Unscoped, like `getListing` beside it -- `getListingsByListingIds`
+        needs only the app key pair. An id Etsy does not answer for is
+        **absent** from the result rather than present with an invented state:
+        "we could not find out" and "it is still a draft" are different facts,
+        and only the caller knows which way to resolve the difference.
+        """
+        states: dict[int, str] = {}
+        ids = list(listing_ids)
+        for start in range(0, len(ids), BATCH_LIMIT):
+            chunk = ids[start : start + BATCH_LIMIT]
+            response = self._transport.get(
+                "/v3/application/listings/batch",
+                params={"listing_ids": ",".join(str(i) for i in chunk)},
+            )
+            for row in _results(response.json()):
+                listing = Listing.model_validate(row)
+                if listing.state is not None:
+                    states[listing.listing_id] = listing.state
+        return states
+
+    def get_listing_inventory(self, listing_id: int) -> Inventory:
+        response = self._transport.get(f"/v3/application/listings/{listing_id}/inventory")
+        return Inventory.model_validate(response.json())
+
+    def get_listing_variation_images(
+        self, shop_id: int, listing_id: int
+    ) -> list[VariationImageLink]:
+        """Shop-scoped, like the write beside it -- and unlike every other
+        *read* in this client, which is why it was got wrong once and worth
+        stating: `getListingVariationImages` takes `shop_id` in the path.
+
+        The unscoped `/v3/application/listings/{id}/variation-images` 404s for
+        every listing, linked or not, which is indistinguishable from "no
+        links yet" and was once read as exactly that. On the correct path a
+        listing with no links answers `200` with `count: 0` like every other
+        list read here (measured, both shapes), so a `404` means the listing
+        is gone and is raised rather than flattened into an empty list.
+        """
+        response = self._transport.get(
+            f"/v3/application/shops/{shop_id}/listings/{listing_id}/variation-images"
+        )
+        return [VariationImageLink.model_validate(row) for row in _results(response.json())]
+
+    def shipping_profiles(self, shop_id: int) -> list[ShippingProfile]:
+        response = self._transport.get(f"/v3/application/shops/{shop_id}/shipping-profiles")
+        return [ShippingProfile.model_validate(row) for row in _results(response.json())]
+
+    def production_partners(self, shop_id: int) -> list[ProductionPartner]:
+        response = self._transport.get(f"/v3/application/shops/{shop_id}/production-partners")
+        return [ProductionPartner.model_validate(row) for row in _results(response.json())]
+
+    def shop_sections(self, shop_id: int) -> list[ShopSection]:
+        response = self._transport.get(f"/v3/application/shops/{shop_id}/sections")
+        return [ShopSection.model_validate(row) for row in _results(response.json())]
+
+    def return_policies(self, shop_id: int) -> list[ReturnPolicy]:
+        response = self._transport.get(f"/v3/application/shops/{shop_id}/policies/return")
+        return [ReturnPolicy.model_validate(row) for row in _results(response.json())]
+
+    # ------------------------------------------------------------- writes
+
+    def create_shop_section(self, shop_id: int, title: str) -> ShopSection:
+        response = self._transport.post(
+            f"/v3/application/shops/{shop_id}/sections", data={"title": title}
+        )
+        return ShopSection.model_validate(response.json())
+
+    def update_listing(self, shop_id: int, listing_id: int, patch: dict[str, Any]) -> Listing:
+        body = dict(patch)
+        if isinstance(body.get("image_ids"), (list, tuple)):
+            # The sharp edge: comma-separated reorders and detaches; repeated
+            # keys answer 200 and destroy every image but one. Only a single
+            # string value in a JSON body can never be re-encoded that way.
+            body["image_ids"] = ",".join(str(image_id) for image_id in body["image_ids"])
+        response = self._transport.patch(
+            f"/v3/application/shops/{shop_id}/listings/{listing_id}", json=body
+        )
+        return Listing.model_validate(response.json())
+
+    def upload_listing_image(
+        self,
+        shop_id: int,
+        listing_id: int,
+        *,
+        file_name: str,
+        contents: bytes,
+        rank: int,
+        alt_text: str = "",
+        overwrite: bool = False,
+        listing_image_id: int | None = None,
+    ) -> ListingImage:
+        """Upload at `rank`, with `alt_text` -- there is no image-update
+        endpoint, so alt text is only ever set here.
+
+        `overwrite` replaces the image already at that rank in place, keeping
+        its count and neighbouring ranks untouched and minting a new id
+        rather than colliding with what was there (measured). It needs
+        `listing_image_id` naming what to replace.
+        """
+        data: dict[str, str] = {"rank": str(rank), "alt_text": alt_text}
+        if overwrite:
+            data["overwrite"] = "true"
+        if listing_image_id is not None:
+            data["listing_image_id"] = str(listing_image_id)
+        response = self._transport.post(
+            f"/v3/application/shops/{shop_id}/listings/{listing_id}/images",
+            data=data,
+            files={"image": (file_name, contents)},
+        )
+        return ListingImage.model_validate(response.json())
+
+    def upload_listing_video(
+        self, shop_id: int, listing_id: int, *, file_name: str, contents: bytes
+    ) -> ListingVideo:
+        """Upload a video file, `active` on return -- there is no processing
+        state to poll (decision 9). No rank and no position: where it lands
+        follows from attach order, which is the caller's to arrange.
+
+        A POST, so the transport retries it on `429` only: a `5xx` may have
+        landed, and a second send would spend a second association of the
+        listing's daily ten.
+        """
+        content_type = video_content_type(file_name)
+        return self._post_video(
+            shop_id,
+            listing_id,
+            data={"name": file_name},
+            files={"video": (file_name, contents, content_type)},
+        )
+
+    def attach_listing_video(self, shop_id: int, listing_id: int, video_id: int) -> ListingVideo:
+        """Attach a video the shop already has, by id -- how a video moves
+        without re-sending a byte, since re-attaching anchors it afresh
+        (decision 9). Counts against the daily ten exactly as an upload does.
+        """
+        return self._post_video(shop_id, listing_id, data={"video_id": str(video_id)})
+
+    def _post_video(self, shop_id: int, listing_id: int, **kwargs: Any) -> ListingVideo:
+        try:
+            response = self._transport.post(
+                f"/v3/application/shops/{shop_id}/listings/{listing_id}/videos",
+                params=MULTI_VIDEO,
+                **kwargs,
+            )
+        except EtsyApiError as exc:
+            refusal = _video_refusal(exc)
+            if refusal is exc:
+                raise
+            raise refusal from exc
+        return ListingVideo.model_validate(response.json())
+
+    def delete_listing_video(self, shop_id: int, listing_id: int, video_id: int) -> None:
+        """Take a video off the listing (`204`). Etsy keeps the file, which
+        is what makes :meth:`attach_listing_video` possible afterwards."""
+        self._transport.delete(
+            f"/v3/application/shops/{shop_id}/listings/{listing_id}/videos/{video_id}"
+        )
+
+    def update_variation_images(
+        self, shop_id: int, listing_id: int, links: list[VariationImageLink]
+    ) -> None:
+        """Overwrite every swatch link on the listing. An empty list
+        is a write that clears them, not a no-op -- measured."""
+        body = {
+            "variation_images": [
+                {
+                    "property_id": link.property_id,
+                    "value_id": link.value_id,
+                    "image_id": link.image_id,
+                }
+                for link in links
+            ]
+        }
+        self._transport.post(
+            f"/v3/application/shops/{shop_id}/listings/{listing_id}/variation-images", json=body
+        )
+
+
+def video_content_type(file_name: str) -> str:
+    """The content type a video upload is sent as, or a :class:`ValueError`
+    for a file ADR-0045 does not allow -- raised before a byte is sent, since
+    anything else reaching the client is a caller's bug that would spend one
+    of the listing's daily associations. The fake shares it, so a stage
+    tested against the fake meets the same refusal."""
+    suffix = PurePosixPath(file_name).suffix.lower()
+    content_type = VIDEO_CONTENT_TYPES.get(suffix)
+    if content_type is None:
+        raise ValueError(f"{file_name}: a listing video is .mp4 or .mov, not {suffix!r}")
+    return content_type
+
+
+def _results(body: Any) -> list[Any]:
+    """Etsy's list envelope is always ``{count, results}``."""
+    if isinstance(body, dict) and isinstance(body.get("results"), list):
+        return list(body["results"])
+    return []

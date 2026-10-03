@@ -24,10 +24,7 @@ dependencies = [
     "python-multipart>=0.0.9,<1",
     "uvicorn[standard]>=0.38,<1",
     "questionary>=2.0,<3",
-    # Native window around the calibrator SPA. Imported only when
-    # `etsy-listings ui` opens a window, not on `--browser` or at package import.
-    "pywebview>=6,<7",
-    # PRD 72's video gate reads a clip's duration, size and streams through
+    # ADR-0045's video gate reads a clip's duration, size and streams through
     # PyAV. Unlike OpenCV/Pillow it never produces bytes that get hashed, so a
     # floor pin is enough; its wheels bundle FFmpeg on every CI platform.
     "av>=15",
@@ -39,13 +36,15 @@ etsy-listings = "etsy_listings.cli.app:main"
 [tool.hatch.build.targets.wheel]
 packages = ["src/etsy_listings"]
 
-[tool.hatch.build]
-# ui/frontend/dist/ is gitignored (built, not source) but must ship in the
-# wheel -- hatchling excludes gitignored paths from artifacts by default.
-artifacts = ["src/etsy_listings/ui/frontend/dist/**"]
-
-[tool.hatch.build.hooks.custom]
+# Wheels only: the hook rebuilds the npm project at frontend-dir and maps its
+# gitignored dist/ to assets-dir inside the package, where the server finds it
+# once installed. The sdist carries the npm source, lockfile and this hook
+# instead (node_modules/ and dist/ stay out as gitignored), so building a
+# wheel from it rebuilds the same assets.
+[tool.hatch.build.targets.wheel.hooks.custom]
 path = "hatch_build.py"
+frontend-dir = "src/ui"
+assets-dir = "etsy_listings/server/static"
 
 [dependency-groups]
 dev = [
@@ -55,14 +54,15 @@ dev = [
     "ruff>=0.14,<1",
     "types-pyyaml",
     "playwright>=1.49,<2",
+    "import-linter>=2.15,<3",
 ]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 # The repo root, so `tests.support` (shared builders and prompt doubles) and
-# `tests.contract` (whose payload transcripts the e2e layer re-checks against
+# `tests.core.contract` (whose payload transcripts the e2e layer re-checks against
 # the live API) are importable from any layer. `tests/` is deliberately not a
-# package -- the layers stay flat directories -- so they resolve as namespace
+# package -- the owner/layer directories stay plain -- so they resolve as namespace
 # packages off the root, which is what this puts on `sys.path`.
 pythonpath = ["."]
 markers = [
@@ -93,8 +93,8 @@ exclude_also = [
 line-length = 100
 target-version = "py312"
 src = ["src", "tests"]
-# ruff formats Python inside Markdown fences. docs/prd.md and
-# docs/implementation-plan.md are authored documents whose snippets are
+# ruff formats Python inside Markdown fences. docs/history/prd.md and
+# docs/history/implementation-plan.md are authored documents whose snippets are
 # deliberately laid out for reading (aligned comments, condensed dataclasses);
 # reformatting them is noise in a diff that is supposed to record decisions.
 extend-exclude = ["docs/**"]
@@ -139,15 +139,91 @@ ignore_missing_imports = true
 module = "questionary.*"
 ignore_missing_imports = true
 
-[[tool.mypy.overrides]]
-module = "webview"
-ignore_missing_imports = true
-
-[[tool.mypy.overrides]]
-module = "webview.*"
-ignore_missing_imports = true
-
 [tool.pydantic-mypy]
 init_forbid_extra = true
 init_typed = true
 warn_required_dynamic_aliases = true
+
+# Dependency direction between core, server and CLI (ADR-0052; the
+# module-structure spec's Import Linter table). Forbidden contracts are checked
+# transitively, and an ignored import that no longer exists is reported, so a
+# temporary exclusion cannot outlive the code it excuses. Every temporary
+# exclusion names the PR of docs/features/module-structure-20260930/plan.md
+# that removes it; none may survive PR 11. `uv run lint-imports` runs in
+# scripts/check.sh and CI; tests/test_import_contracts.py proves these
+# contracts reject representative violations.
+#
+# Wizard sequencing, prompts and terminal output are all under etsy_listings.cli
+# (plan, PR 10), so forbidding cli covers them; their reusable operations are
+# in core and bound by core's contract.
+[tool.importlinter]
+root_packages = ["etsy_listings"]
+include_external_packages = true
+
+[[tool.importlinter.contracts]]
+name = "Core is transport-independent: no server, CLI (wizards, prompts, terminal) or framework imports"
+type = "forbidden"
+source_modules = ["etsy_listings.core"]
+forbidden_modules = [
+    "etsy_listings.server",
+    "etsy_listings.cli",
+    "fastapi",
+    "starlette",
+    "uvicorn",
+    "typer",
+    "questionary",
+]
+
+[[tool.importlinter.contracts]]
+name = "Server does not depend on the CLI, including its wizards, prompts and terminal adapters"
+type = "forbidden"
+source_modules = ["etsy_listings.server"]
+forbidden_modules = [
+    "etsy_listings.cli",
+    "typer",
+    "questionary",
+]
+
+[[tool.importlinter.contracts]]
+name = "Only the CLI ui launcher reaches the server, through its startup interface"
+type = "forbidden"
+source_modules = ["etsy_listings.cli"]
+forbidden_modules = ["etsy_listings.server", "fastapi", "starlette", "uvicorn"]
+ignore_imports = [
+    # Permanent and intended: the one CLI-to-server edge (ADR-0052; plan, PR 5).
+    # A single edge rather than an exemption for the cli package, and a
+    # forbidden contract rather than CLI/server independence, which would
+    # reject this intentional path. cli.app registering the command reaches it
+    # indirectly, which the ignore permits; any other route to server breaks.
+    "etsy_listings.cli.ui -> etsy_listings.server.hosting",
+]
+
+# Protected implementation (ADR-0052; module-structure spec, "Application
+# callers cannot bypass protected implementation modules"). core.application
+# is imported module by module, with no core-wide facade; each package
+# __init__.py lists its public modules and names the implementation-only ones
+# below. Only the coordinator a module serves may import it -- not server, not
+# the CLI, not another operation and not a package initializer. Tests are
+# outside this graph; tests/test_protected_test_imports.py reads these
+# contracts and lets only a module's own tests import it.
+
+[[tool.importlinter.contracts]]
+name = "Deployment runs are reached through Deployments, not its worker or review check"
+type = "protected"
+protected_modules = [
+    "etsy_listings.core.application.deploy.executor",
+    "etsy_listings.core.application.deploy.review",
+]
+allowed_importers = ["etsy_listings.core.application.deploy.deployments"]
+as_packages = false
+
+[[tool.importlinter.contracts]]
+name = "AI runs are reached through AiCoordinator, not the thread that runs them"
+type = "protected"
+protected_modules = ["etsy_listings.core.application.ai.runner"]
+allowed_importers = [
+    "etsy_listings.core.application.ai.coordinator",
+    # The queue drafts batch rows through the same runs (ADR-0048).
+    "etsy_listings.core.application.ai.batch_queue",
+]
+as_packages = false

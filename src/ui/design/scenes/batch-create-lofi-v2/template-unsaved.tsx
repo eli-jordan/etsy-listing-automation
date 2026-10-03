@@ -1,0 +1,12 @@
+import { TemplateEditor } from "./_TemplateEditor";
+
+export const meta = {
+  title: "Listing template — change not saved · v2",
+  viewport: "laptop",
+  description:
+    "Wireframe state: an edit that makes the template incomplete is held and explained; the last complete version stays saved.",
+};
+
+export default function Frame() {
+  return <TemplateEditor mode="unsaved" />;
+}

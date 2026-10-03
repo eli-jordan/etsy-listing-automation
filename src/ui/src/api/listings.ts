@@ -1,0 +1,270 @@
+import { api } from "./client";
+import type {
+  CommonCopySummary,
+  MediaFileSummary,
+  CreateListingRequest,
+  EtsySectionSummary,
+  EtsySectionsResponse,
+  GarmentProfileSummary,
+  ListingDesignSummary,
+  ListingDetail,
+  ListingSummary,
+  PricingPlanSummary,
+  WorkspaceSummary,
+} from "../types";
+
+/**
+ * The listings UI's whole HTTP surface (phase 5). Mirrors `api/calibrator.ts`'s
+ * shape exactly: typed wrapper functions over `openapi-fetch`, the only thing
+ * pages/components import.
+ */
+
+export class ListingsApiError extends Error {}
+
+export async function listListings(): Promise<ListingSummary[]> {
+  const { data, error } = await api.GET("/api/listings");
+  if (error || !data) throw new ListingsApiError("could not load listings");
+  return data;
+}
+
+export async function getListing(name: string): Promise<ListingDetail> {
+  const { data, error } = await api.GET("/api/listings/{name}", {
+    params: { path: { name } },
+  });
+  if (error || !data) throw new ListingsApiError(`could not load listing ${name}`);
+  return data;
+}
+
+/** The same, but `null` on a 404 rather than a thrown error -- what the
+ * deploy view uses to tell "this listing no longer exists" (a retract just
+ * applied, decision 11) apart from a genuine failure it should surface. */
+export async function tryGetListing(name: string): Promise<ListingDetail | null> {
+  const { data, error, response } = await api.GET("/api/listings/{name}", {
+    params: { path: { name } },
+  });
+  if (response.status === 404) return null;
+  if (error || !data) throw new ListingsApiError(`could not load listing ${name}`);
+  return data;
+}
+
+/** A partial `listing.yaml` document -- merged server-side, one level deep on
+ * `etsy:` (see `core/application/listing_edits.py`'s `_merge`). Always resolves: an invalid
+ * candidate comes back as a 200 with `field_errors` populated and nothing
+ * written, so the caller never has to branch on the HTTP status to render
+ * inline validation. */
+export async function patchListing(
+  name: string,
+  patch: Record<string, unknown>,
+): Promise<ListingDetail> {
+  const { data, error } = await api.PATCH("/api/listings/{name}", {
+    params: { path: { name } },
+    body: patch,
+  });
+  if (error || !data) throw new ListingsApiError(`could not save listing ${name}`);
+  return data;
+}
+
+/** The empty document `+ New listing` opens the editor on: nothing chosen, an
+ * empty `name`, and a block issue for each thing still to pick. Built
+ * server-side so the starting shape of a listing is not also invented here.
+ * See `server/api/listings.py`'s `listing_draft`. */
+export async function getListingDraft(): Promise<ListingDetail> {
+  const { data, error } = await api.GET("/api/listing-draft");
+  if (error || !data) throw new ListingsApiError("could not start a new listing");
+  return data;
+}
+
+/** The same, for a candidate the editor has since edited -- recomputed issues
+ * and field errors, still written nowhere. This is what keeps the issues banner
+ * true while the listing has no name, which is the only channel an unsaved
+ * listing has for being told what it is missing. */
+export async function describeListingDraft(
+  document: Record<string, unknown>,
+): Promise<ListingDetail> {
+  const { data, error } = await api.POST("/api/listing-draft", { body: { document } });
+  if (error || !data) throw new ListingsApiError("could not check the draft");
+  return data;
+}
+
+/** Naming a listing is what creates it. Resolves for a document the server
+ * would not write, exactly as `patchListing` does -- `field_errors` is set and
+ * `name` comes back empty, which is the "not created" signal. It *rejects*
+ * only for what a name can be wrong about: not a usable directory name (400),
+ * or already taken (409). */
+export async function createListing(body: CreateListingRequest): Promise<ListingDetail> {
+  const { data, error } = await api.POST("/api/listings", { body });
+  if (error || !data) throw new ListingsApiError("could not create listing");
+  return data;
+}
+
+/** Move a listing to a new name, directory and render cache together.
+ *
+ * Rejects where `patchListing` resolves, and the asymmetry is the point: a
+ * *document* the server will not write is answered with `field_errors` on a
+ * 200, because the editor shows those inline and keeps going. A *name* it will
+ * not take is a 400 or a 409, because there is nothing to show inline and the
+ * only useful answer is to say so beside the name field. */
+/** Wipe a never-pushed listing, or mark one with remotes ``lifecycle: deleted``.
+ * 204 means the files are gone; 200 is the still-listed pending-delete row. */
+export async function deleteListing(name: string): Promise<ListingSummary | null> {
+  const { data, error, response } = await api.DELETE("/api/listings/{name}", {
+    params: { path: { name } },
+  });
+  if (response?.status === 204) return null;
+  if (error || !data) throw new ListingsApiError(`could not delete listing ${name}`);
+  return data as ListingSummary;
+}
+
+export async function renameListing(name: string, newName: string): Promise<ListingDetail> {
+  const { data, error } = await api.POST("/api/listings/{name}/rename", {
+    params: { path: { name } },
+    body: { new_name: newName },
+  });
+  if (error || !data) throw new ListingsApiError(`could not rename ${name} to ${newName}`);
+  return data;
+}
+
+export async function listGarmentProfiles(): Promise<GarmentProfileSummary[]> {
+  const { data, error } = await api.GET("/api/garment-profiles");
+  if (error || !data) throw new ListingsApiError("could not load garment profiles");
+  return data;
+}
+
+/** Every plan, each flagged for whether it was built for *this* garment.
+ * `garmentProfile` is empty for a listing that has not chosen one yet: there is
+ * then nothing to be compatible with, and the editor drops the "different
+ * garment" note rather than claiming every plan differs from a garment nobody
+ * picked. */
+export async function listPricingPlans(garmentProfile: string): Promise<PricingPlanSummary[]> {
+  const { data, error } = await api.GET("/api/pricing-plans", {
+    params: { query: { garment_profile: garmentProfile } },
+  });
+  if (error || !data) throw new ListingsApiError("could not load pricing plans");
+  return data;
+}
+
+/** The file locator's *Shared* group: every image and video under
+ * `common-media/`, each with its `kind` and the ref `media:` stores. */
+export async function listCommonMedia(): Promise<MediaFileSummary[]> {
+  const { data, error } = await api.GET("/api/common-media");
+  if (error || !data) throw new ListingsApiError("could not load shared files");
+  return data;
+}
+
+/** The *This listing* group: the listing's own files, each ref spelled
+ * `./…` (ADR-0046). */
+export async function listListingMediaFiles(listing: string): Promise<MediaFileSummary[]> {
+  const { data, error } = await api.GET("/api/listings/{listing}/media-files", {
+    params: { path: { listing } },
+  });
+  if (error || !data) throw new ListingsApiError("could not load this listing's files");
+  return data;
+}
+
+/** A file's path under its directory, escaped a segment at a time so the
+ * slashes of a subdirectory stay slashes. */
+function mediaPath(name: string): string {
+  return name.split("/").map(encodeURIComponent).join("/");
+}
+
+/** One of the listing's own files, downscaled for a list. Images only: a
+ * video answers `415`, since a `<video>` element draws its own poster. */
+export function listingMediaThumbnailUrl(listing: string, name: string): string {
+  return `/api/listings/${encodeURIComponent(listing)}/media-files/${mediaPath(name)}/thumbnail`;
+}
+
+/** The same file as-is -- a picture at its own size, or a video `<video>`
+ * can seek in (the endpoint answers `Range`). */
+export function listingMediaFileUrl(listing: string, name: string): string {
+  return `/api/listings/${encodeURIComponent(listing)}/media-files/${mediaPath(name)}/file`;
+}
+
+/** One of the listing's scenes, each layer printing the file its colour
+ * resolves to in the *saved* listing (A35). `version` is ignored by the
+ * server: it is a signature of the saved design map, so a landed save is a new
+ * URL and the browser fetches the picture again. */
+export function listingScenePreviewUrl(
+  listing: string,
+  template: string,
+  colour: string | null,
+  version: string,
+): string {
+  const params = new URLSearchParams({ template });
+  if (colour) params.set("colour", colour);
+  params.set("v", version);
+  return `/api/listings/${encodeURIComponent(listing)}/scene-preview?${params.toString()}`;
+}
+
+/** The shared asset's own picture, downscaled for a list. A URL, like the two
+ * thumbnails above. `name` is its path under `common-media/`, extension and
+ * all -- `MediaFileSummary.name`. */
+export function commonMediaThumbnailUrl(name: string): string {
+  return `/api/common-media/${mediaPath(name)}/thumbnail`;
+}
+
+/** The same asset at its own size -- what the preview pane shows and what the
+ * lightbox opens. The thumbnail is 160px on its longest edge, which is a
+ * picture to *pick* rather than one to judge. */
+export function commonMediaFileUrl(name: string): string {
+  return `/api/common-media/${mediaPath(name)}/file`;
+}
+
+/** The Description tab's common-copy selector (AI SEO implementation plan,
+ * PR6): every reusable description body, each with a ref ready to write
+ * straight into `description.ref`. Empty (never an error) for a workspace
+ * with no `common-copy/` yet, the same convention `listEtsySections` follows
+ * for an unconfigured shop -- an editor with nothing to pick from is an
+ * ordinary state, not a failure. */
+export async function listCommonCopy(): Promise<CommonCopySummary[]> {
+  try {
+    const { data, error } = await api.GET("/api/common-copy");
+    if (error || !data) return [];
+    return data;
+  } catch {
+    return [];
+  }
+}
+
+export async function getWorkspace(): Promise<WorkspaceSummary> {
+  const { data, error } = await api.GET("/api/workspace");
+  if (error || !data) throw new ListingsApiError("could not load the workspace");
+  return data;
+}
+
+/** A URL, not a fetch -- the browser loads it as an `<img src>`, the same
+ * shape `templateThumbnailUrl` already uses for the calibrator's rail. */
+export function listingDesignThumbnailUrl(name: string): string {
+  return `/api/listing-designs/${encodeURIComponent(name)}/thumbnail`;
+}
+
+export async function listListingDesigns(): Promise<ListingDesignSummary[]> {
+  const { data, error } = await api.GET("/api/listing-designs");
+  if (error || !data) throw new ListingsApiError("could not load listing designs");
+  return data;
+}
+
+/** The live shop's sections, for the Details tab's Section dropdown.
+ * `available: false` (never a rejected promise) means the workspace has no
+ * usable Etsy connection and the caller should retain the text fallback;
+ * an available empty list can create the shop's first section. */
+export async function listEtsySections(): Promise<EtsySectionsResponse> {
+  try {
+    const { data, error } = await api.GET("/api/etsy/sections");
+    if (error || !data) return { available: false, sections: [] };
+    return data;
+  } catch {
+    return { available: false, sections: [] };
+  }
+}
+
+/** Create a live Etsy shop section. Unlike the list above, this needs the
+ * workspace's signed-in Etsy connection because Etsy requires `shops_w`.
+ * The caller adds the returned row to its picker and saves its title into the
+ * listing through normal autosave. */
+export async function createEtsySection(title: string): Promise<EtsySectionSummary> {
+  const { data, error } = await api.POST("/api/etsy/sections", {
+    body: { title },
+  });
+  if (error || !data) throw new ListingsApiError("could not create Etsy section");
+  return data;
+}

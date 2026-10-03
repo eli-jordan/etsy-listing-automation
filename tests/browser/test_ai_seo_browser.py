@@ -2,8 +2,8 @@
 PR8; driven through AI runs since the market-SEO plan's PR 6): the one thing
 no other layer covers -- that the React drawers, the readiness endpoint, an
 AI run (brief, market research, proposal) and its event stream,
-`ai/orchestrator.py`'s fallback and repair logic, browser `localStorage`
-persistence, and (for one test) the real Printify desired-document builder
+`ai/orchestrator.py`'s fallback and repair logic, the server-side proposal
+cache, and (for one test) the real Printify desired-document builder
 all agree, end to end, in a real browser against a real running app.
 
 Every test drives ``create_app(seo_provider_factory=...,
@@ -36,16 +36,16 @@ import uvicorn
 import yaml
 from playwright.sync_api import Page, expect
 
-from etsy_listings.ai.errors import (
+from etsy_listings.core.ai.errors import (
     ProviderCancelledError,
     ProviderGenerationError,
     ProviderUnavailableError,
 )
-from etsy_listings.ai.models import Deadline, ProviderReadiness, RawProviderResult
-from etsy_listings.ai.providers import AiProvider, FakeAiProvider
-from etsy_listings.clients.etsy.fakes import FakeEtsyMarketClient
-from etsy_listings.clients.printify.fakes import FakeCatalogClient, FakePrintifyClient
-from etsy_listings.clients.printify.models import (
+from etsy_listings.core.ai.models import Deadline, ProviderReadiness, RawProviderResult
+from etsy_listings.core.ai.providers import AiProvider, FakeAiProvider
+from etsy_listings.core.clients.etsy.fakes import FakeEtsyMarketClient
+from etsy_listings.core.clients.printify.fakes import FakeCatalogClient, FakePrintifyClient
+from etsy_listings.core.clients.printify.models import (
     Blueprint,
     PrintAreaPlaceholder,
     PrintProvider,
@@ -55,17 +55,17 @@ from etsy_listings.clients.printify.models import (
     VariantOptions,
     VariantSet,
 )
-from etsy_listings.config.description import compose_description
-from etsy_listings.engine.context import EventSink, RunContext
-from etsy_listings.ui.api.app import FRONTEND_DIST, create_app
-from etsy_listings.workspace.layout import (
+from etsy_listings.core.config.description import compose_description
+from etsy_listings.core.engine.context import EventSink, RunContext
+from etsy_listings.core.workspace.layout import (
     BRIEF_PROMPT_FILE,
     COMMON_COPY_DIR,
     MARKET_QUERIES_PROMPT_FILE,
     PROMPTS_DIR,
     SEO_PROMPT_FILE,
 )
-from etsy_listings.workspace.workspace import Workspace
+from etsy_listings.core.workspace.workspace import Workspace
+from etsy_listings.server.api.app import FRONTEND_DIST, create_app
 
 from tests.support.ai_runs import DRAFTED_BRIEF, ChainProvider, seed_snapshot, seeded_market
 from tests.support.builders import FIXTURE_LISTING as LISTING
@@ -284,8 +284,7 @@ def _seo_server(
     otherwise) instead of Etsy."""
     if not FRONTEND_DIST.is_dir():
         prerequisite_missing(
-            "ui/frontend/dist is absent -- run `npm run build` in "
-            "src/etsy_listings/ui/frontend to exercise the browser tests"
+            "src/ui/dist is absent -- run `npm run build` in src/ui to exercise the browser tests"
         )
 
     workspace = Workspace.discover(root_override=workspace_root)
@@ -335,7 +334,7 @@ def _open_details_tab(page: Page) -> None:
     """`DetailsTab` -- and with it `useAiSeoMode` -- only mounts once the
     seller has actually switched to the **Listing Details** tab; the editor
     opens on a different tab by default (`test_listings_browser.py`'s own
-    `.tabs .seg-opt` pattern)."""
+    `.tabs.seg-opt` pattern)."""
     page.locator(".tabs .seg-opt", has_text="Listing Details").click()
     page.locator("#details-title").wait_for(state="visible")
 
@@ -352,9 +351,9 @@ def _wait_for_apply_enabled(page: Page) -> None:
 
 # ===========================================================================
 # 1. Independent title / tags / lead acceptance, and item 3's no-mutation
-#    guarantee -- proven through the real browser+backend stack, which is a
-#    stronger guarantee than the unit/API layers PR3/PR5 already covered
-#    (implementation plan, PR8 item 3's own docstring reasoning).
+# guarantee -- proven through the real browser+backend stack, which is a
+# stronger guarantee than the unit/API layers PR3/PR5 already covered
+# (implementation plan, PR8 item 3's own docstring reasoning).
 # ===========================================================================
 
 
@@ -484,22 +483,22 @@ def test_full_workflow_independent_title_tags_and_lead_acceptance(
         assert sorted(written["etsy"]["tags"]) == sorted(f"tag{i}" for i in range(13))
         assert written["etsy"]["description"]["lead"] == ""  # rejected, untouched
 
-        # -- Every drawer resolved: the pending proposal is gone, and so
-        # is the AI Mode control's own busy state; the button is usable
-        # again --
-        remaining = page.evaluate(
-            "prefix => Object.keys(localStorage).filter(k => k.startsWith(prefix))",
-            "ai-seo-proposal:",
-        )
-        assert remaining == []
+        # -- Every drawer resolved: nothing is pending, but the server keeps
+        # the proposal with each section recorded as resolved, and the
+        # AI Mode control is usable again --
+        assert _cached_proposal(page)["resolution"] == {
+            "title": "accepted",
+            "tags": "accepted",
+            "lead": "dismissed",
+        }
         ai_mode.wait_for(state="visible")
         assert ai_mode.is_enabled()
 
 
 # ===========================================================================
 # 2. AI Mode stays visible but disabled until its prerequisites are ready.
-#    The brief test starts empty and fills it through the real editor; the
-#    other two exercise provider and prompt readiness.
+# The brief test starts empty and fills it through the real editor; the
+# other two exercise provider and prompt readiness.
 # ===========================================================================
 
 
@@ -656,13 +655,14 @@ def test_ai_mode_is_disabled_without_prompts_seo_md(
 
 
 # ===========================================================================
-# 3. Stale proposal: a submitted-input change keeps the proposal visible but
-#    unselectable, and regenerating preserves whatever was already accepted
-#    (implementation plan, "Proposal and stale-state rules"; PR7 item 4).
+# 3. Stale proposal: a submitted-input change keeps the proposal visible and
+# its choices usable, with the drawer heading naming what changed, and
+# regenerating preserves whatever was already accepted (UI doc §8; ADR-0047;
+# features/ai-seo-20260922/interactions.md §7).
 # ===========================================================================
 
 
-def test_a_changed_editor_input_stales_unresolved_choices_until_regenerated(
+def test_a_changed_input_marks_the_proposal_out_of_date_and_it_stays_usable(
     browser_type: Any, workspace_root: Path, prerequisite_missing: Any
 ) -> None:
     provider = _ready_provider(
@@ -705,29 +705,32 @@ def test_a_changed_editor_input_stales_unresolved_choices_until_regenerated(
         title_drawer.wait_for(state="hidden")
 
         # A submitted generation input changes: the Section field feeds
-        # `etsy_category` (`aiSeoStorage.ts.buildComparableSnapshot`).
+        # `etsy_category`. The server judges staleness against the saved
+        # listing, so the heading changes once autosave lands.
         section = page.get_by_label("Section")
         section.fill("Trail Gear")
         page.locator("#details-title").click()  # blur Section, flush autosave
 
-        tags_drawer.get_by_text("Suggestions are out of date").wait_for(state="visible")
-        lead_drawer.get_by_text("Suggestions are out of date").wait_for(state="visible")
+        heading = "Out of date: shop section changed since. Still usable"
+        tags_drawer.get_by_text(heading).wait_for(state="visible")
+        lead_drawer.get_by_text(heading).wait_for(state="visible")
 
-        # Stale suggestions cannot be selected: the choice buttons are
-        # disabled, and a tag toggle is a no-op even if forced.
-        assert lead_drawer.get_by_role("button", name="Lead option one.").is_disabled()
+        # Still usable, with no confirmation: the heading is the warning.
         first_more_tag = tags_drawer.get_by_role("button", name="+ tag14", exact=True)
-        assert first_more_tag.get_attribute("aria-disabled") == "true"
-        first_more_tag.click(force=True)
-        page.locator(".chips .chip", has_text="tag14").wait_for(state="hidden")
+        assert first_more_tag.get_attribute("aria-disabled") == "false"
+        first_more_tag.click()
+        page.locator(".chips .chip", has_text="tag14").wait_for(state="visible")
+        lead_drawer.get_by_role("button", name="Lead option one.").click()
+        lead_drawer.wait_for(state="hidden")
+        assert page.locator("#details-description-lead").input_value() == "Lead option one."
+        assert page.get_by_role("dialog").count() == 0
 
         # Regenerate: the AI Mode control itself doubles as Regenerate
         # once a proposal is stale, and is not disabled by staleness
         # (only by an in-flight request). It *is* disabled until the
-        # Section edit's autosave lands -- a proposal describes the saved
+        # choices' autosave lands -- a proposal describes the saved
         # listing, so `useAiSeoMode` waits for `saved` -- which is why this
-        # waits rather than reading the state once: the stale badges above
-        # are local and appear before that PATCH has answered.
+        # waits rather than reading the state once.
         expect(ai_mode).to_be_enabled()
         ai_mode.click()
 
@@ -738,8 +741,8 @@ def test_a_changed_editor_input_stales_unresolved_choices_until_regenerated(
         fresh_tags_drawer.get_by_role("button", name="+ newtag0", exact=True).wait_for(
             state="visible"
         )
-        # Fresh, not stale: the disabled treatment is gone.
-        assert fresh_lead_drawer.get_by_role("button", name="Fresh lead one.").is_enabled()
+        # Fresh, not stale: the ordinary heading is back.
+        expect(fresh_lead_drawer.get_by_text("Choose one suggestion")).to_be_visible()
 
         # A fresh proposal reopens every drawer, including title's --
         # but the value the seller already accepted is untouched until
@@ -747,13 +750,14 @@ def test_a_changed_editor_input_stales_unresolved_choices_until_regenerated(
         # 7: "Preserve all values already chosen into normal fields").
         fresh_title_drawer.get_by_role("button", name="Fresh First Title").wait_for(state="visible")
         assert page.locator("#details-title").input_value() == "First Title Option"
+        assert page.locator("#details-description-lead").input_value() == "Lead option one."
 
 
 # ===========================================================================
 # 4. Cancellation: the loading state exposes Cancel, which `DELETE`s the run;
-#    nothing is retained, no listing field changes, and the backend genuinely
-#    terminates the provider call rather than merely ignoring its result
-#    (market-seo.md, *AI runs*).
+# nothing is retained, no listing field changes, and the backend genuinely
+# terminates the provider call rather than merely ignoring its result
+# (features/market-seo-20260924/spec.md, *AI runs*).
 # ===========================================================================
 
 
@@ -812,8 +816,8 @@ def test_cancel_during_generation_retains_no_proposal_and_frees_the_listing(
 
 # ===========================================================================
 # 5. Malformed provider output: one same-provider repair attempt, and "Try
-#    again" -- never a partial proposal -- once repair also fails
-#    (implementation plan, "Validation"; PR3/PR4's repair contract).
+# again" -- never a partial proposal -- once repair also fails
+# (implementation plan, "Validation"; PR3/PR4's repair contract).
 # ===========================================================================
 
 
@@ -861,8 +865,8 @@ def test_malformed_output_is_repaired_once_then_try_again_recovers(
 
 # ===========================================================================
 # 6. Provider fallback: a recognised-unavailable failure from the first
-#    provider falls through to the next one in the chain, within the same
-#    request (implementation plan, "Timeout and retries"; PR4 item 3).
+# provider falls through to the next one in the chain, within the same
+# request (implementation plan, "Timeout and retries"; PR4 item 3).
 # ===========================================================================
 
 
@@ -894,26 +898,21 @@ def test_codex_unavailable_falls_through_to_claude(
 
 
 # ===========================================================================
-# 7. Pending-proposal persistence: survives an ordinary refresh, and expires
-#    after its one-day window, scoped to workspace and listing
-#    (implementation plan, "Proposal persistence"; `aiSeoStorage.ts`).
+# 7. Proposal persistence: the proposal is cached on the server (ADR-0049; spec,
+# *Durable AI proposals*), so a reload restores the drawers still open and
+# none the seller resolved, and the browser-local copies an older version
+# kept are purged on load.
 # ===========================================================================
 
 
-def _stored_proposal_key(page: Page) -> str:
-    storage_id = page.evaluate(
-        "async () => (await (await fetch('/api/workspace')).json()).storage_id"
+def _cached_proposal(page: Page) -> dict[str, Any]:
+    cached: dict[str, Any] = page.evaluate(
+        "async name => (await fetch(`/api/listings/${name}/proposal`)).json()", LISTING
     )
-    keys = page.evaluate(
-        "prefix => Object.keys(localStorage).filter(k => k.startsWith(prefix))",
-        f"ai-seo-proposal:{storage_id}:{LISTING}",
-    )
-    assert len(keys) == 1, keys
-    key: str = keys[0]
-    return key
+    return cached
 
 
-def test_pending_proposal_survives_refresh_and_expires_after_one_day(
+def test_generate_then_reload_and_the_suggestions_are_still_waiting(
     browser_type: Any, workspace_root: Path, prerequisite_missing: Any
 ) -> None:
     _seed_prompt(workspace_root)
@@ -929,46 +928,51 @@ def test_pending_proposal_survives_refresh_and_expires_after_one_day(
         page.get_by_role("button", name="AI Mode").click()
         title_drawer = page.get_by_role("region", name="title AI suggestions")
         title_drawer.get_by_role("button", name="Persisted Title One").wait_for(state="visible")
+        assert _cached_proposal(page)["proposal"]["titles"][0] == "Persisted Title One"
 
-        # Scoped exactly by workspace identity and listing, per
-        # `aiSeoStorage.ts.storageKey` -- not just "a" key.
-        key = _stored_proposal_key(page)
-        stored = page.evaluate("k => JSON.parse(localStorage.getItem(k))", key)
-        assert stored["proposal"]["titles"][0] == "Persisted Title One"
+        # -- Dismiss one drawer, and leave behind what an older version of
+        # the app kept in the browser --
+        page.get_by_role("region", name="description lead AI suggestions").get_by_role(
+            "button", name="Reject all"
+        ).click()
+        expect(page.get_by_role("region", name="description lead AI suggestions")).to_have_count(0)
+        for _ in range(50):
+            if _cached_proposal(page)["resolution"]["lead"] == "dismissed":
+                break
+            page.wait_for_timeout(100)
+        else:
+            raise AssertionError("the dismissal never reached the server")
+        page.evaluate(
+            "() => { localStorage.setItem('ai-seo-proposal:ws:take-a-hike', '{}');"
+            " localStorage.setItem('ai-seo-received:ws:take-a-hike', 'x') }"
+        )
 
-        # -- An ordinary refresh restores the unresolved drawers in place,
-        # with no second run: the editor reattaches to the finished one and
-        # replays it, which must not count as a second proposal --
+        # -- An ordinary refresh restores the open drawers in place, with no
+        # second run, and the dismissed one stays closed even though the
+        # editor reattaches to the finished run and replays its proposal --
         page.reload()
         _open_details_tab(page)
         page.get_by_role("region", name="title AI suggestions").get_by_role(
             "button", name="Persisted Title One"
         ).wait_for(state="visible")
+        page.get_by_role("region", name="tag AI suggestions").wait_for(state="visible")
+        page.wait_for_timeout(300)
+        assert page.get_by_role("region", name="description lead AI suggestions").count() == 0
         assert provider.count("seo") == 1  # never asked again
-
-        # -- Rewrite the same entry with an already-past expiry, exactly
-        # the shape `aiSeoStorage.ts` itself writes, then reload:
-        # `loadStoredProposal` discards an expired entry as a side effect
-        # of the read (item 3: "discard expired ones"), so no drawer
-        # reappears and the key itself is gone -- even though the run's
-        # replay delivers the same proposal again --
-        stored["proposal"]["expires_at"] = "2000-01-01T00:00:00.000Z"
-        page.evaluate("([k, v]) => localStorage.setItem(k, JSON.stringify(v))", [key, stored])
-        page.reload()
-        _open_details_tab(page)
-        page.wait_for_timeout(500)
-        assert page.get_by_role("region", name="title AI suggestions").count() == 0
-        assert page.evaluate("k => localStorage.getItem(k)", key) is None
+        legacy = page.evaluate(
+            "() => Object.keys(localStorage).filter(k => k.startsWith('ai-seo-'))"
+        )
+        assert legacy == []
 
 
 # ===========================================================================
 # 8. Common-copy description composition, through a real deployment: PR6's
-#    shared composer (`Workspace.compose_description`) resolves a
-#    `common-copy/` reference identically wherever it is consumed
-#    (implementation plan, "Description and common-copy boundaries") -- here
-#    proved through the *actual* `printify_product` desired-document builder
-#    (`engine/stages/printify_product.py`, PR2), driven by a real browser
-#    click on Apply, not a direct call into that stage's own tests.
+# shared composer (`Workspace.compose_description`) resolves a
+# `common-copy/` reference identically wherever it is consumed
+# (implementation plan, "Description and common-copy boundaries") -- here
+# proved through the *actual* `printify_product` desired-document builder
+# (`engine/stages/printify_product.py`, PR2), driven by a real browser
+# click on Apply, not a direct call into that stage's own tests.
 #
 # AI Mode itself plays no part in this one; it is item 2's own last bullet,
 # grouped with the rest of AI Mode's browser coverage because it exercises
@@ -1122,7 +1126,7 @@ def test_common_copy_description_composes_into_the_printify_desired_document(
 
 
 # ===========================================================================
-# Drafting on design attach (PRD 68)
+# Drafting on design attach
 #
 # The one thing no other layer can show: that picking a design in the real
 # design strip, on a tab that is not Listing Details, ends with suggestion
@@ -1158,7 +1162,7 @@ def test_attaching_a_design_drafts_a_brief_and_leaves_suggestions_waiting(
     browser_type: Any, workspace_root: Path, prerequisite_missing: Any
 ) -> None:
     """The whole chain, from the Variants tab, without the seller asking for
-    any of it (`docs/ui-listing-seo-interactions.md` section 1a)."""
+    any of it (`docs/features/ai-seo-20260922/interactions.md` section 1a)."""
     _seed_prompt(workspace_root)
     _seed_brief_prompt(workspace_root)
     edit_listing(workspace_root, brief="")
@@ -1480,6 +1484,13 @@ def test_nothing_below_the_head_moves_when_the_indicator_comes_and_goes(
         _open_details_tab(page)
         tabs = page.locator(".tabs")
 
+        # The app deliberately loads its display faces from Google Fonts and
+        # falls back to system-ui offline. Measure only after that independent
+        # font choice has settled: FontFaceSet.ready resolves after the font
+        # swap's layout work, so a late Figtree response cannot be mistaken
+        # for the workflow indicator moving the editor.
+        page.evaluate("async () => { await document.fonts.ready }")
+
         def tabs_top() -> float:
             # Suggestions focus their first drawer, which can scroll the page.
             # Compare document positions so that scroll is not mistaken for a
@@ -1505,7 +1516,7 @@ def test_nothing_below_the_head_moves_when_the_indicator_comes_and_goes(
 def test_a_reload_mid_run_shows_the_same_run_again(
     browser_type: Any, workspace_root: Path, prerequisite_missing: Any
 ) -> None:
-    """Leaving or reloading never cancels a run (market-seo.md, *AI runs*):
+    """Leaving or reloading never cancels a run (features/market-seo-20260924/spec.md, *AI runs*):
     the editor reattaches, the events replay, and the page head, the busy
     button, *Generating for…* and Cancel come back as they were -- then the
     suggestions arrive in the reloaded page."""

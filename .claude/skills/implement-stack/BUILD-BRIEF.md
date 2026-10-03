@@ -5,8 +5,7 @@ brackets. The builder starts with an empty context, so the brief carries
 everything.
 
 ````markdown
-You are implementing **PR <n>** of a stacked PR series in `etsy-listing-automation`,
-in an isolated git worktree. The main agent does GitHub: do not push or open a PR.
+You are implementing **PR <n>** of a stacked PR series in an isolated git worktree. The main agent does GitHub: do not push or open a PR.
 
 ## Setup
 1. `git checkout -b <branch> <base commit>`. <base commit> is the tip of
@@ -16,12 +15,11 @@ in an isolated git worktree. The main agent does GitHub: do not push or open a P
    baseline failures by test id, screenshot recipe>
 
 ## Read before coding
-- `AGENTS.md`. Follow it exactly.
 - `<plan path>`, all of it. Your scope and success conditions are
   **"PR <n> — `<title>`"**, with <decisions it cites: A…, PRD …>.
 - <spec and interactions sections this PR claims>
 - <mockup frames for this PR's screens, if any>
-- <code entry points the plan names>
+- <code entry points the plan names, if any>
 
 ## How to work
 - Use the `tdd` skill: red-green-refactor through public interfaces. Every
@@ -38,7 +36,7 @@ in an isolated git worktree. The main agent does GitHub: do not push or open a P
 ## Targeted checks, before returning
 Run and make pass:
 - the Python test files you added or touched, and the whole unit layer
-  (`uv run pytest tests/unit`);
+  (`uv run pytest tests/core/unit tests/server/unit tests/cli/unit`);
 - the vitest files you added or touched;
 - `ruff format . && ruff check .`, `mypy src`, and in the frontend
   `npx prettier --check .`, `npx eslint .`, `npx tsc -b --noEmit`.

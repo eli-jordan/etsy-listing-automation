@@ -19,8 +19,8 @@ import pytest
 import yaml
 from PIL import Image
 
-from tests.behaviour.test_scene_preview_api import expected_scene
 from tests.support.builders import edit_listing
+from tests.support.scenes import expected_scene
 
 pytestmark = pytest.mark.browser
 

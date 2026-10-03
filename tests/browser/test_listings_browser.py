@@ -56,7 +56,7 @@ def _wait_for_listing(page, workspace_root: Path, name: str, **fields: object) -
 
 def test_create_name_and_autosave_a_listing(page, workspace_root: Path) -> None:  # noqa: ANN001
     """`+ New listing` opens the editor on nothing, and the listing appears on
-    disk the moment it has a name (PRD 70).
+    disk the moment it has a name.
 
     It used to need a price source as well, and this test asserted that: the
     file stayed missing while the head explained what was in the way. That was

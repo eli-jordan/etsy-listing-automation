@@ -2,20 +2,20 @@
 
 This is presentation, so it lives in ``cli/`` rather than ``engine/``: the
 engine produces ``Plan`` / ``StagePlan`` / ``Change`` / ``Action`` values and
-this module only formats them. The UI's future JSON serialiser is the sibling
+this module only formats them. The UI's JSON serialiser is the sibling
 of this file, not of the engine -- both consume the same objects and neither
 may compare state itself, which is what keeps the two entry points enforcing
-identical rules (A2, PRD 20). In particular nothing here may stat a file: an
+identical rules. In particular nothing here may stat a file: an
 output is shown as missing because the stage observed it missing.
 """
 
 from __future__ import annotations
 
-from etsy_listings.engine.change import Drift, Plan, StagePlan
+from etsy_listings.core.engine.change import Drift, Plan, StagePlan
 
 
 def format_plan(plan: Plan) -> str:
-    """The PRD's ``plan`` output: which stages run, why, and -- for each one --
+    """The ``plan`` output: which stages run, why, and -- for each one --
     the concrete actions it will take, with the files each reads and writes.
     Richer per-change rendering (price deltas, before/after text) arrives with
     the stages that emit those change types."""
@@ -82,7 +82,7 @@ def format_blocked(stage_plan: StagePlan) -> list[str]:
 
 def _name(stage_plan: StagePlan) -> str:
     """``etsy_media/etsy_videos``: a stage shown under the one the engine
-    groups it with (PRD 72: one gallery, two stages), else its own name."""
+    groups it with (ADR-0045: one gallery, two stages), else its own name."""
     if stage_plan.group is None:
         return stage_plan.stage
     return f"{stage_plan.group}/{stage_plan.stage}"
@@ -91,7 +91,7 @@ def _name(stage_plan: StagePlan) -> str:
 def _drift_detail(drift: Drift) -> str:
     """`` (was NOK standard tee, Etsy now says US origin)`` -- a name in
     place of the raw id when the stage that found the drift could resolve
-    one (A30), on either side independently: the last-applied side almost
+    one, on either side independently: the last-applied side almost
     always can (this stage already stored the name beside the id it
     resolved), the live side only when this run's catalog happened to fetch
     the list a fresh id turned up in. Nothing is printed for a drift with no
@@ -139,7 +139,7 @@ def _format_actions(stage_plan: StagePlan) -> list[str]:
 
 def _header(plan: Plan) -> str:
     if plan.is_live and plan.etsy_listing_id is not None:
-        # PRD 21: a live listing is called out, because applying over it edits
+        # a live listing is called out, because applying over it edits
         # something buyers can already see.
         return f"{plan.listing}  [LIVE — etsy listing {plan.etsy_listing_id}]"
     return plan.listing

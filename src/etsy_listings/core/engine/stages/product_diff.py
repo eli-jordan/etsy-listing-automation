@@ -1,0 +1,306 @@
+"""The product stage's three-way comparison, as a function of three values.
+
+ADR-0008 says each stage writes its own ``plan()``; this is the product stage's,
+lifted out of it. Nothing here touches a workspace, a client, a lockfile or a
+clock -- :func:`compare` takes the desired document, the applied one and the
+live product, and answers what a run would do about them.
+
+It was already pure, and it was already about a hundred and twenty lines. What
+it was not was *reachable*: every function carried a leading underscore inside
+the stage module, so the only route to a price diff was a fixture workspace,
+two fake clients and a `build_plan` call. That is a behaviour test's setup
+being paid to ask a unit question, and it is why the price maths went
+unasserted -- ``PriceChange`` was checked for its *type* and never for its
+before, its after, or its currency.
+
+**One entry point, not four.** ``changes``, ``drift``, ``reason`` and
+``actions`` were computed by four separate calls whose results had to agree,
+and two of them did not: ``_reason`` restated ``will_run``'s predicate in a
+second form, so a rule that existed once could be edited in one place and not
+the other. :class:`ProductComparison` computes the rule once and reports every
+view of it, which is what makes "will it run?" and "why?" incapable of
+disagreeing.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+
+from etsy_listings.core.clients.printify.models import Product
+from etsy_listings.core.engine.change import (
+    Action,
+    Change,
+    Drift,
+    FieldChange,
+    PriceChange,
+    StageIdle,
+    StageWork,
+    drift,
+    scalar,
+    sequence,
+)
+from etsy_listings.core.engine.stages.product_document import (
+    AppliedProduct,
+    PrintifyProductDesired,
+    money,
+)
+
+__all__ = ["ProductComparison", "compare"]
+
+
+@dataclass(frozen=True)
+class ProductComparison:
+    """What a run would do about this product, and why.
+
+    The fields map one-to-one onto the :class:`~etsy_listings.core.engine.change.StagePlan`
+    the stage returns, so the stage assembles rather than decides.
+    """
+
+    outcome: StageIdle | StageWork
+    drift: tuple[Drift, ...]
+
+    @property
+    def will_run(self) -> bool:
+        return isinstance(self.outcome, StageWork)
+
+    @property
+    def reason(self) -> str | None:
+        return self.outcome.reason if isinstance(self.outcome, StageWork) else None
+
+    @property
+    def changes(self) -> tuple[Change, ...]:
+        return self.outcome.changes if isinstance(self.outcome, StageWork) else ()
+
+    @property
+    def actions(self) -> tuple[Action, ...]:
+        return self.outcome.actions if isinstance(self.outcome, StageWork) else ()
+
+
+def compare(
+    desired: PrintifyProductDesired,
+    was: AppliedProduct | None,
+    live: Product | None,
+) -> ProductComparison:
+    """Three-way compare desired, applied and live.
+
+    ``will_run`` is derived from ``reason`` rather than computed beside it:
+    the two used to be separate expressions of one rule -- ``was is None or
+    bool(changes) or live is None`` on one side, a three-branch string on the
+    other -- and separate expressions of one rule are how a stage comes to
+    report "no changes" while running anyway.
+    """
+    wanted = desired.applied()
+    changes = _changes(desired, wanted, was)
+    reason = _reason(was, live, changes)
+    outcome: StageIdle | StageWork
+    if reason is None:
+        outcome = StageIdle()
+    else:
+        outcome = StageWork(
+            reason=reason,
+            changes=changes,
+            actions=_actions(desired, creating=was is None or live is None),
+        )
+    return ProductComparison(outcome=outcome, drift=_drift(was, live))
+
+
+def _reason(
+    was: AppliedProduct | None, live: Product | None, changes: tuple[Change, ...]
+) -> str | None:
+    """Why this stage will run, or ``None`` when it will not.
+
+    The single expression of the rule. ``None`` here *is* ``will_run=False``,
+    so there is no third state in which a stage runs for no stated reason.
+    """
+    if was is None:
+        return "no Printify product yet -- it will be created"
+    if live is None:
+        return "the Printify product this listing named is gone -- it will be created again"
+    if changes:
+        return "the product differs from the listing"
+    return None
+
+
+def _changes(
+    desired: PrintifyProductDesired, wanted: AppliedProduct, was: AppliedProduct | None
+) -> tuple[Change, ...]:
+    if was is None:
+        return ()
+
+    changes: list[Change] = []
+    for path in ("title", "description", "position"):
+        change = scalar(path, getattr(wanted, path), getattr(was, path))
+        if change is not None:
+            changes.append(change)
+
+    colour_change = _colour_change(wanted, was)
+    if colour_change is not None:
+        changes.append(colour_change)
+
+    was_prices = was.prices
+    for variant in sorted(desired.variants, key=lambda v: v.id):
+        previous = was_prices.get(variant.id)
+        if previous is not None and previous != variant.price:
+            # Rendered back into `Money` rather than shown as the minor units
+            # the document stores. "34900 -> 39900" is the wire format; the
+            # user wrote "349 NOK", and that is what a diff has to say back.
+            changes.append(
+                PriceChange(
+                    size=variant.size,
+                    color=variant.colour_slug,
+                    before=money(previous, desired.currency),
+                    after=money(variant.price, desired.currency),
+                )
+            )
+
+    if set(wanted.prices) != set(was_prices):
+        changes.append(
+            FieldChange(path="variants", before=len(was.variants), after=len(wanted.variants))
+        )
+
+    changes.extend(_print_area_changes(wanted, was))
+    return tuple(changes)
+
+
+def _colour_change(wanted: AppliedProduct, was: AppliedProduct) -> Change | None:
+    """A named colour added or removed.
+
+    Read straight off each variant's own ``colour_slug`` -- carried on
+    :class:`~etsy_listings.core.engine.stages.product_document.AppliedVariant`
+    itself rather than looked up from this run's catalog resolution, which is
+    what lets a colour Printify has since discontinued still be
+    named in ``removed``: it has no cell left to resolve, but it still has the
+    name it was applied under.
+
+    Replaces a UI that would otherwise have to diff two colour lists itself
+    to ring a newly added one (ADR-0008, decision 4) -- the ``FieldChange`` below
+    only ever carried a count.
+    """
+    wanted_colours = sorted({v.colour_slug for v in wanted.variants})
+    was_colours = sorted({v.colour_slug for v in was.variants})
+    return sequence("colors", wanted_colours, was_colours)
+
+
+def _print_area_changes(wanted: AppliedProduct, was: AppliedProduct) -> list[Change]:
+    """Print areas matched by design hash, never by position.
+
+    Positional matching read ``was.print_areas[index]``, and the list's order
+    came from the order the listing wrote its colours in -- so moving a colour
+    to the top of ``colors:`` reported every print area as changed and
+    re-uploaded artwork nothing about which had moved. The content hash is the
+    key the groups were partitioned on (ADR-0053), so it identifies an area across
+    any ordering, any rename and any reshaping of ``design:`` -- including the
+    areas already written into lockfiles by versions that keyed them by
+    artwork name, whose hashes are the same.
+    """
+    previous = {area.design_hash: area for area in was.print_areas}
+    changes: list[Change] = []
+    for area in wanted.print_areas:
+        before = previous.get(area.design_hash)
+        if before != area:
+            changes.append(
+                FieldChange(
+                    path=_area_path(area.design_hash),
+                    before=before.design_hash if before else None,
+                    after=area.design_hash,
+                )
+            )
+    wanted_hashes = {area.design_hash for area in wanted.print_areas}
+    for digest in sorted(set(previous) - wanted_hashes):
+        # A file that no longer prints on anything. Positional matching could
+        # not see this at all: a shorter list simply stopped being compared.
+        changes.append(FieldChange(path=_area_path(digest), before=digest, after=None))
+    return changes
+
+
+def _area_path(design_hash: str) -> str:
+    """``print_areas.<first 12 hex digits>`` -- enough to tell two files
+    apart in a plan, without a 64-character key in every line."""
+    return f"print_areas.{design_hash.removeprefix('sha256:')[:12]}"
+
+
+def _drift(was: AppliedProduct | None, live: Product | None) -> tuple[Drift, ...]:
+    """What changed in Printify since we last applied.
+
+    Every field here compares against *last-applied* (``was``), never
+    *desired* -- an edit made locally but not yet applied is a ``change``,
+    reported by ``_changes``, not drift. Comparing against desired made every
+    pending edit (a new colour included) read as if Printify or a human had
+    already reverted it on republish, before ``apply`` ever ran.
+
+    ``was.prices`` is already the enabled subset -- an applied document only
+    ever records what was actually sent -- so it is the same ``{id: price}``
+    shape as ``live.enabled_variants()``.
+    """
+    if was is None or live is None:
+        return ()
+
+    found: list[Drift] = []
+    for path, ours, theirs in (
+        ("title", was.title, live.title),
+        ("description", was.description, live.description),
+    ):
+        change = drift(path, ours, theirs)
+        if change is not None:
+            found.append(change)
+
+    ours_prices = was.prices
+    live_prices = live.enabled_variants()
+    if live_prices != ours_prices:
+        last_applied = f"{len(ours_prices)} enabled"
+        live_description = f"{len(live_prices)} enabled"
+        if len(live_prices) == len(ours_prices):
+            selection_changed = set(live_prices) != set(ours_prices)
+            prices_changed = sum(
+                live_prices[variant_id] != ours_prices[variant_id]
+                for variant_id in set(live_prices) & set(ours_prices)
+            )
+            details: list[str] = []
+            if selection_changed:
+                details.append("selection changed")
+            if prices_changed:
+                noun = "price" if prices_changed == 1 else "prices"
+                details.append(f"{prices_changed} {noun} changed")
+            live_description += f" ({' and '.join(details)})"
+        found.append(
+            Drift(
+                path="variants",
+                last_applied=last_applied,
+                live=live_description,
+            )
+        )
+
+    if live.visible:
+        # The tripwire. Whether a publish lands as a draft is decided outside
+        # this tool, so a managed product turning visible is the only signal
+        # that something changed the setting that decides it.
+        found.append(Drift(path="visible", last_applied=False, live=True))
+    return tuple(found)
+
+
+def _actions(desired: PrintifyProductDesired, *, creating: bool) -> tuple[Action, ...]:
+    verb = "create" if creating else "update"
+    described = (
+        f"{verb} a Printify product: {len(desired.variants)} variants across "
+        f"{len(desired.groups)} print area(s)"
+    )
+    actions = [
+        Action(
+            description=described,
+            inputs=tuple(sorted(group.design.name for group in desired.groups)),
+        )
+    ]
+    if desired.missing:
+        # reported, never fatal. A cell Printify has discontinued is
+        # its fact, not the user's mistake -- but a listing quietly selling
+        # five sizes where it asked for six is worth saying out loud.
+        listed = ", ".join(f"{colour}/{size}" for colour, size in desired.missing)
+        actions.append(
+            Action(
+                description=(
+                    f"skip {len(desired.missing)} colour/size "
+                    f"combination(s) this garment no longer offers: {listed}"
+                )
+            )
+        )
+    return tuple(actions)

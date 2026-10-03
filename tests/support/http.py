@@ -6,7 +6,7 @@ and each got the retry stubbing subtly differently. Once both halves of the
 client share one :class:`Transport`, so should the way a test stands one up.
 
 ``sleep`` is always stubbed. These tests are about decoding a response, and a
-5xx on a GET is retryable (A21), so a real sleep spends the policy's full
+5xx on a GET is retryable, so a real sleep spends the policy's full
 backoff -- seconds of nothing -- before an assertion that never needed to
 wait.
 """
@@ -17,12 +17,12 @@ from collections.abc import Callable
 
 import httpx
 
-from etsy_listings.clients.etsy.transport import BASE_URL as ETSY_BASE_URL
-from etsy_listings.clients.etsy.transport import OAuthClient
-from etsy_listings.clients.etsy.transport import Transport as EtsyTransport
-from etsy_listings.clients.printify import BASE_URL, Transport
-from etsy_listings.clients.retry import DEFAULT_POLICY, RetryPolicy
-from etsy_listings.config.secrets import EtsyAppKey
+from etsy_listings.core.clients.etsy.transport import BASE_URL as ETSY_BASE_URL
+from etsy_listings.core.clients.etsy.transport import OAuthClient
+from etsy_listings.core.clients.etsy.transport import Transport as EtsyTransport
+from etsy_listings.core.clients.printify import BASE_URL, Transport
+from etsy_listings.core.clients.retry import DEFAULT_POLICY, RetryPolicy
+from etsy_listings.core.config.secrets import EtsyAppKey
 
 Handler = Callable[[httpx.Request], httpx.Response]
 

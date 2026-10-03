@@ -32,7 +32,7 @@ Two modules, one job each.
     response, and a retryable status on a GET otherwise spends the policy's
     full backoff before an assertion that never needed to wait.
 
-Withheld deliberately: no builder for ``tests/unit/test_lock.py``. That file
+Withheld deliberately: no builder for ``tests/core/unit/test_lock.py``. That file
 tests :class:`Lockfile` itself, and a unit test of a type should construct it
 directly -- routing it through a builder would mean the thing under test and
 the thing building it move together.

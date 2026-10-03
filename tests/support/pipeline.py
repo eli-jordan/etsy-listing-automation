@@ -14,10 +14,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from etsy_listings.clients.etsy.fakes import FakeEtsyListingClient
-from etsy_listings.clients.etsy.models import ReturnPolicy, ShippingProfile
-from etsy_listings.clients.printify.fakes import FakeCatalogClient, FakePrintifyClient
-from etsy_listings.clients.printify.models import (
+from etsy_listings.core.clients.etsy.fakes import FakeEtsyListingClient
+from etsy_listings.core.clients.etsy.models import ReturnPolicy, ShippingProfile
+from etsy_listings.core.clients.printify.fakes import FakeCatalogClient, FakePrintifyClient
+from etsy_listings.core.clients.printify.models import (
     Blueprint,
     PrintAreaPlaceholder,
     PrintProvider,
@@ -27,10 +27,10 @@ from etsy_listings.clients.printify.models import (
     VariantOptions,
     VariantSet,
 )
-from etsy_listings.engine.context import RunContext
-from etsy_listings.engine.stage import Stage
-from etsy_listings.engine.stages import STAGES
-from etsy_listings.engine.stages.publish import PublishStage
+from etsy_listings.core.engine.context import RunContext
+from etsy_listings.core.engine.stage import Stage
+from etsy_listings.core.engine.stages import STAGES
+from etsy_listings.core.engine.stages.publish import PublishStage
 
 from tests.support.builders import (
     a_context,
