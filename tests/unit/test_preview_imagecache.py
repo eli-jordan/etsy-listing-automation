@@ -129,7 +129,7 @@ class TestMemo:
 
 class TestBudget:
     def test_arrays_are_handed_out_read_only(self, photo: Path) -> None:
-        """Every render pass is pure (A7), so nothing should want to write to
+        """Every render pass is pure, so nothing should want to write to
         one -- and a future accident should fail here rather than corrupt what
         the next request is served."""
         base = PreviewImages().base(photo, 200)

@@ -61,7 +61,7 @@ def _refusal(blocked: Blocked | None) -> str:
     return blocked.message
 
 
-# ------------------------------------------------- design resolution (PRD 38)
+# ------------------------------------------------- design resolution
 
 
 def test_a_design_at_the_print_area_passes(tmp_path: Path) -> None:
@@ -108,7 +108,7 @@ def test_a_missing_design_is_refused_by_name(tmp_path: Path) -> None:
 
 
 def test_a_file_that_is_not_an_image_is_refused(tmp_path: Path) -> None:
-    """A .png that is really a text file is a mistake worth naming rather
+    """A.png that is really a text file is a mistake worth naming rather
     than a traceback out of Pillow."""
     path = tmp_path / "design.png"
     path.write_text("not a png", encoding="utf-8")
@@ -116,7 +116,7 @@ def test_a_file_that_is_not_an_image_is_refused(tmp_path: Path) -> None:
     assert "not readable as an image" in _refusal(check_design_resolution(path, PROFILE))
 
 
-# ------------------------------------------------------ concrete copy (PRD 44)
+# ------------------------------------------------------ concrete copy
 
 
 def test_real_copy_passes() -> None:
@@ -134,17 +134,17 @@ def test_an_empty_lead_is_refused(lead: str) -> None:
 
 
 def test_the_refusal_says_why_a_product_needs_a_title() -> None:
-    """Not obvious: PRD 41 says copy is ours and goes straight to Etsy. It is
+    """Not obvious: ADR-0021 says copy is ours and goes straight to Etsy. It is
     needed here because Printify's create call requires it and because it is
-    the duplicate guard's match key (PRD 48)."""
+    the duplicate guard's match key."""
     message = _refusal(check_copy_is_concrete(title="", lead="x"))
 
     assert "Printify" in message
 
 
 def test_the_lead_refusal_names_the_lead() -> None:
-    """The description model's lead is required, its body optional (PRD's
-    description model) -- the refusal has to say *lead*, not *description*,
+    """The description model's lead is required, its body optional  -- the refusal has to say
+    *lead*, not *description*,
     or a seller with a filled-in body would not know what is still missing."""
     message = _refusal(check_copy_is_concrete(title="Take A Hike Tee", lead=""))
 
@@ -192,7 +192,7 @@ def test_no_garment_profile_is_refused_rather_than_raised(name: str) -> None:
 @pytest.mark.parametrize("name", ["", "   ", "comfort-colors-1717"])
 def test_a_gate_agrees_with_the_banner_about_a_garment_profile(name: str) -> None:
     """The reason these are now one rule and one adapter, rather than two
-    modules with a copy of it each: the engine used to accept `"   "` while the
+    modules with a copy of it each: the engine used to accept `" "` while the
     editor refused it, so one file on disk got two answers. This is the
     assertion that would have caught it."""
     gate = check_garment_profile_chosen(name)
@@ -260,7 +260,7 @@ def test_a_video_gate_refuses_what_the_banner_blocks() -> None:
 
 
 def test_a_video_s_audio_note_never_refuses_a_stage() -> None:
-    """PRD 72: Etsy strips the sound, which is worth telling a seller and no
+    """ADR-0045: Etsy strips the sound, which is worth telling a seller and no
     reason to stop a deploy."""
     videos = {"common-media/size-guide.mp4": replace(SILENT_CLIP, has_audio=True)}
     assert [i.severity for i in rules.check_videos(videos)] == ["info"]

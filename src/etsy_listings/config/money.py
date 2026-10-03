@@ -1,6 +1,6 @@
 """Money type: explicit-currency prices only.
 
-PRD 24: every price carries an explicit currency (``349 NOK``); bare numbers and
+ADR-0006: every price carries an explicit currency (``349 NOK``); bare numbers and
 mismatched currencies are rejected. A bare YAML number (``349``) is valid YAML but
 must fail validation here, so the parser only ever accepts the ``"<amount>
 <CURRENCY>"`` string form.
@@ -69,7 +69,7 @@ class Money:
         """The amount as an integer number of minor units -- ``349 NOK`` is
         ``34900``.
 
-        The form every price reaches Printify in (PRD 39/40). **No conversion
+        The form every price reaches Printify in. **No conversion
         happens**: Printify sends the bare number to the sales channel, which
         renders it in the shop's own currency, so an NOK price travels as NOK
         minor units and no exchange rate enters `apply` or a hash.
@@ -96,7 +96,7 @@ class Money:
         # untrusted input) carries no shape pydantic can derive a JSON Schema
         # from on its own -- stated by hand instead, now that a `Listing`
         # (which nests `Money` under `prices`/`price_overrides`) is exposed
-        # through the listings API's OpenAPI schema (phase-5-listings-ui.md).
+        # through the listings API's OpenAPI schema (features/listings-ui-20260915/spec.md).
         return {"type": "string", "examples": ["349 NOK"]}
 
 

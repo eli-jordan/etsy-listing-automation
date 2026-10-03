@@ -1,6 +1,6 @@
-"""Replace a file without a window where a reader sees it half-written (A37).
+"""Replace a file without a window where a reader sees it half-written.
 
-The A37 replacement rule shared by cache records and listing YAML writes.
+The atomic replacement rule shared by cache records and listing YAML writes.
 JSON and YAML serializers use the same unique temporary and bounded retry.
 """
 
@@ -71,13 +71,13 @@ def read_bytes_retrying(path: Path) -> bytes:
 
 
 def write_json_atomic(path: Path, document: object) -> None:
-    """:func:`write_bytes_atomic` for a cache record (A37): indented UTF-8
+    """:func:`write_bytes_atomic` for a cache record: indented UTF-8
     JSON, so a record is readable when somebody opens ``.cache`` to see why."""
     text = json.dumps(document, indent=2, ensure_ascii=False, sort_keys=False)
     write_bytes_atomic(path, (text + "\n").encode("utf-8"))
 
 
 def write_yaml_atomic(path: Path, document: Mapping[str, Any]) -> None:
-    """Write a YAML document through the shared A37 replacement rule."""
+    """Write a YAML document through the shared atomic replacement rule."""
     text = yaml.safe_dump(dict(document), sort_keys=False)
     write_bytes_atomic(path, text.encode("utf-8"))

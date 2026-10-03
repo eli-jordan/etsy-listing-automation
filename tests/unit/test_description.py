@@ -43,7 +43,7 @@ class TestDescriptionConfig:
             DescriptionConfig.model_validate({"lead": "x", "body": "y"})
 
     def test_an_empty_lead_is_valid_while_editing(self) -> None:
-        """Deployment blocks on it (PRD 44's amendment) -- the model itself
+        """Deployment blocks on it (ADR-0022's amendment) -- the model itself
         never refuses it, or a seller could not save a listing mid-edit."""
         assert DescriptionConfig(text="Printed to order.").lead == ""
 

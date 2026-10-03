@@ -18,7 +18,7 @@ The four that would each have produced a plausible-looking, wrong stage:
   update, though on create it covers only the ones being created. The same
   payload that created the product is rejected as an update of it.
 - ``visible`` is writable, on create and on update, despite the API reference
-  marking it read-only -- see ``docs/api-findings.md``.
+  marking it read-only -- see ``docs/research/api-findings.md``.
 
 It talks to the API through raw ``httpx`` rather than a client, because the
 client is what this is recon *for*; when ``clients/printify/`` exists these
@@ -51,7 +51,7 @@ GARMENT_MODEL = "1717"
 PREFERRED_PROVIDER = "Monster Digital"
 """The blank and printer this shop actually sells, matching the workspace's
 ``preferred_print_provider``. Identified by brand and model, never by title --
-PRD 23, and ``test_printify_catalog_e2e.py`` for why."""
+ADR-0005, and ``test_printify_catalog_e2e.py`` for why."""
 
 COLOURS = ("Black", "Ivory")
 SIZES = ("S", "M", "L")
@@ -61,7 +61,7 @@ failure message."""
 
 PRICE = 2499
 """USD cents -- $24.99. The API says so nowhere; Printify's web app does, and
-``docs/api-findings.md`` records it (PRD 39)."""
+``docs/research/api-findings.md`` records it."""
 
 
 # --------------------------------------------------------------- the design
@@ -296,7 +296,7 @@ class TestUploadingTheDesign:
         self, printify_api: httpx.Client
     ) -> None:
         """120x140 on a 4200x4800 print area. Printify takes it without a
-        murmur, which is why the PRD's design validation (17) is a real gate
+        murmur, which is why the design-size validation is a real gate
         and not a courtesy: nothing downstream will catch a blurry print."""
         tiny = _upload(printify_api, "e2e-tiny.png", _test_design((120, 140)))
         assert tiny["id"]
@@ -342,7 +342,7 @@ class TestCreatingTheProduct:
         self, live: dict[str, Any], wanted_variant_ids: list[int]
     ) -> None:
         """A *documented* per-variant cost, in cents. Not a replacement for
-        ``newcmd/unofficial_variant_costs.py`` (A17) -- ``new`` needs the cost
+        ``newcmd/unofficial_variant_costs.py`` -- ``new`` needs the cost
         before a product exists -- but it is a cross-check for one, and the
         margin display's proper source once a product does exist."""
         for variant in live["variants"]:
@@ -381,7 +381,7 @@ class TestCreatingTheProduct:
         """``price`` and ``cost`` are bare integers, and neither the product
         nor the shop says of what. The answer -- USD cents -- is only visible in
         Printify's web app, which is why it is written down in
-        ``docs/api-findings.md`` rather than read off a response here. PRD 24
+        ``docs/research/api-findings.md`` rather than read off a response here. ADR-0006
         requires every price to carry its currency, so the stage supplies the
         half the API withholds."""
         assert "currency" not in live
@@ -495,7 +495,7 @@ class TestWhatAnUpdateDoes:
         self, live: dict[str, Any], printify_api: httpx.Client, update, design: dict[str, Any]
     ) -> None:
         """Several ``print_areas`` entries partitioning the variants, each with
-        its own image. This is the API support PRD 30's on-light/on-dark
+        its own image. This is the API support that on-light/on-dark
         artwork needs, and it was an open question until now."""
         light_ink = _upload(printify_api, "e2e-light-ink.png", _test_design((1100, 1320)))
         assert light_ink["id"] != design["id"]
@@ -537,7 +537,7 @@ class TestWhatAnUpdateDoes:
         plan concluded from that that draft-vs-live cannot be set through the
         API. It can be set; whether setting it makes an Etsy publish land as a
         draft is a separate question this shop cannot answer -- see
-        ``docs/api-findings.md``."""
+        ``docs/research/api-findings.md``."""
         assert live["visible"] is True
         after = update({"visible": False})
         try:
@@ -547,7 +547,7 @@ class TestWhatAnUpdateDoes:
 
 
 class TestPublishing:
-    """``POST .../publish.json`` and the lock endpoints, on a shop with no
+    """``POST.../publish.json`` and the lock endpoints, on a shop with no
     sales channel connected. The Etsy half of this is Phase 3's to verify."""
 
     def test_publishing_without_a_sales_channel_is_a_named_error(
@@ -575,8 +575,8 @@ class TestPublishing:
     def test_a_failed_publish_leaves_the_product_unlocked(self, live: dict[str, Any]) -> None:
         """So the ``unlock`` path is not reachable this way. Whether a genuine
         in-flight publish locks the product, and whether
-        ``publishing_failed.json`` clears it, needs a connected shop -- PRD
-        risk 6 stays open."""
+        ``publishing_failed.json`` clears it, needs a connected shop -- this test does not verify a
+        stuck publish."""
         assert live["is_locked"] is False
 
     def test_the_publish_budget_is_metered_separately(
@@ -660,7 +660,7 @@ class TestTheSecondRoundOfRecon:
     stage was written rather than after.
 
     Each of these was settled by a throwaway probe script and written into
-    docs/api-findings.md; they live here so the offline suite's transcripts
+    docs/research/api-findings.md; they live here so the offline suite's transcripts
     have something that re-takes them. A contract test can only prove we
     decode what Printify sent last time.
     """
@@ -669,7 +669,7 @@ class TestTheSecondRoundOfRecon:
         self, printify_api: httpx.Client, printify_shop: dict[str, Any]
     ) -> None:
         """Which is what makes `setup` able to discover the shop id rather
-        than asking a human to find one (PRD 42)."""
+        than asking a human to find one."""
         response = printify_api.get("/shops.json")
         assert response.status_code == 200
 
@@ -683,7 +683,7 @@ class TestTheSecondRoundOfRecon:
         self, live: dict[str, Any], wanted_variant_ids: list[int]
     ) -> None:
         """`variants[].sku` is writable, despite nothing in the reference
-        saying so. We decline to set one anyway (PRD 47) -- but the decision
+        saying so. We decline to set one anyway -- but the decision
         rests on this being a choice rather than a limit, so it is measured."""
         skus = {v["id"]: v.get("sku") for v in live["variants"] if v["is_enabled"]}
         assert all(sku for sku in skus.values()), "Printify generates one when we do not"
@@ -714,7 +714,7 @@ class TestTheSecondRoundOfRecon:
     ) -> None:
         """`title`, `search` and `sku` are each accepted with a 200 and
         ignored. This is why the duplicate guard is a walk rather than a
-        query (PRD 48) -- if Printify ever adds a filter, this test is what
+        query -- if Printify ever adds a filter, this test is what
         notices, and the walk can become the query it should have been.
         """
         unfiltered = printify_api.get(f"/shops/{printify_shop['id']}/products.json").json()
@@ -724,7 +724,7 @@ class TestTheSecondRoundOfRecon:
                 f"/shops/{printify_shop['id']}/products.json", params=params
             ).json()
             assert filtered["total"] == unfiltered["total"], (
-                f"params={params} filtered something -- the walk in PRD 48 can be "
+                f"params={params} filtered something -- the walk in ADR-0023 can be "
                 f"replaced by a query"
             )
 

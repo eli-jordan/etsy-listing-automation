@@ -37,7 +37,7 @@ export interface FocusView {
   path: string;
   picture: string;
   /** A video is previewed by a playable `<video>`, an image by an `<img>`
-   * (PRD 72). */
+   *. */
   kind: "image" | "video";
   /** What the listing's check says about this one file -- a video's sound
    * note, a clip too short -- so the pane showing it says it too. */

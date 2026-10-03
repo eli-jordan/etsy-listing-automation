@@ -5,7 +5,7 @@ opening the browser and the user granting consent, and it takes its address
 from :data:`~etsy_listings.clients.etsy.oauth.REDIRECT_URI` rather than a port
 constant of its own -- Etsy matches the redirect against a registered string
 exactly, so that string is the only thing entitled to say which port this
-listens on (PRD 50).
+listens on.
 """
 
 from __future__ import annotations

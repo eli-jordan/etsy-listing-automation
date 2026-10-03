@@ -169,7 +169,7 @@ def test_forgetting_a_listing_leaves_a_running_run_to_end_on_its_own() -> None:
 
 
 def test_a_run_is_manual_unless_the_batch_queue_created_it() -> None:
-    """A40: a batch run is an ordinary run with origin ``batch``."""
+    """ADR-0048: a batch run is an ordinary run with origin ``batch``."""
     registry = _registry()
 
     assert _create(registry, "take-a-hike").origin == "manual"
@@ -179,7 +179,7 @@ def test_a_run_is_manual_unless_the_batch_queue_created_it() -> None:
 
 
 def test_every_subscriber_hears_each_run_finish_once() -> None:
-    """The batch queue's wake-up and its row update (A40): a run that
+    """The batch queue's wake-up and its row update: a run that
     finishes -- batch or manual -- is handed to every subscriber, after its
     terminal event, and a second ``finish`` is not heard again."""
     registry = _registry()
@@ -221,7 +221,7 @@ def test_a_subscriber_is_called_outside_the_run_s_lock() -> None:
 
 
 def test_a_deploy_hold_refuses_new_runs_and_names_the_running_ones() -> None:
-    """A43: one step, so no run can start between the answer and the hold.
+    """ADR-0050: one step, so no run can start between the answer and the hold.
     Listing names compare case-insensitively, as everywhere here."""
     registry = _registry()
     running = _create(registry, "take-a-hike")

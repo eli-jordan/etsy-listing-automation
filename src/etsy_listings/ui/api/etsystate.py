@@ -1,7 +1,7 @@
 """Which of this workspace's listings Etsy considers published.
 
 The one fact a listing's status needs that the workspace cannot answer for
-itself: nothing this tool does ever activates a listing (PRD non-goal 1), so
+itself: nothing this tool does ever activates a listing, so
 "live" only ever becomes true because a human pressed publish in Shop Manager,
 and the only way to find out is to ask.
 

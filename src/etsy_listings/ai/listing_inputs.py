@@ -1,9 +1,9 @@
-"""Saved-listing facts shared by AI generation and proposal judgment (A41).
+"""Saved-listing facts shared by AI generation and proposal judgment.
 
 A prepared request carries the comparison snapshot derived from exactly
 those same facts. HTTP adapters choose status codes; invalid workspace refs
 remain actionable errors on a background run. Reading again between run
-steps is deliberate (PRD 68, 71), not one frozen snapshot for the whole run.
+steps is deliberate, not one frozen snapshot for the whole run.
 """
 
 from __future__ import annotations
@@ -23,7 +23,7 @@ from etsy_listings.workspace.facts import WorkspaceFacts
 from etsy_listings.workspace.workspace import Workspace
 
 _PREFERRED_DESIGN_KEYS = ("default", "on-light", "on-dark")
-# PRD 30: one image for AI, not a per-colour render; unfamiliar keys sort
+# one image for AI, not a per-colour render; unfamiliar keys sort
 # alphabetically so a reordered mapping never changes the chosen image.
 
 

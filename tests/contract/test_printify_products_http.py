@@ -2,7 +2,7 @@
 projection that keeps a comparison honest.
 
 Every payload here is transcribed from a real response recorded on 2026-09-08
-(docs/api-findings.md), including the parts that make the naive
+(docs/research/api-findings.md), including the parts that make the naive
 implementation wrong: the product comes back carrying the *whole* blueprint
 matrix, the placed image gains nine fields we never sent, and an unused
 placeholder arrives empty rather than absent.
@@ -156,7 +156,7 @@ def test_create_posts_to_the_shop_and_returns_the_product() -> None:
 def test_a_create_body_lists_only_the_variants_being_created() -> None:
     """On create, `print_areas.variant_ids` covers the variants being created.
     On update it must cover every variant the product has -- the same payload
-    is rejected as an update of the product it made (docs/api-findings.md)."""
+    is rejected as an update of the product it made (docs/research/api-findings.md)."""
     seen: dict = {}
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -360,7 +360,7 @@ def _page(products: list[dict], *, page: int, last: int) -> dict:
 
 
 def test_the_walk_finds_a_product_matching_title_and_description() -> None:
-    """PRD 48. There is no natural key and no filter -- `title`, `search` and
+    """ADR-0023. There is no natural key and no filter -- `title`, `search` and
     `sku` are all accepted and ignored -- so the match is client-side."""
     found = _client(
         lambda _: httpx.Response(200, json=_page([PRODUCT_PAYLOAD], page=1, last=1))
@@ -447,7 +447,7 @@ def test_delete_removes_the_product() -> None:
 
 def test_delete_treats_a_gone_product_as_already_deleted() -> None:
     """A retract that already deleted the product, then failed because the
-    Etsy draft survived, re-applies after the user removed the draft (PRD 63).
+    Etsy draft survived, re-applies after the user removed the draft.
     The product is gone; crashing on that 404 leaves the local files stuck."""
     _client(lambda _: httpx.Response(404, json={"message": "Not Found"})).delete_product(
         SHOP_ID, PRODUCT_ID

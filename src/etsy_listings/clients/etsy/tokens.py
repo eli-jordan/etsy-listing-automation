@@ -3,13 +3,13 @@
 Etsy issues a new **refresh** token on every refresh, so the file write is
 part of the protocol rather than a cache of it: lose the write and the next
 run has no way back to a working credential except the browser. Everything
-here follows from that (A23).
+here follows from that.
 
 - The write is **atomic and lands before the new access token is used**, so a
   crash mid-rotation leaves either the old pair or the new one, never a
   half-file and never a rotated-but-unrecorded token.
 - Refresh is **serialised in-process**, because `plan` fans its read-only
-  fetches across a thread pool (A3) and two threads refreshing the same token
+  fetches across a thread pool and two threads refreshing the same token
   would each invalidate the other's.
 - An `invalid_grant` is **re-read before it is believed**: a second process
   may have rotated the pair a moment ago, and the answer to that is to use
@@ -17,7 +17,7 @@ here follows from that (A23).
 
 The store never builds a client. It is handed a `refresh` callable, because
 the token endpoint is the one Etsy endpoint that needs no bearer -- which is
-what keeps this module free of a cycle through :mod:`transport`.
+what keeps this module free of a cycle through:mod:`transport`.
 """
 
 from __future__ import annotations
@@ -43,7 +43,7 @@ that ordinary use is not refreshing on every command."""
 REFRESH_TOKEN_LIFETIME = timedelta(days=90)
 """Etsy documents the refresh token's life and not whether using one restarts
 the clock. So this is recomputed at every rotation -- optimistic, and never
-the authority: an `invalid_grant` is what actually settles it (PRD 50)."""
+the authority: an `invalid_grant` is what actually settles it."""
 
 RENEW_WARNING = timedelta(days=14)
 
@@ -59,7 +59,7 @@ class EtsyAuthError(UserFacingError, RuntimeError):
     Naming the command that fixes it is the definition of a
     :class:`~etsy_listings.errors.UserFacingError`; being one is what keeps a
     signed-out workspace reporting that fact per listing rather than aborting
-    the run on the first (PRD 16).
+    the run on the first.
     """
 
     def __init__(self, detail: str) -> None:
@@ -188,7 +188,7 @@ class TokenStore:
         `chmod` is best-effort and deliberately not checked. On Windows -- the
         platform this is developed on -- it sets a read-only bit and is not an
         access control at all, so failing the run over it would be enforcing a
-        guarantee we cannot make either way (PRD 49).
+        guarantee we cannot make either way.
         """
         self._path.parent.mkdir(parents=True, exist_ok=True)
         temp = self._path.with_name(self._path.name + ".tmp")
@@ -209,7 +209,7 @@ class TokenStore:
         This is the callable the transport is built with, and it is resolved
         lazily on every request rather than once at construction -- `plan`
         builds clients it may never call, and a workspace that has not reached
-        Phase 3 must not be made to sign in to build one (A22).
+        Phase 3 must not be made to sign in to build one.
         """
         with self._lock:
             stored = self.load()

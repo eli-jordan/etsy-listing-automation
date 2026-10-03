@@ -68,7 +68,7 @@ class TestTemplatePhotos:
     """Where each scene really is, so the listings editor can caption its
     preview with a path that exists.
 
-    It used to compose that path client-side from PRD 7a's convention, which is
+    It used to compose that path client-side from ADR-0004's convention, which is
     exactly the rule `template_base_image`'s fallback exists to bend -- so the
     caption named a missing file for the one pack layout the renderer handles.
     """
@@ -86,7 +86,7 @@ class TestTemplatePhotos:
         ]
 
     def test_a_fixed_scene_carries_no_colour(self, client: TestClient) -> None:
-        """PRD 28: a `multiple`/`single` template has one photo and no
+        """ADR-0014: a `multiple`/`single` template has one photo and no
         per-colour name to derive it from."""
         assert self.photos(client, "colour-chart-01") == [
             {"colour": None, "file": "mockup-templates/colour-chart-01/scene.png"}
@@ -110,7 +110,7 @@ class TestCalibrationStatus:
     """The rail sorts uncalibrated templates to the top and explains why each
     one is not done, so `status` has to be *derived* -- there is no
     `calibrated:` flag in template.yaml and deliberately so, since that would
-    be new persisted product state the PRD has not agreed. Everything here is
+    be new persisted product state that could disagree with the config. Everything here is
     computed from what the config already says.
     """
 
@@ -235,7 +235,7 @@ class TestThumbnails:
 
 
 class TestPhoto:
-    """`GET .../photo`: the same bare scene photo as the thumbnail, at its own
+    """`GET.../photo`: the same bare scene photo as the thumbnail, at its own
     resolution -- the listing editor's Variants/Listing Images preview stage
     for a listing that has not picked a design yet, which must not be stuck
     showing the rail's 160px tile."""
@@ -277,7 +277,8 @@ class TestPhoto:
 
 
 class TestDesignLibrary:
-    """A19: the test design is a library, not a fixed literal. The grid target
+    """the calibration-design library: the test design is a library, not a fixed literal. The grid
+    target
     answers "is the warp right?" and says nothing about how a real ink weight
     sits on a real garment, so the set has to be open."""
 
@@ -428,7 +429,7 @@ class TestAssigningAKind:
     def test_assigning_colour_matrix_leaves_the_photos_named_as_colours(
         self, client: TestClient, workspace_root: Path
     ) -> None:
-        """PRD 7a: the filename *is* the colour, so nothing is renamed."""
+        """ADR-0004: the filename *is* the colour, so nothing is renamed."""
         _template_folder(workspace_root, "fresh", "black.png", "ivory.png")
         client.post("/api/templates/fresh/kind", json={"kind": "colour-matrix"})
         by_name = {t["name"]: t for t in client.get("/api/templates").json()}
@@ -437,7 +438,7 @@ class TestAssigningAKind:
     def test_assigning_single_renames_the_lone_photo_to_the_scene(
         self, client: TestClient, workspace_root: Path
     ) -> None:
-        """PRD 28: multiple/single kinds use a fixed scene.png -- there is no
+        """ADR-0014: multiple/single kinds use a fixed scene.png -- there is no
         per-colour photo to name."""
         directory = _template_folder(workspace_root, "fresh", "some-shot.png")
         assert client.post("/api/templates/fresh/kind", json={"kind": "single"}).status_code == 200
@@ -488,7 +489,7 @@ class TestAssigningAKind:
 
 class TestColourReport:
     """The kind picker shows what colour each photo will be taken as, before
-    committing to `colour-matrix`. PRD 7a makes the filename the source of
+    committing to `colour-matrix`. ADR-0004 makes the filename the source of
     truth, so this only *reports* that rule -- there is no manual mapping.
     """
 
@@ -521,7 +522,7 @@ class TestColourReport:
         }
 
     def test_excludes_the_scene_photo(self, client: TestClient) -> None:
-        """A scene is not a colour (PRD 28)."""
+        """A scene is not a colour."""
         rows = client.get("/api/templates/colour-chart-01/colour-report").json()
         assert all(row["filename"] != "scene.png" for row in rows)
 
@@ -589,7 +590,7 @@ def test_preview_renders_the_full_composite_for_multiple_kind(client: TestClient
 
 
 class TestDesignPreview:
-    """`GET .../design-preview`: the listing editor's real-render preview,
+    """`GET.../design-preview`: the listing editor's real-render preview,
     which -- unlike `preview()` above -- resolves a listing's real
     `designs/*.png` artwork and reads geometry from the *saved*
     template.yaml rather than the request body."""
@@ -669,7 +670,7 @@ class TestDesignPreview:
 
 
 class TestSwatch:
-    """`GET .../swatch`: a colour's real garment shade, sampled off its own
+    """`GET.../swatch`: a colour's real garment shade, sampled off its own
     scene photo -- not an invented hex value."""
 
     def test_returns_a_hex_colour_for_a_real_colour(self, client: TestClient) -> None:
@@ -901,7 +902,7 @@ bouncing off request validation before the name is ever looked at."""
         ("POST", "/api/templates/bad%3Aname/kind", {"kind": "single"}),
         ("PUT", "/api/templates/bad%3Aname/config", SINGLE_CONFIG),
         # Not a template name: a *design* id, reaching the same rule through
-        # the preview endpoint's test-design library (A19). The rest of the
+        # the preview endpoint's test-design library. The rest of the
         # body is valid so the request gets past validation to the id.
         (
             "POST",
@@ -934,7 +935,7 @@ def test_an_unusable_name_is_a_400_from_every_endpoint(
 
 
 class TestFilenamesBecomeColourSlugs:
-    """PRD 7a: a colour-matrix photo's filename *is* the slugified colour.
+    """ADR-0004: a colour-matrix photo's filename *is* the slugified colour.
 
     The calibrator used to only say so. `Heather Grey.png` was reported as a
     colour literally called "Heather Grey", previewed happily under that name,
@@ -1030,7 +1031,7 @@ class TestFilenamesBecomeColourSlugs:
     def test_exceptions_yaml_decides_the_slug(
         self, client: TestClient, workspace_root: Path
     ) -> None:
-        """PRD 7a's escape hatch: a sparse exceptions.yaml overrides names
+        """ADR-0004's escape hatch: a sparse exceptions.yaml overrides names
         that don't slugify usefully. The calibrator has to honour it, or it
         renames a file to a slug no listing will ever reference -- a bare
         `slugify` here would give `heather-grey`, and the workspace has said

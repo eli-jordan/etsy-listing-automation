@@ -212,7 +212,7 @@ def capture[T](
     "already set -- leaving it alone" is the whole of that step, and spending
     a network call to re-confirm what nobody asked about is not free. ``setup``
     says yes, because verifying the Printify token *is* asking which shops it
-    reaches (PRD 42) and it needs that answer either way.
+    reaches and it needs that answer either way.
 
     A verification that raises is a refusal: ``command`` names what to re-run,
     and nothing is written by this function in any case -- see :func:`store`.
@@ -275,7 +275,7 @@ def announce_gitignore(root: Path) -> None:
 
     Both wizards do this before the first secret, with the same message: a
     workspace inside an existing repository is one where a ``.env`` written a
-    moment too early is already tracked (PRD 49).
+    moment too early is already tracked.
     """
     if scaffold.update_gitignore(root):
         typer.echo("  wrote .gitignore (.env, .auth/ and .cache/ stay out of git)")

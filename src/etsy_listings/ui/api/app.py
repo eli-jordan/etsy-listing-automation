@@ -1,15 +1,6 @@
-"""FastAPI app factory. Phase 1 carried only the calibrator's endpoints (PRD:
-"the calibration UI lands in phase 1 ... because templates must be calibrated
-before rendering is useful at all"); phase 5 adds the listings list and editor
-(``listings.py``); A33 adds the runs resource (``runs.py``) and the executor
-thread behind it.
+"""FastAPI app factory for the calibrator, listings, AI runs and batch workflows.
 
-**Contexts are injected.** ``context_factory`` defaults to
-``connections.run_context`` -- the assembly every real server uses -- but the
-runs executor never calls ``connections`` directly (`connections.py`'s own
-rule: "a credential is resolved when it is used, never when a client is
-built"). A test passes a factory wired to in-memory fakes instead, and the
-executor is none the wiser.
+The routes share one workspace and the same engine services as the CLI.
 """
 
 from __future__ import annotations
@@ -54,6 +45,8 @@ FRONTEND_DIST = Path(__file__).parent.parent / "frontend" / "dist"
 def default_market_client(workspace: Workspace) -> EtsyMarketClient | None:
     """The real, read-only Etsy market client (the app key only), or `None`
     when the workspace has none."""
+    if connections.etsy_app_key(workspace.root) is None:
+        return None
     return connections.etsy_market_client(workspace.root)
 
 
@@ -100,10 +93,10 @@ def create_app(
         cancelling kills its provider subprocess tree, so a server stopping
         never waits out a model.
 
-        Expired staging sessions are swept on the way in (A46). The batch
+        Expired staging sessions are swept on the way in. The batch
         queue starts with the app, returning rows a previous server left
         running to the queue, and stops before the AI runs are cancelled, so
-        it starts nothing into a runner that is shutting down (A40)."""
+        it starts nothing into a runner that is shutting down."""
         staging_store.sweep(now=datetime.now(UTC))
         executor.start()
         batch_queue.start()
@@ -129,20 +122,20 @@ def create_app(
     # Held around every read-merge-write of a listing (`listings.py`, and
     # PR 5's brief write) -- `ui/workspace_locks.py` says why.
     app.state.workspace_locks = locks
-    # AI runs (market-seo.md, *AI runs*): their own registry and a thread per
+    # AI runs (features/market-seo-20260924/spec.md, *AI runs*): their own registry and a thread per
     # run, never `run_executor`. `market_client_factory` is the test seam for
     # Etsy market search, as `seo_provider_factory` is for the providers.
     app.state.ai_run_registry = ai_registry
     app.state.ai_runner = ai_runner
-    # Batch creation's cache records (A37): one store of each per process, so
+    # Batch creation's cache records: one store of each per process, so
     # their per-record locks mean something.
     app.state.staging_store = staging_store
     app.state.batch_store = batch_store
-    # A40: the batch AI queue, dispatching batch rows onto `ai_runner`.
+    # ADR-0048: the batch AI queue, dispatching batch rows onto `ai_runner`.
     # `market_client_factory` is also what staging's AI readiness asks.
     app.state.batch_queue = batch_queue
     app.state.market_client_factory = market_client_factory
-    # A41: the cached proposals, written by `ai_runner` and read and resolved
+    # ADR-0049: the cached proposals, written by `ai_runner` and read and resolved
     # through `seo.py`. One store, for the same reason.
     app.state.proposal_store = proposal_store
 
@@ -164,7 +157,7 @@ def create_app(
 
         Nine endpoints used to wrap their own ``workspace.…(name)`` call in
         the same three lines to say so. The refusal itself still belongs to
-        ``Workspace`` (A8 makes it a security boundary, not a formatting
+        ``Workspace`` (ADR-0013 makes it a security boundary, not a formatting
         concern); all this does is decide the status code it surfaces as.
         """
         return JSONResponse(status_code=400, content={"detail": str(exc)})
@@ -187,7 +180,7 @@ def create_app(
     if FRONTEND_DIST.is_dir():
         # Built assets under /assets; everything else falls back to
         # index.html so client-side routing works on a hard refresh.
-        # `npm run build` (A5) must have run first -- in dev, use the Vite
+        # `npm run build` must have run first -- in dev, use the Vite
         # dev server instead and hit uvicorn only for /api.
         app.mount("/assets", StaticFiles(directory=FRONTEND_DIST / "assets"), name="assets")
 

@@ -1,5 +1,5 @@
 """``GET /api/listings/{name}/market``: the listing's latest market snapshot,
-which the top listings panel reads on mount (market-seo.md, *UI*;
+which the top listings panel reads on mount (features/market-seo-20260924/spec.md, *UI*;
 implementation plan, PR 8)."""
 
 from __future__ import annotations
@@ -105,7 +105,7 @@ def test_a_damaged_snapshot_reads_as_none(workspace_root: Path, client: TestClie
 
 
 def test_no_full_description_is_sent(workspace_root: Path, client: TestClient) -> None:
-    """market-seo.md, *What the proposal sees*: the lead, never the whole
+    """features/market-seo-20260924/spec.md, *What the proposal sees*: the lead, never the whole
     description -- the panel shows what the model saw."""
     seed_snapshot(workspace_root, scored=1)
 

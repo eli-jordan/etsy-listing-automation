@@ -11,7 +11,7 @@ bespoke auth error, a base URL, a timeout, and an ``httpx.Client`` fallback.
 Keeping them apart was not free. The catalog reader called
 ``raise_for_status()`` and had **no retries at all**, so a 429 on
 ``GET /v1/catalog/blueprints.json`` failed a ``new`` run outright while the
-identical 429 on a product write rode out its backoff window (A21). Nobody
+identical 429 on a product write rode out its backoff window. Nobody
 decided that; it is what two implementations of one concern drift into.
 
 What stays split is the *authority*: :class:`~...protocol.CatalogClient` and
@@ -28,7 +28,7 @@ failure observed against the live API is
 
 ``errors.reason`` is a human sentence naming the offending field, and is the
 only part of that envelope worth putting in front of a user
-(docs/api-findings.md).
+(docs/research/api-findings.md).
 """
 
 from __future__ import annotations
@@ -82,7 +82,7 @@ class PrintifyAuthError(UserFacingError, RuntimeError):
     :class:`~etsy_listings.errors.UserFacingError` is for, and the message
     below has always been written as one. Until it *was* one, a revoked token
     on the third listing of ``--all`` ended the batch with a stack trace
-    instead of a line, against PRD 16.
+    instead of a line, against continue-on-error.
 
     One error for both halves. They were two, with two messages naming two
     scopes -- and a user whose token was missing ``catalog.read`` got the
@@ -99,8 +99,8 @@ class PrintifyAuthError(UserFacingError, RuntimeError):
             f"present, it is expired, revoked, or missing a scope.\n"
             f"  Reading the catalog needs `catalog.read`; writing products needs the "
             f"shop and product scopes as well.\n"
-            f"  Regenerate it at printify.com/app/account/api (docs/setup.md "
-            f"section 1.3), or re-run `etsy-listings setup`, which verifies a token "
+            f"  Regenerate it at printify.com/app/account/api (docs/guides/setup.md), "
+            f"or re-run `etsy-listings setup`, which verifies a token "
             f"before storing it."
         )
 
@@ -184,7 +184,7 @@ class Transport:
         # Retries happen *before* the error decoding below, so a 429 that
         # clears on the second attempt never becomes an exception at all --
         # and one that does not clear surfaces as the real decoded error
-        # rather than a retry wrapper's summary of it (A21).
+        # rather than a retry wrapper's summary of it.
         response = with_retries(send, method, self._policy, sleep=self._sleep)
 
         if response.status_code in (401, 403):

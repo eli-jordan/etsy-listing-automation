@@ -3,7 +3,7 @@ import type { ListingProposal, ProposalResolutionPatch, SeoReadinessResponse } f
 
 /**
  * AI Mode's readiness check (AI SEO implementation plan, PR7) and the
- * listing's cached proposal (A41). Generation itself is an AI run:
+ * listing's cached proposal. Generation itself is an AI run:
  * `api/aiRuns.ts`.
  */
 
@@ -21,7 +21,7 @@ export async function getSeoReadiness(name: string): Promise<SeoReadinessRespons
 }
 
 /** The listing's cached proposal, judged stale by the server against the
- * saved listing, or `null` when it has none (A41). */
+ * saved listing, or `null` when it has none (ADR-0049). */
 export async function getListingProposal(name: string): Promise<ListingProposal | null> {
   const { data, error, response } = await api.GET("/api/listings/{name}/proposal", {
     params: { path: { name } },

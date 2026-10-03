@@ -1,4 +1,4 @@
-"""Header pacing on the Etsy transport (market-seo.md, *Quota*).
+"""Header pacing on the Etsy transport (features/market-seo-20260924/spec.md, *Quota*).
 
 Every Etsy response says how many calls are left this second. When that
 reaches 0, the next call waits for the next second rather than spending a
@@ -133,7 +133,7 @@ def test_calls_left_this_second_or_no_readable_header_means_no_wait(
 
 
 def test_the_pacing_holds_across_five_threads_with_one_sleep() -> None:
-    """Five market calls in flight at once (market-seo.md, *Quota*) share
+    """Five market calls in flight at once (features/market-seo-20260924/spec.md, *Quota*) share
     one gate: none is sent before the next second, and the wait is a single
     sleep that the others block behind -- not five sleeps, and not a poll."""
     time = FakeTime()
@@ -179,7 +179,8 @@ def test_a_later_response_with_calls_left_does_not_lift_a_wait_already_owed() ->
 
 def test_the_daily_budget_is_logged_at_debug(caplog: pytest.LogCaptureFixture) -> None:
     """Logged, never stored: Etsy's limits are per app and set in the
-    developer portal, so no budget is kept anywhere (market-seo.md, *Quota*)."""
+    developer portal, so no budget is kept anywhere
+    (features/market-seo-20260924/spec.md, *Quota*)."""
     time = FakeTime()
     handler, _ = _answering(time, 9)
     transport = _transport(time, handler)

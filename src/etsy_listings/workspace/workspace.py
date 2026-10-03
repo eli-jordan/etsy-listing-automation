@@ -1,4 +1,4 @@
-"""Workspace root discovery and path resolution. A8.
+"""Workspace root discovery and path resolution. ADR-0013.
 
 The data tree (``shop.yaml``, ``designs/``, ``listings/``,
 ``mockup-templates/``, ``.cache/``) is a separate directory the user owns, never
@@ -65,15 +65,15 @@ class PathEscapesWorkspaceError(ValueError):
 
 
 MIGRATION_SCRIPT = "scripts/migrate_workspace_refs.py"
-"""PRD 73's one-off rewrite, named by every refusal of the form it replaces."""
+"""ADR-0046's one-off rewrite, named by every refusal of the form it replaces."""
 
 
 class InvalidRefError(ConfigLoadError):
-    """A path in ``listing.yaml`` that is not a two-root ref (PRD 73).
+    """A path in ``listing.yaml`` that is not a two-root ref.
 
     A :class:`ConfigLoadError`, so a stage that meets one fails that listing
     with a sentence rather than a traceback, and the rest of an ``--all``
-    batch carries on (PRD 16).
+    batch carries on.
     """
 
     def __init__(
@@ -112,7 +112,7 @@ def _segment(name: str) -> str:
 
 class NotAMediaFileError(InvalidNameError):
     """A path, from a URL, that does not name an image or video in the
-    directory it was asked of (PRD 72).
+    directory it was asked of.
 
     An :class:`InvalidNameError`, so the UI's one handler turns it into a
     ``400`` like any other name it cannot use."""
@@ -146,7 +146,7 @@ def _is_media_file_in(path: Path, directory: Path) -> bool:
 class AmbiguousColourSuffixError(ValueError):
     """More than one photo in a template's directory ends in the same colour
     slug's hyphen segments, so :func:`Workspace.template_base_image`'s
-    trailing-segment fallback (PRD 7a) has no single answer. Refused rather
+    trailing-segment fallback has no single answer. Refused rather
     than guessed at -- an arbitrary pick here would ship the wrong photo."""
 
     def __init__(self, template: str, colour: str, candidates: list[Path]) -> None:
@@ -259,7 +259,7 @@ class Workspace:
     def browser_storage_id(self) -> str:
         """Stable workspace identity without exposing its absolute path to the UI.
 
-        PRD 4 scopes pending SEO proposals to a workspace and listing. Shop
+        ADR-0003 scopes pending SEO proposals to a workspace and listing. Shop
         name cannot identify a workspace: two roots can use the same name.
         """
         native_root = os.path.normcase(str(self.root.resolve()))
@@ -303,7 +303,7 @@ class Workspace:
     def resolve(self, ref: str, relative_to: Path) -> Path:
         """Resolve ``ref`` against ``relative_to`` to an absolute path.
 
-        The escape check every path goes through (A8). A path written in
+        The escape check every path goes through. A path written in
         ``listing.yaml`` does not come here directly: :meth:`resolve_ref`
         interprets its two roots first, then calls this.
         Raises :class:`PathEscapesWorkspaceError` if the result would fall
@@ -320,13 +320,13 @@ class Workspace:
         return candidate
 
     def resolve_ref(self, ref: str, *, listing_dir: Path) -> Path:
-        """The one interpreter of a path written in ``listing.yaml`` (PRD 73).
+        """The one interpreter of a path written in ``listing.yaml``.
 
         Two roots: no prefix is the workspace root (``designs/x.png``), and
         ``./`` is the listing's own directory (``./shots/back.png``).
         Subdirectories are fine under either; ``..`` is refused anywhere, so a
         ref says where its file is without a reader having to count levels.
-        The result still goes through :meth:`resolve`'s escape check (A8), which
+        The result still goes through :meth:`resolve`'s escape check, which
         is what catches a symlink out of the root.
 
         ``listing_dir`` rather than a name, because the editor's unnamed draft
@@ -337,7 +337,7 @@ class Workspace:
 
     def resolve_template_ref(self, ref: str, *, template: str) -> Path:
         """:meth:`resolve_ref` for a path in a listing template's
-        ``template.yaml`` (A35): the same two roots, with ``./`` meaning the
+        ``template.yaml``: the same two roots, with ``./`` meaning the
         template's own directory, where Save as listing template copies a
         listing's local media. One interpreter with a second owner, not a
         second resolver -- a template's refs become a listing's when it is
@@ -384,7 +384,7 @@ class Workspace:
 
     def listing_names(self) -> list[str]:
         """Directories that still have ``listing.yaml``, or a lockfile with
-        the yaml gone (PRD 67: the row still appears, ``Blocked``). An empty
+        the yaml gone (missing listing files: the row still appears, ``Blocked``). An empty
         directory is not a listing.
         """
         listings = self.root / layout.LISTINGS_DIR
@@ -402,16 +402,16 @@ class Workspace:
         """Every directory under ``listings/``, a listing or not. A name one
         holds is taken even without a ``listing.yaml`` -- create refuses it
         -- so this, not :meth:`listing_names`, is what a new name must avoid
-        (A38)."""
+        ."""
         listings = self.root / layout.LISTINGS_DIR
         if not listings.is_dir():
             return []
         return sorted(path.name for path in listings.iterdir() if path.is_dir())
 
     def remove_listing(self, listing: str) -> None:
-        """Wipe ``listings/{name}/``, ``.cache/renders/{name}/`` (PRD 63),
-        ``.cache/previews/{name}/`` (A32), the market snapshot
-        (market-seo.md, *Cache*) and the cached AI proposal (A42).
+        """Wipe ``listings/{name}/``, ``.cache/renders/{name}/``,
+        ``.cache/previews/{name}/``, the market snapshot
+        (features/market-seo-20260924/spec.md, *Cache*) and the cached AI proposal.
 
         Designs, garment profiles and pricing plans stay -- they are reusable.
         """
@@ -431,7 +431,7 @@ class Workspace:
     def draft_listing_dir(self) -> Path:
         """A listing directory for a listing that has none yet -- the editor's
         unnamed draft, and the design a brief is drafted from before the
-        listing is named. A workspace-rooted ref (PRD 73) lands on the same file
+        listing is named. A workspace-rooted ref lands on the same file
         from any listing directory, so this answers for them exactly as a real
         one would; a `./` ref finds nothing here, which is right, since a
         listing with no directory has no files of its own."""
@@ -444,7 +444,7 @@ class Workspace:
         return self.root / layout.LISTING_TEMPLATES_DIR
 
     def listing_template_names(self) -> list[str]:
-        """Directories that hold a ``template.yaml`` (A35). Save as listing
+        """Directories that hold a ``template.yaml``. Save as listing
         template creates the directory before it writes the file, and a
         directory without one is a save still in flight or one that failed,
         not a template anybody can use."""
@@ -476,7 +476,7 @@ class Workspace:
     def listing_template_media_files(self, template: str) -> list[Path]:
         """Every image and video under a listing template's ``assets/``: the
         *This template* group of the file locator. Only ``assets/``, because
-        that is where every file a template owns is put (A35) -- a stray
+        that is where every file a template owns is put -- a stray
         file beside ``template.yaml`` is nothing the template names."""
         return self._media_files_in(self.listing_template_assets_dir(template))
 
@@ -496,10 +496,10 @@ class Workspace:
         )
 
     def write_listing_template(self, template: str, document: ListingTemplate) -> None:
-        """Write ``template.yaml``, atomically (A37). Defaults are left out, so
+        """Write ``template.yaml``, atomically. Defaults are left out, so
         the file says only what the seller set -- as a hand-written listing
         does. Whether the document is complete enough to write is the
-        caller's question (A36), not the file's."""
+        caller's question, not the file's."""
         dumped = document.model_dump(mode="json", exclude_defaults=True)
         write_bytes_atomic(
             self.listing_template_file(template),
@@ -513,7 +513,7 @@ class Workspace:
         shared refs are never frozen."""
         return self._resolve_owned_ref(ref, frozen_dir, layout.TEMPLATE_FILE)
 
-    # Batch creation's cache records (A37). Ids come from URLs, so every one
+    # Batch creation's cache records. Ids come from URLs, so every one
     # goes through `_segment` like a listing name.
 
     def staging_ids(self) -> list[str]:
@@ -561,7 +561,7 @@ class Workspace:
 
     def design_ref(self, design: str) -> str:
         """The workspace-rooted ref ``listing.yaml`` names ``designs/<design>.png``
-        by (PRD 73) -- what batch creation writes into every listing it makes
+        by -- what batch creation writes into every listing it makes
         (spec, *Design validation*)."""
         return f"{layout.DESIGNS_DIR}/{_segment(design)}.png"
 
@@ -621,9 +621,9 @@ class Workspace:
         ``size-guide.png``, ``videos/intro.mp4``.
 
         Taken as written, with no extension appended: a shared file may be a
-        JPEG or a video (PRD 72) and may sit in a subdirectory, so the name
+        JPEG or a video and may sit in a subdirectory, so the name
         has to say which. See :meth:`_media_file_in` for the boundary it
-        enforces; it takes names from URLs (A8).
+        enforces; it takes names from URLs.
         """
         return self._media_file_in(self.common_media_dir(), path)
 
@@ -633,7 +633,7 @@ class Workspace:
         chart, a care card, a size-guide video), as opposed to a rendered
         mockup.
 
-        Only the types ``media:`` accepts (PRD 72), matched case-insensitively
+        Only the types ``media:`` accepts, matched case-insensitively
         as :func:`~etsy_listings.config.media.media_kind` matches them, so
         nothing is offered that a listing would then refuse to load. Sorted
         by path rather than mtime -- unlike a design, a shared asset is
@@ -643,14 +643,14 @@ class Workspace:
 
     def listing_media_file(self, listing: str, path: str) -> Path:
         """One of a listing's own files, by its path under the listing's
-        directory -- what a ``./`` ref names (PRD 73), without the ``./``.
+        directory -- what a ``./`` ref names, without the ``./``.
         The same boundary as :meth:`common_media_file`, which matters more
         here: this directory also holds ``listing.yaml`` and the lockfile."""
         return self._media_file_in(self.listing_dir(listing), path)
 
     def listing_media_files(self, listing: str) -> list[Path]:
         """Every image and video in a listing's own directory, recursively:
-        the *This listing* half of the file locator (PRD 72). Never
+        the *This listing* half of the file locator. Never
         ``listing.yaml``, the lockfile, or anything a symlink reaches outside
         the directory. Empty for a listing with no directory yet."""
         return self._media_files_in(self.listing_dir(listing))
@@ -697,13 +697,13 @@ class Workspace:
 
     def brief_prompt_file(self) -> Path:
         """``prompts/brief.md`` -- the seller-editable prompt that drafts a
-        listing brief from its design image (PRD 68). Same split as
+        listing brief from its design image. Same split as
         :meth:`seo_prompt_file`: this accessor only names the file."""
         return self.root / layout.PROMPTS_DIR / layout.BRIEF_PROMPT_FILE
 
     def market_queries_prompt_file(self) -> Path:
         """``prompts/market-queries.md`` -- the seller-editable prompt that
-        extracts three buyer searches for market research (market-seo.md,
+        extracts three buyer searches for market research (features/market-seo-20260924/spec.md,
         *Query extraction*). Same split: this accessor only names the file."""
         return self.root / layout.PROMPTS_DIR / layout.MARKET_QUERIES_PROMPT_FILE
 
@@ -712,9 +712,9 @@ class Workspace:
 
     def common_copy_file(self, ref: str) -> Path:
         """Verify a `description.ref` and resolve it -- beneath
-        `common-copy/` only (PRD's description model).
+        `common-copy/` only.
 
-        Written from the workspace root, as every ref is (PRD 73), but
+        Written from the workspace root, as every ref is, but
         narrower than :meth:`resolve_ref`: it has no `./` form, because
         common copy is shared by definition. It still goes through :meth:`resolve` for
         the general escape checks (absolute paths, `..` past the root,
@@ -780,7 +780,7 @@ class Workspace:
         resolver every deployment reader (Printify, Etsy, snapshots, diffs,
         local validation) is required to call, rather than each re-deriving
         it. The editor reads :meth:`resolve_description` once for both its
-        preview and its issue check (docs/ai-seo-implementation-plan.md,
+        preview and its issue check (docs/features/ai-seo-20260922/plan.md,
         "Description and common-copy boundaries").
 
         Loads ``description.ref`` through :meth:`load_common_copy` when one is
@@ -836,7 +836,7 @@ class Workspace:
 
         ``auth`` itself cannot use this accessor -- it runs before there is a
         ``shop.yaml`` to discover a workspace by, so it joins the same two
-        layout constants against the root it was given (PRD 49). This exists
+        layout constants against the root it was given. This exists
         for everything downstream of it, which does have a workspace.
         """
         return self.root / layout.AUTH_DIR / layout.ETSY_TOKENS_FILE
@@ -897,7 +897,7 @@ class Workspace:
     def template_colours(self, template: str) -> list[str]:
         """The colours a ``colour-matrix`` set offers, read from its filenames.
 
-        PRD 7a: the mockup filename *is* the slugified colour name, which is
+        ADR-0004: the mockup filename *is* the slugified colour name, which is
         why this is a directory listing and not a lookup table.
         """
         return [photo.stem for photo in self.template_photos(template)]
@@ -923,7 +923,7 @@ class Workspace:
         return self.template_dir(template) / layout.DERIVED_DIR
 
     def template_base_image(self, template: str, colour: str) -> Path:
-        """``colour-matrix``-kind templates only (PRD 7a): the mockup filename
+        """``colour-matrix``-kind templates only: the mockup filename
         *is* the slugified colour name.
 
         Falls back to a trailing-segment match against the directory's actual
@@ -968,7 +968,7 @@ class Workspace:
         return ScenePhoto(path=self.template_scene_image(template), map_key=template)
 
     def test_designs_dir(self) -> Path:
-        """Where the calibrator's uploaded test targets live (A19). Separate
+        """Where the calibrator's uploaded test targets live. Separate
         from ``designs/``, which holds artwork that actually ships."""
         return self.root / layout.TEST_DESIGNS_DIR
 
@@ -1014,7 +1014,7 @@ class Workspace:
         return self.cache(layout.MARKET_DIR, layout.MARKET_STATS_DIR)
 
     def market_snapshot_file(self, listing: str) -> Path:
-        """The listing's latest market research (market-seo.md, *Cache*).
+        """The listing's latest market research (features/market-seo-20260924/spec.md, *Cache*).
         Keyed by listing name, like :meth:`renders_dir`, so a rename moves it
         and :meth:`remove_listing` removes it."""
         return self.cache(
@@ -1022,30 +1022,50 @@ class Workspace:
         )
 
     def proposal_file(self, listing: str) -> Path:
-        """The listing's cached AI SEO proposal (A41), keyed by its exact
-        name as :meth:`market_snapshot_file` is (A37)."""
+        """The listing's cached AI SEO proposal, keyed by its exact
+        name as :meth:`market_snapshot_file` is."""
         return self.cache(layout.PROPOSALS_DIR, f"{_segment(listing)}.json")
 
     def preview_dir(self, listing: str) -> Path:
         """Every preview this listing currently holds, one subdirectory per
         template -- the same split :meth:`renders_dir` uses, since a preview
         is the same pixels :meth:`render_file` would produce, just rendered
-        ahead of ``apply`` (A32). Sibling to the render cache, not nested in
+        ahead of ``apply``. Sibling to the render cache, not nested in
         it, so :meth:`remove_listing` can wipe one independently of the other."""
         return self.cache(layout.PREVIEWS_DIR, _segment(listing))
+
+    def relative_path(self, path: Path) -> str:
+        """Serialize an owned path for API responses, with portable separators."""
+        return path.relative_to(self.root).as_posix()
+
+    def prune_previews(self, listing: str, valid: dict[str, set[str]]) -> None:
+        """Keep current content-addressed scenes, removing unused templates."""
+        root = self.preview_dir(listing)
+        if not root.is_dir():
+            return
+        for directory in root.iterdir():
+            if not directory.is_dir():
+                continue
+            keep = valid.get(directory.name)
+            if keep is None:
+                remove_tree(directory)
+                continue
+            for file in directory.glob("*.png"):
+                if file.name not in keep:
+                    file.unlink()
 
     def preview_file(
         self, listing: str, template: str, colour: str | None, scene_hash: str
     ) -> Path:
         """One scene's full-size preview, content-addressed by its own
-        ``scene_hash`` (A32): a plan that changes nothing finds the file
+        ``scene_hash``: a plan that changes nothing finds the file
         already there, and a stale one simply stops matching rather than
         needing to be found and deleted by name. Filename mirrors
         :meth:`render_file`'s own convention -- the colour for a
         ``colour-matrix`` scene, ``scene`` otherwise -- with the hash appended
         so two different states of the same scene never collide. ``scene_hash``
         goes through :func:`_segment` like every other name here: it is a
-        security boundary (PRD 20's future preview endpoint resolves through
+        security boundary (ADR-0008's future preview endpoint resolves through
         this accessor, never a path from the URL), not just a naming rule, so
         it refuses anything that is not a single, filesystem-safe segment --
         which is exactly why the caller strips the hash's ``sha256:`` prefix
@@ -1106,7 +1126,7 @@ class Workspace:
 
     def save_template_config(self, template: str, config: AnyTemplate) -> None:
         """Write ``template.yaml``. The calibrator is the only caller -- it is
-        what produces this file (PRD: the calibrator's artefact) -- but the
+        what produces this file -- but the
         path and the serialisation belong here, beside the read."""
         path = self.template_config_file(template)
         path.parent.mkdir(parents=True, exist_ok=True)

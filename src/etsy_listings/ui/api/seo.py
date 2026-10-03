@@ -1,12 +1,12 @@
 """AI Mode's readiness endpoint, the market snapshot the top listings panel
 reads, and the helpers AI runs build a proposal with (AI SEO implementation
-plan, PR5; market-seo.md, *AI runs*; market-seo implementation plan, PR 8).
+plan, PR5; features/market-seo-20260924/spec.md, *AI runs*; market-seo implementation plan, PR 8).
 
 ```
-GET   /api/listings/{name}/ai-seo/readiness      -> SeoReadinessResponse
-GET   /api/listings/{name}/market                -> MarketSnapshot | 404
-GET   /api/listings/{name}/proposal              -> ListingProposal | 404
-PATCH /api/listings/{name}/proposal/resolution   -> ListingProposal | 404 | 409
+GET /api/listings/{name}/ai-seo/readiness -> SeoReadinessResponse
+GET /api/listings/{name}/market -> MarketSnapshot | 404
+GET /api/listings/{name}/proposal -> ListingProposal | 404
+PATCH /api/listings/{name}/proposal/resolution -> ListingProposal | 404 | 409
 ```
 
 Generation itself is an AI run (``ui/airuns/``, served by
@@ -103,7 +103,7 @@ def readiness(
     *,
     draft_brief: bool,
 ) -> SeoReadinessResponse:
-    """Whether an AI run may start for this listing (market-seo.md, *AI
+    """Whether an AI run may start for this listing (features/market-seo-20260924/spec.md, *AI
     runs*), checked in the order a seller would most usefully hear about
     them: what *this* listing is missing before what the local machine's
     provider tooling is missing, since the former is fixed by editing the
@@ -188,7 +188,7 @@ BATCH_PENDING_REASON = "This listing is drafting in a batch. AI Mode is back onc
 
 
 DEPLOYING_REASON = "This listing is deploying. AI Mode is back once the deploy finishes."
-"""The editor's hint while a UI plan or apply holds the listing (A43; UI doc
+"""The editor's hint while a UI plan or apply holds the listing (ADR-0050; UI doc
 §8, *Deploying takes precedence over AI*)."""
 
 
@@ -225,7 +225,7 @@ def get_seo_readiness(target: Existing, request: Request) -> SeoReadinessRespons
 )
 def get_market_snapshot(target: Existing) -> MarketSnapshot:
     """The listing's latest market research, as the top listings panel shows
-    it after a reload (market-seo.md, *UI*). Written only by an AI run whose
+    it after a reload (features/market-seo-20260924/spec.md, *UI*). Written only by an AI run whose
     search succeeded, so a failed run leaves the previous one here. 404 until
     the first search -- the panel is not rendered then -- and for a snapshot
     that no longer reads as one, which the next run replaces."""
@@ -241,7 +241,7 @@ def get_market_snapshot(target: Existing) -> MarketSnapshot:
     responses={404: {"description": "No such listing, or no proposal cached for it"}},
 )
 def get_listing_proposal(target: Existing, request: Request) -> ListingProposal:
-    """The listing's latest AI SEO proposal (A41; spec, *Durable AI
+    """The listing's latest AI SEO proposal (ADR-0049; spec, *Durable AI
     proposals*), with which sections were resolved and whether it has gone
     stale. Written by every AI run before it announces the proposal, so a
     reload, a server restart or a batch run all find it here."""

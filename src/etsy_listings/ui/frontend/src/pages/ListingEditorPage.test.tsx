@@ -183,7 +183,7 @@ describe("ListingEditorPage", () => {
     expect(screen.queryByRole("group", { name: "Actions" })).toBeNull();
   });
 
-  describe("lifecycle actions (PRD 66)", () => {
+  describe("lifecycle actions", () => {
     it("offers exactly the gestures the server serves", async () => {
       vi.spyOn(listingsApi, "getListing").mockResolvedValue(
         detail({ status: "inactive", etsy_listing_id: 555, gestures: ["retire", "renew"] }),
@@ -318,7 +318,7 @@ describe("ListingEditorPage", () => {
     expect(screen.getByText("still <generate>")).toBeInTheDocument();
   });
 
-  it("presents deploy blockers as warnings, marked in words (PRD 70)", async () => {
+  it("presents deploy blockers as warnings, marked in words", async () => {
     /* None of these stops the save -- naming the listing wrote it -- so an
        error's red circle told a seller their work was refused. A blocker
        wears the warning icon like everything else, and says what it stops
@@ -469,7 +469,7 @@ describe("ListingEditorPage", () => {
   });
 
   it("runs the AI chain once the picked design is saved, and fills in the brief it drafts", async () => {
-    /* PRD 68: a pick on a listing whose brief is empty arms the chain; the
+    /* ADR-0003: a pick on a listing whose brief is empty arms the chain; the
        save that follows fires it. The server writes the drafted brief, so
        the field fills in without another save. */
     vi.spyOn(listingsApi, "listListingDesigns").mockResolvedValue([

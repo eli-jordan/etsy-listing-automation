@@ -1,14 +1,14 @@
 """The packaged default `prompts/seo.md`, the setup seed operation, and the
 delimited JSON context/response-schema wrapper the application appends
 around a seller's plain prompt text (AI SEO implementation plan, PR3, items
-2-4; `docs/ai-seo-implementation-plan.md`'s "Prompt" decision).
+2-4; `docs/features/ai-seo-20260922/plan.md`'s "Prompt" decision).
 
 Three responsibilities, kept in one module because they share the one
 contract they all have to agree on -- the proposal shape `RESPONSE_SCHEMA`
 describes is the same shape `ai/validation.py` hard-validates, and the same
 shape `default_prompt_text()`'s packaged prompt asks a provider to produce:
 
-- **The default prompt itself** (:func:`default_prompt_text`) is packaged as
+- **The default prompt itself** ( :func:`default_prompt_text`) is packaged as
   data under ``ai/resources/seo.md`` rather than a Python string constant, so
   it can be read, diffed and edited as the prose document it is -- the same
   reason the repository-root drafting source (`seo_prompt.md`) is a Markdown
@@ -16,7 +16,7 @@ shape `default_prompt_text()`'s packaged prompt asks a provider to produce:
   descendant of that drafting source: three titles, 20 tags, three
   description leads, seven rationale entries, warnings, and observed OCR
   text, where the draft asked for one of each (except tags and rationale).
-- **Seeding** (:func:`seed_prompt`) creates the seller's copy only when one
+- **Seeding** ( :func:`seed_prompt`) creates the seller's copy only when one
   does not exist yet, and never touches an existing file -- `setup` fills
   gaps, it does not correct answers (see `setupcmd/__init__.py`'s own
   statement of that rule, which this is the AI feature's instance of). It
@@ -25,7 +25,7 @@ shape `default_prompt_text()`'s packaged prompt asks a provider to produce:
   caller (`setupcmd`) already knows how to reach `Workspace.seo_prompt_file()`
   and `Workspace.brief_prompt_file()`, or its own pre-workspace paths when
   `setup` is still creating the directory tree.
-- **Prompt assembly** (:func:`build_prompt`) is the one place a seller's
+- **Prompt assembly** ( :func:`build_prompt`) is the one place a seller's
   plain instruction text is wrapped in the JSON this feature needs back. The
   application appends, it never substitutes into the seller's own text --
   there is no placeholder syntax to support, which is also why
@@ -133,7 +133,7 @@ def seed_prompt(path: Path, text: str) -> SeedResult:
 
     ``text`` is a parameter rather than this function picking a packaged
     default, because there are two of them now (``seo.md`` and ``brief.md``,
-    PRD 68) and "which prompt" is not a question a seeding rule has any way
+    ADR-0003) and "which prompt" is not a question a seeding rule has any way
     to answer better than its caller.
     """
     if path.is_file():
@@ -161,10 +161,10 @@ def _matches(path: Path, text: str) -> bool:
 
 def sync_prompt(path: Path, text: str, *, replace: bool) -> PromptSync:
     """Bring one prompt file into line with its packaged default ``text`` --
-    as far as the seller has allowed (market-seo.md, *Prompts and
-    `setup --replace-prompts`*; PRD 71).
+    as far as the seller has allowed (features/market-seo-20260924/spec.md, *Prompts and
+    `setup --replace-prompts`*; ADR-0044).
 
-    A missing file is seeded (:func:`seed_prompt`). An existing file equal to
+    A missing file is seeded ( :func:`seed_prompt`). An existing file equal to
     ``text`` is left alone either way: replacing it would change nothing, and
     its ``.bak`` would overwrite the one holding the seller's last real edit.
     An existing file that differs is left byte for byte unless ``replace``;
@@ -215,7 +215,7 @@ def build_task_prompt(
     verbatim, then this request's context and the response schema, each inside
     its own fixed delimiters.
 
-    Shared by both AI features (PRD 68) -- the delimiters, the "treat this as
+    Shared by both AI features -- the delimiters, the "treat this as
     data" boundary they mark, and the closing instruction are properties of
     how this codebase talks to a coding-agent CLI, not of what it is asking
     for. :func:`build_prompt` below and `ai/brief.py.build_brief_task` differ
@@ -233,7 +233,7 @@ def build_task_prompt(
 
     ``data_block`` is one more block of supplied data, already delimited,
     placed after the context: the market data a proposal is given
-    (market-seo.md, *What the proposal sees*). It brings its own markers
+    (features/market-seo-20260924/spec.md, *What the proposal sees*). It brings its own markers
     because it has its own author, `market/block.py`, which also defuses any
     marker another seller's text tries to smuggle in. Empty means none, and
     then nothing is sent, for the reason an absent context is left out.
@@ -267,7 +267,7 @@ def build_seo_task(seller_prompt: str, request: SeoRequest) -> ProviderTask:
 
     The two steps an adapter used to take for itself -- read ``prompts/seo.md``,
     call :func:`build_prompt` -- happen here instead, which is what lets one
-    adapter serve both AI features (`ai/models.py.ProviderTask`, PRD 68).
+    adapter serve both AI features (`ai/models.py.ProviderTask`, ADR-0003).
     """
     return ProviderTask(
         prompt_text=build_prompt(seller_prompt, request),

@@ -7,7 +7,7 @@ exist yet -- this drives the real pipeline: ``plan_listings``/
 :class:`~etsy_listings.clients.printify.HttpPrintifyClient` and
 :class:`~etsy_listings.clients.etsy.HttpEtsyListingClient`. The recon this
 phase was built from lives in
-[docs/printify-etsy-integration.md](../../docs/printify-etsy-integration.md);
+[docs/research/printify-etsy-integration.md](../../docs/research/printify-etsy-integration.md);
 this is what re-takes it once the code exists to take it with.
 
 **Needs two things the offline suite never does**: a Printify token (shared
@@ -25,17 +25,17 @@ measured, by asking for a listing a previous run had created and getting a
 opposite -- that the listing was orphaned and had to be cleared by hand -- and
 that claim was never checked. Nothing here ever sets ``state``: the
 "live-edit check" confirms the listing is still a draft after every write this
-test makes, which is the measurable form of PRD's non-goal 1 (the tool never
-activates a listing).
+test makes, which is the measurable form of the rule that first publication stays with the seller.
 
 **Every stage must actually run.** A blocked stage is reported, not raised,
 and ``RunReport.failed`` does not count one -- so ``assert not report.failed``
 passes over a stage that refused, and the layer reports green for work it
 never did. It did: `etsy_listing` was blocked for want of a shipping profile
 through every run of this test, so the `updateListing` PATCH at the centre of
-PRD 52-59 was never once sent against the real API, while the first test's
+ADR-0028, ADR-0029, ADR-0030, ADR-0031, ADR-0032 was never once sent against the real API, while the
+first test's
 title assertion passed anyway because Printify creates the listing from the
-*product's* title (PRD 44). :func:`apply_everything` is the guard -- no stage
+*product's* title. :func:`apply_everything` is the guard -- no stage
 may refuse -- and the workspace fixture now resolves a shipping profile from
 the shop it is pointed at rather than leaving one unset.
 """
@@ -82,7 +82,7 @@ IMAGES_IN_ORDER = [
 
 
 def _with_videos(*, second_after: int) -> list[object]:
-    """The images, with the featured video at position 2 (PRD 72) and the
+    """The images, with the featured video at position 2 and the
     second anchored after ``second_after`` of them."""
     head, rest = IMAGES_IN_ORDER[:1], IMAGES_IN_ORDER[1:]
     media: list[object] = [*head, FEATURED_VIDEO, *rest]
@@ -106,7 +106,7 @@ def apply_everything(ctx: RunContext) -> RunReport:
     """Apply, and insist the whole pipeline actually ran.
 
     ``report.failed`` is not enough on its own. A stage that refuses is
-    *reported*, not failed -- PRD 16's rule, and the right one -- so an
+    *reported*, not failed, so an
     assertion on ``failed`` alone passes over a pipeline that quietly did half
     its work. That is not a hypothetical: `etsy_listing` refused in every run
     of this test for want of a shipping profile, and nothing said so.
@@ -229,14 +229,14 @@ class TestTheFullCycle:
 
         # The fields only `etsy_listing`'s PATCH can have set. The title is not
         # one of them -- Printify creates the listing carrying the *product's*
-        # title (PRD 44), so asserting on it proves nothing about the PATCH,
+        # title, so asserting on it proves nothing about the PATCH,
         # which is how a stage that never ran passed this test for weeks.
         assert live.materials == ("cotton",)
         assert live.who_made == "i_did"
         assert live.when_made == "made_to_order"
         assert live.is_supply is False
         assert live.should_auto_renew is False, "renewal: manual"
-        # Resolved from a *name* against the live shop (A25). A stale id here
+        # Resolved from a *name* against the live shop. A stale id here
         # is a 400 that fails the whole PATCH, which is why it is resolved per
         # run rather than cached.
         assert live.shipping_profile_id is not None
@@ -253,7 +253,7 @@ class TestTheFullCycle:
 
     def test_the_listing_is_still_a_draft(self, ctx: RunContext, workspace: Workspace) -> None:
         """The live-edit check: nothing this tool did activated the listing
-        (PRD non-goal 1) -- `state` is never in the PATCH body, and this is
+         -- `state` is never in the PATCH body, and this is
         what proves the omission holds against the real API."""
 
         written = Lockfile.read(workspace.lock_file(LISTING))
@@ -267,7 +267,7 @@ class TestTheFullCycle:
     def test_getting_the_listing_with_images_returns_a_570xn_url(
         self, ctx: RunContext, workspace: Workspace
     ) -> None:
-        """A30, read-only: `getListing?includes=Images` on the real shop
+        """ADR-0038, read-only: `getListing?includes=Images` on the real shop
         carries `url_570xN` for a real, already-uploaded image -- the deploy
         review's "On Etsy now" column reads this for a draft. Reads the
         listing an earlier test in this sequence already created; this test
@@ -341,13 +341,13 @@ class TestTheFullCycle:
                 f"Etsy's own inventory (Printify's variant push), not anything this tool "
                 f"writes -- if that hasn't materialised yet by the time this test asks, "
                 f"resolve_colour_property finds no overlap and the media stage skips "
-                f"loudly rather than failing (decision 6, PRD 46). "
+                f"loudly rather than failing (decision 6, missing variant cells). "
                 f"Inventory properties as read: {properties}"
             )
         image_ids = set(written.remote["etsy_image_ids"].values())
         assert {link.image_id for link in links} <= image_ids
 
-    # -------------------------------------------------- videos (PRD 72)
+    # -------------------------------------------------- videos
 
     def test_two_videos_are_placed_and_their_ids_recorded(
         self, ctx: RunContext, workspace: Workspace

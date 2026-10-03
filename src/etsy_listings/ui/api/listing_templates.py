@@ -1,4 +1,4 @@
-"""Listing-template endpoints (A35, A36; batch plan PR 1): the Listing
+"""Listing-template endpoints (ADR-0047, template completeness; batch plan PR 1): the Listing
 templates page's index, the *name it* page's draft, create (Save as listing
 template and Clone), read, valid-only ``PUT`` and delete.
 
@@ -9,7 +9,7 @@ answer is on the wire, in the listings endpoints' idiom:
   that is not a single path segment (the app-wide ``InvalidNameError``
   handler), ``409`` for one already taken, which is never suffixed.
 * A **document** it will not write is a ``200`` with ``saved: false`` and the
-  issues or field errors, and nothing on disk changes (A36). That is what lets
+  issues or field errors, and nothing on disk changes. That is what lets
   the editor keep the seller's values and say why.
 * A **source** that cannot become a template -- no such listing, a ``./``
   file that cannot be read -- is ``404`` or ``422`` with the sentence.
@@ -320,7 +320,7 @@ def get_listing_template(request: Request, name: str) -> ListingTemplateDetail:
 def put_listing_template(
     request: Request, name: str, body: dict[str, Any]
 ) -> ListingTemplateSaveResult:
-    """A36: write the whole document only if it is complete. A malformed or
+    """template completeness: write the whole document only if it is complete. A malformed or
     incomplete one leaves ``template.yaml`` byte-for-byte as it was, so the
     server always holds the last complete version; the listing-template editor
     (PR 6) keeps the unsaved values on its side."""
@@ -350,13 +350,13 @@ def rename_listing_template(
     request: Request, name: str, body: RenameListingRequest
 ) -> ListingTemplateDetail:
     """Move a listing template, whole, to a new name -- double-click the
-    name, exactly as a listing (UI doc §3). Its name is its directory (A35),
+    name, exactly as a listing (UI doc §3). Its name is its directory,
     so the rename is a directory move and its ``./`` refs, which name that
     directory, need no rewrite. A taken name is a 409 and never suffixed
     (spec, *Storage and identity*).
 
     Staging sessions and batch records made from it follow it by name --
-    the name, not the frozen copy they each keep (A37), which is untouched.
+    the name, not the frozen copy they each keep, which is untouched.
     That name is the card's *Used by N batches* and the staging page's
     *Using X*, the seller's link between a template and its batches. It
     is rewritten after the move, under each record's lock; a crash between

@@ -8,7 +8,7 @@ import type { MediaEntry, TemplateMediaEntry } from "../../types";
  * there is nothing to change. No component state, no DOM, no fetch -- so the
  * rules can be tested by calling them, which is the whole reason they are not
  * closures inside `ImagesTab` any more. The one that matters most was the
- * hardest to reach that way: `toggleSwatchSource` is PRD 56's gate, and it was
+ * hardest to reach that way: `toggleSwatchSource` is ADR-0030's gate, and it was
  * a callback three levels inside a 733-line component.
  */
 
@@ -28,7 +28,7 @@ export interface MediaState {
 }
 
 /** Etsy's ceiling on listing images, mirrored from `config/media.py`'s
- * `MAX_IMAGES`. Videos are counted apart (PRD 72): a listing may hold twenty
+ * `MAX_IMAGES`. Videos are counted apart: a listing may hold twenty
  * images *and* two videos. */
 export const MAX_IMAGES = 20;
 
@@ -70,7 +70,7 @@ export function toggleEntry(
  * colour}` entry: the same list, two shapes (`config/listing.py`'s
  * `MediaEntry`).
  *
- * An image goes on the end. A video goes where PRD 72's gallery rules put it:
+ * An image goes on the end. A video goes where ADR-0045's gallery rules put it:
  * the first one at position 2, where Etsy pins the featured video, and the
  * second on the end, since it may sit anywhere after that. A video with no
  * image yet to be the thumbnail, a third video and a twenty-first image are
@@ -101,7 +101,7 @@ export function addEveryMissingColour(detail: MediaState, template: string): Pat
 /**
  * Point Etsy's colour swatches at this template, or turn them off.
  *
- * Turning it on also adds the colours it lacks: PRD 56's gate
+ * Turning it on also adds the colours it lacks: ADR-0030's gate
  * (`EtsyMediaStage.desired()`) refuses a `variation_images` template whose
  * colours the media does not carry, so naming one without filling it in would
  * write a listing the engine then refuses to apply. Switching *from* another
@@ -126,7 +126,7 @@ export function removeAt(detail: MediaState, index: number): Patch | null {
  * so this is a product decision the user makes by dragging, not a display
  * detail.
  *
- * Inside PRD 72's gallery rules. The featured video holds position 2 while
+ * Inside ADR-0045's gallery rules. The featured video holds position 2 while
  * images move around it, so an image dropped on the thumbnail becomes the
  * thumbnail without pushing the video to 3. The second video may go anywhere
  * after the featured one, and dropping it on position 2 swaps them. A move
@@ -190,7 +190,7 @@ function count(media: readonly MediaEntry[], kind: "image" | "video"): number {
 }
 
 /**
- * What is left after a removal, put back inside PRD 72's gallery rules -- or
+ * What is left after a removal, put back inside ADR-0045's gallery rules -- or
  * `null` when nothing can be.
  *
  * Removing the thumbnail brings the next image forward; removing the featured

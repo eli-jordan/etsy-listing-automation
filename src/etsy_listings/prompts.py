@@ -1,9 +1,9 @@
 """How an interactive command asks a question, given the terminal it got.
 
-A package-root leaf like :mod:`etsy_listings.terminal`, and for the same
+A package-root leaf like:mod:`etsy_listings.terminal`, and for the same
 reason: it answers a question about the terminal rather than about any one
 command. It lived in ``newcmd/`` while ``new`` was the only thing that
-prompted; ``setup`` (PRD 43) is the second, and reaching into another
+prompted; ``setup`` is the second, and reaching into another
 package's submodule for it would have been the wrong way to share this.
 
 This module exists because of a hard constraint discovered while building the
@@ -12,21 +12,21 @@ prompt_toolkit on ``sys.platform == "win32"`` only ever builds a Win32,
 Windows-10-VT100 or ConEmu output, and a cygwin pty is a named pipe with no
 console screen buffer behind it, so ``create_output()`` raises
 ``NoConsoleScreenBufferError`` before a single key is read. Verified under a
-real pty (``script -q -c ... /dev/null``), not just a redirect. CLAUDE.md
+real pty (``script -q -c... /dev/null``), not just a redirect. CLAUDE.md
 mandates cygwin zsh as *the* shell for this project, so "run it somewhere
 else" is not an answer -- ``new`` has to work there.
 
 So each question picks the best backend that can actually run:
 
-===============  =========================================================
-``choose``       ``fzf`` if this machine has one -- fuzzy, scrollable, and
+=============== =========================================================
+``choose`` ``fzf`` if this machine has one -- fuzzy, scrollable, and
                  the tool asked for. Otherwise a plain selector
                  that does not filter at all: questionary's arrow-key list
                  where prompt_toolkit works, else a numbered list over
                  ``input()``, which works anywhere.
-``text``         questionary, else ``input()``.
-``confirm``      questionary, else ``input()``.
-===============  =========================================================
+``text`` questionary, else ``input()``.
+``confirm`` questionary, else ``input()``.
+=============== =========================================================
 
 **Only fzf filters.** Filtering was tried in the other two backends and both
 were worse than not having it. questionary's autocomplete copies the
@@ -102,7 +102,7 @@ def fzf_command() -> list[str] | None:
     So when the native lookup fails, ask cygwin's own shell whether it has one
     and, if it does, run fzf *through* that shell so the shebang is honoured.
     Returning an argv prefix rather than a path is what lets the two cases --
-    a real ``fzf.exe`` and ``sh -c 'exec fzf ...'`` -- reach one call site.
+    a real ``fzf.exe`` and ``sh -c 'exec fzf...'`` -- reach one call site.
     """
     native = shutil.which("fzf")
     if native is not None:

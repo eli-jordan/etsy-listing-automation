@@ -1,5 +1,5 @@
 """Reading the Etsy market: other sellers' active listings, their stats, and
-their review counts (market-seo.md, *Search* and *Stats*).
+their review counts (features/market-seo-20260924/spec.md, *Search* and *Stats*).
 
 Three calls, each the one the spec names and nothing more -- the filtering,
 scoring and rationing that decide *which* calls to make live in research, not
@@ -13,9 +13,9 @@ here:
 - :meth:`~EtsyMarketClient.review_count`: `getReviewsByListing`, one review
   asked for and only its total read.
 
-Read-only by type, like :mod:`shops`: a caller holding an
+Read-only by type, like:mod:`shops`: a caller holding an
 :class:`EtsyMarketClient` cannot reach a write however the transport underneath
-is shared (A22). All three calls are unscoped -- the app key pair is enough --
+is shared. All three calls are unscoped -- the app key pair is enough --
 so the client needs no sign-in (see ``connections.etsy_market_client``).
 
 Pacing and retries are the transport's: header pacing through
@@ -68,7 +68,7 @@ class HttpEtsyMarketClient:
         """Active listings matching ``query``, in the order Etsy ranks them
         for a buyer (``sort_on=score``) who ships to the US -- the country the
         seo prompt writes for. Deliberately no ``taxonomy_id``: nothing in a
-        listing or garment profile records one (market-seo.md, *Search*)."""
+        listing or garment profile records one (features/market-seo-20260924/spec.md, *Search*)."""
         response = self._transport.get(SEARCH_PATH, params=search_params(query, limit=limit))
         return [MarketCandidate.model_validate(row) for row in _results(response.json())]
 
@@ -110,7 +110,7 @@ class HttpEtsyMarketClient:
     def review_count(self, listing_id: int) -> int:
         """How many reviews the listing has: the nearest thing to per-listing
         sales the API offers, and the one per-listing call, so the one
-        research rations (market-seo.md, *Stats*).
+        research rations (features/market-seo-20260924/spec.md, *Stats*).
 
         ``limit=1`` because ``count`` is the total whatever the page size
         (measured). A listing gone since the batch counts zero rather than

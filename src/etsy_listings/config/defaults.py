@@ -29,7 +29,7 @@ class MissingDefaultError(ValueError):
 
 
 class PrintifyDefaults(BaseModel):
-    """Which Printify shop this workspace creates products in (PRD 42).
+    """Which Printify shop this workspace creates products in.
 
     Every product call is shop-scoped -- ``/v1/shops/{shop}/products.json`` --
     so nothing in Phase 2 can run without it. Optional at load anyway, for the
@@ -41,7 +41,7 @@ class PrintifyDefaults(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     shop_name: str | None = None
-    """What the shop is called in Printify, stored beside the id (PRD 51).
+    """What the shop is called in Printify, stored beside the id.
 
     Not a resolution key -- `setup` selects the shop and stores its id, and
     Printify's titles are whatever the owner typed. It is here so that the
@@ -51,7 +51,7 @@ class PrintifyDefaults(BaseModel):
     shop_id: int | None = None
     preferred_print_provider: str | None = None
     """By name, not id. Preselected in `new` when it offers the chosen
-    garment. Under `printify:` because it names a Printify entity (PRD 51)."""
+    garment. Under `printify:` because it names a Printify entity."""
 
     def require_shop_id(self) -> int:
         if self.shop_id is None:
@@ -66,8 +66,8 @@ class PrintifyDefaults(BaseModel):
 
 
 class EtsyReturnPolicyDefaults(BaseModel):
-    """A return policy's identity, since Etsy gives the resource no title
-    (PRD 59). The three terms *are* the identity -- `getShopReturnPolicies`
+    """A return policy's identity, since Etsy gives the resource no title.
+    The three terms *are* the identity -- `getShopReturnPolicies`
     is matched on them exactly, and `describe()` (models.py) is what a plan
     renders instead of a bare id."""
 
@@ -80,10 +80,10 @@ class EtsyReturnPolicyDefaults(BaseModel):
 
 class EtsyListingDefaults(BaseModel):
     """Every field a listing inherits, and nothing that identifies the shop
-    (phase-3-etsy.md, "Config, after this phase"). Overridable per listing in
+    (features/etsy-listing-20260910/spec.md, "Config, after this phase"). Overridable per listing in
     `listing.yaml`'s own `etsy:` block.
 
-    `who_made` defaults to `someone_else` (PRD 52): the shirt genuinely was
+    `who_made` defaults to `someone_else`: the shirt genuinely was
     made by another company, and that declaration requires a production
     partner attached to the *listing* -- checked at plan time (decision 3),
     not here, since resolving a name to a partner needs the shop's live list.
@@ -96,7 +96,7 @@ class EtsyListingDefaults(BaseModel):
     is_supply: bool = False
     renewal: Literal["manual", "auto"] = "manual"
     shipping_profile: str | None = None
-    """By name, not id (PRD 54) -- resolved against the shop's shipping
+    """By name, not id -- resolved against the shop's shipping
     profiles at plan time (`EtsyShopCatalog`), since a stale id would fail
     the whole `updateListing` PATCH."""
     return_policy: EtsyReturnPolicyDefaults | None = None
@@ -109,17 +109,17 @@ class EtsyDefaults(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     currency: str
-    """The shop's own currency, read from Etsy by `setup` (PRD 51).
+    """The shop's own currency, read from Etsy by `setup`.
 
     Under `etsy:` because it describes the Etsy shop, and read rather than
     typed because a workspace configured in one currency while the shop sells
     in another is a disagreement nothing surfaces until a price lands wrong.
-    PRD 24 is unchanged: it remains the only currency a price may be written
+    ADR-0006 is unchanged: it remains the only currency a price may be written
     in."""
 
     shop_name: str | None = None
     """The shop's name on Etsy -- the human-readable half of its identity, and
-    what `findShops` resolves the id from (PRD 51)."""
+    what `findShops` resolves the id from."""
 
     # Deferrable, like `printify.shop_id`: it normally comes back *from* the
     # Etsy API, so demanding it at load time made a workspace unusable before
@@ -153,7 +153,7 @@ MOVED_KEYS = {
     "currency": "etsy.currency",
     "preferred_print_provider": "printify.preferred_print_provider",
 }
-"""Where two top-level keys went (PRD 51).
+"""Where two top-level keys went.
 
 `extra="forbid"` would report them as "extra inputs are not permitted", which
 is true and useless: the value is not extra, it is one line further down the
@@ -187,7 +187,7 @@ def _refuse_moved_keys(path: Path, raw: dict[str, object]) -> None:
     moves = "\n".join(f"  {key}: -> {moved_to}:" for key, moved_to in found)
     raise ConfigLoadError(
         path,
-        "these keys moved under the service that owns them (PRD 51):\n"
+        "these keys moved under the service that owns them:\n"
         f"{moves}\n"
         "  Move them by hand, or re-run `etsy-listings setup`, which rewrites "
         "the file in the current shape.",

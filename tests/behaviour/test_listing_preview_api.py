@@ -1,4 +1,4 @@
-"""``GET /api/listings/{name}/previews/{template}[/{colour}]`` (A32/A33):
+"""``GET /api/listings/{name}/previews/{template}[/{colour}]``:
 resolved through ``Workspace.preview_file`` and the *current* scene hash,
 never through a path built from the URL -- CLAUDE.md's invariant on
 ``workspace`` owning the layout is explicit that this is exactly the kind of

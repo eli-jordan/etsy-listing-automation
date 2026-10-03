@@ -21,7 +21,7 @@ import { openRunStream, type RunStreamHandle } from "./deploy/runStream";
 import { TERMINAL_PHASES } from "./deploy/runPhases";
 
 /**
- * The deploy route: `/listings/:name/deploy` (docs/deploy-changes.md
+ * The deploy route: `/listings/:name/deploy` (docs/features/deploy-20260917/spec.md
  * decision 9). Reattaches to whatever run this listing already has, or
  * starts one -- the composing piece over the pure `deployState` reducer and
  * `comparison` builder, and the presentation modules that draw them.
@@ -176,7 +176,7 @@ export function DeployPage() {
 
   // Status after apply is re-derived from the server, never assumed
   // (decision 10) -- a first deploy reads Deployed, not Live, and a partial
-  // apply reads Dirty (A29).
+  // apply reads Dirty (ADR-0037).
   useEffect(() => {
     if (state.phase !== "applied") return;
     let current = true;

@@ -1,18 +1,18 @@
-"""Running the pipeline over a set of listings, and what came of each. PRD 16.
+"""Running the pipeline over a set of listings, and what came of each.
 
 The shape of a *run* -- read the listing's lockfile, plan it, execute it,
 write the lockfile back, and carry on when one of them fails -- used to live
 in ``cli/app.py``, in a private helper taking a callback. None of it is
 presentation: the lockfile's path and lifecycle are engine concerns, the tool
-version and the clock stamped into it are engine concerns, and PRD 16's
-"one bad listing must not halt fifty good ones" is a product rule that has to
+version and the clock stamped into it are engine concerns, and "one bad listing must not halt fifty
+good ones" is a product rule that has to
 hold whichever entry point drives it. The only thing the CLI added was the
 words.
 
 So this module is to ``build_plan``/``execute`` what
 :class:`~etsy_listings.engine.change.Plan` is to ``cli.render.format_plan``:
 the same seam, one level up. ``cli`` formats the :class:`RunReport`; the UI
-(Phase 5) will serialise it; neither re-derives what a run does, and PRD 16 is
+(Phase 5) will serialise it; neither re-derives what a run does, and continue-on-error is
 now testable without a terminal.
 
 **One event sink, not a callback bundle that grows.** Planning, previewing and
@@ -97,10 +97,10 @@ class RunReport:
 
 
 def fully_applied(outcome: ListingOutcome, lock: Lockfile) -> bool:
-    """Whether ``outcome``'s apply was a *full success* (A44; spec,
+    """Whether ``outcome``'s apply was a *full success* (ADR-0050; spec,
     *Deployment interaction*): the listing is ``ok``, no stage of its plan
     was blocked, and ``lock`` -- the lockfile the apply left -- carries no
-    ``incomplete`` marker (A29).
+    ``incomplete`` marker.
 
     ``ok`` alone is not enough: a blocked stage is not a failure (the CLI
     says so out loud rather than failing the run), so a listing whose Etsy
@@ -119,7 +119,7 @@ def _never_stop() -> bool:
 
 class StalePlanError(UserFacingError):
     """``apply`` was asked to run a plan whose fingerprint no longer matches
-    what re-planning this listing produces right now (A31).
+    what re-planning this listing produces right now.
 
     Carries the fresh :class:`~etsy_listings.engine.plan.PlannedRun`, so a
     caller that reviewed a stale plan -- the editor, in a later PR -- can show
@@ -127,7 +127,7 @@ class StalePlanError(UserFacingError):
     runs a single stage: acting on a plan that may no longer describe the
     live state (Etsy drifted, or a hand edit changed ``listing.yaml``) would
     risk reverting something the reviewer never saw reverted. It is a
-    :class:`~etsy_listings.errors.UserFacingError`, so PRD 16 already covers
+    :class:`~etsy_listings.errors.UserFacingError`, so continue-on-error already covers
     it -- one stale listing in a many-listing ``apply`` does not stop the rest.
     """
 
@@ -140,7 +140,7 @@ class StalePlanError(UserFacingError):
 
 
 def plan_fingerprint(plan: Plan) -> str:
-    """A stable digest of everything a plan reviewed (A31).
+    """A stable digest of everything a plan reviewed.
 
     :func:`~etsy_listings.engine.lock.canonical_hash` over a canonical
     rendering of ``plan``, with every
@@ -153,7 +153,9 @@ def plan_fingerprint(plan: Plan) -> str:
     between two otherwise-identical plans -- an Etsy CDN URL, whether a
     preview has rendered yet -- and hashing one would make ``apply`` refuse a
     plan nobody actually disagreed with. Everything else is hashed on
-    purpose, drift and ``actions`` included: if Etsy drifted between review
+    purpose, drift, ``actions`` and stable stage ``review_hash`` values included:
+    render input edits invalidate review even when visible actions match. If
+    Etsy drifted between review
     and apply, applying without a fresh review would revert something the
     user never saw reverted.
     """
@@ -200,7 +202,7 @@ def plan_listings(
 ) -> RunReport:
     """Plan every listing. Reads only -- nothing is created or written.
 
-    ``should_stop`` (A33) is checked once per listing, before that listing's
+    ``should_stop`` is checked once per listing, before that listing's
     plan starts -- the UI's runs resource is what gives one, so a plan run's
     ``DELETE`` (or a server shutdown) stops the batch between listings rather
     than only after the last one. ``None``, every existing caller's default,
@@ -222,7 +224,7 @@ def preview_listing(
     *,
     should_stop: Callable[[], bool] | None = None,
 ) -> None:
-    """Render full-size previews for one already-planned listing (A32,
+    """Render full-size previews for one already-planned listing (ADR-0040,
     decision 6), emitting :class:`EnginePreviewRendered` once per scene
     that ends this call with a ready preview file.
 
@@ -264,32 +266,32 @@ def apply_listings(
     should_stop: Callable[[], bool] | None = None,
 ) -> RunReport:
     """Plan and then execute every listing, writing the lockfile after every
-    stage that succeeds, not just once at the end.
+        stage that succeeds, not just once at the end.
 
-    A29: this is what makes a partial apply resumable rather than only a
-    complete one. ``execute``'s ``record`` callback is what actually reaches
-    disk on the way through -- passing it a stage's own ``write`` is the
-    whole of what this function adds; a stage failing after a create (PRD 48)
-    is ``execute``'s to record, not this loop's to notice and redo.
+        ADR-0037: this is what makes a partial apply resumable rather than only a
+        complete one. ``execute``'s ``record`` callback is what actually reaches
+        disk on the way through -- passing it a stage's own ``write`` is the
+        whole of what this function adds; a stage failing after a create
+        is ``execute``'s to record, not this loop's to notice and redo.
 
-    ``expect`` (A31) is the fingerprint a caller saw when it last planned this
-    listing, keyed by name. A listing named in ``expect`` is re-planned as it
-    always is, and if the fresh plan's fingerprint disagrees, ``execute`` is
-    never called for it -- :class:`StalePlanError` is raised instead, caught
-    by the same PRD 16 loop every other refusal already goes through. A
-    listing this run applies with no entry in ``expect`` (every CLI call
-    today) skips the check entirely, which is what keeps `apply` usable
-    without ever having planned through this same mapping first.
+        ``expect`` is the fingerprint a caller saw when it last planned this
+        listing, keyed by name. A listing named in ``expect`` is re-planned as it
+        always is, and if the fresh plan's fingerprint disagrees, ``execute`` is
+        never called for it -- :class:`StalePlanError` is raised instead, caught
+        by the same continue-on-error loop every other refusal already goes through. A
+        listing this run applies with no entry in ``expect`` (every CLI call
+        today) skips the check entirely, which is what keeps `apply` usable
+        without ever having planned through this same mapping first.
 
-    ``should_stop`` (A33) is threaded two places: between listings, like
-    :func:`plan_listings`, and into ``execute`` itself, so a stage boundary
-    inside the *current* listing's apply is also a place this can stop --
-    which is the shutdown guarantee decision 7 makes (finish the stage in
-    progress, start no other). ``None`` behaves exactly as before.
+        ``should_stop`` is threaded two places: between listings, like
+        :func:`plan_listings`, and into ``execute`` itself, so a stage boundary
+        inside the *current* listing's apply is also a place this can stop --
+        which is the shutdown guarantee decision 7 makes (finish the stage in
+        progress, start no other). ``None`` behaves exactly as before.
 
-    A listing that ends :func:`fully_applied` loses its cached AI proposal
-    (A44): the proposal described copy that is now deployed or deliberately
-    not taken, and every entry point must leave the same proposal state.
+        A listing that ends :func:`fully_applied` loses its cached AI proposal
+    : the proposal described copy that is now deployed or deliberately
+        not taken, and every entry point must leave the same proposal state.
     """
     stop = should_stop or _never_stop
 
@@ -320,15 +322,15 @@ def apply_listings(
             should_stop=stop_here,
         )
         if halted:
-            # A33's graceful stop skipped stages the plan meant to run, so
+            # ADR-0041's graceful stop skipped stages the plan meant to run, so
             # the listing-level half of the apply did not happen either: a
             # retract that never ran must not wipe the listing, and a renew
-            # never sent must stay marked (PRD 62, 64). Nor is it a full
+            # never sent must stay marked. Nor is it a full
             # success, so the proposal stays too.
             return planned
         after_apply(ctx, listing, planned)
         if fully_applied(ListingOutcome(listing=listing, planned=planned), applied):
-            # A44: here, not in an entry point, so a CLI apply and a UI
+            # ADR-0050: here, not in an entry point, so a CLI apply and a UI
             # apply leave the same proposal state.
             ProposalStore(ctx.workspace).remove(listing)
         return planned
@@ -345,12 +347,12 @@ def _over(
 ) -> RunReport:
     """Run ``work`` per listing, continuing past any refusal the user can act on.
 
-    PRD 16. The exception is caught here rather than inside ``work`` so that
+    continue-on-error. The exception is caught here rather than inside ``work`` so that
     every step of a listing -- loading its lockfile, planning it, executing it
     -- is covered by the same rule, and adding a step later cannot quietly
     escape it.
 
-    ``should_stop`` (A33) is checked before each listing starts -- a listing
+    ``should_stop`` is checked before each listing starts -- a listing
     already in progress is `work`'s own business (``execute`` has its own,
     finer-grained check), and this loop only ever decides whether to *start*
     the next one.

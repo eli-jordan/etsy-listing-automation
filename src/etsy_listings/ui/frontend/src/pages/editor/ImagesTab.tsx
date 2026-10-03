@@ -28,7 +28,7 @@ import * as edits from "./mediaEdits";
  * `media`'s, and what a click *changes* is `mediaEdits`'s.
  *
  * It was one 733-line function holding all of that, thirteen `useState` deep,
- * with PRD 56's swatch-source gate as a callback three levels inside it. The
+ * with ADR-0030's swatch-source gate as a callback three levels inside it. The
  * split is by question: the rule about what `media:` may contain is now
  * callable without a DOM, and a test that clicks one × no longer has to mount
  * a template picker first.
@@ -75,7 +75,7 @@ export function ImagesTab({ detail, onUpdate, artwork, owner }: Props) {
       .catch(() => setStatus("failed to load shared files"));
   }, []);
 
-  // A draft has no directory, so nothing of its own to list (PRD 73).
+  // A draft has no directory, so nothing of its own to list.
   const listing: MediaOwner | null =
     owner === undefined ? (detail.name ? { kind: "listing", name: detail.name } : null) : owner;
   const directory = listing === null || listing.copies !== undefined ? null : listing;
@@ -145,7 +145,7 @@ export function ImagesTab({ detail, onUpdate, artwork, owner }: Props) {
             )}
             {view?.kind === "video" && (
               /* Its own controls, not the carousel button: a click on a
-                  clip is play or seek (PRD 72). Keyed by the file, so
+                  clip is play or seek (ADR-0045). Keyed by the file, so
                   pointing at another clip starts that one afresh. */
               <video
                 key={view.picture}

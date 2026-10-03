@@ -1,26 +1,26 @@
 """Everything said to Etsy, and everything remembered about saying it.
 
 ```
-oauth.py      the flow as pure functions -- URLs, PKCE, payload parsing
-callback.py   the loopback server that catches the redirect, once
-tokens.py     the token file: expiry, rotation, the only writer of it
-transport.py  Transport (both credentials, every API call, paced by the
+oauth.py the flow as pure functions -- URLs, PKCE, payload parsing
+callback.py the loopback server that catches the redirect, once
+tokens.py the token file: expiry, rotation, the only writer of it
+transport.py Transport (both credentials, every API call, paced by the
               rate headers through RateGate) and OAuthClient (the token
               endpoint, which carries neither)
-shops.py      EtsyShopClient -- setup's four unscoped reads
-listings.py   EtsyListingClient -- Phase 3's stages: publish's poll target,
+shops.py EtsyShopClient -- setup's four unscoped reads
+listings.py EtsyListingClient -- Phase 3's stages: publish's poll target,
               the copy PATCH, media upload/reorder/variation-images, and
-              video upload/attach/delete with its two refusals (PRD 72), plus
-              the editor's signed-in shop-section creation (PRD 53)
+              video upload/attach/delete with its two refusals, plus
+              the editor's signed-in shop-section creation
 market.py     EtsyMarketClient -- market-informed SEO's three unscoped
-              reads: search, batch stats, review counts (market-seo.md)
+              reads: search, batch stats, review counts (docs/features/market-seo-20260924/spec.md)
 models.py     what every endpoint above returns
-fakes.py      in-memory doubles for the behaviour layer (A4), including the
+fakes.py      in-memory doubles for the behaviour layer, including the
               video gallery decision 9 measured
 ```
 
 What is here (`oauth.py`, `callback.py`, `tokens.py`, `transport.py`) is the
-authentication half, which everything else waits on (A23).
+authentication half, which everything else waits on.
 
 Exported below is what the rest of the codebase should need: a transport, the
 errors worth catching by type, and the store that keeps a bearer coming.

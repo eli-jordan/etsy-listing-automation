@@ -147,7 +147,7 @@ def test_resolve_colour_slugs_raises_on_collision() -> None:
 
 
 def test_build_garment_profile_reads_print_area_from_the_largest_placeholder() -> None:
-    """One garment profile, one print area (PRD 8a), but the catalog offers
+    """One garment profile, one print area, but the catalog offers
     one per garment size -- the largest wins, so the design is sized for the
     panel that needs the most pixels."""
     profile = build_garment_profile(
@@ -172,7 +172,7 @@ def test_build_garment_profile_raises_actionable_error_for_missing_placeholder()
 
 
 def test_garment_profile_slug_for_is_brand_and_model_not_the_title() -> None:
-    """PRD 23. A title slug would file every brand's version of the same shirt
+    """ADR-0005. A title slug would file every brand's version of the same shirt
     under one name -- Printify calls the Comfort Colors 1717 "Unisex
     Garment-Dyed T-shirt", and so do several other brands' entries."""
     assert garment_profile_slug_for(TSHIRT) == "comfort-colors-1717"
@@ -208,8 +208,8 @@ def test_write_garment_profile_if_absent_writes_once_then_reuses(workspace_root:
 def test_an_existing_garment_profile_for_the_same_garment_is_reused_untouched(
     workspace_root: Path,
 ) -> None:
-    """PRD: `new` "writes garment-profiles/{slug}.yaml if absent; reuses it
-    silently if present". Since the slug is brand+model, a second listing on
+    """`new` writes garment-profiles/{slug}.yaml if absent; reuses it
+    silently if present. Since the slug is brand+model, a second listing on
     the garment the workspace already has a garment profile for finds it --
     which is the whole point of the garment profile being shared. The
     fixture's Comfort Colors 1717 is that case."""
@@ -270,7 +270,7 @@ def test_validate_listing_stub_accepts_a_pricing_plan_reference_with_no_prices()
 # Two things constrain it, and `new` got both wrong. Etsy accepts at most 10
 # images while a print provider can offer far more colours (Comfort Colors
 # 1717 / Monster Digital: 33), and the shape of a valid entry depends on the
-# referenced template's kind (A11) -- a `single` template has one output and
+# referenced template's kind -- a `single` template has one output and
 # no colour to name.
 
 
@@ -296,7 +296,7 @@ def test_media_stops_at_etsys_image_limit() -> None:
 
 def test_a_truncated_stub_still_validates_and_still_sells_every_colour() -> None:
     """The cap belongs to `media`, not to `colors`: colours decide which
-    Printify variants sell, photos are a separate axis (PRD 31)."""
+    Printify variants sell, photos are a separate axis."""
     colours = [f"colour-{n:02d}" for n in range(33)]
     data = build_listing_stub(
         garment_profile_slug="p",
@@ -314,7 +314,7 @@ def test_a_truncated_stub_still_validates_and_still_sells_every_colour() -> None
 
 @pytest.mark.parametrize("kind", ["multiple", "single"])
 def test_a_single_or_multiple_template_gets_one_entry_and_no_colour(kind: str) -> None:
-    """One output each, so there is nothing to disambiguate (PRD 28) -- and a
+    """One output each, so there is nothing to disambiguate -- and a
     `colour` on such an entry is rejected downstream, which is exactly the
     listing `new` used to write."""
     media = build_media_entries(
@@ -366,7 +366,7 @@ def test_write_listing_refuses_to_overwrite_an_existing_listing(workspace_root: 
         write_listing(workspace, "take-a-hike", data)  # fixture already has this listing
 
 
-# --- pricing plans (PRD 33-36) -----------------------------------------------
+# --- pricing plans -----------------------------------------------
 
 
 def test_build_pricing_plan_choices_marks_the_exact_profile_match(tmp_path: Path) -> None:
@@ -401,7 +401,7 @@ def test_load_candidate_pricing_plans_skips_a_broken_plan_not_the_whole_picker(
 
 
 def test_pricing_plan_ref_is_written_from_the_workspace_root(tmp_path: Path) -> None:
-    # PRD 73: no prefix is the workspace root, whichever listing stores it.
+    # ADR-0046: no prefix is the workspace root, whichever listing stores it.
     flat = tmp_path / "pricing-plans" / "launch-low.yaml"
     assert pricing_plan_ref(flat, root=tmp_path) == "pricing-plans/launch-low.yaml"
 

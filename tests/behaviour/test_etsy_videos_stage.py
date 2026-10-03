@@ -1,4 +1,4 @@
-"""The `etsy_videos` stage, against `FakeEtsyListingClient` (A4).
+"""The `etsy_videos` stage, against `FakeEtsyListingClient`.
 
 Every test asserts the gallery the fake keeps, because nothing in Etsy's API
 reports where a video sits (decision 9): `gallery()` is the only place the
@@ -172,7 +172,7 @@ def test_swapping_the_videos_re_attaches_both_without_an_upload(ctx, etsy, works
     changes = _changes(_videos_plan(ctx, lock))
     lock = _apply(ctx, lock)
 
-    # Refs, not prose: the deploy review reads New/Removed off these (PRD 72).
+    # Refs, not prose: the deploy review reads New/Removed off these.
     assert changes == [("videos.featured", FEATURED, SECOND), ("videos.second", SECOND, FEATURED)]
 
     assert len(etsy.video_uploads) == 2, "a swap re-sends no bytes"
@@ -362,7 +362,7 @@ def test_a_crash_between_the_cut_and_the_restore_heals_on_the_next_run(
     assert _swatches(etsy, lock) == ALL_SWATCHES
 
 
-# ------------------------------------------------------------ budget (A29)
+# ------------------------------------------------------------ budget
 
 OTHER = "second-hike"
 OTHER_LISTING_ID = 4572550920
@@ -372,8 +372,8 @@ def test_a_spent_budget_fails_this_listing_keeps_its_images_and_the_batch_goes_o
     workspace_root, ctx, etsy, clock: Clock
 ) -> None:
     """Ten associations per listing per day (decision 9). The refusal is a
-    `UserFacingError`, so the batch reports this listing and carries on (PRD
-    16), and `etsy_media`'s ids are already on disk (A29): tomorrow's run
+    `UserFacingError`, so the batch reports this listing and carries on, and `etsy_media`'s ids are
+    already on disk: tomorrow's run
     re-uploads no image."""
     workspace = ctx.workspace
     shutil.copytree(workspace.listing_dir(LISTING), workspace.listing_dir(OTHER))

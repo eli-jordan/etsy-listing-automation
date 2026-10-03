@@ -1,5 +1,5 @@
 """Contract layer for the market search reads: paths, parameters, envelopes,
-and the response shapes Etsy actually sends (market-seo.md, *Search* and
+and the response shapes Etsy actually sends (features/market-seo-20260924/spec.md, *Search* and
 *Stats*).
 
 Payloads are trimmed from live responses (September 2026) rather than the API
@@ -378,7 +378,7 @@ def test_a_review_response_without_a_count_is_refused() -> None:
 
 # --------------------------------------------------- retry classification
 #
-# market-seo.md, *Failures*: only transient failures are retried -- 429
+# features/market-seo-20260924/spec.md, *Failures*: only transient failures are retried -- 429
 # (waiting at least as long as Retry-After asks), 5xx, timeouts and network
 # errors -- with the Etsy transport's existing policy. Any other 4xx fails
 # at once, since retrying cannot fix it.

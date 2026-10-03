@@ -9,7 +9,7 @@ import { ListingTemplateEditorPage } from "./ListingTemplateEditorPage";
 
 /**
  * The listing-template editor (UI doc §3; batch plan PR 6): the listing
- * editor's shell over a listing template, saved only when complete (A36).
+ * editor's shell over a listing template, saved only when complete.
  */
 
 function template(over: Partial<ListingTemplateDetail> = {}): ListingTemplateDetail {

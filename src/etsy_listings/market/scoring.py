@@ -1,4 +1,4 @@
-"""The scoring maths, pure (market-seo.md, *Scoring*).
+"""The scoring maths, pure (features/market-seo-20260924/spec.md, *Scoring*).
 
 Each metric becomes a 0-1 **percentile within the set being scored**: a
 single viral listing then cannot swamp the rest, and a favourite count and a
@@ -11,7 +11,7 @@ from __future__ import annotations
 import math
 from collections.abc import Collection, Sequence
 
-from etsy_listings.market.models import METRICS, MarketWeights, Metric
+from etsy_listings.config.market_weights import METRICS, MarketWeights, Metric
 
 
 def percentiles(values: Sequence[float | None]) -> list[float]:
@@ -52,7 +52,7 @@ def rescaled(weights: MarketWeights, *, exclude: Collection[Metric] = ()) -> dic
     """The weights left after ``exclude``, rescaled to sum to 1.
 
     The preliminary ranking excludes reviews -- the one signal that costs a
-    call per listing -- and ranks on the rest (market-seo.md, *Stats*). When
+    call per listing -- and ranks on the rest (features/market-seo-20260924/spec.md, *Stats*). When
     nothing is left to weigh, every weight is 0 and the caller's tie-break
     (search position) decides alone.
     """

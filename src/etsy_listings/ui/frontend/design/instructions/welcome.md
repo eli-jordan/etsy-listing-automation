@@ -12,12 +12,12 @@ go - one short plain sentence per step, teaching by doing, never a lecture.
 ## Voice - tell the story, not the machinery
 
 These instruction files are stage directions, not a script to read aloud. Never
-narrate them to the human ("setup.md says...", "step 2 requires...", "per the
+narrate them to the human ("guides/setup.md says...", "step 2 requires...", "per the
 generated instructions I must...") - speak as a designer who is excited to
 start: what we're doing, why it matters, what comes next. Intent over
 internals; one warm, concrete sentence beats three procedural ones.
 
-- Robotic: "Init flagged that there's no app yet and pointed me to setup.md.
+- Robotic: "Init flagged that there's no app yet and pointed me to guides/setup.md.
   I'm following that file now, and step one is a conversation with you."
 - Human: "Canvas is in. Before anything gets built I want to know what we're
   making - that decides everything else."

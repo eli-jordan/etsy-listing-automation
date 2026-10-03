@@ -13,7 +13,7 @@ import { stagePlan } from "../../test/helpers";
 
 /**
  * Pure: snapshots + changes -> before/after blocks, impact tags, price rows,
- * image badges (docs/deploy-changes.md, Frontend module table; decision 3/4).
+ * image badges (docs/features/deploy-20260917/spec.md, Frontend module table; decision 3/4).
  *
  * Every fixture below is shaped exactly like the real DTOs (`ui/runs/events.py`,
  * the five stages' own `snapshot()` methods) so a passing test here is a
@@ -414,9 +414,9 @@ describe("buildComparison: no Etsy listing yet", () => {
 });
 
 /**
- * The `etsy_videos` block (PRD 72). Its badges come from the stage's own
+ * The `etsy_videos` block. Its badges come from the stage's own
  * changes -- a slot change names the ref before and after -- never from
- * comparing the snapshot's two sides here (A2).
+ * comparing the snapshot's two sides here.
  */
 describe("buildComparison: videos", () => {
   const FEATURED = "common-media/size-guide.mp4";

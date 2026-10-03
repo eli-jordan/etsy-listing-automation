@@ -1,5 +1,5 @@
-"""A proposal outlives the server that generated it (A41; spec, *Durable AI
-proposals*; PRD 4 as amended by PRD 74).
+"""A proposal outlives the server that generated it (ADR-0049; spec, *Durable AI
+proposals*; ADR-0003 as amended by ADR-0047).
 
 Each ``TestClient`` block is one server lifetime: ``create_app`` builds a
 fresh AI run registry, so nothing held in memory crosses from one to the

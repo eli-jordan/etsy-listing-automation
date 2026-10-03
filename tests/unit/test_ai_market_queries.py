@@ -1,6 +1,6 @@
-"""Query extraction (market-seo.md, *Query extraction*): the provider call that
-turns a brief, a design and the garment's display title into three buyer
-search queries.
+"""Query extraction (features/market-seo-20260924/spec.md, *Query extraction*):
+the provider call that turns a brief, a design and the garment's display title
+into three buyer search queries.
 
 Driven through `generate_market_queries` against `FakeAiProvider`, the seam
 the AI run (PR 5) calls. It is `run_task` under its own decoder, so what is

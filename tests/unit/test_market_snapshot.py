@@ -1,5 +1,5 @@
 """The latest market research per listing, kept so the top listings panel
-survives a reload (market-seo.md, *Cache*; implementation plan, PR 3)."""
+survives a reload (features/market-seo-20260924/spec.md, *Cache*; implementation plan, PR 3)."""
 
 from __future__ import annotations
 

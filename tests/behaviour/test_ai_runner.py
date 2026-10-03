@@ -1,4 +1,4 @@
-"""One AI run end to end on its own thread (market-seo.md, *The chain*,
+"""One AI run end to end on its own thread (features/market-seo-20260924/spec.md, *The chain*,
 *Failures* and *AI runs*; implementation plan, PR 5): brief, query
 extraction and market search, then the proposal.
 
@@ -6,7 +6,7 @@ Every test drives :class:`~etsy_listings.ui.airuns.runner.AiRunner` against
 the fixture workspace, a :class:`~tests.support.ai_runs.ChainProvider` and
 the in-memory Etsy market, and reads the run back through its events and
 steps -- the same things the SSE stream and the indicator read. The step
-sequences are the *Scenarios* table in ``ui-market-seo-interactions.md``.
+sequences are the *Scenarios* table in ``features/market-seo-20260924/interactions.md``.
 """
 
 from __future__ import annotations
@@ -180,7 +180,7 @@ def test_the_events_carry_the_brief_queries_snapshot_and_proposal(chain: Chain) 
 
 
 def test_a_finished_run_caches_the_proposal_it_announced(chain: Chain) -> None:
-    """A41: the record is written before the event, for every run, so the
+    """ADR-0049: the record is written before the event, for every run, so the
     proposal outlives the run, the registry and the server."""
     run = chain.run(draft_brief=False)
 
@@ -219,8 +219,8 @@ def test_a_listing_deleted_while_its_proposal_is_written_caches_nothing(chain: C
 
 
 def test_a_stop_while_the_proposal_waits_for_the_lock_caches_nothing(chain: Chain) -> None:
-    """A delete stops the run, then takes the listing's lock to clean up
-    (A42). A proposal that was already queued on that lock must not land
+    """A delete stops the run, then takes the listing's lock to clean up.
+    A proposal that was already queued on that lock must not land
     after the cleanup."""
     gate = chain.provider.gate("seo")
     run = chain.start(draft_brief=False)

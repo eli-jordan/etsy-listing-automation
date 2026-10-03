@@ -9,7 +9,7 @@ test would otherwise catch: a token request with an `Authorization` header
 still works, right up until the token it is carrying expires.
 
 Payloads are transcribed from Etsy's authentication guide and quick-start
-tutorial (docs/prd.md 49, 50); the `-m e2e` layer is what re-takes them
+tutorial (docs/history/prd.md 49, 50); the `-m e2e` layer is what re-takes them
 against the live API.
 """
 

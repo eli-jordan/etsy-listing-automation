@@ -41,8 +41,7 @@ type Props = {
 } & (
   | {
       kind?: "listing";
-      /** AI Mode, owned by `ListingEditorShell` rather than by this tab (PRD
-       * 68): a request has to survive a tab switch, and the chain that starts
+      /** AI Mode, owned by `ListingEditorShell` rather than by this tab : a request has to survive a tab switch, and the chain that starts
        * one begins at the design strip above the tabs. */
       aiSeo: AiSeoMode;
     }
@@ -121,7 +120,7 @@ export function DetailsTab(props: Props) {
     };
   }, [previewOpen]);
 
-  // Accessibility (`docs/ui-listing-seo-interactions.md` section 10):
+  // Accessibility (`docs/features/ai-seo-20260922/interactions.md` section 10):
   // "Keyboard focus moves to the first useful control in the first opened
   // drawer after generation, and returns to a sensible field or AI Mode
   // control when the last drawer closes." Every drawer opens together right
@@ -480,14 +479,14 @@ export function DetailsTab(props: Props) {
         </div>
 
         {/* No Materials field: they belong to the garment profile, which
-            every listing on it deploys (docs/phase-5-listings-ui.md), so a
+            every listing on it deploys (docs/features/listings-ui-20260915/spec.md), so a
             read-only copy here only looked editable. */}
       </fieldset>
     </div>
   );
 
   // The top listings panel sits beside the fields once there is a search to
-  // show (docs/ui-market-seo-interactions.md, section 3). Without one the
+  // show (docs/features/market-seo-20260924/interactions.md, section 3). Without one the
   // fields keep their own width: an empty "run AI Mode" card would be noise
   // on every new listing. The wrapper is there either way, so the fields are
   // never remounted -- losing the seller's focus and caret -- when research

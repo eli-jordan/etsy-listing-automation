@@ -10,7 +10,7 @@ goldens). Both callers -- the render stage and the calibrator's preview
 endpoint -- now go through here, so a colour-matrix scene and a chart cannot
 drift apart in how they composite.
 
-Pure, per A7 -- callers own loading the design/template arrays and the derived
+Pure, per ADR-0012 -- callers own loading the design/template arrays and the derived
 maps; these functions never touch a filesystem.
 """
 

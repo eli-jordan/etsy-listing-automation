@@ -1,4 +1,4 @@
-"""Saved-listing AI preparation and comparison facts (A41)."""
+"""Saved-listing AI preparation and comparison facts."""
 
 from pathlib import Path
 

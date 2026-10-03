@@ -35,7 +35,7 @@ function settleResolution(current: ReviewSession, job: ResolutionJob): boolean {
 }
 
 /**
- * A41: one owner for proposal identity, live-event/cache precedence and
+ * One owner for proposal identity, live-event/cache precedence and
  * optimistic drawer resolutions. Resolution writes are serial; pending
  * choices overlay reads until acknowledged, so autosave cannot reopen a
  * drawer while its resolution is still in flight. Accepted content keeps

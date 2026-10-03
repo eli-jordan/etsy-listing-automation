@@ -1,7 +1,7 @@
 """Printify's shop-scoped half over HTTP: the calls that write, and the ones
 that read state a shop owns rather than reference data everyone shares.
 
-Built against [docs/api-findings.md](../../../../docs/api-findings.md) rather
+Built against [docs/research/api-findings.md](../../../../docs/research/api-findings.md) rather
 than the API reference, because several of the answers are not the obvious
 ones and each has produced a plausible-looking wrong implementation:
 
@@ -15,7 +15,7 @@ ones and each has produced a plausible-looking wrong implementation:
   only the created ones on create, which is why ``apply`` branches and why an
   update reads the product first.
 - ``POST products.json`` has no idempotency key and no conflict, so nothing on
-  the server stops a re-run making a second product (PRD 48).
+  the server stops a re-run making a second product.
 
 The token, the retries and the error shapes are
 :mod:`~etsy_listings.clients.printify.transport`, shared with the catalog
@@ -77,7 +77,7 @@ class HttpPrintifyClient(PrintifyClient):
         happen, and it means "create one", not "crash".
 
         Two answers mean the same thing here. `404` is the id nothing knows,
-        and `400`/:data:`~etsy_listings.clients.printify.transport.WRONG_SHOP_CODE`
+        and `400`/ :data:`~etsy_listings.clients.printify.transport.WRONG_SHOP_CODE`
         is the id another shop holds -- which, from this shop's side, is the
         same absence. Catching only the first turns reconnecting a store into
         a hard failure on the next `plan`, because the lockfile still names
@@ -98,7 +98,7 @@ class HttpPrintifyClient(PrintifyClient):
 
         ``visible: false`` because a product nobody has reviewed has no
         business being visible, and the field *is* writable despite the API
-        reference marking it read-only (docs/api-findings.md).
+        reference marking it read-only (docs/research/api-findings.md).
         """
         body = {
             "title": spec.title,
@@ -150,10 +150,10 @@ class HttpPrintifyClient(PrintifyClient):
         """Remove the product, or do nothing if it is already gone.
 
         A retract that deleted the product, then failed because the Etsy draft
-        survived (PRD 63), re-applies after the user removed the draft. The
+        survived, re-applies after the user removed the draft. The
         product is gone; treating that 404 as a crash leaves the local files
         stuck. Same two absences as :meth:`get_product`: `404` is unknown to
-        every shop, `400`/:data:`~etsy_listings.clients.printify.transport.WRONG_SHOP_CODE`
+        every shop, `400`/ :data:`~etsy_listings.clients.printify.transport.WRONG_SHOP_CODE`
         is a product another shop holds.
         """
         try:
@@ -176,7 +176,7 @@ class HttpPrintifyClient(PrintifyClient):
         )
 
     def find_product_by_copy(self, shop_id: int, *, title: str, description: str) -> str | None:
-        """The id of a product already carrying this copy, or ``None``. PRD 48.
+        """The id of a product already carrying this copy, or ``None``. ADR-0023.
 
         A walk, not a query: ``GET products.json`` accepts ``title``,
         ``search`` and ``sku`` and ignores all three, so the match is
@@ -208,7 +208,7 @@ def _variant_bodies(variants: dict[int, int], *, retiring: dict[int, int]) -> li
     """Enabled variants, plus explicit disables for the ones being retired.
 
     **Every entry carries a price, including a disabled one.** Measured:
-    ``{"id": ..., "is_enabled": false}`` alone is
+    ``{"id":..., "is_enabled": false}`` alone is
     ``400 8150 "variants.0.price: The variants.0.price field is required."``
     A variant entry is never partial, which is also why the lockfile has to
     remember what each enabled variant cost -- the desired document cannot
@@ -233,7 +233,7 @@ def _print_area_bodies(
     ``cover`` is the update coverage rule: the union across all entries must
     name every variant the product has. Widening the **last** area rather than
     spreading the extras keeps every earlier area's variant set exactly as the
-    caller partitioned it, which is what PRD 30's on-light/on-dark split
+    caller partitioned it, which is what on-light/on-dark split
     depends on -- a dark-ink group that quietly gained the whole matrix would
     print the wrong file on half the shirts.
     """

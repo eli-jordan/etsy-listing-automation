@@ -1,9 +1,9 @@
-"""The 7-day market caches (market-seo.md, *Cache*), wrapping any
+"""The 7-day market caches (features/market-seo-20260924/spec.md, *Cache*), wrapping any
 :class:`~etsy_listings.clients.etsy.market.EtsyMarketClient` the way
 ``clients/printify/cache.py`` wraps a catalog client.
 
 Two caches, both under ``.cache/market/`` (gitignored, fully derivable --
-PRD 22):
+render-cache storage):
 
 - **search** -- one file per query *and* search parameters, since the same
   words asked with another page size or sort order are a different answer;
@@ -13,7 +13,7 @@ PRD 22):
 
 Similar queries return largely the same listings, so the stats cache is the
 one that absorbs most of a repeat run's calls even when extraction words the
-queries differently (market-seo.md, *Cache*).
+queries differently (features/market-seo-20260924/spec.md, *Cache*).
 
 Research calls from five threads at once. Every read and write of a cache
 file goes through one process-wide lock, and every write replaces its file

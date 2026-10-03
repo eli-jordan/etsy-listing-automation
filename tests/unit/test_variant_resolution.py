@@ -1,10 +1,10 @@
 """Colour slug × size → the integer variant ids Printify sells by.
 
 The join every product write depends on. A listing names colours by slug
-(PRD 7a) and a profile names sizes; Printify knows neither, only a flat list of
+ and a profile names sizes; Printify knows neither, only a flat list of
 variants whose ``options`` carry its own colour *names*.
 
-The interesting case is the one PRD 46 settles: Printify discontinues
+The interesting case is the one missing variant cells settles: Printify discontinues
 individual cells -- ``Berry / 4XL`` exists on the blueprint and no longer in
 the catalog -- and a listing offering six sizes in that colour is not wrong,
 it is asking for something the printer stopped making. That is reported and
@@ -79,7 +79,7 @@ def test_each_variant_carries_the_names_both_sides_use() -> None:
 
 
 def test_a_cell_the_catalog_no_longer_offers_is_reported_not_fatal() -> None:
-    """PRD 46. Printify dropped `Berry / 4XL`; the listing is not wrong for
+    """missing variant cells. Printify dropped `Berry / 4XL`; the listing is not wrong for
     having asked, and refusing it would force the user to drop 4XL for every
     colour or drop the colour entirely."""
     partial = VariantSet(
@@ -138,7 +138,7 @@ def test_a_slug_collision_is_raised_rather_than_silently_picking_one() -> None:
 
 
 def test_variants_outside_the_requested_matrix_are_left_out() -> None:
-    """The enabled subset is the product's real content (docs/api-findings.md).
+    """The enabled subset is the product's real content (docs/research/api-findings.md).
     Everything else on the blueprint is Printify's business, not ours."""
     resolution = resolve_variants(FULL, ["black"], ["S"], NO_EXCEPTIONS)
 
@@ -154,7 +154,7 @@ def test_the_resolution_reports_the_ids_as_a_set_for_the_print_area() -> None:
 
 
 def test_ids_can_be_narrowed_to_one_colour_for_split_artwork() -> None:
-    """PRD 30's on-light/on-dark split partitions the variants across two
+    """on-light/on-dark split partitions the variants across two
     print areas, which needs the ids for a subset of colours."""
     resolution = resolve_variants(FULL, ["black", "blue-jean"], ["S", "M"], NO_EXCEPTIONS)
 

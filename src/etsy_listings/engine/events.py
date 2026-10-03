@@ -1,4 +1,4 @@
-"""The closed event vocabulary emitted while the engine runs (A33).
+"""The closed event vocabulary emitted while the engine runs.
 
 These are domain values, not the UI server's wire models. A caller learns one
 interface and receives one ordered stream; adapters decide which events to

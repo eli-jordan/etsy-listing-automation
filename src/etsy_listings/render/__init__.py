@@ -1,4 +1,4 @@
-"""Turning a design and a blank mockup photo into a composite. A7.
+"""Turning a design and a blank mockup photo into a composite. ADR-0012.
 
 Pure: ndarrays and frozen config in, an image out. No I/O outside
 :mod:`~etsy_listings.render.io` and :class:`DerivedMapCache`, no globals, no
@@ -76,5 +76,5 @@ __all__ = [
 """The individual passes (``warp``/``displace``/``shade``/``export``) are
 deliberately absent: they are the *inside* of ``render_scene``, goldened
 per-pass so a pixel change can be attributed, and composing them in some other
-order elsewhere is exactly what A7 exists to prevent. Import
+order elsewhere is exactly what ADR-0012 exists to prevent. Import
 ``render.passes`` directly if you are testing one."""

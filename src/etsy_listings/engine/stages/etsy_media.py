@@ -2,9 +2,9 @@
 ``image_ids`` PATCH, then the per-colour variation-image links (decisions 5
 and 6).
 
-**The manifest is `listing.media`'s images, in order** -- PRD 12's
+**The manifest is `listing.media`'s images, in order** -- ADR-0031's
 full-replacement media sync retained, ids now surviving a reorder (decision
-5). Videos share `media:` because it is the gallery (PRD 72), but Etsy ranks
+5). Videos share `media:` because it is the gallery, but Etsy ranks
 images among images and places videos by a separate mechanism (decision 9),
 so this stage never sees one: ranks, `MediaChange`s and the snapshot count
 images only, and adding a video is not a reason for this stage to run. Each entry's
@@ -13,7 +13,7 @@ template name for a `single`/`multiple` one, or the entry's own
 workspace-relative path for a shared ``common-media/`` asset -- stable across
 a re-render, since the render stage's own output path does not appear in it.
 
-**A file that does not exist yet is `pending`, not missing (A26's local
+**A file that does not exist yet is `pending`, not missing (ADR-0034's local
 twin).** `desired()` runs at plan time, before any stage has applied anything
 this run; if `render` is about to create the file in the *same* `apply`,
 `etsy_media`'s own `apply` -- running after it in pipeline order -- finds the
@@ -33,8 +33,8 @@ optimisation (decision 5) -- skip the `image_ids` PATCH entirely when a
 mockup's bytes changed but its position did not -- but decision 6 also
 proves the price of it: a replaced image's id changes, and any variation
 link still naming the old one goes dangling and invisible until re-asserted.
-The two-step upload-then-`image_ids` path this stage takes is the one PRD 12
-and PRD 57 describe without qualification, so it is the one built first; the
+The two-step upload-then-`image_ids` path this stage takes is the one ADR-0031 describes without
+qualification, so it is the one built first; the
 in-place path is a later, separate change.
 """
 
@@ -59,7 +59,7 @@ from etsy_listings.engine.stages.etsy_target import (
 from etsy_listings.engine.stages.variation_links import manifest_ref, set_variation_images
 
 IMAGE_IDS_KEY = "etsy_image_ids"
-"""This stage's key in ``lock.remote`` (A20) -- keyed by manifest ref, so a
+"""This stage's key in ``lock.remote`` -- keyed by manifest ref, so a
 reorder does not churn the ids (decision 5)."""
 
 PENDING = "pending"
@@ -71,7 +71,7 @@ NO_SHOP_CONSEQUENCE = "this listing's images will not be uploaded to Etsy"
 
 
 class DesiredImageSnapshot(BaseModel):
-    """One manifest entry, as this run wants to send it (A30)."""
+    """One manifest entry, as this run wants to send it."""
 
     model_config = ConfigDict(frozen=True)
 
@@ -82,7 +82,7 @@ class DesiredImageSnapshot(BaseModel):
 
 class LiveImageSnapshot(BaseModel):
     """One image Etsy actually has, projected back to a ref where possible
-    (A30) -- ``ref`` is ``None`` for an image this tool never uploaded."""
+    -- ``ref`` is ``None`` for an image this tool never uploaded."""
 
     model_config = ConfigDict(frozen=True)
 
@@ -93,7 +93,7 @@ class LiveImageSnapshot(BaseModel):
 
 
 class EtsyMediaSnapshot(BaseModel):
-    """Domain facts for the review (A30): both manifests in full, so the
+    """Domain facts for the review: both manifests in full, so the
     frontend can lay out thumbnails and compute *New* / moved / *Removed*
     badges from ``ref`` identity, guided by the per-rank ``MediaChange``s
     ``plan()`` already emits."""
@@ -113,14 +113,14 @@ class AppliedMediaEntry(BaseModel):
 
 
 class AppliedEtsyMedia(BaseModel):
-    """The verbatim last-applied document (A2)."""
+    """The verbatim last-applied document."""
 
     model_config = ConfigDict(frozen=True, extra="ignore")
 
     manifest: tuple[AppliedMediaEntry, ...]
     variation_images: dict[str, str] = {}
     """colour slug -> manifest ref, only when `variation_images:` names a
-    template (PRD 56). Empty means the feature is off for this listing."""
+    template. Empty means the feature is off for this listing."""
 
 
 @dataclass(frozen=True)
@@ -130,7 +130,7 @@ class ManifestEntry:
     content_hash: str
     """A real ``sha256:...`` hash, or :data:`PENDING`."""
     file: str
-    """``source``, workspace-relative and forward-slashed (A30) -- what the
+    """``source``, workspace-relative and forward-slashed -- what the
     snapshot's ``desired`` side names, computed here rather than in
     ``snapshot()`` because that method is handed no ``ctx`` (a stage's
     ``snapshot`` is pure, like its ``plan``) and so has no workspace root to
@@ -165,7 +165,7 @@ class EtsyMediaDesired:
 
 @dataclass(frozen=True)
 class LiveImage:
-    """One image Etsy actually has on the listing right now (A30)."""
+    """One image Etsy actually has on the listing right now."""
 
     rank: int | None
     image_id: int
@@ -177,7 +177,7 @@ class LiveImage:
     at."""
     ref: str | None = None
     """This id projected back to a manifest ref, through ``lock.remote``'s
-    ref -> id map -- the same reversal A27 already does for variation-image
+    ref -> id map -- the same reversal ADR-0030 already does for variation-image
     links. ``None`` for an image this tool never uploaded (a hand-added one
     in Shop Manager), which is not a fact ``snapshot()`` can derive on its
     own: it is handed no ``lock``, only what ``read_live`` already resolved."""
@@ -192,7 +192,7 @@ class EtsyMediaLive:
     visible any other way (decision 6, measured)."""
     images: tuple[LiveImage, ...] = ()
     """Every image the listing actually carries right now, in Etsy's own
-    rank order (A30) -- what the snapshot's ``live`` side is built from.
+    rank order -- what the snapshot's ``live`` side is built from.
     Defaulted rather than always populated by every caller, since a stage
     under test through `execute` alone often builds one by hand without a
     real `read_live`."""
@@ -208,7 +208,7 @@ def _manifest_entry(
     workspace = ctx.workspace
     if isinstance(entry, str):
         # A bare string is a file ref, resolved the same way `design:` is:
-        # PRD 73's two roots, the workspace or `./` for the listing's own.
+        # ADR-0046's two roots, the workspace or `./` for the listing's own.
         source = workspace.resolve_ref(entry, listing_dir=workspace.listing_dir(listing))
         colour = None
     else:
@@ -237,7 +237,7 @@ class EtsyMediaStage:
             return blocked
 
         # No image-count gate here: `Listing` refuses a gallery over Etsy's
-        # caps when it loads (PRD 72), so a second copy could never fire.
+        # caps when it loads, so a second copy could never fire.
         config = ctx.workspace.load_listing(listing)
 
         variation_template = config.etsy.variation_images
@@ -331,7 +331,7 @@ class EtsyMediaStage:
         return Verdict.no_work(drift=drift_found)
 
     def snapshot(self, desired: EtsyMediaDesired, live: EtsyMediaLive | None) -> EtsyMediaSnapshot:
-        """Both manifests in full (A30) -- the frontend's thumbnails and
+        """Both manifests in full -- the frontend's thumbnails and
         badges are built from this plus the ``MediaChange``s ``plan()``
         already emitted, never from diffing these two lists itself."""
         desired_rows = tuple(
@@ -457,12 +457,12 @@ def _media_changes(
     desired: EtsyMediaDesired, applied: AppliedEtsyMedia | None
 ) -> tuple[MediaChange, ...]:
     """One :class:`~etsy_listings.engine.change.MediaChange` per rank whose
-    ref differs between what was last applied and what this run wants (A30).
+    ref differs between what was last applied and what this run wants.
 
     Replaces the single "the media manifest changed" reason the plan already
     carried: a reason cannot say *which* image is new, which moved or which
     was dropped, so drawing *New* / *was 2* / *Removed* badges used to mean
-    the frontend diffing two ref lists itself (A2, decision 4). Matched by
+    the frontend diffing two ref lists itself (ADR-0008, decision 4). Matched by
     **rank**, not by ref -- a ref appearing at a different rank is exactly a
     reorder, and the frontend (which also has both full manifests, from the
     snapshot) is what turns "before ref X, after ref Y" into a moved-from-N

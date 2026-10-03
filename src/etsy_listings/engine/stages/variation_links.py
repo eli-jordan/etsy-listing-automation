@@ -1,4 +1,4 @@
-"""The per-colour swatch links (PRD 56, decision 6), set by two stages.
+"""The per-colour swatch links (ADR-0030, decision 6), set by two stages.
 
 `etsy_media` sets them after it uploads and orders the images. `etsy_videos`
 sets them again after placing a second video, because placing one means
@@ -35,7 +35,7 @@ def manifest_ref(entry: MediaEntry) -> str:
 
 def swatch_refs(media: Sequence[MediaEntry], template: str | None) -> dict[str, str]:
     """colour slug -> manifest ref, for every `media:` entry drawn from the
-    `variation_images:` template (PRD 56). Empty when the feature is off."""
+    `variation_images:` template. Empty when the feature is off."""
     if template is None:
         return {}
     return {

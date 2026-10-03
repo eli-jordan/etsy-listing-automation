@@ -19,7 +19,7 @@ export interface LightboxItem {
   id: string;
   label: string;
   url: string;
-  /** A video plays with the browser's own controls instead (PRD 72). */
+  /** A video plays with the browser's own controls instead. */
   kind?: "image" | "video";
 }
 

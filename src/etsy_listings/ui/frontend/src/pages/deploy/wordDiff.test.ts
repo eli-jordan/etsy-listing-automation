@@ -3,7 +3,7 @@ import { wordDiff } from "./wordDiff";
 
 /**
  * Formats one `FieldChange`'s before/after for reading -- it does not decide
- * *whether* something changed (A2): the caller only reaches this once a
+ * *whether* something changed: the caller only reaches this once a
  * `FieldChange` already says the title changed, and this only marks which
  * words moved.
  */

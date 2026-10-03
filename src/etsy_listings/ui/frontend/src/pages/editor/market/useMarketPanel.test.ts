@@ -5,7 +5,7 @@ import { MARKET_QUERIES, marketSnapshot } from "../../../test/market";
 import type { MarketSnapshot, WorkflowStep } from "../../../types";
 import { type MarketRun, useMarketPanel } from "./useMarketPanel";
 
-/** Which state the top listings panel is in (docs/ui-market-seo-interactions.md,
+/** Which state the top listings panel is in (docs/features/market-seo-20260924/interactions.md,
  * *Panel states*): from the AI run's market node, its `queries` and `market`
  * events, and the snapshot `GET …/market` answers on mount. */
 

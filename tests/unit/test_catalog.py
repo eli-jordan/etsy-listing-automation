@@ -84,7 +84,7 @@ def test_resolve_blueprint_by_brand_and_model() -> None:
 def test_resolve_blueprint_normalises_case_whitespace_and_trademarks(
     brand: str, model: str
 ) -> None:
-    """PRD 23: nobody should have to type ® into a YAML file to make their
+    """ADR-0005: nobody should have to type ® into a YAML file to make their
     profile resolve."""
     assert resolve_blueprint(brand, model, BLUEPRINTS).id == 6
 

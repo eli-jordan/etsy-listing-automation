@@ -5,15 +5,15 @@ its own right:
 
 * **has it been applied, and has it been edited since?** -- local, and the
   lockfile's question, since the lockfile *is* the record of the last apply.
-* **is it live on Etsy?** -- remote, and nothing this tool ever does: PRD
-  non-goal 1 says the pipeline never activates a listing it creates, so
+* **is it live on Etsy?** -- remote, and nothing this tool ever does: the pipeline never activates a
+listing it creates, so
   "live" only ever arrives because a human pressed publish in Shop Manager.
 
 Crossing them gives the transitions the product asks for::
 
     draft --(apply)--> deployed --(publish on Etsy)--> live
     draft --(apply)--> deployed --(edit)--> draft --(apply)--> deployed
-    live  --(edit)--> dirty --(apply)--> live
+    live --(edit)--> dirty --(apply)--> live
 
 The asymmetry between ``draft`` and ``dirty`` is the point worth stating: an
 edit to something that was never live takes it back to ``draft``, because
@@ -21,7 +21,7 @@ nobody is looking at the stale version -- whereas an edit to a live listing is
 ``dirty``, because a buyer *is*, and the gap between what Etsy shows and what
 the workspace says is the thing worth a different colour.
 
-PRD 61–67 add delete/retire on top of those four, from two more facts:
+ADR-0035, ADR-0036 add delete/retire on top of those four, from two more facts:
 ``listing.yaml``'s optional ``lifecycle:`` key, and Etsy's actual ``state``
 (not the collapsed live-or-not). Those win when both could apply: a retired
 listing is ``inactive``, not ``dirty``, even if the yaml was edited.
@@ -37,6 +37,12 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Literal
 
+from etsy_listings.engine.lock import Lockfile
+from etsy_listings.engine.stages.etsy_listing import AppliedEtsyListing
+from etsy_listings.engine.stages.etsy_target import ETSY_LISTING_ID_KEY
+from etsy_listings.engine.stages.printify_product import PRODUCT_ID_KEY
+from etsy_listings.workspace import Workspace
+
 ListingLifecycle = Literal["retired", "deleted", "renew"]
 ListingStatus = Literal[
     "draft",
@@ -49,6 +55,39 @@ ListingStatus = Literal[
     "expired",
 ]
 ListingGesture = Literal["delete", "retire", "un-retire", "cancel", "renew"]
+
+
+def remote_ids(workspace: Workspace, name: str) -> tuple[int | None, str | None]:
+    """Public remote identity, decoded from the engine's persistence format."""
+    lock = Lockfile.read(workspace.lock_file(name))
+    if lock is None:
+        return None, None
+    etsy = lock.remote.get(ETSY_LISTING_ID_KEY)
+    product = lock.remote.get(PRODUCT_ID_KEY)
+    return (int(etsy) if etsy else None), (str(product) if product else None)
+
+
+def workspace_listing_status(
+    workspace: Workspace,
+    name: str,
+    *,
+    live: bool,
+    lifecycle: ListingLifecycle | None = None,
+    etsy_state: str | None = None,
+) -> ListingStatus:
+    """Combine the last apply record with current local and remote facts."""
+    lock = Lockfile.read(workspace.lock_file(name))
+    applied = lock.parse_applied_for("etsy_listing", AppliedEtsyListing) if lock else None
+    return listing_status(
+        applied=lock is not None and bool(lock.stages_completed),
+        edited=edited_since_apply(workspace.listing_file(name), workspace.lock_file(name)),
+        live=live,
+        lifecycle=lifecycle,
+        etsy_state=etsy_state,
+        last_applied_lifecycle="retired" if applied and applied.state == "inactive" else None,
+        incomplete=lock is not None and lock.incomplete is not None,
+    )
+
 
 LIVE_ETSY_STATES = frozenset({"active", "inactive", "sold_out", "expired", "removed"})
 """Etsy ``state`` values that mean the listing left draft at some point.
@@ -106,10 +145,10 @@ def listing_status(
 
     ``lifecycle`` / ``etsy_state`` / ``last_applied_lifecycle`` are optional
     so the original four-state table still answers from the two facts it
-    always had. When they *are* passed, delete/retire (PRD 61–67) win over
+    always had. When they *are* passed, delete/retire win over
     ``live``/``dirty``: calling a paused listing ``live`` would lie.
 
-    ``incomplete`` is A29's marker -- a stage raised mid-``apply`` and left
+    ``incomplete`` is ADR-0037's marker -- a stage raised mid-``apply`` and left
     the lockfile recording only what ran before it. A per-stage write makes
     ``state.lock.json`` newer than ``listing.yaml`` partway through that
     failed run, so ``edited`` alone would read the listing as clean. The
@@ -145,7 +184,7 @@ def listing_gestures(
     etsy_state: str | None = None,
     published: bool = False,
 ) -> tuple[ListingGesture, ...]:
-    """Which buttons the listings table offers for this row (PRD 66).
+    """Which buttons the listings table offers for this row.
 
     ``published`` is :func:`is_live_etsy_state`: the listing has left
     ``draft``. The original four badges do not decide the buttons -- a

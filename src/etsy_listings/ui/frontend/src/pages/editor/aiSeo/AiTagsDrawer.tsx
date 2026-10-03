@@ -2,7 +2,7 @@ import type { SeoRationaleEntry, SeoWarningEntry } from "../../../types";
 import { AiModeMark, AiSeoDisclosure, SuggestionHeading } from "./AiChoiceDrawer";
 import { canToggleTag, MAX_TAGS } from "./aiSeoTags";
 
-/** The tag drawer (`docs/ui-listing-seo-interactions.md` section 4): 20
+/** The tag drawer (`docs/features/ai-seo-20260922/interactions.md` section 4): 20
  * ranked candidates split into **Best 13** and **More options**, each a
  * toggle synchronized with the listing's real tag collection, plus
  * **Accept best 13** and **Close**. */

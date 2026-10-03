@@ -1,7 +1,7 @@
 """TTL file cache wrapping any :class:`CatalogClient`.
 
-PRD: "the Printify catalog is fetched automatically with a TTL -- ``catalog
-refresh`` is a manual override, not a step you have to remember." The payload is
+The catalog is fetched automatically with a TTL. The manual ``catalog refresh``
+command remains unbuilt; cache refresh does not require it. The payload is
 large and rarely changes, so each read populates
 ``.cache/catalog/{blueprint}-{provider}.json`` (and sibling files for
 blueprints/providers) and reuses it until the TTL expires.

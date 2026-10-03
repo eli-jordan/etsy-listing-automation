@@ -1,4 +1,4 @@
-"""Listings UI endpoints (phase-5-listings-ui.md): the dashboard/editor's
+"""Listings UI endpoints (features/listings-ui-20260915/spec.md): the dashboard/editor's
 ``/api/listings*`` surface, plus the read-only endpoints the editor's pickers
 need (garment profiles, pricing plans, designs).
 
@@ -55,19 +55,15 @@ from etsy_listings.config.listing_validation import (
 from etsy_listings.config.listing_validation import Issue as ValidationIssue
 from etsy_listings.config.money import Money
 from etsy_listings.config.pricing_plan import PricingPlan
-from etsy_listings.engine.lock import Lockfile
+from etsy_listings.config.secrets import MissingCredentialError
 from etsy_listings.engine.preview import lookup_preview
-from etsy_listings.engine.stages.etsy_listing import AppliedEtsyListing
-from etsy_listings.engine.stages.etsy_target import ETSY_LISTING_ID_KEY
-from etsy_listings.engine.stages.printify_product import PRODUCT_ID_KEY
 from etsy_listings.engine.status import (
     ListingGesture,
-    ListingLifecycle,
     ListingStatus,
-    edited_since_apply,
     is_live_etsy_state,
     listing_gestures,
-    listing_status,
+    remote_ids,
+    workspace_listing_status,
 )
 from etsy_listings.newcmd.logic import (
     build_pricing_plan_choices,
@@ -177,7 +173,7 @@ def _business_issues(
 ) -> list[Issue]:
     """*listing_dir* rather than a listing name, because the not-yet-created
     draft the editor opens on ``/listings/new`` has no name and no directory.
-    A workspace-rooted ref (PRD 73) resolves the same against any listing
+    A workspace-rooted ref resolves the same against any listing
     directory, so `Workspace.draft_listing_dir` answers for it exactly as a
     real one would."""
     raw_issues: list[ValidationIssue] = check_listing(
@@ -195,56 +191,6 @@ def _business_issues(
     ]
 
 
-def _remote_ids(workspace: Workspace, name: str) -> tuple[int | None, str | None]:
-    lock = Lockfile.read(workspace.lock_file(name))
-    if lock is None:
-        return None, None
-    raw_etsy = lock.remote.get(ETSY_LISTING_ID_KEY)
-    raw_product = lock.remote.get(PRODUCT_ID_KEY)
-    return (int(raw_etsy) if raw_etsy else None), (str(raw_product) if raw_product else None)
-
-
-def _last_applied_lifecycle(lock: Lockfile | None) -> ListingLifecycle | None:
-    if lock is None:
-        return None
-    applied = lock.parse_applied_for("etsy_listing", AppliedEtsyListing)
-    if applied is not None and applied.state == "inactive":
-        return "retired"
-    return None
-
-
-def _status(
-    workspace: Workspace,
-    name: str,
-    *,
-    live: bool,
-    lifecycle: ListingLifecycle | None = None,
-    etsy_state: str | None = None,
-) -> ListingStatus:
-    """This listing's place in the lifecycle
-    (:mod:`etsy_listings.engine.status`).
-
-    The two local facts are read here because they are facts about *files*:
-    the lockfile records the last apply, and its own modification time is what
-    a later edit to ``listing.yaml`` is compared against. The remote one --
-    whether Etsy has published it -- is the caller's, since the listings table
-    resolves every row's in one request.
-    """
-    lock = Lockfile.read(workspace.lock_file(name))
-    return listing_status(
-        applied=lock is not None and bool(lock.stages_completed),
-        edited=edited_since_apply(workspace.listing_file(name), workspace.lock_file(name)),
-        live=live,
-        lifecycle=lifecycle,
-        etsy_state=etsy_state,
-        last_applied_lifecycle=_last_applied_lifecycle(lock),
-        # A29: a stage raised mid-apply, and the per-stage write already made
-        # the lockfile newer than the yaml -- `edited` alone would read this
-        # as clean.
-        incomplete=lock is not None and lock.incomplete is not None,
-    )
-
-
 def _etsy_state(workspace: Workspace, etsy_listing_id: int | None) -> str | None:
     """One listing's Etsy ``state``. For the single-listing endpoints; the
     table asks :func:`etsy_states` once for every row instead."""
@@ -254,7 +200,7 @@ def _etsy_state(workspace: Workspace, etsy_listing_id: int | None) -> str | None
 
 
 class Priced(Protocol):
-    """What a price summary reads: a listing, or a listing template (A35),
+    """What a price summary reads: a listing, or a listing template,
     which carries the same price fields and the same resolution."""
 
     garment_profile: str
@@ -327,7 +273,7 @@ def _summarize_listing(
     live: bool,
     etsy_state: str | None = None,
 ) -> ListingSummary:
-    etsy_listing_id, printify_product_id = _remote_ids(workspace, name)
+    etsy_listing_id, printify_product_id = remote_ids(workspace, name)
     if not workspace.listing_file(name).is_file():
         missing = check_listing_yaml_present(present=False)
         return ListingSummary(
@@ -335,7 +281,7 @@ def _summarize_listing(
             garment_profile="",
             design=None,
             colour_count=0,
-            status=_status(workspace, name, live=live, etsy_state=etsy_state),
+            status=workspace_listing_status(workspace, name, live=live, etsy_state=etsy_state),
             issue_counts=IssueCounts(block=len(missing), warn=0),
             etsy_listing_id=etsy_listing_id,
             printify_product_id=printify_product_id,
@@ -361,7 +307,7 @@ def _summarize_listing(
         garment_profile=listing.garment_profile,
         design=_sole_design_name(listing),
         colour_count=len(listing.colors),
-        status=_status(
+        status=workspace_listing_status(
             workspace, name, live=live, lifecycle=listing.lifecycle, etsy_state=etsy_state
         ),
         issue_counts=counts,
@@ -381,7 +327,7 @@ def _detail(
     workspace: Workspace, name: str, *, field_errors: dict[str, str] | None = None
 ) -> ListingDetail:
     listing = workspace.load_listing(name)
-    etsy_listing_id, printify_product_id = _remote_ids(workspace, name)
+    etsy_listing_id, printify_product_id = remote_ids(workspace, name)
     etsy_state = _etsy_state(workspace, etsy_listing_id)
     published = is_live_etsy_state(etsy_state) if etsy_listing_id is not None else False
     return _describe(
@@ -391,7 +337,7 @@ def _detail(
         name=name,
         listing_dir=workspace.listing_dir(name),
         modified_at=datetime.fromtimestamp(workspace.listing_file(name).stat().st_mtime, tz=UTC),
-        status=_status(
+        status=workspace_listing_status(
             workspace,
             name,
             live=is_live_etsy_state(etsy_state),
@@ -402,7 +348,7 @@ def _detail(
         printify_product_id=printify_product_id,
         field_errors=field_errors,
         # The table's row gestures, so the editor's action row offers the
-        # same lifecycle actions (PRD 66) without deciding them itself.
+        # same lifecycle actions without deciding them itself.
         gestures=listing_gestures(
             lifecycle=listing.lifecycle, etsy_state=etsy_state, published=published
         ),
@@ -489,7 +435,7 @@ def field_errors_of(exc: ValidationError) -> dict[str, str]:
 
 def _merge(base: dict[str, Any], patch: dict[str, Any]) -> dict[str, Any]:
     """A shallow merge, except ``etsy:``, which merges one level deep -- the
-    editor's tabs each own a slice of it (title, tags, section, ...) and a
+    editor's tabs each own a slice of it (title, tags, section,...) and a
     shallow overwrite there would let a Details-tab autosave silently erase
     whatever the last PATCH wrote to a sibling field."""
     merged = dict(base)
@@ -497,7 +443,7 @@ def _merge(base: dict[str, Any], patch: dict[str, Any]) -> dict[str, Any]:
         if key == "etsy" and isinstance(value, dict) and isinstance(merged.get("etsy"), dict):
             merged["etsy"] = {**merged["etsy"], **value}
         elif key == "lifecycle" and value is None:
-            # Un-retire / Cancel: deleting the key, not writing `active` (PRD 62).
+            # Un-retire / Cancel: deleting the key, not writing `active`.
             merged.pop("lifecycle", None)
         else:
             merged[key] = value
@@ -512,7 +458,7 @@ def list_listings(request: Request) -> list[ListingSummary]:
     workspace = _workspace(request)
     facts = WorkspaceFacts.gather(workspace)
     names = workspace.listing_names()
-    ids = {name: _remote_ids(workspace, name)[0] for name in names}
+    ids = {name: remote_ids(workspace, name)[0] for name in names}
     states = etsy_states(workspace.root, [i for i in ids.values() if i is not None])
     live = {i for i, state in states.items() if is_live_etsy_state(state)}
     rows: list[ListingSummary] = []
@@ -548,7 +494,7 @@ def patch_listing(target: Existing, body: dict[str, Any], request: Request) -> L
             return _detail(workspace, name, field_errors=field_errors_of(exc))
         write_yaml_atomic(path, merged)
     if raw.get("lifecycle") == "deleted" and merged.get("lifecycle") != "deleted":
-        # A42's delete, undone: Cancel on a pending delete (PRD 63) means the
+        # delete, undone: Cancel on a pending delete means the
         # listing never went, so the batch rows the delete marked return.
         design = merged.get("design")
         default = design.get("default") if isinstance(design, dict) else None
@@ -558,24 +504,25 @@ def patch_listing(target: Existing, body: dict[str, Any], request: Request) -> L
 
 @router.delete("/{name}", response_model=None)
 def delete_listing(target: Existing, request: Request) -> ListingSummary | Response:
-    """Delete from the listings table (PRD 63, 66).
+    """Delete from the listings table.
 
     No remotes: wipe now. Remotes: write ``lifecycle: deleted`` and leave the
     row pending. Published: 409 -- retire it instead. Confirm is the UI's.
 
     Either way the market snapshot and the cached AI proposal go now
-    (market-seo.md, *Cache*; A42): a listing pending deletion is one the
+    (features/market-seo-20260924/spec.md, *Cache*; rename and delete hooks): a listing pending
+    deletion is one the
     seller is done researching, and otherwise only the wipe after the remote
     deletion would remove them. An AI run still going is asked to stop
     first, so it does not write a proposal for a listing being deleted, and
-    the listing's batch rows are marked deleted and leave the queue (A42).
+    the listing's batch rows are marked deleted and leave the queue.
     """
     workspace, name = target.workspace, target.name
-    etsy_listing_id, printify_product_id = _remote_ids(workspace, name)
+    etsy_listing_id, printify_product_id = remote_ids(workspace, name)
     etsy_state = _etsy_state(workspace, etsy_listing_id)
     if is_live_etsy_state(etsy_state):
         raise HTTPException(status_code=409, detail=DELETED_ON_PUBLISHED)
-    # A42: the rows first, so the queue cannot start one between the stop
+    # the rows first, so the queue cannot start one between the stop
     # and the delete; a run already going is the one stopped next.
     _batch_store(request).mark_deleted(name)
     _stop_ai_run(request, name)
@@ -605,7 +552,7 @@ def _describe_draft(
     state to echo (unlike PATCH, which still has the listing on disk); one that
     will is described as it stands -- incomplete but structurally sound -- and
     carries its real ``issues``. There is no separate draft validation any
-    more: incompleteness is not a validation failure at all (PRD 70), so the
+    more: incompleteness is not a validation failure at all, so the
     only documents that land in the ``except`` below are genuinely malformed
     ones.
 
@@ -668,13 +615,13 @@ def create_listing(request: Request, body: CreateListingRequest) -> ListingDetai
 def rename_listing(target: Existing, body: RenameListingRequest, request: Request) -> ListingDetail:
     """Move a listing, whole, to a new name.
 
-    A listing's identity is its directory name (PRD 60), so the rename is a
+    A listing's identity is its directory name, so the rename is a
     directory move: ``listing.yaml``, ``state.lock.json`` and Phase 4's
     generated copy travel together, and `.cache/renders/{name}/` moves with them
     because the render cache is keyed by listing name too -- left behind it
     would orphan a tree nothing deletes and cost a full re-render. The market
-    snapshot and the cached AI proposal (A42) move for the same reason, and
-    every batch row naming the listing follows it (A42), so the batch
+    snapshot and the cached AI proposal move for the same reason, and
+    every batch row naming the listing follows it, so the batch
     summary opens the new name.
 
     The lockfile's ``outputs`` keys still spell the old path afterwards, and are
@@ -693,7 +640,7 @@ def rename_listing(target: Existing, body: RenameListingRequest, request: Reques
         # Blur commits an unchanged name constantly; that is not an error, and
         # it must not be the 409 below either.
         return _detail(workspace, old)
-    # A42: the batch rows follow the move. The batch locks come first --
+    # the batch rows follow the move. The batch locks come first --
     # the order creating a batch row takes them in -- see
     # `BatchStore.following_rename`.
     with _batch_store(request).following_rename(old, new), target.locks.listing(old, new):
@@ -723,7 +670,7 @@ def _batch_store(request: Request) -> BatchStore:
 
 
 def _stop_ai_run(request: Request, name: str) -> None:
-    """A42: deleting a listing cancels its active AI run."""
+    """rename and delete hooks: deleting a listing cancels its active AI run."""
     run = request.app.state.ai_run_registry.latest(name)
     if run is not None:
         run.request_stop("cancelled")
@@ -738,7 +685,7 @@ def _forget_ai_run(request: Request, name: str) -> None:
 def _preview_response(
     request: Request, target: Target, template: str, colour: str | None
 ) -> Response:
-    """A32/A33: the preview a plan run already rendered for this scene, at its
+    """ADR-0040, ADR-0041: the preview a plan run already rendered for this scene, at its
     *current* hash. :func:`~etsy_listings.engine.preview.lookup_preview` owns
     the hash and the path; this is the HTTP adapter over it.
     """
@@ -761,7 +708,7 @@ def _preview_response(
 @router.get("/{name}/previews/{template}")
 def listing_preview(target: Existing, template: str, request: Request) -> Response:
     """A ``multiple``/``single``-kind scene: no per-colour photo, so no
-    colour segment (PRD 28's rule, mirrored from ``render_file``)."""
+    colour segment (ADR-0014's rule, mirrored from ``render_file``)."""
     return _preview_response(request, target, template, None)
 
 
@@ -862,7 +809,7 @@ def list_etsy_sections(request: Request) -> EtsySectionsResponse:
         return EtsySectionsResponse(available=False, sections=[])
     try:
         sections = client.shop_sections(shop_id)
-    except (EtsyApiError, EtsyAuthError):
+    except (EtsyApiError, EtsyAuthError, MissingCredentialError):
         return EtsySectionsResponse(available=False, sections=[])
     return EtsySectionsResponse(
         available=True,
@@ -891,7 +838,7 @@ def create_etsy_section(request: Request, body: CreateEtsySectionRequest) -> Ets
         )
     try:
         section = client.create_shop_section(shop_id, body.title)
-    except EtsyAuthError as exc:
+    except (EtsyAuthError, MissingCredentialError) as exc:
         raise HTTPException(status_code=401, detail=str(exc)) from exc
     except EtsyApiError as exc:
         raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc

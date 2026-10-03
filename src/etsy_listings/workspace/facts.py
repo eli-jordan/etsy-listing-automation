@@ -27,13 +27,13 @@ Two different costs, so two different strategies:
   wants one or two of them and a workspace may hold many. The listings table
   asks for each row's; the picker asks for all of them; neither pays for the
   other's.
-* **Videos are probed on demand and kept, by file** (PRD 72), for the same
+* **Videos are probed on demand and kept, by file**, for the same
   reason and one more: a shared clip in ``common-media/`` is named by many
   listings, and opening it once per row would be the four-hundred-parses
   mistake again, with FFmpeg doing the parsing.
 
 It holds the `Workspace` rather than copying paths out of it: reading is
-`Workspace`'s job (A8), and a snapshot that resolved its own paths would be a
+`Workspace`'s job, and a snapshot that resolved its own paths would be a
 second place that knows the layout.
 """
 
@@ -133,7 +133,7 @@ class WorkspaceFacts:
         """One file's probe, kept by path. Public for a caller whose refs are
         not a listing's -- a listing template's, which resolve against the
         template directory, or the files Save as listing template is about to
-        copy (A36)."""
+        copy."""
         if path not in self._probes:
             self._probes[path] = probe_video(path)
         return self._probes[path]

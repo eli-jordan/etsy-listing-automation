@@ -1,5 +1,5 @@
 """``settings.yaml``: the workspace's tunable settings, today only the market
-scoring weights (market-seo.md, *Scoring*; implementation plan, PR 3).
+scoring weights (features/market-seo-20260924/spec.md, *Scoring*; implementation plan, PR 3).
 
 A missing file or key falls back to the spec's defaults. Anything present
 but wrong fails naming the file and the key.
@@ -11,8 +11,8 @@ from pathlib import Path
 
 import pytest
 
+from etsy_listings.config import MarketWeights
 from etsy_listings.config.errors import ConfigLoadError
-from etsy_listings.market import MarketWeights
 from etsy_listings.workspace.workspace import Workspace
 
 SPEC_DEFAULTS = {
@@ -152,7 +152,7 @@ def test_a_file_that_is_not_a_mapping_names_the_file(workspace: Workspace, text:
 
 class TestBatchAi:
     """``batch_ai.concurrency``: how many batch rows draft at once, across
-    every batch (spec, *Batch AI queue*; A40). No settings UI in the first
+    every batch (spec, *Batch AI queue*; ADR-0048). No settings UI in the first
     version, so the file is the only way to change it."""
 
     def test_the_default_is_one_at_a_time(self, workspace: Workspace) -> None:

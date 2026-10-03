@@ -8,14 +8,14 @@ nothing:
 and shop call goes through. :class:`OAuthClient` talks to the token endpoint,
 which takes **neither**: it authenticates by `client_id` in the form body, and
 is the only Etsy endpoint that can be called before a token exists. Giving the
-token endpoint its own client is what keeps :mod:`tokens` free of a cycle back
-through here (A23).
+token endpoint its own client is what keeps:mod:`tokens` free of a cycle back
+through here.
 
 The retry policy, the backoff and the "return the last response rather than
-raising" rule are all shared with Printify (A21) -- one `retry.py`, because a
+raising" rule are all shared with Printify -- one `retry.py`, because a
 429 means the same thing to both. Etsy adds one thing Printify does not: every
 response says how many calls are left this second, which :class:`RateGate`
-reads so the next call waits instead of spending a 429 (market-seo.md,
+reads so the next call waits instead of spending a 429 (features/market-seo-20260924/spec.md,
 *Quota*).
 """
 
@@ -41,7 +41,7 @@ BASE_URL = "https://openapi.etsy.com"
 ``api.etsy.com`` for the same paths; both answer, and the reference is the one
 that describes the endpoints this transport carries. The OAuth token endpoint
 is the exception and keeps the host its own documentation gives it
-(:data:`~etsy_listings.clients.etsy.oauth.TOKEN_URL`)."""
+( :data:`~etsy_listings.clients.etsy.oauth.TOKEN_URL`)."""
 
 DEFAULT_TIMEOUT_SECONDS = 120.0
 """Generous for the same reason Printify's is: listing images travel this
@@ -53,17 +53,18 @@ HTTP_NOT_FOUND = 404
 
 _log = logging.getLogger(__name__)
 
-BearerSource = Callable[[], str]
+BearerSource = Callable[[], str | None]
+AppKeySource = Callable[[], EtsyAppKey]
 """Resolved per request, never at construction. `plan` builds clients it may
 never call, and a workspace that has not signed in must still be able to build
-one (A22)."""
+one."""
 
 
 class EtsyApiError(UserFacingError, RuntimeError):
     """A request Etsy understood and refused.
 
     A :class:`~etsy_listings.errors.UserFacingError`, so that one listing
-    Etsy refuses is one listing reported rather than a batch ended (PRD 16).
+    Etsy refuses is one listing reported rather than a batch ended.
     The Phase 3 stages that will raise this inherit the behaviour by being
     written against this type.
 
@@ -106,7 +107,7 @@ class RateGate:
     Etsy's limits are per app, set in the developer portal, and change
     without the tool knowing -- so nothing is stored or configured here. Each
     response's ``x-remaining-this-second`` is the whole input: at 0, no call
-    is sent until a second has passed since that response (market-seo.md,
+    is sent until a second has passed since that response (features/market-seo-20260924/spec.md,
     *Quota*). A second from the response rather than the next wall-clock
     second, because Etsy does not say whether its window is fixed or sliding,
     and a full second is right under either.
@@ -166,7 +167,7 @@ class Transport:
 
     def __init__(
         self,
-        app_key: EtsyAppKey,
+        app_key: EtsyAppKey | AppKeySource,
         *,
         bearer: BearerSource | None = None,
         client: httpx.Client | None = None,
@@ -184,9 +185,10 @@ class Transport:
         self._gate = RateGate(clock=clock, sleep=sleep)
 
     def request(self, method: str, path: str, **kwargs: Any) -> httpx.Response:
-        headers = {"x-api-key": self._app_key.header()}
-        if self._bearer is not None:
-            headers["Authorization"] = f"Bearer {self._bearer()}"
+        app_key = self._app_key() if callable(self._app_key) else self._app_key
+        headers = {"x-api-key": app_key.header()}
+        if self._bearer is not None and (token := self._bearer()) is not None:
+            headers["Authorization"] = f"Bearer {token}"
 
         def send() -> httpx.Response:
             # Paced per attempt, so a retry waits its turn like any call.
@@ -197,7 +199,7 @@ class Transport:
 
         # Retries first, so a 429 that clears never becomes an exception, and
         # one that does not surfaces as the real decoded error rather than a
-        # wrapper's summary of it (A21).
+        # wrapper's summary of it.
         response = with_retries(send, method, self._policy, sleep=self._sleep, random=self._random)
 
         if response.status_code in (401, 403):

@@ -5,7 +5,7 @@ import type { PriceRow } from "./comparison";
  * table" element). Rows come straight from `comparison.ts`'s `priceRows` --
  * built from the engine's own `PriceChange`s, grouped by size -- so a red
  * "below cost" mark here is never a second copy of `publish`'s own rule
- * (A30).
+ *.
  */
 
 function difference(before: string | null, after: string | null): string {

@@ -1,4 +1,4 @@
-"""The market-data block the proposal prompt receives (market-seo.md, *What
+"""The market-data block the proposal prompt receives (features/market-seo-20260924/spec.md, *What
 the proposal sees*).
 
 Two parts, in this order:

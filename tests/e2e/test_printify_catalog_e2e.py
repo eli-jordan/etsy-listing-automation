@@ -98,7 +98,7 @@ class TestTheCatalogAnswers:
 class TestWhatTheCatalogActuallyRequires:
     """What the catalog checks, measured rather than assumed.
 
-    ``clients/printify/catalog.py`` and docs/setup.md say every ``/v1/catalog/*.json`` call
+    ``clients/printify/catalog.py`` and docs/guides/setup.md say every ``/v1/catalog/*.json`` call
     needs a personal access token with the ``catalog.read`` scope. Two of them
     plainly do not: ``blueprints`` and ``print_providers`` are served with no
     ``Authorization`` header at all. That matters for how hard ``new`` should
@@ -231,14 +231,14 @@ class TestTheOfflineTranscriptsStillMatchReality:
 
 
 class TestTheDocumentedExampleProfileResolves:
-    """Every blueprint this repo puts in front of a user -- the PRD's example
+    """Every blueprint this repo puts in front of a user -- the example
     profile, the getting-started guide, the fixture workspace -- has to be one
     Printify actually returns.
 
     This is where that gets checked against the catalog rather than against a
     fixture agreeing with itself. It is what caught the previous value: a bare
     ``blueprint: Comfort Colors 1717``, a title Printify has never used, which
-    made every profile written by following the guide unresolvable (PRD 23,
+    made every profile written by following the guide unresolvable (ADR-0005,
     since revised to brand + model).
     """
 

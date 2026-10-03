@@ -1,9 +1,9 @@
-"""One latest proposal per listing, in ``.cache/proposals/`` (A37, A41).
+"""One latest proposal per listing, in ``.cache/proposals/`` (cache-record persistence, ADR-0049).
 
 The store is the only reader and writer of those records: a proposal saved
 is the proposal loaded, a newer one replaces it with every section open
 again, a section's resolution sticks, and rename and delete carry the record
-with the listing (A42). A record this code cannot read -- a schema it does
+with the listing. A record this code cannot read -- a schema it does
 not know, a file that is not JSON -- is no record, because it is cache.
 """
 
@@ -104,7 +104,7 @@ def test_a_proposal_read_while_it_is_replaced_is_still_there(
     store: ProposalStore, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Windows refuses to open a record mid-replace; a read that lands there
-    waits the save out rather than finding no proposal (A37)."""
+    waits the save out rather than finding no proposal."""
     _put(store)
     refuse_reads(monkeypatch, 3)
 
@@ -235,7 +235,7 @@ def test_an_unreadable_record_is_no_record(
 def test_the_record_is_schema_versioned_json_under_the_exact_name(
     workspace: Workspace, store: ProposalStore
 ) -> None:
-    """A37 and PRD 4's layout: ``.cache/proposals/<listing>.json``. Not the
+    """cache-record persistence and ADR-0003's layout: ``.cache/proposals/<listing>.json``. Not the
     casefold, which gave two listings differing only in case one file."""
     _put(store, "Take-A-Hike")
 
@@ -290,7 +290,7 @@ def test_a_resolution_cannot_bring_back_a_proposal_another_store_removed(
     workspace: Workspace, store: ProposalStore, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """The engine removes a fully applied listing's proposal through its own
-    store (A44) while the UI's store may be recording a resolution. Their
+    store while the UI's store may be recording a resolution. Their
     per-record locks are one set, so the remove waits for the resolution's
     read-modify-write instead of landing inside it and being overwritten.
 

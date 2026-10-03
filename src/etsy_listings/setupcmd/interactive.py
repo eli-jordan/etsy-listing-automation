@@ -1,6 +1,6 @@
 """Sequencing the questions ``setup`` asks, and doing the I/O it decides on.
 
-Every decision lives in :mod:`etsy_listings.setupcmd.logic`; this module only
+Every decision lives in:mod:`etsy_listings.setupcmd.logic`; this module only
 orders the questions and writes files. Questions go through
 :mod:`etsy_listings.prompts` rather than questionary directly, because
 questionary cannot prompt at all under cygwin (see that module).
@@ -58,7 +58,7 @@ POD_DEFAULTS = {
     "is_supply": False,
     "renewal": "manual",
 }
-"""What every print-on-demand t-shirt listing answers (PRD 52: the shirt
+"""What every print-on-demand t-shirt listing answers (ADR-0028: the shirt
 genuinely was made by another company). Offered as one confirmation rather
 than four questions, because getting four identical answers out of the user
 teaches them the wizard is not worth reading.
@@ -83,7 +83,7 @@ def _sync_prompts(root: Path, *, replace: bool) -> None:
     """Seed, check or replace each packaged prompt, and say what happened.
 
     `setup` fills gaps and does not correct answers; prompts are the one
-    opt-in exception (PRD 71), because a workspace would otherwise never
+    opt-in exception, because a workspace would otherwise never
     receive new instructions such as `seo.md`'s market-data rules. Without
     ``replace``, a prompt that differs from its default is left byte for byte
     and earns a warning naming the file and the flag.
@@ -115,7 +115,7 @@ def _verified_token(root: Path, factory: ClientFactory) -> tuple[str, list[Shop]
     answered.
 
     The shop list comes back from the same call rather than being fetched
-    again: verifying the token *is* asking which shops it can reach (PRD 42),
+    again: verifying the token *is* asking which shops it can reach,
     and a second call would only invite the two answers to disagree. That is
     also why this one verifies a *reused* token where ``auth`` does not --
     ``setup`` needs the answer either way, so there is no call to save.
@@ -192,7 +192,7 @@ class EtsyFindings:
 
     shop: EtsyShop | None = None
     return_policy: dict[str, Any] | None = None
-    """The three terms a return policy is addressed by (PRD 59), not an id."""
+    """The three terms a return policy is addressed by, not an id."""
 
 
 EtsyAccessFactory = Callable[[Path], EtsyAccess | None]
@@ -221,7 +221,7 @@ def _discover_etsy(
     existing_etsy: dict[str, Any],
     existing_listing_defaults: dict[str, Any],
 ) -> EtsyFindings:
-    """Find the Etsy shop and its return policy (PRD 51, PRD 59).
+    """Find the Etsy shop and its return policy.
 
     Never fatal. `setup`'s job is to leave a usable workspace, and everything
     it learns here is optional to that: a failure reports what it could not
@@ -321,7 +321,7 @@ def _policy_terms(policy: ReturnPolicy) -> dict[str, Any]:
 def _pick_return_policy(
     client: EtsyShopClient, shop: EtsyShop, current: dict[str, Any] | None
 ) -> dict[str, Any] | None:
-    """Zero-config when the shop has exactly one (PRD 59): most shops do, and
+    """Zero-config when the shop has exactly one: most shops do, and
     a shop with one return policy needs no reference to it at all -- the
     stages resolve it live the same way. Only two or more make it a question,
     and the answer is the policy's *terms*, not an id Etsy gives no title."""
@@ -447,7 +447,7 @@ def _currency_default(findings: EtsyFindings, existing_etsy: dict[str, Any]) -> 
 
     The shop's answer goes first because it is the only one that cannot be
     wrong: a workspace configured in a currency the shop does not sell in is a
-    disagreement nothing surfaces until a price lands wrong (PRD 51). It is
+    disagreement nothing surfaces until a price lands wrong. It is
     still offered as a default rather than imposed -- it is a prompt, and the
     user can say otherwise.
     """

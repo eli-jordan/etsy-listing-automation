@@ -6,7 +6,7 @@ the catalog and puts it in a :class:`ProductSpec` in the same breath.
 
 *Reference data* -- :class:`Blueprint`, :class:`PrintProvider`,
 :class:`Variant`, :class:`ShippingRates` -- is the read-only, shop-agnostic
-half (PRD 7b). Read-only, but not unauthenticated: every catalog call needs a
+half. Read-only, but not unauthenticated: every catalog call needs a
 token with the ``catalog.read`` scope, same as the rest of the API.
 
 *Shop-scoped state* -- :class:`Shop`, :class:`Upload`, :class:`Product`,
@@ -115,10 +115,10 @@ class VariantSet(BaseModel):
     def placeholder(self, position: str) -> PrintAreaPlaceholder | None:
         """The **largest** size offered at ``position``, or ``None``.
 
-        A profile carries one print area (PRD 8a) and the catalog offers
+        A profile carries one print area and the catalog offers
         several, so one has to win. The largest does, because the print area
         is a resolution target -- a design must come within 10% of it in each
-        axis (PRD 38) -- and art sized for the 3XL panel still covers the S
+        axis -- and art sized for the 3XL panel still covers the S
         panel, while the reverse prints soft on the sizes that need it most.
         """
         sizes = self.placeholder_sizes(position)
@@ -161,11 +161,11 @@ class ShippingRates(BaseModel):
 class Shop(BaseModel):
     """One row of ``GET /v1/shops.json`` -- which is the whole of what that
     endpoint knows. No currency, no settings, no draft preference
-    (docs/api-findings.md).
+    (docs/research/api-findings.md).
 
     The call is scoped to the token, so its answer is also the answer to "which
     shops may this token write to?" -- which is what makes ``setup`` able to
-    discover the shop id rather than asking a human to find one (PRD 42).
+    discover the shop id rather than asking a human to find one.
     """
 
     model_config = ConfigDict(frozen=True)
@@ -214,11 +214,11 @@ class PlacedImage(BaseModel):
     ``imageId`` distinct from the upload id. Comparing all of them against a
     desired document is a permanent spurious diff, so the extras are dropped
     on the way in rather than filtered at every comparison
-    (docs/api-findings.md).
+    (docs/research/api-findings.md).
 
-    The defaults are PRD 45's fixed placement: centred, fit inside the print
+    The defaults are fixed placement: centred, fit inside the print
     area, unrotated. There is no configuration surface for them in v1 --
-    PRD 38's >=90% gate is what makes the constant right rather than arbitrary.
+    ADR-0018's >=90% gate is what makes the constant right rather than arbitrary.
     """
 
     model_config = ConfigDict(frozen=True, extra="ignore")
@@ -254,7 +254,7 @@ class ProductVariant(BaseModel):
     """Printify's per-variant manufacturing cost, in minor units of USD. Read
     only, and not part of any comparison -- it is Printify's fact, not our
     desired state. The publish stage asserts the retail price clears it
-    (PRD 40, amended), which is the one place it matters."""
+    (ADR-0020, amended), which is the one place it matters."""
     is_available: bool = True
 
 
@@ -338,6 +338,6 @@ class ProductSpec(BaseModel):
     print_provider_id: int
     variants: dict[int, int]
     """``{variant_id: price}``, in minor units of the sales channel's currency
-    (PRD 39/40 -- NOK passes through unconverted). The enabled set; anything
+    (ADR-0019, ADR-0020 -- NOK passes through unconverted). The enabled set; anything
     absent is either untouched, on create, or explicitly disabled, on update."""
     print_areas: tuple[PrintAreaSpec, ...]

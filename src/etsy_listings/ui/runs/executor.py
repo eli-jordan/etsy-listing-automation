@@ -1,11 +1,11 @@
-"""The FIFO worker thread that actually runs a plan or an apply (A33,
+"""The FIFO worker thread that actually runs a plan or an apply (ADR-0041,
 decision 7).
 
 **One thread for the whole workspace, not one lock per listing.** The
 registry's per-listing locks decide whether a *new* run may be queued at all;
 they do not, by themselves, stop two runs from executing at once -- that
 guarantee comes from there being exactly one thread here to execute either of
-them. This is what keeps A3's "apply never parallelises writes" true one level
+them. This is what keeps ADR-0009's "apply never parallelises writes" true one level
 up: raising the worker count later would be the whole of parallelising,
 because the lock model already exists.
 
@@ -79,7 +79,7 @@ by swapping this one callable -- nothing else here knows how a client is
 assembled."""
 
 YieldToDeploy = Callable[[Sequence[str]], AbstractContextManager[None]]
-"""How a run takes its listings from AI work before it reads them (A43):
+"""How a run takes its listings from AI work before it reads them:
 ``BatchQueue.yield_to_deploy`` in every real server. It returns once the
 listings' AI work has stopped, and holds them until the ``with`` ends."""
 
@@ -142,7 +142,7 @@ class RunExecutor:
 
     def _execute(self, run: Run) -> None:
         try:
-            # A43: deploying takes precedence over AI. A plan counts as a
+            # ADR-0050: deploying takes precedence over AI. A plan counts as a
             # deploy (spec, *Deployment interaction*), since what it shows
             # is what the apply after it will be checked against.
             with self.yield_to_deploy(run.listings):

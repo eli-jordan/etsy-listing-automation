@@ -25,7 +25,7 @@ import { etsyListingUrl, printifyProductUrl } from "./openOn";
  *
  * The Etsy one is Shop Manager's listing **editor**, not the public
  * `etsy.com/listing/{id}` storefront URL: this tool never activates a listing
- * it creates (PRD non-goal 1 -- `state` is never sent), so a listing it has
+ * it creates (`state` is never sent), so a listing it has
  * just applied is still an Etsy-side draft and the public URL 404s for it.
  * The editor URL works while signed in for every state a listing can be in,
  * draft and live alike, which is why it is not conditional on status.

@@ -148,7 +148,7 @@ describe("ComparisonView", () => {
     expect(screen.queryByText("After apply")).not.toBeInTheDocument();
   });
 
-  it("draws one of the listing's own images from under that listing (PRD 73)", () => {
+  it("draws one of the listing's own images from under that listing", () => {
     const p = plan([
       stage({
         stage: "etsy_media",
@@ -179,7 +179,7 @@ describe("ComparisonView", () => {
   });
 });
 
-describe("ComparisonView's videos (PRD 72)", () => {
+describe("ComparisonView's videos", () => {
   const FEATURED = "common-media/size-guide.mp4";
   const SECOND = "./how-it-fits.mp4";
 

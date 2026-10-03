@@ -1,5 +1,5 @@
 """A listing template's completeness, with its inputs read off the workspace
-(A36).
+.
 
 `config/listing_validation.check_listing_template` is pure, as
 `check_listing` is; somebody has to resolve its description ref and probe its

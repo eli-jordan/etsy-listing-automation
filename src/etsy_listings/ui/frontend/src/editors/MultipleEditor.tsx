@@ -51,7 +51,7 @@ function uncolouredWarning(placements: Placement[]): string | null {
  *
  * `colour_coverage` has no home in wireframe 2a and is, for now, editable only
  * by hand in template.yaml. Recorded as a debt in
- * docs/implementation-plan.md -- it belongs in the Advanced disclosure when it
+ * docs/history/implementation-plan.md -- it belongs in the Advanced disclosure when it
  * comes back.
  */
 export function MultipleEditor({

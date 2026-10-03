@@ -2,7 +2,7 @@
 must still load without.
 
 The field that looks like it belongs in a listing -- ``preview_template`` --
-is the editor's colour-judgement photo, not a ``media:`` default (A13, PRD 29).
+is the editor's colour-judgement photo, not a ``media:`` default.
 """
 
 from __future__ import annotations

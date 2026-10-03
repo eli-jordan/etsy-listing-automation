@@ -1,5 +1,5 @@
 """The ``etsy_videos`` stage: a listing's videos, placed where `media:` puts
-them (PRD 72, phase-3-etsy.md decision 9).
+them (ADR-0045, features/etsy-listing-20260910/spec.md decision 9).
 
 Etsy has no position for a video -- no rank, no ordering call. Where one
 shows follows from attach order, measured by eye in Shop Manager: the video
@@ -30,7 +30,7 @@ that video again rather than trusting an id Etsy has stopped showing.
 **Its own stage, not a branch of `etsy_media`.** Videos have their own
 applied model, their own id map and their own daily budget (ten
 associations per listing, re-attaches included): a budget refusal fails this
-stage alone, after `etsy_media`'s ids are already recorded (A29), so the
+stage alone, after `etsy_media`'s ids are already recorded, so the
 next run re-uploads no image.
 """
 
@@ -62,7 +62,7 @@ from etsy_listings.engine.stages.variation_links import (
 from etsy_listings.workspace.facts import WorkspaceFacts
 
 VIDEO_IDS_KEY = "etsy_video_ids"
-"""This stage's key in ``lock.remote`` (A20): ref -> Etsy ``video_id``, which
+"""This stage's key in ``lock.remote``: ref -> Etsy ``video_id``, which
 is what makes a re-attach by id possible when only the layout changed."""
 
 NO_SHOP_CONSEQUENCE = "this listing's videos will not be uploaded to Etsy"
@@ -79,7 +79,7 @@ class AppliedVideo(BaseModel):
 
 
 class AppliedEtsyVideos(BaseModel):
-    """The verbatim last-applied document (A2): featured first."""
+    """The verbatim last-applied document: featured first."""
 
     model_config = ConfigDict(frozen=True, extra="ignore")
 
@@ -107,7 +107,7 @@ class EtsyVideosDesired:
     """Every image in `media:` order, as ``etsy_image_ids`` keys them: what
     step 3 cuts `image_ids` from and restores it to."""
     swatches: tuple[tuple[str, str], ...] = ()
-    """colour -> image ref pairs from `variation_images:` (PRD 56), re-set
+    """colour -> image ref pairs from `variation_images:`, re-set
     after every cut."""
     colours: tuple[str, ...] = ()
 
@@ -140,7 +140,7 @@ class EtsyVideosLive:
 
 
 class DesiredVideoSnapshot(BaseModel):
-    """One video as this run wants to place it (A30)."""
+    """One video as this run wants to place it."""
 
     model_config = ConfigDict(frozen=True)
 
@@ -150,7 +150,7 @@ class DesiredVideoSnapshot(BaseModel):
 
 
 class LiveVideoSnapshot(BaseModel):
-    """One video Etsy has on the listing (A30); ``ref`` is ``None`` for one
+    """One video Etsy has on the listing; ``ref`` is ``None`` for one
     this tool never uploaded."""
 
     model_config = ConfigDict(frozen=True)
@@ -162,7 +162,7 @@ class LiveVideoSnapshot(BaseModel):
 
 
 class EtsyVideosSnapshot(BaseModel):
-    """Both sides for the deploy review (A30). The live side comes in Etsy's
+    """Both sides for the deploy review. The live side comes in Etsy's
     response order, which says nothing about the gallery (decision 9)."""
 
     model_config = ConfigDict(frozen=True)
@@ -428,7 +428,7 @@ class _Placer:
         video_id = self._known.get(video.ref)
         if video_id is not None and video_id in self._on_listing:
             self._delete(video_id)
-        # `lock.remote` is threaded through the run (A26), so these are the
+        # `lock.remote` is threaded through the run, so these are the
         # ids `etsy_media` set a moment ago in this same apply.
         image_ids_by_ref: dict[str, int] = dict(lock.remote.get(IMAGE_IDS_KEY) or {})
         image_ids = [image_ids_by_ref[r] for r in desired.image_refs if r in image_ids_by_ref]
@@ -470,7 +470,7 @@ def _changes(
     A slot whose video changed is ``videos.featured``/``videos.second``,
     ref before and after, so a reader can tell a new video from one that only
     moved slot by the refs alone -- the deploy review's New and Removed badges
-    come from here rather than from a comparison of its own (A2, PRD 72). The
+    come from here rather than from a comparison of its own. The
     same ref with new bytes is ``.contents``, digest before and after; the
     second video moved among the images is ``.after_images``, its anchor
     before and after.

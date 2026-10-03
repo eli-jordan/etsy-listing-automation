@@ -1,7 +1,7 @@
 """Derived height/luminance maps, and the ``_derived/`` disk cache for them.
 
-Pure computation (:func:`luminance_map`, :func:`height_map`) is separated from
-the cache (:class:`DerivedMapCache`), which is the one place in this module
+Pure computation ( :func:`luminance_map`, :func:`height_map`) is separated from
+the cache ( :class:`DerivedMapCache`), which is the one place in this module
 that does I/O -- keeping the split lets the golden harness test the maps
 without touching a filesystem.
 """
@@ -19,8 +19,8 @@ from etsy_listings.render.types import RGB, FloatMap
 
 
 def luminance_map(base_rgb: RGB) -> FloatMap:
-    """Desaturate -> normalise levels. PRD: "derived from the blank mockup's own
-    luminance" -- this is why plain flat mockup PNGs are sufficient; no
+    """Desaturate -> normalise levels. Derived from the blank mockup's own
+    luminance -- this is why plain flat mockup PNGs are sufficient; no
     purchased displacement/lighting maps are needed."""
     gray = np.asarray(cv2.cvtColor(base_rgb, cv2.COLOR_RGB2GRAY), dtype=np.uint8)
     normalized = gray.astype(np.float32) / 255.0

@@ -12,21 +12,21 @@ import { mediaLostBy, selectColours, selectGarmentProfile } from "./colourSelect
  * A swatch dot next to each name is the listing's *real* garment colour, not
  * an invented hex value -- sampled off the garment profile's
  * `preview_template` (`render/swatch.py`'s `sample_swatch`, via
- * `GET .../swatch`). It answers "roughly what colour is this" for scanning
+ * `GET.../swatch`). It answers "roughly what colour is this" for scanning
  * the whole list; "does this colour suit the design" is still the big
  * preview stage beside it, which overlays the listing's real artwork
- * (`GET .../design-preview`) rather than showing a bare photo -- and is
+ * (`GET.../design-preview`) rather than showing a bare photo -- and is
  * rendered large, because that judgement is about the ink on the cloth and
  * a postage stamp cannot carry it. The preview template is a colour-matrix
  * on the garment, not a `media:` entry, so a new listing can judge colours
- * before it has picked listing images (A13).
+ * before it has picked listing images.
  *
  * Two different states, deliberately distinguished, because conflating them
  * painted every enabled row in the selected-row highlight:
  *
  * * **enabled** -- the colour is in `colors:` and will be sold. The switch.
  * * **previewed** -- the colour on the stage right now. Exactly one, and
- *   `.color-row--selected` means *this*, not "enabled".
+ * `.color-row--selected` means *this*, not "enabled".
  *
  * A disabled colour is dimmed (`--off`) rather than hidden, so turning one
  * back on does not require remembering it existed.
@@ -45,7 +45,7 @@ interface Props {
 }
 
 /** The garment profile's colour-matrix, used to judge colours before the
- * listing has picked its Etsy images. Not a `media:` default (A13). The
+ * listing has picked its Etsy images. Not a `media:` default. The
  * templates list is only consulted to refuse a name we *know* is not
  * colour-matrix -- a new listing must not wait on GET /api/templates
  * (or on a colour-matrix entry in `media:`) before the stage can render. */

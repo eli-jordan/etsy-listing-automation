@@ -17,13 +17,13 @@ import { type PreviewDesign, samePreview } from "./previewDesign";
  *
  * Multi-artwork listings are read-only here. `design:` keyed
  * `on-light`/`on-dark` is resolved per colour and garment by the render stage
- * (PRD's artwork resolution order), so there is no single "the design" to
+ * (the artwork resolution order), so there is no single "the design" to
  * swap, and offering one would silently drop the other.
  */
 
 type Props =
   | {
-      /** `Listing.design` verbatim: artwork key -> ref (PRD 73). */
+      /** `Listing.design` verbatim: artwork key -> ref. */
       design: Record<string, string>;
       /** The new ref, ready to PATCH as `{ design: ref }`. */
       onPick: (ref: string) => void;
@@ -72,7 +72,7 @@ function ArtworkSelect({
   const multi = keys.length > 1;
 
   function pick(chosen: ListingDesignSummary) {
-    // PRD 73: a ref with no prefix is the workspace root, so the design's
+    // ADR-0046: a ref with no prefix is the workspace root, so the design's
     // workspace-relative path is already the ref `new` writes.
     onPick(chosen.file);
     setPicking(false);

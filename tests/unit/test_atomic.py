@@ -1,4 +1,4 @@
-"""`write_bytes_atomic` (A37): the file is either the old bytes or the new,
+"""`write_bytes_atomic`: the file is either the old bytes or the new,
 never a half-written one, and a failed write leaves nothing beside it.
 `read_bytes_retrying` is its reader: a read that lands while Windows is
 replacing the file waits the replace out rather than seeing no file."""

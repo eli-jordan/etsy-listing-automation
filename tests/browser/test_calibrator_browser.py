@@ -710,7 +710,7 @@ class TestKindPickerCreatesEachKind:
 
         saved = _template_config(workspace_root, "lifestyle-01")
         assert saved["kind"] == "single"
-        # PRD 28: a scene kind uses the fixed filename, so whatever the folder
+        # ADR-0014: a scene kind uses the fixed filename, so whatever the folder
         # called its photo is gone by now.
         assert (workspace_root / "mockup-templates" / "lifestyle-01" / "scene.png").is_file()
         assert not (workspace_root / "mockup-templates" / "lifestyle-01" / "black.png").exists()
@@ -743,7 +743,7 @@ class TestKindPickerCreatesEachKind:
             },
         )
 
-        # The picker reports what each filename will be taken as (PRD 7a)
+        # The picker reports what each filename will be taken as
         # before anything is committed.
         page.wait_for_selector(".kind-picker__file")
         listed = page.locator(".kind-picker__filename").all_inner_texts()
@@ -761,7 +761,7 @@ class TestKindPickerCreatesEachKind:
     ) -> None:
         """A photo called `Heather Grey.png` yields the colour `heather-grey`,
         which is not the name on disk. The picker says so before you commit,
-        and `assign_kind` then renames the file to match (PRD 7a).
+        and `assign_kind` then renames the file to match.
 
         Two photos, not one: a single-photo set cannot be a colour matrix at
         all now, so the report it belongs to is not on screen for one.

@@ -1,6 +1,6 @@
 """Browser tests for the listing-template editor (batch plan PR 6; UI doc §2,
 §3): the listing editor's shell over a listing template, the valid-only
-``PUT`` (A36), the rename and create endpoints and the files they write,
+``PUT``, the rename and create endpoints and the files they write,
 together in a real browser.
 
 * Switch every colour off -> *Not saved* and the tab badge, with
@@ -82,7 +82,7 @@ def test_an_incomplete_listing_template_is_kept_off_disk_until_it_is_complete(  
     assert page.get_by_text("Last complete version is kept until then").is_visible()
     assert page.locator(".seg-opt", has_text="Variants").locator(".tab-badge").is_visible()
     # Each switch before the last left a complete template, and was written;
-    # the last one did not, so the file is the last complete version (A36).
+    # the last one did not, so the file is the last complete version.
     assert _colours(workspace_root) == ["moss"]
 
     page.get_by_role("switch", name="black").click()

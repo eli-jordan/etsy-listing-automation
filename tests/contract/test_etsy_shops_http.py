@@ -3,7 +3,7 @@ one response shape Etsy documents differently from how it behaves.
 
 All four calls are unscoped -- the app key pair is enough -- which is what
 lets `setup` resolve every id in `shop.yaml` without a browser sign-in
-(PRD 49). Payloads are transcribed from Etsy's API reference; the `-m e2e`
+. Payloads are transcribed from Etsy's API reference; the `-m e2e`
 layer is what re-takes them against the live API.
 """
 

@@ -1,9 +1,9 @@
 """Per-run name -> id resolution for the four things `shop.yaml`/
 `listing.yaml` refer to by name rather than by Etsy's own id (decision 2,
-PRD 53/54/59).
+per-listing shop sections).
 
 Resolution happens **once per run, in memory** -- not disk-cached like
-Printify's catalog (A25). A stale section id fails the *whole* PATCH, and the
+Printify's catalog. A stale section id fails the *whole* PATCH, and the
 three lists here are small, shop-scoped and cheap to re-fetch next run, so
 there is nothing a cache would buy and one thing it would cost: a renamed
 section in Shop Manager staying invisible until the cache expired.
@@ -42,8 +42,8 @@ class ShopCatalogError(UserFacingError, ValueError):
 
 @dataclass(frozen=True)
 class ReturnPolicyTerms:
-    """A return policy's identity, since Etsy gives the resource no title
-    (PRD 59). ``within_days`` of ``None`` matches any deadline -- only used
+    """A return policy's identity, since Etsy gives the resource no title.
+    ``within_days`` of ``None`` matches any deadline -- only used
     internally; config always supplies all three."""
 
     accepts_returns: bool
@@ -103,7 +103,7 @@ class EtsyShopCatalog:
         )
 
     def shop_section_title(self, section_id: int | None) -> str | None:
-        """A section id read back as its name, for drift labelling (A30).
+        """A section id read back as its name, for drift labelling.
 
         Never fetches: unlike :meth:`shop_section`, a name miss here is not
         a config mistake to report, it is "this run's catalog never had a
@@ -141,7 +141,7 @@ class EtsyShopCatalog:
 
     def return_policy(self, terms: ReturnPolicyTerms | None) -> ReturnPolicy:
         """The policy matching ``terms``, or -- omitted -- the shop's only
-        one. Two or more with nothing named is an error, not a guess (PRD 59)."""
+        one. Two or more with nothing named is an error, not a guess."""
         policies = self._all_return_policies()
         if terms is None:
             if len(policies) == 1:
@@ -164,7 +164,7 @@ class EtsyShopCatalog:
 
     def return_policy_label(self, policy_id: int | None) -> str | None:
         """Mirrors :meth:`shop_section_title`: a return policy has no title
-        of its own (PRD 59), so this is ``describe()``'s terms rather than a
+        of its own, so this is ``describe()``'s terms rather than a
         name."""
         if policy_id is None or self._return_policies is None:
             return None

@@ -1,11 +1,11 @@
 """The ``render`` stage: local-only (no remote state), wires the pure render
 pipeline into plan/apply.
 
-Its ``desired()`` does the I/O the render *passes* deliberately don't (A7):
+Its ``desired()`` does the I/O the render *passes* deliberately don't:
 loading the listing/garment-profile/template config and hashing the design + template
 assets. ``read_live()`` looks at what is actually on disk under
 ``.cache/renders/``. ``apply()`` is the one place renders actually happen and
-get written to ``.cache/renders/{listing}/{template}/...`` (PRD: rendered
+get written to ``.cache/renders/{listing}/{template}/...`` (rendered
 mockups persist in the gitignored cache, keyed by listing, never committed;
 namespaced by template since a listing can reference several -- see
 ``Workspace.render_file``).
@@ -18,7 +18,7 @@ checking only the hash made ``plan`` report "No changes." over a half-empty
 render cache, and ``apply`` then did nothing to restore it.
 
 A template is exactly one of three kinds (multi-placement redesign,
-docs/multi-placement-rendering.md). A scene renders if, and only if, some
+docs/features/multi-placement-rendering-20260903/spec.md). A scene renders if, and only if, some
 entry in the listing's ``media:`` list references it -- rendering is driven
 purely by ``media``, not by ``listing.colors`` (item 4 of that doc).
 
@@ -29,7 +29,7 @@ photo to composite over, the derived-map key, and the resolved layers.
 config nor re-resolves an artwork, which is what keeps the hash and the pixels
 describing the same thing.
 
-A32: ``preview()`` renders full-size, ahead of ``apply()`` and through the
+ADR-0040: ``preview()`` renders full-size, ahead of ``apply()`` and through the
 same pipeline, to a content-addressed cache under ``.cache/previews/`` keyed
 by :func:`scene_hash` -- a *third*, narrower hash axis alongside
 ``input_hash`` (whole-listing: would a re-render differ at all) and
@@ -55,6 +55,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict
 
+from etsy_listings.config.errors import ConfigLoadError
 from etsy_listings.config.listing import TemplateMediaEntry
 from etsy_listings.engine.change import Action, Verdict
 from etsy_listings.engine.context import RunContext, Swatch
@@ -65,8 +66,13 @@ from etsy_listings.engine.lock import (
     to_workspace_relative_posix,
 )
 from etsy_listings.engine.stage import Blocked, StageApplyResult
-from etsy_listings.engine.stages.gates import check_garment_profile_chosen
-from etsy_listings.engine.stages.placement import DesignPlacement
+from etsy_listings.engine.stages.gates import (
+    check_garment_profile_chosen,
+    check_render_photo,
+    check_render_template,
+    check_scene_colour,
+)
+from etsy_listings.engine.stages.placement import ArtworkResolutionError, DesignPlacement
 from etsy_listings.render.config import (
     AnyTemplate,
     ColourMatrixTemplate,
@@ -78,7 +84,7 @@ from etsy_listings.render.maps import DerivedMapCache
 from etsy_listings.render.pipeline import Layer, render_scene
 from etsy_listings.render.swatch import sample_swatch
 from etsy_listings.render.types import RGBA
-from etsy_listings.workspace.workspace import Workspace, remove_tree
+from etsy_listings.workspace.workspace import Workspace
 
 PREVIEW_WORKERS = 2
 """Maximum full-size preview renders in flight.
@@ -108,32 +114,6 @@ def _copy_preview(source: Path, target: Path) -> None:
         os.replace(temporary, target)
     finally:
         temporary.unlink(missing_ok=True)
-
-
-class TemplateAssetError(FileNotFoundError):
-    def __init__(self, template: str, colour: str | None, path: object) -> None:
-        where = f"colour {colour!r}" if colour is not None else "its scene"
-        super().__init__(f"template {template!r}: no mockup base image for {where} at {path}")
-
-
-class TemplateNotFoundError(FileNotFoundError):
-    def __init__(self, template: str, path: object) -> None:
-        super().__init__(
-            f"media references template {template!r}, but no template.yaml exists at {path}"
-        )
-
-
-class MediaColourMismatchError(ValueError):
-    def __init__(self, template: str, kind: str, colour: str | None) -> None:
-        if kind == "colour-matrix":
-            super().__init__(
-                f"media entry for template {template!r} (colour-matrix kind) needs a colour"
-            )
-        else:
-            super().__init__(
-                f"media entry for template {template!r} ({kind} kind) must not set colour "
-                f"{colour!r} -- it has exactly one output"
-            )
 
 
 @dataclass(frozen=True)
@@ -238,7 +218,7 @@ class RenderDesired:
     preview_exists: dict[str, bool] = field(default_factory=dict)
     """Scene key -> whether ``Workspace.preview_file`` already holds a preview
     matching that scene's current :func:`scene_hash`, checked once by
-    ``desired()`` (A32) -- the one place this stage already does I/O beyond
+    ``desired()`` -- the one place this stage already does I/O beyond
     hashing. Feeds :meth:`RenderStage.snapshot`'s ``preview`` field. Defaults
     to empty so a ``RenderDesired`` built by hand (a unit test exercising
     :func:`scene_hash` in isolation) doesn't have to know this exists."""
@@ -267,7 +247,7 @@ def _scene_payload(
     layers, only *its* template's hash, only *its* photo's hash. A scene that
     shares nothing with another -- a different template, different artwork --
     hashes independently of it, which is the entire point of asking per scene
-    rather than reading ``_input_hash``'s listing-wide answer (A32).
+    rather than reading ``_input_hash``'s listing-wide answer.
     """
     return {
         "template": work.template,
@@ -279,10 +259,10 @@ def _scene_payload(
 
 
 def scene_hash(desired: RenderDesired, work: SceneWork) -> str:
-    """A32: one scene's own share of ``_input_hash``'s inputs, hashed alone.
+    """ADR-0040: one scene's own share of ``_input_hash``'s inputs, hashed alone.
 
     Two uses. ``RenderStage.snapshot`` compares this against the hash
-    recorded for the scene at the last apply (:attr:`RenderApplied.scene_hashes`)
+    recorded for the scene at the last apply ( :attr:`RenderApplied.scene_hashes`)
     to say ``cached`` or ``stale`` *per scene* -- ``_input_hash`` alone cannot
     answer that, because it changes the moment any scene's inputs change, which
     would mark every scene stale over one design edit. ``RenderStage.preview``
@@ -320,7 +300,7 @@ RenderSceneState = Literal["cached", "stale", "missing"]
 
 
 class RenderSceneSnapshot(BaseModel):
-    """One scene's domain facts for the before/after review (A30, A32).
+    """One scene's domain facts for the before/after review.
 
     ``state`` answers "would this scene's rendered output change, and is it
     even there" -- ``cached`` when neither is true, ``stale`` when the scene's
@@ -343,7 +323,7 @@ class RenderSceneSnapshot(BaseModel):
 
 class RenderSnapshot(BaseModel):
     """Every referenced scene, in media order -- what the before/after review
-    needs and a ``Plan`` (changes only) cannot supply (A30)."""
+    needs and a ``Plan`` (changes only) cannot supply."""
 
     model_config = ConfigDict(frozen=True)
 
@@ -362,7 +342,7 @@ class RenderApplied(BaseModel):
     answers, and the raising one took a whole ``--all`` batch with it.
 
     ``extra="ignore"``, because the written document also carries
-    ``scene_config``, which nothing reads back: it is there because A2 says
+    ``scene_config``, which nothing reads back: it is there because ADR-0008 says
     the lockfile records the verbatim last-applied document, not because this
     comparison needs it.
     """
@@ -372,7 +352,7 @@ class RenderApplied(BaseModel):
     input_hash: str
     scenes: tuple[str, ...]
     scene_hashes: dict[str, str] = {}
-    """Scene key -> :func:`scene_hash` at the last apply (A32). Defaulted, not
+    """Scene key -> :func:`scene_hash` at the last apply. Defaulted, not
     required: a lockfile written before this field existed decodes as if every
     scene's map were empty, which :meth:`RenderStage.snapshot` already reads
     as "no record to compare against" -- the same answer a scene that has
@@ -383,11 +363,11 @@ class RenderApplied(BaseModel):
 class RenderLive:
     """What is on disk right now, for the scenes the lockfile claims were
     rendered. An observation only -- comparing it against desired/applied is
-    ``plan()``'s job, per A2."""
+    ``plan()``'s job, per ADR-0008."""
 
     outputs_present: dict[str, bool]  # scene key -> its render file exists
     scene_hashes: dict[str, str] = field(default_factory=dict)
-    """``applied.scene_hashes``, carried through unchanged (A32). ``read_live``
+    """``applied.scene_hashes``, carried through unchanged. ``read_live``
     has ``applied`` and ``snapshot`` does not -- this is how the value one
     decoded and the other needs to compare against reaches the second without
     a second decode of the stage's own subtree."""
@@ -412,7 +392,7 @@ def _render_path(workspace: Workspace, listing: str, scene: str) -> Path:
 # The only thing left that reads a template's kind. Which photo a scene
 # composites over, and what its derived maps cache under, are the same
 # question asked at a different level -- `Workspace.scene_photo` answers both,
-# so the calibrator's preview reaches them the same way (A8).
+# so the calibrator's preview reaches them the same way.
 def _layer_specs(
     template_cfg: AnyTemplate, colour: str | None
 ) -> list[tuple[str | None, str | None, RenderConfig]]:
@@ -437,18 +417,23 @@ def _resolve_scene(
     template_name: str,
     template_cfg: AnyTemplate,
     colour: str | None,
-) -> SceneWork:
+) -> SceneWork | Blocked:
     kind = template_cfg.kind
-    if (kind == "colour-matrix") != (colour is not None):
-        raise MediaColourMismatchError(template_name, kind, colour)
+    blocked = check_scene_colour(template_name, kind, colour)
+    if blocked is not None:
+        return blocked
 
     photo = workspace.scene_photo(template_name, colour)
-    if not photo.path.is_file():
-        raise TemplateAssetError(template_name, colour, photo.path)
+    blocked = check_render_photo(template_name, colour, photo.path)
+    if blocked is not None:
+        return blocked
 
     layers = []
     for layer_colour, override, cfg in _layer_specs(template_cfg, colour):
-        artwork = placement.artwork_for(layer_colour, template_override=override)
+        try:
+            artwork = placement.artwork_for(layer_colour, template_override=override)
+        except ArtworkResolutionError as exc:
+            return Blocked(str(exc))
         layers.append(
             ResolvedLayer(
                 colour=layer_colour, artwork=artwork, design=placement.paths[artwork], cfg=cfg
@@ -479,7 +464,7 @@ class RenderStage:
     ) -> RenderDesired | Blocked:
         """``applied`` is unused: nothing about a *previous* render can make the
         next one refusable. The parameter is the protocol's, not this stage's
-        -- the product stage needs it to refuse a garment change (PRD 37)."""
+        -- the product stage needs it to refuse a garment change."""
         del applied
         workspace = ctx.workspace
         listing_cfg = workspace.load_listing(listing)
@@ -503,13 +488,17 @@ class RenderStage:
         for template_name, colour in referenced:
             if template_name not in template_configs:
                 config_path = workspace.template_config_file(template_name)
-                if not config_path.is_file():
-                    raise TemplateNotFoundError(template_name, config_path)
+                blocked = check_render_template(template_name, config_path)
+                if blocked is not None:
+                    return blocked
                 # The file's own bytes, not the re-serialised model: hashing a
                 # normalised dump would miss an edit that pydantic round-trips
                 # away, and the question here is "did the file change?".
                 template_hash[template_name] = hash_file(config_path)
-                template_configs[template_name] = workspace.load_template_config(template_name)
+                try:
+                    template_configs[template_name] = workspace.load_template_config(template_name)
+                except ConfigLoadError as exc:
+                    return Blocked(str(exc))
 
             work = _resolve_scene(
                 workspace=workspace,
@@ -519,6 +508,8 @@ class RenderStage:
                 template_cfg=template_configs[template_name],
                 colour=colour,
             )
+            if isinstance(work, Blocked):
+                return work
             works.append(work)
 
             # Per scene, not per template. A colour-matrix set has one photo
@@ -538,7 +529,7 @@ class RenderStage:
             template_hash=template_hash,
             base_hash=base_hash,
         )
-        # A32: has a preview already been rendered for each scene's *current*
+        # ADR-0040: has a preview already been rendered for each scene's *current*
         # state? Checked here, once, because this is the one place the stage
         # already does I/O beyond hashing (this method's own docstring) --
         # `snapshot()` has no workspace to ask, and by the time `preview()`
@@ -618,7 +609,7 @@ class RenderStage:
 
     def snapshot(self, desired: RenderDesired, live: RenderLive | None) -> RenderSnapshot:
         """Per scene: is its current render output still correct, and is a
-        full-size preview already sitting in the cache for it (A30, A32).
+        full-size preview already sitting in the cache for it.
 
         ``cached``/``stale`` compares this scene's own :func:`scene_hash`
         against what :attr:`RenderLive.scene_hashes` recorded for it at the
@@ -662,7 +653,7 @@ class RenderStage:
         on_ready: Callable[[SceneWork], None] | None = None,
     ) -> tuple[SceneWork, ...]:
         """Render a full-size preview for every scene :meth:`snapshot` calls
-        ``stale`` or ``missing`` (A32), through the same pipeline ``apply``
+        ``stale`` or ``missing``, through the same pipeline ``apply``
         uses, to :meth:`~etsy_listings.workspace.workspace.Workspace.preview_file`;
         prune every preview this listing holds whose hash no longer matches
         any currently-referenced scene, in the same pass.
@@ -673,7 +664,7 @@ class RenderStage:
         which is what makes calling this ahead of an ``apply`` free rather
         than double work, and what keeps a promoted file identical to a fresh
         render: both come from the same ``render_scene`` call over the same
-        resolved inputs (A7).
+        resolved inputs.
 
         Up to :data:`PREVIEW_WORKERS` scenes render concurrently. ``should_stop``
         is checked before each submission, so cancellation starts no more work;
@@ -764,34 +755,22 @@ class RenderStage:
 
     def _prune_previews(self, workspace: Workspace, desired: RenderDesired) -> None:
         """Delete every preview file under this listing's preview directory
-        that does not match one of ``desired``'s scenes at its current hash
-        (A32) -- the input that made it stale is gone by the time this runs,
-        so "does the current hash still name this file" is the only test
-        available, and it is exactly the one a content-addressed cache is for.
+               that does not match one of ``desired``'s scenes at its current hash
+        -- the input that made it stale is gone by the time this runs,
+               so "does the current hash still name this file" is the only test
+               available, and it is exactly the one a content-addressed cache is for.
 
-        A template subdirectory for a template no longer referenced at all
-        (dropped from ``media:`` this run) is removed outright rather than
-        left empty.
+               A template subdirectory for a template no longer referenced at all
+               (dropped from ``media:`` this run) is removed outright rather than
+               left empty.
         """
-        preview_root = workspace.preview_dir(desired.listing)
-        if not preview_root.is_dir():
-            return
         valid: dict[str, set[str]] = {}
         for work in desired.works:
             name = workspace.preview_file(
                 desired.listing, work.template, work.colour, _hash_token(scene_hash(desired, work))
             ).name
             valid.setdefault(work.template, set()).add(name)
-        for template_dir in preview_root.iterdir():
-            if not template_dir.is_dir():
-                continue
-            keep = valid.get(template_dir.name)
-            if keep is None:
-                remove_tree(template_dir)
-                continue
-            for file in template_dir.glob("*.png"):
-                if file.name not in keep:
-                    file.unlink()
+        workspace.prune_previews(desired.listing, valid)
 
     def apply(
         self,
@@ -809,13 +788,13 @@ class RenderStage:
         makes "what was hashed is what was rendered" true by construction
         rather than by two branch sets agreeing.
 
-        A32: before rendering a scene, this looks for a preview
+        ADR-0040: before rendering a scene, this looks for a preview
         :meth:`preview` may already have left at
         :meth:`~etsy_listings.workspace.workspace.Workspace.preview_file` for
         its current hash. If one is there it is copied into place instead of
         rendered again -- a promoted file is
         exactly the bytes a fresh render would produce, since both come from
-        the same pipeline over the same resolved inputs (A7), so the ``outputs``
+        the same pipeline over the same resolved inputs, so the ``outputs``
         hash axis cannot tell the difference and nothing is uploaded twice.
 
         The content-addressed preview is deliberately retained. The deploy UI
@@ -834,7 +813,7 @@ class RenderStage:
                 desired.listing, work.template, work.colour, _hash_token(scene_hash(desired, work))
             )
             if preview_path.is_file():
-                # Promotion (A32): the same bytes a fresh render would
+                # Promotion: the same bytes a fresh render would
                 # produce, already sitting there from an earlier `preview()`
                 # call. Keep the preview addressable while this apply is in
                 # progress: a refreshed deploy page still points at it.
@@ -871,12 +850,16 @@ class RenderStage:
         }
         return StageApplyResult(applied=document, outputs=outputs)
 
+    def review_hash(self, desired: RenderDesired) -> str:
+        """Protect reviewed pixels even when paths and work reasons stay equal."""
+        return self._input_hash(desired)
+
     @staticmethod
     def _input_hash(desired: RenderDesired) -> str:
         """The four axes that decide whether a re-render would differ: the
-        design bytes, the template.yaml bytes, the photo bytes, and the recipe
-        each scene resolved to. No absolute paths, no clock, no tool version
-        (A2)."""
+                design bytes, the template.yaml bytes, the photo bytes, and the recipe
+                each scene resolved to. No absolute paths, no clock, no tool version
+        ."""
         payload: dict[str, object] = {
             "design_hash": desired.design_hash,
             "template_hash": desired.template_hash,

@@ -2,7 +2,7 @@ import { api } from "./client";
 import type { CreateRunRequest, RunDetail, RunSummary } from "../types";
 
 /**
- * The runs resource's REST surface (A33; docs/deploy-changes.md decision 7),
+ * The runs resource's REST surface (ADR-0041; docs/features/deploy-20260917/spec.md decision 7),
  * mirrored from `api/listings.ts`'s own shape: typed wrapper functions over
  * `openapi-fetch`, the only thing pages/components import. The sixth
  * endpoint, `GET /api/runs/{id}/events`, has no wrapper here -- it is
@@ -41,7 +41,7 @@ export async function currentRun(listing: string): Promise<RunSummary | null> {
 
 /** The current workspace-scoped batch run, if the server remembers one. The
  * workspace holder is intentionally queried by scope rather than rebuilt from
- * the Listings table: A34 makes the server the authority for batch scope. */
+ * the Listings table: ADR-0042 makes the server the authority for batch scope. */
 export async function currentWorkspaceRun(): Promise<RunSummary | null> {
   const { data, error } = await api.GET("/api/runs", {
     params: { query: { scope: "workspace" } },

@@ -1,9 +1,9 @@
-"""The `publish` stage, against in-memory clients (A4).
+"""The `publish` stage, against in-memory clients.
 
 Run beside `printify_product` in the same pipeline throughout: publishing is
 meaningless without a product to publish, and the interesting case -- a first
 `apply` that creates the product and publishes it in one run -- only exists
-because A26 threads the product id `printify_product` just minted into
+because ADR-0034 threads the product id `printify_product` just minted into
 `publish`'s own `apply` moments later.
 """
 
@@ -140,7 +140,7 @@ def _publish_plan(ctx: RunContext, lock: Lockfile) -> StagePlan:
 def test_a_first_apply_creates_the_product_and_publishes_it_in_one_run(
     root, catalog, printify
 ) -> None:
-    """The case A26 exists for: `printify_product` mints a product id in its
+    """The case ADR-0034 exists for: `printify_product` mints a product id in its
     own `apply`, and `publish`'s `apply`, later in the same run, has to see
     it -- there is no lockfile on disk yet for it to come from."""
     ctx = _ctx(root, catalog, printify)
@@ -282,7 +282,7 @@ def test_a_price_below_cost_blocks_with_no_run(root, catalog, printify) -> None:
 
 
 def test_the_snapshot_names_every_below_cost_variant(root, catalog, printify) -> None:
-    """A30: the price table's red marker reads this, not a second copy of
+    """ADR-0038: the price table's red marker reads this, not a second copy of
     `_below_cost`'s own rule."""
     ctx = _ctx(root, catalog, printify)
     lock = _apply(ctx, a_lock())

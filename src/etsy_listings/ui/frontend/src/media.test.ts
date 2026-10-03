@@ -18,7 +18,7 @@ import type { MediaEntry, TemplateSummary } from "./types";
  *
  * These answers used to be spread across whichever tab first needed them --
  * three regexes for "strip the directory and the extension", and two
- * `design ? preview : photo` branches with different fallback orders. The
+ * `design ? preview: photo` branches with different fallback orders. The
  * `pictureFor` cases below are what a single owner buys: one place to state
  * which endpoint answers which question.
  */
@@ -149,7 +149,7 @@ describe("pictureFor", () => {
   });
 
   it("addresses a shared asset by its full path under common-media/, extension and all", () => {
-    /* A shared file may be a JPEG, and may sit in a subdirectory (PRD 72):
+    /* A shared file may be a JPEG, and may sit in a subdirectory:
        the stem alone cannot say which file it is. */
     expect(pictureFor("common-media/charts/care.jpg", null)).toBe(
       "/api/common-media/charts/care.jpg/file",
@@ -260,7 +260,7 @@ describe("scenePath", () => {
     );
   });
 
-  it("names scene.png for a fixed-scene template (PRD 28)", () => {
+  it("names scene.png for a fixed-scene template", () => {
     expect(scenePath(undefined, "rack-shot", null)).toBe("mockup-templates/rack-shot/scene.png");
   });
 });
@@ -300,7 +300,7 @@ describe("pictureFor in the listing-template editor", () => {
 describe("ownedTile", () => {
   /* A card's picture of one gallery entry, whoever's `./` files it names: a
      listing's while Save as listing template is still a draft, a listing
-     template's own once it is saved (A35). */
+     template's own once it is saved. */
   it("draws a template entry as its bare thumbnail whoever owns it", () => {
     const entry = { template: "flat-lay-01", colour: "black" };
     expect(ownedTile(entry, { kind: "listing-template", name: "tee" })).toBe(

@@ -3,7 +3,7 @@ import { type EventStreamHandle, type EventStreamOptions, openEventStream } from
 import type { AiRunEvent, AiRunSummary } from "../types";
 
 /**
- * The AI runs resource (market-seo.md, *AI runs*; the implementation plan's
+ * The AI runs resource (features/market-seo-20260924/spec.md, *AI runs*; the implementation plan's
  * Run contract): typed wrappers over `/api/ai/runs`, the only thing the
  * editor imports to start, find, follow and cancel one. Shaped like
  * `api/runs.ts`, the plan/apply runs' client, because the resource is shaped
@@ -12,12 +12,12 @@ import type { AiRunEvent, AiRunSummary } from "../types";
 
 export class AiRunsApiError extends Error {}
 
-/** What the editor says when `POST` answers `batch_pending` (A40). */
+/** What the editor says when `POST` answers `batch_pending`. */
 export const BATCH_PENDING_MESSAGE =
   "This listing is drafting in a batch. AI Mode is back once that is done.";
 
 /** What the editor says when `POST` answers `deploying`: a plan or apply
- * holds the listing, and deploying takes precedence over AI (A43). */
+ * holds the listing, and deploying takes precedence over AI. */
 export const DEPLOYING_MESSAGE =
   "This listing is deploying. AI Mode is back once the deploy finishes.";
 

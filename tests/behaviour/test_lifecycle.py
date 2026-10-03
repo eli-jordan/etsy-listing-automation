@@ -1,4 +1,4 @@
-"""Delete and retire (PRD 61–67), through `plan_listings` / `apply_listings`.
+"""Delete and retire, through `plan_listings` / `apply_listings`.
 
 Wrong verb is `Blocked`. Delete is retract-only. Retire still syncs copy.
 """
@@ -165,7 +165,7 @@ class TestRetract:
         renders = root / ".cache" / "renders" / LISTING
         renders.mkdir(parents=True)
         (renders / "flat-lay-01-black.png").write_bytes(b"png")
-        # A32: a preview left behind by an earlier plan is wiped too.
+        # ADR-0040: a preview left behind by an earlier plan is wiped too.
         previews = root / ".cache" / "previews" / LISTING / "flat-lay-01"
         previews.mkdir(parents=True)
         (previews / "black-deadbeef.png").write_bytes(b"png")
@@ -234,7 +234,7 @@ class TestRetract:
     def test_reapply_after_manual_etsy_removal_wipes_local_when_printify_is_already_gone(
         self, workspace_root: Path, monkeypatch
     ) -> None:
-        """PRD 63: the survived-draft failure keeps the files so the handle is
+        """ADR-0036: the survived-draft failure keeps the files so the handle is
         not lost, then asks the user to remove the listing in Shop Manager and
         re-apply. The Printify product is already gone from the first apply."""
         monkeypatch.setattr(time, "sleep", lambda seconds: None)

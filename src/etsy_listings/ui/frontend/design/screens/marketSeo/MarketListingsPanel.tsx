@@ -34,7 +34,7 @@ type PanelState =
   | { kind: "empty"; queries: string[] }
   | { kind: "failed"; reason: string };
 
-/** How many of the scored listings the proposal sees verbatim (market-seo.md). */
+/** How many of the scored listings the proposal sees verbatim (features/market-seo-20260924/spec.md). */
 const EXAMPLES = 8;
 
 /** Stand-in product photo: a tee in the listing's colour with its print. */

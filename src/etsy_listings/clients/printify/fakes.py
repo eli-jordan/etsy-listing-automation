@@ -1,4 +1,4 @@
-"""In-memory clients for the behaviour suite. No network, ever (A4).
+"""In-memory clients for the behaviour suite. No network, ever.
 
 Both fakes in one module, beside the two protocols they satisfy, because a
 behaviour test that exercises the product stage needs both at once -- the
@@ -9,7 +9,7 @@ version of it, because the awkward parts are what the stage exists to handle:
 a created product comes back carrying the whole blueprint matrix with
 everything but the requested variants disabled, and an update merges variants
 by id rather than replacing them. A fake that behaved sensibly would let a
-stage pass its tests and fail against Printify (A4 -- reach for a fake to test
+stage pass its tests and fail against Printify (ADR-0010 -- reach for a fake to test
 behaviour, a cassette to test payload shape).
 """
 

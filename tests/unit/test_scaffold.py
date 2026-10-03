@@ -1,6 +1,6 @@
 """The two files both `auth` and `setup` write into a workspace.
 
-Moved here from `setup`'s tests when `auth` gained the same need (PRD 49) --
+Moved here from `setup`'s tests when `auth` gained the same need --
 one subject per file, and this one is no longer `setup`'s. What matters about
 both writers is the same thing: they edit a file the user also owns, so what
 they leave alone is as much the behaviour as what they change.
@@ -14,7 +14,7 @@ import pytest
 
 from etsy_listings.workspace import layout, scaffold
 
-# -------------------------------------------------------------- .gitignore
+# --------------------------------------------------------------.gitignore
 
 
 def test_a_fresh_gitignore_gets_every_secret_path(tmp_path: Path) -> None:
@@ -45,7 +45,7 @@ def test_gitignore_is_left_alone_when_it_already_covers_everything(tmp_path: Pat
     assert (tmp_path / ".gitignore").read_text(encoding="utf-8") == before
 
 
-# --------------------------------------------------------------------- .env
+# ---------------------------------------------------------------------.env
 
 
 @pytest.mark.parametrize(

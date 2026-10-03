@@ -1,5 +1,5 @@
 """The market-data block the proposal prompt receives, against a golden file
-(market-seo.md, *What the proposal sees*).
+(features/market-seo-20260924/spec.md, *What the proposal sees*).
 
 The spec's two-part structure, in order: the ranked phrase list, then the top
 eight listings verbatim (title, all tags, lead) in score order -- and never a

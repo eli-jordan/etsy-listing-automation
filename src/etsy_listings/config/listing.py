@@ -1,4 +1,4 @@
-"""``listings/{name}/listing.yaml``: everything commercial and creative, PRD 8a."""
+"""``listings/{name}/listing.yaml``: everything commercial and creative, configuration layering."""
 
 from __future__ import annotations
 
@@ -57,7 +57,7 @@ MAX_TITLE_LENGTH = 140
 
 def _coerce_design(raw: Any) -> dict[str, str]:  # noqa: ANN401 - pydantic validator boundary
     """A bare path is shorthand for the common single-artwork case -- it
-    normalises to one entry, so artwork resolution's "sole key" rule (item 2)
+    normalises to one entry, so the artwork resolver's "sole key" rule
     picks it with no other machinery involved."""
     if isinstance(raw, str):
         return {"default": raw}
@@ -74,8 +74,8 @@ too."""
 
 
 def _check_gallery(media: list[MediaEntry]) -> None:
-    """`media:` is the gallery in order (PRD 72), and these are the layouts
-    Etsy cannot show at all -- malformed rather than incomplete (PRD 70), so
+    """`media:` is the gallery in order, and these are the layouts
+    Etsy cannot show at all -- malformed rather than incomplete, so
     they refuse the write instead of waiting in the issues banner.
 
     Position 1 is the thumbnail and Etsy only ever puts an image there. Etsy
@@ -120,7 +120,7 @@ def check_production_fields(
     currency: str | None,
 ) -> None:
     """The structural rules over the fields a listing and a listing template
-    both carry (A35): prices in the workspace's currency, a gallery Etsy can
+    both carry: prices in the workspace's currency, a gallery Etsy can
     show, and no override or media entry for a colour that is not on sale.
 
     One function rather than a copy in each model, because a listing template
@@ -156,16 +156,16 @@ class EtsyListingConfig(BaseModel):
     tags: list[str] = []
     renewal: Literal["manual", "auto"] | None = None
     section: str | None = None
-    """Which shop section this listing files under, by name (PRD 53). Listing
+    """Which shop section this listing files under, by name. Listing
     only -- there is no shop-wide default, unlike `shipping_profile` below:
     a section is a fact about this listing, and a shop-wide default would be
     right for the first listing and wrong from the second onwards."""
     shipping_profile: str | None = None
     """Overrides `shop.yaml`'s `etsy.listing_defaults.shipping_profile`, by
-    name (PRD 54)."""
+    name."""
     variation_images: str | None = None
     """The `colour-matrix` template whose renders become this listing's
-    per-colour swatches (PRD 56). Names the template rather than a bare
+    per-colour swatches. Names the template rather than a bare
     `true`, because media order would otherwise silently decide which
     template supplies them when a listing carries more than one. Absent
     means the feature is off for this listing."""
@@ -217,17 +217,18 @@ class Listing(BaseModel):
     pricing_plan: str | None = None
     """Workspace-relative path to a ``pricing-plans/*.yaml`` file, resolved
     the same way ``design`` is (not a bare name against a fixed directory,
-    unlike ``garment_profile``/``media[].template``) -- see PRD 34. Resolution and
+    unlike ``garment_profile``/``media[].template``) -- see docs/reference/listing-configuration.md.
+    Resolution and
     loading are the caller's job; ``Listing`` never touches ``Workspace``."""
     price_overrides: dict[str, dict[str, PriceField]] = {}
     artwork: dict[str, str] = {}
     """Explicit per-design artwork override, colour -> artwork key. Wins over
-    everything else in resolution order (item 2) -- the thing a human is most
+    everything else in the artwork resolution order -- the thing a human is most
     likely to actually revisit per design."""
     etsy: EtsyListingConfig = EtsyListingConfig()
     media: list[MediaEntry]
     lifecycle: Literal["retired", "deleted", "renew"] | None = None
-    """Desired end-of-life (PRD 62). Omitted on a working listing, including
+    """Desired end-of-life. Omitted on a working listing, including
     after Un-retire. ``plan`` never writes this key; wrong verb is ``Blocked``,
     never rewritten as the right one. Named ``lifecycle``, not ``status``,
     because the listings table already has a Status column."""
@@ -257,7 +258,7 @@ class Listing(BaseModel):
         hold one rule an unsaved draft was allowed to fail -- "set
         ``pricing_plan`` or ``prices``" -- which made a document that merely
         had nothing chosen yet indistinguishable from one that was malformed.
-        PRD 70 moved that refusal to where the other seven incompletenesses
+        ADR-0043 moved that refusal to where the other seven incompletenesses
         already lived: `config/listing_validation.py` explains it in the
         banner, and `engine/stages/gates.py` turns it into the `Blocked` that
         stops a deploy. What this model still refuses is a document that
@@ -300,7 +301,7 @@ def resolve_price(
     pricing_plan: PricingPlan | None = None,
 ) -> Money:
     """The one precedence rule for a price, for a listing and for a listing
-    template alike (A35 reuses the price models, so it reuses their
+    template alike (ADR-0047 reuses the price models, so it reuses their
     resolution): ``price_overrides`` > ``prices`` > the plan's own."""
     override = price_overrides.get(color, {}).get(size)
     if override is not None:

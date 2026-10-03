@@ -60,7 +60,7 @@ def test_etsys_own_spelling_is_slugified_to_reach_this_tools_colours() -> None:
 
 
 def test_a_colour_that_will_not_slugify_goes_through_the_exceptions() -> None:
-    """PRD 7a's sparse table, applied here for the same reason the mockup
+    """ADR-0004's sparse table, applied here for the same reason the mockup
     filenames apply it: the convention covers almost everything, and the
     exceptions file covers what it cannot."""
     exceptions = ColourExceptions({"Heather Grey/Black": "heather-grey-black"})

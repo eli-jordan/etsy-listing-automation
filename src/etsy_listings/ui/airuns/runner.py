@@ -1,4 +1,4 @@
-"""The thread that runs one AI run's chain (market-seo.md, *The chain*,
+"""The thread that runs one AI run's chain (features/market-seo-20260924/spec.md, *The chain*,
 *Failures* and *AI runs*).
 
 1. **Brief**, only when the run asks for a draft and the saved brief is
@@ -24,7 +24,7 @@ stays.
 
 **Writes.** The guarded ``brief`` is the only workspace file this package
 writes under ``listings/``. The market snapshot (``.cache/market/``) and the
-proposal (``.cache/proposals/``, A41) are saved under the same lock, so a
+proposal (``.cache/proposals/``, ADR-0049) are saved under the same lock, so a
 rename or delete cannot move or remove the listing between the check and
 the write.
 """
@@ -68,7 +68,7 @@ from etsy_listings.workspace.workspace import Workspace
 logger = logging.getLogger(__name__)
 
 RUN_LIMIT_SECONDS = 180.0
-"""The whole run's cap (market-seo.md, *Failures*). Each provider call keeps
+"""The whole run's cap (features/market-seo-20260924/spec.md, *Failures*). Each provider call keeps
 its own 60 seconds; market search has no limit of its own."""
 
 TIMEOUT_MESSAGE = "The AI run took longer than 3 minutes, so it was stopped. Try again."
@@ -200,7 +200,7 @@ class AiRunner:
 
     def _chain(self, run: AiRun) -> None:
         # A batch run can be asked to stop before its thread starts (Cancel
-        # batch landing just after the queue claimed the row, A40).
+        # batch landing just after the queue claimed the row, ADR-0048).
         self._check(run)
         workspace = self.workspace
         inputs = self._load(run)
@@ -288,7 +288,7 @@ class AiRunner:
             cancel_event=run.cancel_event,
         )
         self._check(run)
-        # A41: cached before it is announced, so whoever hears the event can
+        # ADR-0049: cached before it is announced, so whoever hears the event can
         # read it back -- and so it outlives this run and this server.
         # A delete asks the run to stop before it takes the lock, so a stop
         # seen here is one the delete's own cleanup will not come back for.

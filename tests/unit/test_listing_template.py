@@ -1,5 +1,5 @@
 """`ListingTemplate`, the model of `listing-templates/<name>/template.yaml`
-(A35; spec *Listing templates*).
+(ADR-0047; spec *Listing templates*).
 
 It is not a `Listing` with placeholders: the design, the brief and the SEO
 copy are not fields it has, so a document naming them is refused rather than

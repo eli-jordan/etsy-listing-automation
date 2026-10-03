@@ -1,4 +1,4 @@
-"""``ui/runs/registry.py`` (A33, decision 7): per-listing locks, FIFO
+"""``ui/runs/registry.py`` (ADR-0041, decision 7): per-listing locks, FIFO
 queueing, cancellation and retention -- all pure state, no executor and no
 workspace, which is what makes this a unit-layer file rather than a
 behaviour one.

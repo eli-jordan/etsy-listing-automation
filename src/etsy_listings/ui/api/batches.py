@@ -1,4 +1,4 @@
-"""Staging and batch endpoints (batch plan PR 2, 4 and 7; A37-A40, A45, A46):
+"""Staging and batch endpoints (batch plan PR 2, 4 and 7; ADR-0048, ADR-0051, staging expiry):
 stage one ZIP or loose PNGs against a listing template, review and edit the session,
 cancel it or confirm it, then read the batch confirming made and steer its
 AI queue -- cancel, resume, retry.
@@ -15,7 +15,7 @@ the wire:
   that is not a single path segment is the app-wide ``400``.
 
 Both stores and the per-listing locks are the app's (`app.state`), so a
-confirm and an editor's create of the same name wait for each other (A38).
+confirm and an editor's create of the same name wait for each other.
 """
 
 from __future__ import annotations
@@ -162,7 +162,7 @@ def _proposal(
     request: Request, row: BatchRow, facts: WorkspaceFacts
 ) -> tuple[ProposalState | None, list[str]]:
     """The row's listing's cached proposal, judged as the editor judges it
-    (A41), so the summary's *Stale: ...* is the drawer's."""
+    , so the summary's *Stale:...* is the drawer's."""
     workspace = _workspace(request)
     store: ProposalStore = request.app.state.proposal_store
     record = store.load(row.name) if has_listing(row) else None
@@ -227,7 +227,7 @@ def create_staging(
     """Stage one ZIP or loose PNGs (spec, *Accepted input*). Starlette has
     already spooled the parts to temporary files; `stage_pngs` streams each
     one on -- a PNG to its content-addressed upload, a ZIP to disk and then
-    entry by entry out of it -- with a running count (A45)."""
+    entry by entry out of it -- with a running count."""
     workspace = _workspace(request)
     if not workspace.listing_template_file(listing_template).is_file():
         raise HTTPException(status_code=404, detail=f"no listing template {listing_template!r}")
@@ -257,7 +257,7 @@ def get_staging(request: Request, session_id: str) -> StagingDetail:
 @router.patch("/api/staging/{session_id}", response_model=StagingDetail)
 def patch_staging(request: Request, session_id: str, body: StagingPatch) -> StagingDetail:
     """Edit the label, type names, remove rows. Every edit moves the
-    session's expiry to seven days from now (A46)."""
+    session's expiry to seven days from now."""
     now = datetime.now(UTC)
     store = _staging(request)
     with store.lock(session_id):
@@ -277,7 +277,7 @@ def patch_staging(request: Request, session_id: str, body: StagingPatch) -> Stag
 
 @router.delete("/api/staging/{session_id}", status_code=204)
 def cancel_staging(request: Request, session_id: str) -> Response:
-    """Cancel staging: the uploads go at once (A46). The seller's own files
+    """Cancel staging: the uploads go at once. The seller's own files
     were never touched."""
     store = _staging(request)
     with store.lock(session_id):
@@ -304,7 +304,7 @@ def staging_row_thumbnail(request: Request, session_id: str, row: str) -> Respon
 def confirm_staging(request: Request, session_id: str) -> BatchDetail:
     """Create N listings (UI doc §6). Repeating it -- a double click, a retry
     after a dropped response -- finishes the same batch rather than making a
-    second one (A39)."""
+    second one."""
     workspace = _workspace(request)
     workspace.staging_dir(session_id)
     if _batches(request).load(session_id) is None:
@@ -352,7 +352,7 @@ def get_batch(request: Request, batch_id: str) -> BatchDetail:
 )
 def retry_batch_row(request: Request, batch_id: str, row: str) -> BatchDetail:
     """Retry one row (UI doc §7): its creation, if that failed -- which
-    queues it once it exists -- else its AI, keeping the saved brief (A40)."""
+    queues it once it exists -- else its AI, keeping the saved brief."""
     batch = _batch(request, batch_id)
     target = next((r for r in batch.rows if r.id == row), None)
     if target is None:
@@ -412,7 +412,7 @@ def resume_batch(request: Request, batch_id: str) -> BatchDetail:
 def list_batches(request: Request) -> list[BatchIndexEntry]:
     """Recent batches (UI doc §2): every batch, and every staging session
     not confirmed yet, newest first, each with its derived status. Listing
-    them sweeps expired staging first (A46), so a row never offers a
+    them sweeps expired staging first, so a row never offers a
     session that has gone."""
     staging = _staging(request)
     staging.sweep(now=datetime.now(UTC))
@@ -421,7 +421,7 @@ def list_batches(request: Request) -> list[BatchIndexEntry]:
     entries = [_index_entry(batch) for batch in batches]
     for session_id in _workspace(request).staging_ids():
         # A batch keeps its session's id, and a confirmed session stays
-        # until every row is materialised (A46): that one is the batch's.
+        # until every row is materialised: that one is the batch's.
         session = staging.load(session_id) if session_id not in confirmed else None
         if session is not None:
             entries.append(
@@ -512,7 +512,7 @@ def set_reviewed(request: Request, batch_id: str, row: str, body: ReviewedReques
 def batch_row_thumbnail(request: Request, batch_id: str, row: str) -> Response:
     """A row that was never created has no listing design to show, so the
     summary shows the upload it was made from, kept beside the batch for
-    Retry (A46)."""
+    Retry."""
     batch = _batch(request, batch_id)
     try:
         path = row_upload(_workspace(request), batch, row)
@@ -527,7 +527,7 @@ def batch_row_thumbnail(request: Request, batch_id: str, row: str) -> Response:
 def listing_batch(request: Request, name: str) -> ListingBatch | None:
     """The batch that made ``name``, for the editor's row above the head
     (UI doc §8), or ``null``. A row names its listing exactly, as the rename
-    and delete hooks match it (A42); a deleted row is not the listing's.
+    and delete hooks match it; a deleted row is not the listing's.
     Should two batches both claim it, the newer wins."""
     _workspace(request).listing_dir(name)  # a bad name is the app-wide 400
     newest = sorted(_batches(request).all(), key=lambda b: (b.created_at, b.id), reverse=True)

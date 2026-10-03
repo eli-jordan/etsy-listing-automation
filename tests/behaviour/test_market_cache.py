@@ -1,4 +1,5 @@
-"""The 7-day market caches (market-seo.md, *Cache*; implementation plan, PR 3).
+"""The 7-day market caches (features/market-seo-20260924/spec.md, *Cache*;
+implementation plan, PR 3).
 
 Behaviour through the client's own three calls, against the in-memory Etsy
 market with an injected clock: what reaches Etsy is read from the fake's call

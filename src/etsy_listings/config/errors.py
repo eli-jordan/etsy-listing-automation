@@ -1,7 +1,7 @@
 """Actionable config-loading errors.
 
-Every error here names the offending file and field, per the PRD's validation
-section: failures must be actionable, never a bare stack trace.
+Every error here names the offending file and field, under the validation rules: failures must be
+actionable, never a bare stack trace.
 """
 
 from __future__ import annotations

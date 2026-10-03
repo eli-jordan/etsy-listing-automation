@@ -1,4 +1,4 @@
-"""``ui/runs/events.py``: DTO conversion for the SSE stream (A33, decision 7).
+"""``ui/runs/events.py``: DTO conversion for the SSE stream (ADR-0041, decision 7).
 
 Pure, like ``plan_fingerprint`` -- no registry, no executor, no workspace.
 """
@@ -158,7 +158,7 @@ def test_a_stage_plan_with_no_snapshot_carries_none() -> None:
 
 
 def test_a_stage_plan_carries_the_group_the_engine_gave_it() -> None:
-    """PRD 72: the review nests one stage under another by the engine's
+    """ADR-0045: the review nests one stage under another by the engine's
     answer, never by inferring it from a name."""
     assert stage_plan_dto(StagePlan.block("etsy_media", "no shop", group="parent")).group == (
         "parent"

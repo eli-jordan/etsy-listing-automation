@@ -1,4 +1,4 @@
-"""``AiRun`` and the registry of them, in memory (market-seo.md, *AI runs*).
+"""``AiRun`` and the registry of them, in memory (features/market-seo-20260924/spec.md, *AI runs*).
 
 One active run per listing: a second ``create`` while one is running is a
 :class:`Conflict` naming it. A finished run stays the listing's latest until
@@ -33,10 +33,10 @@ from etsy_listings.ui.airuns.events import (
 
 StopReason = Literal["cancelled", "timeout", "shutdown", "deploy"]
 """Why a run was asked to stop. ``deploy`` is a UI deploy taking the listing
-(A43): the run ends ``cancelled`` like any other stop, and a batch row it
+: the run ends ``cancelled`` like any other stop, and a batch row it
 belonged to becomes ``cancelled_by_deploy`` rather than ``cancelled``."""
 RunOrigin = Literal["manual", "batch"]
-"""Who started the run: the editor's AI Mode, or the batch queue (A40). A
+"""Who started the run: the editor's AI Mode, or the batch queue. A
 batch run is otherwise an ordinary run -- same chain, same limit."""
 FinishListener = Callable[["AiRun"], None]
 
@@ -163,7 +163,7 @@ class Conflict:
 
 @dataclass(frozen=True)
 class Deploying:
-    """``create`` refused: a UI deploy holds the listing (A43)."""
+    """``create`` refused: a UI deploy holds the listing."""
 
 
 class AiRunRegistry:
@@ -177,7 +177,7 @@ class AiRunRegistry:
 
     def subscribe(self, listener: FinishListener) -> None:
         """Hear every run this registry creates from now on finish -- the
-        batch queue's wake-up, and how its rows learn their outcome (A40)."""
+        batch queue's wake-up, and how its rows learn their outcome."""
         with self._lock:
             self._listeners.append(listener)
 
@@ -232,7 +232,7 @@ class AiRunRegistry:
     # ------------------------------------------------------------ deploys
 
     def hold_for_deploy(self, listings: Iterable[str]) -> list[AiRun]:
-        """A43: refuse every new run for ``listings`` until
+        """ADR-0050: refuse every new run for ``listings`` until
         :meth:`release_deploy`, and answer the runs still going on them --
         in one step, so no run can start between the two. Counted, so two
         holds on one listing need two releases."""

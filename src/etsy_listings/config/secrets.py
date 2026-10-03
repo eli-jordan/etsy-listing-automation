@@ -1,8 +1,8 @@
 """Credentials, read from the *workspace's* gitignored ``.env`` -- never from
-this repository (PRD: "Secrets never enter the repo"; docs/setup.md §4).
+this repository (docs/guides/setup.md).
 
 Process environment wins over the file, which is what makes a one-off
-``PRINTIFY_API_TOKEN=... etsy-listings new ...`` work without editing
+``PRINTIFY_API_TOKEN=... etsy-listings new...`` work without editing
 anything. Values are read lazily by whoever needs them, and a missing one is
 reported by :class:`MissingCredentialError` naming the exact file it should be
 in -- the alternative was a bare ``401 Unauthorized`` traceback out of httpx,
@@ -25,7 +25,7 @@ ETSY_SHARED_SECRET_VAR = "ETSY_SHARED_SECRET"
 """Etsy's app key is a *pair*, and both halves are required on every v3
 request -- `x-api-key: <keystring>:<shared_secret>`. Two variables rather than
 one pre-joined string, because they are two values on two lines of Etsy's app
-page and a user pasting them should not have to assemble anything (PRD 49)."""
+page and a user pasting them should not have to assemble anything."""
 
 
 class MissingCredentialError(UserFacingError, RuntimeError):
@@ -35,7 +35,7 @@ class MissingCredentialError(UserFacingError, RuntimeError):
     below *is* the whole useful output -- it names the variable, the file and
     the way to get one. Typed as anything else it reaches ``--all`` as a
     traceback that ends the batch on its first unconfigured listing, which is
-    the outcome PRD 16 exists to prevent. ``RuntimeError`` is kept alongside
+    the outcome continue-on-error exists to prevent. ``RuntimeError`` is kept alongside
     it so the type it has always been stays catchable.
     """
 
@@ -102,7 +102,7 @@ class Secrets:
                 self.env_file,
                 "read Printify's catalog (blueprints, print providers, variants)",
                 "Generate a personal access token at printify.com/app/account/connections "
-                "with the `catalog.read` scope -- see docs/setup.md section 1.3.",
+                "with the `catalog.read` scope -- see docs/guides/setup.md.",
             )
         return self.printify_api_token
 
@@ -138,6 +138,6 @@ class Secrets:
                 ANTHROPIC_KEY_VAR,
                 self.env_file,
                 "generate listing copy",
-                "Create a key at console.anthropic.com -- see docs/setup.md section 4.",
+                "Create a key at console.anthropic.com -- see docs/guides/setup.md.",
             )
         return self.anthropic_api_key

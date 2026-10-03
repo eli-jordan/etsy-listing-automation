@@ -1,13 +1,13 @@
 """Local AI Mode: request/task contracts, the three packaged default prompts,
 delimited-context prompt assembly, hard validation, and the local
-Codex/Claude CLI adapters behind `AiProvider` (AI SEO implementation plan,
-PR3 and PR4; PRD 68 for brief drafting).
+Codex/Claude/Grok CLI adapters behind `AiProvider` (AI SEO implementation plan,
+PR3 and PR4; ADR-0003 for brief drafting).
 
 Two features, one machine. **SEO generation** produces a proposal a seller
 reviews suggestion by suggestion; **brief drafting** produces the one input
 that generation needs, from the design image alone. They differ only in the
 prompt, the schema and the validation -- the provider adapters, the
-Codex-then-Claude fallback, the one same-provider repair and the 60-second
+Codex-then-Claude-then-Grok fallback, the one same-provider repair and the 60-second
 deadline are shared, which is what `ProviderTask` exists to make possible.
 
 - ``models`` -- ``ProviderTask``, ``SeoRequest``, ``SeoProposal``,
@@ -20,7 +20,7 @@ deadline are shared, which is what `ProviderTask` exists to make possible.
 - ``brief`` -- everything drafting-specific in one small module:
   ``BriefRequest``, ``DesignBrief``, the packaged default ``brief.md``,
   ``build_brief_task`` and ``validate_brief``.
-- ``market_queries`` -- query extraction for market-informed SEO (PRD 71),
+- ``market_queries`` -- query extraction for market-informed SEO,
   shaped like ``brief``: ``MarketQueriesRequest``, ``MarketQueries``, the
   packaged default ``market-queries.md``, ``build_market_queries_task`` and
   ``validate_market_queries`` (three unique, non-empty queries).
@@ -38,13 +38,13 @@ deadline are shared, which is what `ProviderTask` exists to make possible.
 - ``listing_inputs`` -- saved-listing AI facts, paired request/snapshot
   preparation and proposal judgment.
 - ``proposals`` -- ``ProposalStore``, the durable latest proposal per listing.
-- ``errors`` -- the exception hierarchy `orchestrator` and both adapters
+- ``errors`` -- the exception hierarchy `orchestrator` and all adapters
   raise, and `classify_process_failure`, the availability classifier.
 - ``process`` -- `run_managed`: cross-platform subprocess-tree launch and
   cleanup for timeouts, cancellation, and request disconnects (PR4).
 
 `ui/api/seo.py` is where this package is wired to HTTP. CI never invokes a
-real ``codex`` or ``claude`` binary: every adapter test replaces the
+real provider binary: every adapter test replaces the
 subprocess layer with a double, and every orchestrator test runs against
 `FakeAiProvider`.
 """

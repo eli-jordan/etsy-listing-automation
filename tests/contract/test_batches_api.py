@@ -1,5 +1,5 @@
 """The staging and batch endpoints' HTTP surface (batch plan PR 2 and PR 4;
-A37-A40, A45, A46): status codes, payload shape, and what is on disk after
+ADR-0048, ADR-0051, staging expiry): status codes, payload shape, and what is on disk after
 each answer.
 
 The staging, creation and queue rules are `batches`' and `ui.batchqueue`'s
@@ -443,7 +443,7 @@ class TestIndex:
     def test_a_session_kept_for_a_failed_row_is_the_batch_s_not_a_staging_row(
         self, client: TestClient, workspace: Workspace
     ) -> None:
-        """A46 keeps a confirmed session until every row is materialised; it
+        """staging expiry keeps a confirmed session until every row is materialised; it
         shares the batch's id, and Recent batches shows the batch once."""
         staged = _staged(client, ("a.png", png(1)), ("b.png", png(2)))
         store = StagingStore(workspace)
@@ -551,7 +551,7 @@ class TestListingMembership:
 def test_a_row_that_was_never_created_shows_its_kept_upload(
     client: TestClient, workspace: Workspace
 ) -> None:
-    """Its upload went beside the batch (A46), since the staging session has
+    """Its upload went beside the batch, since the staging session has
     gone; that is its thumbnail on the summary."""
     staged = _staged(client, ("a.png", png(1)))
     workspace.design_file("a").mkdir(parents=True)

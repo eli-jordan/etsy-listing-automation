@@ -6,7 +6,7 @@ tests").
 
 What crosses that protocol is a `ProviderTask` -- assembled prompt text, a
 response schema and one image -- and nothing that says which AI feature
-asked (PRD 68). These tests build tasks directly rather than through
+asked. These tests build tasks directly rather than through
 `build_seo_task`/`build_brief_task`, since a provider is exactly the layer
 that cannot tell the difference.
 """

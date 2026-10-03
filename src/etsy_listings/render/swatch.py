@@ -1,7 +1,7 @@
 """Sampling a representative garment colour out of a mockup photo.
 
 Not a render pass -- nothing composited depends on it -- but pure in the same
-sense (A7): ndarrays and frozen config in, a tuple out, no I/O and no clock.
+sense: ndarrays and frozen config in, a tuple out, no I/O and no clock.
 ``apply`` uses it to put a colour block next to each render log line, so a run
 reads as the colour set it produced rather than as a list of slugs.
 

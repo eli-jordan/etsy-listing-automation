@@ -1,9 +1,13 @@
-"""The calibrator's HTTP surface: the app factory and its two routers.
+"""The workspace HTTP surface: app factory and selected router exports.
+
+The app registers design, template, listing/support, media, listing-template,
+batch, SEO, settings and run routers. The exports below are deliberately a
+subset; create_app is the complete application interface.
 
 Every path here comes from ``Workspace`` -- and so does every *listing* of
 one. That is deliberate rather than stylistic: template names, colours and
 design ids arrive from URLs, so routing them through the workspace's accessors
-means the "stays inside the root" rule (A8) is enforced by the same code the
+means the "stays inside the root" rule is enforced by the same code the
 rest of the tool uses, instead of a second, bespoke check living in the web
 layer.
 

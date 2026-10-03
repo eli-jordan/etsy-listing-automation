@@ -1,4 +1,4 @@
-"""``scene_hash`` (A32): pure, so this builds a `RenderDesired` and a couple of
+"""``scene_hash``: pure, so this builds a `RenderDesired` and a couple of
 `SceneWork` values by hand rather than through a workspace and the render
 stage's `desired()`. The one property worth pinning down is the reason it
 exists at all -- a change to one scene's own inputs must not move another

@@ -16,7 +16,7 @@ import type {
  *
  * The listing-template editor mounts the listing editor's own tabs (UI doc
  * §3), and they read a `ListingDetail`. A listing template is not a listing
- * (A35), so this is the one place the two shapes meet: the design-specific
+ *, so this is the one place the two shapes meet: the design-specific
  * fields a template does not have are filled with a listing's empty values on
  * the way in -- no design, brief, title, tags or lead -- and are dropped on the
  * way out, along with everything the server computes. What the editor shows
@@ -96,7 +96,7 @@ function outcome(result: ListingTemplateSaveResult): SaveOutcome {
   return { saved: false, issues: result.issues, field_errors: result.field_errors ?? {} };
 }
 
-/** `useAutosave`'s transport for a listing template: A36's valid-only
+/** `useAutosave`'s transport for a listing template: valid-only
  * `PUT` of the whole document, the create that naming the draft is (from
  * `source`, carrying the edits made before it), and the rename. There is no
  * describing an unnamed one -- its issues are the draft's until it is

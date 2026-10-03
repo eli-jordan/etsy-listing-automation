@@ -90,7 +90,7 @@ class CodexProvider:
 
     No prompt file: which prose a request is built from, and whether that
     file exists at all, is the *request's* business (`ai/models.py.ProviderTask`,
-    PRD 68). This adapter is only ever told "run the CLI on this text", so a
+    ADR-0003). This adapter is only ever told "run the CLI on this text", so a
     missing `prompts/seo.md` is reported by the endpoint that needed it
     rather than as this CLI being unready.
     """
@@ -104,7 +104,7 @@ class CodexProvider:
 
         On Windows, an npm-installed CLI like `codex` is a `.CMD` shim
         (confirmed live: `shutil.which("codex")` resolves to
-        ``...\\codex.CMD``). `subprocess.run(["codex", ...])` with the bare
+        ``...\\codex.CMD``). `subprocess.run(["codex",...])` with the bare
         name and no `shell=True` fails there with `WinError 2` -- Windows
         `CreateProcess` does not search `PATHEXT` the way a shell or
         `shutil.which` does. Every subprocess call below uses this resolved
@@ -150,7 +150,7 @@ class CodexProvider:
         return None
 
     def _check_read_only_capability(self) -> ProviderReadiness | None:
-        # Known limitation (docs/ai-seo-implementation-plan.md, PR4): this
+        # Known limitation (docs/features/ai-seo-20260922/plan.md, PR4): this
         # only confirms `--help` advertises the required flags, not that a
         # live `exec` invocation actually honours them. Same "no speculative
         # quota check" tradeoff as the auth check above -- readiness stays a

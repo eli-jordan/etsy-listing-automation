@@ -6,8 +6,8 @@ Both the Codex and Claude adapters shell out to a coding-agent CLI that may
 itself spawn helper processes. A plain `subprocess.run(..., timeout=...)`
 only reaps the direct child on a timeout -- any grandchild is left running.
 `run_managed` instead launches the child in its own process group/session
-(:func:`_new_process_group_kwargs`) so the whole tree can be killed as one
-unit (:func:`_kill_process_tree`), and races that kill against three
+( :func:`_new_process_group_kwargs`) so the whole tree can be killed as one
+unit ( :func:`_kill_process_tree`), and races that kill against three
 independent stop conditions rather than one:
 
 - the shared request `Deadline` expiring (a timeout),
@@ -140,11 +140,11 @@ def _kill_process_tree(proc: subprocess.Popen[str]) -> None:
 
     Windows has no `killpg` equivalent for an arbitrary `Popen`; `taskkill
     /T /F` (terminate the tree, forcefully) against the process group leader
-    it was launched into (:func:`_new_process_group_kwargs`) is the
+    it was launched into ( :func:`_new_process_group_kwargs`) is the
     documented way to reach children a coding-agent CLI spawned. POSIX kills
     the whole process group with `SIGKILL` via the same group, *and* SIGKILLs
     each descendant `/proc` still reports individually
-    (:func:`_posix_descendant_pids`), since the group kill alone can race a
+    ( :func:`_posix_descendant_pids`), since the group kill alone can race a
     freshly-forked grandchild on some sandboxed kernels. Either path also
     calls `proc.kill()` directly, both as a fallback if the tree kill could
     not find the process (already exited) and because it is what marks

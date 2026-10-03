@@ -16,11 +16,11 @@ import { MAX_VIDEOS } from "./mediaEdits";
  * ref uploaded as-is: a sizing chart, care instructions, a size-guide video).
  * One control rather than two panels because they fill the same gallery.
  *
- * *Files* is one list in two groups, one per root a ref can name (PRD 73):
+ * *Files* is one list in two groups, one per root a ref can name:
  * *This listing* for the listing's own directory and *Shared* for
  * `common-media/`. The ref roots are an implementation detail rather than
  * useful navigation, and an empty root is omitted. Images and videos sit together, because `media:` is one
- * gallery (PRD 72); a video is drawn by a muted `<video>` from its own first
+ * gallery; a video is drawn by a muted `<video>` from its own first
  * frame, carries its length, and plays on hover.
  *
  * Its own state is what it is *showing* (which half, the search, which template
@@ -290,7 +290,7 @@ export function MediaLocator({
                         <div className="cchips">
                           {/* The listing's own colours, not `t.colours`:
                               a colour-matrix set's photos are named for
-                              PRD 7a's slug, but a template with a shared
+                              ADR-0004's slug, but a template with a shared
                               filename prefix (`{template}-{colour}.png`)
                               reports that whole prefixed stem as its
                               "colour" (`template_colours`'s enumeration

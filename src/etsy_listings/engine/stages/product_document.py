@@ -1,8 +1,8 @@
 """The product stage's two documents, and the gate that reads one of them.
 
 Three things that are one subject: the **desired** product a listing asks for
-(:class:`PrintifyProductDesired`), the **applied** document recording what was
-last sent (:class:`AppliedProduct`, A2), and
+( :class:`PrintifyProductDesired`), the **applied** document recording what was
+last sent ( :class:`AppliedProduct`, ADR-0008), and
 :func:`check_garment_unchanged`, which is a question about the applied
 document and nothing else.
 
@@ -46,9 +46,9 @@ class AppliedVariant(BaseModel):
     price: int
     colour_slug: str
     """Which colour this variant id sold as, at the time it was applied
-    (A30). Carried on the variant itself, rather than looked up from this
+    . Carried on the variant itself, rather than looked up from this
     run's catalog resolution, because a colour Printify has since discontinued
-    (PRD 46) would otherwise have no name to be reported *removed* by --
+     would otherwise have no name to be reported *removed* by --
     exactly the run a removal needs to be visible on."""
 
 
@@ -61,7 +61,7 @@ class AppliedPrintArea(BaseModel):
 
 
 class AppliedProduct(BaseModel):
-    """The verbatim last-applied document (A2), as a type rather than a dict.
+    """The verbatim last-applied document, as a type rather than a dict.
 
     It is *stored* as JSON, and it used to be *read back* as JSON too:
     ``applied.get("title")`` beside ``document["print_areas"]`` beside
@@ -113,7 +113,7 @@ class PricedVariant:
     colour_slug: str
     size: str
     price: int
-    """Minor units of the sales channel's currency (PRD 39/40)."""
+    """Minor units of the sales channel's currency."""
 
 
 @dataclass(frozen=True)
@@ -127,7 +127,7 @@ class PrintifyProductDesired:
     groups: tuple[ArtworkGroup, ...]
     missing: tuple[tuple[str, str], ...] = ()
     """``(colour_slug, size)`` cells the catalog no longer offers. Reported,
-    never fatal -- PRD 46."""
+    never fatal -- missing variant cells."""
     currency: str = ""
 
     @property
@@ -201,7 +201,7 @@ def check_garment_unchanged(
 ) -> Blocked | None:
     """Refuse a garment or printer change on a listing that already has a product.
 
-    A deliberate refusal, not a missing feature (PRD 37). Printify ignores both
+    A deliberate refusal, not a missing feature. Printify ignores both
     fields on an update -- ``200``, no change -- so the only automated route is
     delete-and-recreate, which takes the Etsy listing behind the product with
     it: reviews, favourites, search history, to save retyping a short YAML

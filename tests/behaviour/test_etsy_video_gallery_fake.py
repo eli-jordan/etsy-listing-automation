@@ -1,6 +1,6 @@
 """Locks in the video behaviour `FakeEtsyListingClient` has to reproduce,
 because the fake's `gallery()` is the only place a behaviour test can see
-where a video sits -- the real API never reports it (phase-3-etsy.md
+where a video sits -- the real API never reports it (features/etsy-listing-20260910/spec.md
 decision 9, "Testing").
 
 The sequence tests replay the recon's labelled probe step for step: images

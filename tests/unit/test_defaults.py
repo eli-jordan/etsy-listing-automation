@@ -25,7 +25,7 @@ def _write(tmp_path: Path, data: dict[str, object]) -> Path:
 
 def test_loads_without_a_listing_defaults_block(tmp_path: Path) -> None:
     """A workspace must be usable before the Etsy phase, and every field
-    Phase 3 needs has a sensible default (PRD 52 for who_made)."""
+    Phase 3 needs has a sensible default (ADR-0028 for who_made)."""
     defaults = Defaults.load(_write(tmp_path, MINIMAL))
     assert defaults.etsy.listing_defaults.who_made == "someone_else"
     assert defaults.etsy.listing_defaults.when_made == "made_to_order"
@@ -69,7 +69,7 @@ def test_listing_defaults_load_when_set(tmp_path: Path) -> None:
 def test_no_shop_section_or_return_policy_id_live_in_shop_yaml_anymore() -> None:
     """A shop-wide section default would be right for the first listing and
     wrong from the second onwards; a return policy is now addressed by its
-    terms (PRD 59), not an id."""
+    terms, not an id."""
     assert "shop_section_id" not in EtsyDefaults.model_fields
     assert "return_policy_id" not in EtsyDefaults.model_fields
     assert not hasattr(EtsyDefaults, "require_shop_section_id")

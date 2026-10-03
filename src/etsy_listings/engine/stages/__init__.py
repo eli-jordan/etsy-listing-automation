@@ -1,16 +1,16 @@
-"""Concrete stages, in pipeline order (A1: order encodes dependency, not a
+"""Concrete stages, in pipeline order (ADR-0007: order encodes dependency, not a
 dependency graph).
 
-``Render()`` and ``PrintifyProduct()`` are Phase 1/2. Phase 3 adds
-``Publish()``, ``EtsyListing()`` and ``EtsyMedia()`` -- in that order,
+The pipeline renders mockups, configures the Printify product, publishes
+selectively, then patches Etsy listing fields, images and videos in that order,
 because each depends on what the one before it just did *this run*, via
-A26's threading of ``lock.remote`` rather than a second lockfile read:
+ADR-0034's threading of ``lock.remote`` rather than a second lockfile read:
 ``Publish`` mints the Etsy listing id ``EtsyListing`` and ``EtsyMedia`` both
 PATCH, and ``EtsyMedia`` needs whatever images survive the first two to
 exist. ``EtsyVideos()`` follows ``EtsyMedia()`` because a second video is
-placed by the number of images on the listing when it is attached (PRD 72,
+placed by the number of images on the listing when it is attached (ADR-0045,
 decision 9), so the images have to be there and in order first.
-``Generate`` (Phase 4) is the one stage still to come.
+AI proposals run separately from deployment; there is no Generate stage.
 
 **A stage in this list is not a stage that always runs.**
 ``PrintifyProduct`` reports itself unconfigured, rather than failing, in a

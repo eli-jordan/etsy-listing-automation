@@ -1,4 +1,4 @@
-"""Frozen listing-template content (PRD 74, A35-A39).
+"""Frozen listing-template content.
 
 Document, owned files and saved-at time are captured together, before an
 upload can outlive the template. Shared refs still resolve through Workspace
@@ -45,7 +45,7 @@ class FrozenListingTemplate:
 
         The lock covers only content capture, never the design upload.
         No record or listing is created here; the caller owns cleanup if
-        receiving or saving its staging session fails (A46).
+        receiving or saving its staging session fails.
         """
         with lock(name):
             template = workspace.load_listing_template(name)
@@ -82,7 +82,7 @@ class FrozenListingTemplate:
         )
 
     def copy_to(self, directory: Path) -> FrozenListingTemplate:
-        """Keep frozen assets in a batch after staging goes (A37, A46)."""
+        """Keep frozen assets in a batch after staging goes."""
         directory.mkdir(parents=True, exist_ok=True)
         for asset in self.assets():
             target = self.workspace.resolve_frozen_template_ref(asset.ref, frozen_dir=directory)

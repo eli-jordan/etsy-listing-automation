@@ -140,7 +140,7 @@ def test_the_progress_counts() -> None:
 
 
 def test_a_row_a_deploy_cancelled_leaves_nothing_for_resume_and_needs_no_retry() -> None:
-    """A43: Resume never queues ``cancelled_by_deploy`` again, so it is not
+    """ADR-0050: Resume never queues ``cancelled_by_deploy`` again, so it is not
     work Cancel batch left (Stopped would offer a Resume that does nothing),
     and nothing failed. The listing is deployed and waits for review."""
     rows = [_row(1, reviewed=True), _row(2, ai="cancelled_by_deploy")]

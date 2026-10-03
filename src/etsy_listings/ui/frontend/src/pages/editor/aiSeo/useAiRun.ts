@@ -12,7 +12,7 @@ import type {
 } from "../../../types";
 
 /**
- * The editor's side of an AI run (market-seo.md, *AI runs*): the brief,
+ * The editor's side of an AI run (features/market-seo-20260924/spec.md, *AI runs*): the brief,
  * market research and the proposal as one server-side run per listing,
  * started here, followed through its event stream, and reattached to after a
  * reload or a return to the editor.
@@ -27,9 +27,9 @@ import type {
  * A written brief is handed over only for a live attachment: a finished
  * run's brief is already in the saved listing. Proposal events are forwarded
  * with attachment context; useProposalReview owns their identity and
- * precedence against durable cache reads and resolutions (A41).
+ * precedence against durable cache reads and resolutions.
  *
- * ## The auto chain (PRD 68)
+ * ## The auto chain
  *
  * {@link AiRun.arm} is called from the design strip's pick while the brief is
  * empty. The chain then fires **once**, on the first successful save after
@@ -61,14 +61,14 @@ export interface AiRun {
   message: string | null;
   /** When the run started (ms since the epoch), from the server. */
   startedAt: number | null;
-  /** Who started the run: this editor, or the batch queue (A40). `null`
+  /** Who started the run: this editor, or the batch queue. `null`
    * until there is a run. */
   origin: AiRunSummary["origin"] | null;
   start: (options: { draftBrief: boolean; automatic?: boolean }) => void;
   cancel: () => void;
   /** Attaches to the listing's run if one is running that this editor is
    * not following yet -- a batch run whose turn came while the editor was
-   * open (A40). */
+   * open. */
   follow: () => void;
   /** Arms the auto chain; see the module docstring. */
   arm: () => void;

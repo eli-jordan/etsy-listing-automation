@@ -1,10 +1,9 @@
 """Template authoring endpoints: listing, kind assignment, config, and a live
-preview through the *real* renderer (PRD: "the Python backend re-runs the real
-renderer on each change and streams back the composite, so the preview is the
-actual output, not an approximation").
+preview through the real renderer. Each change produces the actual composite,
+so the preview shows the same output as deployment.
 
 Nothing here creates a template. A template is a folder of photos the user
-puts in the workspace (PRD, Template authoring), so these endpoints all name
+puts in the workspace, so these endpoints all name
 one that already exists.
 
 A template is exactly one of three kinds; the config shape and the preview
@@ -12,7 +11,7 @@ request shape both follow which kind is in play.
 
 Every path here comes from ``Workspace``. That is deliberate: template names
 arrive from URLs, and routing them through the workspace's accessors means the
-"stays inside the root" rule (A8) is enforced by the same code the rest of the
+"stays inside the root" rule is enforced by the same code the rest of the
 tool uses, instead of a second, bespoke check living in the web layer.
 """
 
@@ -63,7 +62,6 @@ from etsy_listings.ui.api.schemas import (
     TemplateSummary,
 )
 from etsy_listings.ui.api.thumbnails import thumbnail_response
-from etsy_listings.workspace import layout
 from etsy_listings.workspace.workspace import AmbiguousColourSuffixError, Workspace
 
 router = APIRouter(prefix="/api/templates", tags=["templates"])
@@ -167,7 +165,7 @@ def _status_reason(config: AnyTemplate) -> str | None:
 def _photos(workspace: Workspace, name: str, config: AnyTemplate) -> list[TemplatePhoto]:
     """Where each of this template's scenes really is, workspace-relative.
 
-    Asked of ``Workspace.scene_photo`` rather than composed from PRD 7a's
+    Asked of ``Workspace.scene_photo`` rather than composed from ADR-0004's
     convention, because that convention has a documented exception the
     convention itself cannot express -- ``template_base_image``'s
     trailing-segment fallback. An ambiguous colour is skipped rather than
@@ -177,22 +175,15 @@ def _photos(workspace: Workspace, name: str, config: AnyTemplate) -> list[Templa
     """
     if not isinstance(config, ColourMatrixTemplate):
         scene = workspace.template_scene_image(name)
-        return [TemplatePhoto(colour=None, file=_relative(name, scene))]
+        return [TemplatePhoto(colour=None, file=workspace.relative_path(scene))]
     photos: list[TemplatePhoto] = []
     for colour in workspace.template_colours(name):
         try:
             path = workspace.scene_photo(name, colour).path
         except AmbiguousColourSuffixError:
             continue
-        photos.append(TemplatePhoto(colour=colour, file=_relative(name, path)))
+        photos.append(TemplatePhoto(colour=colour, file=workspace.relative_path(path)))
     return photos
-
-
-def _relative(template: str, photo: Path) -> str:
-    """Forward-slashed and workspace-relative, the shape every other served
-    path uses (`MediaFileSummary.file`). Built from the layout rather than
-    `relative_to(root)` so it cannot come back as a Windows path."""
-    return f"{layout.MOCKUP_TEMPLATES_DIR}/{template}/{photo.name}"
 
 
 def _summarize(workspace: Workspace, name: str) -> TemplateSummary:
@@ -245,7 +236,7 @@ def _colour_slugs(workspace: Workspace, photos: list[Path]) -> dict[Path, str]:
 
     Goes through ``slug_map`` with the workspace's ``exceptions.yaml``, not a
     bare ``slugify``, so the calibrator computes the *same* slug the rest of
-    the tool does -- including the names PRD 7a says will not slugify cleanly
+    the tool does -- including the names ADR-0004 says will not slugify cleanly
     and are overridden by hand. Two photos landing on one slug is refused
     here rather than silently losing one of them at rename time.
     """
@@ -262,7 +253,7 @@ def colour_report(template: Existing) -> list[ColourReportRow]:
 
     Shown in the kind picker before committing, so a badly named file is seen
     while it is still cheap to think about. A row with ``clean: false`` is one
-    ``assign_kind`` will rename on disk (PRD 7a: the filename *is* the
+    ``assign_kind`` will rename on disk (ADR-0004: the filename *is* the
     slugified colour, and a directory whose filenames disagree with the
     colours they mean is the state that rule exists to prevent).
     """
@@ -307,7 +298,7 @@ def assign_kind(template: Existing, body: AssignKindRequest) -> AnyTemplate:
     starting ``template.yaml`` for that shape.
 
     Refuses a template that already has a config. Kind decides the whole file
-    shape (A11), so changing it would discard whatever calibration was done in
+    shape, so changing it would discard whatever calibration was done in
     the old shape's fields -- and doing that silently, from a picker, is the
     kind of data loss nobody would think to look for.
     """
@@ -332,7 +323,7 @@ def assign_kind(template: Existing, body: AssignKindRequest) -> AnyTemplate:
         # called "Heather Grey", while `new` writes the *slug* into a
         # listing's media -- so rendering failed with "no mockup base image
         # for colour 'heather-grey'" against a template the calibrator had
-        # just declared finished. PRD 7a makes the filename the slug; this is
+        # just declared finished. ADR-0004 makes the filename the slug; this is
         # where that becomes true.
         photos = _rename_photos_to_slugs(workspace, photos)
         with Image.open(photos[0]) as img:
@@ -392,10 +383,10 @@ def thumbnail(template: Existing, colour: str | None = None) -> Response:
     picture, since ``template_preview_photo`` deliberately answers "any one
     of them". Resolution goes through
     :meth:`~etsy_listings.workspace.workspace.Workspace.template_base_image`,
-    which owns PRD 7a's filename convention and its trailing-segment
+    which owns ADR-0004's filename convention and its trailing-segment
     fallback -- this endpoint must not glob for ``{colour}.png`` itself.
 
-    How it is downscaled and served is :mod:`etsy_listings.ui.api.thumbnails`'
+    How it is downscaled and served is:mod:`etsy_listings.ui.api.thumbnails`'
     question -- the listings table asks the same one of a design.
     """
     source = _thumbnail_source(template, colour)
@@ -408,11 +399,11 @@ def thumbnail(template: Existing, colour: str | None = None) -> Response:
 @router.get("/{name}/photo")
 def photo(template: Existing, colour: str | None = None) -> Response:
     """The template's own photo, at its own resolution -- the bare-scene
-    counterpart of ``GET .../design-preview`` for a listing that has not
+    counterpart of ``GET.../design-preview`` for a listing that has not
     picked a design yet.
 
     Same photo :func:`thumbnail` serves, same resolution rule
-    (:func:`_thumbnail_source`), just not downscaled to list size: the
+    ( :func:`_thumbnail_source`), just not downscaled to list size: the
     listing editor's Variants and Listing Images previews are a large hero
     stage, not a row of tiles, and serving them the 160px list thumbnail is
     why that stage used to look tiny for a listing with no design picked yet.

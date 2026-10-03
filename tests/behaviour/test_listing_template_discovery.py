@@ -1,4 +1,4 @@
-"""A listing template is never a listing (spec, *Product invariants* 1; A35).
+"""A listing template is never a listing (spec, *Product invariants* 1; ADR-0047).
 
 It never appears in listing discovery, ``plan --all``, or the workspace-wide
 deploy the listings table starts. Nothing filters it out: it lives beside

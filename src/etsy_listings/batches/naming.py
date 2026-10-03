@@ -1,4 +1,4 @@
-"""Name allocation (A38; spec *Cleaning and editing names*).
+"""Name allocation (name allocation; spec *Cleaning and editing names*).
 
 One base name drives both ``listings/<name>/`` and ``designs/<name>.png``, so
 a name is free only when it is free for both, and for every other row of the

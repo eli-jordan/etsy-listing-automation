@@ -348,7 +348,7 @@ describe("ImagesTab", () => {
   });
 });
 
-describe("ImagesTab's Etsy colour-swatch toggle (PRD 56)", () => {
+describe("ImagesTab's Etsy colour-swatch toggle", () => {
   function renderWith(over: Partial<ListingDetail> = {}, onUpdate = vi.fn()) {
     vi.spyOn(calibrator, "listTemplates").mockResolvedValue([
       summary({ name: "flat-lay-01", colours: ["black", "white", "moss"] }),
@@ -472,7 +472,7 @@ describe("ImagesTab's shared images (common-media/)", () => {
   });
 
   it("adds one as the workspace-rooted ref a listing stores", async () => {
-    /* `media:` holds these as a plain string ref (PRD 73), not as a
+    /* `media:` holds these as a plain string ref (ADR-0046), not as a
        {template, colour} entry. */
     const onUpdate = renderShared();
     fireEvent.click(await screen.findByRole("button", { name: "Files" }));
@@ -535,7 +535,7 @@ describe("ImagesTab's shared images (common-media/)", () => {
   });
 });
 
-describe("ImagesTab's own files (./) and videos (PRD 72, 73)", () => {
+describe("ImagesTab's own files (./) and videos", () => {
   const CLOSE_UP: MediaFileSummary = {
     name: "close-up.mp4",
     file: "listings/take-a-hike/close-up.mp4",

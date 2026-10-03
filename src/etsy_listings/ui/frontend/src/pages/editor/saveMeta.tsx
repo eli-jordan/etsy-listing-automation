@@ -9,14 +9,14 @@ import { SavedChip } from "./SavedChip";
  * sentences rather than five renders.
  *
  * The "not saved yet" ones say what is in the way rather than a bland "Not
- * saved". Since PRD 70 that is a much rarer state: naming a listing writes it,
+ * saved". Since ADR-0043 that is a much rarer state: naming a listing writes it,
  * and incompleteness never withholds the file. What is left is a document the
  * server will not write because it contradicts itself -- and `field_errors`
  * has already said which field, inline, so this line only has to say that the
  * file has not been written.
  *
  * A listing template's editor says the same about its own file (UI doc §1,
- * §3). Its `unsaved` is the common case rather than the rare one -- A36
+ * §3). Its `unsaved` is the common case rather than the rare one -- template completeness
  * writes only complete templates -- and the sentence already fits it. */
 export function metaFor(
   save: SaveState,

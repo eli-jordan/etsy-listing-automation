@@ -1,6 +1,6 @@
 """Running the pipeline over a set of listings, with no terminal involved.
 
-PRD 16's continue-on-error used to be a private CLI helper, so the only way to
+continue-on-error used to be a private CLI helper, so the only way to
 check that one bad listing did not halt the batch was to invoke the command
 and grep its stdout. These assert against the :class:`RunReport` instead --
 the same object the UI will serialise in Phase 5.
@@ -12,6 +12,7 @@ import json
 from pathlib import Path
 
 import pytest
+from PIL import Image
 
 from etsy_listings.clients.printify.fakes import FakeCatalogClient, FakePrintifyClient
 from etsy_listings.clients.printify.models import Blueprint
@@ -55,7 +56,39 @@ def _ctx(root: Path, **overrides: object) -> RunContext:
     return a_context(root, printify=FakePrintifyClient([]), **overrides)  # type: ignore[arg-type]
 
 
-# ------------------------------------------------------------------ PRD 16
+# ------------------------------------------------------------------ continue-on-error
+
+
+@pytest.mark.parametrize("problem", ["template", "photo", "colour", "artwork"])
+def test_local_render_refusals_preserve_the_rest_of_the_batch(
+    workspace_root: Path, problem: str
+) -> None:
+    import yaml
+
+    copy_listing(workspace_root, "broken")
+    path = workspace_root / "listings/broken/listing.yaml"
+    document = yaml.safe_load(path.read_text(encoding="utf-8"))
+    if problem == "template":
+        document["media"] = [{"template": "missing-template"}]
+    elif problem == "photo":
+        document["colors"].append("missing-colour")
+        document["media"] = [{"template": "flat-lay-01", "colour": "missing-colour"}]
+    elif problem == "colour":
+        document["media"] = [{"template": "flat-lay-01"}]
+    else:
+        document["design"] = {
+            "first": "designs/take-a-hike.png",
+            "second": "designs/take-a-hike.png",
+        }
+    path.write_text(yaml.safe_dump(document), encoding="utf-8")
+
+    report = plan_listings(_ctx(workspace_root), ["broken", LISTING], STAGES)
+
+    assert report.outcomes[0].planned is not None
+    plans = report.outcomes[0].planned.plan.stage_plans
+    assert plans[0].stage == "render" and plans[0].blocked
+    assert len(plans) == len(STAGES)
+    assert report.outcomes[1].ok
 
 
 def test_one_bad_listing_does_not_stop_the_rest(workspace_root: Path) -> None:
@@ -101,7 +134,7 @@ def test_a_failure_carries_the_message_not_a_stack(workspace_root: Path) -> None
 
 
 def test_an_unmigrated_ref_fails_its_listing_naming_the_migration(workspace_root: Path) -> None:
-    """PRD 73: the old listing-relative form is refused by name -- as that
+    """ADR-0046: the old listing-relative form is refused by name -- as that
     listing's failure, so the rest of an `--all` batch still plans."""
     copy_listing(workspace_root, "legacy", design="../../designs/take-a-hike.png")
 
@@ -151,7 +184,7 @@ def _configured(root: Path) -> Path:
 def test_a_client_refusal_fails_its_listing_rather_than_the_run(
     workspace_root: Path, error: Exception
 ) -> None:
-    """PRD 16 covers the API refusing, not only the config being wrong.
+    """continue-on-error covers the API refusing, not only the config being wrong.
 
     These three used to be plain ``RuntimeError``s, and ``run`` catches only
     :class:`UserFacingError` -- so a 500, a revoked token or an unset variable
@@ -337,8 +370,8 @@ def test_a_second_apply_reads_the_lockfile_the_first_one_wrote(workspace_root: P
 def test_stage_checking_and_stage_planned_fire_once_per_stage_in_pipeline_order(
     workspace_root: Path,
 ) -> None:
-    """A33, decision 2: `build_plan`'s walk reports each stage as it goes,
-    in the pipeline's own order -- A21 left A3's fan-out unbuilt, so that
+    """ADR-0041, decision 2: `build_plan`'s walk reports each stage as it goes,
+    in the pipeline's own order -- ADR-0009 left ADR-0009's fan-out unbuilt, so that
     order is genuinely the order stages resolve in."""
     checking: list[str] = []
     resolved: list[str] = []
@@ -395,8 +428,41 @@ def test_apply_with_a_matching_fingerprint_applies_normally(workspace_root: Path
     assert (workspace_root / "listings" / LISTING / "state.lock.json").is_file()
 
 
+@pytest.mark.parametrize(
+    "input_file",
+    [
+        "designs/take-a-hike.png",
+        "mockup-templates/flat-lay-01/moss.png",
+        "mockup-templates/flat-lay-01/template.yaml",
+    ],
+)
+def test_reviewed_apply_refuses_changed_render_inputs_at_the_same_path(
+    workspace_root: Path, input_file: str
+) -> None:
+    ctx = _ctx(workspace_root)
+    reviewed = plan_listings(ctx, [LISTING], [RenderStage()]).outcomes[0].planned
+    assert reviewed is not None
+    path = workspace_root / input_file
+    if path.suffix == ".yaml":
+        path.write_text(
+            path.read_text(encoding="utf-8") + "\n# calibration edited\n", encoding="utf-8"
+        )
+    else:
+        with Image.open(path) as image:
+            changed = image.copy()
+        changed.putpixel((0, 0), (255, 0, 255, 255) if changed.mode == "RGBA" else (255, 0, 255))
+        changed.save(path)
+
+    report = apply_listings(
+        ctx, [LISTING], [RenderStage()], expect={LISTING: plan_fingerprint(reviewed.plan)}
+    )
+
+    assert isinstance(report.outcomes[0].error, StalePlanError)
+    assert not ctx.workspace.lock_file(LISTING).exists()
+
+
 def test_a_stale_fingerprint_refuses_before_any_write(workspace_root: Path) -> None:
-    """A31: acting on a plan that no longer describes the current state --
+    """ADR-0039: acting on a plan that no longer describes the current state --
     here, any fingerprint that is not the real one -- must not run a single
     stage."""
     ctx = _ctx(workspace_root)
@@ -412,7 +478,7 @@ def test_a_stale_fingerprint_refuses_before_any_write(workspace_root: Path) -> N
 
 
 def test_a_stale_listing_does_not_stop_the_rest_of_the_batch(workspace_root: Path) -> None:
-    """PRD 16, still: a stale plan is a refusal like any other."""
+    """continue-on-error, still: a stale plan is a refusal like any other."""
     copy_listing(workspace_root, "fine")
     ctx = _ctx(workspace_root)
 

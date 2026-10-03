@@ -1,10 +1,10 @@
 /**
- * Word-level formatting of one `FieldChange`'s before/after (docs/deploy-changes.md
+ * Word-level formatting of one `FieldChange`'s before/after (docs/features/deploy-20260917/spec.md
  * decision 4, spec's "Change highlighting" element).
  *
  * This is presentation over a decision the engine already made: a title only
- * reaches here because a `FieldChange(path="title", ...)` already says it
- * changed (A2 -- the page never decides *whether* something changed, only how
+ * reaches here because a `FieldChange(path="title",...)` already says it
+ * changed (ADR-0008 -- the page never decides *whether* something changed, only how
  * to show it). Word-level marking formats that one field's own before and
  * after and compares nothing else, exactly as the spec says.
  *

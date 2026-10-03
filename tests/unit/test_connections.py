@@ -40,7 +40,7 @@ def _env(root: Path, contents: str) -> None:
 def test_a_printify_transport_does_not_need_a_token_to_exist(workspace_root: Path) -> None:
     """The fixture workspace has no ``.env`` at all. `plan` builds a catalog
     client it may never call, so demanding a token here would fail every
-    workspace that has not needed one yet (A22)."""
+    workspace that has not needed one yet."""
     workspace = Workspace.discover(root_override=workspace_root)
 
     assert connections.catalog_client(workspace) is not None
@@ -59,13 +59,15 @@ def test_the_token_is_demanded_at_the_moment_it_is_used(workspace_root: Path) ->
 # ---------------------------------------------------------------------- Etsy
 
 
-def test_no_etsy_credentials_means_no_etsy_client(workspace_root: Path) -> None:
+def test_no_etsy_credentials_are_demanded_until_a_request(workspace_root: Path) -> None:
     """`plan`/`apply` in a workspace that has never run `auth etsy` must not be
     made to configure it just to render mockups or write to Printify -- the
     same reasoning the Printify token already gets."""
     assert connections.etsy_app_key(workspace_root) is None
-    assert connections.etsy_transport(workspace_root) is None
-    assert connections.etsy_listing_client(workspace_root) is None
+    transport = connections.etsy_transport(workspace_root)
+    assert connections.etsy_listing_client(workspace_root) is not None
+    with pytest.raises(MissingCredentialError):
+        transport.get("/v3/application/openapi-ping")
 
 
 def test_etsy_credentials_present_build_a_real_client(workspace_root: Path) -> None:
@@ -81,12 +83,12 @@ def test_half_a_key_pair_reads_as_absent(workspace_root: Path) -> None:
     _env(workspace_root, "ETSY_KEYSTRING=test-keystring\n")
 
     assert connections.etsy_app_key(workspace_root) is None
-    assert connections.etsy_listing_client(workspace_root) is None
+    assert connections.etsy_listing_client(workspace_root) is not None
 
 
 def test_the_token_store_is_the_one_in_this_workspace(workspace_root: Path) -> None:
     """Where the rotating refresh token lives is this module's answer, not
-    four modules' -- ``.auth/`` beside the workspace, never the repo (A23)."""
+    four modules' -- ``.auth/`` beside the workspace, never the repo."""
     store = connections.etsy_token_store(workspace_root)
 
     assert store.path == workspace_root / layout.AUTH_DIR / layout.ETSY_TOKENS_FILE
@@ -111,7 +113,7 @@ def test_a_run_context_carries_every_client_a_stage_might_ask_for(workspace_root
     assert ctx.workspace is workspace
     assert ctx.catalog is not None
     assert ctx.printify is not None
-    assert ctx.etsy is None  # no Etsy sign-in in the fixture workspace
+    assert ctx.etsy is not None
 
 
 def test_a_run_can_borrow_credentials_without_borrowing_the_workspace_cache(
@@ -119,7 +121,7 @@ def test_a_run_can_borrow_credentials_without_borrowing_the_workspace_cache(
 ) -> None:
     """The E2E layer deploys a disposable workspace through credentials from
     a configured one. Its catalog state still belongs to the disposable
-    workspace: no stale user cache is read or written (A8)."""
+    workspace: no stale user cache is read or written."""
     workspace = Workspace.discover(root_override=workspace_root)
     expected = Blueprint(
         id=706,
@@ -153,8 +155,21 @@ def _market_over(root: Path, seen: list[httpx.Request]) -> EtsyMarketClient | No
     )
 
 
-def test_no_etsy_key_pair_means_no_market_client(workspace_root: Path) -> None:
-    assert connections.etsy_market_client(workspace_root) is None
+def test_market_connection_reads_the_key_pair_at_each_request(workspace_root: Path) -> None:
+    seen: list[httpx.Request] = []
+    client = _market_over(workspace_root, seen)
+    assert client is not None
+    with pytest.raises(MissingCredentialError):
+        client.search_active("hiking shirt")
+    assert seen == []
+    _env(workspace_root, KEY_PAIR)
+    client.search_active("hiking shirt")
+    _env(workspace_root, "ETSY_KEYSTRING=rotated\nETSY_SHARED_SECRET=new-secret\n")
+    client.search_active("hiking shirt")
+    assert [request.headers["x-api-key"] for request in seen] == [
+        "test-keystring:test-secret",
+        "rotated:new-secret",
+    ]
 
 
 def test_the_market_client_needs_only_the_key_pair_not_a_sign_in(workspace_root: Path) -> None:

@@ -1,15 +1,15 @@
-"""The AI runs resource (market-seo.md, *AI runs*; the implementation plan's
+"""The AI runs resource (features/market-seo-20260924/spec.md, *AI runs*; the implementation plan's
 *Run contract*).
 
 ```
-POST   /api/ai/runs              {listing, draft_brief} -> 202 AiRunSummary
+POST /api/ai/runs {listing, draft_brief} -> 202 AiRunSummary
                                  | 409 {active_run} | 409 {reason}
-                                 | 409 {reason: "batch_pending"} (A40)
-                                 | 409 {reason: "deploying"} (A43)
-GET    /api/ai/runs?listing=     the listing's current or most recent run, or 404
-GET    /api/ai/runs/{id}         AiRunDetail: phase, steps, events so far
-GET    /api/ai/runs/{id}/events  text/event-stream; replays after Last-Event-ID
-DELETE /api/ai/runs/{id}         cancel; 409 if already finished
+                                 | 409 {reason: "batch_pending"}
+                                 | 409 {reason: "deploying"}
+GET /api/ai/runs?listing= the listing's current or most recent run, or 404
+GET /api/ai/runs/{id} AiRunDetail: phase, steps, events so far
+GET /api/ai/runs/{id}/events text/event-stream; replays after Last-Event-ID
+DELETE /api/ai/runs/{id} cancel; 409 if already finished
 ```
 
 ``POST`` re-checks readiness here, whatever the browser last saw
@@ -49,12 +49,12 @@ from etsy_listings.workspace.workspace import Workspace
 router = APIRouter(prefix="/api/ai/runs", tags=["ai-runs"])
 
 BATCH_PENDING = "batch_pending"
-"""The refusal's ``reason`` while batch work owns the listing (A40), a code
+"""The refusal's ``reason`` while batch work owns the listing, a code
 the editor words itself rather than a sentence."""
 
 DEPLOYING = "deploying"
 """The refusal's ``reason`` while a UI plan or apply holds the listing
-(A43): deploying takes precedence over AI."""
+: deploying takes precedence over AI."""
 
 _EVENT_WAIT_TIMEOUT = 1.0
 """One SSE poll's longest block, as in ``ui/api/runs.py``."""
@@ -105,11 +105,11 @@ def create_ai_run(request: Request, body: CreateAiRunRequest) -> AiRunSummary | 
     workspace: Workspace = request.app.state.workspace
     if not workspace.listing_file(body.listing).is_file():
         raise HTTPException(status_code=404, detail=f"no listing {body.listing!r}")
-    # A43: a deploy holding the listing wins over everything below. The
+    # ADR-0050: a deploy holding the listing wins over everything below. The
     # registry refuses again at `create`, which is what closes the race.
     if registry.deploying(body.listing):
         return _refused(AiRunRefusal(reason=DEPLOYING))
-    # A40: a queued or running batch row owns the listing's AI, even while
+    # ADR-0048: a queued or running batch row owns the listing's AI, even while
     # no run holds it yet -- two runs must never own one listing.
     queue: BatchQueue = request.app.state.batch_queue
     if queue.pending(body.listing):

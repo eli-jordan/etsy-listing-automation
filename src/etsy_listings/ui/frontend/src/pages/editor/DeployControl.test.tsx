@@ -8,7 +8,7 @@ import { runSummary, type RunSummaryOverrides } from "../../test/helpers";
 import { DeployControl } from "./DeployControl";
 
 /**
- * The page-head control's four states (docs/deploy-changes.md decision 8).
+ * The page-head control's four states (docs/features/deploy-20260917/spec.md decision 8).
  */
 
 function summary(over: RunSummaryOverrides = {}): RunSummary {

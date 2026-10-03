@@ -27,7 +27,7 @@ dependencies = [
     # Native window around the calibrator SPA. Imported only when
     # `etsy-listings ui` opens a window, not on `--browser` or at package import.
     "pywebview>=6,<7",
-    # PRD 72's video gate reads a clip's duration, size and streams through
+    # ADR-0045's video gate reads a clip's duration, size and streams through
     # PyAV. Unlike OpenCV/Pillow it never produces bytes that get hashed, so a
     # floor pin is enough; its wheels bundle FFmpeg on every CI platform.
     "av>=15",
@@ -93,8 +93,8 @@ exclude_also = [
 line-length = 100
 target-version = "py312"
 src = ["src", "tests"]
-# ruff formats Python inside Markdown fences. docs/prd.md and
-# docs/implementation-plan.md are authored documents whose snippets are
+# ruff formats Python inside Markdown fences. docs/history/prd.md and
+# docs/history/implementation-plan.md are authored documents whose snippets are
 # deliberately laid out for reading (aligned comments, condensed dataclasses);
 # reformatting them is noise in a diff that is supposed to record decisions.
 extend-exclude = ["docs/**"]

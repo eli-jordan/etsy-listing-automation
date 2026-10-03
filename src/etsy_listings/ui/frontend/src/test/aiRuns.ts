@@ -20,7 +20,7 @@ import type {
  * pushes is what the editor sees -- the same `step`/`brief`/`proposal`/
  * `phase` sequence `ui/airuns/runner.py` writes.
  *
- * It also stands in for the listing's cached proposal (A41) at `api/seo.ts`:
+ * It also stands in for the listing's cached proposal at `api/seo.ts`:
  * a `proposal` event pushed down a stream is cached first, exactly as the
  * runner writes the record before it announces it, and a resolution is
  * recorded on it -- or refused, as the server refuses one for a proposal

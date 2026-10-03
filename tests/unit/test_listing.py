@@ -143,7 +143,7 @@ def test_rejects_more_than_twenty_images() -> None:
         Listing.model_validate(data, context={"currency": "NOK"})
 
 
-# ------------------------------------------------ the gallery's rules (PRD 72)
+# ------------------------------------------------ the gallery's rules
 
 THUMB = {"template": "flat-lay-01", "colour": "black"}
 FEATURED = "common-media/size-guide.mp4"
@@ -280,7 +280,7 @@ def test_pricing_plan_defaults_to_none() -> None:
 
 
 def test_a_listing_with_neither_pricing_plan_nor_prices_still_parses() -> None:
-    """PRD 70: this model stopped owning the price-source refusal. It is a
+    """ADR-0043: this model stopped owning the price-source refusal. It is a
     `listing_validation.check_price_source` block issue and a
     `gates.check_price_source` refusal -- the same two places every other
     incompleteness is reported from -- so the file is written and the deploy
@@ -363,8 +363,8 @@ def test_resolved_price_raises_without_a_plan_when_the_size_is_missing() -> None
 
 
 def test_lifecycle_is_omitted_on_a_working_listing() -> None:
-    """Named `lifecycle`, not `status`: the table already has a Status column
-    (PRD 62). Working listings do not carry a third value."""
+    """Named `lifecycle`, not `status`: the table already has a Status column.
+    Working listings do not carry a third value."""
     listing = Listing.model_validate(BASE, context={"currency": "NOK"})
     assert listing.lifecycle is None
 
@@ -396,7 +396,7 @@ def test_an_empty_draft_builds_with_nothing_chosen() -> None:
 
 
 def test_the_empty_document_validates_as_an_ordinary_listing() -> None:
-    """PRD 70: incompleteness is not a validation failure, so there is no
+    """ADR-0043: incompleteness is not a validation failure, so there is no
     separate draft rule and nothing for one to waive. An empty document is a
     listing that has nothing chosen yet -- the banner says what is missing,
     and the stages refuse to deploy it."""
@@ -419,7 +419,7 @@ def test_the_empty_document_validates_as_an_ordinary_listing() -> None:
 def test_an_incomplete_listing_still_cannot_contradict_itself(
     over: dict[str, object], expected_in_message: str
 ) -> None:
-    """The line PRD 70 draws: *incomplete* is fine, *malformed* is not.
+    """The line ADR-0043 draws: *incomplete* is fine, *malformed* is not.
 
     Every case here is a field somebody filled in that disagrees with another
     one -- a colour that is not sold, a price in the wrong currency, a title

@@ -41,9 +41,9 @@ WINDOW_BACKGROUND = "#f5ead8"
 _SERVER_START_TIMEOUT_SECONDS = 30
 _SHUTDOWN_TIMEOUT_SECONDS = 10
 """How long ``stop`` waits when nothing is running. Not applied when a run is
-active (A33): an apply mid-stage can legitimately outlast this, and cutting
+active: an apply mid-stage can legitimately outlast this, and cutting
 the wait short would kill the server thread out from under the executor
-that A29 already made durable through exactly this kind of interruption --
+that ADR-0037 already made durable through exactly this kind of interruption --
 except a durable partial apply is still worse than the finish it was one
 stage away from."""
 
@@ -61,12 +61,12 @@ class RunningServer:
     def stop(self) -> None:
         """Ask the server to stop and wait for it -- which, through the ASGI
         lifespan ``ui/api/app.py`` wires up, already includes the runs
-        executor's own shutdown (A33): a queued run cancelled, a plan run
+        executor's own shutdown: a queued run cancelled, a plan run
         stopped at its next boundary, an apply run finishing the stage it is
         in. A fixed timeout is fine when nothing is running; a run in flight
         gets an unbounded wait and a status line instead, because a plan
         run's window disappearing mid-preview is a cosmetic annoyance and an
-        apply's window disappearing mid-stage is the thing A29 exists to make
+        apply's window disappearing mid-stage is the thing ADR-0037 exists to make
         recoverable, not something to also make routine.
         """
         self._server.should_exit = True

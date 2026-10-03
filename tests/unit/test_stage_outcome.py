@@ -1,4 +1,4 @@
-"""The stage decision interface: exactly one legal outcome (A33)."""
+"""The stage decision interface: exactly one legal outcome."""
 
 from __future__ import annotations
 

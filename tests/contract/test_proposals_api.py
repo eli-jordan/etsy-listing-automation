@@ -1,4 +1,4 @@
-"""``/api/listings/{name}/proposal``'s HTTP surface (A41, A42; spec,
+"""``/api/listings/{name}/proposal``'s HTTP surface (ADR-0049, rename and delete hooks; spec,
 *Durable AI proposals*): the cached proposal an AI run wrote, judged stale
 against the saved listing, its per-section resolution, and the record
 following the listing through rename and delete.
@@ -160,7 +160,7 @@ def test_an_unknown_resolution_is_422(client: TestClient) -> None:
     assert _resolve(client, generated_at, title="maybe").status_code == 422
 
 
-# -------------------------------------------------- rename and delete (A42)
+# -------------------------------------------------- rename and delete
 
 
 def test_renaming_the_listing_moves_its_proposal(client: TestClient) -> None:
@@ -204,7 +204,7 @@ def test_marking_the_listing_deleted_removes_its_proposal(
     client: TestClient, workspace: Workspace
 ) -> None:
     """A listing with remotes stays on disk, pending its remote deletion
-    (PRD 63); its proposal goes now, as its market snapshot does."""
+    ; its proposal goes now, as its market snapshot does."""
     _generate(client)
     Lockfile.empty(tool_version="test", applied_at="2024-01-01T00:00:00").model_copy(
         update={"remote": {"printify_product_id": "abc123"}, "stages_completed": ["render"]}

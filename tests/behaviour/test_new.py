@@ -100,7 +100,7 @@ asked rather than by when.
 Not listed, because it is not on that path: `Design`, asked only when no
 design name was given. A test that wants it adds its own key. Light-vs-dark
 artwork tone is never asked by `new` at all -- it is a hand-edit to the
-generated garment profile (docs/multi-placement-rendering.md).
+generated garment profile (docs/features/multi-placement-rendering-20260903/spec.md).
 
 The two pricing keys look ambiguous and are not: a fragment that is the whole
 question wins outright, and otherwise the longest match does, so "Pricing plan
@@ -165,7 +165,7 @@ def test_new_runs_end_to_end_through_the_plain_input_backend(
 def test_new_writes_a_listing_that_validates_against_a_single_kind_template(
     workspace_root: Path, monkeypatch, scripted
 ) -> None:
-    """A `single`-kind template has one output and no colour to name (PRD 28).
+    """A `single`-kind template has one output and no colour to name.
     `new` used to write one `{template, colour}` entry per colour regardless of
     kind, which is not a listing the renderer accepts."""
     from etsy_listings.config.listing import Listing

@@ -30,7 +30,7 @@ import { TEMPLATE_DELETE_DETAILS, templateDeleteTitle } from "./listingTemplateD
  * create, and leaving without naming discards the draft.
  * `/listing-templates/:name` opens a saved one.
  *
- * Autosave writes only complete templates (A36): an edit that makes one
+ * Autosave writes only complete templates: an edit that makes one
  * incomplete is held here, explained by the banner and the head, retried by
  * the next edit, and guarded against navigating away (`useUnsavedWarning`).
  *

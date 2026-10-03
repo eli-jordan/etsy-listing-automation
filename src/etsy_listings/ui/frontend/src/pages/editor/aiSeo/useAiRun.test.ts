@@ -16,9 +16,9 @@ import type { ListingDetail, MarketSnapshot } from "../../../types";
 import { type AiRunHandlers, useAiRun } from "./useAiRun";
 
 /**
- * The editor's side of an AI run (market-seo.md, *AI runs*): starting one,
+ * The editor's side of an AI run (features/market-seo-20260924/spec.md, *AI runs*): starting one,
  * following its events into `steps`, `queries`, `market` and `proposal`,
- * reattaching after a reload, cancelling -- and PRD 68's auto chain, which
+ * reattaching after a reload, cancelling -- and ADR-0003's auto chain, which
  * a design pick arms and the first successful save fires.
  *
  * The server is `test/aiRuns.ts`'s stand-in at `api/aiRuns.ts`'s seam; a
@@ -285,7 +285,7 @@ describe("useAiRun reattaching", () => {
   });
 
   it("forwards finished-run proposal replay with its attachment context", async () => {
-    /* The cached proposal is the truth once the run is over (A41): it
+    /* The cached proposal is the truth once the run is over: it
        carries which sections the seller has resolved since, which the
        replayed event does not. */
     runs.find.mockResolvedValue(aiRunSummary({ phase: "done" }));
@@ -365,7 +365,7 @@ describe("useAiRun cancelling", () => {
   });
 });
 
-describe("useAiRun auto chain (PRD 68)", () => {
+describe("useAiRun auto chain", () => {
   /** A pick on a listing with an empty brief, then the saves that follow. */
   function picked(over: Partial<ListingDetail> = {}) {
     const view = setup({ detail: detail({ brief: "", ...over }), save: saved(1) });

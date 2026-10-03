@@ -1,5 +1,5 @@
 """Three buyer queries in, twenty scored comparable listings out
-(market-seo.md, *Market search* and *Scoring*).
+(features/market-seo-20260924/spec.md, *Market search* and *Scoring*).
 
 The order of work is the order of cost. Searches and the batch are cheap and
 fixed -- three and one -- so every candidate gets them. The review count is
@@ -9,7 +9,7 @@ research run therefore makes at most 3 + 1 + 20 calls.
 
 Calls go out at most :data:`MAX_IN_FLIGHT` at a time; pacing and retries are
 the transport's. A call that still fails after those fails the whole run
-(:class:`MarketResearchError`): the market data is the primary driver of the
+( :class:`MarketResearchError`): the market data is the primary driver of the
 proposal's wording, so there is no quietly carrying on without it.
 """
 
@@ -25,12 +25,11 @@ import httpx
 
 from etsy_listings.clients.etsy.market import EtsyMarketClient
 from etsy_listings.clients.etsy.models import MarketCandidate, MarketListing
+from etsy_listings.config.market_weights import MarketWeights, Metric
 from etsy_listings.errors import UserFacingError
 from etsy_listings.market.block import lead
 from etsy_listings.market.models import (
     MarketResult,
-    MarketWeights,
-    Metric,
     ScoredListing,
 )
 from etsy_listings.market.phrases import rank_phrases
@@ -40,7 +39,7 @@ SEARCH_LIMIT = 25
 """Results per query: 3 x 25 gives about sixty unique candidates."""
 
 MAX_IN_FLIGHT = 5
-"""Etsy calls one research run has open at once (market-seo.md, *Quota*)."""
+"""Etsy calls one research run has open at once (features/market-seo-20260924/spec.md, *Quota*)."""
 
 SCORED = 20
 """How many listings get a review count, and so a final score."""
@@ -108,7 +107,7 @@ def research(
         for candidate in found
         if (age := _age_days(candidate[0], now)) is not None and age >= MIN_AGE_DAYS
     ]
-    # Relaxing (market-seo.md, *Filters*): the age filter is the only one
+    # Relaxing (features/market-seo-20260924/spec.md, *Filters*): the age filter is the only one
     # research applies itself, so dropping it is a second pass over what was
     # already found -- a new search would return the same listings.
     relaxed = not old_enough
@@ -290,7 +289,7 @@ def _scored(
 def _empty(queries: tuple[str, ...], found: int, *, relaxed: bool) -> MarketResult:
     """Nothing comparable: the one outcome that lets the proposal go ahead
     without market data, since the calls worked and there was simply
-    nothing to learn from (market-seo.md, *Filters*)."""
+    nothing to learn from (features/market-seo-20260924/spec.md, *Filters*)."""
     return MarketResult(
         queries=queries,
         found=found,

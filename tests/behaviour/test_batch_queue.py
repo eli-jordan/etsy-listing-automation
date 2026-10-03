@@ -1,4 +1,4 @@
-"""The batch AI queue (batch plan PR 4; spec *Batch AI queue*; A40): every
+"""The batch AI queue (batch plan PR 4; spec *Batch AI queue*; ADR-0048): every
 created row drafts its brief, researches the market and gets a proposal, a
 limited number at a time across every batch, round-robin between batches.
 
@@ -186,7 +186,7 @@ def test_a_manual_run_does_not_count_against_the_limit_and_its_listing_waits(
     q: Queue,
 ) -> None:
     """Manual runs are outside the batch limit, and a row whose listing a
-    manual run holds is skipped until that run ends (A40)."""
+    manual run holds is skipped until that run ends."""
     batch = q.confirm(*_designs("night-hike-club", "cedar-trail"))
     gate = q.provider.gate("queries")
     manual = q.registry.create("night-hike-club", draft_brief=False)
@@ -309,7 +309,7 @@ def test_a_row_running_when_the_server_stops_reruns_after_a_restart(
 ) -> None:
     """A run does not survive its server, so the row it left ``running``
     is queued again on the next start, and reruns to one listing and one
-    proposal (spec, *Scheduling*; A40)."""
+    proposal (spec, *Scheduling*; ADR-0048)."""
     seed_prompts(workspace_root)
     workspace = Workspace.discover(root_override=workspace_root)
     a_listing_template(workspace)

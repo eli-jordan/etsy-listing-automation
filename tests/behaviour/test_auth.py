@@ -8,7 +8,7 @@ rather than the order the questions were asked in.
 
 The one ordering that *is* asserted is the `.gitignore`: `auth` may be the
 first thing ever written into a directory, and a `.env` that lands before the
-ignore rule is a secret inside somebody's repository (PRD 49).
+ignore rule is a secret inside somebody's repository.
 """
 
 from __future__ import annotations

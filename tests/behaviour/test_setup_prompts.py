@@ -1,5 +1,5 @@
-"""`setup` and the workspace's AI prompts (market-seo.md, *Prompts and
-`setup --replace-prompts`*; PRD 71's exception to "setup never overwrites").
+"""`setup` and the workspace's AI prompts (features/market-seo-20260924/spec.md, *Prompts and
+`setup --replace-prompts`*; ADR-0044's exception to "setup never overwrites").
 
 Three packaged prompts, three outcomes each: a missing prompt is seeded; an
 existing one is kept byte for byte, with a warning when it differs from its

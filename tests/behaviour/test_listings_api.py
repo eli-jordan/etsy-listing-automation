@@ -69,7 +69,7 @@ def write_lock(
     from "something wrote a lockfile carrying only ids" -- `stages_completed`
     is the record of the former, and it is what `draft` vs `deployed` turns on.
 
-    ``incomplete`` stands in for A29's marker, set the way `execute` sets it:
+    ``incomplete`` stands in for ADR-0037's marker, set the way `execute` sets it:
     a stage raised, and this is what a failed `apply` left behind.
     """
     remote: dict[str, object] = {}
@@ -425,7 +425,7 @@ class TestGetListingDetail:
     def test_reports_a_too_short_video_as_an_images_block_naming_it(
         self, client: TestClient, workspace_root: Path
     ) -> None:
-        """PRD 72's gate, read through `WorkspaceFacts` off the real file."""
+        """ADR-0045's gate, read through `WorkspaceFacts` off the real file."""
         shutil.copy(
             VIDEOS / "short-2s-512.mp4", workspace_root / "listings" / "take-a-hike" / "clip.mp4"
         )
@@ -538,7 +538,7 @@ class TestListingStatus:
     def test_a_partially_applied_live_listing_reads_dirty_not_live(
         self, client: TestClient, workspace_root: Path, etsy_says: EtsyStates
     ) -> None:
-        """A29: a failed `apply` leaves the marker set, and the per-stage
+        """ADR-0037: a failed `apply` leaves the marker set, and the per-stage
         write already made the lockfile newer than the yaml -- so nothing
         about mtimes tells the API this listing's Etsy copy might not match
         what was reviewed. Without wiring the marker through, this would
@@ -551,7 +551,7 @@ class TestListingStatus:
         self, client: TestClient, workspace_root: Path, etsy_says: EtsyStates
     ) -> None:
         """What `deployed` is *for*: the pipeline never activates a listing
-        (PRD non-goal 1), so an applied listing sits at Etsy as a draft until
+        , so an applied listing sits at Etsy as a draft until
         a human publishes it."""
         write_lock(workspace_root, "take-a-hike", etsy_listing_id=555)
         etsy_says({555: "draft"})
@@ -720,7 +720,7 @@ class TestCreateListing:
     def test_an_incomplete_document_is_written_and_its_gaps_reported(
         self, client: TestClient, workspace_root: Path
     ) -> None:
-        """PRD 70: naming writes it. No price source is an incompleteness, not
+        """ADR-0043: naming writes it. No price source is an incompleteness, not
         a malformed document, so the file appears and the banner carries the
         block issue that stops a deploy.
 
@@ -740,10 +740,10 @@ class TestCreateListing:
     def test_a_structurally_broken_document_comes_back_as_field_errors(
         self, client: TestClient, workspace_root: Path
     ) -> None:
-        """A bare number is not a price (PRD 24) -- that one *is* a field error,
+        """A bare number is not a price -- that one *is* a field error,
         rendered inline, and still writes nothing.
 
-        The other side of PRD 70's line: incomplete is written, malformed is
+        The other side of ADR-0043's line: incomplete is written, malformed is
         not."""
         response = client.post(
             "/api/listings",
@@ -847,7 +847,7 @@ class TestListingDraft:
     def test_a_structurally_broken_candidate_comes_back_as_field_errors(
         self, client: TestClient
     ) -> None:
-        """A bare number is not a price (PRD 24). The draft cannot be described
+        """A bare number is not a price. The draft cannot be described
         as a `Listing` at all then, so the errors are the news and the rest of
         the body describes the empty draft -- which is why the editor keeps its
         own state for everything but `field_errors`."""
@@ -950,7 +950,7 @@ class TestSupportingEndpoints:
         by_name = {row["name"]: row for row in response.json()}
         assert by_name["comfort-colors-1717"]["sizes"] == ["S", "M", "L", "XL", "XXL", "XXXL"]
         # The Variants tab's colour preview is this template, not the first
-        # colour-matrix in media: (A13). The fixture names the workspace's
+        # colour-matrix in media:. The fixture names the workspace's
         # colour-matrix set.
         assert by_name["comfort-colors-1717"]["preview_template"] == "flat-lay-01"
 
@@ -979,7 +979,7 @@ class TestSupportingEndpoints:
         assert by_name["tee-basic"]["compatible"] is True
         assert by_name["other-garment"]["compatible"] is False
         # `ref` is what a PATCH writes straight into `pricing_plan:` --
-        # workspace-rooted (PRD 73), ready to use unchanged (mirrors
+        # workspace-rooted, ready to use unchanged (mirrors
         # `MediaFileSummary.ref`).
         assert by_name["tee-basic"]["ref"] == "pricing-plans/tee-basic.yaml"
 

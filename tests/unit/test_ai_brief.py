@@ -1,6 +1,6 @@
 """``ai/brief.py``: the packaged default `prompts/brief.md`, the task a
 provider is handed, and the hard validation a drafted brief passes before it
-can reach a listing's Brief field (PRD 68).
+can reach a listing's Brief field.
 
 Pure string/JSON assembly and validation, so it is tested directly against
 fixtures rather than a workspace -- the same split `test_ai_prompt.py` draws

@@ -1,5 +1,5 @@
 """Market research end to end against the in-memory Etsy market
-(market-seo.md, *Market search* and *Scoring*; implementation plan, PR 2).
+(features/market-seo-20260924/spec.md, *Market search* and *Scoring*; implementation plan, PR 2).
 
 Three queries in; out come at most twenty scored listings, a phrase list and
 the counts the panel shows. What these tests hold research to is mostly about

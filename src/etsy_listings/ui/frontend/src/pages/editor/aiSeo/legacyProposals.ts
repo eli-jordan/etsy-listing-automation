@@ -1,5 +1,5 @@
 /**
- * The browser-local proposals this app kept before A41 moved them to the
+ * The browser-local proposals this app kept before ADR-0049 moved them to the
  * server: the pending proposal per workspace and listing, and the
  * `generated_at` of the last one each listing received. The spec (*Durable
  * AI proposals*) discards them rather than migrating them, so `main.tsx`

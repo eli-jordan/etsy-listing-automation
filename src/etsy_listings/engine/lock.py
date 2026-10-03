@@ -1,4 +1,4 @@
-"""``state.lock.json``: the verbatim last-applied desired document. A2.
+"""``state.lock.json``: the verbatim last-applied desired document. ADR-0008.
 
 Hashing rules, enforced by the single :func:`canonical_hash` helper every stage
 must go through: hash only the ``applied`` subtree; ``applied_at``,
@@ -13,7 +13,7 @@ with the rules for doing so written down one module away, in
 implemented in another are rules that drift, so :meth:`Lockfile.fold` is now
 where a stage's result becomes the next lockfile, and
 :meth:`Lockfile.applied_for` is where a stage gets its own subtree back --
-which is what lets the ``Stage`` protocol drop a method (A2, A20).
+which is what lets the ``Stage`` protocol drop a method.
 """
 
 from __future__ import annotations
@@ -84,13 +84,13 @@ class StageApplyResult:
     they were previously documented here and implemented a module away.
 
     ``applied`` becomes ``lock.applied[stage]`` -- the verbatim last-applied
-    document A2 hashes. ``outputs`` merges into the lockfile's separate
+    document ADR-0008 hashes. ``outputs`` merges into the lockfile's separate
     ``outputs`` axis (workspace-relative path -> content hash), which is what
     later decides whether a file needs *re-uploading*, independently of
     whether the stage needed to *re-run* at all.
 
     ``remote`` merges into ``lock.remote``: ids an API handed back, which the
-    stage did not choose and cannot derive (A20). Each stage owns a key prefix
+    stage did not choose and cannot derive. Each stage owns a key prefix
     -- ``printify_*``, ``etsy_*`` -- so one arriving never displaces another's.
 
     **``remote`` is never hashed**, and that is the point of keeping it out of
@@ -106,12 +106,12 @@ class StageApplyResult:
 
 
 class IncompleteApply(BaseModel):
-    """A29: which stage a failed ``apply`` stopped at, still on the lockfile.
+    """ADR-0037: which stage a failed ``apply`` stopped at, still on the lockfile.
 
     ``execute`` folds each stage's result as it goes, so a crash after
     ``printify_product`` created a product still leaves that id in
     ``remote`` -- the fold already happened. What was missing was a record
-    that the *run* did not finish: without one, PRD 48's duplicate-create
+    that the *run* did not finish: without one, ADR-0023's duplicate-create
     guard is the only thing that still knows a later stage never ran, and
     only for the one stage it happens to protect. This is the general marker,
     set for whichever stage raised.
@@ -196,7 +196,7 @@ class Lockfile(BaseModel):
         ``applied[stage]`` is a whole document, so a stage that stops emitting
         a field must not keep the old one. ``remote`` is shared *across*
         stages, so a Printify id arriving must not take the Etsy listing id
-        with it (A20) -- it merges.
+        with it -- it merges.
         """
         completed = list(self.stages_completed)
         if stage not in completed:
@@ -211,7 +211,7 @@ class Lockfile(BaseModel):
         )
 
     def marked_incomplete(self, stage: str) -> Lockfile:
-        """Record that ``stage`` raised mid-``apply`` (A29).
+        """Record that ``stage`` raised mid-``apply``.
 
         Called from exactly one place: ``execute``'s except-and-re-raise,
         after everything before ``stage`` has already been folded in. Kept as
@@ -234,10 +234,10 @@ class Lockfile(BaseModel):
     def stamped(self, *, tool_version: str, applied_at: str) -> Lockfile:
         """The same content, marked with what wrote it and when.
 
-        Separate from :meth:`fold` because it happens once per run rather than
-        once per stage -- and because neither field may ever enter a hash
-        (A2), so the one place they are set is the one place to look to check
-        that they have not.
+                Separate from :meth:`fold` because it happens once per run rather than
+                once per stage -- and because neither field may ever enter a hash
+        , so the one place they are set is the one place to look to check
+                that they have not.
         """
         return self.model_copy(update={"tool_version": tool_version, "applied_at": applied_at})
 
@@ -255,7 +255,7 @@ class Lockfile(BaseModel):
         path.parent.mkdir(parents=True, exist_ok=True)
         tmp = path.with_suffix(path.suffix + ".tmp")
         # `exclude_none`: the only field that can be `None` today is
-        # `incomplete`, and A29 needs it gone from the file entirely when
+        # `incomplete`, and ADR-0037 needs it gone from the file entirely when
         # unset -- not written as `"incomplete": null` -- so that a clean
         # lockfile stays byte-identical to one written before this field
         # existed.

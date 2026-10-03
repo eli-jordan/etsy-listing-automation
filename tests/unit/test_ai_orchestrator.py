@@ -37,7 +37,7 @@ from etsy_listings.ai.providers import FakeAiProvider
 
 _PROMPT = "Write SEO copy.\n"
 """Stands in for the seller's `prompts/seo.md`. The orchestrator takes the
-text rather than a path (PRD 68 moved prompt assembly out of the adapters),
+text rather than a path (ADR-0003 moved prompt assembly out of the adapters),
 so these tests need no workspace at all."""
 
 
@@ -284,7 +284,7 @@ def test_provider_becoming_unavailable_during_repair_surfaces_as_try_again() -> 
 
 # --------------------------------------------------------------- brief drafting
 #
-# `generate_brief` is the same `run_task` under a different decoder (PRD 68),
+# `generate_brief` is the same `run_task` under a different decoder,
 # so these do not re-test fallback, repair or the deadline -- every case
 # above already covers those once. What is worth asserting is exactly what
 # differs: which task a provider is handed, and that a brief-shaped response

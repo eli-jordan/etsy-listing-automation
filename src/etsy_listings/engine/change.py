@@ -1,4 +1,4 @@
-"""The shared ``Change`` vocabulary. A2: each stage writes its own comparison, so
+"""The shared ``Change`` vocabulary. ADR-0008: each stage writes its own comparison, so
 the shared surface here is the vocabulary and a handful of helpers -- not a
 generic differ. Keeping the *mechanics* shared is what stops six near-identical
 routines diverging."""
@@ -56,12 +56,12 @@ class Drift:
     live: Any
     last_applied_label: str | None = None
     live_label: str | None = None
-    """A30: a human name in place of ``last_applied``/``live``'s raw id, when
+    """ADR-0038: a human name in place of ``last_applied``/``live``'s raw id, when
     the stage that found the drift can name one. ``None`` by default -- most
     drift is already scalar text (a title, a boolean) with nothing to name,
     and a stage with no catalog to ask (``product_diff``, ``publish``) simply
     never sets these. Filled by `etsy_listing._drift` from the
-    :class:`~etsy_listings.clients.etsy.shopcatalog.EtsyShopCatalog` A25
+    :class:`~etsy_listings.clients.etsy.shopcatalog.EtsyShopCatalog` ADR-0033
     already resolved this run, so naming an id costs no request `plan()`'s own
     comparison was not already going to make -- `plan()` stays pure (no
     client) by never asking one itself."""
@@ -121,7 +121,7 @@ class Action:
 
     ``missing_outputs`` is the subset of ``outputs`` that does not exist on
     disk right now. It is the stage that observes this, never the renderer:
-    presentation may not stat a file (A2).
+    presentation may not stat a file.
     """
 
     description: str
@@ -152,7 +152,7 @@ class StageBlocked:
 
 
 StageOutcome = StageIdle | StageWork | StageBlocked
-"""The only three answers a stage can give (A33).
+"""The only three answers a stage can give.
 
 The former product of ``will_run``, ``reason``, ``blocked``, changes and
 actions admitted contradictions that the repository's invariants explicitly
@@ -181,7 +181,7 @@ class Verdict:
         ``Blocked``, and it covers every refusal that can be decided from
         config alone. This covers the rest: a retail price below Printify's
         cost needs ``variants[].cost``, which exists only on a product that
-        already exists (PRD 40's amendment), so the check *cannot* happen
+        already exists (ADR-0020's amendment), so the check *cannot* happen
         before ``read_live``.
 
         The alternative it replaces was a verdict that would not run carrying
@@ -243,7 +243,7 @@ class StagePlan:
 
     The outcome owns the mutually exclusive idle/work/blocked decision.
     ``snapshot`` carries unchanged facts for review and remains excluded from
-    the A31 fingerprint.
+    the ADR-0039 fingerprint.
     """
 
     stage: str
@@ -253,6 +253,10 @@ class StagePlan:
     group: str | None = None
     """The stage this one is shown under (``Stage.group``), stamped by the
     engine like ``stage`` itself."""
+
+    review_hash: str | None = None
+    """Stable execution inputs not expressed by changes/actions (ADR-0039).
+    Separate from display snapshots, so preview availability cannot stale a review."""
 
     @classmethod
     def no_work(

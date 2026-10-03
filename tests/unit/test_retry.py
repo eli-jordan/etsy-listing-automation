@@ -1,4 +1,4 @@
-"""A21: when a failed request is worth sending again, and how long to wait.
+"""ADR-0009: when a failed request is worth sending again, and how long to wait.
 
 The delays are computed here rather than slept, so every test is instant and
 deterministic -- the jitter source and the clock are both injected.
@@ -7,7 +7,7 @@ The rule that carries the most weight is the one about methods. A 429 means
 Printify rejected the request before doing anything with it, so resending is
 free whatever the verb. A 500 means nothing of the sort: the write may well
 have landed, and `create_product` has no idempotency key and no conflict, so a
-retried POST is exactly how one design becomes two products (PRD 48).
+retried POST is exactly how one design becomes two products.
 """
 
 from __future__ import annotations

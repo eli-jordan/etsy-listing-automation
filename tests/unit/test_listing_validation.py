@@ -135,8 +135,8 @@ class TestCopyIsConcrete:
         assert _check(_listing()) == []
 
     def test_a_non_empty_body_does_not_excuse_an_empty_lead(self) -> None:
-        """The lead is required regardless of the body (PRD's description
-        model) -- a listing-specific `text` filled in must not quiet the
+        """The lead is required regardless of the body  -- a listing-specific `text` filled in must
+        not quiet the
         lead's own block."""
         listing = _listing()
         etsy = listing.etsy.model_copy(
@@ -400,7 +400,7 @@ class TestNothingChosenYet:
 
 
 class TestLifecycleVerb:
-    """PRD 62: wrong verb is Blocked, never rewritten as the right one."""
+    """lifecycle intent: wrong verb is Blocked, never rewritten as the right one."""
 
     def test_deleted_on_a_published_listing_blocks_and_says_to_retire(self) -> None:
         issues = check_lifecycle_verb("deleted", published=True)
@@ -500,7 +500,7 @@ def _blocks(issues: list[Issue]) -> list[Issue]:
 
 
 class TestVideos:
-    """Etsy's help page is the gate (PRD 72): the API itself took a 20 s
+    """Etsy's help page is the gate: the API itself took a 20 s
     clip, so nothing past this point would catch one."""
 
     def test_a_clip_inside_every_limit_has_no_issue(self) -> None:
@@ -563,7 +563,7 @@ class TestVideos:
 
 
 class TestListingTemplateCompleteness:
-    """A36: a listing template is checked with the listing's own production
+    """template completeness: a listing template is checked with the listing's own production
     checks, and none about a design, a brief or copy -- those are absent on
     purpose, not missing."""
 

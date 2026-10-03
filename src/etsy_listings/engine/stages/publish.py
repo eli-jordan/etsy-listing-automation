@@ -2,7 +2,7 @@
 Etsy shop, and polls until the resulting listing id exists.
 
 Three things measured in
-[docs/printify-etsy-integration.md](../../../../docs/printify-etsy-integration.md)
+[docs/research/printify-etsy-integration.md](../../../../docs/research/printify-etsy-integration.md)
 shape this stage:
 
 - **The lock is real and asynchronous.** ``POST publish.json`` answers
@@ -20,7 +20,7 @@ shape this stage:
   only exists on a product that already exists, which is exactly what
   ``read_live`` has in hand by the time ``plan`` runs -- so the check lives in
   ``plan()``, turning a remote refusal into something `plan` can say before
-  anything is sent (PRD 40's amendment).
+  anything is sent (ADR-0020's amendment).
 
 The desired variant matrix is rebuilt through
 :func:`~etsy_listings.engine.stages.printify_product.resolve_variant_pricing`,
@@ -54,7 +54,7 @@ from etsy_listings.errors import UserFacingError
 
 ETSY_LISTING_HANDLE_KEY = "etsy_listing_handle"
 PUBLISH_LOCKED_KEY = "printify_publish_locked"
-"""This stage's own keys in ``lock.remote`` (A20). The listing id it also
+"""This stage's own keys in ``lock.remote``. The listing id it also
 writes is named by ``etsy_target``, not here: two later stages read it, and a
 key two stages read should not be spelled in the one that happens to mint
 it."""
@@ -106,7 +106,7 @@ class PublishTimeoutError(UserFacingError, RuntimeError):
 class PublishWithoutProductError(UserFacingError, RuntimeError):
     """``apply`` was asked to publish a listing with no Printify product id
     on record. `printify_product` runs first in the pipeline and either mints
-    one (available here via A26's same-run threading) or blocks -- reaching
+    one (available here via ADR-0034's same-run threading) or blocks -- reaching
     here means it blocked for a reason this stage's own gates do not share
     (a design too small, or a garment change), which is a real, if rare, gap
     between two independently-gated stages rather than a wiring defect.
@@ -120,7 +120,7 @@ class PublishWithoutProductError(UserFacingError, RuntimeError):
 
 
 class PublishApplied(BaseModel):
-    """The verbatim last-applied document (A2)."""
+    """The verbatim last-applied document."""
 
     model_config = ConfigDict(frozen=True, extra="ignore")
 
@@ -138,7 +138,7 @@ class PublishDesired:
     priced_variants: tuple[PricedVariant, ...]
     """The full resolved matrix, colour and size included -- carried rather
     than collapsed straight to ``{id: price}`` because the below-cost
-    snapshot (A30) needs to *name* a variant, not just its id, and this is
+    snapshot needs to *name* a variant, not just its id, and this is
     the one place that resolution exists."""
     missing: tuple[tuple[str, str], ...] = ()
     currency: str = ""
@@ -163,8 +163,8 @@ class PublishDesired:
 
 class BelowCostRow(BaseModel):
     """One variant priced under what Printify charges to make it -- the
-    row `plan()` already refuses over (:func:`_below_cost`), named for the
-    before/after review (A30) rather than left as a bare variant id."""
+    row `plan()` already refuses over ( :func:`_below_cost`), named for the
+    before/after review rather than left as a bare variant id."""
 
     model_config = ConfigDict(frozen=True)
 
@@ -180,7 +180,7 @@ class BelowCostRow(BaseModel):
 
 
 class PublishSnapshot(BaseModel):
-    """Domain facts for the review (A30): only the rows the stage's own
+    """Domain facts for the review: only the rows the stage's own
     ``plan()`` would refuse over, so the price table's red marker is never a
     second copy of the below-cost rule."""
 
@@ -269,7 +269,7 @@ class PublishStage:
             if shortfall:
                 # A refusal, not a quiet no-op: `plan` renders this beside the
                 # ones `desired()` raises. It cannot *be* one of those -- the
-                # costs it needs arrive with `read_live` (PRD 40's amendment).
+                # costs it needs arrive with `read_live` (ADR-0020's amendment).
                 return Verdict.refused(_below_cost_message(shortfall), drift=drift)
 
         if applied is None:
@@ -283,7 +283,7 @@ class PublishStage:
         return Verdict.no_work(drift=drift)
 
     def snapshot(self, desired: PublishDesired, live: PublishLive | None) -> PublishSnapshot:
-        """The below-cost rows only, named (A30) -- reuses ``_below_cost``
+        """The below-cost rows only, named -- reuses ``_below_cost``
         rather than re-deriving which variants are under cost, so the price
         table's red marker cannot drift from the rule ``plan()`` refuses
         with."""

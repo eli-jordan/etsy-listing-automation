@@ -1,14 +1,14 @@
-"""The latest AI SEO proposal per listing, kept in server cache (A41; spec,
-*Durable AI proposals*; PRD 4 and 71 as amended by PRD 74).
+"""The latest AI SEO proposal per listing, kept in server cache (ADR-0049; spec,
+*Durable AI proposals*; ADR-0003, ADR-0044 as amended by ADR-0047).
 
 ``.cache/proposals/<listing>.json`` holds one record per listing:
 the ranked choices, the inputs frozen when they were generated, when, which
 run origin wrote it, and which of its three sections the seller has accepted
 or dismissed. Regeneration replaces it; there is no history and no expiry.
 It goes when the listing is deleted or fully applied, or ``.cache`` is
-cleared, and moves when the listing is renamed (A42).
+cleared, and moves when the listing is renamed.
 
-It lives here rather than beside the UI so the engine can reach it (A44's
+It lives here rather than beside the UI so the engine can reach it (ADR-0050's
 cleanup after a full apply) without importing ``ui``.
 
 :func:`proposal_staleness` is the one answer to "does this proposal still
@@ -124,7 +124,7 @@ class ProposalResolution(BaseModel):
 
 
 class ProposalRecord(BaseModel):
-    """``.cache/proposals/<listing>.json`` (A41)."""
+    """``.cache/proposals/<listing>.json``."""
 
     model_config = ConfigDict(populate_by_name=True)
 
@@ -148,14 +148,14 @@ _LOCKS: dict[tuple[str, str], threading.Lock] = {}
 """Every record's lock in this process, keyed by the resolved proposals
 directory and the casefolded listing name. Process-wide, not per store:
 the engine removes a fully applied listing's proposal through a store of
-its own (A44) while the UI's store may be resolving the same record, and
+its own while the UI's store may be resolving the same record, and
 two sets of locks would let the remove land inside that read-modify-write
 and be written back over."""
 
 
 class ProposalStore:
     """The one reader and writer of proposal records. Every mutation is a
-    read-modify-write under the record's lock (A37), and every store over
+    read-modify-write under the record's lock, and every store over
     one workspace shares those locks, so a store is cheap to make."""
 
     def __init__(self, workspace: Workspace) -> None:
@@ -247,7 +247,7 @@ class ProposalStore:
             return record
 
     def move(self, old: str, new: str) -> None:
-        """Rename's half of A42: the record follows the listing."""
+        """Rename's half of rename and delete hooks: the record follows the listing."""
         with self._lock(old, new):
             record = self.load(old)
             if record is None:
@@ -259,7 +259,7 @@ class ProposalStore:
             self._save(record.model_copy(update={"listing": new}))
 
     def remove(self, listing: str) -> None:
-        """Delete's half of A42, and A44's cleanup after a full apply."""
+        """Delete's half of rename and delete hooks, and ADR-0050's cleanup after a full apply."""
         with self._lock(listing):
             if self.load(listing) is not None:
                 self._workspace.proposal_file(listing).unlink(missing_ok=True)
@@ -274,7 +274,7 @@ class ProposalStaleness(BaseModel):
 
 class ListingProposal(BaseModel):
     """A listing's cached proposal as the editor and the batch summary read
-    it (A41): the record, and whether it still describes the saved listing.
+    it: the record, and whether it still describes the saved listing.
     ``stale`` is computed from the saved listing on every read, never
     stored."""
 
@@ -293,7 +293,7 @@ def _same_set(frozen: Sequence[str], now: Sequence[str]) -> bool:
 
 
 def proposal_staleness(frozen: SeoProposalSnapshot, now: SeoProposalSnapshot) -> ProposalStaleness:
-    """Which generation inputs changed between ``frozen`` and ``now`` (A41).
+    """Which generation inputs changed between ``frozen`` and ``now``.
 
     Ported field by field from the frontend's ``isStale``. Two echoes are
     folded into the change that caused them, so the heading names what the

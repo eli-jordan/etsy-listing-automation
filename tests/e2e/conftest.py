@@ -275,13 +275,13 @@ def point_at_throwaway_shops(
     # leaving it unset is what kept that stage out of every run of the
     # Phase 3 test. Resolved from the shop rather than hard-coded, so this
     # configures itself against whichever throwaway shop it is pointed at --
-    # and by name, which is also what exercises A25's name -> id resolution
+    # and by name, which is also what exercises ADR-0033's name -> id resolution
     # against the real API.
     profiles = [p for p in etsy_client.shipping_profiles(etsy_shop_id) if not p.is_deleted]
     if not profiles:
         prerequisite_missing(
             f"Etsy shop {etsy_shop_id} has no shipping profile -- create one in Shop Manager; "
-            f"`etsy_listing` cannot patch a listing without one (PRD 58)"
+            f"`etsy_listing` cannot patch a listing without one (ADR-0032)"
         )
     set_etsy_listing_defaults(root, who_made="i_did", shipping_profile=profiles[0].title)
     # `i_did`, not the real `someone_else` default: this throwaway shop is not

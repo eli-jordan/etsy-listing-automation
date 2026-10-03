@@ -9,7 +9,7 @@ import { useMarketPanel } from "../market/useMarketPanel";
 
 /**
  * Listing Details' **AI Mode** (AI SEO implementation plan, PR7): readiness,
- * the AI run behind the button (`useAiRun`; market-seo.md, *AI runs*), the
+ * the AI run behind the button (`useAiRun`; features/market-seo-20260924/spec.md, *AI runs*), the
  * listing's cached proposal, and the three independent per-field acceptance
  * actions. `ListingEditorPageContent` owns it, above the tabs, because a run
  * outlives the tab it was started from; `DetailsTab` renders it.
@@ -22,7 +22,7 @@ import { useMarketPanel } from "../market/useMarketPanel";
  * already wrote it, so it is not autosaved again), and a proposal opens the
  * drawers.
  *
- * ## The proposal lives on the server (A41)
+ * ## The proposal lives on the server
  *
  * The run caches its proposal before announcing it, so the editor reads it
  * with `GET …/proposal` on open and again after every save, and records a
@@ -30,9 +30,9 @@ import { useMarketPanel } from "../market/useMarketPanel";
  * whether it is stale, against the *saved* listing, so the batch summary and
  * this editor agree; an edit shows up as stale once autosave lands it. A
  * stale proposal stays usable: the drawer heading names what changed
- * (PRD 74; UI doc §8).
+ * (ADR-0047; UI doc §8).
  *
- * ## A batch's run (A40)
+ * ## A batch's run
  *
  * While a batch row owns the listing, readiness says `batch_pending`: the
  * control stays disabled with the server's hint, and every
@@ -40,7 +40,7 @@ import { useMarketPanel } from "../market/useMarketPanel";
  * the row's turn comes, so the editor shows the batch run live and opens
  * its drawers as a manual run's would.
  *
- * ## A deploy (A43)
+ * ## A deploy
  *
  * While a plan or apply holds the listing, readiness says `deploying`:
  * deploying takes precedence over AI (UI doc §8), so the control stays

@@ -425,7 +425,7 @@ def test_a_plan_run_finishes_while_another_listing_s_ai_run_is_in_flight(
     workspace_root: Path, client: TestClient, provider: ChainProvider
 ) -> None:
     """A deploy never queues behind AI work. Its own listing's is cancelled
-    first (A43, ``tests/behaviour/test_deploy_precedence.py``); another
+    first (ADR-0050, ``tests/behaviour/test_deploy_precedence.py``); another
     listing's is left to run beside it."""
     copy_listing(workspace_root, "second")
     gate = provider.gate("seo")

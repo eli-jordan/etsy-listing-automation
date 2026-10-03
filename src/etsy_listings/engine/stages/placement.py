@@ -1,4 +1,4 @@
-"""Which design prints on which colour. A14, and the one rule two stages share.
+"""Which design prints on which colour. artwork resolution, and the one rule two stages share.
 
 Two stages put a design somewhere, and they must agree about which one: the
 render stage composites it onto a mockup photo, and the product stage ships it
@@ -23,11 +23,13 @@ from pathlib import Path
 
 from etsy_listings.config.garment_profile import GarmentProfile
 from etsy_listings.config.listing import Listing
+from etsy_listings.config.listing_validation import check_artwork_resolved
 from etsy_listings.engine.lock import hash_file
+from etsy_listings.errors import UserFacingError
 from etsy_listings.workspace.workspace import Workspace
 
 
-class ArtworkResolutionError(ValueError):
+class ArtworkResolutionError(UserFacingError):
     """Names *which* key was asked for and *who* asked for it.
 
     Without both, the message sends you to the wrong file. A template with
@@ -46,19 +48,8 @@ class ArtworkResolutionError(ValueError):
         wanted: str | None = None,
         source: str = "",
     ) -> None:
-        detail = f"colour {colour!r}" if colour is not None else "this template"
-        tone_note = f" (tone: {tone})" if tone else ""
-        if wanted is not None:
-            super().__init__(
-                f"{detail}{tone_note}: {source} asks for artwork {wanted!r}, which the "
-                f"design does not have -- it offers {available!r}. Add {wanted!r} to the "
-                f"listing's design:, or remove the override."
-            )
-        else:
-            super().__init__(
-                f"{detail}{tone_note} needs an artwork but none resolves -- design offers "
-                f"{available!r}; add a listing.artwork override or a matching key"
-            )
+        issues = check_artwork_resolved(colour, tone, available, wanted=wanted, source=source)
+        super().__init__(issues[0].message)
 
 
 @dataclass(frozen=True)
@@ -68,7 +59,7 @@ class ArtworkGroup:
     Colours rather than Printify variant ids: which ink a colour gets is a
     fact about the listing, and turning it into ids is the product stage's
     business. A group per artwork rather than one print area for everything,
-    because PRD 30's ``on-light``/``on-dark`` split is exactly this -- two
+    because ``on-light``/``on-dark`` split is exactly this -- two
     files on one product, partitioned by colour. A single-artwork listing is
     simply the one-group case.
     """
@@ -92,7 +83,7 @@ class DesignPlacement:
     profile: GarmentProfile
     paths: dict[str, Path]
     """Artwork key -> the design file it names, resolved through
-    :meth:`Workspace.resolve_ref` (PRD 73), so a ``design:`` ref cannot escape
+    :meth:`Workspace.resolve_ref`, so a ``design:`` ref cannot escape
     the root."""
 
     @classmethod
@@ -110,7 +101,7 @@ class DesignPlacement:
         )
 
     def artwork_for(self, colour: str | None, *, template_override: str | None = None) -> str:
-        """Resolution order (docs/multi-placement-rendering.md item 2):
+        """Resolution order (docs/features/multi-placement-rendering-20260903/spec.md item 2):
         1. ``listing.artwork[colour]`` -- explicit per-design override, wins even
            over the template's own override (deliberately -- see the doc).
         2. The template/placement's own ``artwork`` override.
@@ -134,11 +125,12 @@ class DesignPlacement:
         if candidate is None and len(keys) == 1:
             candidate, source = keys[0], "the design's sole key"
 
-        if candidate is None or candidate not in key_set:
-            tone = self.profile.colors.get(colour) if colour is not None else None
+        tone = self.profile.colors.get(colour) if colour is not None else None
+        if check_artwork_resolved(colour, tone, sorted(keys), wanted=candidate, source=source):
             raise ArtworkResolutionError(
                 colour, tone, sorted(keys), wanted=candidate, source=source
             )
+        assert candidate is not None
         return candidate
 
     def design_for(self, colour: str | None, *, template_override: str | None = None) -> Path:

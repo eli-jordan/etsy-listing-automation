@@ -1,4 +1,4 @@
-"""Backoff policy for the write-side clients. A21.
+"""Backoff policy for the write-side clients. ADR-0009.
 
 Retry arrives in Phase 2 rather than Phase 6 with the rest of the rate-limiting
 work, because it is needed the moment anything writes: a 429 against a client
@@ -10,7 +10,7 @@ Printify rejected the request before touching it, so resending is free
 whatever the verb. A 5xx or a dropped connection is the opposite: the write
 may well have landed, and ``POST products.json`` has no idempotency key and no
 conflict, so a retried create is precisely how one design becomes two products
-(PRD 48, and ``TestNothingStopsUsCreatingTheSameProductTwice`` in the e2e
+(ADR-0023, and ``TestNothingStopsUsCreatingTheSameProductTwice`` in the e2e
 layer). So idempotent methods are retried on both; POST only on 429.
 
 Nothing here sleeps on its own clock or reads the global one: ``sleep`` and the

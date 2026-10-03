@@ -1,11 +1,10 @@
 """Market research: three buyer queries in, twenty scored comparable
-listings, a ranked phrase list and a market-data block out (market-seo.md,
+listings, a ranked phrase list and a market-data block out (features/market-seo-20260924/spec.md,
 *Market search*, *Scoring* and *What the proposal sees*).
 
-The names below are all in memory, and nothing here knows about HTTP or the
-UI. The two modules that touch disk are imported by their own names, never
-re-exported here, because they need the workspace -- and the workspace's
-``settings.yaml`` loader imports :class:`MarketWeights` from this package:
+Research results are in memory. Disk cache/snapshot adapters are imported
+by their own module names. MarketWeights is owned by config and re-exported
+here for compatibility; settings loading never imports market.
 
 - ``market.cache`` -- :class:`~etsy_listings.market.cache.CachedEtsyMarketClient`,
   the 7-day caches wrapped around any

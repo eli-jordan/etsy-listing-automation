@@ -2,9 +2,9 @@
 
 No I/O, no clock, no globals: this module builds strings and parses payloads,
 which is what lets the whole flow be tested without a browser, a socket or a
-recorded response. What talks to the network lives in :mod:`transport`, what
-catches the redirect lives in :mod:`callback`, and what remembers the result
-lives in :mod:`tokens` (A23).
+recorded response. What talks to the network lives in:mod:`transport`, what
+catches the redirect lives in:mod:`callback`, and what remembers the result
+lives in:mod:`tokens`.
 
 Two facts about Etsy shape everything here:
 
@@ -13,10 +13,10 @@ Two facts about Etsy shape everything here:
   verifier has to outlive the browser round trip.
 - **The redirect URI must match a pre-registered string exactly**, character
   for character: scheme, host, port, path, no trailing slash. That is why
-  :data:`REDIRECT_URI` is a constant rather than something assembled from a
+:data:`REDIRECT_URI` is a constant rather than something assembled from a
   port number at call time -- the registered string is the source of truth,
-  and :mod:`callback` takes its port and path *from* it rather than the other
-  way round (PRD 50).
+  and:mod:`callback` takes its port and path *from* it rather than the other
+  way round.
 """
 
 from __future__ import annotations
@@ -41,15 +41,14 @@ REDIRECT_URI = "http://localhost:8517/oauth/callback"
 """Registered verbatim with the Etsy app. `http` on loopback: Etsy's
 authentication guide says redirect URIs must be `https://`, while Etsy's own
 quick-start tutorial uses `http://localhost:3003/oauth/redirect` throughout.
-The tutorial is the one that has been run (PRD 50)."""
+The tutorial is the one that has been run."""
 
 SCOPES: tuple[str, ...] = ("listings_r", "listings_w", "shops_r", "shops_w")
 """The smallest set covering Phases 3-6. `shops_w` lets the editor create a
-shop section inline (PRD 53); it does not broaden the tool into managing
-shipping profiles (PRD 54). `listings_w` covers image upload and delete;
+shop section inline; it does not broaden the tool into managing
+shipping profiles. `listings_w` covers image upload and delete;
 `listings_d` is for deleting listings, which this tool never does. Changing
-this forces every user through the browser again, so it is a decision (PRD
-50) rather than a default."""
+this forces every user through the browser again, so it is a decision rather than a default."""
 
 VERIFIER_BYTES = 32
 """32 random bytes is 43 base64url characters -- the shortest verifier RFC
@@ -189,7 +188,7 @@ class TokenResponse:
 
     Both grants return the same shape, including a **new refresh token every
     time** -- rotation is not an occasional event to handle, it is the normal
-    case (A23).
+    case.
     """
 
     access_token: str

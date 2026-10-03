@@ -1,6 +1,6 @@
 """Contract layer for the Printify catalog client: payload shape, auth, and
 error decoding, driven through real ``httpx`` with a mock transport standing
-in for the network (A4's "cassette" job -- a fake would tell us nothing about
+in for the network (ADR-0010's "cassette" job -- a fake would tell us nothing about
 the wire format or the headers that actually go out).
 
 The reason this file exists: Printify's catalog endpoints are *not*
@@ -183,9 +183,9 @@ def test_other_http_errors_are_not_swallowed_as_auth_failures() -> None:
 
 def test_a_rate_limited_catalog_read_is_retried() -> None:
     """The behaviour this reader did not have. A 429 on ``blueprints.json``
-    failed a ``new`` run outright, while the identical 429 on a product write
-    rode out its backoff window -- two implementations of one concern, drifted
-    (A21)."""
+        failed a ``new`` run outright, while the identical 429 on a product write
+        rode out its backoff window -- two implementations of one concern, drifted
+    ."""
     responses = iter(
         [
             httpx.Response(429, headers={"Retry-After": "0"}),

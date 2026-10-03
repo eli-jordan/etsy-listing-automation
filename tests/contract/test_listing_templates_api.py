@@ -1,4 +1,4 @@
-"""The listing-templates resource's HTTP surface (A35, A36; batch plan PR 1):
+"""The listing-templates resource's HTTP surface (ADR-0047, template completeness; batch plan PR 1):
 status codes, payload shape, and -- because a refusal must never half-write
 -- what is on disk after each answer.
 
@@ -297,7 +297,7 @@ class TestReadAndDelete:
 
 
 class TestPut:
-    """A36's valid-only save. The editor that drives it is PR 6's; the
+    """valid-only save. The editor that drives it is PR 6's; the
     contract is fixed now so a template on disk is never incomplete."""
 
     def test_an_incomplete_document_is_not_saved_and_the_file_is_untouched(

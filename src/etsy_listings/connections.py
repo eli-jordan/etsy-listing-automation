@@ -1,26 +1,13 @@
 """What a workspace can talk to: one place that builds the clients.
 
-Assembling a signed-in Etsy connection takes five steps in a fixed order --
-read the ``.env``, decide whether there is a key pair at all, open the token
-store at ``.auth/etsy-tokens.json`` with a refresh that can find the keystring
-again, hang a transport off the store's access token, and wrap it in a
-client. `cli`, `setup`, `auth` and the e2e layer each wrote that sequence out,
-which is four places to update when the shape changes and four chances to get
-the lazy/eager question wrong -- the question this module exists to answer
-once:
+Factories build transports and clients without reading credentials. Printify
+tokens, Etsy app keys and signed-in bearers are resolved on each request, so
+clients can be built before auth and key rotations take effect without a
+restart. Missing credentials fail actionably when a request needs them.
 
-**A credential is resolved when it is used, never when a client is built.**
-``plan`` constructs a catalog client it may never call, and a workspace that
-has only ever rendered mockups has no ``.env`` at all. Demanding a token at
-construction time would break every one of them, so Printify's token arrives
-through a callable and Etsy's bearer through the store (A22, A23).
-
-**Absent is not broken.** :func:`etsy_listing_client` answers ``None`` for a
-workspace that has never run `auth etsy`, because that is an ordinary state of
-a Phase 1/2 workspace and the Etsy stages already report it as a blocked
-stage naming the command that fixes it. A credential that is genuinely
-*missing* where one is required is still reported by name and file, by
-``Secrets`` -- never as a raw ``401``.
+etsy_app_key is an explicit availability query for readiness/setup callers;
+it is separate from client construction. Market requests never attach a
+bearer, avoiding unnecessary refresh-token rotation.
 
 This module does not verify anything. Proving a credential works is
 ``credentials.py``'s job, and it is a separate one: `setup` and `auth` verify
@@ -71,7 +58,7 @@ def printify_transport(root: Path) -> Transport:
 
     Shared by both clients because it is one host and one token: they differ
     in what they are allowed to *ask*, which is a matter of which protocol the
-    caller holds, not of which socket the bytes leave through (A22).
+    caller holds, not of which socket the bytes leave through.
     """
 
     def token() -> str:
@@ -153,69 +140,36 @@ def etsy_app_key(root: Path) -> EtsyAppKey | None:
     return secrets.require_etsy_app_key()
 
 
-def etsy_transport(root: Path) -> EtsyTransport | None:
-    """A transport carrying both credentials Etsy wants: the app key on every
-    request, and a bearer resolved through the store at the moment it is sent.
+def _etsy_app_key_source(root: Path) -> Callable[[], EtsyAppKey]:
+    def app_key() -> EtsyAppKey:
+        return Secrets.load(root / layout.ENV_FILE).require_etsy_app_key()
 
-    ``None`` when the workspace has no key pair. A workspace that has one but
-    has never signed in gets a transport that fails when it is *used* -- which
-    is the right moment, since the key pair alone is enough for the unscoped
-    calls `setup` and `auth` make.
-    """
-    app_key = etsy_app_key(root)
-    if app_key is None:
-        return None
-    return EtsyTransport(app_key, bearer=etsy_token_store(root).access_token)
+    return app_key
 
 
-def etsy_listing_client(root: Path) -> EtsyListingClient | None:
-    """The signed-in Etsy connection Phase 3's stages write through, or
-    ``None`` before `auth etsy` has run."""
-    transport = etsy_transport(root)
-    if transport is None:
-        return None
-    return HttpEtsyListingClient(transport)
+def etsy_transport(root: Path) -> EtsyTransport:
+    """Resolve the app key and signed-in bearer on each request."""
+    return EtsyTransport(_etsy_app_key_source(root), bearer=etsy_token_store(root).access_token)
 
 
-def etsy_shop_client(root: Path) -> EtsyShopClient | None:
-    """The unscoped, read-only Etsy surface `setup` also uses (`shops.py`):
-    shop/section/policy lookups that need only the app key pair, never a
-    signed-in bearer -- ``None`` only when the workspace has no key pair at
-    all.
-
-    Deliberately not built from :func:`etsy_transport`: that always hands the
-    transport a bearer *callable*, which every request then calls, and the
-    store raises when no tokens have ever been saved -- fine for the scoped
-    listing surface, which cannot do anything unsigned-in anyway, but wrong
-    here. A bearer is attached only when tokens already exist, so a workspace
-    with a key pair but no sign-in yet can still resolve its own shop's
-    sections (a bearer is a bonus for these calls, never a requirement --
-    mirrors `setupcmd.interactive._default_etsy_access`).
-    """
-    app_key = etsy_app_key(root)
-    if app_key is None:
-        return None
-    tokens = etsy_token_store(root).load()
-    bearer = etsy_token_store(root).access_token if tokens is not None else None
-    return HttpEtsyShopClient(EtsyTransport(app_key, bearer=bearer))
+def etsy_listing_client(root: Path) -> EtsyListingClient:
+    """Build the listing connection without demanding credentials."""
+    return HttpEtsyListingClient(etsy_transport(root))
 
 
-def etsy_market_client(root: Path, *, http: httpx.Client | None = None) -> EtsyMarketClient | None:
-    """The read-only market surface research searches through
-    (market-seo.md), or ``None`` when the workspace has no key pair.
+def etsy_shop_client(root: Path) -> EtsyShopClient:
+    """Unscoped lookups, adding a bearer only if one exists at request time."""
+    store = etsy_token_store(root)
 
-    **The key pair and nothing else** -- never a bearer, even when a sign-in
-    exists. All three market calls are unscoped, and Etsy rotates the refresh
-    token on every use: a bearer these calls do not need would only add a
-    refresh, and a chance to race `plan`/`apply` (or the e2e layer's copy of
-    the token) for the one valid refresh token, to every research run.
+    def bearer() -> str | None:
+        return store.access_token() if store.load() is not None else None
 
-    ``http`` is the connection underneath, injected only by tests.
-    """
-    app_key = etsy_app_key(root)
-    if app_key is None:
-        return None
-    return HttpEtsyMarketClient(EtsyTransport(app_key, client=http))
+    return HttpEtsyShopClient(EtsyTransport(_etsy_app_key_source(root), bearer=bearer))
+
+
+def etsy_market_client(root: Path, *, http: httpx.Client | None = None) -> EtsyMarketClient:
+    """Read-only research with a lazy app key and no rotating bearer."""
+    return HttpEtsyMarketClient(EtsyTransport(_etsy_app_key_source(root), client=http))
 
 
 # ------------------------------------------------------------------- the run
@@ -232,11 +186,11 @@ def run_context(
     The optional clients are what let one context serve every phase: a
     workspace with no Printify shop and no Etsy sign-in still plans and still
     renders, and the stages that need a client report themselves blocked
-    rather than the run failing to start (A20, A26).
+    rather than the run failing to start.
 
     ``credentials_root`` is the E2E seam for a disposable data workspace that
     borrows a configured workspace's secrets. Only credentials come from it;
-    the catalog cache remains under ``workspace`` (A8).
+    the catalog cache remains under ``workspace``.
     """
     sink = {"on_event": on_event} if on_event is not None else {}
     root = credentials_root or workspace.root

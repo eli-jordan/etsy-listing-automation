@@ -1,4 +1,4 @@
-"""Whether a cached proposal still describes its listing (A41; spec, *Durable
+"""Whether a cached proposal still describes its listing (ADR-0049; spec, *Durable
 AI proposals*): the inputs frozen when it was generated against the same
 inputs read from the listing now, with a reason per input that moved.
 

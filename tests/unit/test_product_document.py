@@ -106,12 +106,12 @@ def test_the_document_hashes_the_same_as_the_dict_it_replaced() -> None:
     all -- including one that silently re-applies every product in every
     workspace on upgrade. So it is written out.
 
-    ``colour_slug`` joined ``variants`` for A30: naming a colour Printify has
-    since discontinued (PRD 46) in a `ListChange("colors", removed=...)`
+    ``colour_slug`` joined ``variants`` for ADR-0038: naming a colour Printify has
+    since discontinued in a `ListChange("colors", removed=...)`
     needs the name recorded on the variant that carried it, since the id
     alone no longer resolves in the catalog once it's gone. Adding it changes
     every existing lockfile's `input_hash` once -- a conscious, one-time
-    re-adopt (PRD 48's guard adopts the existing product by title and
+    re-adopt (ADR-0023's guard adopts the existing product by title and
     description rather than duplicating it), not a silent one, which is
     exactly what pinning this literal is for.
     """
@@ -143,7 +143,7 @@ def test_a_document_round_trips_through_json_unchanged() -> None:
     )
 
 
-# ---------------------------------------------------- garment change (PRD 37)
+# ---------------------------------------------------- garment change
 
 
 APPLIED = _desired().applied()
@@ -190,7 +190,7 @@ def test_both_changing_at_once_names_both() -> None:
 
 
 def test_a_group_takes_only_the_variants_whose_colour_it_covers() -> None:
-    """PRD 30's on-light/on-dark split: one product's variants partitioned
+    """on-light/on-dark split: one product's variants partitioned
     across two print areas by colour. The group knows colours; only the stage
     knows which Printify ids those are."""
     desired = _desired(BLACK_M, BLACK_S, IVORY_S)

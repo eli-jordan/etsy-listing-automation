@@ -1,4 +1,4 @@
-"""`unlock`: clear a Printify product stuck publishing (PRD risk 6).
+"""`unlock`: clear a Printify product stuck publishing.
 
 Its one job -- `publishing_failed.json` actually clearing a genuine lock --
 has never been observed against a real stuck publish (none has stuck in
