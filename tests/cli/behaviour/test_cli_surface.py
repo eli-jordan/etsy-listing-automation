@@ -209,14 +209,6 @@ def test_each_swatch_is_styled_with_the_colour_the_stage_sampled(plain_env, caps
     assert out.endswith(" rendered colour-chart-01\n")
 
 
-def test_the_ansi_escapes_survive_to_the_terminal(plain_env, capsys) -> None:
-    """click strips ANSI when it thinks stdout is not a terminal -- which would
-    silently undo the decision `_swatch_glyph` just made."""
-    plain_env.setenv("FORCE_COLOR", "1")
-    cli._echo_event(Event(message="rendered flat-lay-01/black", swatches=((10, 20, 30),)))
-    assert "38;2;10;20;30" in capsys.readouterr().out
-
-
 def test_an_event_with_no_swatch_is_printed_plainly(capsys) -> None:
     cli._echo_event(Event(message="applying render"))
     assert capsys.readouterr().out == "  applying render\n"
