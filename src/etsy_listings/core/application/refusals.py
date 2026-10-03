@@ -129,6 +129,21 @@ class TemplatePhotoMissing(UserFacingError, LookupError):
     has no per-colour photos at all. The message names what was asked for."""
 
 
+class DesignUploadRefused(UserFacingError, ValueError):
+    """A test-design upload the library will not take: no filename, a name
+    that is not a plain filename, or bytes that are not an image. Nothing is
+    written."""
+
+
+class CalibrationDesignMissing(UserFacingError, LookupError):
+    """No uploaded test design by that id. The id came from a list the
+    library handed out, so a missing one means the list moved on."""
+
+    def __init__(self, design: str) -> None:
+        super().__init__(f"unknown test design {design!r}")
+        self.design = design
+
+
 # --------------------------------------------------------- listing templates
 #
 # ADR-0047, template completeness. A name already taken is the domain's own

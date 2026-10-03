@@ -26,10 +26,9 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-import yaml
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 
-from etsy_listings.core.config.errors import ConfigLoadError, format_validation_error
+from etsy_listings.core.config.errors import ConfigLoadError, format_validation_error, parse_yaml
 from etsy_listings.core.config.market_weights import MarketWeights
 
 
@@ -72,10 +71,7 @@ class Settings(BaseModel):
         are :class:`ConfigLoadError`, naming the file and the dotted key."""
         if not path.is_file():
             return cls()
-        try:
-            raw = yaml.safe_load(path.read_text(encoding="utf-8"))
-        except yaml.YAMLError as exc:
-            raise ConfigLoadError(path, f"not valid YAML: {exc}") from exc
+        raw = parse_yaml(path, path.read_text(encoding="utf-8"))
         if raw is None:
             return cls()
         if not isinstance(raw, dict):

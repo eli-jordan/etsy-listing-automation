@@ -8,6 +8,8 @@ an encoding question in a file about a wizard.
 
 from __future__ import annotations
 
+import errno
+
 import pytest
 
 from etsy_listings.cli import terminal
@@ -131,3 +133,27 @@ class _Reconfigurable:
         if self._seen is None:
             raise ValueError("cannot reconfigure")
         self._seen.append(encoding)
+
+
+def test_a_broken_pipe_is_a_reader_gone_everywhere() -> None:
+    assert terminal.stdout_reader_gone(BrokenPipeError(errno.EPIPE, "broken pipe"))
+
+
+@pytest.mark.parametrize(
+    ("platform", "is_pipe", "expected"),
+    [("win32", True, True), ("win32", False, False), ("linux", True, False)],
+)
+def test_einval_is_a_reader_gone_only_for_a_windows_stdout_pipe(
+    monkeypatch, platform: str, is_pipe: bool, expected: bool
+) -> None:
+    monkeypatch.setattr(terminal.sys, "platform", platform)
+    monkeypatch.setattr(terminal, "_stdout_is_pipe", lambda: is_pipe)
+
+    assert terminal.stdout_reader_gone(OSError(errno.EINVAL, "invalid argument")) is expected
+
+
+def test_another_os_error_is_not_a_reader_gone(monkeypatch) -> None:
+    monkeypatch.setattr(terminal.sys, "platform", "win32")
+    monkeypatch.setattr(terminal, "_stdout_is_pipe", lambda: True)
+
+    assert not terminal.stdout_reader_gone(OSError(errno.EACCES, "denied"))

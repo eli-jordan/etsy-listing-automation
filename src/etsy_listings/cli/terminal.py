@@ -14,8 +14,10 @@ nothing but the standard library, so any CLI module may depend on it.
 
 from __future__ import annotations
 
+import errno
 import os
 import re
+import stat
 import sys
 from collections.abc import Mapping
 from typing import TextIO
@@ -65,6 +67,36 @@ def adopt_declared_encoding(environ: Mapping[str, str] | None = None) -> None:
             reconfigure(encoding="utf-8")
         except (OSError, ValueError):
             continue
+
+
+def stdout_reader_gone(exc: OSError) -> bool:
+    """Did ``exc`` come from writing to a stdout pipe nobody reads any more?
+
+    ``etsy-listings auth etsy --help | head`` closes the pipe once ``head``
+    has its lines. POSIX reports that as ``BrokenPipeError``; native-Windows
+    Python reports a write to a closed pipe as ``EINVAL`` instead, which
+    Click's own broken-pipe handling does not recognise. ``EINVAL`` counts
+    only when stdout really is a pipe, so an unrelated invalid-argument error
+    still surfaces.
+    """
+    if isinstance(exc, BrokenPipeError):
+        return True
+    return exc.errno == errno.EINVAL and sys.platform == "win32" and _stdout_is_pipe()
+
+
+def _stdout_is_pipe() -> bool:
+    try:
+        return stat.S_ISFIFO(os.fstat(sys.stdout.fileno()).st_mode)
+    except (OSError, ValueError, AttributeError):  # closed, or not a real file
+        return False
+
+
+def discard_stdout() -> None:
+    """Point the stdout file descriptor at the null device, so the flush
+    Python makes at exit cannot fail a second time on the closed pipe."""
+    devnull = os.open(os.devnull, os.O_WRONLY)
+    os.dup2(devnull, sys.stdout.fileno())
+    os.close(devnull)
 
 
 def encodable(text: str, *, stream: TextIO | None = None) -> bool:

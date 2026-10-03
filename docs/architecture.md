@@ -610,8 +610,9 @@ later. Each traces to a decision.
   client is built**, so a workspace that has only ever rendered mockups can
   still `plan`. Etsy app keys, bearers and Printify tokens are lazy sources;
   the explicit `etsy_app_key` availability query is reserved for
-  readiness/setup operations. `application/shop_discovery.etsy_access` still
-  assembles setup's Etsy shop client outside this module (F06).
+  readiness/setup operations; setup's shop discovery uses that query to decide
+  whether to look, then reads through `etsy_shop_client` like every other
+  caller.
 - **A credential is found, verified and stored through
   `core/application/credentials.py`, and captured through `cli/credentials.py`.**
   Where it already lives (environment, then the workspace `.env`) and how to

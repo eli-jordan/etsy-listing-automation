@@ -6,7 +6,6 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Annotated, Any, Final, Literal, Self
 
-import yaml
 from pydantic import (
     BaseModel,
     BeforeValidator,
@@ -17,7 +16,7 @@ from pydantic import (
 )
 
 from etsy_listings.core.config.description import DescriptionConfig
-from etsy_listings.core.config.errors import ConfigLoadError, format_validation_error
+from etsy_listings.core.config.errors import ConfigLoadError, format_validation_error, parse_yaml
 from etsy_listings.core.config.media import (
     MAX_IMAGES,
     MAX_VIDEOS,
@@ -273,7 +272,7 @@ class Listing(BaseModel):
     def load(cls, path: Path, *, currency: str) -> Listing:
         if not path.is_file():
             raise ConfigLoadError(path, "listing file not found")
-        raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        raw = parse_yaml(path, path.read_text(encoding="utf-8")) or {}
         try:
             return cls.model_validate(raw, context={"currency": currency})
         except ValidationError as exc:

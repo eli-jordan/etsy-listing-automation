@@ -1,24 +1,29 @@
-"""The calibrator's test-design library.
+"""The calibrator's test-design library over HTTP.
 
 Calibration is judged by eye. The bundled grid target answers "is the warp
 right?" precisely and says nothing about how a real ink weight sits on a real
 garment, so the set of things you can preview against has to be open: three
-bundled targets plus whatever the user uploads.
-
-Uploads land in the *workspace* (``test-designs/``), never in this repo, and
-never in ``designs/`` -- that directory holds artwork listings actually ship,
-and a calibration target is not a product.
+bundled targets (static files this package ships) plus whatever the user
+uploads. What an upload may be called, whether it is an image and where it
+lands are ``core/application/calibration_designs.py``'s; this module decodes
+the request and maps its refusals to 400.
 """
 
 from __future__ import annotations
 
-from io import BytesIO
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Request, UploadFile
 from fastapi.responses import Response
-from PIL import Image, UnidentifiedImageError
 
+from etsy_listings.core.application.calibration_designs import (
+    save_uploaded_design,
+    uploaded_design,
+)
+from etsy_listings.core.application.refusals import (
+    CalibrationDesignMissing,
+    DesignUploadRefused,
+)
 from etsy_listings.core.workspace.workspace import Workspace
 from etsy_listings.server.api.schemas import DesignSummary
 from etsy_listings.server.api.thumbnails import thumbnail_response
@@ -57,10 +62,10 @@ def resolve_design(workspace: Workspace, design: str) -> Path:
     bundled = BUNDLED_DESIGNS.get(design)
     if bundled is not None:
         return bundled
-    uploaded = workspace.test_design_file(design)
-    if not uploaded.is_file():
-        raise HTTPException(status_code=400, detail=f"unknown test design {design!r}")
-    return uploaded
+    try:
+        return uploaded_design(workspace, design)
+    except CalibrationDesignMissing as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.get("", response_model=list[DesignSummary])
@@ -86,26 +91,9 @@ def design_thumbnail(request: Request, design: str) -> Response:
 
 @router.post("", response_model=DesignSummary)
 async def upload_design(request: Request, file: UploadFile) -> DesignSummary:
-    workspace = _workspace(request)
-    if not file.filename:
-        raise HTTPException(status_code=400, detail="the upload needs a filename")
-    # Reject rather than sanitise: `Path("../../evil.png").stem` is a
-    # perfectly innocent "evil", so trusting the stem alone would silently
-    # accept a traversal attempt instead of reporting it.
-    if file.filename != Path(file.filename).name:
-        raise HTTPException(status_code=400, detail=f"{file.filename!r} is not a plain filename")
-
-    destination = workspace.test_design_file(Path(file.filename).stem)
-
     payload = await file.read()
-    # Decoded before it is written, so a file that is not an image is refused
-    # rather than sitting in the library until a preview fails on it.
     try:
-        with Image.open(BytesIO(payload)) as probe:
-            probe.verify()
-    except (UnidentifiedImageError, OSError, ValueError) as exc:
-        raise HTTPException(status_code=400, detail="that file is not a readable image") from exc
-
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    destination.write_bytes(payload)
-    return DesignSummary(id=destination.stem, label=destination.stem, source="upload")
+        design = save_uploaded_design(_workspace(request), file.filename or "", payload)
+    except DesignUploadRefused as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return DesignSummary(id=design, label=design, source="upload")
