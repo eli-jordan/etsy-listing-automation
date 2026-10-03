@@ -1,6 +1,7 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as calibrator from "../api/calibrator";
+import { PREVIEW_DEBOUNCE_MS } from "../hooks/usePreview";
 import type { ColourMatrixTemplate } from "../types";
 import { ColourMatrixEditor } from "./ColourMatrixEditor";
 
@@ -143,11 +144,17 @@ describe("ColourMatrixEditor", () => {
 
   it("asks for no preview at all when the set has no colours", async () => {
     const spy = vi.spyOn(calibrator, "renderPreview").mockResolvedValue("blob:preview");
-    setup({ colours: [] });
-
-    await new Promise((resolve) => setTimeout(resolve, 250));
-    expect(spy).not.toHaveBeenCalled();
-    expect(screen.getByText("Loading preview…")).toBeInTheDocument();
+    vi.useFakeTimers();
+    try {
+      setup({ colours: [] });
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(PREVIEW_DEBOUNCE_MS);
+      });
+      expect(spy).not.toHaveBeenCalled();
+      expect(screen.getByText("Loading preview…")).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("opening the Preview tab renders every colour at full size", async () => {
