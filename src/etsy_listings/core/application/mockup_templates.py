@@ -53,6 +53,7 @@ from etsy_listings.core.render.config import (
     RenderConfig,
     ShadeConfig,
     SingleTemplate,
+    scene_layers,
 )
 from etsy_listings.core.render.pipeline import Layer, render_scene
 from etsy_listings.core.render.swatch import sample_swatch
@@ -388,8 +389,17 @@ class PreviewScene:
     photo: ScenePhoto
     derived_dir: Path
     layers: tuple[RenderConfig, ...]
-    design: Path
-    """The design file to composite, as the caller resolved it."""
+    designs: tuple[Path | None, ...]
+    """The design file each layer composites, as the caller resolved it --
+    parallel to ``layers``. ``None`` leaves that layer's garment bare."""
+
+
+LayerDesign = Callable[[str | None], Path | None]
+"""``depicted colour -> design file`` for one layer of a saved scene, or
+``None`` to leave the layer bare. The colour is the one
+:func:`~etsy_listings.core.render.config.scene_layers` says the layer
+depicts, so a ``multiple`` scene can print a different file per placement
+(A35)."""
 
 
 def unsaved_preview(
@@ -398,9 +408,9 @@ def unsaved_preview(
     """The calibrator's live preview. Geometry shaped for another kind than
     the template is refuses with :class:`TemplatePreviewKindMismatch`.
 
-    ``design`` resolves the file to composite -- a calibrator test design or
-    a listing's artwork, whose libraries are the caller's -- and may refuse;
-    it is asked after the kind check and before the photo is looked for.
+    ``design`` resolves the one file every layer composites -- a calibrator
+    test design, whose library is the caller's -- and may refuse; it is asked
+    after the kind check and before the photo is looked for.
     Refusals: :class:`TemplateMissing`, :class:`TemplateConfigMissing`,
     :class:`TemplatePhotoMissing`."""
     kind = _load_config(workspace, name).kind
@@ -410,28 +420,25 @@ def unsaved_preview(
         RenderConfig(bounding_box=box, displace=geometry.displace, shade=geometry.shade)
         for box in geometry.boxes
     )
-    return _scene(workspace, name, geometry.colour, layers, design)
+    path = design()
+    return _scene(workspace, name, geometry.colour, layers, tuple(path for _ in layers))
 
 
 def saved_preview(
-    workspace: Workspace, name: str, *, colour: str | None, design: Callable[[], Path]
+    workspace: Workspace, name: str, *, colour: str | None, design: LayerDesign
 ) -> PreviewScene:
     """The saved geometry, as the render stage composites it -- the listing
     editors' read-only preview. ``colour`` picks the photo of a
-    colour-matrix set and means nothing to the other kinds."""
+    colour-matrix set and means nothing to the other kinds.
+
+    ``design`` is asked once per layer, with the colour that layer depicts
+    (:func:`~etsy_listings.core.render.config.scene_layers`, the render
+    stage's own pairing), before the photo is looked for."""
     config = _load_config(workspace, name)
-    layers: tuple[RenderConfig, ...]
-    if isinstance(config, MultipleTemplate):
-        layers = tuple(config.render_config_for(p) for p in config.placements)
-    else:
-        layers = (config.render_config(),)
-    return _scene(
-        workspace,
-        name,
-        colour if isinstance(config, ColourMatrixTemplate) else None,
-        layers,
-        design,
-    )
+    depicted = colour if isinstance(config, ColourMatrixTemplate) else None
+    pairs = scene_layers(config, depicted)
+    designs = tuple(design(layer_colour) for layer_colour, _ in pairs)
+    return _scene(workspace, name, depicted, tuple(cfg for _, cfg in pairs), designs)
 
 
 def _scene(
@@ -439,11 +446,11 @@ def _scene(
     name: str,
     colour: str | None,
     layers: tuple[RenderConfig, ...],
-    design: Callable[[], Path],
+    designs: tuple[Path | None, ...],
 ) -> PreviewScene:
-    # The design is resolved before the photo is looked for: an unknown design
-    # was refused ahead of a missing photo before this moved out of the route.
-    design_path = design()
+    # The designs are resolved by the caller before the photo is looked for:
+    # an unknown design was refused ahead of a missing photo before this moved
+    # out of the route.
     photo = workspace.scene_photo(name, colour)
     if not photo.path.is_file():
         missing = f"colour {colour!r}" if colour is not None else f"{name!r}"
@@ -452,7 +459,7 @@ def _scene(
         photo=photo,
         derived_dir=workspace.template_derived_dir(name),
         layers=layers,
-        design=design_path,
+        designs=designs,
     )
 
 
@@ -461,18 +468,25 @@ def compose_preview(
     *,
     base: RGB,
     scale: float,
-    design: RGBA,
+    design: Callable[[Path], RGBA],
     height: Callable[[], FloatMap],
     luminance: Callable[[], FloatMap],
 ) -> Image.Image:
-    """Composite ``design`` onto ``base`` -- the scene's photo, possibly
-    downscaled by ``scale`` -- at the scene's layers, scaled to match.
-    ``height`` and ``luminance`` supply the derived maps at ``base``'s size,
-    and are asked only when a layer displaces or shades."""
-    layers = [scaled(cfg, scale) for cfg in scene.layers]
+    """Composite each layer's design onto ``base`` -- the scene's photo,
+    possibly downscaled by ``scale`` -- at the scene's layers, scaled to
+    match. ``design`` decodes a layer's file; a layer with none stays bare,
+    so no layers at all is the photo itself. ``height`` and ``luminance``
+    supply the derived maps at ``base``'s size, and are asked only when a
+    painted layer displaces or shades."""
+    painted = [
+        (scaled(cfg, scale), path)
+        for cfg, path in zip(scene.layers, scene.designs, strict=True)
+        if path is not None
+    ]
+    layers = [cfg for cfg, _ in painted]
     return render_scene(
         base,
-        [Layer(design=design, cfg=cfg) for cfg in layers],
+        [Layer(design=design(path), cfg=cfg) for cfg, path in painted],
         height=height() if any(cfg.displace.enabled for cfg in layers) else None,
         luminance=luminance() if any(cfg.shade.enabled for cfg in layers) else None,
     )

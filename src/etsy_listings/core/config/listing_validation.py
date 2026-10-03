@@ -43,6 +43,15 @@ from typing import Literal
 
 from PIL import Image, UnidentifiedImageError
 
+from etsy_listings.core.config.artwork import (
+    SlotEmpty,
+    Tone,
+    Unclassified,
+    is_light_dark,
+    representative,
+    resolve,
+    slot_users,
+)
 from etsy_listings.core.config.garment_profile import GarmentProfile
 from etsy_listings.core.config.listing import Listing, TemplateMediaEntry
 from etsy_listings.core.config.listing_template import ListingTemplate
@@ -346,19 +355,6 @@ def _check_garment_profile_exists(
     ]
 
 
-def _check_design_selected(listing: Listing) -> list[Issue]:
-    if listing.design:
-        return []
-    return [
-        Issue(
-            "block",
-            "variants",
-            "Design",
-            "No design selected -- pick the artwork this listing prints.",
-        )
-    ]
-
-
 def check_price_source(*, pricing_plan: str | None, priced_sizes: bool) -> list[Issue]:
     """Nothing says what a variant costs.
 
@@ -445,29 +441,6 @@ def check_render_photo(
     ]
 
 
-def check_artwork_resolved(
-    colour: str | None,
-    tone: str | None,
-    available: list[str],
-    *,
-    wanted: str | None = None,
-    source: str = "",
-) -> list[Issue]:
-    if wanted is not None and wanted in available:
-        return []
-    detail = f"colour {colour!r}" if colour is not None else "this template"
-    tone_note = f" (tone: {tone})" if tone else ""
-    message = (
-        f"{detail}{tone_note}: {source} asks for artwork {wanted!r}, which the "
-        f"design does not have -- it offers {available!r}. Add {wanted!r} to the "
-        f"listing's design:, or remove the override."
-        if wanted is not None
-        else f"{detail}{tone_note} needs an artwork but none resolves -- design offers "
-        f"{available!r}; add a listing.artwork override or a matching key"
-    )
-    return [Issue("block", "variants", "Design", message)]
-
-
 def _check_variation_images(
     listing: Production, templates: Mapping[str, TemplateInfo]
 ) -> list[Issue]:
@@ -519,24 +492,157 @@ def _check_tags(listing: Listing) -> list[Issue]:
     return []
 
 
-def _check_colours_in_garment_profile(
-    listing: Production, profile: GarmentProfile | None
-) -> list[Issue]:
-    if profile is None:
+_ARTWORK_WHERE = "Artwork"
+_LINK_WHERE = "Artwork · Link the two designs if one is all this listing needs"
+
+
+def _names(colours: Iterable[str]) -> str:
+    """``Ivory``, ``Ivory and Natural``, ``Ivory, Natural and Sand``."""
+    cap = [colour[:1].upper() + colour[1:] for colour in colours]
+    if len(cap) <= 1:
+        return "".join(cap)
+    return f"{', '.join(cap[:-1])} and {cap[-1]}"
+
+
+def _shirts(tone: Tone) -> str:
+    return f"{tone} shirts"
+
+
+def _depicted(
+    listing: Listing, templates: Mapping[str, TemplateInfo]
+) -> tuple[list[str], list[str]]:
+    """The garment colours the listing's mockup scenes show, and the
+    templates that show one without naming it (spec: *Artwork resolution*).
+
+    The media entry's colour for a ``colour-matrix`` scene, every placement's
+    colour for a ``multiple`` one, the template's own colour for a ``single``.
+    A template with no config on disk is skipped, as the kind check skips it:
+    it is not this module's to report.
+    """
+    colours: dict[str, None] = {}
+    colourless: dict[str, None] = {}
+    for entry in listing.media:
+        if not isinstance(entry, TemplateMediaEntry):
+            continue
+        if entry.colour is not None:
+            colours.setdefault(entry.colour, None)
+            continue
+        info = templates.get(entry.template)
+        if info is None or info.kind == "colour-matrix":
+            continue
+        if info.kind == "single" and not info.colours:
+            colourless.setdefault(entry.template, None)
+        for colour in sorted(info.colours):
+            colours.setdefault(colour, None)
+    return list(colours), list(colourless)
+
+
+def _unclassified_issue(severity: Severity, profile: str, colours: list[str]) -> list[Issue]:
+    """Colours ``profile`` gives no tone, naming the file that has to be fixed
+    -- tone is shared garment data a listing cannot correct (ADR-0053)."""
+    if not colours:
         return []
-    missing = [colour for colour in listing.colors if colour not in profile.colors]
-    if not missing:
-        return []
+    verb = "isn't" if len(colours) == 1 else "aren't"
     return [
         Issue(
-            "warn",
+            severity,
             "variants",
-            "Variants › Colours",
-            f"{', '.join(missing)} not classified light/dark in the garment profile -- "
-            f"Printify may not offer {'it' if len(missing) == 1 else 'them'} (best-effort "
-            f"check only).",
+            f"Fix it in garment-profiles/{profile}.yaml",
+            f"{_names(colours)} {verb} marked light or dark in the {profile} garment profile",
         )
     ]
+
+
+def _check_template_tones(template: ListingTemplate, profile: GarmentProfile) -> list[Issue]:
+    """A listing template has no design, so nothing resolves yet: an
+    unclassified colour is a warning here, since any block refuses a
+    template's write. Every listing made from it blocks until the profile
+    is fixed (ADR-0053)."""
+    unclassified = [colour for colour in template.colors if colour not in profile.colors]
+    return _unclassified_issue("warn", template.garment_profile, unclassified)
+
+
+def check_artwork(
+    listing: Listing,
+    profile: GarmentProfile | None,
+    templates: Mapping[str, TemplateInfo],
+) -> list[Issue]:
+    """Which file every enabled and every depicted colour prints, asked of
+    `config/artwork.py` (ADR-0053), and every reason one cannot be answered.
+
+    Incomplete rather than malformed (spec: *Saving, blockers and warnings*):
+    the listing saves, and these stop it deploying. The wording and `where`
+    are docs/features/multi-artwork-20260928/interactions.md's (Part 1 §10, Part 2 §9).
+
+    * no design at all -- an empty map, or a pair with both slots empty;
+    * an enabled colour the garment profile gives no tone, in *either* mode,
+      because classification is mandatory shared data a listing cannot fix;
+      a colour only *depicted* needs one only when there is a pair to pick
+      from;
+    * a light/dark slot an automatic colour needs but nobody has filled;
+    * a ``single`` scene that names no colour, in light/dark mode;
+    * and, as a warning, a pair only one of whose slots is in use.
+
+    With no loadable garment profile only the first applies; the others
+    need its tones.
+    """
+    design = listing.design
+    if representative(design) is None:
+        return [
+            Issue("block", "variants", _ARTWORK_WHERE, "No design is chosen for this listing yet")
+        ]
+    if profile is None:
+        return []
+
+    tones = profile.colors
+    depicted, colourless = _depicted(listing, templates)
+    unclassified = [colour for colour in listing.colors if colour not in tones]
+    empty: dict[Tone, list[str]] = {"light": [], "dark": []}
+    for colour in [*listing.colors, *depicted]:
+        match resolve(design, colour, tones):
+            case Unclassified() if colour not in unclassified:
+                unclassified.append(colour)
+            case SlotEmpty(tone) if colour not in empty[tone]:
+                empty[tone].append(colour)
+
+    issues = _unclassified_issue("block", listing.garment_profile, unclassified)
+    for tone, colours in empty.items():
+        if not colours:
+            continue
+        noun = f"is a {tone} shirt" if len(colours) == 1 else f"are {_shirts(tone)}"
+        issues.append(
+            Issue(
+                "block",
+                "variants",
+                f"{_ARTWORK_WHERE} · For {_shirts(tone)}",
+                f"{_names(colours)} {noun}, but no design for {_shirts(tone)} is chosen",
+            )
+        )
+    if is_light_dark(design):
+        issues += [
+            Issue(
+                "block",
+                "images",
+                f"Listing Images › {template}",
+                f"{template!r} doesn't say which shirt colour it shows, so it can't choose "
+                f"between the designs for light and dark shirts. Name its colour in the "
+                f"calibrator, or remove it from this listing.",
+            )
+            for template in colourless
+        ]
+        used = [tone for tone, users in slot_users(design, listing.colors, tones).items() if users]
+        if len(used) == 1:
+            other: Tone = "dark" if used[0] == "light" else "light"
+            issues.append(
+                Issue(
+                    "warn",
+                    "variants",
+                    _LINK_WHERE,
+                    f"Only the design for {_shirts(used[0])} is in use — no {other} shirt you "
+                    f"sell needs the design for {_shirts(other)}",
+                )
+            )
+    return issues
 
 
 MAX_VIDEO_BYTES = 100_000_000
@@ -661,14 +767,13 @@ def check_listing(
     """
     issues: list[Issue] = []
     issues += _check_garment_profile_exists(listing, garment_profile_names)
-    issues += _check_design_selected(listing)
+    issues += check_artwork(listing, garment_profile, templates)
     issues += _check_colours_enabled(listing)
     issues += _check_price_source(listing)
     issues += _check_media_present(listing)
     issues += _check_copy(listing, description_ref_error=description_ref_error)
     if garment_profile is not None:
         issues += _check_design(design_paths, garment_profile)
-        issues += _check_colours_in_garment_profile(listing, garment_profile)
         issues += _check_printify_variant_limit(listing, garment_profile)
     issues += _check_template_kind_colour_match(listing, templates)
     issues += _check_variation_images(listing, templates)
@@ -707,7 +812,7 @@ def check_listing_template(
     issues += _check_media_present(template)
     issues += check_description_ref(template.etsy.description.ref, description_ref_error)
     if garment_profile is not None:
-        issues += _check_colours_in_garment_profile(template, garment_profile)
+        issues += _check_template_tones(template, garment_profile)
         issues += _check_printify_variant_limit(template, garment_profile)
     issues += _check_template_kind_colour_match(template, templates)
     issues += _check_variation_images(template, templates)

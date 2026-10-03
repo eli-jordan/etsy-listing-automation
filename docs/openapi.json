@@ -2312,14 +2312,6 @@
         "additionalProperties": false,
         "description": "The full `Listing`, plus what the editor needs and nothing a listing\nitself would ever store: computed status, computed issues, and (only\nmeaningful right after a PATCH) which fields a rejected candidate failed\non.",
         "properties": {
-          "artwork": {
-            "additionalProperties": {
-              "type": "string"
-            },
-            "default": {},
-            "title": "Artwork",
-            "type": "object"
-          },
           "brief": {
             "title": "Brief",
             "type": "string"
@@ -2338,8 +2330,16 @@
           },
           "design": {
             "additionalProperties": {
-              "type": "string"
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
             },
+            "default": {},
             "title": "Design",
             "type": "object"
           },
@@ -2585,7 +2585,6 @@
         },
         "required": [
           "garment_profile",
-          "design",
           "colors",
           "brief",
           "media",
@@ -3600,17 +3599,6 @@
       "Placement": {
         "description": "One garment within a ``multiple``-kind scene.",
         "properties": {
-          "artwork": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Artwork"
-          },
           "bounding_box": {
             "maxItems": 4,
             "minItems": 4,
@@ -4846,7 +4834,14 @@
           },
           "design": {
             "additionalProperties": {
-              "type": "string"
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
             },
             "title": "Design",
             "type": "object"
@@ -5084,17 +5079,6 @@
       "SingleTemplate": {
         "description": "One photo, one garment -- a lifestyle shot, a folded product photo,\nanything that isn't part of a colour set.",
         "properties": {
-          "artwork": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Artwork"
-          },
           "bounding_box": {
             "maxItems": 4,
             "minItems": 4,
@@ -8417,6 +8401,102 @@
         ]
       }
     },
+    "/api/listings/{name}/scene-preview": {
+      "get": {
+        "description": "One of this listing's scenes, each layer printing the file its depicted\ncolour resolves to in the *saved* listing (A35) -- the Variants stage and\nevery Listing Images picture, multi-colour scenes included (spec:\n*Previews*). Resolved here rather than from a design name in the URL,\nbecause the editor showing one file while Printify prints another is the\nthing a single resolver exists to prevent.\n\nA layer that resolves to nothing is left bare rather than failing the\npicture (:func:`~etsy_listings.core.application.listing_reads.scene_artwork`).\n``v`` is ignored; the editor sends a signature of the saved design so a\nlanded save is a new URL and the browser fetches it again.",
+        "operationId": "scene_preview_api_listings__name__scene_preview_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "template",
+            "required": true,
+            "schema": {
+              "title": "Template",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "colour",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Colour"
+            }
+          },
+          {
+            "in": "query",
+            "name": "scale",
+            "required": false,
+            "schema": {
+              "default": "full",
+              "enum": [
+                "editor",
+                "full"
+              ],
+              "title": "Scale",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "v",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "V"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Scene Preview",
+        "tags": [
+          "listings"
+        ]
+      }
+    },
     "/api/pricing-plans": {
       "get": {
         "description": "Every plan, each flagged for whether it was built for this garment.\n\n``garment_profile`` is optional because a listing that has not chosen one\nyet has nothing to be compatible *with*: asking with an empty name says that\nhonestly, and the editor then drops the \"different garment\" note rather than\nlabelling every plan as differing from a garment nobody picked.",
@@ -9313,7 +9393,7 @@
     },
     "/api/templates/{name}/design-preview": {
       "get": {
-        "description": "A listing's *real* artwork, composited onto this template's saved\ngeometry -- what the listing editor's Variants/Listing Images tabs show\nso a colour can be judged against the actual design, not a bare photo.\n\n``design`` is a name from ``GET /api/listing-designs``, resolved through\n``Workspace.design_file`` -- deliberately not :func:`resolve_design`,\nwhich is the calibrator's own test-design library and never sees a\nlisting's real artwork.\n\n``test_design`` is that library's id instead, for the listing-template\neditor (UI doc \u00a73): a listing template has no artwork, so it is viewed\nthrough a calibrator test design, bundled grid by default. Exactly one of\nthe two -- they name files in different places, and guessing which one a\nbare name meant is how a test target would end up judged as artwork.",
+        "description": "One design on every layer of this template's saved geometry -- the\nlisting-template editor's preview (UI doc \u00a73): a listing template has no\nartwork, so it is viewed through a design picked only to preview with.\n\n``design`` is a name from ``GET /api/listing-designs``, resolved through\n``Workspace.design_file``; ``test_design`` is the calibrator library's id\ninstead, through :func:`resolve_design`, bundled grid by default. Exactly\none of the two -- they name files in different places, and guessing which\none a bare name meant is how a test target would end up judged as artwork.\n\nA *listing's* scenes are not previewed here: ``GET\n/api/listings/{name}/scene-preview`` resolves each layer's file from the\nsaved listing (A35), so its editor cannot show one file while Printify\nprints another.",
         "operationId": "design_preview_api_templates__name__design_preview_get",
         "parameters": [
           {

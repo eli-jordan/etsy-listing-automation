@@ -102,10 +102,10 @@ def test_drop_three_pngs_fix_a_name_and_create_three_listings(  # noqa: ANN001
         page.goto(summary)
         rows.filter(has_text=listing).get_by_role("link", name=listing).click()
         page.wait_for_url(re.compile(rf"/listings/{listing}\?batch="))
-        # The editor's design row names the file the row wrote.
-        design_file = page.locator(".design-row__file")
-        design_file.wait_for()
-        assert design_file.inner_text() == f"designs/{listing}.png"
+        # The editor's design strip names the design the row wrote.
+        design_name = page.locator(".design-row--slot .design-row__name").first
+        design_name.wait_for()
+        assert design_name.inner_text() == listing
 
 
 def test_a_batch_of_two_drafts_both_and_the_editor_has_the_suggestions_waiting(  # noqa: ANN001

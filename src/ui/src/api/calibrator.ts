@@ -134,8 +134,10 @@ export function designThumbnailUrl(id: string): string {
 }
 
 /**
- * A listing's real design, composited onto this template's *saved* geometry
- * -- unlike {@link templateThumbnailUrl}/{@link templatePhotoUrl}, which are
+ * One design on every layer of this template's *saved* geometry -- the
+ * listing-template editor's preview (UI doc §3). A listing's own scenes use
+ * `listingScenePreviewUrl` instead, which resolves each layer's file (A35).
+ * Unlike {@link templateThumbnailUrl}/{@link templatePhotoUrl}, which are
  * a bare, inkless photo, or {@link renderPreview}, which composites a
  * calibrator test design against *unsaved* geometry. A plain URL for the
  * same reason those are: the browser owns loading and caching it.

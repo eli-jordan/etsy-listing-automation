@@ -71,7 +71,6 @@ function detail(over: Partial<ListingDetail> = {}): ListingDetail {
     brief: "",
     prices: {},
     price_overrides: {},
-    artwork: {},
     pricing_plan: null,
     etsy: {
       title: "",

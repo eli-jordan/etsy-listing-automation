@@ -6,11 +6,13 @@ import { EditableName } from "../components/EditableName";
 import { StatusTag } from "../components/StatusTag";
 import { useAutosave } from "../hooks/useAutosave";
 import { type MediaOwner, refName } from "../media";
-import type { Issue, IssueTab, ListingDetail } from "../types";
+import type { DesignMap, Issue, IssueTab, ListingDetail } from "../types";
 import type { AiSeoMode } from "./editor/aiSeo/useAiSeoMode";
 import { AiWorkflowIndicator } from "./editor/aiSeo/AiWorkflowIndicator";
 import { useAiSeoMode } from "./editor/aiSeo/useAiSeoMode";
 import { DeployControl } from "./editor/DeployControl";
+import { ArtworkStrip } from "./editor/ArtworkStrip";
+import { representative, type SlotTarget, type Tone } from "./editor/artwork";
 import { DesignSelect } from "./editor/DesignSelect";
 import { DEFAULT_PREVIEW, type PreviewDesign, previewArtwork } from "./editor/previewDesign";
 import { DetailsTab } from "./editor/DetailsTab";
@@ -174,8 +176,17 @@ function ListingEditorPageContent({
   const [typedName, setTypedName] = useState("");
   const aiSeo = useAiSeoMode(detail, update, flush, save, adopt);
 
-  /** Everything picking a design sets off, in the one handler, because two of
-   * the three need the pick itself rather than a later render of its effect.
+  /** Everything a design strip change sets off, in the one handler. Only a
+   * change to the **representative** artwork -- the first non-null of
+   * `default`, `on-light`, `on-dark` -- names a draft or arms the AI chain
+   * (spec: *Representative artwork*; interactions Part 1 §2-§5, Part 2 §3).
+   * It is the one image the brief and SEO workflow is sent, so it is the
+   * listing's concept; the alternate slot and a colour's own design are print
+   * treatment. So Unlink (the file moves to `on-light`) and a dark-slot pick
+   * beside a filled light slot set nothing off, and a Link that keeps the
+   * dark-shirt file does. Decided from the map, not from which control made
+   * it, so a new control cannot get the rule wrong; a colour's own design
+   * never reaches here at all (it is a Variants edit through `update`).
    *
    * The name is here rather than in `ListingEditorShell` because naming is
    * `useAutosave`'s (`commitName`), and only a draft that has none gets one:
@@ -186,10 +197,14 @@ function ListingEditorPageContent({
    * file, so the ordinary create flow becomes "pick a design" with nothing
    * else required. A name already taken is refused exactly as a typed one is,
    * and the page head says so. */
-  function pickDesign(ref: string) {
-    update({ design: ref });
+  function changeDesign(next: DesignMap) {
+    // The whole map, always: `update` replaces `design` rather than merging
+    // into it, and the map is the one written form (multi-artwork plan).
+    update({ design: next });
+    const chosen = representative(next);
+    if (chosen === null || chosen === representative(detail.design)) return;
     if (detail.name === "" && typedName.trim() === "") {
-      const named = refName(ref);
+      const named = refName(chosen);
       // Shown as the name immediately, not only once the file exists. A
       // create is refused until the document will validate (no price source,
       // usually), and `useAutosave` holds the name for the edit that retries
@@ -210,7 +225,7 @@ function ListingEditorPageContent({
       detail={detail}
       update={update}
       flush={flush}
-      onPickDesign={pickDesign}
+      onDesignChange={changeDesign}
       aiSeo={aiSeo}
       head={
         <EditorHead
@@ -355,10 +370,11 @@ type ShellProps = {
 } & (
   | {
       kind?: "listing";
-      /** Everything one design pick sets off -- the edit, naming an unnamed
-       * draft, and arming the AI chain. Built by `ListingEditorPageContent`,
-       * which is the layer that has `commitName`. */
-      onPickDesign: (ref: string) => void;
+      /** Everything one design strip change sets off -- the edit, and when
+       * the representative artwork changes, naming an unnamed draft and
+       * arming the AI chain. Built by `ListingEditorPageContent`, which is
+       * the layer that has `commitName`. */
+      onDesignChange: (next: DesignMap) => void;
       /** Owned by `ListingEditorPageContent`, not by this shell and not by
        * `DetailsTab`: a run outlives the tab it was started from --
        * switching to Variants unmounts the tab. */
@@ -381,6 +397,27 @@ export function ListingEditorShell(props: ShellProps) {
   const template = props.kind === "listing-template";
   const aiSeo = props.kind === "listing-template" ? null : props.aiSeo;
   const [tab, setTab] = useState<Tab>("variants");
+  /** Which base slot's Recent designs panel is open. Here, not in the strip,
+   * so the card under the Variants stage can open one too (interactions
+   * Part 2 §2). */
+  const [openSlot, setOpenSlot] = useState<SlotTarget | null>(null);
+  /** The colour on the Variants stage. Here, not in the tab, so the strip's
+   * "Also printing their own design" names can preview one too -- and so
+   * leaving Variants and coming back keeps the colour the seller chose. */
+  const [previewed, setPreviewed] = useState<string | null>(null);
+
+  function previewColour(colour: string) {
+    setPreviewed(colour);
+    if (tab !== "variants") pickTab("variants");
+  }
+
+  /** The card under the stage's fix for an empty slot: that slot's panel,
+   * scrolled into view, because filling it fixes every colour that needs it. */
+  function chooseSlot(tone: Tone) {
+    setOpenSlot({ kind: "slot", tone });
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
   // The listing template's preview design (UI doc §3): component state, so
   // it is never in the document and is back to the bundled grid every time
   // the editor opens.
@@ -436,7 +473,15 @@ export function ListingEditorShell(props: ShellProps) {
       {props.kind === "listing-template" ? (
         <DesignSelect preview={preview} onPreview={setPreview} />
       ) : (
-        <DesignSelect design={detail.design} onPick={props.onPickDesign} />
+        <ArtworkStrip
+          design={detail.design}
+          colours={detail.colors}
+          garmentProfile={detail.garment_profile}
+          open={openSlot}
+          onOpen={setOpenSlot}
+          onChange={props.onDesignChange}
+          onPreview={previewColour}
+        />
       )}
 
       <div className="tabs seg">
@@ -465,6 +510,9 @@ export function ListingEditorShell(props: ShellProps) {
         <VariantsTab
           detail={detail}
           onUpdate={update}
+          previewed={previewed}
+          onPreview={setPreviewed}
+          onChooseSlot={chooseSlot}
           {...(artwork === undefined ? {} : { artwork })}
         />
       )}

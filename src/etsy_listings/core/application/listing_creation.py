@@ -93,7 +93,7 @@ def build_listing_stub(
     invented."""
     return {
         "garment_profile": garment_profile_slug,
-        "design": design_ref,
+        "design": {"default": design_ref},
         "colors": colours,
         "brief": brief,
         "pricing_plan": pricing_plan_ref,

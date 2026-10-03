@@ -21,6 +21,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from email.utils import format_datetime
+from functools import cache
 from io import BytesIO
 from pathlib import Path
 from typing import Annotated, Literal
@@ -272,7 +273,7 @@ def _encode_preview(image: Image.Image, scale: PreviewScale) -> Response:
     return Response(content=buffer.getvalue(), media_type=EDITOR_MEDIA_TYPE)
 
 
-def _render_preview_response(scene: PreviewScene, scale: PreviewScale) -> Response:
+def render_preview_response(scene: PreviewScene, scale: PreviewScale) -> Response:
     """Composite the scene from the shared memo rather than off disk: a drag
     is a burst of requests for the same photo, design and derived maps, and
     re-reading them is what made the old editor take seconds per frame."""
@@ -281,7 +282,7 @@ def _render_preview_response(scene: PreviewScene, scale: PreviewScale) -> Respon
         scene,
         base=base.image,
         scale=base.scale,
-        design=PREVIEW_IMAGES.design(scene.design),
+        design=PREVIEW_IMAGES.design,
         height=lambda: PREVIEW_IMAGES.height(scene.derived_dir, scene.photo.map_key, base),
         luminance=lambda: PREVIEW_IMAGES.luminance(scene.derived_dir, scene.photo.map_key, base),
     )
@@ -304,7 +305,7 @@ def preview(template: Existing, body: PreviewRequest, scale: PreviewScale = "ful
         raise _not_found(exc) from exc
     except TemplatePreviewKindMismatch as exc:
         raise _bad_request(exc) from exc
-    return _render_preview_response(scene, scale)
+    return render_preview_response(scene, scale)
 
 
 @router.get("/{name}/design-preview")
@@ -315,20 +316,20 @@ def design_preview(
     colour: str | None = None,
     scale: PreviewScale = "full",
 ) -> Response:
-    """A listing's *real* artwork, composited onto this template's saved
-    geometry -- what the listing editor's Variants/Listing Images tabs show
-    so a colour can be judged against the actual design, not a bare photo.
+    """One design on every layer of this template's saved geometry -- the
+    listing-template editor's preview (UI doc §3): a listing template has no
+    artwork, so it is viewed through a design picked only to preview with.
 
     ``design`` is a name from ``GET /api/listing-designs``, resolved through
-    ``Workspace.design_file`` -- deliberately not :func:`resolve_design`,
-    which is the calibrator's own test-design library and never sees a
-    listing's real artwork.
+    ``Workspace.design_file``; ``test_design`` is the calibrator library's id
+    instead, through :func:`resolve_design`, bundled grid by default. Exactly
+    one of the two -- they name files in different places, and guessing which
+    one a bare name meant is how a test target would end up judged as artwork.
 
-    ``test_design`` is that library's id instead, for the listing-template
-    editor (UI doc §3): a listing template has no artwork, so it is viewed
-    through a calibrator test design, bundled grid by default. Exactly one of
-    the two -- they name files in different places, and guessing which one a
-    bare name meant is how a test target would end up judged as artwork.
+    A *listing's* scenes are not previewed here: ``GET
+    /api/listings/{name}/scene-preview`` resolves each layer's file from the
+    saved listing (A35), so its editor cannot show one file while Printify
+    prints another.
     """
     workspace = template.workspace
     if (design is None) == (test_design is None):
@@ -343,11 +344,15 @@ def design_preview(
             raise HTTPException(status_code=404, detail=f"no design {design!r}")
         return path
 
+    # Every layer shows the one file, resolved (and refused) once.
+    one_design = cache(design_path)
     try:
-        scene = saved_preview(workspace, template.name, colour=colour, design=design_path)
+        scene = saved_preview(
+            workspace, template.name, colour=colour, design=lambda _colour: one_design()
+        )
     except (TemplateConfigMissing, TemplatePhotoMissing) as exc:
         raise _not_found(exc) from exc
-    return _render_preview_response(scene, scale)
+    return render_preview_response(scene, scale)
 
 
 @router.get("/{name}/swatch", response_model=SwatchResponse)

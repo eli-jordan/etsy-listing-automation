@@ -38,7 +38,7 @@ def workspace(workspace_root: Path) -> Workspace:
 def a_document(**over: Any) -> dict[str, Any]:  # noqa: ANN401
     document: dict[str, Any] = {
         "garment_profile": "comfort-colors-1717",
-        "design": "designs/take-a-hike.png",
+        "design": {"default": "designs/take-a-hike.png"},
         "colors": ["black"],
         "brief": "",
         "prices": {"S": "349 NOK"},

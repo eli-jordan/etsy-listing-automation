@@ -67,9 +67,14 @@ describe("viewFocus, for a template", () => {
     expect(viewFocus(ON_TEMPLATE, listing([]), [FLAT_LAY], null).title).toBe("flat-lay-01 · black");
   });
 
-  it("composites the design into the picture when there is one", () => {
-    const view = viewFocus(ON_TEMPLATE, listing([]), [FLAT_LAY], "take-a-hike");
-    expect(view.picture).toContain("design-preview");
+  it("renders the saved listing's scene when there is one to resolve from", () => {
+    const view = viewFocus(ON_TEMPLATE, listing([]), [FLAT_LAY], {
+      listing: "take-a-hike",
+      version: "abc123",
+    });
+    expect(view.picture).toBe(
+      "/api/listings/take-a-hike/scene-preview?template=flat-lay-01&colour=black&v=abc123",
+    );
   });
 });
 
@@ -91,7 +96,10 @@ describe("viewFocus, for a shared asset", () => {
   });
 
   it("shows the file itself, never a render -- it is already what Etsy gets", () => {
-    const view = viewFocus(ON_SHARED, listing([]), [], "take-a-hike");
+    const view = viewFocus(ON_SHARED, listing([]), [], {
+      listing: "take-a-hike",
+      version: "abc123",
+    });
     expect(view.picture).toBe("/api/common-media/sizing.png/file");
   });
 });

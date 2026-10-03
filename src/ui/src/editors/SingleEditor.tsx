@@ -17,7 +17,8 @@ interface Props {
 
 /** The simplest of the three: one box over one photo, nothing to
  * disambiguate. Everything it adds to the shell is the optional garment
- * colour, which exists only so artwork resolution has something to key on. */
+ * colour the photo shows -- what a listing with light and dark designs
+ * resolves this scene's artwork by (ADR-0053). */
 export function SingleEditor({
   templateName,
   config,
@@ -67,7 +68,7 @@ export function SingleEditor({
           <input
             value={config.colour ?? ""}
             onChange={(e) => onChange({ ...config, colour: e.target.value || null })}
-            placeholder="for artwork resolution, if relevant"
+            placeholder="the shirt colour this photo shows"
           />
         </label>
       }

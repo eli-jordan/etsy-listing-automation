@@ -548,30 +548,37 @@ class Workspace:
         (spec, *Design validation*)."""
         return f"{layout.DESIGNS_DIR}/{_segment(design)}.png"
 
-    def design_content_hash(self, design: Mapping[str, str], *, listing_dir: Path) -> str | None:
+    def design_content_hash(
+        self, design: Mapping[str, str | None], *, listing_dir: Path
+    ) -> str | None:
         """Content identity for the design the editor and SEO request see.
 
         Keys and refs are sorted, and the hash contains no absolute path. A
         missing secondary file gets a stable marker so changes to readable
-        artwork still change the identity of an incomplete draft.
+        artwork still change the identity of an incomplete draft. The whole
+        map, ``null`` slots included: an emptied slot is a different listing
+        to review (multi-artwork plan, *Settled decisions*).
         """
         if not design:
             return None
         digest = hashlib.sha256()
         for key, ref in sorted(design.items()):
-            content_hash: str | None = None
-            try:
-                path = self.resolve_ref(ref, listing_dir=listing_dir)
-                file_digest = hashlib.sha256()
-                with path.open("rb") as source:
-                    for chunk in iter(lambda: source.read(1024 * 1024), b""):
-                        file_digest.update(chunk)
-                content_hash = file_digest.hexdigest()
-            except (OSError, InvalidRefError):
-                pass
+            content_hash = None if ref is None else self._readable_hash(ref, listing_dir)
             entry = json.dumps((key, ref, content_hash), ensure_ascii=False)
             digest.update(entry.encode("utf-8"))
         return digest.hexdigest()
+
+    def _readable_hash(self, ref: str, listing_dir: Path) -> str | None:
+        """The file's sha256, or ``None`` when it cannot be read."""
+        try:
+            path = self.resolve_ref(ref, listing_dir=listing_dir)
+            file_digest = hashlib.sha256()
+            with path.open("rb") as source:
+                for chunk in iter(lambda: source.read(1024 * 1024), b""):
+                    file_digest.update(chunk)
+        except (OSError, InvalidRefError):
+            return None
+        return file_digest.hexdigest()
 
     def lock_file(self, listing: str) -> Path:
         return self.listing_dir(listing) / layout.LOCK_FILE

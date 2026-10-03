@@ -4,8 +4,8 @@ import type { ListingSummary } from "../types";
 import { StatusTag } from "./StatusTag";
 
 /** The listing's artwork, or an empty tile when `design` is null -- which is
- * what a multi-artwork listing (`on-light`/`on-dark`) reports, since no single
- * picture stands for it. Decorative: the row's name is right beside it and is
+ * what a listing with no base design chosen reports. The server picks the
+ * file (spec: *Representative artwork*). Decorative: the row's name is right beside it and is
  * what a screen reader should read, so `alt` is deliberately empty. */
 export function DesignThumb({ design }: { design: string | null }) {
   if (design === null) return <span className="listing-thumb listing-thumb--empty" />;

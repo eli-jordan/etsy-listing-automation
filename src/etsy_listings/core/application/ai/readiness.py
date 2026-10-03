@@ -24,6 +24,7 @@ from etsy_listings.core.ai.claude import ClaudeProvider
 from etsy_listings.core.ai.codex import CodexProvider
 from etsy_listings.core.ai.grok import GrokProvider
 from etsy_listings.core.ai.providers import AiProvider
+from etsy_listings.core.config.artwork import representative
 from etsy_listings.core.config.listing import Listing
 from etsy_listings.core.workspace.facts import WorkspaceFacts
 from etsy_listings.core.workspace.workspace import Workspace
@@ -74,7 +75,7 @@ def unready_reason(
     The listing itself being saved is the caller's to check first.
     """
     drafting = draft_brief and not listing.brief.strip()
-    if not listing.design:
+    if representative(listing.design) is None:
         return "the listing has no selected design"
     if not listing.brief.strip() and not drafting:
         return "the listing brief is empty"

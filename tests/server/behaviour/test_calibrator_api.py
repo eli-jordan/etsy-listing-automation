@@ -487,10 +487,12 @@ def test_preview_renders_the_full_composite_for_multiple_kind(client: TestClient
 
 
 class TestDesignPreview:
-    """`GET.../design-preview`: the listing editor's real-render preview,
-    which -- unlike `preview()` above -- resolves a listing's real
-    `designs/*.png` artwork and reads geometry from the *saved*
-    template.yaml rather than the request body."""
+    """`GET.../design-preview`: the listing-template editor's real-render
+    preview, which -- unlike `preview()` above -- reads geometry from the
+    *saved* template.yaml rather than the request body, and composites a
+    workspace design or a test design picked only to preview with. A
+    listing's own scenes go through `GET /api/listings/{name}/scene-preview`
+    instead."""
 
     def test_renders_a_real_png_for_a_colour_matrix_colour(self, client: TestClient) -> None:
         response = client.get(
@@ -655,7 +657,6 @@ class TestPreviewScale:
                     {"x": width * 0.95, "y": height * 0.95},
                     {"x": width * 0.55, "y": height * 0.95},
                 ],
-                "artwork": None,
             }
         ]
         response = client.post("/api/templates/colour-chart-01/preview?scale=editor", json=config)
@@ -744,7 +745,6 @@ def test_a_dot_dot_config_url_reaches_no_template_at_all(client: TestClient) -> 
 SINGLE_CONFIG: dict[str, object] = {
     "kind": "single",
     "colour": None,
-    "artwork": None,
     "bounding_box": [
         {"x": 0, "y": 0},
         {"x": 100, "y": 0},

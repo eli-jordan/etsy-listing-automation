@@ -74,6 +74,11 @@ def _design(workspace: Workspace):  # noqa: ANN202
     return lambda: workspace.design_file("take-a-hike")
 
 
+def _every_layer(workspace: Workspace):  # noqa: ANN202
+    """A saved scene's ``design``: the one file, whatever colour a layer depicts."""
+    return lambda _colour: workspace.design_file("take-a-hike")
+
+
 def _overview(workspace: Workspace, name: str):  # noqa: ANN202
     return {t.name: t for t in list_templates(workspace)}[name]
 
@@ -306,17 +311,39 @@ class TestPreviewScene:
         self, workspace: Workspace
     ) -> None:
         scene = saved_preview(
-            workspace, "colour-chart-01", colour="black", design=_design(workspace)
+            workspace, "colour-chart-01", colour="black", design=_every_layer(workspace)
         )
         config = read_config(workspace, "colour-chart-01").config
         assert isinstance(config, MultipleTemplate)
         assert list(scene.layers) == [config.render_config_for(p) for p in config.placements]
         assert scene.photo.path.name == "scene.png"
 
+    def test_each_saved_layer_asks_for_the_file_of_the_colour_it_depicts(
+        self, workspace: Workspace
+    ) -> None:
+        """A ``multiple`` scene's placements each name a colour, and a layer
+        resolving to nothing is kept, bare, rather than dropped -- so the
+        designs stay paired with the layers they print on (A35)."""
+        config = read_config(workspace, "colour-chart-01").config
+        assert isinstance(config, MultipleTemplate)
+        asked: list[str | None] = []
+        first = config.placements[0].colour
+
+        def per_colour(colour: str | None) -> Path | None:
+            asked.append(colour)
+            return workspace.design_file("take-a-hike") if colour == first else None
+
+        scene = saved_preview(workspace, "colour-chart-01", colour=None, design=per_colour)
+
+        assert asked == [p.colour for p in config.placements]
+        assert scene.designs[0] == workspace.design_file("take-a-hike")
+        assert all(path is None for path in scene.designs[1:])
+        assert len(scene.designs) == len(scene.layers)
+
     def test_saved_geometry_needs_a_config(self, workspace: Workspace) -> None:
         _folder(workspace, "fresh", "black.png")
         with pytest.raises(TemplateConfigMissing):
-            saved_preview(workspace, "fresh", colour=None, design=_design(workspace))
+            saved_preview(workspace, "fresh", colour=None, design=_every_layer(workspace))
 
     def test_scaling_moves_the_box_and_the_displacement_with_the_canvas(self) -> None:
         cfg = RenderConfig(bounding_box=BOX, displace=DisplaceConfig(enabled=True, strength=0.8))
@@ -328,11 +355,12 @@ class TestPreviewScene:
     def test_compose_paints_the_design_inside_the_scaled_box_and_reads_maps_only_when_asked(
         self, workspace: Workspace
     ) -> None:
-        scene = saved_preview(workspace, "colour-chart-01", colour=None, design=_design(workspace))
+        scene = saved_preview(
+            workspace, "colour-chart-01", colour=None, design=_every_layer(workspace)
+        )
         base = load_template_base(scene.photo.path)
         half = np.ascontiguousarray(base[::2, ::2])
         asked: list[str] = []
-        design = load_design(scene.design)
 
         def never(kind: str):  # noqa: ANN202
             def load():  # noqa: ANN202
@@ -348,7 +376,7 @@ class TestPreviewScene:
             replace(scene, layers=no_maps),
             base=half,
             scale=0.5,
-            design=design,
+            design=load_design,
             height=never("height"),
             luminance=never("luminance"),
         )

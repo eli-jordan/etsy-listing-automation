@@ -4,6 +4,7 @@ import {
   commonMediaThumbnailUrl,
   listingMediaFileUrl,
   listingMediaThumbnailUrl,
+  listingScenePreviewUrl,
 } from "./api/listings";
 import {
   listingTemplateMediaFileUrl,
@@ -48,7 +49,7 @@ export type PictureSize = "tile" | "full";
  *
  * Filename-derived rather than looked up, so a reel tile still labels itself
  * when the file has been deleted from `common-media/` since the listing named
- * it. One implementation: `DesignSelect` and the reel each had their own.
+ * it. One implementation: the design strip and the reel each had their own.
  */
 export function refName(ref: string): string {
   const file = ref.split("/").pop() ?? ref;
@@ -82,17 +83,31 @@ export function mediaKind(entry: MediaEntry): "image" | "video" {
 }
 
 /**
- * The one design a render can overlay -- `null` for a multi-artwork listing
- * (`on-light`/`on-dark`), where there is no single "the design" to composite,
- * which is the same case `DesignSelect` treats as read-only.
+ * Which saved listing a scene render resolves its artwork from, and a
+ * signature of that listing's saved design (A35).
  *
- * Here rather than beside the Design strip because every caller wants it for
- * the same reason: it is the second argument to {@link pictureFor}.
+ * Every layer of a scene prints the file its colour resolves to -- a
+ * light/dark pair shows both files in one multi-colour scene -- so a picture
+ * is asked of the listing, not of one design name. It is the *saved* listing
+ * the server reads (multi-artwork plan, *Editor previews*), which is why the
+ * signature is `design_content_hash`: it comes from the last server response,
+ * so it changes when a design edit has landed rather than when it was made,
+ * and a URL is never cached holding the picture from before the save.
+ *
+ * `null` for an unnamed draft, which has no saved listing to resolve from,
+ * and for a listing with no design, which would only print nothing.
  */
-export function singleDesignName(design: Record<string, string>): string | null {
-  const values = Object.values(design);
-  if (values.length !== 1) return null;
-  return refName(values[0] as string) || null;
+export interface SceneSource {
+  listing: string;
+  version: string;
+}
+
+export function sceneSource(
+  listing: string,
+  designVersion: string | null | undefined,
+): SceneSource | null {
+  if (listing === "" || designVersion === null || designVersion === undefined) return null;
+  return { listing, version: designVersion };
 }
 
 /** What to call one entry, in a tile label, a lightbox caption or an aria-label. */
@@ -134,11 +149,11 @@ export function missingColours(
 /**
  * The picture for one thing `media:` can hold.
  *
- * A template entry is a *render*: the listing's real artwork composited onto
- * the template's saved geometry. `design` is null for a multi-artwork listing
- * (`on-light`/`on-dark`), where there is no single design to composite, and
- * that case falls back to the bare inkless photo. A shared asset is already
- * exactly the file Etsy would receive, so it is served as-is.
+ * A template entry is a *render*: each layer printing the file its colour
+ * resolves to, composited onto the template's saved geometry -- or, for a
+ * listing template, its preview design on every layer. With no `artwork` it is
+ * the bare inkless photo. A shared asset is
+ * already exactly the file Etsy would receive, so it is served as-is.
  *
  * At `tile` size a template entry is always the bare thumbnail, never a render:
  * a tile is picked out of a row, and running the real pipeline once per tile
@@ -149,20 +164,22 @@ export function missingColours(
  */
 export function pictureFor(
   entry: MediaEntry,
-  design: Artwork | null,
+  artwork: Artwork | null,
   size: PictureSize = "full",
   owner: MediaOwner | string | null = null,
 ): string {
   if (typeof entry === "string") return filePicture(entry, size, ownerOf(owner));
-  return templatePicture(entry.template, entry.colour ?? null, design, size);
+  return templatePicture(entry.template, entry.colour ?? null, artwork, size);
 }
 
-/** What a render composites onto a template's photo: a listing's design by
- * name (`GET /api/listing-designs`), or -- in the listing-template editor,
- * where there is no artwork (UI doc §3) -- a calibrator test design by its
- * library id. An object for the second so the two cannot be mistaken for each
- * other: they name files in different directories. */
-export type Artwork = string | { testDesign: string };
+/** What a render composites onto a template's photo: a saved listing, each
+ * layer printing the file its colour resolves to ({@link SceneSource}); or,
+ * in the listing-template editor where there is no artwork (UI doc §3), one
+ * design picked only to preview with -- a workspace design by name, or a
+ * calibrator test design by its library id. An object for the test design so
+ * the two names cannot be mistaken for each other: they name files in
+ * different directories. */
+export type Artwork = SceneSource | string | { testDesign: string };
 
 /** Whose directory a `./` ref is resolved against: a listing's, or a listing
  * template's (ADR-0047) -- the one other thing that owns files of its own.
@@ -220,12 +237,15 @@ export function ownedTile(entry: MediaEntry, owner: MediaOwner): string {
 export function templatePicture(
   template: string,
   colour: string | null,
-  design: Artwork | null,
+  artwork: Artwork | null,
   size: PictureSize = "full",
 ): string {
   if (size === "tile") return templateThumbnailUrl(template, colour);
-  if (design === null) return templatePhotoUrl(template, colour);
-  return templateDesignPreviewUrl(template, design, colour);
+  if (artwork === null) return templatePhotoUrl(template, colour);
+  if (typeof artwork === "string" || "testDesign" in artwork) {
+    return templateDesignPreviewUrl(template, artwork, colour);
+  }
+  return listingScenePreviewUrl(artwork.listing, template, colour, artwork.version);
 }
 
 /**

@@ -34,6 +34,7 @@ from tests.support.builders import FIXTURE_LISTING as LISTING
 from tests.support.builders import (
     a_context,
     a_lock,
+    edit_garment_profile,
     edit_listing,
     set_copy,
     set_shop_id,
@@ -110,9 +111,8 @@ def _plan(ctx: RunContext, lock: Lockfile) -> PlannedRun:
 def test_unresolvable_artwork_is_a_blocked_product_plan(
     root: Path, catalog: FakeCatalogClient, printify: FakePrintifyClient
 ) -> None:
-    edit_listing(
-        root, design={"first": "designs/take-a-hike.png", "second": "designs/take-a-hike.png"}
-    )
+    # ADR-0053: ivory is a light shirt and the pair has no file for it.
+    edit_listing(root, design={"on-light": None, "on-dark": "designs/take-a-hike.png"})
     planned = _plan(_ctx(root, catalog, printify), a_lock())
     assert planned.plan.stage_plans[0].blocked
 
@@ -483,6 +483,10 @@ def test_a_refusal_does_not_cost_the_other_stages_their_plan(root, catalog, prin
 
 
 def test_a_colour_the_catalog_does_not_offer_is_refused(root, catalog, printify) -> None:
+    # Classified, so the artwork gate (ADR-0053) lets it through to the catalog.
+    edit_garment_profile(
+        root, "comfort-colors-1717", colors={"black": "dark", "chartreuse": "light"}
+    )
     edit_listing(
         root,
         colors=["black", "chartreuse"],

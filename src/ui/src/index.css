@@ -2059,6 +2059,27 @@ table.listings tbody tr:last-child td {
   background: linear-gradient(135deg, var(--color-neutral-200), var(--color-neutral-300));
 }
 
+/* A thumbnail on the cloth it prints on: light ink on a light tile would be
+   invisible, and "does this ink suit the shirt" is the point of looking. */
+.design-tile {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.design-tile img {
+  width: 82%;
+  height: 82%;
+  object-fit: contain;
+}
+
+.design-tile--empty {
+  background: transparent;
+  border: 1.5px dashed color-mix(in srgb, var(--color-text) 30%, transparent);
+  box-shadow: none;
+}
+
 .design-row__text {
   flex: 1;
   min-width: 0;
@@ -2096,6 +2117,136 @@ table.listings tbody tr:last-child td {
 
 .design-row__change:hover {
   text-decoration: underline;
+}
+
+/* The linked pair (interactions Part 2 §1): two base-slot cards, for light
+   and for dark shirts, joined by the Link / Unlink pill. */
+.design-select--pair {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.design-select__head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.design-select__own {
+  font-size: 12px;
+  color: color-mix(in srgb, var(--color-text) 65%, transparent);
+}
+
+/* A colour's name in the own-design line: previews that colour. */
+.design-select__colour {
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  font-weight: 600;
+  color: var(--color-accent-700);
+  cursor: pointer;
+}
+
+.design-select__colour:hover {
+  text-decoration: underline;
+}
+
+.design-pair {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.design-row--slot {
+  padding: 6px 12px 6px 6px;
+  border: 1px solid var(--color-divider);
+  background: var(--color-neutral-100);
+}
+
+/* Empty, and a colour the listing sells needs it. */
+.design-row--missing {
+  border-style: dashed;
+  border-color: var(--color-warning);
+  background: color-mix(in srgb, var(--color-warning) 8%, var(--color-neutral-100));
+}
+
+/* Linked: the dark card only mirrors the one design. */
+.design-row--mirrored {
+  border-style: dashed;
+  background: transparent;
+}
+
+.design-row--mirrored .design-tile {
+  opacity: 0.75;
+}
+
+.design-row--open {
+  border-color: var(--color-accent);
+}
+
+.design-row__title {
+  font-size: 11px;
+  font-weight: 700;
+  color: color-mix(in srgb, var(--color-text) 68%, transparent);
+}
+
+.design-row__users {
+  font-size: 11.5px;
+  color: color-mix(in srgb, var(--color-text) 60%, transparent);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.design-row__users--idle {
+  font-style: italic;
+}
+
+.design-row__same {
+  font-weight: 600;
+  color: color-mix(in srgb, var(--color-text) 55%, transparent);
+}
+
+.design-row--slot .design-row__change {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.design-link {
+  height: 30px;
+  padding: 0 11px 0 9px;
+  gap: 5px;
+  font-family: var(--font-body);
+  font-size: 11.5px;
+  font-weight: 700;
+  border-radius: 999px;
+  border: 1px solid var(--color-divider);
+  background: var(--color-bg);
+  color: color-mix(in srgb, var(--color-text) 60%, transparent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.design-link:hover {
+  border-color: var(--color-accent);
+  color: var(--color-accent-700);
+}
+
+.design-link--on {
+  background: var(--color-accent-100);
+  border-color: var(--color-accent-300);
+  color: var(--color-accent-700);
+}
+
+.design-select--pair .add-panel {
+  margin-top: 0;
 }
 
 /* The inline picker the strip drops open, and the card grid inside it --
@@ -2311,6 +2462,50 @@ table.listings tbody tr:last-child td {
 
 .color-row--off .color-row__swatch {
   opacity: 0.45;
+}
+
+/* A colour's own design (interactions Part 2 §5): the tag beside its name,
+   and the chip of the file each sold colour prints, on its own cloth. */
+.color-row__own {
+  padding: 1px 7px;
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.color-row__chip {
+  flex: none;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid color-mix(in srgb, var(--color-text) 18%, transparent);
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  cursor: pointer;
+  transition: box-shadow 0.12s ease;
+}
+
+.color-row__chip img {
+  width: 88%;
+  height: 88%;
+  object-fit: contain;
+}
+
+.color-row__chip:hover,
+.color-row__chip:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--color-accent);
+}
+
+.color-row__chip--own {
+  box-shadow: 0 0 0 2px var(--color-accent-2);
+}
+
+.color-row__chip--empty {
+  background: transparent;
+  border: 1.5px dashed var(--color-warning);
 }
 
 /* A switch is a `<button role="switch">` here, not a styled checkbox --
@@ -4392,6 +4587,12 @@ table.listings tbody tr:last-child td {
   max-height: min(1024px, calc(100vh - 260px));
 }
 
+/* Variants: the "what this colour prints" card sits under the stage, and the
+   two are read together -- so the photo leaves room for it on a laptop. */
+.variants-preview .preview-stage--large img {
+  max-height: min(1024px, calc(100vh - 380px));
+}
+
 /* A button only so the keyboard can open the carousel -- it must look like
    the image it wraps and nothing else. */
 .preview-stage__open {
@@ -4433,6 +4634,79 @@ table.listings tbody tr:last-child td {
   font-size: 11px;
   text-align: center;
   color: color-mix(in srgb, var(--color-text) 50%, transparent);
+}
+
+/* What the previewed colour prints, and why (interactions Part 2 §6). */
+.color-prints {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--color-neutral-100);
+  border: 1px solid var(--color-divider);
+}
+
+.color-prints--blocked {
+  border-color: var(--color-warning);
+  background: color-mix(in srgb, var(--color-warning) 8%, var(--color-neutral-100));
+}
+
+.color-prints__thumb {
+  flex: none;
+  width: 52px;
+  height: 52px;
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  box-shadow: var(--shadow-sm);
+}
+
+.color-prints__thumb img {
+  width: 84%;
+  height: 84%;
+  object-fit: contain;
+}
+
+.color-prints__text {
+  flex: 1;
+  min-width: 0;
+}
+
+.color-prints__title {
+  font-weight: 700;
+  font-size: 14px;
+}
+
+.color-prints__why {
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: color-mix(in srgb, var(--color-text) 72%, transparent);
+  max-width: 62ch;
+}
+
+.color-prints__note {
+  margin-top: 4px;
+  font-size: 11px;
+  color: color-mix(in srgb, var(--color-text) 55%, transparent);
+}
+
+.color-prints__actions {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+  flex: none;
+}
+
+/* The same body-face override `.add-panel .btn-like` applies: Caprasimo is
+   for headings, not 12px row actions. */
+.color-prints__btn {
+  font-family: var(--font-body);
+  font-weight: 600;
+  white-space: nowrap;
 }
 
 .image-placeholder {
@@ -4805,6 +5079,62 @@ table.listings tbody tr:last-child td {
   color: color-mix(in srgb, var(--color-text) 55%, transparent);
 }
 
+/* The full design list for one target (interactions Part 2 §4): titled for
+   it, every thumbnail on its cloth, the current file marked. */
+.design-picker {
+  width: 460px;
+}
+
+.design-picker__hint {
+  margin: calc(-1 * var(--space-2)) 0 0;
+  font-size: 12.5px;
+  color: color-mix(in srgb, var(--color-text) 68%, transparent);
+}
+
+.design-picker__search {
+  position: relative;
+}
+
+.design-picker__search svg {
+  position: absolute;
+  left: 11px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: color-mix(in srgb, var(--color-text) 50%, transparent);
+}
+
+.design-picker__search .input {
+  width: 100%;
+  padding-left: 32px;
+}
+
+.design-picker__row {
+  width: 100%;
+}
+
+.design-picker__row .modal-design-row__thumb {
+  width: 44px;
+  height: 44px;
+}
+
+.design-picker__row--on {
+  background: color-mix(in srgb, var(--color-accent) 10%, transparent);
+}
+
+.design-picker__text {
+  flex: 1;
+  min-width: 0;
+}
+
+.design-picker__current {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--color-accent-700);
+}
+
 .modal-empty {
   font-size: 12.5px;
   color: color-mix(in srgb, var(--color-text) 55%, transparent);
@@ -4848,6 +5178,47 @@ table.listings tbody tr:last-child td {
   display: flex;
   justify-content: flex-end;
   gap: var(--space-2);
+}
+
+/* Linking a light/dark pair: which of the two files every shirt prints. */
+.choose-base {
+  width: 440px;
+}
+
+.choose-base__body {
+  margin: 0;
+  font-size: 13px;
+  color: color-mix(in srgb, var(--color-text) 72%, transparent);
+}
+
+.choose-base__options {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.choose-base__card {
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-start;
+  gap: var(--space-2);
+  padding: 8px;
+}
+
+.choose-base__text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.choose-base__card .template-card__kind {
+  font-size: 11px;
+}
+
+.choose-base__note {
+  margin: 0;
+  font-size: 13px;
+  color: color-mix(in srgb, var(--color-text) 72%, transparent);
 }
 
 /* — the deploy view (docs/features/deploy-20260917/spec.md, `pages/deploy/`) —
@@ -6352,6 +6723,17 @@ button.seo-ai-mode.seo-ai-mode--busy:disabled {
 
   .page-head--editor {
     flex-wrap: wrap;
+  }
+
+  /* The linked pair stacks: narrow widths are not designed yet
+     (multi-artwork plan, Uncovered surfaces), but the page must not scroll
+     sideways. */
+  .design-pair {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .design-link {
+    justify-self: center;
   }
 
   .page-head__name {

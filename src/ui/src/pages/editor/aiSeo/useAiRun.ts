@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { cancelAiRun, findAiRun, openAiRunStream, startAiRun } from "../../../api/aiRuns";
 import type { EventStreamHandle } from "../../../api/sse";
 import type { SaveState } from "../../../hooks/useAutosave";
+import { representative } from "../artwork";
 import type {
   AiRunEvent,
   AiRunPhase,
@@ -31,10 +32,11 @@ import type {
  *
  * ## The auto chain
  *
- * {@link AiRun.arm} is called from the design strip's pick while the brief is
- * empty. The chain then fires **once**, on the first successful save after
- * the pick that has a name, a design and a garment profile -- the first
- * moment the server can run it -- asking for a brief only if the field is
+ * {@link AiRun.arm} is called when the design strip changes the listing's
+ * representative artwork while the brief is empty. The chain then fires
+ * **once**, on the first successful save after that which has a name, a
+ * representative artwork and a garment profile -- the first moment the
+ * server can run it -- asking for a brief only if the field is
  * still empty then. That start raises {@link AiRun.autoNotice}; pressing
  * AI Mode does not. A new pick re-arms it; leaving the editor disarms it.
  * A run that fails is reported and left alone: an automatic retry against a
@@ -247,10 +249,12 @@ export function useAiRun(
   }, []);
 
   // Reattach: the listing's current or latest run, replayed from its first
-  // event. Only for a saved listing with a design -- nothing else can have
-  // had a run -- and never over a run this editor has started since.
+  // event. Only for a saved listing with a representative artwork -- the one
+  // image a run is sent, so nothing else can have had a run (spec,
+  // *Representative artwork*) -- and never over a run this editor has
+  // started since.
   const name = detail.name;
-  const hasDesign = Object.keys(detail.design).length > 0;
+  const hasDesign = representative(detail.design) !== null;
   useEffect(() => {
     if (name === "" || !hasDesign) return;
     const mine = generation.current;

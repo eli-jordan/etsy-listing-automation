@@ -12,6 +12,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+import yaml
 
 from etsy_listings.cli import prompts
 from etsy_listings.core.clients.printify.models import Blueprint
@@ -159,6 +160,9 @@ def test_new_runs_end_to_end_through_the_plain_input_backend(
     listing = workspace_root / "listings" / "brand-new-design" / "listing.yaml"
     assert listing.is_file()
     assert "flat-lay-01" in listing.read_text(encoding="utf-8")
+    # The map form, never the bare-string shorthand (multi-artwork plan).
+    written = yaml.safe_load(listing.read_text(encoding="utf-8"))
+    assert written["design"] == {"default": "designs/brand-new-design.png"}
     assert (workspace_root / "garment-profiles" / "gildan-5000.yaml").is_file()
     assert (workspace_root / "pricing-plans" / "launch-low.yaml").is_file()
 
@@ -283,7 +287,6 @@ def test_cancelling_the_pricing_plan_picker_stops_new(
 SINGLE_KIND_TEMPLATE = """\
 kind: single
 colour: white
-artwork: on-light
 bounding_box:
 - {x: 10.0, y: 10.0}
 - {x: 90.0, y: 10.0}

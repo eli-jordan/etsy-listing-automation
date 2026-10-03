@@ -8,7 +8,7 @@ import {
   pictureFor,
   refName,
   scenePath,
-  singleDesignName,
+  sceneSource,
   templatePicture,
 } from "./media";
 import type { MediaEntry, TemplateSummary } from "./types";
@@ -36,6 +36,8 @@ const FLAT_LAY: TemplateSummary = {
   status_reason: null,
 };
 
+const SAVED = { listing: "take-a-hike", version: "abc123" };
+
 describe("refName", () => {
   it("takes the stem of a ref", () => {
     expect(refName("common-media/sizing-chart.png")).toBe("sizing-chart");
@@ -54,19 +56,18 @@ describe("refName", () => {
   });
 });
 
-describe("singleDesignName", () => {
-  it("names the one design", () => {
-    expect(singleDesignName({ default: "designs/take-a-hike.png" })).toBe("take-a-hike");
+describe("sceneSource", () => {
+  it("renders a saved listing's scenes, keyed by its saved design", () => {
+    expect(sceneSource("take-a-hike", "abc123")).toEqual({
+      listing: "take-a-hike",
+      version: "abc123",
+    });
   });
 
-  it("answers null for a multi-artwork listing, which has no single design", () => {
-    expect(
-      singleDesignName({ "on-light": "designs/a.png", "on-dark": "designs/b.png" }),
-    ).toBeNull();
-  });
-
-  it("answers null for a listing with no design at all", () => {
-    expect(singleDesignName({})).toBeNull();
+  it("has nothing to resolve for an unnamed draft or a listing with no design", () => {
+    expect(sceneSource("", "abc123")).toBeNull();
+    expect(sceneSource("take-a-hike", null)).toBeNull();
+    expect(sceneSource("take-a-hike", undefined)).toBeNull();
   });
 });
 
@@ -119,20 +120,26 @@ describe("missingColours", () => {
 });
 
 describe("pictureFor", () => {
-  it("composites the listing's real design onto a template at full size", () => {
-    const url = pictureFor({ template: "flat-lay-01", colour: "black" }, "take-a-hike");
-    expect(url).toContain("/api/templates/flat-lay-01/design-preview");
-    expect(url).toContain("design=take-a-hike");
-    expect(url).toContain("colour=black");
+  it("renders a template with the saved listing's resolved artwork at full size", () => {
+    const url = pictureFor({ template: "flat-lay-01", colour: "black" }, SAVED);
+    expect(url).toBe(
+      "/api/listings/take-a-hike/scene-preview?template=flat-lay-01&colour=black&v=abc123",
+    );
   });
 
-  it("falls back to the bare photo when there is no single design to composite", () => {
+  it("renders a multi-colour scene the same way, with no colour of its own", () => {
+    expect(pictureFor({ template: "colour-chart-01", colour: null }, SAVED)).toBe(
+      "/api/listings/take-a-hike/scene-preview?template=colour-chart-01&v=abc123",
+    );
+  });
+
+  it("falls back to the bare photo when there is no saved listing to resolve from", () => {
     const url = pictureFor({ template: "flat-lay-01", colour: "black" }, null);
     expect(url).toBe("/api/templates/flat-lay-01/photo?colour=black");
   });
 
   it("uses the thumbnail for a tile, never a render", () => {
-    const url = pictureFor({ template: "flat-lay-01", colour: "black" }, "take-a-hike", "tile");
+    const url = pictureFor({ template: "flat-lay-01", colour: "black" }, SAVED, "tile");
     expect(url).toBe("/api/templates/flat-lay-01/thumbnail?colour=black");
   });
 
@@ -143,9 +150,7 @@ describe("pictureFor", () => {
   });
 
   it("serves a shared asset as-is at full size -- it is already what Etsy gets", () => {
-    expect(pictureFor("common-media/sizing.png", "take-a-hike")).toBe(
-      "/api/common-media/sizing.png/file",
-    );
+    expect(pictureFor("common-media/sizing.png", SAVED)).toBe("/api/common-media/sizing.png/file");
   });
 
   it("addresses a shared asset by its full path under common-media/, extension and all", () => {
@@ -225,8 +230,8 @@ describe("templatePicture", () => {
   });
 
   it("agrees with pictureFor for the same template and colour", () => {
-    expect(templatePicture("flat-lay-01", "black", "take-a-hike")).toBe(
-      pictureFor({ template: "flat-lay-01", colour: "black" }, "take-a-hike"),
+    expect(templatePicture("flat-lay-01", "black", SAVED)).toBe(
+      pictureFor({ template: "flat-lay-01", colour: "black" }, SAVED),
     );
   });
 });

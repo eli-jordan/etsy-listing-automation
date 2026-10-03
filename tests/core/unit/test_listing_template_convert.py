@@ -116,7 +116,7 @@ class TestWhatIsCopied:
     ) -> None:
         edit_listing(
             workspace.root,
-            artwork={"black": "default"},
+            design={"default": "designs/take-a-hike.png", "black": "designs/take-a-hike.png"},
             lifecycle="retired",
             etsy={
                 "title": "Take A Hike Tee",

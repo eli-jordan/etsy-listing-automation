@@ -994,6 +994,36 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/listings/{name}/scene-preview": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Scene Preview
+     * @description One of this listing's scenes, each layer printing the file its depicted
+     *     colour resolves to in the *saved* listing (A35) -- the Variants stage and
+     *     every Listing Images picture, multi-colour scenes included (spec:
+     *     *Previews*). Resolved here rather than from a design name in the URL,
+     *     because the editor showing one file while Printify prints another is the
+     *     thing a single resolver exists to prevent.
+     *
+     *     A layer that resolves to nothing is left bare rather than failing the
+     *     picture (:func:`~etsy_listings.core.application.listing_reads.scene_artwork`).
+     *     ``v`` is ignored; the editor sends a signature of the saved design so a
+     *     landed save is a new URL and the browser fetches it again.
+     */
+    get: operations["scene_preview_api_listings__name__scene_preview_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/pricing-plans": {
     parameters: {
       query?: never;
@@ -1268,20 +1298,20 @@ export interface paths {
     };
     /**
      * Design Preview
-     * @description A listing's *real* artwork, composited onto this template's saved
-     *     geometry -- what the listing editor's Variants/Listing Images tabs show
-     *     so a colour can be judged against the actual design, not a bare photo.
+     * @description One design on every layer of this template's saved geometry -- the
+     *     listing-template editor's preview (UI doc §3): a listing template has no
+     *     artwork, so it is viewed through a design picked only to preview with.
      *
      *     ``design`` is a name from ``GET /api/listing-designs``, resolved through
-     *     ``Workspace.design_file`` -- deliberately not :func:`resolve_design`,
-     *     which is the calibrator's own test-design library and never sees a
-     *     listing's real artwork.
+     *     ``Workspace.design_file``; ``test_design`` is the calibrator library's id
+     *     instead, through :func:`resolve_design`, bundled grid by default. Exactly
+     *     one of the two -- they name files in different places, and guessing which
+     *     one a bare name meant is how a test target would end up judged as artwork.
      *
-     *     ``test_design`` is that library's id instead, for the listing-template
-     *     editor (UI doc §3): a listing template has no artwork, so it is viewed
-     *     through a calibrator test design, bundled grid by default. Exactly one of
-     *     the two -- they name files in different places, and guessing which one a
-     *     bare name meant is how a test target would end up judged as artwork.
+     *     A *listing's* scenes are not previewed here: ``GET
+     *     /api/listings/{name}/scene-preview`` resolves each layer's file from the
+     *     saved listing (A35), so its editor cannot show one file while Printify
+     *     prints another.
      */
     get: operations["design_preview_api_templates__name__design_preview_get"];
     put?: never;
@@ -2496,13 +2526,6 @@ export interface components {
      *     on.
      */
     ListingDetail: {
-      /**
-       * Artwork
-       * @default {}
-       */
-      artwork: {
-        [key: string]: string;
-      };
       /** Brief */
       brief: string;
       /** Colors */
@@ -2512,9 +2535,12 @@ export interface components {
        * @default
        */
       description_composed: string;
-      /** Design */
+      /**
+       * Design
+       * @default {}
+       */
       design: {
-        [key: string]: string;
+        [key: string]: string | null;
       };
       /** Design Content Hash */
       design_content_hash?: string | null;
@@ -3055,8 +3081,6 @@ export interface components {
      * @description One garment within a ``multiple``-kind scene.
      */
     Placement: {
-      /** Artwork */
-      artwork?: string | null;
       /** Bounding Box */
       bounding_box: [
         components["schemas"]["Point"],
@@ -3546,7 +3570,7 @@ export interface components {
       colors: string[];
       /** Design */
       design: {
-        [key: string]: string;
+        [key: string]: string | null;
       };
       /** Design Content Hash */
       design_content_hash: string | null;
@@ -3682,8 +3706,6 @@ export interface components {
      *     anything that isn't part of a colour set.
      */
     SingleTemplate: {
-      /** Artwork */
-      artwork?: string | null;
       /** Bounding Box */
       bounding_box: [
         components["schemas"]["Point"],
@@ -5851,6 +5873,42 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["ListingDetail"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  scene_preview_api_listings__name__scene_preview_get: {
+    parameters: {
+      query: {
+        template: string;
+        colour?: string | null;
+        scale?: "editor" | "full";
+        v?: string | null;
+      };
+      header?: never;
+      path: {
+        name: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": unknown;
         };
       };
       /** @description Validation Error */

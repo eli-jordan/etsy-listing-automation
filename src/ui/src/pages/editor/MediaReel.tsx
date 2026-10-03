@@ -26,7 +26,7 @@ import type { Focus } from "./focus";
 
 interface Props {
   media: readonly MediaEntry[];
-  design: Artwork | null;
+  scene: Artwork | null;
   swatchTemplate: string | null;
   selectedIndex: number | null;
   /** Whose `./` refs these are -- a listing (by name) or a listing
@@ -43,7 +43,7 @@ interface Props {
 
 export function MediaReel({
   media,
-  design,
+  scene,
   swatchTemplate,
   selectedIndex,
   listing,
@@ -95,7 +95,7 @@ export function MediaReel({
               key={`${mediaLabel(entry)}-${index}`}
               entry={entry}
               index={index}
-              picture={pictureFor(entry, design, "tile", listing)}
+              picture={pictureFor(entry, scene, "tile", listing)}
               suppliesSwatch={
                 typeof entry !== "string" &&
                 swatchTemplate !== null &&

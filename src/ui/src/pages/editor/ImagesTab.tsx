@@ -9,7 +9,7 @@ import {
   mediaKind,
   mediaLabel,
   pictureFor,
-  singleDesignName,
+  sceneSource,
 } from "../../media";
 import type { MediaFileSummary, ListingDetail, TemplateSummary } from "../../types";
 import { MediaLocator } from "./MediaLocator";
@@ -91,7 +91,10 @@ export function ImagesTab({ detail, onUpdate, artwork, owner }: Props) {
       .catch(() => setStatus("failed to load this listing's files"));
   }, [directoryKind, directoryName]);
 
-  const design = artwork !== undefined ? artwork : singleDesignName(detail.design);
+  // Each layer resolved from the saved listing, multi-colour scenes too
+  // (A35) -- or, in the listing-template editor, its preview design.
+  const scene: Artwork | null =
+    artwork !== undefined ? artwork : sceneSource(detail.name, detail.design_content_hash);
 
   /** Every edit is a patch or nothing: a rule that declines (the twentieth
    * image is already there) returns `null` rather than an unchanged document,
@@ -105,11 +108,11 @@ export function ImagesTab({ detail, onUpdate, artwork, owner }: Props) {
   const lightboxItems: LightboxItem[] = detail.media.map((entry, index) => ({
     id: `${mediaLabel(entry)}-${index}`,
     label: mediaLabel(entry),
-    url: pictureFor(entry, design, "full", listing),
+    url: pictureFor(entry, scene, "full", listing),
     kind: mediaKind(entry),
   }));
 
-  const view = focus === null ? null : viewFocus(focus, detail, templates, design, listing);
+  const view = focus === null ? null : viewFocus(focus, detail, templates, scene, listing);
 
   function toggleFocused() {
     if (focus === null) return;
@@ -210,7 +213,7 @@ export function ImagesTab({ detail, onUpdate, artwork, owner }: Props) {
 
         <MediaReel
           media={detail.media}
-          design={design}
+          scene={scene}
           swatchTemplate={detail.etsy.variation_images ?? null}
           selectedIndex={selectedIndex}
           listing={listing}

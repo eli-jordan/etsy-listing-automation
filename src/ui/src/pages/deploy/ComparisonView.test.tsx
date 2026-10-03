@@ -2,6 +2,7 @@ import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { ComparisonView } from "./ComparisonView";
 import { buildComparison } from "./comparison";
+import { sceneSource } from "../../media";
 import type { EtsyListingSnapshot, ListingDetail, PlanDTO, StagePlanDTO } from "../../types";
 import { stagePlan } from "../../test/helpers";
 
@@ -36,7 +37,6 @@ function detail(): ListingDetail {
     brief: "",
     prices: {},
     price_overrides: {},
-    artwork: {},
     pricing_plan: null,
     etsy: {
       title: "",
@@ -95,7 +95,10 @@ describe("ComparisonView", () => {
     render(
       <ComparisonView
         comparison={buildComparison(p)}
-        listing={{ name: detail().name, design: detail().design }}
+        listing={{
+          name: detail().name,
+          scene: sceneSource(detail().name, detail().design_content_hash),
+        }}
         renderSnapshot={null}
         previewsRendered={new Set()}
         collapsed={false}
@@ -118,7 +121,10 @@ describe("ComparisonView", () => {
     render(
       <ComparisonView
         comparison={buildComparison(p)}
-        listing={{ name: detail().name, design: detail().design }}
+        listing={{
+          name: detail().name,
+          scene: sceneSource(detail().name, detail().design_content_hash),
+        }}
         renderSnapshot={null}
         previewsRendered={new Set()}
         collapsed={false}
@@ -136,7 +142,10 @@ describe("ComparisonView", () => {
     render(
       <ComparisonView
         comparison={buildComparison(p)}
-        listing={{ name: detail().name, design: detail().design }}
+        listing={{
+          name: detail().name,
+          scene: sceneSource(detail().name, detail().design_content_hash),
+        }}
         renderSnapshot={null}
         previewsRendered={new Set()}
         collapsed
@@ -163,7 +172,10 @@ describe("ComparisonView", () => {
     render(
       <ComparisonView
         comparison={buildComparison(p)}
-        listing={{ name: detail().name, design: detail().design }}
+        listing={{
+          name: detail().name,
+          scene: sceneSource(detail().name, detail().design_content_hash),
+        }}
         renderSnapshot={null}
         previewsRendered={new Set()}
         collapsed={false}
@@ -209,7 +221,10 @@ describe("ComparisonView's videos", () => {
     render(
       <ComparisonView
         comparison={buildComparison(p)}
-        listing={{ name: detail().name, design: detail().design }}
+        listing={{
+          name: detail().name,
+          scene: sceneSource(detail().name, detail().design_content_hash),
+        }}
         renderSnapshot={null}
         previewsRendered={new Set()}
         collapsed={collapsed}

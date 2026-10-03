@@ -25,7 +25,6 @@ function detail(over: Partial<ListingDetail> = {}): ListingDetail {
     garment_model: "1717",
     prices: {},
     price_overrides: {},
-    artwork: {},
     pricing_plan: null,
     etsy: {
       title: "Take A Hike Tee",
@@ -97,6 +96,18 @@ describe("useAiSeoMode availability", () => {
     const readiness = vi.spyOn(seoApi, "getSeoReadiness");
 
     const { result } = renderHook(() => useAiSeoMode(detail({ design: {} }), vi.fn(), vi.fn()));
+
+    await waitFor(() => expect(result.current.available).toBe(false));
+    expect(readiness).not.toHaveBeenCalled();
+  });
+
+  it("is unavailable without asking when neither base slot holds a file", async () => {
+    /* Spec, *Representative artwork*: an empty light/dark pair has no image
+       to send, and a colour's own design is never promoted to one. */
+    const readiness = vi.spyOn(seoApi, "getSeoReadiness");
+    const empty = { "on-light": null, "on-dark": null, black: "designs/black.png" };
+
+    const { result } = renderHook(() => useAiSeoMode(detail({ design: empty }), vi.fn(), vi.fn()));
 
     await waitFor(() => expect(result.current.available).toBe(false));
     expect(readiness).not.toHaveBeenCalled();

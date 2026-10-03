@@ -99,11 +99,15 @@ class TestWhatTheCatalogActuallyRequires:
     """What the catalog checks, measured rather than assumed.
 
     ``clients/printify/catalog.py`` and docs/guides/setup.md say every ``/v1/catalog/*.json`` call
-    needs a personal access token with the ``catalog.read`` scope. Two of them
-    plainly do not: ``blueprints`` and ``print_providers`` are served with no
-    ``Authorization`` header at all. That matters for how hard ``new`` should
-    push a user to get a token before it will run, so it is measured here
-    rather than believed.
+    needs a personal access token with the ``catalog.read`` scope. One of them
+    plainly does not: ``print_providers`` is served with no ``Authorization``
+    header at all. That matters for how hard ``new`` should push a user to get
+    a token before it will run, so it is measured here rather than believed.
+
+    ``blueprints`` used to be served the same way; since 2026-09-29 Printify
+    answers it 401 without a header. The same rollout as the bad-token
+    change below, so it is dropped rather than re-pinned: the client always
+    sends the token, which works either way.
 
     What this class deliberately no longer asserts is how the API treats a
     *bad* token. It used to serve the per-provider endpoints to any header at
@@ -120,7 +124,6 @@ class TestWhatTheCatalogActuallyRequires:
     """
 
     PUBLIC = [
-        "/v1/catalog/blueprints.json",
         "/v1/catalog/blueprints/706/print_providers.json",
     ]
 

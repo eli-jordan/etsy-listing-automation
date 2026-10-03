@@ -148,7 +148,7 @@ export function MultipleEditor({
             })) as BoundingBox)
           : CENTRED_BOX;
         return {
-          placements: [...placements, { colour: "", bounding_box, artwork: null }],
+          placements: [...placements, { colour: "", bounding_box }],
           select: placements.length,
         };
       }),

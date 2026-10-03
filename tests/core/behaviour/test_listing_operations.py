@@ -148,7 +148,7 @@ class TestDescribeDraft:
         view = describe_draft(workspace, EMPTY_DRAFT)
 
         blocks = {i.where for i in view.issues if i.severity == "block"}
-        assert {"Design", "Pricing", "Variants › Colours"} <= blocks
+        assert {"Artwork", "Pricing", "Variants › Colours"} <= blocks
         assert (view.name, view.status, view.gestures) == ("", "draft", ())
 
     def test_an_incomplete_candidate_is_described_as_it_stands(self, workspace: Workspace) -> None:

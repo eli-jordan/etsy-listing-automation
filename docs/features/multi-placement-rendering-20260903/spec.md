@@ -8,6 +8,15 @@ per-scene overrides — that design was replaced before any code shipped
 against it, in favour of the simpler, kind-based one documented here, which
 *is* implemented.
 
+**Multi-artwork amendment:** The [multi-artwork specification](../multi-artwork-20260928/spec.md) and
+ADR-0053 supersede this document's artwork-key resolution, separate listing
+`artwork:` field, and template/placement artwork overrides. The approved target
+uses one `design:` map for reserved base keys and direct colour keys. Those
+passages describe the current implementation only, not the approved product
+target. The template kinds, rendering geometry and media-addressing decisions
+remain in force. The [multi-artwork plan](../multi-artwork-20260928/plan.md)
+replaces the superseded mechanics.
+
 ## Two things this solves
 
 - **A colour chart** — several garments in one photo, not one garment per

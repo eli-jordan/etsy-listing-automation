@@ -29,6 +29,7 @@ from pydantic import ValidationError
 
 from etsy_listings.core.application.dependencies import EtsyStates
 from etsy_listings.core.application.refusals import ListingMissing, field_errors_of
+from etsy_listings.core.config.artwork import Resolved, resolve
 from etsy_listings.core.config.errors import ConfigLoadError
 from etsy_listings.core.config.garment_profile import GarmentProfile
 from etsy_listings.core.config.listing import Listing
@@ -144,6 +145,37 @@ def read_listing(workspace: Workspace, name: str, *, etsy_states: EtsyStates) ->
         etsy_listing_id=etsy_listing_id,
         printify_product_id=printify_product_id,
     )
+
+
+def scene_artwork(workspace: Workspace, name: str) -> Callable[[str | None], Path | None]:
+    """Which file a scene layer depicting a colour prints, in listing
+    ``name`` as *saved* (A35) -- the editor's scene preview, so the editor
+    cannot show one file while Printify prints another.
+
+    The answer is ``None`` -- the layer is left bare rather than failing the
+    picture -- for an empty slot, an unclassified colour, a ref outside its
+    root or a file since deleted: the issues banner already says why, and the
+    rest of the scene is still worth judging. Raises :class:`ListingMissing`
+    without a ``listing.yaml``, and ``ConfigLoadError`` when it does not load.
+    """
+    if not ListingDocuments(workspace).exists(name):
+        raise ListingMissing(name)
+    listing = workspace.load_listing(name)
+    profile = WorkspaceFacts.for_files(workspace).garment_profile(listing.garment_profile)
+    tones = profile.colors if profile is not None else {}
+    listing_dir = workspace.listing_dir(name)
+
+    def artwork(colour: str | None) -> Path | None:
+        resolution = resolve(listing.design, colour, tones)
+        if not isinstance(resolution, Resolved):
+            return None
+        try:
+            path = workspace.resolve_ref(resolution.ref, listing_dir=listing_dir)
+        except InvalidRefError:
+            return None
+        return path if path.is_file() else None
+
+    return artwork
 
 
 def describe_draft(workspace: Workspace, document: Mapping[str, Any]) -> ListingView:
@@ -363,6 +395,8 @@ def _resolve_design_paths(
 ) -> dict[str, Path]:
     paths: dict[str, Path] = {}
     for key, ref in listing.design.items():
+        if ref is None:
+            continue
         try:
             paths[key] = workspace.resolve_ref(ref, listing_dir=listing_dir)
         except InvalidRefError:

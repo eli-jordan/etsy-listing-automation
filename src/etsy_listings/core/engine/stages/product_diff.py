@@ -182,40 +182,41 @@ def _colour_change(wanted: AppliedProduct, was: AppliedProduct) -> Change | None
 
 
 def _print_area_changes(wanted: AppliedProduct, was: AppliedProduct) -> list[Change]:
-    """Print areas matched by ``artwork``, never by position.
+    """Print areas matched by design hash, never by position.
 
     Positional matching read ``was.print_areas[index]``, and the list's order
     came from the order the listing wrote its colours in -- so moving a colour
     to the top of ``colors:`` reported every print area as changed and
-    re-uploaded artwork nothing about which had moved. ``artwork`` is the key
-    the groups were partitioned on, so it identifies an area across any
-    ordering, including the orderings already written into lockfiles by
-    versions that did not sort them.
+    re-uploaded artwork nothing about which had moved. The content hash is the
+    key the groups were partitioned on (ADR-0053), so it identifies an area across
+    any ordering, any rename and any reshaping of ``design:`` -- including the
+    areas already written into lockfiles by versions that keyed them by
+    artwork name, whose hashes are the same.
     """
-    previous = {area.artwork: area for area in was.print_areas}
+    previous = {area.design_hash: area for area in was.print_areas}
     changes: list[Change] = []
     for area in wanted.print_areas:
-        before = previous.get(area.artwork)
+        before = previous.get(area.design_hash)
         if before != area:
             changes.append(
                 FieldChange(
-                    path=f"print_areas.{area.artwork}",
+                    path=_area_path(area.design_hash),
                     before=before.design_hash if before else None,
                     after=area.design_hash,
                 )
             )
-    for artwork in sorted(set(previous) - {area.artwork for area in wanted.print_areas}):
-        # An artwork key that no longer prints on anything. Positional
-        # matching could not see this at all: a shorter list simply stopped
-        # being compared.
-        changes.append(
-            FieldChange(
-                path=f"print_areas.{artwork}",
-                before=previous[artwork].design_hash,
-                after=None,
-            )
-        )
+    wanted_hashes = {area.design_hash for area in wanted.print_areas}
+    for digest in sorted(set(previous) - wanted_hashes):
+        # A file that no longer prints on anything. Positional matching could
+        # not see this at all: a shorter list simply stopped being compared.
+        changes.append(FieldChange(path=_area_path(digest), before=digest, after=None))
     return changes
+
+
+def _area_path(design_hash: str) -> str:
+    """``print_areas.<first 12 hex digits>`` -- enough to tell two files
+    apart in a plan, without a 64-character key in every line."""
+    return f"print_areas.{design_hash.removeprefix('sha256:')[:12]}"
 
 
 def _drift(was: AppliedProduct | None, live: Product | None) -> tuple[Drift, ...]:

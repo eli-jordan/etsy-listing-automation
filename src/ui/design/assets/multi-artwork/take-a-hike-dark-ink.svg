@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200">
+  <defs><clipPath id="sun"><circle cx="100" cy="86" r="46"/></clipPath></defs>
+  <g clip-path="url(#sun)" fill="#d9692e">
+    <rect x="40" y="36" width="120" height="30"/>
+    <rect x="40" y="70" width="120" height="12"/>
+    <rect x="40" y="86" width="120" height="8"/>
+    <rect x="40" y="98" width="120" height="5"/>
+    <rect x="40" y="107" width="120" height="3"/>
+  </g>
+  <path d="M28 132 L70 84 L90 106 L114 74 L172 132 Z" fill="#2a2420"/>
+  <path d="M104 88 L114 74 L124 88 L118 84 L114 90 L109 84 Z" fill="#d9692e" opacity="0.9"/>
+  
+  <text x="100" y="164" text-anchor="middle" font-family="Arial Black, Helvetica, sans-serif" font-weight="900" font-size="25" letter-spacing="1" fill="#2a2420">TAKE A HIKE</text>
+  <text x="100" y="184" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-weight="700" font-size="9" letter-spacing="4" fill="#d9692e">EST. ON THE TRAIL</text>
+</svg>

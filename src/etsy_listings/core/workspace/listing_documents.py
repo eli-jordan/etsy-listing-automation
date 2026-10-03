@@ -39,7 +39,7 @@ from typing import Any
 
 import yaml
 
-from etsy_listings.core.config.listing import Listing
+from etsy_listings.core.config.listing import Listing, canonical_document
 from etsy_listings.core.errors import UserFacingError
 from etsy_listings.core.workspace.atomic import read_bytes_retrying, write_bytes_atomic
 from etsy_listings.core.workspace.workspace import Workspace
@@ -171,6 +171,9 @@ class ListingDocuments:
 
     def _write(self, name: str, document: Mapping[str, Any]) -> Path:
         path = self._workspace.listing_file(name)
-        text = yaml.safe_dump(dict(document), sort_keys=False, allow_unicode=True)
+        # Every write normalises `design:` to its map form (ADR-0053): a bare
+        # string or `null` written by hand converges on the one written form
+        # the next time anything saves.
+        text = yaml.safe_dump(canonical_document(document), sort_keys=False, allow_unicode=True)
         write_bytes_atomic(path, text.encode("utf-8"))
         return path

@@ -13,7 +13,8 @@ src/etsy_listings/
   core/ transport-independent backend; no FastAPI, Typer or terminal/prompt imports
     workspace/ root discovery, path resolution, the only code that knows the directory layout;
       listing_documents.py is the only way to read/edit/write listing.yaml, and owns each listing's lock
-    config/ pydantic models, Money, slugs, listing_validation.py (every local refusal)
+    config/ pydantic models, Money, slugs, listing_validation.py (every local refusal),
+      artwork.py (ADR-0053: which file each garment colour prints; every reader asks it)
     engine/ Stage protocol, Change vocabulary, lockfile, plan/apply/run, lifecycle, stages/
     render/ pure render passes, frozen RenderConfig, pipeline
     clients/ printify/ and etsy/ — transport, models, fakes

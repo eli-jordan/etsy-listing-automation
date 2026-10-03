@@ -497,8 +497,11 @@ later. Each traces to a decision.
   silence, under a plan reading "No changes."
   Missing render templates/photos, template-kind colour mismatches and
   unresolved artwork use shared config checks and return `Blocked`. Template
-  load failures are adapted to the same stage refusal. Artwork resolution
-  errors are actionable at exceptional boundaries and caught in desired state.
+  load failures are adapted to the same stage refusal. Artwork that cannot
+  resolve — no design, an unclassified colour, an empty light/dark slot, a
+  colourless `single` scene in light/dark mode, a design ref naming no file —
+  is refused through `gates.check_artwork` and `gates.resolved_design`; no
+  artwork configuration raises out of a stage (`ADR-0053`).
 - **One rule behind that vocabulary, not one per reader.**
   `core/config/listing_validation.py` owns every local refusal about a
   listing — predicate, message and all — and `core/engine/stages/gates.py` is
@@ -564,6 +567,18 @@ later. Each traces to a decision.
   `cvtColor` and `getPerspectiveTransform` have different contracts and do not
   take those keywords. `tests/core/unit/test_no_bare_cv2.py` checks the
   applicable render calls.
+- **One function decides which file a garment colour prints.**
+  `core/config/artwork.py` (`ADR-0053`) is pure: `resolve(design, colour,
+  tones)` answers a colour's own `design[colour]`, then in light/dark mode the
+  `on-light`/`on-dark` slot by the garment profile's tone, then `default`, or
+  says why it cannot. Listing validation, the render stage (per layer, by the
+  colour the layer depicts), the Printify stage (per enabled colour) and the
+  AI workflow (`representative`) all ask it; nothing else restates the rule.
+  Templates choose no artwork. An artwork group — a render layer's design
+  identity, a Printify print area — is the resolved file's **content hash**,
+  so renaming a file or reshaping `design:` without changing what any garment
+  prints plans nothing. `design:` is always written as a map
+  (`ListingDocuments` normalises a bare string or `null`).
 - **Rendering is driven purely by `media`.** A scene renders only if some
   `media` entry references it — `listing.colors` drives which Printify
   variants sell, not which photos get rendered.

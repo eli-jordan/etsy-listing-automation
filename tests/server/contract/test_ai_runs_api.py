@@ -184,6 +184,11 @@ def test_post_for_an_unknown_listing_is_404(client: TestClient) -> None:
     ("edit", "draft_brief", "reason"),
     [
         ({"design": {}}, True, "the listing has no selected design"),
+        (
+            {"design": {"on-light": None, "on-dark": None, "moss": "designs/take-a-hike.png"}},
+            True,
+            "the listing has no selected design",
+        ),
         ({"brief": " "}, False, "the listing brief is empty"),
         ({"garment_profile": ""}, False, "the listing has no usable garment profile"),
         ({"garment_profile": "no-such-profile"}, True, "the listing has no usable garment profile"),

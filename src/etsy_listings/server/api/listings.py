@@ -50,10 +50,12 @@ from etsy_listings.core.application.listing_reads import (
     describe_draft,
     listing_row,
     read_listing,
+    scene_artwork,
 )
 from etsy_listings.core.application.listing_reads import (
     list_listings as listing_rows,
 )
+from etsy_listings.core.application.mockup_templates import saved_preview
 from etsy_listings.core.application.pricing_plans import (
     load_candidate_pricing_plans,
     pricing_plan_options,
@@ -63,10 +65,15 @@ from etsy_listings.core.application.refusals import (
     ListingMissing,
     ListingNameTaken,
     PublishedListingDeletion,
+    TemplateConfigMissing,
+    TemplateMissing,
+    TemplatePhotoMissing,
 )
 from etsy_listings.core.batches import BatchStore
 from etsy_listings.core.clients.etsy.tokens import EtsyAuthError
 from etsy_listings.core.clients.etsy.transport import EtsyApiError
+from etsy_listings.core.config.artwork import representative
+from etsy_listings.core.config.errors import ConfigLoadError
 from etsy_listings.core.config.listing import EMPTY_DRAFT, Listing
 from etsy_listings.core.config.listing_validation import Issue as ValidationIssue
 from etsy_listings.core.config.secrets import MissingCredentialError
@@ -94,6 +101,7 @@ from etsy_listings.server.api.schemas import (
     ResolvedPrice,
     WorkspaceSummary,
 )
+from etsy_listings.server.api.templates import PreviewScale, render_preview_response
 from etsy_listings.server.api.thumbnails import thumbnail_response
 
 router = APIRouter(prefix="/api/listings", tags=["listings"])
@@ -172,18 +180,17 @@ def _wire_issues(issues: Sequence[ValidationIssue]) -> list[dict[str, str]]:
     ]
 
 
-def _sole_design_name(listing: Listing) -> str | None:
-    """The one design's name, or ``None`` when there isn't one.
+def _representative_name(listing: Listing) -> str | None:
+    """The representative artwork's name, or ``None`` when there isn't one.
 
-    ``Listing.design`` is artwork-key -> path, and a bare string normalises to
-    a single ``default`` entry -- the common case, and the only one with a
-    picture that stands for the whole listing. The stem is what
+    The spec's *Representative artwork* (A35's ``representative``): the
+    first non-null of ``default``, ``on-light``, ``on-dark``, never a
+    colour's own file. The stem is what
     ``GET /api/listing-designs/{name}/thumbnail`` takes, since
     ``workspace.design_file`` derives one fixed path per name.
     """
-    if len(listing.design) != 1:
-        return None
-    return Path(next(iter(listing.design.values()))).stem
+    ref = representative(listing.design)
+    return None if ref is None else Path(ref).stem
 
 
 def _summary(row: ListingRow) -> ListingSummary:
@@ -191,7 +198,7 @@ def _summary(row: ListingRow) -> ListingSummary:
     return ListingSummary(
         name=row.name,
         garment_profile=listing.garment_profile if listing is not None else "",
-        design=_sole_design_name(listing) if listing is not None else None,
+        design=_representative_name(listing) if listing is not None else None,
         colour_count=len(listing.colors) if listing is not None else 0,
         status=row.status,
         issue_counts=IssueCounts(
@@ -384,6 +391,43 @@ def listing_preview_coloured(
 ) -> Response:
     """A ``colour-matrix``-kind scene: one preview per colour."""
     return _preview_response(request, target, template, colour)
+
+
+@router.get("/{name}/scene-preview")
+def scene_preview(
+    target: Existing,
+    template: str,
+    colour: str | None = None,
+    scale: PreviewScale = "full",
+    v: str | None = None,
+) -> Response:
+    """One of this listing's scenes, each layer printing the file its depicted
+    colour resolves to in the *saved* listing (A35) -- the Variants stage and
+    every Listing Images picture, multi-colour scenes included (spec:
+    *Previews*). Resolved here rather than from a design name in the URL,
+    because the editor showing one file while Printify prints another is the
+    thing a single resolver exists to prevent.
+
+    A layer that resolves to nothing is left bare rather than failing the
+    picture (:func:`~etsy_listings.core.application.listing_reads.scene_artwork`).
+    ``v`` is ignored; the editor sends a signature of the saved design so a
+    landed save is a new URL and the browser fetches it again.
+    """
+    del v
+    workspace = target.workspace
+    try:
+        artwork = scene_artwork(workspace, target.name)
+    except ListingMissing as exc:
+        raise _not_found(exc) from exc
+    except ConfigLoadError as exc:
+        raise HTTPException(
+            status_code=404, detail=f"listing {target.name!r} does not load"
+        ) from exc
+    try:
+        scene = saved_preview(workspace, template, colour=colour, design=artwork)
+    except (TemplateMissing, TemplateConfigMissing, TemplatePhotoMissing) as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return render_preview_response(scene, scale)
 
 
 @support_router.get("/api/listing-draft", response_model=ListingDetail)

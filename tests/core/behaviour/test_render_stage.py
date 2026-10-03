@@ -11,7 +11,6 @@ import pytest
 from etsy_listings.core.engine.apply import execute
 from etsy_listings.core.engine.plan import build_plan
 from etsy_listings.core.engine.stages import STAGES
-from etsy_listings.core.engine.stages.placement import ArtworkResolutionError
 
 from tests.support.builders import FIXTURE_LISTING as LISTING
 from tests.support.builders import a_context, a_lock
@@ -169,34 +168,3 @@ def test_replacing_any_colours_photo_triggers_a_rerender(workspace_root: Path, c
     )
     assert render_plan.will_run is True
     assert render_plan.reason == "design or template changed"
-
-
-# --- artwork resolution errors point at the right file -----------------------
-
-
-def test_an_unsatisfiable_template_override_names_the_key_and_its_source() -> None:
-    """A `single` template carrying `artwork: on-light` over a single-file
-    design used to report only "colour 'white' needs an artwork but none
-    resolves" -- which reads as a problem with the colour or the listing,
-    while the demand came from the template and `on-light` appeared nowhere
-    in the message."""
-    error = ArtworkResolutionError(
-        "white",
-        None,
-        ["default"],
-        wanted="on-light",
-        source="the template's own artwork: override",
-    )
-    message = str(error)
-
-    assert "on-light" in message  # the key that was asked for
-    assert "template" in message  # where the demand came from
-    assert "['default']" in message  # what the design actually offers
-
-
-def test_an_unresolvable_artwork_still_reports_the_old_way() -> None:
-    """Nothing asked for a specific key -- a multi-key design with no tone,
-    no override and no sole key to fall back on."""
-    message = str(ArtworkResolutionError("moss", "dark", ["on-dark", "on-light"]))
-    assert "none resolves" in message
-    assert "tone: dark" in message

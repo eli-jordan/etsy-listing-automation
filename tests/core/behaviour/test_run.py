@@ -76,10 +76,8 @@ def test_local_render_refusals_preserve_the_rest_of_the_batch(
     elif problem == "colour":
         document["media"] = [{"template": "flat-lay-01"}]
     else:
-        document["design"] = {
-            "first": "designs/take-a-hike.png",
-            "second": "designs/take-a-hike.png",
-        }
+        # ADR-0053: ivory is a light shirt and the pair has no file for it.
+        document["design"] = {"on-light": None, "on-dark": "designs/take-a-hike.png"}
     path.write_text(yaml.safe_dump(document), encoding="utf-8")
 
     report = plan_listings(_ctx(workspace_root), ["broken", LISTING], STAGES)

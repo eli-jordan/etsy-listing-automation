@@ -26,6 +26,7 @@ from etsy_listings.core.render.config import (
     TemplateConfig,
     dump_template_config,
     load_template_config,
+    scene_layers,
 )
 from etsy_listings.core.render.io import (
     DesignValidationError,
@@ -58,6 +59,7 @@ __all__ = [
     "TemplateConfig",
     "dump_template_config",
     "load_template_config",
+    "scene_layers",
     # Compositing. One function for all three kinds -- see pipeline.py.
     "Layer",
     "render_scene",
