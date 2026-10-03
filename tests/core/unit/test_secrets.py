@@ -16,6 +16,7 @@ import pytest
 from etsy_listings.core.config.secrets import (
     ETSY_KEYSTRING_VAR,
     ETSY_SHARED_SECRET_VAR,
+    PRINTIFY_TOKEN_VAR,
     MissingCredentialError,
     Secrets,
 )
@@ -99,10 +100,15 @@ def test_secrets_read_the_workspace_env_file(tmp_path: Path, monkeypatch) -> Non
 
 
 def test_missing_token_names_the_file_it_should_be_in(tmp_path: Path, monkeypatch) -> None:
-    monkeypatch.delenv("PRINTIFY_API_TOKEN", raising=False)
+    """Printify's catalog is not public: the message has to name the token,
+    the `.env` it belongs in and where to get one with the right scope."""
+    monkeypatch.delenv(PRINTIFY_TOKEN_VAR, raising=False)
     secrets = Secrets.load(tmp_path / ".env")
     with pytest.raises(MissingCredentialError) as exc_info:
         secrets.require_printify_api_token()
     message = str(exc_info.value)
-    assert "PRINTIFY_API_TOKEN" in message
-    assert str(tmp_path / ".env") in message
+    assert exc_info.value.variable == PRINTIFY_TOKEN_VAR
+    assert message.startswith(f"{PRINTIFY_TOKEN_VAR} is not set")
+    assert f"Put it in {tmp_path / '.env'} as `{PRINTIFY_TOKEN_VAR}=...`" in message
+    assert "printify.com/app/account/connections" in message
+    assert "`catalog.read` scope" in message
