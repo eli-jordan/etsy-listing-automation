@@ -112,4 +112,35 @@ jobs:
           PRINTIFY_API_TOKEN: ${{ secrets.PRINTIFY_API_TOKEN }}
           ETSY_KEYSTRING: ${{ secrets.ETSY_KEYSTRING }}
           ETSY_SHARED_SECRET: ${{ secrets.ETSY_SHARED_SECRET }}
-        run: uv run pytest -m e2e
+        # -rA names every case's outcome, so a skip is visible in the log
+        # rather than folded into a count.
+        run: uv run pytest -m e2e -rA
+
+      # Read-only: every product this layer makes carries "etsy-listings e2e"
+      # in its title and is deleted in teardown. This lists any that are not,
+      # by title and id only, whether or not the tests passed.
+      - name: no e2e product left behind
+        if: always()
+        env:
+          PRINTIFY_API_TOKEN: ${{ secrets.PRINTIFY_API_TOKEN }}
+        run: |
+          uv run python - <<'PY'
+          import os, sys, httpx
+          api = httpx.Client(
+              base_url="https://api.printify.com/v1",
+              headers={"Authorization": f"Bearer {os.environ['PRINTIFY_API_TOKEN']}"},
+              timeout=30,
+          )
+          left, page = [], 1
+          while True:
+              body = api.get("/shops/28877318/products.json", params={"page": page, "limit": 50}).json()
+              left += [(p["id"], p["title"]) for p in body["data"]
+                       if "etsy-listings e2e" in p["title"] and not p.get("is_deleted")]
+              if page >= body["last_page"]:
+                  break
+              page += 1
+          for product_id, title in left:
+              print(f"left behind: {product_id} {title}")
+          print(f"{len(left)} e2e products on the shop")
+          sys.exit(1 if left else 0)
+          PY
