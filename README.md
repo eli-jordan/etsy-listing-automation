@@ -181,7 +181,13 @@ a workspace whose `.env` carries the credentials:
 ```bash
 ETSY_LISTINGS_ROOT=/path/to/workspace uv run pytest -m e2e
 E2E_REAL_AI=1 ETSY_LISTINGS_ROOT=/path/to/workspace uv run pytest -m e2e tests/e2e/test_ai_run_e2e.py   # with signed-in Codex/Claude
+ETSY_LISTINGS_ROOT=/path/to/workspace uv run pytest -m e2e tests/e2e/test_phase3_publish_e2e.py::test_the_full_cycle_from_nothing_to_a_media_complete_draft   # the Phase 3 journey alone
 ```
+
+Each live case arranges its own state. The Phase 3 publish cycle is one
+journey whose milestones (first apply, idempotent plan, media order, videos,
+unchanged re-apply) run in order against copy unique to the run, so a failure
+names its milestone and cleanup can always find the product it made.
 
 No real designs or garment photography live in this repo. Golden and behaviour
 tests use procedurally generated fixtures; regenerate them (deterministically)
