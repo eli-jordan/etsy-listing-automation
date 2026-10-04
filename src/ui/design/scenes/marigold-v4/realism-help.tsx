@@ -1,5 +1,5 @@
 export const meta = {
-  title: "Marigold — realism help � v4",
+  title: "Marigold — realism help · v4",
   viewport: "laptop",
   description: "Click-to-open explanations for lighting, fabric texture and print shine.",
 };

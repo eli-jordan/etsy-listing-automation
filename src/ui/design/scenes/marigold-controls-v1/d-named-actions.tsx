@@ -1,5 +1,5 @@
 export const meta = {
-  title: "Archived � D · Descriptive actions",
+  title: "Archived · D · Descriptive actions",
   viewport: "laptop",
   description: "Larger Hide print and Bring print back actions explain the two brushes.",
 };

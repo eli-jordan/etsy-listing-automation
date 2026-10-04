@@ -1,5 +1,5 @@
 export const meta = {
-  title: "Archived � B · Separate editing modes",
+  title: "Archived · B · Separate editing modes",
   viewport: "laptop",
   description: "Placement and Print area tabs separate moving the design from painting the mask.",
 };

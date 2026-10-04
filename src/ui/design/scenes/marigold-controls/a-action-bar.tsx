@@ -1,5 +1,5 @@
 export const meta = {
-  title: "A · Single line",
+  title: "A Â· Single line",
   viewport: "laptop",
   description: "Two clear brush actions, with settings only while editing.",
 };

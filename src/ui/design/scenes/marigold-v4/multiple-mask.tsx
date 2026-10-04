@@ -1,5 +1,5 @@
 export const meta = {
-  title: "Marigold — mask editing, multiple placements � v4",
+  title: "Marigold — mask editing, multiple placements · v4",
   viewport: "laptop",
   description: "The selected floating Mask / Unmask dock on a two-placement scene.",
 };

@@ -1,5 +1,5 @@
 export const meta = {
-  title: "Archived � E · Popover editor",
+  title: "Archived · E · Popover editor",
   viewport: "laptop",
   description: "A quiet Print area strip opens a compact popover for occasional corrections.",
 };

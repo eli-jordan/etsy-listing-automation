@@ -1,5 +1,5 @@
 export const meta = {
-  title: "Marigold — full-quality preview � v3",
+  title: "Marigold — full-quality preview · v3",
   viewport: "laptop",
   description: "Prepared maps shared across colours in the existing full-quality Preview tab.",
 };

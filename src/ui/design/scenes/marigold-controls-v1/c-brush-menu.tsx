@@ -1,5 +1,5 @@
 export const meta = {
-  title: "Archived � C · Single brush menu",
+  title: "Archived · C · Single brush menu",
   viewport: "laptop",
   description: "A single brush action selector with an explicit Done button.",
 };

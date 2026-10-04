@@ -1,5 +1,5 @@
 export const meta = {
-  title: "C · Guided brush",
+  title: "C Â· Guided brush",
   viewport: "laptop",
   description: "A single brush action selector with an explicit Done button.",
 };

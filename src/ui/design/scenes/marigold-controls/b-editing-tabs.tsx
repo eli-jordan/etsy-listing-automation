@@ -1,5 +1,5 @@
 export const meta = {
-  title: "B · Side rail",
+  title: "B Â· Side rail",
   viewport: "laptop",
   description: "Placement and Print area tabs separate moving the design from painting the mask.",
 };

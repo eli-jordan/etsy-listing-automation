@@ -1,5 +1,5 @@
 export const meta = {
-  title: "Marigold — multiple placements � v4",
+  title: "Marigold — multiple placements · v4",
   viewport: "laptop",
   description:
     "The existing multiple-placement workbench with per-placement masks and shared preparation.",

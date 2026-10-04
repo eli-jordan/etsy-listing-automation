@@ -1,5 +1,5 @@
 export const meta = {
-  title: "E · Context ribbon",
+  title: "E Â· Context ribbon",
   viewport: "laptop",
   description: "A quiet Print area strip opens a compact popover for occasional corrections.",
 };

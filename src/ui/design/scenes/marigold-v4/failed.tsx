@@ -1,5 +1,5 @@
 export const meta = {
-  title: "Marigold — preparation failed � v4",
+  title: "Marigold — preparation failed · v4",
   viewport: "laptop",
   description:
     "An actionable preparation failure with Retry and existing placement controls retained.",

@@ -1,5 +1,5 @@
 export const meta = {
-  title: "Archived � A · Compact action bar",
+  title: "Archived · A · Compact action bar",
   viewport: "laptop",
   description: "Two clear brush actions, with settings only while editing.",
 };

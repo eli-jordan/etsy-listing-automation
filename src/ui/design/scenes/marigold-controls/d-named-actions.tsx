@@ -1,5 +1,5 @@
 export const meta = {
-  title: "D · Floating dock",
+  title: "D Â· Floating dock",
   viewport: "laptop",
   description: "Larger Hide print and Bring print back actions explain the two brushes.",
 };

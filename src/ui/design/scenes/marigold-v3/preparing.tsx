@@ -1,5 +1,5 @@
 export const meta = {
-  title: "Marigold — preparing � v3",
+  title: "Marigold — preparing · v3",
   viewport: "laptop",
   description: "Background preparation with step progress, elapsed time and cancellation.",
 };

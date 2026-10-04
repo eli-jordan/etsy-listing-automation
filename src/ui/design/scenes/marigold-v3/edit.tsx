@@ -1,5 +1,5 @@
 export const meta = {
-  title: "Marigold — placement & masks � v3",
+  title: "Marigold — placement & masks · v3",
   viewport: "laptop",
   description: "The current template workbench with Marigold controls and fast placement preview.",
 };

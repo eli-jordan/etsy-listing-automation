@@ -1,5 +1,5 @@
 export const meta = {
-  title: "Marigold — visible mask editing � v4",
+  title: "Marigold — visible mask editing · v4",
   viewport: "laptop",
   description:
     "Selected floating dock with Mask and Unmask brushes; transparent red marks hidden print.",
