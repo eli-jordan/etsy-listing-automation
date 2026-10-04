@@ -1,0 +1,1 @@
+The only exposed parameters are num_inference_steps (10) and ensemble_size (3), matching the prototype ensemble. Resolution and seed remain internal and hidden. Both fields have documentation-linked help. Reset restores both exposed defaults. Changes are local mock state and would require explicit preparation in the product.

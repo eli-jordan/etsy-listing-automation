@@ -35,6 +35,26 @@
       "description": "The listing template card gallery: today's 2fr/1fr/1fr strip beside the shipped fanned stack (C). A and B are on the archive."
     },
     {
+      "name": "marigold",
+      "title": "Marigold Mockup Templates",
+      "description": "Full Marigold workflow with the selected floating Mask / Unmask dock and red exclusion overlay."
+    },
+    {
+      "name": "marigold-box-controls",
+      "title": "Archive · Design Box Options",
+      "description": "Option A selected with icon and switch only; integrated into the full workflow."
+    },
+    {
+      "name": "marigold-controls",
+      "title": "Archive · Marigold Mask Options",
+      "description": "Retired comparison: option D selected and integrated into the full Marigold workflow."
+    },
+    {
+      "name": "marigold-inference",
+      "title": "Archive · Inference Options",
+      "description": "Option C selected and integrated into the full workflow with matching field and information-card names."
+    },
+    {
       "name": "archive",
       "title": "Archive",
       "description": "Retired directions, grouped by feature - history, not options."
@@ -176,6 +196,90 @@
     {
       "name": "listing-seo-v3",
       "frames": 5
+    },
+    {
+      "name": "marigold",
+      "frames": 10,
+      "brief": "design/scenes/marigold/_brief.md",
+      "description": "Marigold additions to the current mockup-template workbench, with preparation and preview states.",
+      "note": "Selected option D is integrated across the full workflow. Mask and Unmask edit exclusions; transparent red means hidden print. Edit mask opens the floating dock; Done or Escape returns to placement. The placement box stays visible as a reference. Undo and Reset mask are in the bottom brush dock’s three-dot menu. Edit mask shows the overlay automatically; Done hides it. There is no visibility checkbox or eye button.\n\nStart with [placement](goto:marigold/edit), [mask editing](goto:marigold/mask-editing), [preparation](goto:marigold/preparing), and [preview](goto:marigold/preview). Also inspect [multiple-placement mask editing](goto:marigold/multiple-mask).\n\nThrowaway UI only: fixture images and mask geometry, no inference, API writes or durable edits. The previous workflow is archived as marigold-v3.\n\nThe design-box visibility control uses option A, reduced to an icon and switch with a tooltip. It affects guides and corner handles only and remains available during mask editing.\n\nAdvanced inference uses the selected dialog. The button lives inside Renderer and appears only for Marigold. Inference steps and Ensemble size label both fields and their info cards."
+    },
+    {
+      "name": "marigold-box-controls",
+      "frames": 5,
+      "brief": "design/scenes/marigold-box-controls/_brief.md",
+      "description": "Five distinct ways to show and hide the design box within the selected Marigold workflow. No option selected.",
+      "note": "The box control affects only placement guides and handles; the design remains visible. Mask editing retains its own automatic overlay visibility. A switch, paired view modes, an image chip, a bottom view strip and a display menu are compared in the same app context. Local fixture interactions only."
+    },
+    {
+      "name": "marigold-controls",
+      "frames": 5,
+      "brief": "design/scenes/marigold-controls/_brief.md",
+      "description": "Five distinct ways to correct a visible print-area mask while preserving the current application layout.",
+      "note": "Retired comparison: option D was selected and integrated into the full Marigold workflow with Mask / Unmask labels and red exclusions. These frames preserve the pre-selection alternatives."
+    },
+    {
+      "name": "marigold-controls-v1",
+      "frames": 5,
+      "brief": "design/scenes/marigold-controls-v1/_brief.md",
+      "description": "Five distinct ways to correct a visible print-area mask while preserving the current application layout.",
+      "note": "Archived: the user rejected all five first-round layouts and requested a transparent red mask for the next round. Shared screen dependencies are frozen in this directory."
+    },
+    {
+      "name": "marigold-inference",
+      "frames": 3,
+      "brief": "design/scenes/marigold-inference/_brief.md",
+      "description": "Three alternatives for custom Marigold inference controls. No presets; no option selected.",
+      "note": "The only exposed parameters are num_inference_steps (10) and ensemble_size (3), matching the prototype ensemble. Resolution and seed remain internal and hidden. Both fields have documentation-linked help. Reset restores both exposed defaults. Changes are local mock state and would require explicit preparation in the product."
+    },
+    {
+      "name": "marigold-v1",
+      "frames": 6,
+      "brief": "design/scenes/marigold-v1/_brief.md",
+      "description": "Marigold additions to the current mockup-template workbench, with preparation and preview states.",
+      "note": "UI mockups only. The current application shell, tabs and corner editor are reused.\nPhotos and artwork are existing design fixtures; the images here do not demonstrate\nnew renderer output or validated shared-map quality.\nThe Preview grid keeps the current app's tile-to-full-size interaction. Only\nBay and Berry fixture images are included here; the remaining colour tiles are\nomitted from the mockup.\n\nStart with [placement and masks](goto:marigold-v1/edit), then\n[preparation](goto:marigold-v1/preparing) and [ready preview](goto:marigold-v1/preview).\nAdditional states show [saved changes](goto:marigold-v1/outdated),\n[multiple placements](goto:marigold-v1/multiple) and [failure recovery](goto:marigold-v1/failed).\n\nFirst Preview opening renders automatically once maps are ready. After edits,\nthe seller uses Re-render. Closing the browser leaves preparation running;\nserver restart resumes unfinished work. Readiness has no approval step."
+    },
+    {
+      "name": "marigold-v2",
+      "frames": 8,
+      "brief": "design/scenes/marigold-v2/_brief.md",
+      "description": "Marigold additions to the current mockup-template workbench, with preparation and preview states.",
+      "note": "UI mockups only. The current application shell, tabs and corner editor are reused.\nPhotos and artwork are existing design fixtures; the images here do not demonstrate\nnew renderer output or validated shared-map quality.\nThe Preview grid keeps the current app's tile-to-full-size interaction. Only\nBay and Berry fixture images are included here; the remaining colour tiles are\nomitted from the mockup.\n\nStart with [placement and masks](goto:marigold-v2/edit), then\n[preparation](goto:marigold-v2/preparing) and [ready preview](goto:marigold-v2/preview).\nAdditional states show [saved changes](goto:marigold-v2/outdated),\n[multiple placements](goto:marigold-v2/multiple) and [failure recovery](goto:marigold-v2/failed).\nSee [visible mask editing](goto:marigold-v2/mask-editing) and\n[clicked field help](goto:marigold-v2/realism-help). The tinted mask is illustrative\nfixture geometry; strokes, Restore and Undo update it in memory. Hiding the mask\ndoes not change its rendering effect. The saved-changes frame is after the CPU\nrebuild: maps are Ready, and the existing red Re-render button marks stale images.\nThe previous round is preserved as marigold-v1 on the archive board.\n\nFirst Preview opening renders automatically once maps are ready. After edits,\nthe seller uses Re-render. Closing the browser leaves preparation running;\nserver restart resumes unfinished work. Readiness has no approval step."
+    },
+    {
+      "name": "marigold-v3",
+      "frames": 8,
+      "brief": "design/scenes/marigold-v3/_brief.md",
+      "description": "Marigold additions to the current mockup-template workbench, with preparation and preview states.",
+      "note": "Archived workflow before integrating the selected floating mask dock."
+    },
+    {
+      "name": "marigold-v4",
+      "frames": 9,
+      "brief": "design/scenes/marigold-v4/_brief.md",
+      "description": "Marigold additions to the current mockup-template workbench, with preparation and preview states.",
+      "note": "Archived before removing the mask visibility controls in favour of automatic Edit mask / Done visibility."
+    },
+    {
+      "name": "marigold-v5",
+      "frames": 9,
+      "brief": "design/scenes/marigold-v5/_brief.md",
+      "description": "Marigold additions to the current mockup-template workbench, with preparation and preview states.",
+      "note": "Archived before restoring the design-box visibility control."
+    },
+    {
+      "name": "marigold-v6",
+      "frames": 9,
+      "brief": "design/scenes/marigold-v6/_brief.md",
+      "description": "Marigold additions to the current mockup-template workbench, with preparation and preview states.",
+      "note": "Archived before integrating the selected Advanced inference dialog."
+    },
+    {
+      "name": "marigold-v7",
+      "frames": 10,
+      "brief": "design/scenes/marigold-v7/_brief.md",
+      "description": "Marigold additions to the current mockup-template workbench, with preparation and preview states.",
+      "note": "Selected option D is integrated across the full workflow. Mask and Unmask edit exclusions; transparent red means hidden print. Edit mask opens the floating dock; Done or Escape returns to placement. The placement box stays visible as a reference. Undo and Reset mask are in the bottom brush dock’s three-dot menu. Edit mask shows the overlay automatically; Done hides it. There is no visibility checkbox or eye button.\n\nStart with [placement](goto:marigold-v7/edit), [mask editing](goto:marigold-v7/mask-editing), [preparation](goto:marigold-v7/preparing), and [preview](goto:marigold-v7/preview). Also inspect [multiple-placement mask editing](goto:marigold-v7/multiple-mask).\n\nThrowaway UI only: fixture images and mask geometry, no inference, API writes or durable edits. The previous workflow is archived as marigold-v3.\n\nThe design-box visibility control uses option A, reduced to an icon and switch with a tooltip. It affects guides and corner handles only and remains available during mask editing.\n\nAdvanced inference uses the selected dialog. The button lives inside Renderer and appears only for Marigold. Inference steps and Ensemble size label both fields and their info cards."
     },
     {
       "name": "market-seo",
@@ -1478,6 +1582,825 @@
       "title": "Listing SEO — AI Mode prototype",
       "viewport": "laptop",
       "description": "Single clickable prototype: AI Mode loads in place, then reveals title, lead, and ranked tag suggestions automatically."
+    },
+    {
+      "id": "marigold-box-controls/a-switch",
+      "file": "design/scenes/marigold-box-controls/a-switch.tsx",
+      "kind": "tsx",
+      "scene": "marigold-box-controls",
+      "title": "A \\u00b7 Labelled switch",
+      "viewport": "laptop",
+      "description": "Design box visibility exploration; no option selected.",
+      "variantGroup": "marigold-box-controls",
+      "variant": "a"
+    },
+    {
+      "id": "marigold-box-controls/b-view-modes",
+      "file": "design/scenes/marigold-box-controls/b-view-modes.tsx",
+      "kind": "tsx",
+      "scene": "marigold-box-controls",
+      "title": "B \\u00b7 Two view modes",
+      "viewport": "laptop",
+      "description": "Design box visibility exploration; no option selected.",
+      "variantGroup": "marigold-box-controls",
+      "variant": "b"
+    },
+    {
+      "id": "marigold-box-controls/c-canvas-chip",
+      "file": "design/scenes/marigold-box-controls/c-canvas-chip.tsx",
+      "kind": "tsx",
+      "scene": "marigold-box-controls",
+      "title": "C \\u00b7 Floating image control",
+      "viewport": "laptop",
+      "description": "Design box visibility exploration; no option selected.",
+      "variantGroup": "marigold-box-controls",
+      "variant": "c"
+    },
+    {
+      "id": "marigold-box-controls/d-bottom-strip",
+      "file": "design/scenes/marigold-box-controls/d-bottom-strip.tsx",
+      "kind": "tsx",
+      "scene": "marigold-box-controls",
+      "title": "D \\u00b7 View strip below image",
+      "viewport": "laptop",
+      "description": "Design box visibility exploration; no option selected.",
+      "variantGroup": "marigold-box-controls",
+      "variant": "d"
+    },
+    {
+      "id": "marigold-box-controls/e-display-menu",
+      "file": "design/scenes/marigold-box-controls/e-display-menu.tsx",
+      "kind": "tsx",
+      "scene": "marigold-box-controls",
+      "title": "E \\u00b7 Display menu",
+      "viewport": "laptop",
+      "description": "Design box visibility exploration; no option selected.",
+      "variantGroup": "marigold-box-controls",
+      "variant": "e"
+    },
+    {
+      "id": "marigold-controls-v1/a-action-bar",
+      "file": "design/scenes/marigold-controls-v1/a-action-bar.tsx",
+      "kind": "tsx",
+      "scene": "marigold-controls-v1",
+      "title": "Archived � A · Compact action bar",
+      "viewport": "laptop",
+      "description": "Two clear brush actions, with settings only while editing.",
+      "variantGroup": "marigold-controls-v1",
+      "variant": "a"
+    },
+    {
+      "id": "marigold-controls-v1/b-editing-tabs",
+      "file": "design/scenes/marigold-controls-v1/b-editing-tabs.tsx",
+      "kind": "tsx",
+      "scene": "marigold-controls-v1",
+      "title": "Archived � B · Separate editing modes",
+      "viewport": "laptop",
+      "description": "Placement and Print area tabs separate moving the design from painting the mask.",
+      "variantGroup": "marigold-controls-v1",
+      "variant": "b"
+    },
+    {
+      "id": "marigold-controls-v1/c-brush-menu",
+      "file": "design/scenes/marigold-controls-v1/c-brush-menu.tsx",
+      "kind": "tsx",
+      "scene": "marigold-controls-v1",
+      "title": "Archived � C · Single brush menu",
+      "viewport": "laptop",
+      "description": "A single brush action selector with an explicit Done button.",
+      "variantGroup": "marigold-controls-v1",
+      "variant": "c"
+    },
+    {
+      "id": "marigold-controls-v1/d-named-actions",
+      "file": "design/scenes/marigold-controls-v1/d-named-actions.tsx",
+      "kind": "tsx",
+      "scene": "marigold-controls-v1",
+      "title": "Archived � D · Descriptive actions",
+      "viewport": "laptop",
+      "description": "Larger Hide print and Bring print back actions explain the two brushes.",
+      "variantGroup": "marigold-controls-v1",
+      "variant": "d"
+    },
+    {
+      "id": "marigold-controls-v1/e-popover-editor",
+      "file": "design/scenes/marigold-controls-v1/e-popover-editor.tsx",
+      "kind": "tsx",
+      "scene": "marigold-controls-v1",
+      "title": "Archived � E · Popover editor",
+      "viewport": "laptop",
+      "description": "A quiet Print area strip opens a compact popover for occasional corrections.",
+      "variantGroup": "marigold-controls-v1",
+      "variant": "e"
+    },
+    {
+      "id": "marigold-controls/a-action-bar",
+      "file": "design/scenes/marigold-controls/a-action-bar.tsx",
+      "kind": "tsx",
+      "scene": "marigold-controls",
+      "title": "A � Single line",
+      "viewport": "laptop",
+      "description": "Two clear brush actions, with settings only while editing.",
+      "variantGroup": "marigold-controls",
+      "variant": "a"
+    },
+    {
+      "id": "marigold-controls/b-editing-tabs",
+      "file": "design/scenes/marigold-controls/b-editing-tabs.tsx",
+      "kind": "tsx",
+      "scene": "marigold-controls",
+      "title": "B � Side rail",
+      "viewport": "laptop",
+      "description": "Placement and Print area tabs separate moving the design from painting the mask.",
+      "variantGroup": "marigold-controls",
+      "variant": "b"
+    },
+    {
+      "id": "marigold-controls/c-brush-menu",
+      "file": "design/scenes/marigold-controls/c-brush-menu.tsx",
+      "kind": "tsx",
+      "scene": "marigold-controls",
+      "title": "C � Guided brush",
+      "viewport": "laptop",
+      "description": "A single brush action selector with an explicit Done button.",
+      "variantGroup": "marigold-controls",
+      "variant": "c"
+    },
+    {
+      "id": "marigold-controls/d-named-actions",
+      "file": "design/scenes/marigold-controls/d-named-actions.tsx",
+      "kind": "tsx",
+      "scene": "marigold-controls",
+      "title": "D � Floating dock",
+      "viewport": "laptop",
+      "description": "Larger Hide print and Bring print back actions explain the two brushes.",
+      "variantGroup": "marigold-controls",
+      "variant": "d"
+    },
+    {
+      "id": "marigold-controls/e-popover-editor",
+      "file": "design/scenes/marigold-controls/e-popover-editor.tsx",
+      "kind": "tsx",
+      "scene": "marigold-controls",
+      "title": "E � Context ribbon",
+      "viewport": "laptop",
+      "description": "A quiet Print area strip opens a compact popover for occasional corrections.",
+      "variantGroup": "marigold-controls",
+      "variant": "e"
+    },
+    {
+      "id": "marigold-inference/a-inline",
+      "file": "design/scenes/marigold-inference/a-inline.tsx",
+      "kind": "tsx",
+      "scene": "marigold-inference",
+      "title": "A \\u00b7 Inline advanced panel",
+      "viewport": "laptop",
+      "description": "Custom Marigold inference controls; prototype defaults and linked information cards.",
+      "variantGroup": "marigold-inference",
+      "variant": "a"
+    },
+    {
+      "id": "marigold-inference/b-drawer",
+      "file": "design/scenes/marigold-inference/b-drawer.tsx",
+      "kind": "tsx",
+      "scene": "marigold-inference",
+      "title": "B \\u00b7 Preparation settings drawer",
+      "viewport": "laptop",
+      "description": "Custom Marigold inference controls; prototype defaults and linked information cards.",
+      "variantGroup": "marigold-inference",
+      "variant": "b"
+    },
+    {
+      "id": "marigold-inference/c-dialog",
+      "file": "design/scenes/marigold-inference/c-dialog.tsx",
+      "kind": "tsx",
+      "scene": "marigold-inference",
+      "title": "C \\u00b7 Settings dialog with reference card",
+      "viewport": "laptop",
+      "description": "Custom Marigold inference controls; prototype defaults and linked information cards.",
+      "variantGroup": "marigold-inference",
+      "variant": "c"
+    },
+    {
+      "id": "marigold-v1/edit",
+      "file": "design/scenes/marigold-v1/edit.tsx",
+      "kind": "tsx",
+      "scene": "marigold-v1",
+      "title": "Marigold — placement & masks · v1",
+      "viewport": "laptop",
+      "description": "Archived before toolbar, visible mask and field help: The current template workbench with Marigold controls and fast placement preview."
+    },
+    {
+      "id": "marigold-v1/failed",
+      "file": "design/scenes/marigold-v1/failed.tsx",
+      "kind": "tsx",
+      "scene": "marigold-v1",
+      "title": "Marigold — preparation failed · v1",
+      "viewport": "laptop",
+      "description": "An actionable preparation failure with Retry and existing placement controls retained."
+    },
+    {
+      "id": "marigold-v1/multiple",
+      "file": "design/scenes/marigold-v1/multiple.tsx",
+      "kind": "tsx",
+      "scene": "marigold-v1",
+      "title": "Marigold — multiple placements · v1",
+      "viewport": "laptop",
+      "description": "The existing multiple-placement workbench with per-placement masks and shared preparation."
+    },
+    {
+      "id": "marigold-v1/outdated",
+      "file": "design/scenes/marigold-v1/outdated.tsx",
+      "kind": "tsx",
+      "scene": "marigold-v1",
+      "title": "Marigold — saved changes · v1",
+      "viewport": "laptop",
+      "description": "Saved calibration rebuilding on the CPU while the previous preview stays visibly stale."
+    },
+    {
+      "id": "marigold-v1/preparing",
+      "file": "design/scenes/marigold-v1/preparing.tsx",
+      "kind": "tsx",
+      "scene": "marigold-v1",
+      "title": "Marigold — preparing · v1",
+      "viewport": "laptop",
+      "description": "Archived before toolbar, visible mask and field help: Background preparation with step progress, elapsed time and cancellation."
+    },
+    {
+      "id": "marigold-v1/preview",
+      "file": "design/scenes/marigold-v1/preview.tsx",
+      "kind": "tsx",
+      "scene": "marigold-v1",
+      "title": "Marigold — full-quality preview · v1",
+      "viewport": "laptop",
+      "description": "Archived before toolbar, visible mask and field help: Prepared maps shared across colours in the existing full-quality Preview tab."
+    },
+    {
+      "id": "marigold-v2/edit",
+      "file": "design/scenes/marigold-v2/edit.tsx",
+      "kind": "tsx",
+      "scene": "marigold-v2",
+      "title": "Marigold — placement & masks · v2",
+      "viewport": "laptop",
+      "description": "The current template workbench with Marigold controls and fast placement preview."
+    },
+    {
+      "id": "marigold-v2/failed",
+      "file": "design/scenes/marigold-v2/failed.tsx",
+      "kind": "tsx",
+      "scene": "marigold-v2",
+      "title": "Marigold — preparation failed · v2",
+      "viewport": "laptop",
+      "description": "An actionable preparation failure with Retry and existing placement controls retained."
+    },
+    {
+      "id": "marigold-v2/mask-editing",
+      "file": "design/scenes/marigold-v2/mask-editing.tsx",
+      "kind": "tsx",
+      "scene": "marigold-v2",
+      "title": "Marigold — visible mask editing · v2",
+      "viewport": "laptop",
+      "description": "Visible cloth mask with Exclude and Restore tools immediately above the image."
+    },
+    {
+      "id": "marigold-v2/multiple",
+      "file": "design/scenes/marigold-v2/multiple.tsx",
+      "kind": "tsx",
+      "scene": "marigold-v2",
+      "title": "Marigold — multiple placements · v2",
+      "viewport": "laptop",
+      "description": "The existing multiple-placement workbench with per-placement masks and shared preparation."
+    },
+    {
+      "id": "marigold-v2/outdated",
+      "file": "design/scenes/marigold-v2/outdated.tsx",
+      "kind": "tsx",
+      "scene": "marigold-v2",
+      "title": "Marigold — saved changes · v2",
+      "viewport": "laptop",
+      "description": "Maps are current after the automatic CPU rebuild; stale renders use the existing red Re-render button."
+    },
+    {
+      "id": "marigold-v2/preparing",
+      "file": "design/scenes/marigold-v2/preparing.tsx",
+      "kind": "tsx",
+      "scene": "marigold-v2",
+      "title": "Marigold — preparing · v2",
+      "viewport": "laptop",
+      "description": "Background preparation with step progress, elapsed time and cancellation."
+    },
+    {
+      "id": "marigold-v2/preview",
+      "file": "design/scenes/marigold-v2/preview.tsx",
+      "kind": "tsx",
+      "scene": "marigold-v2",
+      "title": "Marigold — full-quality preview · v2",
+      "viewport": "laptop",
+      "description": "Prepared maps shared across colours in the existing full-quality Preview tab."
+    },
+    {
+      "id": "marigold-v2/realism-help",
+      "file": "design/scenes/marigold-v2/realism-help.tsx",
+      "kind": "tsx",
+      "scene": "marigold-v2",
+      "title": "Marigold — realism help · v2",
+      "viewport": "laptop",
+      "description": "Click-to-open explanations for lighting, fabric texture and print shine."
+    },
+    {
+      "id": "marigold-v3/edit",
+      "file": "design/scenes/marigold-v3/edit.tsx",
+      "kind": "tsx",
+      "scene": "marigold-v3",
+      "title": "Marigold — placement & masks � v3",
+      "viewport": "laptop",
+      "description": "The current template workbench with Marigold controls and fast placement preview."
+    },
+    {
+      "id": "marigold-v3/failed",
+      "file": "design/scenes/marigold-v3/failed.tsx",
+      "kind": "tsx",
+      "scene": "marigold-v3",
+      "title": "Marigold — preparation failed � v3",
+      "viewport": "laptop",
+      "description": "An actionable preparation failure with Retry and existing placement controls retained."
+    },
+    {
+      "id": "marigold-v3/mask-editing",
+      "file": "design/scenes/marigold-v3/mask-editing.tsx",
+      "kind": "tsx",
+      "scene": "marigold-v3",
+      "title": "Marigold — visible mask editing � v3",
+      "viewport": "laptop",
+      "description": "Visible cloth mask with Exclude and Restore tools immediately above the image."
+    },
+    {
+      "id": "marigold-v3/multiple",
+      "file": "design/scenes/marigold-v3/multiple.tsx",
+      "kind": "tsx",
+      "scene": "marigold-v3",
+      "title": "Marigold — multiple placements � v3",
+      "viewport": "laptop",
+      "description": "The existing multiple-placement workbench with per-placement masks and shared preparation."
+    },
+    {
+      "id": "marigold-v3/outdated",
+      "file": "design/scenes/marigold-v3/outdated.tsx",
+      "kind": "tsx",
+      "scene": "marigold-v3",
+      "title": "Marigold — saved changes � v3",
+      "viewport": "laptop",
+      "description": "Maps are current after the automatic CPU rebuild; stale renders use the existing red Re-render button."
+    },
+    {
+      "id": "marigold-v3/preparing",
+      "file": "design/scenes/marigold-v3/preparing.tsx",
+      "kind": "tsx",
+      "scene": "marigold-v3",
+      "title": "Marigold — preparing � v3",
+      "viewport": "laptop",
+      "description": "Background preparation with step progress, elapsed time and cancellation."
+    },
+    {
+      "id": "marigold-v3/preview",
+      "file": "design/scenes/marigold-v3/preview.tsx",
+      "kind": "tsx",
+      "scene": "marigold-v3",
+      "title": "Marigold — full-quality preview � v3",
+      "viewport": "laptop",
+      "description": "Prepared maps shared across colours in the existing full-quality Preview tab."
+    },
+    {
+      "id": "marigold-v3/realism-help",
+      "file": "design/scenes/marigold-v3/realism-help.tsx",
+      "kind": "tsx",
+      "scene": "marigold-v3",
+      "title": "Marigold — realism help � v3",
+      "viewport": "laptop",
+      "description": "Click-to-open explanations for lighting, fabric texture and print shine."
+    },
+    {
+      "id": "marigold-v4/edit",
+      "file": "design/scenes/marigold-v4/edit.tsx",
+      "kind": "tsx",
+      "scene": "marigold-v4",
+      "title": "Marigold — placement & masks � v4",
+      "viewport": "laptop",
+      "description": "The current template workbench with Marigold controls and fast placement preview."
+    },
+    {
+      "id": "marigold-v4/failed",
+      "file": "design/scenes/marigold-v4/failed.tsx",
+      "kind": "tsx",
+      "scene": "marigold-v4",
+      "title": "Marigold — preparation failed � v4",
+      "viewport": "laptop",
+      "description": "An actionable preparation failure with Retry and existing placement controls retained."
+    },
+    {
+      "id": "marigold-v4/mask-editing",
+      "file": "design/scenes/marigold-v4/mask-editing.tsx",
+      "kind": "tsx",
+      "scene": "marigold-v4",
+      "title": "Marigold — visible mask editing � v4",
+      "viewport": "laptop",
+      "description": "Selected floating dock with Mask and Unmask brushes; transparent red marks hidden print."
+    },
+    {
+      "id": "marigold-v4/multiple",
+      "file": "design/scenes/marigold-v4/multiple.tsx",
+      "kind": "tsx",
+      "scene": "marigold-v4",
+      "title": "Marigold — multiple placements � v4",
+      "viewport": "laptop",
+      "description": "The existing multiple-placement workbench with per-placement masks and shared preparation."
+    },
+    {
+      "id": "marigold-v4/multiple-mask",
+      "file": "design/scenes/marigold-v4/multiple-mask.tsx",
+      "kind": "tsx",
+      "scene": "marigold-v4",
+      "title": "Marigold — mask editing, multiple placements � v4",
+      "viewport": "laptop",
+      "description": "The selected floating Mask / Unmask dock on a two-placement scene."
+    },
+    {
+      "id": "marigold-v4/outdated",
+      "file": "design/scenes/marigold-v4/outdated.tsx",
+      "kind": "tsx",
+      "scene": "marigold-v4",
+      "title": "Marigold — saved changes � v4",
+      "viewport": "laptop",
+      "description": "Maps are current after the automatic CPU rebuild; stale renders use the existing red Re-render button."
+    },
+    {
+      "id": "marigold-v4/preparing",
+      "file": "design/scenes/marigold-v4/preparing.tsx",
+      "kind": "tsx",
+      "scene": "marigold-v4",
+      "title": "Marigold — preparing � v4",
+      "viewport": "laptop",
+      "description": "Background preparation with step progress, elapsed time and cancellation."
+    },
+    {
+      "id": "marigold-v4/preview",
+      "file": "design/scenes/marigold-v4/preview.tsx",
+      "kind": "tsx",
+      "scene": "marigold-v4",
+      "title": "Marigold — full-quality preview � v4",
+      "viewport": "laptop",
+      "description": "Prepared maps shared across colours in the existing full-quality Preview tab."
+    },
+    {
+      "id": "marigold-v4/realism-help",
+      "file": "design/scenes/marigold-v4/realism-help.tsx",
+      "kind": "tsx",
+      "scene": "marigold-v4",
+      "title": "Marigold — realism help � v4",
+      "viewport": "laptop",
+      "description": "Click-to-open explanations for lighting, fabric texture and print shine."
+    },
+    {
+      "id": "marigold-v5/edit",
+      "file": "design/scenes/marigold-v5/edit.tsx",
+      "kind": "tsx",
+      "scene": "marigold-v5",
+      "title": "Marigold — placement & masks · v5",
+      "viewport": "laptop",
+      "description": "The current template workbench with Marigold controls and fast placement preview."
+    },
+    {
+      "id": "marigold-v5/failed",
+      "file": "design/scenes/marigold-v5/failed.tsx",
+      "kind": "tsx",
+      "scene": "marigold-v5",
+      "title": "Marigold — preparation failed · v5",
+      "viewport": "laptop",
+      "description": "An actionable preparation failure with Retry and existing placement controls retained."
+    },
+    {
+      "id": "marigold-v5/mask-editing",
+      "file": "design/scenes/marigold-v5/mask-editing.tsx",
+      "kind": "tsx",
+      "scene": "marigold-v5",
+      "title": "Marigold — visible mask editing · v5",
+      "viewport": "laptop",
+      "description": "Selected floating dock with Mask and Unmask brushes; transparent red marks hidden print."
+    },
+    {
+      "id": "marigold-v5/multiple",
+      "file": "design/scenes/marigold-v5/multiple.tsx",
+      "kind": "tsx",
+      "scene": "marigold-v5",
+      "title": "Marigold — multiple placements · v5",
+      "viewport": "laptop",
+      "description": "The existing multiple-placement workbench with per-placement masks and shared preparation."
+    },
+    {
+      "id": "marigold-v5/multiple-mask",
+      "file": "design/scenes/marigold-v5/multiple-mask.tsx",
+      "kind": "tsx",
+      "scene": "marigold-v5",
+      "title": "Marigold — mask editing, multiple placements · v5",
+      "viewport": "laptop",
+      "description": "The selected floating Mask / Unmask dock on a two-placement scene."
+    },
+    {
+      "id": "marigold-v5/outdated",
+      "file": "design/scenes/marigold-v5/outdated.tsx",
+      "kind": "tsx",
+      "scene": "marigold-v5",
+      "title": "Marigold — saved changes · v5",
+      "viewport": "laptop",
+      "description": "Maps are current after the automatic CPU rebuild; stale renders use the existing red Re-render button."
+    },
+    {
+      "id": "marigold-v5/preparing",
+      "file": "design/scenes/marigold-v5/preparing.tsx",
+      "kind": "tsx",
+      "scene": "marigold-v5",
+      "title": "Marigold — preparing · v5",
+      "viewport": "laptop",
+      "description": "Background preparation with step progress, elapsed time and cancellation."
+    },
+    {
+      "id": "marigold-v5/preview",
+      "file": "design/scenes/marigold-v5/preview.tsx",
+      "kind": "tsx",
+      "scene": "marigold-v5",
+      "title": "Marigold — full-quality preview · v5",
+      "viewport": "laptop",
+      "description": "Prepared maps shared across colours in the existing full-quality Preview tab."
+    },
+    {
+      "id": "marigold-v5/realism-help",
+      "file": "design/scenes/marigold-v5/realism-help.tsx",
+      "kind": "tsx",
+      "scene": "marigold-v5",
+      "title": "Marigold — realism help · v5",
+      "viewport": "laptop",
+      "description": "Click-to-open explanations for lighting, fabric texture and print shine."
+    },
+    {
+      "id": "marigold-v6/edit",
+      "file": "design/scenes/marigold-v6/edit.tsx",
+      "kind": "tsx",
+      "scene": "marigold-v6",
+      "title": "Marigold — placement & masks · v6",
+      "viewport": "laptop",
+      "description": "The current template workbench with Marigold controls and fast placement preview."
+    },
+    {
+      "id": "marigold-v6/failed",
+      "file": "design/scenes/marigold-v6/failed.tsx",
+      "kind": "tsx",
+      "scene": "marigold-v6",
+      "title": "Marigold — preparation failed · v6",
+      "viewport": "laptop",
+      "description": "An actionable preparation failure with Retry and existing placement controls retained."
+    },
+    {
+      "id": "marigold-v6/mask-editing",
+      "file": "design/scenes/marigold-v6/mask-editing.tsx",
+      "kind": "tsx",
+      "scene": "marigold-v6",
+      "title": "Marigold — visible mask editing · v6",
+      "viewport": "laptop",
+      "description": "Selected floating dock with Mask and Unmask brushes; transparent red marks hidden print."
+    },
+    {
+      "id": "marigold-v6/multiple",
+      "file": "design/scenes/marigold-v6/multiple.tsx",
+      "kind": "tsx",
+      "scene": "marigold-v6",
+      "title": "Marigold — multiple placements · v6",
+      "viewport": "laptop",
+      "description": "The existing multiple-placement workbench with per-placement masks and shared preparation."
+    },
+    {
+      "id": "marigold-v6/multiple-mask",
+      "file": "design/scenes/marigold-v6/multiple-mask.tsx",
+      "kind": "tsx",
+      "scene": "marigold-v6",
+      "title": "Marigold — mask editing, multiple placements · v6",
+      "viewport": "laptop",
+      "description": "The selected floating Mask / Unmask dock on a two-placement scene."
+    },
+    {
+      "id": "marigold-v6/outdated",
+      "file": "design/scenes/marigold-v6/outdated.tsx",
+      "kind": "tsx",
+      "scene": "marigold-v6",
+      "title": "Marigold — saved changes · v6",
+      "viewport": "laptop",
+      "description": "Maps are current after the automatic CPU rebuild; stale renders use the existing red Re-render button."
+    },
+    {
+      "id": "marigold-v6/preparing",
+      "file": "design/scenes/marigold-v6/preparing.tsx",
+      "kind": "tsx",
+      "scene": "marigold-v6",
+      "title": "Marigold — preparing · v6",
+      "viewport": "laptop",
+      "description": "Background preparation with step progress, elapsed time and cancellation."
+    },
+    {
+      "id": "marigold-v6/preview",
+      "file": "design/scenes/marigold-v6/preview.tsx",
+      "kind": "tsx",
+      "scene": "marigold-v6",
+      "title": "Marigold — full-quality preview · v6",
+      "viewport": "laptop",
+      "description": "Prepared maps shared across colours in the existing full-quality Preview tab."
+    },
+    {
+      "id": "marigold-v6/realism-help",
+      "file": "design/scenes/marigold-v6/realism-help.tsx",
+      "kind": "tsx",
+      "scene": "marigold-v6",
+      "title": "Marigold — realism help · v6",
+      "viewport": "laptop",
+      "description": "Click-to-open explanations for lighting, fabric texture and print shine."
+    },
+    {
+      "id": "marigold-v7/edit",
+      "file": "design/scenes/marigold-v7/edit.tsx",
+      "kind": "tsx",
+      "scene": "marigold-v7",
+      "title": "Marigold — placement & masks · v7",
+      "viewport": "laptop",
+      "description": "The current template workbench with Marigold controls and fast placement preview."
+    },
+    {
+      "id": "marigold-v7/failed",
+      "file": "design/scenes/marigold-v7/failed.tsx",
+      "kind": "tsx",
+      "scene": "marigold-v7",
+      "title": "Marigold — preparation failed · v7",
+      "viewport": "laptop",
+      "description": "An actionable preparation failure with Retry and existing placement controls retained."
+    },
+    {
+      "id": "marigold-v7/inference-settings",
+      "file": "design/scenes/marigold-v7/inference-settings.tsx",
+      "kind": "tsx",
+      "scene": "marigold-v7",
+      "title": "Marigold — Advanced inference · v7",
+      "viewport": "laptop",
+      "description": "Selected settings dialog with matching Inference steps and Ensemble size labels and help cards."
+    },
+    {
+      "id": "marigold-v7/mask-editing",
+      "file": "design/scenes/marigold-v7/mask-editing.tsx",
+      "kind": "tsx",
+      "scene": "marigold-v7",
+      "title": "Marigold — visible mask editing · v7",
+      "viewport": "laptop",
+      "description": "Selected floating dock with Mask and Unmask brushes; transparent red marks hidden print."
+    },
+    {
+      "id": "marigold-v7/multiple",
+      "file": "design/scenes/marigold-v7/multiple.tsx",
+      "kind": "tsx",
+      "scene": "marigold-v7",
+      "title": "Marigold — multiple placements · v7",
+      "viewport": "laptop",
+      "description": "The existing multiple-placement workbench with per-placement masks and shared preparation."
+    },
+    {
+      "id": "marigold-v7/multiple-mask",
+      "file": "design/scenes/marigold-v7/multiple-mask.tsx",
+      "kind": "tsx",
+      "scene": "marigold-v7",
+      "title": "Marigold — mask editing, multiple placements · v7",
+      "viewport": "laptop",
+      "description": "The selected floating Mask / Unmask dock on a two-placement scene."
+    },
+    {
+      "id": "marigold-v7/outdated",
+      "file": "design/scenes/marigold-v7/outdated.tsx",
+      "kind": "tsx",
+      "scene": "marigold-v7",
+      "title": "Marigold — saved changes · v7",
+      "viewport": "laptop",
+      "description": "Maps are current after the automatic CPU rebuild; stale renders use the existing red Re-render button."
+    },
+    {
+      "id": "marigold-v7/preparing",
+      "file": "design/scenes/marigold-v7/preparing.tsx",
+      "kind": "tsx",
+      "scene": "marigold-v7",
+      "title": "Marigold — preparing · v7",
+      "viewport": "laptop",
+      "description": "Background preparation with step progress, elapsed time and cancellation."
+    },
+    {
+      "id": "marigold-v7/preview",
+      "file": "design/scenes/marigold-v7/preview.tsx",
+      "kind": "tsx",
+      "scene": "marigold-v7",
+      "title": "Marigold — full-quality preview · v7",
+      "viewport": "laptop",
+      "description": "Prepared maps shared across colours in the existing full-quality Preview tab."
+    },
+    {
+      "id": "marigold-v7/realism-help",
+      "file": "design/scenes/marigold-v7/realism-help.tsx",
+      "kind": "tsx",
+      "scene": "marigold-v7",
+      "title": "Marigold — realism help · v7",
+      "viewport": "laptop",
+      "description": "Click-to-open explanations for lighting, fabric texture and print shine."
+    },
+    {
+      "id": "marigold/edit",
+      "file": "design/scenes/marigold/edit.tsx",
+      "kind": "tsx",
+      "scene": "marigold",
+      "title": "Marigold — placement & masks",
+      "viewport": "laptop",
+      "description": "The current template workbench with Marigold controls and fast placement preview."
+    },
+    {
+      "id": "marigold/failed",
+      "file": "design/scenes/marigold/failed.tsx",
+      "kind": "tsx",
+      "scene": "marigold",
+      "title": "Marigold — preparation failed",
+      "viewport": "laptop",
+      "description": "An actionable preparation failure with Retry and existing placement controls retained."
+    },
+    {
+      "id": "marigold/inference-settings",
+      "file": "design/scenes/marigold/inference-settings.tsx",
+      "kind": "tsx",
+      "scene": "marigold",
+      "title": "Marigold — Advanced inference",
+      "viewport": "laptop",
+      "description": "Selected settings dialog with matching Inference steps and Ensemble size labels and help cards."
+    },
+    {
+      "id": "marigold/mask-editing",
+      "file": "design/scenes/marigold/mask-editing.tsx",
+      "kind": "tsx",
+      "scene": "marigold",
+      "title": "Marigold — visible mask editing",
+      "viewport": "laptop",
+      "description": "Selected floating dock with Mask and Unmask brushes; transparent red marks hidden print."
+    },
+    {
+      "id": "marigold/multiple",
+      "file": "design/scenes/marigold/multiple.tsx",
+      "kind": "tsx",
+      "scene": "marigold",
+      "title": "Marigold — multiple placements",
+      "viewport": "laptop",
+      "description": "The existing multiple-placement workbench with per-placement masks and shared preparation."
+    },
+    {
+      "id": "marigold/multiple-mask",
+      "file": "design/scenes/marigold/multiple-mask.tsx",
+      "kind": "tsx",
+      "scene": "marigold",
+      "title": "Marigold — mask editing, multiple placements",
+      "viewport": "laptop",
+      "description": "The selected floating Mask / Unmask dock on a two-placement scene."
+    },
+    {
+      "id": "marigold/outdated",
+      "file": "design/scenes/marigold/outdated.tsx",
+      "kind": "tsx",
+      "scene": "marigold",
+      "title": "Marigold — saved changes",
+      "viewport": "laptop",
+      "description": "Maps are current after the automatic CPU rebuild; stale renders use the existing red Re-render button."
+    },
+    {
+      "id": "marigold/preparing",
+      "file": "design/scenes/marigold/preparing.tsx",
+      "kind": "tsx",
+      "scene": "marigold",
+      "title": "Marigold — preparing",
+      "viewport": "laptop",
+      "description": "Background preparation with step progress, elapsed time and cancellation."
+    },
+    {
+      "id": "marigold/preview",
+      "file": "design/scenes/marigold/preview.tsx",
+      "kind": "tsx",
+      "scene": "marigold",
+      "title": "Marigold — full-quality preview",
+      "viewport": "laptop",
+      "description": "Prepared maps shared across colours in the existing full-quality Preview tab."
+    },
+    {
+      "id": "marigold/realism-help",
+      "file": "design/scenes/marigold/realism-help.tsx",
+      "kind": "tsx",
+      "scene": "marigold",
+      "title": "Marigold — realism help",
+      "viewport": "laptop",
+      "description": "Click-to-open explanations for lighting, fabric texture and print shine."
     },
     {
       "id": "market-seo/ready",

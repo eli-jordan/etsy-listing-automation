@@ -99,6 +99,54 @@
       },
       [
         "editor-header-v3"
+      ],
+      {
+        "space": 4
+      },
+      [
+        "marigold-v1"
+      ],
+      {
+        "space": 4
+      },
+      [
+        "marigold-v2"
+      ],
+      {
+        "space": 4
+      },
+      [
+        "marigold-controls-v1"
+      ],
+      {
+        "space": 4
+      },
+      [
+        "marigold-v3"
+      ],
+      {
+        "space": 4
+      },
+      [
+        "marigold-v4"
+      ],
+      {
+        "space": 4
+      },
+      [
+        "marigold-v5"
+      ],
+      {
+        "space": 4
+      },
+      [
+        "marigold-v6"
+      ],
+      {
+        "space": 4
+      },
+      [
+        "marigold-v7"
       ]
     ],
     "scenes": {
@@ -300,6 +348,118 @@
             "header-marked",
             "batch/a-labelled",
             "batch/b-icon-only"
+          ]
+        ]
+      },
+      "marigold-v1": {
+        "rows": [
+          [
+            "edit",
+            "preparing",
+            "preview",
+            "outdated",
+            "multiple",
+            "failed"
+          ]
+        ]
+      },
+      "marigold-v2": {
+        "rows": [
+          [
+            "edit",
+            "failed",
+            "mask-editing",
+            "multiple",
+            "outdated",
+            "preparing",
+            "preview",
+            "realism-help"
+          ]
+        ]
+      },
+      "marigold-controls-v1": {
+        "rows": [
+          [
+            "a-action-bar",
+            "b-editing-tabs",
+            "c-brush-menu",
+            "d-named-actions",
+            "e-popover-editor"
+          ]
+        ]
+      },
+      "marigold-v3": {
+        "rows": [
+          [
+            "edit",
+            "failed",
+            "mask-editing",
+            "multiple",
+            "outdated",
+            "preparing",
+            "preview",
+            "realism-help"
+          ]
+        ]
+      },
+      "marigold-v4": {
+        "rows": [
+          [
+            "edit",
+            "failed",
+            "mask-editing",
+            "multiple-mask",
+            "multiple",
+            "outdated",
+            "preparing",
+            "preview",
+            "realism-help"
+          ]
+        ]
+      },
+      "marigold-v5": {
+        "rows": [
+          [
+            "edit",
+            "failed",
+            "mask-editing",
+            "multiple-mask",
+            "multiple",
+            "outdated",
+            "preparing",
+            "preview",
+            "realism-help"
+          ]
+        ]
+      },
+      "marigold-v6": {
+        "rows": [
+          [
+            "edit",
+            "failed",
+            "mask-editing",
+            "multiple-mask",
+            "multiple",
+            "outdated",
+            "preparing",
+            "preview",
+            "realism-help"
+          ]
+        ]
+      },
+      "marigold-v7": {
+        "rows": [
+          [
+            "edit",
+            "failed",
+            "inference-settings",
+            "mask-editing",
+            "multiple-mask",
+            "multiple",
+            "outdated",
+            "preparing",
+            "preview",
+            "realism-help"
           ]
         ]
       }
@@ -608,6 +768,262 @@
     },
     {
       "frame": "archive/template-card-even-squares"
+    },
+    {
+      "key": "marigold_v1_edit",
+      "frame": "marigold-v1/edit"
+    },
+    {
+      "key": "marigold_v1_preparing",
+      "frame": "marigold-v1/preparing"
+    },
+    {
+      "key": "marigold_v1_preview",
+      "frame": "marigold-v1/preview"
+    },
+    {
+      "key": "marigold_v1_outdated",
+      "frame": "marigold-v1/outdated"
+    },
+    {
+      "key": "marigold_v1_multiple",
+      "frame": "marigold-v1/multiple"
+    },
+    {
+      "key": "marigold_v1_failed",
+      "frame": "marigold-v1/failed"
+    },
+    {
+      "key": "marigold_v2_edit",
+      "frame": "marigold-v2/edit"
+    },
+    {
+      "key": "marigold_v2_failed",
+      "frame": "marigold-v2/failed"
+    },
+    {
+      "key": "marigold_v2_mask-editing",
+      "frame": "marigold-v2/mask-editing"
+    },
+    {
+      "key": "marigold_v2_multiple",
+      "frame": "marigold-v2/multiple"
+    },
+    {
+      "key": "marigold_v2_outdated",
+      "frame": "marigold-v2/outdated"
+    },
+    {
+      "key": "marigold_v2_preparing",
+      "frame": "marigold-v2/preparing"
+    },
+    {
+      "key": "marigold_v2_preview",
+      "frame": "marigold-v2/preview"
+    },
+    {
+      "key": "marigold_v2_realism-help",
+      "frame": "marigold-v2/realism-help"
+    },
+    {
+      "key": "mc_v1_a-action-bar",
+      "frame": "marigold-controls-v1/a-action-bar"
+    },
+    {
+      "key": "mc_v1_b-editing-tabs",
+      "frame": "marigold-controls-v1/b-editing-tabs"
+    },
+    {
+      "key": "mc_v1_c-brush-menu",
+      "frame": "marigold-controls-v1/c-brush-menu"
+    },
+    {
+      "key": "mc_v1_d-named-actions",
+      "frame": "marigold-controls-v1/d-named-actions"
+    },
+    {
+      "key": "mc_v1_e-popover-editor",
+      "frame": "marigold-controls-v1/e-popover-editor"
+    },
+    {
+      "key": "marigold_v3_edit",
+      "frame": "marigold-v3/edit"
+    },
+    {
+      "key": "marigold_v3_failed",
+      "frame": "marigold-v3/failed"
+    },
+    {
+      "key": "marigold_v3_mask-editing",
+      "frame": "marigold-v3/mask-editing"
+    },
+    {
+      "key": "marigold_v3_multiple",
+      "frame": "marigold-v3/multiple"
+    },
+    {
+      "key": "marigold_v3_outdated",
+      "frame": "marigold-v3/outdated"
+    },
+    {
+      "key": "marigold_v3_preparing",
+      "frame": "marigold-v3/preparing"
+    },
+    {
+      "key": "marigold_v3_preview",
+      "frame": "marigold-v3/preview"
+    },
+    {
+      "key": "marigold_v3_realism-help",
+      "frame": "marigold-v3/realism-help"
+    },
+    {
+      "key": "marigold_v4_edit",
+      "frame": "marigold-v4/edit"
+    },
+    {
+      "key": "marigold_v4_failed",
+      "frame": "marigold-v4/failed"
+    },
+    {
+      "key": "marigold_v4_mask-editing",
+      "frame": "marigold-v4/mask-editing"
+    },
+    {
+      "key": "marigold_v4_multiple-mask",
+      "frame": "marigold-v4/multiple-mask"
+    },
+    {
+      "key": "marigold_v4_multiple",
+      "frame": "marigold-v4/multiple"
+    },
+    {
+      "key": "marigold_v4_outdated",
+      "frame": "marigold-v4/outdated"
+    },
+    {
+      "key": "marigold_v4_preparing",
+      "frame": "marigold-v4/preparing"
+    },
+    {
+      "key": "marigold_v4_preview",
+      "frame": "marigold-v4/preview"
+    },
+    {
+      "key": "marigold_v4_realism-help",
+      "frame": "marigold-v4/realism-help"
+    },
+    {
+      "key": "marigold_v5_edit",
+      "frame": "marigold-v5/edit"
+    },
+    {
+      "key": "marigold_v5_failed",
+      "frame": "marigold-v5/failed"
+    },
+    {
+      "key": "marigold_v5_mask-editing",
+      "frame": "marigold-v5/mask-editing"
+    },
+    {
+      "key": "marigold_v5_multiple-mask",
+      "frame": "marigold-v5/multiple-mask"
+    },
+    {
+      "key": "marigold_v5_multiple",
+      "frame": "marigold-v5/multiple"
+    },
+    {
+      "key": "marigold_v5_outdated",
+      "frame": "marigold-v5/outdated"
+    },
+    {
+      "key": "marigold_v5_preparing",
+      "frame": "marigold-v5/preparing"
+    },
+    {
+      "key": "marigold_v5_preview",
+      "frame": "marigold-v5/preview"
+    },
+    {
+      "key": "marigold_v5_realism-help",
+      "frame": "marigold-v5/realism-help"
+    },
+    {
+      "key": "marigold_v6_edit",
+      "frame": "marigold-v6/edit"
+    },
+    {
+      "key": "marigold_v6_failed",
+      "frame": "marigold-v6/failed"
+    },
+    {
+      "key": "marigold_v6_mask-editing",
+      "frame": "marigold-v6/mask-editing"
+    },
+    {
+      "key": "marigold_v6_multiple-mask",
+      "frame": "marigold-v6/multiple-mask"
+    },
+    {
+      "key": "marigold_v6_multiple",
+      "frame": "marigold-v6/multiple"
+    },
+    {
+      "key": "marigold_v6_outdated",
+      "frame": "marigold-v6/outdated"
+    },
+    {
+      "key": "marigold_v6_preparing",
+      "frame": "marigold-v6/preparing"
+    },
+    {
+      "key": "marigold_v6_preview",
+      "frame": "marigold-v6/preview"
+    },
+    {
+      "key": "marigold_v6_realism-help",
+      "frame": "marigold-v6/realism-help"
+    },
+    {
+      "key": "marigold_v7_edit",
+      "frame": "marigold-v7/edit"
+    },
+    {
+      "key": "marigold_v7_failed",
+      "frame": "marigold-v7/failed"
+    },
+    {
+      "key": "marigold_v7_inference-settings",
+      "frame": "marigold-v7/inference-settings"
+    },
+    {
+      "key": "marigold_v7_mask-editing",
+      "frame": "marigold-v7/mask-editing"
+    },
+    {
+      "key": "marigold_v7_multiple-mask",
+      "frame": "marigold-v7/multiple-mask"
+    },
+    {
+      "key": "marigold_v7_multiple",
+      "frame": "marigold-v7/multiple"
+    },
+    {
+      "key": "marigold_v7_outdated",
+      "frame": "marigold-v7/outdated"
+    },
+    {
+      "key": "marigold_v7_preparing",
+      "frame": "marigold-v7/preparing"
+    },
+    {
+      "key": "marigold_v7_preview",
+      "frame": "marigold-v7/preview"
+    },
+    {
+      "key": "marigold_v7_realism-help",
+      "frame": "marigold-v7/realism-help"
     }
   ]
 }

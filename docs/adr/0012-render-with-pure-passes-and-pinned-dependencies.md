@@ -9,3 +9,9 @@ Compose pure render passes over arrays and frozen configuration, with explicit d
 Multiple-placement rendering originally introduced a separate scene path to preserve the existing single-layer goldens. The current renderer exposes `render_scene()` for both deployment and calibration; the lasting requirement is the deterministic pixel contract, rather than two entry points that no longer exist.
 
 First recorded 2026-09-03 in [commit 3959ee0](https://github.com/eli-jordan/etsy-listing-automation/commit/3959ee0c08172195bc726d81d2c98ed4a4f4efef).
+
+## Accepted extension, not yet implemented
+
+[ADR-0053](0053-prepare-durable-mockup-maps-before-rendering.md) records the
+Marigold extension. Its feature spec defines the new renderer configuration and
+durable maps; the implementation remains Photo warp until that plan ships.

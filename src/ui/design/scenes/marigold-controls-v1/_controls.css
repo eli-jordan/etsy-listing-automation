@@ -1,0 +1,267 @@
+/* Five throwaway control explorations; existing app tokens supply the style. */
+.mc-frame {
+  --mc-mask-blue: #1688e5;
+}
+.mc-toolbar {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border-bottom: 1px solid var(--color-divider);
+  font-family: var(--font-body);
+}
+.mc-line {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+.mc-push {
+  margin-left: auto;
+}
+.mc-title {
+  font-size: 12px;
+  font-weight: 600;
+}
+.mc-toolbar .btn {
+  min-height: 30px;
+  padding: var(--space-1) var(--space-2);
+}
+.mc-toolbar .btn-ghost {
+  min-height: 28px;
+  padding: var(--space-1);
+}
+.mc-toolbar .mc-icon {
+  width: 28px;
+  min-width: 28px;
+}
+.mc-toolbar .btn-ghost:hover:not(:disabled),
+.mc-radio-action:hover,
+.mc-mode-tabs button:hover {
+  background: var(--color-accent-100);
+}
+.mc-toolbar .mc-selected {
+  background: var(--color-accent-100);
+  border-color: var(--color-accent);
+  color: var(--color-accent-800);
+}
+.mc-brush-actions {
+  display: inline-flex;
+  gap: var(--space-1);
+}
+.mc-brush-actions--segmented {
+  gap: 0;
+}
+.mc-brush-actions--segmented .btn:first-child {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+.mc-brush-actions--segmented .btn:last-child {
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+  margin-left: -1px;
+}
+.mc-legend {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: 11px;
+  color: var(--color-neutral-800);
+}
+.mc-swatch {
+  width: 11px;
+  height: 11px;
+  border-radius: 2px;
+  background: var(--mc-mask-blue);
+  border: 1px solid #0b64ae;
+}
+.mc-swatch--off {
+  background: transparent;
+  border-color: var(--color-neutral-600);
+}
+.mc-toolbar .mc-eye--on {
+  color: var(--color-accent-800);
+}
+.mc-eye[aria-pressed="true"] {
+  background: var(--color-accent-100);
+}
+.mc-brush,
+.mc-menu {
+  position: relative;
+}
+.mc-brush-slider {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--color-neutral-800);
+  font-size: 11px;
+}
+.mc-brush-slider input {
+  min-width: 0;
+  width: 100%;
+  accent-color: var(--color-accent);
+}
+.mc-brush-slider > span {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.mc-brush-popover,
+.mc-dropdown,
+.mc-editor-popover {
+  position: absolute;
+  top: calc(100% + var(--space-2));
+  right: 0;
+  background: var(--color-bg);
+  border: 1px solid var(--color-divider);
+  border-radius: var(--radius-md);
+  padding: var(--space-3);
+  z-index: 12;
+}
+.mc-brush-popover {
+  width: 220px;
+}
+.mc-dropdown {
+  width: 205px;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+}
+.mc-dropdown .btn {
+  justify-content: flex-start;
+}
+.mc-mode-line {
+  padding-bottom: var(--space-2);
+  border-bottom: 1px solid var(--color-divider);
+  justify-content: space-between;
+}
+.mc-mode-tabs {
+  display: inline-flex;
+  gap: var(--space-1);
+}
+.mc-mode-tabs button {
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-sm);
+  font-family: var(--font-body);
+  font-size: 12px;
+  font-weight: 600;
+  padding: var(--space-2) var(--space-3);
+  color: var(--color-neutral-700);
+}
+.mc-mode-tabs .mc-mode-active {
+  background: var(--color-bg);
+  color: var(--color-text);
+}
+.mc-guidance {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--color-neutral-700);
+}
+.mc-select-label {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  min-width: 175px;
+  gap: var(--space-2);
+}
+.mc-select-label svg {
+  width: 17px;
+  height: 17px;
+  flex: none;
+  color: var(--color-neutral-700);
+}
+.mc-action-pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-2);
+}
+.mc-action {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  text-align: left;
+  border: 1px solid var(--color-divider);
+  border-radius: var(--radius-sm);
+  padding: var(--space-2);
+  background: transparent;
+  color: var(--color-text);
+  font-family: var(--font-body);
+}
+.mc-action:hover {
+  background: var(--color-accent-100);
+}
+.mc-action svg {
+  width: 18px;
+  height: 18px;
+  flex: none;
+}
+.mc-action > span,
+.mc-radio-action > span {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.mc-action strong,
+.mc-radio-action strong {
+  font-size: 12px;
+  font-weight: 600;
+}
+.mc-action small,
+.mc-radio-action small {
+  font-size: 10px;
+  color: var(--color-neutral-700);
+}
+.mc-summary {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+.mc-editor-popover {
+  width: 270px;
+  right: var(--space-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.mc-popover-head {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+.mc-popover-head strong {
+  font-size: 13px;
+}
+.mc-popover-head > span {
+  font-size: 11px;
+  color: var(--color-neutral-700);
+}
+.mc-radio-action {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  cursor: pointer;
+  padding: var(--space-1);
+  border-radius: var(--radius-sm);
+}
+.mc-radio-action input {
+  accent-color: var(--color-accent);
+}
+.mc-popover-history {
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--color-divider);
+  justify-content: space-between;
+}
+@media (max-width: 600px) {
+  .mc-toolbar .mc-line {
+    gap: var(--space-1);
+  }
+  .mc-toolbar .mc-editor-popover {
+    position: static;
+    width: 100%;
+  }
+  .mc-brush-actions {
+    flex-wrap: wrap;
+  }
+}

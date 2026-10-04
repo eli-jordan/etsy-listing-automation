@@ -1,0 +1,75 @@
+{
+  "version": 1,
+  "name": "marigold",
+  "auto": false,
+  "title": "Marigold Mockup Templates",
+  "description": "Full Marigold workflow with the selected floating Mask / Unmask dock and red exclusion overlay.",
+  "order": 7,
+  "layout": {
+    "rows": [
+      [
+        "marigold"
+      ]
+    ],
+    "scenes": {
+      "marigold": {
+        "rows": [
+          [
+            "edit",
+            "preparing",
+            "preview",
+            "outdated",
+            "multiple",
+            "failed",
+            "mask-editing",
+            "realism-help",
+            "multiple-mask",
+            "inference-settings"
+          ]
+        ]
+      }
+    }
+  },
+  "nodes": [
+    {
+      "key": "marigold_edit",
+      "frame": "marigold/edit"
+    },
+    {
+      "key": "marigold_preparing",
+      "frame": "marigold/preparing"
+    },
+    {
+      "key": "marigold_preview",
+      "frame": "marigold/preview"
+    },
+    {
+      "key": "marigold_outdated",
+      "frame": "marigold/outdated"
+    },
+    {
+      "key": "marigold_multiple",
+      "frame": "marigold/multiple"
+    },
+    {
+      "key": "marigold_failed",
+      "frame": "marigold/failed"
+    },
+    {
+      "key": "marigold_mask_editing",
+      "frame": "marigold/mask-editing"
+    },
+    {
+      "key": "marigold_realism_help",
+      "frame": "marigold/realism-help"
+    },
+    {
+      "key": "marigold_multiple_mask",
+      "frame": "marigold/multiple-mask"
+    },
+    {
+      "key": "marigold_inference_settings",
+      "frame": "marigold/inference-settings"
+    }
+  ]
+}

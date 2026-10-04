@@ -1,0 +1,254 @@
+.mi-frame {
+  font-family: var(--font-body);
+}
+.mi-frame .mi-launch {
+  width: 100%;
+  justify-content: space-between;
+  padding: 11px 13px;
+}
+.mi-inline {
+  background: var(--color-bg) !important;
+}
+.mi-section-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  color: var(--color-text);
+  font: 12px var(--font-body);
+}
+.mi-frame svg {
+  flex-shrink: 0;
+}
+.mi-section-toggle svg,
+.mi-info-button svg,
+.mi-reset svg,
+.mi-info-title svg {
+  width: 16px;
+  height: 16px;
+}
+.mi-notice {
+  font-size: 11px;
+  line-height: 1.55;
+  color: var(--color-neutral-700);
+  margin: 12px 0 18px;
+}
+.mi-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.mi-field label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-bottom: 7px;
+  color: var(--color-text);
+}
+.mi-field code {
+  font-size: 11px;
+}
+.mi-info-button {
+  display: inline-flex;
+  padding: 0;
+  border: 0;
+  color: var(--color-neutral-700);
+  background: transparent;
+}
+.mi-field input {
+  width: 100%;
+  background: var(--color-bg);
+  border: 1px solid var(--color-divider);
+  border-radius: 5px;
+  padding: 8px 10px;
+  font: 14px var(--font-body);
+  color: var(--color-text);
+}
+.mi-default {
+  display: block;
+  margin-top: 4px;
+  font-size: 10px;
+  color: var(--color-neutral-600);
+}
+.mi-info-card {
+  background: var(--color-accent-100);
+  border: 1px solid var(--color-divider);
+  border-radius: 6px;
+  padding: 12px;
+  font-size: 11px;
+  line-height: 1.6;
+}
+.mi-info-title {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--color-accent-800);
+}
+.mi-info-title strong {
+  font-size: 11px;
+  font-weight: 600;
+}
+.mi-info-card p {
+  margin: 8px 0;
+}
+.mi-info-card a {
+  color: var(--color-accent-800);
+  text-underline-offset: 3px;
+}
+.mi-inline .mi-info-card {
+  margin-top: 16px;
+}
+.mi-reset {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  color: var(--color-accent-800);
+  font: 11px var(--font-body);
+  cursor: pointer;
+}
+.mi-inline .mi-reset {
+  margin-top: 16px;
+}
+.mi-save-state {
+  display: block;
+  margin-top: 7px;
+  font-size: 10px;
+  color: var(--color-neutral-600);
+}
+.mi-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  background: #3028204d;
+  display: flex;
+}
+.mi-sheet {
+  display: flex;
+  flex-direction: column;
+  background: var(--color-bg);
+  color: var(--color-text);
+  box-shadow: 0 12px 50px #30282035;
+}
+.mi-drawer {
+  justify-content: flex-end;
+}
+.mi-drawer .mi-sheet {
+  width: 440px;
+  max-width: 100%;
+  height: 100%;
+}
+.mi-sheet header {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 24px;
+  border-bottom: 1px solid var(--color-divider);
+}
+.mi-eyebrow {
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  color: var(--color-neutral-600);
+}
+.mi-sheet h2 {
+  font: 24px var(--font-heading, var(--font-body));
+  margin: 8px 0;
+}
+.mi-sheet header p {
+  margin: 0;
+  color: var(--color-neutral-700);
+  font-size: 12px;
+}
+.mi-close {
+  margin-left: auto;
+  background: transparent;
+  border: 0;
+  font-size: 23px;
+  color: var(--color-neutral-700);
+  padding: 0 3px;
+}
+.mi-sheet-body {
+  padding: 0 24px 24px;
+  overflow: auto;
+  flex: 1;
+}
+.mi-setting-card {
+  margin-bottom: 22px;
+}
+.mi-setting-card .mi-field {
+  display: grid;
+  grid-template-columns: 1fr 86px;
+  align-items: center;
+  gap: 4px 12px;
+  margin-bottom: 10px;
+}
+.mi-setting-card label {
+  margin: 0;
+}
+.mi-setting-card .mi-default {
+  grid-column: 1/-1;
+}
+.mi-sheet footer {
+  border-top: 1px solid var(--color-divider);
+  padding: 18px 24px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+}
+.mi-dialog {
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+.mi-dialog .mi-sheet {
+  width: 730px;
+  max-width: 100%;
+  max-height: calc(100vh - 40px);
+  border-radius: 12px;
+  overflow: hidden;
+}
+.mi-dialog-body {
+  display: grid;
+  grid-template-columns: 1fr 1.1fr;
+  gap: 24px;
+  padding: 8px 24px 24px;
+  overflow: auto;
+}
+.mi-dialog-body aside {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding-top: 16px;
+}
+.mi-dialog-body .mi-fields {
+  gap: 24px;
+}
+.mi-saved {
+  font-size: 11px;
+  color: var(--color-neutral-700);
+  margin: 0;
+}
+@media (max-width: 600px) {
+  .mi-dialog-body {
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
+  .mi-dialog {
+    padding: 10px;
+  }
+  .mi-dialog .mi-sheet {
+    max-height: calc(100vh - 20px);
+  }
+  .mi-sheet header {
+    padding: 18px;
+  }
+  .mi-sheet footer {
+    padding: 14px 18px;
+  }
+}

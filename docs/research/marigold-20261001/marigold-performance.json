@@ -1,0 +1,121 @@
+{
+  "cpu": "Intel(R) Core(TM) i9-10850K CPU @ 3.60GHz",
+  "logical_processors": 10,
+  "artwork_size": [
+    4200,
+    4800
+  ],
+  "gpu_libraries_loaded": false,
+  "cases": [
+    {
+      "name": "fence",
+      "size": [
+        2048,
+        2048
+      ],
+      "prepare_seconds": 11.096096799941733,
+      "fit_seconds": 10.47,
+      "map_save_seconds": 2.7753948000026867,
+      "map_load_seconds": 1.0641692999051884,
+      "render_seconds": [
+        6.03497779997997,
+        5.806706300005317,
+        4.630428000004031
+      ],
+      "png_encode_seconds": [
+        2.169979600002989,
+        1.4909698999254033,
+        1.4473178999032825
+      ],
+      "map_megabytes": 24.68582534790039
+    },
+    {
+      "name": "espresso",
+      "size": [
+        1254,
+        1254
+      ],
+      "prepare_seconds": 5.3324857000261545,
+      "fit_seconds": 4.903,
+      "map_save_seconds": 1.613243700005114,
+      "map_load_seconds": 0.4072761000134051,
+      "render_seconds": [
+        2.7469299000222236,
+        3.04104040004313,
+        2.8088442999869585
+      ],
+      "png_encode_seconds": [
+        0.5777226999634877,
+        0.5602679000003263,
+        0.5514712000731379
+      ],
+      "map_megabytes": 22.91453742980957
+    },
+    {
+      "name": "pepper",
+      "size": [
+        1254,
+        1254
+      ],
+      "prepare_seconds": 5.088374600047246,
+      "fit_seconds": 4.681,
+      "map_save_seconds": 1.458273300086148,
+      "map_load_seconds": 0.34355639992281795,
+      "render_seconds": [
+        2.697430899948813,
+        2.779668200062588,
+        3.275863700080663
+      ],
+      "png_encode_seconds": [
+        0.554749200004153,
+        0.8452573000686243,
+        0.6669094999087974
+      ],
+      "map_megabytes": 19.40766429901123
+    },
+    {
+      "name": "moss",
+      "size": [
+        1254,
+        1254
+      ],
+      "prepare_seconds": 6.515851599979214,
+      "fit_seconds": 6.052,
+      "map_save_seconds": 1.8809212000342086,
+      "map_load_seconds": 0.43819080002140254,
+      "render_seconds": [
+        3.870811100001447,
+        3.0790852999780327,
+        2.828747999970801
+      ],
+      "png_encode_seconds": [
+        0.5884246000787243,
+        0.5743269000668079,
+        0.5780548000475392
+      ],
+      "map_megabytes": 20.341296195983887
+    },
+    {
+      "name": "holdout-ivory",
+      "size": [
+        2048,
+        2048
+      ],
+      "prepare_seconds": 9.217059499933384,
+      "fit_seconds": 8.743,
+      "map_save_seconds": 2.823819200042635,
+      "map_load_seconds": 0.8273993000620976,
+      "render_seconds": [
+        4.638347400003113,
+        4.442022299976088,
+        4.841736699920148
+      ],
+      "png_encode_seconds": [
+        1.5707714000018314,
+        1.4744648999767378,
+        1.4704908001003787
+      ],
+      "map_megabytes": 27.893507957458496
+    }
+  ]
+}

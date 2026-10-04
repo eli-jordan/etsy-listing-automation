@@ -1,0 +1,289 @@
+/* Round two: local, reversible UI exploration. Red marks allowed print. */
+.mc-frame {
+  --mc-mask-color: #ed3737;
+}
+.mc-toolbar,
+.mc-rest {
+  position: relative;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--color-divider);
+  font-family: var(--font-body);
+  font-size: 12px;
+  background: var(--color-bg);
+}
+.mc-toolbar button,
+.mc-rest button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 7px 9px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--color-text);
+  font: inherit;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.mc-toolbar button:hover,
+.mc-rest button:hover {
+  background: var(--color-accent-100);
+}
+.mc-toolbar button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+.mc-toolbar svg,
+.mc-rest svg {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+.mc-single,
+.mc-heading,
+.mc-rest,
+.mc-guided-options,
+.mc-ribbon-controls,
+.mc-dock {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.mc-docked {
+  container-type: inline-size;
+}
+.mc-spacer {
+  flex: 1;
+}
+.mc-actions {
+  display: flex;
+  gap: 3px;
+}
+.mc-actions button[aria-pressed="true"],
+.mc-presets button[aria-pressed="true"] {
+  background: var(--color-accent-100);
+  color: var(--color-accent-800);
+  box-shadow: inset 0 0 0 1px var(--color-accent);
+}
+.mc-toolbar .mc-done {
+  background: var(--color-neutral-900, #38352f);
+  color: var(--color-bg);
+  padding-inline: 12px;
+}
+.mc-divider {
+  width: 1px;
+  height: 22px;
+  background: var(--color-divider);
+  margin: 0 4px;
+}
+.mc-size {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+.mc-size input {
+  width: 55px;
+  accent-color: var(--color-accent);
+}
+.mc-dot {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--color-neutral-700);
+}
+.mc-legend {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+  color: var(--color-neutral-700);
+  white-space: nowrap;
+}
+.mc-legend i {
+  width: 9px;
+  height: 9px;
+  background: rgba(237, 55, 55, 0.46);
+  border: 1px solid #df5050;
+  border-radius: 2px;
+}
+.mc-canvas-legend {
+  position: absolute;
+  top: calc(100% + 12px);
+  left: 12px;
+  z-index: 5;
+  border-radius: 4px;
+  padding: 5px 8px;
+  background: rgba(255, 253, 248, 0.92);
+  pointer-events: none;
+}
+.mc-more {
+  position: relative;
+}
+.mc-menu {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  z-index: 20;
+  width: 150px;
+  padding: 6px;
+  background: var(--color-bg);
+  border: 1px solid var(--color-divider);
+  border-radius: 6px;
+  box-shadow: 0 4px 16px #30282020;
+}
+.mc-menu button {
+  width: 100%;
+  justify-content: flex-start;
+}
+.mc-tool-rail {
+  position: absolute;
+  top: calc(100% + 12px);
+  left: 10px;
+  z-index: 6;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 5px;
+  gap: 5px;
+  border: 1px solid var(--color-divider);
+  border-radius: 8px;
+  background: var(--color-bg);
+  box-shadow: 0 3px 10px #30282015;
+}
+.mc-vertical {
+  flex-direction: column;
+}
+.mc-vertical button {
+  flex-direction: column;
+  font-size: 9px;
+  padding: 9px 5px;
+  min-width: 47px;
+}
+.mc-rail-size {
+  flex-direction: column;
+  font-size: 9px !important;
+}
+.mc-rail-rule {
+  height: 1px;
+  width: 32px;
+  background: var(--color-divider);
+}
+.mc-frame:has(.mc-rail) .mg-stage {
+  margin-left: 65px;
+}
+.mc-guided select {
+  border: 0;
+  border-bottom: 1px dotted var(--color-accent);
+  background: transparent;
+  font: inherit;
+  font-weight: 600;
+  color: var(--color-accent-800);
+  padding: 5px 0;
+  max-width: 200px;
+}
+.mc-step {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--color-neutral-700);
+  margin-right: 10px;
+}
+.mc-guided-options {
+  margin-top: 8px;
+  padding-top: 7px;
+  border-top: 1px solid var(--color-divider);
+}
+.mc-frame:has(.mc-docked) .mg-stage {
+  margin-bottom: 60px;
+}
+.mc-dock {
+  position: absolute;
+  top: calc(100% + 100cqw - 12px);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 6;
+  padding: 7px;
+  border: 1px solid var(--color-divider);
+  border-radius: 10px;
+  background: var(--color-bg);
+  box-shadow: 0 4px 16px #30282020;
+  white-space: nowrap;
+}
+.mc-ribbon {
+  padding: 0;
+}
+.mc-ribbon-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: var(--color-accent-100);
+}
+.mc-ribbon-label strong {
+  font-size: 11px;
+}
+.mc-ribbon-controls {
+  padding: 8px 10px;
+}
+.mc-ribbon-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-right: 5px;
+  margin-right: 0;
+  border-right: 1px solid var(--color-divider);
+}
+.mc-ribbon-group small {
+  font-size: 8px;
+  letter-spacing: 0.1em;
+  color: var(--color-neutral-700);
+  padding-left: 8px;
+}
+.mc-presets {
+  display: flex;
+}
+.mc-presets button {
+  width: 24px;
+  height: 30px;
+  padding: 0;
+}
+.mc-presets i {
+  border-radius: 50%;
+  background: currentColor;
+}
+@media (min-width: 601px) and (max-width: 1000px) {
+  .mc-single,
+  .mc-ribbon-controls {
+    flex-wrap: wrap;
+  }
+}
+@media (max-width: 600px) {
+  .mc-single {
+    flex-wrap: wrap;
+  }
+  .mc-single .mc-size {
+    margin-left: auto;
+  }
+  .mc-heading {
+    flex-wrap: wrap;
+  }
+  .mc-dock {
+    position: static;
+    transform: none;
+    margin-top: 10px;
+    box-shadow: none;
+    justify-content: center;
+  }
+  .mc-frame:has(.mc-docked) .mg-stage {
+    margin-bottom: 0;
+  }
+  .mc-ribbon-controls {
+    flex-wrap: wrap;
+  }
+  .mc-toolbar .mc-legend {
+    font-size: 9px;
+  }
+}
