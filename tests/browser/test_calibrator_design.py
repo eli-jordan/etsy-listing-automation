@@ -9,9 +9,12 @@ component state.
 Colour assertions carry the hex they came from, because a bare `rgb(245, 234,
 216)` in a diff tells the next reader nothing about which token moved.
 
-Screenshots are written to `_screenshots/` (gitignored) for human review
-against the 2a wireframe; no pixel comparison happens here, since a browser
-screenshot is far more platform-fragile than the render goldens are.
+The five `capture` scenes write screenshots to `_screenshots/` (gitignored,
+or `CALIBRATOR_SCREENSHOT_DIR`) for human review against the 2a wireframe.
+They assert nothing about looks -- a browser screenshot is far more
+platform-fragile than the render goldens -- so they are opt-in artifacts, not
+regression tests: `uv run pytest -m capture` produces them, and `-m browser`
+leaves them out.
 """
 
 from __future__ import annotations
@@ -177,6 +180,7 @@ def test_no_console_errors_with_the_new_stylesheet(page) -> None:  # noqa: ANN00
     assert errors == []
 
 
+@pytest.mark.capture
 def test_capture_full_page_screenshot(page, screenshot_dir: Path) -> None:  # noqa: ANN001
     """Not an assertion about looks -- it produces the artifact a human (or
     Claude) reviews against the wireframe. Fails only if the page won't paint."""
@@ -187,6 +191,7 @@ def test_capture_full_page_screenshot(page, screenshot_dir: Path) -> None:  # no
     assert target.stat().st_size > 0
 
 
+@pytest.mark.capture
 def test_capture_preview_all_screenshot(page, screenshot_dir: Path) -> None:  # noqa: ANN001
     """The Preview tab with every colour rendered -- the state you approve
     from, and the only place the grid exists.
@@ -206,6 +211,7 @@ def test_capture_preview_all_screenshot(page, screenshot_dir: Path) -> None:  # 
     assert target.stat().st_size > 0
 
 
+@pytest.mark.capture
 def test_capture_lightbox_screenshot(page, screenshot_dir: Path) -> None:  # noqa: ANN001
     """A rendered preview opened large -- where a calibration is actually
     judged, and the reason the Preview tab renders at full size at all."""
@@ -224,6 +230,7 @@ def test_capture_lightbox_screenshot(page, screenshot_dir: Path) -> None:  # noq
     assert target.stat().st_size > 0
 
 
+@pytest.mark.capture
 def test_capture_multiple_editor_screenshot(page, screenshot_dir: Path) -> None:  # noqa: ANN001
     """The chart editor with a box selected -- the colour captions, the extent
     readout and the Add box affordance are the parts that only exist here."""
@@ -237,6 +244,7 @@ def test_capture_multiple_editor_screenshot(page, screenshot_dir: Path) -> None:
     assert target.stat().st_size > 0
 
 
+@pytest.mark.capture
 def test_capture_workbench_screenshot(  # noqa: ANN001
     page, screenshot_dir: Path, workspace_root: Path
 ) -> None:

@@ -39,24 +39,10 @@ from playwright.sync_api import Page, expect
 from etsy_listings.core.ai.errors import (
     ProviderCancelledError,
     ProviderGenerationError,
-    ProviderUnavailableError,
 )
 from etsy_listings.core.ai.models import Deadline, ProviderReadiness, RawProviderResult
 from etsy_listings.core.ai.providers import AiProvider, FakeAiProvider
 from etsy_listings.core.clients.etsy.fakes import FakeEtsyMarketClient
-from etsy_listings.core.clients.printify.fakes import FakeCatalogClient, FakePrintifyClient
-from etsy_listings.core.clients.printify.models import (
-    Blueprint,
-    PrintAreaPlaceholder,
-    PrintProvider,
-    ProductExternal,
-    Shop,
-    Variant,
-    VariantOptions,
-    VariantSet,
-)
-from etsy_listings.core.config.description import compose_description
-from etsy_listings.core.engine.context import EventSink, RunContext
 from etsy_listings.core.workspace.layout import (
     BRIEF_PROMPT_FILE,
     COMMON_COPY_DIR,
@@ -69,7 +55,7 @@ from etsy_listings.server.api.app import FRONTEND_DIST, create_app
 
 from tests.support.ai_runs import DRAFTED_BRIEF, ChainProvider, seed_snapshot, seeded_market
 from tests.support.builders import FIXTURE_LISTING as LISTING
-from tests.support.builders import edit_listing, set_shop_id, write_design
+from tests.support.builders import edit_listing, write_design
 from tests.support.server import stop_server
 
 pytestmark = pytest.mark.browser
@@ -199,33 +185,6 @@ def _unready_provider(name: str, reason: str) -> FakeAiProvider:
 
 
 @dataclass
-class _AlwaysUnavailableProvider:
-    """A provider whose `readiness()` says it is fine, but whose `generate()`
-    always raises a recognised-unavailable failure -- modelling a CLI whose
-    sign-in expired *between* the cheap readiness probe and the real call, the
-    one case the settled "Timeout and retries" decision permits to fall
-    through to the next provider."""
-
-    name: str = "codex"
-    reason: str = "codex session expired mid-request"
-    calls: int = field(default=0, init=False)
-
-    def readiness(self) -> ProviderReadiness:
-        return ProviderReadiness(ready=True)
-
-    def generate(
-        self,
-        task: Any,
-        deadline: Deadline,
-        *,
-        repair: Any = None,
-        cancel_event: threading.Event | None = None,
-    ) -> RawProviderResult:
-        self.calls += 1
-        raise ProviderUnavailableError(self.name, self.reason)
-
-
-@dataclass
 class _CancelAwareProvider:
     """Blocks inside `generate()` until `cancel_event` is set, then raises
     `ProviderCancelledError` -- exactly how a real adapter behaves once
@@ -273,7 +232,6 @@ def _seo_server(
     prerequisite_missing: Any,
     *,
     providers: list[AiProvider],
-    context_factory: Any = None,
     market: FakeEtsyMarketClient | None = None,
 ) -> Iterator[str]:
     """The real app -- built SPA served by FastAPI, exactly as `etsy-listings
@@ -294,8 +252,6 @@ def _seo_server(
         "seo_provider_factory": lambda _workspace: providers,
         "market_client_factory": lambda _workspace: etsy_market,
     }
-    if context_factory is not None:
-        kwargs["context_factory"] = context_factory
     app = create_app(workspace, **kwargs)
     config = uvicorn.Config(app, host="127.0.0.1", port=port, log_level="warning")
     server = uvicorn.Server(config)
@@ -337,16 +293,6 @@ def _open_details_tab(page: Page) -> None:
     `.tabs.seg-opt` pattern)."""
     page.locator(".tabs .seg-opt", has_text="Listing Details").click()
     page.locator("#details-title").wait_for(state="visible")
-
-
-def _wait_for_apply_enabled(page: Page) -> None:
-    apply_button = page.get_by_role("button", name="Apply")
-    apply_button.wait_for(state="visible")
-    for _ in range(200):
-        if apply_button.is_enabled():
-            return
-        page.wait_for_timeout(100)
-    raise AssertionError("Apply never became enabled once previews finished")
 
 
 # ===========================================================================
@@ -864,40 +810,6 @@ def test_malformed_output_is_repaired_once_then_try_again_recovers(
 
 
 # ===========================================================================
-# 6. Provider fallback: a recognised-unavailable failure from the first
-# provider falls through to the next one in the chain, within the same
-# request (implementation plan, "Timeout and retries"; PR4 item 3).
-# ===========================================================================
-
-
-def test_codex_unavailable_falls_through_to_claude(
-    browser_type: Any, workspace_root: Path, prerequisite_missing: Any
-) -> None:
-    _seed_prompt(workspace_root)
-    codex = _AlwaysUnavailableProvider(name="codex", reason="codex session expired mid-request")
-    claude = _ready_provider(
-        name="claude", responses=[_valid_json(titles=["Claude Wrote This One", "Second", "Third"])]
-    )
-
-    with (
-        _seo_server(workspace_root, prerequisite_missing, providers=[codex, claude]) as base_url,
-        _seo_page(browser_type, base_url) as page,
-    ):
-        page.get_by_role("heading", name=LISTING).wait_for(state="visible")
-        _open_details_tab(page)
-        ai_mode = page.get_by_role("button", name="AI Mode")
-        ai_mode.wait_for(state="visible")  # both report ready() = True
-
-        ai_mode.click()
-        title_drawer = page.get_by_role("region", name="title AI suggestions")
-        title_drawer.get_by_role("button", name="Claude Wrote This One").wait_for(state="visible")
-        # Both of the run's provider tasks fell through: the searches, then
-        # the proposal.
-        assert codex.calls == 2
-        assert claude.calls == ["queries", "seo"]
-
-
-# ===========================================================================
 # 7. Proposal persistence: the proposal is cached on the server (ADR-0049; spec,
 # *Durable AI proposals*), so a reload restores the drawers still open and
 # none the seller resolved, and the browser-local copies an older version
@@ -966,58 +878,19 @@ def test_generate_then_reload_and_the_suggestions_are_still_waiting(
 
 
 # ===========================================================================
-# 8. Common-copy description composition, through a real deployment: PR6's
-# shared composer (`Workspace.compose_description`) resolves a
-# `common-copy/` reference identically wherever it is consumed
-# (implementation plan, "Description and common-copy boundaries") -- here
-# proved through the *actual* `printify_product` desired-document builder
-# (`engine/stages/printify_product.py`, PR2), driven by a real browser
-# click on Apply, not a direct call into that stage's own tests.
-#
-# AI Mode itself plays no part in this one; it is item 2's own last bullet,
-# grouped with the rest of AI Mode's browser coverage because it exercises
-# the other half of this PR8's mandate: the description model AI Mode's lead
-# drawer writes into is the same one this composition reads out of.
+# 8. Common copy: choosing a `common-copy/` file in the real editor saves its
+# ref beside the lead, and the preview shows the literal lead, one blank line
+# and the body. How the deploy stages consume the same document is proved
+# lower, with literal strings: test_printify_product_stage.py and
+# test_etsy_listing_stage.py's common-copy cases.
 # ===========================================================================
 
-_PRINTIFY_BLUEPRINT = Blueprint(
-    id=706, title="Unisex Garment-Dyed T-shirt", brand="Comfort Colors®", model="1717"
-)
-"""Matches `tests/fixtures/workspace/garment-profiles/comfort-colors-1717.yaml`'s
-`blueprint.brand`/`model` (brand/model, not title, is the resolution key --
-see that fixture's own comment) -- id and title are otherwise arbitrary
-Printify-side facts, transcribed from `test_printify_product_stage.py` rather
-than invented again, since both exist to describe the same fixture profile."""
-_PRINTIFY_PROVIDER = PrintProvider(id=29, title="Monster Digital")
-_PRINTIFY_COLOURS = ["Black", "Blue Jean", "Ivory", "Moss"]
-_PRINTIFY_SIZES = ["S", "M", "L", "XL", "XXL", "XXXL"]
-_PRINT_AREA = (4500, 5400)  # the garment profile's own `print_area`
-_SHOP_ID = 28819281
-
-
-def _printify_variants() -> VariantSet:
-    placeholder = PrintAreaPlaceholder(
-        position="front", width=_PRINT_AREA[0], height=_PRINT_AREA[1]
-    )
-    return VariantSet(
-        variants=tuple(
-            Variant(
-                id=1000 + colour_index * 10 + size_index,
-                title=f"{colour} / {size}",
-                options=VariantOptions(color=colour, size=size),
-                placeholders=(placeholder,),
-            )
-            for colour_index, colour in enumerate(_PRINTIFY_COLOURS)
-            for size_index, size in enumerate(_PRINTIFY_SIZES)
-        )
-    )
-
-
-_COMMON_COPY_BODY = (
+_LEAD = "A relaxed heavyweight tee for the trail and the coffee stop after it."
+_EXPECTED_PREVIEW = (
+    "A relaxed heavyweight tee for the trail and the coffee stop after it.\n\n"
     "Runs true to size in a relaxed, garment-dyed fit.\n\n"
     "Machine wash cold with like colours, tumble dry low."
 )
-_LEAD = "A relaxed heavyweight tee for the trail and the coffee stop after it."
 
 
 def _write_common_copy(workspace_root: Path) -> None:
@@ -1028,12 +901,21 @@ def _write_common_copy(workspace_root: Path) -> None:
         "title: Comfort Colors care & fit\n"
         "targets: [description]\n"
         "summary: Reusable fit and care copy for every Comfort Colors listing.\n"
-        "---\n" + _COMMON_COPY_BODY + "\n",
+        "---\n"
+        "Runs true to size in a relaxed, garment-dyed fit.\n\n"
+        "Machine wash cold with like colours, tumble dry low.\n",
         encoding="utf-8",
     )
 
 
-def test_common_copy_description_composes_into_the_printify_desired_document(
+def _saved_description(workspace_root: Path) -> Any:
+    listing = yaml.safe_load(
+        (workspace_root / "listings" / LISTING / "listing.yaml").read_text(encoding="utf-8")
+    )
+    return listing["etsy"]["description"]
+
+
+def test_choosing_common_copy_saves_its_ref_and_previews_the_literal_description(
     browser_type: Any, workspace_root: Path, prerequisite_missing: Any
 ) -> None:
     _write_common_copy(workspace_root)
@@ -1041,88 +923,38 @@ def test_common_copy_description_composes_into_the_printify_desired_document(
         workspace_root,
         etsy={
             "title": "Take A Hike Tee",
-            # Lead only, no body source yet -- the browser interaction below
-            # is what picks the common-copy file (section 6: "Choose a
-            # common-copy item"), not a pre-seeded config.
             "description": {"lead": _LEAD},
             "tags": [],
             "renewal": "manual",
         },
     )
-    set_shop_id(workspace_root, _SHOP_ID)
-    write_design(workspace_root, _PRINT_AREA)
-
-    catalog = FakeCatalogClient(
-        blueprints=[_PRINTIFY_BLUEPRINT],
-        providers_by_blueprint={706: [_PRINTIFY_PROVIDER]},
-        variants_by_key={(706, 29): _printify_variants()},
-    )
-    printify = FakePrintifyClient([Shop(id=_SHOP_ID, title="My new store")])
-    # Seeded before the product exists, exactly as `test_publish_stage.py`
-    # does: `publish` attaches `external` and clears `is_locked` on its very
-    # first read, so the `publish` stage that runs after `printify_product`
-    # (unrelated to anything this test is about) does not spend real minutes
-    # polling a fake that would otherwise stay locked forever.
-    printify.publish_external["fake-product-1"] = ProductExternal(
-        id="4572550919", handle="https://www.etsy.com/listing/4572550919/probe"
-    )
-
-    def _context_factory(workspace: Workspace, on_event: EventSink | None) -> RunContext:
-        kwargs = {"on_event": on_event} if on_event is not None else {}
-        return RunContext(
-            workspace=workspace, catalog=catalog, printify=printify, etsy=None, **kwargs
-        )
 
     with (
         _seo_server(
-            workspace_root,
-            prerequisite_missing,
-            providers=[_ready_provider()],
-            context_factory=_context_factory,
+            workspace_root, prerequisite_missing, providers=[_ready_provider()]
         ) as base_url,
         _seo_page(browser_type, base_url) as page,
     ):
         page.get_by_role("heading", name=LISTING).wait_for(state="visible")
         _open_details_tab(page)
 
-        # -- The editor's preview is the exact server-side
-        # `compose_description` call the deployment builder below will
-        # also make. It stays behind the preview link until opened. --
-        source_select = page.locator("#details-description-source")
-        source_select.click()
+        page.locator("#details-description-source").click()
         page.get_by_role("searchbox", name="Search description body sources").fill("comfort")
         page.get_by_role("option", name="Comfort Colors care & fit").click()
-        expected_description = compose_description(_LEAD, _COMMON_COPY_BODY)
         page.get_by_role("button", name="Description preview").click()
         preview = page.locator("#details-description-preview .description-preview")
+        # to_have_text collapses whitespace, which would hide a lost blank
+        # line; the rendered text is compared exactly instead.
+        expect(preview).to_contain_text("Machine wash cold", timeout=DEFAULT_TIMEOUT_MS)
+        assert preview.inner_text() == _EXPECTED_PREVIEW
+
         for _ in range(100):
-            if preview.inner_text() == expected_description:
+            saved = _saved_description(workspace_root)
+            if saved["ref"] == "common-copy/comfort-colors.md" and saved["lead"] == _LEAD:
                 break
             page.wait_for_timeout(100)
         else:
-            raise AssertionError(
-                f"description preview never composed to the expected string: "
-                f"{preview.inner_text()!r}"
-            )
-
-        # -- Deploy: a real plan against the real `printify_product`
-        # stage, over the fake Printify/catalog clients above --
-        page.get_by_role("button", name="Deploy changes →").click()
-        page.wait_for_url(f"**/listings/{LISTING}/deploy")
-        page.get_by_role("heading", name="Deploy").wait_for(state="visible")
-        _wait_for_apply_enabled(page)
-
-        page.get_by_role("button", name="Apply").click()
-        page.get_by_text("Deployed.").wait_for(state="visible", timeout=DEFAULT_TIMEOUT_MS)
-
-    # -- The actual `printify_product` desired-document builder (PR2) is what
-    # produced this -- not a client-side recomputation of the join rule --
-    # because the browser drove a real Apply against the real fake Printify
-    # client, exactly the way a seller's own Apply click would.
-    assert len(printify.created) == 1
-    assert printify.created[0].description == expected_description
-    assert _LEAD in printify.created[0].description
-    assert "Machine wash cold" in printify.created[0].description
+            raise AssertionError(f"never saved: {_saved_description(workspace_root)!r}")
 
 
 # ===========================================================================

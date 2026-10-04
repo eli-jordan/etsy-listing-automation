@@ -154,6 +154,8 @@ jobs:
       # built SPA -- and a layer that runs nothing still reports green.
       # ETSY_LISTINGS_REQUIRE_EVERY_LAYER makes that a failure naming the
       # prerequisite, so this job cannot pass without doing its job.
+      # The opt-in `capture` screenshots stay out unless -m names them
+      # (tests/conftest.py); check.sh's default selection agrees.
       - name: pytest -m browser
         env:
           ETSY_LISTINGS_REQUIRE_EVERY_LAYER: "1"
