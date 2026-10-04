@@ -144,11 +144,12 @@ Layers (`ADR-0010`): unit, golden (per-pass and end-to-end renders), behaviour (
 
 <important if="you are running or modifying the e2e tests, or the e2e workflow">
 
-E2E hits the real Printify and Etsy APIs and is excluded by default (`addopts = "-m 'not e2e'"`). Printify tests need `PRINTIFY_API_TOKEN` or `ETSY_LISTINGS_ROOT` pointing at a workspace whose `.env` has it; market research tests need that workspace's Etsy app key. Tests skip before any network call when a prerequisite is missing.
+E2E hits the real Printify and Etsy APIs and is excluded by default (`addopts = "-m 'not e2e'"`). Printify tests need `PRINTIFY_API_TOKEN` or `ETSY_LISTINGS_ROOT` pointing at a workspace whose `.env` has it; market research tests need that workspace's Etsy app key. Tests skip before any network call when a prerequisite is missing. No live case reads state another case wrote: Phase 3 is one journey whose named milestone steps run in order on a run-unique copy, and its cleanup deletes the locked product or, with no lockfile, the one carrying that copy.
 
 ```
 ETSY_LISTINGS_ROOT=/path/to/workspace uv run pytest -m e2e
 E2E_REAL_AI=1 ETSY_LISTINGS_ROOT=/path/to/workspace uv run pytest -m e2e tests/e2e/test_ai_run_e2e.py # full market AI, signed-in local providers
+ETSY_LISTINGS_ROOT=/path/to/workspace uv run pytest -m e2e tests/e2e/test_phase3_publish_e2e.py::test_the_full_cycle_from_nothing_to_a_media_complete_draft # the Phase 3 journey alone
 ```
 
 Run it locally before merging rather than iterating through CI. `gh workflow run e2e --ref <branch>` re-runs just that workflow. If CI's Etsy sign-in goes stale (refresh tokens rotate on use), run `etsy-listings auth etsy` locally and update the `ETSY_TOKENS_JSON` secret.

@@ -37,6 +37,11 @@ identify the start of the work, not its release date.
 | Module structure and shared operations | [Spec](features/module-structure-20260930/spec.md) | — | [Plan](features/module-structure-20260930/plan.md) |
 | Test suite quality | [Spec](features/test-suite-quality-20261003/spec.md) | [Preserved interactions](features/test-suite-quality-20261003/interactions.md) | [Plan](features/test-suite-quality-20261003/plan.md) |
 
+Test suite quality also keeps an [audit-to-delivery map](features/test-suite-quality-20261003/coverage-map.md)
+and an [execution record](features/test-suite-quality-20261003/execution.md)
+that holds the PR ledger, every replaced or removed case with its lower
+oracle, sensitivity results and the matched measurements.
+
 The AI SEO interactions are amended by market-informed SEO and durable batch
 proposals; the video requirements also live in the Etsy integration spec.
 Batch-creation interactions override that feature's spec where they differ.

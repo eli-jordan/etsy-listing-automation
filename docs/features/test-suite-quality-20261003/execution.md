@@ -25,20 +25,20 @@ rows here; the orchestrator owns the ledger states.
 
 | PR | Branch | Worktree | Base | Build tip | Final tip | PR | State |
 |---|---|---|---|---|---|---|---|
-| 1 | `stack/tsq-01-reliable-oracles` | `tsq-01` | stack base | | | | pending |
-| 2 | `stack/tsq-02-render-cache-contracts` | `tsq-02` | PR 1 tip | | | | pending |
-| 3 | `stack/tsq-03-shared-wheel` | `tsq-03` | PR 2 tip | | | | pending |
-| 4 | `stack/tsq-04-race-gates` | `tsq-04` | PR 3 tip | | | | pending |
-| 5 | `stack/tsq-05-stage-fixtures` | `tsq-05` | PR 4 tip | | | | pending |
-| 6 | `stack/tsq-06-cleanup-render-rules` | `tsq-06` | PR 5 tip | | | | pending |
-| 7 | `stack/tsq-07-proposal-seeding` | `tsq-07` | PR 6 tip | | | | pending |
-| 8 | `stack/tsq-08-calibration-geometry` | `tsq-08` | PR 7 tip | | | | pending |
-| 9 | `stack/tsq-09-cli-ownership` | `tsq-09` | PR 8 tip | | | | pending |
-| 10 | `stack/tsq-10-ui-clocks` | `tsq-10` | PR 9 tip | | | | pending |
-| 11 | `stack/tsq-11-vitest-projects` | `tsq-11` | PR 10 tip | | | | pending |
-| 12 | `stack/tsq-12-browser-opt-in` | `tsq-12` | PR 11 tip | | | | pending |
-| 13 | `stack/tsq-13-live-journeys` | `tsq-13` | PR 12 tip | | | | pending |
-| 14 | `stack/tsq-14-evidence` | `tsq-14` | PR 13 tip | | | | pending |
+| 1 | `stack/tsq-01-reliable-oracles` | `tsq-01` | stack base | — | `931a704` | [#114](https://github.com/eli-jordan/etsy-listing-automation/pull/114) | Open; [CI](https://github.com/eli-jordan/etsy-listing-automation/actions/runs/37119443009) and [e2e](https://github.com/eli-jordan/etsy-listing-automation/actions/runs/37119448744) green on `931a704` |
+| 2 | `stack/tsq-02-render-cache-contracts` | `tsq-02` | PR 1 tip | — | `8b7caab` | [#115](https://github.com/eli-jordan/etsy-listing-automation/pull/115) | Open; [CI](https://github.com/eli-jordan/etsy-listing-automation/actions/runs/37121194811) and [e2e](https://github.com/eli-jordan/etsy-listing-automation/actions/runs/37121152523) green on `8b7caab` |
+| 3 | `stack/tsq-03-shared-wheel` | `tsq-03` | PR 2 tip | — | `c3e9dd5` | [#116](https://github.com/eli-jordan/etsy-listing-automation/pull/116) | Open; [CI](https://github.com/eli-jordan/etsy-listing-automation/actions/runs/37122850983) and [e2e](https://github.com/eli-jordan/etsy-listing-automation/actions/runs/37150677026) green on `c3e9dd5` |
+| 4 | `stack/tsq-04-race-gates` | `tsq-04` | PR 3 tip | — | `98dabe3` | [#117](https://github.com/eli-jordan/etsy-listing-automation/pull/117) | Open; [CI](https://github.com/eli-jordan/etsy-listing-automation/actions/runs/37152119393) and [e2e](https://github.com/eli-jordan/etsy-listing-automation/actions/runs/37152848328) green on `98dabe3` |
+| 5 | `stack/tsq-05-stage-fixtures` | `tsq-05` | PR 4 tip | — | `1aa1d0c` | [#118](https://github.com/eli-jordan/etsy-listing-automation/pull/118) | Open; [CI](https://github.com/eli-jordan/etsy-listing-automation/actions/runs/37154387985) and [e2e](https://github.com/eli-jordan/etsy-listing-automation/actions/runs/37155205622) green on `1aa1d0c` |
+| 6 | `stack/tsq-06-cleanup-render-rules` | `tsq-06` | PR 5 tip | — | `a5891ca` | [#119](https://github.com/eli-jordan/etsy-listing-automation/pull/119) | Open; [CI](https://github.com/eli-jordan/etsy-listing-automation/actions/runs/37156819913) and [e2e](https://github.com/eli-jordan/etsy-listing-automation/actions/runs/37157474363) green on `a5891ca` |
+| 7 | `stack/tsq-07-proposal-seeding` | `tsq-07` | PR 6 tip | — | `d42fdcb` | [#120](https://github.com/eli-jordan/etsy-listing-automation/pull/120) | Open; [CI](https://github.com/eli-jordan/etsy-listing-automation/actions/runs/37158513334) and [e2e](https://github.com/eli-jordan/etsy-listing-automation/actions/runs/37159122023) green on `d42fdcb` |
+| 8 | `stack/tsq-08-calibration-geometry` | `tsq-08` | PR 7 tip | — | `b1f7030` | [#121](https://github.com/eli-jordan/etsy-listing-automation/pull/121) | Open; [CI](https://github.com/eli-jordan/etsy-listing-automation/actions/runs/37159848886) and [e2e](https://github.com/eli-jordan/etsy-listing-automation/actions/runs/37160461323) green on `b1f7030` |
+| 9 | `stack/tsq-09-cli-ownership` | `tsq-09` | PR 8 tip | — | `20cd8ea` | [#122](https://github.com/eli-jordan/etsy-listing-automation/pull/122) | Open; [CI](https://github.com/eli-jordan/etsy-listing-automation/actions/runs/37161606354) and [e2e](https://github.com/eli-jordan/etsy-listing-automation/actions/runs/37162276125) green on `20cd8ea` |
+| 10 | `stack/tsq-10-ui-clocks` | `tsq-10` | PR 9 tip | — | `068c438` | [#123](https://github.com/eli-jordan/etsy-listing-automation/pull/123) | Open; [CI](https://github.com/eli-jordan/etsy-listing-automation/actions/runs/37163616911) and [e2e](https://github.com/eli-jordan/etsy-listing-automation/actions/runs/37163623905) green on `068c438` |
+| 11 | `stack/tsq-11-vitest-projects` | `tsq-11` | PR 10 tip | — | `435ba23` | [#124](https://github.com/eli-jordan/etsy-listing-automation/pull/124) | Open; [CI](https://github.com/eli-jordan/etsy-listing-automation/actions/runs/37164407249) and [e2e](https://github.com/eli-jordan/etsy-listing-automation/actions/runs/37164984505) green on `435ba23` |
+| 12 | `stack/tsq-12-browser-opt-in` | `tsq-12` | PR 11 tip | — | `ac315d9` | [#125](https://github.com/eli-jordan/etsy-listing-automation/pull/125) | Open; [CI](https://github.com/eli-jordan/etsy-listing-automation/actions/runs/37166067105) and [e2e](https://github.com/eli-jordan/etsy-listing-automation/actions/runs/37166533232) green on `ac315d9` |
+| 13 | `stack/tsq-13-live-journeys` | `tsq-13` | PR 12 tip | `628090b` | `be556a8` | [#126](https://github.com/eli-jordan/etsy-listing-automation/pull/126) | Open; [CI](https://github.com/eli-jordan/etsy-listing-automation/actions/runs/37167868935) green on `be556a8`; serial [e2e](https://github.com/eli-jordan/etsy-listing-automation/actions/runs/37167639782) green on `c9416e8` (47 passed, 2 skipped; later commits docs only) |
+| 14 | `stack/tsq-14-evidence` | `tsq-14` | PR 13 tip | — | `e38575c` (this row's own commit is docs only) | [#127](https://github.com/eli-jordan/etsy-listing-automation/pull/127) | Open; [CI](https://github.com/eli-jordan/etsy-listing-automation/actions/runs/37168896408) and serial [e2e](https://github.com/eli-jordan/etsy-listing-automation/actions/runs/37168903021) green on `e38575c` (47 passed, 2 skipped) |
 
 ## Case replacement ledger
 
@@ -193,3 +193,141 @@ Each remaining `test_ai_models.py` case was assessed on its own (T10); none was 
 | `test_raw_provider_result_carries_the_provider_name_and_its_raw_output` | Keep | Storage-only; low cost, no stronger unit witness to fold into |
 
 The `startedAt` alias candidate in the coverage map lives in frontend tests and is left to PR 10.
+
+## PR 14 closing evidence
+
+**PR 13 live results** ([run 37167639782](https://github.com/eli-jordan/etsy-listing-automation/actions/runs/37167639782), 47 passed, 2 skipped).
+
+| Case | Result |
+|---|---|
+| `test_the_full_cycle_from_nothing_to_a_media_complete_draft`, all nine milestones | Passed |
+| Cleanup fallback by copy with no lockfile | Not exercised live: the journey passed, so cleanup took the lockfile path; verified with a recording double only |
+| `test_the_walk_pages_the_real_list_to_this_runs_product` | Passed |
+| `test_the_brand_and_model_the_docs_tell_users_to_write_resolve` | Passed |
+| `test_a_failed_publish_is_a_named_error_and_leaves_the_product_unlocked` | Skipped: the CI Printify shop is connected to Etsy and the guard refuses to publish there |
+| `test_the_publish_budget_is_metered_separately` (unchanged) | Skipped, same guard |
+| `test_full_ai_run_drafts_brief_researches_market_and_proposes_seo` | Passed with `FakeAiProvider`; real-AI path not verified |
+| Leftover products | None from this run; one pre-run-unique product, `6abc1f2a79dbacca490d16bf`, is left for the owner |
+
+**Final gates (G2–G5) at this PR's tip**, venv Python 3.12.11, Node 24.8.0: `bash scripts/check.sh` 2,980 passed, 10 skipped (platform), 54 deselected, Python coverage 97.01% (branch measurement, 85% floor); Vitest `node`+`dom` 1,023 passed at 90.52% branch, `design` 4 passed; `npm run build`, typecheck, lint and format check clean; `ETSY_LISTINGS_REQUIRE_EVERY_LAYER=1 uv run pytest -m browser` 93 passed; `uv run pytest -m capture` 5 passed; `uv run lint-imports` 5 contracts kept.
+
+The PR ledger's build-tip column stayed empty for PRs 1–11 because each finisher pushed its last local commit as the final tip; the final tip is the SHA that CI and the e2e workflow ran on. Every linked run above was read with `gh run view` and names that SHA. PRs 12, 13 and 14 are filled in by their finishers.
+
+### Ranked findings
+
+Each row names the commit that delivered the finding and the test that now carries it. Fuller per-case evidence is in the case replacement ledger above.
+
+| Finding | PR | Commits | Evidence at the tip | State |
+|---|---:|---|---|---|
+| F01 repeated wheel builds | 3 | `1b8b417` | `tests/test_wheel_frontend.py` shared `stale_project_wheel`; `test_installed_wheel_serves_the_spa_without_node_or_the_checkout`; missing-index and sdist cases keep their own builds | Done |
+| F02 initial-false readiness | 1 | `41079e9` | `useAiSeoMode.test.ts` "…, and says why", "…, and says so"; `DetailsTab.test.tsx` refusal-reason case | Done |
+| F03 gesture callbacks compare equal | 1, 8 | `f79f9b5`, `db7f60b` | `QuadEditor.test.tsx` "scales from…" and "slides from the box as it was when the gesture started, not compounding"; `quadGeometry.test.ts` anchored-gesture row | Done |
+| F04 scheduler-dependent races | 4 | `123716a`, `10dc193`, `7b6aa46` | `test_listing_operations.py::TestCompetingWrites`, `test_listing_template_operations.py::TestCompetingWrites`, `test_listing_writes_api.py::TestCompetingWrites`, gated `test_runs_api.py` conflict/cancel cases | Done |
+| F05 full deployments for cleanup predicates | 6 | `1656623`, `ab1f4fa` | `tests/core/unit/test_fully_applied.py::test_fully_applied`; `test_proposal_cleanup.py::test_a_simple_full_success_removes_the_proposal` plus retained real-pipeline success | Done |
+| F06 oversized stage designs | 5 | `d31e4de`, `59dda7b` | `at_print_area` in `tests/support/pipeline.py`; `test_a_full_resolution_design_is_uploaded_and_created`; exact-floor case in `test_product_gates.py`; timings below | Done |
+| F07 smoothing, kernel, cache reuse | 2 | `c48641c` | `test_render_maps.py::test_height_map_spreads_an_impulse_by_the_gaussian_it_names`, `…rounds_an_even_kernel_up…`, `…loads_what_it_stored_instead_of_recomputing`, kernel/source invalidation | Done |
+| F08 LRU and fresh pixels | 2 | `34dd19c` | `test_preview_imagecache.py::TestBudget::test_the_least_recently_used_entry_goes_first`, `TestMemo::test_editing_the_photo_invalidates_it` | Done |
+| F09 pass goldens depend on warp | 6 | `84a06b6` | `tests/core/golden/passes/test_passes_golden.py` from `fixtures/render/prewarped-grid.png`; `golden/e2e/test_render_e2e_golden.py` retained | Done |
+| F10 SVG setup for geometry | 8 | `278a808`, `db7f60b`, `b1f7030` | `src/ui/src/components/quadGeometry.test.ts`; `test_calibrator_browser.py::TestMovingABox::test_a_drag_on_a_downscaled_canvas_moves_the_box_in_photo_pixels`, `test_the_box_menu_stays_inside_the_clipping_pane` | Done |
+| F11 status-free 404 mock | 7 | `06bb4c6` | `src/ui/src/api/calibrator.test.ts` real-`Response` cases at 404 and 500 with method, path and body | Done |
+| F12 AI chain seeds proposals | 7 | `f30edbc`, `86cb545` | `test_proposals_api.py` cases seeded by `save_proposal`; `test_a_saved_proposal_reads_current_with_its_origin`; real-run and restart cases retained | Done |
+| F13 duplicated provider rules, shared description oracle | 12 | `a8abbe0` | `test_ai_seo_browser.py::test_choosing_common_copy_saves_its_ref_and_previews_the_literal_description`; fall-through in `test_ai_orchestrator.py` and `test_ai_market_queries.py` | Done; [CI](https://github.com/eli-jordan/etsy-listing-automation/actions/runs/37166067105) and [e2e](https://github.com/eli-jordan/etsy-listing-automation/actions/runs/37166533232) green on `ac315d9` |
+| F14 screenshot existence gate | 12 | `2c352ff` | `capture` marker, `tests/conftest.py`; `tests/test_ci_selection.py` capture cases; `-m capture` collects 5 and wrote all five at this PR's final gates | Done; same PR 12 runs |
+| F15 real UI sleeps | 10 | `9c7a05f`, `57e34ed`, `58e64bc`, `8ca38ef`, `b4be17b`, `779e74e` | `usePreview.test.ts`, `PreviewPanel.test.tsx`, `DeployPage.test.tsx`, `BatchDeployPage.test.tsx`, `App.test.tsx`, `ListingEditorPage.test.tsx` on controlled clocks | Done |
+| F16 fresh-read, deadline, execution | 2, 5 | `6cc38a9`, `59dda7b` | `test_ai_brief.py::test_the_packaged_prompt_is_read_fresh_each_call`; `test_ai_models.py` deadline cases; `test_an_update_reads_the_product_before_writing_it`; `test_a_changed_price_is_republished` | Done |
+| F17 stateful live tests | 13 | `bc96fa2`, `bd0abec` | `test_phase3_publish_e2e.py::test_the_full_cycle_from_nothing_to_a_media_complete_draft`; `test_printify_product_e2e.py::…test_a_failed_publish_is_a_named_error_and_leaves_the_product_unlocked` | Done; journey passed in serial [e2e](https://github.com/eli-jordan/etsy-listing-automation/actions/runs/37167639782). The failed-publish case skipped live (the CI shop is Etsy-connected and its guard refuses), so its own unlock proof is hermetic only |
+| F18 SKU, title, pagination non-tests | 13 | `094791d`, `bc96fa2`, `e4e741a` | `test_printify_products_http.py::test_the_walk_pages_a_server_that_honours_page_and_limit`; `test_the_walk_pages_the_real_list_to_this_runs_product`; SKU and vendor-title cases deleted | Done; walk and resolution passed in serial [e2e](https://github.com/eli-jordan/etsy-listing-automation/actions/runs/37167639782) |
+| F19 duplicate reel presentations | 10 | `b9067d8` | `MediaReel.test.tsx` position and ceiling cases; one `ImagesTab.test.tsx` position witness | Done |
+| F20 obsolete classes and layout | 10 | `fefca13` | `DetailsTab.test.tsx` panel content and focus cases; browser calibrator frames | Done |
+| F21 immediate negative Reset | 10 | `b4be17b` | `App.test.tsx` "goes back to the last successful save, not the config it opened with" | Done |
+| F22 formatter, ANSI, CLI ownership | 9 | `4e8e34d`, `05637eb`, `2d25c24`, `3e480c4` | `tests/cli/unit/test_format_plan.py`; `tests/core/unit/test_garment_profiles.py`, `test_listing_stubs.py`, `test_starting_prices.py`, `test_secrets.py`; `test_plan_time_refusal.py` | Done |
+
+### Supporting recommendations
+
+| Recommendation | PR | Evidence | State |
+|---|---:|---|---|
+| Ambient workspace override | 1 | `d54d2c6`: `test_workspace.py` discovery cases unset `ETSY_LISTINGS_ROOT`; override cases kept | Done |
+| Four DTO, fake and lock duplicates | 2 | `19fd967`: four removals, each with a lower oracle in the ledger | Done |
+| Other DTO storage and `startedAt` alias | 2, 10 | PR 2 storage-only review table above; `9880814` pins `startedAt` to `created_at` | Done, case by case |
+| Fake-`Popen` creation guesses | 4 | `7b6aa46`: factory `created` event, bounded waits, joined finisher | Done |
+| Schema identity in doubles | 7 | `320b8ab`: `tests/core/unit/test_chain_provider.py` copied-schema and unknown-schema cases | Done |
+| Repeated typed fixtures | 7, 10 | `86cb545` `save_proposal`; `1b84082` `src/test/listings.ts`; `07bf877` literal `MarketResult` | Done |
+| Market formatter runs research | 6 | `07bf877`: literal cases plus `test_the_block_matches_the_golden` | Done |
+| Catalog HTTP owns secrets and placeholder rule | 5, 9 | `8b91a1e` to `test_catalog.py`; `4e8e34d`, `05637eb` to `test_secrets.py`; nested decoding stays in `test_catalog_http.py` | Done |
+| Real process tests labelled unit | 4 | `7b6aa46`: `tests/core/behaviour/test_ai_process_tree.py`, still hermetic-selected | Done |
+| Pure picker tests owned by CLI | 9 | `4e8e34d`: three core subjects, terminal picker stays in `test_new_picker.py` | Done |
+| Non-DOM Vitest under jsdom | 11 | `37b257b`: `node` project, 204 cases in 12 files | Done |
+| Prototype cases in production Vitest | 11 | `37b257b`: `design` project, `npm run test:design` in `check.sh` and CI | Done |
+| Low-level events and microtask guesses | 10, 12 | `779e74e` `userEvent` in `ListingEditorPage.test.tsx`; `57e34ed` settled effects; PR 12 changed no helper needing it | Done for changed files |
+| Browser helpers use presentation classes | 12 | PR 12's one changed helper uses the existing `#details-description-source` id. 103 class-based `locator(".…")` calls remain across ten browser files | Retained; see deferral |
+| AI live test over-specifies progress | 13 | `30a2693`: repeated step states collapse before comparison | Done; passed live with `FakeAiProvider` (`E2E_REAL_AI` unset in CI), real-AI path unverified |
+| Comparable benchmarks and pyramid inventory | 14 | Measurements and layer inventory below | Done |
+| CI/check.sh alignment and mandatory layers | 11, 12, 14 | `37b257b`, `2c352ff`; `tests/test_ci_selection.py`; this PR's docs refresh | Done |
+| Good tests and safety witnesses | All | Witness table below | Done |
+
+**Deferral.** The 103 class-based browser locators stay. The plan limits semantic locators to helpers a PR changed, and a sweep would touch ten files whose classes are, in places, the style contract the case checks; sorting those from incidental hooks is a review of its own, not evidence work. Owner: the repository owner, as a follow-up browser-maintenance change. No other row is deferred.
+
+### Good-test witnesses
+
+Every witness below was collected at this branch's tip (`uv run pytest --collect-only`, 35 cases) and every name also exists at the stack base; the process-tree cases changed file in PR 4 with unchanged assertions, and the idempotency and currency stage cases now run at the PR 5 print area.
+
+| Protection | Witness |
+|---|---|
+| Idempotency | `test_printify_product_stage.py::test_a_second_apply_writes_nothing`; `test_etsy_listing_stage.py::test_a_second_apply_with_nothing_changed_is_a_no_op`; `test_render_stage.py::test_apply_twice_produces_byte_identical_applied_subtree` |
+| Safe retry | `tests/core/unit/test_retry.py::test_a_non_retryable_failure_is_returned_immediately`; `test_printify_shops_http.py::test_retries_that_run_out_surface_the_real_error_not_a_wrapper` |
+| Currency | `test_money.py::test_require_currency_rejects_mismatch_with_actionable_message`; `test_printify_product_stage.py::test_prices_reach_printify_as_minor_units_of_the_shop_currency` |
+| Path safety | `test_workspace.py::test_resolve_rejects_parent_escape`; `test_workspace_common_copy.py::TestCommonCopyFile::test_refuses_traversal_back_out_of_common_copy` |
+| SSE | `test_runs_api.py::test_an_apply_run_streams_its_full_event_sequence`; `test_ai_runs_api.py::test_the_stream_replays_only_what_came_after_last_event_id` |
+| Restart | `test_durable_proposals.py::test_a_manual_runs_proposal_survives_a_restart`; `test_batch_queue.py::test_a_row_running_when_the_server_stops_reruns_after_a_restart` |
+| Fingerprints | `test_run.py::test_a_stale_fingerprint_refuses_before_any_write` |
+| Real process cleanup | `test_ai_process_tree.py::test_run_managed_actually_kills_a_real_process_and_its_grandchild_on_timeout`, `…_tree_on_cancellation` (moved in PR 4, assertions unchanged) |
+| Encoding | `test_ai_process_tree.py::test_run_managed_speaks_utf8_to_a_real_process_whatever_the_locale`; `test_cli_surface.py::test_a_stdout_that_cannot_encode_the_block_falls_back_to_ascii`; `test_terminal.py::test_a_utf8_locale_re_encodes_the_output_streams` |
+| Golden composition | `golden/e2e/test_render_e2e_golden.py::test_e2e_composite_golden[black]`, `[white]`, `test_e2e_composite_with_displace_enabled_golden` |
+| Release install | `test_wheel_frontend.py::test_installed_wheel_serves_the_spa_without_node_or_the_checkout` |
+
+### Measurements
+
+All runs were on the macOS host in the environment block, venv Python 3.12.11 (uv's resolved interpreter, not the system 3.13.7), Node 24.8.0, with `ETSY_LISTINGS_ROOT` unset. The stack base `d89a830` ran in a temporary detached worktree with its own `uv sync`, `npm install` and `npm run build`; it was removed afterwards. Both sides had warm uv and npm caches and a built `src/ui/dist`. pytest ran with `-p no:cacheprovider`, and focused runs with `-p no:randomly`. Base and tip runs alternated, so drift on the shared machine falls on both. Times are pytest's or Vitest's own reported durations; wall clock is noted where it differs in kind.
+
+**Full comparison (one run each).**
+
+| Suite | Stack base `d89a830` | Tip | Change |
+|---|---|---|---|
+| `pytest -m "not browser and not e2e"` | 2,865 passed, 10 skipped of 2,875; 420.3 s | 2,887 passed, 10 skipped of 2,897; 351.6 s | +22 cases, −68.7 s |
+| `npx vitest run` | 997 passed; 27.9 s | 1,027 passed; 19.5 s | +30 cases, −8.4 s |
+
+The skips are the same ten platform skips on both sides. One run per side is a single observation; the focused runs below say where the time went.
+
+**Focused runs (three each, median and range).**
+
+| Target | Cases base → tip | Base median (range) | Tip median (range) |
+|---|---|---|---|
+| Packaging, `tests/test_wheel_frontend.py` (PR 3) | 5 → 5 | 30.3 s (28.6–52.1) | 30.2 s (21.2–38.5) |
+| Stage and cleanup targets (PRs 5, 6)¹ | 99 → 111 | 77.1 s (75.8–77.2) | 13.2 s (12.7–17.6) |
+| Vitest, PR 10 tip `068c438` vs tip (PR 11)² | 1,027 → 1,027 | 22.6 s (21.8–22.7) | 19.0 s (18.6–19.4) |
+| Vitest, stack base vs tip | 997 → 1,027 | 25.0 s (24.1–29.1) | 25.9 s (25.5–26.4) |
+
+¹ `test_printify_product_stage`, `test_publish_stage`, `test_product_gates`, `test_proposal_cleanup`, `test_video_in_media`, `test_migrate_refs_cost`, `test_passes_golden`, `test_market_block`, plus `test_fully_applied` at the tip.
+² A separate matched pair, added because the stack base differs from the tip by 30 cases.
+
+The stage targets ran 5.8 times faster while gaining twelve cases, so the gain is the smaller print area and simpler stages, not fewer cases. The packaging medians are level: the first base run paid a cold build (52 s) and the remaining runs overlap. PR 3's own evidence is the build count, five wheels and one sdist down to three and one, and this measurement neither confirms nor contradicts a time gain from it. For the frontend, the matched pair with identical cases shows the split saving 3.6 s, almost all in jsdom environment setup (summed environment time 78–89 s before, 60–64 s after); the `node` project alone runs 204 cases in 1.8–1.9 s. Against the stack base, Vitest's medians overlap even though the single full runs differed, so no whole-suite frontend gain is claimed.
+
+**Collection by layer.**
+
+| Selection | Base | Tip |
+|---|---:|---|
+| Hermetic (`not browser and not e2e`) | 2,875 | 2,897 |
+| Core unit / behaviour / contract / golden | 1,318 / 711 / 174 / 15 | 1,363 / 720 / 172 / 18 |
+| Server unit / behaviour / contract | 27 / 219 / 136 | 27 / 219 / 137 |
+| CLI unit / behaviour | 66 / 170 | 79 / 120 |
+| Project-wide `tests/*.py` | 39 | 42 |
+| Required browser | 97 | 93 |
+| `capture` (opt-in) | 0 | 5 |
+| e2e | 62 | 49 |
+| Vitest `node` / `dom` / `design` | 997 in one environment | 204 / 819 / 4 |
+
+The CLI behaviour drop and the core unit rise are PR 9's moves of pure subjects to their owners, not lost assertions; the case ledger names each. The browser change is PR 8's two added geometry witnesses, PR 12's one deletion and the five captures leaving required collection. The e2e drop is PR 13's merges and two trivia deletions. None of these counts is offered as a quality measure; the per-case ledger is.
+
+### Deviations from the plan
+
+G2–G5 ran at this PR's tip (above); G7 is recorded in the PR ledger. The frontend environment comparison used an extra matched pair (PR 10 tip) beside the stack base, because the stack base runs 30 fewer cases. The browser-locator recommendation is retained with the deferral above rather than implemented here, since this PR moves no unfinished refactor.

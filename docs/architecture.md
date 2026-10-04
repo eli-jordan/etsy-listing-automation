@@ -733,6 +733,34 @@ manual runs, including Import Linter, followed by a browser job on every
 trigger. The Python job explicitly uses `-m "not browser and not e2e"`: a
 command-line marker replaces the default, so both exclusions must be stated.
 Browser checks require Chromium and the built SPA and prohibit clean skips.
+
+Some selections carry roles rather than layers. The five calibrator review
+screenshots are artifacts, not oracles, so they carry the `capture` marker and
+`tests/conftest.py` deselects them unless `-m` names it: a screenshot whose
+only assertion is that a file exists cannot fail for a product reason, and
+keeping it opt-in beat deleting it because reviewers still want the frames.
+`tests/test_ci_selection.py` proves CI's browser selection equals `check.sh`'s
+and excludes exactly those scenes. Real process-tree timeout, cancellation and
+UTF-8 cases live in their own behaviour subject,
+`tests/core/behaviour/test_ai_process_tree.py`, apart from the fake-`Popen`
+wiring units. The live Phase 3 publish cycle is one self-contained journey
+(`test_the_full_cycle_from_nothing_to_a_media_complete_draft`) rather than
+nine ordered cases, because the cases depended on each other's shop state and
+could not be selected alone.
+
+Vitest has three projects in `src/ui/vitest.config.ts`:
+
+| Project | Environment | Contents | Run by |
+|---|---|---|---|
+| `node` | Node, no setup file | Pure rule modules with no DOM or browser API | `npm run test`, `npm run test:coverage` |
+| `dom` | jsdom with the shared setup | Components, hooks and the HTTP/SSE adapters, which run against the browser `fetch`/`EventSource` they ship with | `npm run test`, `npm run test:coverage` |
+| `design` | jsdom with the shared setup | The marver prototype frames under `src/ui/design/` | `npm run test`, `npm run test:design` |
+
+A `node` subject that starts touching `document` fails with a
+`ReferenceError`, which is the point: the split states each file's actual
+dependency instead of giving everything jsdom. Prototype tests stay required
+(`check.sh` and CI run `test:design`) but sit outside production coverage, because a
+prototype frame exercising production components is not production coverage.
 Real-API E2E stays in its separate main/manual workflow.
 
 The CLI currently exposes `setup`, `auth`, `new`, `plan`, `apply`, `unlock` and
