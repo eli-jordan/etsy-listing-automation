@@ -92,6 +92,40 @@ jobs:
           printf '%s' "$ETSY_TOKENS_JSON" > "$workspace/.auth/etsy-tokens.json"
           echo "ETSY_LISTINGS_ROOT=$workspace" >> "$GITHUB_ENV"
 
+      - name: e2e products on the shop before the run
+        env:
+          PRINTIFY_API_TOKEN: ${{ secrets.PRINTIFY_API_TOKEN }}
+          MODE: before
+        run: |
+          uv run python - "$RUNNER_TEMP/e2e-products-before.txt" "$MODE" <<'PY'
+          import os, sys, httpx
+          path, mode = sys.argv[1], sys.argv[2]
+          api = httpx.Client(
+              base_url="https://api.printify.com/v1",
+              headers={"Authorization": f"Bearer {os.environ['PRINTIFY_API_TOKEN']}"},
+              timeout=30,
+          )
+          found, page = {}, 1
+          while True:
+              body = api.get("/shops/28877318/products.json", params={"page": page, "limit": 50}).json()
+              found |= {p["id"]: p["title"] for p in body["data"]
+                        if "etsy-listings e2e" in p["title"] and not p.get("is_deleted")}
+              if page >= body["last_page"]:
+                  break
+              page += 1
+          if mode == "before":
+              open(path, "w").write("".join(f"{i}\n" for i in found))
+              print(f"{len(found)} e2e products on the shop before this run")
+              sys.exit(0)
+          before = set(open(path).read().split())
+          for product_id, title in found.items():
+              origin = "earlier run" if product_id in before else "THIS RUN"
+              print(f"left behind ({origin}): {product_id} {title}")
+          new = [i for i in found if i not in before]
+          print(f"{len(new)} e2e products left behind by this run")
+          sys.exit(1 if new else 0)
+          PY
+
       # The layer skips itself, every test, when a credential is missing --
       # which is right on a contributor's machine and wrong here, where a layer
       # that runs nothing still reports green.
@@ -117,30 +151,41 @@ jobs:
         run: uv run pytest -m e2e -rA
 
       # Read-only: every product this layer makes carries "etsy-listings e2e"
-      # in its title and is deleted in teardown. This lists any that are not,
-      # by title and id only, whether or not the tests passed.
+      # in its title and is deleted in teardown. The shop is listed before and
+      # after the tests (title and id only); a product that appeared during
+      # this run and is still there fails the job, whether or not the tests
+      # passed. Ones an earlier run left are named but are not this run's.
       - name: no e2e product left behind
         if: always()
         env:
           PRINTIFY_API_TOKEN: ${{ secrets.PRINTIFY_API_TOKEN }}
+          MODE: after
         run: |
-          uv run python - <<'PY'
+          uv run python - "$RUNNER_TEMP/e2e-products-before.txt" "$MODE" <<'PY'
           import os, sys, httpx
+          path, mode = sys.argv[1], sys.argv[2]
           api = httpx.Client(
               base_url="https://api.printify.com/v1",
               headers={"Authorization": f"Bearer {os.environ['PRINTIFY_API_TOKEN']}"},
               timeout=30,
           )
-          left, page = [], 1
+          found, page = {}, 1
           while True:
               body = api.get("/shops/28877318/products.json", params={"page": page, "limit": 50}).json()
-              left += [(p["id"], p["title"]) for p in body["data"]
-                       if "etsy-listings e2e" in p["title"] and not p.get("is_deleted")]
+              found |= {p["id"]: p["title"] for p in body["data"]
+                        if "etsy-listings e2e" in p["title"] and not p.get("is_deleted")}
               if page >= body["last_page"]:
                   break
               page += 1
-          for product_id, title in left:
-              print(f"left behind: {product_id} {title}")
-          print(f"{len(left)} e2e products on the shop")
-          sys.exit(1 if left else 0)
+          if mode == "before":
+              open(path, "w").write("".join(f"{i}\n" for i in found))
+              print(f"{len(found)} e2e products on the shop before this run")
+              sys.exit(0)
+          before = set(open(path).read().split())
+          for product_id, title in found.items():
+              origin = "earlier run" if product_id in before else "THIS RUN"
+              print(f"left behind ({origin}): {product_id} {title}")
+          new = [i for i in found if i not in before]
+          print(f"{len(new)} e2e products left behind by this run")
+          sys.exit(1 if new else 0)
           PY
