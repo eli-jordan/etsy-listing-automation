@@ -35,7 +35,7 @@ if TYPE_CHECKING:
     from etsy_listings.core.workspace import Workspace
 
 _GUARD = threading.Lock()
-_LOCKS: dict[tuple[str, str], threading.RLock] = {}
+_LOCKS: dict[str, threading.RLock] = {}
 
 
 def digest(data: bytes) -> str:
@@ -110,10 +110,10 @@ class CalibrationStore:
     @contextmanager
     def lock(self, name: str) -> Iterator[None]:
         directory = self.workspace.template_dir(name)
-        self.workspace.resolve(
+        resolved = self.workspace.resolve(
             directory.relative_to(self.workspace.root).as_posix(), self.workspace.root
         )
-        key = (str(self.workspace.root.resolve()).casefold(), name.casefold())
+        key = str(resolved).casefold()
         with _GUARD:
             lock = _LOCKS.setdefault(key, threading.RLock())
         with lock:

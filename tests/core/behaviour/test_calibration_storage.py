@@ -570,3 +570,40 @@ def test_missing_automatic_baseline_does_not_overwrite_saved_edits(workspace_roo
             expected_revision=store.read("example").revision,
         )
     assert store.workspace.template_mask_file("example").read_bytes() == edited
+
+
+def test_template_alias_saves_share_canonical_directory_lock(workspace_root: Path) -> None:
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Event
+
+    from etsy_listings.core.workspace.calibration import CalibrationConflict
+
+    store = make_store(workspace_root)
+    alias = store.workspace.template_dir("alias")
+    alias.symlink_to(store.workspace.template_dir("example"), target_is_directory=True)
+    before = store.read("example")
+    config = load_template_config(
+        {**before.config.model_dump(mode="json"), "renderer": {"type": "photo-warp", "config": {}}}
+    )
+    started, finished = Event(), Event()
+
+    def save_alias() -> str:
+        started.set()
+        try:
+            store.save("alias", config, expected_revision=before.revision, request_id="alias-save")
+            return "saved"
+        except CalibrationConflict:
+            return "conflict"
+        finally:
+            finished.set()
+
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        with store.lock("example"):
+            pending = executor.submit(save_alias)
+            assert started.wait(2)
+            assert not finished.wait(0.2)
+            store.save(
+                "example", config, expected_revision=before.revision, request_id="original-save"
+            )
+        assert pending.result(timeout=5) == "conflict"
+    assert store.read("alias").config == store.read("example").config
