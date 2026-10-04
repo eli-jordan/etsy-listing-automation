@@ -680,6 +680,9 @@ timings into guarantees. Store the results beside the existing performance repor
 
 ## Delivery sequence
 
+The [stack execution contract](stack.md) assigns these stages to PRs and names
+their exit conditions and shared verification gates.
+
 These stages are unshipped. Add delivery PR links as they land. Build the complete
 integration before the final visual quality review, as agreed.
 
