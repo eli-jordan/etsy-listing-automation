@@ -41,7 +41,7 @@ def test_e2e_composite_with_displace_enabled_golden(assert_matches_golden) -> No
     )
     cfg = template_config.render_config().model_copy(
         update={
-            "displace": template_config.displace.model_copy(
+            "displace": template_config.render_config().displace.model_copy(
                 update={"enabled": True, "strength": 0.6}
             )
         }

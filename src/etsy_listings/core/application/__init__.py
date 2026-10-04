@@ -55,7 +55,8 @@ import names the module it depends on. Public interfaces:
 ``mockup_templates``
     The calibrator: ``list_templates`` -> ``TemplateOverview``,
     ``colour_report``, ``assign_kind``, ``read_config`` / ``save_config``,
-    ``template_photo``, ``template_swatch``, and the preview scene --
+    ``save_calibration`` commits config and mask edits with an expected revision
+    and idempotent request ID; ``template_photo``, ``template_swatch``, and the preview scene --
     ``saved_preview`` / ``unsaved_preview`` -> ``PreviewScene``,
     ``compose_preview``, ``scaled``. Images arrive decoded from the caller.
 ``calibration_designs``
@@ -90,7 +91,9 @@ import names the module it depends on. Public interfaces:
     ``ReviewedPlanRefused``.
 ``workspace_locks``
     ``WorkspaceLocks``: the per-listing-template write locks every
-    template check-then-write holds, one instance per application runtime.
+    template check-then-write holds, one instance per application runtime;
+    ``mockup_template(workspace, name)`` uses calibration storage's independent
+    process-wide template lock for saved calibration and map publication.
 ``deploy``
     Deployment runs -- registry, FIFO executor and their event log; see the
     subpackage's own initialiser.

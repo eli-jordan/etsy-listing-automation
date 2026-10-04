@@ -209,7 +209,10 @@ def _write_colour_matrix_set(template_dir: Path, colours: dict[str, tuple[int, i
     config = {
         "kind": "colour-matrix",
         "bounding_box": print_area_box(TEMPLATE_SIZE),
-        "shade": {"enabled": True, "opacity": 0.6, "blend": "soft-light"},
+        "renderer": {
+            "type": "photo-warp",
+            "config": {"shade": {"enabled": True, "opacity": 0.6, "blend": "soft-light"}},
+        },
     }
     (template_dir / "template.yaml").write_text(
         yaml.safe_dump(config, sort_keys=False), encoding="utf-8"
@@ -229,7 +232,13 @@ def _write_multiple_set(template_dir: Path, colours: dict[str, tuple[int, int, i
         rgb = colours[name]
         slot = make_template_base((slot_w, h), rgb)
         scene[:, i * slot_w : (i + 1) * slot_w] = np.asarray(slot)
-        placements.append({"colour": name, "bounding_box": print_area_box((slot_w, h), x_offset=i)})
+        placements.append(
+            {
+                "id": f"fixture-placement-{i + 1}",
+                "colour": name,
+                "bounding_box": print_area_box((slot_w, h), x_offset=i),
+            }
+        )
 
     Image.fromarray(scene, mode="RGB").save(
         template_dir / "scene.png", format="PNG", optimize=False, compress_level=6
@@ -238,7 +247,10 @@ def _write_multiple_set(template_dir: Path, colours: dict[str, tuple[int, int, i
     config = {
         "kind": "multiple",
         "colour_coverage": "subset",
-        "shade": {"enabled": True, "opacity": 0.6, "blend": "soft-light"},
+        "renderer": {
+            "type": "photo-warp",
+            "config": {"shade": {"enabled": True, "opacity": 0.6, "blend": "soft-light"}},
+        },
         "placements": placements,
     }
     (template_dir / "template.yaml").write_text(

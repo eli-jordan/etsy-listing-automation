@@ -1,9 +1,5 @@
 kind: multiple
 colour_coverage: subset
-shade:
-  enabled: true
-  opacity: 0.6
-  blend: soft-light
 placements:
 - colour: black
   bounding_box:
@@ -15,6 +11,7 @@ placements:
     y: 391.68
   - x: 134.4
     y: 403.2
+  id: fixture-placement-1
 - colour: moss
   bounding_box:
   - x: 624.0
@@ -25,3 +22,11 @@ placements:
     y: 391.68
   - x: 614.4
     y: 403.2
+  id: fixture-placement-2
+renderer:
+  type: photo-warp
+  config:
+    shade:
+      enabled: true
+      opacity: 0.6
+      blend: soft-light

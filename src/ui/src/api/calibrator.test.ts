@@ -1,3 +1,4 @@
+import type { PhotoWarpTemplate } from "../types";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { must } from "../test/helpers";
 import type { ColourMatrixTemplate } from "../types";
@@ -6,7 +7,7 @@ vi.mock("./client", () => ({
   api: { GET: vi.fn(), PUT: vi.fn() },
 }));
 
-const CONFIG: ColourMatrixTemplate = {
+const CONFIG: PhotoWarpTemplate<ColourMatrixTemplate> = {
   kind: "colour-matrix",
   bounding_box: [
     { x: 0, y: 0 },
@@ -14,8 +15,13 @@ const CONFIG: ColourMatrixTemplate = {
     { x: 100, y: 100 },
     { x: 0, y: 100 },
   ],
-  displace: { enabled: false, strength: 0 },
-  shade: { enabled: true, opacity: 0.6, blend: "soft-light" },
+  renderer: {
+    type: "photo-warp",
+    config: {
+      displace: { enabled: false, strength: 0 },
+      shade: { enabled: true, opacity: 0.6, blend: "soft-light" },
+    },
+  },
 };
 
 afterEach(() => {

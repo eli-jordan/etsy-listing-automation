@@ -1,3 +1,4 @@
+import type { PhotoWarpTemplate } from "../types";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as calibrator from "../api/calibrator";
@@ -13,7 +14,7 @@ import { EditorShell } from "./EditorShell";
  * answer cover all three, and it needs no template kind at all to do it.
  */
 
-const CONFIG: SingleTemplate = {
+const CONFIG: PhotoWarpTemplate<PhotoWarpTemplate<SingleTemplate>> = {
   kind: "single",
   colour: null,
   artwork: null,
@@ -23,8 +24,13 @@ const CONFIG: SingleTemplate = {
     { x: 10, y: 10 },
     { x: 0, y: 10 },
   ],
-  displace: { enabled: false, strength: 0 },
-  shade: { enabled: true, opacity: 0.6, blend: "soft-light" },
+  renderer: {
+    type: "photo-warp",
+    config: {
+      displace: { enabled: false, strength: 0 },
+      shade: { enabled: true, opacity: 0.6, blend: "soft-light" },
+    },
+  },
 };
 
 afterEach(() => vi.restoreAllMocks());
@@ -35,7 +41,9 @@ beforeEach(() => {
   vi.spyOn(calibrator, "listDesigns").mockResolvedValue([]);
 });
 
-function setup(overrides: Partial<Parameters<typeof EditorShell<SingleTemplate>>[0]> = {}) {
+function setup(
+  overrides: Partial<Parameters<typeof EditorShell<PhotoWarpTemplate<SingleTemplate>>>[0]> = {},
+) {
   const onChange = vi.fn();
   render(
     <EditorShell
@@ -107,7 +115,9 @@ describe("EditorShell", () => {
     expect(onChange).toHaveBeenCalledWith(
       expect.objectContaining({
         kind: "single",
-        displace: expect.objectContaining({ enabled: true }),
+        renderer: expect.objectContaining({
+          config: expect.objectContaining({ displace: expect.objectContaining({ enabled: true }) }),
+        }),
       }),
     );
   });

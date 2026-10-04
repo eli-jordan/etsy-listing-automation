@@ -1951,20 +1951,14 @@ export interface components {
        */
       design: string;
       /**
-       * @default {
-       *       "enabled": false,
-       *       "strength": 0
-       *     }
+       * Kind
+       * @default colour-matrix
+       * @constant
        */
-      displace: components["schemas"]["DisplaceConfig"];
-      /**
-       * @default {
-       *       "blend": "soft-light",
-       *       "enabled": true,
-       *       "opacity": 0.6
-       *     }
-       */
-      shade: components["schemas"]["ShadeConfig"];
+      kind: "colour-matrix";
+      /** Renderer */
+      renderer:
+        components["schemas"]["PhotoWarpRenderer"] | components["schemas"]["MarigoldRenderer"];
     };
     /**
      * ColourMatrixTemplate
@@ -1982,25 +1976,13 @@ export interface components {
         components["schemas"]["Point"],
       ];
       /**
-       * @default {
-       *       "enabled": false,
-       *       "strength": 0
-       *     }
-       */
-      displace: components["schemas"]["DisplaceConfig"];
-      /**
        * @description discriminator enum property added by openapi-typescript
        * @enum {string}
        */
       kind: "colour-matrix";
-      /**
-       * @default {
-       *       "blend": "soft-light",
-       *       "enabled": true,
-       *       "opacity": 0.6
-       *     }
-       */
-      shade: components["schemas"]["ShadeConfig"];
+      /** Renderer */
+      renderer:
+        components["schemas"]["PhotoWarpRenderer"] | components["schemas"]["MarigoldRenderer"];
     };
     /**
      * ColourReportRow
@@ -2882,6 +2864,85 @@ export interface components {
       /** Video Id */
       video_id: number;
     };
+    /** MarigoldAppearance */
+    MarigoldAppearance: {
+      /**
+       * Fabric Texture
+       * @default 0.25
+       */
+      fabric_texture: number;
+      /**
+       * Lighting Source
+       * @default estimated
+       * @enum {string}
+       */
+      lighting_source: "estimated" | "photo";
+      /**
+       * Lighting Strength
+       * @default 1
+       */
+      lighting_strength: number;
+      /**
+       * Print Shine
+       * @default 0
+       */
+      print_shine: number;
+    };
+    /** MarigoldConfig */
+    MarigoldConfig: {
+      /**
+       * @default {
+       *       "fabric_texture": 0.25,
+       *       "lighting_source": "estimated",
+       *       "lighting_strength": 1,
+       *       "print_shine": 0
+       *     }
+       */
+      appearance: components["schemas"]["MarigoldAppearance"];
+      /**
+       * @default {
+       *       "ensemble_size": 3,
+       *       "num_inference_steps": 10
+       *     }
+       */
+      inference: components["schemas"]["MarigoldInference"];
+    };
+    /** MarigoldInference */
+    MarigoldInference: {
+      /**
+       * Ensemble Size
+       * @default 3
+       */
+      ensemble_size: number;
+      /**
+       * Num Inference Steps
+       * @default 10
+       */
+      num_inference_steps: number;
+    };
+    /** MarigoldRenderer */
+    MarigoldRenderer: {
+      /**
+       * @default {
+       *       "appearance": {
+       *         "fabric_texture": 0.25,
+       *         "lighting_source": "estimated",
+       *         "lighting_strength": 1,
+       *         "print_shine": 0
+       *       },
+       *       "inference": {
+       *         "ensemble_size": 3,
+       *         "num_inference_steps": 10
+       *       }
+       *     }
+       */
+      config: components["schemas"]["MarigoldConfig"];
+      /**
+       * @description discriminator enum property added by openapi-typescript
+       * @enum {string}
+       */
+      type: "marigold";
+    };
     /**
      * MarketSnapshot
      * @description One research, as the panel reads it back: the result's fields, when
@@ -2948,27 +3009,27 @@ export interface components {
     /** MultiplePreviewRequest */
     MultiplePreviewRequest: {
       /**
+       * Colour Coverage
+       * @default exact
+       * @enum {string}
+       */
+      colour_coverage: "exact" | "subset";
+      /**
        * Design
        * @default bundled-grid
        */
       design: string;
       /**
-       * @default {
-       *       "enabled": false,
-       *       "strength": 0
-       *     }
+       * Kind
+       * @default multiple
+       * @constant
        */
-      displace: components["schemas"]["DisplaceConfig"];
+      kind: "multiple";
       /** Placements */
       placements: components["schemas"]["Placement"][];
-      /**
-       * @default {
-       *       "blend": "soft-light",
-       *       "enabled": true,
-       *       "opacity": 0.6
-       *     }
-       */
-      shade: components["schemas"]["ShadeConfig"];
+      /** Renderer */
+      renderer:
+        components["schemas"]["PhotoWarpRenderer"] | components["schemas"]["MarigoldRenderer"];
     };
     /**
      * MultipleTemplate
@@ -2984,27 +3045,15 @@ export interface components {
        */
       colour_coverage: "exact" | "subset";
       /**
-       * @default {
-       *       "enabled": false,
-       *       "strength": 0
-       *     }
-       */
-      displace: components["schemas"]["DisplaceConfig"];
-      /**
        * @description discriminator enum property added by openapi-typescript
        * @enum {string}
        */
       kind: "multiple";
       /** Placements */
       placements: components["schemas"]["Placement"][];
-      /**
-       * @default {
-       *       "blend": "soft-light",
-       *       "enabled": true,
-       *       "opacity": 0.6
-       *     }
-       */
-      shade: components["schemas"]["ShadeConfig"];
+      /** Renderer */
+      renderer:
+        components["schemas"]["PhotoWarpRenderer"] | components["schemas"]["MarigoldRenderer"];
     };
     /**
      * PhaseEvent
@@ -3029,6 +3078,46 @@ export interface components {
        * @enum {string}
        */
       type: "phase";
+    };
+    /** PhotoWarpConfig */
+    PhotoWarpConfig: {
+      /**
+       * @default {
+       *       "enabled": false,
+       *       "strength": 0
+       *     }
+       */
+      displace: components["schemas"]["DisplaceConfig"];
+      /**
+       * @default {
+       *       "blend": "soft-light",
+       *       "enabled": true,
+       *       "opacity": 0.6
+       *     }
+       */
+      shade: components["schemas"]["ShadeConfig"];
+    };
+    /** PhotoWarpRenderer */
+    PhotoWarpRenderer: {
+      /**
+       * @default {
+       *       "displace": {
+       *         "enabled": false,
+       *         "strength": 0
+       *       },
+       *       "shade": {
+       *         "blend": "soft-light",
+       *         "enabled": true,
+       *         "opacity": 0.6
+       *       }
+       *     }
+       */
+      config: components["schemas"]["PhotoWarpConfig"];
+      /**
+       * @description discriminator enum property added by openapi-typescript
+       * @enum {string}
+       */
+      type: "photo-warp";
     };
     /**
      * PhraseScore
@@ -3066,6 +3155,8 @@ export interface components {
       ];
       /** Colour */
       colour: string;
+      /** Id */
+      id: string;
     };
     /** PlanDTO */
     PlanDTO: {
@@ -3648,6 +3739,8 @@ export interface components {
     };
     /** SinglePreviewRequest */
     SinglePreviewRequest: {
+      /** Artwork */
+      artwork?: string | null;
       /** Bounding Box */
       bounding_box: [
         components["schemas"]["Point"],
@@ -3655,26 +3748,22 @@ export interface components {
         components["schemas"]["Point"],
         components["schemas"]["Point"],
       ];
+      /** Colour */
+      colour?: string | null;
       /**
        * Design
        * @default bundled-grid
        */
       design: string;
       /**
-       * @default {
-       *       "enabled": false,
-       *       "strength": 0
-       *     }
+       * Kind
+       * @default single
+       * @constant
        */
-      displace: components["schemas"]["DisplaceConfig"];
-      /**
-       * @default {
-       *       "blend": "soft-light",
-       *       "enabled": true,
-       *       "opacity": 0.6
-       *     }
-       */
-      shade: components["schemas"]["ShadeConfig"];
+      kind: "single";
+      /** Renderer */
+      renderer:
+        components["schemas"]["PhotoWarpRenderer"] | components["schemas"]["MarigoldRenderer"];
     };
     /**
      * SingleTemplate
@@ -3694,25 +3783,13 @@ export interface components {
       /** Colour */
       colour?: string | null;
       /**
-       * @default {
-       *       "enabled": false,
-       *       "strength": 0
-       *     }
-       */
-      displace: components["schemas"]["DisplaceConfig"];
-      /**
        * @description discriminator enum property added by openapi-typescript
        * @enum {string}
        */
       kind: "single";
-      /**
-       * @default {
-       *       "blend": "soft-light",
-       *       "enabled": true,
-       *       "opacity": 0.6
-       *     }
-       */
-      shade: components["schemas"]["ShadeConfig"];
+      /** Renderer */
+      renderer:
+        components["schemas"]["PhotoWarpRenderer"] | components["schemas"]["MarigoldRenderer"];
     };
     /** StageAppliedEvent */
     StageAppliedEvent: {

@@ -15,9 +15,11 @@ claiming every caller already obeys them.
 Module paths in this document are relative to `src/etsy_listings/` unless they
 start with `src/`, `tests/`, `scripts/` or `docs/`.
 
-The accepted [Marigold design](features/marigold-20261001/plan.md) is not yet
-implemented. ADR-0053 records that extension; the inventory below describes
-current code, not the proposed preparation packages.
+The [Marigold design](features/marigold-20261001/plan.md) is being implemented
+in stages under ADR-0053. Renderer configuration and recoverable calibration
+storage are implemented. Model preparation, durable maps and the complete editor
+flow remain planned; Marigold configurations currently refuse rendering with a
+preparation explanation.
 
 ## Runtime and dependencies
 
@@ -294,6 +296,50 @@ on disk â€” which is exactly the difference that makes it a preview.
 `application.mockup_templates` decides the scene (photo, layers, design) and
 composites it from decoded images the server supplies out of its memo;
 encoding the frame as WebP or PNG is the server's.
+
+### Renderer configuration and calibration recovery
+
+Templates require `renderer.type` and put active settings in `renderer.config`.
+Photo warp retains the existing pure numerical pipeline. Marigold settings parse
+without installing or importing model dependencies, but rendering refuses until
+map preparation is integrated. Old top-level `shade` and `displace` are rejected,
+including mixed-format preview bodies. Multiple placements require safe, unique
+IDs; production creation uses UUIDs and geometry, recolouring and reorder preserve
+them. Single and colour-matrix placements use `None` internally.
+
+`workspace.calibration.CalibrationStore` holds a process-wide reentrant lock per
+workspace and mockup template. This is independent of the listing-template lock
+domain. All template-config writers use its recoverable transaction. Server
+operations recover before reading; the direct Workspace loader takes the same
+lock and refuses an active transaction, so a CLI cannot roll forward a live server
+save. One server per workspace remains the ownership assumption.
+
+A save validates its revision and ordered mask operations, stages payloads and
+backups in the template-owned `.calibration-transaction/`, flushes commit intent,
+replaces destinations and verifies checksums before cleanup. Missing intent means
+discard staging; durable intent means roll forward the entire validated payload
+set. Damaged recovery data blocks reading with a repair explanation. Saved request
+receipts deduplicate exact retries and reject reused IDs with different content.
+The revision covers effective config, resolved main-photo pixels and filename,
+and saved mask checksums. It excludes inactive renderer settings and brush history.
+Config GET returns that revision as its ETag. The required save envelope and
+If-Match HTTP adapter remain part of the editor integration stage.
+
+Automatic and edited full-photo grayscale PNGs live under `masks/`, with stable-ID
+subdirectories only for multiple templates. Metadata binds them to the main photo
+and records the automatic algorithm version and PNG checksums. Normal rebuilding
+preserves both masks; explicit fresh baseline refresh replaces them only when no
+manual correction would be lost. A changed photo requires explicit mask reset.
+Reset copies the durable automatic raster. Undo uses cached whole-stroke raster
+checkpoints bound to the committed edited checksum; missing or damaged history
+loses Undo without losing the saved mask. Config and flattened mask edits commit
+together. `renderer-settings.json` preserves last-saved inactive settings and
+renderer selection restores them without preparing anything.
+
+Workspace resolves the colour-matrix main photo by ordinal filename ordering of
+actual colour photos. Fixed-scene kinds use `scene.png`; a stray scene file cannot
+replace the colour-matrix reference. Reference identity includes decoded RGB pixels,
+dimensions, filename and the conversion version.
 
 ### Two sizes, one pipeline
 

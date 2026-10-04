@@ -3,9 +3,8 @@ import type {
   BoundingBox,
   ColourReportRow,
   DesignSummary,
-  DisplaceConfig,
+  Renderer,
   Placement,
-  ShadeConfig,
   TemplateConfigState,
   TemplateKind,
   TemplateSummary,
@@ -165,9 +164,9 @@ export async function getTemplateSwatch(name: string, colour: string): Promise<s
 }
 
 type PreviewBody =
-  | { colour: string; bounding_box: BoundingBox; displace: DisplaceConfig; shade: ShadeConfig }
-  | { placements: Placement[]; displace: DisplaceConfig; shade: ShadeConfig }
-  | { bounding_box: BoundingBox; displace: DisplaceConfig; shade: ShadeConfig };
+  | { colour: string; bounding_box: BoundingBox; renderer: Renderer }
+  | { placements: Placement[]; renderer: Renderer }
+  | { bounding_box: BoundingBox; renderer: Renderer };
 
 /** Which of the server's two preview sizes to ask for.
  *

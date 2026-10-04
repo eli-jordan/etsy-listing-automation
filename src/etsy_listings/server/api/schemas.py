@@ -45,7 +45,7 @@ from etsy_listings.core.config.media import MediaEntry, MediaKind
 # place a state could be added to. Derived on every read, never persisted --
 # the same principle `TemplateSummary.status` states below.
 from etsy_listings.core.engine.status import ListingGesture, ListingStatus
-from etsy_listings.core.render.config import BoundingBox, DisplaceConfig, Placement, ShadeConfig
+from etsy_listings.core.render.config import BoundingBox, Placement, Renderer
 
 TemplateKind = Literal["colour-matrix", "multiple", "single"]
 
@@ -154,24 +154,30 @@ class ColourMatrixPreviewRequest(BaseModel):
     than forbidden, since a natural client pattern is spreading a whole
     ``GET.../config`` response (which includes ``kind``) into the body."""
 
+    model_config = ConfigDict(extra="forbid")
+    kind: Literal["colour-matrix"] = "colour-matrix"
     colour: str
     bounding_box: BoundingBox
-    displace: DisplaceConfig = DisplaceConfig()
-    shade: ShadeConfig = ShadeConfig()
+    renderer: Renderer
     design: str = "bundled-grid"
 
 
 class MultiplePreviewRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    kind: Literal["multiple"] = "multiple"
+    colour_coverage: Literal["exact", "subset"] = "exact"
     placements: list[Placement]
-    displace: DisplaceConfig = DisplaceConfig()
-    shade: ShadeConfig = ShadeConfig()
+    renderer: Renderer
     design: str = "bundled-grid"
 
 
 class SinglePreviewRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    kind: Literal["single"] = "single"
+    colour: str | None = None
+    artwork: str | None = None
     bounding_box: BoundingBox
-    displace: DisplaceConfig = DisplaceConfig()
-    shade: ShadeConfig = ShadeConfig()
+    renderer: Renderer
     design: str = "bundled-grid"
 
 

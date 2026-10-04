@@ -44,12 +44,15 @@ from etsy_listings.core.application.refusals import (
 from etsy_listings.core.config.errors import ConfigLoadError
 from etsy_listings.core.config.slug import slug_map
 from etsy_listings.core.render.config import (
+    AnyRenderer,
     AnyTemplate,
     BoundingBox,
     ColourMatrixTemplate,
     DisplaceConfig,
     MultipleTemplate,
+    PhotoWarpRenderer,
     Point,
+    PreparationRequired,
     RenderConfig,
     ShadeConfig,
     SingleTemplate,
@@ -57,6 +60,7 @@ from etsy_listings.core.render.config import (
 from etsy_listings.core.render.pipeline import Layer, render_scene
 from etsy_listings.core.render.swatch import sample_swatch
 from etsy_listings.core.render.types import RGB, RGBA, FloatMap
+from etsy_listings.core.workspace.calibration import Calibration, CalibrationStore, MaskEdit
 from etsy_listings.core.workspace.workspace import (
     AmbiguousColourSuffixError,
     ScenePhoto,
@@ -118,7 +122,7 @@ def list_templates(workspace: Workspace) -> list[TemplateOverview]:
 def _overview(workspace: Workspace, name: str) -> TemplateOverview:
     width, height = _photo_size(workspace, name)
     try:
-        config = workspace.load_template_config(name)
+        config = CalibrationStore(workspace).config(name)
     except ConfigLoadError:
         return TemplateOverview(
             name=name,
@@ -152,7 +156,11 @@ def _photo_size(workspace: Workspace, name: str) -> tuple[int | None, int | None
     """From the image header alone (``Image.open`` is lazy). An unreadable
     file answers ``None``: listing a template is how the seller reaches the
     UI that fixes it."""
-    photo = workspace.template_preview_photo(name)
+    photo: Path | None
+    try:
+        photo = workspace.template_main_photo(name, CalibrationStore(workspace).config(name))
+    except (ConfigLoadError, FileNotFoundError):
+        photo = workspace.template_preview_photo(name)
     if photo is None:
         return None, None
     try:
@@ -204,7 +212,10 @@ def template_photo(workspace: Workspace, name: str, colour: str | None) -> Path:
     require_template(workspace, name)
     source: Path | None
     if colour is None:
-        source = workspace.template_preview_photo(name)
+        try:
+            source = workspace.template_main_photo(name, CalibrationStore(workspace).config(name))
+        except (ConfigLoadError, FileNotFoundError):
+            source = workspace.template_preview_photo(name)
     else:
         try:
             source = workspace.template_base_image(name, colour)
@@ -268,7 +279,9 @@ def assign_kind(workspace: Workspace, name: str, kind: TemplateKind) -> AnyTempl
         photos = _rename_photos_to_slugs(workspace, photos)
         with Image.open(photos[0]) as img:
             size = img.size
-        config = ColourMatrixTemplate(bounding_box=_default_box(size))
+        config = ColourMatrixTemplate(
+            renderer=PhotoWarpRenderer(type="photo-warp"), bounding_box=_default_box(size)
+        )
     else:
         if len(photos) != 1:
             raise TemplateKindRefused(f"{kind} kind expects one photo, found {len(photos)}")
@@ -277,9 +290,11 @@ def assign_kind(workspace: Workspace, name: str, kind: TemplateKind) -> AnyTempl
         with Image.open(scene) as img:
             size = img.size
         config = (
-            MultipleTemplate(placements=[])
+            MultipleTemplate(renderer=PhotoWarpRenderer(type="photo-warp"), placements=[])
             if kind == "multiple"
-            else SingleTemplate(bounding_box=_default_box(size))
+            else SingleTemplate(
+                renderer=PhotoWarpRenderer(type="photo-warp"), bounding_box=_default_box(size)
+            )
         )
     workspace.save_template_config(name, config)
     return config
@@ -334,17 +349,24 @@ def _rename_photos_to_slugs(workspace: Workspace, photos: list[Path]) -> list[Pa
 class SavedConfig:
     config: AnyTemplate
     modified_at: datetime
+    revision: str
 
 
 def read_config(workspace: Workspace, name: str) -> SavedConfig:
     """The template's ``template.yaml`` and when it was last written.
     :class:`TemplateConfigMissing` for one with no config yet -- loaded
     before its file is stat()ed, so that is a refusal, not an ``OSError``."""
-    config = _load_config(workspace, name)
-    modified_at = datetime.fromtimestamp(
-        workspace.template_config_file(name).stat().st_mtime, tz=UTC
-    )
-    return SavedConfig(config=config, modified_at=modified_at)
+    require_template(workspace, name)
+    store = CalibrationStore(workspace)
+    with store.lock(name):
+        try:
+            saved = store.read(name)
+        except ConfigLoadError as exc:
+            raise TemplateConfigMissing(name) from exc
+        modified_at = datetime.fromtimestamp(
+            workspace.template_config_file(name).stat().st_mtime, tz=UTC
+        )
+        return SavedConfig(config=saved.config, modified_at=modified_at, revision=saved.revision)
 
 
 def save_config(workspace: Workspace, name: str, config: AnyTemplate) -> None:
@@ -354,10 +376,30 @@ def save_config(workspace: Workspace, name: str, config: AnyTemplate) -> None:
     workspace.save_template_config(name, config)
 
 
+def save_calibration(
+    workspace: Workspace,
+    name: str,
+    config: AnyTemplate,
+    *,
+    expected_revision: str,
+    request_id: str,
+    mask_edits: list[MaskEdit] | None = None,
+) -> Calibration:
+    """ADR-0053: configuration and flattened masks commit as one revision."""
+    require_template(workspace, name)
+    return CalibrationStore(workspace).save(
+        name,
+        config,
+        expected_revision=expected_revision,
+        request_id=request_id,
+        mask_edits=mask_edits,
+    )
+
+
 def _load_config(workspace: Workspace, name: str) -> AnyTemplate:
     require_template(workspace, name)
     try:
-        return workspace.load_template_config(name)
+        return CalibrationStore(workspace).config(name)
     except ConfigLoadError as exc:
         raise TemplateConfigMissing(name) from exc
 
@@ -375,6 +417,7 @@ class PreviewGeometry:
     kind: TemplateKind
     boxes: tuple[BoundingBox, ...]
     colour: str | None = None
+    renderer: AnyRenderer | None = None
     displace: DisplaceConfig = field(default_factory=DisplaceConfig)
     shade: ShadeConfig = field(default_factory=ShadeConfig)
 
@@ -403,11 +446,23 @@ def unsaved_preview(
     it is asked after the kind check and before the photo is looked for.
     Refusals: :class:`TemplateMissing`, :class:`TemplateConfigMissing`,
     :class:`TemplatePhotoMissing`."""
-    kind = _load_config(workspace, name).kind
+    config = _load_config(workspace, name)
+    if not isinstance(config.renderer, PhotoWarpRenderer) or (
+        geometry.renderer is not None and not isinstance(geometry.renderer, PhotoWarpRenderer)
+    ):
+        raise PreparationRequired("Prepare the template first: Marigold maps are required")
+    kind = config.kind
     if geometry.kind != kind:
         raise TemplatePreviewKindMismatch(kind)
+    settings = (
+        geometry.renderer.config if isinstance(geometry.renderer, PhotoWarpRenderer) else None
+    )
     layers = tuple(
-        RenderConfig(bounding_box=box, displace=geometry.displace, shade=geometry.shade)
+        RenderConfig(
+            bounding_box=box,
+            displace=settings.displace if settings else geometry.displace,
+            shade=settings.shade if settings else geometry.shade,
+        )
         for box in geometry.boxes
     )
     return _scene(workspace, name, geometry.colour, layers, design)

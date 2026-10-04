@@ -1,3 +1,4 @@
+import type { PhotoWarpTemplate } from "../types";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as calibrator from "../api/calibrator";
@@ -6,7 +7,7 @@ import { SingleEditor } from "./SingleEditor";
 
 const SPACE: [number, number] = [400, 200];
 
-const CONFIG: SingleTemplate = {
+const CONFIG: PhotoWarpTemplate<SingleTemplate> = {
   kind: "single",
   colour: null,
   artwork: null,
@@ -16,8 +17,13 @@ const CONFIG: SingleTemplate = {
     { x: 100, y: 100 },
     { x: 0, y: 100 },
   ],
-  displace: { enabled: false, strength: 0 },
-  shade: { enabled: true, opacity: 0.6, blend: "soft-light" },
+  renderer: {
+    type: "photo-warp",
+    config: {
+      displace: { enabled: false, strength: 0 },
+      shade: { enabled: true, opacity: 0.6, blend: "soft-light" },
+    },
+  },
 };
 
 afterEach(() => vi.restoreAllMocks());
@@ -47,8 +53,7 @@ describe("SingleEditor", () => {
         "lifestyle-01",
         {
           bounding_box: CONFIG.bounding_box,
-          displace: CONFIG.displace,
-          shade: CONFIG.shade,
+          renderer: CONFIG.renderer,
         },
         "bundled-grid",
         "editor",

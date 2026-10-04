@@ -177,3 +177,9 @@ export type EtsyMediaSnapshot = components["schemas"]["EtsyMediaSnapshot"];
 export type DesiredVideoSnapshot = components["schemas"]["DesiredVideoSnapshot"];
 export type LiveVideoSnapshot = components["schemas"]["LiveVideoSnapshot"];
 export type EtsyVideosSnapshot = components["schemas"]["EtsyVideosSnapshot"];
+
+export type PhotoWarpRenderer = components["schemas"]["PhotoWarpRenderer"];
+export type PhotoWarpTemplate<T> = Omit<T, "renderer"> & { renderer: PhotoWarpRenderer };
+
+export type Renderer =
+  components["schemas"]["PhotoWarpRenderer"] | components["schemas"]["MarigoldRenderer"];
