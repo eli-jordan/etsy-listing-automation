@@ -27,6 +27,16 @@ that claim was never checked. Nothing here ever sets ``state``: the
 "live-edit check" confirms the listing is still a draft after every write this
 test makes, which is the measurable form of the rule that first publication stays with the seller.
 
+**One journey, not nine ordered tests.** Each milestone below needs the
+remote state the one before it left, and nine products to make them
+independent would cost nine creates, publishes and uploads on a shared shop.
+So the milestones are steps of a single test, which owns its workspace, its
+copy and its cleanup: selecting it runs everything it depends on, and no
+other case reads what it made. The copy carries a per-run token, because the
+product stage adopts an existing product by copy (ADR-0023) -- a fixed title
+would let a product an earlier crashed run left behind stand in for this
+run's create.
+
 **Every stage must actually run.** A blocked stage is reported, not raised,
 and ``RunReport.failed`` does not count one -- so ``assert not report.failed``
 passes over a stage that refused, and the layer reports green for work it
@@ -43,6 +53,7 @@ the shop it is pointed at rather than leaving one unset.
 from __future__ import annotations
 
 import shutil
+import uuid
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -78,7 +89,7 @@ IMAGES_IN_ORDER = [
     {"template": "flat-lay-01", "colour": colour}
     for colour in ("moss", "black", "blue-jean", "ivory")
 ]
-"""The order the reorder test below leaves `media:` in."""
+"""The order the reorder milestone below leaves `media:` in."""
 
 
 def _with_videos(*, second_after: int) -> list[object]:
@@ -129,12 +140,23 @@ def apply_everything(ctx: RunContext) -> RunReport:
     return report
 
 
-@pytest.fixture(scope="class")
+@pytest.fixture
+def copy() -> tuple[str, str]:
+    """This run's title and description, unique on the shared shop."""
+    token = uuid.uuid4().hex[:8]
+    return (
+        f"etsy-listings e2e {token} -- safe to delete",
+        f"Created by automated test run {token}. The Printify product is deleted in teardown.",
+    )
+
+
+@pytest.fixture
 def workspace(
     tmp_path_factory: pytest.TempPathFactory,
     credentials_workspace: Workspace,
     etsy_client: HttpEtsyListingClient,
     prerequisite_missing: PrerequisiteMissing,
+    copy: tuple[str, str],
 ) -> Workspace:
     """A fresh copy of the fixture workspace (the same one every offline test
     uses -- real profile, real mockup templates), pointed at the throwaway
@@ -151,17 +173,14 @@ def workspace(
     # `write_design`; this test needs the same thing against the real gate.
     write_design(root, (4500, 5400))
 
-    set_copy(
-        root,
-        title="etsy-listings e2e -- safe to delete",
-        description="Created by an automated test. The Printify product is deleted in teardown.",
-    )
+    title, description = copy
+    set_copy(root, title=title, description=description)
     point_at_throwaway_shops(root, credentials_workspace, etsy_client, prerequisite_missing)
 
     return Workspace.discover(root_override=root)
 
 
-@pytest.fixture(scope="class")
+@pytest.fixture
 def ctx(
     workspace: Workspace,
     printify_token: str,
@@ -174,236 +193,265 @@ def ctx(
     )
 
 
-@pytest.fixture(scope="class", autouse=True)
-def cleanup_product(workspace: Workspace, printify_client: PrintifyClient) -> Iterator[None]:
-    """Deletes the Printify product the class's tests create, once, after the
-    whole ordered sequence has run. The Etsy listing it published cannot be
-    cleaned up the same way -- see the module docstring's note on the
-    cleanup asymmetry."""
+@pytest.fixture(autouse=True)
+def cleanup_product(
+    workspace: Workspace, printify_client: PrintifyClient, copy: tuple[str, str]
+) -> Iterator[None]:
+    """Deletes the Printify product the journey created, whichever milestone
+    it stopped at. Deleting it also removes its Etsy draft (module docstring).
+
+    The lockfile names the product once a run has written it; a failure
+    between Printify's create and that write leaves no lockfile, so the
+    fallback finds the product by this run's own unique copy."""
     try:
         yield
     finally:
+        shop_id = workspace.defaults.printify.require_shop_id()
         existing = Lockfile.read(workspace.lock_file(LISTING))
         product_id = existing.remote.get(PRODUCT_ID_KEY) if existing is not None else None
+        if not product_id:
+            title, description = copy
+            product_id = printify_client.find_product_by_copy(
+                shop_id, title=title, description=description
+            )
         if product_id:
-            shop_id = workspace.defaults.printify.require_shop_id()
             printify_client.delete_product(shop_id, str(product_id))
 
 
 # ------------------------------------------------------------- the full cycle
 
 
-class TestTheFullCycle:
-    """One ordered sequence: nothing to a patched, media-complete draft, then
-    a change on each side and a re-apply that only touches what changed."""
+def _a_first_apply_creates_publishes_and_patches_the_listing(
+    ctx: RunContext, workspace: Workspace, title: str
+) -> None:
+    apply_everything(ctx)
+    lock = workspace.lock_file(LISTING)
 
-    def test_a_first_apply_creates_publishes_and_patches_the_listing(
-        self, ctx: RunContext, workspace: Workspace
-    ) -> None:
-        apply_everything(ctx)
-        lock = workspace.lock_file(LISTING)
+    written = Lockfile.read(lock)
+    assert written is not None
+    assert written.remote.get(PRODUCT_ID_KEY)
+    assert written.remote.get(ETSY_LISTING_ID_KEY)
 
-        written = Lockfile.read(lock)
-        assert written is not None
-        assert written.remote.get(PRODUCT_ID_KEY)
-        assert written.remote.get(ETSY_LISTING_ID_KEY)
+    # Every stage wrote a document, which is the only proof that every
+    # stage ran: a refusal writes nothing and fails nothing. `etsy_videos`
+    # is the exception by design -- this listing has no video yet, and a
+    # stage with nothing to place records nothing (the video milestones below
+    # are where it runs).
+    assert set(written.applied) == {
+        "render",
+        "printify_product",
+        "publish",
+        "etsy_listing",
+        "etsy_media",
+    }
 
-        # Every stage wrote a document, which is the only proof that every
-        # stage ran: a refusal writes nothing and fails nothing. `etsy_videos`
-        # is the exception by design -- this listing has no video yet, and a
-        # stage with nothing to place records nothing (the video tests below
-        # are where it runs).
-        assert set(written.applied) == {
-            "render",
-            "printify_product",
-            "publish",
-            "etsy_listing",
-            "etsy_media",
-        }
+    listing_id = int(written.remote[ETSY_LISTING_ID_KEY])
+    live = ctx.require_etsy().get_listing(listing_id, include_images=True)
+    assert live is not None
+    assert live.title == title
+    assert len(live.images) == 4, "one per colour in the fixture listing"
 
-        listing_id = int(written.remote[ETSY_LISTING_ID_KEY])
-        live = ctx.require_etsy().get_listing(listing_id, include_images=True)
-        assert live is not None
-        assert live.title == "etsy-listings e2e -- safe to delete"
-        assert len(live.images) == 4, "one per colour in the fixture listing"
+    # The fields only `etsy_listing`'s PATCH can have set. The title is not
+    # one of them -- Printify creates the listing carrying the *product's*
+    # title, so asserting on it proves nothing about the PATCH,
+    # which is how a stage that never ran passed this test for weeks.
+    assert live.materials == ("cotton",)
+    assert live.who_made == "i_did"
+    assert live.when_made == "made_to_order"
+    assert live.is_supply is False
+    assert live.should_auto_renew is False, "renewal: manual"
+    # Resolved from a *name* against the live shop. A stale id here
+    # is a 400 that fails the whole PATCH, which is why it is resolved per
+    # run rather than cached.
+    assert live.shipping_profile_id is not None
+    assert live.return_policy_id is not None
 
-        # The fields only `etsy_listing`'s PATCH can have set. The title is not
-        # one of them -- Printify creates the listing carrying the *product's*
-        # title, so asserting on it proves nothing about the PATCH,
-        # which is how a stage that never ran passed this test for weeks.
-        assert live.materials == ("cotton",)
-        assert live.who_made == "i_did"
-        assert live.when_made == "made_to_order"
-        assert live.is_supply is False
-        assert live.should_auto_renew is False, "renewal: manual"
-        # Resolved from a *name* against the live shop. A stale id here
-        # is a 400 that fails the whole PATCH, which is why it is resolved per
-        # run rather than cached.
-        assert live.shipping_profile_id is not None
-        assert live.return_policy_id is not None
 
-    def test_a_second_plan_reports_no_changes(self, ctx: RunContext, workspace: Workspace) -> None:
-        """Idempotency, against the real APIs: nothing in `listing.yaml`
-        changed, so nothing should want to run."""
-        planned = plan_listings(ctx, [LISTING], STAGES)
-        outcome = planned.outcomes[0]
-        assert outcome.ok, outcome.error
-        assert outcome.planned is not None
-        assert not outcome.planned.plan.has_changes
+def _a_second_plan_reports_no_changes(ctx: RunContext, workspace: Workspace) -> None:
+    """Idempotency, against the real APIs: nothing in `listing.yaml`
+    changed, so nothing should want to run."""
+    planned = plan_listings(ctx, [LISTING], STAGES)
+    outcome = planned.outcomes[0]
+    assert outcome.ok, outcome.error
+    assert outcome.planned is not None
+    assert not outcome.planned.plan.has_changes
 
-    def test_the_listing_is_still_a_draft(self, ctx: RunContext, workspace: Workspace) -> None:
-        """The live-edit check: nothing this tool did activated the listing
-         -- `state` is never in the PATCH body, and this is
-        what proves the omission holds against the real API."""
 
-        written = Lockfile.read(workspace.lock_file(LISTING))
-        assert written is not None
-        listing_id = int(written.remote[ETSY_LISTING_ID_KEY])
+def _the_listing_is_still_a_draft(ctx: RunContext, workspace: Workspace) -> None:
+    """The live-edit check: nothing this tool did activated the listing
+     -- `state` is never in the PATCH body, and this is
+    what proves the omission holds against the real API."""
 
-        live = ctx.require_etsy().get_listing(listing_id)
-        assert live is not None
-        assert live.state == "draft"
+    written = Lockfile.read(workspace.lock_file(LISTING))
+    assert written is not None
+    listing_id = int(written.remote[ETSY_LISTING_ID_KEY])
 
-    def test_getting_the_listing_with_images_returns_a_570xn_url(
-        self, ctx: RunContext, workspace: Workspace
-    ) -> None:
-        """ADR-0038, read-only: `getListing?includes=Images` on the real shop
-        carries `url_570xN` for a real, already-uploaded image -- the deploy
-        review's "On Etsy now" column reads this for a draft. Reads the
-        listing an earlier test in this sequence already created; this test
-        itself performs no write of its own (see the e2e credentials note)."""
-        written = Lockfile.read(workspace.lock_file(LISTING))
-        assert written is not None
-        listing_id = int(written.remote[ETSY_LISTING_ID_KEY])
+    live = ctx.require_etsy().get_listing(listing_id)
+    assert live is not None
+    assert live.state == "draft"
 
-        live = ctx.require_etsy().get_listing(listing_id, include_images=True)
 
-        assert live is not None
-        assert live.images, "the earlier apply in this sequence uploaded four"
-        assert all(image.url_570xN for image in live.images)
+def _getting_the_listing_with_images_returns_a_570xn_url(
+    ctx: RunContext, workspace: Workspace
+) -> None:
+    """ADR-0038, read-only: `getListing?includes=Images` on the real shop
+    carries `url_570xN` for a real, already-uploaded image -- the deploy
+    review's "On Etsy now" column reads this for a draft. Reads the
+    listing the first milestone of this journey created; this step
+    itself performs no write of its own (see the e2e credentials note)."""
+    written = Lockfile.read(workspace.lock_file(LISTING))
+    assert written is not None
+    listing_id = int(written.remote[ETSY_LISTING_ID_KEY])
 
-    def test_reordering_media_and_reapplying_only_touches_the_order(
-        self, ctx: RunContext, workspace: Workspace
-    ) -> None:
-        """One colour moved to the front of `media:`. No design changed, so
-        this should cost one `image_ids` PATCH and zero uploads."""
+    live = ctx.require_etsy().get_listing(listing_id, include_images=True)
 
-        edit_listing(
-            workspace.root,
-            media=[
-                {"template": "flat-lay-01", "colour": "moss"},
-                {"template": "flat-lay-01", "colour": "black"},
-                {"template": "flat-lay-01", "colour": "blue-jean"},
-                {"template": "flat-lay-01", "colour": "ivory"},
-            ],
+    assert live is not None
+    assert live.images, "the first apply of this journey uploaded four"
+    assert all(image.url_570xN for image in live.images)
+
+
+def _reordering_media_and_reapplying_only_touches_the_order(
+    ctx: RunContext, workspace: Workspace
+) -> None:
+    """One colour moved to the front of `media:`. No design changed, so
+    this should cost one `image_ids` PATCH and zero uploads."""
+
+    edit_listing(
+        workspace.root,
+        media=[
+            {"template": "flat-lay-01", "colour": "moss"},
+            {"template": "flat-lay-01", "colour": "black"},
+            {"template": "flat-lay-01", "colour": "blue-jean"},
+            {"template": "flat-lay-01", "colour": "ivory"},
+        ],
+    )
+
+    apply_everything(ctx)
+
+    written = Lockfile.read(workspace.lock_file(LISTING))
+    assert written is not None
+    listing_id = int(written.remote[ETSY_LISTING_ID_KEY])
+    live = ctx.require_etsy().get_listing(listing_id, include_images=True)
+    assert live is not None
+    assert len(live.images) == 4, "a reorder must not lose or duplicate an image"
+    ranked = sorted(live.images, key=lambda image: image.rank or 0)
+    moss_id = written.remote["etsy_image_ids"]["flat-lay-01:moss"]
+    assert ranked[0].listing_image_id == moss_id
+
+
+def _variation_images_bind_each_colour_actually_uploaded(
+    ctx: RunContext, workspace: Workspace, title: str
+) -> None:
+    """decision 6, against the real inventory and the real join."""
+
+    edit_listing(
+        workspace.root,
+        etsy={
+            "title": title,
+            "description": {"lead": "Created by an automated test."},
+            "variation_images": "flat-lay-01",
+        },
+    )
+
+    apply_everything(ctx)
+
+    written = Lockfile.read(workspace.lock_file(LISTING))
+    assert written is not None
+    listing_id = int(written.remote[ETSY_LISTING_ID_KEY])
+    shop_id = workspace.defaults.etsy.require_shop_id()
+    links = ctx.require_etsy().get_listing_variation_images(shop_id, listing_id)
+    if len(links) != 4:
+        inventory = ctx.require_etsy().get_listing_inventory(listing_id)
+        properties = [
+            (pv.property_id, pv.values) for p in inventory.products for pv in p.property_values
+        ]
+        pytest.fail(
+            f"expected 4 variation image links, got {len(links)}. This binds against "
+            f"Etsy's own inventory (Printify's variant push), not anything this tool "
+            f"writes -- if that hasn't materialised yet by the time this test asks, "
+            f"resolve_colour_property finds no overlap and the media stage skips "
+            f"loudly rather than failing (decision 6, missing variant cells). "
+            f"Inventory properties as read: {properties}"
         )
+    image_ids = set(written.remote["etsy_image_ids"].values())
+    assert {link.image_id for link in links} <= image_ids
 
-        apply_everything(ctx)
 
-        written = Lockfile.read(workspace.lock_file(LISTING))
-        assert written is not None
-        listing_id = int(written.remote[ETSY_LISTING_ID_KEY])
-        live = ctx.require_etsy().get_listing(listing_id, include_images=True)
-        assert live is not None
-        assert len(live.images) == 4, "a reorder must not lose or duplicate an image"
-        ranked = sorted(live.images, key=lambda image: image.rank or 0)
-        moss_id = written.remote["etsy_image_ids"]["flat-lay-01:moss"]
-        assert ranked[0].listing_image_id == moss_id
+def _two_videos_are_placed_and_their_ids_recorded(ctx: RunContext, workspace: Workspace) -> None:
+    """decision 9 against the real API: both uploaded with
+    `is_multi_video=true`, both `active`. Where each sits in the gallery
+    cannot be read back through any API -- the fake's `gallery()` is what
+    the behaviour layer asserts; here it is what Etsy accepted."""
+    shared = workspace.root / "common-media"
+    shared.mkdir(exist_ok=True)
+    shutil.copy(VIDEOS / "valid-3s-512.mp4", workspace.root / FEATURED_VIDEO)
+    shutil.copy(
+        VIDEOS / "with-audio-3s-512.mp4", workspace.listing_dir(LISTING) / "how-it-fits.mp4"
+    )
+    edit_listing(workspace.root, media=_with_videos(second_after=2))
 
-    def test_variation_images_bind_each_colour_actually_uploaded(
-        self, ctx: RunContext, workspace: Workspace
-    ) -> None:
-        """decision 6, against the real inventory and the real join."""
+    apply_everything(ctx)
 
-        edit_listing(
-            workspace.root,
-            etsy={
-                "title": "etsy-listings e2e -- safe to delete",
-                "description": {"lead": "Created by an automated test."},
-                "variation_images": "flat-lay-01",
-            },
-        )
+    written = Lockfile.read(workspace.lock_file(LISTING))
+    assert written is not None
+    video_ids = written.remote["etsy_video_ids"]
+    assert set(video_ids) == {FEATURED_VIDEO, SECOND_VIDEO}
+    assert _live_videos(ctx, written) == dict.fromkeys(video_ids.values(), "active")
 
-        apply_everything(ctx)
 
-        written = Lockfile.read(workspace.lock_file(LISTING))
-        assert written is not None
-        listing_id = int(written.remote[ETSY_LISTING_ID_KEY])
-        shop_id = workspace.defaults.etsy.require_shop_id()
-        links = ctx.require_etsy().get_listing_variation_images(shop_id, listing_id)
-        if len(links) != 4:
-            inventory = ctx.require_etsy().get_listing_inventory(listing_id)
-            properties = [
-                (pv.property_id, pv.values) for p in inventory.products for pv in p.property_values
-            ]
-            pytest.fail(
-                f"expected 4 variation image links, got {len(links)}. This binds against "
-                f"Etsy's own inventory (Printify's variant push), not anything this tool "
-                f"writes -- if that hasn't materialised yet by the time this test asks, "
-                f"resolve_colour_property finds no overlap and the media stage skips "
-                f"loudly rather than failing (decision 6, missing variant cells). "
-                f"Inventory properties as read: {properties}"
-            )
-        image_ids = set(written.remote["etsy_image_ids"].values())
-        assert {link.image_id for link in links} <= image_ids
+def _moving_the_second_video_re_attaches_it_without_an_upload(
+    ctx: RunContext, workspace: Workspace
+) -> None:
+    """One image later: the same `video_id`s, so no bytes were re-sent,
+    and the swatch links the cut detached are set again (decision 9's
+    "What it costs")."""
+    before = Lockfile.read(workspace.lock_file(LISTING))
+    assert before is not None
+    shop_id = workspace.defaults.etsy.require_shop_id()
+    listing_id = int(before.remote[ETSY_LISTING_ID_KEY])
+    links_before = ctx.require_etsy().get_listing_variation_images(shop_id, listing_id)
+    edit_listing(workspace.root, media=_with_videos(second_after=3))
 
-    # -------------------------------------------------- videos
+    report = apply_everything(ctx)
 
-    def test_two_videos_are_placed_and_their_ids_recorded(
-        self, ctx: RunContext, workspace: Workspace
-    ) -> None:
-        """decision 9 against the real API: both uploaded with
-        `is_multi_video=true`, both `active`. Where each sits in the gallery
-        cannot be read back through any API -- the fake's `gallery()` is what
-        the behaviour layer asserts; here it is what Etsy accepted."""
-        shared = workspace.root / "common-media"
-        shared.mkdir(exist_ok=True)
-        shutil.copy(VIDEOS / "valid-3s-512.mp4", workspace.root / FEATURED_VIDEO)
-        shutil.copy(
-            VIDEOS / "with-audio-3s-512.mp4", workspace.listing_dir(LISTING) / "how-it-fits.mp4"
-        )
-        edit_listing(workspace.root, media=_with_videos(second_after=2))
+    planned = report.outcomes[0].planned
+    assert planned is not None
+    running = [sp.stage for sp in planned.plan.stage_plans if sp.will_run]
+    assert running == ["etsy_videos"], "a video move is no image's business"
+    written = Lockfile.read(workspace.lock_file(LISTING))
+    assert written is not None
+    assert written.remote["etsy_video_ids"] == before.remote["etsy_video_ids"]
+    assert set(_live_videos(ctx, written).values()) == {"active"}
+    links = ctx.require_etsy().get_listing_variation_images(shop_id, listing_id)
+    assert len(links) == len(links_before)
+    assert {link.image_id for link in links} <= set(written.remote["etsy_image_ids"].values())
 
-        apply_everything(ctx)
 
-        written = Lockfile.read(workspace.lock_file(LISTING))
-        assert written is not None
-        video_ids = written.remote["etsy_video_ids"]
-        assert set(video_ids) == {FEATURED_VIDEO, SECOND_VIDEO}
-        assert _live_videos(ctx, written) == dict.fromkeys(video_ids.values(), "active")
+def _re_applying_the_videos_unchanged_writes_nothing(ctx: RunContext, workspace: Workspace) -> None:
+    report = apply_everything(ctx)
 
-    def test_moving_the_second_video_re_attaches_it_without_an_upload(
-        self, ctx: RunContext, workspace: Workspace
-    ) -> None:
-        """One image later: the same `video_id`s, so no bytes were re-sent,
-        and the swatch links the cut detached are set again (decision 9's
-        "What it costs")."""
-        before = Lockfile.read(workspace.lock_file(LISTING))
-        assert before is not None
-        shop_id = workspace.defaults.etsy.require_shop_id()
-        listing_id = int(before.remote[ETSY_LISTING_ID_KEY])
-        links_before = ctx.require_etsy().get_listing_variation_images(shop_id, listing_id)
-        edit_listing(workspace.root, media=_with_videos(second_after=3))
+    planned = report.outcomes[0].planned
+    assert planned is not None
+    assert not planned.plan.has_changes
 
-        report = apply_everything(ctx)
 
-        planned = report.outcomes[0].planned
-        assert planned is not None
-        running = [sp.stage for sp in planned.plan.stage_plans if sp.will_run]
-        assert running == ["etsy_videos"], "a video move is no image's business"
-        written = Lockfile.read(workspace.lock_file(LISTING))
-        assert written is not None
-        assert written.remote["etsy_video_ids"] == before.remote["etsy_video_ids"]
-        assert set(_live_videos(ctx, written).values()) == {"active"}
-        links = ctx.require_etsy().get_listing_variation_images(shop_id, listing_id)
-        assert len(links) == len(links_before)
-        assert {link.image_id for link in links} <= set(written.remote["etsy_image_ids"].values())
+# ------------------------------------------------------------- the journey
 
-    def test_re_applying_the_videos_unchanged_writes_nothing(
-        self, ctx: RunContext, workspace: Workspace
-    ) -> None:
-        report = apply_everything(ctx)
 
-        planned = report.outcomes[0].planned
-        assert planned is not None
-        assert not planned.plan.has_changes
+def test_the_full_cycle_from_nothing_to_a_media_complete_draft(
+    ctx: RunContext, workspace: Workspace, copy: tuple[str, str]
+) -> None:
+    """Nothing to a patched, media-complete draft, then a change on each side
+    and a re-apply that only touches what changed. Each milestone is a step of
+    this one test, in the order its remote state requires; a failure names the
+    step it stopped at, and ``cleanup_product`` deletes whatever was made."""
+    title, _ = copy
+    _a_first_apply_creates_publishes_and_patches_the_listing(ctx, workspace, title)
+    _a_second_plan_reports_no_changes(ctx, workspace)
+    _the_listing_is_still_a_draft(ctx, workspace)
+    _getting_the_listing_with_images_returns_a_570xn_url(ctx, workspace)
+    _reordering_media_and_reapplying_only_touches_the_order(ctx, workspace)
+    _variation_images_bind_each_colour_actually_uploaded(ctx, workspace, title)
+    _two_videos_are_placed_and_their_ids_recorded(ctx, workspace)
+    _moving_the_second_video_re_attaches_it_without_an_upload(ctx, workspace)
+    _re_applying_the_videos_unchanged_writes_nothing(ctx, workspace)
