@@ -25,20 +25,20 @@ rows here; the orchestrator owns the ledger states.
 
 | PR | Branch | Worktree | Base | Build tip | Final tip | PR | State |
 |---|---|---|---|---|---|---|---|
-| 1 | `stack/tsq-01-reliable-oracles` | `tsq-01` | stack base | | | | pending |
-| 2 | `stack/tsq-02-render-cache-contracts` | `tsq-02` | PR 1 tip | | | | pending |
-| 3 | `stack/tsq-03-shared-wheel` | `tsq-03` | PR 2 tip | | | | pending |
-| 4 | `stack/tsq-04-race-gates` | `tsq-04` | PR 3 tip | | | | pending |
-| 5 | `stack/tsq-05-stage-fixtures` | `tsq-05` | PR 4 tip | | | | pending |
-| 6 | `stack/tsq-06-cleanup-render-rules` | `tsq-06` | PR 5 tip | | | | pending |
-| 7 | `stack/tsq-07-proposal-seeding` | `tsq-07` | PR 6 tip | | | | pending |
-| 8 | `stack/tsq-08-calibration-geometry` | `tsq-08` | PR 7 tip | | | | pending |
-| 9 | `stack/tsq-09-cli-ownership` | `tsq-09` | PR 8 tip | | | | pending |
-| 10 | `stack/tsq-10-ui-clocks` | `tsq-10` | PR 9 tip | | | | pending |
-| 11 | `stack/tsq-11-vitest-projects` | `tsq-11` | PR 10 tip | | | | pending |
-| 12 | `stack/tsq-12-browser-opt-in` | `tsq-12` | PR 11 tip | | | | pending |
-| 13 | `stack/tsq-13-live-journeys` | `tsq-13` | PR 12 tip | | | | pending |
-| 14 | `stack/tsq-14-evidence` | `tsq-14` | PR 13 tip | | | | pending |
+| 1 | `stack/tsq-01-reliable-oracles` | `tsq-01` | stack base | — | `931a704` | [#114](https://github.com/eli-jordan/etsy-listing-automation/pull/114) | Open; [CI](https://github.com/eli-jordan/etsy-listing-automation/actions/runs/37119443009) and [e2e](https://github.com/eli-jordan/etsy-listing-automation/actions/runs/37119448744) green on `931a704` |
+| 2 | `stack/tsq-02-render-cache-contracts` | `tsq-02` | PR 1 tip | — | `8b7caab` | [#115](https://github.com/eli-jordan/etsy-listing-automation/pull/115) | Open; [CI](https://github.com/eli-jordan/etsy-listing-automation/actions/runs/37121194811) and [e2e](https://github.com/eli-jordan/etsy-listing-automation/actions/runs/37121152523) green on `8b7caab` |
+| 3 | `stack/tsq-03-shared-wheel` | `tsq-03` | PR 2 tip | — | `c3e9dd5` | [#116](https://github.com/eli-jordan/etsy-listing-automation/pull/116) | Open; [CI](https://github.com/eli-jordan/etsy-listing-automation/actions/runs/37122850983) and [e2e](https://github.com/eli-jordan/etsy-listing-automation/actions/runs/37150677026) green on `c3e9dd5` |
+| 4 | `stack/tsq-04-race-gates` | `tsq-04` | PR 3 tip | — | `98dabe3` | [#117](https://github.com/eli-jordan/etsy-listing-automation/pull/117) | Open; [CI](https://github.com/eli-jordan/etsy-listing-automation/actions/runs/37152119393) and [e2e](https://github.com/eli-jordan/etsy-listing-automation/actions/runs/37152848328) green on `98dabe3` |
+| 5 | `stack/tsq-05-stage-fixtures` | `tsq-05` | PR 4 tip | — | `1aa1d0c` | [#118](https://github.com/eli-jordan/etsy-listing-automation/pull/118) | Open; [CI](https://github.com/eli-jordan/etsy-listing-automation/actions/runs/37154387985) and [e2e](https://github.com/eli-jordan/etsy-listing-automation/actions/runs/37155205622) green on `1aa1d0c` |
+| 6 | `stack/tsq-06-cleanup-render-rules` | `tsq-06` | PR 5 tip | — | `a5891ca` | [#119](https://github.com/eli-jordan/etsy-listing-automation/pull/119) | Open; [CI](https://github.com/eli-jordan/etsy-listing-automation/actions/runs/37156819913) and [e2e](https://github.com/eli-jordan/etsy-listing-automation/actions/runs/37157474363) green on `a5891ca` |
+| 7 | `stack/tsq-07-proposal-seeding` | `tsq-07` | PR 6 tip | — | `d42fdcb` | [#120](https://github.com/eli-jordan/etsy-listing-automation/pull/120) | Open; [CI](https://github.com/eli-jordan/etsy-listing-automation/actions/runs/37158513334) and [e2e](https://github.com/eli-jordan/etsy-listing-automation/actions/runs/37159122023) green on `d42fdcb` |
+| 8 | `stack/tsq-08-calibration-geometry` | `tsq-08` | PR 7 tip | — | `b1f7030` | [#121](https://github.com/eli-jordan/etsy-listing-automation/pull/121) | Open; [CI](https://github.com/eli-jordan/etsy-listing-automation/actions/runs/37159848886) and [e2e](https://github.com/eli-jordan/etsy-listing-automation/actions/runs/37160461323) green on `b1f7030` |
+| 9 | `stack/tsq-09-cli-ownership` | `tsq-09` | PR 8 tip | — | `20cd8ea` | [#122](https://github.com/eli-jordan/etsy-listing-automation/pull/122) | Open; [CI](https://github.com/eli-jordan/etsy-listing-automation/actions/runs/37161606354) and [e2e](https://github.com/eli-jordan/etsy-listing-automation/actions/runs/37162276125) green on `20cd8ea` |
+| 10 | `stack/tsq-10-ui-clocks` | `tsq-10` | PR 9 tip | — | `068c438` | [#123](https://github.com/eli-jordan/etsy-listing-automation/pull/123) | Open; [CI](https://github.com/eli-jordan/etsy-listing-automation/actions/runs/37163616911) and [e2e](https://github.com/eli-jordan/etsy-listing-automation/actions/runs/37163623905) green on `068c438` |
+| 11 | `stack/tsq-11-vitest-projects` | `tsq-11` | PR 10 tip | — | `435ba23` | [#124](https://github.com/eli-jordan/etsy-listing-automation/pull/124) | Open; [CI](https://github.com/eli-jordan/etsy-listing-automation/actions/runs/37164407249) and [e2e](https://github.com/eli-jordan/etsy-listing-automation/actions/runs/37164984505) green on `435ba23` |
+| 12 | `stack/tsq-12-browser-opt-in` | `tsq-12` | PR 11 tip | `ac315d9` | _finisher: final tip_ | _finisher: PR link_ | _finisher: CI and e2e URLs_ |
+| 13 | `stack/tsq-13-live-journeys` | `tsq-13` | PR 12 tip | `628090b` | _finisher: final tip_ | _finisher: PR link_ | _finisher: CI and e2e URLs_ |
+| 14 | `stack/tsq-14-evidence` | `tsq-14` | PR 13 tip | _see report_ | _finisher: final SHA_ | _finisher: PR link_ | _finisher: CI and serial e2e URLs at the final SHA_ |
 
 ## Case replacement ledger
 
