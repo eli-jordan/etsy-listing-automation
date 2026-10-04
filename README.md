@@ -101,8 +101,9 @@ npm run typecheck     # tsc, strict
 npm run lint          # eslint
 npm run format        # prettier --write (check.sh runs this)
 npm run format:check  # prettier --check (CI runs this)
-npm run test          # vitest
-npm run test:coverage # vitest with the coverage gate
+npm run test          # vitest, every project (node, dom, design)
+npm run test:coverage # node + dom projects with the coverage gate
+npm run test:design   # design prototype tests (required, not coverage)
 npm run gen:api       # regenerate src/api/schema.ts from docs/openapi.json
 ```
 

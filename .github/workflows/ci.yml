@@ -114,6 +114,11 @@ jobs:
       - name: vitest + coverage (branch, fail under 85%)
         run: npm run test:coverage
 
+      # Required, but outside production coverage: the prototype frames
+      # import production components (vitest.config.ts's `design` project).
+      - name: vitest design prototypes
+        run: npm run test:design
+
   browser:
     # Every trigger runs browsers after the Python and frontend gates.
     name: browser

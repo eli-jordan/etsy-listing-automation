@@ -66,7 +66,7 @@ uv run ruff check . / ruff format . # lint / format
 uv run python scripts/sloc.py --summary # code size, prose excluded
 ```
 
-Frontend (`src/ui/`): `npm run dev|build|typecheck|lint|format|format:check|test|test:coverage|gen:api`. After changing a FastAPI endpoint's shape, regenerate the typed client (`ADR-0011`, never hand-written): `uv run python scripts/export_openapi.py`, then `npm run gen:api`.
+Frontend (`src/ui/`): `npm run dev|build|typecheck|lint|format|format:check|test|test:coverage|test:design|gen:api`. Vitest has three projects (`vitest.config.ts`): `node` for pure subjects, `dom` (jsdom + setup) for everything else under `src/`, `design` for prototype frames; `test:coverage` measures only node + dom, `test:design` is required separately. After changing a FastAPI endpoint's shape, regenerate the typed client (`ADR-0011`, never hand-written): `uv run python scripts/export_openapi.py`, then `npm run gen:api`.
 
 Human-facing setup, calibrator usage and contributor docs live in [README.md](README.md); this file holds only what an agent needs to act correctly. Keep the two commands lists in step.
 
