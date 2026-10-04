@@ -36,8 +36,8 @@ rows here; the orchestrator owns the ledger states.
 | 9 | `stack/tsq-09-cli-ownership` | `tsq-09` | PR 8 tip | — | `20cd8ea` | [#122](https://github.com/eli-jordan/etsy-listing-automation/pull/122) | Open; [CI](https://github.com/eli-jordan/etsy-listing-automation/actions/runs/37161606354) and [e2e](https://github.com/eli-jordan/etsy-listing-automation/actions/runs/37162276125) green on `20cd8ea` |
 | 10 | `stack/tsq-10-ui-clocks` | `tsq-10` | PR 9 tip | — | `068c438` | [#123](https://github.com/eli-jordan/etsy-listing-automation/pull/123) | Open; [CI](https://github.com/eli-jordan/etsy-listing-automation/actions/runs/37163616911) and [e2e](https://github.com/eli-jordan/etsy-listing-automation/actions/runs/37163623905) green on `068c438` |
 | 11 | `stack/tsq-11-vitest-projects` | `tsq-11` | PR 10 tip | — | `435ba23` | [#124](https://github.com/eli-jordan/etsy-listing-automation/pull/124) | Open; [CI](https://github.com/eli-jordan/etsy-listing-automation/actions/runs/37164407249) and [e2e](https://github.com/eli-jordan/etsy-listing-automation/actions/runs/37164984505) green on `435ba23` |
-| 12 | `stack/tsq-12-browser-opt-in` | `tsq-12` | PR 11 tip | `ac315d9` | _finisher: final tip_ | _finisher: PR link_ | _finisher: CI and e2e URLs_ |
-| 13 | `stack/tsq-13-live-journeys` | `tsq-13` | PR 12 tip | `628090b` | _finisher: final tip_ | _finisher: PR link_ | _finisher: CI and e2e URLs_ |
+| 12 | `stack/tsq-12-browser-opt-in` | `tsq-12` | PR 11 tip | — | `ac315d9` | [#125](https://github.com/eli-jordan/etsy-listing-automation/pull/125) | Open; [CI](https://github.com/eli-jordan/etsy-listing-automation/actions/runs/37166067105) and [e2e](https://github.com/eli-jordan/etsy-listing-automation/actions/runs/37166533232) green on `ac315d9` |
+| 13 | `stack/tsq-13-live-journeys` | `tsq-13` | PR 12 tip | `628090b` | `be556a8` | [#126](https://github.com/eli-jordan/etsy-listing-automation/pull/126) | Open; [CI](https://github.com/eli-jordan/etsy-listing-automation/actions/runs/37167868935) green on `be556a8`; serial [e2e](https://github.com/eli-jordan/etsy-listing-automation/actions/runs/37167639782) green on `c9416e8` (47 passed, 2 skipped; later commits docs only) |
 | 14 | `stack/tsq-14-evidence` | `tsq-14` | PR 13 tip | _see report_ | _finisher: final SHA_ | _finisher: PR link_ | _finisher: CI and serial e2e URLs at the final SHA_ |
 
 ## Case replacement ledger
@@ -196,6 +196,21 @@ The `startedAt` alias candidate in the coverage map lives in frontend tests and 
 
 ## PR 14 closing evidence
 
+**PR 13 live results** ([run 37167639782](https://github.com/eli-jordan/etsy-listing-automation/actions/runs/37167639782), 47 passed, 2 skipped).
+
+| Case | Result |
+|---|---|
+| `test_the_full_cycle_from_nothing_to_a_media_complete_draft`, all nine milestones | Passed |
+| Cleanup fallback by copy with no lockfile | Not exercised live: the journey passed, so cleanup took the lockfile path; verified with a recording double only |
+| `test_the_walk_pages_the_real_list_to_this_runs_product` | Passed |
+| `test_the_brand_and_model_the_docs_tell_users_to_write_resolve` | Passed |
+| `test_a_failed_publish_is_a_named_error_and_leaves_the_product_unlocked` | Skipped: the CI Printify shop is connected to Etsy and the guard refuses to publish there |
+| `test_the_publish_budget_is_metered_separately` (unchanged) | Skipped, same guard |
+| `test_full_ai_run_drafts_brief_researches_market_and_proposes_seo` | Passed with `FakeAiProvider`; real-AI path not verified |
+| Leftover products | None from this run; one pre-run-unique product, `6abc1f2a79dbacca490d16bf`, is left for the owner |
+
+**Final gates (G2–G5) at this PR's tip**, venv Python 3.12.11, Node 24.8.0: `bash scripts/check.sh` 2,980 passed, 10 skipped (platform), 54 deselected, Python coverage 97.01% (branch measurement, 85% floor); Vitest `node`+`dom` 1,023 passed at 90.52% branch, `design` 4 passed; `npm run build`, typecheck, lint and format check clean; `ETSY_LISTINGS_REQUIRE_EVERY_LAYER=1 uv run pytest -m browser` 93 passed; `uv run pytest -m capture` 5 passed; `uv run lint-imports` 5 contracts kept.
+
 The PR ledger's build-tip column stayed empty for PRs 1–11 because each finisher pushed its last local commit as the final tip; the final tip is the SHA that CI and the e2e workflow ran on. Every linked run above was read with `gh run view` and names that SHA. PRs 12, 13 and 14 are filled in by their finishers.
 
 ### Ranked findings
@@ -216,12 +231,12 @@ Each row names the commit that delivered the finding and the test that now carri
 | F10 SVG setup for geometry | 8 | `278a808`, `db7f60b`, `b1f7030` | `src/ui/src/components/quadGeometry.test.ts`; `test_calibrator_browser.py::TestMovingABox::test_a_drag_on_a_downscaled_canvas_moves_the_box_in_photo_pixels`, `test_the_box_menu_stays_inside_the_clipping_pane` | Done |
 | F11 status-free 404 mock | 7 | `06bb4c6` | `src/ui/src/api/calibrator.test.ts` real-`Response` cases at 404 and 500 with method, path and body | Done |
 | F12 AI chain seeds proposals | 7 | `f30edbc`, `86cb545` | `test_proposals_api.py` cases seeded by `save_proposal`; `test_a_saved_proposal_reads_current_with_its_origin`; real-run and restart cases retained | Done |
-| F13 duplicated provider rules, shared description oracle | 12 | `a8abbe0` | `test_ai_seo_browser.py::test_choosing_common_copy_saves_its_ref_and_previews_the_literal_description`; fall-through in `test_ai_orchestrator.py` and `test_ai_market_queries.py` | Done (PR 12 finishing) |
-| F14 screenshot existence gate | 12 | `2c352ff` | `capture` marker, `tests/conftest.py`; `tests/test_ci_selection.py` capture cases; `-m capture` collects 5 | Done (PR 12 finishing) |
+| F13 duplicated provider rules, shared description oracle | 12 | `a8abbe0` | `test_ai_seo_browser.py::test_choosing_common_copy_saves_its_ref_and_previews_the_literal_description`; fall-through in `test_ai_orchestrator.py` and `test_ai_market_queries.py` | Done; [CI](https://github.com/eli-jordan/etsy-listing-automation/actions/runs/37166067105) and [e2e](https://github.com/eli-jordan/etsy-listing-automation/actions/runs/37166533232) green on `ac315d9` |
+| F14 screenshot existence gate | 12 | `2c352ff` | `capture` marker, `tests/conftest.py`; `tests/test_ci_selection.py` capture cases; `-m capture` collects 5 and wrote all five at this PR's final gates | Done; same PR 12 runs |
 | F15 real UI sleeps | 10 | `9c7a05f`, `57e34ed`, `58e64bc`, `8ca38ef`, `b4be17b`, `779e74e` | `usePreview.test.ts`, `PreviewPanel.test.tsx`, `DeployPage.test.tsx`, `BatchDeployPage.test.tsx`, `App.test.tsx`, `ListingEditorPage.test.tsx` on controlled clocks | Done |
 | F16 fresh-read, deadline, execution | 2, 5 | `6cc38a9`, `59dda7b` | `test_ai_brief.py::test_the_packaged_prompt_is_read_fresh_each_call`; `test_ai_models.py` deadline cases; `test_an_update_reads_the_product_before_writing_it`; `test_a_changed_price_is_republished` | Done |
-| F17 stateful live tests | 13 | `bc96fa2`, `bd0abec` | `test_phase3_publish_e2e.py::test_the_full_cycle_from_nothing_to_a_media_complete_draft`; `test_printify_product_e2e.py::…test_a_failed_publish_is_a_named_error_and_leaves_the_product_unlocked` | Done locally; live run is the PR 13 finisher's |
-| F18 SKU, title, pagination non-tests | 13 | `094791d`, `bc96fa2`, `e4e741a` | `test_printify_products_http.py::test_the_walk_pages_a_server_that_honours_page_and_limit`; `test_the_walk_pages_the_real_list_to_this_runs_product`; SKU and vendor-title cases deleted | Done locally; live run is the PR 13 finisher's |
+| F17 stateful live tests | 13 | `bc96fa2`, `bd0abec` | `test_phase3_publish_e2e.py::test_the_full_cycle_from_nothing_to_a_media_complete_draft`; `test_printify_product_e2e.py::…test_a_failed_publish_is_a_named_error_and_leaves_the_product_unlocked` | Done; journey passed in serial [e2e](https://github.com/eli-jordan/etsy-listing-automation/actions/runs/37167639782). The failed-publish case skipped live (the CI shop is Etsy-connected and its guard refuses), so its own unlock proof is hermetic only |
+| F18 SKU, title, pagination non-tests | 13 | `094791d`, `bc96fa2`, `e4e741a` | `test_printify_products_http.py::test_the_walk_pages_a_server_that_honours_page_and_limit`; `test_the_walk_pages_the_real_list_to_this_runs_product`; SKU and vendor-title cases deleted | Done; walk and resolution passed in serial [e2e](https://github.com/eli-jordan/etsy-listing-automation/actions/runs/37167639782) |
 | F19 duplicate reel presentations | 10 | `b9067d8` | `MediaReel.test.tsx` position and ceiling cases; one `ImagesTab.test.tsx` position witness | Done |
 | F20 obsolete classes and layout | 10 | `fefca13` | `DetailsTab.test.tsx` panel content and focus cases; browser calibrator frames | Done |
 | F21 immediate negative Reset | 10 | `b4be17b` | `App.test.tsx` "goes back to the last successful save, not the config it opened with" | Done |
@@ -245,7 +260,7 @@ Each row names the commit that delivered the finding and the test that now carri
 | Prototype cases in production Vitest | 11 | `37b257b`: `design` project, `npm run test:design` in `check.sh` and CI | Done |
 | Low-level events and microtask guesses | 10, 12 | `779e74e` `userEvent` in `ListingEditorPage.test.tsx`; `57e34ed` settled effects; PR 12 changed no helper needing it | Done for changed files |
 | Browser helpers use presentation classes | 12 | PR 12's one changed helper uses the existing `#details-description-source` id. 103 class-based `locator(".…")` calls remain across ten browser files | Retained; see deferral |
-| AI live test over-specifies progress | 13 | `30a2693`: repeated step states collapse before comparison | Done locally |
+| AI live test over-specifies progress | 13 | `30a2693`: repeated step states collapse before comparison | Done; passed live with `FakeAiProvider` (`E2E_REAL_AI` unset in CI), real-AI path unverified |
 | Comparable benchmarks and pyramid inventory | 14 | Measurements and layer inventory below | Done |
 | CI/check.sh alignment and mandatory layers | 11, 12, 14 | `37b257b`, `2c352ff`; `tests/test_ci_selection.py`; this PR's docs refresh | Done |
 | Good tests and safety witnesses | All | Witness table below | Done |
@@ -315,4 +330,4 @@ The CLI behaviour drop and the core unit rise are PR 9's moves of pure subjects 
 
 ### Deviations from the plan
 
-The plan asks G2–G8 to pass at the final SHA; this PR ran G2 and the docs and packaging contracts locally, and the remaining gates belong to the finisher at the last SHA. The frontend environment comparison used an extra matched pair (PR 10 tip) beside the stack base, because the stack base runs 30 fewer cases. The browser-locator recommendation is retained with the deferral above rather than implemented here, since this PR moves no unfinished refactor.
+G2–G5 ran at this PR's tip (above); G7 is recorded in the PR ledger. The frontend environment comparison used an extra matched pair (PR 10 tip) beside the stack base, because the stack base runs 30 fewer cases. The browser-locator recommendation is retained with the deferral above rather than implemented here, since this PR moves no unfinished refactor.
