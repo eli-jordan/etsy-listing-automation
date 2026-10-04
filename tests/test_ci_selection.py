@@ -69,3 +69,55 @@ def test_frontend_gate_runs_production_and_prototype_tests_in_ci_and_check_sh() 
         if script.startswith("test")
     ]
     assert ci == check == ["test:coverage", "test:design"]
+
+
+# The five screenshot scenes are review artifacts, not regression tests (T11):
+# they only assert that a PNG was written. They run when asked for by marker.
+CAPTURE_SCENES = {
+    "test_capture_full_page_screenshot",
+    "test_capture_preview_all_screenshot",
+    "test_capture_lightbox_screenshot",
+    "test_capture_multiple_editor_screenshot",
+    "test_capture_workbench_screenshot",
+}
+
+
+def _collected(root: Path, tmp_path: Path, *selection: str) -> set[str]:
+    result = subprocess.run(
+        [sys.executable, "-m", "pytest", "--collect-only", "-q", *selection]
+        + ["-o", f"cache_dir={tmp_path / 'cache'}", "tests/browser"],
+        cwd=root,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    return {line.replace("\\", "/") for line in result.stdout.splitlines() if "::" in line}
+
+
+def _names(ids: set[str]) -> set[str]:
+    return {node.rsplit("::", 1)[-1] for node in ids}
+
+
+def test_required_browser_selection_excludes_only_the_opt_in_captures(tmp_path: Path) -> None:
+    root = Path(__file__).resolve().parents[1]
+    workflow = yaml.safe_load((root / ".github/workflows/ci.yml").read_text())
+    command = next(
+        step["run"]
+        for step in workflow["jobs"]["browser"]["steps"]
+        if step.get("run", "").startswith("uv run pytest")
+    )
+    args = shlex.split(command)
+    required = _collected(root, tmp_path, *args[args.index("-m") :])
+    # check.sh runs the default selection, which must agree.
+    default = _collected(root, tmp_path)
+    everything = _collected(root, tmp_path, "-m", "browser or capture")
+    assert required == default
+    assert not _names(required) & CAPTURE_SCENES
+    # Real witnesses -- decoded PNGs, saved YAML, geometry -- stay required.
+    assert "test_the_preview_sits_on_the_surface_tone" in _names(required)
+    assert everything - required == {n for n in everything if _names({n}) <= CAPTURE_SCENES}
+
+
+def test_the_capture_marker_selects_exactly_the_five_scenes(tmp_path: Path) -> None:
+    root = Path(__file__).resolve().parents[1]
+    assert _names(_collected(root, tmp_path, "-m", "capture")) == CAPTURE_SCENES

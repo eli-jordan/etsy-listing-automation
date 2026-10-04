@@ -68,6 +68,7 @@ pythonpath = ["."]
 markers = [
     "e2e: exercises real Printify/Etsy APIs against a throwaway shop; skipped by default",
     "browser: drives the calibrator in a real browser via playwright; skipped when it is unavailable",
+    "capture: opt-in screenshot artifacts for human review; run only when -m names capture",
 ]
 addopts = "-m 'not e2e'"
 

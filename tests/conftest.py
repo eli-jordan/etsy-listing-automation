@@ -74,3 +74,19 @@ def pytest_addoption(parser: pytest.Parser) -> None:
 def update_goldens(request: pytest.FixtureRequest) -> bool:
     value: bool = request.config.getoption("--update-goldens")
     return value
+
+
+def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
+    """Leave the opt-in `capture` scenes out unless `-m` asks for them.
+
+    They are browser tests by location, so a plain `-m browser` would otherwise
+    run them; but they only write review screenshots and assert nothing a
+    regression could break (T11). Naming the marker -- `-m capture` -- is the
+    one way in.
+    """
+    if "capture" in (config.getoption("markexpr") or ""):
+        return
+    kept = [item for item in items if item.get_closest_marker("capture") is None]
+    if len(kept) != len(items):
+        config.hook.pytest_deselected(items=[i for i in items if i not in kept])
+        items[:] = kept

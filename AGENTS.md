@@ -56,7 +56,8 @@ uv run pytest -k "currency" # by keyword
 uv run pytest --cov # coverage, enforcing the 85% branch floor
 uv run pytest --cov --cov-report=html # then open htmlcov/index.html
 uv run pytest -m e2e # env-gated e2e layer (real shop, see Testing)
-uv run pytest -m browser # playwright browser tests
+uv run pytest -m browser # playwright browser tests (opt-in captures excluded)
+uv run pytest -m capture # opt-in: the five calibrator review screenshots, to tests/browser/_screenshots/ or $CALIBRATOR_SCREENSHOT_DIR
 uv run pytest -m "not browser and not e2e" # hermetic layers (e.g. no chromium installed)
 uv run playwright install chromium # one-off, enables the browser layer
 uv run pytest --update-goldens # regenerate render goldens
@@ -160,7 +161,7 @@ Run it locally before merging rather than iterating through CI. `gh workflow run
 
 <important if="you are changing CI workflows or scripts/check.sh">
 
-[ci.yml](.github/workflows/ci.yml): PRs, pushes to `main` and manual runs run format-check, ruff, mypy, `lint-imports` and `pytest -m "not browser and not e2e"` under the coverage floor on ubuntu and windows, plus the frontend gate. A separate `pytest -m browser` job runs after those gates on all three triggers. These jobs use no real shop APIs. [e2e.yml](.github/workflows/e2e.yml): `pytest -m e2e`, on push to `main` or manually. Windows is in the matrix because goldens were generated there; ubuntu proves the OpenCV/Pillow pins produce the same bytes. CI mirrors `check.sh` rather than calling it — change one, change the other.
+[ci.yml](.github/workflows/ci.yml): PRs, pushes to `main` and manual runs run format-check, ruff, mypy, `lint-imports` and `pytest -m "not browser and not e2e"` under the coverage floor on ubuntu and windows, plus the frontend gate. A separate `pytest -m browser` job runs after those gates on all three triggers; the opt-in `capture` screenshots are deselected unless `-m` names them (`tests/conftest.py`), so neither CI nor `check.sh` runs them. These jobs use no real shop APIs. [e2e.yml](.github/workflows/e2e.yml): `pytest -m e2e`, on push to `main` or manually. Windows is in the matrix because goldens were generated there; ubuntu proves the OpenCV/Pillow pins produce the same bytes. CI mirrors `check.sh` rather than calling it — change one, change the other.
 </important>
 
 <important if="you are measuring or reducing code size">
