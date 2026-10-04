@@ -1,6 +1,6 @@
 {
   "project": {
-    "name": "frontend",
+    "name": "ui",
     "description": "A calm control room for print-on-demand sellers to turn a t-shirt design into a reviewable Etsy listing."
   },
   "boards": [
@@ -98,7 +98,7 @@
       "frames": 1,
       "brief": "design/scenes/batch-create-specs/_brief.md",
       "title": "Batch Creation — Thinking",
-      "description": "Batch listing creation thinking — brief and flow from docs/listing-batch-creation-spec.md (UNCONFIRMED: self-answered from the spec)."
+      "description": "Batch listing creation thinking — brief and flow from docs/features/batch-creation-20260927/spec.md (UNCONFIRMED: self-answered from the spec)."
     },
     {
       "name": "batch-deploy-lofi",
@@ -1643,7 +1643,7 @@
       "file": "design/scenes/marigold-controls-v1/a-action-bar.tsx",
       "kind": "tsx",
       "scene": "marigold-controls-v1",
-      "title": "Archived � A · Compact action bar",
+      "title": "Archived · A · Compact action bar",
       "viewport": "laptop",
       "description": "Two clear brush actions, with settings only while editing.",
       "variantGroup": "marigold-controls-v1",
@@ -1654,7 +1654,7 @@
       "file": "design/scenes/marigold-controls-v1/b-editing-tabs.tsx",
       "kind": "tsx",
       "scene": "marigold-controls-v1",
-      "title": "Archived � B · Separate editing modes",
+      "title": "Archived · B · Separate editing modes",
       "viewport": "laptop",
       "description": "Placement and Print area tabs separate moving the design from painting the mask.",
       "variantGroup": "marigold-controls-v1",
@@ -1665,7 +1665,7 @@
       "file": "design/scenes/marigold-controls-v1/c-brush-menu.tsx",
       "kind": "tsx",
       "scene": "marigold-controls-v1",
-      "title": "Archived � C · Single brush menu",
+      "title": "Archived · C · Single brush menu",
       "viewport": "laptop",
       "description": "A single brush action selector with an explicit Done button.",
       "variantGroup": "marigold-controls-v1",
@@ -1676,7 +1676,7 @@
       "file": "design/scenes/marigold-controls-v1/d-named-actions.tsx",
       "kind": "tsx",
       "scene": "marigold-controls-v1",
-      "title": "Archived � D · Descriptive actions",
+      "title": "Archived · D · Descriptive actions",
       "viewport": "laptop",
       "description": "Larger Hide print and Bring print back actions explain the two brushes.",
       "variantGroup": "marigold-controls-v1",
@@ -1687,7 +1687,7 @@
       "file": "design/scenes/marigold-controls-v1/e-popover-editor.tsx",
       "kind": "tsx",
       "scene": "marigold-controls-v1",
-      "title": "Archived � E · Popover editor",
+      "title": "Archived · E · Popover editor",
       "viewport": "laptop",
       "description": "A quiet Print area strip opens a compact popover for occasional corrections.",
       "variantGroup": "marigold-controls-v1",
@@ -1698,7 +1698,7 @@
       "file": "design/scenes/marigold-controls/a-action-bar.tsx",
       "kind": "tsx",
       "scene": "marigold-controls",
-      "title": "A � Single line",
+      "title": "A · Single line",
       "viewport": "laptop",
       "description": "Two clear brush actions, with settings only while editing.",
       "variantGroup": "marigold-controls",
@@ -1709,7 +1709,7 @@
       "file": "design/scenes/marigold-controls/b-editing-tabs.tsx",
       "kind": "tsx",
       "scene": "marigold-controls",
-      "title": "B � Side rail",
+      "title": "B · Side rail",
       "viewport": "laptop",
       "description": "Placement and Print area tabs separate moving the design from painting the mask.",
       "variantGroup": "marigold-controls",
@@ -1720,7 +1720,7 @@
       "file": "design/scenes/marigold-controls/c-brush-menu.tsx",
       "kind": "tsx",
       "scene": "marigold-controls",
-      "title": "C � Guided brush",
+      "title": "C · Guided brush",
       "viewport": "laptop",
       "description": "A single brush action selector with an explicit Done button.",
       "variantGroup": "marigold-controls",
@@ -1731,7 +1731,7 @@
       "file": "design/scenes/marigold-controls/d-named-actions.tsx",
       "kind": "tsx",
       "scene": "marigold-controls",
-      "title": "D � Floating dock",
+      "title": "D · Floating dock",
       "viewport": "laptop",
       "description": "Larger Hide print and Bring print back actions explain the two brushes.",
       "variantGroup": "marigold-controls",
@@ -1742,7 +1742,7 @@
       "file": "design/scenes/marigold-controls/e-popover-editor.tsx",
       "kind": "tsx",
       "scene": "marigold-controls",
-      "title": "E � Context ribbon",
+      "title": "E · Context ribbon",
       "viewport": "laptop",
       "description": "A quiet Print area strip opens a compact popover for occasional corrections.",
       "variantGroup": "marigold-controls",
@@ -1912,7 +1912,7 @@
       "file": "design/scenes/marigold-v3/edit.tsx",
       "kind": "tsx",
       "scene": "marigold-v3",
-      "title": "Marigold — placement & masks � v3",
+      "title": "Marigold — placement & masks · v3",
       "viewport": "laptop",
       "description": "The current template workbench with Marigold controls and fast placement preview."
     },
@@ -1921,7 +1921,7 @@
       "file": "design/scenes/marigold-v3/failed.tsx",
       "kind": "tsx",
       "scene": "marigold-v3",
-      "title": "Marigold — preparation failed � v3",
+      "title": "Marigold — preparation failed · v3",
       "viewport": "laptop",
       "description": "An actionable preparation failure with Retry and existing placement controls retained."
     },
@@ -1930,7 +1930,7 @@
       "file": "design/scenes/marigold-v3/mask-editing.tsx",
       "kind": "tsx",
       "scene": "marigold-v3",
-      "title": "Marigold — visible mask editing � v3",
+      "title": "Marigold — visible mask editing · v3",
       "viewport": "laptop",
       "description": "Visible cloth mask with Exclude and Restore tools immediately above the image."
     },
@@ -1939,7 +1939,7 @@
       "file": "design/scenes/marigold-v3/multiple.tsx",
       "kind": "tsx",
       "scene": "marigold-v3",
-      "title": "Marigold — multiple placements � v3",
+      "title": "Marigold — multiple placements · v3",
       "viewport": "laptop",
       "description": "The existing multiple-placement workbench with per-placement masks and shared preparation."
     },
@@ -1948,7 +1948,7 @@
       "file": "design/scenes/marigold-v3/outdated.tsx",
       "kind": "tsx",
       "scene": "marigold-v3",
-      "title": "Marigold — saved changes � v3",
+      "title": "Marigold — saved changes · v3",
       "viewport": "laptop",
       "description": "Maps are current after the automatic CPU rebuild; stale renders use the existing red Re-render button."
     },
@@ -1957,7 +1957,7 @@
       "file": "design/scenes/marigold-v3/preparing.tsx",
       "kind": "tsx",
       "scene": "marigold-v3",
-      "title": "Marigold — preparing � v3",
+      "title": "Marigold — preparing · v3",
       "viewport": "laptop",
       "description": "Background preparation with step progress, elapsed time and cancellation."
     },
@@ -1966,7 +1966,7 @@
       "file": "design/scenes/marigold-v3/preview.tsx",
       "kind": "tsx",
       "scene": "marigold-v3",
-      "title": "Marigold — full-quality preview � v3",
+      "title": "Marigold — full-quality preview · v3",
       "viewport": "laptop",
       "description": "Prepared maps shared across colours in the existing full-quality Preview tab."
     },
@@ -1975,7 +1975,7 @@
       "file": "design/scenes/marigold-v3/realism-help.tsx",
       "kind": "tsx",
       "scene": "marigold-v3",
-      "title": "Marigold — realism help � v3",
+      "title": "Marigold — realism help · v3",
       "viewport": "laptop",
       "description": "Click-to-open explanations for lighting, fabric texture and print shine."
     },
@@ -1984,7 +1984,7 @@
       "file": "design/scenes/marigold-v4/edit.tsx",
       "kind": "tsx",
       "scene": "marigold-v4",
-      "title": "Marigold — placement & masks � v4",
+      "title": "Marigold — placement & masks · v4",
       "viewport": "laptop",
       "description": "The current template workbench with Marigold controls and fast placement preview."
     },
@@ -1993,7 +1993,7 @@
       "file": "design/scenes/marigold-v4/failed.tsx",
       "kind": "tsx",
       "scene": "marigold-v4",
-      "title": "Marigold — preparation failed � v4",
+      "title": "Marigold — preparation failed · v4",
       "viewport": "laptop",
       "description": "An actionable preparation failure with Retry and existing placement controls retained."
     },
@@ -2002,7 +2002,7 @@
       "file": "design/scenes/marigold-v4/mask-editing.tsx",
       "kind": "tsx",
       "scene": "marigold-v4",
-      "title": "Marigold — visible mask editing � v4",
+      "title": "Marigold — visible mask editing · v4",
       "viewport": "laptop",
       "description": "Selected floating dock with Mask and Unmask brushes; transparent red marks hidden print."
     },
@@ -2011,7 +2011,7 @@
       "file": "design/scenes/marigold-v4/multiple.tsx",
       "kind": "tsx",
       "scene": "marigold-v4",
-      "title": "Marigold — multiple placements � v4",
+      "title": "Marigold — multiple placements · v4",
       "viewport": "laptop",
       "description": "The existing multiple-placement workbench with per-placement masks and shared preparation."
     },
@@ -2020,7 +2020,7 @@
       "file": "design/scenes/marigold-v4/multiple-mask.tsx",
       "kind": "tsx",
       "scene": "marigold-v4",
-      "title": "Marigold — mask editing, multiple placements � v4",
+      "title": "Marigold — mask editing, multiple placements · v4",
       "viewport": "laptop",
       "description": "The selected floating Mask / Unmask dock on a two-placement scene."
     },
@@ -2029,7 +2029,7 @@
       "file": "design/scenes/marigold-v4/outdated.tsx",
       "kind": "tsx",
       "scene": "marigold-v4",
-      "title": "Marigold — saved changes � v4",
+      "title": "Marigold — saved changes · v4",
       "viewport": "laptop",
       "description": "Maps are current after the automatic CPU rebuild; stale renders use the existing red Re-render button."
     },
@@ -2038,7 +2038,7 @@
       "file": "design/scenes/marigold-v4/preparing.tsx",
       "kind": "tsx",
       "scene": "marigold-v4",
-      "title": "Marigold — preparing � v4",
+      "title": "Marigold — preparing · v4",
       "viewport": "laptop",
       "description": "Background preparation with step progress, elapsed time and cancellation."
     },
@@ -2047,7 +2047,7 @@
       "file": "design/scenes/marigold-v4/preview.tsx",
       "kind": "tsx",
       "scene": "marigold-v4",
-      "title": "Marigold — full-quality preview � v4",
+      "title": "Marigold — full-quality preview · v4",
       "viewport": "laptop",
       "description": "Prepared maps shared across colours in the existing full-quality Preview tab."
     },
@@ -2056,7 +2056,7 @@
       "file": "design/scenes/marigold-v4/realism-help.tsx",
       "kind": "tsx",
       "scene": "marigold-v4",
-      "title": "Marigold — realism help � v4",
+      "title": "Marigold — realism help · v4",
       "viewport": "laptop",
       "description": "Click-to-open explanations for lighting, fabric texture and print shine."
     },
