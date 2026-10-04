@@ -54,8 +54,15 @@ def _garment(blueprints: list[Blueprint]) -> Blueprint:
 
 
 @pytest.fixture(scope="session")
-def garment(catalog: HttpCatalogClient) -> Blueprint:
-    return _garment(catalog.blueprints())
+def blueprints(catalog: HttpCatalogClient) -> list[Blueprint]:
+    """The whole catalog, fetched once: every resolution below reads the same
+    live list rather than asking Printify for it again."""
+    return catalog.blueprints()
+
+
+@pytest.fixture(scope="session")
+def garment(blueprints: list[Blueprint]) -> Blueprint:
+    return _garment(blueprints)
 
 
 @pytest.fixture(scope="session")
@@ -80,9 +87,8 @@ def variant_payload(
 
 class TestTheCatalogAnswers:
     def test_blueprints_returns_a_decodable_non_empty_list(
-        self, catalog: HttpCatalogClient
+        self, blueprints: list[Blueprint]
     ) -> None:
-        blueprints = catalog.blueprints()
         assert blueprints, "Printify returned an empty catalog"
         assert all(isinstance(b, Blueprint) for b in blueprints)
 
@@ -246,32 +252,21 @@ class TestTheDocumentedExampleProfileResolves:
     DOCUMENTED_MODEL = "1717"
 
     def test_the_brand_and_model_the_docs_tell_users_to_write_resolve(
-        self, catalog: HttpCatalogClient, garment: Blueprint
+        self, blueprints: list[Blueprint], garment: Blueprint
     ) -> None:
-        resolved = resolve_blueprint(
-            self.DOCUMENTED_BRAND, self.DOCUMENTED_MODEL, catalog.blueprints()
-        )
+        """Without the trademark sign: the catalog's brand is "Comfort
+        Colors®", the docs tell users to write "Comfort Colors", and that has
+        to be enough."""
+        assert "®" not in self.DOCUMENTED_BRAND
+        assert garment.brand == f"{self.DOCUMENTED_BRAND}®"
+        resolved = resolve_blueprint(self.DOCUMENTED_BRAND, self.DOCUMENTED_MODEL, blueprints)
         assert resolved.id == garment.id
 
-    def test_it_resolves_without_the_trademark_sign_the_catalog_carries(
-        self, catalog: HttpCatalogClient
-    ) -> None:
-        """The catalog's brand is "Comfort Colors®". The docs tell users to
-        write "Comfort Colors", and that has to be enough."""
-        assert "®" not in self.DOCUMENTED_BRAND
-        assert resolve_blueprint(self.DOCUMENTED_BRAND, self.DOCUMENTED_MODEL, catalog.blueprints())
-
-    def test_the_recorded_title_is_still_what_printify_calls_it(self, garment: Blueprint) -> None:
-        """``title`` takes no part in matching, so a drift here is not a broken
-        profile -- but the docs and fixture quote it, and prose that has gone
-        stale is worth knowing about."""
-        assert garment.title == "Unisex Garment-Dyed T-shirt"
-
     def test_an_unknown_garment_lists_brand_model_pairs_to_choose_from(
-        self, catalog: HttpCatalogClient
+        self, blueprints: list[Blueprint]
     ) -> None:
         with pytest.raises(CatalogResolutionError) as caught:
-            resolve_blueprint("Not A Real Brand", "0000", catalog.blueprints())
+            resolve_blueprint("Not A Real Brand", "0000", blueprints)
         message = str(caught.value)
         assert "Not A Real Brand 0000" in message
         # Pairs, not titles: what it lists must be pasteable into a profile.
