@@ -189,8 +189,8 @@ class TestTemplateRail:
         # inner_text() is the *rendered* text, and the heading is uppercased in
         # CSS -- the casing is presentation, so compare without it.
         headings = [h.lower() for h in page.locator(".template-rail__heading").all_inner_texts()]
-        assert "needs calibration Â· 1" in headings
-        assert "calibrated Â· 2" in headings
+        assert "needs calibration · 1" in headings
+        assert "calibrated · 2" in headings
 
     def test_the_banner_offers_the_next_uncalibrated_template(  # noqa: ANN001
         self, page, workspace_root: Path
@@ -200,7 +200,7 @@ class TestTemplateRail:
         page.wait_for_selector(".template-rail__banner")
         assert "1 template needs calibration" in page.locator(".template-rail__banner").inner_text()
 
-        page.get_by_role("button", name="Calibrate next â†’").click()
+        page.get_by_role("button", name="Calibrate next →").click()
         assert _selected_template(page) == "needs-a-kind"
 
     def test_rail_thumbnails_decode_as_real_images(self, page) -> None:  # noqa: ANN001
@@ -575,7 +575,7 @@ class TestMultipleKind:
         page.locator(".quad-editor__polygon").first.click(button="right")
         page.wait_for_selector(".quad-editor__menu")
         items = page.locator(".quad-editor__menu button").all_inner_texts()
-        assert items == ["Duplicate", "Bring to front", "Delete âŒ«"]
+        assert items == ["Duplicate", "Bring to front", "Delete ⌫"]
 
     def test_hiding_the_outlines_leaves_only_the_selected_box(self, page) -> None:  # noqa: ANN001
         _select_template(page, MULTIPLE_TEMPLATE)
@@ -711,7 +711,7 @@ class TestKindPickerCreatesEachKind:
 
         page.get_by_role("radio", name="Single one photo, one garment").check()
         kind_log = TrafficLog(page, "/kind")
-        page.get_by_role("button", name="Start calibrating â†’").click()
+        page.get_by_role("button", name="Start calibrating →").click()
         kind_log.wait_for(lambda r: _method(r) == "POST" and r.status == 200)
 
         page.wait_for_selector(PREVIEW_IMAGE)
@@ -733,7 +733,7 @@ class TestKindPickerCreatesEachKind:
         self._open_picker(
             page, workspace_root, "lifestyle-02", {"black.png": self._source(workspace_root)}
         )
-        page.get_by_role("button", name="Start calibrating â†’").click()
+        page.get_by_role("button", name="Start calibrating →").click()
         page.wait_for_selector(HANDLE)
 
         page.get_by_label("show placement outline").uncheck()
@@ -760,7 +760,7 @@ class TestKindPickerCreatesEachKind:
         assert sorted(listed) == ["black.png", "ivory.png"]
 
         kind_log = TrafficLog(page, "/kind")
-        page.get_by_role("button", name="Start calibrating â†’").click()
+        page.get_by_role("button", name="Start calibrating →").click()
         kind_log.wait_for(lambda r: _method(r) == "POST" and r.status == 200)
 
         _wait_for_colours(page, 2)
