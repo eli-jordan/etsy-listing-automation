@@ -607,3 +607,15 @@ def test_template_alias_saves_share_canonical_directory_lock(workspace_root: Pat
             )
         assert pending.result(timeout=5) == "conflict"
     assert store.read("alias").config == store.read("example").config
+
+
+def test_template_alias_cannot_escape_workspace(workspace_root: Path, tmp_path: Path) -> None:
+    from etsy_listings.core.workspace import PathEscapesWorkspaceError
+
+    store = make_store(workspace_root)
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    store.workspace.template_dir("escape").symlink_to(outside, target_is_directory=True)
+    with pytest.raises(PathEscapesWorkspaceError):
+        store.read("escape")
+    assert list(outside.iterdir()) == []
