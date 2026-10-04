@@ -1,43 +1,13 @@
 import { describe, expect, it } from "vitest";
 import type { ListingDetail } from "../../types";
 import { mediaLostBy, selectColours, selectGarmentProfile } from "./colourSelection";
+import { listingDetail } from "../../test/listings";
 
 /** Pure, so the cascade is tested here rather than through a rendered tab --
  * what the Variants tab's own tests check is that it goes through this. */
 
 function detail(over: Partial<ListingDetail> = {}): ListingDetail {
-  return {
-    garment_profile: "comfort-colors-1717",
-    design: {},
-    colors: ["black", "white"],
-    brief: "",
-    prices: {},
-    price_overrides: {},
-    artwork: {},
-    pricing_plan: null,
-    etsy: {
-      title: "",
-      description: { lead: "", text: null, ref: null },
-      tags: [],
-      variation_images: null,
-      renewal: null,
-      section: null,
-      shipping_profile: null,
-    },
-    media: [],
-    name: "take-a-hike",
-    modified_at: "2026-09-17T10:00:00Z",
-    status: "draft",
-    issues: [],
-    field_errors: {},
-    etsy_listing_id: null,
-    printify_product_id: null,
-    pricing_plan_name: null,
-    resolved_prices: [],
-    gestures: [],
-    description_composed: "",
-    ...over,
-  };
+  return listingDetail({ design: {}, colors: ["black", "white"], ...over });
 }
 
 describe("selectColours", () => {

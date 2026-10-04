@@ -18,7 +18,7 @@ import {
   type DeployState,
 } from "./deploy/deployState";
 import { openRunStream, type RunStreamHandle } from "./deploy/runStream";
-import { TERMINAL_PHASES } from "./deploy/runPhases";
+import { MARK_SEEN_GRACE_MS, TERMINAL_PHASES } from "./deploy/runPhases";
 
 /**
  * The deploy route: `/listings/:name/deploy` (docs/features/deploy-20260917/spec.md
@@ -170,7 +170,7 @@ export function DeployPage() {
       markSeen();
       return;
     }
-    const timer = window.setTimeout(markSeen, 750);
+    const timer = window.setTimeout(markSeen, MARK_SEEN_GRACE_MS);
     return () => window.clearTimeout(timer);
   }, [runId, state.phase]);
 

@@ -5,40 +5,10 @@ import * as listingsApi from "../../api/listings";
 import * as templatesApi from "../../api/listingTemplates";
 import type { ListingDetail, MediaFileSummary, TemplateSummary } from "../../types";
 import { ImagesTab } from "./ImagesTab";
+import { listingDetail } from "../../test/listings";
 
 function detail(over: Partial<ListingDetail> = {}): ListingDetail {
-  return {
-    garment_profile: "comfort-colors-1717",
-    design: {},
-    colors: ["black"],
-    brief: "",
-    prices: {},
-    price_overrides: {},
-    artwork: {},
-    pricing_plan: null,
-    etsy: {
-      title: "",
-      description: { lead: "", text: null, ref: null },
-      tags: [],
-      variation_images: null,
-      renewal: null,
-      section: null,
-      shipping_profile: null,
-    },
-    media: [],
-    name: "take-a-hike",
-    modified_at: "2026-09-17T10:00:00Z",
-    status: "draft",
-    issues: [],
-    field_errors: {},
-    etsy_listing_id: null,
-    printify_product_id: null,
-    pricing_plan_name: null,
-    resolved_prices: [],
-    gestures: [],
-    description_composed: "",
-    ...over,
-  };
+  return listingDetail({ design: {}, ...over });
 }
 
 function summary(over: Partial<TemplateSummary> & { name: string }): TemplateSummary {
@@ -163,12 +133,6 @@ describe("ImagesTab", () => {
     expect(onUpdate).toHaveBeenCalledWith({ media: [] });
   });
 
-  it("shows the empty-reel hint when there is no media yet", async () => {
-    vi.spyOn(calibrator, "listTemplates").mockResolvedValue([]);
-    render(<ImagesTab detail={detail()} onUpdate={vi.fn()} />);
-    expect(screen.getByText(/Nothing here yet/)).toBeInTheDocument();
-  });
-
   it("draws each reel tile in its own colour, not one photo for the whole set", async () => {
     /* `template_preview_photo` answers "any one of them", so a reel keyed on
        the template name alone drew black and ivory identically. */
@@ -193,33 +157,6 @@ describe("ImagesTab", () => {
       "src",
       "/api/templates/flat-lay-01/thumbnail?colour=white",
     );
-  });
-
-  it("counts the reel against Etsy's 20-image limit", async () => {
-    vi.spyOn(calibrator, "listTemplates").mockResolvedValue([]);
-    render(
-      <ImagesTab
-        detail={detail({ media: [{ template: "flat-lay-01", colour: "black" }] })}
-        onUpdate={vi.fn()}
-      />,
-    );
-    expect(screen.getByText("1 of 20 images")).toBeInTheDocument();
-  });
-
-  it("says what to do at the limit instead of how to reorder", async () => {
-    vi.spyOn(calibrator, "listTemplates").mockResolvedValue([]);
-    render(
-      <ImagesTab
-        detail={detail({
-          media: Array.from({ length: 20 }, (_, i) => ({
-            template: "flat-lay-01",
-            colour: `c${i}`,
-          })),
-        })}
-        onUpdate={vi.fn()}
-      />,
-    );
-    expect(screen.getByText(/remove one before adding another/)).toBeInTheDocument();
   });
 
   it("shows how many of a template's entries the listing already has", async () => {

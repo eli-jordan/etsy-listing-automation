@@ -27,6 +27,10 @@ import type {
  * that has since been replaced.
  */
 
+/** When {@link aiRunSummary}'s run was created, unless a test says otherwise:
+ * fixed, so a start time read from it is a value a test can name. */
+export const AI_RUN_CREATED_AT = "2026-09-25T10:00:00Z";
+
 export function aiRunSummary(over: Partial<AiRunSummary> = {}): AiRunSummary {
   return {
     id: "run-1",
@@ -39,7 +43,7 @@ export function aiRunSummary(over: Partial<AiRunSummary> = {}): AiRunSummary {
       { id: "market", state: "pending", detail: null },
       { id: "seo", state: "pending", detail: null },
     ],
-    created_at: new Date().toISOString(),
+    created_at: AI_RUN_CREATED_AT,
     finished_at: null,
     ...over,
   };

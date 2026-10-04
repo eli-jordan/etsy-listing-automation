@@ -20,6 +20,7 @@ import { MARKET_QUERIES, marketSnapshot } from "../../test/market";
 import type { ListingDetail, ListingProposal, SeoReadinessResponse } from "../../types";
 import { DetailsTab as DetailsTabView } from "./DetailsTab";
 import { useAiSeoMode } from "./aiSeo/useAiSeoMode";
+import { listingDetail, listingEtsy } from "../../test/listings";
 
 let runs: FakeAiRuns;
 
@@ -65,38 +66,13 @@ function DetailsTab(props: {
 }
 
 function detail(over: Partial<ListingDetail> = {}): ListingDetail {
-  return {
-    garment_profile: "comfort-colors-1717",
+  return listingDetail({
     design: {},
-    colors: ["black"],
-    brief: "",
-    prices: {},
-    price_overrides: {},
-    artwork: {},
-    pricing_plan: null,
-    etsy: {
-      title: "",
-      description: { lead: "", text: null, ref: null },
-      tags: ["Botanical", "Gift"],
-      variation_images: null,
-      renewal: null,
-      section: null,
-      shipping_profile: null,
-    },
-    media: [],
-    name: "take-a-hike",
-    modified_at: "2026-09-17T10:00:00Z",
-    status: "draft",
-    issues: [],
-    field_errors: {},
-    etsy_listing_id: null,
-    printify_product_id: null,
+    etsy: listingEtsy({ tags: ["Botanical", "Gift"] }),
     pricing_plan_name: "tee-basic",
     resolved_prices: [{ size: "S", amount: "349 NOK" }],
-    gestures: [],
-    description_composed: "",
     ...over,
-  };
+  });
 }
 
 describe("DetailsTab for a listing template", () => {
@@ -864,25 +840,23 @@ describe("DetailsTab top listings panel", () => {
     return screen.getByRole("group", { name: "Listing details" });
   }
 
-  it("keeps the fields at their own width when there is no search to show", async () => {
+  it("shows no panel when there is no search to show", async () => {
     render(<DetailsTab detail={withDesign()} onUpdate={vi.fn()} onFlush={vi.fn()} />);
 
     await waitFor(() => expect(runs.market).toHaveBeenCalledWith("take-a-hike"));
     expect(screen.queryByRole("complementary", { name: "Similar Etsy Listings" })).toBeNull();
-    expect(fieldset().closest(".mkt-layout")).toBeNull();
+    expect(fieldset()).toBeVisible();
   });
 
-  it("puts the last search beside the fields", async () => {
+  it("shows the last search alongside the fields, not in place of them", async () => {
     runs.market.mockResolvedValue(marketSnapshot());
 
     render(<DetailsTab detail={withDesign()} onUpdate={vi.fn()} onFlush={vi.fn()} />);
 
     const panel = await screen.findByRole("complementary", { name: "Similar Etsy Listings" });
-    const layout = fieldset().closest(".mkt-layout");
-    expect(layout?.children).toHaveLength(2);
-    expect(layout?.children[0]).toHaveClass("details-tab");
-    expect(layout?.children[0]).toContainElement(fieldset());
-    expect(layout?.children[1]).toBe(panel);
+    expect(panel).toBeVisible();
+    expect(fieldset()).toBeVisible();
+    expect(fieldset()).not.toContainElement(panel);
   });
 
   it("keeps the seller's place in the fields when the panel appears", async () => {

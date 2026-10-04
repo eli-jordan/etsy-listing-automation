@@ -2,6 +2,7 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as seoApi from "../../../api/seo";
 import {
+  AI_RUN_CREATED_AT,
   aiRunSummary,
   briefEvent,
   type FakeAiRuns,
@@ -13,45 +14,19 @@ import {
 import { deferred } from "../../../test/helpers";
 import type { ListingDetail, ListingProposal, SeoReadinessResponse } from "../../../types";
 import { BATCH_POLL_MS, useAiSeoMode } from "./useAiSeoMode";
+import { listingDetail, listingEtsy } from "../../../test/listings";
 
 function detail(over: Partial<ListingDetail> = {}): ListingDetail {
-  return {
-    garment_profile: "comfort-colors-1717",
-    design: { default: "designs/take-a-hike.png" },
-    colors: ["black"],
+  return listingDetail({
     brief: "A relaxed hiking tee.",
     garment_materials: ["ring-spun cotton"],
     garment_product_type: "tee",
     garment_brand: "Comfort Colors",
     garment_model: "1717",
-    prices: {},
-    price_overrides: {},
-    artwork: {},
-    pricing_plan: null,
-    etsy: {
-      title: "Take A Hike Tee",
-      description: { lead: "", text: null, ref: null },
-      tags: [],
-      variation_images: null,
-      renewal: null,
-      section: "Graphic Tees",
-      shipping_profile: null,
-    },
-    media: [],
-    name: "take-a-hike",
-    modified_at: "2026-09-17T10:00:00Z",
-    status: "draft",
-    issues: [],
-    field_errors: {},
-    etsy_listing_id: null,
-    printify_product_id: null,
-    pricing_plan_name: null,
-    resolved_prices: [],
-    gestures: [],
-    description_composed: "",
+    etsy: listingEtsy({ title: "Take A Hike Tee", section: "Graphic Tees" }),
     design_content_hash: null,
     ...over,
-  };
+  });
 }
 
 const proposal = listingProposal;
@@ -200,8 +175,8 @@ describe("useAiSeoMode generation", () => {
     act(() => result.current.generate());
 
     await waitFor(() => expect(result.current.run.steps).toHaveLength(3));
-    expect(result.current.startedAt).toBe(result.current.run.startedAt);
-    expect(result.current.startedAt).not.toBeNull();
+    // The server's start, which the elapsed-time readout counts from.
+    expect(result.current.startedAt).toBe(Date.parse(AI_RUN_CREATED_AT));
   });
 
   it("moves to a failed phase, says why, and stores nothing when the run fails", async () => {

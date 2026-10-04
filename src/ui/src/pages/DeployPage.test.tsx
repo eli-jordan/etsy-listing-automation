@@ -4,6 +4,8 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as listingsApi from "../api/listings";
 import * as runsApi from "../api/runs";
+import { MARK_SEEN_GRACE_MS } from "./deploy/runPhases";
+import { controlledClock } from "../test/clock";
 import { DeployPage } from "./DeployPage";
 import * as runStreamModule from "./deploy/runStream";
 import type {
@@ -21,6 +23,7 @@ import {
   type RunSummaryOverrides,
   type StagePlanOverrides,
 } from "../test/helpers";
+import { listingDetail } from "../test/listings";
 
 /**
  * The route: reattach or start, composing the reducer/comparison/presentation
@@ -32,38 +35,12 @@ import {
  */
 
 function detail(over: Partial<ListingDetail> = {}): ListingDetail {
-  return {
-    garment_profile: "comfort-colors-1717",
-    design: { default: "designs/take-a-hike.png" },
-    colors: ["black"],
-    brief: "",
-    prices: {},
-    price_overrides: {},
-    artwork: {},
-    pricing_plan: null,
-    etsy: {
-      title: "",
-      description: { lead: "", text: null, ref: null },
-      tags: [],
-      variation_images: null,
-      renewal: null,
-      section: null,
-      shipping_profile: null,
-    },
-    media: [],
-    name: "take-a-hike",
-    modified_at: "2026-09-17T10:00:00Z",
+  return listingDetail({
     status: "dirty",
-    issues: [],
-    field_errors: {},
     etsy_listing_id: 1698234512,
     printify_product_id: "abc123",
-    pricing_plan_name: null,
-    resolved_prices: [],
-    gestures: [],
-    description_composed: "",
     ...over,
-  };
+  });
 }
 
 function stage<Name extends StagePlanDTO["stage"]>(
@@ -249,6 +226,7 @@ describe("DeployPage: reattaching", () => {
   });
 
   it("shows a finished, unseen run's result without opening a stream", async () => {
+    const clock = controlledClock();
     vi.spyOn(listingsApi, "getListing").mockResolvedValue(detail());
     const fullPlan = plan([stage({ stage: "render", will_run: true, reason: "x" })]);
     vi.spyOn(runsApi, "currentRun").mockResolvedValue(
@@ -286,12 +264,13 @@ describe("DeployPage: reattaching", () => {
 
     expect(await screen.findByText("Deployed.")).toBeInTheDocument();
     expect(handles).toHaveLength(0);
-    await waitFor(() => expect(runsApi.markRunSeen).toHaveBeenCalledWith("run-4"), {
-      timeout: 2_000,
-    });
+    expect(runsApi.markRunSeen).not.toHaveBeenCalledWith("run-4");
+    await clock.advance(MARK_SEEN_GRACE_MS);
+    expect(runsApi.markRunSeen).toHaveBeenCalledWith("run-4");
   });
 
   it("keeps a just-finished apply unseen when Back is clicked immediately", async () => {
+    const clock = controlledClock();
     vi.spyOn(listingsApi, "getListing").mockResolvedValue(detail());
     const fullPlan = plan([stage({ stage: "render", will_run: true, reason: "x" })]);
     vi.spyOn(runsApi, "currentRun").mockResolvedValue(
@@ -322,8 +301,8 @@ describe("DeployPage: reattaching", () => {
 
     renderPage();
     expect(await screen.findByText("Deployed.")).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: /Back to editor/ }));
-    await new Promise((resolve) => window.setTimeout(resolve, 800));
+    await clock.user.click(screen.getByRole("button", { name: /Back to editor/ }));
+    await clock.advance(MARK_SEEN_GRACE_MS);
 
     expect(runsApi.markRunSeen).not.toHaveBeenCalledWith("run-fast-apply");
     expect(screen.getByText("editor page")).toBeInTheDocument();
