@@ -308,7 +308,8 @@ IDs; production creation uses UUIDs and geometry, recolouring and reorder preser
 them. Single and colour-matrix placements use `None` internally.
 
 `workspace.calibration.CalibrationStore` holds a process-wide reentrant lock per
-workspace and mockup template. This is independent of the listing-template lock
+validated, canonical mockup-template directory. In-workspace aliases share that
+lock; aliases outside the workspace are refused before IO. This is independent of the listing-template lock
 domain. All template-config writers use its recoverable transaction. Server
 operations recover before reading; the direct Workspace loader takes the same
 lock and refuses an active transaction, so a CLI cannot roll forward a live server
