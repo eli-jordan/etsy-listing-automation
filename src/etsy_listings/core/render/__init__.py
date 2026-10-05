@@ -45,6 +45,7 @@ from etsy_listings.core.render.io import (
     save_png,
 )
 from etsy_listings.core.render.maps import DerivedMapCache, height_map, luminance_map
+from etsy_listings.core.render.material import MaterialLayer, MaterialMaps, render_marigold_scene
 from etsy_listings.core.render.pipeline import Layer, render_scene
 from etsy_listings.core.render.swatch import sample_swatch
 from etsy_listings.core.render.types import RGB, RGBA, FloatMap
@@ -81,6 +82,9 @@ __all__ = [
     # Compositing. One function for all three kinds -- see pipeline.py.
     "Layer",
     "render_scene",
+    "MaterialMaps",
+    "MaterialLayer",
+    "render_marigold_scene",
     # Derived maps, and their on-disk cache.
     "DerivedMapCache",
     "height_map",
