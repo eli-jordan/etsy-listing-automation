@@ -261,3 +261,82 @@ def test_dispatch_guard_refuses_cancelled_call_and_allows_later_retry(tmp_path, 
             )["artifact"]
             == output
         )
+
+
+def test_warm_startup_cancellation_is_rechecked_before_dispatch(tmp_path):
+    import threading
+    import time
+    from contextlib import contextmanager
+
+    from PIL import Image
+
+    from etsy_listings.core.preparation.worker_client import WorkerError
+
+    from tests.support.marigold import controlled_worker
+
+    Image.new("RGB", (12, 8)).save(tmp_path / "crop.png")
+    command = controlled_worker(tmp_path)
+    script = tmp_path / "controlled_worker.py"
+    source = script.read_text(encoding="utf-8")
+    source = source.replace(
+        "    def capabilities(self):",
+        """    def capabilities(self):
+        from pathlib import Path
+        Path('startup-ready').touch()
+        while not Path('startup-release').exists():
+            time.sleep(0.01)""",
+    )
+    source = source.replace(
+        "import numpy as np",
+        "import os"
+        + chr(10)
+        + "os.chdir("
+        + repr(str(tmp_path))
+        + ")"
+        + chr(10)
+        + "import numpy as np",
+    )
+    script.write_text(source, encoding="utf-8")
+    cancelled = threading.Event()
+    errors = []
+
+    @contextmanager
+    def guard():
+        if cancelled.is_set():
+            raise WorkerError("Cancelled during startup")
+        yield
+
+    with WarmWorker(command, cache_root=tmp_path, engine_version="1.0.0") as worker:
+
+        def infer():
+            try:
+                worker.infer(
+                    request_id="starting",
+                    role="depth",
+                    input="crop.png",
+                    output="refused.npz",
+                    size=(12, 8),
+                    dispatch_guard=guard,
+                )
+            except BaseException as exc:
+                errors.append(exc)
+
+        thread = threading.Thread(target=infer)
+        thread.start()
+        deadline = time.monotonic() + 5
+        while not (tmp_path / "startup-ready").exists() and time.monotonic() < deadline:
+            time.sleep(0.01)
+        assert (tmp_path / "startup-ready").exists()
+        cancelled.set()
+        worker.cancel("starting")
+        (tmp_path / "startup-release").touch()
+        thread.join(5)
+        assert not thread.is_alive()
+        assert len(errors) == 1 and "during startup" in str(errors[0])
+        assert not (tmp_path / "refused.npz").exists()
+        assert (
+            worker.infer(
+                request_id="retry", role="depth", input="crop.png", output="retry.npz", size=(12, 8)
+            )["artifact"]
+            == "retry.npz"
+        )
