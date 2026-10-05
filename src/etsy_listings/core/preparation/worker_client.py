@@ -12,6 +12,7 @@ import time
 import uuid
 from collections import deque
 from collections.abc import Callable, Sequence
+from contextlib import AbstractContextManager, nullcontext
 from pathlib import Path
 from typing import Any, Self, cast
 
@@ -160,6 +161,7 @@ class Worker:
         num_inference_steps: int = 10,
         ensemble_size: int = 3,
         progress: Callable[[dict[str, Any]], None] | None = None,
+        dispatch_guard: Callable[[], AbstractContextManager[None]] = nullcontext,
     ) -> dict[str, Any]:
         cache_path(self.cache_root, input, suffix=".png")
         destination = cache_path(self.cache_root, output, suffix=".npz")
@@ -168,17 +170,20 @@ class Worker:
                 "Worker is busy; additional calls must remain in the coordinator queue"
             )
         try:
-            self._send(
-                "infer",
-                request_id=request_id,
-                role=role,
-                input=input,
-                output=output,
-                settings={
-                    "num_inference_steps": num_inference_steps,
-                    "ensemble_size": ensemble_size,
-                },
-            )
+            # The coordinator atomically rechecks cancellation with dispatch.
+            # Do not hold its guard during handshake or model execution.
+            with dispatch_guard():
+                self._send(
+                    "infer",
+                    request_id=request_id,
+                    role=role,
+                    input=input,
+                    output=output,
+                    settings={
+                        "num_inference_steps": num_inference_steps,
+                        "ensemble_size": ensemble_size,
+                    },
+                )
             result = self._receive(request_id, timeout=self.timeout, progress=progress)
             if result["type"] != "result" or result.get("artifact") != output:
                 raise WorkerError("Worker returned an unexpected artifact")
@@ -260,6 +265,7 @@ class WarmWorker:
         num_inference_steps: int = 10,
         ensemble_size: int = 3,
         progress: Callable[[dict[str, Any]], None] | None = None,
+        dispatch_guard: Callable[[], AbstractContextManager[None]] = nullcontext,
     ) -> dict[str, Any]:
         if not self._lock.acquire(blocking=False):
             raise WorkerError("Worker is busy; keep additional work in the coordinator queue")
@@ -282,6 +288,7 @@ class WarmWorker:
                 num_inference_steps=num_inference_steps,
                 ensemble_size=ensemble_size,
                 progress=progress,
+                dispatch_guard=dispatch_guard,
             )
         finally:
             self._lock.release()
