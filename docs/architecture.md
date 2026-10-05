@@ -791,3 +791,37 @@ The CLI currently exposes `setup`, `auth`, `new`, `plan`, `apply`, `unlock` and
 run-history recorder and a general persisted rate-budget module are absent.
 Current transports already share retries, and Etsy has a per-transport,
 header-driven `RateGate`; their existence does not imply those future modules.
+
+## Native Marigold runtime
+
+Core preparation's Runtime owns explicit setup, update and inspection under
+ADR-0053. The app carries an independent worker distribution and complete
+Windows CUDA installation lock. Installation stages an immutable directory
+beneath <home>/.etsy-listings/marigold/runtimes/<engine-version>/<installation-id>.
+Only verified packages, checkpoint hashes and successful real normals, lighting
+and depth smoke calls allow the global current pointer to change. Repair uses a
+new installation ID. A job retains both its engine version and installation ID;
+updates never overwrite the selected directory. Failed relocated installations
+remain unreferenced for diagnosis and do not prevent an explicit retry.
+
+Status performs deep validation on first inspection, then caches the report for
+five minutes while its distribution files, weights and installed package metadata
+retain the same sizes and modification times. A changed file forces verification.
+Repeated HTTP polling should reuse this process cache. A fresh worker handshake
+always checks actual CUDA and engine capability, even with a cached report.
+
+WarmWorker restarts a worker that exited idle, without retrying an active failed
+call. It accepts one call at a time and refuses implicit queuing. The coordinator
+owns remaining work and cancellation intent. JSON-lines v1 controls remain
+readable during inference; cancellation retains the active call's validated
+numeric artifact and starts no next call. The worker loads native pipeline
+dependencies before starting its reader, since importing SciPy BLAS after that
+thread started stalled the measured Windows process. Models stay in RAM under a
+one-pipeline and 4 GiB tensor budget; only active components enter CUDA.
+Diagnostics drain separately from protocol output.
+
+Prediction files contain float32 arrays only. Readers check archive bounds,
+headers, role/shape, finite values, ranges and checksums with pickle disabled.
+Import contracts keep runtime installation and torch out of CPU rendering and
+prediction loading. Preparation coordination, durable maps and rendering remain
+separate delivery stages.

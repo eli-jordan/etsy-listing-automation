@@ -1,6 +1,6 @@
 """Typer CLI. One module per command; this module wires them into one app.
 
-``plan``, ``apply``, ``new``, ``ui``, ``setup``, ``auth`` and ``unlock`` are
+``plan``, ``apply``, ``new``, ``ui``, ``setup``, ``auth``, ``unlock`` and ``marigold`` are
 built, per strict phase order. ``catalog refresh`` and ``status``
 remain for Phase 6.
 """

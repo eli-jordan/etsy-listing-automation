@@ -16,6 +16,7 @@ src/etsy_listings/
     config/ pydantic models, Money, slugs, listing_validation.py (every local refusal)
     engine/ Stage protocol, Change vocabulary, lockfile, plan/apply/run, lifecycle, stages/
     render/ pure render passes, frozen RenderConfig, pipeline
+    preparation/ explicit native runtime and pinned worker; safe prediction files, no model imports on CPU paths
     clients/ printify/ and etsy/ — transport, models, fakes
     ai/ SEO/brief providers (Codex/Claude/Grok), prompts, proposals
     market/ market-informed SEO research
@@ -70,7 +71,7 @@ Frontend (`src/ui/`): `npm run dev|build|typecheck|lint|format|format:check|test
 
 Human-facing setup, calibrator usage and contributor docs live in [README.md](README.md); this file holds only what an agent needs to act correctly. Keep the two commands lists in step.
 
-CLI surface (`etsy-listings`). `setup`, `auth`, `new`, `plan`, `apply`, `unlock` and `ui` are registered in `cli/app.py` (`ui` lives in `cli/ui.py`); `render`, `generate`, `catalog refresh` and `status` remain unbuilt — do not assume a command exists because a historical plan lists it.
+CLI surface (`etsy-listings`). `setup`, `auth`, `new`, `plan`, `apply`, `unlock`, `marigold` and `ui` are registered in `cli/app.py` (`ui` lives in `cli/ui.py`); `render`, `generate`, `catalog refresh` and `status` remain unbuilt — do not assume a command exists because a historical plan lists it.
 
 ```
 setup initialise a workspace: skeleton, shop.yaml, ids
@@ -80,6 +81,7 @@ new [<design>] interactive design/garment/provider picker; writes garment profil
 plan <listing|--all> three-way diff against live state
 apply <listing|--all> execute every stage the plan identified
 unlock <listing> clear a Printify product stuck publishing
+marigold setup|status|update explicit native worker installation and inspection
 ui [--host --port] serve the dashboard, calibrator, listings and runs over HTTP in the foreground; no native window
 render / generate force a single local stage [not built]
 catalog refresh force-refresh the cached Printify catalog [not built]
