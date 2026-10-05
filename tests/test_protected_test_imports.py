@@ -29,6 +29,10 @@ ROOT = Path(__file__).resolve().parents[1]
 TESTS = ROOT / "tests"
 
 OWNING_TESTS: Mapping[str, frozenset[str]] = {
+    # Numerical preparation is tested through prepare; sampling through the
+    # public CPU scene renderer. No test may bypass those agreed seams.
+    "etsy_listings.core.preparation._geometry": frozenset(),
+    "etsy_listings.core.render._material_math": frozenset(),
     "etsy_listings.core.preparation.installation": frozenset(
         {"tests/core/unit/test_marigold_installation.py"}
     ),

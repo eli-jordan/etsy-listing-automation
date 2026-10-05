@@ -17,9 +17,10 @@ start with `src/`, `tests/`, `scripts/` or `docs/`.
 
 The [Marigold design](features/marigold-20261001/plan.md) is being implemented
 in stages under ADR-0053. Renderer configuration and recoverable calibration
-storage are implemented. Model preparation, durable maps and the complete editor
-flow remain planned; Marigold configurations currently refuse rendering with a
-preparation explanation.
+storage, the explicit native worker, pure numerical preparation, durable map
+publication and CPU composition are implemented. Queue, editor and deployment
+integration remain later stages. Existing application rendering still refuses
+Marigold with a preparation explanation until those callers acquire maps.
 
 ## Runtime and dependencies
 
@@ -825,3 +826,27 @@ headers, role/shape, finite values, ranges and checksums with pickle disabled.
 Import contracts keep runtime installation and torch out of CPU rendering and
 prediction loading. Preparation coordination, durable maps and rendering remain
 separate delivery stages.
+
+## Durable Marigold maps and CPU composition
+
+`preparation.numerics` ports crop planning, mask proposal, robust normals/depth
+fitting and baking from the evaluated prototype. It accepts explicit evidence
+arrays and edited visibility, with cancellation checkpoints between CPU phases.
+`render.material` samples normalized material coordinates in premultiplied linear
+colour and composes ordered layers. Both lighting alternatives remain in maps;
+appearance controls require no fitting. Photo warp goldens retain their bytes.
+
+`preparation.artifacts.Artifacts` owns validated generation publication, readiness,
+acquisition and reference-aware cleanup. Workspace derives every durable path and
+owns enumeration/removal. Publication and reader leases use the canonical
+mockup-template lock domain. Active publishers register before exposing staging;
+readers retain one complete generation while replacement and cleanup proceed.
+Saved readiness reconstructs current inputs with accepted evidence identity from
+the durable manifest, without prediction cache or installed model dependencies.
+
+The [schema 1 contract](features/marigold-20261001/artifact-contract.md) records
+coordinate conventions, array bounds, allocation limits and coordinator-facing
+contracts. Numeric content identity excludes storage and provenance. ZIP and NPY
+checks happen before array allocation, and CPU import contracts exclude inference
+installation and torch. Shared colour dimension checks are mechanical validation;
+full photo quality remains the later integration release gate.
