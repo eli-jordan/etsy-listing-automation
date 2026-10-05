@@ -1,6 +1,8 @@
 import sys
 
-from etsy_listings.core.preparation.worker_client import Worker
+import pytest
+
+from etsy_listings.core.preparation.worker_client import WarmWorker, Worker
 
 
 def test_worker_handshake_drains_stderr_independently(tmp_path):
@@ -196,3 +198,66 @@ def test_watchdog_fails_without_publishing_partial_artifact(tmp_path):
             )
         assert not worker.alive
     assert not (tmp_path / "partial.npz").exists()
+
+
+@pytest.mark.parametrize("adapter", [Worker, WarmWorker])
+def test_dispatch_guard_refuses_cancelled_call_and_allows_later_retry(tmp_path, adapter):
+    import threading
+    from contextlib import contextmanager
+
+    from PIL import Image
+
+    from etsy_listings.core.preparation.worker_client import WorkerError
+
+    from tests.support.marigold import controlled_worker
+
+    Image.new("RGB", (12, 8)).save(tmp_path / "crop.png")
+    reached = threading.Event()
+    release = threading.Event()
+    cancelled = threading.Event()
+    errors = []
+
+    @contextmanager
+    def dispatch_guard():
+        reached.set()
+        assert release.wait(5)
+        if cancelled.is_set():
+            raise WorkerError("Cancelled before dispatch")
+        yield
+
+    with adapter(
+        controlled_worker(tmp_path), cache_root=tmp_path, engine_version="1.0.0"
+    ) as worker:
+
+        def infer():
+            try:
+                worker.infer(
+                    request_id="pending",
+                    role="depth",
+                    input="crop.png",
+                    output="refused.npz",
+                    size=(12, 8),
+                    dispatch_guard=dispatch_guard,
+                )
+            except BaseException as exc:
+                errors.append(exc)
+
+        thread = threading.Thread(target=infer)
+        thread.start()
+        assert reached.wait(5)
+        cancelled.set()
+        worker.cancel("pending")
+        release.set()
+        thread.join(5)
+        assert not thread.is_alive()
+        assert len(errors) == 1
+        assert isinstance(errors[0], WorkerError)
+        assert "before dispatch" in str(errors[0])
+        assert not (tmp_path / "refused.npz").exists()
+        output = adapter.__name__ + ".npz"
+        assert (
+            worker.infer(
+                request_id="retry", role="depth", input="crop.png", output=output, size=(12, 8)
+            )["artifact"]
+            == output
+        )
