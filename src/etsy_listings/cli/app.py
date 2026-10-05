@@ -19,6 +19,7 @@ import typer
 from etsy_listings.cli import prompts, terminal
 from etsy_listings.cli.auth import ALL_PARTS as ALL_AUTH_PARTS
 from etsy_listings.cli.auth import Part as AuthPart
+from etsy_listings.cli.marigold import app as marigold_app
 from etsy_listings.cli.options import open_workspace, root_option
 from etsy_listings.cli.render import format_blocked, format_plan
 from etsy_listings.cli.ui import ui
@@ -64,6 +65,7 @@ the process environment overrides that file. See docs/guides/setup.md.
 """
 
 app = typer.Typer(no_args_is_help=True, epilog=EPILOG)
+app.add_typer(marigold_app, name="marigold")
 
 
 @app.callback(epilog=EPILOG)

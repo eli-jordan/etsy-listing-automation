@@ -227,3 +227,29 @@ allowed_importers = [
     "etsy_listings.core.application.ai.batch_queue",
 ]
 as_packages = false
+
+# The isolated worker is checked without installing its model dependencies in
+# the application environment. They are complete and pinned in distribution/uv.lock.
+[[tool.mypy.overrides]]
+module = ["torch.*", "diffusers.*", "huggingface_hub.*", "psutil.*"]
+ignore_missing_imports = true
+
+[[tool.importlinter.contracts]]
+name = "CPU rendering and prediction loading never reach model installation or inference"
+type = "forbidden"
+source_modules = ["etsy_listings.core.render", "etsy_listings.core.preparation.predictions"]
+forbidden_modules = [
+    "etsy_listings.core.preparation.runtime",
+    "etsy_listings.core.preparation.installation",
+    "etsy_listings.core.preparation.worker_client",
+    "etsy_listings.core.preparation.distribution",
+    "torch",
+    "diffusers",
+]
+
+[[tool.importlinter.contracts]]
+name = "Native installation is reached through the explicit Runtime interface"
+type = "protected"
+protected_modules = ["etsy_listings.core.preparation.installation"]
+allowed_importers = ["etsy_listings.core.preparation.runtime"]
+as_packages = false
