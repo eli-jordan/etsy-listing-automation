@@ -4,7 +4,7 @@ The data tree (``shop.yaml``, ``designs/``, ``listings/``,
 ``mockup-templates/``, ``.cache/``) is a separate directory the user owns, never
 this repository. ``Workspace.resolve()`` is the single chokepoint every path
 reference in a config file passes through, and it refuses to resolve outside the
-workspace root — this is a security boundary (it is also what keeps the UI's
+workspace root â€” this is a security boundary (it is also what keeps the UI's
 future file-serving endpoints safe), not a tidiness rule.
 """
 
@@ -541,6 +541,36 @@ class Workspace:
         if directories:
             return sorted(p.name for p in parent.iterdir() if p.is_dir())
         return sorted(p.stem for p in parent.glob("*.json") if p.is_file())
+
+    def preparation_jobs(self) -> list[str]:
+        return self._cache_entries("preparation/jobs", directories=False)
+
+    def preparation_job_file(self, job: str) -> Path:
+        return self.cache("preparation", "jobs", _segment(job) + ".json")
+
+    def preparation_work(self, job: str, file: str | None = None) -> Path:
+        directory = self.cache("preparation", "work", _segment(job))
+        return directory if file is None else directory / _segment(file)
+
+    def preparation_prediction_current(self, template: str) -> Path:
+        return self.cache("preparation", "predictions", _segment(template), "current.json")
+
+    def preparation_prediction_set(self, template: str, identity: str) -> Path:
+        return self.cache(
+            "preparation", "predictions", _segment(template), "sets", _segment(identity)
+        )
+
+    def preparation_prediction_sets(self, template: str) -> list[str]:
+        directory = self.cache("preparation", "predictions", _segment(template), "sets")
+        return (
+            sorted(p.name for p in directory.iterdir() if p.is_dir()) if directory.is_dir() else []
+        )
+
+    def remove_preparation_work(self, job: str) -> None:
+        remove_tree(self.preparation_work(job))
+
+    def remove_prediction_set(self, template: str, identity: str) -> None:
+        remove_tree(self.preparation_prediction_set(template, identity))
 
     def design_ref(self, design: str) -> str:
         """The workspace-rooted ref ``listing.yaml`` names ``designs/<design>.png``
