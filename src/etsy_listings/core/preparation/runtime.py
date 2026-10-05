@@ -25,7 +25,8 @@ class SetupError(RuntimeError):
 
 def _segment(value: str) -> None:
     if (
-        not value
+        not isinstance(value, str)
+        or not value
         or value in (".", "..")
         or any(
             c not in "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ.-"
@@ -78,7 +79,7 @@ class Runtime:
     def inspect(self) -> Capability:
         try:
             current = json.loads((self.root / "current.json").read_text(encoding="utf-8"))
-            if current["schema_version"] != 1:
+            if not isinstance(current, dict) or current.get("schema_version") != 1:
                 raise SetupError("Unsupported installation pointer schema")
             return self.selection(
                 current["engine_version"], installation_id=current["installation_id"]
@@ -103,7 +104,11 @@ class Runtime:
             pointer = json.loads(
                 (self.root / "runtimes" / version / "current.json").read_text(encoding="utf-8")
             )
-            installation_id = pointer["installation_id"]
+            if not isinstance(pointer, dict) or pointer.get("schema_version") != 1:
+                raise SetupError("Invalid installation pointer schema")
+            installation_id = pointer.get("installation_id")
+            if not isinstance(installation_id, str):
+                raise SetupError("Invalid installation ID")
         _segment(installation_id)
         target = self.root / "runtimes" / version / installation_id
         if not target.resolve().is_relative_to((self.root / "runtimes").resolve()):

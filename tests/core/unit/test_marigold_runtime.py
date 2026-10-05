@@ -107,3 +107,42 @@ def test_failed_post_rename_probe_leaves_previous_current_and_allows_retry(tmp_p
     installer.rejected_versions.clear()
     assert newer.update().available
     assert runtime.selection("1.0.0", installation_id=previous.installation_id).available
+
+
+def test_malformed_installation_pointers_are_actionable_and_repairable(tmp_path):
+    import json
+
+    from etsy_listings.core.preparation.runtime import Capability
+
+    class Installer:
+        def install(self, target, weights, version):
+            (target / "python.exe").write_bytes(b"valid")
+            return Capability(True, None, engine_version=version, python=str(target / "python.exe"))
+
+        def inspect(self, target, weights, version):
+            return Capability(True, None, engine_version=version, python=str(target / "python.exe"))
+
+    runtime = Runtime(home=tmp_path, installer=Installer())
+    selected = runtime.setup()
+    malformed = [
+        [],
+        None,
+        42,
+        {},
+        {"schema_version": 1, "engine_version": 42, "installation_id": 42},
+        {"schema_version": 1, "engine_version": "1.0.0", "installation_id": 42},
+    ]
+    for value in malformed:
+        (runtime.root / "current.json").write_text(json.dumps(value), encoding="utf-8")
+        report = runtime.inspect()
+        assert not report.available
+        assert "marigold update" in report.problem
+        assert runtime.update().available
+        assert runtime.inspect().available
+        (runtime.root / "runtimes" / "1.0.0" / "current.json").write_text(
+            json.dumps(value), encoding="utf-8"
+        )
+        repaired = runtime.update()
+        assert repaired.available
+        assert runtime.inspect().installation_id == repaired.installation_id
+        assert runtime.selection("1.0.0", installation_id=selected.installation_id).available
