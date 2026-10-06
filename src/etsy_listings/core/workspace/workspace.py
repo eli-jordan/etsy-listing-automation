@@ -4,7 +4,7 @@ The data tree (``shop.yaml``, ``designs/``, ``listings/``,
 ``mockup-templates/``, ``.cache/``) is a separate directory the user owns, never
 this repository. ``Workspace.resolve()`` is the single chokepoint every path
 reference in a config file passes through, and it refuses to resolve outside the
-workspace root â€” this is a security boundary (it is also what keeps the UI's
+workspace root — this is a security boundary (it is also what keeps the UI's
 future file-serving endpoints safe), not a tidiness rule.
 """
 
