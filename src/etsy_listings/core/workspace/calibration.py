@@ -58,6 +58,10 @@ class MaskUnavailable(UserFacingError):
     """Mask editing or Undo has no usable saved baseline/history."""
 
 
+class MaskPhotoMismatch(MaskUnavailable):
+    """Saved masks belong to another main photo and require an explicit reset."""
+
+
 FiniteCoordinate = Annotated[float, Field(allow_inf_nan=False)]
 
 
@@ -293,7 +297,7 @@ class CalibrationStore:
                 if metadata["schema_version"] != 1:
                     raise ValueError("unsupported mask metadata schema")
                 if metadata["photo"] != self.photo_identity(name, calibration.config):
-                    raise MaskUnavailable(
+                    raise MaskPhotoMismatch(
                         "Main photo changed; explicitly reset masks for this photo"
                     )
                 if metadata["automatic_checksum"] != digest(automatic) or metadata[
