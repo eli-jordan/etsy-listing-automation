@@ -31,7 +31,7 @@ from etsy_listings.core.render.config import (
 from etsy_listings.core.render.material import MaterialMaps
 from etsy_listings.core.workspace import Workspace
 from etsy_listings.core.workspace.atomic import write_bytes_atomic
-from etsy_listings.core.workspace.calibration import CalibrationStore, json_bytes
+from etsy_listings.core.workspace.calibration import CalibrationStore, MaskPhotoMismatch, json_bytes
 
 SCHEMA = 1
 MAX_PIXELS = 32 * 1024 * 1024
@@ -381,7 +381,11 @@ class Artifacts:
         return Acquired(manifest, MappingProxyType(maps))
 
     def saved_inputs(
-        self, name: str, *, evidence: Mapping[str | None, str] | None = None
+        self,
+        name: str,
+        *,
+        evidence: Mapping[str | None, str] | None = None,
+        reset_masks_for_photo: bool = False,
     ) -> PreparationInputs:
         """Read current pixel-affecting inputs without cache or installed models.
 
@@ -389,6 +393,9 @@ class Artifacts:
         not a cache path or runtime selection. Omission retains identity from
         the durable manifest. Explicit preparation supplies a new complete set.
         Appearance and placement order do not enter preparation identity.
+        Explicit photo reset captures a zero mask identity only for a saved
+        mask belonging to another photo. It never writes masks or bypasses
+        damaged/missing mask components; valid same-photo edits are retained.
         """
         with self.calibration.lock(name):
             config = self.calibration.config(name)
@@ -415,8 +422,20 @@ class Artifacts:
                     else config.bounding_box
                 )
                 checksum = "0" * 64
-                if self.workspace.template_mask_file(name, placement_id).exists():
-                    checksum = self.calibration.mask(name, placement_id).checksum
+                has_mask = self.workspace.template_mask_file(name, placement_id).exists()
+                if reset_masks_for_photo:
+                    has_mask = has_mask or any(
+                        self.workspace.template_mask_file(
+                            name, placement_id, source=source
+                        ).exists()
+                        for source in ("automatic", "metadata")
+                    )
+                if has_mask:
+                    try:
+                        checksum = self.calibration.mask(name, placement_id).checksum
+                    except MaskPhotoMismatch:
+                        if not reset_masks_for_photo:
+                            raise
                 placements.append(
                     PlacementInput(
                         id=placement_id,
