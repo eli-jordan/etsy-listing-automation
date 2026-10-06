@@ -36,7 +36,7 @@ class Store:
             now = time.time()
             job = job.model_copy(update={**changes, "updated": now})
             event = Event(
-                sequence=len(job.events) + 1,
+                sequence=job.events[-1].sequence + 1 if job.events else 1,
                 job_id=job.id,
                 phase=job.phase,
                 step=job.step,
@@ -45,11 +45,17 @@ class Store:
                 placements_total=len(job.snapshot.placements),
                 error=job.error,
             )
-            job = job.model_copy(update={"events": (*job.events, event)})
-            write_bytes_atomic(
-                self.workspace.preparation_job_file(job.id),
-                json_bytes(job.model_dump(mode="json")),
-                durable=True,
-            )
+            last = job.events[-1] if job.events else None
+            if last is None or (last.phase, last.step, last.placements_completed, last.error) != (
+                event.phase,
+                event.step,
+                event.placements_completed,
+                event.error,
+            ):
+                job = job.model_copy(update={"events": (*job.events, event)[-512:]})
+            data = json_bytes(job.model_dump(mode="json"))
+            if len(data) > 4 * 1024 * 1024:
+                raise ValueError("Preparation journal exceeds size limit")
+            write_bytes_atomic(self.workspace.preparation_job_file(job.id), data, durable=True)
             self.condition.notify_all()
             return job

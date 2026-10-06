@@ -77,6 +77,10 @@ class Job(Record):
     error: str | None = None
     events: tuple[Event, ...] = ()
 
+    @property
+    def last_event_sequence(self) -> int:
+        return self.events[-1].sequence if self.events else 0
+
 
 def placement_key(value: str | None) -> str:
     return "" if value is None else value

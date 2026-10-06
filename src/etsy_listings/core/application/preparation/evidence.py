@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import hashlib
 import json
+import threading
+from collections.abc import Callable
 from dataclasses import asdict
 from pathlib import Path
 from typing import Any
@@ -23,10 +25,13 @@ from etsy_listings.core.preparation.numerics import (
 from etsy_listings.core.preparation.predictions import cache_path, read_prediction
 from etsy_listings.core.workspace import Workspace
 from etsy_listings.core.workspace.atomic import write_bytes_atomic
-from etsy_listings.core.workspace.calibration import json_bytes
+from etsy_listings.core.workspace.calibration import CalibrationStore, json_bytes
 
 # Checkpoint and preprocessing semantics are immutable for this supported fitter.
 # Installation IDs intentionally do not change compatible evidence identity.
+_PUBLISHERS: set[str] = set()
+_PUBLISHER_LOCK = threading.Lock()
+
 CHECKPOINTS = (
     "09cfdd258cb281fa006cf1afcd2284376d16687d/"
     "08c3930bb641abf786ba44ce92547507ebefbc16/"
@@ -127,23 +132,61 @@ class EvidenceStore:
         }
         lighting = arrays["lighting"]
         return Evidence(
-            crop_of(value, inputs),
-            EvidenceIdentity(**value.identity),
-            arrays["normals"][0],
-            lighting[0],
-            lighting[1],
-            lighting[2],
-            arrays["depth"][0, :, :, 0],
+            crop=crop_of(value, inputs),
+            identity=EvidenceIdentity(**value.identity),
+            normals=arrays["normals"][0],
+            shading=lighting[1],
+            albedo=lighting[0],
+            residual=lighting[2],
+            depth=arrays["depth"][0, :, :, 0],
         )
 
     def retain(
-        self, template: str, inputs: PreparationInputs, values: tuple[CropEvidence, ...]
+        self,
+        template: str,
+        inputs: PreparationInputs,
+        values: tuple[CropEvidence, ...],
+        *,
+        job_order: int,
+        checkpoint: Callable[[str], None] = lambda _: None,
+    ) -> tuple[CropEvidence, ...]:
+        identity = uuid4().hex
+        directory = self.workspace.preparation_prediction_set(template, identity)
+        key = str(directory.resolve()).casefold()
+        with _PUBLISHER_LOCK:
+            _PUBLISHERS.add(key)
+        try:
+            return self._retain(
+                template,
+                inputs,
+                values,
+                job_order=job_order,
+                identity=identity,
+                checkpoint=checkpoint,
+            )
+        finally:
+            with _PUBLISHER_LOCK:
+                _PUBLISHERS.discard(key)
+
+    def publishing(self, directory: Path) -> bool:
+        with _PUBLISHER_LOCK:
+            return str(directory.resolve()).casefold() in _PUBLISHERS
+
+    def _retain(
+        self,
+        template: str,
+        inputs: PreparationInputs,
+        values: tuple[CropEvidence, ...],
+        *,
+        job_order: int,
+        identity: str,
+        checkpoint: Callable[[str], None],
     ) -> tuple[CropEvidence, ...]:
         if len(self.select(inputs, values)) != len(inputs.placements):
             raise ValueError("Prediction replacement must cover the complete placement set")
-        identity = uuid4().hex
         directory = self.workspace.preparation_prediction_set(template, identity)
         directory.mkdir(parents=True)
+        checkpoint("predictions_staging")
         retained = []
         for value in values:
             predictions = []
@@ -157,15 +200,20 @@ class EvidenceStore:
         document = {
             "schema_version": 1,
             "id": identity,
+            "job_order": job_order,
+            "inputs": inputs.model_dump(mode="json"),
             "evidence": [v.model_dump(mode="json") for v in retained],
         }
         for value in retained:
             if not self.valid(value):
                 raise ValueError("Invalid retained prediction replacement")
         write_bytes_atomic(directory / "manifest.json", json_bytes(document), durable=True)
-        write_bytes_atomic(
-            self.workspace.preparation_prediction_current(template),
-            json_bytes(document),
-            durable=True,
-        )
+        checkpoint("predictions_validated")
+        with CalibrationStore(self.workspace).lock(template):
+            write_bytes_atomic(
+                self.workspace.preparation_prediction_current(template),
+                json_bytes(document),
+                durable=True,
+            )
+        checkpoint("predictions_pointer")
         return tuple(retained)

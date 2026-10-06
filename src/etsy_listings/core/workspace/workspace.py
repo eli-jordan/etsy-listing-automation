@@ -566,6 +566,9 @@ class Workspace:
             sorted(p.name for p in directory.iterdir() if p.is_dir()) if directory.is_dir() else []
         )
 
+    def preparation_work_ids(self) -> list[str]:
+        return self._cache_entries("preparation/work", directories=True)
+
     def remove_preparation_work(self, job: str) -> None:
         remove_tree(self.preparation_work(job))
 

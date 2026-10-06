@@ -111,7 +111,12 @@ class Execution:
         except StalePreparation:
             self.write(identity, phase="superseded")
         except Exception as exc:
-            self.write(identity, phase="failed", error=str(exc) or type(exc).__name__)
+            latest = self.owner.status(identity)
+            self.write(
+                identity,
+                phase="cancelled" if latest.cancel_intent else "failed",
+                error=str(exc) or type(exc).__name__,
+            )
 
     def finalize_published(self, identity: str) -> bool:
         job = self.owner.status(identity)
@@ -229,7 +234,11 @@ class Execution:
                 values.append(selected)
             assignments[placement_key(placement.id)] = selected.id
         retained = self.evidence.retain(
-            job.template, job.snapshot, tuple({v.id: v for v in values}.values())
+            job.template,
+            job.snapshot,
+            tuple({v.id: v for v in values if v.id in set(assignments.values())}.values()),
+            job_order=job.order,
+            checkpoint=lambda step: self.owner.checkpoint(identity, step),
         )
         inputs = job.snapshot.model_copy(
             update={
@@ -375,7 +384,10 @@ class Execution:
                 ):
                     raise ValueError("Saved mask snapshot checksum mismatch")
             with Image.open(mask_path) as image:
-                mask = np.asarray(image.convert("L"), np.float32) / np.float32(255)
+                from etsy_listings.core.render import FloatMap
+
+                mask: FloatMap = np.array(image.convert("L"), dtype=np.float32)
+                mask /= np.float32(255)
             record = job.cpu_checkpoints.get(placement_key(placement.id))
             archive = self.owner.workspace.preparation_work(
                 identity, "maps-" + placement_key(placement.id) + ".npz"

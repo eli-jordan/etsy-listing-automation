@@ -276,3 +276,20 @@ allowed_importers = [
     "etsy_listings.core.preparation._geometry",
 ]
 as_packages = false
+
+[[tool.importlinter.contracts]]
+name = "Preparation jobs go through Preparations"
+type = "protected"
+protected_modules = [
+    "etsy_listings.core.application.preparation.execution",
+    "etsy_listings.core.application.preparation.store",
+]
+allowed_importers = ["etsy_listings.core.application.preparation.coordinator"]
+as_packages = false
+
+[[tool.importlinter.contracts]]
+name = "Preparation prediction retention belongs to job execution"
+type = "protected"
+protected_modules = ["etsy_listings.core.application.preparation.evidence"]
+allowed_importers = ["etsy_listings.core.application.preparation.execution"]
+as_packages = false

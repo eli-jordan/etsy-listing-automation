@@ -10,6 +10,7 @@ import hashlib
 import time
 from collections.abc import Callable
 from concurrent.futures import Executor, Future, ThreadPoolExecutor
+from contextlib import suppress
 from typing import Any
 from uuid import uuid4
 
@@ -26,7 +27,8 @@ from etsy_listings.core.application.preparation.models import (
     placement_key,
 )
 from etsy_listings.core.application.preparation.store import Store
-from etsy_listings.core.preparation.artifacts import Artifacts
+from etsy_listings.core.errors import UserFacingError
+from etsy_listings.core.preparation.artifacts import Artifacts, PreparationInputs
 from etsy_listings.core.preparation.runtime import Runtime
 from etsy_listings.core.render.config import MarigoldRenderer
 from etsy_listings.core.workspace import Workspace
@@ -47,6 +49,7 @@ class Preparations:
         workspace: Workspace,
         *,
         runtime: PreparationRuntime | None = None,
+        artifacts: Artifacts | None = None,
         gpu_executor: Executor | None = None,
         cpu_executor: Executor | None = None,
         checkpoint: Callable[[str, str], None] = lambda _job, _step: None,
@@ -54,7 +57,7 @@ class Preparations:
         self.workspace = workspace
         self.runtime: PreparationRuntime = runtime if runtime is not None else Runtime()
         self.calibration = CalibrationStore(workspace)
-        self.artifacts = Artifacts(workspace)
+        self.artifacts = artifacts if artifacts is not None else Artifacts(workspace)
         self.store = Store(workspace)
         self.gpu = gpu_executor or ThreadPoolExecutor(
             max_workers=1, thread_name_prefix="preparation-gpu"
@@ -94,9 +97,12 @@ class Preparations:
             raise ValueError("Invalid event cursor or wait")
         with self.store.condition:
             job = self.store.read(identity)
-            if after > len(job.events):
+            last_sequence = job.events[-1].sequence if job.events else 0
+            if after > last_sequence or (
+                after and job.events and after < job.events[0].sequence - 1
+            ):
                 raise ValueError("Event cursor is unavailable; resync from status")
-            if wait and after == len(job.events) and job.phase not in TERMINAL:
+            if wait and after == last_sequence and job.phase not in TERMINAL:
                 self.store.condition.wait(wait)
                 job = self.store.read(identity)
             return tuple(e for e in job.events if e.sequence > after)
@@ -157,7 +163,7 @@ class Preparations:
                 if (
                     job.template == template
                     and job.phase not in TERMINAL
-                    and job.snapshot.identity() == snapshot.identity()
+                    and self.execution.geometry(job.snapshot) == self.execution.geometry(snapshot)
                 ):
                     return self.store.write(job, receipts={**job.receipts, request_id: digest})
         # Deep inspection may take 25 seconds. Never hold a journal or template
@@ -179,7 +185,8 @@ class Preparations:
                 if (
                     existing.template == template
                     and existing.phase not in TERMINAL
-                    and existing.snapshot.identity() == snapshot.identity()
+                    and self.execution.geometry(existing.snapshot)
+                    == self.execution.geometry(snapshot)
                 ):
                     return self.store.write(
                         existing, receipts={**existing.receipts, request_id: digest}
@@ -234,12 +241,21 @@ class Preparations:
             call = self._call if self._call and self._call[0] == identity else None
             worker = self._worker
         if call and worker:
-            worker.cancel(call[1])
+            with suppress(RuntimeError, OSError):
+                worker.cancel(call[1])
         return job
+
+    def _requires_retry(self, template: str, inputs: PreparationInputs, jobs: list[Job]) -> bool:
+        latest = next((job for job in reversed(jobs) if job.template == template), None)
+        return (
+            latest is not None
+            and latest.phase in {"failed", "cancelled"}
+            and self.execution.geometry(latest.snapshot) == self.execution.geometry(inputs)
+        )
 
     def reconcile_saved(self, template: str) -> Job | None:
         """CPU work only. Missing complete evidence never authorizes inference."""
-        with self.calibration.lock(template), self.store.condition:
+        with self.calibration.lock(template):
             calibration = self.calibration.read(template)
             if not isinstance(calibration.config.renderer, MarigoldRenderer):
                 return None
@@ -247,6 +263,8 @@ class Preparations:
             if self.artifacts.readiness(template, inputs).can_render:
                 return None
             jobs = self.store.jobs()
+            if self._requires_retry(template, inputs, jobs):
+                return None
             selected = self.execution.evidence.select(
                 inputs, self.execution.evidence.candidates(template, jobs)
             )
@@ -262,31 +280,35 @@ class Preparations:
                     )
                 }
             )
-            for job in jobs:
-                if job.template == template and job.phase not in TERMINAL:
-                    if self.execution.geometry(job.snapshot) == self.execution.geometry(inputs):
-                        return job
-                    if job.kind == "rebuild" and job.id not in self._active:
-                        self.store.write(job, phase="superseded")
-            now = time.time()
-            identity = uuid4().hex
-            job = Job(
-                id=identity,
-                order=max((j.order for j in jobs), default=0) + 1,
-                template=template,
-                request_id="reconcile-" + identity,
-                request_digest=inputs.identity(),
-                action="prepare",
-                kind="rebuild",
-                config_revision=calibration.revision,
-                snapshot=inputs,
-                created=now,
-                updated=now,
-                evidence=tuple({v.id: v for v in selected.values()}.values()),
-                placement_evidence={key: value.id for key, value in selected.items()},
-            )
-            self.execution.capture(job)
-            job = self.store.write(job)
+            with self.store.condition:
+                jobs = self.store.jobs()
+                if self._requires_retry(template, inputs, jobs):
+                    return None
+                for job in jobs:
+                    if job.template == template and job.phase not in TERMINAL:
+                        if self.execution.geometry(job.snapshot) == self.execution.geometry(inputs):
+                            return job
+                        if job.kind == "rebuild" and job.id not in self._active:
+                            self.store.write(job, phase="superseded")
+                now = time.time()
+                identity = uuid4().hex
+                job = Job(
+                    id=identity,
+                    order=max((j.order for j in jobs), default=0) + 1,
+                    template=template,
+                    request_id="reconcile-" + identity,
+                    request_digest=inputs.identity(),
+                    action="prepare",
+                    kind="rebuild",
+                    config_revision=calibration.revision,
+                    snapshot=inputs,
+                    created=now,
+                    updated=now,
+                    evidence=tuple({v.id: v for v in selected.values()}.values()),
+                    placement_evidence={key: value.id for key, value in selected.items()},
+                )
+                self.execution.capture(job)
+                job = self.store.write(job)
         self._schedule()
         return job
 
@@ -312,7 +334,11 @@ class Preparations:
                     error=None if isinstance(exc, Stopped) else str(exc),
                 )
         for name in self.workspace.template_names(include_uncalibrated=True):
-            self.reconcile_saved(name)
+            # A damaged or changed-photo template remains an actionable reader
+            # refusal; it must not stop recovery of unrelated saved templates.
+            with suppress(UserFacingError, ValueError, OSError):
+                self.reconcile_saved(name)
+            self.cleanup(name)
 
     def start(self) -> None:
         """Recover and reconcile before scheduling. Hosts run this off the event loop."""
@@ -324,9 +350,11 @@ class Preparations:
 
     def close(self) -> None:
         """Finish active phases and retain resumable records; do not imply Cancel."""
-        self._closing = True
+        with self.store.condition:
+            self._closing = True
+            futures = list(self._futures)
         try:
-            for future in list(self._futures):
+            for future in futures:
                 future.result()
         finally:
             if self._worker:
@@ -368,6 +396,11 @@ class Preparations:
             with self.store.condition:
                 self._active.discard(identity)
                 setattr(self, "_" + lane + "_busy", False)
+            job = self.status(identity)
+            if job.phase == "superseded" and not self._closing:
+                self.reconcile_saved(job.template)
+            if job.phase in TERMINAL:
+                self.cleanup(job.template)
             self._schedule()
 
     def cleanup(self, template: str) -> dict[str, list[str]]:
@@ -376,25 +409,36 @@ class Preparations:
 
         removed_sets = []
         removed_work = []
-        with self.calibration.lock(template), self.store.condition:
+        with self.calibration.lock(template):
             jobs = self.store.jobs()
             current = set()
+            replacement_order = 0
             try:
                 pointer = json.loads(
                     self.workspace.preparation_prediction_current(template).read_bytes()
                 )
                 self.workspace.preparation_prediction_set(template, pointer["id"])
                 current.add(pointer["id"])
+                replacement_inputs = PreparationInputs.model_validate(pointer["inputs"])
+                values = self.execution.evidence.current(template)
+                if len(self.execution.evidence.select(replacement_inputs, values)) == len(
+                    replacement_inputs.placements
+                ):
+                    replacement_order = pointer["job_order"]
             except (OSError, ValueError, TypeError, KeyError):
                 pass
             # Completed and superseded jobs cease holding obsolete complete sets.
             # Retire those references in their authoritative records before deletion.
-            for job in jobs:
-                if job.template != template or job.id in self._active:
-                    continue
-                if job.phase in {"completed", "superseded"}:
-                    self.store.write(job, evidence=(), cpu_checkpoints={})
-            jobs = self.store.jobs()
+            with self.store.condition:
+                for job in jobs:
+                    if job.template != template or job.id in self._active:
+                        continue
+                    retired = job.phase in {"completed", "superseded"} or (
+                        job.phase in {"failed", "cancelled"} and job.order < replacement_order
+                    )
+                    if retired and (job.evidence or job.cpu_checkpoints):
+                        self.store.write(job, evidence=(), cpu_checkpoints={})
+                jobs = self.store.jobs()
             referenced_paths = [
                 self.execution.evidence.path(p.path)
                 for job in jobs
@@ -403,8 +447,10 @@ class Preparations:
             ]
             for identity in self.workspace.preparation_prediction_sets(template):
                 directory = self.workspace.preparation_prediction_set(template, identity)
-                if identity not in current and not any(
-                    path.is_relative_to(directory) for path in referenced_paths
+                if (
+                    identity not in current
+                    and not self.execution.evidence.publishing(directory)
+                    and not any(path.is_relative_to(directory) for path in referenced_paths)
                 ):
                     self.workspace.remove_prediction_set(template, identity)
                     removed_sets.append(identity)
@@ -413,12 +459,20 @@ class Preparations:
                 if (
                     job.template == template
                     and job.id not in self._active
-                    and job.phase in {"completed", "superseded"}
+                    and (
+                        job.phase in {"completed", "superseded"}
+                        or (job.phase in {"failed", "cancelled"} and job.order < replacement_order)
+                    )
                     and directory.exists()
                     and not any(path.is_relative_to(directory) for path in referenced_paths)
                 ):
                     self.workspace.remove_preparation_work(job.id)
                     removed_work.append(job.id)
+            known_jobs = {job.id for job in jobs}
+            for identity in self.workspace.preparation_work_ids():
+                if identity not in known_jobs and identity not in self._active:
+                    self.workspace.remove_preparation_work(identity)
+                    removed_work.append(identity)
             generations = {
                 j.result["generation_id"]
                 for j in jobs
