@@ -237,7 +237,7 @@ def test_main_photo_change_refuses_mask_reuse_until_explicit_reset(workspace_roo
 
     import pytest
 
-    from etsy_listings.core.workspace.calibration import MaskUnavailable
+    from etsy_listings.core.workspace.calibration import MaskPhotoMismatch, MaskUnavailable
 
     store = make_store(workspace_root)
     png = BytesIO()
@@ -251,7 +251,7 @@ def test_main_photo_change_refuses_mask_reuse_until_explicit_reset(workspace_roo
     Image.new("RGB", (32, 32), "black").save(store.workspace.template_main_photo("example"))
     changed = store.read("example")
     assert changed.revision != saved.revision
-    with pytest.raises(MaskUnavailable, match="Main photo changed"):
+    with pytest.raises(MaskPhotoMismatch, match="Main photo changed"):
         store.mask("example")
     with pytest.raises(MaskUnavailable):
         store.install_automatic(
@@ -619,3 +619,16 @@ def test_template_alias_cannot_escape_workspace(workspace_root: Path, tmp_path: 
     with pytest.raises(PathEscapesWorkspaceError):
         store.read("escape")
     assert list(outside.iterdir()) == []
+
+
+@pytest.mark.parametrize("placement_id", [None, "unknown"])
+def test_unavailable_mask_is_not_a_main_photo_mismatch(
+    workspace_root: Path, placement_id: str | None
+) -> None:
+    from etsy_listings.core.workspace.calibration import MaskPhotoMismatch, MaskUnavailable
+
+    store = make_store(workspace_root)
+    with pytest.raises(MaskUnavailable) as refusal:
+        store.mask("example", placement_id)
+    assert type(refusal.value) is MaskUnavailable
+    assert not isinstance(refusal.value, MaskPhotoMismatch)
