@@ -15,7 +15,7 @@ from etsy_listings.core.render.config import (
     PhotoWarpRenderer,
 )
 from etsy_listings.core.workspace import Workspace
-from etsy_listings.core.workspace.calibration import CalibrationStore, SavedMask
+from etsy_listings.core.workspace.calibration import CalibrationStore, MaskPhotoMismatch, SavedMask
 
 
 @dataclass(frozen=True)
@@ -78,7 +78,9 @@ def preparation_view(preparations: Preparations, name: str) -> PreparationView:
                                 )
                                 break
             except (UserFacingError, ValueError, OSError) as exc:
-                reason = "photo_changed" if "Main photo changed" in str(exc) else "invalid_artifact"
+                reason = (
+                    "photo_changed" if isinstance(exc, MaskPhotoMismatch) else "invalid_artifact"
+                )
                 maps = Readiness("out_of_date", reason, str(exc))
         placements = []
         for identity in store.placement_ids(saved.config):

@@ -160,3 +160,37 @@ def test_failed_preparation_has_actionable_error_and_explicit_retry(page, prepar
     jobs = page.request.get(origin + "/api/preparation/jobs").json()
     assert len(jobs) == 2
     assert {job["phase"] for job in jobs} == {"failed", "completed"}
+
+
+def test_changed_photo_recovers_only_after_explicit_reset_and_prepare(
+    page, workspace_root: Path, preparation_runtime
+):
+    from etsy_listings.core.workspace import Workspace
+
+    select_template(page)
+    page.get_by_role("button", name="Prepare template", exact=True).click()
+    ready(page)
+    calls = sum(len(worker.calls) for worker in preparation_runtime.workers)
+    workspace = Workspace.discover(root_override=workspace_root)
+    photo = workspace.template_main_photo("marigold-shirt")
+    with Image.open(photo) as source:
+        changed = source.convert("RGB")
+    changed.putpixel((30, 30), (17, 23, 41))
+    changed.save(photo)
+    page.reload()
+    page.locator(".template-rail__item[data-template=marigold-shirt]").click()
+    recovery = page.get_by_role("button", name="Reset masks and prepare", exact=True)
+    recovery.wait_for()
+    assert page.get_by_role("button", name="Edit mask", exact=True).is_disabled()
+    assert sum(len(worker.calls) for worker in preparation_runtime.workers) == calls
+    with page.expect_response(
+        lambda r: (
+            "/api/preparation/jobs" in r.url and r.request.method == "POST" and r.status == 202
+        )
+    ) as submitted:
+        recovery.click()
+    assert submitted.value.request.post_data_json["reset_masks_for_photo"] is True
+    assert submitted.value.request.post_data_json["action"] == "prepare_again"
+    ready(page)
+    assert page.get_by_role("button", name="Edit mask", exact=True).is_enabled()
+    assert sum(len(worker.calls) for worker in preparation_runtime.workers) == calls + 3
