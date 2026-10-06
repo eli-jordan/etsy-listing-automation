@@ -163,6 +163,10 @@ class Preparations:
                 if (
                     job.template == template
                     and job.phase not in TERMINAL
+                    and (
+                        action != "prepare_again"
+                        or (job.kind == "prepare" and job.action == "prepare_again")
+                    )
                     and self.execution.geometry(job.snapshot) == self.execution.geometry(snapshot)
                 ):
                     return self.store.write(job, receipts={**job.receipts, request_id: digest})
@@ -185,6 +189,10 @@ class Preparations:
                 if (
                     existing.template == template
                     and existing.phase not in TERMINAL
+                    and (
+                        action != "prepare_again"
+                        or (existing.kind == "prepare" and existing.action == "prepare_again")
+                    )
                     and self.execution.geometry(existing.snapshot)
                     == self.execution.geometry(snapshot)
                 ):
@@ -481,5 +489,9 @@ class Preparations:
                 and j.result
                 and "generation_id" in j.result
             }
-            removed_maps = self.artifacts.cleanup(template, retained_generations=generations)
+            removed_maps: list[str] = []
+            # An unreadable pointer cannot identify the last valid generation.
+            # Preserve every generation, but allow explicit preparation to repair it.
+            with suppress(ValueError, OSError):
+                removed_maps = self.artifacts.cleanup(template, retained_generations=generations)
         return {"prediction_sets": removed_sets, "work": removed_work, "generations": removed_maps}

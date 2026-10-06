@@ -911,3 +911,66 @@ def test_request_receipts_do_not_emit_duplicate_step_events(workspace_root):
     with pytest.raises(ValueError, match="resync"):
         coordinator.events(first.id, after=2)
     coordinator.close()
+
+
+def test_prepare_again_refreshes_models_even_with_matching_active_cpu_rebuild(workspace_root):
+    import threading
+
+    workspace, runtime, initial, first = prepare_template(workspace_root)
+    initial.close()
+    entered = threading.Event()
+    release = threading.Event()
+
+    def checkpoint(identity, step):
+        if step == "flattening" and not entered.is_set():
+            entered.set()
+            assert release.wait(10)
+
+    coordinator = Preparations(workspace, runtime=runtime, checkpoint=checkpoint)
+    saved = move_box(workspace, 1)
+    rebuilding = coordinator.reconcile_saved("shirt")
+    coordinator.start()
+    assert entered.wait(10)
+    try:
+        assert (
+            coordinator.submit("shirt", config_revision=saved.revision, request_id="ordinary").id
+            == rebuilding.id
+        )
+        refresh = coordinator.submit(
+            "shirt", config_revision=saved.revision, request_id="fresh", action="prepare_again"
+        )
+        assert refresh.id != rebuilding.id
+    finally:
+        release.set()
+    assert wait_terminal(coordinator, refresh.id).phase == "completed"
+    assert wait_terminal(coordinator, rebuilding.id).phase == "completed"
+    coordinator.close()
+    assert sum(len(w.calls) for w in runtime.workers) == 6
+
+
+def test_invalid_current_map_pointer_does_not_prevent_explicit_preparation_repair(workspace_root):
+    import json
+
+    from etsy_listings.core.preparation.artifacts import Artifacts
+
+    workspace, runtime, initial, first = prepare_template(workspace_root)
+    initial.close()
+    pointer = json.loads(workspace.template_map_current("shirt").read_bytes())
+    pointer["schema_version"] = 2
+    workspace.template_map_current("shirt").write_text(json.dumps(pointer), encoding="utf-8")
+    coordinator = Preparations(workspace, runtime=runtime)
+    job = coordinator.submit(
+        "shirt",
+        config_revision=CalibrationStore(workspace).read("shirt").revision,
+        request_id="repair",
+    )
+    coordinator.start()
+    result = wait_terminal(coordinator, job.id)
+    coordinator.close()
+    assert result.phase == "completed", result.error
+    assert (
+        Artifacts(workspace)
+        .readiness("shirt", Artifacts(workspace).saved_inputs("shirt"))
+        .can_render
+    )
+    assert len(runtime.workers) == 1
