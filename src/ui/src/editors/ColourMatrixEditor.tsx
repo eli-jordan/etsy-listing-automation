@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import type { PhotoWarpTemplate } from "../types";
 import { useCallback, useMemo, useState } from "react";
 import type { PreviewJob } from "../components/PreviewPanel";
@@ -6,6 +7,7 @@ import type { ColourMatrixTemplate } from "../types";
 import { EditorShell, OneBoxCanvas } from "./EditorShell";
 
 interface Props {
+  rendererControls?: ReactNode;
   templateName: string;
   config: PhotoWarpTemplate<ColourMatrixTemplate>;
   colours: string[];
@@ -26,6 +28,7 @@ interface Props {
  * shell is the choice of which colour the canvas is showing, and a preview
  * that renders all of them. */
 function PhotoWarpColourMatrixEditor({
+  rendererControls,
   templateName,
   config,
   colours,
@@ -83,6 +86,7 @@ function PhotoWarpColourMatrixEditor({
 
   return (
     <EditorShell
+      {...(rendererControls ? { rendererControls } : {})}
       templateName={templateName}
       config={config}
       onChange={onChange}

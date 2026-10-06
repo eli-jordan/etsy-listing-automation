@@ -1,3 +1,4 @@
+import type { PreparationJob } from "../api/preparation";
 import { useMemo, useState } from "react";
 import { templateThumbnailUrl } from "../api/calibrator";
 import type { TemplateKind, TemplateSummary } from "../types";
@@ -29,7 +30,7 @@ const VISIBLE_LIMIT = 5;
 type StatusFilter = "needs" | "all" | "done";
 
 function needsCalibration(t: TemplateSummary): boolean {
-  return t.status === "needs-calibration";
+  return t.renderer === "marigold" ? !t.maps?.can_render : t.status === "needs-calibration";
 }
 
 function countLabel(n: number, noun: string): string {
@@ -88,6 +89,13 @@ function Row({ template, selected, onSelect }: RowProps) {
       <span className="template-rail__text">
         <span className="template-rail__name">{template.name}</span>
         <span className="template-rail__meta">{describe(template)}</span>
+        {template.renderer === "marigold" && (
+          <span
+            className={`mg-rail-state${template.maps?.can_render ? " mg-rail-state--ready" : ""}`}
+          >
+            {template.maps?.can_render ? "Ready" : "Needs maps"}
+          </span>
+        )}
       </span>
     </button>
   );
@@ -123,12 +131,14 @@ function Group({ heading, templates, selected, onSelect }: GroupProps) {
 }
 
 interface TemplateRailProps {
+  jobs?: PreparationJob[];
   templates: TemplateSummary[];
   selected: string | null;
   onSelect: (name: string) => void;
 }
 
-export function TemplateRail({ templates, selected, onSelect }: TemplateRailProps) {
+export function TemplateRail({ templates, selected, onSelect, jobs = [] }: TemplateRailProps) {
+  const marigold = templates.some((t) => t.renderer === "marigold");
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState<StatusFilter>("all");
   const [kind, setKind] = useState<TemplateKind | null>(null);
@@ -180,9 +190,9 @@ export function TemplateRail({ templates, selected, onSelect }: TemplateRailProp
       <div className="template-rail__filters">
         {(
           [
-            ["needs", `Needs calibration ${outstanding.length}`],
+            ["needs", `${marigold ? "Needs maps" : "Needs calibration"} ${outstanding.length}`],
             ["all", `All ${templates.length}`],
-            ["done", `Done ${doneCount}`],
+            ["done", `${marigold ? "Ready" : "Done"} ${doneCount}`],
           ] as const
         ).map(([value, label]) => (
           <button
@@ -228,6 +238,23 @@ export function TemplateRail({ templates, selected, onSelect }: TemplateRailProp
             onSelect={onSelect}
           />
         </>
+      )}
+      {jobs.length > 0 && (
+        <section className="mg-queue">
+          <h2>Preparation queue</h2>
+          {jobs.map((job) => (
+            <button type="button" key={job.id} onClick={() => onSelect(job.template)}>
+              <span>{job.template}</span>
+              <span>
+                {job.phase === "queued"
+                  ? "Queued"
+                  : job.kind === "rebuild"
+                    ? "Updating maps"
+                    : "Preparing"}
+              </span>
+            </button>
+          ))}
+        </section>
       )}
     </nav>
   );

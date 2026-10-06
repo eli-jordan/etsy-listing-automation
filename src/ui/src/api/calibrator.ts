@@ -1,3 +1,4 @@
+import type { MaskEdit } from "./preparation";
 import { api } from "./client";
 import type {
   BoundingBox,
@@ -31,6 +32,7 @@ export async function listTemplates(): Promise<TemplateSummary[]> {
  * plain array when inferring the response type of a 3-way discriminated
  * union -- the server still enforces exactly 4 points either way.
  */
+const templateRevisions = new Map<string, string>();
 export interface TemplateConfigDocument {
   config: TemplateConfigState;
   modifiedAt: string;
@@ -43,21 +45,63 @@ export async function getTemplateConfig(name: string): Promise<TemplateConfigDoc
   if (error) return null;
   const modifiedAt = response.headers.get("Last-Modified");
   if (modifiedAt === null) throw new CalibratorApiError("template config has no modification time");
+  const revision = response.headers.get("ETag");
+  if (revision) templateRevisions.set(name, revision);
   return { config: data as unknown as TemplateConfigState, modifiedAt };
 }
 
-export async function saveTemplateConfig(
+async function writeTemplateConfig(
   name: string,
   config: TemplateConfigState,
+  maskEdits: MaskEdit[] = [],
 ): Promise<TemplateConfigState> {
-  const { data, error } = await api.PUT("/api/templates/{name}/config", {
-    params: { path: { name } },
-    body: config,
+  const { data, error, response } = await api.PUT("/api/templates/{name}/config", {
+    params: { path: { name }, header: { "if-match": templateRevisions.get(name) ?? "" } },
+
+    body: { request_id: crypto.randomUUID(), config, mask_edits: maskEdits },
   });
-  if (error) throw new CalibratorApiError("could not save template.yaml");
+  if (error)
+    throw new CalibratorApiError(
+      response?.status === 409
+        ? "Template changed elsewhere. Reload before saving."
+        : "could not save template.yaml",
+    );
+  const revision = response?.headers.get("ETag");
+  if (revision) templateRevisions.set(name, revision);
   return data as unknown as TemplateConfigState;
 }
 
+// Keep one revision-bearing save in flight per template. Operations are objects
+// shared by successive draft snapshots; consume each only after its commit.
+const pendingSaves = new Map<string, Promise<TemplateConfigState>>();
+const committedOperations = new WeakSet<MaskEdit["operations"][number]>();
+export function saveTemplateConfig(
+  name: string,
+  config: TemplateConfigState,
+  maskEdits: MaskEdit[] = [],
+): Promise<TemplateConfigState> {
+  const previous = pendingSaves.get(name);
+  const write = async () => {
+    const edits = maskEdits
+      .map((edit) => ({
+        ...edit,
+        operations: edit.operations.filter((op) => !committedOperations.has(op)),
+      }))
+      .filter((edit) => edit.operations.length > 0);
+    const saved = await writeTemplateConfig(name, config, edits);
+    for (const edit of edits)
+      for (const operation of edit.operations) committedOperations.add(operation);
+    return saved;
+  };
+  const promise = previous ? previous.then(write) : write();
+  pendingSaves.set(name, promise);
+  void promise
+    .finally(() => {
+      if (pendingSaves.get(name) === promise) pendingSaves.delete(name);
+    })
+    .catch(() => {});
+  return promise;
+}
 /** What each photo will be taken as if this becomes a colour-matrix set.
  * Reporting only -- ADR-0004 makes the filename the source of truth. */
 export async function getColourReport(name: string): Promise<ColourReportRow[]> {

@@ -135,3 +135,61 @@ describe("renderPreview", () => {
     );
   });
 });
+
+describe("revision-aware mask saves", () => {
+  it("serializes saves with the new revision and consumes each pending stroke once", async () => {
+    const { api } = await import("./client");
+    const { getTemplateConfig, saveTemplateConfig } = await import("./calibrator");
+    vi.mocked(api.GET).mockResolvedValue({
+      data: CONFIG,
+      response: new Response(null, {
+        headers: { ETag: "revision-1", "Last-Modified": "Wed, 17 Sep 2026 18:30:00 GMT" },
+      }),
+    } as never);
+    await getTemplateConfig("race");
+    let finish!: (v: never) => void;
+    vi.mocked(api.PUT)
+      .mockImplementationOnce(
+        () =>
+          new Promise((r) => {
+            finish = r;
+          }),
+      )
+      .mockResolvedValueOnce({
+        data: CONFIG,
+        response: new Response(null, { headers: { ETag: "revision-3" } }),
+      } as never);
+    const operation = {
+      type: "stroke" as const,
+      mode: "mask" as const,
+      diameter_px: 12,
+      points: [[5, 6] as [number, number]],
+    };
+    const edits = [{ placement_id: null, operations: [operation] }];
+    const first = saveTemplateConfig("race", CONFIG, edits);
+    const second = saveTemplateConfig("race", CONFIG, edits);
+    expect(api.PUT).toHaveBeenCalledTimes(1);
+    expect(api.PUT).toHaveBeenNthCalledWith(
+      1,
+      "/api/templates/{name}/config",
+      expect.objectContaining({
+        params: { path: { name: "race" }, header: { "if-match": "revision-1" } },
+        body: { request_id: expect.any(String), config: CONFIG, mask_edits: edits },
+      }),
+    );
+    finish({
+      data: CONFIG,
+      response: new Response(null, { headers: { ETag: "revision-2" } }),
+    } as never);
+    await first;
+    await second;
+    expect(api.PUT).toHaveBeenNthCalledWith(
+      2,
+      "/api/templates/{name}/config",
+      expect.objectContaining({
+        params: { path: { name: "race" }, header: { "if-match": "revision-2" } },
+        body: { request_id: expect.any(String), config: CONFIG, mask_edits: [] },
+      }),
+    );
+  });
+});
