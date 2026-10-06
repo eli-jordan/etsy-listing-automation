@@ -52,7 +52,7 @@ from etsy_listings.core.application.refusals import (
     TemplatePreviewKindMismatch,
 )
 from etsy_listings.core.config.slug import SlugCollisionError
-from etsy_listings.core.render.config import AnyTemplate, TemplateConfig
+from etsy_listings.core.render.config import AnyTemplate, PreparationRequired, TemplateConfig
 from etsy_listings.core.render.io import encode_png
 from etsy_listings.core.workspace.workspace import Workspace
 from etsy_listings.server.api.designs import resolve_design
@@ -188,12 +188,13 @@ def get_config(template: Existing, response: Response) -> AnyTemplate:
         saved = read_config(template.workspace, template.name)
     except TemplateConfigMissing as exc:
         raise _not_found(exc) from exc
+    response.headers["ETag"] = f'"{saved.revision}"'
     response.headers["Last-Modified"] = format_datetime(saved.modified_at, usegmt=True)
     return saved.config
 
 
 @router.put("/{name}/config", response_model=TemplateConfig)
-def put_config(template: Existing, body: AnyTemplate) -> AnyTemplate:
+def put_config(template: Existing, body: TemplateConfig) -> AnyTemplate:
     save_config(template.workspace, template.name, body)
     return body
 
@@ -206,20 +207,16 @@ def _geometry(body: PreviewRequest) -> PreviewGeometry:
         return PreviewGeometry(
             kind="multiple",
             boxes=tuple(p.bounding_box for p in body.placements),
-            displace=body.displace,
-            shade=body.shade,
+            renderer=body.renderer,
         )
     if isinstance(body, ColourMatrixPreviewRequest):
         return PreviewGeometry(
             kind="colour-matrix",
             boxes=(body.bounding_box,),
             colour=body.colour,
-            displace=body.displace,
-            shade=body.shade,
+            renderer=body.renderer,
         )
-    return PreviewGeometry(
-        kind="single", boxes=(body.bounding_box,), displace=body.displace, shade=body.shade
-    )
+    return PreviewGeometry(kind="single", boxes=(body.bounding_box,), renderer=body.renderer)
 
 
 PreviewScale = Literal["editor", "full"]
@@ -302,6 +299,8 @@ def preview(template: Existing, body: PreviewRequest, scale: PreviewScale = "ful
         )
     except (TemplateConfigMissing, TemplatePhotoMissing) as exc:
         raise _not_found(exc) from exc
+    except PreparationRequired as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     except TemplatePreviewKindMismatch as exc:
         raise _bad_request(exc) from exc
     return _render_preview_response(scene, scale)
@@ -345,6 +344,8 @@ def design_preview(
 
     try:
         scene = saved_preview(workspace, template.name, colour=colour, design=design_path)
+    except PreparationRequired as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     except (TemplateConfigMissing, TemplatePhotoMissing) as exc:
         raise _not_found(exc) from exc
     return _render_preview_response(scene, scale)

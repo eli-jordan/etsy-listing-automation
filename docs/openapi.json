@@ -1109,6 +1109,7 @@
         "type": "object"
       },
       "ColourMatrixPreviewRequest": {
+        "additionalProperties": false,
         "description": "Disambiguated from the other two preview shapes by required fields\nalone (``colour`` here, ``placements`` on ``MultiplePreviewRequest``,\nneither on ``SinglePreviewRequest``) -- extra fields are ignored rather\nthan forbidden, since a natural client pattern is spreading a whole\n``GET.../config`` response (which includes ``kind``) into the body.",
         "properties": {
           "bounding_box": {
@@ -1140,30 +1141,41 @@
             "title": "Design",
             "type": "string"
           },
-          "displace": {
-            "$ref": "#/components/schemas/DisplaceConfig",
-            "default": {
-              "enabled": false,
-              "strength": 0.0
-            }
+          "kind": {
+            "const": "colour-matrix",
+            "default": "colour-matrix",
+            "title": "Kind",
+            "type": "string"
           },
-          "shade": {
-            "$ref": "#/components/schemas/ShadeConfig",
-            "default": {
-              "blend": "soft-light",
-              "enabled": true,
-              "opacity": 0.6
-            }
+          "renderer": {
+            "discriminator": {
+              "mapping": {
+                "marigold": "#/components/schemas/MarigoldRenderer",
+                "photo-warp": "#/components/schemas/PhotoWarpRenderer"
+              },
+              "propertyName": "type"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/PhotoWarpRenderer"
+              },
+              {
+                "$ref": "#/components/schemas/MarigoldRenderer"
+              }
+            ],
+            "title": "Renderer"
           }
         },
         "required": [
           "colour",
-          "bounding_box"
+          "bounding_box",
+          "renderer"
         ],
         "title": "ColourMatrixPreviewRequest",
         "type": "object"
       },
       "ColourMatrixTemplate": {
+        "additionalProperties": false,
         "description": "One photo per colour, same design position in all of them. Scene\nimages are ``{colour-slug}.png`` per colour -- there is no\n``colours:`` list in the YAML, since the filenames present in the\ndirectory *are* the colour set.",
         "properties": {
           "bounding_box": {
@@ -1186,30 +1198,34 @@
             "title": "Bounding Box",
             "type": "array"
           },
-          "displace": {
-            "$ref": "#/components/schemas/DisplaceConfig",
-            "default": {
-              "enabled": false,
-              "strength": 0.0
-            }
-          },
           "kind": {
             "const": "colour-matrix",
             "default": "colour-matrix",
             "title": "Kind",
             "type": "string"
           },
-          "shade": {
-            "$ref": "#/components/schemas/ShadeConfig",
-            "default": {
-              "blend": "soft-light",
-              "enabled": true,
-              "opacity": 0.6
-            }
+          "renderer": {
+            "discriminator": {
+              "mapping": {
+                "marigold": "#/components/schemas/MarigoldRenderer",
+                "photo-warp": "#/components/schemas/PhotoWarpRenderer"
+              },
+              "propertyName": "type"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/PhotoWarpRenderer"
+              },
+              {
+                "$ref": "#/components/schemas/MarigoldRenderer"
+              }
+            ],
+            "title": "Renderer"
           }
         },
         "required": [
-          "bounding_box"
+          "bounding_box",
+          "renderer"
         ],
         "title": "ColourMatrixTemplate",
         "type": "object"
@@ -1486,6 +1502,7 @@
         "type": "object"
       },
       "DisplaceConfig": {
+        "additionalProperties": false,
         "description": "Implemented but off by default -- over-strong displacement looks\nmelted, so it's tuned per template in the calibrator's live preview.",
         "properties": {
           "enabled": {
@@ -3279,6 +3296,115 @@
         "title": "LiveVideoSnapshot",
         "type": "object"
       },
+      "MarigoldAppearance": {
+        "additionalProperties": false,
+        "properties": {
+          "fabric_texture": {
+            "default": 0.25,
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Fabric Texture",
+            "type": "number"
+          },
+          "lighting_source": {
+            "default": "estimated",
+            "enum": [
+              "estimated",
+              "photo"
+            ],
+            "title": "Lighting Source",
+            "type": "string"
+          },
+          "lighting_strength": {
+            "default": 1.0,
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Lighting Strength",
+            "type": "number"
+          },
+          "print_shine": {
+            "default": 0.0,
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Print Shine",
+            "type": "number"
+          }
+        },
+        "title": "MarigoldAppearance",
+        "type": "object"
+      },
+      "MarigoldConfig": {
+        "additionalProperties": false,
+        "properties": {
+          "appearance": {
+            "$ref": "#/components/schemas/MarigoldAppearance",
+            "default": {
+              "fabric_texture": 0.25,
+              "lighting_source": "estimated",
+              "lighting_strength": 1.0,
+              "print_shine": 0.0
+            }
+          },
+          "inference": {
+            "$ref": "#/components/schemas/MarigoldInference",
+            "default": {
+              "ensemble_size": 3,
+              "num_inference_steps": 10
+            }
+          }
+        },
+        "title": "MarigoldConfig",
+        "type": "object"
+      },
+      "MarigoldInference": {
+        "additionalProperties": false,
+        "properties": {
+          "ensemble_size": {
+            "default": 3,
+            "exclusiveMinimum": 0.0,
+            "title": "Ensemble Size",
+            "type": "integer"
+          },
+          "num_inference_steps": {
+            "default": 10,
+            "exclusiveMinimum": 0.0,
+            "title": "Num Inference Steps",
+            "type": "integer"
+          }
+        },
+        "title": "MarigoldInference",
+        "type": "object"
+      },
+      "MarigoldRenderer": {
+        "additionalProperties": false,
+        "properties": {
+          "config": {
+            "$ref": "#/components/schemas/MarigoldConfig",
+            "default": {
+              "appearance": {
+                "fabric_texture": 0.25,
+                "lighting_source": "estimated",
+                "lighting_strength": 1.0,
+                "print_shine": 0.0
+              },
+              "inference": {
+                "ensemble_size": 3,
+                "num_inference_steps": 10
+              }
+            }
+          },
+          "type": {
+            "const": "marigold",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type"
+        ],
+        "title": "MarigoldRenderer",
+        "type": "object"
+      },
       "MarketSnapshot": {
         "description": "One research, as the panel reads it back: the result's fields, when\nthe search ran, and the exact block the proposal was given. Holds each\nlisting's lead, never its full description (features/market-seo-20260924/spec.md, *What the\nproposal sees*).",
         "properties": {
@@ -3420,43 +3546,7 @@
         "type": "object"
       },
       "MultiplePreviewRequest": {
-        "properties": {
-          "design": {
-            "default": "bundled-grid",
-            "title": "Design",
-            "type": "string"
-          },
-          "displace": {
-            "$ref": "#/components/schemas/DisplaceConfig",
-            "default": {
-              "enabled": false,
-              "strength": 0.0
-            }
-          },
-          "placements": {
-            "items": {
-              "$ref": "#/components/schemas/Placement"
-            },
-            "title": "Placements",
-            "type": "array"
-          },
-          "shade": {
-            "$ref": "#/components/schemas/ShadeConfig",
-            "default": {
-              "blend": "soft-light",
-              "enabled": true,
-              "opacity": 0.6
-            }
-          }
-        },
-        "required": [
-          "placements"
-        ],
-        "title": "MultiplePreviewRequest",
-        "type": "object"
-      },
-      "MultipleTemplate": {
-        "description": "Several garments in one photo. ``displace``/``shade`` are scene-level\nonly -- one photo, one lighting pass; a placement needing different\nrendering treatment belongs in its own template instead.",
+        "additionalProperties": false,
         "properties": {
           "colour_coverage": {
             "default": "exact",
@@ -3467,12 +3557,10 @@
             "title": "Colour Coverage",
             "type": "string"
           },
-          "displace": {
-            "$ref": "#/components/schemas/DisplaceConfig",
-            "default": {
-              "enabled": false,
-              "strength": 0.0
-            }
+          "design": {
+            "default": "bundled-grid",
+            "title": "Design",
+            "type": "string"
           },
           "kind": {
             "const": "multiple",
@@ -3487,17 +3575,80 @@
             "title": "Placements",
             "type": "array"
           },
-          "shade": {
-            "$ref": "#/components/schemas/ShadeConfig",
-            "default": {
-              "blend": "soft-light",
-              "enabled": true,
-              "opacity": 0.6
-            }
+          "renderer": {
+            "discriminator": {
+              "mapping": {
+                "marigold": "#/components/schemas/MarigoldRenderer",
+                "photo-warp": "#/components/schemas/PhotoWarpRenderer"
+              },
+              "propertyName": "type"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/PhotoWarpRenderer"
+              },
+              {
+                "$ref": "#/components/schemas/MarigoldRenderer"
+              }
+            ],
+            "title": "Renderer"
           }
         },
         "required": [
-          "placements"
+          "placements",
+          "renderer"
+        ],
+        "title": "MultiplePreviewRequest",
+        "type": "object"
+      },
+      "MultipleTemplate": {
+        "additionalProperties": false,
+        "description": "Several garments in one photo. ``displace``/``shade`` are scene-level\nonly -- one photo, one lighting pass; a placement needing different\nrendering treatment belongs in its own template instead.",
+        "properties": {
+          "colour_coverage": {
+            "default": "exact",
+            "enum": [
+              "exact",
+              "subset"
+            ],
+            "title": "Colour Coverage",
+            "type": "string"
+          },
+          "kind": {
+            "const": "multiple",
+            "default": "multiple",
+            "title": "Kind",
+            "type": "string"
+          },
+          "placements": {
+            "items": {
+              "$ref": "#/components/schemas/Placement"
+            },
+            "title": "Placements",
+            "type": "array"
+          },
+          "renderer": {
+            "discriminator": {
+              "mapping": {
+                "marigold": "#/components/schemas/MarigoldRenderer",
+                "photo-warp": "#/components/schemas/PhotoWarpRenderer"
+              },
+              "propertyName": "type"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/PhotoWarpRenderer"
+              },
+              {
+                "$ref": "#/components/schemas/MarigoldRenderer"
+              }
+            ],
+            "title": "Renderer"
+          }
+        },
+        "required": [
+          "placements",
+          "renderer"
         ],
         "title": "MultipleTemplate",
         "type": "object"
@@ -3555,6 +3706,57 @@
         "title": "PhaseEvent",
         "type": "object"
       },
+      "PhotoWarpConfig": {
+        "additionalProperties": false,
+        "properties": {
+          "displace": {
+            "$ref": "#/components/schemas/DisplaceConfig",
+            "default": {
+              "enabled": false,
+              "strength": 0.0
+            }
+          },
+          "shade": {
+            "$ref": "#/components/schemas/ShadeConfig",
+            "default": {
+              "blend": "soft-light",
+              "enabled": true,
+              "opacity": 0.6
+            }
+          }
+        },
+        "title": "PhotoWarpConfig",
+        "type": "object"
+      },
+      "PhotoWarpRenderer": {
+        "additionalProperties": false,
+        "properties": {
+          "config": {
+            "$ref": "#/components/schemas/PhotoWarpConfig",
+            "default": {
+              "displace": {
+                "enabled": false,
+                "strength": 0.0
+              },
+              "shade": {
+                "blend": "soft-light",
+                "enabled": true,
+                "opacity": 0.6
+              }
+            }
+          },
+          "type": {
+            "const": "photo-warp",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type"
+        ],
+        "title": "PhotoWarpRenderer",
+        "type": "object"
+      },
       "PhraseScore": {
         "description": "One tag used by the scored listings: how many use it, and the sum of\ntheir scores normalised so the best phrase is 1.",
         "properties": {
@@ -3598,6 +3800,7 @@
         "type": "object"
       },
       "Placement": {
+        "additionalProperties": false,
         "description": "One garment within a ``multiple``-kind scene.",
         "properties": {
           "artwork": {
@@ -3634,9 +3837,14 @@
           "colour": {
             "title": "Colour",
             "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
           }
         },
         "required": [
+          "id",
           "colour",
           "bounding_box"
         ],
@@ -3900,6 +4108,7 @@
         "type": "object"
       },
       "Point": {
+        "additionalProperties": false,
         "properties": {
           "x": {
             "title": "X",
@@ -5006,6 +5215,7 @@
         "type": "object"
       },
       "ShadeConfig": {
+        "additionalProperties": false,
         "description": "Blends the base mockup photo's own greyscale lighting over the printed\ndesign, so a flat design picks up the garment's real fold shadows and\nlight falloff instead of looking pasted on as a flat rectangle -- this is\nwhy a plain flat-lay PNG is enough to mock up, with no purchased\nPhotoshop lighting map needed. On by default: almost every mockup needs\nit. ``multiply`` crushes prints on dark garments, so ``soft-light`` or a\nmid-grey pivot is used for those instead.",
         "properties": {
           "blend": {
@@ -5033,7 +5243,19 @@
         "type": "object"
       },
       "SinglePreviewRequest": {
+        "additionalProperties": false,
         "properties": {
+          "artwork": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Artwork"
+          },
           "bounding_box": {
             "maxItems": 4,
             "minItems": 4,
@@ -5054,34 +5276,56 @@
             "title": "Bounding Box",
             "type": "array"
           },
+          "colour": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Colour"
+          },
           "design": {
             "default": "bundled-grid",
             "title": "Design",
             "type": "string"
           },
-          "displace": {
-            "$ref": "#/components/schemas/DisplaceConfig",
-            "default": {
-              "enabled": false,
-              "strength": 0.0
-            }
+          "kind": {
+            "const": "single",
+            "default": "single",
+            "title": "Kind",
+            "type": "string"
           },
-          "shade": {
-            "$ref": "#/components/schemas/ShadeConfig",
-            "default": {
-              "blend": "soft-light",
-              "enabled": true,
-              "opacity": 0.6
-            }
+          "renderer": {
+            "discriminator": {
+              "mapping": {
+                "marigold": "#/components/schemas/MarigoldRenderer",
+                "photo-warp": "#/components/schemas/PhotoWarpRenderer"
+              },
+              "propertyName": "type"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/PhotoWarpRenderer"
+              },
+              {
+                "$ref": "#/components/schemas/MarigoldRenderer"
+              }
+            ],
+            "title": "Renderer"
           }
         },
         "required": [
-          "bounding_box"
+          "bounding_box",
+          "renderer"
         ],
         "title": "SinglePreviewRequest",
         "type": "object"
       },
       "SingleTemplate": {
+        "additionalProperties": false,
         "description": "One photo, one garment -- a lifestyle shot, a folded product photo,\nanything that isn't part of a colour set.",
         "properties": {
           "artwork": {
@@ -5126,30 +5370,34 @@
             ],
             "title": "Colour"
           },
-          "displace": {
-            "$ref": "#/components/schemas/DisplaceConfig",
-            "default": {
-              "enabled": false,
-              "strength": 0.0
-            }
-          },
           "kind": {
             "const": "single",
             "default": "single",
             "title": "Kind",
             "type": "string"
           },
-          "shade": {
-            "$ref": "#/components/schemas/ShadeConfig",
-            "default": {
-              "blend": "soft-light",
-              "enabled": true,
-              "opacity": 0.6
-            }
+          "renderer": {
+            "discriminator": {
+              "mapping": {
+                "marigold": "#/components/schemas/MarigoldRenderer",
+                "photo-warp": "#/components/schemas/PhotoWarpRenderer"
+              },
+              "propertyName": "type"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/PhotoWarpRenderer"
+              },
+              {
+                "$ref": "#/components/schemas/MarigoldRenderer"
+              }
+            ],
+            "title": "Renderer"
           }
         },
         "required": [
-          "bounding_box"
+          "bounding_box",
+          "renderer"
         ],
         "title": "SingleTemplate",
         "type": "object"
@@ -9247,7 +9495,15 @@
           "content": {
             "application/json": {
               "schema": {
-                "anyOf": [
+                "discriminator": {
+                  "mapping": {
+                    "colour-matrix": "#/components/schemas/ColourMatrixTemplate",
+                    "multiple": "#/components/schemas/MultipleTemplate",
+                    "single": "#/components/schemas/SingleTemplate"
+                  },
+                  "propertyName": "kind"
+                },
+                "oneOf": [
                   {
                     "$ref": "#/components/schemas/ColourMatrixTemplate"
                   },

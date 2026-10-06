@@ -121,3 +121,14 @@ RUNS_DB = "runs.db"
 FX_CACHE_FILE = "fx.json"
 
 ROOT_ENV_VAR = "ETSY_LISTINGS_ROOT"
+
+# ADR-0053: durable calibration assets, outside disposable workspace cache.
+RENDERER_SETTINGS_FILE = "renderer-settings.json"
+CALIBRATION_TRANSACTION_DIR = ".calibration-transaction"
+CALIBRATION_RECEIPT_FILE = ".calibration-receipt.json"
+MASKS_DIR = "masks"
+AUTOMATIC_MASK_FILE = "automatic.png"
+EDITED_MASK_FILE = "edited.png"
+MASK_METADATA_FILE = "metadata.json"
+PREPARATION_DIR = "preparation"
+BRUSHES_DIR = "brushes"

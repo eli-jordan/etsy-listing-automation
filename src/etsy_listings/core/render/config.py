@@ -19,16 +19,17 @@ redesign, see docs/features/multi-placement-rendering-20260903/spec.md):
 from __future__ import annotations
 
 import json
+import re
 from typing import Annotated, Literal
 
-from pydantic import AfterValidator, BaseModel, ConfigDict, Field, TypeAdapter
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field, TypeAdapter, model_validator
 
 
 class Point(BaseModel):
-    model_config = ConfigDict(frozen=True)
+    model_config = ConfigDict(frozen=True, extra="forbid")
 
-    x: float
-    y: float
+    x: float = Field(allow_inf_nan=False)
+    y: float = Field(allow_inf_nan=False)
 
 
 def _validate_non_degenerate(
@@ -51,7 +52,7 @@ class DisplaceConfig(BaseModel):
     """Implemented but off by default -- over-strong displacement looks
     melted, so it's tuned per template in the calibrator's live preview."""
 
-    model_config = ConfigDict(frozen=True)
+    model_config = ConfigDict(frozen=True, extra="forbid")
 
     enabled: bool = False
     strength: float = 0.0  # 0..1, calibrated per template
@@ -66,7 +67,7 @@ class ShadeConfig(BaseModel):
     it. ``multiply`` crushes prints on dark garments, so ``soft-light`` or a
     mid-grey pivot is used for those instead."""
 
-    model_config = ConfigDict(frozen=True)
+    model_config = ConfigDict(frozen=True, extra="forbid")
 
     enabled: bool = True
     opacity: float = 0.6  # 0..1
@@ -87,30 +88,98 @@ class RenderConfig(BaseModel):
         return json.dumps(self.model_dump(mode="json"), sort_keys=True, separators=(",", ":"))
 
 
+class PhotoWarpConfig(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+    displace: DisplaceConfig = DisplaceConfig()
+    shade: ShadeConfig = ShadeConfig()
+
+
+class MarigoldInference(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+    num_inference_steps: int = Field(default=10, gt=0, strict=True)
+    ensemble_size: int = Field(default=3, gt=0, strict=True)
+
+
+class MarigoldAppearance(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+    lighting_source: Literal["estimated", "photo"] = "estimated"
+    lighting_strength: float = Field(default=1.0, ge=0, le=1, allow_inf_nan=False)
+    fabric_texture: float = Field(default=0.25, ge=0, le=1, allow_inf_nan=False)
+    print_shine: float = Field(default=0.0, ge=0, le=1, allow_inf_nan=False)
+
+
+class MarigoldConfig(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+    inference: MarigoldInference = MarigoldInference()
+    appearance: MarigoldAppearance = MarigoldAppearance()
+
+
+class PhotoWarpRenderer(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+    type: Literal["photo-warp"]
+    config: PhotoWarpConfig = PhotoWarpConfig()
+
+
+class MarigoldRenderer(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+    type: Literal["marigold"]
+    config: MarigoldConfig = MarigoldConfig()
+
+
+AnyRenderer = PhotoWarpRenderer | MarigoldRenderer
+Renderer = Annotated[AnyRenderer, Field(discriminator="type")]
+
+
+class PreparationRequired(ValueError):
+    """ADR-0053 forbids rendering Marigold through Photo warp."""
+
+
+def photo_warp_config(renderer: AnyRenderer, box: BoundingBox) -> RenderConfig:
+    if not isinstance(renderer, PhotoWarpRenderer):
+        raise PreparationRequired("Prepare the template first: Marigold maps are required")
+    return RenderConfig(bounding_box=box, **renderer.config.model_dump())
+
+
+def _safe_id(value: str) -> str:
+    # ADR-0053: an ID owns durable assets and survives reorder/recolour.
+    reserved = {
+        "con",
+        "prn",
+        "aux",
+        "nul",
+        *(f"com{i}" for i in range(1, 10)),
+        *(f"lpt{i}" for i in range(1, 10)),
+    }
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]*", value) or value.casefold() in reserved:
+        raise ValueError("placement id must be a non-empty safe path segment")
+    return value
+
+
+PlacementId = Annotated[str, AfterValidator(_safe_id)]
+
+
 class ColourMatrixTemplate(BaseModel):
     """One photo per colour, same design position in all of them. Scene
     images are ``{colour-slug}.png`` per colour -- there is no
     ``colours:`` list in the YAML, since the filenames present in the
     directory *are* the colour set."""
 
-    model_config = ConfigDict(frozen=True)
+    model_config = ConfigDict(frozen=True, extra="forbid")
 
     kind: Literal["colour-matrix"] = "colour-matrix"
     bounding_box: BoundingBox
-    displace: DisplaceConfig = DisplaceConfig()
-    shade: ShadeConfig = ShadeConfig()
+    renderer: Renderer
 
     def render_config(self) -> RenderConfig:
-        return RenderConfig(
-            bounding_box=self.bounding_box, displace=self.displace, shade=self.shade
-        )
+        return photo_warp_config(self.renderer, self.bounding_box)
 
 
 class Placement(BaseModel):
     """One garment within a ``multiple``-kind scene."""
 
-    model_config = ConfigDict(frozen=True)
+    model_config = ConfigDict(frozen=True, extra="forbid")
 
+    id: PlacementId
     colour: str
     bounding_box: BoundingBox
     artwork: str | None = None
@@ -123,7 +192,7 @@ class MultipleTemplate(BaseModel):
     only -- one photo, one lighting pass; a placement needing different
     rendering treatment belongs in its own template instead."""
 
-    model_config = ConfigDict(frozen=True)
+    model_config = ConfigDict(frozen=True, extra="forbid")
 
     kind: Literal["multiple"] = "multiple"
     placements: list[Placement]
@@ -135,20 +204,24 @@ class MultipleTemplate(BaseModel):
     colours the listing doesn't sell are skipped and ``plan`` reports which --
     use for one shop-wide chart reused across listings selling different
     subsets of the garment's colour range."""
-    displace: DisplaceConfig = DisplaceConfig()
-    shade: ShadeConfig = ShadeConfig()
+    renderer: Renderer
+
+    @model_validator(mode="after")
+    def unique_ids(self) -> MultipleTemplate:
+        ids = [placement.id.casefold() for placement in self.placements]
+        if len(ids) != len(set(ids)):
+            raise ValueError("placement IDs must be unique")
+        return self
 
     def render_config_for(self, placement: Placement) -> RenderConfig:
-        return RenderConfig(
-            bounding_box=placement.bounding_box, displace=self.displace, shade=self.shade
-        )
+        return photo_warp_config(self.renderer, placement.bounding_box)
 
 
 class SingleTemplate(BaseModel):
     """One photo, one garment -- a lifestyle shot, a folded product photo,
     anything that isn't part of a colour set."""
 
-    model_config = ConfigDict(frozen=True)
+    model_config = ConfigDict(frozen=True, extra="forbid")
 
     kind: Literal["single"] = "single"
     colour: str | None = None
@@ -157,13 +230,10 @@ class SingleTemplate(BaseModel):
     filename."""
     artwork: str | None = None
     bounding_box: BoundingBox
-    displace: DisplaceConfig = DisplaceConfig()
-    shade: ShadeConfig = ShadeConfig()
+    renderer: Renderer
 
     def render_config(self) -> RenderConfig:
-        return RenderConfig(
-            bounding_box=self.bounding_box, displace=self.displace, shade=self.shade
-        )
+        return photo_warp_config(self.renderer, self.bounding_box)
 
 
 AnyTemplate = ColourMatrixTemplate | MultipleTemplate | SingleTemplate

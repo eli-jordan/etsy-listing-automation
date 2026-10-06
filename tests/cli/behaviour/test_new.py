@@ -280,15 +280,21 @@ def test_cancelling_the_pricing_plan_picker_stops_new(
     assert not (workspace_root / "listings" / "cancelled-at-pricing").exists()
 
 
-SINGLE_KIND_TEMPLATE = """\
-kind: single
+SINGLE_KIND_TEMPLATE = """kind: single
 colour: white
 artwork: on-light
 bounding_box:
-- {x: 10.0, y: 10.0}
-- {x: 90.0, y: 10.0}
-- {x: 90.0, y: 90.0}
-- {x: 10.0, y: 90.0}
+- x: 10.0
+  y: 10.0
+- x: 90.0
+  y: 10.0
+- x: 90.0
+  y: 90.0
+- x: 10.0
+  y: 90.0
+renderer:
+  type: photo-warp
+  config: {}
 """
 
 

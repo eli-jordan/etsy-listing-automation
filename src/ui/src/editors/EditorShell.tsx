@@ -4,13 +4,12 @@ import { PrintRealismPanel } from "../components/PrintRealismPanel";
 import { QuadEditor } from "../components/QuadEditor";
 import { TestDesignPicker } from "../components/TestDesignPicker";
 import { ViewTabs, type View } from "../components/ViewTabs";
-import type { BoundingBox, DisplaceConfig, ShadeConfig } from "../types";
+import type { BoundingBox, PhotoWarpRenderer } from "../types";
 
 /** The parts of a template.yaml every kind has, and this shell edits directly.
  * Everything else about a config is the kind's own business. */
 export interface RealismConfig {
-  displace: DisplaceConfig;
-  shade: ShadeConfig;
+  renderer: PhotoWarpRenderer;
 }
 
 /** What a canvas is handed once the shell knows there is something to draw. */
@@ -135,10 +134,20 @@ export function EditorShell<T extends RealismConfig>({
         {controls}
         <TestDesignPicker value={design} onChange={onDesignChange} />
         <PrintRealismPanel
-          displace={config.displace}
-          shade={config.shade}
-          onDisplaceChange={(displace) => onChange({ ...config, displace })}
-          onShadeChange={(shade) => onChange({ ...config, shade })}
+          displace={config.renderer.config.displace}
+          shade={config.renderer.config.shade}
+          onDisplaceChange={(displace) =>
+            onChange({
+              ...config,
+              renderer: { ...config.renderer, config: { ...config.renderer.config, displace } },
+            })
+          }
+          onShadeChange={(shade) =>
+            onChange({
+              ...config,
+              renderer: { ...config.renderer, config: { ...config.renderer.config, shade } },
+            })
+          }
         />
       </aside>
     </main>

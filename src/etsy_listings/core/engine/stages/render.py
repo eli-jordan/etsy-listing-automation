@@ -76,6 +76,7 @@ from etsy_listings.core.engine.stages.placement import ArtworkResolutionError, D
 from etsy_listings.core.render.config import (
     AnyTemplate,
     ColourMatrixTemplate,
+    PreparationRequired,
     RenderConfig,
     SingleTemplate,
 )
@@ -429,7 +430,11 @@ def _resolve_scene(
         return blocked
 
     layers = []
-    for layer_colour, override, cfg in _layer_specs(template_cfg, colour):
+    try:
+        specs = _layer_specs(template_cfg, colour)
+    except PreparationRequired as exc:
+        return Blocked(str(exc))
+    for layer_colour, override, cfg in specs:
         try:
             artwork = placement.artwork_for(layer_colour, template_override=override)
         except ArtworkResolutionError as exc:

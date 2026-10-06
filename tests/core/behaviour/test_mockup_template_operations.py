@@ -246,7 +246,9 @@ class TestConfig:
 
     def test_saving_needs_a_template_to_save_into(self, workspace: Workspace) -> None:
         with pytest.raises(TemplateMissing):
-            save_config(workspace, "nope", SingleTemplate(bounding_box=BOX))
+            save_config(
+                workspace, "nope", SingleTemplate(renderer={"type": "photo-warp"}, bounding_box=BOX)
+            )
         assert not (workspace.root / "mockup-templates" / "nope").exists()
 
 

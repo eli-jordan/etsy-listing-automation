@@ -400,20 +400,30 @@ class TestColourMatrixKind:
         self, page
     ) -> None:
         """The control is named for what it does to the photograph now, but it
-        still writes `displace` -- this is the test that the rename stayed a
+        still writes `renderer.config.displace` -- this is the test that the rename stayed a
         rename and did not quietly repoint the toggle."""
         _select_template(page, COLOUR_MATRIX_TEMPLATE)
         page.wait_for_selector(PREVIEW_IMAGE)
         log = TrafficLog(page, "/preview")
         page.get_by_label("Follow fabric wrinkles").check()
-        log.wait_for(lambda r: _sent(r).get("displace", {}).get("enabled") is True)
+        log.wait_for(
+            lambda r: (
+                _sent(r).get("renderer", {}).get("config", {}).get("displace", {}).get("enabled")
+                is True
+            )
+        )
 
     def test_the_shading_presets_write_a_blend_mode(self, page) -> None:  # noqa: ANN001
         _select_template(page, COLOUR_MATRIX_TEMPLATE)
         page.wait_for_selector(PREVIEW_IMAGE)
         log = TrafficLog(page, "/preview")
         page.get_by_role("button", name="Rich").click()
-        log.wait_for(lambda r: _sent(r).get("shade", {}).get("blend") == "multiply")
+        log.wait_for(
+            lambda r: (
+                _sent(r).get("renderer", {}).get("config", {}).get("shade", {}).get("blend")
+                == "multiply"
+            )
+        )
 
     def test_choosing_a_test_design_rerenders_against_it(self, page) -> None:  # noqa: ANN001
         _select_template(page, COLOUR_MATRIX_TEMPLATE)

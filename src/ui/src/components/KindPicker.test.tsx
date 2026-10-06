@@ -66,8 +66,13 @@ describe("the default kind follows the photo count", () => {
         { x: 1, y: 1 },
         { x: 0, y: 1 },
       ],
-      displace: { enabled: false, strength: 0 },
-      shade: { enabled: true, opacity: 0.6, blend: "soft-light" },
+      renderer: {
+        type: "photo-warp",
+        config: {
+          displace: { enabled: false, strength: 0 },
+          shade: { enabled: true, opacity: 0.6, blend: "soft-light" },
+        },
+      },
     });
     renderPicker();
     await waitFor(() => expect(screen.getByRole("radio", { name: /Single/ })).toBeChecked());
@@ -149,8 +154,13 @@ describe("KindPicker", () => {
         { x: 1, y: 1 },
         { x: 0, y: 1 },
       ],
-      displace: { enabled: false, strength: 0 },
-      shade: { enabled: true, opacity: 0.6, blend: "soft-light" },
+      renderer: {
+        type: "photo-warp",
+        config: {
+          displace: { enabled: false, strength: 0 },
+          shade: { enabled: true, opacity: 0.6, blend: "soft-light" },
+        },
+      },
     });
     const { onAssigned } = renderPicker();
 
@@ -164,8 +174,13 @@ describe("KindPicker", () => {
       kind: "multiple",
       colour_coverage: "exact",
       placements: [],
-      displace: { enabled: false, strength: 0 },
-      shade: { enabled: true, opacity: 0.6, blend: "soft-light" },
+      renderer: {
+        type: "photo-warp",
+        config: {
+          displace: { enabled: false, strength: 0 },
+          shade: { enabled: true, opacity: 0.6, blend: "soft-light" },
+        },
+      },
     });
     renderPicker();
     fireEvent.click(screen.getByRole("radio", { name: /Multiple/ }));

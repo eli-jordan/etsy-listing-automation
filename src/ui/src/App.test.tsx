@@ -1,10 +1,11 @@
+import type { PhotoWarpTemplate } from "./types";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "./App";
 import * as calibrator from "./api/calibrator";
 import type { ColourMatrixTemplate, MultipleTemplate, TemplateSummary } from "./types";
 
-const COLOUR_MATRIX: ColourMatrixTemplate = {
+const COLOUR_MATRIX: PhotoWarpTemplate<ColourMatrixTemplate> = {
   kind: "colour-matrix",
   bounding_box: [
     { x: 0, y: 0 },
@@ -12,16 +13,26 @@ const COLOUR_MATRIX: ColourMatrixTemplate = {
     { x: 100, y: 100 },
     { x: 0, y: 100 },
   ],
-  displace: { enabled: false, strength: 0 },
-  shade: { enabled: true, opacity: 0.6, blend: "soft-light" },
+  renderer: {
+    type: "photo-warp",
+    config: {
+      displace: { enabled: false, strength: 0 },
+      shade: { enabled: true, opacity: 0.6, blend: "soft-light" },
+    },
+  },
 };
 
-const MULTIPLE: MultipleTemplate = {
+const MULTIPLE: PhotoWarpTemplate<MultipleTemplate> = {
   kind: "multiple",
   colour_coverage: "exact",
   placements: [],
-  displace: { enabled: false, strength: 0 },
-  shade: { enabled: true, opacity: 0.6, blend: "soft-light" },
+  renderer: {
+    type: "photo-warp",
+    config: {
+      displace: { enabled: false, strength: 0 },
+      shade: { enabled: true, opacity: 0.6, blend: "soft-light" },
+    },
+  },
 };
 
 const MODIFIED_AT = "Wed, 17 Sep 2026 18:30:00 GMT";
@@ -194,7 +205,10 @@ describe("App", () => {
     await waitFor(() => expect(saveSpy).toHaveBeenCalledTimes(1), { timeout: 2_000 });
     expect(saveSpy.mock.calls[0]?.[0]).toBe("flat-lay-01");
     expect(saveSpy.mock.calls[0]?.[1]).toMatchObject({
-      displace: { enabled: false, strength: 0.75 },
+      renderer: {
+        type: "photo-warp",
+        config: expect.objectContaining({ displace: { enabled: false, strength: 0.75 } }),
+      },
     });
     await waitFor(() => expect(screen.getByText("Saved a moment ago")).toBeInTheDocument());
     expect(document.querySelector(".page-head__saved .page-head__dot")).toBeInTheDocument();

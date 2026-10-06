@@ -19,6 +19,10 @@ ever guarded.
 from __future__ import annotations
 
 import threading
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from etsy_listings.core.workspace import Workspace
 from collections.abc import Iterator
 from contextlib import ExitStack, contextmanager
 
@@ -46,6 +50,18 @@ class WorkspaceLocks:
         with ExitStack() as stack:
             for key in keys:
                 stack.enter_context(self._lock(key))
+            yield
+
+    @contextmanager
+    def mockup_template(self, workspace: Workspace, name: str) -> Iterator[None]:
+        """ADR-0053: calibration and map publication share a separate domain.
+
+        Reuse the document store's workspace-scoped reentrant lock, so all
+        readers and coordinators serialize even across host lock instances.
+        """
+        from etsy_listings.core.workspace.calibration import CalibrationStore
+
+        with CalibrationStore(workspace).lock(name):
             yield
 
     def _lock(self, key: str) -> threading.Lock:

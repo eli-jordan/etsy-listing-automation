@@ -8,7 +8,10 @@ bounding_box:
   y: 391.68
 - x: 134.4
   y: 403.2
-shade:
-  enabled: true
-  opacity: 0.6
-  blend: soft-light
+renderer:
+  type: photo-warp
+  config:
+    shade:
+      enabled: true
+      opacity: 0.6
+      blend: soft-light

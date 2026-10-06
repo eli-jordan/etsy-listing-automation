@@ -1,3 +1,4 @@
+import type { PhotoWarpTemplate } from "../types";
 import { useCallback, useMemo, useState } from "react";
 import type { PreviewJob } from "../components/PreviewPanel";
 import { QuadEditor } from "../components/QuadEditor";
@@ -7,7 +8,7 @@ import { EditorShell } from "./EditorShell";
 
 interface Props {
   templateName: string;
-  config: MultipleTemplate;
+  config: PhotoWarpTemplate<MultipleTemplate>;
   /** The scene photo's true pixel size -- the space every placement's box is
    * in. See `QuadEditor`'s `space`. */
   space: [number, number] | null;
@@ -54,7 +55,7 @@ function uncolouredWarning(placements: Placement[]): string | null {
  * docs/history/implementation-plan.md -- it belongs in the Advanced disclosure when it
  * comes back.
  */
-export function MultipleEditor({
+function PhotoWarpMultipleEditor({
   templateName,
   config,
   space,
@@ -70,10 +71,9 @@ export function MultipleEditor({
     useMemo(
       () => ({
         placements: config.placements,
-        displace: config.displace,
-        shade: config.shade,
+        renderer: config.renderer,
       }),
-      [config.placements, config.displace, config.shade],
+      [config.placements, config.renderer],
     ),
     design,
   );
@@ -88,12 +88,11 @@ export function MultipleEditor({
         label: templateName,
         body: {
           placements: config.placements,
-          displace: config.displace,
-          shade: config.shade,
+          renderer: config.renderer,
         },
       },
     ],
-    [templateName, config.placements, config.displace, config.shade],
+    [templateName, config.placements, config.renderer],
   );
 
   const handleBoxChange = useCallback(
@@ -148,7 +147,10 @@ export function MultipleEditor({
             })) as BoundingBox)
           : CENTRED_BOX;
         return {
-          placements: [...placements, { colour: "", bounding_box, artwork: null }],
+          placements: [
+            ...placements,
+            { id: crypto.randomUUID(), colour: "", bounding_box, artwork: null },
+          ],
           select: placements.length,
         };
       }),
@@ -238,4 +240,17 @@ export function MultipleEditor({
       footer={warning ? <p className="app__warn">{warning}</p> : null}
     />
   );
+}
+
+export function MultipleEditor(props: Omit<Props, "config"> & { config: MultipleTemplate }) {
+  const renderer = props.config.renderer;
+  if (renderer.type !== "photo-warp") {
+    return (
+      <p role="status">
+        Prepare the template first. Marigold rendering is unavailable until template maps are
+        prepared.
+      </p>
+    );
+  }
+  return <PhotoWarpMultipleEditor {...props} config={{ ...props.config, renderer }} />;
 }

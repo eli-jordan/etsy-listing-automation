@@ -39,7 +39,7 @@ from etsy_listings.core.config.slug import ColourExceptions
 # `config`, which owns the commercial/product files. Loading it here is the same
 # edge `load_listing` already has to `config`: the workspace knows where every
 # file lives, and asks whichever module owns a file's shape to parse it.
-from etsy_listings.core.render.config import AnyTemplate, dump_template_config
+from etsy_listings.core.render.config import AnyTemplate
 from etsy_listings.core.render.config import load_template_config as parse_template_config
 from etsy_listings.core.workspace import layout
 from etsy_listings.core.workspace.atomic import read_bytes_retrying, write_bytes_atomic
@@ -902,6 +902,53 @@ class Workspace:
     def template_config_file(self, template: str) -> Path:
         return self.template_dir(template) / layout.TEMPLATE_FILE
 
+    def template_main_photo(self, template: str, config: AnyTemplate | None = None) -> Path:
+        """ADR-0053: ordinal first actual colour photo; fixed kinds use scene."""
+        config = config if config is not None else self.load_template_config(template)
+        if config.kind == "colour-matrix":
+            photos = sorted(self.template_photos(template), key=lambda photo: photo.name)
+            if not photos:
+                raise FileNotFoundError(f"No main photo for template {template!r}")
+            return photos[0]
+        return self.template_scene_image(template)
+
+    def template_renderer_settings_file(self, template: str) -> Path:
+        return self.template_dir(template) / layout.RENDERER_SETTINGS_FILE
+
+    def template_calibration_transaction(self, template: str) -> Path:
+        return self.template_dir(template) / layout.CALIBRATION_TRANSACTION_DIR
+
+    def template_calibration_receipt(self, template: str) -> Path:
+        return self.template_dir(template) / layout.CALIBRATION_RECEIPT_FILE
+
+    def template_mask_dir(self, template: str, placement_id: str | None = None) -> Path:
+        from pydantic import TypeAdapter
+
+        from etsy_listings.core.render.config import PlacementId
+
+        directory = self.template_dir(template) / layout.MASKS_DIR
+        if placement_id is not None:
+            directory /= TypeAdapter(PlacementId).validate_python(placement_id)
+        return self.resolve(directory.relative_to(self.root).as_posix(), self.root)
+
+    def template_mask_file(
+        self, template: str, placement_id: str | None = None, *, source: str = "edited"
+    ) -> Path:
+        if source not in ("automatic", "edited", "metadata"):
+            raise ValueError("Unknown mask source")
+        filename = {
+            "automatic": layout.AUTOMATIC_MASK_FILE,
+            "edited": layout.EDITED_MASK_FILE,
+            "metadata": layout.MASK_METADATA_FILE,
+        }[source]
+        return self.template_mask_dir(template, placement_id) / filename
+
+    def template_brush_history(self, template: str, placement_id: str | None = None) -> Path:
+        # Validate both names through the durable location's accessor.
+        self.template_mask_dir(template, placement_id)
+        directory = self.cache(layout.PREPARATION_DIR, layout.BRUSHES_DIR, _segment(template))
+        return directory / (f"{placement_id}.json" if placement_id is not None else "implicit.json")
+
     def template_derived_dir(self, template: str) -> Path:
         return self.template_dir(template) / layout.DERIVED_DIR
 
@@ -1094,6 +1141,12 @@ class Workspace:
         return load_exceptions(self.exceptions_file())
 
     def load_template_config(self, template: str) -> AnyTemplate:
+        from etsy_listings.core.workspace.calibration import CalibrationStore
+
+        with CalibrationStore(self).lock(template):
+            return self._read_template_config(template)
+
+    def _read_template_config(self, template: str) -> AnyTemplate:
         """One ``template.yaml``, parsed into whichever of the three kinds it is.
 
         The read used to be open-coded at each of its four call sites -- the
@@ -1103,6 +1156,12 @@ class Workspace:
         of a layout that the layout accessors above exist to prevent, so it
         lives here with ``load_listing`` and ``load_garment_profile``.
         """
+        from etsy_listings.core.workspace.calibration import CalibrationRepairRequired
+
+        if self.template_calibration_transaction(template).exists():
+            raise CalibrationRepairRequired(
+                "Active calibration transaction; retry after server recovery"
+            )
         path = self.template_config_file(template)
         if not path.is_file():
             raise ConfigLoadError(path, "template config not found -- calibrate it with `ui` first")
@@ -1115,8 +1174,6 @@ class Workspace:
         """Write ``template.yaml``. The calibrator is the only caller -- it is
         what produces this file -- but the
         path and the serialisation belong here, beside the read."""
-        path = self.template_config_file(template)
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(
-            yaml.safe_dump(dump_template_config(config), sort_keys=False), encoding="utf-8"
-        )
+        from etsy_listings.core.workspace.calibration import CalibrationStore
+
+        CalibrationStore(self).write_config(template, config)

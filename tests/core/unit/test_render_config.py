@@ -62,7 +62,11 @@ def test_displace_defaults_off_shade_defaults_on() -> None:
 
 def test_colour_matrix_template_has_no_per_colour_override() -> None:
     template = load_template_config(
-        {"kind": "colour-matrix", "bounding_box": _box_dicts(SQUARE_BOX)}
+        {
+            "kind": "colour-matrix",
+            "bounding_box": _box_dicts(SQUARE_BOX),
+            "renderer": {"type": "photo-warp", "config": {}},
+        }
     )
     assert isinstance(template, ColourMatrixTemplate)
     assert template.render_config().bounding_box == SQUARE_BOX
@@ -72,9 +76,19 @@ def test_multiple_template_dispatches_by_kind() -> None:
     template = load_template_config(
         {
             "kind": "multiple",
+            "renderer": {"type": "photo-warp", "config": {}},
             "placements": [
-                {"colour": "black", "bounding_box": _box_dicts(SQUARE_BOX)},
-                {"colour": "ivory", "bounding_box": _box_dicts(SQUARE_BOX), "artwork": "on-dark"},
+                {
+                    "id": "fixture-placement-1",
+                    "colour": "black",
+                    "bounding_box": _box_dicts(SQUARE_BOX),
+                },
+                {
+                    "id": "fixture-placement-2",
+                    "colour": "ivory",
+                    "bounding_box": _box_dicts(SQUARE_BOX),
+                    "artwork": "on-dark",
+                },
             ],
         }
     )
@@ -90,7 +104,14 @@ def test_multiple_template_colour_coverage_accepts_subset() -> None:
         {
             "kind": "multiple",
             "colour_coverage": "subset",
-            "placements": [{"colour": "black", "bounding_box": _box_dicts(SQUARE_BOX)}],
+            "renderer": {"type": "photo-warp", "config": {}},
+            "placements": [
+                {
+                    "id": "fixture-placement-1",
+                    "colour": "black",
+                    "bounding_box": _box_dicts(SQUARE_BOX),
+                }
+            ],
         }
     )
     assert isinstance(template, MultipleTemplate)
@@ -99,7 +120,12 @@ def test_multiple_template_colour_coverage_accepts_subset() -> None:
 
 def test_single_template_dispatches_by_kind() -> None:
     template = load_template_config(
-        {"kind": "single", "colour": "black", "bounding_box": _box_dicts(SQUARE_BOX)}
+        {
+            "kind": "single",
+            "colour": "black",
+            "bounding_box": _box_dicts(SQUARE_BOX),
+            "renderer": {"type": "photo-warp", "config": {}},
+        }
     )
     assert isinstance(template, SingleTemplate)
     assert template.colour == "black"
@@ -107,7 +133,13 @@ def test_single_template_dispatches_by_kind() -> None:
 
 
 def test_single_template_colour_is_optional() -> None:
-    template = load_template_config({"kind": "single", "bounding_box": _box_dicts(SQUARE_BOX)})
+    template = load_template_config(
+        {
+            "kind": "single",
+            "bounding_box": _box_dicts(SQUARE_BOX),
+            "renderer": {"type": "photo-warp", "config": {}},
+        }
+    )
     assert isinstance(template, SingleTemplate)
     assert template.colour is None
 

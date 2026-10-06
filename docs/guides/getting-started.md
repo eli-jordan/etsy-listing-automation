@@ -246,8 +246,19 @@ bounding_box:
   - { x: 345.6, y: 115.2 }
   - { x: 355.2, y: 391.68 }
   - { x: 134.4, y: 403.2 }
-shade: { enabled: true, opacity: 0.6, blend: soft-light }
+renderer:
+  type: photo-warp
+  config:
+    shade: { enabled: true, opacity: 0.6, blend: soft-light }
 ```
+
+Templates require an explicit renderer. Existing settings belong under
+`renderer.config`; old top-level `shade` and `displace` are refused. Repository
+fixtures use the new format, but the tool never rewrites external workspaces.
+Multiple placements also require stable safe IDs, such as `left-shirt`; changing
+colour, geometry or order must preserve them. Marigold configuration can be saved,
+but model preparation and its editor controls are still being integrated.
+
 
 Full schema and worked examples for all three kinds, plus how light/dark
 artwork resolves per colour, are in
@@ -618,7 +629,7 @@ your-workspace/
 .env secrets — PRINTIFY_API_TOKEN etc., gitignore this
   designs/ your artwork PNGs
   mockup-templates/<name>/
-    template.yaml kind + bounding box(es) + shade/displace
+    template.yaml kind + bounding box(es) + renderer.type/config
     {colour}.png | scene.png
   garment-profiles/<name>.yaml garment definition, reused across listings
   listings/<name>/
