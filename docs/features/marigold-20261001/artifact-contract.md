@@ -90,3 +90,10 @@ Reader leases hold one generation through rendering. Cleanup protects current
 maps, active publishers/readers and durable job references supplied by the
 coordinator. Workspace owns all directory conventions and Windows-safe removal.
 Interrupted unreferenced staging and generations can be cleaned after restart.
+
+Explicit `saved_inputs(reset_masks_for_photo=True)` captures zero mask identity
+only when the saved mask reports `MaskPhotoMismatch`. Default capture refuses
+that mismatch. Capture never mutates mask files, preserves valid same-photo
+manual masks, and still refuses missing or damaged saved-mask components. The
+coordinator must persist explicit reset intent and perform baseline installation
+separately after checking the current photo and calibration revision.

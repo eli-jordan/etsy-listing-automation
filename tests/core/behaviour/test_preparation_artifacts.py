@@ -438,3 +438,63 @@ def test_small_placement_on_a_large_photo_prepares_and_publishes_invisible_coord
     store.publish("shirt", inputs, {None: prepared.maps}, current_inputs=lambda: inputs)
     with store.acquire("shirt", inputs) as acquired:
         assert acquired.maps[None].size == (512, 512)
+
+
+@pytest.mark.parametrize("damage", ["photo", "same_photo", "missing", "missing_edited", "corrupt"])
+def test_explicit_photo_reset_capture_only_bypasses_photo_mismatch(workspace_root, damage) -> None:
+    from PIL import Image
+
+    from etsy_listings.core.errors import UserFacingError
+    from etsy_listings.core.render import load_template_config
+    from etsy_listings.core.workspace.calibration import MaskPhotoMismatch
+
+    workspace = Workspace.discover(root_override=workspace_root)
+    workspace.template_dir("shirt").mkdir()
+    photo = workspace.template_scene_image("shirt")
+    Image.new("RGB", (16, 16), "navy").save(photo)
+    workspace.save_template_config(
+        "shirt",
+        load_template_config(
+            {
+                "kind": "single",
+                "bounding_box": [{"x": x, "y": y} for x, y in [(0, 0), (15, 0), (15, 15), (0, 15)]],
+                "renderer": {"type": "marigold", "config": {}},
+            }
+        ),
+    )
+    store = Artifacts(workspace)
+    calibration = store.calibration
+    calibration.install_automatic(
+        "shirt",
+        calibration.encode_mask(Image.new("L", (16, 16), 123)),
+        algorithm_version="test",
+        expected_revision=calibration.read("shirt").revision,
+    )
+    checksum = calibration.mask("shirt").checksum
+    if damage == "photo":
+        Image.new("RGB", (16, 16), "red").save(photo)
+    elif damage == "missing":
+        workspace.template_mask_file("shirt", source="automatic").unlink()
+    elif damage == "missing_edited":
+        workspace.template_mask_file("shirt").unlink()
+    elif damage == "corrupt":
+        workspace.template_mask_file("shirt", source="metadata").write_bytes(b"[]")
+    paths = [
+        workspace.template_mask_file("shirt", source=source)
+        for source in ("automatic", "edited", "metadata")
+    ]
+    before = {p: p.read_bytes() for p in paths if p.exists()}
+    if damage == "photo":
+        with pytest.raises(MaskPhotoMismatch):
+            store.saved_inputs("shirt")
+        assert (
+            store.saved_inputs("shirt", reset_masks_for_photo=True).placements[0].mask == "0" * 64
+        )
+    elif damage == "same_photo":
+        assert (
+            store.saved_inputs("shirt", reset_masks_for_photo=True).placements[0].mask == checksum
+        )
+    else:
+        with pytest.raises(UserFacingError):
+            store.saved_inputs("shirt", reset_masks_for_photo=True)
+    assert {p: p.read_bytes() for p in paths if p.exists()} == before
