@@ -29,6 +29,11 @@ ROOT = Path(__file__).resolve().parents[1]
 TESTS = ROOT / "tests"
 
 OWNING_TESTS: Mapping[str, frozenset[str]] = {
+    # Preparation recovery, retention and execution are tested only through the
+    # approved Preparations interface with real numerical/filesystem operations.
+    "etsy_listings.core.application.preparation.execution": frozenset(),
+    "etsy_listings.core.application.preparation.evidence": frozenset(),
+    "etsy_listings.core.application.preparation.store": frozenset(),
     # Numerical preparation is tested through prepare; sampling through the
     # public CPU scene renderer. No test may bypass those agreed seams.
     "etsy_listings.core.preparation._geometry": frozenset(),
