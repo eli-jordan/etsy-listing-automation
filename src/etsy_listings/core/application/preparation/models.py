@@ -67,6 +67,7 @@ class Job(Record):
     step: str = "queued"
     created: float
     updated: float
+    reset_masks_for_photo: bool = False
     cancel_intent: bool = False
     evidence: tuple[CropEvidence, ...] = ()
     placement_evidence: dict[str, str] = Field(default_factory=dict)

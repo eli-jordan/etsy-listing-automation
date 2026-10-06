@@ -115,6 +115,7 @@ class Preparations:
         request_id: str,
         action: Action = "prepare",
         previous_job: str | None = None,
+        reset_masks_for_photo: bool = False,
     ) -> Job:
         if (
             action not in ("prepare", "prepare_again", "retry")
@@ -124,6 +125,10 @@ class Preparations:
             raise PreparationRefused("Invalid preparation action or request ID")
         if (action == "retry") != (previous_job is not None):
             raise PreparationRefused("Retry requires a previous job")
+        if reset_masks_for_photo and action != "prepare_again":
+            raise PreparationRefused("Photo mask reset requires explicit Prepare again")
+        if previous_job is not None:
+            reset_masks_for_photo = self.status(previous_job).reset_masks_for_photo
         digest = hashlib.sha256(
             json_bytes(
                 {
@@ -131,6 +136,7 @@ class Preparations:
                     "config_revision": config_revision,
                     "action": action,
                     "previous_job": previous_job,
+                    "reset_masks_for_photo": reset_masks_for_photo,
                 }
             )
         ).hexdigest()
@@ -148,7 +154,9 @@ class Preparations:
                 raise CalibrationConflict("Calibration changed before preparation submission")
             if not isinstance(calibration.config.renderer, MarigoldRenderer):
                 raise PreparationRefused("Select Marigold before preparing this template")
-            snapshot = self.artifacts.saved_inputs(template)
+            snapshot = self.artifacts.saved_inputs(
+                template, reset_masks_for_photo=reset_masks_for_photo
+            )
             if previous_job is not None:
                 previous = self.store.read(previous_job)
                 if previous.template != template or previous.phase not in {
@@ -163,6 +171,7 @@ class Preparations:
                 if (
                     job.template == template
                     and job.phase not in TERMINAL
+                    and job.reset_masks_for_photo == reset_masks_for_photo
                     and (
                         action != "prepare_again"
                         or (job.kind == "prepare" and job.action == "prepare_again")
@@ -184,11 +193,14 @@ class Preparations:
             calibration = self.calibration.read(template)
             if calibration.revision != config_revision:
                 raise CalibrationConflict("Calibration changed during runtime inspection")
-            snapshot = self.artifacts.saved_inputs(template)
+            snapshot = self.artifacts.saved_inputs(
+                template, reset_masks_for_photo=reset_masks_for_photo
+            )
             for existing in self.store.jobs():
                 if (
                     existing.template == template
                     and existing.phase not in TERMINAL
+                    and existing.reset_masks_for_photo == reset_masks_for_photo
                     and (
                         action != "prepare_again"
                         or (existing.kind == "prepare" and existing.action == "prepare_again")
@@ -224,6 +236,7 @@ class Preparations:
                 receipts={request_id: digest},
                 action=action,
                 kind="prepare",
+                reset_masks_for_photo=reset_masks_for_photo,
                 config_revision=config_revision,
                 snapshot=snapshot,
                 engine_version=selected.engine_version,

@@ -974,3 +974,166 @@ def test_invalid_current_map_pointer_does_not_prevent_explicit_preparation_repai
         .can_render
     )
     assert len(runtime.workers) == 1
+
+
+@pytest.mark.parametrize("cancel", [False, True])
+def test_explicit_photo_reset_is_durable_and_cancellation_preserves_old_masks(
+    workspace_root, cancel
+):
+    from etsy_listings.core.preparation.artifacts import Artifacts
+    from etsy_listings.core.workspace.calibration import MaskPhotoMismatch
+
+    workspace, runtime, coordinator, first = prepare_template(workspace_root)
+    coordinator.close()
+    before = workspace.template_mask_file("shirt").read_bytes()
+    Image.new("RGB", (64, 64), "red").save(workspace.template_scene_image("shirt"))
+    coordinator = Preparations(workspace, runtime=runtime)
+    revision = CalibrationStore(workspace).read("shirt").revision
+    with pytest.raises(MaskPhotoMismatch):
+        coordinator.submit("shirt", config_revision=revision, request_id="ordinary")
+    with pytest.raises(ValueError, match="Prepare again"):
+        coordinator.submit(
+            "shirt", config_revision=revision, request_id="wrong", reset_masks_for_photo=True
+        )
+    job = coordinator.submit(
+        "shirt",
+        config_revision=revision,
+        request_id="reset",
+        action="prepare_again",
+        reset_masks_for_photo=True,
+    )
+    assert job.reset_masks_for_photo
+    assert all(p.mask == "0" * 64 for p in job.snapshot.placements)
+    assert not workspace.preparation_work(job.id, "mask-.png").exists()
+    with pytest.raises(ValueError, match="request ID"):
+        coordinator.submit(
+            "shirt", config_revision=revision, request_id="reset", action="prepare_again"
+        )
+    if cancel:
+        coordinator.cancel(job.id)
+        assert workspace.template_mask_file("shirt").read_bytes() == before
+        coordinator = Preparations(workspace, runtime=runtime)
+        coordinator.recover()
+        assert coordinator.status(job.id).phase == "cancelled"
+        job = coordinator.submit(
+            "shirt",
+            config_revision=revision,
+            request_id="retry",
+            action="retry",
+            previous_job=job.id,
+        )
+        assert job.reset_masks_for_photo
+    coordinator.start()
+    result = wait_terminal(coordinator, job.id)
+    coordinator.close()
+    assert result.phase == "completed", result.error
+    assert CalibrationStore(workspace).mask("shirt").edited != before
+    artifacts = Artifacts(workspace)
+    assert artifacts.readiness("shirt", artifacts.saved_inputs("shirt")).state == "ready"
+
+
+@pytest.mark.parametrize("change", ["none", "edit", "photo"])
+def test_photo_reset_partial_multiple_install_recovers_only_exact_inputs(workspace_root, change):
+    import threading
+
+    from etsy_listings.core.preparation.artifacts import Artifacts
+    from etsy_listings.core.workspace.calibration import MaskEdit, Stroke
+
+    from tests.support.marigold import PreparationRuntime
+
+    workspace = multiple_template(workspace_root)
+    runtime = PreparationRuntime()
+    coordinator = Preparations(workspace, runtime=runtime)
+    first = coordinator.submit(
+        "shirt",
+        config_revision=CalibrationStore(workspace).read("shirt").revision,
+        request_id="first",
+    )
+    coordinator.start()
+    assert wait_terminal(coordinator, first.id).phase == "completed"
+    coordinator.close()
+    old_pointer = workspace.template_map_current("shirt").read_bytes()
+    Image.new("RGB", (64, 64), "red").save(workspace.template_scene_image("shirt"))
+    exited = threading.Event()
+
+    def crash(identity, step):
+        if step == "mask_committed":
+            exited.set()
+            raise ProcessExit()
+
+    coordinator = Preparations(workspace, runtime=runtime, checkpoint=crash)
+    job = coordinator.submit(
+        "shirt",
+        config_revision=CalibrationStore(workspace).read("shirt").revision,
+        request_id="reset",
+        action="prepare_again",
+        reset_masks_for_photo=True,
+    )
+    coordinator.start()
+    assert exited.wait(10)
+    with pytest.raises(ProcessExit):
+        coordinator.close()
+    assert workspace.template_map_current("shirt").read_bytes() == old_pointer
+    store = CalibrationStore(workspace)
+    if change == "edit":
+        current = store.read("shirt")
+        store.save(
+            "shirt",
+            current.config,
+            expected_revision=current.revision,
+            request_id="edit",
+            mask_edits=[
+                MaskEdit(
+                    placement_id="left",
+                    operations=[
+                        Stroke(type="stroke", mode="mask", diameter_px=5, points=[(30, 30)])
+                    ],
+                )
+            ],
+        )
+    if change == "photo":
+        Image.new("RGB", (64, 64), "green").save(workspace.template_scene_image("shirt"))
+    preserved = workspace.template_mask_file("shirt", "left").read_bytes()
+    restarted = Preparations(workspace, runtime=runtime)
+    restarted.start()
+    result = wait_terminal(restarted, job.id)
+    restarted.close()
+    assert result.phase == ("completed" if change == "none" else "superseded"), result.error
+    if change != "none":
+        assert workspace.template_mask_file("shirt", "left").read_bytes() == preserved
+        assert workspace.template_map_current("shirt").read_bytes() == old_pointer
+    else:
+        artifacts = Artifacts(workspace)
+        assert artifacts.readiness("shirt", artifacts.saved_inputs("shirt")).state == "ready"
+
+
+def test_photo_reset_intent_preserves_same_photo_manual_mask(workspace_root):
+    from etsy_listings.core.workspace.calibration import MaskEdit, Stroke
+
+    workspace, runtime, coordinator, first = prepare_template(workspace_root)
+    store = CalibrationStore(workspace)
+    current = store.read("shirt")
+    saved = store.save(
+        "shirt",
+        current.config,
+        expected_revision=current.revision,
+        request_id="manual",
+        mask_edits=[
+            MaskEdit(
+                operations=[Stroke(type="stroke", mode="mask", diameter_px=5, points=[(30, 30)])]
+            )
+        ],
+    )
+    checksum = store.mask("shirt").checksum
+    job = coordinator.submit(
+        "shirt",
+        config_revision=saved.revision,
+        request_id="refresh",
+        action="prepare_again",
+        reset_masks_for_photo=True,
+    )
+    assert job.snapshot.placements[0].mask == checksum
+    result = wait_terminal(coordinator, job.id)
+    coordinator.close()
+    assert result.phase == "completed", result.error
+    assert store.mask("shirt").checksum == checksum

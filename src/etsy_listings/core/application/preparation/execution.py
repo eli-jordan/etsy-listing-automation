@@ -51,7 +51,7 @@ class Execution:
         )
         for placement in job.snapshot.placements:
             path = workspace.template_mask_file(job.template, placement.id)
-            if path.exists():
+            if placement.mask != "0" * 64 and path.exists():
                 write_bytes_atomic(
                     workspace.preparation_work(
                         job.id, "mask-" + placement_key(placement.id) + ".png"
@@ -73,7 +73,9 @@ class Execution:
     def safe(self, identity: str, step: str) -> Job:
         job = self.owner.status(identity)
         with self.owner.calibration.lock(job.template):
-            current = self.owner.artifacts.saved_inputs(job.template)
+            current = self.owner.artifacts.saved_inputs(
+                job.template, reset_masks_for_photo=job.reset_masks_for_photo
+            )
             if self.geometry(current) != self.geometry(job.snapshot):
                 raise Stopped("superseded")
             job = self.owner.status(identity)
@@ -121,7 +123,9 @@ class Execution:
     def finalize_published(self, identity: str) -> bool:
         job = self.owner.status(identity)
         try:
-            current = self.owner.artifacts.saved_inputs(job.template)
+            current = self.owner.artifacts.saved_inputs(
+                job.template, reset_masks_for_photo=job.reset_masks_for_photo
+            )
             if self.geometry(current) != self.geometry(job.snapshot):
                 return False
             with self.owner.artifacts.acquire(job.template, job.snapshot) as acquired:
@@ -261,7 +265,9 @@ class Execution:
         """Serialize Cancel versus the actual protocol send, after warm startup."""
         job = self.owner.status(identity)
         with self.owner.calibration.lock(job.template):
-            current = self.owner.artifacts.saved_inputs(job.template)
+            current = self.owner.artifacts.saved_inputs(
+                job.template, reset_masks_for_photo=job.reset_masks_for_photo
+            )
             with self.owner.store.condition:
                 latest = self.owner.store.read(identity)
                 if latest.cancel_intent:
@@ -294,7 +300,9 @@ class Execution:
         if not job.planned_masks:
             return
         with self.owner.calibration.lock(job.template):
-            current = self.owner.artifacts.saved_inputs(job.template)
+            current = self.owner.artifacts.saved_inputs(
+                job.template, reset_masks_for_photo=job.reset_masks_for_photo
+            )
             proposed = tuple(
                 p.model_copy(update={"mask": job.planned_masks.get(placement_key(p.id), p.mask)})
                 for p in job.snapshot.placements
@@ -371,6 +379,7 @@ class Execution:
                         algorithm_version=proposal.algorithm,
                         expected_revision=revision,
                         placement_id=placement.id,
+                        reset_for_photo=job.reset_masks_for_photo,
                     )
                     self.owner.checkpoint(identity, "mask_committed")
                     self.recover_masks(identity)
@@ -448,7 +457,9 @@ class Execution:
             latest = self.owner.status(identity)
             if latest.cancel_intent:
                 raise Stopped("cancelled")
-            return self.owner.artifacts.saved_inputs(job.template, evidence=semantic)
+            return self.owner.artifacts.saved_inputs(
+                job.template, evidence=semantic, reset_masks_for_photo=job.reset_masks_for_photo
+            )
 
         manifest = self.owner.artifacts.publish(
             job.template,
