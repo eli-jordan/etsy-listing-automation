@@ -29,6 +29,9 @@ ROOT = Path(__file__).resolve().parents[1]
 TESTS = ROOT / "tests"
 
 OWNING_TESTS: Mapping[str, frozenset[str]] = {
+    "etsy_listings.core.preparation.installation": frozenset(
+        {"tests/core/unit/test_marigold_installation.py"}
+    ),
     "etsy_listings.core.application.deploy.executor": frozenset(
         {"tests/core/behaviour/test_runs_executor.py"}
     ),

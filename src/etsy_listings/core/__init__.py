@@ -1,7 +1,7 @@
 """The transport-independent backend (ADR-0052).
 
 Engine, workspace, config, clients, rendering, AI, market research, listing
-templates and batches live here, with shared client construction
+templates, batches and explicit model preparation live here, with shared client construction
 (:mod:`~etsy_listings.core.connections`), the user-facing error base
 (:mod:`~etsy_listings.core.errors`) and the move and removal of everything
 keyed by a listing's name (:mod:`~etsy_listings.core.listing_artifacts`).
