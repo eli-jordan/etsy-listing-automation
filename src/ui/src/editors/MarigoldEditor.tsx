@@ -30,6 +30,7 @@ interface Props {
   onChange: (config: TemplateConfigState) => void;
   preparation: Preparation | null;
   rendererControls: ReactNode;
+  calibrationRevision?: string;
   maskEdits: MaskEdit[];
   onMaskEdits: (edits: MaskEdit[]) => void;
   savedConfig: TemplateConfigState | null;
@@ -46,6 +47,7 @@ export function MarigoldEditor({
   onChange,
   preparation,
   rendererControls,
+  calibrationRevision,
   maskEdits,
   onMaskEdits,
   savedConfig,
@@ -193,7 +195,13 @@ export function MarigoldEditor({
         })
       : null;
   const unsavedMaps = mapInputs(config) !== mapInputs(savedConfig) || maskEdits.length > 0;
-  const blocked = !preparation?.maps.can_render || unsavedMaps || !!preparation.active_job;
+  const awaitingSavedRevision =
+    !!calibrationRevision && preparation?.config_revision !== calibrationRevision;
+  const blocked =
+    !preparation?.maps.can_render ||
+    unsavedMaps ||
+    awaitingSavedRevision ||
+    !!preparation.active_job;
   return (
     <main
       className="app__main"
@@ -204,7 +212,7 @@ export function MarigoldEditor({
       <div className="app__preview">
         <div className="app__preview-bar">
           <ViewTabs value={tab} onChange={setTab} />
-          <TestDesignPicker value={design} onChange={onDesignChange} />
+          <TestDesignPicker compact value={design} onChange={onDesignChange} />
         </div>
         {tab === "calibrate" && (
           <>
@@ -306,12 +314,26 @@ export function MarigoldEditor({
               )}
               {editing && <MaskBrushDock controls={controls} />}
             </div>
+            <div className="mg-canvas-foot">
+              <strong>{editing ? "Mask preview" : "Placement preview"}</strong>
+              <span>Simple overlay · open Preview to see folds and lighting.</span>
+            </div>
             <p className="mg-canvas-hint">
-              Placement preview. Folds and lighting are visible in Preview.
+              {editing
+                ? "Mask hides print; Unmask restores it."
+                : "Drag corners or move the box. Shift-drag scales it."}
             </p>
           </>
         )}
         <PreviewPanel
+          fullQuality
+          reference={
+            config.kind === "colour-matrix"
+              ? "All colours use " +
+                (preparation?.main_photo.split(/[\\/]/).at(-1) ?? "the main photo") +
+                "'s prepared maps. No additional preparation."
+              : ""
+          }
           templateName={templateName}
           jobs={jobs}
           design={design}
@@ -320,7 +342,9 @@ export function MarigoldEditor({
             blocked
               ? unsavedMaps
                 ? "Save your calibration changes before rendering."
-                : (preparation?.maps.message ?? "Prepare the template first.")
+                : awaitingSavedRevision
+                  ? "Waiting for current calibration status. Reload the template if it changed elsewhere."
+                  : (preparation?.maps.message ?? "Prepare the template first.")
               : null
           }
           onPrepare={onPrepare}

@@ -97,7 +97,7 @@ export function EditorShell<T extends RealismConfig>({
           {/* Two views of the same template: one to adjust in, one to judge
               in. Shared by all three kinds -- see ViewTabs. */}
           <ViewTabs value={tab} onChange={setTab} />
-          <TestDesignPicker value={design} onChange={onDesignChange} />
+          <TestDesignPicker compact value={design} onChange={onDesignChange} />
           {calibrating && barExtras}
           {calibrating && (
             <label className="app__outline-toggle">

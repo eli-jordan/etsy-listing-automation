@@ -40,6 +40,7 @@ function countLabel(n: number, noun: string): string {
 /** What the row says under the name: what is missing, or what it holds. */
 function describe(t: TemplateSummary): string {
   const kind = t.kind ? KIND_LABELS[t.kind] : null;
+  if (t.renderer === "marigold") return kind ?? "Unknown";
   if (needsCalibration(t)) {
     const reason = t.status_reason ?? "not calibrated";
     return kind ? `${kind} · ${reason}` : reason;
@@ -68,12 +69,13 @@ function Thumb({ name }: { name: string }) {
 }
 
 interface RowProps {
+  preparationStatus?: string | null;
   template: TemplateSummary;
   selected: boolean;
   onSelect: (name: string) => void;
 }
 
-function Row({ template, selected, onSelect }: RowProps) {
+function Row({ template, selected, onSelect, preparationStatus }: RowProps) {
   const classes = ["template-rail__item"];
   if (selected) classes.push("template-rail__item--active");
   if (needsCalibration(template)) classes.push("template-rail__item--needs");
@@ -93,7 +95,7 @@ function Row({ template, selected, onSelect }: RowProps) {
           <span
             className={`mg-rail-state${template.maps?.can_render ? " mg-rail-state--ready" : ""}`}
           >
-            {template.maps?.can_render ? "Ready" : "Needs maps"}
+            {preparationStatus || (template.maps?.can_render ? "Ready" : "Needs maps")}
           </span>
         )}
       </span>
@@ -102,13 +104,22 @@ function Row({ template, selected, onSelect }: RowProps) {
 }
 
 interface GroupProps {
+  jobs?: PreparationJob[];
+  selectedPreparationStatus?: string | null;
   heading: string;
   templates: TemplateSummary[];
   selected: string | null;
   onSelect: (name: string) => void;
 }
 
-function Group({ heading, templates, selected, onSelect }: GroupProps) {
+function Group({
+  heading,
+  templates,
+  selected,
+  onSelect,
+  jobs = [],
+  selectedPreparationStatus,
+}: GroupProps) {
   const [expanded, setExpanded] = useState(false);
   if (templates.length === 0) return null;
 
@@ -119,7 +130,21 @@ function Group({ heading, templates, selected, onSelect }: GroupProps) {
     <section className="template-rail__group">
       <h2 className="template-rail__heading">{`${heading} · ${templates.length}`}</h2>
       {visible.map((t) => (
-        <Row key={t.name} template={t} selected={t.name === selected} onSelect={onSelect} />
+        <Row
+          key={t.name}
+          template={t}
+          selected={t.name === selected}
+          onSelect={onSelect}
+          preparationStatus={
+            t.name === selected
+              ? (selectedPreparationStatus ?? null)
+              : jobs.find((job) => job.template === t.name)?.phase === "queued"
+                ? "Queued"
+                : jobs.some((job) => job.template === t.name)
+                  ? "Preparing"
+                  : null
+          }
+        />
       ))}
       {hidden > 0 && (
         <button type="button" className="template-rail__more" onClick={() => setExpanded(true)}>
@@ -131,13 +156,20 @@ function Group({ heading, templates, selected, onSelect }: GroupProps) {
 }
 
 interface TemplateRailProps {
+  selectedPreparationStatus?: string | null;
   jobs?: PreparationJob[];
   templates: TemplateSummary[];
   selected: string | null;
   onSelect: (name: string) => void;
 }
 
-export function TemplateRail({ templates, selected, onSelect, jobs = [] }: TemplateRailProps) {
+export function TemplateRail({
+  templates,
+  selected,
+  onSelect,
+  jobs = [],
+  selectedPreparationStatus,
+}: TemplateRailProps) {
   const marigold = templates.some((t) => t.renderer === "marigold");
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState<StatusFilter>("all");
@@ -147,7 +179,7 @@ export function TemplateRail({ templates, selected, onSelect, jobs = [] }: Templ
   const doneCount = templates.length - outstanding.length;
   // Held separately so the banner's callback has something TypeScript can
   // narrow -- `outstanding.length > 0` in JSX does not narrow `outstanding[0]`.
-  const nextUp = outstanding[0] ?? null;
+  const nextUp = outstanding.find((template) => template.renderer !== "marigold") ?? null;
 
   const shown = useMemo(() => {
     const term = search.trim().toLowerCase();
@@ -190,8 +222,8 @@ export function TemplateRail({ templates, selected, onSelect, jobs = [] }: Templ
       <div className="template-rail__filters">
         {(
           [
-            ["needs", `${marigold ? "Needs maps" : "Needs calibration"} ${outstanding.length}`],
             ["all", `All ${templates.length}`],
+            ["needs", `${marigold ? "Needs maps" : "Needs calibration"} ${outstanding.length}`],
             ["done", `${marigold ? "Ready" : "Done"} ${doneCount}`],
           ] as const
         ).map(([value, label]) => (
@@ -223,6 +255,15 @@ export function TemplateRail({ templates, selected, onSelect, jobs = [] }: Templ
 
       {shown.length === 0 ? (
         <p className="template-rail__empty">No templates match.</p>
+      ) : marigold ? (
+        <Group
+          heading="Templates"
+          templates={shown}
+          selected={selected}
+          onSelect={onSelect}
+          jobs={jobs}
+          selectedPreparationStatus={selectedPreparationStatus ?? null}
+        />
       ) : (
         <>
           <Group
@@ -241,9 +282,14 @@ export function TemplateRail({ templates, selected, onSelect, jobs = [] }: Templ
       )}
       {jobs.length > 0 && (
         <section className="mg-queue">
-          <h2>Preparation queue</h2>
+          <h2 className="template-rail__heading">Preparation queue</h2>
           {jobs.map((job) => (
-            <button type="button" key={job.id} onClick={() => onSelect(job.template)}>
+            <button
+              className="mg-queue-entry"
+              type="button"
+              key={job.id}
+              onClick={() => onSelect(job.template)}
+            >
               <span>{job.template}</span>
               <span>
                 {job.phase === "queued"

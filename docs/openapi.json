@@ -4514,6 +4514,10 @@
       },
       "PreparationJobResponse": {
         "properties": {
+          "config_revision": {
+            "title": "Config Revision",
+            "type": "string"
+          },
           "elapsed": {
             "title": "Elapsed",
             "type": "number"
@@ -4598,6 +4602,7 @@
           }
         },
         "required": [
+          "config_revision",
           "id",
           "template",
           "kind",

@@ -6,6 +6,7 @@ import { getRuntime, type Preparation, type Runtime } from "../api/preparation";
 import type { Renderer } from "../types";
 export function RendererPanel({
   settings,
+  reference,
   renderer,
   onRendererChange,
   preparation,
@@ -14,6 +15,7 @@ export function RendererPanel({
   pending,
   error,
 }: {
+  reference?: string;
   settings: (runtime: Runtime | null) => ReactNode;
   renderer: Renderer;
   onRendererChange: (renderer: Renderer["type"]) => void;
@@ -52,12 +54,10 @@ export function RendererPanel({
           : "prepare";
   return (
     <section className="realism mg-preparation">
-      <h3>Renderer</h3>
-      <label className="mg-label" htmlFor="template-renderer">
-        Renderer
-      </label>
+      <h3 className="realism__heading">Renderer</h3>
       <select
         id="template-renderer"
+        aria-label="Renderer"
         value={renderer.type}
         onChange={(e) => onRendererChange(e.target.value as Renderer["type"])}
       >
@@ -67,16 +67,17 @@ export function RendererPanel({
       {renderer.type === "marigold" && (
         <>
           <div className="mg-row">
-            <span>Template maps</span>
+            <strong>Template maps</strong>
             <span
               className={`tag mg-status${label === "Ready" ? " mg-status--ready" : label === "Failed" ? " mg-status--failed" : ""}`}
             >
               {label}
             </span>
           </div>
-          <p className="mg-help">
-            {preparation?.maps.message ?? "Prepare the template to follow its folds and lighting."}
-          </p>
+          {reference && <p className="mg-help">{reference}</p>}
+          {!job && preparation?.maps.state === "out_of_date" && preparation.maps.reason && (
+            <p className="mg-help">{preparation.maps.message}</p>
+          )}
           {job ? (
             <div className="mg-progress">
               <PreparationProgress job={job} />
@@ -91,7 +92,10 @@ export function RendererPanel({
           ) : (
             <button
               type="button"
-              className="btn btn-primary mg-wide"
+              className={
+                "btn mg-wide " +
+                (action === "prepare_again" && !recovery ? "btn-secondary" : "btn-primary")
+              }
               disabled={pending || !preparation || !runtime?.available}
               onClick={() => onPrepare(action, recovery && action !== "retry")}
             >
@@ -123,6 +127,13 @@ export function RendererPanel({
                 Prepare again to use {runtime.engine_version}.
               </p>
             )}
+          <p className="mg-help">
+            {job
+              ? "You can close this browser. Preparation will continue."
+              : action === "retry"
+                ? "Completed steps will be reused."
+                : "Prepare once, then reuse for every design and colour."}
+          </p>
           {settings(runtime)}
         </>
       )}

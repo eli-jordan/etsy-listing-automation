@@ -902,6 +902,7 @@ class PreparationPlacementResponse(BaseModel):
 
 
 class PreparationJobResponse(BaseModel):
+    config_revision: str
     id: str
     template: str
     kind: Literal["prepare", "rebuild"]

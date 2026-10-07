@@ -1092,3 +1092,60 @@
     flex-wrap: wrap;
   }
 }
+
+/* The approved workbench sits inside the shell's existing page inset. */
+.app.mg-app {
+  padding: 0;
+  max-width: none;
+}
+.app__preview-bar .design-picker--compact {
+  display: inline-flex;
+  flex-direction: row;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 0;
+  border: 0;
+  background: transparent;
+  min-width: 0;
+}
+.design-picker--compact .design-picker__select {
+  width: 132px;
+  font-size: 12px;
+}
+.design-picker--compact .design-picker__heading {
+  font-size: 9px;
+  font-weight: 400;
+}
+.design-picker--compact .design-picker__upload {
+  white-space: nowrap;
+  font-size: 10px;
+}
+.design-picker--compact .design-picker__status:empty {
+  display: none;
+}
+.mg-app .mg-main-photo {
+  padding: 0 var(--space-3) var(--space-2);
+  margin: 0;
+  font-weight: 400;
+}
+
+.mg-queue-entry {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-2);
+  width: 100%;
+  padding: var(--space-2) 0;
+  border: 0;
+  border-radius: 0;
+  border-bottom: 1px solid var(--color-divider);
+  background: transparent;
+  font-family: var(--font-body);
+  font-size: 11px;
+  text-align: left;
+}
+.mg-progress .mg-row {
+  margin: 0;
+}
+.mg-app .preview-grid > .mg-help {
+  margin-top: var(--space-3);
+}

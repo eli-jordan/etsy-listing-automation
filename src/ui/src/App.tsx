@@ -13,7 +13,13 @@ import {
 } from "./api/preparation";
 import type { Renderer } from "./types";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { getTemplateConfig, listTemplates, saveTemplateConfig } from "./api/calibrator";
+import {
+  acknowledgedTemplateRevision,
+  getTemplateConfig,
+  listTemplates,
+  refreshPreparedRevision,
+  saveTemplateConfig,
+} from "./api/calibrator";
 import { KindPicker } from "./components/KindPicker";
 import { TemplateRail } from "./components/TemplateRail";
 import { ColourMatrixEditor } from "./editors/ColourMatrixEditor";
@@ -41,6 +47,11 @@ export function App() {
   const preparationJobs = usePreparationQueue();
   const [maskDraft, setMaskDraft] = useState<{ name: string; edits: MaskEdit[] } | null>(null);
   const [preparationVersion, setPreparationVersion] = useState(0);
+  const [calibrationFence, setCalibrationFence] = useState<{
+    name: string;
+    revision: string;
+  } | null>(null);
+  const ownPreparations = useRef(new Set<string>());
   const [preparing, setPreparing] = useState(false);
   const [preparationError, setPreparationError] = useState("");
   const rendererCache = useRef<Record<string, Partial<Record<Renderer["type"], Renderer>>>>({});
@@ -68,6 +79,10 @@ export function App() {
     name: string;
     config: TemplateConfigState;
   } | null>(null);
+  const authoringState = useRef({ preparation, savedEntry });
+  useEffect(() => {
+    authoringState.current = { preparation, savedEntry };
+  }, [preparation, savedEntry]);
   const [status, setStatus] = useState("");
   const [savedAt, setSavedAt] = useState<number | null>(null);
   // Which test artwork the previews render with. A way of looking at a
@@ -123,6 +138,14 @@ export function App() {
         const entry = loaded ? { name: templateName, config: loaded.config } : null;
         setConfigEntry(entry);
         setSavedEntry(entry);
+        setCalibrationFence(
+          loaded
+            ? {
+                name: templateName,
+                revision: acknowledgedTemplateRevision(templateName),
+              }
+            : null,
+        );
         setSavedAt(loaded ? Date.parse(loaded.modifiedAt) : null);
         setStatus(loaded ? "Saved" : "");
       })
@@ -133,6 +156,21 @@ export function App() {
       current = false;
     };
   }, [templateName, configVersion]);
+
+  useEffect(() => {
+    const completed = preparation?.latest_job;
+    if (
+      completed?.phase !== "completed" ||
+      !ownPreparations.current.has(completed.id) ||
+      completed.config_revision !== preparation?.config_revision
+    )
+      return;
+    setCalibrationFence((current) =>
+      current?.name === completed.template && current.revision === completed.config_revision
+        ? current
+        : { name: completed.template, revision: completed.config_revision },
+    );
+  }, [preparation]);
 
   const mapState = preparation?.maps.state;
   const preparationPhase = preparation?.active_job?.phase;
@@ -162,7 +200,24 @@ export function App() {
     (name: string, next: TemplateConfigState, edits: MaskEdit[] = []) => {
       const seq = ++saveSeq.current;
       setStatus("Saving…");
-      return saveTemplateConfig(name, next, edits)
+      const current = authoringState.current;
+      const completed = current.preparation?.latest_job;
+      const sync =
+        completed?.phase === "completed" &&
+        completed.template === name &&
+        ownPreparations.current.has(completed.id) &&
+        completed.config_revision === current.preparation?.config_revision &&
+        current.savedEntry?.name === name
+          ? refreshPreparedRevision(
+              name,
+              current.savedEntry.config,
+              completed.config_revision,
+            ).then((accepted) => {
+              if (accepted) ownPreparations.current.delete(completed.id);
+            })
+          : Promise.resolve();
+      return sync
+        .then(() => saveTemplateConfig(name, next, edits))
         .then(() => {
           setMaskDraft((current) => {
             if (current?.name !== name) return current;
@@ -180,6 +235,7 @@ export function App() {
           });
           if (seq !== saveSeq.current || name !== currentTemplate.current) return;
           setSavedEntry({ name, config: next });
+          setCalibrationFence({ name, revision: acknowledgedTemplateRevision(name) });
 
           setPreparationVersion((v) => v + 1);
           setSavedAt(Date.now());
@@ -248,7 +304,7 @@ export function App() {
           setMaskDraft(validEdits.length ? { name: templateName, edits: validEdits } : null);
         if (dirty) await saveConfig(templateName, config, validEdits);
         const current = await getPreparation(templateName);
-        await prepareTemplate({
+        const submitted = await prepareTemplate({
           template: templateName,
           config_revision: current.config_revision,
           request_id: crypto.randomUUID(),
@@ -258,6 +314,7 @@ export function App() {
             ? { previous_job: current.latest_job.id }
             : {}),
         });
+        ownPreparations.current.add(submitted.id);
         reloadPreparation();
         refreshTemplates();
       } catch (e) {
@@ -311,10 +368,31 @@ export function App() {
             });
     setConfig({ ...config, renderer });
   };
+  const railTemplates = useMemo(
+    () =>
+      templates.map((template) =>
+        preparation?.template === template.name
+          ? { ...template, maps: preparation.maps }
+          : template,
+      ),
+    [templates, preparation],
+  );
+  const selected = templates.find((t) => t.name === templateName);
   const rendererControls =
     config && templateName ? (
       <RendererPanel
         renderer={config.renderer}
+        reference={
+          preparation
+            ? "Main image: " +
+              preparation.main_photo.split(/[\\/]/).at(-1) +
+              (config.kind === "colour-matrix"
+                ? " · shared across " + selected?.colours.length + " colours"
+                : config.kind === "multiple"
+                  ? " · all placements"
+                  : "")
+            : ""
+        }
         onRendererChange={switchRenderer}
         preparation={preparation}
         onPrepare={(action, recovery) => void startPreparation(action, recovery)}
@@ -349,7 +427,6 @@ export function App() {
         }
       />
     ) : null;
-  const selected = templates.find((t) => t.name === templateName);
 
   // Every colour already in use anywhere in the workspace, for the box
   // colour field's suggestions. Suggestions rather than a closed list: a
@@ -371,27 +448,42 @@ export function App() {
     selected?.width && selected.height ? [selected.width, selected.height] : null;
 
   return (
-    <div className="app mg-frame">
+    <div className={config?.renderer.type === "marigold" ? "app mg-frame mg-app" : "app mg-frame"}>
       <header className="app__header">
         <h1 className="app__title">Mockup Templates</h1>
         {selected && (
           <>
             <span className="app__crumb-sep">/</span>
             <span className="app__crumb">{selected.name}</span>
-            <span
-              className={selected.status === "calibrated" ? "tag tag-accent-2" : "tag tag-accent"}
-            >
-              {selected.status === "calibrated" ? "calibrated" : "needs calibration"}
-            </span>
+            {config?.renderer.type !== "marigold" && (
+              <span
+                className={selected.status === "calibrated" ? "tag tag-accent-2" : "tag tag-accent"}
+              >
+                {selected.status === "calibrated" ? "calibrated" : "needs calibration"}
+              </span>
+            )}
             {config?.renderer.type === "marigold" && (
-              <span className="tag mg-status">{preparationLabel(preparation)}</span>
+              <span
+                className={
+                  "tag mg-status" +
+                  (preparation?.maps.can_render
+                    ? " mg-status--ready"
+                    : preparation?.latest_job?.phase === "failed"
+                      ? " mg-status--failed"
+                      : "")
+                }
+              >
+                {preparationLabel(preparation)}
+              </span>
             )}
             <span className="app__meta">
-              {selected.status === "calibrated"
-                ? `${kindLabel ?? "Unknown"} · ${selected.colours.length} colour${
-                    selected.colours.length === 1 ? "" : "s"
-                  }`
-                : (selected.status_reason ?? "not calibrated")}
+              {config?.kind === "multiple"
+                ? "Multiple · " + config.placements.length + " placements"
+                : selected.status === "calibrated"
+                  ? `${kindLabel ?? "Unknown"} · ${selected.colours.length} colour${
+                      selected.colours.length === 1 ? "" : "s"
+                    }`
+                  : (selected.status_reason ?? "not calibrated")}
             </span>
           </>
         )}
@@ -418,7 +510,7 @@ export function App() {
               Reload template
             </button>
           )}
-          <button onClick={handleReset} disabled={!dirty}>
+          <button className="btn btn-secondary" onClick={handleReset} disabled={!dirty}>
             Reset
           </button>
         </div>
@@ -426,7 +518,10 @@ export function App() {
 
       <div className="app__workbench">
         <TemplateRail
-          templates={templates}
+          templates={railTemplates}
+          selectedPreparationStatus={
+            config?.renderer.type === "marigold" ? preparationLabel(preparation) : null
+          }
           selected={templateName}
           onSelect={selectTemplate}
           jobs={preparationJobs}
@@ -461,6 +556,9 @@ export function App() {
                   onChange={setConfig}
                   preparation={preparation}
                   rendererControls={rendererControls}
+                  calibrationRevision={
+                    calibrationFence?.name === templateName ? calibrationFence.revision : ""
+                  }
                   maskEdits={maskEdits}
                   onMaskEdits={(edits) => setMaskDraft({ name: templateName, edits })}
                   savedConfig={saved}

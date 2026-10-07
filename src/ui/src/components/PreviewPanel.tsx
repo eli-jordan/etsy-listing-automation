@@ -40,6 +40,8 @@ export interface PreviewJob {
 }
 
 interface Props {
+  fullQuality?: boolean;
+  reference?: string;
   blocked?: string | null;
   prepareLabel?: string;
   onPrepare?: () => void;
@@ -81,6 +83,8 @@ function requestKey(templateName: string, design: string, jobs: PreviewJob[]): s
 }
 
 export function PreviewPanel({
+  fullQuality,
+  reference,
   templateName,
   jobs,
   design,
@@ -213,6 +217,7 @@ export function PreviewPanel({
         {request !== null && !complete && !stale && !blocked && (
           <span className="preview-grid__status">rendering at full size…</span>
         )}
+        {fullQuality && complete && <span className="preview-grid__status">Full quality</span>}
         {failed > 0 && (
           <span className="preview-grid__failed">
             {`${failed} ${failed === 1 ? "preview" : "previews"} failed to render`}
@@ -276,6 +281,13 @@ export function PreviewPanel({
             );
           })}
         </div>
+      )}
+
+      {fullQuality && request !== null && (
+        <>
+          <p className="mg-help">Full-size renders. Click an image to see it large.</p>
+          {reference && <p className="mg-help">{reference}</p>}
+        </>
       )}
 
       {openIndex >= 0 && (

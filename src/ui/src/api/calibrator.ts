@@ -50,6 +50,44 @@ export async function getTemplateConfig(name: string): Promise<TemplateConfigDoc
   return { config: data as unknown as TemplateConfigState, modifiedAt };
 }
 
+/** Revision acknowledged by this client's last config read or successful save. */
+export function acknowledgedTemplateRevision(name: string): string {
+  return (templateRevisions.get(name) ?? "").replace(/^"|"$/g, "");
+}
+
+function canonicalConfig(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(canonicalConfig);
+  if (value !== null && typeof value === "object")
+    return Object.fromEntries(
+      Object.entries(value)
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([key, item]) => [key, canonicalConfig(item)]),
+    );
+  return value;
+}
+
+/** Accept this editor's completed baseline revision only while the saved
+ * configuration and the coordinator's exact revision still match the disk. */
+export async function refreshPreparedRevision(
+  name: string,
+  savedConfig: TemplateConfigState,
+  preparedRevision: string,
+): Promise<boolean> {
+  const expected = '"' + preparedRevision + '"';
+  if (templateRevisions.get(name) === expected) return true;
+  const { data, error, response } = await api.GET("/api/templates/{name}/config", {
+    params: { path: { name } },
+  });
+  if (
+    error ||
+    response.headers.get("ETag") !== expected ||
+    JSON.stringify(canonicalConfig(data)) !== JSON.stringify(canonicalConfig(savedConfig))
+  )
+    return false;
+  templateRevisions.set(name, expected);
+  return true;
+}
+
 async function writeTemplateConfig(
   name: string,
   config: TemplateConfigState,
@@ -62,7 +100,7 @@ async function writeTemplateConfig(
   });
   if (error)
     throw new CalibratorApiError(
-      response?.status === 409
+      response?.status === 409 || response?.status === 412
         ? "Template changed elsewhere. Reload before saving."
         : "could not save template.yaml",
     );

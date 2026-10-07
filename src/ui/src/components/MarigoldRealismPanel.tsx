@@ -45,9 +45,9 @@ export function MarigoldRealismPanel({
       }}
     >
       <div className="realism__head">
-        <h3>Print realism</h3>
+        <h3 className="realism__heading">Print realism</h3>
         <button
-          className="btn-ghost"
+          className="btn btn-ghost"
           onClick={() => onChange({ ...MARIGOLD_DEFAULTS.config.appearance })}
         >
           Reset
@@ -56,7 +56,12 @@ export function MarigoldRealismPanel({
       {(Object.keys(fields) as (keyof Appearance)[]).map((key) => (
         <div className="realism__pass" key={key}>
           <div className="mg-field-title">
-            <label htmlFor={`realism-${key}`}>{fields[key].label}</label>
+            <label
+              className={key === "lighting_source" ? "mg-label" : "realism__title mg-slider-label"}
+              htmlFor={`realism-${key}`}
+            >
+              {fields[key].label}
+            </label>
             <button
               type="button"
               className="mg-info"
@@ -96,7 +101,7 @@ export function MarigoldRealismPanel({
                 <span className="realism__value">{Math.round(value[key] * 100)}%</span>
               </div>
               <p className="realism__scale">
-                {fields[key].low} <span>{fields[key].high}</span>
+                {fields[key].low} <span aria-hidden="true">—</span> {fields[key].high}
               </p>
             </>
           )}

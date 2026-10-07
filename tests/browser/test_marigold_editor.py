@@ -194,3 +194,62 @@ def test_changed_photo_recovers_only_after_explicit_reset_and_prepare(
     ready(page)
     assert page.get_by_role("button", name="Edit mask", exact=True).is_enabled()
     assert sum(len(worker.calls) for worker in preparation_runtime.workers) == calls + 3
+
+
+def test_first_prepare_mask_save_needs_no_reload_and_external_edit_still_conflicts(
+    page, preparation_runtime
+):
+    select_template(page)
+    origin = page.url.split("/templates")[0]
+    page.get_by_role("button", name="Prepare template", exact=True).click()
+    ready(page)
+
+    def stroke():
+        area = page.get_by_label("Mask drawing area").bounding_box()
+        assert area is not None
+        page.mouse.move(area["x"] + area["width"] * 0.45, area["y"] + area["height"] * 0.45)
+        page.mouse.down()
+        page.mouse.move(area["x"] + area["width"] * 0.5, area["y"] + area["height"] * 0.5, steps=5)
+        page.mouse.up()
+
+    page.get_by_role("button", name="Edit mask", exact=True).click()
+    with page.expect_response(
+        lambda r: r.url.endswith("/config") and r.request.method == "PUT" and r.status == 200
+    ):
+        stroke()
+    page.get_by_role("button", name="Done", exact=True).click()
+    ready(page)
+    calls = sum(len(worker.calls) for worker in preparation_runtime.workers)
+    assert calls == 3
+
+    page.get_by_role("tab", name="Preview", exact=True).click()
+    expected = (
+        2
+        if page.request.get(origin + "/api/templates/marigold-shirt/config").json()["kind"]
+        == "colour-matrix"
+        else 1
+    )
+    page.wait_for_function(
+        "(n) => document.querySelectorAll('.preview-grid__tile img').length === n", arg=expected
+    )
+    page.get_by_role("tab", name="Calibrate", exact=True).click()
+
+    config_url = origin + "/api/templates/marigold-shirt/config"
+    document = page.request.get(config_url)
+    config = document.json()
+    config["renderer"]["config"]["appearance"]["fabric_texture"] = 0.33
+    external = page.request.put(
+        config_url,
+        headers={"If-Match": document.headers["etag"]},
+        data={"request_id": "external-edit", "config": config},
+    )
+    assert external.status == 200
+    page.get_by_role("button", name="Edit mask", exact=True).click()
+    with page.expect_response(
+        lambda r: r.url.endswith("/config") and r.request.method == "PUT" and r.status == 412
+    ):
+        stroke()
+    page.get_by_role("button", name="Reload template", exact=True).wait_for()
+    assert page.get_by_role("toolbar", name="Mask brushes").is_visible()
+    assert page.request.get(config_url).headers["etag"] == external.headers["etag"]
+    assert sum(len(worker.calls) for worker in preparation_runtime.workers) == calls

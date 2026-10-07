@@ -17,6 +17,7 @@ describe("usePreparation", () => {
       step: "normals",
       elapsed: 3,
       placements_completed: 0,
+      config_revision: "sha256:revision",
       placements_total: 1,
       error: null,
       last_event_sequence: 3,

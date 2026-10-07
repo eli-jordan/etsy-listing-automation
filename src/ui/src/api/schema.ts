@@ -3559,6 +3559,8 @@ export interface components {
     };
     /** PreparationJobResponse */
     PreparationJobResponse: {
+      /** Config Revision */
+      config_revision: string;
       /** Elapsed */
       elapsed: number;
       /** Engine Version */

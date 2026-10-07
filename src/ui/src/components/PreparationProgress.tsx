@@ -2,6 +2,15 @@ import { useEffect, useState } from "react";
 import { CheckCircleIcon } from "@phosphor-icons/react/dist/csr/CheckCircle";
 import { ClockIcon } from "@phosphor-icons/react/dist/csr/Clock";
 import type { PreparationJob } from "../api/preparation";
+const stepLabels: Record<string, string> = {
+  loading_models: "Loading models",
+  normals: "Estimating surface direction",
+  lighting: "Estimating garment lighting",
+  depth: "Estimating depth",
+  cpu_queued: "Waiting to build maps",
+  building_maps: "Building maps",
+  publication: "Publishing maps",
+};
 export function PreparationProgress({ job }: { job: PreparationJob }) {
   const [ticks, setTicks] = useState(0);
   const [base, setBase] = useState({ elapsed: job.elapsed, ticks });
@@ -23,14 +32,16 @@ export function PreparationProgress({ job }: { job: PreparationJob }) {
           : -1;
   return (
     <>
-      <p>
-        {job.phase === "queued"
-          ? `Waiting in queue${job.queue_position ? ` · ${job.queue_position}` : ""}`
-          : job.step}
+      <p className="mg-row">
+        <strong>
+          {job.phase === "queued"
+            ? `Waiting in queue${job.queue_position ? ` · ${job.queue_position}` : ""}`
+            : (stepLabels[job.step] ?? job.step.replaceAll("_", " "))}
+        </strong>
+        <span>{Math.floor(job.elapsed + ticks - base.ticks)}s</span>
       </p>
-      <p>
-        {Math.floor(job.elapsed + ticks - base.ticks)}s · {job.placements_completed} /{" "}
-        {job.placements_total} placements
+      <p className="mg-help">
+        {job.placements_completed} / {job.placements_total} placements
       </p>
       <ol className="mg-steps">
         {["Surface direction", "Garment lighting", "Depth", "Build maps"].map((label, i) => (

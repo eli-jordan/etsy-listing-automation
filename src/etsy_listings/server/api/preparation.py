@@ -40,6 +40,7 @@ def coordinator(request: Request) -> Preparations:
 def job_response(preparations: Preparations, job: Job) -> PreparationJobResponse:
     queued = [item.id for item in preparations.list_jobs(limit=1000) if item.phase == "queued"]
     return PreparationJobResponse(
+        config_revision=job.config_revision,
         id=job.id,
         template=job.template,
         kind=job.kind,
