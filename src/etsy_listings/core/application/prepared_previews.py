@@ -14,6 +14,7 @@ from etsy_listings.core.application.refusals import (
     TemplatePreviewKindMismatch,
 )
 from etsy_listings.core.preparation.artifacts import ArtifactError, Artifacts
+from etsy_listings.core.preparation.readiness import saved_readiness
 from etsy_listings.core.render import (
     AnyTemplate,
     ColourMatrixTemplate,
@@ -61,6 +62,9 @@ def prepared_preview(
                 saved.config.renderer, MarigoldRenderer
             ):
                 raise PreparationRequired("Save the Marigold renderer selection before rendering")
+            readiness = saved_readiness(workspace, name)
+            if not readiness.can_render:
+                raise PreparationRequired(readiness.message or "Prepare the template first")
             inputs = artifacts.saved_inputs(name)
             boxes = (
                 {p.id: p.bounding_box for p in requested.placements}

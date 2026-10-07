@@ -2,20 +2,15 @@
 
 from dataclasses import dataclass
 
-from PIL import Image
-
 from etsy_listings.core.application.mockup_templates import require_template
 from etsy_listings.core.application.preparation.coordinator import Preparations
 from etsy_listings.core.application.preparation.models import TERMINAL, Job
 from etsy_listings.core.errors import UserFacingError
-from etsy_listings.core.preparation.artifacts import ArtifactError, Readiness
-from etsy_listings.core.render.config import (
-    ColourMatrixTemplate,
-    MultipleTemplate,
-    PhotoWarpRenderer,
-)
+from etsy_listings.core.preparation.artifacts import Readiness
+from etsy_listings.core.preparation.readiness import saved_preparation_facts
+from etsy_listings.core.render.config import MultipleTemplate
 from etsy_listings.core.workspace import Workspace
-from etsy_listings.core.workspace.calibration import CalibrationStore, MaskPhotoMismatch, SavedMask
+from etsy_listings.core.workspace.calibration import CalibrationStore, SavedMask
 
 
 @dataclass(frozen=True)
@@ -45,43 +40,9 @@ def preparation_view(preparations: Preparations, name: str) -> PreparationView:
     store = CalibrationStore(workspace)
     with store.lock(name):
         saved = store.read(name)
-        prepared_engine = None
-        if isinstance(saved.config.renderer, PhotoWarpRenderer):
-            maps = Readiness("not_required")
-        elif isinstance(saved.config, MultipleTemplate) and not saved.config.placements:
-            maps = Readiness(
-                "needs_preparation",
-                "missing_placements",
-                "Add a placement before preparing the template",
-            )
-        else:
-            try:
-                inputs = preparations.artifacts.saved_inputs(name)
-                # A ready poll validates and loads one fixed generation only.
-                # Failed acquisitions use the artifact reader's structured reason.
-                try:
-                    with preparations.artifacts.acquire(name, inputs) as acquired:
-                        maps = Readiness("ready", content_digest=acquired.manifest.content_digest)
-                        value = acquired.manifest.provenance.get("engine_version")
-                        prepared_engine = value if isinstance(value, str) else None
-                except ArtifactError:
-                    maps = preparations.artifacts.readiness(name, inputs)
-                if isinstance(saved.config, ColourMatrixTemplate):
-                    for photo in workspace.template_photos(name):
-                        with Image.open(photo) as image:
-                            if image.size != (inputs.photo.width, inputs.photo.height):
-                                maps = Readiness(
-                                    "out_of_date",
-                                    "incompatible_dimensions",
-                                    "Shared colour photo dimensions differ from the main photo. "
-                                    "Use matching photos or separate templates.",
-                                )
-                                break
-            except (UserFacingError, ValueError, OSError) as exc:
-                reason = (
-                    "photo_changed" if isinstance(exc, MaskPhotoMismatch) else "invalid_artifact"
-                )
-                maps = Readiness("out_of_date", reason, str(exc))
+        facts = saved_preparation_facts(workspace, name)
+        maps = facts.maps
+        prepared_engine = facts.prepared_engine
         placements = []
         for identity in store.placement_ids(saved.config):
             try:

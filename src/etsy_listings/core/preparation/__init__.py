@@ -7,6 +7,9 @@ distribution are implementation details reached through Runtime.
 Numerics exposes plan_crop, evidence_covers, propose_mask and prepare. Its
 internal geometry fitter is reached only there. Artifacts exposes typed
 PreparationInputs and Artifacts.saved_inputs/readiness/publish/acquire/cleanup.
+readiness.saved_readiness and saved_preparation_facts validate saved assets for editor status,
+listing
+checks and engine refusals without consulting inference runtime or cache.
 Rendering consumes MaterialMaps through render.render_marigold_scene. Neither
 artifact loading nor numerical preparation depends on the installed runtime.
 Importing this package never starts workers or loads torch.

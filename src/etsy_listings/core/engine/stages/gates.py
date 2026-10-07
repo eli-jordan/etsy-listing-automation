@@ -108,3 +108,7 @@ def check_render_template(template: str, path: Path) -> Blocked | None:
 
 def check_render_photo(template: str, colour: str | None, path: Path) -> Blocked | None:
     return _refuse(rules.check_render_photo(template, colour, path, present=path.is_file()))
+
+
+def check_prepared_maps(template: str, error: str | None) -> Blocked | None:
+    return _refuse(rules.check_prepared_maps(template, error))

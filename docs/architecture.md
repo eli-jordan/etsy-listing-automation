@@ -884,3 +884,24 @@ cleanup also respects artifact reader leases. Durable masks and map generations
 survive cache removal. Step journals retain at most 512 events with monotonically
 increasing sequence IDs; a cursor older than retained history requires status
 resynchronization. Receipt-only changes do not emit another step event.
+
+## Prepared listing rendering
+
+`preparation.readiness.saved_readiness` provides the same durable-map facts to
+calibration status, `WorkspaceFacts` and the render stage. Listing checks block
+referenced templates with unavailable maps. Reusable listing-template saves
+remain structural; their materialized listings must pass deployment readiness.
+
+Under ADR-0053, the render stage resolves artwork through `DesignPlacement` for
+each placement and hashes accepted numerical map content, ordered artwork pixel
+identities, target photo pixels and appearance. Its Marigold scene identity is
+shared with authoring previews. YAML formatting, inactive settings, generation
+names and inference provenance do not enter that identity. Photo warp keeps its
+existing byte hashes and composition pipeline.
+
+Preview and apply acquire one immutable generation per scene. Before composing
+or promoting a deployment preview, apply rechecks saved preparation inputs and
+actual scene identity. Matching previews copy their exact PNG bytes; changed
+artwork, photos or maps cannot authorize stale promotion. Output file hashes
+remain the separate upload axis. Cache removal recreates rendered images from
+durable assets without model installation or inference.
