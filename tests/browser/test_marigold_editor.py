@@ -180,7 +180,12 @@ def test_changed_photo_recovers_only_after_explicit_reset_and_prepare(
     page.reload()
     page.locator(".template-rail__item[data-template=marigold-shirt]").click()
     recovery = page.get_by_role("button", name="Reset masks and prepare", exact=True)
-    recovery.wait_for()
+    try:
+        recovery.wait_for()
+    except Exception as exc:
+        origin = page.url.split("/templates")[0]
+        status = page.request.get(origin + "/api/templates/marigold-shirt/preparation").text()
+        raise AssertionError(status + "\n" + page.locator("body").inner_text()) from exc
     assert page.get_by_role("button", name="Edit mask", exact=True).is_disabled()
     assert sum(len(worker.calls) for worker in preparation_runtime.workers) == calls
     with page.expect_response(
