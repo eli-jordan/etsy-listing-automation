@@ -197,9 +197,12 @@ The saved 40% expanded evidence rectangle covered the original and a 60% inner
 quad. Translating the original by one photo pixel failed full-margin coverage.
 This confirms conservative reuse; it does not justify reducing the margin.
 Aggregate 2 GiB generation validation happens at publication after CPU map
-construction. Ten full-photo 2048 maps would already exceed that final-array
-budget. That potentially expensive pre-refusal allocation was reported to the
-artifact/coordinator owners; an unsafe near-OOM run was deliberately avoided.
+construction. Measured 2048-by-2048 descriptors contain 15 four-byte channels, or
+234,881,024 bytes per placement. Ten therefore require 2,348,810,240 bytes,
+exceeding the 2,147,483,648-byte generation cap. The build retains every
+placement map before that check. This is a concrete late-refusal code path,
+reported to the artifact/coordinator owners; it is not an observed OOM. An
+unsafe near-OOM experiment was deliberately avoided.
 
 ## Foreground and colour-matrix verdict
 
