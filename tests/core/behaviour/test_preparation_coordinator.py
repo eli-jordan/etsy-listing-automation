@@ -1188,3 +1188,49 @@ def test_checkpoint_wait_reports_terminal_model_failure(workspace_root):
             wait_checkpoint(coordinator, job.id, threading.Event())
     finally:
         coordinator.close()
+
+
+@pytest.mark.parametrize("operation", ["submit", "recover"])
+def test_budget_preflight_refuses_before_runtime_or_prediction_allocation(
+    workspace_root, monkeypatch, operation
+):
+    import etsy_listings.core.preparation.artifacts as policy
+
+    from tests.support.marigold import PreparationRuntime
+
+    workspace = multiple_template(workspace_root)
+    runtime = PreparationRuntime()
+    coordinator = Preparations(workspace, runtime=runtime)
+    revision = CalibrationStore(workspace).read("shirt").revision
+    if operation == "recover":
+        job = coordinator.submit("shirt", config_revision=revision, request_id="saved")
+    monkeypatch.setattr(policy, "MAX_ARCHIVE_BYTES", 64 * 64 * 56)
+    if operation == "submit":
+        with pytest.raises(ValueError, match="allocation budget"):
+            coordinator.submit("shirt", config_revision=revision, request_id="too-large")
+        assert runtime.inspections == 0
+        assert coordinator.list_jobs() == []
+        assert workspace.preparation_work_ids() == []
+    else:
+        restarted = Preparations(workspace, runtime=runtime)
+        restarted.start()
+        result = restarted.status(job.id)
+        restarted.close()
+        assert result.phase == "failed"
+        assert "allocation budget" in result.error
+    assert runtime.workers == []
+    assert workspace.preparation_prediction_sets("shirt") == []
+    assert not workspace.template_mask_file("shirt", "left").exists()
+
+
+def test_saved_reconcile_preflights_before_loading_retained_maps(workspace_root, monkeypatch):
+    import etsy_listings.core.preparation.artifacts as policy
+
+    workspace, runtime, coordinator, first = prepare_template(workspace_root)
+    move_box(workspace, 1)
+    monkeypatch.setattr(policy, "MAX_ARCHIVE_BYTES", 1)
+    with pytest.raises(ValueError, match="allocation budget"):
+        coordinator.reconcile_saved("shirt")
+    assert len(runtime.workers[0].calls) == 3
+    assert len(coordinator.list_jobs()) == 1
+    coordinator.close()
