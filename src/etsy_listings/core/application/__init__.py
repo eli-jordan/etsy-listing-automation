@@ -100,6 +100,10 @@ import names the module it depends on. Public interfaces:
 ``ai``
     AI runs, the batch AI queue, readiness and proposals -- the coordinator,
     registry, runner and their events; see the subpackage's own initialiser.
+``preparation``
+    Durable Marigold authoring jobs through ``preparation.coordinator.Preparations``;
+    public request/result models and host runtime/worker dependencies. The
+    subpackage documents its protected journal, prediction and execution modules.
 ``dependencies``
     The seams a host fills: ``EtsyStates`` (the UI process's Etsy state memo,
     which stays in the server), ``ContextFactory`` (a deployment run's

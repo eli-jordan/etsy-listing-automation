@@ -84,3 +84,79 @@ def rewrite_map_manifest(workspace, template, generation, document):
     pointer = json.loads(path.read_bytes())
     pointer["manifest_checksum"] = hashlib.sha256(data).hexdigest()
     path.write_text(json.dumps(pointer), encoding="utf-8")
+
+
+class PreparationWorker:
+    """Controlled model predictions, leaving queue, fitting and publication real."""
+
+    def __init__(self, root):
+        import threading
+
+        self.root = root
+        self.calls = []
+        self.entered = threading.Event()
+        self.dispatch_entered = threading.Event()
+        self.dispatch_release = threading.Event()
+        self.dispatch_release.set()
+        self.release = threading.Event()
+        self.release.set()
+        self.cancelled = []
+        self.closed = False
+        self.failure = None
+
+    def infer(self, *, request_id, role, input, output, size, **settings):
+        import hashlib
+        from contextlib import nullcontext
+
+        import numpy as np
+
+        self.dispatch_entered.set()
+        assert self.dispatch_release.wait(20)
+        guard = settings.pop("dispatch_guard", nullcontext)
+        with guard():
+            self.calls.append((role, input, settings))
+            self.entered.set()
+        assert self.release.wait(20)
+        if self.failure:
+            raise self.failure
+        w, h = size
+        array = np.full(
+            (3 if role == "lighting" else 1, h, w, 1 if role == "depth" else 3), 0.5, np.float32
+        )
+        if role == "normals":
+            array[:] = 0
+            array[..., 2] = 1
+        path = self.root / output
+        path.parent.mkdir(parents=True, exist_ok=True)
+        np.savez_compressed(path, prediction=array)
+        return {"checksum": hashlib.sha256(path.read_bytes()).hexdigest(), "artifact": output}
+
+    def cancel(self, request_id):
+        self.cancelled.append(request_id)
+
+    def close(self):
+        self.closed = True
+
+
+class PreparationRuntime:
+    def __init__(self):
+        from etsy_listings.core.preparation.runtime import Capability
+
+        self.capability = Capability(True, None, "1.0.0", installation_id="test")
+        self.workers = []
+        self.factory = PreparationWorker
+        self.inspections = 0
+
+    def inspect(self):
+        self.inspections += 1
+        return self.capability
+
+    def selection(self, version, *, installation_id):
+        from dataclasses import replace
+
+        return replace(self.capability, engine_version=version, installation_id=installation_id)
+
+    def worker(self, selected, *, cache_root):
+        worker = self.factory(cache_root)
+        self.workers.append(worker)
+        return worker

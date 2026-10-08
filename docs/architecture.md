@@ -850,3 +850,37 @@ contracts. Numeric content identity excludes storage and provenance. ZIP and NPY
 checks happen before array allocation, and CPU import contracts exclude inference
 installation and torch. Shared colour dimension checks are mechanical validation;
 full photo quality remains the later integration release gate.
+
+## Durable preparation jobs
+
+`application.preparation.coordinator.Preparations` owns explicit preparation and
+CPU-only Save reconciliation under ADR-0053. Synchronous host calls run off the
+HTTP event loop. Deep runtime and artifact checks hold no workspace journal lock,
+so another template's status and cancellation remain available. The host supplies
+runtime/worker and executor boundaries; the default owns one GPU executor, one
+CPU executor and one warm worker selected by immutable engine/installation IDs.
+CPU fitting may overlap the next template's serial GPU calls.
+
+Atomic job records own saved photo/mask snapshots, request receipts, submission
+order, cancel intent, validated prediction references, CPU archives and events.
+Only a protocol dispatch guard decides whether an unstarted model call may run.
+Cancel records intent before acknowledgement; the active call finishes and keeps
+valid evidence. Safe checkpoints reread calibration and cancellation. Geometry,
+masks, main photo and inference settings can supersede work; appearance and
+placement order do not. A superseded request never authorizes new inference.
+
+Recovery recognizes exact planned automatic-mask bytes after interrupted mask
+commits and a published matching generation before its completed job record.
+The complete placement set is mandatory. Save reconciliation queues CPU work only
+when existing validated evidence covers every clipped 40-percent crop. Startup
+also reconciles saved templates, closing the calibration-commit/job-create gap.
+Changed-photo masks remain a refusal until explicitly reset for that photo.
+
+Prediction sets register publication ownership before exposing staging and switch
+their pointer only after complete validation. Current sets, active publishers,
+active jobs and reusable failed/cancelled attempts protect cache files. A later
+complete replacement retires historical attempt references before deletion. Map
+cleanup also respects artifact reader leases. Durable masks and map generations
+survive cache removal. Step journals retain at most 512 events with monotonically
+increasing sequence IDs; a cursor older than retained history requires status
+resynchronization. Receipt-only changes do not emit another step event.
