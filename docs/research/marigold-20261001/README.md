@@ -9,6 +9,7 @@ Experiments do not override those documents or establish release readiness.
 | Record | Contents |
 | --- | --- |
 | [Marigold trial](mockup-marigold-trial.md) | Native Windows feasibility, pinned models and measured findings. |
+| [Integrated native validation](../../features/marigold-20261001/quality-validation.md) | Production runtime/coordinator, full-resolution colour and multiple-placement quality, resource bounds and lifecycle measurements. |
 | [Performance data](marigold-performance.json) | CPU preparation/rendering and map-storage measurements. |
 | [Original handoff](mockup-marigold-handoff.md) | Historical brief, including superseded WSL and calibration suggestions. |
 | [Classical trial](mockup-classical-surface-trial.md) | Earlier approach and synthetic checks. |
