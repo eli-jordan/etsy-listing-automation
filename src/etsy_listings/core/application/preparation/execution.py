@@ -89,6 +89,7 @@ class Execution:
 
     def run(self, identity: str, lane: str) -> None:
         try:
+            self.owner.artifacts.validate_inputs(self.owner.status(identity).snapshot)
             self.recover_masks(identity)
             if self.finalize_published(identity):
                 return

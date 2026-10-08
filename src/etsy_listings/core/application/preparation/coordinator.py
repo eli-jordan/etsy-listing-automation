@@ -157,6 +157,7 @@ class Preparations:
             snapshot = self.artifacts.saved_inputs(
                 template, reset_masks_for_photo=reset_masks_for_photo
             )
+            self.artifacts.validate_inputs(snapshot)
             if previous_job is not None:
                 previous = self.store.read(previous_job)
                 if previous.template != template or previous.phase not in {
@@ -196,6 +197,7 @@ class Preparations:
             snapshot = self.artifacts.saved_inputs(
                 template, reset_masks_for_photo=reset_masks_for_photo
             )
+            self.artifacts.validate_inputs(snapshot)
             for existing in self.store.jobs():
                 if (
                     existing.template == template
@@ -281,6 +283,7 @@ class Preparations:
             if not isinstance(calibration.config.renderer, MarigoldRenderer):
                 return None
             inputs = self.artifacts.saved_inputs(template)
+            self.artifacts.validate_inputs(inputs)
             if self.artifacts.readiness(template, inputs).can_render:
                 return None
             jobs = self.store.jobs()
@@ -341,6 +344,7 @@ class Preparations:
                 self.execution.write(job.id, phase="cancelled")
                 continue
             try:
+                self.artifacts.validate_inputs(job.snapshot)
                 self.execution.recover_masks(job.id)
                 if self.execution.finalize_published(job.id):
                     continue
