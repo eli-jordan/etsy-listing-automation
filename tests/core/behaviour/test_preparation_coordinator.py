@@ -65,6 +65,29 @@ def wait_terminal(coordinator, identity):
     raise AssertionError("Preparation did not finish")
 
 
+def wait_checkpoint(coordinator, identity, reached):
+    """Await a crash boundary under the same budget as ordinary job completion."""
+    import sys
+    import time
+    import traceback
+
+    deadline = time.monotonic() + 30
+    while not reached.is_set():
+        job = coordinator.status(identity)
+        assert job.phase not in {"failed", "cancelled", "superseded", "completed"}, job.model_dump(
+            mode="json"
+        )
+        if time.monotonic() >= deadline:
+            stacks = {
+                key: "".join(traceback.format_stack(frame))
+                for key, frame in sys._current_frames().items()
+            }
+            raise AssertionError(
+                f"Checkpoint not reached: {job.model_dump(mode='json')}; threads={stacks}"
+            )
+        coordinator.events(identity, after=job.last_event_sequence, wait=0.1)
+
+
 @pytest.mark.parametrize("kind", ["single", "colour-matrix", "multiple"])
 def test_explicit_preparation_publishes_every_required_placement(workspace_root, kind):
     from etsy_listings.core.preparation.artifacts import Artifacts
@@ -1070,7 +1093,7 @@ def test_photo_reset_partial_multiple_install_recovers_only_exact_inputs(workspa
         reset_masks_for_photo=True,
     )
     coordinator.start()
-    assert exited.wait(10)
+    wait_checkpoint(coordinator, job.id, exited)
     with pytest.raises(ProcessExit):
         coordinator.close()
     assert workspace.template_map_current("shirt").read_bytes() == old_pointer
@@ -1137,3 +1160,31 @@ def test_photo_reset_intent_preserves_same_photo_manual_mask(workspace_root):
     coordinator.close()
     assert result.phase == "completed", result.error
     assert store.mask("shirt").checksum == checksum
+
+
+def test_checkpoint_wait_reports_terminal_model_failure(workspace_root):
+    import threading
+
+    from tests.support.marigold import PreparationRuntime, PreparationWorker
+
+    workspace = template(workspace_root)
+    runtime = PreparationRuntime()
+
+    def failed_worker(root):
+        worker = PreparationWorker(root)
+        worker.failure = ValueError("diagnostic model refusal")
+        return worker
+
+    runtime.factory = failed_worker
+    coordinator = Preparations(workspace, runtime=runtime)
+    job = coordinator.submit(
+        "shirt",
+        config_revision=CalibrationStore(workspace).read("shirt").revision,
+        request_id="failure",
+    )
+    coordinator.start()
+    try:
+        with pytest.raises(AssertionError, match="diagnostic model refusal"):
+            wait_checkpoint(coordinator, job.id, threading.Event())
+    finally:
+        coordinator.close()
