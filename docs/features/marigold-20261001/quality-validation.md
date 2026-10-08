@@ -139,7 +139,7 @@ relies on the 900-second inference watchdog.
 | Gate | Evidence and current status |
 | --- | --- |
 | G1 | Production-native measurements and full-resolution comparisons are recorded here. 79 Photo warp/Marigold golden, listing, coordinator and protocol checks pass. Photo warp bytes are unchanged. |
-| G2 | BUILD checks pass: 1462 unit cases, five platform skips; 17 integrated frontend cases; ruff formatting/lint, mypy, Prettier, ESLint and TypeScript. Full check/coverage and browser verification belong to FINISH. |
+| G2 | BUILD checks pass: 1462 unit cases, five platform skips; 17 integrated frontend cases; ruff formatting/lint, mypy, Prettier, ESLint and TypeScript. FINISH full check passed 3195 Python tests with seven skips and 95.60% coverage; frontend passed 1021 tests across 80 files with 89.3% branch coverage. Dedicated browser rerun passed all 113 cases. |
 | G3 | No HTTP contract changes or new production dependencies. No user data, secrets or weights enter Git. Existing CPU rendering import boundaries are retained. |
 | G4 | Parent owns PR creation, CI and exclusive real-shop e2e dispatch during FINISH. No remote shop writes or dispatch occur in this BUILD. |
 | G5 | Independent production UI/API review remains pending. The isolated prepared workspace and startup recipe below support that review. |
@@ -223,8 +223,8 @@ Neither the fence colour matrix nor the foreground proposal passes a blanket
 quality gate. Independent maps are useful comparison evidence, not photographic
 ground truth. All 33 photos, every aspect ratio, real two-garment scenes, maximum
 32 placements, browser display latency and low-memory machines remain outside
-these measurements. Final CI, coverage, browser, real-shop e2e and independent
-manual QA are still required before delivery.
+these measurements. Local full coverage and browser gates pass. Final CI, real-shop e2e and
+independent manual QA are still required before delivery.
 
 ## Isolated manual review workspace
 
