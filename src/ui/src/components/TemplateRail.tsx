@@ -30,7 +30,9 @@ const VISIBLE_LIMIT = 5;
 type StatusFilter = "needs" | "all" | "done";
 
 function needsCalibration(t: TemplateSummary): boolean {
-  return t.renderer === "marigold" ? !t.maps?.can_render : t.status === "needs-calibration";
+  return t.renderer === "marigold"
+    ? Boolean(t.maps && !t.maps.can_render)
+    : t.status === "needs-calibration";
 }
 
 function countLabel(n: number, noun: string): string {
@@ -95,7 +97,12 @@ function Row({ template, selected, onSelect, preparationStatus }: RowProps) {
           <span
             className={`mg-rail-state${template.maps?.can_render ? " mg-rail-state--ready" : ""}`}
           >
-            {preparationStatus || (template.maps?.can_render ? "Ready" : "Needs maps")}
+            {preparationStatus ||
+              (template.maps
+                ? template.maps.can_render
+                  ? "Ready"
+                  : "Needs maps"
+                : "Checking maps")}
           </span>
         )}
       </span>
@@ -176,7 +183,9 @@ export function TemplateRail({
   const [kind, setKind] = useState<TemplateKind | null>(null);
 
   const outstanding = useMemo(() => templates.filter(needsCalibration), [templates]);
-  const doneCount = templates.length - outstanding.length;
+  const isReady = (t: TemplateSummary) =>
+    t.renderer === "marigold" ? Boolean(t.maps?.can_render) : !needsCalibration(t);
+  const doneCount = templates.filter(isReady).length;
   // Held separately so the banner's callback has something TypeScript can
   // narrow -- `outstanding.length > 0` in JSX does not narrow `outstanding[0]`.
   const nextUp = outstanding.find((template) => template.renderer !== "marigold") ?? null;
@@ -186,7 +195,7 @@ export function TemplateRail({
     return templates.filter((t) => {
       if (term && !t.name.toLowerCase().includes(term)) return false;
       if (status === "needs" && !needsCalibration(t)) return false;
-      if (status === "done" && needsCalibration(t)) return false;
+      if (status === "done" && !isReady(t)) return false;
       if (kind && t.kind !== kind) return false;
       return true;
     });

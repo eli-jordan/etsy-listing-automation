@@ -66,3 +66,17 @@ describe("usePreparation", () => {
     expect(result.current.preparation?.template).toBe("new");
   });
 });
+
+it("retains idle readiness without decoding it repeatedly and refreshes on focus", async () => {
+  vi.useFakeTimers();
+  const get = vi.spyOn(api, "getPreparation").mockResolvedValue(READY);
+  const { result } = renderHook(() => usePreparation("tee", 0));
+  await act(async () => {});
+  expect(result.current.preparation).toEqual(READY);
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(12000);
+  });
+  expect(get).toHaveBeenCalledTimes(1);
+  await act(async () => window.dispatchEvent(new Event("focus")));
+  expect(get).toHaveBeenCalledTimes(2);
+});
