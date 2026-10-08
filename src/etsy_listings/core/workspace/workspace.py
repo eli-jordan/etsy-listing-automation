@@ -949,6 +949,53 @@ class Workspace:
         directory = self.cache(layout.PREPARATION_DIR, layout.BRUSHES_DIR, _segment(template))
         return directory / (f"{placement_id}.json" if placement_id is not None else "implicit.json")
 
+    def template_maps_dir(self, template: str) -> Path:
+        directory = self.template_dir(template) / layout.MAPS_DIR
+        return self.resolve(directory.relative_to(self.root).as_posix(), self.root)
+
+    def template_map_current(self, template: str) -> Path:
+        return self.template_maps_dir(template) / layout.MAP_CURRENT_FILE
+
+    def template_map_generation_dir(
+        self, template: str, generation: str, *, staging: bool = False
+    ) -> Path:
+        directory = (
+            self.template_maps_dir(template)
+            / (layout.MAP_STAGING_DIR if staging else layout.MAP_GENERATIONS_DIR)
+            / _segment(generation)
+        )
+        return self.resolve(directory.relative_to(self.root).as_posix(), self.root)
+
+    def template_map_manifest(
+        self, template: str, generation: str, *, staging: bool = False
+    ) -> Path:
+        return (
+            self.template_map_generation_dir(template, generation, staging=staging)
+            / layout.MAP_MANIFEST_FILE
+        )
+
+    def template_map_file(
+        self, template: str, generation: str, placement_id: str | None, *, staging: bool = False
+    ) -> Path:
+        # Explicit IDs may be named "placement"; implicit and explicit sets never mix.
+        filename = f"{_segment(placement_id) if placement_id is not None else 'placement'}.npz"
+        path = self.template_map_generation_dir(template, generation, staging=staging) / filename
+        return self.resolve(path.relative_to(self.root).as_posix(), self.root)
+
+    def template_map_generations(self, template: str, *, staging: bool = False) -> list[str]:
+        directory = self.template_maps_dir(template) / (
+            layout.MAP_STAGING_DIR if staging else layout.MAP_GENERATIONS_DIR
+        )
+        directory = self.resolve(directory.relative_to(self.root).as_posix(), self.root)
+        if not directory.exists():
+            return []
+        return sorted(path.name for path in directory.iterdir() if path.is_dir())
+
+    def remove_map_generation(
+        self, template: str, generation: str, *, staging: bool = False
+    ) -> None:
+        remove_tree(self.template_map_generation_dir(template, generation, staging=staging))
+
     def template_derived_dir(self, template: str) -> Path:
         return self.template_dir(template) / layout.DERIVED_DIR
 
