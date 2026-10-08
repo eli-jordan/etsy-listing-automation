@@ -97,3 +97,10 @@ that mismatch. Capture never mutates mask files, preserves valid same-photo
 manual masks, and still refuses missing or damaged saved-mask components. The
 coordinator must persist explicit reset intent and perform baseline installation
 separately after checking the current photo and calibration revision.
+
+`Artifacts.validate_inputs(inputs)` preflights the existing dimension, photo-pixel,
+placement and aggregate allocation limits before runtime inspection or map work.
+It counts every declared BOUNDS channel, including production patch labels, at
+four bytes per scalar: 56 bytes per photo pixel per placement. This protects
+the retained complete generation, independent of archive compression. Callers
+must repeat preflight when reconstructing persisted work for recovery.

@@ -498,3 +498,53 @@ def test_explicit_photo_reset_capture_only_bypasses_photo_mismatch(workspace_roo
         with pytest.raises(UserFacingError):
             store.saved_inputs("shirt", reset_masks_for_photo=True)
     assert {p: p.read_bytes() for p in paths if p.exists()} == before
+
+
+@pytest.mark.parametrize("height, accepted", [(4681, True), (4682, False)])
+def test_validate_inputs_enforces_last_accepted_aggregate_height_without_allocating(
+    workspace_root, monkeypatch, height, accepted
+) -> None:
+    from etsy_listings.core.preparation.artifacts import ArtifactError
+
+    store = Artifacts(Workspace.discover(root_override=workspace_root))
+    inputs = preparation_inputs(tuple(f"placement-{i}" for i in range(8)), (1024, height))
+
+    def forbidden(*args, **kwargs):
+        pytest.fail("Input preflight must not allocate map arrays")
+
+    monkeypatch.setattr(np, "empty", forbidden)
+    monkeypatch.setattr(np, "zeros", forbidden)
+    monkeypatch.setattr(np, "full", forbidden)
+    if accepted:
+        assert store.validate_inputs(inputs) is None
+    else:
+        with pytest.raises(ArtifactError, match="allocation budget"):
+            store.validate_inputs(inputs)
+    assert not store.workspace.template_maps_dir("shirt").exists()
+
+
+@pytest.mark.parametrize("size", [(8193, 1), (0, 1), (8192, 4097)])
+def test_validate_inputs_refuses_invalid_dimensions_even_for_unchecked_inputs(workspace_root, size):
+    from etsy_listings.core.preparation.artifacts import ArtifactError
+
+    store = Artifacts(Workspace.discover(root_override=workspace_root))
+    inputs = preparation_inputs()
+    inputs = inputs.model_copy(
+        update={"photo": inputs.photo.model_copy(update={"width": size[0], "height": size[1]})}
+    )
+    with pytest.raises(ArtifactError):
+        store.validate_inputs(inputs)
+
+
+def test_validate_inputs_refuses_known_ten_placement_2048_generation(workspace_root):
+    from etsy_listings.core.preparation.artifacts import ArtifactError
+
+    store = Artifacts(Workspace.discover(root_override=workspace_root))
+    inputs = preparation_inputs(tuple(f"placement-{i}" for i in range(10)), (2048, 2048))
+    with pytest.raises(ArtifactError, match="allocation budget"):
+        store.validate_inputs(inputs)
+
+
+def test_validate_inputs_accepts_exact_axis_and_photo_pixel_limits(workspace_root):
+    store = Artifacts(Workspace.discover(root_override=workspace_root))
+    assert store.validate_inputs(preparation_inputs(size=(8192, 4096))) is None
