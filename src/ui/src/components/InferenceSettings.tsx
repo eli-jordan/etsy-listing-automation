@@ -21,12 +21,14 @@ export function InferenceSettings({
   value,
   onSave,
   templateName,
-  limits = { num_inference_steps: 50, ensemble_size: 10 },
+  limits = { num_inference_steps: 10, ensemble_size: 3 },
+  capabilityKnown = false,
 }: {
   value: typeof defaults;
   onSave: (value: typeof defaults) => void;
   templateName: string;
   limits?: typeof defaults;
+  capabilityKnown?: boolean;
 }) {
   const [open, setOpen] = useState(false);
 
@@ -104,6 +106,8 @@ export function InferenceSettings({
               <div>
                 <p className="mi-notice">
                   Changes take effect the next time you prepare this template.
+                  {!capabilityKnown &&
+                    " Checking runtime capability; supported defaults are the current limits."}
                 </p>
                 <div className="mi-fields">
                   {(Object.keys(fields) as Key[]).map((key) => (

@@ -21,7 +21,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from contextlib import suppress
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 from email.utils import format_datetime
 from io import BytesIO
 from pathlib import Path
@@ -45,7 +45,6 @@ from etsy_listings.core.application.mockup_templates import (
     template_swatch,
     unsaved_preview,
 )
-from etsy_listings.core.application.preparation_views import preparation_view
 from etsy_listings.core.application.prepared_previews import prepared_preview
 from etsy_listings.core.application.refusals import (
     TemplateAlreadyCalibrated,
@@ -140,12 +139,12 @@ def list_templates(request: Request) -> list[TemplateSummary]:
     for overview in calibration.list_templates(workspace):
         summary = _summary(overview)
         if overview.has_config:
-            view = preparation_view(request.app.state.preparations, overview.name)
-            config = read_config(workspace, overview.name).config
+            config = workspace.load_template_config(overview.name)
             summary.renderer = config.renderer.type
-            summary.maps = MapReadinessResponse(
-                **asdict(view.maps), can_render=view.maps.can_render
-            )
+            # Catalog reads metadata only. The selected status endpoint validates
+            # maps; background client reads fill the other rows without blocking entry.
+            if config.renderer.type == "photo-warp":
+                summary.maps = MapReadinessResponse(state="not_required", can_render=True)
         summaries.append(summary)
     return summaries
 
