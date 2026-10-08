@@ -196,13 +196,17 @@ simultaneous large placement sets remain unvalidated.
 The saved 40% expanded evidence rectangle covered the original and a 60% inner
 quad. Translating the original by one photo pixel failed full-margin coverage.
 This confirms conservative reuse; it does not justify reducing the margin.
-Aggregate 2 GiB generation validation happens at publication after CPU map
-construction. Measured 2048-by-2048 descriptors contain 14 four-byte channels (56 bytes per pixel), or
-234,881,024 bytes per placement. Ten therefore require 2,348,810,240 bytes,
-exceeding the 2,147,483,648-byte generation cap. The build retains every
-placement map before that check. This is a concrete late-refusal code path,
-reported to the artifact/coordinator owners; it is not an observed OOM. An
-unsafe near-OOM experiment was deliberately avoided.
+The initial measurement exposed a late-refusal bug: aggregate 2 GiB validation
+ran only after CPU map construction. Actual 2048-by-2048 descriptors contain
+14 four-byte channels (56 bytes per pixel), or 234,881,024 bytes per placement.
+Ten require 2,348,810,240 bytes, exceeding the 2,147,483,648-byte cap. This was
+a concrete code-path finding, not an observed OOM; an unsafe near-OOM run was
+avoided. The owning PR3/PR4 fixes now preflight this retained-generation size
+before submission, runtime inspection, recovery and execution. Public-interface
+regressions cover early refusal without allocating the oversized generation.
+Publication retains its final validation. The fix does not guarantee comfortable
+RAM use for every accepted placement set. Native measurements above are preserved
+and were not rerun for this deterministic budget check.
 
 ## Foreground and colour-matrix verdict
 
