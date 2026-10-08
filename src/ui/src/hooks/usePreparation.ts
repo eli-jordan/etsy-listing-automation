@@ -49,9 +49,6 @@ export function usePreparation(name: string | null, version: number) {
               timer = setTimeout(() => void read(), 1000);
             },
           });
-        } else {
-          // A save elsewhere can start a CPU rebuild. Status discovery has no side effect.
-          timer = setTimeout(() => void read(), 3000);
         }
       } catch (e) {
         if (!cancelled) {
@@ -62,8 +59,11 @@ export function usePreparation(name: string | null, version: number) {
         reading = false;
       }
     }
+    const onFocus = () => void read();
+    window.addEventListener("focus", onFocus);
     void read();
     return () => {
+      window.removeEventListener("focus", onFocus);
       cancelled = true;
       stream?.close();
       if (timer) clearTimeout(timer);

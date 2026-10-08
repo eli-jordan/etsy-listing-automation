@@ -87,3 +87,23 @@ def test_missing_targets_and_invalid_pagination_have_client_statuses(workspace_r
         assert client.get(route).status_code == 404
     for query in [{"offset": -1}, {"limit": 0}, {"limit": 1001}]:
         assert client.get("/api/preparation/jobs", params=query).status_code == 422
+
+
+def test_catalog_lists_metadata_without_decoding_calibration_or_maps(workspace_root, monkeypatch):
+    from etsy_listings.core.workspace.calibration import CalibrationStore
+
+    from tests.support.marigold import marigold_template
+
+    workspace = marigold_template(workspace_root, name="prepared-shirt")
+
+    def unexpected_decode(*args, **kwargs):
+        raise AssertionError("Catalog must not inspect full calibration pixels")
+
+    monkeypatch.setattr(CalibrationStore, "photo_identity", unexpected_decode)
+    client = TestClient(create_app(workspace))
+    response = client.get("/api/templates")
+    assert response.status_code == 200
+    rows = {row["name"]: row for row in response.json()}
+    assert rows["prepared-shirt"]["renderer"] == "marigold"
+    assert rows["prepared-shirt"]["maps"] is None
+    assert rows["flat-lay-01"]["maps"]["state"] == "not_required"

@@ -215,3 +215,24 @@ it("authorizes changed-photo mask recovery explicitly and preserves calibration 
     [],
   );
 });
+
+it("shows loading while a saved template config is pending instead of kind assignment", async () => {
+  let finish!: (value: Awaited<ReturnType<typeof calibrator.getTemplateConfig>>) => void;
+  vi.mocked(calibrator.getTemplateConfig).mockImplementation(
+    () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+  );
+  render(<App />);
+  await screen.findByText("Loading template...");
+  expect(screen.queryByText(/Choose a template kind/)).not.toBeInTheDocument();
+  expect(screen.queryByLabelText("Renderer")).not.toBeInTheDocument();
+  await act(async () =>
+    finish({
+      config: { ...SINGLE, renderer: PHOTOWARP },
+      modifiedAt: "Wed, 17 Sep 2026 18:30:00 GMT",
+    }),
+  );
+  expect(await screen.findByLabelText("Renderer")).toHaveValue("photo-warp");
+});

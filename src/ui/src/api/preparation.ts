@@ -6,9 +6,10 @@ export type PreparationJob = components["schemas"]["PreparationJobResponse"];
 export type MaskEdit = components["schemas"]["MaskEdit"];
 export type MaskOperation = MaskEdit["operations"][number];
 export type Runtime = components["schemas"]["MarigoldRuntimeResponse"];
-export async function getPreparation(name: string): Promise<Preparation> {
+export async function getPreparation(name: string, signal?: AbortSignal): Promise<Preparation> {
   const { data, error } = await api.GET("/api/templates/{name}/preparation", {
     params: { path: { name } },
+    ...(signal ? { signal } : {}),
   });
   if (error || !data) throw new Error("Could not read template map status. Try again.");
   return data;

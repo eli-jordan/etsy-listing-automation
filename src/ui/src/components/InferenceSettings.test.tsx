@@ -39,3 +39,19 @@ describe("Advanced Marigold Settings", () => {
     expect(screen.getByLabelText("Inference steps")).toHaveValue(10);
   });
 });
+
+it("uses conservative supported limits while runtime capability is pending", () => {
+  render(
+    <InferenceSettings
+      templateName="tee"
+      value={{ num_inference_steps: 10, ensemble_size: 3 }}
+      onSave={vi.fn()}
+    />,
+  );
+  fireEvent.click(screen.getByText(/Advanced settings/));
+  expect(screen.getByLabelText("Inference steps")).toHaveAttribute("max", "10");
+  expect(screen.getByLabelText("Ensemble size")).toHaveAttribute("max", "3");
+  expect(screen.getByText(/Checking runtime capability/)).toBeInTheDocument();
+  fireEvent.change(screen.getByLabelText("Inference steps"), { target: { value: "11" } });
+  expect(screen.getByText("Save settings")).toBeDisabled();
+});

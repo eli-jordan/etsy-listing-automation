@@ -5,6 +5,7 @@ import { InferenceSettings } from "./components/InferenceSettings";
 import { MARIGOLD_DEFAULTS } from "./editors/marigoldDefaults";
 import { MarigoldEditor } from "./editors/MarigoldEditor";
 import { usePreparation } from "./hooks/usePreparation";
+import { useTemplateReadiness } from "./hooks/useTemplateReadiness";
 import {
   cancelPreparation,
   prepareTemplate,
@@ -83,6 +84,11 @@ export function App() {
   useEffect(() => {
     authoringState.current = { preparation, savedEntry };
   }, [preparation, savedEntry]);
+  const [configLoad, setConfigLoad] = useState<{
+    name: string;
+    version: number;
+    phase: "ready" | "error";
+  } | null>(null);
   const [status, setStatus] = useState("");
   const [savedAt, setSavedAt] = useState<number | null>(null);
   // Which test artwork the previews render with. A way of looking at a
@@ -135,6 +141,7 @@ export function App() {
     getTemplateConfig(templateName)
       .then((loaded) => {
         if (!current) return;
+        setConfigLoad({ name: templateName, version: configVersion, phase: "ready" });
         const entry = loaded ? { name: templateName, config: loaded.config } : null;
         setConfigEntry(entry);
         setSavedEntry(entry);
@@ -150,7 +157,10 @@ export function App() {
         setStatus(loaded ? "Saved" : "");
       })
       .catch(() => {
-        if (current) setStatus("failed to load template config");
+        if (current) {
+          setConfigLoad({ name: templateName, version: configVersion, phase: "error" });
+          setStatus("failed to load template config");
+        }
       });
     return () => {
       current = false;
@@ -368,14 +378,24 @@ export function App() {
             });
     setConfig({ ...config, renderer });
   };
+  const queueKey = preparationJobs
+    .filter((job) => job.template === templateName)
+    .map((job) => job.id + job.phase)
+    .join(",");
+  const previousQueueKey = useRef(queueKey);
+  useEffect(() => {
+    if (previousQueueKey.current !== queueKey) reloadPreparation();
+    previousQueueKey.current = queueKey;
+  }, [queueKey, reloadPreparation]);
+  const railFacts = useTemplateReadiness(templates, templateName, preparationJobs);
   const railTemplates = useMemo(
     () =>
       templates.map((template) =>
         preparation?.template === template.name
           ? { ...template, maps: preparation.maps }
-          : template,
+          : { ...template, maps: railFacts[template.name] ?? template.maps ?? null },
       ),
-    [templates, preparation],
+    [templates, preparation, railFacts],
   );
   const selected = templates.find((t) => t.name === templateName);
   const rendererControls =
@@ -404,6 +424,7 @@ export function App() {
             <InferenceSettings
               templateName={templateName}
               value={config.renderer.config.inference}
+              capabilityKnown={Boolean(runtime)}
               {...(runtime
                 ? {
                     limits: {
@@ -455,7 +476,7 @@ export function App() {
           <>
             <span className="app__crumb-sep">/</span>
             <span className="app__crumb">{selected.name}</span>
-            {config?.renderer.type !== "marigold" && (
+            {config && config.renderer.type !== "marigold" && (
               <span
                 className={selected.status === "calibrated" ? "tag tag-accent-2" : "tag tag-accent"}
               >
@@ -532,7 +553,16 @@ export function App() {
               choice, so nothing else can be touched yet. Kind decides the
               whole shape of template.yaml (ADR-0014) -- every other control is
               meaningless or wrong until it is answered. */}
-          {templateName && !config ? (
+          {templateName &&
+          (configLoad?.name !== templateName ||
+            configLoad.version !== configVersion ||
+            configLoad.phase !== "ready") ? (
+            <p role={configLoad?.phase === "error" ? "alert" : "status"}>
+              {configLoad?.phase === "error"
+                ? "Could not load template configuration. Reload to try again."
+                : "Loading template..."}
+            </p>
+          ) : templateName && !config ? (
             <KindPicker
               key={templateName}
               templateName={templateName}
