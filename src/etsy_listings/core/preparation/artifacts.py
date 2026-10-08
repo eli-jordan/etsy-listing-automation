@@ -293,6 +293,24 @@ class Artifacts:
         self.workspace = workspace
         self.calibration = CalibrationStore(workspace)
 
+    def validate_inputs(self, inputs: PreparationInputs) -> None:
+        """Refuse known map limits before runtime inspection or numerical work.
+
+        Production baking includes optional patch labels. Every BOUNDS channel
+        is four bytes (float32 or int32); count the full retained generation,
+        not just one placement or compressed archive size.
+        """
+        try:
+            checked = PreparationInputs.model_validate(inputs.model_dump())
+        except ValueError as exc:
+            raise ArtifactError("Invalid prepared-map inputs: " + str(exc)) from exc
+        bytes_per_pixel = sum(max(channels, 1) * 4 for _, _, channels in BOUNDS.values())
+        expected = (
+            checked.photo.width * checked.photo.height * len(checked.placements) * bytes_per_pixel
+        )
+        if expected > MAX_ARCHIVE_BYTES:
+            raise ArtifactError("Prepared generation exceeds allocation budget")
+
     def _key(self, name: str, generation: str) -> tuple[str, str]:
         return str(self.workspace.template_maps_dir(name)).casefold(), generation
 
