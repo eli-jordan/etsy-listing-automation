@@ -97,14 +97,14 @@ describe("App", () => {
 
   it("shows the open template's calibration state and contents in the header", async () => {
     vi.spyOn(calibrator, "listTemplates").mockResolvedValue([
-      summary({ name: "tote", kind: "multiple", colours: [], status_reason: null }),
+      summary({ name: "tote", kind: "multiple", colours: ["black", "moss"], status_reason: null }),
     ]);
     vi.spyOn(calibrator, "getTemplateConfig").mockResolvedValue(configDocument(MULTIPLE));
     vi.spyOn(calibrator, "renderPreview").mockResolvedValue("blob:preview");
 
     render(<App />);
     await waitFor(() => expect(header().getByText("calibrated")).toBeInTheDocument());
-    expect(header().getByText("Multiple · 0 colours")).toBeInTheDocument();
+    expect(header().getByText("Multiple · 0 placements")).toBeInTheDocument();
   });
 
   it("shows the template file's saved time on initial load", async () => {
