@@ -139,10 +139,10 @@ relies on the 900-second inference watchdog.
 | Gate | Evidence and current status |
 | --- | --- |
 | G1 | Production-native measurements and full-resolution comparisons are recorded here. 79 Photo warp/Marigold golden, listing, coordinator and protocol checks pass. Photo warp bytes are unchanged. |
-| G2 | BUILD checks pass: 1462 unit cases, five platform skips; 17 integrated frontend cases; ruff formatting/lint, mypy, Prettier, ESLint and TypeScript. FINISH full check passed 3195 Python tests with seven skips and 95.60% coverage; frontend passed 1021 tests across 80 files with 89.3% branch coverage. Dedicated browser rerun passed all 113 cases. |
+| G2 | BUILD checks pass: 1462 unit cases, five platform skips; 17 integrated frontend cases; ruff formatting/lint, mypy, Prettier, ESLint and TypeScript. The recovered full check at `08e2a6ac` passed 3206 Python tests with seven skips and 95.61% coverage; frontend passed 1027 tests across 81 files with 89.23% branch coverage. The earlier dedicated browser rerun passed all 113 cases. Final propagated owner fixes still require final gates. |
 | G3 | No HTTP contract changes or new production dependencies. No user data, secrets or weights enter Git. Existing CPU rendering import boundaries are retained. |
 | G4 | Parent owns PR creation, CI and exclusive real-shop e2e dispatch during FINISH. No remote shop writes or dispatch occur in this BUILD. |
-| G5 | Independent production UI/API review remains pending. The isolated prepared workspace and startup recipe below support that review. |
+| G5 | Independent Chrome/UI and API review verified the flows below. Final Escape/loading recheck and recovery-defect verification remain pending; foreground image quality limits remain explicit. |
 
 ## Completed lifecycle and resource measurements
 
@@ -227,8 +227,42 @@ Neither the fence colour matrix nor the foreground proposal passes a blanket
 quality gate. Independent maps are useful comparison evidence, not photographic
 ground truth. All 33 photos, every aspect ratio, real two-garment scenes, maximum
 32 placements, browser display latency and low-memory machines remain outside
-these measurements. Local full coverage and browser gates pass. Final CI, real-shop e2e and
-independent manual QA are still required before delivery.
+these measurements. Recorded local coverage and browser gates pass. Final propagated-fix gates, CI,
+real-shop e2e and the remaining independent rechecks are required before delivery.
+
+## Independent integrated UI/API review
+
+The stack orchestrator reviewed the production server in Chrome using the
+isolated workspace, without remote shop credentials. Full-quality previews were
+observed for single (1/1), multiple (two placements, 1/1) and colour matrix (3/3).
+The selected white test design appeared in every multiple placement. The full-size
+viewer advanced with Next and closed with Escape. Photo warp to Marigold restored
+Ready and reused existing maps. Maximum inference settings were visibly 10/3.
+
+Actual canvas dragging painted a visible mask stroke; Undo removed it and Done
+exited the brush. Multiple-placement Reset restored the automatic mask visually.
+The transient paint jobs followed by Undo/Reset were superseded during fitting
+and reused the prior completed generation: they were not completed rebuilds.
+The separate explicit foreground correction job completed in 99.57 seconds with
+CPU-only rebuild and no GPU inference. Save and exact retry both returned 200
+with the same ETag. The corrected full-resolution PNG returned 200 in 10.22
+seconds. It restored the pendant and manually brushed chain segment, but a broad
+brush exposed a garment halo and an unbrushed second chain remained affected.
+This proves correction controls work; it neither approves automatic occlusion
+nor certifies the hand-edited mask for production.
+
+Independent API smoke checks returned the eleven-template catalog in 0.093
+seconds (200), multiple configuration with an ETag in 0.157 seconds (200), missing
+preparation in 0.015 seconds (404), and invalid `jobs?limit=0` as 422. These are
+warm local measurements, not a bound on deep runtime status or initial loading.
+Evidence remains external under `parent-qa`, including `final-api-smoke.json`
+and `foreground-after.png`; no real images enter Git.
+
+Body-focused Escape while editing was found to violate the interaction contract
+and reported to the editor owner. Its document-listener fix and initial catalog
+loading state await independent recheck here. A separate intermittent photo-change
+recovery failure is under owner investigation; final coverage and browser gates
+must include the propagated resolution. Neither issue is silently marked passed.
 
 ## Isolated manual review workspace
 
