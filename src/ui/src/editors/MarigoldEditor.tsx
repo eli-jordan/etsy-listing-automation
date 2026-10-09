@@ -61,6 +61,14 @@ export function MarigoldEditor({
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
   const [editing, setEditing] = useState(false);
+  useEffect(() => {
+    if (!editing) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !event.defaultPrevented) setEditing(false);
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [editing]);
   const [showBox, setShowBox] = useState(true);
   const [mode, setMode] = useState<"mask" | "unmask">("mask");
   const [diameter, setDiameter] = useState(24);
@@ -203,12 +211,7 @@ export function MarigoldEditor({
     awaitingSavedRevision ||
     !!preparation.active_job;
   return (
-    <main
-      className="app__main"
-      onKeyDown={(event) => {
-        if (event.key === "Escape") setEditing(false);
-      }}
-    >
+    <main className="app__main">
       <div className="app__preview">
         <div className="app__preview-bar">
           <ViewTabs value={tab} onChange={setTab} />

@@ -104,7 +104,8 @@ describe("MarigoldEditor", () => {
     fireEvent.click(screen.getByText("Done"));
     expect(screen.queryByText("Red = hidden print")).not.toBeInTheDocument();
     fireEvent.click(screen.getByText("Edit mask"));
-    fireEvent.keyDown(screen.getByLabelText("Mask drawing area"), { key: "Escape" });
+    fireEvent.keyDown(document.body, { key: "Escape" });
+    expect(screen.queryByRole("toolbar", { name: "Mask brushes" })).not.toBeInTheDocument();
     expect(view.edits()[0]?.operations).toHaveLength(1);
     fireEvent.click(screen.getByText("Edit mask"));
     fireEvent.click(screen.getByLabelText("Mask actions"));

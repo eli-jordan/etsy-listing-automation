@@ -88,6 +88,12 @@ def test_edit_prepare_reconnect_mask_and_full_quality_preview(
     assert saved.value.request.post_data_json["mask_edits"][0]["operations"][0]["type"] == "stroke"
     assert not page.get_by_role("toolbar", name="Mask brushes").is_visible()
     ready(page)
+    page.get_by_role("button", name="Edit mask", exact=True).click()
+    page.evaluate("document.activeElement?.blur()")
+    assert page.evaluate("document.activeElement === document.body")
+    page.keyboard.press("Escape")
+    page.get_by_role("button", name="Edit mask", exact=True).wait_for()
+    assert not page.get_by_role("toolbar", name="Mask brushes").is_visible()
     mask_url = (
         "/api/templates/marigold-shirt/placements/left-shirt/mask"
         if template_kind == "multiple"
