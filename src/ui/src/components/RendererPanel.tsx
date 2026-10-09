@@ -1,5 +1,5 @@
 import { PreparationProgress } from "./PreparationProgress";
-import { preparationLabel } from "./preparationLabel";
+import { preparationLabel, marigoldMapsReady } from "./preparationLabel";
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { getRuntime, type Preparation, type Runtime } from "../api/preparation";
@@ -42,14 +42,14 @@ export function RendererPanel({
     };
   }, [renderer.type]);
   const job = preparation?.active_job;
-  const label = preparationLabel(preparation);
+  const label = pending ? "Preparing" : preparationLabel(preparation);
   const recovery = preparation?.maps.reason === "photo_changed";
   const action =
     preparation?.latest_job?.phase === "failed"
       ? "retry"
       : recovery
         ? "prepare_again"
-        : preparation?.maps.can_render
+        : marigoldMapsReady(preparation?.maps)
           ? "prepare_again"
           : "prepare";
   return (
@@ -118,7 +118,8 @@ export function RendererPanel({
               {runtimeError || runtime?.problem || "Checking Marigold runtime…"}
             </p>
           )}
-          {preparation?.maps.can_render &&
+          {preparation &&
+            marigoldMapsReady(preparation.maps) &&
             preparation.prepared_engine &&
             runtime?.engine_version &&
             preparation.prepared_engine !== runtime.engine_version && (

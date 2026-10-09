@@ -1,3 +1,4 @@
+import { marigoldMapsReady } from "./preparationLabel";
 import type { PreparationJob } from "../api/preparation";
 import { useMemo, useState } from "react";
 import { templateThumbnailUrl } from "../api/calibrator";
@@ -31,7 +32,7 @@ type StatusFilter = "needs" | "all" | "done";
 
 function needsCalibration(t: TemplateSummary): boolean {
   return t.renderer === "marigold"
-    ? Boolean(t.maps && !t.maps.can_render)
+    ? Boolean(t.maps && !marigoldMapsReady(t.maps))
     : t.status === "needs-calibration";
 }
 
@@ -95,11 +96,11 @@ function Row({ template, selected, onSelect, preparationStatus }: RowProps) {
         <span className="template-rail__meta">{describe(template)}</span>
         {template.renderer === "marigold" && (
           <span
-            className={`mg-rail-state${template.maps?.can_render ? " mg-rail-state--ready" : ""}`}
+            className={`mg-rail-state${marigoldMapsReady(template.maps) ? " mg-rail-state--ready" : ""}`}
           >
             {preparationStatus ||
               (template.maps
-                ? template.maps.can_render
+                ? marigoldMapsReady(template.maps)
                   ? "Ready"
                   : "Needs maps"
                 : "Checking maps")}
@@ -184,7 +185,7 @@ export function TemplateRail({
 
   const outstanding = useMemo(() => templates.filter(needsCalibration), [templates]);
   const isReady = (t: TemplateSummary) =>
-    t.renderer === "marigold" ? Boolean(t.maps?.can_render) : !needsCalibration(t);
+    t.renderer === "marigold" ? marigoldMapsReady(t.maps) : !needsCalibration(t);
   const doneCount = templates.filter(isReady).length;
   // Held separately so the banner's callback has something TypeScript can
   // narrow -- `outstanding.length > 0` in JSX does not narrow `outstanding[0]`.

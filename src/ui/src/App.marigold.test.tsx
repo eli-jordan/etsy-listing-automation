@@ -236,3 +236,43 @@ it("shows loading while a saved template config is pending instead of kind assig
   );
   expect(await screen.findByLabelText("Renderer")).toHaveValue("photo-warp");
 });
+
+it("never treats retained Photo warp readiness as prepared Marigold maps", async () => {
+  vi.mocked(prep.getPreparation).mockResolvedValue({
+    ...READY,
+    maps: { state: "not_required", can_render: true },
+    placements: [
+      { placement_id: null, mask_available: false, mask_reason: "Prepare first", undo_count: 0 },
+    ],
+    latest_job: null,
+    active_job: null,
+  });
+  const submit = vi.spyOn(prep, "prepareTemplate");
+  render(<App />);
+  await screen.findByLabelText("Renderer");
+  await waitFor(() => expect(prep.getPreparation).toHaveBeenCalled());
+  fireEvent.change(screen.getByLabelText("Renderer"), { target: { value: "marigold" } });
+  await waitFor(() =>
+    expect(document.querySelector(".mg-preparation .mg-status")).toHaveTextContent(
+      "Needs preparation",
+    ),
+  );
+  expect(screen.queryByRole("button", { name: "Prepare again" })).not.toBeInTheDocument();
+  expect(await screen.findByRole("button", { name: "Prepare template" })).toBeInTheDocument();
+  expect(submit).not.toHaveBeenCalled();
+});
+
+it("shows Preparing while an explicit prepare request is pending", async () => {
+  vi.mocked(calibrator.getTemplateConfig).mockResolvedValue({
+    config: SINGLE,
+    modifiedAt: "Wed, 17 Sep 2026 18:30:00 GMT",
+  });
+  vi.mocked(prep.getPreparation).mockResolvedValue(READY);
+  vi.spyOn(prep, "prepareTemplate").mockImplementation(() => new Promise(() => {}));
+  render(<App />);
+  const button = await screen.findByRole("button", { name: "Prepare again" });
+  fireEvent.click(button);
+  await waitFor(() => expect(prep.prepareTemplate).toHaveBeenCalled());
+  expect(document.querySelector(".mg-preparation .mg-status")).toHaveTextContent("Preparing");
+  expect(button).toBeDisabled();
+});
