@@ -57,6 +57,7 @@ export function App() {
   const [preparationError, setPreparationError] = useState("");
   const rendererCache = useRef<Record<string, Partial<Record<Renderer["type"], Renderer>>>>({});
   const [templates, setTemplates] = useState<TemplateSummary[]>([]);
+  const [catalogState, setCatalogState] = useState<"loading" | "ready" | "error">("loading");
   const [templateName, setTemplateName] = useState<string | null>(null);
   const {
     preparation,
@@ -118,11 +119,13 @@ export function App() {
     listTemplates()
       .then((loaded) => {
         if (seq !== refreshSeq.current) return;
+        setCatalogState("ready");
         setTemplates(loaded);
         setTemplateName((current) => selectName ?? current ?? loaded[0]?.name ?? null);
       })
       .catch(() => {
         if (seq !== refreshSeq.current) return;
+        setCatalogState("error");
         setStatus("failed to load templates");
       });
   }, []);
@@ -647,9 +650,14 @@ export function App() {
                 )}
               {/* Templates are folders in the workspace, not something this
                   page creates: the calibrator calibrates. */}
-              {!templateName && (
-                <p>No templates yet -- add a folder of photos under mockup-templates/.</p>
-              )}
+              {!templateName &&
+                (catalogState === "loading" ? (
+                  <p role="status">Loading templates...</p>
+                ) : catalogState === "error" ? (
+                  <p role="alert">Could not load templates. Reload to try again.</p>
+                ) : (
+                  <p>No templates yet -- add a folder of photos under mockup-templates/.</p>
+                ))}
             </>
           )}
         </div>

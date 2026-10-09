@@ -299,3 +299,18 @@ describe("App", () => {
     });
   });
 });
+
+it("waits for the initial catalog before claiming the workspace is empty", async () => {
+  let finish!: (templates: TemplateSummary[]) => void;
+  vi.spyOn(calibrator, "listTemplates").mockImplementation(
+    () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+  );
+  render(<App />);
+  expect(screen.getByText("Loading templates...")).toBeInTheDocument();
+  expect(screen.queryByText(/No templates yet/)).not.toBeInTheDocument();
+  await act(async () => finish([]));
+  expect(screen.getByText(/No templates yet/)).toBeInTheDocument();
+});
