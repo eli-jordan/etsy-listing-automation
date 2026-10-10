@@ -269,8 +269,20 @@ it("shows Preparing while an explicit prepare request is pending", async () => {
   });
   vi.mocked(prep.getPreparation).mockResolvedValue(READY);
   vi.spyOn(prep, "prepareTemplate").mockImplementation(() => new Promise(() => {}));
+  const runtime = await prep.getRuntime();
+  let finishRuntime!: (value: prep.Runtime) => void;
+  vi.mocked(prep.getRuntime).mockImplementation(
+    () =>
+      new Promise((resolve) => {
+        finishRuntime = resolve;
+      }),
+  );
   render(<App />);
   const button = await screen.findByRole("button", { name: "Prepare again" });
+  expect(button).toBeDisabled();
+  expect(prep.prepareTemplate).not.toHaveBeenCalled();
+  await act(async () => finishRuntime(runtime));
+  await waitFor(() => expect(button).toBeEnabled());
   fireEvent.click(button);
   await waitFor(() => expect(prep.prepareTemplate).toHaveBeenCalled());
   expect(document.querySelector(".mg-preparation .mg-status")).toHaveTextContent("Preparing");
