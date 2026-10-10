@@ -302,8 +302,8 @@ encoding the frame as WebP or PNG is the server's.
 
 Templates require `renderer.type` and put active settings in `renderer.config`.
 Photo warp retains the existing pure numerical pipeline. Marigold settings parse
-without installing or importing model dependencies, but rendering refuses until
-map preparation is integrated. Old top-level `shade` and `displace` are rejected,
+without installing or importing model dependencies. Marigold rendering requires
+current complete durable maps and refuses missing or stale preparation. Old top-level `shade` and `displace` are rejected,
 including mixed-format preview bodies. Multiple placements require safe, unique
 IDs; production creation uses UUIDs and geometry, recolouring and reorder preserve
 them. Single and colour-matrix placements use `None` internally.
@@ -824,8 +824,8 @@ Diagnostics drain separately from protocol output.
 Prediction files contain float32 arrays only. Readers check archive bounds,
 headers, role/shape, finite values, ranges and checksums with pickle disabled.
 Import contracts keep runtime installation and torch out of CPU rendering and
-prediction loading. Preparation coordination, durable maps and rendering remain
-separate delivery stages.
+prediction loading. Preparation coordination, durable maps and rendering use
+separate modules and never start inference implicitly.
 
 ## Durable Marigold maps and CPU composition
 
@@ -849,7 +849,10 @@ coordinate conventions, array bounds, allocation limits and coordinator-facing
 contracts. Numeric content identity excludes storage and provenance. ZIP and NPY
 checks happen before array allocation, and CPU import contracts exclude inference
 installation and torch. Shared colour dimension checks are mechanical validation;
-full photo quality remains the later integration release gate.
+full photo quality is reviewed separately in the
+[integrated native validation](features/marigold-20261001/quality-validation.md).
+The measured fence colour variants are unsuitable for shared reference maps;
+separate independently prepared templates are the agreed remedy.
 
 ## Durable preparation jobs
 
@@ -905,3 +908,19 @@ actual scene identity. Matching previews copy their exact PNG bytes; changed
 artwork, photos or maps cannot authorize stale promotion. Output file hashes
 remain the separate upload axis. Cache removal recreates rendered images from
 durable assets without model installation or inference.
+
+## Native operational validation
+
+The [integrated native report](features/marigold-20261001/quality-validation.md)
+records full-resolution photo comparisons and bounded native experiments under
+ADR-0053. Allocation caps and the one-pipeline tensor budget constrain individual
+operations; they are not total-process RAM or throughput guarantees. The full
+40-percent crop requirement remains conservative. No smaller evidence reuse
+margin is certified.
+
+The coordinator owns one GPU and one CPU lane. Worker numerical operations use
+four Torch threads; host OpenCV currently inherits its machine-dependent default.
+Graceful coordinator close finishes active phases before closing the worker.
+The worker's 15-second shutdown grace therefore starts after active coordinator
+work has finished. A stalled active model call relies on the separate 900-second
+watchdog. Neither duration is a normal-operation latency promise.

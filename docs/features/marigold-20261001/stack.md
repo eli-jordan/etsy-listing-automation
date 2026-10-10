@@ -47,3 +47,10 @@ a requirement to hit an invented line-count target.
 Record branch, worktree, agent, base/tip, PR URL and build/finish/check state as
 work proceeds. The orchestration log is working state; delivery links belong in
 this feature after the PRs open.
+
+PR7 is [#135](https://github.com/eli-jordan/etsy-listing-automation/pull/135),
+branch `stack/marigold-07-validation`, based on the additively merged PR6 tip `907f110e`. Native
+measurements and unsuitable-photo decisions are in
+[quality validation](quality-validation.md). Local full and dedicated browser
+gates pass. Independent Chrome/API review and its final browser-unavailable
+limitation are recorded in the report. CI and serial real-shop e2e remain pending.
