@@ -139,10 +139,10 @@ relies on the 900-second inference watchdog.
 | Gate | Evidence and current status |
 | --- | --- |
 | G1 | Production-native measurements and full-resolution comparisons are recorded here. 79 Photo warp/Marigold golden, listing, coordinator and protocol checks pass. Photo warp bytes are unchanged. |
-| G2 | BUILD checks pass: 1462 unit cases, five platform skips; 17 integrated frontend cases; ruff formatting/lint, mypy, Prettier, ESLint and TypeScript. The recovered full check at `08e2a6ac` passed 3206 Python tests with seven skips and 95.61% coverage; frontend passed 1027 tests across 81 files with 89.23% branch coverage. The earlier dedicated browser rerun passed all 113 cases. Final propagated owner fixes still require final gates. |
+| G2 | BUILD checks pass: 1462 unit cases, five platform skips; 17 integrated frontend cases; ruff formatting/lint, mypy, Prettier, ESLint and TypeScript. The final full check passed 3206 Python tests with seven skips and 95.63% coverage; the dedicated browser gate passed all 113 cases. After the last test-only owner fix, the full frontend gate passed 1031 tests across 81 files with 89.46% branch coverage, formatting, lint and type checking. |
 | G3 | No HTTP contract changes or new production dependencies. No user data, secrets or weights enter Git. Existing CPU rendering import boundaries are retained. |
 | G4 | Parent owns PR creation, CI and exclusive real-shop e2e dispatch during FINISH. No remote shop writes or dispatch occur in this BUILD. |
-| G5 | Independent Chrome/UI and API review verified the flows below. The body-focused Escape and initial Loading fixes passed independent Chrome recheck; recovery-defect verification remains pending. Foreground image quality limits remain explicit. |
+| G5 | Independent Chrome/UI and API review verified the flows below. The body-focused Escape and initial Loading fixes passed independent Chrome recheck; final readiness changes are covered by deterministic owner regressions; the final manual readiness recheck was unavailable. Foreground image quality limits remain explicit. |
 
 ## Completed lifecycle and resource measurements
 
@@ -227,8 +227,9 @@ Neither the fence colour matrix nor the foreground proposal passes a blanket
 quality gate. Independent maps are useful comparison evidence, not photographic
 ground truth. All 33 photos, every aspect ratio, real two-garment scenes, maximum
 32 placements, browser display latency and low-memory machines remain outside
-these measurements. Recorded local coverage and browser gates pass. Final propagated-fix gates, CI,
-real-shop e2e and the remaining independent rechecks are required before delivery.
+these measurements. Recorded local coverage and browser gates pass. Final local propagated-fix gates pass. CI and serial real-shop e2e remain
+required before delivery; the final manual browser availability limitation is
+recorded below.
 
 ## Independent integrated UI/API review
 
@@ -261,9 +262,17 @@ and `foreground-after.png`; no real images enter Git.
 Body-focused Escape while editing was found to violate the interaction contract
 and reported to the editor owner. Independent Chrome recheck of the propagated
 `237bc022` document-listener fix passed with BODY focus, and initial catalog
-Loading was verified. Draft retention remains covered by the owner regressions. A separate intermittent photo-change
-recovery failure is under owner investigation; final coverage and browser gates
-must include the propagated resolution. Neither issue is silently marked passed.
+Loading was verified. Draft retention remains covered by the owner regressions. The photo-change investigation identified false Ready presentation in frontend
+state, not backend deletion of prepared generations. The owning editor fix
+propagated readiness-aware labels and controls. Its pending-Prepare regression
+waits for an accepted POST before asserting pending state, so it does not race
+request submission. Final gates include these propagated regressions. After server restart,
+independent API checks returned catalog 200 in 0.094 seconds, folded-edge
+preparation 200 with ready maps and `can_render=true`, and multiple configuration
+200. Chrome then reported unavailable; the T3 preview snapshot timed out twice
+at 15 seconds and evaluation timed out too. No additional manual false-Ready
+recheck is claimed. Earlier full Chrome flows and Escape recheck remain valid;
+the final readiness code has eight App and six browser-kind owner regressions. No issue is silently marked passed.
 
 ## Isolated manual review workspace
 
