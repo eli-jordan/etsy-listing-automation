@@ -302,12 +302,10 @@ describe("App", () => {
 
 it("waits for the initial catalog before claiming the workspace is empty", async () => {
   let finish!: (templates: TemplateSummary[]) => void;
-  vi.spyOn(calibrator, "listTemplates").mockImplementation(
-    () =>
-      new Promise((resolve) => {
-        finish = resolve;
-      }),
-  );
+  const pending = new Promise<TemplateSummary[]>((resolve) => {
+    finish = resolve;
+  });
+  vi.spyOn(calibrator, "listTemplates").mockReturnValue(pending);
   render(<App />);
   expect(screen.getByText("Loading templates...")).toBeInTheDocument();
   expect(screen.queryByText(/No templates yet/)).not.toBeInTheDocument();
