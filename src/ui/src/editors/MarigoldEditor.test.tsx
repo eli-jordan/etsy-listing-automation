@@ -257,3 +257,9 @@ it("has one drawing area and assigns a multiple mask stroke to the selected stab
   expect(screen.queryByRole("toolbar", { name: "Mask brushes" })).not.toBeInTheDocument();
   expect(view.edits()).toHaveLength(1);
 });
+
+it("refuses an automatic full preview from Photo warp not-required status", async () => {
+  setup(SINGLE, { ...READY, maps: { state: "not_required", can_render: true } });
+  await act(async () => {});
+  expect(calibrator.renderPreview).not.toHaveBeenCalled();
+});
