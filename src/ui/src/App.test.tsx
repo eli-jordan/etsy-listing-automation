@@ -97,14 +97,14 @@ describe("App", () => {
 
   it("shows the open template's calibration state and contents in the header", async () => {
     vi.spyOn(calibrator, "listTemplates").mockResolvedValue([
-      summary({ name: "tote", kind: "multiple", colours: [], status_reason: null }),
+      summary({ name: "tote", kind: "multiple", colours: ["black", "moss"], status_reason: null }),
     ]);
     vi.spyOn(calibrator, "getTemplateConfig").mockResolvedValue(configDocument(MULTIPLE));
     vi.spyOn(calibrator, "renderPreview").mockResolvedValue("blob:preview");
 
     render(<App />);
     await waitFor(() => expect(header().getByText("calibrated")).toBeInTheDocument());
-    expect(header().getByText("Multiple · 0 colours")).toBeInTheDocument();
+    expect(header().getByText("Multiple · 0 placements")).toBeInTheDocument();
   });
 
   it("shows the template file's saved time on initial load", async () => {
@@ -298,4 +298,17 @@ describe("App", () => {
       await waitFor(() => expect(getSpy.mock.calls.length).toBe(callsBefore));
     });
   });
+});
+
+it("waits for the initial catalog before claiming the workspace is empty", async () => {
+  let finish!: (templates: TemplateSummary[]) => void;
+  const pending = new Promise<TemplateSummary[]>((resolve) => {
+    finish = resolve;
+  });
+  vi.spyOn(calibrator, "listTemplates").mockReturnValue(pending);
+  render(<App />);
+  expect(screen.getByText("Loading templates...")).toBeInTheDocument();
+  expect(screen.queryByText(/No templates yet/)).not.toBeInTheDocument();
+  await act(async () => finish([]));
+  expect(screen.getByText(/No templates yet/)).toBeInTheDocument();
 });

@@ -135,3 +135,113 @@ describe("renderPreview", () => {
     );
   });
 });
+
+describe("revision-aware mask saves", () => {
+  it("serializes saves with the new revision and consumes each pending stroke once", async () => {
+    const { api } = await import("./client");
+    const { getTemplateConfig, saveTemplateConfig } = await import("./calibrator");
+    vi.mocked(api.GET).mockResolvedValue({
+      data: CONFIG,
+      response: new Response(null, {
+        headers: { ETag: "revision-1", "Last-Modified": "Wed, 17 Sep 2026 18:30:00 GMT" },
+      }),
+    } as never);
+    await getTemplateConfig("race");
+    let finish!: (v: never) => void;
+    vi.mocked(api.PUT)
+      .mockImplementationOnce(
+        () =>
+          new Promise((r) => {
+            finish = r;
+          }),
+      )
+      .mockResolvedValueOnce({
+        data: CONFIG,
+        response: new Response(null, { headers: { ETag: "revision-3" } }),
+      } as never);
+    const operation = {
+      type: "stroke" as const,
+      mode: "mask" as const,
+      diameter_px: 12,
+      points: [[5, 6] as [number, number]],
+    };
+    const edits = [{ placement_id: null, operations: [operation] }];
+    const first = saveTemplateConfig("race", CONFIG, edits);
+    const second = saveTemplateConfig("race", CONFIG, edits);
+    expect(api.PUT).toHaveBeenCalledTimes(1);
+    expect(api.PUT).toHaveBeenNthCalledWith(
+      1,
+      "/api/templates/{name}/config",
+      expect.objectContaining({
+        params: { path: { name: "race" }, header: { "if-match": "revision-1" } },
+        body: { request_id: expect.any(String), config: CONFIG, mask_edits: edits },
+      }),
+    );
+    finish({
+      data: CONFIG,
+      response: new Response(null, { headers: { ETag: "revision-2" } }),
+    } as never);
+    await first;
+    await second;
+    expect(api.PUT).toHaveBeenNthCalledWith(
+      2,
+      "/api/templates/{name}/config",
+      expect.objectContaining({
+        params: { path: { name: "race" }, header: { "if-match": "revision-2" } },
+        body: { request_id: expect.any(String), config: CONFIG, mask_edits: [] },
+      }),
+    );
+  });
+});
+
+describe("prepared revision refresh", () => {
+  it.each(["original", "reordered"])(
+    "accepts unchanged saved configuration with %s keys",
+    async (order) => {
+      const { api } = await import("./client");
+      const { refreshPreparedRevision, saveTemplateConfig } = await import("./calibrator");
+      vi.mocked(api.GET).mockResolvedValue({
+        data:
+          order === "reordered"
+            ? {
+                renderer: CONFIG.renderer,
+                bounding_box: CONFIG.bounding_box,
+                kind: CONFIG.kind,
+              }
+            : CONFIG,
+        error: undefined,
+        response: new Response(null, { headers: { ETag: '"sha256:baseline"' } }),
+      } as never);
+      expect(await refreshPreparedRevision("fresh-baseline", CONFIG, "sha256:baseline")).toBe(true);
+      vi.mocked(api.PUT).mockResolvedValue({
+        data: CONFIG,
+        error: undefined,
+        response: new Response(null, { headers: { ETag: '"sha256:saved"' } }),
+      } as never);
+      await saveTemplateConfig("fresh-baseline", CONFIG);
+      expect(api.PUT).toHaveBeenLastCalledWith(
+        "/api/templates/{name}/config",
+        expect.objectContaining({
+          params: {
+            path: { name: "fresh-baseline" },
+            header: { "if-match": '"sha256:baseline"' },
+          },
+        }),
+      );
+    },
+  );
+  it.each(["revision", "configuration"])("refuses a newer external %s", async (changed) => {
+    const { api } = await import("./client");
+    const { refreshPreparedRevision } = await import("./calibrator");
+    vi.mocked(api.GET).mockResolvedValue({
+      data: changed === "configuration" ? { ...CONFIG, kind: "single" } : CONFIG,
+      error: undefined,
+      response: new Response(null, {
+        headers: { ETag: changed === "revision" ? '"sha256:external"' : '"sha256:completed"' },
+      }),
+    } as never);
+    expect(await refreshPreparedRevision("external-" + changed, CONFIG, "sha256:completed")).toBe(
+      false,
+    );
+  });
+});

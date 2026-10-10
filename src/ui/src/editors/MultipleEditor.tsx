@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import type { PhotoWarpTemplate } from "../types";
 import { useCallback, useMemo, useState } from "react";
 import type { PreviewJob } from "../components/PreviewPanel";
@@ -7,6 +8,7 @@ import type { BoundingBox, MultipleTemplate, Placement } from "../types";
 import { EditorShell } from "./EditorShell";
 
 interface Props {
+  rendererControls?: ReactNode;
   templateName: string;
   config: PhotoWarpTemplate<MultipleTemplate>;
   /** The scene photo's true pixel size -- the space every placement's box is
@@ -56,6 +58,7 @@ function uncolouredWarning(placements: Placement[]): string | null {
  * comes back.
  */
 function PhotoWarpMultipleEditor({
+  rendererControls,
   templateName,
   config,
   space,
@@ -176,6 +179,7 @@ function PhotoWarpMultipleEditor({
           Math.min(...source.bounding_box.map((p) => p.x));
         const copy: Placement = {
           ...source,
+          id: crypto.randomUUID(),
           bounding_box: source.bounding_box.map((p) => ({ x: p.x + width, y: p.y })) as BoundingBox,
         };
         const next = [...placements];
@@ -199,6 +203,7 @@ function PhotoWarpMultipleEditor({
 
   return (
     <EditorShell
+      {...(rendererControls ? { rendererControls } : {})}
       templateName={templateName}
       config={config}
       onChange={onChange}

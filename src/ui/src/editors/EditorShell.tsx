@@ -20,6 +20,7 @@ export interface CanvasContext {
 }
 
 interface Props<T extends RealismConfig> {
+  rendererControls?: ReactNode;
   templateName: string;
   config: T;
   onChange: (config: T) => void;
@@ -69,6 +70,7 @@ interface Props<T extends RealismConfig> {
  * them.
  */
 export function EditorShell<T extends RealismConfig>({
+  rendererControls,
   templateName,
   config,
   onChange,
@@ -95,6 +97,7 @@ export function EditorShell<T extends RealismConfig>({
           {/* Two views of the same template: one to adjust in, one to judge
               in. Shared by all three kinds -- see ViewTabs. */}
           <ViewTabs value={tab} onChange={setTab} />
+          <TestDesignPicker compact value={design} onChange={onDesignChange} />
           {calibrating && barExtras}
           {calibrating && (
             <label className="app__outline-toggle">
@@ -132,7 +135,7 @@ export function EditorShell<T extends RealismConfig>({
 
       <aside className="app__controls">
         {controls}
-        <TestDesignPicker value={design} onChange={onDesignChange} />
+        {rendererControls}
         <PrintRealismPanel
           displace={config.renderer.config.displace}
           shade={config.renderer.config.shade}

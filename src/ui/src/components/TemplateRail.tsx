@@ -1,3 +1,5 @@
+import { marigoldMapsReady } from "./preparationLabel";
+import type { PreparationJob } from "../api/preparation";
 import { useMemo, useState } from "react";
 import { templateThumbnailUrl } from "../api/calibrator";
 import type { TemplateKind, TemplateSummary } from "../types";
@@ -29,7 +31,9 @@ const VISIBLE_LIMIT = 5;
 type StatusFilter = "needs" | "all" | "done";
 
 function needsCalibration(t: TemplateSummary): boolean {
-  return t.status === "needs-calibration";
+  return t.renderer === "marigold"
+    ? Boolean(t.maps && !marigoldMapsReady(t.maps))
+    : t.status === "needs-calibration";
 }
 
 function countLabel(n: number, noun: string): string {
@@ -39,6 +43,7 @@ function countLabel(n: number, noun: string): string {
 /** What the row says under the name: what is missing, or what it holds. */
 function describe(t: TemplateSummary): string {
   const kind = t.kind ? KIND_LABELS[t.kind] : null;
+  if (t.renderer === "marigold") return kind ?? "Unknown";
   if (needsCalibration(t)) {
     const reason = t.status_reason ?? "not calibrated";
     return kind ? `${kind} · ${reason}` : reason;
@@ -67,12 +72,13 @@ function Thumb({ name }: { name: string }) {
 }
 
 interface RowProps {
+  preparationStatus?: string | null;
   template: TemplateSummary;
   selected: boolean;
   onSelect: (name: string) => void;
 }
 
-function Row({ template, selected, onSelect }: RowProps) {
+function Row({ template, selected, onSelect, preparationStatus }: RowProps) {
   const classes = ["template-rail__item"];
   if (selected) classes.push("template-rail__item--active");
   if (needsCalibration(template)) classes.push("template-rail__item--needs");
@@ -88,19 +94,40 @@ function Row({ template, selected, onSelect }: RowProps) {
       <span className="template-rail__text">
         <span className="template-rail__name">{template.name}</span>
         <span className="template-rail__meta">{describe(template)}</span>
+        {template.renderer === "marigold" && (
+          <span
+            className={`mg-rail-state${marigoldMapsReady(template.maps) ? " mg-rail-state--ready" : ""}`}
+          >
+            {preparationStatus ||
+              (template.maps
+                ? marigoldMapsReady(template.maps)
+                  ? "Ready"
+                  : "Needs maps"
+                : "Checking maps")}
+          </span>
+        )}
       </span>
     </button>
   );
 }
 
 interface GroupProps {
+  jobs?: PreparationJob[];
+  selectedPreparationStatus?: string | null;
   heading: string;
   templates: TemplateSummary[];
   selected: string | null;
   onSelect: (name: string) => void;
 }
 
-function Group({ heading, templates, selected, onSelect }: GroupProps) {
+function Group({
+  heading,
+  templates,
+  selected,
+  onSelect,
+  jobs = [],
+  selectedPreparationStatus,
+}: GroupProps) {
   const [expanded, setExpanded] = useState(false);
   if (templates.length === 0) return null;
 
@@ -111,7 +138,21 @@ function Group({ heading, templates, selected, onSelect }: GroupProps) {
     <section className="template-rail__group">
       <h2 className="template-rail__heading">{`${heading} · ${templates.length}`}</h2>
       {visible.map((t) => (
-        <Row key={t.name} template={t} selected={t.name === selected} onSelect={onSelect} />
+        <Row
+          key={t.name}
+          template={t}
+          selected={t.name === selected}
+          onSelect={onSelect}
+          preparationStatus={
+            t.name === selected
+              ? (selectedPreparationStatus ?? null)
+              : jobs.find((job) => job.template === t.name)?.phase === "queued"
+                ? "Queued"
+                : jobs.some((job) => job.template === t.name)
+                  ? "Preparing"
+                  : null
+          }
+        />
       ))}
       {hidden > 0 && (
         <button type="button" className="template-rail__more" onClick={() => setExpanded(true)}>
@@ -123,28 +164,39 @@ function Group({ heading, templates, selected, onSelect }: GroupProps) {
 }
 
 interface TemplateRailProps {
+  selectedPreparationStatus?: string | null;
+  jobs?: PreparationJob[];
   templates: TemplateSummary[];
   selected: string | null;
   onSelect: (name: string) => void;
 }
 
-export function TemplateRail({ templates, selected, onSelect }: TemplateRailProps) {
+export function TemplateRail({
+  templates,
+  selected,
+  onSelect,
+  jobs = [],
+  selectedPreparationStatus,
+}: TemplateRailProps) {
+  const marigold = templates.some((t) => t.renderer === "marigold");
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState<StatusFilter>("all");
   const [kind, setKind] = useState<TemplateKind | null>(null);
 
   const outstanding = useMemo(() => templates.filter(needsCalibration), [templates]);
-  const doneCount = templates.length - outstanding.length;
+  const isReady = (t: TemplateSummary) =>
+    t.renderer === "marigold" ? marigoldMapsReady(t.maps) : !needsCalibration(t);
+  const doneCount = templates.filter(isReady).length;
   // Held separately so the banner's callback has something TypeScript can
   // narrow -- `outstanding.length > 0` in JSX does not narrow `outstanding[0]`.
-  const nextUp = outstanding[0] ?? null;
+  const nextUp = outstanding.find((template) => template.renderer !== "marigold") ?? null;
 
   const shown = useMemo(() => {
     const term = search.trim().toLowerCase();
     return templates.filter((t) => {
       if (term && !t.name.toLowerCase().includes(term)) return false;
       if (status === "needs" && !needsCalibration(t)) return false;
-      if (status === "done" && needsCalibration(t)) return false;
+      if (status === "done" && !isReady(t)) return false;
       if (kind && t.kind !== kind) return false;
       return true;
     });
@@ -180,9 +232,9 @@ export function TemplateRail({ templates, selected, onSelect }: TemplateRailProp
       <div className="template-rail__filters">
         {(
           [
-            ["needs", `Needs calibration ${outstanding.length}`],
             ["all", `All ${templates.length}`],
-            ["done", `Done ${doneCount}`],
+            ["needs", `${marigold ? "Needs maps" : "Needs calibration"} ${outstanding.length}`],
+            ["done", `${marigold ? "Ready" : "Done"} ${doneCount}`],
           ] as const
         ).map(([value, label]) => (
           <button
@@ -213,6 +265,15 @@ export function TemplateRail({ templates, selected, onSelect }: TemplateRailProp
 
       {shown.length === 0 ? (
         <p className="template-rail__empty">No templates match.</p>
+      ) : marigold ? (
+        <Group
+          heading="Templates"
+          templates={shown}
+          selected={selected}
+          onSelect={onSelect}
+          jobs={jobs}
+          selectedPreparationStatus={selectedPreparationStatus ?? null}
+        />
       ) : (
         <>
           <Group
@@ -228,6 +289,28 @@ export function TemplateRail({ templates, selected, onSelect }: TemplateRailProp
             onSelect={onSelect}
           />
         </>
+      )}
+      {jobs.length > 0 && (
+        <section className="mg-queue">
+          <h2 className="template-rail__heading">Preparation queue</h2>
+          {jobs.map((job) => (
+            <button
+              className="mg-queue-entry"
+              type="button"
+              key={job.id}
+              onClick={() => onSelect(job.template)}
+            >
+              <span>{job.template}</span>
+              <span>
+                {job.phase === "queued"
+                  ? "Queued"
+                  : job.kind === "rebuild"
+                    ? "Updating maps"
+                    : "Preparing"}
+              </span>
+            </button>
+          ))}
+        </section>
       )}
     </nav>
   );

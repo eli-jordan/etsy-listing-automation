@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import type { PhotoWarpTemplate } from "../types";
 import { useCallback, useMemo } from "react";
 import type { PreviewJob } from "../components/PreviewPanel";
@@ -6,6 +7,7 @@ import type { SingleTemplate } from "../types";
 import { EditorShell, OneBoxCanvas } from "./EditorShell";
 
 interface Props {
+  rendererControls?: ReactNode;
   templateName: string;
   config: PhotoWarpTemplate<SingleTemplate>;
   /** The photo's true pixel size -- the space the box is in. See
@@ -20,6 +22,7 @@ interface Props {
  * disambiguate. Everything it adds to the shell is the optional garment
  * colour, which exists only so artwork resolution has something to key on. */
 function PhotoWarpSingleEditor({
+  rendererControls,
   templateName,
   config,
   space,
@@ -52,6 +55,7 @@ function PhotoWarpSingleEditor({
 
   return (
     <EditorShell
+      {...(rendererControls ? { rendererControls } : {})}
       templateName={templateName}
       config={config}
       onChange={onChange}

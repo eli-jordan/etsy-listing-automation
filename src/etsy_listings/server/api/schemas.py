@@ -34,6 +34,7 @@ from etsy_listings.core.application.deploy.events import (
     RunEvent,
     RunScope,
 )
+from etsy_listings.core.application.preparation.models import Action, Phase
 from etsy_listings.core.batches import AiState
 from etsy_listings.core.config.listing import Listing
 from etsy_listings.core.config.listing_template import ListingTemplate
@@ -45,7 +46,8 @@ from etsy_listings.core.config.media import MediaEntry, MediaKind
 # place a state could be added to. Derived on every read, never persisted --
 # the same principle `TemplateSummary.status` states below.
 from etsy_listings.core.engine.status import ListingGesture, ListingStatus
-from etsy_listings.core.render.config import BoundingBox, Placement, Renderer
+from etsy_listings.core.render.config import BoundingBox, Placement, Renderer, TemplateConfig
+from etsy_listings.core.workspace.calibration import MaskEdit, Stroke
 
 TemplateKind = Literal["colour-matrix", "multiple", "single"]
 
@@ -97,6 +99,8 @@ class TemplatePhoto(BaseModel):
 
 
 class TemplateSummary(BaseModel):
+    renderer: Literal["photo-warp", "marigold"] | None = None
+    maps: MapReadinessResponse | None = None
     name: str
     kind: TemplateKind | None
     colours: list[str]
@@ -871,3 +875,92 @@ class AiRunSummary(BaseModel):
 
 class AiRunDetail(AiRunSummary):
     events: list[AiRunEvent]
+
+
+class CalibrationSaveRequest(BaseModel):
+    """A single recoverable calibration transaction under ADR-0053."""
+
+    model_config = ConfigDict(extra="forbid")
+    request_id: str = Field(min_length=1, max_length=256)
+    config: TemplateConfig
+    mask_edits: list[MaskEdit] = Field(default_factory=list, max_length=256)
+
+
+class MapReadinessResponse(BaseModel):
+    state: Literal["needs_preparation", "out_of_date", "ready", "not_required"]
+    reason: str | None = None
+    message: str | None = None
+    content_digest: str | None = None
+    can_render: bool
+
+
+class PreparationPlacementResponse(BaseModel):
+    placement_id: str | None
+    mask_available: bool
+    mask_reason: str | None
+    undo_count: int
+
+
+class PreparationJobResponse(BaseModel):
+    config_revision: str
+    id: str
+    template: str
+    kind: Literal["prepare", "rebuild"]
+    phase: Phase
+    step: str
+    elapsed: float
+    placements_completed: int
+    placements_total: int
+    error: str | None
+    last_event_sequence: int
+    queue_position: int | None
+    engine_version: str | None
+
+
+class PreparationResponse(BaseModel):
+    template: str
+    config_revision: str
+    main_photo: str
+    maps: MapReadinessResponse
+    placements: list[PreparationPlacementResponse]
+    active_job: PreparationJobResponse | None
+    latest_job: PreparationJobResponse | None
+    renderer_settings: dict[str, Any]
+    prepared_engine: str | None
+
+
+class CreatePreparationRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    template: str
+    config_revision: str
+    request_id: str = Field(min_length=1, max_length=256)
+    action: Action = "prepare"
+    previous_job: str | None = None
+    reset_masks_for_photo: bool = False
+
+
+class MaskHistoryStroke(BaseModel):
+    before: str
+    operation: Stroke
+
+
+class MaskHistoryResponse(BaseModel):
+    checksum: str
+    undo_count: int
+    strokes: list[MaskHistoryStroke]
+
+
+class MarigoldRuntimeResponse(BaseModel):
+    available: bool
+    problem: str | None
+    engine_version: str | None
+    required_engine: str
+    installation_id: str | None
+    update_available: bool
+    max_num_inference_steps: int
+    max_ensemble_size: int
+    max_image_dimension: int
+
+
+class PreparationResyncResponse(BaseModel):
+    resync: Literal[True] = True

@@ -59,6 +59,11 @@ import names the module it depends on. Public interfaces:
     and idempotent request ID; ``template_photo``, ``template_swatch``, and the preview scene --
     ``saved_preview`` / ``unsaved_preview`` -> ``PreviewScene``,
     ``compose_preview``, ``scaled``. Images arrive decoded from the caller.
+``preparation_views``
+    Read-only authoring readiness and per-placement mask access.
+``prepared_previews``
+    CPU previews acquire one immutable map generation for the whole scene and
+    return exact PNG bytes with a canonical scene identity for promotion.
 ``calibration_designs``
     The calibrator's uploaded test designs: ``save_uploaded_design`` (name
     and image checks, then the write), ``uploaded_design``.

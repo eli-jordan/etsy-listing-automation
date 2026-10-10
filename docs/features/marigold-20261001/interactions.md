@@ -105,6 +105,7 @@ settings so switching back restores them. Switching never starts preparation.
 | Failed | Show an actionable reason and **Retry preparation**. Retain editing controls and reuse valid completed work on retry. |
 | Saved calibration requiring only a CPU rebuild | Automatically rebuild from cached predictions after save. Show the updating state; do not run model inference. |
 | Missing predictions or changed inference settings | Mark preparation needed and wait for explicit Prepare template. |
+| Changed main photo with masks from the previous photo | Block mask editing and full-quality rendering; explain the mismatch and offer **Reset masks and prepare**. Ordinary Save and Prepare do not replace those masks. |
 
 See [preparing](ui-mockups/preparing.png), [failure](ui-mockups/failed.png) and [multiple placements](ui-mockups/multiple.png).
 Source: `prepSection`, `Status`, `.mg-progress`, `.mg-steps`, `.mg-step--done`,
@@ -113,6 +114,13 @@ Source: `prepSection`, `Status`, `.mg-progress`, `.mg-steps`, `.mg-step--done`,
 The displayed steps follow the prototype's sequential execution. The three model
 predictions are independent, but map building consumes them. These screens do
 not promise concurrent GPU inference or a preparation duration.
+
+**Reset masks and prepare** explicitly replaces masks belonging to the previous
+main photo and submits Prepare again. Keep geometry, appearance and valid
+same-photo mask drafts. Discard only stale-photo brush operations, save the valid
+draft first, and stop on a revision conflict before submitting inference. Retry
+retains this explicit recovery intent. A newer photo or calibration edit
+supersedes the recovery job. There is no extra confirmation step.
 
 Closing the UI leaves server work running. On server restart, unfinished work
 resumes, reusing completed valid work. These are integration requirements, not

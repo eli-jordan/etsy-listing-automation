@@ -387,13 +387,17 @@ def save_calibration(
 ) -> Calibration:
     """ADR-0053: configuration and flattened masks commit as one revision."""
     require_template(workspace, name)
-    return CalibrationStore(workspace).save(
-        name,
-        config,
-        expected_revision=expected_revision,
-        request_id=request_id,
-        mask_edits=mask_edits,
-    )
+    store = CalibrationStore(workspace)
+    with store.lock(name):
+        if store.read(name).config.kind != config.kind:
+            raise TemplateKindRefused("Template kind cannot be changed after calibration")
+        return store.save(
+            name,
+            config,
+            expected_revision=expected_revision,
+            request_id=request_id,
+            mask_edits=mask_edits,
+        )
 
 
 def _load_config(workspace: Workspace, name: str) -> AnyTemplate:

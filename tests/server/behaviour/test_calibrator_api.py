@@ -48,6 +48,8 @@ def test_list_templates_includes_a_directory_with_no_template_yaml(
     by_name = {t["name"]: t for t in client.get("/api/templates").json()}
     assert by_name["not-calibrated-yet"] == {
         "name": "not-calibrated-yet",
+        "renderer": None,
+        "maps": None,
         "kind": None,
         "colours": [],
         # No kind, so no way to say whether its photos are per-colour scenes or
@@ -114,7 +116,13 @@ class TestCalibrationStatus:
         The count matters; "some boxes" would not tell you when you were done."""
         config = client.get("/api/templates/colour-chart-01/config").json()
         config["placements"][0]["colour"] = ""
-        client.put("/api/templates/colour-chart-01/config", json=config)
+        client.put(
+            "/api/templates/colour-chart-01/config",
+            json={"request_id": "update-colour", "config": config},
+            headers={
+                "If-Match": client.get("/api/templates/colour-chart-01/config").headers["etag"]
+            },
+        )
         assert self._status(client, "colour-chart-01") == (
             "needs-calibration",
             "1 box has no colour",
@@ -448,7 +456,11 @@ def test_put_config_updates_the_bounding_box(client: TestClient) -> None:
     new_box = [{"x": 10, "y": 10}, {"x": 200, "y": 10}, {"x": 200, "y": 200}, {"x": 10, "y": 200}]
     current["bounding_box"] = new_box
 
-    put_response = client.put("/api/templates/flat-lay-01/config", json=current)
+    put_response = client.put(
+        "/api/templates/flat-lay-01/config",
+        json={"request_id": "update-box", "config": current},
+        headers={"If-Match": client.get("/api/templates/flat-lay-01/config").headers["etag"]},
+    )
     assert put_response.status_code == 200
     assert put_response.json()["bounding_box"] == new_box
 
@@ -875,7 +887,7 @@ def test_unsaved_marigold_cannot_render_over_saved_photo_warp(client: TestClient
     config["renderer"] = {"type": "marigold", "config": {}}
     response = client.post("/api/templates/flat-lay-01/preview", json={**config, "colour": "black"})
     assert response.status_code == 409
-    assert "Prepare the template first" in response.json()["detail"]
+    assert "Save the Marigold renderer selection" in response.json()["detail"]
 
 
 @pytest.mark.parametrize("old_field", ["shade", "displace"])

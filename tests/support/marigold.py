@@ -160,3 +160,34 @@ class PreparationRuntime:
         worker = self.factory(cache_root)
         self.workers.append(worker)
         return worker
+
+
+def marigold_template(workspace_root, kind="single", name="shirt", renderer="marigold"):
+    """Small deterministic garment photo for public HTTP/browser workflows."""
+    from PIL import Image, ImageDraw
+
+    from etsy_listings.core.render import load_template_config
+    from etsy_listings.core.workspace import Workspace
+
+    workspace = Workspace.discover(root_override=workspace_root)
+    workspace.template_dir(name).mkdir()
+    photo = Image.new("RGB", (64, 64), "white")
+    ImageDraw.Draw(photo).rectangle((8, 8, 55, 55), fill="navy")
+    photo.save(
+        workspace.template_dir(name) / ("navy.png" if kind == "colour-matrix" else "scene.png")
+    )
+    if kind == "colour-matrix":
+        second = Image.new("RGB", (64, 64), "white")
+        ImageDraw.Draw(second).rectangle((8, 8, 55, 55), fill="ivory")
+        second.save(workspace.template_dir(name) / "ivory.png")
+    box = [{"x": x, "y": y} for x, y in [(12, 12), (51, 12), (51, 51), (12, 51)]]
+    config = {"kind": kind, "renderer": {"type": renderer, "config": {}}}
+    if kind == "multiple":
+        config["placements"] = [
+            {"id": identity, "colour": "Navy", "bounding_box": box}
+            for identity in ["left-shirt", "right-shirt"]
+        ]
+    else:
+        config["bounding_box"] = box
+    workspace.save_template_config(name, load_template_config(config))
+    return workspace

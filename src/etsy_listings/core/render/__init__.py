@@ -97,7 +97,10 @@ __all__ = [
     "save_png",
     "sample_swatch",
 ]
-"""The individual passes (``warp``/``displace``/``shade``/``export``) are
+"""The public identity module provides decoded artwork and prepared scene
+identities for CPU preview promotion; it imports no orchestration code.
+
+The individual passes (``warp``/``displace``/``shade``/``export``) are
 deliberately absent: they are the *inside* of ``render_scene``, goldened
 per-pass so a pixel change can be attributed, and composing them in some other
 order elsewhere is exactly what ADR-0012 exists to prevent. Import
