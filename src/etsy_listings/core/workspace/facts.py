@@ -47,7 +47,11 @@ from etsy_listings.core.config.garment_profile import GarmentProfile
 from etsy_listings.core.config.listing import Listing
 from etsy_listings.core.config.listing_validation import TemplateInfo
 from etsy_listings.core.config.media import ProbeFailure, VideoFacts, media_kind
-from etsy_listings.core.render.config import ColourMatrixTemplate, MultipleTemplate
+from etsy_listings.core.render.config import (
+    ColourMatrixTemplate,
+    MarigoldRenderer,
+    MultipleTemplate,
+)
 from etsy_listings.core.workspace.video import probe_video
 from etsy_listings.core.workspace.workspace import InvalidNameError, InvalidRefError, Workspace
 
@@ -162,5 +166,12 @@ def _template_info_map(workspace: Workspace) -> dict[str, TemplateInfo]:
             colours = frozenset(p.colour for p in config.placements if p.colour)
         else:
             colours = frozenset({config.colour}) if config.colour else frozenset()
-        result[name] = TemplateInfo(kind=config.kind, colours=colours)
+        # Local import avoids the workspace package's construction cycle.
+        from etsy_listings.core.preparation.readiness import saved_readiness
+
+        error = None
+        if isinstance(config.renderer, MarigoldRenderer):
+            maps = saved_readiness(workspace, name)
+            error = None if maps.can_render else maps.message
+        result[name] = TemplateInfo(kind=config.kind, colours=colours, preparation_error=error)
     return result
