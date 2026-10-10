@@ -142,7 +142,7 @@ relies on the 900-second inference watchdog.
 | G2 | BUILD checks pass: 1462 unit cases, five platform skips; 17 integrated frontend cases; ruff formatting/lint, mypy, Prettier, ESLint and TypeScript. The recovered full check at `08e2a6ac` passed 3206 Python tests with seven skips and 95.61% coverage; frontend passed 1027 tests across 81 files with 89.23% branch coverage. The earlier dedicated browser rerun passed all 113 cases. Final propagated owner fixes still require final gates. |
 | G3 | No HTTP contract changes or new production dependencies. No user data, secrets or weights enter Git. Existing CPU rendering import boundaries are retained. |
 | G4 | Parent owns PR creation, CI and exclusive real-shop e2e dispatch during FINISH. No remote shop writes or dispatch occur in this BUILD. |
-| G5 | Independent Chrome/UI and API review verified the flows below. Final Escape/loading recheck and recovery-defect verification remain pending; foreground image quality limits remain explicit. |
+| G5 | Independent Chrome/UI and API review verified the flows below. The body-focused Escape and initial Loading fixes passed independent Chrome recheck; recovery-defect verification remains pending. Foreground image quality limits remain explicit. |
 
 ## Completed lifecycle and resource measurements
 
@@ -259,8 +259,9 @@ Evidence remains external under `parent-qa`, including `final-api-smoke.json`
 and `foreground-after.png`; no real images enter Git.
 
 Body-focused Escape while editing was found to violate the interaction contract
-and reported to the editor owner. Its document-listener fix and initial catalog
-loading state await independent recheck here. A separate intermittent photo-change
+and reported to the editor owner. Independent Chrome recheck of the propagated
+`237bc022` document-listener fix passed with BODY focus, and initial catalog
+Loading was verified. Draft retention remains covered by the owner regressions. A separate intermittent photo-change
 recovery failure is under owner investigation; final coverage and browser gates
 must include the propagated resolution. Neither issue is silently marked passed.
 
