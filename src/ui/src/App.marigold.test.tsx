@@ -218,12 +218,12 @@ it("authorizes changed-photo mask recovery explicitly and preserves calibration 
 
 it("shows loading while a saved template config is pending instead of kind assignment", async () => {
   let finish!: (value: Awaited<ReturnType<typeof calibrator.getTemplateConfig>>) => void;
-  vi.mocked(calibrator.getTemplateConfig).mockImplementation(
-    () =>
-      new Promise((resolve) => {
-        finish = resolve;
-      }),
+  const pending = new Promise<Awaited<ReturnType<typeof calibrator.getTemplateConfig>>>(
+    (resolve) => {
+      finish = resolve;
+    },
   );
+  vi.mocked(calibrator.getTemplateConfig).mockReturnValue(pending);
   render(<App />);
   await screen.findByText("Loading template...");
   expect(screen.queryByText(/Choose a template kind/)).not.toBeInTheDocument();
@@ -271,12 +271,10 @@ it("shows Preparing while an explicit prepare request is pending", async () => {
   vi.spyOn(prep, "prepareTemplate").mockImplementation(() => new Promise(() => {}));
   const runtime = await prep.getRuntime();
   let finishRuntime!: (value: prep.Runtime) => void;
-  vi.mocked(prep.getRuntime).mockImplementation(
-    () =>
-      new Promise((resolve) => {
-        finishRuntime = resolve;
-      }),
-  );
+  const pendingRuntime = new Promise<prep.Runtime>((resolve) => {
+    finishRuntime = resolve;
+  });
+  vi.mocked(prep.getRuntime).mockReturnValue(pendingRuntime);
   render(<App />);
   const button = await screen.findByRole("button", { name: "Prepare again" });
   expect(button).toBeDisabled();
