@@ -174,8 +174,18 @@ def test_changed_photo_recovers_only_after_explicit_reset_and_prepare(
     from etsy_listings.core.workspace import Workspace
 
     select_template(page)
-    page.get_by_role("button", name="Prepare template", exact=True).click()
+    with page.expect_response(
+        lambda r: (
+            "/api/preparation/jobs" in r.url and r.request.method == "POST" and r.status == 202
+        )
+    ):
+        page.get_by_role("button", name="Prepare template", exact=True).click()
     ready(page)
+    origin = page.url.split("/templates")[0]
+    prepared = page.request.get(origin + "/api/templates/marigold-shirt/preparation").json()
+    assert prepared["maps"]["state"] == "ready"
+    assert prepared["latest_job"]["phase"] == "completed"
+    assert all(placement["mask_available"] for placement in prepared["placements"])
     calls = sum(len(worker.calls) for worker in preparation_runtime.workers)
     workspace = Workspace.discover(root_override=workspace_root)
     photo = workspace.template_main_photo("marigold-shirt")

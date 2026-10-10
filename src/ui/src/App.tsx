@@ -1,6 +1,6 @@
 import { usePreparationQueue } from "./hooks/usePreparationQueue";
 import { RendererPanel } from "./components/RendererPanel";
-import { preparationLabel } from "./components/preparationLabel";
+import { preparationLabel, marigoldMapsReady } from "./components/preparationLabel";
 import { InferenceSettings } from "./components/InferenceSettings";
 import { MARIGOLD_DEFAULTS } from "./editors/marigoldDefaults";
 import { MarigoldEditor } from "./editors/MarigoldEditor";
@@ -490,14 +490,14 @@ export function App() {
               <span
                 className={
                   "tag mg-status" +
-                  (preparation?.maps.can_render
+                  (!preparing && marigoldMapsReady(preparation?.maps)
                     ? " mg-status--ready"
                     : preparation?.latest_job?.phase === "failed"
                       ? " mg-status--failed"
                       : "")
                 }
               >
-                {preparationLabel(preparation)}
+                {preparing ? "Preparing" : preparationLabel(preparation)}
               </span>
             )}
             <span className="app__meta">
@@ -544,7 +544,11 @@ export function App() {
         <TemplateRail
           templates={railTemplates}
           selectedPreparationStatus={
-            config?.renderer.type === "marigold" ? preparationLabel(preparation) : null
+            config?.renderer.type === "marigold"
+              ? preparing
+                ? "Preparing"
+                : preparationLabel(preparation)
+              : null
           }
           selected={templateName}
           onSelect={selectTemplate}

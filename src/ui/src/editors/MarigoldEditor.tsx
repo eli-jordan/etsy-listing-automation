@@ -12,6 +12,7 @@ import { PreviewPanel, type PreviewJob } from "../components/PreviewPanel";
 import { MarigoldRealismPanel } from "../components/MarigoldRealismPanel";
 import { MaskToolbar, MaskBrushDock, type MaskControls } from "../components/MaskToolbar";
 import { PlacementOverlay } from "../components/PlacementOverlay";
+import { marigoldMapsReady } from "../components/preparationLabel";
 import { maskDraft } from "../components/maskDraft";
 import { QuadEditor } from "../components/QuadEditor";
 import { TestDesignPicker } from "../components/TestDesignPicker";
@@ -206,10 +207,10 @@ export function MarigoldEditor({
   const awaitingSavedRevision =
     !!calibrationRevision && preparation?.config_revision !== calibrationRevision;
   const blocked =
-    !preparation?.maps.can_render ||
+    !marigoldMapsReady(preparation?.maps) ||
     unsavedMaps ||
     awaitingSavedRevision ||
-    !!preparation.active_job;
+    !!preparation?.active_job;
   return (
     <main className="app__main">
       <div className="app__preview">
