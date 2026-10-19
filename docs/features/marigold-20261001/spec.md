@@ -436,3 +436,8 @@ Persist calibration separately and rebuild durable maps in background work.
 Full-quality Preview, approval, preview promotion and export retain the original
 49 by 49 fit, complete photo size, lossless PNG and accepted-generation checks.
 Interactive frames carry no approvable render identity and cannot be promoted.
+
+Cap interactive artwork at a 1024px longest edge before building floating-point
+material mip levels. A measured 4200 by 4800 design otherwise takes 3.75 seconds
+per edit despite the 512px destination. Retain RGBA validation and use the
+original complete artwork for full-quality preview and export.

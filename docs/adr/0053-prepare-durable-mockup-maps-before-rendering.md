@@ -78,3 +78,8 @@ Reuse the existing 80ms editor debounce and one-request-at-a-time WebP loop.
 Keep durable autosave at its normal 800ms idle delay so a full-resolution CPU
 rebuild does not preempt each interactive response. Full-quality preview and
 export continue to consume only complete accepted 49 by 49 generations.
+
+Cap interactive artwork at a 1024px longest edge before building floating-point
+material mip levels. A measured 4200 by 4800 design otherwise takes 3.75 seconds
+per edit despite the 512px destination. Retain RGBA validation and use the
+original complete artwork for full-quality preview and export.

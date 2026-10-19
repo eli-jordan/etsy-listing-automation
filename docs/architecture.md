@@ -836,6 +836,13 @@ arrays and edited visibility, with cancellation checkpoints between CPU phases.
 colour and composes ordered layers. Both lighting alternatives remain in maps;
 appearance controls require no fitting. Photo warp goldens retain their bytes.
 
+Schema 2 stores placement maps over bounded half-open photo extents, with a
+sixteen-pixel halo for photographic blur and material derivatives. Array origins
+retain global photo pixel centres; the renderer returns the complete original-size
+photo. Extents enter schema 2 numerical identity. Schema 1 full-photo assets keep
+their original validation and digest rules without inference or migration.
+ADR-0053 records the measured storage cost behind this amendment.
+
 `preparation.artifacts.Artifacts` owns validated generation publication, readiness,
 acquisition and reference-aware cleanup. Workspace derives every durable path and
 owns enumeration/removal. Publication and reader leases use the canonical
@@ -844,7 +851,7 @@ readers retain one complete generation while replacement and cleanup proceed.
 Saved readiness reconstructs current inputs with accepted evidence identity from
 the durable manifest, without prediction cache or installed model dependencies.
 
-The [schema 1 contract](features/marigold-20261001/artifact-contract.md) records
+The [schema 1 and 2 contract](features/marigold-20261001/artifact-contract.md) records
 coordinate conventions, array bounds, allocation limits and coordinator-facing
 contracts. Numeric content identity excludes storage and provenance. ZIP and NPY
 checks happen before array allocation, and CPU import contracts exclude inference
