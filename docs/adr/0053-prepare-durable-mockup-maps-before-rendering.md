@@ -65,3 +65,16 @@ changing resolution, colour, material filtering or deterministic output.
 Photo warp retains level six. Old Marigold output bytes remain distinct in
 identity and cannot be promoted as a newly encoded scene. Pin Pillow and retain
 metadata-free encoding as before.
+
+## Amendment, 2026-10-19: separate transient editor composites
+
+The user approved a lower-resolution interactive material preview with a
+subsecond correction target. Use retained validated evidence to fit a transient
+17 by 17 mesh and rasterize at 512px. Keep original photo coordinates and the
+complete evidence margin. This frame is visibly approximate and has no durable
+generation or approval identity. It never changes masks, history or readiness.
+
+Reuse the existing 80ms editor debounce and one-request-at-a-time WebP loop.
+Keep durable autosave at its normal 800ms idle delay so a full-resolution CPU
+rebuild does not preempt each interactive response. Full-quality preview and
+export continue to consume only complete accepted 49 by 49 generations.

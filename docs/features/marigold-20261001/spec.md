@@ -415,3 +415,24 @@ queue persistence, HTTP contracts and module interfaces. It must satisfy the
 behaviour here. Crop reuse margins, RAM budgets and responsiveness remain
 implementation measurements. Build the full integration before quality review;
 shared-colour and multiple-placement quality remain release gates.
+
+## Amendment, 2026-10-19: composited interactive corrections
+
+The edit canvas must show the corrected material composite below one second
+after the last mask or covered-geometry edit, with half a second preferred.
+The user approved a reduced-resolution interactive preview, matching Photo
+warp's editor-scale workflow. This replaces the straight-overlay-only editing
+requirement above. Keep immediate brush feedback while the composite updates.
+
+Interactive previews may use a fixed 512px raster, a 17 by 17 fitting mesh and
+WebP. Label that approximation on the canvas. Fit using validated saved evidence
+and current draft geometry/mask operations, with the same conservative evidence
+coverage refusal. Never infer, publish a generation, save a mask or change Undo
+history to produce an interactive frame. Bind draft mask replay to the exact
+acknowledged saved revision, and discard responses superseded by a later edit
+or template switch.
+
+Persist calibration separately and rebuild durable maps in background work.
+Full-quality Preview, approval, preview promotion and export retain the original
+49 by 49 fit, complete photo size, lossless PNG and accepted-generation checks.
+Interactive frames carry no approvable render identity and cannot be promoted.
