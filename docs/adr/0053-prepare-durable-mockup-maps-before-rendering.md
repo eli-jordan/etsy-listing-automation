@@ -83,3 +83,15 @@ Cap interactive artwork at a 1024px longest edge before building floating-point
 material mip levels. A measured 4200 by 4800 design otherwise takes 3.75 seconds
 per edit despite the 512px destination. Retain RGBA validation and use the
 original complete artwork for full-quality preview and export.
+
+
+## Amendment, 2026-10-19: prioritize correction under a durable rebuild
+
+Use a 256px longest edge and 512px artwork cap for interactive composites,
+retaining the transient 17 by 17 fit. This supersedes the earlier 512px frame
+and 1024px artwork limits. Real two-placement edits with 4200 by 4800 artwork
+still exceed one second when a full-quality rebuild competes for CPU, despite
+status-request coalescing. The user explicitly permits reduced interactive
+resolution. Label the approximation in the editor; full-quality Preview and
+export retain original artwork, complete photo size and the accepted 49 by 49
+maps. Keep the 800ms durable autosave delay and revision fences.
