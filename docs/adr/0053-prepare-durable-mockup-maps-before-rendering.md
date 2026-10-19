@@ -51,3 +51,17 @@ forty-percent prediction margin, conservative full-photo preflight limits,
 complete-generation publication, cancellation checkpoints and reader leases.
 Existing schema 1 assets remain renderable without model installation or a
 migration. CPU rebuilds can publish schema 2 from their validated saved evidence.
+
+## Amendment, 2026-10-19: deterministic lossless Marigold encoding
+
+Use fixed PNG compression level one for both Marigold previews and deployment,
+and include that encoder setting in their shared scene identity. Measurements
+on the same full 2048px RGB pixels reduce encoding from 0.80 to 0.18 seconds for
+the synthetic fixture and from 1.26 to 0.22 seconds for a real photograph. Files
+grow by 21 and 16 percent respectively. Decoded pixels are identical. This
+exchanges modest local transfer and storage for correction latency without
+changing resolution, colour, material filtering or deterministic output.
+
+Photo warp retains level six. Old Marigold output bytes remain distinct in
+identity and cannot be promoted as a newly encoded scene. Pin Pillow and retain
+metadata-free encoding as before.
