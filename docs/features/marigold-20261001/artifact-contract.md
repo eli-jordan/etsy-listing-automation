@@ -1,4 +1,4 @@
-# Durable material maps, schema 1
+# Durable material maps, schemas 1 and 2
 
 This is the implemented CPU contract under ADR-0053. Preparation coordination,
 HTTP integration and deployment wiring ship in later stack stages. Real photo
@@ -29,8 +29,13 @@ mask for manual correction. Authoring stores the proposed raster and algorithm
 identity through the calibration store.
 
 Each placement archive stores the following arrays. Required fields are float32;
-optional patch labels are int32. The extent is the full main photo, with shape
-`height,width` and a final channel axis where specified.
+optional patch labels are int32. Legacy schema 1 extents cover the full main
+photo. Schema 2 arrays cover a half-open photo-coordinate extent, with shape
+`bottom-top,right-left` and a final channel axis where specified. The manifest
+retains the complete main-photo size. Array pixel centres add the extent origin
+before entering the original photo coordinate frame. Preparation retains a
+sixteen-pixel halo around the quad, clipped to the photo. Outside the extent
+visibility is zero. This is the 2026-10-19 amendment to ADR-0053.
 
 | Field | Channels | Bounds |
 | --- | --- | --- |
@@ -69,7 +74,8 @@ change rendering only.
 
 The manifest records array shapes, dtypes and numerical checksums, photo identity,
 placement extents, semantic conventions and provenance. The content digest hashes
-canonical contiguous array bytes and semantic layout by placement ID. Archive
+canonical contiguous array bytes and semantic layout by placement ID. Schema 2
+also hashes each extent. Schema 1 retains its original digest calculation. Archive
 bytes, generation names, paths and provenance are excluded. Storage has separate
 checksums. Readers validate ZIP member counts, uncompressed size, NPY headers,
 exact byte lengths and dimensions before allocation, load with pickle disabled,

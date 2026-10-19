@@ -28,3 +28,26 @@ old format with `renderer.type` and `renderer.config`; no compatibility parser
 is required. Only multiple placements need explicit stable IDs. Workspace derives
 mask locations so YAML does not repeat a path convention. Photo warp retains
 its existing numerical output under the new format.
+
+## Amendment, 2026-10-19: bound material storage by placement extent
+
+Write schema 2 placement maps over a bounded photo-coordinate extent, retaining
+schema 1 full-photo reads. The full-photo storage requirement is unworkable for
+the five-second warm 2048px correction goal. A single placement retains fourteen
+four-byte channels, or 235 MB, and the measured synchronous rebuild spends 2.92
+of 7.38 seconds publishing and validating those arrays. Most pixels are outside
+the print and cannot affect the result.
+
+Each placement records its half-open extent and the complete reference photo
+size. Pixel centres and fitted coordinates stay in the original photo frame.
+Retain a sixteen-pixel halo around the quad for the pinned photographic blur and
+material derivatives. Visibility outside the extent is implicitly zero. Render
+the complete original-size photograph and preserve every visible map value and
+final image pixel. Include the extent in schema 2 numerical identity so moving
+an otherwise identical field cannot reuse an old rendered scene.
+
+This changes storage, not inference coverage or output quality. Keep the complete
+forty-percent prediction margin, conservative full-photo preflight limits,
+complete-generation publication, cancellation checkpoints and reader leases.
+Existing schema 1 assets remain renderable without model installation or a
+migration. CPU rebuilds can publish schema 2 from their validated saved evidence.
