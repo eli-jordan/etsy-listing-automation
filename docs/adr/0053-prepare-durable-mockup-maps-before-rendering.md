@@ -95,3 +95,12 @@ status-request coalescing. The user explicitly permits reduced interactive
 resolution. Label the approximation in the editor; full-quality Preview and
 export retain original artwork, complete photo size and the accepted 49 by 49
 maps. Keep the 800ms durable autosave delay and revision fences.
+
+
+## Amendment, 2026-10-19: settle the interactive request before autosave
+
+Keep the 800ms minimum idle delay, but defer automatic saving while the current
+interactive composite is pending. A save must not supersede its own requested
+revision mid-fit and force a slower retry. Explicit Save and preparation actions
+retain their existing revision checks. This affects scheduling only; masks and
+durable map publication remain unchanged.
