@@ -104,3 +104,14 @@ interactive composite is pending. A save must not supersede its own requested
 revision mid-fit and force a slower retry. Explicit Save and preparation actions
 retain their existing revision checks. This affects scheduling only; masks and
 durable map publication remain unchanged.
+
+
+## Amendment, 2026-10-19: yield CPU preparation to interactive requests
+
+Give transient editor composition priority at existing CPU preparation phase
+checkpoints within the same workspace. A background fit waits between phases
+while an interactive request is active and continues checking cancellation.
+This preserves exact numerical operations and generation leases. It does not
+pause active inference or alter its dispatch guard. The settled-request run
+removed revision retries but still measured a 1.017-second composite under CPU
+contention; the foreground must not compete with every remaining rebuild phase.
