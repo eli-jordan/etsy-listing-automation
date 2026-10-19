@@ -45,10 +45,10 @@ def saved_preparation_facts(workspace: Workspace, name: str) -> SavedPreparation
             inputs = artifacts.saved_inputs(name)
             prepared_engine = None
             try:
-                with artifacts.acquire(name, inputs) as acquired:
-                    maps = Readiness("ready", content_digest=acquired.manifest.content_digest)
-                    engine = acquired.manifest.provenance.get("engine_version")
-                    prepared_engine = engine if isinstance(engine, str) else None
+                manifest = artifacts.inspect(name, inputs)
+                maps = Readiness("ready", content_digest=manifest.content_digest)
+                engine = manifest.provenance.get("engine_version")
+                prepared_engine = engine if isinstance(engine, str) else None
             except ArtifactError:
                 maps = artifacts.readiness(name, inputs)
             if isinstance(config, ColourMatrixTemplate):

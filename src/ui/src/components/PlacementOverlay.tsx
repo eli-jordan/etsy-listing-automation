@@ -20,7 +20,9 @@ export function PlacementOverlay({
   mode,
   diameter,
   onStroke,
+  showArtwork = true,
 }: {
+  showArtwork?: boolean;
   box: BoundingBox;
   designUrl: string;
   maskUrl: string | null;
@@ -113,28 +115,30 @@ export function PlacementOverlay({
           </g>
         </mask>
       </defs>
-      <g mask={`url(#cloth-${id})`} pointerEvents="none">
-        <foreignObject
-          x={0}
-          y={0}
-          width={space[0]}
-          height={space[1]}
-          style={{ overflow: "visible" }}
-        >
-          <img
-            src={designUrl}
-            alt=""
-            style={{
-              width: 1,
-              height: 1,
-              position: "absolute",
-              transformOrigin: "0 0",
-              transform: artworkTransform(box),
-              pointerEvents: "none",
-            }}
-          />
-        </foreignObject>
-      </g>
+      {showArtwork && (
+        <g mask={`url(#cloth-${id})`} pointerEvents="none">
+          <foreignObject
+            x={0}
+            y={0}
+            width={space[0]}
+            height={space[1]}
+            style={{ overflow: "visible" }}
+          >
+            <img
+              src={designUrl}
+              alt=""
+              style={{
+                width: 1,
+                height: 1,
+                position: "absolute",
+                transformOrigin: "0 0",
+                transform: artworkTransform(box),
+                pointerEvents: "none",
+              }}
+            />
+          </foreignObject>
+        </g>
+      )}
       {editing && (
         <>
           <rect

@@ -161,6 +161,7 @@ def prepare(
     evidence: Evidence,
     *,
     mask: FloatMap,
+    max_edge: int | None = None,
     checkpoint: Callable[[str], None] = lambda _: None,
 ) -> Preparation:
     """Fit one placement from explicit evidence, with cancellation between phases.
@@ -181,12 +182,13 @@ def prepare(
         or np.any((mask < 0) | (mask > 1))
     ):
         raise ValueError("Visibility mask must be finite float32 photo pixels in [0,1]")
-    grid = geometry.placement_grid(box, 49)
+    mesh = 17 if max_edge is not None else 49
+    grid = geometry.placement_grid(box, mesh)
     placement_width = float((np.linalg.norm(box[1] - box[0]) + np.linalg.norm(box[2] - box[3])) / 2)
     normals = evidence.sample(evidence.normals, grid)
     normals /= np.maximum(np.linalg.norm(normals, axis=-1, keepdims=True), 1e-8)
     confidence = geometry.sample(mask, grid)
-    grid_ids = np.ones((49, 49), np.int32)
+    grid_ids = np.ones((mesh, mesh), np.int32)
     checkpoint("fitting")
     surface, diagnostics = geometry.integrate(
         grid / placement_width, normals, confidence, grid_ids, evidence.sample(evidence.depth, grid)
@@ -194,24 +196,52 @@ def prepare(
     checkpoint("flattening")
     uv, flat_diagnostics = geometry.flatten(surface, grid_ids)
     checkpoint("baking")
-    neutral = geometry.placement_grid(np.array([[0, 0], [1, 0], [1, 1], [0, 1]], np.float32), 49)
-    material, valid = material_math.bake(neutral, box, size)
-    material += geometry.sample(uv - neutral, material * 48)
-    valid *= mask
+    neutral = geometry.placement_grid(np.array([[0, 0], [1, 0], [1, 1], [0, 1]], np.float32), mesh)
+    # Fitting remains in original photo coordinates; only transient editor
+    # rasterization is reduced. Durable callers leave max_edge unset.
+    factor: FloatMap = np.ones(2, np.float32)
+    if max_edge is not None:
+        if max_edge < 1:
+            raise ValueError("Editor raster size must be positive")
+        ratio = min(1.0, max_edge / max(width, height))
+        size = (max(1, round(width * ratio)), max(1, round(height * ratio)))
+        factor = np.array([size[0] / width, size[1] / height], np.float32)
+        base = cast(RGB, cv2.resize(base, size, interpolation=cv2.INTER_AREA))
+        mask = cast(FloatMap, cv2.resize(mask, size, interpolation=cv2.INTER_AREA))
+        box = box * factor
+        width, height = size
+    # Lighting normalization only selects confident pixels inside the quad.
+    # Include more than GaussianBlur(sigma=3)'s 12-pixel radius so photographic
+    # gains on every visible pixel are identical to the full-photo computation.
+    lo = np.maximum(np.floor(box.min(axis=0)).astype(int) - 16, 0)
+    hi = np.minimum(np.ceil(box.max(axis=0)).astype(int) + 17, [width, height])
+    left, top = int(lo[0]), int(lo[1])
+    right, bottom = int(hi[0]), int(hi[1])
+    region = (slice(top, bottom), slice(left, right))
+    material, valid = material_math.bake(
+        neutral, box, (right - left, bottom - top), origin=(left, top)
+    )
+    material += geometry.sample(uv - neutral, material * (mesh - 1))
+    valid *= mask[region]
     labels = (valid > 0).astype(np.int32)
     checkpoint("lighting")
-    yy, xx = np.mgrid[:height, :width].astype(np.float32)
-    xy = np.stack([xx, yy], -1)
-    full_normals = evidence.sample(evidence.normals, xy)
-    _, full_confidence = geometry.slopes(full_normals)
-    fields, light_diagnostics = geometry.lighting_fields(
-        base,
+    yy, xx = np.mgrid[top:bottom, left:right].astype(np.float32)
+    xy = cast(FloatMap, np.stack([xx, yy], -1) / factor)
+    normals = evidence.sample(evidence.normals, xy)
+    _, confidence = geometry.slopes(normals)
+    local_box = box - np.array([left, top], np.float32)
+    local_fields, light_diagnostics = geometry.lighting_fields(
+        base[region],
         evidence.sample(evidence.shading, xy),
         evidence.sample(evidence.albedo, xy),
         evidence.sample(evidence.residual, xy),
-        mask * geometry.polygon_mask(size, box.tolist()),
-        full_confidence,
+        mask[region] * geometry.polygon_mask((right - left, bottom - top), local_box.tolist()),
+        confidence,
+        # Interactive samples represent a larger original-photo area. Keep the
+        # durable 100-pixel refusal unchanged while allowing small valid prints.
+        minimum_samples=max(1, math.ceil(100 * float(np.prod(factor)))),
     )
+    fields = local_fields
     return Preparation(
         MaterialMaps(
             material,
@@ -221,6 +251,8 @@ def prepare(
             fields["texture"],
             fields["residual"],
             labels,
+            origin=(left, top),
+            photo_size=size,
         ),
         {**diagnostics, **flat_diagnostics, **light_diagnostics},
     )

@@ -154,3 +154,89 @@ def test_changed_photo_requires_explicit_mask_reset_and_prepare(
         assert all(item["mask_available"] for item in ready_state["placements"])
         assert len(client.get("/api/preparation/jobs").json()) == 2
         assert sum(len(worker.calls) for worker in runtime.workers) == calls + 3
+
+
+@pytest.mark.parametrize("kind", ["single", "multiple"])
+def test_interactive_drafts_composite_without_saving_or_publishing(workspace_root, kind):
+    workspace = marigold_template(workspace_root, kind)
+    runtime = PreparationRuntime()
+    with TestClient(create_app(workspace, preparation_runtime=runtime)) as client:
+        status = client.get("/api/templates/shirt/preparation").json()
+        created = client.post(
+            "/api/preparation/jobs",
+            json={
+                "template": "shirt",
+                "config_revision": status["config_revision"],
+                "request_id": "interactive-fixture",
+            },
+        )
+        wait_job(client, created.json()["id"])
+        loaded = client.get("/api/templates/shirt/config")
+        ready = client.get("/api/templates/shirt/preparation").json()
+        calls = sum(len(worker.calls) for worker in runtime.workers)
+        buffer = BytesIO()
+        Image.new("RGBA", (32, 32), "white").save(buffer, format="PNG")
+        uploaded = client.post(
+            "/api/designs", files={"file": ("white.png", buffer.getvalue(), "image/png")}
+        )
+        body = {
+            **loaded.json(),
+            "design": uploaded.json()["id"],
+            "calibration_revision": loaded.headers["etag"].strip(chr(34)),
+        }
+        url = "/api/templates/shirt/preview?scale=editor"
+        baseline = client.post(url, json=body)
+        assert baseline.status_code == 200, baseline.text
+        assert baseline.headers["content-type"] == "image/webp"
+        assert baseline.headers["x-preview-quality"] == "interactive"
+        assert "x-render-identity" not in baseline.headers
+        ids = [p["id"] for p in body["placements"]] if kind == "multiple" else [None]
+        mask_url = (
+            "/api/templates/shirt/placements/left-shirt/mask"
+            if kind == "multiple"
+            else "/api/templates/shirt/mask"
+        )
+        mask_before = client.get(mask_url).content
+        stroke = {"type": "stroke", "mode": "mask", "diameter_px": 24, "points": [[32, 32]]}
+        body["mask_edits"] = [{"placement_id": key, "operations": [stroke]} for key in ids]
+        painted = client.post(url, json=body)
+        assert painted.status_code == 200, painted.text
+        before = Image.open(BytesIO(baseline.content)).convert("RGB")
+        after = Image.open(BytesIO(painted.content)).convert("RGB")
+        assert sum(before.getpixel((32, 32))) > sum(after.getpixel((32, 32))) + 200
+        assert client.get(mask_url).content == mask_before
+        assert client.get("/api/templates/shirt/config").headers["etag"] == loaded.headers["etag"]
+        assert (
+            client.get("/api/templates/shirt/preparation").json()["maps"]["content_digest"]
+            == ready["maps"]["content_digest"]
+        )
+        assert client.post("/api/templates/shirt/preview", json=body).status_code == 409
+        for operation in ["undo", "reset"]:
+            body["mask_edits"] = [
+                {"placement_id": key, "operations": [stroke, {"type": operation}]} for key in ids
+            ]
+            restored = client.post(url, json=body)
+            assert restored.status_code == 200, restored.text
+            assert restored.content == baseline.content
+        body["mask_edits"] = []
+        boxes = (
+            [p["bounding_box"] for p in body["placements"]]
+            if kind == "multiple"
+            else [body["bounding_box"]]
+        )
+        for box in boxes:
+            box[0]["x"] += 2
+        adjusted = client.post(url, json=body)
+        assert adjusted.status_code == 200, adjusted.text
+        assert adjusted.content != baseline.content
+        # Cached transient maps must still require validated retained evidence.
+        # Durable readiness survives removal, but authoring must not infer.
+        pointer = workspace.preparation_prediction_current("shirt")
+        retained = pointer.read_bytes()
+        pointer.unlink()
+        assert client.post(url, json=body).status_code == 409
+        assert client.get("/api/templates/shirt/preparation").json()["maps"]["can_render"]
+        pointer.write_bytes(retained)
+        body["calibration_revision"] = "stale"
+        assert client.post(url, json=body).status_code == 409
+        assert sum(len(worker.calls) for worker in runtime.workers) == calls

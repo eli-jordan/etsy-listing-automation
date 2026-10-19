@@ -13,6 +13,7 @@ import threading
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
+from functools import lru_cache
 from io import BytesIO
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, Any, Literal, cast
@@ -30,6 +31,7 @@ from etsy_listings.core.render.config import (
     load_template_config,
 )
 from etsy_listings.core.workspace.atomic import write_bytes_atomic, write_json_atomic
+from etsy_listings.core.workspace.file_version import file_version
 
 if TYPE_CHECKING:
     from etsy_listings.core.workspace import Workspace
@@ -44,6 +46,29 @@ def digest(data: bytes) -> str:
 
 def json_bytes(value: object) -> bytes:
     return json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False).encode("utf-8")
+
+
+@lru_cache(maxsize=128)
+def _photo_identity(path: Path, stamp: tuple[int | str, ...]) -> dict[str, Any]:
+    with Image.open(path) as image:
+        pixels = image.convert("RGB")
+        return {
+            "file": path.name,
+            "width": pixels.width,
+            "height": pixels.height,
+            "conversion": "pillow-rgb-v1",
+            "pixels": digest(pixels.tobytes()),
+        }
+
+
+@lru_cache(maxsize=256)
+def _validate_mask(data: bytes, width: int, height: int) -> None:
+    # Bounded by entries AND payload size at the caller. Keep compressed mask
+    # bytes only, never decoded photo-sized images. Content keys detect damage.
+    with Image.open(BytesIO(data)) as image:
+        if image.format != "PNG" or image.mode != "L" or image.size != (width, height):
+            raise ValueError("Mask must be a full-photo grayscale PNG")
+        image.load()
 
 
 class CalibrationRepairRequired(UserFacingError):
@@ -207,15 +232,8 @@ class CalibrationStore:
 
     def photo_identity(self, name: str, config: AnyTemplate) -> dict[str, Any]:
         path = self.workspace.template_main_photo(name, config)
-        with Image.open(path) as image:
-            pixels = image.convert("RGB")
-            return {
-                "file": path.name,
-                "width": pixels.width,
-                "height": pixels.height,
-                "conversion": "pillow-rgb-v1",
-                "pixels": digest(pixels.tobytes()),
-            }
+        stamp = file_version(path)
+        return _photo_identity(path.resolve(), stamp).copy()
 
     def placement_ids(self, config: AnyTemplate) -> list[str | None]:
         return [p.id for p in config.placements] if isinstance(config, MultipleTemplate) else [None]
@@ -304,8 +322,8 @@ class CalibrationStore:
                     "edited_checksum"
                 ] != digest(edited):
                     raise ValueError("mask checksum mismatch")
-                self.decode_mask(automatic, metadata["photo"])
-                self.decode_mask(edited, metadata["photo"])
+                self.validate_mask(automatic, metadata["photo"])
+                self.validate_mask(edited, metadata["photo"])
             except (OSError, ValueError, KeyError, TypeError) as exc:
                 raise CalibrationRepairRequired(
                     "Saved mask is damaged; repair or explicitly reset its baseline"
@@ -322,10 +340,16 @@ class CalibrationStore:
             photo = self.photo_identity(name, self.workspace.load_template_config(name))
             for entry in history["strokes"]:
                 Stroke.model_validate(entry["operation"])
-                self.decode_mask(base64.b64decode(entry["before"], validate=True), photo)
+                self.validate_mask(base64.b64decode(entry["before"], validate=True), photo)
             return cast(list[dict[str, Any]], history["strokes"])
         except (OSError, ValueError, KeyError, TypeError):
             return []
+
+    def validate_mask(self, data: bytes, photo: dict[str, Any]) -> None:
+        if len(data) <= 64 * 1024:
+            _validate_mask(data, photo["width"], photo["height"])
+        else:
+            self.decode_mask(data, photo)
 
     def decode_mask(self, data: bytes, photo: dict[str, Any]) -> Image.Image:
         with Image.open(BytesIO(data)) as image:

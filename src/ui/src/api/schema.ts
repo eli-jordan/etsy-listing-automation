@@ -2133,6 +2133,8 @@ export interface components {
         components["schemas"]["Point"],
         components["schemas"]["Point"],
       ];
+      /** Calibration Revision */
+      calibration_revision?: string | null;
       /** Colour */
       colour: string;
       /**
@@ -2146,6 +2148,8 @@ export interface components {
        * @constant
        */
       kind: "colour-matrix";
+      /** Mask Edits */
+      mask_edits?: components["schemas"]["MaskEdit"][];
       /** Renderer */
       renderer:
         components["schemas"]["PhotoWarpRenderer"] | components["schemas"]["MarigoldRenderer"];
@@ -3306,6 +3310,8 @@ export interface components {
     };
     /** MultiplePreviewRequest */
     MultiplePreviewRequest: {
+      /** Calibration Revision */
+      calibration_revision?: string | null;
       /**
        * Colour Coverage
        * @default exact
@@ -3323,6 +3329,8 @@ export interface components {
        * @constant
        */
       kind: "multiple";
+      /** Mask Edits */
+      mask_edits?: components["schemas"]["MaskEdit"][];
       /** Placements */
       placements: components["schemas"]["Placement"][];
       /** Renderer */
@@ -4130,6 +4138,8 @@ export interface components {
         components["schemas"]["Point"],
         components["schemas"]["Point"],
       ];
+      /** Calibration Revision */
+      calibration_revision?: string | null;
       /** Colour */
       colour?: string | null;
       /**
@@ -4143,6 +4153,8 @@ export interface components {
        * @constant
        */
       kind: "single";
+      /** Mask Edits */
+      mask_edits?: components["schemas"]["MaskEdit"][];
       /** Renderer */
       renderer:
         components["schemas"]["PhotoWarpRenderer"] | components["schemas"]["MarigoldRenderer"];

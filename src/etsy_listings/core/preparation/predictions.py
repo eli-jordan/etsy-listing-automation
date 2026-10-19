@@ -4,10 +4,13 @@ from __future__ import annotations
 
 import hashlib
 import zipfile
+from functools import lru_cache
 from pathlib import Path
 
 import numpy as np
 from numpy.typing import NDArray
+
+from etsy_listings.core.workspace.file_version import file_version
 
 MAX_PIXELS = 4096 * 4096
 MAX_ARCHIVE_BYTES = 640 * 1024 * 1024
@@ -53,6 +56,25 @@ def validate_prediction(array: NDArray[np.float32], *, role: str, size: tuple[in
             raise PredictionError("Normals must be finite unit vectors")
     elif array.min() < 0 or array.max() > 1:
         raise PredictionError("Prediction values outside [0, 1]")
+
+
+@lru_cache(maxsize=128)
+def _validated_file(
+    path: Path, role: str, checksum: str, size: tuple[int, int], stamp: tuple[int | str, ...]
+) -> None:
+    read_prediction(path, role=role, checksum=checksum, size=size)
+
+
+def validate_prediction_file(
+    path: Path, *, role: str, checksum: str, size: tuple[int, int]
+) -> None:
+    """Validate reusable immutable evidence without repeatedly decoding it.
+
+    Retain at most 128 small validation proofs, never prediction arrays.
+    Replacement, writes and removal invalidate the file-identity stamp.
+    """
+    stamp = file_version(path)
+    _validated_file(path.resolve(), role, checksum, size, stamp)
 
 
 def read_prediction(

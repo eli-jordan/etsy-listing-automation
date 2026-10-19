@@ -68,3 +68,16 @@ def test_prediction_loading_imports_no_model_runtime(tmp_path):
         text=True,
     )
     assert result.returncode == 0, result.stderr
+
+
+def test_warm_file_validation_detects_prediction_replacement(tmp_path):
+    from etsy_listings.core.preparation.predictions import validate_prediction_file
+
+    path = tmp_path / "depth.npz"
+    np.savez(path, prediction=np.full((1, 8, 12, 1), 0.5, dtype=np.float32))
+    checksum = hashlib.sha256(path.read_bytes()).hexdigest()
+    for _ in range(2):
+        validate_prediction_file(path, role="depth", checksum=checksum, size=(12, 8))
+    np.savez(path, prediction=np.full((1, 8, 12, 1), 0.25, dtype=np.float32))
+    with pytest.raises(PredictionError, match="checksum"):
+        validate_prediction_file(path, role="depth", checksum=checksum, size=(12, 8))

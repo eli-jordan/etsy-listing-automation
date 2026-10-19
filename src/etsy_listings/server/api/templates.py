@@ -45,6 +45,7 @@ from etsy_listings.core.application.mockup_templates import (
     template_swatch,
     unsaved_preview,
 )
+from etsy_listings.core.application.preparation.previews import editor_preview
 from etsy_listings.core.application.prepared_previews import prepared_preview
 from etsy_listings.core.application.refusals import (
     TemplateAlreadyCalibrated,
@@ -58,7 +59,7 @@ from etsy_listings.core.config.slug import SlugCollisionError
 from etsy_listings.core.errors import UserFacingError
 from etsy_listings.core.render import MarigoldRenderer, load_template_config
 from etsy_listings.core.render.config import AnyTemplate, PreparationRequired, TemplateConfig
-from etsy_listings.core.render.io import encode_png
+from etsy_listings.core.render.io import MARIGOLD_PNG_COMPRESSION, encode_png
 from etsy_listings.core.workspace.calibration import CalibrationConflict
 from etsy_listings.core.workspace.workspace import Workspace
 from etsy_listings.server.api.designs import resolve_design
@@ -340,10 +341,33 @@ def preview(template: Existing, body: PreviewRequest, scale: PreviewScale = "ful
     design from its own test-design library."""
     workspace = template.workspace
     if isinstance(body.renderer, MarigoldRenderer):
-        document = body.model_dump(mode="json", exclude={"design"})
+        document = body.model_dump(
+            mode="json", exclude={"design", "calibration_revision", "mask_edits"}
+        )
         if isinstance(body, ColourMatrixPreviewRequest):
             document.pop("colour")
         config = load_template_config(document)
+        if scale == "editor":
+            try:
+                image = editor_preview(
+                    workspace,
+                    template.name,
+                    config=config,
+                    revision=body.calibration_revision or "",
+                    mask_edits=body.mask_edits,
+                    base=lambda path: PREVIEW_IMAGES.base(path).image,
+                    artwork=lambda: PREVIEW_IMAGES.design(
+                        resolve_design(workspace, body.design), max_edge=512
+                    ),
+                )
+            except (PreparationRequired, ValueError, OSError) as exc:
+                raise HTTPException(status_code=409, detail=str(exc)) from exc
+            response = _encode_preview(image, "editor")
+            response.headers["Cache-Control"] = "no-store"
+            response.headers["X-Preview-Quality"] = "interactive"
+            return response
+        if body.mask_edits:
+            raise HTTPException(status_code=409, detail="Save draft mask edits before full preview")
         return _prepared_response(
             template,
             config,
@@ -444,7 +468,7 @@ def _prepared_response(
     except (TemplateConfigMissing, TemplatePhotoMissing) as exc:
         raise _not_found(exc) from exc
     return Response(
-        encode_png(preview.image),
+        encode_png(preview.image, compression=MARIGOLD_PNG_COMPRESSION),
         media_type="image/png",
         headers={
             "X-Render-Identity": preview.render_identity,

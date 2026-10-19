@@ -6,6 +6,7 @@ from collections.abc import Sequence
 from typing import Any
 
 from etsy_listings.core.render.config import MarigoldAppearance
+from etsy_listings.core.render.io import MARIGOLD_PNG_COMPRESSION
 from etsy_listings.core.render.types import RGBA
 
 
@@ -48,6 +49,7 @@ def prepared_scene_identity(
     return _canonical(
         {
             "renderer": "marigold-material-v1",
+            "png_compression": MARIGOLD_PNG_COMPRESSION,
             "map_content": map_content,
             "layers": [
                 {"placement_id": identity, "artwork": artwork}

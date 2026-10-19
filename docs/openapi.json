@@ -1180,6 +1180,17 @@
             "title": "Bounding Box",
             "type": "array"
           },
+          "calibration_revision": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Calibration Revision"
+          },
           "colour": {
             "title": "Colour",
             "type": "string"
@@ -1194,6 +1205,14 @@
             "default": "colour-matrix",
             "title": "Kind",
             "type": "string"
+          },
+          "mask_edits": {
+            "items": {
+              "$ref": "#/components/schemas/MaskEdit"
+            },
+            "maxItems": 32,
+            "title": "Mask Edits",
+            "type": "array"
           },
           "renderer": {
             "discriminator": {
@@ -3934,6 +3953,17 @@
       "MultiplePreviewRequest": {
         "additionalProperties": false,
         "properties": {
+          "calibration_revision": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Calibration Revision"
+          },
           "colour_coverage": {
             "default": "exact",
             "enum": [
@@ -3953,6 +3983,14 @@
             "default": "multiple",
             "title": "Kind",
             "type": "string"
+          },
+          "mask_edits": {
+            "items": {
+              "$ref": "#/components/schemas/MaskEdit"
+            },
+            "maxItems": 32,
+            "title": "Mask Edits",
+            "type": "array"
           },
           "placements": {
             "items": {
@@ -5913,6 +5951,17 @@
             "title": "Bounding Box",
             "type": "array"
           },
+          "calibration_revision": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Calibration Revision"
+          },
           "colour": {
             "anyOf": [
               {
@@ -5934,6 +5983,14 @@
             "default": "single",
             "title": "Kind",
             "type": "string"
+          },
+          "mask_edits": {
+            "items": {
+              "$ref": "#/components/schemas/MaskEdit"
+            },
+            "maxItems": 32,
+            "title": "Mask Edits",
+            "type": "array"
           },
           "renderer": {
             "discriminator": {

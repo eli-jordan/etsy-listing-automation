@@ -632,3 +632,17 @@ def test_unavailable_mask_is_not_a_main_photo_mismatch(
         store.mask("example", placement_id)
     assert type(refusal.value) is MaskUnavailable
     assert not isinstance(refusal.value, MaskPhotoMismatch)
+
+
+def test_repeated_photo_identity_tracks_replaced_pixels(workspace_root) -> None:
+    from PIL import Image
+
+    store = make_store(workspace_root)
+    config = store.config("example")
+    first = store.photo_identity("example", config)
+    assert store.photo_identity("example", config) == first
+    path = store.workspace.template_main_photo("example", config)
+    Image.new("RGB", (first["width"], first["height"]), (21, 37, 83)).save(path)
+    second = store.photo_identity("example", config)
+    assert second["pixels"] != first["pixels"]
+    assert store.photo_identity("example", config) == second

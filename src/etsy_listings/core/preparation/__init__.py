@@ -6,7 +6,10 @@ evidence without loading model packages. Installation and the embedded worker
 distribution are implementation details reached through Runtime.
 Numerics exposes plan_crop, evidence_covers, propose_mask and prepare. Its
 internal geometry fitter is reached only there. Artifacts exposes typed
-PreparationInputs and Artifacts.saved_inputs/readiness/publish/acquire/cleanup.
+PreparationInputs and Artifacts.saved_inputs/inspect/readiness/publish/acquire/
+reusable/cleanup. inspect reuses bounded immutable-generation validation proofs;
+reusable leases exact unchanged placements during a CPU rebuild. Schema 2 maps
+carry photo-coordinate extents; schema 1 full-photo generations remain readable.
 readiness.saved_readiness and saved_preparation_facts validate saved assets for editor status,
 listing
 checks and engine refusals without consulting inference runtime or cache.

@@ -286,3 +286,29 @@ it("shows Preparing while an explicit prepare request is pending", async () => {
   expect(document.querySelector(".mg-preparation .mg-status")).toHaveTextContent("Preparing");
   expect(button).toBeDisabled();
 });
+
+it("waits for the current interactive composite before autosaving its revision", async () => {
+  vi.mocked(calibrator.getTemplateConfig).mockResolvedValue({
+    config: SINGLE,
+    modifiedAt: "Wed, 17 Sep 2026 18:30:00 GMT",
+  });
+  vi.mocked(prep.getPreparation).mockResolvedValue(READY);
+  let finish!: (url: string) => void;
+  const pending = new Promise<string>((resolve) => {
+    finish = resolve;
+  });
+  vi.mocked(calibrator.renderPreview)
+    .mockResolvedValueOnce("blob:initial")
+    .mockReturnValue(pending);
+  render(<App />);
+  const texture = await screen.findByLabelText("Fabric texture");
+  await waitFor(() => expect(calibrator.renderPreview).toHaveBeenCalledTimes(1));
+  fireEvent.change(texture, { target: { value: "62" } });
+  await waitFor(() => expect(calibrator.renderPreview).toHaveBeenCalledTimes(2));
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 900));
+  });
+  expect(calibrator.saveTemplateConfig).not.toHaveBeenCalled();
+  await act(async () => finish("blob:edited"));
+  await waitFor(() => expect(calibrator.saveTemplateConfig).toHaveBeenCalledTimes(1));
+});

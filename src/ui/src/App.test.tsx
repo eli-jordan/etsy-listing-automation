@@ -312,3 +312,25 @@ it("waits for the initial catalog before claiming the workspace is empty", async
   await act(async () => finish([]));
   expect(screen.getByText(/No templates yet/)).toBeInTheDocument();
 });
+
+it("keeps a newer template selection when an autosave catalog refresh arrives late", async () => {
+  const rows = [summary({ name: "first" }), summary({ name: "second" })];
+  let finish!: (value: TemplateSummary[]) => void;
+  const pending = new Promise<TemplateSummary[]>((resolve) => {
+    finish = resolve;
+  });
+  const list = vi
+    .spyOn(calibrator, "listTemplates")
+    .mockResolvedValueOnce(rows)
+    .mockReturnValue(pending);
+  vi.spyOn(calibrator, "getTemplateConfig").mockResolvedValue(configDocument(COLOUR_MATRIX));
+  vi.spyOn(calibrator, "renderPreview").mockResolvedValue("blob:preview");
+  vi.spyOn(calibrator, "saveTemplateConfig").mockResolvedValue(COLOUR_MATRIX);
+  render(<App />);
+  fireEvent.change(await screen.findByLabelText("Wrinkle strength"), { target: { value: "25" } });
+  await waitFor(() => expect(list).toHaveBeenCalledTimes(2), { timeout: 2000 });
+  selectTemplate("second");
+  await waitFor(() => expect(header().getByText("second")).toBeInTheDocument());
+  await act(async () => finish(rows));
+  expect(header().getByText("second")).toBeInTheDocument();
+});

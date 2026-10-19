@@ -164,6 +164,8 @@ class ColourMatrixPreviewRequest(BaseModel):
     bounding_box: BoundingBox
     renderer: Renderer
     design: str = "bundled-grid"
+    calibration_revision: str | None = None
+    mask_edits: list[MaskEdit] = Field(default_factory=list, max_length=32)
 
 
 class MultiplePreviewRequest(BaseModel):
@@ -173,6 +175,8 @@ class MultiplePreviewRequest(BaseModel):
     placements: list[Placement]
     renderer: Renderer
     design: str = "bundled-grid"
+    calibration_revision: str | None = None
+    mask_edits: list[MaskEdit] = Field(default_factory=list, max_length=32)
 
 
 class SinglePreviewRequest(BaseModel):
@@ -183,6 +187,8 @@ class SinglePreviewRequest(BaseModel):
     bounding_box: BoundingBox
     renderer: Renderer
     design: str = "bundled-grid"
+    calibration_revision: str | None = None
+    mask_edits: list[MaskEdit] = Field(default_factory=list, max_length=32)
 
 
 PreviewRequest = ColourMatrixPreviewRequest | MultiplePreviewRequest | SinglePreviewRequest

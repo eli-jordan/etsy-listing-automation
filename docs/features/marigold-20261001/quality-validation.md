@@ -293,3 +293,8 @@ above are intentional review inputs. `multiple-validation` has both placements
 prepared. Local design files are `white.png`, `saturated.png`, `fine.png`,
 `transparent.png` and `real.png`. Full-resolution foreground evidence is outside
 the workspace under `renders/folded-edge-*-white-*.png`; none is committed.
+
+
+Interactive authoring correction measurements, including edits during durable
+CPU rebuilds, are recorded in [the correction latency validation](edit-latency-validation.md).
+Those approximate frames are separate from the full-quality comparisons above.

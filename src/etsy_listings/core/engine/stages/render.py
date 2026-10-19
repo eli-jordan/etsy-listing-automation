@@ -89,7 +89,12 @@ from etsy_listings.core.render.config import (
     SingleTemplate,
 )
 from etsy_listings.core.render.identity import artwork_identity, prepared_scene_identity
-from etsy_listings.core.render.io import load_design, load_template_base, save_png
+from etsy_listings.core.render.io import (
+    MARIGOLD_PNG_COMPRESSION,
+    load_design,
+    load_template_base,
+    save_png,
+)
 from etsy_listings.core.render.maps import DerivedMapCache
 from etsy_listings.core.render.material import MaterialLayer, render_marigold_scene
 from etsy_listings.core.render.pipeline import Layer, render_scene
@@ -893,7 +898,7 @@ class RenderStage:
                     ],
                     appearance=work.appearance,
                 )
-                save_png(image, target)
+                save_png(image, target, compression=MARIGOLD_PNG_COMPRESSION)
         except ArtifactError as exc:
             raise StageBlockedError(str(exc)) from exc
 

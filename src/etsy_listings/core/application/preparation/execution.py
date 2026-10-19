@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterator
-from contextlib import contextmanager, suppress
+from collections.abc import Iterator, Mapping
+from contextlib import AbstractContextManager, contextmanager, nullcontext, suppress
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
 from PIL import Image
 
+from etsy_listings.core.application.preparation.activity import yield_to_interactive
 from etsy_listings.core.application.preparation.dependencies import InferenceWorker
 from etsy_listings.core.application.preparation.evidence import EvidenceStore
 from etsy_listings.core.application.preparation.models import Job, Prediction, placement_key
@@ -353,133 +354,153 @@ class Execution:
         job = self.owner.status(identity)
         with Image.open(self.owner.workspace.preparation_work(identity, "photo.png")) as photo:
             base = np.array(photo.convert("RGB"), np.uint8)
-        maps: dict[str | None, MaterialMaps] = {}
-        for placement in job.snapshot.placements:
-            self.safe(identity, "mask")
-            job = self.owner.status(identity)
-            mask_path = self.owner.workspace.preparation_work(
-                identity, "mask-" + placement_key(placement.id) + ".png"
-            )
-            if placement.mask == "0" * 64:
-                proposal = propose_mask(base, np.array(placement.quad, np.float32))
-                data = self.owner.calibration.encode_mask(
-                    Image.fromarray(np.rint(proposal.mask * 255).astype(np.uint8))
-                )
-                write_bytes_atomic(mask_path, data, durable=True)
-                planned = {
-                    **job.planned_masks,
-                    placement_key(placement.id): file_checksum(mask_path),
-                }
-                self.write(identity, planned_masks=planned)
-                with self.owner.calibration.lock(job.template):
-                    self.safe(identity, "mask_publication")
-                    revision = self.owner.calibration.read(job.template).revision
-                    self.owner.calibration.install_automatic(
-                        job.template,
-                        data,
-                        algorithm_version=proposal.algorithm,
-                        expected_revision=revision,
-                        placement_id=placement.id,
-                        reset_for_photo=job.reset_masks_for_photo,
-                    )
-                    self.owner.checkpoint(identity, "mask_committed")
-                    self.recover_masks(identity)
+        reuse: AbstractContextManager[Mapping[str | None, MaterialMaps]] = (
+            self.owner.artifacts.reusable(job.template, job.snapshot)
+            if job.kind == "rebuild"
+            else nullcontext({})
+        )
+        with reuse as reusable:
+            maps: dict[str | None, MaterialMaps] = {}
+            for placement in job.snapshot.placements:
+                self.safe(identity, "mask")
                 job = self.owner.status(identity)
-            else:
-                if not mask_path.exists():
-                    raise ValueError("Saved mask snapshot is missing; retry preparation")
-                if (
-                    file_checksum(mask_path)
-                    != next(p for p in job.snapshot.placements if p.id == placement.id).mask
-                ):
-                    raise ValueError("Saved mask snapshot checksum mismatch")
-            with Image.open(mask_path) as image:
-                from etsy_listings.core.render import FloatMap
-
-                mask: FloatMap = np.array(image.convert("L"), dtype=np.float32)
-                mask /= np.float32(255)
-            record = job.cpu_checkpoints.get(placement_key(placement.id))
-            archive = self.owner.workspace.preparation_work(
-                identity, "maps-" + placement_key(placement.id) + ".npz"
-            )
-            prepared = None
-            if record:
-                with suppress(ValueError, OSError):
-                    prepared = read_maps(
-                        archive,
-                        PlacementArtifact.model_validate(record),
-                        (job.snapshot.photo.width, job.snapshot.photo.height),
+                reused = reusable.get(placement.id)
+                if reused is not None:
+                    maps[placement.id] = reused
+                    continue
+                mask_path = self.owner.workspace.preparation_work(
+                    identity, "mask-" + placement_key(placement.id) + ".png"
+                )
+                if placement.mask == "0" * 64:
+                    proposal = propose_mask(base, np.array(placement.quad, np.float32))
+                    data = self.owner.calibration.encode_mask(
+                        Image.fromarray(np.rint(proposal.mask * 255).astype(np.uint8))
                     )
-            if prepared is None:
-                value = next(
-                    v
-                    for v in job.evidence
-                    if v.id == job.placement_evidence[placement_key(placement.id)]
+                    write_bytes_atomic(mask_path, data, durable=True)
+                    planned = {
+                        **job.planned_masks,
+                        placement_key(placement.id): file_checksum(mask_path),
+                    }
+                    self.write(identity, planned_masks=planned)
+                    with self.owner.calibration.lock(job.template):
+                        self.safe(identity, "mask_publication")
+                        revision = self.owner.calibration.read(job.template).revision
+                        self.owner.calibration.install_automatic(
+                            job.template,
+                            data,
+                            algorithm_version=proposal.algorithm,
+                            expected_revision=revision,
+                            placement_id=placement.id,
+                            reset_for_photo=job.reset_masks_for_photo,
+                        )
+                        self.owner.checkpoint(identity, "mask_committed")
+                        self.recover_masks(identity)
+                    job = self.owner.status(identity)
+                else:
+                    if not mask_path.exists():
+                        raise ValueError("Saved mask snapshot is missing; retry preparation")
+                    if (
+                        file_checksum(mask_path)
+                        != next(p for p in job.snapshot.placements if p.id == placement.id).mask
+                    ):
+                        raise ValueError("Saved mask snapshot checksum mismatch")
+                with Image.open(mask_path) as image:
+                    from etsy_listings.core.render import FloatMap
+
+                    mask: FloatMap = np.array(image.convert("L"), dtype=np.float32)
+                    mask /= np.float32(255)
+                record = job.cpu_checkpoints.get(placement_key(placement.id))
+                archive = self.owner.workspace.preparation_work(
+                    identity, "maps-" + placement_key(placement.id) + ".npz"
                 )
+                prepared = None
+                if record:
+                    with suppress(ValueError, OSError):
+                        prepared = read_maps(
+                            archive,
+                            PlacementArtifact.model_validate(record),
+                            (job.snapshot.photo.width, job.snapshot.photo.height),
+                        )
+                if prepared is None:
+                    value = next(
+                        v
+                        for v in job.evidence
+                        if v.id == job.placement_evidence[placement_key(placement.id)]
+                    )
 
-                def checkpoint(step: str) -> None:
-                    self.safe(identity, step)
+                    def checkpoint(step: str) -> None:
+                        def check_cancelled() -> None:
+                            if self.owner.status(identity).cancel_intent:
+                                raise Stopped("cancelled")
+                            if self.owner._closing:
+                                raise Stopped("queued")
 
-                prepared = prepare(
-                    base,
-                    np.array(placement.quad, np.float32),
-                    self.evidence.load(value, job.snapshot),
-                    mask=mask,
-                    checkpoint=checkpoint,
-                ).maps
-                from etsy_listings.core.preparation.artifacts import arrays_of
+                        yield_to_interactive(self.owner.workspace, check_cancelled)
+                        self.safe(identity, step)
 
-                with archive.open("wb") as stream:
-                    np.savez_compressed(stream, **arrays_of(prepared))
-                    stream.flush()
-                    import os
+                    prepared = prepare(
+                        base,
+                        np.array(placement.quad, np.float32),
+                        self.evidence.load(value, job.snapshot),
+                        mask=mask,
+                        checkpoint=checkpoint,
+                    ).maps
+                    from etsy_listings.core.preparation.artifacts import arrays_of
 
-                    os.fsync(stream.fileno())
-                descriptor = PlacementArtifact(
-                    id=placement.id,
-                    checksum=file_checksum(archive),
-                    extent=(0, 0, job.snapshot.photo.width, job.snapshot.photo.height),
-                    arrays=descriptors(prepared),
-                )
+                    for array in arrays_of(prepared).values():
+                        array.flags.writeable = False
+                    with archive.open("wb") as stream:
+                        np.savez(stream, **arrays_of(prepared))
+                        stream.flush()
+                        import os
+
+                        os.fsync(stream.fileno())
+                    descriptor = PlacementArtifact(
+                        id=placement.id,
+                        checksum=file_checksum(archive),
+                        extent=prepared.extent,
+                        arrays=descriptors(prepared),
+                    )
+                    latest = self.owner.status(identity)
+                    self.write(
+                        identity,
+                        cpu_checkpoints={
+                            **latest.cpu_checkpoints,
+                            placement_key(placement.id): descriptor.model_dump(mode="json"),
+                        },
+                        placements_completed=len(maps) + 1,
+                    )
+                maps[placement.id] = prepared
+            job = self.safe(identity, "publication")
+            semantic = {p.id: p.evidence for p in job.snapshot.placements}
+
+            def current_inputs() -> PreparationInputs:
                 latest = self.owner.status(identity)
-                self.write(
-                    identity,
-                    cpu_checkpoints={
-                        **latest.cpu_checkpoints,
-                        placement_key(placement.id): descriptor.model_dump(mode="json"),
-                    },
-                    placements_completed=len(maps) + 1,
+                if latest.cancel_intent:
+                    raise Stopped("cancelled")
+                return self.owner.artifacts.saved_inputs(
+                    job.template, evidence=semantic, reset_masks_for_photo=job.reset_masks_for_photo
                 )
-            maps[placement.id] = prepared
-        job = self.safe(identity, "publication")
-        semantic = {p.id: p.evidence for p in job.snapshot.placements}
 
-        def current_inputs() -> PreparationInputs:
-            latest = self.owner.status(identity)
-            if latest.cancel_intent:
-                raise Stopped("cancelled")
-            return self.owner.artifacts.saved_inputs(
-                job.template, evidence=semantic, reset_masks_for_photo=job.reset_masks_for_photo
+            manifest = self.owner.artifacts.publish(
+                job.template,
+                job.snapshot,
+                maps,
+                current_inputs=current_inputs,
+                copy_maps=False,
+                provenance={
+                    "job_id": job.id,
+                    "engine_version": job.engine_version,
+                    "installation_id": job.installation_id,
+                },
+                checkpoint=lambda step: self.owner.checkpoint(identity, step),
             )
-
-        manifest = self.owner.artifacts.publish(
-            job.template,
-            job.snapshot,
-            maps,
-            current_inputs=current_inputs,
-            provenance={
-                "job_id": job.id,
-                "engine_version": job.engine_version,
-                "installation_id": job.installation_id,
-            },
-            checkpoint=lambda step: self.owner.checkpoint(identity, step),
-        )
-        self.write(
-            identity,
-            phase="completed",
-            result={
-                "generation_id": manifest.generation_id,
-                "content_digest": manifest.content_digest,
-            },
-            placements_completed=len(maps),
-        )
+            self.write(
+                identity,
+                phase="completed",
+                result={
+                    "generation_id": manifest.generation_id,
+                    "content_digest": manifest.content_digest,
+                },
+                placements_completed=len(maps),
+            )

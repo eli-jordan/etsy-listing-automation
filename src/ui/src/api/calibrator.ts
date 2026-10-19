@@ -245,10 +245,11 @@ export async function getTemplateSwatch(name: string, colour: string): Promise<s
   return data.hex;
 }
 
-type PreviewBody =
+type PreviewBody = { calibration_revision?: string; mask_edits?: MaskEdit[] } & (
   | { colour: string; bounding_box: BoundingBox; renderer: Renderer }
   | { placements: Placement[]; renderer: Renderer }
-  | { bounding_box: BoundingBox; renderer: Renderer };
+  | { bounding_box: BoundingBox; renderer: Renderer }
+);
 
 /** Which of the server's two preview sizes to ask for.
  *

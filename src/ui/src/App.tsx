@@ -46,6 +46,11 @@ const KIND_LABELS: Record<TemplateKind, string> = {
 
 export function App() {
   const preparationJobs = usePreparationQueue();
+  const [previewPending, setPreviewPending] = useState<{
+    name: string | null;
+    pending: boolean;
+  } | null>(null);
+  const lastEditAt = useRef(0);
   const [maskDraft, setMaskDraft] = useState<{ name: string; edits: MaskEdit[] } | null>(null);
   const [preparationVersion, setPreparationVersion] = useState(0);
   const [calibrationFence, setCalibrationFence] = useState<{
@@ -116,12 +121,20 @@ export function App() {
 
   const refreshTemplates = useCallback((selectName?: string) => {
     const seq = ++refreshSeq.current;
+    const selectionAtRequest = currentTemplate.current;
     listTemplates()
       .then((loaded) => {
         if (seq !== refreshSeq.current) return;
         setCatalogState("ready");
         setTemplates(loaded);
-        setTemplateName((current) => selectName ?? current ?? loaded[0]?.name ?? null);
+        // A save may finish its catalog refresh after the user has moved on.
+        setTemplateName(
+          (current) =>
+            (current === selectionAtRequest ? selectName : undefined) ??
+            current ??
+            loaded[0]?.name ??
+            null,
+        );
       })
       .catch(() => {
         if (seq !== refreshSeq.current) return;
@@ -186,10 +199,9 @@ export function App() {
   }, [preparation]);
 
   const mapState = preparation?.maps.state;
-  const preparationPhase = preparation?.active_job?.phase;
   useEffect(() => {
     if (mapState) refreshTemplates();
-  }, [mapState, preparationPhase, refreshTemplates]);
+  }, [mapState, refreshTemplates]);
   const config = configEntry?.name === templateName ? configEntry.config : null;
   const saved = savedEntry?.name === templateName ? savedEntry.config : null;
 
@@ -266,17 +278,28 @@ export function App() {
     [refreshTemplates],
   );
 
+  useEffect(() => {
+    lastEditAt.current = Date.now();
+  }, [config, maskEdits, templateName]);
+  const waitingForPreview = previewPending?.name === templateName && previewPending.pending;
+
   // Match the listing editor: wait until a run of edits settles, then write
   // it as one request. Changing template or resetting clears the pending
   // timer through the effect cleanup.
   useEffect(() => {
-    if (!templateName || !config || !dirty) return;
+    if (
+      !templateName ||
+      !config ||
+      !dirty ||
+      (config.renderer.type === "marigold" && waitingForPreview)
+    )
+      return;
     const timer = setTimeout(
       () => void saveConfig(templateName, config, maskEdits).catch(() => {}),
-      AUTOSAVE_DEBOUNCE_MS,
+      Math.max(0, AUTOSAVE_DEBOUNCE_MS - (Date.now() - lastEditAt.current)),
     );
     return () => clearTimeout(timer);
-  }, [config, dirty, saveConfig, templateName, maskEdits]);
+  }, [config, dirty, saveConfig, templateName, maskEdits, waitingForPreview]);
 
   const handleApprove = useCallback(() => {
     if (!templateName || !config) return;
@@ -598,6 +621,7 @@ export function App() {
                   }
                   maskEdits={maskEdits}
                   onMaskEdits={(edits) => setMaskDraft({ name: templateName, edits })}
+                  onPreviewPending={(pending) => setPreviewPending({ name: templateName, pending })}
                   savedConfig={saved}
                   onPrepare={() =>
                     void startPreparation(

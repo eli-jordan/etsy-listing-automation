@@ -843,6 +843,20 @@ photo. Extents enter schema 2 numerical identity. Schema 1 full-photo assets kee
 their original validation and digest rules without inference or migration.
 ADR-0053 records the measured storage cost behind this amendment.
 
+The editor replays draft masks at the acknowledged calibration revision and fits
+retained validated evidence into a transient 17 by 17 mesh and 256px composite.
+Interactive artwork is capped at 512px. These frames carry no accepted render
+identity and publish no assets. Autosave keeps its 800ms minimum idle deadline
+and waits for the current interactive request to settle, then independently
+reconciles durable 49 by 49 maps. Full-quality Preview and export retain original
+artwork and photo size. Revision fences reject superseded requests without
+implicit inference. The read-only evidence reader is separate from job-owned
+prediction publication and retention.
+CPU preparation yields at its existing numerical phase checkpoints while an
+interactive request is active in the same workspace. Waiting holds no template
+or coordinator locks and still observes cancellation and close intent. Already
+executing phases are not preempted; inference dispatch remains independent.
+
 `preparation.artifacts.Artifacts` owns validated generation publication, readiness,
 acquisition and reference-aware cleanup. Workspace derives every durable path and
 owns enumeration/removal. Publication and reader leases use the canonical

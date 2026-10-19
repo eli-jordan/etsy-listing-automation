@@ -227,7 +227,7 @@ def test_invalid_generations_are_refused_as_one_complete_set(workspace_root, dam
     path = store.workspace.template_map_manifest("shirt", generation.generation_id)
     document = json.loads(path.read_bytes())
     if damage == "unsupported_schema":
-        document["schema_version"] = 2
+        document["schema_version"] = 3
     elif damage == "extent":
         document["placements"][0]["extent"][2] = 15
     elif damage == "placement_set":
@@ -427,9 +427,11 @@ def test_small_placement_on_a_large_photo_prepares_and_publishes_invisible_coord
         np.full((512, 512, 3), 128, np.uint8), box, evidence, mask=np.ones((512, 512), np.float32)
     )
     assert prepared.maps.visibility[0, 0] == 0
-    assert prepared.maps.visibility[256, 256] == 1
-    np.testing.assert_allclose(prepared.maps.material[240, 240], [0, 0], atol=1e-6)
-    np.testing.assert_allclose(prepared.maps.material[272, 272], [1, 1], atol=1e-6)
+    assert prepared.maps.origin == (224, 224)
+    assert prepared.maps.visibility[32, 32] == 1
+    assert prepared.maps.size == (512, 512)
+    np.testing.assert_allclose(prepared.maps.material[16, 16], [0, 0], atol=1e-6)
+    np.testing.assert_allclose(prepared.maps.material[48, 48], [1, 1], atol=1e-6)
     inputs = preparation_inputs(size=(512, 512))
     placement = inputs.placements[0].model_copy(
         update={"quad": tuple(tuple(float(v) for v in point) for point in box)}
@@ -548,3 +550,196 @@ def test_validate_inputs_refuses_known_ten_placement_2048_generation(workspace_r
 def test_validate_inputs_accepts_exact_axis_and_photo_pixel_limits(workspace_root):
     store = Artifacts(Workspace.discover(root_override=workspace_root))
     assert store.validate_inputs(preparation_inputs(size=(8192, 4096))) is None
+
+
+def test_interactive_publication_uses_lossless_stored_arrays(workspace_root) -> None:
+    """Full-resolution edit maps must not pay DEFLATE CPU cost twice."""
+    import zipfile
+
+    store = Artifacts(Workspace.discover(root_override=workspace_root))
+    inputs = preparation_inputs()
+    maps = material_maps()
+    generation = store.publish("shirt", inputs, {None: maps}, current_inputs=lambda: inputs)
+    path = store.workspace.template_map_file("shirt", generation.generation_id, None)
+    with zipfile.ZipFile(path) as archive:
+        assert all(member.compress_type == zipfile.ZIP_STORED for member in archive.infolist())
+    with store.acquire("shirt", inputs) as acquired:
+        for name in (
+            "material",
+            "visibility",
+            "estimated",
+            "photographic",
+            "texture",
+            "residual",
+            "patch_ids",
+        ):
+            np.testing.assert_array_equal(getattr(acquired.maps[None], name), getattr(maps, name))
+
+
+def test_inspection_validates_changed_or_removed_maps_after_a_warm_read(workspace_root) -> None:
+    from etsy_listings.core.preparation.artifacts import ArtifactError
+
+    store = Artifacts(Workspace.discover(root_override=workspace_root))
+    inputs = preparation_inputs()
+    generation = store.publish(
+        "shirt", inputs, {None: material_maps()}, current_inputs=lambda: inputs
+    )
+    assert store.inspect("shirt", inputs).generation_id == generation.generation_id
+    path = store.workspace.template_map_file("shirt", generation.generation_id, None)
+    data = path.read_bytes()
+    path.write_bytes(data[:-1] + bytes([data[-1] ^ 1]))
+    with pytest.raises(ArtifactError, match="checksum"):
+        store.inspect("shirt", inputs)
+    path.write_bytes(data)
+    assert store.inspect("shirt", inputs).generation_id == generation.generation_id
+    path.unlink()
+    with pytest.raises(ArtifactError):
+        store.inspect("shirt", inputs)
+
+
+def test_acquisition_rejects_corruption_after_warm_generation_reads(workspace_root) -> None:
+    from etsy_listings.core.preparation.artifacts import ArtifactError
+
+    store = Artifacts(Workspace.discover(root_override=workspace_root))
+    inputs = preparation_inputs()
+    generation = store.publish(
+        "shirt", inputs, {None: material_maps()}, current_inputs=lambda: inputs
+    )
+    with store.acquire("shirt", inputs) as acquired:
+        assert not acquired.maps[None].visibility.flags.writeable
+    path = store.workspace.template_map_file("shirt", generation.generation_id, None)
+    original = path.read_bytes()
+    path.write_bytes(original[:-1] + bytes([original[-1] ^ 1]))
+    with (
+        pytest.raises(ArtifactError, match="checksum"),
+        Artifacts(store.workspace).acquire("shirt", inputs),
+    ):
+        pass
+
+
+def test_unchanged_placements_can_be_reused_while_the_generation_stays_leased(
+    workspace_root,
+) -> None:
+    store = Artifacts(Workspace.discover(root_override=workspace_root))
+    inputs = preparation_inputs(("left", "right"))
+    maps = {"left": material_maps(), "right": material_maps()}
+    first = store.publish("shirt", inputs, maps, current_inputs=lambda: inputs)
+    changed = inputs.model_copy(
+        update={
+            "placements": (
+                inputs.placements[0].model_copy(update={"mask": "d" * 64}),
+                inputs.placements[1],
+            )
+        }
+    )
+    with store.reusable("shirt", changed) as reused:
+        assert set(reused) == {"right"}
+        np.testing.assert_array_equal(reused["right"].material, maps["right"].material)
+        store.publish("shirt", changed, maps, current_inputs=lambda: changed)
+        assert store.cleanup("shirt") == []
+    assert store.cleanup("shirt") == [first.generation_id]
+
+
+def test_compact_maps_roundtrip_at_their_photo_origin_and_hash_the_extent(workspace_root) -> None:
+    from dataclasses import replace
+
+    from etsy_listings.core.render import MarigoldAppearance, MaterialLayer, render_marigold_scene
+
+    store = Artifacts(Workspace.discover(root_override=workspace_root))
+    inputs = preparation_inputs(size=(32, 32))
+    maps = replace(material_maps(), origin=(8, 8), photo_size=(32, 32))
+    generation = store.publish("shirt", inputs, {None: maps}, current_inputs=lambda: inputs)
+    assert generation.schema_version == 2
+    assert generation.placements[0].extent == (8, 8, 24, 24)
+    with store.acquire("shirt", inputs) as acquired:
+        loaded = acquired.maps[None]
+        assert loaded.size == (32, 32)
+        assert loaded.visibility.shape == (16, 16)
+        image = np.array(
+            render_marigold_scene(
+                np.zeros((32, 32, 3), np.uint8),
+                [
+                    MaterialLayer(np.full((16, 16, 4), 255, np.uint8), loaded),
+                ],
+                appearance=MarigoldAppearance(fabric_texture=0),
+            )
+        )
+        assert image[16, 16].tolist() == [188, 188, 188]
+        assert image[4, 4].tolist() == [0, 0, 0]
+    moved = store.publish(
+        "shirt", inputs, {None: replace(maps, origin=(9, 8))}, current_inputs=lambda: inputs
+    )
+    assert moved.content_digest != generation.content_digest
+
+
+def test_schema_one_generation_keeps_its_original_numeric_identity(workspace_root) -> None:
+    import json
+
+    from tests.support.marigold import rewrite_map_manifest
+
+    store = Artifacts(Workspace.discover(root_override=workspace_root))
+    inputs = preparation_inputs()
+    generation = store.publish(
+        "shirt", inputs, {None: material_maps()}, current_inputs=lambda: inputs
+    )
+    manifest_path = store.workspace.template_map_manifest("shirt", generation.generation_id)
+    document = json.loads(manifest_path.read_bytes())
+    document["schema_version"] = 1
+    # Fixed result from the original schema1 implementation on this synthetic fixture.
+    document["content_digest"] = "cbbbedece4ddcd84201d4764512c6e1c5cf666979f9c4b7f13f488aecfc4e888"
+    rewrite_map_manifest(store.workspace, "shirt", generation.generation_id, document)
+    pointer_path = store.workspace.template_map_current("shirt")
+    pointer = json.loads(pointer_path.read_bytes())
+    pointer["schema_version"] = 1
+    pointer_path.write_text(json.dumps(pointer), encoding="utf-8")
+    with Artifacts(store.workspace).acquire("shirt", inputs) as acquired:
+        assert acquired.manifest.schema_version == 1
+        assert acquired.maps[None].origin == (0, 0)
+        assert acquired.maps[None].size == (16, 16)
+        np.testing.assert_array_equal(acquired.maps[None].material, material_maps().material)
+
+
+def test_reusing_maps_does_not_hold_template_lock_during_archive_read(
+    workspace_root, monkeypatch
+) -> None:
+    import os
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Event
+
+    from etsy_listings.core.preparation import artifacts
+
+    store = Artifacts(Workspace.discover(root_override=workspace_root))
+    inputs = preparation_inputs()
+    generation = store.publish(
+        "shirt", inputs, {None: material_maps()}, current_inputs=lambda: inputs
+    )
+    path = store.workspace.template_map_file("shirt", generation.generation_id, None)
+    stat = path.stat()
+    os.utime(path, ns=(stat.st_atime_ns, stat.st_mtime_ns + 1_000_000_000))
+    loading, resume, locked = Event(), Event(), Event()
+    read_maps = artifacts.read_maps
+
+    def blocked_read(*args, **kwargs):
+        loading.set()
+        assert resume.wait(5)
+        return read_maps(*args, **kwargs)
+
+    def reuse():
+        with store.reusable("shirt", inputs) as reused:
+            assert None in reused
+
+    def snapshot_lock():
+        with store.calibration.lock("shirt"):
+            locked.set()
+
+    monkeypatch.setattr(artifacts, "read_maps", blocked_read)
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        reader = pool.submit(reuse)
+        try:
+            assert loading.wait(5)
+            snapshot = pool.submit(snapshot_lock)
+            assert locked.wait(1), "archive decompression blocked the interactive snapshot"
+        finally:
+            resume.set()
+        reader.result()
+        snapshot.result()

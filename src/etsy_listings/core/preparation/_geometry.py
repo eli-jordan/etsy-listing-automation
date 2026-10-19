@@ -306,10 +306,17 @@ def polygon_mask(size: tuple[int, int], points: list[list[float]]) -> Float:
 
 
 def lighting_fields(
-    base: Pixels, shading: Float, albedo: Float, residual: Float, cloth: Float, confidence: Float
+    base: Pixels,
+    shading: Float,
+    albedo: Float,
+    residual: Float,
+    cloth: Float,
+    confidence: Float,
+    *,
+    minimum_samples: int = 100,
 ) -> tuple[dict[str, Float], dict[str, Any]]:
     selected = (cloth > 0.95) & (confidence > 0.35)
-    if selected.sum() < 100:
+    if selected.sum() < minimum_samples:
         raise ValueError("Not enough confident visible cloth to normalize lighting")
     luminance = np.sum(shading * np.array([0.2126, 0.7152, 0.0722]), -1)
     exposure = max(float(np.percentile(luminance[selected], 70)), 0.01)

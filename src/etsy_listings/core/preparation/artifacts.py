@@ -10,10 +10,13 @@ import hashlib
 import json
 import math
 import os
+import threading
+import weakref
 import zipfile
+from collections import OrderedDict
 from collections.abc import Callable, Iterator, Mapping
-from contextlib import contextmanager, suppress
-from dataclasses import dataclass, fields
+from contextlib import ExitStack, contextmanager, suppress
+from dataclasses import dataclass
 from pathlib import Path
 from types import MappingProxyType
 from typing import Any, Literal
@@ -32,8 +35,9 @@ from etsy_listings.core.render.material import MaterialMaps
 from etsy_listings.core.workspace import Workspace
 from etsy_listings.core.workspace.atomic import write_bytes_atomic
 from etsy_listings.core.workspace.calibration import CalibrationStore, MaskPhotoMismatch, json_bytes
+from etsy_listings.core.workspace.file_version import file_version
 
-SCHEMA = 1
+SCHEMA = 2
 MAX_PIXELS = 32 * 1024 * 1024
 MAX_ARCHIVE_BYTES = 2 * 1024 * 1024 * 1024
 SEMANTICS = {
@@ -134,7 +138,7 @@ class PlacementArtifact(Record):
 
 
 class Manifest(Record):
-    schema_version: Literal[1] = 1
+    schema_version: Literal[1, 2] = 2
     generation_id: PlacementId
     preparation_inputs: PreparationInputs
     semantics: dict[str, str]
@@ -162,15 +166,17 @@ class Readiness:
 
 
 def arrays_of(maps: MaterialMaps) -> dict[str, Any]:
-    return {
-        field.name: getattr(maps, field.name)
-        for field in fields(maps)
-        if getattr(maps, field.name) is not None
-    }
+    return {name: getattr(maps, name) for name in BOUNDS if getattr(maps, name) is not None}
 
 
 def validate_maps(maps: MaterialMaps, size: tuple[int, int]) -> None:
-    width, height = size
+    photo_width, photo_height = size
+    left, top, right, bottom = maps.extent
+    if maps.size != size or not (
+        0 <= left < right <= photo_width and 0 <= top < bottom <= photo_height
+    ):
+        raise ArtifactError("Prepared map extent does not match main photo")
+    width, height = right - left, bottom - top
     if min(size) < 1 or max(size) > 8192 or width * height > MAX_PIXELS:
         raise ArtifactError("Unsupported prepared-map dimensions")
     arrays = arrays_of(maps)
@@ -186,24 +192,63 @@ def validate_maps(maps: MaterialMaps, size: tuple[int, int]) -> None:
             raise ArtifactError(f"Prepared {name} values outside declared bounds")
 
 
+_DESCRIPTOR_LOCK = threading.Lock()
+_DESCRIPTORS: dict[
+    int, tuple[weakref.ReferenceType[MaterialMaps], tuple[Any, ...], dict[str, ArrayDescriptor]]
+] = {}
+
+
+def _forget_descriptors(reference: weakref.ReferenceType[MaterialMaps], key: int) -> None:
+    with _DESCRIPTOR_LOCK:
+        entry = _DESCRIPTORS.get(key)
+        if entry is not None and entry[0] is reference:
+            del _DESCRIPTORS[key]
+
+
 def descriptors(maps: MaterialMaps) -> dict[str, ArrayDescriptor]:
-    return {
+    arrays = arrays_of(maps)
+    immutable = all(not a.flags.writeable and a.flags.owndata for a in arrays.values())
+    signature = tuple((name, id(a), a.shape, a.dtype.str, a.strides) for name, a in arrays.items())
+    if immutable:
+        with _DESCRIPTOR_LOCK:
+            entry = _DESCRIPTORS.get(id(maps))
+            if entry is not None and entry[0]() is maps and entry[1] == signature:
+                return entry[2].copy()
+    result = {
         name: ArrayDescriptor(
             shape=array.shape,
             dtype="int32" if name == "patch_ids" else "float32",
-            checksum=hashlib.sha256(np.ascontiguousarray(array).tobytes()).hexdigest(),
+            checksum=hashlib.sha256(np.ascontiguousarray(array)).hexdigest(),
         )
-        for name, array in arrays_of(maps).items()
+        for name, array in arrays.items()
     }
+    if immutable:
+        key = id(maps)
+        reference = weakref.ref(maps, lambda ref: _forget_descriptors(ref, key))
+        with _DESCRIPTOR_LOCK:
+            _DESCRIPTORS[key] = reference, signature, result
+    return result.copy()
 
 
 def numerical_digest(placements: Mapping[str | None, MaterialMaps]) -> str:
+    return _descriptor_digest(
+        {key: descriptors(value) for key, value in placements.items()},
+        extents={key: value.extent for key, value in placements.items()},
+    )
+
+
+def _descriptor_digest(
+    placements: Mapping[str | None, Mapping[str, ArrayDescriptor]],
+    *,
+    extents: Mapping[str | None, tuple[int, int, int, int]] | None = None,
+) -> str:
     content = [
         {
             "id": key,
+            **({"extent": extents[key]} if extents is not None else {}),
             "arrays": {
                 name: descriptor.model_dump(mode="json")
-                for name, descriptor in descriptors(placements[key]).items()
+                for name, descriptor in placements[key].items()
             },
         }
         for key in sorted(placements, key=lambda v: v or "")
@@ -216,8 +261,20 @@ def file_checksum(path: Path) -> str:
         return hashlib.file_digest(stream, "sha256").hexdigest()
 
 
-def read_maps(path: Path, descriptor: PlacementArtifact, size: tuple[int, int]) -> MaterialMaps:
+def read_maps(
+    path: Path,
+    descriptor: PlacementArtifact,
+    size: tuple[int, int],
+    *,
+    known_maps: MaterialMaps | None = None,
+) -> MaterialMaps:
     """Check all NPY headers and uncompressed byte budgets before allocation."""
+    photo_width, photo_height = size
+    left, top, right, bottom = descriptor.extent
+    if not (0 <= left < right <= photo_width and 0 <= top < bottom <= photo_height):
+        raise ArtifactError("Prepared map extent does not match main photo")
+    if known_maps is not None and any(a.flags.writeable for a in arrays_of(known_maps).values()):
+        known_maps = None
     try:
         if path.stat().st_size > MAX_ARCHIVE_BYTES or file_checksum(path) != descriptor.checksum:
             raise ArtifactError("Prepared archive size/checksum mismatch")
@@ -237,7 +294,7 @@ def read_maps(path: Path, descriptor: PlacementArtifact, size: tuple[int, int]) 
                 name = member.filename[:-4]
                 expected = descriptor.arrays[name]
                 channels = BOUNDS[name][2]
-                width, height = size
+                width, height = right - left, bottom - top
                 shape = (height, width, channels) if channels else (height, width)
                 dtype = np.dtype("int32" if name == "patch_ids" else "float32")
                 if expected.shape != shape or expected.dtype != str(dtype):
@@ -264,9 +321,23 @@ def read_maps(path: Path, descriptor: PlacementArtifact, size: tuple[int, int]) 
                     raise ArtifactError(
                         "Prepared array header has unsafe shape, dtype or byte length"
                     )
-        with np.load(path, allow_pickle=False) as archive:
-            arrays = {name: archive[name] for name in names}
-        maps = MaterialMaps(**arrays)
+                if known_maps is not None:
+                    # Verify written payload bytes and ZIP CRC only after header,
+                    # shape, dtype and byte-budget checks have passed.
+                    with archive.open(member) as stream:
+                        stream.read(header_size)
+                        payload = hashlib.sha256()
+                        while chunk := stream.read(1024 * 1024):
+                            payload.update(chunk)
+                        if payload.hexdigest() != expected.checksum:
+                            raise ArtifactError("Prepared numerical checksum mismatch")
+        if known_maps is None:
+            with np.load(path, allow_pickle=False) as archive:
+                arrays = {name: archive[name] for name in names}
+            maps = MaterialMaps(**arrays, origin=(left, top), photo_size=size)
+        else:
+            maps = known_maps
+            arrays = arrays_of(maps)
         validate_maps(maps, size)
         if descriptors(maps) != descriptor.arrays:
             raise ArtifactError("Prepared numerical checksum mismatch")
@@ -280,6 +351,46 @@ def read_maps(path: Path, descriptor: PlacementArtifact, size: tuple[int, int]) 
 
 
 _READERS: dict[tuple[str, str], int] = {}
+
+
+# Cache validation proofs, never arrays. A status poll must not decompress and
+# hash hundreds of MiB while holding the calibration lock. Immutable generation
+# files are revalidated after replacement, writes, removal or process restart.
+_VALIDATED: OrderedDict[tuple[Any, ...], None] = OrderedDict()
+_VALIDATED_LOCK = threading.Lock()
+MAP_CACHE_BYTES = 512 * 1024 * 1024
+_MAPS: OrderedDict[tuple[Any, ...], tuple[Mapping[str | None, MaterialMaps], int]] = OrderedDict()
+_MAP_BYTES = 0
+
+
+def _remember_maps(
+    signature: tuple[Any, ...],
+    maps: Mapping[str | None, MaterialMaps],
+    *,
+    previous: tuple[Any, ...] | None = None,
+) -> None:
+    global _MAP_BYTES
+    size = sum(a.nbytes for m in maps.values() for a in arrays_of(m).values())
+    with _VALIDATED_LOCK:
+        for key in (signature, previous):
+            if key is not None and key in _MAPS:
+                _, removed = _MAPS.pop(key)
+                _MAP_BYTES -= removed
+        if size > MAP_CACHE_BYTES:
+            return
+        while _MAPS and _MAP_BYTES + size > MAP_CACHE_BYTES:
+            _, (_, removed) = _MAPS.popitem(last=False)
+            _MAP_BYTES -= removed
+        _MAPS[signature] = maps, size
+        _MAP_BYTES += size
+
+
+def _remember_validation(signature: tuple[Any, ...]) -> None:
+    with _VALIDATED_LOCK:
+        _VALIDATED[signature] = None
+        _VALIDATED.move_to_end(signature)
+        while len(_VALIDATED) > 128:
+            _VALIDATED.popitem(last=False)
 
 
 class Artifacts:
@@ -340,7 +451,7 @@ class Artifacts:
             "manifest_checksum",
         }:
             raise ArtifactError("Invalid current map pointer")
-        if type(value["schema_version"]) is not int or value["schema_version"] != SCHEMA:
+        if type(value["schema_version"]) is not int or value["schema_version"] not in (1, SCHEMA):
             raise ArtifactError("Unsupported map schema; migrate or prepare the template again")
         if not isinstance(value["generation_id"], str) or not isinstance(
             value["manifest_checksum"], str
@@ -358,10 +469,9 @@ class Artifacts:
         document = json.loads(path.read_bytes())
         if not isinstance(document, dict):
             raise ArtifactError("Invalid prepared manifest; prepare the template again")
-        if (
-            type(document.get("schema_version")) is not int
-            or document.get("schema_version") != SCHEMA
-        ):
+        if type(document.get("schema_version")) is not int or document.get(
+            "schema_version"
+        ) not in (1, SCHEMA):
             raise ArtifactError("Unsupported map schema; migrate or prepare the template again")
         manifest = Manifest.model_validate(document)
         if manifest.generation_id != generation or manifest.semantics != SEMANTICS:
@@ -371,10 +481,74 @@ class Artifacts:
             raise ArtifactError("Prepared generation does not contain the exact placement set")
         return manifest
 
+    def _signature(
+        self, name: str, manifest: Manifest, checksum: str, *, staging: bool = False
+    ) -> tuple[Any, ...]:
+        paths = [
+            self.workspace.template_map_manifest(name, manifest.generation_id, staging=staging)
+        ]
+        paths.extend(
+            self.workspace.template_map_file(name, manifest.generation_id, p.id, staging=staging)
+            for p in manifest.placements
+        )
+        return (
+            checksum,
+            *((str(path.resolve()).casefold(), *file_version(path)) for path in paths),
+        )
+
+    def inspect(
+        self, name: str, inputs: PreparationInputs, *, target_size: tuple[int, int] | None = None
+    ) -> Manifest:
+        """Inspect a validated immutable generation without retaining its arrays.
+
+        The template lock protects the pointer and files for the entire read.
+        Validation proofs are bounded and invalidated by every file's identity,
+        size and nanosecond write/change times. No model or prediction is read.
+        """
+        try:
+            with self.calibration.lock(name):
+                pointer = self._pointer(name)
+                generation, checksum = pointer["generation_id"], pointer["manifest_checksum"]
+                manifest = self._read_manifest(name, generation, checksum)
+                self._check_inputs(manifest, inputs, target_size)
+                signature = self._signature(name, manifest, checksum)
+                with _VALIDATED_LOCK:
+                    validated = signature in _VALIDATED
+                    if validated:
+                        _VALIDATED.move_to_end(signature)
+                if not validated:
+                    manifest = self._load(name, generation, checksum).manifest
+                return manifest
+        except (OSError, ValueError, KeyError, TypeError) as exc:
+            if isinstance(exc, ArtifactError):
+                raise
+            raise ArtifactError("Invalid prepared generation; prepare the template again") from exc
+
+    @staticmethod
+    def _check_inputs(
+        manifest: Manifest, inputs: PreparationInputs, target_size: tuple[int, int] | None
+    ) -> None:
+        if manifest.preparation_inputs.identity() != inputs.identity():
+            raise StalePreparation("Prepared maps are out of date; rebuild or prepare the template")
+        if target_size is not None and target_size != (inputs.photo.width, inputs.photo.height):
+            raise ArtifactError("Shared colour photo dimensions differ from the main photo")
+
     def _load(
-        self, name: str, generation: str, checksum: str, *, staging: bool = False
+        self,
+        name: str,
+        generation: str,
+        checksum: str,
+        *,
+        staging: bool = False,
+        known_maps: Mapping[str | None, MaterialMaps] | None = None,
     ) -> Acquired:
         manifest = self._read_manifest(name, generation, checksum, staging=staging)
+        signature = self._signature(name, manifest, checksum, staging=staging)
+        with _VALIDATED_LOCK:
+            cached = _MAPS.get(signature)
+            if cached is not None:
+                _MAPS.move_to_end(signature)
+                return Acquired(manifest, cached[0])
         size = (manifest.preparation_inputs.photo.width, manifest.preparation_inputs.photo.height)
         if (
             sum(
@@ -387,16 +561,30 @@ class Artifacts:
             raise ArtifactError("Prepared generation exceeds allocation budget")
         maps = {}
         for placement in manifest.placements:
-            if placement.extent != (0, 0, *size):
+            if manifest.schema_version == 1 and placement.extent != (0, 0, *size):
                 raise ArtifactError("Prepared map extent does not match main photo")
             maps[placement.id] = read_maps(
                 self.workspace.template_map_file(name, generation, placement.id, staging=staging),
                 placement,
                 size,
+                known_maps=known_maps.get(placement.id) if known_maps is not None else None,
             )
-        if numerical_digest(maps) != manifest.content_digest:
+        if (
+            _descriptor_digest(
+                {p.id: p.arrays for p in manifest.placements},
+                extents={p.id: p.extent for p in manifest.placements}
+                if manifest.schema_version == 2
+                else None,
+            )
+            != manifest.content_digest
+        ):
             raise ArtifactError("Prepared generation numerical identity mismatch")
-        return Acquired(manifest, MappingProxyType(maps))
+        if self._signature(name, manifest, checksum, staging=staging) != signature:
+            raise ArtifactError("Prepared files changed during validation")
+        _remember_validation(signature)
+        frozen = MappingProxyType(maps)
+        _remember_maps(signature, frozen)
+        return Acquired(manifest, frozen)
 
     def saved_inputs(
         self,
@@ -484,7 +672,14 @@ class Artifacts:
         current_inputs: Callable[[], PreparationInputs],
         provenance: dict[str, Any] | None = None,
         checkpoint: Callable[[str], None] = lambda _: None,
+        copy_maps: bool = True,
     ) -> Manifest:
+        """Publish a complete validated generation.
+
+        copy_maps=False transfers immutable array ownership to the bounded
+        reader cache. The coordinator uses it after freezing its private maps;
+        ordinary callers retain the default independent input snapshot.
+        """
         generation = uuid4().hex
         with self._lease(name, generation):
             return self._publish(
@@ -495,6 +690,7 @@ class Artifacts:
                 provenance=provenance,
                 checkpoint=checkpoint,
                 generation=generation,
+                copy_maps=copy_maps,
             )
 
     def _publish(
@@ -507,6 +703,7 @@ class Artifacts:
         provenance: dict[str, Any] | None = None,
         checkpoint: Callable[[str], None] = lambda _: None,
         generation: str,
+        copy_maps: bool,
     ) -> Manifest:
         if set(maps) != set(inputs.ids):
             raise ArtifactError("Publish requires the exact configured placement set")
@@ -528,14 +725,14 @@ class Artifacts:
                 for key, value in arrays_of(maps[placement_id]).items()
             }
             with path.open("wb") as stream:
-                np.savez_compressed(stream, **canonical)
+                np.savez(stream, **canonical)
                 stream.flush()
                 os.fsync(stream.fileno())
             entries.append(
                 PlacementArtifact(
                     id=placement_id,
                     checksum=file_checksum(path),
-                    extent=(0, 0, *size),
+                    extent=maps[placement_id].extent,
                     arrays=descriptors(maps[placement_id]),
                 )
             )
@@ -545,14 +742,19 @@ class Artifacts:
             semantics=SEMANTICS,
             placements=tuple(entries),
             provenance=provenance or {},
-            content_digest=numerical_digest(maps),
+            content_digest=_descriptor_digest(
+                {p.id: p.arrays for p in entries}, extents={p.id: p.extent for p in entries}
+            ),
         )
         manifest_path = self.workspace.template_map_manifest(name, generation, staging=True)
         write_bytes_atomic(
             manifest_path, json_bytes(manifest.model_dump(mode="json")), durable=True
         )
         checksum = file_checksum(manifest_path)
-        self._load(name, generation, checksum, staging=True)
+        validated = self._load(
+            name, generation, checksum, staging=True, known_maps=None if copy_maps else maps
+        )
+        staging_signature = self._signature(name, manifest, checksum, staging=True)
         checkpoint("validated")
         with self.calibration.lock(name):
             if current_inputs().identity() != inputs.identity():
@@ -560,6 +762,9 @@ class Artifacts:
             final = self.workspace.template_map_generation_dir(name, generation)
             final.parent.mkdir(parents=True, exist_ok=True)
             staging.rename(final)
+            final_signature = self._signature(name, manifest, checksum)
+            _remember_validation(final_signature)
+            _remember_maps(final_signature, validated.maps, previous=staging_signature)
             checkpoint("generation")
             write_bytes_atomic(
                 self.workspace.template_map_current(name),
@@ -574,6 +779,41 @@ class Artifacts:
             )
             checkpoint("pointer")
         return manifest
+
+    @contextmanager
+    def reusable(
+        self, name: str, inputs: PreparationInputs
+    ) -> Iterator[Mapping[str | None, MaterialMaps]]:
+        """Lease exact unchanged placements while a replacement is fitted.
+
+        Photo, inference and compatibility must all match. Each retained map
+        additionally needs the same placement ID, quad, mask and evidence.
+        Missing/damaged old maps provide no reuse and never authorize inference.
+        """
+        with ExitStack() as lease:
+            reused: dict[str | None, MaterialMaps] = {}
+            try:
+                with self.calibration.lock(name):
+                    pointer = self._pointer(name)
+                    manifest = self._read_manifest(
+                        name, pointer["generation_id"], pointer["manifest_checksum"]
+                    )
+                    accepted = manifest.preparation_inputs
+                    unchanged: set[str | None] = set()
+                    if (
+                        accepted.photo == inputs.photo
+                        and accepted.inference == inputs.inference
+                        and accepted.compatibility == inputs.compatibility
+                    ):
+                        unchanged = {p.id for p in inputs.placements if p in accepted.placements}
+                # acquire registers its own generation lease before loading. Keep
+                # archive reads outside the template lock so previews can snapshot.
+                if unchanged:
+                    acquired = lease.enter_context(self.acquire(name, accepted))
+                    reused = {key: acquired.maps[key].cropped_to_visibility() for key in unchanged}
+            except (OSError, ValueError, KeyError, TypeError):
+                pass
+            yield MappingProxyType(reused)
 
     @contextmanager
     def acquire(
@@ -591,16 +831,9 @@ class Artifacts:
             raise ArtifactError("Invalid prepared generation; prepare the template again") from exc
         try:
             try:
+                manifest = self._read_manifest(name, generation, pointer["manifest_checksum"])
+                self._check_inputs(manifest, inputs, target_size)
                 acquired = self._load(name, generation, pointer["manifest_checksum"])
-                if acquired.manifest.preparation_inputs.identity() != inputs.identity():
-                    raise StalePreparation(
-                        "Prepared maps are out of date; rebuild or prepare the template"
-                    )
-                if target_size is not None and target_size != (
-                    inputs.photo.width,
-                    inputs.photo.height,
-                ):
-                    raise ArtifactError("Shared colour photo dimensions differ from the main photo")
             except (OSError, ValueError, KeyError, TypeError) as exc:
                 if isinstance(exc, ArtifactError):
                     raise
@@ -621,16 +854,16 @@ class Artifacts:
         if not self.workspace.template_map_current(name).exists():
             return Readiness("needs_preparation", "missing_maps", "Prepare the template first")
         try:
-            with self.acquire(name, inputs, target_size=target_size) as acquired:
-                return Readiness("ready", content_digest=acquired.manifest.content_digest)
+            manifest = self.inspect(name, inputs, target_size=target_size)
+            return Readiness("ready", content_digest=manifest.content_digest)
         except StalePreparation as exc:
             # The accepted inputs are immutable, so explain the first relevant change.
             reason = "placement_changed"
             try:
                 pointer = self._pointer(name)
-                accepted = self._load(
+                accepted = self._read_manifest(
                     name, pointer["generation_id"], pointer["manifest_checksum"]
-                ).manifest.preparation_inputs
+                ).preparation_inputs
                 if accepted.photo != inputs.photo:
                     reason = "photo_changed"
                 elif accepted.inference != inputs.inference:

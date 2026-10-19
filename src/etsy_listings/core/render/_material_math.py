@@ -48,28 +48,64 @@ def signed_areas(uv: Float) -> Float:
     return np.stack([cross(b - a, c - a), cross(c - d, b - d)])
 
 
-def bake(uv: Float, box: Float, size: tuple[int, int]) -> tuple[Float, Float]:
+def bake(
+    uv: Float, box: Float, size: tuple[int, int], *, origin: tuple[int, int] = (0, 0)
+) -> tuple[Float, Float]:
     """Fixed diagonal triangle interpolation; photo -> material, never inverted by negation."""
     width, height = size
     mesh = uv.shape[0]
-    yy, xx = np.mgrid[:height, :width].astype(np.float32)
+    coordinate = np.arange(mesh, dtype=np.float32) / (mesh - 1)
+    neutral = np.array_equal(
+        uv[..., 0], np.broadcast_to(coordinate, (mesh, mesh))
+    ) and np.array_equal(uv[..., 1], np.broadcast_to(coordinate[:, None], (mesh, mesh)))
     matrix = cv2.getPerspectiveTransform(
         box, np.array([[0, 0], [255, 0], [255, 255], [0, 255]], np.float32)
     )
-    den = matrix[2, 0] * xx + matrix[2, 1] * yy + matrix[2, 2]
-    den = np.where(np.abs(den) < 1e-8, np.nan, den)
-    x = (matrix[0, 0] * xx + matrix[0, 1] * yy + matrix[0, 2]) / den / 255
-    y = (matrix[1, 0] * xx + matrix[1, 1] * yy + matrix[1, 2]) / den / 255
-    valid = (x >= 0) & (x <= 1) & (y >= 0) & (y <= 1) & np.isfinite(x + y)
-    gx = np.clip(np.nan_to_num(x), 0, 1) * (mesh - 1)
-    gy = np.clip(np.nan_to_num(y), 0, 1) * (mesh - 1)
-    ix, iy = np.minimum(gx.astype(int), mesh - 2), np.minimum(gy.astype(int), mesh - 2)
-    fx, fy = gx - ix, gy - iy
-    a, b, c, d = uv[iy, ix], uv[iy, ix + 1], uv[iy + 1, ix], uv[iy + 1, ix + 1]
-    lower = a + fx[..., None] * (b - a) + fy[..., None] * (c - a)
-    upper = d + (1 - fx[..., None]) * (c - d) + (1 - fy[..., None]) * (b - d)
-    material = np.where((fx + fy <= 1)[..., None], lower, upper).astype(np.float32)
-    return material, valid.astype(np.float32)
+    material = np.empty((height, width, 2), np.float32)
+    visibility = np.empty((height, width), np.float32)
+    # Identical arithmetic in bounded row tiles avoids full-frame float64
+    # triangle temporaries. Pixel coordinates stay in the original photo frame.
+    for top in range(0, height, 128):
+        bottom = min(top + 128, height)
+        yy, xx = np.mgrid[
+            origin[1] + top : origin[1] + bottom, origin[0] : origin[0] + width
+        ].astype(np.float32)
+        den = matrix[2, 0] * xx + matrix[2, 1] * yy + matrix[2, 2]
+        den = np.where(np.abs(den) < 1e-8, np.nan, den)
+        x = (matrix[0, 0] * xx + matrix[0, 1] * yy + matrix[0, 2]) / den / 255
+        y = (matrix[1, 0] * xx + matrix[1, 1] * yy + matrix[1, 2]) / den / 255
+        valid = (x >= 0) & (x <= 1) & (y >= 0) & (y <= 1) & np.isfinite(x + y)
+        gx = np.clip(np.nan_to_num(x), 0, 1) * (mesh - 1)
+        gy = np.clip(np.nan_to_num(y), 0, 1) * (mesh - 1)
+        ix, iy = np.minimum(gx.astype(int), mesh - 2), np.minimum(gy.astype(int), mesh - 2)
+        fx, fy = gx - ix, gy - iy
+        if neutral:
+            # Preparation bakes the neutral grid before adding fitted residuals.
+            # Its triangle components are separable. Keep the same float32 edge
+            # differences, float64 weights and diagonal choice as the general
+            # interpolator, without loading four two-channel fields per pixel.
+            ax, bx = coordinate[ix], coordinate[ix + 1]
+            ay, dy = coordinate[iy], coordinate[iy + 1]
+            lower_x = ax + fx * (bx - ax)
+            lower_y = ay + fy * (dy - ay)
+            upper_x = bx + (1 - fx) * (ax - bx)
+            upper_y = dy + (1 - fy) * (ay - dy)
+            lower_triangle = fx + fy <= 1
+            tile = np.stack(
+                [
+                    np.where(lower_triangle, lower_x, upper_x),
+                    np.where(lower_triangle, lower_y, upper_y),
+                ],
+                -1,
+            ).astype(np.float32)
+        else:
+            a, b, c, d = uv[iy, ix], uv[iy, ix + 1], uv[iy + 1, ix], uv[iy + 1, ix + 1]
+            lower = a + fx[..., None] * (b - a) + fy[..., None] * (c - a)
+            upper = d + (1 - fx[..., None]) * (c - d) + (1 - fy[..., None]) * (b - d)
+            tile = np.where((fx + fy <= 1)[..., None], lower, upper).astype(np.float32)
+        material[top:bottom] = tile
+        visibility[top:bottom] = valid
+    return material, visibility
 
 
 def premultiply(artwork: Pixels) -> Float:

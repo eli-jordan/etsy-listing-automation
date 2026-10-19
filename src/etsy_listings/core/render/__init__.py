@@ -97,7 +97,10 @@ __all__ = [
     "save_png",
     "sample_swatch",
 ]
-"""The public identity module provides decoded artwork and prepared scene
+"""MaterialMaps carries an explicit photo origin and optional reference size for
+compact preparation maps. The pure renderer returns the complete reference photo.
+
+The public identity module provides decoded artwork and prepared scene
 identities for CPU preview promotion; it imports no orchestration code.
 
 The individual passes (``warp``/``displace``/``shade``/``export``) are

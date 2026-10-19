@@ -14,6 +14,7 @@ export function usePreparation(name: string | null, version: number) {
     let cancelled = false;
     let stream: ReturnType<typeof followPreparation> | undefined;
     let timer: ReturnType<typeof setTimeout> | undefined;
+    let eventTimer: ReturnType<typeof setTimeout> | undefined;
     let cursor: number | undefined;
     let followedId: string | undefined;
     let reading = false;
@@ -39,7 +40,13 @@ export function usePreparation(name: string | null, version: number) {
                   : "sequence" in event
                     ? event.sequence
                     : event.last_event_sequence;
-              void read();
+              // CPU checkpoints arrive in bursts. Reading all masks and map
+              // readiness per event competes with interactive composition.
+              if (!eventTimer)
+                eventTimer = setTimeout(() => {
+                  eventTimer = undefined;
+                  void read();
+                }, 250);
             },
             onDone: () => {
               timer = setTimeout(() => void read(), 250);
@@ -67,6 +74,7 @@ export function usePreparation(name: string | null, version: number) {
       cancelled = true;
       stream?.close();
       if (timer) clearTimeout(timer);
+      if (eventTimer) clearTimeout(eventTimer);
     };
   }, [name, version, refresh]);
   return { preparation: entry?.name === name ? entry.value : null, error, reload };

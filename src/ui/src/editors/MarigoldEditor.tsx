@@ -7,6 +7,7 @@ import {
   type MaskOperation,
   type Preparation,
 } from "../api/preparation";
+import { usePreview } from "../hooks/usePreview";
 import { templatePhotoUrl } from "../api/calibrator";
 import { PreviewPanel, type PreviewJob } from "../components/PreviewPanel";
 import { MarigoldRealismPanel } from "../components/MarigoldRealismPanel";
@@ -36,6 +37,7 @@ interface Props {
   onMaskEdits: (edits: MaskEdit[]) => void;
   savedConfig: TemplateConfigState | null;
   onPrepare: () => void;
+  onPreviewPending?: (pending: boolean) => void;
 }
 export function MarigoldEditor({
   templateName,
@@ -53,6 +55,7 @@ export function MarigoldEditor({
   onMaskEdits,
   savedConfig,
   onPrepare,
+  onPreviewPending,
 }: Props) {
   const [histories, setHistories] = useState<{
     revision: string;
@@ -174,6 +177,17 @@ export function MarigoldEditor({
           ],
     [config, colours, templateName],
   );
+  const editorRevision = calibrationRevision || preparation?.config_revision || "";
+  const editorBody = jobs[0]?.body;
+  const editorPreview = usePreview(
+    templateName,
+    editorRevision && editorBody
+      ? { ...editorBody, calibration_revision: editorRevision, mask_edits: maskEdits }
+      : null,
+    design,
+    true,
+    onPreviewPending,
+  );
   const revision = preparation?.config_revision ?? "";
   const placementKey = JSON.stringify(
     preparation?.placements.filter((p) => p.mask_available).map((p) => p.placement_id) ?? [],
@@ -230,7 +244,7 @@ export function MarigoldEditor({
             <div className="mg-stage mg-editor-stage">
               {space ? (
                 <QuadEditor
-                  imageUrl={templatePhotoUrl(templateName)}
+                  imageUrl={editorPreview ?? templatePhotoUrl(templateName)}
                   space={space}
                   boxes={placements.map((p) => p.bounding_box)}
                   selectedIndex={index}
@@ -280,6 +294,7 @@ export function MarigoldEditor({
                         return (
                           <PlacementOverlay
                             key={p.id}
+                            showArtwork={!editorPreview}
                             box={p.bounding_box}
                             designUrl={`/api/designs/${encodeURIComponent(design)}/image`}
                             maskUrl={
@@ -320,7 +335,11 @@ export function MarigoldEditor({
             </div>
             <div className="mg-canvas-foot">
               <strong>{editing ? "Mask preview" : "Placement preview"}</strong>
-              <span>Simple overlay · open Preview to see folds and lighting.</span>
+              <span>
+                {editorPreview
+                  ? "Interactive preview · 256px. Open Preview to judge full quality."
+                  : "Placement overlay. Prepare the template to see folds and lighting."}
+              </span>
             </div>
             <p className="mg-canvas-hint">
               {editing

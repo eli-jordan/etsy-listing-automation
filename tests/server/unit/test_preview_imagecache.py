@@ -201,3 +201,29 @@ def test_two_threads_asking_at_once_get_the_same_array(photo: Path) -> None:
 
     assert results[0] is results[1]
     assert images.held_bytes == 200 * 100 * 3
+
+
+def test_replacing_photo_at_the_same_mtime_invalidates_decoded_pixels(tmp_path):
+    path = tmp_path / "scene.bmp"
+    Image.new("RGB", (16, 16), "red").save(path)
+    images = PreviewImages()
+    original = images.base(path).image
+    stat = path.stat()
+    Image.new("RGB", (16, 16), "blue").save(path)
+    os.utime(path, ns=(stat.st_atime_ns, stat.st_mtime_ns))
+    assert images.base(path).image[0, 0].tolist() == [0, 0, 255]
+    assert original[0, 0].tolist() == [255, 0, 0]
+
+
+def test_editor_artwork_is_bounded_without_changing_full_quality_input(tmp_path):
+    path = tmp_path / "art.png"
+    Image.new("RGBA", (640, 320), (230, 35, 160, 128)).save(path)
+    images = PreviewImages()
+    editor = images.design(path, max_edge=128)
+    assert editor.shape == (64, 128, 4)
+    assert not editor.flags.writeable
+    assert images.design(path, max_edge=128) is editor
+    assert images.design(path).shape == (320, 640, 4)
+    Image.new("RGB", (640, 320), "red").save(path)
+    with pytest.raises(ValueError, match="alpha channel"):
+        images.design(path, max_edge=128)

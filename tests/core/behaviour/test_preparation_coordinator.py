@@ -1234,3 +1234,19 @@ def test_saved_reconcile_preflights_before_loading_retained_maps(workspace_root,
     assert len(runtime.workers[0].calls) == 3
     assert len(coordinator.list_jobs()) == 1
     coordinator.close()
+
+
+def test_prepare_again_refits_fresh_predictions_even_when_geometry_matches(workspace_root):
+    workspace, runtime, coordinator, _ = prepare_template(workspace_root)
+    try:
+        refresh = coordinator.submit(
+            "shirt",
+            config_revision=CalibrationStore(workspace).read("shirt").revision,
+            request_id="fresh-fit",
+            action="prepare_again",
+        )
+        assert wait_terminal(coordinator, refresh.id).phase == "completed"
+        assert any(event.step == "flattening" for event in coordinator.events(refresh.id))
+        assert sum(len(worker.calls) for worker in runtime.workers) == 6
+    finally:
+        coordinator.close()

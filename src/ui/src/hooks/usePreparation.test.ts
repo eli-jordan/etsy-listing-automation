@@ -36,9 +36,15 @@ describe("usePreparation", () => {
     await waitFor(() => expect(result.current.preparation?.active_job?.id).toBe("job"));
     expect(submit).not.toHaveBeenCalled();
     vi.useFakeTimers();
-    act(() => options?.onEvent({ ...job, job_id: job.id, sequence: 4 }));
-    await act(async () => {});
-    expect(follow).toHaveBeenLastCalledWith("job", expect.objectContaining({ lastEventId: 4 }));
+    act(() => {
+      for (let sequence = 4; sequence <= 8; sequence++)
+        options?.onEvent({ ...job, job_id: job.id, sequence });
+    });
+    expect(get).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(250);
+    });
+    expect(follow).toHaveBeenLastCalledWith("job", expect.objectContaining({ lastEventId: 8 }));
     act(() => options?.onError?.(new Error("drop")));
     await act(async () => {
       await vi.advanceTimersByTimeAsync(1000);

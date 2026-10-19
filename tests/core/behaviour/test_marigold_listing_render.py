@@ -95,7 +95,7 @@ def test_matching_preview_promotes_exact_bytes_without_composition(workspace_roo
         FIXTURE_LISTING, "shirt", None, authoring.render_identity.removeprefix("sha256:")
     )
     expected = target.read_bytes()
-    assert expected == encode_png(authoring.image)
+    assert expected == encode_png(authoring.image, compression=1)
 
     def unexpected_render(*args, **kwargs):
         raise AssertionError("matching preview must be promoted")
@@ -202,7 +202,7 @@ def test_multiple_placements_resolve_actual_artwork_and_preserve_paint_order(wor
         appearance=config.renderer.config.appearance,
     )
     assert workspace.render_file(FIXTURE_LISTING, "shirt", None).read_bytes() == encode_png(
-        expected
+        expected, compression=1
     )
     workspace.save_template_config(
         "shirt", config.model_copy(update={"placements": placements[::-1]})
@@ -355,7 +355,7 @@ def test_shared_colour_scenes_use_each_target_photo_without_inference(workspace_
             [MaterialLayer(load_design(work.layers[0].design), maps)],
             appearance=work.appearance,
         )
-        assert work.output.read_bytes() == encode_png(expected)
+        assert work.output.read_bytes() == encode_png(expected, compression=1)
     assert desired.works[0].render_identity != desired.works[1].render_identity
 
 
