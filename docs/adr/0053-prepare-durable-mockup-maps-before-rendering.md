@@ -153,3 +153,27 @@ Deferring readiness work separately reduced the measured 12-edit maximum from
 1.000017 to 0.980563 seconds. These probe results justify targeting request work
 first; they do not establish the final latency requirement across all cases.
 Retain actual 1024px rasterization, readable artwork, and the strict threshold.
+
+## Amendment, 2026-10-20: cooperate between numerical solves
+
+Durable CPU fitting also checks foreground priority between the existing
+conjugate-gradient solves inside normal integration and material flattening.
+These are scheduling opportunities, separate from durable phase checkpoints.
+They hold no calibration or coordinator lock and do not write progress records
+or validate a new revision per solve. Waiting still checks cancel and close
+intent. Existing phase checkpoints retain full revision validation, journal
+updates and publication fences. The solver's arithmetic and stopping criteria
+remain unchanged, as do generation leases and explicit inference dispatch.
+
+Retain decoded evidence within a 384 MiB byte budget. The measured two-scene
+working set is about 262 MiB, exceeding the old 256 MiB budget. Eviction while
+an older durable job still needed its scene caused a selected edit to reload
+prediction archives for 0.641 seconds. File-version checks and validated immutable
+arrays remain mandatory. This budget is fixed; larger working sets can still
+evict evidence and require decoding.
+
+A cache-only probe removed that warm reload but retained a 1.049-second solver
+tail. Combining the bounded cache and solver-boundary cooperation with automatic
+readiness deferral measured twelve real-artwork geometry edits below one second,
+maximum 0.816 seconds. The full mask/geometry and idle/overlap matrix still must
+validate the implementation. Neither raster nor artwork resolution is reduced.

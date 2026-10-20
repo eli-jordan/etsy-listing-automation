@@ -860,10 +860,14 @@ implicit inference. The read-only evidence reader is separate from job-owned
 prediction publication and retention. Automatic selected-template status reads
 wait for the pending preview loop to settle, then fetch fresh readiness and
 reattach to active work. Explicit status and cancellation APIs remain available.
-CPU preparation yields at its existing numerical phase checkpoints while an
-interactive request is active in the same workspace. Waiting holds no template
-or coordinator locks and still observes cancellation and close intent. Already
-executing phases are not preempted; inference dispatch remains independent.
+CPU preparation yields at numerical phase checkpoints and between the existing
+conjugate-gradient solves while an interactive request is active in the same
+workspace. Waiting holds no template or coordinator locks and still observes
+cancellation and close intent. Per-solve cooperation does not write journal
+records or change solver arithmetic. Each phase retains full revision checks.
+A single active solve is not preempted; inference dispatch remains independent.
+Validated decoded evidence shares a fixed 384 MiB cache budget, with file-version
+checks retained before reuse.
 
 `preparation.artifacts.Artifacts` owns validated generation publication, readiness,
 acquisition and reference-aware cleanup. Workspace derives every durable path and
