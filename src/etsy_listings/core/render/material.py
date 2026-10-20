@@ -111,10 +111,13 @@ def patch_derivative(material: Float, labels: NDArray[np.int32], axis: int) -> F
 
 
 def filtered_sample(
-    artwork: Pixels, material: Float, patch_ids: NDArray[np.int32] | None = None
+    artwork: Pixels,
+    material: Float,
+    patch_ids: NDArray[np.int32] | None = None,
+    *,
+    packed: Float,
 ) -> Float:
     """Derivative-selected mip filtering in premultiplied linear colour."""
-    packed = material_math.premultiply(artwork)
     h, w = artwork.shape[:2]
     labels = np.ones(material.shape[:2], np.int32) if patch_ids is None else patch_ids
     dy, dx = (patch_derivative(material, labels, axis) for axis in (0, 1))
@@ -157,11 +160,29 @@ def filtered_sample(
     return result
 
 
+def prepare_material_artwork(artwork: RGBA) -> FloatMap:
+    """Exact linear samples, reusable in a host's byte-bounded cache."""
+    _validate_artwork(artwork)
+    return material_math.premultiply(artwork)
+
+
+def _validate_artwork(artwork: RGBA) -> None:
+    if (
+        artwork.ndim != 3
+        or artwork.shape[2] != 4
+        or artwork.dtype != np.uint8
+        or min(artwork.shape[:2]) < 1
+    ):
+        raise ValueError("Artwork must be nonempty uint8 RGBA")
+
+
 @dataclass(frozen=True)
 class MaterialLayer:
     design: RGBA
     maps: MaterialMaps
     placement_id: str | None = None
+    premultiplied: FloatMap | None = None
+    """Optional prepare_material_artwork(design) result; the host owns its budget."""
 
 
 def render_marigold_scene(
@@ -182,13 +203,7 @@ def render_marigold_scene(
         maps = layer.maps
         if maps.size != (base.shape[1], base.shape[0]):
             raise ValueError("Shared colour photo dimensions differ from the main photo")
-        if (
-            layer.design.ndim != 3
-            or layer.design.shape[2] != 4
-            or layer.design.dtype != np.uint8
-            or min(layer.design.shape[:2]) < 1
-        ):
-            raise ValueError("Artwork must be nonempty uint8 RGBA")
+        _validate_artwork(layer.design)
         left, top, right, bottom = maps.extent
         if not (0 <= left < right <= base.shape[1] and 0 <= top < bottom <= base.shape[0]):
             raise ValueError("Prepared map extent is outside the reference photo")
@@ -210,7 +225,13 @@ def render_marigold_scene(
         material = maps.material[region]
         labels = maps.patch_ids[region] if maps.patch_ids is not None else None
         visibility = maps.visibility[region]
-        sampled = filtered_sample(layer.design, material, labels)
+        packed = layer.premultiplied
+        if packed is None:
+            packed = prepare_material_artwork(layer.design)
+        if packed.shape != layer.design.shape or packed.dtype != np.float32:
+            raise ValueError("Premultiplied artwork must match its RGBA source")
+        sampled = filtered_sample(layer.design, material, labels, packed=packed)
+        del packed
         selected_gain = (
             maps.estimated[region]
             if settings.lighting_source == "estimated"

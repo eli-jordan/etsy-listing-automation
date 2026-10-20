@@ -17,6 +17,13 @@ def blur(array: Float, sigma: float) -> Float:
 
 
 def linear(rgb: NDArray[Any]) -> Float:
+    # Byte colour has only 256 possible inputs. Evaluate the same float32
+    # transfer function once per value instead of per megapixel. The local
+    # table keeps this pass pure and preserves the non-byte input contract.
+    if rgb.dtype == np.uint8:
+        values = np.arange(256, dtype=np.float32) / 255
+        table = np.where(values <= 0.04045, values / 12.92, ((values + 0.055) / 1.055) ** 2.4)
+        return cast(Float, table[rgb])
     values = rgb.astype(np.float32) / 255
     return np.where(values <= 0.04045, values / 12.92, ((values + 0.055) / 1.055) ** 2.4)
 

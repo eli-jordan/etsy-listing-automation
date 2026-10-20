@@ -29,7 +29,8 @@ from etsy_listings.core.render.types import RGB, RGBA, FloatMap
 from etsy_listings.core.workspace import Workspace
 from etsy_listings.core.workspace.calibration import CalibrationStore, MaskEdit
 
-EDITOR_EDGE = 256
+EDITOR_EDGE = 1024
+EDITOR_ARTWORK_EDGE = 3072
 _MAP_BUDGET = 64 * 1024 * 1024
 _MAP_LOCK = threading.Lock()
 _MAP_CACHE: OrderedDict[tuple[str, ...], tuple[MaterialMaps, int]] = OrderedDict()
@@ -69,10 +70,10 @@ def editor_preview(
     revision: str,
     mask_edits: list[MaskEdit],
     base: Callable[[Path], RGB],
-    artwork: Callable[[], RGBA],
+    artwork: Callable[[], tuple[RGBA, FloatMap]],
     colour: str | None = None,
 ) -> Image.Image:
-    """Fit original coordinates, rasterize a small disposable editor image.
+    """Fit original coordinates, rasterize a disposable 1024px editor image.
 
     Draft masks replay against exactly the client's acknowledged revision. A
     save racing this request cannot apply a stroke twice. The snapshot leaves
@@ -151,7 +152,7 @@ def editor_preview(
             )
             if target.shape != image.shape:
                 raise PreparationRequired("Colour photos must match the main photo dimensions")
-            design = artwork()
+            design, packed = artwork()
         layers = []
         for key, box in boxes:
             candidate = selected[placement_key(key)]
@@ -171,7 +172,9 @@ def editor_preview(
                 evidence = evidence_store.load(candidate, inputs)
                 return prepare(image, quad, evidence, mask=mask, max_edge=EDITOR_EDGE).maps
 
-            layers.append(MaterialLayer(design, _maps(cache_key, compute), key))
+            layers.append(
+                MaterialLayer(design, _maps(cache_key, compute), key, premultiplied=packed)
+            )
 
         width, height = layers[0].maps.size
         small = cast(RGB, cv2.resize(target, (width, height), interpolation=cv2.INTER_AREA))

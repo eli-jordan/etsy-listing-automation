@@ -41,6 +41,7 @@ from typing import Any, TypeVar
 import numpy as np
 from PIL import Image
 
+from etsy_listings.core.render import prepare_material_artwork
 from etsy_listings.core.render.io import DesignValidationError, load_design
 from etsy_listings.core.render.maps import DerivedMapCache
 from etsy_listings.core.render.types import RGB, RGBA, FloatMap
@@ -207,7 +208,7 @@ class PreviewImages:
 
         Photo warp and full-quality callers keep their original source. The
         Marigold editor caps its source before floating-point mip construction;
-        otherwise a 4800px design dominates even a 512px destination frame.
+        otherwise a 4800px design dominates even a 1024px destination frame.
         """
 
         def decode() -> RGBA:
@@ -223,6 +224,25 @@ class PreviewImages:
                 return array
 
         return self._cache.get(("design", str(path), _stamp(path), max_edge), decode)
+
+    def material_design(self, path: Path, max_edge: int) -> tuple[RGBA, FloatMap]:
+        """Retain exact linear artwork samples under the same total byte budget.
+
+        Capture the file token before decoding, so a concurrent replacement
+        cannot cache old samples under its new file version.
+        """
+        for _ in range(3):
+            stamp = _stamp(path)
+            design = self.design(path, max_edge=max_edge)
+            if _stamp(path) == stamp:
+                break
+        else:
+            raise OSError("Artwork changed repeatedly while reading preview samples; retry")
+        packed = self._cache.get(
+            ("material-design", str(path), stamp, max_edge),
+            lambda: prepare_material_artwork(design),
+        )
+        return design, packed
 
     def height(self, derived_dir: Path, map_key: str, base: ScaledBase) -> FloatMap:
         cache = DerivedMapCache(derived_dir)

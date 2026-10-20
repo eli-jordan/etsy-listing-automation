@@ -7,6 +7,7 @@ Use a new output directory for each comparison. Prepared real photos remain exte
 from __future__ import annotations
 
 import argparse
+import base64
 import hashlib
 import json
 import os
@@ -88,7 +89,8 @@ def measure(
         page.wait_for_function(
             """() => {
                 const i=document.querySelector('.quad-editor img');
-                return i && i.src.startsWith('blob:') && i.complete && i.naturalWidth === 256;
+                return i && i.src.startsWith('blob:') && i.complete &&
+                    i.naturalWidth === 1024 && i.naturalHeight === 1024;
             }"""
         )
     old_editor_source = page.get_by_alt_text("Rendered preview").first.get_attribute("src")
@@ -206,6 +208,9 @@ def measure(
             seen_source = image.get_attribute("src")
             if time.monotonic() > deadline:
                 raise TimeoutError("No changed composite: " + json.dumps(spans))
+        assert decoded == {"width": 1024, "height": 1024}, (
+            "Interactive benchmark requires an actual decoded 1024px square composite"
+        )
         after_pixel = image.evaluate(PIXEL_JS, point) if point else None
         if before_pixel is not None:
             assert sum(abs(a - b) for a, b in zip(before_pixel, after_pixel, strict=True)) > 30, (
@@ -230,6 +235,13 @@ def measure(
             "fingerprint": fingerprint,
             "before_fingerprint": old_fingerprint,
             "rebuild_active_at_edit": bool(active_before),
+            "rebuild_phase_at_edit": active_before["phase"] if active_before else None,
+            "rebuild_phase_after_display": active_after["phase"] if active_after else None,
+            "checkpoints": [
+                (identity, step, at - start)
+                for identity, step, at in checkpoints
+                if start <= at <= end
+            ],
             "same_rebuild_active_through_display": bool(
                 active_before and active_after and active_before["id"] == active_after["id"]
             ),
@@ -238,6 +250,15 @@ def measure(
             **decoded,
             "responses": list(spans),
         }
+        # Capture the actual decoded raster after stopping the clock, so review
+        # can inspect native detail rather than a CSS-scaled screen capture.
+        png = image.evaluate("""img => {
+            const c=document.createElement('canvas');
+            c.width=img.naturalWidth; c.height=img.naturalHeight;
+            c.getContext('2d').drawImage(img, 0, 0);
+            return c.toDataURL('image/png').split(',')[1];
+        }""")
+        (output / f"{name}-{kind}-{repeat}-decoded.png").write_bytes(base64.b64decode(png))
         print(json.dumps(row), flush=True)
         # The default isolates steady-state service cost. The contention mode
         # starts the next edit as soon as autosave has queued/runs a rebuild.
@@ -352,6 +373,8 @@ def run(
     edits: list[str] | None = None,
     artwork_size: tuple[int, int] = (512, 512),
     during_rebuild: bool = False,
+    frontend_dist: Path | None = None,
+    design: str | None = None,
 ) -> None:
     if output.exists() or output.resolve().is_relative_to(source.resolve()):
         raise ValueError("Output must be a new isolated directory")
@@ -363,6 +386,10 @@ def run(
     Image.new("RGBA", artwork_size, (230, 35, 160, 255)).save(
         workspace.test_design_file("benchmark-contrast")
     )
+    if frontend_dist is not None:
+        from etsy_listings.server.api import app as api_app
+
+        api_app.FRONTEND_DIST = frontend_dist.resolve()
     app = create_app(workspace, preparation_runtime=EvidenceOnlyRuntime())
     checkpoints = []
     app.state.preparations.checkpoint = lambda identity, step: checkpoints.append(
@@ -410,7 +437,7 @@ def run(
                 picker = page.get_by_label("Test design", exact=True)
                 old_design = picker.input_value()
                 old_src = page.get_by_alt_text("Rendered preview").first.get_attribute("src")
-                picker.select_option("benchmark-contrast")
+                picker.select_option(design or "benchmark-contrast")
                 if interactive:
                     page.wait_for_function(
                         """old => {
@@ -418,7 +445,7 @@ def run(
                         return i && i.src.startsWith('blob:') && i.complete &&
                             (old === null || i.src !== old);
                     }""",
-                        arg=old_src if old_design != "benchmark-contrast" else None,
+                        arg=old_src if old_design != (design or "benchmark-contrast") else None,
                         timeout=60_000,
                     )
                     page.get_by_alt_text("Rendered preview").first.evaluate(DECODE_JS)
@@ -465,6 +492,8 @@ def run(
             "source": str(source.resolve()),
             "mode": "interactive" if interactive else "full",
             "artwork_size": artwork_size,
+            "design": design or "benchmark-contrast",
+            "frontend_dist": str(frontend_dist) if frontend_dist else None,
             "during_rebuild": during_rebuild,
             "warmups": warmups,
             "summary": {
@@ -518,6 +547,8 @@ if __name__ == "__main__":
     parser.add_argument("--threshold", type=float, default=1)
     parser.add_argument("--interactive", action="store_true")
     parser.add_argument("--during-rebuild", action="store_true")
+    parser.add_argument("--frontend-dist", type=Path)
+    parser.add_argument("--design", help="Existing test artwork ID, including real source artwork")
     parser.add_argument("--template", action="append")
     parser.add_argument("--artwork-size", nargs=2, type=int, default=(512, 512))
     parser.add_argument("--edit", action="append", choices=["mask", "geometry"])
@@ -532,4 +563,6 @@ if __name__ == "__main__":
         args.edit,
         tuple(args.artwork_size),
         args.during_rebuild,
+        args.frontend_dist,
+        args.design,
     )

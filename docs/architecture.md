@@ -147,6 +147,12 @@ credential and both halves of the Etsy grant around the browser step;
 `cli/terminal.py` is a standard-library leaf for encoding and presentation.
 None of the three CLI modules is importable from core.
 
+Template configuration reads still open the current UTF-8 bytes, with existing
+calibration lock scopes unchanged. A bounded content-keyed cache reuses parsing for documents up
+to 64 KiB, then returns a deep copy because placement lists remain mutable.
+External edits, including same-size writes with restored timestamps, therefore
+remain visible. Larger documents bypass that parse cache.
+
 ## What `plan` and `apply` actually do
 
 ```mermaid
@@ -268,7 +274,7 @@ transient CDN URLs remain excluded from review identity.
 graph LR
     Canvas["Calibrate tab<br/>quad handles + sliders"] -->|"POST /preview?scale=editor<br/>(debounced)"| API["server/api/templates.py"]
     Tab["Preview tab<br/><i>on demand</i>"] -->|"POST /preview?scale=full"| API
-    API --> Cache["server/api/imagecache.py<br/><i>decoded photo, design, maps</i>"]
+    API --> Cache["server/api/imagecache.py<br/><i>decoded photo, linear artwork, maps</i>"]
     Cache --> Op["core/application/mockup_templates.py<br/><i>scene choice and compositing</i>"]
     Op --> RenderPipe["core/render/pipeline.py<br/><i>the same code apply runs</i>"]
     RenderPipe -->|"frame"| API

@@ -356,7 +356,7 @@ export function MarigoldEditor({
               <strong>{editing ? "Mask preview" : "Placement preview"}</strong>
               <span>
                 {editorPreview
-                  ? "Interactive preview · 256px. Open Preview to judge full quality."
+                  ? "Interactive preview · 1024px. Open Preview to judge full quality."
                   : "Placement overlay. Prepare the template to see folds and lighting."}
               </span>
             </div>

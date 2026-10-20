@@ -45,7 +45,7 @@ from etsy_listings.core.application.mockup_templates import (
     template_swatch,
     unsaved_preview,
 )
-from etsy_listings.core.application.preparation.previews import editor_preview
+from etsy_listings.core.application.preparation.previews import EDITOR_ARTWORK_EDGE, editor_preview
 from etsy_listings.core.application.prepared_previews import prepared_preview
 from etsy_listings.core.application.refusals import (
     TemplateAlreadyCalibrated,
@@ -358,8 +358,8 @@ def preview(template: Existing, body: PreviewRequest, scale: PreviewScale = "ful
                     mask_edits=body.mask_edits,
                     colour=body.colour if isinstance(body, ColourMatrixPreviewRequest) else None,
                     base=lambda path: PREVIEW_IMAGES.base(path).image,
-                    artwork=lambda: PREVIEW_IMAGES.design(
-                        resolve_design(workspace, body.design), max_edge=512
+                    artwork=lambda: PREVIEW_IMAGES.material_design(
+                        resolve_design(workspace, body.design), max_edge=EDITOR_ARTWORK_EDGE
                     ),
                 )
             except (PreparationRequired, ValueError, OSError) as exc:

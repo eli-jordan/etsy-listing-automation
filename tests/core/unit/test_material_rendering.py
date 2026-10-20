@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import tracemalloc
 from dataclasses import replace
 
 import numpy as np
@@ -97,3 +98,44 @@ def test_multiple_layers_use_their_maps_and_the_callers_composition_order() -> N
     assert forward[8, 8].tolist() == [0, 0, 255]
     assert reverse[8, 8].tolist() == [255, 0, 0]
     assert forward[8, 13].tolist() == [0, 0, 255]
+
+
+def test_shared_artwork_keeps_each_placements_material_coordinates() -> None:
+    base = np.zeros((16, 16, 3), np.uint8)
+    artwork = np.full((16, 16, 4), [255, 0, 0, 255], np.uint8)
+    artwork[:, 8:] = [0, 0, 255, 255]
+    left, right = material_maps(), material_maps()
+    left.material[:] = [0, 0]
+    right.material[:] = [1, 1]
+    left.visibility[:, 8:] = 0
+    right.visibility[:, :8] = 0
+    image = np.asarray(
+        render_marigold_scene(
+            base,
+            [MaterialLayer(artwork, left), MaterialLayer(artwork, right)],
+            appearance=MarigoldAppearance(lighting_strength=0, fabric_texture=0),
+        )
+    )
+    assert np.all(image[:, :8] == [255, 0, 0])
+    assert np.all(image[:, 8:] == [0, 0, 255])
+
+
+def test_distinct_placement_artwork_does_not_accumulate_linear_buffers() -> None:
+    base = np.zeros((16, 16, 3), np.uint8)
+    maps = material_maps()
+    layers = [MaterialLayer(np.full((256, 256, 4), 255, np.uint8), maps) for _ in range(8)]
+
+    def peak(selected):
+        tracemalloc.start()
+        try:
+            render_marigold_scene(base, selected)
+            return tracemalloc.get_traced_memory()[1]
+        finally:
+            tracemalloc.stop()
+
+    # Source pixels were allocated before tracing. Only temporary rendering
+    # storage is measured. Eight unique sources must not retain eight float
+    # copies until the scene finishes.
+    one = peak(layers[:1])
+    many = peak(layers)
+    assert many < one * 3, (one, many)

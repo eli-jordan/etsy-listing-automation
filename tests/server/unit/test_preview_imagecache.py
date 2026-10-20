@@ -227,3 +227,80 @@ def test_editor_artwork_is_bounded_without_changing_full_quality_input(tmp_path)
     Image.new("RGB", (640, 320), "red").save(path)
     with pytest.raises(ValueError, match="alpha channel"):
         images.design(path, max_edge=128)
+
+
+def test_material_artwork_reuses_exact_read_only_samples_and_invalidates(tmp_path):
+    path = tmp_path / "material-art.png"
+    Image.new("RGBA", (64, 32), (230, 35, 160, 128)).save(path)
+    images = PreviewImages()
+    pixels, packed = images.material_design(path, max_edge=32)
+    again, same_packed = images.material_design(path, max_edge=32)
+    assert again is pixels and same_packed is packed
+    assert pixels.shape == packed.shape == (16, 32, 4)
+    assert packed.dtype == np.float32
+    assert not packed.flags.writeable
+    assert images.held_bytes == pixels.nbytes + packed.nbytes
+    Image.new("RGBA", (64, 32), (0, 255, 0, 255)).save(path)
+    _, replaced = images.material_design(path, max_edge=32)
+    assert replaced is not packed
+    np.testing.assert_array_equal(replaced[0, 0], [0, 1, 0, 1])
+
+
+def test_material_artwork_cannot_mix_pixels_and_linear_samples_during_replacement(
+    tmp_path, monkeypatch
+):
+    import etsy_listings.server.api.imagecache as cache_module
+
+    path = tmp_path / "replacement.png"
+    Image.new("RGBA", (64, 32), (255, 0, 0, 255)).save(path)
+    images = PreviewImages()
+    images.material_design(path, max_edge=32)
+    original_token = cache_module.file_version
+    replace = True
+
+    def version_and_external_edit(file):
+        nonlocal replace
+        token = original_token(file)
+        if replace:
+            replace = False
+            Image.new("RGBA", (64, 32), (0, 255, 0, 255)).save(path)
+        return token
+
+    # The completed external write lands after the outer version probe, before
+    # the decoded source lookup. A warm linear cache must not return red ink
+    # paired with the newly decoded green source.
+    monkeypatch.setattr(cache_module, "file_version", version_and_external_edit)
+    pixels, packed = images.material_design(path, max_edge=32)
+    np.testing.assert_array_equal(pixels[0, 0], [0, 255, 0, 255])
+    np.testing.assert_array_equal(packed[0, 0], [0, 1, 0, 1])
+
+
+def test_material_artwork_refuses_a_continuously_replaced_source(tmp_path, monkeypatch):
+    import etsy_listings.server.api.imagecache as cache_module
+
+    path = tmp_path / "changing.png"
+    Image.new("RGBA", (64, 32), "red").save(path)
+    original_token = cache_module.file_version
+    sequence = 0
+
+    def version_and_external_edit(file):
+        nonlocal sequence
+        token = original_token(file)
+        sequence += 1
+        Image.new("RGBA", (64, 32), (sequence, 255, 0, 255)).save(path)
+        return token
+
+    monkeypatch.setattr(cache_module, "file_version", version_and_external_edit)
+    with pytest.raises(OSError, match="changed repeatedly"):
+        PreviewImages().material_design(path, max_edge=32)
+
+
+def test_material_artwork_larger_than_the_budget_is_served_without_retention(tmp_path):
+    path = tmp_path / "budget.png"
+    Image.new("RGBA", (64, 32), "red").save(path)
+    images = PreviewImages(budget_bytes=3000)
+    pixels, first = images.material_design(path, max_edge=32)
+    _, second = images.material_design(path, max_edge=32)
+    assert first is not second
+    assert images.held_bytes == pixels.nbytes
+    assert not first.flags.writeable and not second.flags.writeable

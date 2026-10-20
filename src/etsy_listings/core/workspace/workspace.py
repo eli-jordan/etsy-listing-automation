@@ -17,6 +17,7 @@ import shutil
 import stat
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
+from functools import lru_cache
 from pathlib import Path, PureWindowsPath
 
 import yaml
@@ -62,6 +63,13 @@ class WorkspaceNotFoundError(FileNotFoundError):
 class PathEscapesWorkspaceError(ValueError):
     def __init__(self, ref: str, root: Path) -> None:
         super().__init__(f"path {ref!r} escapes the workspace root ({root})")
+
+
+@lru_cache(maxsize=64)
+def _parsed_template_config(text: str) -> AnyTemplate:
+    # Key by actual contents, never timestamps. The reader still observes
+    # every external edit and transaction before reusing the parse result.
+    return parse_template_config(yaml.safe_load(text))
 
 
 MIGRATION_SCRIPT = "scripts/migrate_workspace_refs.py"
@@ -1246,7 +1254,12 @@ class Workspace:
         if not path.is_file():
             raise ConfigLoadError(path, "template config not found -- calibrate it with `ui` first")
         try:
-            return parse_template_config(yaml.safe_load(path.read_text(encoding="utf-8")))
+            text = path.read_text(encoding="utf-8")
+            if len(text.encode("utf-8")) > 64 * 1024:
+                return parse_template_config(yaml.safe_load(text))
+            # Frozen template models can still contain mutable placement lists.
+            # Never expose the retained parse object to a caller.
+            return _parsed_template_config(text).model_copy(deep=True)
         except ValidationError as exc:
             raise format_validation_error(path, exc) from exc
 

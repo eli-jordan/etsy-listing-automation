@@ -200,6 +200,7 @@ def prepare(
     # Fitting remains in original photo coordinates; only transient editor
     # rasterization is reduced. Durable callers leave max_edge unset.
     factor: FloatMap = np.ones(2, np.float32)
+    offset: FloatMap = np.zeros(2, np.float32)
     if max_edge is not None:
         if max_edge < 1:
             raise ValueError("Editor raster size must be positive")
@@ -208,7 +209,11 @@ def prepare(
         factor = np.array([size[0] / width, size[1] / height], np.float32)
         base = cast(RGB, cv2.resize(base, size, interpolation=cv2.INTER_AREA))
         mask = cast(FloatMap, cv2.resize(mask, size, interpolation=cv2.INTER_AREA))
-        box = box * factor
+        # Resize maps pixel centres: x' = (x + 0.5) * factor - 0.5.
+        # Matching the photo/mask resize avoids a fractional-pixel artwork
+        # shift, especially visible in fine text at editor resolution.
+        offset = (factor - 1) * np.float32(0.5)
+        box = box * factor + offset
         width, height = size
     # Lighting normalization only selects confident pixels inside the quad.
     # Include more than GaussianBlur(sigma=3)'s 12-pixel radius so photographic
@@ -226,7 +231,7 @@ def prepare(
     labels = (valid > 0).astype(np.int32)
     checkpoint("lighting")
     yy, xx = np.mgrid[top:bottom, left:right].astype(np.float32)
-    xy = cast(FloatMap, np.stack([xx, yy], -1) / factor)
+    xy = cast(FloatMap, (np.stack([xx, yy], -1) - offset) / factor)
     normals = evidence.sample(evidence.normals, xy)
     _, confidence = geometry.slopes(normals)
     local_box = box - np.array([left, top], np.float32)

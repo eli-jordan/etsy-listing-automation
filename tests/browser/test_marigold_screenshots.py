@@ -79,11 +79,30 @@ def test_capture_approved_marigold_states(page, tmp_path: Path, preparation_runt
         page.locator(".mg-preparation h3").evaluate("el => getComputedStyle(el).fontSize") == "10px"
     )
     assert page.locator(".template-rail").get_by_text("Needs calibration", exact=False).count() == 0
-    tabs = page.get_by_role("tablist").bounding_box()
-    picker = page.get_by_label("Test design", exact=True).bounding_box()
-    assert tabs is not None and picker is not None
-    assert abs(tabs["y"] - picker["y"]) < 8
-    assert page.locator(".app__header").bounding_box()["height"] < 65
+    # The shared Photo warp width permits a second toolbar row at 1280px.
+    # Check the responsive arrangement and clipping, rather than requiring
+    # the former oversized Marigold canvas to keep every control on one row.
+    for width in [1440, 1280]:
+        page.set_viewport_size({"width": width, "height": 800})
+        bar = page.locator(".app__preview-bar").bounding_box()
+        tabs = page.get_by_role("tablist").bounding_box()
+        picker = page.get_by_label("Test design", exact=True).bounding_box()
+        assert bar is not None and tabs is not None and picker is not None
+        if width == 1440:
+            assert abs(tabs["y"] - picker["y"]) < 8
+        else:
+            assert 0 <= picker["y"] - (tabs["y"] + tabs["height"]) < 12
+            picker_group = page.locator(".app__preview-bar .design-picker").bounding_box()
+            assert picker_group is not None
+            assert abs(tabs["x"] - picker_group["x"]) < 1
+        for control in page.locator(".app__preview-bar > *").all():
+            bounds = control.bounding_box()
+            assert bounds is not None
+            assert bar["x"] <= bounds["x"]
+            assert bounds["x"] + bounds["width"] <= bar["x"] + bar["width"]
+            assert bar["y"] <= bounds["y"]
+            assert bounds["y"] + bounds["height"] <= bar["y"] + bar["height"]
+        assert page.locator(".app__header").bounding_box()["height"] < 65
     shot("edit")
     page.get_by_role("button", name="About Light & shadow strength", exact=True).click()
     shot("realism-help")

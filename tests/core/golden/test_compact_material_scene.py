@@ -68,3 +68,14 @@ def test_editor_composites_small_valid_placements_after_downsampling():
     image = render_marigold_scene(base[::4, ::4].copy(), [MaterialLayer(art, preview)])
     assert image.size == (64, 64)
     assert not np.array_equal(np.asarray(image)[26, 26], base[104, 104])
+
+
+def test_editor_raster_samples_original_photo_pixel_centres():
+    base, _, evidence, mask, _ = compact_fixture()
+    box = np.array([[80, 80], [160, 80], [160, 160], [80, 160]], np.float32)
+    mask[:] = 1
+    maps = prepare(base, box, evidence, mask=mask, max_edge=128).maps
+    # Output pixel 40 covers original pixels 80 and 81, centred at 80.5.
+    # The flat 80px print therefore samples U=V=0.5/80, rather than zero.
+    x, y = 40 - maps.origin[0], 40 - maps.origin[1]
+    np.testing.assert_allclose(maps.material[y, x], [0.00625, 0.00625], atol=1e-6)
