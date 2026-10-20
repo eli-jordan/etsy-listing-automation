@@ -64,11 +64,12 @@ export function App() {
   const [templates, setTemplates] = useState<TemplateSummary[]>([]);
   const [catalogState, setCatalogState] = useState<"loading" | "ready" | "error">("loading");
   const [templateName, setTemplateName] = useState<string | null>(null);
+  const waitingForPreview = previewPending?.name === templateName && previewPending.pending;
   const {
     preparation,
     error: mapError,
     reload: reloadPreparation,
-  } = usePreparation(templateName, preparationVersion);
+  } = usePreparation(templateName, preparationVersion, waitingForPreview);
   const maskEdits = useMemo(
     () => (maskDraft?.name === templateName ? maskDraft.edits : []),
     [maskDraft, templateName],
@@ -281,7 +282,6 @@ export function App() {
   useEffect(() => {
     lastEditAt.current = Date.now();
   }, [config, maskEdits, templateName]);
-  const waitingForPreview = previewPending?.name === templateName && previewPending.pending;
 
   // Match the listing editor: wait until a run of edits settles, then write
   // it as one request. Changing template or resetting clears the pending

@@ -287,7 +287,7 @@ it("shows Preparing while an explicit prepare request is pending", async () => {
   expect(button).toBeDisabled();
 });
 
-it("waits for the current interactive composite before autosaving its revision", async () => {
+it("waits for the current composite before autosaving and refreshing readiness", async () => {
   vi.mocked(calibrator.getTemplateConfig).mockResolvedValue({
     config: SINGLE,
     modifiedAt: "Wed, 17 Sep 2026 18:30:00 GMT",
@@ -309,6 +309,37 @@ it("waits for the current interactive composite before autosaving its revision",
     await new Promise((resolve) => setTimeout(resolve, 900));
   });
   expect(calibrator.saveTemplateConfig).not.toHaveBeenCalled();
+  const reads = vi.mocked(prep.getPreparation).mock.calls.length;
+  await act(async () => window.dispatchEvent(new Event("focus")));
+  expect(prep.getPreparation).toHaveBeenCalledTimes(reads);
   await act(async () => finish("blob:edited"));
+  await waitFor(() =>
+    expect(vi.mocked(prep.getPreparation).mock.calls.length).toBeGreaterThan(reads),
+  );
   await waitFor(() => expect(calibrator.saveTemplateConfig).toHaveBeenCalledTimes(1));
+});
+
+it("resumes fresh readiness when a pending Marigold preview is unmounted by renderer selection", async () => {
+  vi.mocked(calibrator.getTemplateConfig).mockResolvedValue({
+    config: SINGLE,
+    modifiedAt: "Wed, 17 Sep 2026 18:30:00 GMT",
+  });
+  vi.mocked(prep.getPreparation).mockResolvedValue(READY);
+  let finish!: (url: string) => void;
+  vi.mocked(calibrator.renderPreview)
+    .mockImplementationOnce(() => new Promise<string>((resolve) => (finish = resolve)))
+    .mockResolvedValue("blob:photo-warp");
+  render(<App />);
+  await screen.findByLabelText("Fabric texture");
+  await waitFor(() => expect(calibrator.renderPreview).toHaveBeenCalledTimes(1));
+  const reads = vi.mocked(prep.getPreparation).mock.calls.length;
+  fireEvent.change(screen.getByLabelText("Renderer"), { target: { value: "photo-warp" } });
+  await screen.findByLabelText("Wrinkle strength");
+  await act(async () => window.dispatchEvent(new Event("focus")));
+  await waitFor(() =>
+    expect(vi.mocked(prep.getPreparation).mock.calls.length).toBeGreaterThan(reads),
+  );
+  await act(async () => finish("blob:stale-marigold"));
+  expect(screen.getByLabelText("Renderer")).toHaveValue("photo-warp");
+  expect(URL.revokeObjectURL).toHaveBeenCalledWith("blob:stale-marigold");
 });

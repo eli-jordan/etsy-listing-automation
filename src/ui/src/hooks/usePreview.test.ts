@@ -206,3 +206,19 @@ it("clears a refused strict frame so an old composite cannot impersonate current
   await waitFor(() => expect(result.current).toBeNull());
   expect(URL.revokeObjectURL).toHaveBeenCalledWith("blob:old");
 });
+
+it("clears pending for the departing template without clearing the new template", () => {
+  vi.useFakeTimers();
+  const listeners = { first: vi.fn(), second: vi.fn() };
+  const { rerender, unmount } = renderHook(
+    ({ name }: { name: "first" | "second" }) =>
+      usePreview(name, BODY, "grid", true, listeners[name]),
+    { initialProps: { name: "first" } },
+  );
+  expect(listeners.first).toHaveBeenLastCalledWith(true);
+  rerender({ name: "second" });
+  expect(listeners.first).toHaveBeenLastCalledWith(false);
+  expect(listeners.second).toHaveBeenLastCalledWith(true);
+  unmount();
+  expect(listeners.second).toHaveBeenLastCalledWith(false);
+});

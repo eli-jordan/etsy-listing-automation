@@ -61,7 +61,9 @@ def crop_of(value: CropEvidence, inputs: PreparationInputs) -> Crop:
     return crop.resized(value.size)
 
 
-_EVIDENCE_BUDGET = 256 * 1024 * 1024
+# A real two-scene edit/rebuild working set is about 262 MiB. Retaining it
+# avoids archive decoding during warm edits while keeping ownership bounded.
+_EVIDENCE_BUDGET = 384 * 1024 * 1024
 _EVIDENCE_LOCK = threading.Lock()
 _EVIDENCE: OrderedDict[tuple[Any, ...], tuple[Evidence, int]] = OrderedDict()
 _EVIDENCE_BYTES = 0

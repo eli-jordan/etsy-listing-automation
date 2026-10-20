@@ -121,7 +121,7 @@ selection races were addressed. Final lock-scope review found no remaining lease
 race. Full-quality numerical and decoded-composite parity remains exact on the
 three real scenes described above.
 
-## 1024px revision, 2026-10-20
+## 1024px revision at 928225a, 2026-10-20
 
 User feedback rejected the earlier 256px frame as too blurry. The editor now
 rasterizes at a 1024px longest edge using artwork sampled from up to 3072px.
@@ -247,6 +247,111 @@ unbounded artwork buffer retention; the per-layer release and separate-source
 memory regression resolve it. The second standards review found no remaining
 findings. These reviews do not establish latency compliance; the failed overlap
 measurements above remain authoritative.
+
+## Contention revision after 928225a, 2026-10-20
+
+The previous seven overlap misses remained a failed requirement. Per-thread
+wall/CPU traces separated executing numerical work from calibration lock waits.
+An active durable flattening phase increased an editor fit from roughly 0.2 to
+0.56 seconds. Automatic readiness snapshots also consumed CPU and held the
+calibration lock while numerical work was already yielding. A later trace found
+0.641 seconds spent decoding prediction archives before an editor fit began.
+
+The real two-scene decoded evidence working set is about 262 MiB, exceeding the
+old 256 MiB retention budget. An older durable job could evict evidence needed by
+the selected scene. Windows file-version probes were measured separately and
+returned USN tokens in approximately 0.0001 to 0.0003 seconds, ruling out archive
+hashing for those tokens as the cause.
+
+The implementation makes three measured changes. Automatic selected-template
+readiness reads wait while the existing preview loop is pending, then fetch a
+fresh snapshot and reconnect. The evidence cache retains exact validated arrays
+within 384 MiB. Durable preparation cooperates between existing CG solves,
+without changing arithmetic, convergence criteria or numerical samples. Its
+phase checkpoints still validate revisions and write durable progress. Inner
+cooperation holds no template/coordinator lock and checks cancellation/close
+while waiting. GPU dispatch, leases and complete-generation publication retain
+their existing rules. ADR-0053 records both scheduling amendments before code.
+
+The probes below all use the same real photos and 4200 by 4800 artwork, six
+geometry edits per scene. They retain strict 1024px decoded output and the
+one-second threshold. Probe-only behavior stays outside the repository; these
+runs explain the implementation choice and are separate from final acceptance.
+
+| Experiment | Samples | Median seconds | Maximum seconds | Misses |
+| --- | ---: | ---: | ---: | ---: |
+| Baseline trace | 12 | 0.801 | 1.000 | 1 |
+| Solver-boundary probe only | 12 | 0.793 | 1.016 | 1 |
+| Readiness-priority probe only | 12 | 0.751 | 0.981 | 0 |
+| Implemented readiness deferral | 12 | 0.768 | 1.437 | 2 |
+| Readiness plus solver probe | 12 | 0.716 | 1.364 | 1 |
+| Readiness plus 384 MiB evidence | 12 | 0.716 | 1.049 | 1 |
+| All three probe changes | 12 | 0.715 | 0.816 | 0 |
+| Permanent implementation | 12 | 0.708 | 0.866 | 0 |
+
+The permanent implementation also has red/green public-hook and App regressions
+for deferred status, SSE cleanup and fresh refetch. Numerical regressions protect
+cooperation inside fitting/flattening before the next durable phase. Existing
+coordinator tests protect cancellation, interrupted saves, superseded geometry,
+publication and leases.
+
+Spec review found that switching to Photo warp during a pending Marigold request
+could leave readiness paused. The fix captures the departing template's pending
+listener, clears it during preview cleanup and preserves generation fencing for
+late results. New App and template-switch regressions failed before the fix and
+passed afterwards. Both second-round review axes report no remaining findings.
+
+### Frozen-source measurements
+
+Six normal-exit runs cover 96 edits on fresh copies of the same prepared inputs.
+Every changed decoded composite is 1024 by 1024. All mask samples retain the
+original pixel-change assertion above 30. Real-artwork masks choose visible ink
+against the source photo before starting the clock, avoiding transparent margins.
+The earlier contrast-artwork mask locations remain unchanged for comparison.
+
+| Source and mode | Samples | Median seconds | Maximum seconds | Misses | Active rebuild at edit | Same job through display |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Synthetic idle | 16 | 0.613 | 0.762 | 0 | 0 | 0 |
+| Synthetic overlap repeat | 16 | 0.682 | 0.833 | 0 | 14 | 14 |
+| Real photos idle | 16 | 0.665 | 0.749 | 0 | 0 | 0 |
+| Real photos overlap | 16 | 0.736 | 0.951 | 0 | 14 | 14 |
+| Actual artwork idle | 16 | 0.675 | 0.816 | 0 | 0 | 0 |
+| Actual artwork overlap | 16 | 0.733 | 0.916 | 0 | 14 | 13 |
+
+A first synthetic-overlap run recorded another 16 edits and completed durable
+publication, but its process hung after the server-thread join timeout. Its
+measurements remain included, with maximum 0.832 seconds. A fresh stack-dump
+diagnostic and uninstrumented repeat exited normally. The cause of that sporadic
+teardown hang is unresolved; no shutdown or benchmark waiting rule was weakened.
+Across all 112 uninstrumented samples from the frozen implementation, there are
+zero one-second misses and the maximum is 0.950668 seconds. The preferred
+half-second target remains unmet consistently. These measurements establish the
+strict target for these warm workflows on this host, not a universal bound.
+
+The implementation fingerprint is `dee5fd4dd9565d5ae20df1ae8ffbb04061399cacd17b1eda1bfced7984a48d46`.
+All evidence is external under `C:/cygwin64/tmp/marigold-1024-tail`.
+`verified-summary.json` includes every run, exit status, overlap count and miss;
+`verified-*/measurements.json` and native decoded PNGs preserve the raw samples.
+`diagnosis-summary.json` and the per-thread trace files retain the failed probes.
+Earlier runs stopped for the reviewed renderer-switch correction retain their
+raw rows and interruption note and are identified separately.
+
+Fresh full-quality fitting against frozen 928225a modules matched every map
+array, diagnostic and rebuilt full-photo pixel exactly on `folded-bay` and
+`multiple-validation`, including all placements. The comparison supplies the new
+cooperation callback while retaining original 4200 by 4800 artwork.
+`full-quality-parity/parity.json` records those equalities. Clean 1024px editor
+pixels also match 928225a exactly on both scenes, recorded separately in
+`full-quality-parity/editor-parity.json`. The two fine-line/text tests pass with
+identical contrast and error metrics to the previous revision.
+
+Frontend formatting, lint and type checking pass, with 1,053 tests in 83 files
+and 89.67% branch coverage. Ruff, mypy across 219 source files and all 11 import
+contracts pass. The external production build succeeds. All 120 browser tests
+pass, including the screenshot assertion and nine captured states. The full
+backend coverage gate passes with 3,128 tests, seven skips and 95.24% coverage.
+`static-final.log`, `frontend-final.log`, `backend-final.log`, `browser-final.log`
+and `build-final.log` retain the final validation results.
 
 ## Limits
 

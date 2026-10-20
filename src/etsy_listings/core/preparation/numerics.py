@@ -163,11 +163,13 @@ def prepare(
     mask: FloatMap,
     max_edge: int | None = None,
     checkpoint: Callable[[str], None] = lambda _: None,
+    cooperate: Callable[[], None] = lambda: None,
 ) -> Preparation:
     """Fit one placement from explicit evidence, with cancellation between phases.
 
     A supplied mask is the durable edited visibility, not brush history. The
     checkpoint callback may raise to cancel without publishing partial maps.
+    cooperate runs between numerical solves without publishing phase progress.
     """
     height, width = base.shape[:2]
     size = (width, height)
@@ -191,10 +193,15 @@ def prepare(
     grid_ids = np.ones((mesh, mesh), np.int32)
     checkpoint("fitting")
     surface, diagnostics = geometry.integrate(
-        grid / placement_width, normals, confidence, grid_ids, evidence.sample(evidence.depth, grid)
+        grid / placement_width,
+        normals,
+        confidence,
+        grid_ids,
+        evidence.sample(evidence.depth, grid),
+        cooperate=cooperate,
     )
     checkpoint("flattening")
-    uv, flat_diagnostics = geometry.flatten(surface, grid_ids)
+    uv, flat_diagnostics = geometry.flatten(surface, grid_ids, cooperate=cooperate)
     checkpoint("baking")
     neutral = geometry.placement_grid(np.array([[0, 0], [1, 0], [1, 1], [0, 1]], np.float32), mesh)
     # Fitting remains in original photo coordinates; only transient editor

@@ -65,8 +65,11 @@ def cg(
     multiply: Callable[[NDArray[Any]], NDArray[Any]],
     diagonal: NDArray[Any],
     initial: NDArray[Any],
+    *,
+    cooperate: Callable[[], None] = lambda: None,
 ) -> NDArray[Any]:
     """Small sparse PCG, no new authoring dependency in the production environment."""
+    cooperate()
     value = initial.astype(np.float64).copy()
     residual = rhs - multiply(value)
     tolerance = max(1e-9, np.linalg.norm(rhs) * 1e-7)
@@ -101,6 +104,8 @@ def integrate(
     patch_ids: NDArray[Any],
     depth: Float | None = None,
     depth_confidence: Float | None = None,
+    *,
+    cooperate: Callable[[], None] = lambda: None,
 ) -> tuple[Float, dict[str, Any]]:
     mesh = xy.shape[0]
     a, b, _ = surface_math.graph(mesh)
@@ -133,7 +138,7 @@ def integrate(
         )
 
     diagonal = degree + prior + smooth_strength * (smooth_degree**2 + smooth_degree)
-    z = cg(rhs, operator, diagonal, np.zeros(len(p)))
+    z = cg(rhs, operator, diagonal, np.zeros(len(p)), cooperate=cooperate)
     original_weight = edge_weight.copy()
     for _ in range(3):
         residual = z[b] - z[a] - target
@@ -153,7 +158,7 @@ def integrate(
             a, weights=edge_weight * target, minlength=len(p)
         )
         diagonal = degree + prior + smooth_strength * (smooth_degree**2 + smooth_degree)
-        z = cg(rhs, operator, diagonal, z)
+        z = cg(rhs, operator, diagonal, z, cooperate=cooperate)
     depth_metrics: dict[str, Any] = {"used": False}
     if depth is not None:
         # Affine invariant depth increases AWAY from the viewer. Fit into the
@@ -174,7 +179,7 @@ def integrate(
                 prior += 0.015 * dc
                 rhs += 0.015 * dc * fitted
                 diagonal += 0.015 * dc
-                z = cg(rhs, operator, diagonal, z)
+                z = cg(rhs, operator, diagonal, z, cooperate=cooperate)
                 depth_metrics = {
                     "used": True,
                     "scale": float(scale),
@@ -203,6 +208,8 @@ def integrate(
 def flatten(
     surface: Float,
     patch_ids: NDArray[Any],
+    *,
+    cooperate: Callable[[], None] = lambda: None,
 ) -> tuple[Float, dict[str, Any]]:
     mesh = surface.shape[0]
     a, b, _ = surface_math.graph(mesh)
@@ -248,7 +255,9 @@ def flatten(
                 - np.bincount(a, weights=edge_weight * target[:, axis], minlength=len(p))
                 + prior * target_prior[:, axis]
             )
-            proposal[:, axis] = cg(rhs, operator, degree + prior, value[:, axis])
+            proposal[:, axis] = cg(
+                rhs, operator, degree + prior, value[:, axis], cooperate=cooperate
+            )
         step = 1.0
         while step > 1 / 1024:
             candidate = value + step * (proposal - value)

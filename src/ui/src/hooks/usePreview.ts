@@ -155,9 +155,13 @@ export function usePreview(
   // Anything still in flight belongs to the previous template, so its result
   // must not land on this one's canvas.
   useEffect(() => {
+    // Capture this template's listener. A newer render can already have
+    // installed the next template's listener before this cleanup runs.
+    const notify = pendingListener.current;
     return () => {
       generation.current += 1;
       queued.current = null;
+      notify?.(false);
     };
   }, [templateName]);
 

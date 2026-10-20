@@ -59,6 +59,48 @@ PIXEL_JS = """(img, point) => {
 }"""
 
 
+PNG_JS = """img => {
+  const c=document.createElement('canvas');
+  c.width=img.naturalWidth; c.height=img.naturalHeight;
+  c.getContext('2d').drawImage(img, 0, 0);
+  return c.toDataURL('image/png').split(',')[1];
+}"""
+
+
+def visible_ink_point(
+    page: Page, area: dict[str, float], background: Image.Image
+) -> dict[str, float]:
+    """Choose actual visible print ink, including designs with transparent margins."""
+    image = page.get_by_alt_text("Rendered preview").first
+    bounds = image.bounding_box()
+    assert bounds
+    actual = np.asarray(
+        Image.open(BytesIO(base64.b64decode(image.evaluate(PNG_JS)))).convert("RGB")
+    )
+    height, width = actual.shape[:2]
+    reference = cv2.resize(np.asarray(background), (width, height), interpolation=cv2.INTER_AREA)
+    difference = np.abs(actual.astype(np.int16) - reference.astype(np.int16)).sum(axis=2)
+    # Stay inside the first placement's bounds. Pixels that differ strongly
+    # from the original photo locate ink without assuming an artwork silhouette.
+    x0 = max(0, round((area["x"] + area["width"] * 0.08 - bounds["x"]) / bounds["width"] * width))
+    x1 = min(
+        width, round((area["x"] + area["width"] * 0.92 - bounds["x"]) / bounds["width"] * width)
+    )
+    y0 = max(
+        0, round((area["y"] + area["height"] * 0.08 - bounds["y"]) / bounds["height"] * height)
+    )
+    y1 = min(
+        height, round((area["y"] + area["height"] * 0.92 - bounds["y"]) / bounds["height"] * height)
+    )
+    region = difference[y0:y1, x0:x1]
+    assert region.size and region.max() > 30, "Real artwork must have visible ink to mask"
+    y, x = np.unravel_index(region.argmax(), region.shape)
+    return {
+        "x": bounds["x"] + (x0 + int(x) + 0.5) * bounds["width"] / width,
+        "y": bounds["y"] + (y0 + int(y) + 0.5) * bounds["height"] / height,
+    }
+
+
 class EvidenceOnlyRuntime:
     def inspect(self) -> Capability:
         return Capability(False, "Benchmark forbids model inference")
@@ -79,6 +121,7 @@ def measure(
     checkpoints: list[tuple[str, str, float]],
     interactive: bool = False,
     during_rebuild: bool = False,
+    mask_background: Image.Image | None = None,
 ) -> dict[str, Any]:
     page.get_by_role("tab", name="Calibrate", exact=True).click()
     polygon = page.locator(".quad-editor__polygon").first
@@ -148,6 +191,9 @@ def measure(
         x = area["x"] + area["width"] * fraction
         y = area["y"] + area["height"] * 0.45
         point = {"x": x, "y": y}
+        if mask_background is not None:
+            point = visible_ink_point(page, area, mask_background)
+            x, y = point["x"], point["y"]
         if interactive:
             before_pixel = page.get_by_alt_text("Rendered preview").first.evaluate(PIXEL_JS, point)
         page.mouse.move(x, y)
@@ -247,17 +293,14 @@ def measure(
             ),
             "before_pixel": before_pixel,
             "after_pixel": after_pixel,
+            "mask_point": point,
+            "mask_target": "visible-artwork" if mask_background is not None else "fixed-contrast",
             **decoded,
             "responses": list(spans),
         }
         # Capture the actual decoded raster after stopping the clock, so review
         # can inspect native detail rather than a CSS-scaled screen capture.
-        png = image.evaluate("""img => {
-            const c=document.createElement('canvas');
-            c.width=img.naturalWidth; c.height=img.naturalHeight;
-            c.getContext('2d').drawImage(img, 0, 0);
-            return c.toDataURL('image/png').split(',')[1];
-        }""")
+        png = image.evaluate(PNG_JS)
         (output / f"{name}-{kind}-{repeat}-decoded.png").write_bytes(base64.b64decode(png))
         print(json.dumps(row), flush=True)
         # The default isolates steady-state service cost. The contention mode
@@ -455,6 +498,10 @@ def run(
                             "initial_image_seconds": time.perf_counter() - warmup_start,
                         }
                     )
+                mask_background = None
+                if design is not None:
+                    with Image.open(workspace.template_main_photo(name)) as photo:
+                        mask_background = photo.convert("RGB")
                 for kind in edits:
                     for repeat in range(repeats):
                         row = measure(
@@ -466,6 +513,7 @@ def run(
                             checkpoints,
                             interactive,
                             during_rebuild,
+                            mask_background,
                         )
                         rows.append(row)
                         (output / "raw-rows.json").write_text(

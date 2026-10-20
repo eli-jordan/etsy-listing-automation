@@ -2,14 +2,16 @@ import { useCallback, useEffect, useState } from "react";
 import { followPreparation, getPreparation, type Preparation } from "../api/preparation";
 
 /** Reattach to server work, including CPU rebuilds after save. Reconnection reads
- * status and resumes events; it never submits another preparation job. */
-export function usePreparation(name: string | null, version: number) {
+ * status and resumes events; it never submits another preparation job. Automatic
+ * reads pause while the editor composite is pending, then resume with a fresh
+ * snapshot so progress validation does not compete with the visible edit. */
+export function usePreparation(name: string | null, version: number, previewPending = false) {
   const [entry, setEntry] = useState<{ name: string; value: Preparation } | null>(null);
   const [error, setError] = useState("");
   const [refresh, setRefresh] = useState(0);
   const reload = useCallback(() => setRefresh((n) => n + 1), []);
   useEffect(() => {
-    if (!name) return;
+    if (!name || previewPending) return;
     const template = name;
     let cancelled = false;
     let stream: ReturnType<typeof followPreparation> | undefined;
@@ -76,6 +78,6 @@ export function usePreparation(name: string | null, version: number) {
       if (timer) clearTimeout(timer);
       if (eventTimer) clearTimeout(eventTimer);
     };
-  }, [name, version, refresh]);
+  }, [name, version, refresh, previewPending]);
   return { preparation: entry?.name === name ? entry.value : null, error, reload };
 }

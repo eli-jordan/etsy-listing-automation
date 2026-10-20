@@ -157,3 +157,38 @@ def test_cpu_cancellation_stops_at_the_requested_phase_without_baking() -> None:
 def test_crop_refuses_degenerate_nonfinite_or_outside_placements(box, size) -> None:
     with pytest.raises(ValueError):
         plan_crop(box, size)
+
+
+@pytest.mark.parametrize("stop_phase", ["fitting", "flattening"])
+def test_cpu_cooperation_can_interrupt_a_solver_before_the_next_durable_phase(stop_phase):
+    from etsy_listings.core.preparation.numerics import Evidence, prepare
+
+    box = np.array([[10, 10], [53, 10], [53, 53], [10, 53]], np.float32)
+    normals = np.zeros((64, 64, 3), np.float32)
+    normals[..., 2] = 1
+    evidence = Evidence(
+        plan_crop(box, (64, 64)),
+        EvidenceIdentity("p", "m", "i", "v"),
+        normals,
+        np.ones((64, 64, 3), np.float32),
+        np.ones((64, 64, 3), np.float32),
+        np.zeros((64, 64, 3), np.float32),
+        np.ones((64, 64), np.float32),
+    )
+    phases = []
+
+    def cooperate():
+        if phases[-1] == stop_phase:
+            raise InterruptedError("yield inside solver phase")
+
+    with pytest.raises(InterruptedError, match="yield inside solver phase"):
+        prepare(
+            np.full((64, 64, 3), 128, np.uint8),
+            box,
+            evidence,
+            mask=np.ones((64, 64), np.float32),
+            checkpoint=phases.append,
+            cooperate=cooperate,
+        )
+    assert phases[-1] == stop_phase
+    assert "baking" not in phases

@@ -32,7 +32,10 @@ describe("usePreparation", () => {
       options = value;
       return { close };
     });
-    const { result, unmount } = renderHook(() => usePreparation("tee", 0));
+    const { result, unmount, rerender } = renderHook(
+      ({ pending }) => usePreparation("tee", 0, pending),
+      { initialProps: { pending: false } },
+    );
     await waitFor(() => expect(result.current.preparation?.active_job?.id).toBe("job"));
     expect(submit).not.toHaveBeenCalled();
     vi.useFakeTimers();
@@ -50,6 +53,17 @@ describe("usePreparation", () => {
       await vi.advanceTimersByTimeAsync(1000);
     });
     expect(get).toHaveBeenCalledTimes(3);
+    expect(submit).not.toHaveBeenCalled();
+    rerender({ pending: true });
+    expect(close).toHaveBeenCalled();
+    act(() => options?.onEvent({ ...job, job_id: job.id, sequence: 9 }));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1000);
+    });
+    expect(get).toHaveBeenCalledTimes(3);
+    rerender({ pending: false });
+    await act(async () => {});
+    expect(get).toHaveBeenCalledTimes(4);
     expect(submit).not.toHaveBeenCalled();
     unmount();
     expect(close).toHaveBeenCalled();
@@ -85,4 +99,27 @@ it("retains idle readiness without decoding it repeatedly and refreshes on focus
   expect(get).toHaveBeenCalledTimes(1);
   await act(async () => window.dispatchEvent(new Event("focus")));
   expect(get).toHaveBeenCalledTimes(2);
+});
+
+it("defers automatic readiness reads while a composite is pending and resumes fresh", async () => {
+  vi.useFakeTimers();
+  const get = vi.spyOn(api, "getPreparation").mockResolvedValue(READY);
+  const { result, rerender } = renderHook(({ pending }) => usePreparation("tee", 0, pending), {
+    initialProps: { pending: false },
+  });
+  await act(async () => {});
+  expect(result.current.preparation).toEqual(READY);
+  rerender({ pending: true });
+  await act(async () => {
+    window.dispatchEvent(new Event("focus"));
+    result.current.reload();
+    await vi.advanceTimersByTimeAsync(3000);
+  });
+  expect(get).toHaveBeenCalledTimes(1);
+  expect(result.current.preparation).toEqual(READY);
+  get.mockResolvedValue({ ...READY, config_revision: "sha256:new-revision" });
+  rerender({ pending: false });
+  await act(async () => {});
+  expect(get).toHaveBeenCalledTimes(2);
+  expect(result.current.preparation?.config_revision).toBe("sha256:new-revision");
 });

@@ -428,14 +428,17 @@ class Execution:
                         if v.id == job.placement_evidence[placement_key(placement.id)]
                     )
 
-                    def checkpoint(step: str) -> None:
-                        def check_cancelled() -> None:
-                            if self.owner.status(identity).cancel_intent:
-                                raise Stopped("cancelled")
-                            if self.owner._closing:
-                                raise Stopped("queued")
+                    def check_cancelled() -> None:
+                        if self.owner.status(identity).cancel_intent:
+                            raise Stopped("cancelled")
+                        if self.owner._closing:
+                            raise Stopped("queued")
 
+                    def cooperate() -> None:
                         yield_to_interactive(self.owner.workspace, check_cancelled)
+
+                    def checkpoint(step: str) -> None:
+                        cooperate()
                         self.safe(identity, step)
 
                     prepared = prepare(
@@ -444,6 +447,7 @@ class Execution:
                         self.evidence.load(value, job.snapshot),
                         mask=mask,
                         checkpoint=checkpoint,
+                        cooperate=cooperate,
                     ).maps
                     from etsy_listings.core.preparation.artifacts import arrays_of
 

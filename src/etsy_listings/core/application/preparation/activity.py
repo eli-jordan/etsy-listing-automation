@@ -1,4 +1,4 @@
-"""Workspace-scoped foreground priority at existing CPU phase checkpoints."""
+"""Workspace-scoped foreground priority at CPU phase and solver boundaries."""
 
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
@@ -32,7 +32,7 @@ def interactive(workspace: Workspace) -> Iterator[None]:
 
 
 def yield_to_interactive(workspace: Workspace, check: Callable[[], None]) -> None:
-    """Wait between phases, checking cancellation without holding our lock."""
+    """Wait between work chunks, checking cancellation without holding our lock."""
     key = _key(workspace)
     while True:
         with _CONDITION:
