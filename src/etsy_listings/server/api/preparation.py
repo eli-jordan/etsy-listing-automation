@@ -57,7 +57,8 @@ def job_response(preparations: Preparations, job: Job) -> PreparationJobResponse
 
 
 @router.get("/templates/{name}/preparation", response_model=PreparationResponse)
-def status(request: Request, name: str) -> PreparationResponse:
+def status(request: Request, name: str, response: Response) -> PreparationResponse:
+    response.headers["Cache-Control"] = "no-store"
     preparations = coordinator(request)
     try:
         view = preparation_view(preparations, name)
@@ -148,14 +149,18 @@ def history_response(request: Request, name: str, placement_id: str | None) -> M
 
 
 @router.get("/templates/{name}/mask-history", response_model=MaskHistoryResponse)
-def mask_history(request: Request, name: str) -> MaskHistoryResponse:
+def mask_history(request: Request, name: str, response: Response) -> MaskHistoryResponse:
+    response.headers["Cache-Control"] = "no-store"
     return history_response(request, name, None)
 
 
 @router.get(
     "/templates/{name}/placements/{placement_id}/mask-history", response_model=MaskHistoryResponse
 )
-def placement_history(request: Request, name: str, placement_id: str) -> MaskHistoryResponse:
+def placement_history(
+    request: Request, name: str, placement_id: str, response: Response
+) -> MaskHistoryResponse:
+    response.headers["Cache-Control"] = "no-store"
     return history_response(request, name, placement_id)
 
 

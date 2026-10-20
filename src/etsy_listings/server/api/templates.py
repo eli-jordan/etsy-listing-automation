@@ -211,6 +211,7 @@ def get_config(template: Existing, response: Response) -> AnyTemplate:
         raise _not_found(exc) from exc
     response.headers["ETag"] = f'"{saved.revision}"'
     response.headers["Last-Modified"] = format_datetime(saved.modified_at, usegmt=True)
+    response.headers["Cache-Control"] = "no-store"
     return saved.config
 
 
@@ -355,6 +356,7 @@ def preview(template: Existing, body: PreviewRequest, scale: PreviewScale = "ful
                     config=config,
                     revision=body.calibration_revision or "",
                     mask_edits=body.mask_edits,
+                    colour=body.colour if isinstance(body, ColourMatrixPreviewRequest) else None,
                     base=lambda path: PREVIEW_IMAGES.base(path).image,
                     artwork=lambda: PREVIEW_IMAGES.design(
                         resolve_design(workspace, body.design), max_edge=512

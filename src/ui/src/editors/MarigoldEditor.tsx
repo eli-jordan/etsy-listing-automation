@@ -63,6 +63,9 @@ export function MarigoldEditor({
   }>({ revision: "", values: {} });
   const [tab, setTab] = useState<View>("calibrate");
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedColour, setSelectedColour] = useState<string | null>(null);
+  const colour =
+    selectedColour && colours.includes(selectedColour) ? selectedColour : (colours[0] ?? "");
 
   const [editing, setEditing] = useState(false);
   useEffect(() => {
@@ -178,7 +181,8 @@ export function MarigoldEditor({
     [config, colours, templateName],
   );
   const editorRevision = calibrationRevision || preparation?.config_revision || "";
-  const editorBody = jobs[0]?.body;
+  const editorBody =
+    config.kind === "colour-matrix" ? jobs.find((job) => job.id === colour)?.body : jobs[0]?.body;
   const editorPreview = usePreview(
     templateName,
     editorRevision && editorBody
@@ -231,6 +235,18 @@ export function MarigoldEditor({
         <div className="app__preview-bar">
           <ViewTabs value={tab} onChange={setTab} />
           <TestDesignPicker compact value={design} onChange={onDesignChange} />
+          {tab === "calibrate" && config.kind === "colour-matrix" && colours.length > 1 && (
+            <label className="app__bar-field">
+              <span>Colour</span>
+              <select value={colour} onChange={(e) => setSelectedColour(e.target.value)}>
+                {colours.map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
         </div>
         {tab === "calibrate" && (
           <>
@@ -244,7 +260,10 @@ export function MarigoldEditor({
             <div className="mg-stage mg-editor-stage">
               {space ? (
                 <QuadEditor
-                  imageUrl={editorPreview ?? templatePhotoUrl(templateName)}
+                  imageUrl={
+                    editorPreview ??
+                    templatePhotoUrl(templateName, config.kind === "colour-matrix" ? colour : null)
+                  }
                   space={space}
                   boxes={placements.map((p) => p.bounding_box)}
                   selectedIndex={index}

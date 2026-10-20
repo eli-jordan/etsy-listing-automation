@@ -1093,11 +1093,6 @@
   }
 }
 
-/* The approved workbench sits inside the shell's existing page inset. */
-.app.mg-app {
-  padding: 0;
-  max-width: none;
-}
 .app__preview-bar .design-picker--compact {
   display: inline-flex;
   flex-direction: row;

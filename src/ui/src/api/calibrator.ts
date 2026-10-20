@@ -40,6 +40,8 @@ export interface TemplateConfigDocument {
 
 export async function getTemplateConfig(name: string): Promise<TemplateConfigDocument | null> {
   const { data, error, response } = await api.GET("/api/templates/{name}/config", {
+    // Bypass configs cached before the server added its no-store policy too.
+    cache: "no-store",
     params: { path: { name } },
   });
   if (error) return null;
@@ -76,6 +78,7 @@ export async function refreshPreparedRevision(
   const expected = '"' + preparedRevision + '"';
   if (templateRevisions.get(name) === expected) return true;
   const { data, error, response } = await api.GET("/api/templates/{name}/config", {
+    cache: "no-store",
     params: { path: { name } },
   });
   if (

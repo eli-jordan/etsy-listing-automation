@@ -63,8 +63,11 @@ Single and multiple templates use their existing scene photo. If the resolved
 main photo changes, preparation becomes stale. The ordering rule must be shared
 by backend readers, not independently reconstructed by the browser.
 
-All authoring uses the main photo. Colour-matrix templates keep one shared
-placement and calibration. A multiple template has separate placement controls
+Model preparation and shared-map fitting use the main photo. Colour-matrix
+calibration offers the same view-only colour selector as Photo warp: the selected
+photo is the interactive composite or fallback background, while geometry and
+masks remain shared. Browsing colours never changes the main photo or starts
+preparation. Colour-matrix templates keep one shared placement and calibration. A multiple template has separate placement controls
 and maps for each design placement on its one scene photo. Preparation may reuse
 model evidence between placements when it covers them adequately; do not require
 one identical crop to fit unrelated regions of the scene.

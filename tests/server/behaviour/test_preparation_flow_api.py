@@ -33,7 +33,9 @@ def test_save_prepare_mask_undo_reset_and_preview_use_current_revision(
     runtime = PreparationRuntime()
     with TestClient(create_app(workspace, preparation_runtime=runtime)) as client:
         status_url = "/api/templates/shirt/preparation"
-        status = client.get(status_url).json()
+        status_response = client.get(status_url)
+        assert status_response.headers["cache-control"] == "no-store"
+        status = status_response.json()
         assert status["maps"]["state"] == "needs_preparation"
         created = client.post(
             "/api/preparation/jobs",
@@ -78,7 +80,9 @@ def test_save_prepare_mask_undo_reset_and_preview_use_current_revision(
         assert painted.status_code == 200, painted.text
         raster = Image.open(BytesIO(client.get(mask_url).content))
         assert raster.getpixel((30, 30)) == 0
-        history = client.get(mask_url + "-history").json()
+        history_response = client.get(mask_url + "-history")
+        assert history_response.headers["cache-control"] == "no-store"
+        history = history_response.json()
         assert history["undo_count"] == 1
         assert base64.b64decode(history["strokes"][0]["before"]) == baseline
         state = client.get(status_url).json()
@@ -240,3 +244,57 @@ def test_interactive_drafts_composite_without_saving_or_publishing(workspace_roo
         body["calibration_revision"] = "stale"
         assert client.post(url, json=body).status_code == 409
         assert sum(len(worker.calls) for worker in runtime.workers) == calls
+
+
+def test_interactive_colour_selection_changes_only_the_target_photo(workspace_root):
+    workspace = marigold_template(workspace_root, "colour-matrix")
+    runtime = PreparationRuntime()
+    with TestClient(create_app(workspace, preparation_runtime=runtime)) as client:
+        status_url = "/api/templates/shirt/preparation"
+        status = client.get(status_url).json()
+        created = client.post(
+            "/api/preparation/jobs",
+            json={
+                "template": "shirt",
+                "config_revision": status["config_revision"],
+                "request_id": "colour-fixture",
+            },
+        )
+        wait_job(client, created.json()["id"])
+        ready = client.get(status_url).json()
+        loaded = client.get("/api/templates/shirt/config")
+        calls = sum(len(worker.calls) for worker in runtime.workers)
+        outputs = {}
+        for colour in ["navy", "ivory", "navy"]:
+            response = client.post(
+                "/api/templates/shirt/preview?scale=editor",
+                json={
+                    **loaded.json(),
+                    "colour": colour,
+                    "design": "bundled-grid",
+                    "calibration_revision": ready["config_revision"],
+                },
+            )
+            assert response.status_code == 200, response.text
+            outputs[colour] = Image.open(BytesIO(response.content)).convert("RGB")
+        navy = outputs["navy"].getpixel((9, 32))
+        ivory = outputs["ivory"].getpixel((9, 32))
+        assert navy[0] < 40 and navy[1] < 40 and navy[2] > 90, navy
+        assert min(ivory) > 200, ivory
+        after = client.get(status_url).json()
+        assert after["main_photo"] == ready["main_photo"]
+        assert after["maps"]["content_digest"] == ready["maps"]["content_digest"]
+        assert client.get("/api/templates/shirt/config").headers["etag"] == loaded.headers["etag"]
+        assert sum(len(worker.calls) for worker in runtime.workers) == calls
+        Image.new("RGB", (65, 64), "navy").save(workspace.template_base_image("shirt", "navy"))
+        mismatched = client.post(
+            "/api/templates/shirt/preview?scale=editor",
+            json={
+                **loaded.json(),
+                "colour": "navy",
+                "design": "bundled-grid",
+                "calibration_revision": ready["config_revision"],
+            },
+        )
+        assert mismatched.status_code == 409
+        assert "dimensions" in mismatched.json()["detail"].lower()

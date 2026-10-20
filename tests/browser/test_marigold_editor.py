@@ -274,3 +274,127 @@ def test_first_prepare_mask_save_needs_no_reload_and_external_edit_still_conflic
     assert page.get_by_role("toolbar", name="Mask brushes").is_visible()
     assert page.request.get(config_url).headers["etag"] == external.headers["etag"]
     assert sum(len(worker.calls) for worker in preparation_runtime.workers) == calls
+
+
+def test_renderer_switch_keeps_the_same_centered_canvas_size(page):
+    page.set_viewport_size({"width": 2000, "height": 1100})
+    page.locator(".template-rail__item[data-template='marigold-shirt']").click()
+    photo = page.get_by_alt_text("Rendered preview")
+    photo.wait_for()
+    page.wait_for_function("() => document.querySelector('.quad-editor__image')?.naturalWidth > 0")
+    before = page.locator(".app").bounding_box()
+    photo_before = photo.bounding_box()
+    assert before is not None and photo_before is not None
+    page.get_by_label("Renderer", exact=True).select_option("marigold")
+    page.get_by_role("button", name="Prepare template", exact=True).wait_for()
+    after = page.locator(".app").bounding_box()
+    photo_after = photo.bounding_box()
+    assert after is not None and photo_after is not None
+    assert after["width"] == pytest.approx(before["width"], abs=1)
+    assert after["x"] == pytest.approx(before["x"], abs=1)
+    assert photo_after["width"] == pytest.approx(photo_before["width"], abs=1)
+
+
+def test_new_tab_reads_current_renderer_and_can_prepare_after_an_external_save(
+    page, workspace_root
+):
+    import os
+    import time
+
+    from etsy_listings.core.workspace import Workspace
+
+    workspace = Workspace.discover(root_override=workspace_root)
+    path = workspace.template_config_file("marigold-shirt")
+    old = time.time() - 86400
+    os.utime(path, (old, old))
+    page.locator(".template-rail__item[data-template='marigold-shirt']").click()
+    assert page.get_by_label("Renderer", exact=True).input_value() == "photo-warp"
+    origin = page.url.split("/templates")[0]
+    url = origin + "/api/templates/marigold-shirt/config"
+    loaded = page.request.get(url)
+    config = loaded.json()
+    config["renderer"] = {"type": "marigold", "config": {}}
+    saved = page.request.put(
+        url,
+        headers={"If-Match": loaded.headers["etag"]},
+        data={"request_id": "external-renderer-switch", "config": config},
+    )
+    assert saved.status == 200
+    other = page.context.new_page()
+    other.goto(origin + "/templates")
+    other.locator(".template-rail__item[data-template='marigold-shirt']").click()
+    renderer = other.get_by_label("Renderer", exact=True)
+    renderer.wait_for()
+    assert renderer.input_value() == "marigold"
+    with other.expect_response(
+        lambda r: "/api/preparation/jobs" in r.url and r.request.method == "POST"
+    ) as submitted:
+        other.get_by_role("button", name="Prepare template", exact=True).click()
+    assert submitted.value.status == 202, submitted.value.text()
+    ready(other)
+    # The first tab still has a genuinely stale edit and must not overwrite it.
+    with page.expect_response(
+        lambda r: r.url.endswith("/config") and r.request.method == "PUT"
+    ) as refused:
+        page.get_by_label("Renderer", exact=True).select_option("marigold")
+    assert refused.value.status == 412
+    page.get_by_role("button", name="Reload template", exact=True).wait_for()
+
+
+@pytest.mark.parametrize("template_kind", ["colour-matrix"], indirect=True)
+def test_colour_selection_changes_fallback_and_prepared_composite_without_saving(
+    page, preparation_runtime
+):
+    with page.expect_response(
+        lambda r: r.url.endswith("/config") and r.request.method == "PUT" and r.status == 200
+    ):
+        select_template(page)
+    origin = page.url.split("/templates")[0]
+    config_url = origin + "/api/templates/marigold-shirt/config"
+    before = page.request.get(config_url).headers["etag"]
+    main = page.request.get(origin + "/api/templates/marigold-shirt/preparation").json()[
+        "main_photo"
+    ]
+    selector = page.get_by_role("combobox", name="Colour", exact=True)
+    for colour in ["navy", "ivory"]:
+        selector.select_option(colour)
+        page.wait_for_function(
+            "(colour) => document.querySelector('.quad-editor__image')"
+            "?.src.endsWith('/photo?colour=' + colour)",
+            arg=colour,
+        )
+    assert page.request.get(config_url).headers["etag"] == before
+    assert not preparation_runtime.workers
+    page.get_by_role("button", name="Prepare template", exact=True).click()
+    ready(page)
+    prepared = page.request.get(config_url).headers["etag"]
+    calls = sum(len(worker.calls) for worker in preparation_runtime.workers)
+    for colour, rgb in [("navy", [0, 0, 128]), ("ivory", [255, 255, 240])]:
+        with page.expect_response(
+            lambda r, colour=colour: (
+                "/preview?scale=editor" in r.url
+                and r.request.post_data_json.get("colour") == colour
+                and r.status == 200
+            )
+        ):
+            selector.select_option(colour)
+        page.wait_for_function(
+            """(rgb) => {
+              const image = document.querySelector('.quad-editor__image');
+              if (!image?.src.startsWith('blob:') || !image.complete) return false;
+              if (!image.naturalWidth) return false;
+              const canvas = document.createElement('canvas');
+              canvas.width = image.naturalWidth; canvas.height = image.naturalHeight;
+              const ctx = canvas.getContext('2d'); ctx.drawImage(image, 0, 0);
+              const pixel = ctx.getImageData(canvas.width * 0.15, canvas.height * 0.15, 1, 1).data;
+              return rgb.every((v, i) => Math.abs(v - pixel[i]) < 12);
+            }""",
+            arg=rgb,
+            timeout=5000,
+        )
+    assert page.request.get(config_url).headers["etag"] == prepared
+    assert sum(len(worker.calls) for worker in preparation_runtime.workers) == calls
+    assert (
+        page.request.get(origin + "/api/templates/marigold-shirt/preparation").json()["main_photo"]
+        == main
+    )

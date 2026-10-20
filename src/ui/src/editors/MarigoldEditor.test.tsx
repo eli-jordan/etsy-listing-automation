@@ -18,7 +18,11 @@ beforeEach(() => {
   vi.spyOn(calibrator, "renderPreview").mockResolvedValue("blob:full");
 });
 afterEach(() => vi.restoreAllMocks());
-function setup(config: TemplateConfigState = SINGLE, ready: preparation.Preparation = READY) {
+function setup(
+  config: TemplateConfigState = SINGLE,
+  ready: preparation.Preparation = READY,
+  colours = ["black", "white"],
+) {
   let current: TemplateConfigState = config;
   let edits: preparation.MaskEdit[] = [];
   function Harness() {
@@ -30,7 +34,7 @@ function setup(config: TemplateConfigState = SINGLE, ready: preparation.Preparat
         config={{ ...value, renderer: value.renderer as Extract<Renderer, { type: "marigold" }> }}
         savedConfig={config}
         space={[400, 200]}
-        colours={["black", "white"]}
+        colours={colours}
         knownColours={["black", "white"]}
         design="bundled-grid"
         onDesignChange={vi.fn()}
@@ -153,16 +157,77 @@ describe("MarigoldEditor", () => {
     if (next.kind !== "multiple") throw new Error("wrong kind");
     expect(next.placements.map((p) => p.id)).toEqual(["first", "second"]);
   });
-  it("keeps the fixed main colour reference while browsing colours and previews all colours", async () => {
-    setup({ kind: "colour-matrix", bounding_box: BOX, renderer: MARIGOLD });
+  it("browses colour photos when composition is unavailable without editing shared preparation", async () => {
+    vi.mocked(calibrator.renderPreview).mockRejectedValue(new Error("Prepare first"));
+    const config = { kind: "colour-matrix" as const, bounding_box: BOX, renderer: MARIGOLD };
+    const view = setup(config);
     expect(screen.getByText(/Main photo.*main.png/)).toBeInTheDocument();
-    expect(screen.queryByText("Colour")).not.toBeInTheDocument();
     expect(screen.getByAltText("Rendered preview")).toHaveAttribute(
       "src",
-      "/api/templates/tee/photo",
+      "/api/templates/tee/photo?colour=black",
     );
+    fireEvent.change(screen.getByRole("combobox", { name: "Colour" }), {
+      target: { value: "white" },
+    });
+    await waitFor(() =>
+      expect(calibrator.renderPreview).toHaveBeenCalledWith(
+        "tee",
+        expect.objectContaining({ colour: "white" }),
+        "bundled-grid",
+        "editor",
+      ),
+    );
+    expect(screen.getByAltText("Rendered preview")).toHaveAttribute(
+      "src",
+      "/api/templates/tee/photo?colour=white",
+    );
+    expect(view.config()).toEqual(config);
+    expect(view.edits()).toEqual([]);
+    expect(screen.getByText(/Main photo.*main.png/)).toBeInTheDocument();
+  });
+  it("composites the selected colour and still renders every colour in Preview", async () => {
+    vi.mocked(calibrator.renderPreview).mockImplementation(
+      async (_name, body) => "blob:" + ("colour" in body ? body.colour : "scene"),
+    );
+    const config = { kind: "colour-matrix" as const, bounding_box: BOX, renderer: MARIGOLD };
+    const view = setup(config);
+    await waitFor(() =>
+      expect(screen.getByAltText("Rendered preview")).toHaveAttribute("src", "blob:black"),
+    );
+    fireEvent.change(screen.getByRole("combobox", { name: "Colour" }), {
+      target: { value: "white" },
+    });
+    await waitFor(() =>
+      expect(screen.getByAltText("Rendered preview")).toHaveAttribute("src", "blob:white"),
+    );
+    expect(view.config()).toEqual(config);
     fireEvent.click(screen.getByRole("tab", { name: "Preview" }));
-    await waitFor(() => expect(calibrator.renderPreview).toHaveBeenCalledTimes(2));
+    await waitFor(() =>
+      expect(calibrator.renderPreview).toHaveBeenCalledWith(
+        "tee",
+        expect.objectContaining({ colour: "black" }),
+        "bundled-grid",
+        "full",
+      ),
+    );
+    expect(calibrator.renderPreview).toHaveBeenCalledWith(
+      "tee",
+      expect.objectContaining({ colour: "white" }),
+      "bundled-grid",
+      "full",
+    );
+    expect(screen.queryByRole("combobox", { name: "Colour" })).not.toBeInTheDocument();
+  });
+  it.each([{ colours: [] }, { colours: ["black"] }])(
+    "offers no colour choice for a set with $colours",
+    ({ colours }) => {
+      setup({ kind: "colour-matrix", bounding_box: BOX, renderer: MARIGOLD }, READY, colours);
+      expect(screen.queryByRole("combobox", { name: "Colour" })).not.toBeInTheDocument();
+    },
+  );
+  it("offers no colour selector for a single scene", () => {
+    setup();
+    expect(screen.queryByRole("combobox", { name: "Colour" })).not.toBeInTheDocument();
   });
   it("allows unsaved appearance preview but blocks missing maps and unsaved mask edits", async () => {
     const view = setup();

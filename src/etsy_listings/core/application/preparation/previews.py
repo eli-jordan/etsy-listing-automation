@@ -70,6 +70,7 @@ def editor_preview(
     mask_edits: list[MaskEdit],
     base: Callable[[Path], RGB],
     artwork: Callable[[], RGBA],
+    colour: str | None = None,
 ) -> Image.Image:
     """Fit original coordinates, rasterize a small disposable editor image.
 
@@ -141,6 +142,15 @@ def editor_preview(
                 for key, _ in boxes
             }
             image = base(workspace.template_main_photo(name, saved.config))
+            # Fit shared maps against the fixed main photo. Only the final
+            # composite background follows the editor's colour selection.
+            target = (
+                base(workspace.template_base_image(name, colour))
+                if config.kind == "colour-matrix" and colour is not None
+                else image
+            )
+            if target.shape != image.shape:
+                raise PreparationRequired("Colour photos must match the main photo dimensions")
             design = artwork()
         layers = []
         for key, box in boxes:
@@ -164,7 +174,7 @@ def editor_preview(
             layers.append(MaterialLayer(design, _maps(cache_key, compute), key))
 
         width, height = layers[0].maps.size
-        small = cast(RGB, cv2.resize(image, (width, height), interpolation=cv2.INTER_AREA))
+        small = cast(RGB, cv2.resize(target, (width, height), interpolation=cv2.INTER_AREA))
         result = render_marigold_scene(small, layers, appearance=config.renderer.config.appearance)
         with store.lock(name):
             if store.read(name).revision != revision:

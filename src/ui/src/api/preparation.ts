@@ -8,6 +8,7 @@ export type MaskOperation = MaskEdit["operations"][number];
 export type Runtime = components["schemas"]["MarigoldRuntimeResponse"];
 export async function getPreparation(name: string, signal?: AbortSignal): Promise<Preparation> {
   const { data, error } = await api.GET("/api/templates/{name}/preparation", {
+    cache: "no-store",
     params: { path: { name } },
     ...(signal ? { signal } : {}),
   });
@@ -28,10 +29,19 @@ export async function prepareTemplate(
   body: components["schemas"]["CreatePreparationRequest"],
 ): Promise<PreparationJob> {
   const { data, error } = await api.POST("/api/preparation/jobs", { body });
-  if (error || !data)
-    throw new Error(
-      "Preparation could not start. Check runtime availability and save the template again.",
-    );
+  if (error || !data) {
+    const detail: unknown = error?.detail;
+    const message =
+      typeof detail === "string"
+        ? detail
+        : detail &&
+            typeof detail === "object" &&
+            "message" in detail &&
+            typeof detail.message === "string"
+          ? detail.message
+          : "Preparation could not start. Try again.";
+    throw new Error(message);
+  }
   return data;
 }
 export async function cancelPreparation(identity: string): Promise<PreparationJob> {
@@ -64,8 +74,12 @@ export async function getMaskHistory(
 ): Promise<MaskHistory> {
   const result =
     placementId === null
-      ? await api.GET("/api/templates/{name}/mask-history", { params: { path: { name } } })
+      ? await api.GET("/api/templates/{name}/mask-history", {
+          cache: "no-store",
+          params: { path: { name } },
+        })
       : await api.GET("/api/templates/{name}/placements/{placement_id}/mask-history", {
+          cache: "no-store",
           params: { path: { name, placement_id: placementId } },
         });
   if (result.error || !result.data)
