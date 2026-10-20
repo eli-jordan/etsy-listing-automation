@@ -456,3 +456,23 @@ status-request coalescing. The user explicitly permits reduced interactive
 resolution. Label the approximation in the editor; full-quality Preview and
 export retain original artwork, complete photo size and the accepted 49 by 49
 maps. Keep the 800ms durable autosave delay and revision fences.
+
+
+## Amendment, 2026-10-20: readable interactive composites
+
+Manual review found the 256px composite too blurry to judge artwork. Interactive
+composites now require a 1024px longest edge, preserving non-square photo aspect
+ratio and retaining smaller source photos at their native size. Rasterize from
+original coordinates and validated evidence at that size. Enlarging a completed
+256px frame does not satisfy this requirement. Retain enough original artwork
+samples to resolve fine text and lines at 1024px; the former 512px artwork cap
+is superseded. A transient 17 by 17 geometry fit remains permitted if its
+high-resolution raster passes detail checks.
+
+The final edit-to-displayed-composite target remains strictly below one second,
+preferably below half a second, for masks and covered geometry on one and two
+placements, including overlap with durable rebuilding. Measure the actual
+1024px decoded display and report missed tails without relaxing resolution or
+the threshold. Full-quality Preview and export retain original artwork and
+accepted complete 49 by 49 generations. Scheduling, revision fences, explicit
+inference and selected-colour background behavior remain unchanged.
