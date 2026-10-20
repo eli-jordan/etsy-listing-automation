@@ -135,3 +135,21 @@ placements, including overlap with durable rebuilding. Measure the actual
 the threshold. Full-quality Preview and export retain original artwork and
 accepted complete 49 by 49 generations. Scheduling, revision fences, explicit
 inference and selected-colour background behavior remain unchanged.
+
+## Amendment, 2026-10-20: defer progress reads during interactive composition
+
+Selected-template automatic readiness refetches wait while the existing editor
+preview loop is pending, then read the current backend state and reconnect to
+active work. The initial debounce belongs to that pending interval. A template
+switch still isolates late responses, and failures release the pending state.
+Explicit status and cancellation APIs remain available, with their no-store and
+revision behavior unchanged. This schedules requests; it does not cache a
+readiness answer or authorize different preparation work.
+
+Per-thread profiling of real 4200 by 4800 artwork showed status snapshots
+competing for CPU and the calibration lock while the numerical lane was already
+waiting for the foreground. A solver-boundary-only probe still missed one second.
+Deferring readiness work separately reduced the measured 12-edit maximum from
+1.000017 to 0.980563 seconds. These probe results justify targeting request work
+first; they do not establish the final latency requirement across all cases.
+Retain actual 1024px rasterization, readable artwork, and the strict threshold.
