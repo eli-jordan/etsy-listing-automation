@@ -1108,7 +1108,56 @@
         "title": "Body_upload_design_api_designs_post",
         "type": "object"
       },
+      "CalibrationSaveRequest": {
+        "additionalProperties": false,
+        "description": "A single recoverable calibration transaction under ADR-0054.",
+        "properties": {
+          "config": {
+            "discriminator": {
+              "mapping": {
+                "colour-matrix": "#/components/schemas/ColourMatrixTemplate",
+                "multiple": "#/components/schemas/MultipleTemplate",
+                "single": "#/components/schemas/SingleTemplate"
+              },
+              "propertyName": "kind"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ColourMatrixTemplate"
+              },
+              {
+                "$ref": "#/components/schemas/MultipleTemplate"
+              },
+              {
+                "$ref": "#/components/schemas/SingleTemplate"
+              }
+            ],
+            "title": "Config"
+          },
+          "mask_edits": {
+            "items": {
+              "$ref": "#/components/schemas/MaskEdit"
+            },
+            "maxItems": 256,
+            "title": "Mask Edits",
+            "type": "array"
+          },
+          "request_id": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Request Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "request_id",
+          "config"
+        ],
+        "title": "CalibrationSaveRequest",
+        "type": "object"
+      },
       "ColourMatrixPreviewRequest": {
+        "additionalProperties": false,
         "description": "Disambiguated from the other two preview shapes by required fields\nalone (``colour`` here, ``placements`` on ``MultiplePreviewRequest``,\nneither on ``SinglePreviewRequest``) -- extra fields are ignored rather\nthan forbidden, since a natural client pattern is spreading a whole\n``GET.../config`` response (which includes ``kind``) into the body.",
         "properties": {
           "bounding_box": {
@@ -1131,6 +1180,17 @@
             "title": "Bounding Box",
             "type": "array"
           },
+          "calibration_revision": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Calibration Revision"
+          },
           "colour": {
             "title": "Colour",
             "type": "string"
@@ -1140,30 +1200,49 @@
             "title": "Design",
             "type": "string"
           },
-          "displace": {
-            "$ref": "#/components/schemas/DisplaceConfig",
-            "default": {
-              "enabled": false,
-              "strength": 0.0
-            }
+          "kind": {
+            "const": "colour-matrix",
+            "default": "colour-matrix",
+            "title": "Kind",
+            "type": "string"
           },
-          "shade": {
-            "$ref": "#/components/schemas/ShadeConfig",
-            "default": {
-              "blend": "soft-light",
-              "enabled": true,
-              "opacity": 0.6
-            }
+          "mask_edits": {
+            "items": {
+              "$ref": "#/components/schemas/MaskEdit"
+            },
+            "maxItems": 32,
+            "title": "Mask Edits",
+            "type": "array"
+          },
+          "renderer": {
+            "discriminator": {
+              "mapping": {
+                "marigold": "#/components/schemas/MarigoldRenderer",
+                "photo-warp": "#/components/schemas/PhotoWarpRenderer"
+              },
+              "propertyName": "type"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/PhotoWarpRenderer"
+              },
+              {
+                "$ref": "#/components/schemas/MarigoldRenderer"
+              }
+            ],
+            "title": "Renderer"
           }
         },
         "required": [
           "colour",
-          "bounding_box"
+          "bounding_box",
+          "renderer"
         ],
         "title": "ColourMatrixPreviewRequest",
         "type": "object"
       },
       "ColourMatrixTemplate": {
+        "additionalProperties": false,
         "description": "One photo per colour, same design position in all of them. Scene\nimages are ``{colour-slug}.png`` per colour -- there is no\n``colours:`` list in the YAML, since the filenames present in the\ndirectory *are* the colour set.",
         "properties": {
           "bounding_box": {
@@ -1186,30 +1265,34 @@
             "title": "Bounding Box",
             "type": "array"
           },
-          "displace": {
-            "$ref": "#/components/schemas/DisplaceConfig",
-            "default": {
-              "enabled": false,
-              "strength": 0.0
-            }
-          },
           "kind": {
             "const": "colour-matrix",
             "default": "colour-matrix",
             "title": "Kind",
             "type": "string"
           },
-          "shade": {
-            "$ref": "#/components/schemas/ShadeConfig",
-            "default": {
-              "blend": "soft-light",
-              "enabled": true,
-              "opacity": 0.6
-            }
+          "renderer": {
+            "discriminator": {
+              "mapping": {
+                "marigold": "#/components/schemas/MarigoldRenderer",
+                "photo-warp": "#/components/schemas/PhotoWarpRenderer"
+              },
+              "propertyName": "type"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/PhotoWarpRenderer"
+              },
+              {
+                "$ref": "#/components/schemas/MarigoldRenderer"
+              }
+            ],
+            "title": "Renderer"
           }
         },
         "required": [
-          "bounding_box"
+          "bounding_box",
+          "renderer"
         ],
         "title": "ColourMatrixTemplate",
         "type": "object"
@@ -1369,6 +1452,58 @@
         "title": "CreateListingTemplateRequest",
         "type": "object"
       },
+      "CreatePreparationRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "default": "prepare",
+            "enum": [
+              "prepare",
+              "prepare_again",
+              "retry"
+            ],
+            "title": "Action",
+            "type": "string"
+          },
+          "config_revision": {
+            "title": "Config Revision",
+            "type": "string"
+          },
+          "previous_job": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Previous Job"
+          },
+          "request_id": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Request Id",
+            "type": "string"
+          },
+          "reset_masks_for_photo": {
+            "default": false,
+            "title": "Reset Masks For Photo",
+            "type": "boolean"
+          },
+          "template": {
+            "title": "Template",
+            "type": "string"
+          }
+        },
+        "required": [
+          "template",
+          "config_revision",
+          "request_id"
+        ],
+        "title": "CreatePreparationRequest",
+        "type": "object"
+      },
       "DescriptionConfig": {
         "additionalProperties": false,
         "properties": {
@@ -1486,6 +1621,7 @@
         "type": "object"
       },
       "DisplaceConfig": {
+        "additionalProperties": false,
         "description": "Implemented but off by default -- over-strong displacement looks\nmelted, so it's tuned per template in the calibrator's live preview.",
         "properties": {
           "enabled": {
@@ -2014,6 +2150,70 @@
         "title": "EtsyVideosStagePlanDTO",
         "type": "object"
       },
+      "Event": {
+        "additionalProperties": false,
+        "properties": {
+          "elapsed": {
+            "title": "Elapsed",
+            "type": "number"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "job_id": {
+            "title": "Job Id",
+            "type": "string"
+          },
+          "phase": {
+            "enum": [
+              "queued",
+              "running",
+              "cancelling",
+              "cancelled",
+              "superseded",
+              "failed",
+              "completed"
+            ],
+            "title": "Phase",
+            "type": "string"
+          },
+          "placements_completed": {
+            "title": "Placements Completed",
+            "type": "integer"
+          },
+          "placements_total": {
+            "title": "Placements Total",
+            "type": "integer"
+          },
+          "sequence": {
+            "title": "Sequence",
+            "type": "integer"
+          },
+          "step": {
+            "title": "Step",
+            "type": "string"
+          }
+        },
+        "required": [
+          "sequence",
+          "job_id",
+          "phase",
+          "step",
+          "elapsed",
+          "placements_completed",
+          "placements_total"
+        ],
+        "title": "Event",
+        "type": "object"
+      },
       "FieldChangeDTO": {
         "properties": {
           "after": {
@@ -2312,14 +2512,6 @@
         "additionalProperties": false,
         "description": "The full `Listing`, plus what the editor needs and nothing a listing\nitself would ever store: computed status, computed issues, and (only\nmeaningful right after a PATCH) which fields a rejected candidate failed\non.",
         "properties": {
-          "artwork": {
-            "additionalProperties": {
-              "type": "string"
-            },
-            "default": {},
-            "title": "Artwork",
-            "type": "object"
-          },
           "brief": {
             "title": "Brief",
             "type": "string"
@@ -2338,8 +2530,16 @@
           },
           "design": {
             "additionalProperties": {
-              "type": "string"
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
             },
+            "default": {},
             "title": "Design",
             "type": "object"
           },
@@ -2585,7 +2785,6 @@
         },
         "required": [
           "garment_profile",
-          "design",
           "colors",
           "brief",
           "media",
@@ -3279,6 +3478,246 @@
         "title": "LiveVideoSnapshot",
         "type": "object"
       },
+      "MapReadinessResponse": {
+        "properties": {
+          "can_render": {
+            "title": "Can Render",
+            "type": "boolean"
+          },
+          "content_digest": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Content Digest"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "state": {
+            "enum": [
+              "needs_preparation",
+              "out_of_date",
+              "ready",
+              "not_required"
+            ],
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "state",
+          "can_render"
+        ],
+        "title": "MapReadinessResponse",
+        "type": "object"
+      },
+      "MarigoldAppearance": {
+        "additionalProperties": false,
+        "properties": {
+          "fabric_texture": {
+            "default": 0.25,
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Fabric Texture",
+            "type": "number"
+          },
+          "lighting_source": {
+            "default": "estimated",
+            "enum": [
+              "estimated",
+              "photo"
+            ],
+            "title": "Lighting Source",
+            "type": "string"
+          },
+          "lighting_strength": {
+            "default": 1.0,
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Lighting Strength",
+            "type": "number"
+          },
+          "print_shine": {
+            "default": 0.0,
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Print Shine",
+            "type": "number"
+          }
+        },
+        "title": "MarigoldAppearance",
+        "type": "object"
+      },
+      "MarigoldConfig": {
+        "additionalProperties": false,
+        "properties": {
+          "appearance": {
+            "$ref": "#/components/schemas/MarigoldAppearance",
+            "default": {
+              "fabric_texture": 0.25,
+              "lighting_source": "estimated",
+              "lighting_strength": 1.0,
+              "print_shine": 0.0
+            }
+          },
+          "inference": {
+            "$ref": "#/components/schemas/MarigoldInference",
+            "default": {
+              "ensemble_size": 3,
+              "num_inference_steps": 10
+            }
+          }
+        },
+        "title": "MarigoldConfig",
+        "type": "object"
+      },
+      "MarigoldInference": {
+        "additionalProperties": false,
+        "properties": {
+          "ensemble_size": {
+            "default": 3,
+            "exclusiveMinimum": 0.0,
+            "title": "Ensemble Size",
+            "type": "integer"
+          },
+          "num_inference_steps": {
+            "default": 10,
+            "exclusiveMinimum": 0.0,
+            "title": "Num Inference Steps",
+            "type": "integer"
+          }
+        },
+        "title": "MarigoldInference",
+        "type": "object"
+      },
+      "MarigoldRenderer": {
+        "additionalProperties": false,
+        "properties": {
+          "config": {
+            "$ref": "#/components/schemas/MarigoldConfig",
+            "default": {
+              "appearance": {
+                "fabric_texture": 0.25,
+                "lighting_source": "estimated",
+                "lighting_strength": 1.0,
+                "print_shine": 0.0
+              },
+              "inference": {
+                "ensemble_size": 3,
+                "num_inference_steps": 10
+              }
+            }
+          },
+          "type": {
+            "const": "marigold",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type"
+        ],
+        "title": "MarigoldRenderer",
+        "type": "object"
+      },
+      "MarigoldRuntimeResponse": {
+        "properties": {
+          "available": {
+            "title": "Available",
+            "type": "boolean"
+          },
+          "engine_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Engine Version"
+          },
+          "installation_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Installation Id"
+          },
+          "max_ensemble_size": {
+            "title": "Max Ensemble Size",
+            "type": "integer"
+          },
+          "max_image_dimension": {
+            "title": "Max Image Dimension",
+            "type": "integer"
+          },
+          "max_num_inference_steps": {
+            "title": "Max Num Inference Steps",
+            "type": "integer"
+          },
+          "problem": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Problem"
+          },
+          "required_engine": {
+            "title": "Required Engine",
+            "type": "string"
+          },
+          "update_available": {
+            "title": "Update Available",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "available",
+          "problem",
+          "engine_version",
+          "required_engine",
+          "installation_id",
+          "update_available",
+          "max_num_inference_steps",
+          "max_ensemble_size",
+          "max_image_dimension"
+        ],
+        "title": "MarigoldRuntimeResponse",
+        "type": "object"
+      },
       "MarketSnapshot": {
         "description": "One research, as the panel reads it back: the result's fields, when\nthe search ran, and the exact block the proposal was given. Holds each\nlisting's lead, never its full description (features/market-seo-20260924/spec.md, *What the\nproposal sees*).",
         "properties": {
@@ -3341,6 +3780,97 @@
           "block"
         ],
         "title": "MarketSnapshot",
+        "type": "object"
+      },
+      "MaskEdit": {
+        "additionalProperties": false,
+        "properties": {
+          "operations": {
+            "items": {
+              "discriminator": {
+                "mapping": {
+                  "reset": "#/components/schemas/Reset",
+                  "stroke": "#/components/schemas/Stroke",
+                  "undo": "#/components/schemas/Undo"
+                },
+                "propertyName": "type"
+              },
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/Stroke"
+                },
+                {
+                  "$ref": "#/components/schemas/Undo"
+                },
+                {
+                  "$ref": "#/components/schemas/Reset"
+                }
+              ]
+            },
+            "maxItems": 256,
+            "minItems": 1,
+            "title": "Operations",
+            "type": "array"
+          },
+          "placement_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Placement Id"
+          }
+        },
+        "required": [
+          "operations"
+        ],
+        "title": "MaskEdit",
+        "type": "object"
+      },
+      "MaskHistoryResponse": {
+        "properties": {
+          "checksum": {
+            "title": "Checksum",
+            "type": "string"
+          },
+          "strokes": {
+            "items": {
+              "$ref": "#/components/schemas/MaskHistoryStroke"
+            },
+            "title": "Strokes",
+            "type": "array"
+          },
+          "undo_count": {
+            "title": "Undo Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "checksum",
+          "undo_count",
+          "strokes"
+        ],
+        "title": "MaskHistoryResponse",
+        "type": "object"
+      },
+      "MaskHistoryStroke": {
+        "properties": {
+          "before": {
+            "title": "Before",
+            "type": "string"
+          },
+          "operation": {
+            "$ref": "#/components/schemas/Stroke"
+          }
+        },
+        "required": [
+          "before",
+          "operation"
+        ],
+        "title": "MaskHistoryStroke",
         "type": "object"
       },
       "MediaChangeDTO": {
@@ -3420,18 +3950,46 @@
         "type": "object"
       },
       "MultiplePreviewRequest": {
+        "additionalProperties": false,
         "properties": {
+          "calibration_revision": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Calibration Revision"
+          },
+          "colour_coverage": {
+            "default": "exact",
+            "enum": [
+              "exact",
+              "subset"
+            ],
+            "title": "Colour Coverage",
+            "type": "string"
+          },
           "design": {
             "default": "bundled-grid",
             "title": "Design",
             "type": "string"
           },
-          "displace": {
-            "$ref": "#/components/schemas/DisplaceConfig",
-            "default": {
-              "enabled": false,
-              "strength": 0.0
-            }
+          "kind": {
+            "const": "multiple",
+            "default": "multiple",
+            "title": "Kind",
+            "type": "string"
+          },
+          "mask_edits": {
+            "items": {
+              "$ref": "#/components/schemas/MaskEdit"
+            },
+            "maxItems": 32,
+            "title": "Mask Edits",
+            "type": "array"
           },
           "placements": {
             "items": {
@@ -3440,22 +3998,34 @@
             "title": "Placements",
             "type": "array"
           },
-          "shade": {
-            "$ref": "#/components/schemas/ShadeConfig",
-            "default": {
-              "blend": "soft-light",
-              "enabled": true,
-              "opacity": 0.6
-            }
+          "renderer": {
+            "discriminator": {
+              "mapping": {
+                "marigold": "#/components/schemas/MarigoldRenderer",
+                "photo-warp": "#/components/schemas/PhotoWarpRenderer"
+              },
+              "propertyName": "type"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/PhotoWarpRenderer"
+              },
+              {
+                "$ref": "#/components/schemas/MarigoldRenderer"
+              }
+            ],
+            "title": "Renderer"
           }
         },
         "required": [
-          "placements"
+          "placements",
+          "renderer"
         ],
         "title": "MultiplePreviewRequest",
         "type": "object"
       },
       "MultipleTemplate": {
+        "additionalProperties": false,
         "description": "Several garments in one photo. ``displace``/``shade`` are scene-level\nonly -- one photo, one lighting pass; a placement needing different\nrendering treatment belongs in its own template instead.",
         "properties": {
           "colour_coverage": {
@@ -3466,13 +4036,6 @@
             ],
             "title": "Colour Coverage",
             "type": "string"
-          },
-          "displace": {
-            "$ref": "#/components/schemas/DisplaceConfig",
-            "default": {
-              "enabled": false,
-              "strength": 0.0
-            }
           },
           "kind": {
             "const": "multiple",
@@ -3487,17 +4050,28 @@
             "title": "Placements",
             "type": "array"
           },
-          "shade": {
-            "$ref": "#/components/schemas/ShadeConfig",
-            "default": {
-              "blend": "soft-light",
-              "enabled": true,
-              "opacity": 0.6
-            }
+          "renderer": {
+            "discriminator": {
+              "mapping": {
+                "marigold": "#/components/schemas/MarigoldRenderer",
+                "photo-warp": "#/components/schemas/PhotoWarpRenderer"
+              },
+              "propertyName": "type"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/PhotoWarpRenderer"
+              },
+              {
+                "$ref": "#/components/schemas/MarigoldRenderer"
+              }
+            ],
+            "title": "Renderer"
           }
         },
         "required": [
-          "placements"
+          "placements",
+          "renderer"
         ],
         "title": "MultipleTemplate",
         "type": "object"
@@ -3555,6 +4129,57 @@
         "title": "PhaseEvent",
         "type": "object"
       },
+      "PhotoWarpConfig": {
+        "additionalProperties": false,
+        "properties": {
+          "displace": {
+            "$ref": "#/components/schemas/DisplaceConfig",
+            "default": {
+              "enabled": false,
+              "strength": 0.0
+            }
+          },
+          "shade": {
+            "$ref": "#/components/schemas/ShadeConfig",
+            "default": {
+              "blend": "soft-light",
+              "enabled": true,
+              "opacity": 0.6
+            }
+          }
+        },
+        "title": "PhotoWarpConfig",
+        "type": "object"
+      },
+      "PhotoWarpRenderer": {
+        "additionalProperties": false,
+        "properties": {
+          "config": {
+            "$ref": "#/components/schemas/PhotoWarpConfig",
+            "default": {
+              "displace": {
+                "enabled": false,
+                "strength": 0.0
+              },
+              "shade": {
+                "blend": "soft-light",
+                "enabled": true,
+                "opacity": 0.6
+              }
+            }
+          },
+          "type": {
+            "const": "photo-warp",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type"
+        ],
+        "title": "PhotoWarpRenderer",
+        "type": "object"
+      },
       "PhraseScore": {
         "description": "One tag used by the scored listings: how many use it, and the sum of\ntheir scores normalised so the best phrase is 1.",
         "properties": {
@@ -3598,19 +4223,9 @@
         "type": "object"
       },
       "Placement": {
+        "additionalProperties": false,
         "description": "One garment within a ``multiple``-kind scene.",
         "properties": {
-          "artwork": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Artwork"
-          },
           "bounding_box": {
             "maxItems": 4,
             "minItems": 4,
@@ -3634,9 +4249,14 @@
           "colour": {
             "title": "Colour",
             "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
           }
         },
         "required": [
+          "id",
           "colour",
           "bounding_box"
         ],
@@ -3900,6 +4520,7 @@
         "type": "object"
       },
       "Point": {
+        "additionalProperties": false,
         "properties": {
           "x": {
             "title": "X",
@@ -3915,6 +4536,242 @@
           "y"
         ],
         "title": "Point",
+        "type": "object"
+      },
+      "PreparationJobResponse": {
+        "properties": {
+          "config_revision": {
+            "title": "Config Revision",
+            "type": "string"
+          },
+          "elapsed": {
+            "title": "Elapsed",
+            "type": "number"
+          },
+          "engine_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Engine Version"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "prepare",
+              "rebuild"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "last_event_sequence": {
+            "title": "Last Event Sequence",
+            "type": "integer"
+          },
+          "phase": {
+            "enum": [
+              "queued",
+              "running",
+              "cancelling",
+              "cancelled",
+              "superseded",
+              "failed",
+              "completed"
+            ],
+            "title": "Phase",
+            "type": "string"
+          },
+          "placements_completed": {
+            "title": "Placements Completed",
+            "type": "integer"
+          },
+          "placements_total": {
+            "title": "Placements Total",
+            "type": "integer"
+          },
+          "queue_position": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Queue Position"
+          },
+          "step": {
+            "title": "Step",
+            "type": "string"
+          },
+          "template": {
+            "title": "Template",
+            "type": "string"
+          }
+        },
+        "required": [
+          "config_revision",
+          "id",
+          "template",
+          "kind",
+          "phase",
+          "step",
+          "elapsed",
+          "placements_completed",
+          "placements_total",
+          "error",
+          "last_event_sequence",
+          "queue_position",
+          "engine_version"
+        ],
+        "title": "PreparationJobResponse",
+        "type": "object"
+      },
+      "PreparationPlacementResponse": {
+        "properties": {
+          "mask_available": {
+            "title": "Mask Available",
+            "type": "boolean"
+          },
+          "mask_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mask Reason"
+          },
+          "placement_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Placement Id"
+          },
+          "undo_count": {
+            "title": "Undo Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "placement_id",
+          "mask_available",
+          "mask_reason",
+          "undo_count"
+        ],
+        "title": "PreparationPlacementResponse",
+        "type": "object"
+      },
+      "PreparationResponse": {
+        "properties": {
+          "active_job": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PreparationJobResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "config_revision": {
+            "title": "Config Revision",
+            "type": "string"
+          },
+          "latest_job": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PreparationJobResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "main_photo": {
+            "title": "Main Photo",
+            "type": "string"
+          },
+          "maps": {
+            "$ref": "#/components/schemas/MapReadinessResponse"
+          },
+          "placements": {
+            "items": {
+              "$ref": "#/components/schemas/PreparationPlacementResponse"
+            },
+            "title": "Placements",
+            "type": "array"
+          },
+          "prepared_engine": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prepared Engine"
+          },
+          "renderer_settings": {
+            "additionalProperties": true,
+            "title": "Renderer Settings",
+            "type": "object"
+          },
+          "template": {
+            "title": "Template",
+            "type": "string"
+          }
+        },
+        "required": [
+          "template",
+          "config_revision",
+          "main_photo",
+          "maps",
+          "placements",
+          "active_job",
+          "latest_job",
+          "renderer_settings",
+          "prepared_engine"
+        ],
+        "title": "PreparationResponse",
+        "type": "object"
+      },
+      "PreparationResyncResponse": {
+        "properties": {
+          "resync": {
+            "const": true,
+            "default": true,
+            "title": "Resync",
+            "type": "boolean"
+          }
+        },
+        "title": "PreparationResyncResponse",
         "type": "object"
       },
       "PreviewRenderedEvent": {
@@ -4601,6 +5458,21 @@
         "title": "RenderStagePlanDTO",
         "type": "object"
       },
+      "Reset": {
+        "additionalProperties": false,
+        "properties": {
+          "type": {
+            "const": "reset",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type"
+        ],
+        "title": "Reset",
+        "type": "object"
+      },
       "ResolvedPrice": {
         "properties": {
           "amount": {
@@ -4846,7 +5718,14 @@
           },
           "design": {
             "additionalProperties": {
-              "type": "string"
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
             },
             "title": "Design",
             "type": "object"
@@ -5006,6 +5885,7 @@
         "type": "object"
       },
       "ShadeConfig": {
+        "additionalProperties": false,
         "description": "Blends the base mockup photo's own greyscale lighting over the printed\ndesign, so a flat design picks up the garment's real fold shadows and\nlight falloff instead of looking pasted on as a flat rectangle -- this is\nwhy a plain flat-lay PNG is enough to mock up, with no purchased\nPhotoshop lighting map needed. On by default: almost every mockup needs\nit. ``multiply`` crushes prints on dark garments, so ``soft-light`` or a\nmid-grey pivot is used for those instead.",
         "properties": {
           "blend": {
@@ -5033,56 +5913,7 @@
         "type": "object"
       },
       "SinglePreviewRequest": {
-        "properties": {
-          "bounding_box": {
-            "maxItems": 4,
-            "minItems": 4,
-            "prefixItems": [
-              {
-                "$ref": "#/components/schemas/Point"
-              },
-              {
-                "$ref": "#/components/schemas/Point"
-              },
-              {
-                "$ref": "#/components/schemas/Point"
-              },
-              {
-                "$ref": "#/components/schemas/Point"
-              }
-            ],
-            "title": "Bounding Box",
-            "type": "array"
-          },
-          "design": {
-            "default": "bundled-grid",
-            "title": "Design",
-            "type": "string"
-          },
-          "displace": {
-            "$ref": "#/components/schemas/DisplaceConfig",
-            "default": {
-              "enabled": false,
-              "strength": 0.0
-            }
-          },
-          "shade": {
-            "$ref": "#/components/schemas/ShadeConfig",
-            "default": {
-              "blend": "soft-light",
-              "enabled": true,
-              "opacity": 0.6
-            }
-          }
-        },
-        "required": [
-          "bounding_box"
-        ],
-        "title": "SinglePreviewRequest",
-        "type": "object"
-      },
-      "SingleTemplate": {
-        "description": "One photo, one garment -- a lifestyle shot, a folded product photo,\nanything that isn't part of a colour set.",
+        "additionalProperties": false,
         "properties": {
           "artwork": {
             "anyOf": [
@@ -5115,6 +5946,17 @@
             "title": "Bounding Box",
             "type": "array"
           },
+          "calibration_revision": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Calibration Revision"
+          },
           "colour": {
             "anyOf": [
               {
@@ -5126,12 +5968,10 @@
             ],
             "title": "Colour"
           },
-          "displace": {
-            "$ref": "#/components/schemas/DisplaceConfig",
-            "default": {
-              "enabled": false,
-              "strength": 0.0
-            }
+          "design": {
+            "default": "bundled-grid",
+            "title": "Design",
+            "type": "string"
           },
           "kind": {
             "const": "single",
@@ -5139,17 +5979,103 @@
             "title": "Kind",
             "type": "string"
           },
-          "shade": {
-            "$ref": "#/components/schemas/ShadeConfig",
-            "default": {
-              "blend": "soft-light",
-              "enabled": true,
-              "opacity": 0.6
-            }
+          "mask_edits": {
+            "items": {
+              "$ref": "#/components/schemas/MaskEdit"
+            },
+            "maxItems": 32,
+            "title": "Mask Edits",
+            "type": "array"
+          },
+          "renderer": {
+            "discriminator": {
+              "mapping": {
+                "marigold": "#/components/schemas/MarigoldRenderer",
+                "photo-warp": "#/components/schemas/PhotoWarpRenderer"
+              },
+              "propertyName": "type"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/PhotoWarpRenderer"
+              },
+              {
+                "$ref": "#/components/schemas/MarigoldRenderer"
+              }
+            ],
+            "title": "Renderer"
           }
         },
         "required": [
-          "bounding_box"
+          "bounding_box",
+          "renderer"
+        ],
+        "title": "SinglePreviewRequest",
+        "type": "object"
+      },
+      "SingleTemplate": {
+        "additionalProperties": false,
+        "description": "One photo, one garment -- a lifestyle shot, a folded product photo,\nanything that isn't part of a colour set.",
+        "properties": {
+          "bounding_box": {
+            "maxItems": 4,
+            "minItems": 4,
+            "prefixItems": [
+              {
+                "$ref": "#/components/schemas/Point"
+              },
+              {
+                "$ref": "#/components/schemas/Point"
+              },
+              {
+                "$ref": "#/components/schemas/Point"
+              },
+              {
+                "$ref": "#/components/schemas/Point"
+              }
+            ],
+            "title": "Bounding Box",
+            "type": "array"
+          },
+          "colour": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Colour"
+          },
+          "kind": {
+            "const": "single",
+            "default": "single",
+            "title": "Kind",
+            "type": "string"
+          },
+          "renderer": {
+            "discriminator": {
+              "mapping": {
+                "marigold": "#/components/schemas/MarigoldRenderer",
+                "photo-warp": "#/components/schemas/PhotoWarpRenderer"
+              },
+              "propertyName": "type"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/PhotoWarpRenderer"
+              },
+              {
+                "$ref": "#/components/schemas/MarigoldRenderer"
+              }
+            ],
+            "title": "Renderer"
+          }
+        },
+        "required": [
+          "bounding_box",
+          "renderer"
         ],
         "title": "SingleTemplate",
         "type": "object"
@@ -5557,6 +6483,57 @@
         "title": "StagingRowDetail",
         "type": "object"
       },
+      "Stroke": {
+        "additionalProperties": false,
+        "properties": {
+          "diameter_px": {
+            "exclusiveMinimum": 0.0,
+            "maximum": 10000.0,
+            "title": "Diameter Px",
+            "type": "number"
+          },
+          "mode": {
+            "enum": [
+              "mask",
+              "unmask"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "points": {
+            "items": {
+              "maxItems": 2,
+              "minItems": 2,
+              "prefixItems": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                }
+              ],
+              "type": "array"
+            },
+            "maxItems": 10000,
+            "minItems": 1,
+            "title": "Points",
+            "type": "array"
+          },
+          "type": {
+            "const": "stroke",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "mode",
+          "diameter_px",
+          "points"
+        ],
+        "title": "Stroke",
+        "type": "object"
+      },
       "SwatchResponse": {
         "description": "A colour-matrix colour's real garment shade, sampled off its own scene\nphoto (`render/swatch.py`'s `sample_swatch`) rather than an invented or\nhand-typed hex value -- nothing in the domain model stores one.",
         "properties": {
@@ -5753,6 +6730,16 @@
             ],
             "title": "Kind"
           },
+          "maps": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MapReadinessResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "name": {
             "title": "Name",
             "type": "string"
@@ -5764,6 +6751,21 @@
             },
             "title": "Photos",
             "type": "array"
+          },
+          "renderer": {
+            "anyOf": [
+              {
+                "enum": [
+                  "photo-warp",
+                  "marigold"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Renderer"
           },
           "status": {
             "enum": [
@@ -5804,6 +6806,21 @@
           "status"
         ],
         "title": "TemplateSummary",
+        "type": "object"
+      },
+      "Undo": {
+        "additionalProperties": false,
+        "properties": {
+          "type": {
+            "const": "undo",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type"
+        ],
+        "title": "Undo",
         "type": "object"
       },
       "ValidationError": {
@@ -6922,6 +7939,47 @@
           }
         },
         "summary": "Upload Design",
+        "tags": [
+          "designs"
+        ]
+      }
+    },
+    "/api/designs/{design}/image": {
+      "get": {
+        "description": "Original RGBA artwork for responsive local placement, without rendering.",
+        "operationId": "design_image_api_designs__design__image_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "design",
+            "required": true,
+            "schema": {
+              "title": "Design",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Design Image",
         "tags": [
           "designs"
         ]
@@ -8417,6 +9475,374 @@
         ]
       }
     },
+    "/api/listings/{name}/scene-preview": {
+      "get": {
+        "description": "One of this listing's scenes, each layer printing the file its depicted\ncolour resolves to in the *saved* listing (A35) -- the Variants stage and\nevery Listing Images picture, multi-colour scenes included (spec:\n*Previews*). Resolved here rather than from a design name in the URL,\nbecause the editor showing one file while Printify prints another is the\nthing a single resolver exists to prevent.\n\nA layer that resolves to nothing is left bare rather than failing the\npicture (:func:`~etsy_listings.core.application.listing_reads.scene_artwork`).\n``v`` is ignored; the editor sends a signature of the saved design so a\nlanded save is a new URL and the browser fetches it again.",
+        "operationId": "scene_preview_api_listings__name__scene_preview_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "template",
+            "required": true,
+            "schema": {
+              "title": "Template",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "colour",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Colour"
+            }
+          },
+          {
+            "in": "query",
+            "name": "scale",
+            "required": false,
+            "schema": {
+              "default": "full",
+              "enum": [
+                "editor",
+                "full"
+              ],
+              "title": "Scale",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "v",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "V"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Scene Preview",
+        "tags": [
+          "listings"
+        ]
+      }
+    },
+    "/api/marigold/runtime": {
+      "get": {
+        "operationId": "runtime_status_api_marigold_runtime_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MarigoldRuntimeResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Runtime Status",
+        "tags": [
+          "preparation"
+        ]
+      }
+    },
+    "/api/preparation/jobs": {
+      "get": {
+        "operationId": "jobs_api_preparation_jobs_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "template",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Template"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 1000,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/PreparationJobResponse"
+                  },
+                  "title": "Response Jobs Api Preparation Jobs Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Jobs",
+        "tags": [
+          "preparation"
+        ]
+      },
+      "post": {
+        "operationId": "submit_api_preparation_jobs_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreatePreparationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PreparationJobResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Submit",
+        "tags": [
+          "preparation"
+        ]
+      }
+    },
+    "/api/preparation/jobs/{identity}": {
+      "delete": {
+        "operationId": "cancel_api_preparation_jobs__identity__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "identity",
+            "required": true,
+            "schema": {
+              "title": "Identity",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PreparationJobResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Cancel",
+        "tags": [
+          "preparation"
+        ]
+      },
+      "get": {
+        "operationId": "job_status_api_preparation_jobs__identity__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "identity",
+            "required": true,
+            "schema": {
+              "title": "Identity",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PreparationJobResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Job Status",
+        "tags": [
+          "preparation"
+        ]
+      }
+    },
+    "/api/preparation/jobs/{identity}/events": {
+      "get": {
+        "operationId": "events_api_preparation_jobs__identity__events_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "identity",
+            "required": true,
+            "schema": {
+              "title": "Identity",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/Event"
+                    },
+                    {
+                      "$ref": "#/components/schemas/PreparationJobResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/PreparationResyncResponse"
+                    }
+                  ],
+                  "title": "Response 200 Events Api Preparation Jobs  Identity  Events Get"
+                }
+              },
+              "text/event-stream": {}
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Events",
+        "tags": [
+          "preparation"
+        ]
+      }
+    },
     "/api/pricing-plans": {
       "get": {
         "description": "Every plan, each flagged for whether it was built for this garment.\n\n``garment_profile`` is optional because a listing that has not chosen one\nyet has nothing to be compatible *with*: asking with an empty name says that\nhonestly, and the editor then drops the \"different garment\" note rather than\nlabelling every plan as differing from a garment nobody picked.",
@@ -9241,24 +10667,22 @@
               "title": "Name",
               "type": "string"
             }
+          },
+          {
+            "in": "header",
+            "name": "if-match",
+            "required": true,
+            "schema": {
+              "title": "If-Match",
+              "type": "string"
+            }
           }
         ],
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "anyOf": [
-                  {
-                    "$ref": "#/components/schemas/ColourMatrixTemplate"
-                  },
-                  {
-                    "$ref": "#/components/schemas/MultipleTemplate"
-                  },
-                  {
-                    "$ref": "#/components/schemas/SingleTemplate"
-                  }
-                ],
-                "title": "Body"
+                "$ref": "#/components/schemas/CalibrationSaveRequest"
               }
             }
           },
@@ -9313,7 +10737,7 @@
     },
     "/api/templates/{name}/design-preview": {
       "get": {
-        "description": "A listing's *real* artwork, composited onto this template's saved\ngeometry -- what the listing editor's Variants/Listing Images tabs show\nso a colour can be judged against the actual design, not a bare photo.\n\n``design`` is a name from ``GET /api/listing-designs``, resolved through\n``Workspace.design_file`` -- deliberately not :func:`resolve_design`,\nwhich is the calibrator's own test-design library and never sees a\nlisting's real artwork.\n\n``test_design`` is that library's id instead, for the listing-template\neditor (UI doc \u00a73): a listing template has no artwork, so it is viewed\nthrough a calibrator test design, bundled grid by default. Exactly one of\nthe two -- they name files in different places, and guessing which one a\nbare name meant is how a test target would end up judged as artwork.",
+        "description": "One design on every layer of this template's saved geometry -- the\nlisting-template editor's preview (UI doc \u00a73): a listing template has no\nartwork, so it is viewed through a design picked only to preview with.\n\n``design`` is a name from ``GET /api/listing-designs``, resolved through\n``Workspace.design_file``; ``test_design`` is the calibrator library's id\ninstead, through :func:`resolve_design`, bundled grid by default. Exactly\none of the two -- they name files in different places, and guessing which\none a bare name meant is how a test target would end up judged as artwork.\n\nA *listing's* scenes are not previewed here: ``GET\n/api/listings/{name}/scene-preview`` resolves each layer's file from the\nsaved listing (A35), so its editor cannot show one file while Printify\nprints another.",
         "operationId": "design_preview_api_templates__name__design_preview_get",
         "parameters": [
           {
@@ -9486,6 +10910,102 @@
         ]
       }
     },
+    "/api/templates/{name}/mask": {
+      "get": {
+        "operationId": "mask_api_templates__name__mask_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "source",
+            "required": false,
+            "schema": {
+              "default": "edited",
+              "enum": [
+                "edited",
+                "automatic"
+              ],
+              "title": "Source",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Mask",
+        "tags": [
+          "preparation"
+        ]
+      }
+    },
+    "/api/templates/{name}/mask-history": {
+      "get": {
+        "operationId": "mask_history_api_templates__name__mask_history_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MaskHistoryResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Mask History",
+        "tags": [
+          "preparation"
+        ]
+      }
+    },
     "/api/templates/{name}/photo": {
       "get": {
         "description": "The same photo at its own resolution, for the listing editors' large\npreview stage when no design is picked yet.",
@@ -9540,6 +11060,162 @@
         "summary": "Photo",
         "tags": [
           "templates"
+        ]
+      }
+    },
+    "/api/templates/{name}/placements/{placement_id}/mask": {
+      "get": {
+        "operationId": "placement_mask_api_templates__name__placements__placement_id__mask_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "placement_id",
+            "required": true,
+            "schema": {
+              "title": "Placement Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "source",
+            "required": false,
+            "schema": {
+              "default": "edited",
+              "enum": [
+                "edited",
+                "automatic"
+              ],
+              "title": "Source",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Placement Mask",
+        "tags": [
+          "preparation"
+        ]
+      }
+    },
+    "/api/templates/{name}/placements/{placement_id}/mask-history": {
+      "get": {
+        "operationId": "placement_history_api_templates__name__placements__placement_id__mask_history_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "placement_id",
+            "required": true,
+            "schema": {
+              "title": "Placement Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MaskHistoryResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Placement History",
+        "tags": [
+          "preparation"
+        ]
+      }
+    },
+    "/api/templates/{name}/preparation": {
+      "get": {
+        "operationId": "status_api_templates__name__preparation_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PreparationResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Status",
+        "tags": [
+          "preparation"
         ]
       }
     },

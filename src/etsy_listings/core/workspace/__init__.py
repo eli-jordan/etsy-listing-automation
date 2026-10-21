@@ -23,6 +23,15 @@ through ``ListingDocuments`` for its lock, retrying read and atomic replace,
 and for the one answer to "is there a listing?" and "is this name free?".
 It is imported from its own module, as ``atomic`` is, rather than from here.
 
+``calibration.CalibrationStore`` owns mockup-template read/save recovery,
+revision conflicts, save receipts, inactive renderer selection and durable mask
+operations. Its template lock is process-wide and separate from listing-template
+locks. ``Workspace.load_template_config`` takes that lock but refuses an active
+transaction, so concurrent CLI reads never recover a live server save. Server
+operations read through the store, which recovers interrupted transactions first.
+Mask PNGs and transactions are template assets; only stroke Undo is cached.
+This module deliberately does not re-export the store or its edit models.
+
 :class:`WorkspaceFacts` is the same rule applied to *repeated* reading: the
 garment profiles and template configs a listing check needs, gathered once for
 a request rather than re-parsed inside every check of every row -- and the
@@ -31,7 +40,7 @@ probe itself, the one reader of a clip's facts.
 """
 
 from etsy_listings.core.workspace import layout
-from etsy_listings.core.workspace.facts import WorkspaceFacts
+from etsy_listings.core.workspace.facts import WorkspaceFacts, template_info
 from etsy_listings.core.workspace.userpath import to_native_path
 from etsy_listings.core.workspace.video import probe_video
 from etsy_listings.core.workspace.workspace import (
@@ -51,6 +60,8 @@ __all__ = [
     "ScenePhoto",
     # What a listing check reads off the tree, gathered once per request.
     "WorkspaceFacts",
+    # One loaded template as that check sees it, for a stage that has the config.
+    "template_info",
     # A video file's facts, never an exception.
     "probe_video",
     # The five refusals, each naming what it refused and why.

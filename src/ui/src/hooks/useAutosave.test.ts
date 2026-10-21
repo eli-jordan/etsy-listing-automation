@@ -12,7 +12,6 @@ function detail(over: Partial<ListingDetail> = {}): ListingDetail {
     brief: "",
     prices: {},
     price_overrides: {},
-    artwork: {},
     pricing_plan: null,
     etsy: {
       title: "",
@@ -585,7 +584,7 @@ describe("useAutosave before the listing exists", () => {
     vi.spyOn(listingsApi, "describeListingDraft").mockResolvedValue(draft());
     const { result, unmount } = renderHook(() => useAutosave(null, draft()));
 
-    // What `DesignSelect` sends. Held as a string, `Object.keys` on it reports
+    // The form `listing.yaml` may still hold. Held as a string, `Object.keys` on it reports
     // one "artwork" per character.
     act(() => result.current.update({ design: "designs/take-a-hike.png" }));
 
