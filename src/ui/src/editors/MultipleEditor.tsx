@@ -212,7 +212,7 @@ function PhotoWarpMultipleEditor({
       space={space}
       previewUrl={previewUrl}
       jobs={jobs}
-      outlineLabel="show all outlines"
+      outlineLabel="Show all design boxes"
       canvas={({ imageUrl, space: box_space, showOutlines }) =>
         config.placements.length === 0 ? (
           <div className="quad-editor__empty">

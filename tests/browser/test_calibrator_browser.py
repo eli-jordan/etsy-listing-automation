@@ -375,7 +375,7 @@ class TestColourMatrixKind:
         the boxes you are not working on."""
         _select_template(page, COLOUR_MATRIX_TEMPLATE)
         page.wait_for_selector(HANDLE)
-        page.get_by_label("show placement outline").uncheck()
+        page.get_by_role("switch", name="Show design box").uncheck()
         page.wait_for_function("() => document.querySelectorAll('.quad-editor__box').length === 0")
         assert page.locator(HANDLE).count() == 0
 
@@ -581,7 +581,7 @@ class TestMultipleKind:
         _select_template(page, MULTIPLE_TEMPLATE)
         page.wait_for_selector(".quad-editor__box")
         assert page.locator(".quad-editor__box").count() == 2
-        page.get_by_label("show all outlines").uncheck()
+        page.get_by_role("switch", name="Show all design boxes").uncheck()
         # The selected box keeps its handles -- the toggle is for judging the
         # render, not for giving up the ability to fix it.
         page.wait_for_function("() => document.querySelectorAll('.quad-editor__box').length === 1")
@@ -736,7 +736,7 @@ class TestKindPickerCreatesEachKind:
         page.get_by_role("button", name="Start calibrating →").click()
         page.wait_for_selector(HANDLE)
 
-        page.get_by_label("show placement outline").uncheck()
+        page.get_by_role("switch", name="Show design box").uncheck()
         page.wait_for_function("() => document.querySelectorAll('.quad-editor__box').length === 0")
         assert page.locator(HANDLE).count() == 0
 

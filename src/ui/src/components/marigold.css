@@ -96,11 +96,6 @@
 .mg-slider-label {
   font-size: 12px;
 }
-.mg-main-photo {
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--color-neutral-700);
-}
 .mg-stage {
   position: relative;
 }
@@ -176,6 +171,11 @@
   gap: var(--space-2);
   border-block: 1px solid var(--color-divider);
   padding-block: var(--space-2);
+}
+.mg-progress.mg-rebuild {
+  flex-direction: row;
+  align-items: center;
+  font-size: 12px;
 }
 .mg-progress .mg-row {
   font-size: 11px;
@@ -571,7 +571,6 @@
   }
 }
 
-.mg-maskbar,
 .mg-mask-dock {
   display: flex;
   align-items: center;
@@ -579,12 +578,6 @@
   font: 12px var(--font-body);
   background: var(--color-bg);
 }
-.mg-maskbar {
-  position: relative;
-  padding: 10px 12px;
-  border-bottom: 1px solid var(--color-divider);
-}
-.mg-maskbar button,
 .mg-mask-dock button {
   display: inline-flex;
   align-items: center;
@@ -598,51 +591,12 @@
   font: inherit;
   white-space: nowrap;
 }
-.mg-maskbar button:hover,
 .mg-mask-dock button:hover {
   background: var(--color-accent-100);
 }
-.mg-maskbar button:disabled {
-  opacity: 0.35;
-}
-.mg-maskbar svg,
 .mg-mask-dock svg {
   width: 16px;
   height: 16px;
-}
-.mg-mask-spacer {
-  flex: 1;
-}
-.mg-box-control {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-right: 12px;
-}
-.mg-maskbar .mg-box-switch {
-  display: block;
-  width: 30px;
-  min-width: 30px;
-  height: 18px;
-  padding: 2px;
-  border: 0;
-  border-radius: 12px;
-  background: var(--color-neutral-500);
-}
-.mg-maskbar .mg-box-switch[aria-checked="true"] {
-  background: var(--color-accent);
-}
-.mg-box-switch i {
-  display: block;
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
-  background: white;
-  box-shadow: 0 1px 2px #0002;
-  transition: transform 0.12s;
-}
-.mg-box-switch[aria-checked="true"] i {
-  transform: translateX(12px);
 }
 .mg-mask-legend {
   display: inline-flex;
@@ -650,6 +604,11 @@
   gap: 6px;
   color: var(--color-neutral-700);
   font-size: 10px;
+}
+/* Its own line at the top of the dock, so the controls and Done share one row. */
+.mg-mask-dock .mg-mask-legend {
+  flex-basis: 100%;
+  justify-content: center;
 }
 .mg-mask-legend i {
   width: 9px;
@@ -662,12 +621,12 @@
   background: transparent;
   border-color: var(--color-neutral-600);
 }
-.mg-maskbar .mg-mask-done {
+.mg-mask-dock button.mg-mask-done {
   background: var(--color-neutral-900, #38352f);
   color: var(--color-bg);
   padding-inline: 12px;
 }
-.mg-maskbar .mg-mask-edit {
+.mg-mask-dock button.mg-mask-edit {
   border: 1px solid var(--color-divider);
 }
 .mg-stage:has(.mg-mask-dock) {
@@ -720,9 +679,6 @@
   accent-color: var(--color-accent);
 }
 @media (max-width: 600px) {
-  .mg-maskbar {
-    flex-wrap: wrap;
-  }
   .mg-mask-dock {
     gap: 2px;
     padding: 5px;
@@ -1088,11 +1044,6 @@
 }
 .design-picker--compact .design-picker__status:empty {
   display: none;
-}
-.mg-app .mg-main-photo {
-  padding: 0 var(--space-3) var(--space-2);
-  margin: 0;
-  font-weight: 400;
 }
 
 .mg-queue-entry {

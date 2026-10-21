@@ -33,9 +33,9 @@ interface Props {
   onDuplicateSelected?: () => void;
   onBringSelectedToFront?: () => void;
   /** How much box chrome to draw. Three states rather than a boolean because
-   * 2a's two toggles mean different things: a chart's "show all outlines"
+   * 2a's two toggles mean different things: a chart's "Show all design boxes"
    * hides the *other* boxes while you keep working on one ("selected"), and a
-   * colour set's "show placement outline" hides everything so you can judge
+   * colour set's "Show design box" hides everything so you can judge
    * the render clean ("none"). */
   outlines?: "all" | "selected" | "none";
   /** Per-box caption drawn under the box and edited by clicking it.

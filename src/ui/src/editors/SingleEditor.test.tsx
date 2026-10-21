@@ -102,7 +102,7 @@ describe("SingleEditor", () => {
     fireEvent.load(img);
     expect(container.querySelectorAll(".quad-editor__box")).toHaveLength(1);
 
-    fireEvent.click(screen.getByLabelText("show placement outline"));
+    fireEvent.click(screen.getByRole("switch", { name: "Show design box" }));
     expect(container.querySelectorAll(".quad-editor__box")).toHaveLength(0);
     expect(container.querySelectorAll(".quad-editor__handle")).toHaveLength(0);
   });

@@ -1,4 +1,5 @@
 import { type ReactNode, useState } from "react";
+import { BoxToggle } from "../components/BoxToggle";
 import { PreviewPanel, type PreviewJob } from "../components/PreviewPanel";
 import { PrintRealismPanel } from "../components/PrintRealismPanel";
 import { QuadEditor } from "../components/QuadEditor";
@@ -34,7 +35,7 @@ interface Props<T extends RealismConfig> {
   previewUrl: string | null;
   jobs: PreviewJob[];
   onApprove?: () => void;
-  /** What the outline checkbox says. One box or twelve changes the wording,
+  /** What the design-box toggle says. One box or twelve changes the wording,
    * not the control. */
   outlineLabel?: string;
   /** The calibration canvas. A function, not a node, because everything it
@@ -80,7 +81,7 @@ export function EditorShell<T extends RealismConfig>({
   previewUrl,
   jobs,
   onApprove,
-  outlineLabel = "show placement outline",
+  outlineLabel = "Show design box",
   canvas,
   barExtras,
   controls,
@@ -100,14 +101,9 @@ export function EditorShell<T extends RealismConfig>({
           <TestDesignPicker compact value={design} onChange={onDesignChange} />
           {calibrating && barExtras}
           {calibrating && (
-            <label className="app__outline-toggle">
-              <input
-                type="checkbox"
-                checked={showOutlines}
-                onChange={(e) => setShowOutlines(e.target.checked)}
-              />
-              {outlineLabel}
-            </label>
+            <div className="app__outline-toggle">
+              <BoxToggle checked={showOutlines} onChange={setShowOutlines} label={outlineLabel} />
+            </div>
           )}
         </div>
 

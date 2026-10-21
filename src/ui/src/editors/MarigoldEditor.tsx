@@ -11,7 +11,8 @@ import { usePreview } from "../hooks/usePreview";
 import { templatePhotoUrl } from "../api/calibrator";
 import { PreviewPanel, type PreviewJob } from "../components/PreviewPanel";
 import { MarigoldRealismPanel } from "../components/MarigoldRealismPanel";
-import { MaskToolbar, MaskBrushDock, type MaskControls } from "../components/MaskToolbar";
+import { BoxToggle } from "../components/BoxToggle";
+import { MaskBrushDock, type MaskControls } from "../components/MaskToolbar";
 import { PlacementOverlay } from "../components/PlacementOverlay";
 import { marigoldMapsReady } from "../components/preparationLabel";
 import { maskDraft } from "../components/maskDraft";
@@ -112,8 +113,6 @@ export function MarigoldEditor({
   const controls: MaskControls = {
     editing,
     setEditing,
-    showBox,
-    setShowBox,
     mode,
     setMode,
     diameter,
@@ -248,16 +247,14 @@ export function MarigoldEditor({
               </select>
             </label>
           )}
+          {tab === "calibrate" && (
+            <div className="app__outline-toggle">
+              <BoxToggle checked={showBox} onChange={setShowBox} />
+            </div>
+          )}
         </div>
         {tab === "calibrate" && (
           <>
-            {config.kind === "colour-matrix" && (
-              <p className="mg-main-photo">
-                Main photo · {preparation?.main_photo.split(/[\\/]/).at(-1) ?? "First photo"}.
-                Preparation is shared across colours.
-              </p>
-            )}
-            <MaskToolbar controls={controls} />
             <div className="mg-stage mg-editor-stage">
               {space ? (
                 <QuadEditor
@@ -351,7 +348,7 @@ export function MarigoldEditor({
               ) : (
                 <p className="app__loading">No readable scene photo.</p>
               )}
-              {editing && <MaskBrushDock controls={controls} />}
+              {space && <MaskBrushDock controls={controls} />}
             </div>
           </>
         )}

@@ -6,7 +6,6 @@ import { getRuntime, type Preparation, type Runtime } from "../api/preparation";
 import type { Renderer } from "../types";
 export function RendererPanel({
   settings,
-  reference,
   renderer,
   onRendererChange,
   preparation,
@@ -15,7 +14,6 @@ export function RendererPanel({
   pending,
   error,
 }: {
-  reference?: string;
   settings: (runtime: Runtime | null) => ReactNode;
   renderer: Renderer;
   onRendererChange: (renderer: Renderer["type"]) => void;
@@ -42,6 +40,9 @@ export function RendererPanel({
     };
   }, [renderer.type]);
   const job = preparation?.active_job;
+  // A CPU rebuild reuses saved predictions and takes seconds, so it gets a
+  // spinner where the stages go -- not the GPU run's steps, timer and Cancel.
+  const rebuilding = job?.kind === "rebuild";
   const label = pending ? "Preparing" : preparationLabel(preparation);
   const recovery = preparation?.maps.reason === "photo_changed";
   const action =
@@ -74,11 +75,15 @@ export function RendererPanel({
               {label}
             </span>
           </div>
-          {reference && <p className="mg-help">{reference}</p>}
           {!job && preparation?.maps.state === "out_of_date" && preparation.maps.reason && (
             <p className="mg-help">{preparation.maps.message}</p>
           )}
-          {job ? (
+          {rebuilding ? (
+            <div className="mg-progress mg-rebuild" role="status">
+              <span className="dv-spinner" aria-hidden="true" />
+              Rebuilding maps
+            </div>
+          ) : job ? (
             <div className="mg-progress">
               <PreparationProgress job={job} />
               <button
@@ -128,13 +133,11 @@ export function RendererPanel({
                 Prepare again to use {runtime.engine_version}.
               </p>
             )}
-          <p className="mg-help">
-            {job
-              ? "You can close this browser. Preparation will continue."
-              : action === "retry"
-                ? "Completed steps will be reused."
-                : "Prepare once, then reuse for every design and colour."}
-          </p>
+          {job && !rebuilding ? (
+            <p className="mg-help">You can close this browser. Preparation will continue.</p>
+          ) : (
+            !job && action === "retry" && <p className="mg-help">Completed steps will be reused.</p>
+          )}
           {settings(runtime)}
         </>
       )}

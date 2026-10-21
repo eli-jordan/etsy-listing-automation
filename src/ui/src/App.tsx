@@ -421,17 +421,6 @@ export function App() {
     config && templateName ? (
       <RendererPanel
         renderer={config.renderer}
-        reference={
-          preparation
-            ? "Main image: " +
-              preparation.main_photo.split(/[\\/]/).at(-1) +
-              (config.kind === "colour-matrix"
-                ? " · shared across " + selected?.colours.length + " colours"
-                : config.kind === "multiple"
-                  ? " · all placements"
-                  : "")
-            : ""
-        }
         onRendererChange={switchRenderer}
         preparation={preparation}
         onPrepare={(action, recovery) => void startPreparation(action, recovery)}

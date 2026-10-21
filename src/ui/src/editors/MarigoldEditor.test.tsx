@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as calibrator from "../api/calibrator";
@@ -88,6 +88,19 @@ describe("MarigoldEditor", () => {
     fireEvent.click(screen.getByRole("switch", { name: "Show design box" }));
     expect(container.querySelectorAll(".quad-editor__box")).toHaveLength(0);
     expect(container.querySelector("foreignObject img")).toBeInTheDocument();
+  });
+  it("docks only Edit mask until editing starts, then the brushes and Done", () => {
+    setup();
+    expect(screen.getByRole("button", { name: "Edit mask" })).toBeInTheDocument();
+    expect(screen.queryByRole("toolbar", { name: "Mask brushes" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Done" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Edit mask" }));
+    const dock = screen.getByRole("toolbar", { name: "Mask brushes" });
+    expect(within(dock).getByRole("button", { name: "Done" })).toBeInTheDocument();
+    expect(within(dock).getByRole("button", { name: "Undo brush stroke" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Edit mask" })).not.toBeInTheDocument();
+    fireEvent.click(within(dock).getByRole("button", { name: "Done" }));
+    expect(screen.getByRole("button", { name: "Edit mask" })).toBeInTheDocument();
   });
   it("retains whole photo-coordinate strokes on Done and Escape, Undo and Reset affect only the mask", () => {
     const view = setup();
@@ -190,7 +203,7 @@ describe("MarigoldEditor", () => {
     vi.mocked(calibrator.renderPreview).mockRejectedValue(new Error("Prepare first"));
     const config = { kind: "colour-matrix" as const, bounding_box: BOX, renderer: MARIGOLD };
     const view = setup(config);
-    expect(screen.getByText(/Main photo.*main.png/)).toBeInTheDocument();
+    expect(screen.queryByText(/Main photo/)).not.toBeInTheDocument();
     expect(screen.getByAltText("Rendered preview")).toHaveAttribute(
       "src",
       "/api/templates/tee/photo?colour=black",
@@ -212,7 +225,6 @@ describe("MarigoldEditor", () => {
     );
     expect(view.config()).toEqual(config);
     expect(view.edits()).toEqual([]);
-    expect(screen.getByText(/Main photo.*main.png/)).toBeInTheDocument();
   });
   it("composites the selected colour and still renders every colour in Preview", async () => {
     vi.mocked(calibrator.renderPreview).mockImplementation(

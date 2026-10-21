@@ -305,7 +305,7 @@ export function TemplateRail({
                 {job.phase === "queued"
                   ? "Queued"
                   : job.kind === "rebuild"
-                    ? "Updating maps"
+                    ? "Rebuilding maps"
                     : "Preparing"}
               </span>
             </button>

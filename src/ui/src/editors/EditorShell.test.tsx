@@ -69,7 +69,7 @@ describe("EditorShell", () => {
     setup();
 
     expect(screen.getByTestId("canvas")).toHaveTextContent("outlined");
-    const toggle = screen.getByLabelText("show placement outline");
+    const toggle = screen.getByRole("switch", { name: "Show design box" });
     expect(toggle).toBeChecked();
 
     fireEvent.click(toggle);
@@ -79,9 +79,9 @@ describe("EditorShell", () => {
   });
 
   it("takes the outline label from the kind, since one box reads differently", () => {
-    setup({ outlineLabel: "show all outlines" });
+    setup({ outlineLabel: "Show all design boxes" });
 
-    expect(screen.getByLabelText("show all outlines")).toBeInTheDocument();
+    expect(screen.getByRole("switch", { name: "Show all design boxes" })).toBeInTheDocument();
   });
 
   it("switching to Preview hides the calibration controls", () => {
@@ -91,7 +91,7 @@ describe("EditorShell", () => {
     fireEvent.click(screen.getByRole("tab", { name: "Preview" }));
 
     expect(screen.queryByTestId("canvas")).not.toBeInTheDocument();
-    expect(screen.queryByLabelText("show placement outline")).not.toBeInTheDocument();
+    expect(screen.queryByRole("switch", { name: "Show design box" })).not.toBeInTheDocument();
   });
 
   it("holds the canvas back until there is both an image and a space to draw it in", () => {

@@ -1,11 +1,8 @@
-import { BoundingBoxIcon } from "@phosphor-icons/react/dist/csr/BoundingBox";
 import { EraserIcon } from "@phosphor-icons/react/dist/csr/Eraser";
 import { PaintBrushIcon } from "@phosphor-icons/react/dist/csr/PaintBrush";
 export interface MaskControls {
   editing: boolean;
   setEditing: (value: boolean) => void;
-  showBox: boolean;
-  setShowBox: (value: boolean) => void;
   mode: "mask" | "unmask";
   setMode: (value: "mask" | "unmask") => void;
   diameter: number;
@@ -15,42 +12,24 @@ export interface MaskControls {
   undo: () => void;
   reset: () => void;
 }
-export function MaskToolbar({ controls: c }: { controls: MaskControls }) {
-  return (
-    <div className="mg-maskbar">
-      <div className="mg-box-control" title={c.showBox ? "Hide design box" : "Show design box"}>
-        <BoundingBoxIcon aria-hidden="true" />
+/** The dock under the photo. Only "Edit mask" until editing starts; then the
+ * brushes, Undo, Reset and Done. */
+export function MaskBrushDock({ controls: c }: { controls: MaskControls }) {
+  if (!c.editing) {
+    return (
+      <div className="mg-mask-dock">
         <button
           type="button"
-          className="mg-box-switch"
-          role="switch"
-          aria-label="Show design box"
-          aria-checked={c.showBox}
-          onClick={() => c.setShowBox(!c.showBox)}
+          className="mg-mask-edit"
+          disabled={!c.canEdit}
+          title={!c.canEdit ? "Prepare the template to create an editable mask" : undefined}
+          onClick={() => c.setEditing(true)}
         >
-          <i />
+          Edit mask
         </button>
       </div>
-      {c.editing && (
-        <span className="mg-mask-legend">
-          <i />
-          Red = hidden print
-        </span>
-      )}
-      <span className="mg-mask-spacer" />
-      <button
-        type="button"
-        disabled={!c.canEdit}
-        title={!c.canEdit ? "Prepare the template to create an editable mask" : undefined}
-        className={c.editing ? "mg-mask-done" : "mg-mask-edit"}
-        onClick={() => c.setEditing(!c.editing)}
-      >
-        {c.editing ? "Done" : "Edit mask"}
-      </button>
-    </div>
-  );
-}
-export function MaskBrushDock({ controls: c }: { controls: MaskControls }) {
+    );
+  }
   return (
     <div
       className="mg-mask-dock"
@@ -63,6 +42,10 @@ export function MaskBrushDock({ controls: c }: { controls: MaskControls }) {
         }
       }}
     >
+      <span className="mg-mask-legend">
+        <i />
+        Red = hidden print
+      </span>
       <button type="button" aria-pressed={c.mode === "mask"} onClick={() => c.setMode("mask")}>
         <PaintBrushIcon />
         Mask
@@ -90,6 +73,9 @@ export function MaskBrushDock({ controls: c }: { controls: MaskControls }) {
       </button>
       <button type="button" aria-label="Reset mask" disabled={!c.canEdit} onClick={c.reset}>
         Reset
+      </button>
+      <button type="button" className="mg-mask-done" onClick={() => c.setEditing(false)}>
+        Done
       </button>
     </div>
   );

@@ -1005,13 +1005,44 @@ button:not([class]):active:not(:disabled) {
   color: var(--color-bg);
 }
 
-.app__outline-toggle {
+/* The design-box switch, one control for both renderers' editors. Selectors
+   are doubled so a toolbar's own `button` rules (the Marigold mask bar's)
+   cannot restyle it. */
+.box-toggle {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  font-size: 11px;
-  color: color-mix(in srgb, var(--color-text) 60%, transparent);
-  cursor: pointer;
+  gap: 8px;
+  color: var(--color-text);
+}
+.box-toggle svg {
+  width: 16px;
+  height: 16px;
+}
+.box-toggle .box-toggle__switch,
+.box-toggle .box-toggle__switch:hover {
+  display: block;
+  width: 30px;
+  min-width: 30px;
+  height: 18px;
+  padding: 2px;
+  border: 0;
+  border-radius: 12px;
+  background: var(--color-neutral-500);
+}
+.box-toggle .box-toggle__switch[aria-checked="true"] {
+  background: var(--color-accent);
+}
+.box-toggle__switch i {
+  display: block;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: white;
+  box-shadow: 0 1px 2px #0002;
+  transition: transform 0.12s;
+}
+.box-toggle__switch[aria-checked="true"] i {
+  transform: translateX(12px);
 }
 
 .quad-editor__add {

@@ -6,7 +6,7 @@ export function preparationLabel(value: Preparation | null): string {
   if (!value) return "Checking maps";
   if (value.active_job)
     return value.active_job.kind === "rebuild"
-      ? "Updating maps"
+      ? "Rebuilding maps"
       : value.active_job.phase === "queued"
         ? "Queued"
         : "Preparing";

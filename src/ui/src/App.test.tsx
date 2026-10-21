@@ -149,9 +149,11 @@ describe("App", () => {
     await screen.findByText("Loading preview…");
 
     selectTemplate("colour-chart-01");
-    // "show all outlines" is the multiple editor's toggle, and only its own --
-    // a colour set says "show placement outline".
-    await waitFor(() => expect(screen.getByText("show all outlines")).toBeInTheDocument());
+    // "Show all design boxes" is the multiple editor's toggle, and only its own --
+    // a colour set says "Show design box".
+    await waitFor(() =>
+      expect(screen.getByRole("switch", { name: "Show all design boxes" })).toBeInTheDocument(),
+    );
   });
 
   it("replaces the workspace with the kind picker when a template has no config", async () => {
