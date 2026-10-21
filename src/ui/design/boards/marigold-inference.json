@@ -1,0 +1,40 @@
+{
+  "version": 1,
+  "name": "marigold-inference",
+  "title": "Archive \u00b7 Inference Options",
+  "description": "Option C selected and integrated into the full workflow with matching field and information-card names.",
+  "auto": false,
+  "order": 89,
+  "layout": {
+    "rows": [
+      [
+        "marigold-inference"
+      ]
+    ],
+    "scenes": {
+      "marigold-inference": {
+        "rows": [
+          [
+            "a-inline",
+            "b-drawer",
+            "c-dialog"
+          ]
+        ]
+      }
+    }
+  },
+  "nodes": [
+    {
+      "key": "mi_a-inline",
+      "frame": "marigold-inference/a-inline"
+    },
+    {
+      "key": "mi_b-drawer",
+      "frame": "marigold-inference/b-drawer"
+    },
+    {
+      "key": "mi_c-dialog",
+      "frame": "marigold-inference/c-dialog"
+    }
+  ]
+}
