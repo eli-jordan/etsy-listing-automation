@@ -1,3 +1,4 @@
+import type { PhotoWarpTemplate } from "../types";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as calibrator from "../api/calibrator";
@@ -6,7 +7,7 @@ import { ColourMatrixEditor } from "./ColourMatrixEditor";
 
 const SPACE: [number, number] = [400, 200];
 
-const CONFIG: ColourMatrixTemplate = {
+const CONFIG: PhotoWarpTemplate<ColourMatrixTemplate> = {
   kind: "colour-matrix",
   bounding_box: [
     { x: 0, y: 0 },
@@ -14,8 +15,13 @@ const CONFIG: ColourMatrixTemplate = {
     { x: 100, y: 100 },
     { x: 0, y: 100 },
   ],
-  displace: { enabled: false, strength: 0 },
-  shade: { enabled: true, opacity: 0.6, blend: "soft-light" },
+  renderer: {
+    type: "photo-warp",
+    config: {
+      displace: { enabled: false, strength: 0 },
+      shade: { enabled: true, opacity: 0.6, blend: "soft-light" },
+    },
+  },
 };
 
 const COLOURS = ["black", "ivory", "moss"];
@@ -65,8 +71,7 @@ describe("ColourMatrixEditor", () => {
         {
           colour: "black",
           bounding_box: CONFIG.bounding_box,
-          displace: CONFIG.displace,
-          shade: CONFIG.shade,
+          renderer: CONFIG.renderer,
         },
         "bundled-grid",
         "editor",

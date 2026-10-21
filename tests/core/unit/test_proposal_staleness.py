@@ -116,3 +116,31 @@ def test_a_different_design_is_one_reason_not_two() -> None:
     now = _snapshot(design={"default": "designs/other.png"}, design_content_hash="9a0b")
 
     assert proposal_staleness(_snapshot(), now).reasons == ["design changed since"]
+
+
+class TestALightDarkPair:
+    """Multi-artwork plan, *AI staleness*: only arming follows the
+    representative artwork; staleness compares the whole map, ``null`` slots
+    and colour keys included, since every file in it is what the proposal was
+    judged against."""
+
+    PAIR: dict[str, str | None] = {"on-light": "designs/light.png", "on-dark": None}
+
+    def test_the_same_pair_is_not_stale_empty_slot_and_key_order_aside(self) -> None:
+        frozen = _snapshot(design=self.PAIR)
+        now = _snapshot(design={"on-dark": None, "on-light": "designs/light.png"})
+        assert proposal_staleness(frozen, now).is_stale is False
+
+    def test_filling_the_empty_slot_is_stale_though_the_representative_is_unchanged(
+        self,
+    ) -> None:
+        now = _snapshot(design={**self.PAIR, "on-dark": "designs/dark.png"})
+        assert proposal_staleness(_snapshot(design=self.PAIR), now).reasons == [
+            "design changed since"
+        ]
+
+    def test_a_colour_s_own_design_is_stale(self) -> None:
+        now = _snapshot(design={**self.PAIR, "black": "designs/black.png"})
+        assert proposal_staleness(_snapshot(design=self.PAIR), now).reasons == [
+            "design changed since"
+        ]

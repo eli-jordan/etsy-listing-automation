@@ -97,3 +97,12 @@ async def upload_design(request: Request, file: UploadFile) -> DesignSummary:
     except DesignUploadRefused as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return DesignSummary(id=design, label=design, source="upload")
+
+
+@router.get("/{design}/image")
+def design_image(request: Request, design: str) -> Response:
+    """Original RGBA artwork for responsive local placement, without rendering."""
+    path = resolve_design(_workspace(request), design)
+    return Response(
+        path.read_bytes(), media_type="image/png", headers={"Cache-Control": "no-cache"}
+    )

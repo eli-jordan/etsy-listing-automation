@@ -18,14 +18,11 @@ from etsy_listings.core.ai.proposals import (
     SeoProposalSnapshot,
     proposal_staleness,
 )
+from etsy_listings.core.config.artwork import representative
 from etsy_listings.core.errors import UserFacingError
 from etsy_listings.core.workspace.facts import WorkspaceFacts
 from etsy_listings.core.workspace.listing_documents import ListingDocuments
 from etsy_listings.core.workspace.workspace import Workspace
-
-_PREFERRED_DESIGN_KEYS = ("default", "on-light", "on-dark")
-# one image for AI, not a per-colour render; unfamiliar keys sort
-# alphabetically so a reordered mapping never changes the chosen image.
 
 
 @dataclass(frozen=True)
@@ -72,14 +69,14 @@ class ListingAiInputs:
         if not self._has_profile:
             raise UserFacingError("the listing has no usable garment profile")
         snapshot = self.snapshot
-        if not snapshot.design:
+        # The one image a provider sees is the representative artwork
+        # (ADR-0053): default, then on-light, then on-dark -- never a colour's
+        # own file, which is print treatment rather than the listing's concept.
+        ref = representative(snapshot.design)
+        if ref is None:
             raise UserFacingError("the listing has no selected design")
-        key = next(
-            (key for key in _PREFERRED_DESIGN_KEYS if key in snapshot.design),
-            min(snapshot.design),
-        )
         design: Path = self._workspace.resolve_ref(
-            snapshot.design[key], listing_dir=self._workspace.listing_dir(self._name)
+            ref, listing_dir=self._workspace.listing_dir(self._name)
         )
         request = SeoRequest(
             market_block=market_block,
