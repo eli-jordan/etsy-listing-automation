@@ -1,8 +1,11 @@
 import sys
+import threading
 
 import pytest
 
 from etsy_listings.core.preparation.worker_client import WarmWorker, Worker
+
+from tests.support.gates import GATE_TIMEOUT
 
 
 def test_worker_handshake_drains_stderr_independently(tmp_path):
@@ -31,36 +34,36 @@ for line in sys.stdin:
 
 
 def test_cancellation_completes_active_call_and_retains_valid_evidence(tmp_path):
-    import threading
-
     from PIL import Image
 
+    from tests.support.gates import workers
     from tests.support.marigold import controlled_worker
 
     Image.new("RGB", (12, 8)).save(tmp_path / "crop.png")
-    results = []
     with Worker(
-        controlled_worker(tmp_path, delay=0.5), cache_root=tmp_path, engine_version="1.0.0"
+        controlled_worker(tmp_path, hold=True), cache_root=tmp_path, engine_version="1.0.0"
     ) as worker:
         started = threading.Event()
-        thread = threading.Thread(
-            target=lambda: results.append(
-                worker.infer(
-                    request_id="active",
-                    role="depth",
-                    input="crop.png",
-                    output="depth.npz",
-                    size=(12, 8),
-                    progress=lambda _: started.set(),
+        with workers() as start:
+            try:
+                active = start(
+                    "active inference",
+                    lambda: worker.infer(
+                        request_id="active",
+                        role="depth",
+                        input="crop.png",
+                        output="depth.npz",
+                        size=(12, 8),
+                        progress=lambda _: started.set(),
+                    ),
                 )
-            )
-        )
-        thread.start()
-        assert started.wait(5)
-        worker.cancel("active")
-        thread.join(5)
-        assert not thread.is_alive()
-        assert results[0]["cancelled"] is True
+                assert started.wait(GATE_TIMEOUT)
+                # The model call is held until this cancel is acknowledged.
+                worker.cancel("active")
+                result = active.result()
+            finally:
+                (tmp_path / "infer-release").touch()
+        assert isinstance(result, dict) and result["cancelled"] is True
         assert (tmp_path / "depth.npz").exists()
         assert (
             worker.infer(
@@ -71,42 +74,44 @@ def test_cancellation_completes_active_call_and_retains_valid_evidence(tmp_path)
 
 
 def test_worker_refuses_a_second_call_instead_of_queuing_after_cancellation(tmp_path):
-    import threading
-
-    import pytest
     from PIL import Image
 
     from etsy_listings.core.preparation.worker_client import WorkerError
 
+    from tests.support.gates import workers
     from tests.support.marigold import controlled_worker
 
     Image.new("RGB", (12, 8)).save(tmp_path / "crop.png")
     started = threading.Event()
     with Worker(
-        controlled_worker(tmp_path, delay=0.4), cache_root=tmp_path, engine_version="1.0.0"
+        controlled_worker(tmp_path, hold=True), cache_root=tmp_path, engine_version="1.0.0"
     ) as worker:
-        thread = threading.Thread(
-            target=lambda: worker.infer(
-                request_id="active",
-                role="depth",
-                input="crop.png",
-                output="depth.npz",
-                size=(12, 8),
-                progress=lambda _: started.set(),
-            )
-        )
-        thread.start()
-        assert started.wait(5)
-        with pytest.raises(WorkerError, match="busy"):
-            worker.infer(
-                request_id="remaining",
-                role="depth",
-                input="crop.png",
-                output="remaining.npz",
-                size=(12, 8),
-            )
-        worker.cancel("active")
-        thread.join(5)
+        with workers() as start:
+            try:
+                active = start(
+                    "active inference",
+                    lambda: worker.infer(
+                        request_id="active",
+                        role="depth",
+                        input="crop.png",
+                        output="depth.npz",
+                        size=(12, 8),
+                        progress=lambda _: started.set(),
+                    ),
+                )
+                assert started.wait(GATE_TIMEOUT)
+                with pytest.raises(WorkerError, match="busy"):
+                    worker.infer(
+                        request_id="remaining",
+                        role="depth",
+                        input="crop.png",
+                        output="remaining.npz",
+                        size=(12, 8),
+                    )
+                worker.cancel("active")
+                active.result()
+            finally:
+                (tmp_path / "infer-release").touch()
         assert not (tmp_path / "remaining.npz").exists()
 
 

@@ -4,10 +4,17 @@ import sys
 from pathlib import Path
 
 
-def controlled_worker(tmp_path: Path, *, delay: float = 0.1, idle: float = 300) -> list[str]:
+def controlled_worker(
+    tmp_path: Path, *, delay: float = 0.1, idle: float = 300, hold: bool = False
+) -> list[str]:
     """A real worker process around a stub model. Each process appends its pid
     to ``worker-starts`` on start, so a test can tell a restarted process from
-    the one before it."""
+    the one before it.
+
+    With ``hold``, the model call stays in progress until the worker has
+    acknowledged a control (a cancel, or the shutdown on close) or the test
+    creates ``infer-release`` -- so a cancel provably lands during the call
+    rather than racing a fixed ``delay``. The hold is bounded."""
     source = Path(__file__).parents[2] / "src/etsy_listings/core/preparation/distribution/src"
     script = tmp_path / "controlled_worker.py"
     script.write_text(
@@ -21,12 +28,34 @@ class Backend:
             raise RuntimeError('Native model startup must finish before the control reader')
         return dict(engine_version='1.0.0', roles=['normals','lighting','depth'], cuda=True)
     def infer(self, role, image, settings):
-        time.sleep({delay!r})
+        if {hold!r}:
+            deadline = time.monotonic() + 15
+            while not (_exists('control-acknowledged') or _exists('infer-release')):
+                if time.monotonic() > deadline:
+                    raise RuntimeError('held model call was never released')
+                time.sleep(0.01)
+        else:
+            time.sleep({delay!r})
         return np.full((1,image.height,image.width,1), 0.5, dtype=np.float32), dict(test=True)
 import os
+def _exists(name):
+    return os.path.exists(os.path.join({str(tmp_path)!r}, name))
 def _mark(name):
     with open(os.path.join({str(tmp_path)!r}, name), 'a') as f:
         f.write(str(os.getpid()) + chr(10))
+class _Acknowledgements:
+    # Marks a control as acknowledged once the reader has recorded it.
+    def __init__(self, stream):
+        self._stream = stream
+    def write(self, text):
+        written = self._stream.write(text)
+        if '"acknowledged": true' in text:
+            _mark('control-acknowledged')
+        return written
+    def flush(self):
+        self._stream.flush()
+if {hold!r}:
+    sys.stdout = _Acknowledgements(sys.stdout)
 _mark('worker-starts')
 serve(Backend(), cache_root={str(tmp_path)!r}, idle_seconds={idle!r})
 """,
