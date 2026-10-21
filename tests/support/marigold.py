@@ -5,6 +5,9 @@ from pathlib import Path
 
 
 def controlled_worker(tmp_path: Path, *, delay: float = 0.1, idle: float = 300) -> list[str]:
+    """A real worker process around a stub model. Each process appends its pid
+    to ``worker-starts`` on start, so a test can tell a restarted process from
+    the one before it."""
     source = Path(__file__).parents[2] / "src/etsy_listings/core/preparation/distribution/src"
     script = tmp_path / "controlled_worker.py"
     script.write_text(
@@ -20,11 +23,33 @@ class Backend:
     def infer(self, role, image, settings):
         time.sleep({delay!r})
         return np.full((1,image.height,image.width,1), 0.5, dtype=np.float32), dict(test=True)
+import os
+def _mark(name):
+    with open(os.path.join({str(tmp_path)!r}, name), 'a') as f:
+        f.write(str(os.getpid()) + chr(10))
+_mark('worker-starts')
 serve(Backend(), cache_root={str(tmp_path)!r}, idle_seconds={idle!r})
 """,
         encoding="utf-8",
     )
     return [sys.executable, str(script)]
+
+
+def worker_pids(tmp_path: Path) -> list[str]:
+    """Pids of every worker process started, in start order."""
+    path = tmp_path / "worker-starts"
+    return path.read_text(encoding="utf-8").split() if path.is_file() else []
+
+
+def wait_until(condition, what: str, *, timeout: float = 15.0) -> None:
+    """Bounded poll for an observable condition; fails naming what never happened."""
+    import time
+
+    deadline = time.monotonic() + timeout
+    while not condition():
+        if time.monotonic() > deadline:
+            raise AssertionError(f"{what} never happened within {timeout}s")
+        time.sleep(0.01)
 
 
 def material_maps(size: tuple[int, int] = (16, 16)):

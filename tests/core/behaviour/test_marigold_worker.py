@@ -111,13 +111,11 @@ def test_worker_refuses_a_second_call_instead_of_queuing_after_cancellation(tmp_
 
 
 def test_idle_exit_restarts_on_next_call_without_failed_attempt(tmp_path):
-    import time
-
     from PIL import Image
 
     from etsy_listings.core.preparation.worker_client import WarmWorker
 
-    from tests.support.marigold import controlled_worker
+    from tests.support.marigold import controlled_worker, wait_until, worker_pids
 
     Image.new("RGB", (12, 8)).save(tmp_path / "crop.png")
     with WarmWorker(
@@ -126,7 +124,13 @@ def test_idle_exit_restarts_on_next_call_without_failed_attempt(tmp_path):
         worker.infer(
             request_id="first", role="depth", input="crop.png", output="first.npz", size=(12, 8)
         )
-        time.sleep(0.3)
+        [first] = worker_pids(tmp_path)
+        # The idle exit is observed, not guessed: the process is gone (and
+        # reaped) before the next call. Waiting only for ``serve`` to return
+        # races the interpreter's own exit.
+        idle = worker._worker
+        assert idle is not None
+        wait_until(lambda: not idle.alive, "the idle worker's exit")
         assert (
             worker.infer(
                 request_id="second",
@@ -137,6 +141,8 @@ def test_idle_exit_restarts_on_next_call_without_failed_attempt(tmp_path):
             )["artifact"]
             == "second.npz"
         )
+        starts = worker_pids(tmp_path)
+        assert len(starts) == 2 and starts[0] == first and starts[1] != first
 
 
 def test_worker_protocol_rejects_unsafe_paths_and_malformed_requests(tmp_path):
