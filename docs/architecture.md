@@ -15,6 +15,13 @@ claiming every caller already obeys them.
 Module paths in this document are relative to `src/etsy_listings/` unless they
 start with `src/`, `tests/`, `scripts/` or `docs/`.
 
+The [Marigold design](features/marigold-20261001/plan.md) is being implemented
+in stages under ADR-0054. Renderer configuration and recoverable calibration
+storage, the explicit native worker, pure numerical preparation, durable map
+publication and CPU composition are implemented. Queue, editor and deployment
+integration remain later stages. Existing application rendering still refuses
+Marigold with a preparation explanation until those callers acquire maps.
+
 ## Runtime and dependencies
 
 The application is a synchronous Python 3.12+ backend with a FastAPI server, a
@@ -58,7 +65,7 @@ src/
 
 ```mermaid
 graph TD
-    CLIUI["cli.ui (launcher)"] -->|"the one CLI→server edge"| HOSTING["server.hosting"]
+    CLIUI["cli.ui (launcher)"] -->|"the one CLIâ†’server edge"| HOSTING["server.hosting"]
     CLI["cli: commands, wizards, prompts, terminal"] --> CORE
     CLI --> CLIUI
     HOSTING --> API["server.api: routes, schemas, SSE, caches"]
@@ -140,6 +147,12 @@ credential and both halves of the Etsy grant around the browser step;
 `cli/terminal.py` is a standard-library leaf for encoding and presentation.
 None of the three CLI modules is importable from core.
 
+Template configuration reads still open the current UTF-8 bytes, with existing
+calibration lock scopes unchanged. A bounded content-keyed cache reuses parsing for documents up
+to 64 KiB, then returns a deep copy because placement lists remain mutable.
+External edits, including same-size writes with restored timestamps, therefore
+remain visible. Larger documents bypass that parse cache.
+
 ## What `plan` and `apply` actually do
 
 ```mermaid
@@ -165,7 +178,7 @@ sequenceDiagram
             Engine->>Stage: desired(ctx, listing, applied)
             alt desired is not Blocked
                 Engine->>Stage: read_live(ctx, listing, lock, applied)
-                Engine->>Stage: plan(desired, applied, live) → Verdict
+                Engine->>Stage: plan(desired, applied, live) â†’ Verdict
             else desired is Blocked
                 Engine->>Engine: record blocked StagePlan without live read
             end
@@ -209,12 +222,12 @@ Each stage's own `plan()` compares three states using the shared helpers in
 ```mermaid
 graph LR
     D["<b>desired</b><br/>config files + rendered mockups"] --> Diff{"stage.plan()"}
-    A["<b>last applied</b><br/>state.lock.json → applied.&lt;stage&gt;"] --> Diff
+    A["<b>last applied</b><br/>state.lock.json â†’ applied.&lt;stage&gt;"] --> Diff
     L["<b>live</b><br/>Printify + Etsy<br/>or local output existence"] --> Diff
     Diff --> SP["StagePlan(will_run, changes, drift)"]
 
-    D -. "≠ applied ⇒ a change you made".- A
-    A -. "≠ live ⇒ drift, someone edited outside the tool".- L
+    D -. "â‰  applied â‡’ a change you made".- A
+    A -. "â‰  live â‡’ drift, someone edited outside the tool".- L
 ```
 
 `local = True` means there is no remote drift to report; it does not suppress
@@ -261,7 +274,7 @@ transient CDN URLs remain excluded from review identity.
 graph LR
     Canvas["Calibrate tab<br/>quad handles + sliders"] -->|"POST /preview?scale=editor<br/>(debounced)"| API["server/api/templates.py"]
     Tab["Preview tab<br/><i>on demand</i>"] -->|"POST /preview?scale=full"| API
-    API --> Cache["server/api/imagecache.py<br/><i>decoded photo, design, maps</i>"]
+    API --> Cache["server/api/imagecache.py<br/><i>decoded photo, linear artwork, maps</i>"]
     Cache --> Op["core/application/mockup_templates.py<br/><i>scene choice and compositing</i>"]
     Op --> RenderPipe["core/render/pipeline.py<br/><i>the same code apply runs</i>"]
     RenderPipe -->|"frame"| API
@@ -290,6 +303,51 @@ on disk — which is exactly the difference that makes it a preview.
 `application.mockup_templates` decides the scene (photo, layers, design) and
 composites it from decoded images the server supplies out of its memo;
 encoding the frame as WebP or PNG is the server's.
+
+### Renderer configuration and calibration recovery
+
+Templates require `renderer.type` and put active settings in `renderer.config`.
+Photo warp retains the existing pure numerical pipeline. Marigold settings parse
+without installing or importing model dependencies. Marigold rendering requires
+current complete durable maps and refuses missing or stale preparation. Old top-level `shade` and `displace` are rejected,
+including mixed-format preview bodies. Multiple placements require safe, unique
+IDs; production creation uses UUIDs and geometry, recolouring and reorder preserve
+them. Single and colour-matrix placements use `None` internally.
+
+`workspace.calibration.CalibrationStore` holds a process-wide reentrant lock per
+validated, canonical mockup-template directory. In-workspace aliases share that
+lock; aliases outside the workspace are refused before IO. This is independent of the listing-template lock
+domain. All template-config writers use its recoverable transaction. Server
+operations recover before reading; the direct Workspace loader takes the same
+lock and refuses an active transaction, so a CLI cannot roll forward a live server
+save. One server per workspace remains the ownership assumption.
+
+A save validates its revision and ordered mask operations, stages payloads and
+backups in the template-owned `_renderer/calibration-transaction/`, flushes commit intent,
+replaces destinations and verifies checksums before cleanup. Missing intent means
+discard staging; durable intent means roll forward the entire validated payload
+set. Damaged recovery data blocks reading with a repair explanation. Saved request
+receipts deduplicate exact retries and reject reused IDs with different content.
+The revision covers effective config, resolved main-photo pixels and filename,
+and saved mask checksums. It excludes inactive renderer settings and brush history.
+Config GET returns that revision as its ETag. The required save envelope and
+If-Match HTTP adapter remain part of the editor integration stage.
+
+Automatic and edited full-photo grayscale PNGs live under `_renderer/masks/`, with stable-ID
+subdirectories only for multiple templates. Metadata binds them to the main photo
+and records the automatic algorithm version and PNG checksums. Normal rebuilding
+preserves both masks; explicit fresh baseline refresh replaces them only when no
+manual correction would be lost. A changed photo requires explicit mask reset.
+Reset copies the durable automatic raster. Undo uses cached whole-stroke raster
+checkpoints bound to the committed edited checksum; missing or damaged history
+loses Undo without losing the saved mask. Config and flattened mask edits commit
+together. `_renderer/renderer-settings.json` preserves last-saved inactive settings and
+renderer selection restores them without preparing anything.
+
+Workspace resolves the colour-matrix main photo by ordinal filename ordering of
+actual colour photos. Fixed-scene kinds use `scene.png`; a stray scene file cannot
+replace the colour-matrix reference. Reference identity includes decoded RGB pixels,
+dimensions, filename and the conversion version.
 
 ### Two sizes, one pipeline
 
@@ -497,8 +555,11 @@ later. Each traces to a decision.
   silence, under a plan reading "No changes."
   Missing render templates/photos, template-kind colour mismatches and
   unresolved artwork use shared config checks and return `Blocked`. Template
-  load failures are adapted to the same stage refusal. Artwork resolution
-  errors are actionable at exceptional boundaries and caught in desired state.
+  load failures are adapted to the same stage refusal. Artwork that cannot
+  resolve — no design, an unclassified colour, an empty light/dark slot, a
+  colourless `single` scene in light/dark mode, a design ref naming no file —
+  is refused through `gates.check_artwork` and `gates.resolved_design`; no
+  artwork configuration raises out of a stage (`ADR-0053`).
 - **One rule behind that vocabulary, not one per reader.**
   `core/config/listing_validation.py` owns every local refusal about a
   listing — predicate, message and all — and `core/engine/stages/gates.py` is
@@ -564,6 +625,18 @@ later. Each traces to a decision.
   `cvtColor` and `getPerspectiveTransform` have different contracts and do not
   take those keywords. `tests/core/unit/test_no_bare_cv2.py` checks the
   applicable render calls.
+- **One function decides which file a garment colour prints.**
+  `core/config/artwork.py` (`ADR-0053`) is pure: `resolve(design, colour,
+  tones)` answers a colour's own `design[colour]`, then in light/dark mode the
+  `on-light`/`on-dark` slot by the garment profile's tone, then `default`, or
+  says why it cannot. Listing validation, the render stage (per layer, by the
+  colour the layer depicts), the Printify stage (per enabled colour) and the
+  AI workflow (`representative`) all ask it; nothing else restates the rule.
+  Templates choose no artwork. An artwork group — a render layer's design
+  identity, a Printify print area — is the resolved file's **content hash**,
+  so renaming a file or reshaping `design:` without changing what any garment
+  prints plans nothing. `design:` is always written as a map
+  (`ListingDocuments` normalises a bare string or `null`).
 - **Rendering is driven purely by `media`.** A scene renders only if some
   `media` entry references it — `listing.colors` drives which Printify
   variants sell, not which photos get rendered.
@@ -740,3 +813,165 @@ The CLI currently exposes `setup`, `auth`, `new`, `plan`, `apply`, `unlock` and
 run-history recorder and a general persisted rate-budget module are absent.
 Current transports already share retries, and Etsy has a per-transport,
 header-driven `RateGate`; their existence does not imply those future modules.
+
+## Native Marigold runtime
+
+Core preparation's Runtime owns explicit setup, update and inspection under
+ADR-0054. The app carries an independent worker distribution and complete
+Windows CUDA installation lock. Installation stages an immutable directory
+beneath <home>/.etsy-listings/marigold/runtimes/<engine-version>/<installation-id>.
+Only verified packages, checkpoint hashes and successful real normals, lighting
+and depth smoke calls allow the global current pointer to change. Repair uses a
+new installation ID. A job retains both its engine version and installation ID;
+updates never overwrite the selected directory. Failed relocated installations
+remain unreferenced for diagnosis and do not prevent an explicit retry.
+
+Setup and update always perform deep validation: hashing every distribution file
+and pinned weight, and asking the worker for its package inventory and CUDA. A pass
+records each file's size and modification time, with the worker report, in the
+installation's `verified.json`. Status compares against that record and answers
+from it, across server restarts, while every file is unchanged; a changed, added
+or missing file forces deep validation again. Same-size, same-time damage is only
+caught by setup or update. A fresh worker handshake always checks actual CUDA and
+engine capability, even with a recorded report.
+
+WarmWorker restarts a worker that exited idle, without retrying an active failed
+call. It accepts one call at a time and refuses implicit queuing. The coordinator
+owns remaining work and cancellation intent. JSON-lines v1 controls remain
+readable during inference; cancellation retains the active call's validated
+numeric artifact and starts no next call. The worker loads native pipeline
+dependencies before starting its reader, since importing SciPy BLAS after that
+thread started stalled the measured Windows process. Models stay in RAM under a
+one-pipeline and 4 GiB tensor budget; only active components enter CUDA.
+Diagnostics drain separately from protocol output.
+
+Prediction files contain float32 arrays only. Readers check archive bounds,
+headers, role/shape, finite values, ranges and checksums with pickle disabled.
+Import contracts keep runtime installation and torch out of CPU rendering and
+prediction loading. Preparation coordination, durable maps and rendering use
+separate modules and never start inference implicitly.
+
+## Durable Marigold maps and CPU composition
+
+`preparation.numerics` ports crop planning, mask proposal, robust normals/depth
+fitting and baking from the evaluated prototype. It accepts explicit evidence
+arrays and edited visibility, with cancellation checkpoints between CPU phases.
+`render.material` samples normalized material coordinates in premultiplied linear
+colour and composes ordered layers. Both lighting alternatives remain in maps;
+appearance controls require no fitting. Photo warp goldens retain their bytes.
+
+Schema 2 stores placement maps over bounded half-open photo extents, with a
+sixteen-pixel halo for photographic blur and material derivatives. Array origins
+retain global photo pixel centres; the renderer returns the complete original-size
+photo. Extents enter schema 2 numerical identity. Schema 1 full-photo assets keep
+their original validation and digest rules without inference or migration.
+ADR-0054 records the measured storage cost behind this amendment.
+
+The editor replays draft masks at the acknowledged calibration revision and fits
+retained validated evidence into a transient 17 by 17 mesh and 1024px composite.
+Interactive artwork is capped at 3072px. These frames carry no accepted render
+identity and publish no assets. Autosave keeps its 800ms minimum idle deadline
+and waits for the current interactive request to settle, then independently
+reconciles durable 49 by 49 maps. Full-quality Preview and export retain original
+artwork and photo size. Revision fences reject superseded requests without
+implicit inference. The read-only evidence reader is separate from job-owned
+prediction publication and retention. Automatic selected-template status reads
+wait for the pending preview loop to settle, then fetch fresh readiness and
+reattach to active work. Explicit status and cancellation APIs remain available.
+CPU preparation yields at numerical phase checkpoints and between the existing
+conjugate-gradient solves while an interactive request is active in the same
+workspace. Waiting holds no template or coordinator locks and still observes
+cancellation and close intent. Per-solve cooperation does not write journal
+records or change solver arithmetic. Each phase retains full revision checks.
+A single active solve is not preempted; inference dispatch remains independent.
+Validated decoded evidence shares a fixed 384 MiB cache budget, with file-version
+checks retained before reuse.
+
+`preparation.artifacts.Artifacts` owns validated generation publication, readiness,
+acquisition and reference-aware cleanup. Workspace derives every durable path and
+owns enumeration/removal. Publication and reader leases use the canonical
+mockup-template lock domain. Active publishers register before exposing staging;
+readers retain one complete generation while replacement and cleanup proceed.
+Saved readiness reconstructs current inputs with accepted evidence identity from
+the durable manifest, without prediction cache or installed model dependencies.
+
+The [schema 1 and 2 contract](features/marigold-20261001/artifact-contract.md) records
+coordinate conventions, array bounds, allocation limits and coordinator-facing
+contracts. Numeric content identity excludes storage and provenance. ZIP and NPY
+checks happen before array allocation, and CPU import contracts exclude inference
+installation and torch. Shared colour dimension checks are mechanical validation;
+full photo quality is reviewed separately in the
+[integrated native validation](features/marigold-20261001/quality-validation.md).
+The measured fence colour variants are unsuitable for shared reference maps;
+separate independently prepared templates are the agreed remedy.
+
+## Durable preparation jobs
+
+`application.preparation.coordinator.Preparations` owns explicit preparation and
+CPU-only Save reconciliation under ADR-0054. Synchronous host calls run off the
+HTTP event loop. Deep runtime and artifact checks hold no workspace journal lock,
+so another template's status and cancellation remain available. The host supplies
+runtime/worker and executor boundaries; the default owns one GPU executor, one
+CPU executor and one warm worker selected by immutable engine/installation IDs.
+CPU fitting may overlap the next template's serial GPU calls.
+
+Atomic job records own saved photo/mask snapshots, request receipts, submission
+order, cancel intent, validated prediction references, CPU archives and events.
+Only a protocol dispatch guard decides whether an unstarted model call may run.
+Cancel records intent before acknowledgement; the active call finishes and keeps
+valid evidence. Safe checkpoints reread calibration and cancellation. Geometry,
+masks, main photo and inference settings can supersede work; appearance and
+placement order do not. A superseded request never authorizes new inference.
+
+Recovery recognizes exact planned automatic-mask bytes after interrupted mask
+commits and a published matching generation before its completed job record.
+The complete placement set is mandatory. Save reconciliation queues CPU work only
+when existing validated evidence covers every clipped 40-percent crop. Startup
+also reconciles saved templates, closing the calibration-commit/job-create gap.
+Changed-photo masks remain a refusal until explicitly reset for that photo.
+
+Prediction sets register publication ownership before exposing staging and switch
+their pointer only after complete validation. Current sets, active publishers,
+active jobs and reusable failed/cancelled attempts protect cache files. A later
+complete replacement retires historical attempt references before deletion. Map
+cleanup also respects artifact reader leases. Durable masks and map generations
+survive cache removal. Step journals retain at most 512 events with monotonically
+increasing sequence IDs; a cursor older than retained history requires status
+resynchronization. Receipt-only changes do not emit another step event.
+
+## Prepared listing rendering
+
+`preparation.readiness.saved_readiness` provides the same durable-map facts to
+calibration status, `WorkspaceFacts` and the render stage. Listing checks block
+referenced templates with unavailable maps. Reusable listing-template saves
+remain structural; their materialized listings must pass deployment readiness.
+
+Under ADR-0054, the render stage resolves artwork through `DesignPlacement` for
+each placement and hashes accepted numerical map content, ordered artwork pixel
+identities, target photo pixels and appearance. Its Marigold scene identity is
+shared with authoring previews. YAML formatting, inactive settings, generation
+names and inference provenance do not enter that identity. Photo warp keeps its
+existing byte hashes and composition pipeline.
+
+Preview and apply acquire one immutable generation per scene. Before composing
+or promoting a deployment preview, apply rechecks saved preparation inputs and
+actual scene identity. Matching previews copy their exact PNG bytes; changed
+artwork, photos or maps cannot authorize stale promotion. Output file hashes
+remain the separate upload axis. Cache removal recreates rendered images from
+durable assets without model installation or inference.
+
+## Native operational validation
+
+The [integrated native report](features/marigold-20261001/quality-validation.md)
+records full-resolution photo comparisons and bounded native experiments under
+ADR-0054. Allocation caps and the one-pipeline tensor budget constrain individual
+operations; they are not total-process RAM or throughput guarantees. The full
+40-percent crop requirement remains conservative. No smaller evidence reuse
+margin is certified.
+
+The coordinator owns one GPU and one CPU lane. Worker numerical operations use
+four Torch threads; host OpenCV currently inherits its machine-dependent default.
+Graceful coordinator close finishes active phases before closing the worker.
+The worker's 15-second shutdown grace therefore starts after active coordinator
+work has finished. A stalled active model call relies on the separate 900-second
+watchdog. Neither duration is a normal-operation latency promise.

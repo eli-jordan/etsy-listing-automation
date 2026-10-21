@@ -113,11 +113,13 @@ class TestOrganicGround:
 
 
 class TestOrganicComponents:
-    def test_buttons_are_pills(self, page) -> None:  # noqa: ANN001
+    def test_editor_action_buttons_are_flat(self, page) -> None:  # noqa: ANN001
         """Buttons now use the flat 4px (via --radius-sm override); only tags,
         chips, switches and circles retain the 999px pill radius."""
         page.wait_for_selector(PREVIEW_IMAGE)
-        radius = _computed(page, "button", "border-radius")
+        radius = page.get_by_role("button", name="Reset print realism").evaluate(
+            "el => getComputedStyle(el).borderRadius"
+        )
         assert radius == "4px", f"expected flat 4px, got {radius}"
 
     def test_there_is_no_manual_save_action(self, page) -> None:  # noqa: ANN001

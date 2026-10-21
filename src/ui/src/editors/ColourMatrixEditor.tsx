@@ -1,3 +1,5 @@
+import type { ReactNode } from "react";
+import type { PhotoWarpTemplate } from "../types";
 import { useCallback, useMemo, useState } from "react";
 import type { PreviewJob } from "../components/PreviewPanel";
 import { usePreview } from "../hooks/usePreview";
@@ -5,8 +7,9 @@ import type { ColourMatrixTemplate } from "../types";
 import { EditorShell, OneBoxCanvas } from "./EditorShell";
 
 interface Props {
+  rendererControls?: ReactNode;
   templateName: string;
-  config: ColourMatrixTemplate;
+  config: PhotoWarpTemplate<ColourMatrixTemplate>;
   colours: string[];
   /** The photo's true pixel size -- the space the box is in. See
    * `QuadEditor`'s `space`. */
@@ -24,7 +27,8 @@ interface Props {
 /** One box that has to work in every colour of the set. What it adds to the
  * shell is the choice of which colour the canvas is showing, and a preview
  * that renders all of them. */
-export function ColourMatrixEditor({
+function PhotoWarpColourMatrixEditor({
+  rendererControls,
   templateName,
   config,
   colours,
@@ -51,11 +55,10 @@ export function ColourMatrixEditor({
           ? {
               colour,
               bounding_box: config.bounding_box,
-              displace: config.displace,
-              shade: config.shade,
+              renderer: config.renderer,
             }
           : null,
-      [colour, config.bounding_box, config.displace, config.shade],
+      [colour, config.bounding_box, config.renderer],
     ),
     design,
   );
@@ -70,11 +73,10 @@ export function ColourMatrixEditor({
         body: {
           colour: c,
           bounding_box: config.bounding_box,
-          displace: config.displace,
-          shade: config.shade,
+          renderer: config.renderer,
         },
       })),
-    [colours, config.bounding_box, config.displace, config.shade],
+    [colours, config.bounding_box, config.renderer],
   );
 
   const setBox = useCallback(
@@ -84,6 +86,7 @@ export function ColourMatrixEditor({
 
   return (
     <EditorShell
+      {...(rendererControls ? { rendererControls } : {})}
       templateName={templateName}
       config={config}
       onChange={onChange}
@@ -119,4 +122,19 @@ export function ColourMatrixEditor({
       }
     />
   );
+}
+
+export function ColourMatrixEditor(
+  props: Omit<Props, "config"> & { config: ColourMatrixTemplate },
+) {
+  const renderer = props.config.renderer;
+  if (renderer.type !== "photo-warp") {
+    return (
+      <p role="status">
+        Prepare the template first. Marigold rendering is unavailable until template maps are
+        prepared.
+      </p>
+    );
+  }
+  return <PhotoWarpColourMatrixEditor {...props} config={{ ...props.config, renderer }} />;
 }
