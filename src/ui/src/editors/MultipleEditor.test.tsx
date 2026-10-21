@@ -1,3 +1,4 @@
+import type { PhotoWarpTemplate } from "../types";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as calibrator from "../api/calibrator";
@@ -7,11 +8,12 @@ import { MultipleEditor } from "./MultipleEditor";
 
 const SPACE: [number, number] = [400, 200];
 
-const CONFIG: MultipleTemplate = {
+const CONFIG: PhotoWarpTemplate<MultipleTemplate> = {
   kind: "multiple",
   colour_coverage: "exact",
   placements: [
     {
+      id: "fixture-placement-1",
       colour: "black",
       bounding_box: [
         { x: 0, y: 0 },
@@ -21,8 +23,13 @@ const CONFIG: MultipleTemplate = {
       ],
     },
   ],
-  displace: { enabled: false, strength: 0 },
-  shade: { enabled: true, opacity: 0.6, blend: "soft-light" },
+  renderer: {
+    type: "photo-warp",
+    config: {
+      displace: { enabled: false, strength: 0 },
+      shade: { enabled: true, opacity: 0.6, blend: "soft-light" },
+    },
+  },
 };
 
 afterEach(() => vi.restoreAllMocks());
@@ -62,8 +69,7 @@ describe("MultipleEditor", () => {
         "colour-chart-01",
         {
           placements: CONFIG.placements,
-          displace: CONFIG.displace,
-          shade: CONFIG.shade,
+          renderer: CONFIG.renderer,
         },
         "bundled-grid",
         "editor",
@@ -116,9 +122,12 @@ describe("MultipleEditor", () => {
 
   it("says how many boxes still have no colour", async () => {
     vi.spyOn(calibrator, "renderPreview").mockResolvedValue("blob:preview");
-    const config: MultipleTemplate = {
+    const config: PhotoWarpTemplate<MultipleTemplate> = {
       ...CONFIG,
-      placements: [...CONFIG.placements, { ...must(CONFIG.placements[0]), colour: "" }],
+      placements: [
+        ...CONFIG.placements,
+        { ...must(CONFIG.placements[0]), id: "fixture-placement-2", colour: "" },
+      ],
     };
     render(
       <MultipleEditor

@@ -15,8 +15,13 @@ const BODY: Body = {
     { x: 100, y: 100 },
     { x: 0, y: 100 },
   ],
-  displace: { enabled: false, strength: 0 },
-  shade: { enabled: true, opacity: 0.6, blend: "soft-light" },
+  renderer: {
+    type: "photo-warp",
+    config: {
+      displace: { enabled: false, strength: 0 },
+      shade: { enabled: true, opacity: 0.6, blend: "soft-light" },
+    },
+  },
 };
 
 beforeEach(() => {
@@ -147,4 +152,73 @@ describe("usePreview's one-at-a-time rule", () => {
     await waitFor(() => expect(URL.revokeObjectURL).toHaveBeenCalledWith("blob:stale"));
     expect(result.current).not.toBe("blob:stale");
   });
+});
+
+it("discards a superseded strict editor composite before showing the latest edit", async () => {
+  let first: (url: string) => void = () => {};
+  let second: (url: string) => void = () => {};
+  const spy = vi
+    .spyOn(calibrator, "renderPreview")
+    .mockImplementationOnce(
+      () =>
+        new Promise<string>((resolve) => {
+          first = resolve;
+        }),
+    )
+    .mockImplementationOnce(
+      () =>
+        new Promise<string>((resolve) => {
+          second = resolve;
+        }),
+    );
+  const { result, rerender } = renderHook(({ design }) => usePreview("shirt", BODY, design, true), {
+    initialProps: { design: "first" },
+  });
+  await waitFor(() => expect(spy).toHaveBeenCalledTimes(1));
+  rerender({ design: "latest" });
+  first("blob:superseded");
+  await waitFor(() => expect(URL.revokeObjectURL).toHaveBeenCalledWith("blob:superseded"));
+  expect(result.current).toBeNull();
+  await waitFor(() => expect(spy).toHaveBeenCalledTimes(2));
+  second("blob:latest");
+  await waitFor(() => expect(result.current).toBe("blob:latest"));
+});
+
+it("hides the previous template's decoded image immediately in strict mode", async () => {
+  vi.spyOn(calibrator, "renderPreview").mockResolvedValue("blob:first");
+  const { result, rerender } = renderHook(({ name }) => usePreview(name, BODY, "grid", true), {
+    initialProps: { name: "first" },
+  });
+  await waitFor(() => expect(result.current).toBe("blob:first"));
+  rerender({ name: "second" });
+  expect(result.current).toBeNull();
+});
+
+it("clears a refused strict frame so an old composite cannot impersonate current geometry", async () => {
+  vi.spyOn(calibrator, "renderPreview")
+    .mockResolvedValueOnce("blob:old")
+    .mockRejectedValue(new Error("Evidence does not cover this geometry"));
+  const { result, rerender } = renderHook(({ design }) => usePreview("shirt", BODY, design, true), {
+    initialProps: { design: "old" },
+  });
+  await waitFor(() => expect(result.current).toBe("blob:old"));
+  rerender({ design: "new" });
+  await waitFor(() => expect(result.current).toBeNull());
+  expect(URL.revokeObjectURL).toHaveBeenCalledWith("blob:old");
+});
+
+it("clears pending for the departing template without clearing the new template", () => {
+  vi.useFakeTimers();
+  const listeners = { first: vi.fn(), second: vi.fn() };
+  const { rerender, unmount } = renderHook(
+    ({ name }: { name: "first" | "second" }) =>
+      usePreview(name, BODY, "grid", true, listeners[name]),
+    { initialProps: { name: "first" } },
+  );
+  expect(listeners.first).toHaveBeenLastCalledWith(true);
+  rerender({ name: "second" });
+  expect(listeners.first).toHaveBeenLastCalledWith(false);
+  expect(listeners.second).toHaveBeenLastCalledWith(true);
+  unmount();
+  expect(listeners.second).toHaveBeenLastCalledWith(false);
 });

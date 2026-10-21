@@ -40,6 +40,7 @@ second place that knows the layout.
 from __future__ import annotations
 
 from collections.abc import Mapping
+from dataclasses import replace
 from pathlib import Path
 
 from etsy_listings.core.config.errors import ConfigLoadError
@@ -47,7 +48,12 @@ from etsy_listings.core.config.garment_profile import GarmentProfile
 from etsy_listings.core.config.listing import Listing
 from etsy_listings.core.config.listing_validation import TemplateInfo
 from etsy_listings.core.config.media import ProbeFailure, VideoFacts, media_kind
-from etsy_listings.core.render.config import ColourMatrixTemplate, MultipleTemplate
+from etsy_listings.core.render.config import (
+    AnyTemplate,
+    ColourMatrixTemplate,
+    MarigoldRenderer,
+    MultipleTemplate,
+)
 from etsy_listings.core.workspace.video import probe_video
 from etsy_listings.core.workspace.workspace import InvalidNameError, InvalidRefError, Workspace
 
@@ -156,11 +162,26 @@ def _template_info_map(workspace: Workspace) -> dict[str, TemplateInfo]:
             config = workspace.load_template_config(name)
         except ConfigLoadError:
             continue
-        if isinstance(config, ColourMatrixTemplate):
-            colours = frozenset(workspace.template_colours(name))
-        elif isinstance(config, MultipleTemplate):
-            colours = frozenset(p.colour for p in config.placements if p.colour)
-        else:
-            colours = frozenset({config.colour}) if config.colour else frozenset()
-        result[name] = TemplateInfo(kind=config.kind, colours=colours)
+        info = template_info(workspace, name, config)
+        if isinstance(config.renderer, MarigoldRenderer):
+            # Local import avoids the workspace package's construction cycle.
+            from etsy_listings.core.preparation.readiness import saved_readiness
+
+            maps = saved_readiness(workspace, name)
+            if not maps.can_render:
+                info = replace(info, preparation_error=maps.message)
+        result[name] = info
     return result
+
+
+def template_info(workspace: Workspace, name: str, config: AnyTemplate) -> TemplateInfo:
+    """One loaded template as a listing check sees it. Public for the render
+    stage, which has already loaded the configs it ships and asks the same
+    artwork question of them (ADR-0053) without gathering the whole catalogue."""
+    if isinstance(config, ColourMatrixTemplate):
+        colours = frozenset(workspace.template_colours(name))
+    elif isinstance(config, MultipleTemplate):
+        colours = frozenset(p.colour for p in config.placements if p.colour)
+    else:
+        colours = frozenset({config.colour}) if config.colour else frozenset()
+    return TemplateInfo(kind=config.kind, colours=colours)
