@@ -62,6 +62,9 @@ uv run etsy-listings apply <listing-name>   # execute the plan; writes state.loc
 uv run etsy-listings apply --all
 uv run etsy-listings unlock <listing-name>  # clear a stuck Printify publish
 uv run etsy-listings ui --root <workspace>  # serves the UI at :8000
+uv run etsy-listings marigold setup        # explicit native GPU worker + weights
+uv run etsy-listings marigold status       # inspect capabilities; never install
+uv run etsy-listings marigold update       # select required engine; retain old installs
 ```
 
 ## The calibrator
@@ -191,3 +194,28 @@ exec bit), and `LF → CRLF` warnings from git are harmless.
 ## Contributing with AI agents
 
 [AGENTS.md](AGENTS.md) holds the working rules for coding agents.
+
+### Marigold runtime
+
+Marigold inference is an optional authoring dependency on native Windows x64.
+Run etsy-listings marigold setup explicitly. It installs Python 3.12.14 and a
+complete pinned worker environment, verifies the three pinned checkpoints,
+and runs normals, lighting and depth before selecting the installation. No
+workspace is needed for these commands. Packages and weights live under
+`<home>/.etsy-listings/marigold`, separate from production imaging dependencies.
+Status and preparation never install packages or download weights.
+
+Marigold update retains previous installations and an active job's engine
+selection. It also repairs a damaged installation into a new immutable directory.
+Failed setup does not replace the last usable installation. Status --json
+returns capabilities and operational bounds. Engine 1.0.0 accepts 1-10 inference
+steps, 1-3 ensemble members and images up to 4096 pixels on each axis. These are
+conservative safety bounds, not quality guarantees. It keeps one pipeline in
+RAM, caps retained model tensors at 4 GiB and exits after five idle minutes.
+
+The production setup and cancellation checks passed on an RTX 3070 with 8 GiB
+VRAM. This stage installs inference only; durable Marigold maps and editor
+preparation arrive in subsequent integration stages. Full-resolution
+photo quality and supported input limits still require the feature's final
+integration validation. Measurements and current limits are recorded in the
+[Marigold runtime report](docs/features/marigold-20261001/runtime-validation.md).

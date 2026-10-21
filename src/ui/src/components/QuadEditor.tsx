@@ -1,8 +1,10 @@
-import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import { type ReactNode, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import type { BoundingBox, Point } from "../types";
 import { cornerDragged, labelAnchor, menuPlacement, moved, nudged } from "./quadGeometry";
 
 interface Props {
+  overlay?: ReactNode;
+  interactive?: boolean;
   imageUrl: string;
   /** The template photo's **true** `[width, height]`, from the API.
    *
@@ -29,9 +31,9 @@ interface Props {
   onDuplicateSelected?: () => void;
   onBringSelectedToFront?: () => void;
   /** How much box chrome to draw. Three states rather than a boolean because
-   * 2a's two toggles mean different things: a chart's "show all outlines"
+   * 2a's two toggles mean different things: a chart's "Show all design boxes"
    * hides the *other* boxes while you keep working on one ("selected"), and a
-   * colour set's "show placement outline" hides everything so you can judge
+   * colour set's "Show design box" hides everything so you can judge
    * the render clean ("none"). */
   outlines?: "all" | "selected" | "none";
   /** Per-box caption drawn under the box and edited by clicking it.
@@ -146,6 +148,8 @@ function positionMenu(el: HTMLElement, menu: Menu): void {
 }
 
 export function QuadEditor({
+  overlay,
+  interactive = true,
   imageUrl,
   space,
   boxes,
@@ -200,7 +204,7 @@ export function QuadEditor({
   function handleCornerPointerDown(pointIndex: number) {
     return (event: React.PointerEvent<SVGCircleElement>) => {
       const start = boxes[selectedIndex];
-      if (!start) return;
+      if (!start || !interactive) return;
       event.currentTarget.setPointerCapture(event.pointerId);
       setDrag({ kind: "corner", pointIndex, start });
     };
@@ -210,7 +214,7 @@ export function QuadEditor({
    * moves; the corners keep their offsets, so a skewed quad stays skewed. */
   function handleBoxPointerDown(boxIndex: number) {
     return (event: React.PointerEvent<SVGPolygonElement>) => {
-      if (event.button !== 0) return;
+      if (event.button !== 0 || !interactive) return;
       const origin = toImageSpace(event.clientX, event.clientY);
       const start = boxes[boxIndex];
       if (!origin || !start) return;
@@ -221,7 +225,7 @@ export function QuadEditor({
   }
 
   function handlePointerMove(event: React.PointerEvent<SVGSVGElement>) {
-    if (!drag) return;
+    if (!drag || !interactive) return;
     const point = toImageSpace(event.clientX, event.clientY);
     if (!point) return;
     if (drag.kind === "box") {
@@ -245,6 +249,7 @@ export function QuadEditor({
   }
 
   function handleKeyDown(event: React.KeyboardEvent<HTMLDivElement>) {
+    if (!interactive) return;
     // The caption editor lives inside the canvas, so its arrows, Backspace and
     // Delete would otherwise reach the box while you are typing a colour name.
     if ((event.target as Element).closest("input, textarea")) return;
@@ -289,6 +294,7 @@ export function QuadEditor({
           onPointerMove={handlePointerMove}
           onPointerUp={handlePointerUp}
         >
+          {overlay}
           {boxes.map((box, boxIndex) => {
             const active = boxIndex === selectedIndex;
             if (!chromeVisible(boxIndex)) return null;
@@ -298,9 +304,11 @@ export function QuadEditor({
                 className={
                   active ? "quad-editor__box" : "quad-editor__box quad-editor__box--dimmed"
                 }
-                onClick={() => onSelect(boxIndex)}
+                onClick={() => {
+                  if (interactive) onSelect(boxIndex);
+                }}
                 onContextMenu={(event) => {
-                  if (!hasBoxMenu) return;
+                  if (!hasBoxMenu || !interactive) return;
                   event.preventDefault();
                   onSelect(boxIndex);
                   setMenu(menuAnchor(event.clientX, event.clientY, svgRef.current));
@@ -309,6 +317,7 @@ export function QuadEditor({
                 <polygon
                   points={box.map((p) => `${p.x},${p.y}`).join(" ")}
                   className="quad-editor__polygon"
+                  pointerEvents={interactive ? undefined : "none"}
                   onPointerDown={handleBoxPointerDown(boxIndex)}
                 />
                 {active &&
@@ -319,6 +328,7 @@ export function QuadEditor({
                       cy={p.y}
                       r={Math.max(space[0], space[1]) * 0.015}
                       className="quad-editor__handle"
+                      pointerEvents={interactive ? undefined : "none"}
                       onPointerDown={handleCornerPointerDown(pointIndex)}
                     />
                   ))}
@@ -372,7 +382,7 @@ export function QuadEditor({
                 title={onLabelChange ? "Click to edit" : undefined}
                 onClick={() => {
                   onSelect(boxIndex);
-                  if (onLabelChange) setEditingLabel(boxIndex);
+                  if (onLabelChange && interactive) setEditingLabel(boxIndex);
                 }}
               >
                 {text || labelPlaceholder || "unnamed"}
@@ -389,7 +399,7 @@ export function QuadEditor({
         </div>
       )}
 
-      {onAddBox && (
+      {onAddBox && interactive && (
         <button type="button" className="btn btn-primary quad-editor__add" onClick={onAddBox}>
           + Add box
         </button>

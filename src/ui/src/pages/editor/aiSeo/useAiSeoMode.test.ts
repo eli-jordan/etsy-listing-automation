@@ -74,7 +74,33 @@ describe("useAiSeoMode availability", () => {
 
     const { result } = renderHook(() => useAiSeoMode(detail({ design: {} }), vi.fn(), vi.fn()));
 
-    await waitFor(() => expect(result.current.available).toBe(false));
+    await waitFor(() =>
+      expect(result.current.requirements).toContainEqual({
+        label: "Design selected",
+        ready: false,
+      }),
+    );
+    expect(result.current.available).toBe(false);
+    expect(result.current.reason).toBeNull();
+    expect(readiness).not.toHaveBeenCalled();
+  });
+
+  it("is unavailable without asking when neither base slot holds a file", async () => {
+    /* Spec, *Representative artwork*: an empty light/dark pair has no image
+       to send, and a colour's own design is never promoted to one. */
+    const readiness = vi.spyOn(seoApi, "getSeoReadiness");
+    const empty = { "on-light": null, "on-dark": null, black: "designs/black.png" };
+
+    const { result } = renderHook(() => useAiSeoMode(detail({ design: empty }), vi.fn(), vi.fn()));
+
+    await waitFor(() =>
+      expect(result.current.requirements).toContainEqual({
+        label: "Design selected",
+        ready: false,
+      }),
+    );
+    expect(result.current.available).toBe(false);
+    expect(result.current.reason).toBeNull();
     expect(readiness).not.toHaveBeenCalled();
   });
 

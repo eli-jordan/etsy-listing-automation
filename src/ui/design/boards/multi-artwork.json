@@ -1,0 +1,99 @@
+{
+  "version": 1,
+  "name": "multi-artwork",
+  "auto": false,
+  "title": "Multi-artwork Listings",
+  "description": "App-styled mockups built from the real editor components: one design or a linked light/dark pair, per-colour designs, and the deploy blockers they create.",
+  "layout": {
+    "rows": [
+      [
+        "multi-artwork"
+      ]
+    ],
+    "scenes": {
+      "multi-artwork": {
+        "rows": [
+          [
+            "01-one-design",
+            "02-light-dark",
+            "03-colour-picker",
+            "04-colour-exception"
+          ],
+          [
+            "05-missing-light",
+            "06-one-slot-used",
+            "07-unclassified",
+            "08-back-to-one"
+          ]
+        ]
+      }
+    }
+  },
+  "nodes": [
+    {
+      "key": "n_ma_01",
+      "frame": "multi-artwork/01-one-design",
+      "x": 0,
+      "y": 0,
+      "w": 1280,
+      "h": 800
+    },
+    {
+      "key": "n_ma_02",
+      "frame": "multi-artwork/02-light-dark",
+      "x": 1400,
+      "y": 0,
+      "w": 1280,
+      "h": 800
+    },
+    {
+      "key": "n_ma_03",
+      "frame": "multi-artwork/03-colour-picker",
+      "x": 2800,
+      "y": 0,
+      "w": 1280,
+      "h": 800
+    },
+    {
+      "key": "n_ma_04",
+      "frame": "multi-artwork/04-colour-exception",
+      "x": 4200,
+      "y": 0,
+      "w": 1280,
+      "h": 800
+    },
+    {
+      "key": "n_ma_05",
+      "frame": "multi-artwork/05-missing-light",
+      "x": 0,
+      "y": 1000,
+      "w": 1280,
+      "h": 800
+    },
+    {
+      "key": "n_ma_06",
+      "frame": "multi-artwork/06-one-slot-used",
+      "x": 1400,
+      "y": 1000,
+      "w": 1280,
+      "h": 800
+    },
+    {
+      "key": "n_ma_07",
+      "frame": "multi-artwork/07-unclassified",
+      "x": 2800,
+      "y": 1000,
+      "w": 1280,
+      "h": 800
+    },
+    {
+      "key": "n_ma_08",
+      "frame": "multi-artwork/08-back-to-one",
+      "x": 4200,
+      "y": 1000,
+      "w": 1280,
+      "h": 800
+    }
+  ],
+  "order": 4
+}

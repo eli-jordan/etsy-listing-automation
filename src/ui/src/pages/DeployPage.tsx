@@ -3,6 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { cancelRun, createRun, currentRun, getRun, markRunSeen } from "../api/runs";
 import { getListing, tryGetListing } from "../api/listings";
 import { StatusTag } from "../components/StatusTag";
+import { sceneSource } from "../media";
 import { stageWillRun, type ListingDetail } from "../types";
 import { buildComparison } from "./deploy/comparison";
 import { ComparisonView } from "./deploy/ComparisonView";
@@ -331,7 +332,10 @@ export function DeployPage() {
                 <div className="dv-approved-comparison__body">
                   <ComparisonView
                     comparison={comparison}
-                    listing={{ name: detail.name, design: detail.design }}
+                    listing={{
+                      name: detail.name,
+                      scene: sceneSource(detail.name, detail.design_content_hash),
+                    }}
                     renderSnapshot={
                       state.plan.stage_plans.find((s) => s.stage === "render")?.snapshot ?? null
                     }
@@ -346,7 +350,10 @@ export function DeployPage() {
               <>
                 <ComparisonView
                   comparison={comparison}
-                  listing={{ name: detail.name, design: detail.design }}
+                  listing={{
+                    name: detail.name,
+                    scene: sceneSource(detail.name, detail.design_content_hash),
+                  }}
                   renderSnapshot={
                     state.plan.stage_plans.find((s) => s.stage === "render")?.snapshot ?? null
                   }
