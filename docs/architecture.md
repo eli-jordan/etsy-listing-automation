@@ -323,7 +323,7 @@ lock and refuses an active transaction, so a CLI cannot roll forward a live serv
 save. One server per workspace remains the ownership assumption.
 
 A save validates its revision and ordered mask operations, stages payloads and
-backups in the template-owned `.calibration-transaction/`, flushes commit intent,
+backups in the template-owned `_renderer/calibration-transaction/`, flushes commit intent,
 replaces destinations and verifies checksums before cleanup. Missing intent means
 discard staging; durable intent means roll forward the entire validated payload
 set. Damaged recovery data blocks reading with a repair explanation. Saved request
@@ -333,7 +333,7 @@ and saved mask checksums. It excludes inactive renderer settings and brush histo
 Config GET returns that revision as its ETag. The required save envelope and
 If-Match HTTP adapter remain part of the editor integration stage.
 
-Automatic and edited full-photo grayscale PNGs live under `masks/`, with stable-ID
+Automatic and edited full-photo grayscale PNGs live under `_renderer/masks/`, with stable-ID
 subdirectories only for multiple templates. Metadata binds them to the main photo
 and records the automatic algorithm version and PNG checksums. Normal rebuilding
 preserves both masks; explicit fresh baseline refresh replaces them only when no
@@ -341,7 +341,7 @@ manual correction would be lost. A changed photo requires explicit mask reset.
 Reset copies the durable automatic raster. Undo uses cached whole-stroke raster
 checkpoints bound to the committed edited checksum; missing or damaged history
 loses Undo without losing the saved mask. Config and flattened mask edits commit
-together. `renderer-settings.json` preserves last-saved inactive settings and
+together. `_renderer/renderer-settings.json` preserves last-saved inactive settings and
 renderer selection restores them without preparing anything.
 
 Workspace resolves the colour-matrix main photo by ordinal filename ordering of

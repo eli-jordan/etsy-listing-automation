@@ -281,7 +281,7 @@ downscale the canvas drags against, capped at
 
 Naming the sizes rather than accepting an ``?max_edge=`` keeps the number the
 server's business: each distinct base size grows its own pair of cached
-derived maps in the template's ``_derived/``, so a client free to ask for any
+derived maps in the template's ``_renderer/derived/``, so a client free to ask for any
 width would quietly fill that directory with one pair per window size.
 """
 

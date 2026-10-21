@@ -173,24 +173,27 @@ conventions implemented by `Workspace`, not values written into YAML.
 ```text
 mockup-templates/example/
   template.yaml
-  renderer-settings.json
   ivory.png
   pepper.png
-  masks/
-    automatic.png                 # single or colour-matrix
-    edited.png
-    metadata.json
-    left-shirt/                   # multiple placement instead
-      automatic.png
+  _renderer/                      # everything the app writes besides template.yaml
+    renderer-settings.json
+    calibration-receipt.json
+    masks/
+      automatic.png               # single or colour-matrix
       edited.png
       metadata.json
-  maps/
-    current.json
-    generations/<generation-id>/
-      manifest.json
-      placement.npz               # implicit placement
-      left-shirt.npz              # explicit placement instead
-  .calibration-transaction/        # present only during a recoverable save
+      left-shirt/                 # multiple placement instead
+        automatic.png
+        edited.png
+        metadata.json
+    maps/
+      current.json
+      generations/<generation-id>/
+        manifest.json
+        placement.npz             # implicit placement
+        left-shirt.npz            # explicit placement instead
+    derived/                      # Photo warp height/luminance cache
+    calibration-transaction/      # present only during a recoverable save
 ```
 
 Mask PNGs are full main-photo dimensions in photo pixel coordinates. Zero hides
@@ -245,7 +248,7 @@ predictions, but leaves masks, Reset and prepared rendering intact.
 To publish maps, write all archives and the generation manifest into staging,
 validate the complete set, then move it to its immutable generation directory.
 Under the template lock, compare current preparation inputs and atomically
-replace `maps/current.json` with `{schema_version, generation_id,
+replace `_renderer/maps/current.json` with `{schema_version, generation_id,
 manifest_checksum}`. Readers see the old complete generation or the new one.
 On failure leave the old pointer intact. Recovery can remove unreferenced staging
 and generation directories after checking persisted jobs and reader ownership.

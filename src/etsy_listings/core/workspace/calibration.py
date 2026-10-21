@@ -524,7 +524,7 @@ class CalibrationStore:
         with self.lock(name):
             self.recover(name)
             transaction = self.workspace.template_calibration_transaction(name)
-            transaction.mkdir()
+            transaction.mkdir(parents=True)
             entries = []
             for index, (path, data) in enumerate(files.items()):
                 relative = path.relative_to(self.workspace.template_dir(name)).as_posix()

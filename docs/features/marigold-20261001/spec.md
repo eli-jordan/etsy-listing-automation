@@ -53,7 +53,7 @@ top-level rendering settings are replaced, with no legacy loading requirement.
 Single and colour-matrix templates retain their top-level `bounding_box` and
 have no placement ID. Multiple templates keep their placement list and give each
 placement a stable ID. Mask paths are derived by Workspace, never stored in YAML.
-Automatic and edited masks live under `./masks/`, with a placement-ID subdirectory
+Automatic and edited masks live under `./_renderer/masks/`, with a placement-ID subdirectory
 for multiple templates. Both masks survive cache cleanup and template copying.
 
 Resolve the main photo using one stable, documented ordering of the template's

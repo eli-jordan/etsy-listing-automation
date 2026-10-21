@@ -953,21 +953,24 @@ class Workspace:
             return photos[0]
         return self.template_scene_image(template)
 
+    def template_renderer_dir(self, template: str) -> Path:
+        return self.template_dir(template) / layout.RENDERER_DIR
+
     def template_renderer_settings_file(self, template: str) -> Path:
-        return self.template_dir(template) / layout.RENDERER_SETTINGS_FILE
+        return self.template_renderer_dir(template) / layout.RENDERER_SETTINGS_FILE
 
     def template_calibration_transaction(self, template: str) -> Path:
-        return self.template_dir(template) / layout.CALIBRATION_TRANSACTION_DIR
+        return self.template_renderer_dir(template) / layout.CALIBRATION_TRANSACTION_DIR
 
     def template_calibration_receipt(self, template: str) -> Path:
-        return self.template_dir(template) / layout.CALIBRATION_RECEIPT_FILE
+        return self.template_renderer_dir(template) / layout.CALIBRATION_RECEIPT_FILE
 
     def template_mask_dir(self, template: str, placement_id: str | None = None) -> Path:
         from pydantic import TypeAdapter
 
         from etsy_listings.core.render.config import PlacementId
 
-        directory = self.template_dir(template) / layout.MASKS_DIR
+        directory = self.template_renderer_dir(template) / layout.MASKS_DIR
         if placement_id is not None:
             directory /= TypeAdapter(PlacementId).validate_python(placement_id)
         return self.resolve(directory.relative_to(self.root).as_posix(), self.root)
@@ -991,7 +994,7 @@ class Workspace:
         return directory / (f"{placement_id}.json" if placement_id is not None else "implicit.json")
 
     def template_maps_dir(self, template: str) -> Path:
-        directory = self.template_dir(template) / layout.MAPS_DIR
+        directory = self.template_renderer_dir(template) / layout.MAPS_DIR
         return self.resolve(directory.relative_to(self.root).as_posix(), self.root)
 
     def template_map_current(self, template: str) -> Path:
@@ -1038,7 +1041,7 @@ class Workspace:
         remove_tree(self.template_map_generation_dir(template, generation, staging=staging))
 
     def template_derived_dir(self, template: str) -> Path:
-        return self.template_dir(template) / layout.DERIVED_DIR
+        return self.template_renderer_dir(template) / layout.DERIVED_DIR
 
     def template_base_image(self, template: str, colour: str) -> Path:
         """``colour-matrix``-kind templates only: the mockup filename

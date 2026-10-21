@@ -53,7 +53,7 @@ EDITOR_MAX_EDGE = 900
 A single fixed number rather than "however wide the pane happens to be": the
 derived height/luminance maps are cached on disk under a hash of the base
 image's bytes, so an arbitrary per-request size would leave one ``.npy`` pair
-per window width sitting in every template's ``_derived/``. Two sizes exist --
+per window width sitting in every template's ``_renderer/derived/``. Two sizes exist --
 this one and full -- so at most two pairs do.
 
 900 is comfortably above the ~700px the canvas occupies on a 1280px window at
