@@ -1,5 +1,5 @@
 import { maskDraft } from "./maskDraft";
-import { useId, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useId, useRef, useState } from "react";
 import type { MaskOperation } from "../api/preparation";
 import type { BoundingBox } from "../types";
 import { artworkTransform } from "./artworkTransform";
@@ -38,6 +38,10 @@ export function PlacementOverlay({
   const id = useId().replaceAll(":", "");
   const [stroke, setStroke] = useState<Stroke | null>(null);
   const current = useRef<Stroke | null>(null);
+  const cursor = useRef<SVGGElement>(null);
+  function hideCursor() {
+    cursor.current?.setAttribute("visibility", "hidden");
+  }
   const { automatic, strokes, undoSaved } = maskDraft(operations);
   const base = automatic
     ? automaticMaskUrl
@@ -54,6 +58,10 @@ export function PlacementOverlay({
     p.x = event.clientX;
     p.y = event.clientY;
     const result = p.matrixTransform(ctm.inverse());
+    if (result.x >= 0 && result.x < space[0] && result.y >= 0 && result.y < space[1]) {
+      cursor.current?.setAttribute("transform", `translate(${result.x} ${result.y})`);
+      cursor.current?.setAttribute("visibility", "visible");
+    } else hideCursor();
     return [
       Math.max(0, Math.min(space[0] - 1, result.x)),
       Math.max(0, Math.min(space[1] - 1, result.y)),
@@ -65,6 +73,12 @@ export function PlacementOverlay({
     setStroke(null);
     if (next) onStroke(next);
   }
+  // Leaving mask mode commits an active gesture once, including Escape while
+  // the pointer is still held. The effect event uses the latest draft callback.
+  const finishGesture = useEffectEvent(finish);
+  useEffect(() => {
+    if (editing) return () => finishGesture();
+  }, [editing]);
   const all = stroke ? [...strokes, stroke] : strokes;
   const paths = all.map((s, i) => (
     <path
@@ -154,7 +168,9 @@ export function PlacementOverlay({
             width={space[0]}
             height={space[1]}
             fill="transparent"
-            style={{ touchAction: "none", cursor: "crosshair" }}
+            style={{ touchAction: "none", cursor: "none" }}
+            onPointerEnter={point}
+            onPointerLeave={hideCursor}
             onPointerDown={(event) => {
               if (event.button !== 0) return;
               event.stopPropagation();
@@ -166,9 +182,9 @@ export function PlacementOverlay({
               setStroke(next);
             }}
             onPointerMove={(event) => {
+              const p = point(event);
               if (!current.current) return;
               event.stopPropagation();
-              const p = point(event);
               if (p) {
                 const next = { ...current.current, points: [...current.current.points, p] };
                 current.current = next;
@@ -179,8 +195,38 @@ export function PlacementOverlay({
               event.stopPropagation();
               finish();
             }}
-            onPointerCancel={finish}
+            onPointerCancel={() => {
+              finish();
+              hideCursor();
+            }}
+            onLostPointerCapture={finish}
           />
+          <g
+            ref={cursor}
+            aria-label="Brush footprint"
+            visibility="hidden"
+            pointerEvents="none"
+            fill="none"
+          >
+            {/* SVG photo units match the stroke, including resize and DPR.
+                  Non-scaling outlines stay legible on light and dark photos. */}
+            <circle
+              cx={0}
+              cy={0}
+              r={(stroke?.diameter_px ?? diameter) / 2}
+              stroke="black"
+              strokeWidth={3}
+              vectorEffect="non-scaling-stroke"
+            />
+            <circle
+              cx={0}
+              cy={0}
+              r={(stroke?.diameter_px ?? diameter) / 2}
+              stroke="white"
+              strokeWidth={1}
+              vectorEffect="non-scaling-stroke"
+            />
+          </g>
         </>
       )}
     </g>

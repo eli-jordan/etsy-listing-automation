@@ -81,8 +81,8 @@ export function App() {
     name: string;
     config: TemplateConfigState;
   } | null>(null);
-  // What is on disk. Reset goes back to this, and comparing against it is what
-  // makes "are there unsaved edits?" answerable without a re-fetch.
+  // Comparing against the last saved config identifies unsaved edits without
+  // fetching the document again.
   const [savedEntry, setSavedEntry] = useState<{
     name: string;
     config: TemplateConfigState;
@@ -284,7 +284,7 @@ export function App() {
   }, [config, maskEdits, templateName]);
 
   // Match the listing editor: wait until a run of edits settles, then write
-  // it as one request. Changing template or resetting clears the pending
+  // it as one request. Changing template clears the pending
   // timer through the effect cleanup.
   useEffect(() => {
     if (
@@ -305,13 +305,6 @@ export function App() {
     if (!templateName || !config) return;
     void saveConfig(templateName, config, maskEdits).catch(() => {});
   }, [templateName, config, saveConfig, maskEdits]);
-
-  const handleReset = useCallback(() => {
-    if (!templateName || !saved) return;
-    setConfigEntry({ name: templateName, config: saved });
-    setMaskDraft(null);
-    setStatus("reset");
-  }, [templateName, saved]);
 
   const selectTemplate = useCallback((name: string) => {
     setStatus("");
@@ -557,9 +550,6 @@ export function App() {
               Reload template
             </button>
           )}
-          <button className="btn btn-secondary" onClick={handleReset} disabled={!dirty}>
-            Reset
-          </button>
         </div>
       </header>
 

@@ -98,10 +98,11 @@ export function MarigoldEditor({
   const placementId = config.kind === "multiple" ? (selected?.id ?? null) : null;
   const edit = maskEdits.find((e) => e.placement_id === placementId);
   const operations = edit?.operations ?? [];
-  function append(operation: MaskOperation) {
+  function append(operation: MaskOperation, id = placementId) {
+    const existing = maskEdits.find((e) => e.placement_id === id)?.operations ?? [];
     onMaskEdits([
-      ...maskEdits.filter((e) => e.placement_id !== placementId),
-      { placement_id: placementId, operations: [...operations, operation] },
+      ...maskEdits.filter((e) => e.placement_id !== id),
+      { placement_id: id, operations: [...existing, operation] },
     ]);
   }
   const placementState = preparation?.placements.find((p) => p.placement_id === placementId);
@@ -340,7 +341,7 @@ export function MarigoldEditor({
                             editing={editing && i === index}
                             mode={mode}
                             diameter={diameter}
-                            onStroke={append}
+                            onStroke={(stroke) => append(stroke, id)}
                           />
                         );
                       })}
@@ -352,30 +353,10 @@ export function MarigoldEditor({
               )}
               {editing && <MaskBrushDock controls={controls} />}
             </div>
-            <div className="mg-canvas-foot">
-              <strong>{editing ? "Mask preview" : "Placement preview"}</strong>
-              <span>
-                {editorPreview
-                  ? "Interactive preview · 1024px. Open Preview to judge full quality."
-                  : "Placement overlay. Prepare the template to see folds and lighting."}
-              </span>
-            </div>
-            <p className="mg-canvas-hint">
-              {editing
-                ? "Mask hides print; Unmask restores it."
-                : "Drag corners or move the box. Shift-drag scales it."}
-            </p>
           </>
         )}
         <PreviewPanel
           fullQuality
-          reference={
-            config.kind === "colour-matrix"
-              ? "All colours use " +
-                (preparation?.main_photo.split(/[\\/]/).at(-1) ?? "the main photo") +
-                "'s prepared maps. No additional preparation."
-              : ""
-          }
           templateName={templateName}
           jobs={jobs}
           design={design}
@@ -400,15 +381,6 @@ export function MarigoldEditor({
       </div>
       <aside className="app__controls">
         {rendererControls}
-        {config.kind === "single" && (
-          <label>
-            Garment colour (optional)
-            <input
-              value={config.colour ?? ""}
-              onChange={(e) => onChange({ ...config, colour: e.target.value || null })}
-            />
-          </label>
-        )}
         <MarigoldRealismPanel
           value={config.renderer.config.appearance}
           onChange={(appearance) =>

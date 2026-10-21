@@ -451,9 +451,10 @@ def unsaved_preview(
     Refusals: :class:`TemplateMissing`, :class:`TemplateConfigMissing`,
     :class:`TemplatePhotoMissing`."""
     config = _load_config(workspace, name)
-    if not isinstance(config.renderer, PhotoWarpRenderer) or (
-        geometry.renderer is not None and not isinstance(geometry.renderer, PhotoWarpRenderer)
-    ):
+    # Authoring previews use the explicit draft renderer before autosave.
+    # An omitted renderer still follows the saved template, so a Marigold
+    # template cannot accidentally fall through to the Photo warp pipeline.
+    if not isinstance(geometry.renderer or config.renderer, PhotoWarpRenderer):
         raise PreparationRequired("Prepare the template first: Marigold maps are required")
     kind = config.kind
     if geometry.kind != kind:

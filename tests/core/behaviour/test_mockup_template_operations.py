@@ -70,6 +70,21 @@ def _folder(
     return directory
 
 
+def test_unsaved_preview_without_an_explicit_renderer_keeps_marigold_refusal(workspace_root):
+    from etsy_listings.core.render.config import PreparationRequired
+
+    from tests.support.marigold import marigold_template
+
+    workspace = marigold_template(workspace_root)
+    with pytest.raises(PreparationRequired, match="Marigold maps are required"):
+        unsaved_preview(
+            workspace,
+            "shirt",
+            PreviewGeometry(kind="single", boxes=(BOX,)),
+            design=_design(workspace),
+        )
+
+
 def _design(workspace: Workspace):  # noqa: ANN202
     return lambda: workspace.design_file("take-a-hike")
 

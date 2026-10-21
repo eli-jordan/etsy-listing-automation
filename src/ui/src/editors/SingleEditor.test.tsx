@@ -62,13 +62,13 @@ describe("SingleEditor", () => {
     await screen.findByAltText("Rendered preview");
   });
 
-  it("editing the colour field updates the config", async () => {
+  it("retains the saved colour without a garment colour field", async () => {
     vi.spyOn(calibrator, "renderPreview").mockResolvedValue("blob:preview");
     const onChange = vi.fn();
     render(
       <SingleEditor
         templateName="lifestyle-01"
-        config={CONFIG}
+        config={{ ...CONFIG, colour: "black" }}
         space={SPACE}
         onChange={onChange}
         design="bundled-grid"
@@ -76,10 +76,9 @@ describe("SingleEditor", () => {
       />,
     );
 
-    fireEvent.change(screen.getByLabelText("Garment colour (optional)"), {
-      target: { value: "black" },
-    });
-    expect(onChange).toHaveBeenCalledWith({ ...CONFIG, colour: "black" });
+    expect(screen.queryByLabelText("Garment colour (optional)")).not.toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Wrinkle strength"), { target: { value: "75" } });
+    expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ colour: "black" }));
   });
 
   /** One box, always selected: without this there was no way to get the

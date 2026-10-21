@@ -18,9 +18,7 @@ interface Props {
   onDesignChange: (design: string) => void;
 }
 
-/** The simplest of the three: one box over one photo, nothing to
- * disambiguate. Everything it adds to the shell is the optional garment
- * colour, which exists only so artwork resolution has something to key on. */
+/** One placement over one photo, with the shared preview and realism controls. */
 function PhotoWarpSingleEditor({
   rendererControls,
   templateName,
@@ -65,16 +63,6 @@ function PhotoWarpSingleEditor({
       previewUrl={previewUrl}
       jobs={jobs}
       canvas={(ctx) => <OneBoxCanvas {...ctx} box={config.bounding_box} onChange={setBox} />}
-      controls={
-        <label>
-          Garment colour (optional)
-          <input
-            value={config.colour ?? ""}
-            onChange={(e) => onChange({ ...config, colour: e.target.value || null })}
-            placeholder="for artwork resolution, if relevant"
-          />
-        </label>
-      }
     />
   );
 }

@@ -114,23 +114,7 @@
   opacity: 0.9;
   z-index: 1;
 }
-.mg-canvas-foot {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-  padding: var(--space-3);
-  font-size: 12px;
-  border-top: 1px solid var(--color-divider);
-}
-.mg-canvas-foot span,
-.mg-canvas-hint {
-  color: var(--color-neutral-700);
-  font-size: 11px;
-}
-.mg-canvas-hint {
-  margin: 0;
-  padding: 0 var(--space-3) var(--space-3);
-}
+
 .mg-rail-state {
   display: block;
   font-size: 11px;
@@ -686,39 +670,25 @@
 .mg-maskbar .mg-mask-edit {
   border: 1px solid var(--color-divider);
 }
-.mg-mask-more {
-  position: relative;
-}
-.mg-mask-menu {
-  position: absolute;
-  right: 0;
-  bottom: calc(100% + 10px);
-  z-index: 20;
-  width: 160px;
-  padding: 6px;
-  border: 1px solid var(--color-divider);
-  border-radius: 6px;
-  background: var(--color-bg);
-  box-shadow: 0 4px 16px #30282020;
-}
-.mg-mask-menu button {
-  width: 100%;
-  justify-content: flex-start;
-}
 .mg-stage:has(.mg-mask-dock) {
-  margin-bottom: 60px;
   overflow: visible;
 }
 .mg-mask-dock {
-  position: absolute;
-  left: 50%;
-  bottom: -36px;
-  transform: translateX(-50%);
+  position: relative;
+  width: fit-content;
+  max-width: calc(100% - 12px);
+  margin: 8px auto;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 4px;
   z-index: 8;
   padding: 7px;
   border: 1px solid var(--color-divider);
   border-radius: 10px;
   box-shadow: 0 4px 16px #30282020;
+}
+.mg-mask-dock button {
+  padding: 7px;
 }
 .mg-mask-dock button[aria-pressed="true"] {
   background: var(--color-accent-100);
@@ -726,10 +696,11 @@
   box-shadow: inset 0 0 0 1px var(--color-accent);
 }
 .mg-mask-divider {
+  flex-shrink: 0;
   width: 1px;
   height: 22px;
   background: var(--color-divider);
-  margin: 0 4px;
+  margin: 0 2px;
 }
 .mg-mask-size {
   display: flex;

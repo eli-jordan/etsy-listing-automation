@@ -1,10 +1,12 @@
 """The live editor, durable queue and CPU renderer across every template kind."""
 
+import base64
+import time
 from io import BytesIO
 from pathlib import Path
 
 import pytest
-from PIL import Image
+from PIL import Image, ImageChops
 
 from tests.support.marigold import PreparationRuntime, PreparationWorker, marigold_template
 
@@ -398,3 +400,228 @@ def test_colour_selection_changes_fallback_and_prepared_composite_without_saving
         page.request.get(origin + "/api/templates/marigold-shirt/preparation").json()["main_photo"]
         == main
     )
+
+
+def test_renderer_switch_renders_before_autosave_and_discards_inflight_frame(page):
+    from playwright.sync_api import expect
+
+    select_template(page)
+    page.get_by_role("button", name="Prepare template", exact=True).click()
+    ready(page)
+    page.wait_for_function(
+        "() => document.querySelector('.quad-editor__image')?.src.startsWith('blob:')"
+    )
+    held = []
+
+    def hold_material(route):
+        if not held and route.request.post_data_json["renderer"]["type"] == "marigold":
+            held.append((route, route.fetch()))
+        else:
+            route.continue_()
+
+    page.route("**/preview?scale=editor", hold_material)
+    texture = page.get_by_role("slider", name="Fabric texture")
+    texture.press("ArrowRight")
+    edited_texture = texture.input_value()
+    deadline = time.monotonic() + 5
+    while not held and time.monotonic() < deadline:
+        page.wait_for_timeout(10)
+    assert len(held) == 1
+    with page.expect_response(
+        lambda r: (
+            r.url.endswith("/config")
+            and r.request.method == "PUT"
+            and r.request.post_data_json["config"]["renderer"]["type"] == "photo-warp"
+            and r.status == 200
+        )
+    ):
+        with page.expect_response(
+            lambda r: (
+                "/preview?scale=editor" in r.url
+                and r.request.post_data_json["renderer"]["type"] == "photo-warp"
+            )
+        ) as rendered:
+            page.get_by_label("Renderer", exact=True).select_option("photo-warp")
+        assert rendered.value.status == 200
+        canvas = page.get_by_alt_text("Rendered preview")
+        expect(canvas).to_be_visible()
+        pixels = canvas.evaluate("""async image => {
+            await image.decode();
+            const c = document.createElement('canvas');
+            c.width = image.naturalWidth; c.height = image.naturalHeight;
+            c.getContext('2d').drawImage(image, 0, 0);
+            return c.toDataURL('image/png').split(',')[1];
+        }""")
+        image = Image.open(BytesIO(base64.b64decode(pixels)))
+        image.load()
+        assert image.size == (64, 64)
+        photo_url = page.url.split("/templates")[0] + "/api/templates/marigold-shirt/photo"
+        colour = rendered.value.request.post_data_json.get("colour")
+        source = Image.open(
+            BytesIO(page.request.get(photo_url, params={"colour": colour} if colour else {}).body())
+        ).convert("RGB")
+        artwork_difference = ImageChops.difference(image.convert("RGB"), source)
+        assert artwork_difference.point(lambda v: 255 if v > 30 else 0).getbbox() is not None
+    origin = page.url.split("/templates")[0]
+    page.wait_for_function(
+        "() => document.querySelector('.app__status')?.textContent.includes('Saved')"
+    )
+    config = page.request.get(origin + "/api/templates/marigold-shirt/config").json()
+    assert config["renderer"]["type"] == "photo-warp"
+    page.get_by_role("tab", name="Preview", exact=True).click()
+    page.locator(".preview-grid__tile img").first.wait_for()
+    page.get_by_role("tab", name="Calibrate", exact=True).click()
+    with page.expect_response(
+        lambda r: (
+            r.url.endswith("/config")
+            and r.request.method == "PUT"
+            and r.request.post_data_json["config"]["renderer"]["type"] == "marigold"
+            and r.status == 200
+        )
+    ):
+        page.get_by_label("Renderer", exact=True).select_option("marigold")
+    ready(page)
+    page.wait_for_function(
+        "() => document.querySelector('.quad-editor__image')?.src.startsWith('blob:')"
+    )
+    expect(page.get_by_role("slider", name="Fabric texture")).to_have_value(edited_texture)
+    latest = page.get_by_alt_text("Rendered preview")
+    latest.evaluate("image => image.decode()")
+    current_source = latest.get_attribute("src")
+    for route, response in held:
+        route.fulfill(response=response)
+    page.unroute("**/preview?scale=editor", hold_material)
+    expect(latest).to_have_attribute("src", current_source)
+    assert (
+        page.request.get(origin + "/api/templates/marigold-shirt/config").json()["renderer"]["type"]
+        == "marigold"
+    )
+
+
+@pytest.mark.parametrize("device_scale", [1, 2])
+def test_mask_cursor_matches_photo_brush_on_hover_paint_and_resize(
+    browser_type, calibrator_server, device_scale, template_kind
+):
+    from playwright.sync_api import expect
+
+    context = browser_type.new_context(
+        viewport={"width": 1280, "height": 900}, device_scale_factor=device_scale
+    )
+    cursor_page = context.new_page()
+    try:
+        cursor_page.goto(calibrator_server + "/templates")
+        select_template(cursor_page)
+        cursor_page.get_by_role("button", name="Prepare template", exact=True).click()
+        ready(cursor_page)
+        cursor_page.get_by_role("button", name="Edit mask", exact=True).click()
+        area = cursor_page.get_by_label("Mask drawing area")
+        cursor = cursor_page.get_by_label("Brush footprint", exact=True)
+        dock = cursor_page.get_by_role("toolbar", name="Mask brushes")
+        expect(dock.get_by_role("button", name="Undo brush stroke")).to_be_disabled()
+        expect(dock.get_by_role("button", name="Reset mask")).to_be_enabled()
+        mask_path = (
+            "/api/templates/marigold-shirt/placements/left-shirt/mask"
+            if template_kind == "multiple"
+            else "/api/templates/marigold-shirt/mask"
+        )
+
+        def saved_mask():
+            return Image.open(
+                BytesIO(cursor_page.request.get(calibrator_server + mask_path).body())
+            ).convert("L")
+
+        for width, mode, diameter in [(1280, "Mask", 24), (1500, "Unmask", 40)]:
+            cursor_page.set_viewport_size({"width": width, "height": 900})
+            dock.get_by_role("button", name=mode, exact=True).click()
+            dock.get_by_role("slider", name="Brush size").fill(str(diameter))
+            bounds = area.bounding_box()
+            assert bounds is not None
+            x = bounds["x"] + bounds["width"] * 0.45
+            y = bounds["y"] + bounds["height"] * 0.45
+            if mode == "Unmask":
+                # Give Unmask a fully excluded region so its entire footprint
+                # becomes visible in saved pixels, independent of the prior stroke.
+                dock.get_by_role("button", name="Mask", exact=True).click()
+                dock.get_by_role("slider", name="Brush size").fill("80")
+                with cursor_page.expect_response(
+                    lambda r: (
+                        r.url.endswith("/config") and r.request.method == "PUT" and r.status == 200
+                    )
+                ):
+                    cursor_page.mouse.click(x, y)
+                dock.get_by_role("button", name=mode, exact=True).click()
+                dock.get_by_role("slider", name="Brush size").fill(str(diameter))
+            before_mask = saved_mask()
+            cursor_page.mouse.move(x, y)
+            expect(cursor).to_be_visible()
+            circle = cursor.locator("circle").last.bounding_box()
+            assert circle is not None
+            assert circle["width"] == pytest.approx(bounds["width"] * diameter / 64, abs=1.1)
+            assert circle["height"] == pytest.approx(bounds["height"] * diameter / 64, abs=1.1)
+            assert circle["x"] + circle["width"] / 2 == pytest.approx(x, abs=1)
+            assert circle["y"] + circle["height"] / 2 == pytest.approx(y, abs=1)
+            cursor_page.mouse.down()
+            cursor_page.mouse.move(x + 8, y + 6, steps=3)
+            painted = cursor.bounding_box()
+            assert painted is not None
+            assert painted["x"] + painted["width"] / 2 == pytest.approx(x + 8, abs=1)
+            assert painted["y"] + painted["height"] / 2 == pytest.approx(y + 6, abs=1)
+            dock.get_by_role("slider", name="Brush size").fill(str(diameter + 8))
+            active_circle = cursor.locator("circle").last.bounding_box()
+            assert active_circle is not None
+            assert active_circle["width"] == pytest.approx(circle["width"], abs=1)
+            with cursor_page.expect_response(
+                lambda r: (
+                    r.url.endswith("/config") and r.request.method == "PUT" and r.status == 200
+                )
+            ):
+                cursor_page.mouse.up()
+            changed = ImageChops.difference(before_mask, saved_mask()).getbbox()
+            assert changed is not None
+            # Compare the decoded raster footprint with the circle in screen
+            # units. Allow the mask rasterizer's pixel rounding at both edges.
+            assert (changed[2] - changed[0]) * bounds["width"] / 64 == pytest.approx(
+                circle["width"] + 8, abs=3 * bounds["width"] / 64
+            )
+            assert (changed[3] - changed[1]) * bounds["height"] / 64 == pytest.approx(
+                circle["height"] + 6, abs=3 * bounds["height"] / 64
+            )
+            expect(dock.get_by_role("button", name="Undo brush stroke")).to_be_enabled()
+            cursor_page.mouse.move(bounds["x"] - 10, bounds["y"] - 10)
+            expect(cursor).not_to_be_visible()
+        cursor_page.get_by_role("button", name="Done", exact=True).click()
+        expect(cursor).to_have_count(0)
+        cursor_page.get_by_role("button", name="Edit mask", exact=True).click()
+        expect(cursor).not_to_be_visible()
+        cursor_page.keyboard.press("Escape")
+        expect(dock).to_have_count(0)
+    finally:
+        context.close()
+
+
+@pytest.mark.parametrize("template_kind", ["single"], indirect=True)
+def test_mask_toolbar_keeps_direct_actions_reachable_on_mobile(page):
+    from playwright.sync_api import expect
+
+    select_template(page)
+    page.get_by_role("button", name="Prepare template", exact=True).click()
+    ready(page)
+    page.set_viewport_size({"width": 390, "height": 844})
+    page.get_by_role("button", name="Edit mask", exact=True).click()
+    dock = page.get_by_role("toolbar", name="Mask brushes")
+    preview = page.locator(".app__preview").bounding_box()
+    assert preview is not None
+    for name in ["Mask", "Unmask", "Undo brush stroke", "Reset mask"]:
+        action = dock.get_by_role("button", name=name, exact=True)
+        expect(action).to_be_visible()
+        box = action.bounding_box()
+        assert box is not None
+        assert preview["x"] <= box["x"]
+        assert box["x"] + box["width"] <= preview["x"] + preview["width"]
+    dock.get_by_role("button", name="Unmask", exact=True).click()
+    expect(dock.get_by_role("button", name="Unmask", exact=True)).to_have_attribute(
+        "aria-pressed", "true"
+    )
+    dock.get_by_role("button", name="Reset mask", exact=True).click()
+    page.get_by_role("button", name="Done", exact=True).click()
+    expect(dock).to_have_count(0)

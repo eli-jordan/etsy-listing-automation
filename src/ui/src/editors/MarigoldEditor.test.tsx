@@ -70,6 +70,14 @@ function pointerSpace(svg: SVGSVGElement) {
   });
 }
 describe("MarigoldEditor", () => {
+  it("keeps the saved single colour without showing a garment colour field or calibration footers", () => {
+    const view = setup({ ...SINGLE, colour: "navy" });
+    expect(screen.queryByLabelText("Garment colour (optional)")).not.toBeInTheDocument();
+    expect(view.container.querySelector(".mg-canvas-foot")).not.toBeInTheDocument();
+    expect(view.container.querySelector(".mg-canvas-hint")).not.toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Fabric texture"), { target: { value: "62" } });
+    expect(view.config()).toMatchObject({ colour: "navy" });
+  });
   it("calibrates locally without making a render request and hides only box chrome", () => {
     const { container } = setup();
     expect(calibrator.renderPreview).not.toHaveBeenCalled();
@@ -112,14 +120,35 @@ describe("MarigoldEditor", () => {
     expect(screen.queryByRole("toolbar", { name: "Mask brushes" })).not.toBeInTheDocument();
     expect(view.edits()[0]?.operations).toHaveLength(1);
     fireEvent.click(screen.getByText("Edit mask"));
-    fireEvent.click(screen.getByLabelText("Mask actions"));
-    fireEvent.click(screen.getByText("Undo brush stroke"));
+    fireEvent.click(screen.getByRole("button", { name: "Undo brush stroke" }));
     expect(view.edits()[0]?.operations.at(-1)).toEqual({ type: "undo" });
-    fireEvent.click(screen.getByLabelText("Mask actions"));
-    expect(screen.getByText("Undo brush stroke")).toBeDisabled();
-    fireEvent.click(screen.getByText("Reset mask"));
+    expect(screen.getByRole("button", { name: "Undo brush stroke" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "Reset mask" }));
     expect(view.edits()[0]?.operations.at(-1)).toEqual({ type: "reset" });
     expect(view.config()).toEqual(SINGLE);
+  });
+  it("commits complete cancelled and Escape-ended gestures once", () => {
+    const view = setup();
+    pointerSpace(must(view.container.querySelector<SVGSVGElement>("svg.quad-editor__overlay")));
+    fireEvent.click(screen.getByText("Edit mask"));
+    const area = screen.getByLabelText("Mask drawing area");
+    fireEvent.pointerDown(area, { clientX: 20, clientY: 25, button: 0 });
+    fireEvent.pointerMove(area, { clientX: 30, clientY: 35 });
+    fireEvent.pointerCancel(area);
+    fireEvent.lostPointerCapture(area);
+    expect(view.edits()[0]?.operations).toHaveLength(1);
+    fireEvent.pointerDown(area, { clientX: 40, clientY: 25, button: 0 });
+    fireEvent.pointerMove(area, { clientX: 45, clientY: 30 });
+    fireEvent.keyDown(document.body, { key: "Escape" });
+    expect(view.edits()[0]?.operations).toHaveLength(2);
+    expect(view.edits()[0]?.operations[1]).toMatchObject({
+      type: "stroke",
+      points: [
+        [80, 50],
+        [90, 60],
+      ],
+    });
+    expect(screen.queryByRole("toolbar", { name: "Mask brushes" })).not.toBeInTheDocument();
   });
   it("keeps stable placement IDs when duplicated, reordered and removed", () => {
     const config: TemplateConfigState = {
@@ -237,8 +266,7 @@ describe("MarigoldEditor", () => {
     expect(screen.getByRole("button", { name: "Re-render" })).toBeEnabled();
     fireEvent.click(screen.getByRole("tab", { name: "Calibrate" }));
     fireEvent.click(screen.getByText("Edit mask"));
-    fireEvent.click(screen.getByLabelText("Mask actions"));
-    fireEvent.click(screen.getByText("Reset mask"));
+    fireEvent.click(screen.getByRole("button", { name: "Reset mask" }));
     fireEvent.click(screen.getByRole("tab", { name: "Preview" }));
     expect(screen.getByRole("button", { name: "Re-render" })).toBeDisabled();
     expect(view.edits()).toHaveLength(1);
@@ -276,8 +304,7 @@ describe("MarigoldEditor", () => {
     await waitFor(() => expect(preparation.getMaskHistory).toHaveBeenCalled());
     await act(async () => {});
     fireEvent.click(screen.getByText("Edit mask"));
-    fireEvent.click(screen.getByLabelText("Mask actions"));
-    fireEvent.click(screen.getByText("Undo brush stroke"));
+    fireEvent.click(screen.getByRole("button", { name: "Undo brush stroke" }));
     expect(view.container.querySelector("mask image")).toHaveAttribute(
       "href",
       "data:image/png;base64,previouspng",
@@ -327,4 +354,46 @@ it("refuses an automatic full preview from Photo warp not-required status", asyn
   setup(SINGLE, { ...READY, maps: { state: "not_required", can_render: true } });
   await act(async () => {});
   expect(calibrator.renderPreview).not.toHaveBeenCalled();
+});
+
+it("keeps an interrupted stroke on its starting placement when selection changes", () => {
+  const config: TemplateConfigState = {
+    kind: "multiple",
+    colour_coverage: "exact",
+    placements: [
+      { id: "first", colour: "black", bounding_box: BOX, artwork: null },
+      { id: "second", colour: "white", bounding_box: BOX, artwork: null },
+    ],
+    renderer: MARIGOLD,
+  };
+  const view = setup(config, {
+    ...READY,
+    placements: [
+      { placement_id: "first", mask_available: true, mask_reason: null, undo_count: 0 },
+      { placement_id: "second", mask_available: true, mask_reason: null, undo_count: 0 },
+    ],
+  });
+  pointerSpace(must(view.container.querySelector<SVGSVGElement>("svg.quad-editor__overlay")));
+  fireEvent.click(screen.getByText("Edit mask"));
+  const area = screen.getByLabelText("Mask drawing area");
+  fireEvent.pointerDown(area, { clientX: 20, clientY: 25, button: 0 });
+  fireEvent.pointerMove(area, { clientX: 30, clientY: 35 });
+  fireEvent.click(screen.getByRole("button", { name: "white" }));
+  expect(view.edits()).toEqual([
+    {
+      placement_id: "first",
+      operations: [
+        {
+          type: "stroke",
+          mode: "mask",
+          diameter_px: 24,
+          points: [
+            [40, 50],
+            [60, 70],
+          ],
+        },
+      ],
+    },
+  ]);
+  expect(screen.queryByLabelText("Mask drawing area")).not.toBeInTheDocument();
 });

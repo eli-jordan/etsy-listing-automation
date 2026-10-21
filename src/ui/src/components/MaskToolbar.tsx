@@ -1,8 +1,6 @@
 import { BoundingBoxIcon } from "@phosphor-icons/react/dist/csr/BoundingBox";
-import { DotsThreeIcon } from "@phosphor-icons/react/dist/csr/DotsThree";
 import { EraserIcon } from "@phosphor-icons/react/dist/csr/Eraser";
 import { PaintBrushIcon } from "@phosphor-icons/react/dist/csr/PaintBrush";
-import { useState } from "react";
 export interface MaskControls {
   editing: boolean;
   setEditing: (value: boolean) => void;
@@ -53,7 +51,6 @@ export function MaskToolbar({ controls: c }: { controls: MaskControls }) {
   );
 }
 export function MaskBrushDock({ controls: c }: { controls: MaskControls }) {
-  const [menu, setMenu] = useState(false);
   return (
     <div
       className="mg-mask-dock"
@@ -62,7 +59,6 @@ export function MaskBrushDock({ controls: c }: { controls: MaskControls }) {
       onKeyDown={(e) => {
         if (e.key === "Escape") {
           e.stopPropagation();
-          setMenu(false);
           c.setEditing(false);
         }
       }}
@@ -88,38 +84,13 @@ export function MaskBrushDock({ controls: c }: { controls: MaskControls }) {
         />
         <span>{c.diameter}px</span>
       </label>
-      <div className="mg-mask-more">
-        <button
-          type="button"
-          className="mg-mask-icon"
-          aria-label="Mask actions"
-          aria-expanded={menu}
-          onClick={() => setMenu(!menu)}
-        >
-          <DotsThreeIcon />
-        </button>
-        {menu && (
-          <div className="mg-mask-menu">
-            <button
-              disabled={!c.canUndo}
-              onClick={() => {
-                c.undo();
-                setMenu(false);
-              }}
-            >
-              Undo brush stroke
-            </button>
-            <button
-              onClick={() => {
-                c.reset();
-                setMenu(false);
-              }}
-            >
-              Reset mask
-            </button>
-          </div>
-        )}
-      </div>
+      <span className="mg-mask-divider" />
+      <button type="button" aria-label="Undo brush stroke" disabled={!c.canUndo} onClick={c.undo}>
+        Undo
+      </button>
+      <button type="button" aria-label="Reset mask" disabled={!c.canEdit} onClick={c.reset}>
+        Reset
+      </button>
     </div>
   );
 }

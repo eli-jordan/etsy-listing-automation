@@ -260,43 +260,14 @@ describe("App", () => {
     });
   });
 
-  describe("Reset", () => {
-    /** Reset is the header's, but the only way to make the page dirty is
-     * through a real control -- so this drives the wrinkle slider, which the
-     * Print realism panel exposes as a 0-100 percentage over a 0..1 config. */
-    async function mount() {
-      vi.spyOn(calibrator, "listTemplates").mockResolvedValue([summary({ name: "flat-lay-01" })]);
-      vi.spyOn(calibrator, "getTemplateConfig").mockResolvedValue(configDocument(COLOUR_MATRIX));
-      vi.spyOn(calibrator, "renderPreview").mockResolvedValue("blob:preview");
-      render(<App />);
-      return await screen.findByLabelText("Wrinkle strength");
-    }
-
-    async function mountAndEdit() {
-      const strength = await mount();
-      fireEvent.change(strength, { target: { value: "75" } });
-      await waitFor(() => expect(strength).toHaveValue("75"));
-      return strength;
-    }
-
-    it("is disabled until something is edited", async () => {
-      await mount();
-      expect(screen.getByRole("button", { name: "Reset" })).toBeDisabled();
-    });
-
-    it("throws away unsaved edits and goes back to what is on disk", async () => {
-      const strength = await mountAndEdit();
-      fireEvent.click(screen.getByRole("button", { name: "Reset" }));
-      await waitFor(() => expect(strength).toHaveValue("0"));
-    });
-
-    it("does not re-fetch to do it -- the last saved config is already held", async () => {
-      const getSpy = vi.spyOn(calibrator, "getTemplateConfig");
-      await mountAndEdit();
-      const callsBefore = getSpy.mock.calls.length;
-      fireEvent.click(screen.getByRole("button", { name: "Reset" }));
-      await waitFor(() => expect(getSpy.mock.calls.length).toBe(callsBefore));
-    });
+  it("keeps print realism Reset without a global header Reset", async () => {
+    vi.spyOn(calibrator, "listTemplates").mockResolvedValue([summary({ name: "flat-lay-01" })]);
+    vi.spyOn(calibrator, "getTemplateConfig").mockResolvedValue(configDocument(COLOUR_MATRIX));
+    vi.spyOn(calibrator, "renderPreview").mockResolvedValue("blob:preview");
+    render(<App />);
+    await screen.findByLabelText("Wrinkle strength");
+    expect(header().queryByRole("button", { name: "Reset" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Reset print realism" })).toBeInTheDocument();
   });
 });
 
