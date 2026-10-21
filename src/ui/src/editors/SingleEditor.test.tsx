@@ -10,7 +10,6 @@ const SPACE: [number, number] = [400, 200];
 const CONFIG: PhotoWarpTemplate<SingleTemplate> = {
   kind: "single",
   colour: null,
-  artwork: null,
   bounding_box: [
     { x: 0, y: 0 },
     { x: 100, y: 0 },

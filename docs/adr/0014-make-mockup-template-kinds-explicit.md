@@ -8,6 +8,6 @@ First recorded 2026-09-03 in [commit f8b2138](https://github.com/eli-jordan/etsy
 
 ## Accepted extension, not yet implemented
 
-[ADR-0053](0053-prepare-durable-mockup-maps-before-rendering.md) records the
+[ADR-0054](0054-prepare-durable-mockup-maps-before-rendering.md) records the
 Marigold extension. Its feature spec defines the new renderer configuration and
 durable maps; the implementation remains Photo warp until that plan ships.

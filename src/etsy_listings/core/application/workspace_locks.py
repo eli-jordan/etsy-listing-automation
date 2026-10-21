@@ -54,7 +54,7 @@ class WorkspaceLocks:
 
     @contextmanager
     def mockup_template(self, workspace: Workspace, name: str) -> Iterator[None]:
-        """ADR-0053: calibration and map publication share a separate domain.
+        """ADR-0054: calibration and map publication share a separate domain.
 
         Reuse the document store's workspace-scoped reentrant lock, so all
         readers and coordinators serialize even across host lock instances.

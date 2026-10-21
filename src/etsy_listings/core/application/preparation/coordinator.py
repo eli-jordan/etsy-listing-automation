@@ -1,4 +1,4 @@
-"""Workspace-owned durable preparation queue (ADR-0053).
+"""Workspace-owned durable preparation queue (ADR-0054).
 
 Async hosts offload synchronous request operations. GPU and CPU work each own a
 single executor lane; installation inspection never runs on their event loop.

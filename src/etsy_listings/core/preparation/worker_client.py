@@ -236,7 +236,7 @@ class WarmWorker:
     """Coordinator-owned adapter. Restart idle workers; never retry an active call.
 
     Hold one selected command for the job lifetime, so installing a newer engine
-    cannot redirect recovered or running work to it (ADR-0053).
+    cannot redirect recovered or running work to it (ADR-0054).
     """
 
     def __init__(

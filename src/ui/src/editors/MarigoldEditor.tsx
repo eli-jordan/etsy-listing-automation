@@ -88,7 +88,6 @@ export function MarigoldEditor({
             id: "implicit",
             colour: config.kind === "single" ? (config.colour ?? "") : (colours[0] ?? ""),
             bounding_box: config.bounding_box,
-            artwork: null,
           },
         ];
   const index = Math.max(
@@ -146,7 +145,7 @@ export function MarigoldEditor({
           { x: 400, y: 350 },
           { x: 200, y: 350 },
         ];
-    const p: Placement = { id: crypto.randomUUID(), colour: "", bounding_box, artwork: null };
+    const p: Placement = { id: crypto.randomUUID(), colour: "", bounding_box };
     mutate([...placements, p], p.id);
   }
   function duplicate() {

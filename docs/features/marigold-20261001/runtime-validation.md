@@ -1,7 +1,7 @@
 # Native runtime validation
 
 Measured 2026-10-05 on native Windows, NVIDIA RTX 3070, 8192 MiB VRAM and driver
-616.92. This is PR2's runtime evidence under ADR-0053. It establishes package,
+616.92. This is PR2's runtime evidence under ADR-0054. It establishes package,
 protocol and lifecycle execution. It does not establish garment-map quality,
 full-resolution rendering or the feature's remaining colour/multiple gates.
 

@@ -7,7 +7,7 @@ from etsy_listings.core.preparation.artifacts import Artifacts
 from etsy_listings.core.workspace import WorkspaceFacts
 from etsy_listings.core.workspace.listing_documents import ListingDocuments
 
-from tests.support.builders import FIXTURE_LISTING, a_context, a_lock
+from tests.support.builders import FIXTURE_LISTING, a_context, a_lock, edit_garment_profile
 from tests.support.marigold import marigold_template, material_maps
 
 
@@ -162,9 +162,10 @@ def test_multiple_placements_resolve_actual_artwork_and_preserve_paint_order(wor
 
     workspace = marigold_template(workspace_root, "multiple")
     config = workspace.load_template_config("shirt")
+    # A35: a placement's artwork is the file its colour resolves to.
     placements = [
-        p.model_copy(update={"artwork": artwork})
-        for p, artwork in zip(config.placements, ["red", "blue"], strict=True)
+        p.model_copy(update={"colour": colour})
+        for p, colour in zip(config.placements, ["black", "ivory"], strict=True)
     ]
     workspace.save_template_config("shirt", config.model_copy(update={"placements": placements}))
     red = workspace.resolve("designs/red.png", workspace.root)
@@ -175,7 +176,12 @@ def test_multiple_placements_resolve_actual_artwork_and_preserve_paint_order(wor
         FIXTURE_LISTING,
         lambda document: {
             **document,
-            "design": {"red": "designs/red.png", "blue": "designs/blue.png"},
+            "colors": ["black", "ivory"],
+            "design": {
+                "default": "designs/take-a-hike.png",
+                "black": "designs/red.png",
+                "ivory": "designs/blue.png",
+            },
             "media": [{"template": "shirt"}],
         },
     )
@@ -333,6 +339,18 @@ def test_shared_colour_scenes_use_each_target_photo_without_inference(workspace_
     )
 
     workspace = marigold_template(workspace_root, "colour-matrix")
+    # Every colour a listing sells needs a tone in its garment profile (A35).
+    edit_garment_profile(
+        workspace_root,
+        "comfort-colors-1717",
+        colors={
+            "black": "dark",
+            "blue-jean": "dark",
+            "ivory": "light",
+            "moss": "dark",
+            "navy": "dark",
+        },
+    )
     ListingDocuments(workspace).edit(
         FIXTURE_LISTING,
         lambda document: {

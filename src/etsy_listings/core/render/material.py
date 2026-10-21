@@ -1,4 +1,4 @@
-"""Prepared CPU sampling maps and scene composition. ADR-0053.
+"""Prepared CPU sampling maps and scene composition. ADR-0054.
 
 Schema v1 stores photo pixel centres in row/column order. Material channels
 are U right, V down. 0/1 map to first/last artwork centres. Material sampling

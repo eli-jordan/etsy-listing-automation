@@ -127,7 +127,7 @@ FX_CACHE_FILE = "fx.json"
 
 ROOT_ENV_VAR = "ETSY_LISTINGS_ROOT"
 
-# ADR-0053: durable calibration assets, outside disposable workspace cache,
+# ADR-0054: durable calibration assets, outside disposable workspace cache,
 # inside RENDERER_DIR.
 RENDERER_SETTINGS_FILE = "renderer-settings.json"
 CALIBRATION_TRANSACTION_DIR = "calibration-transaction"

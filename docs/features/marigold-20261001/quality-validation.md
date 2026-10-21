@@ -2,7 +2,7 @@
 
 Measured 2026-10-08 on native Windows using the production engine 1.0.0,
 `Runtime.worker`, `Preparations`, durable `Artifacts` and the CPU scene renderer.
-This is PR7's release evidence under ADR-0053. Independent UI/API review and the
+This is PR7's release evidence under ADR-0054. Independent UI/API review and the
 stack's final CI/e2e gates remain separate requirements. No production readiness
 claim follows from the measurements below.
 

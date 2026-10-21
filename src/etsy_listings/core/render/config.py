@@ -20,7 +20,8 @@ from __future__ import annotations
 
 import json
 import re
-from typing import Annotated, Literal
+from collections.abc import Mapping
+from typing import Annotated, Any, Literal
 
 from pydantic import AfterValidator, BaseModel, ConfigDict, Field, TypeAdapter, model_validator
 
@@ -131,7 +132,7 @@ Renderer = Annotated[AnyRenderer, Field(discriminator="type")]
 
 
 class PreparationRequired(ValueError):
-    """ADR-0053 forbids rendering Marigold through Photo warp."""
+    """ADR-0054 forbids rendering Marigold through Photo warp."""
 
 
 def photo_warp_config(renderer: AnyRenderer, box: BoundingBox) -> RenderConfig:
@@ -141,7 +142,7 @@ def photo_warp_config(renderer: AnyRenderer, box: BoundingBox) -> RenderConfig:
 
 
 def _safe_id(value: str) -> str:
-    # ADR-0053: an ID owns durable assets and survives reorder/recolour.
+    # ADR-0054: an ID owns durable assets and survives reorder/recolour.
     reserved = {
         "con",
         "prn",
@@ -174,6 +175,27 @@ class ColourMatrixTemplate(BaseModel):
         return photo_warp_config(self.renderer, self.bounding_box)
 
 
+def _reject_template_artwork(value: Any) -> Any:  # noqa: ANN401 - pydantic validator boundary
+    """A template no longer chooses artwork (ADR-0053): a colour resolves to the
+    same file in every mockup scene and on Printify, and a mockup showing a
+    different print from the delivered shirt is not a useful exception. The
+    field is refused by name rather than dropped, since ignoring it would
+    render something other than what the file asks for.
+
+    ``artwork: null`` is not an override, and is what the calibrator wrote
+    into every ``multiple`` and ``single`` template before ADR-0053 -- so it loads,
+    and the next save drops it."""
+    if isinstance(value, Mapping) and value.get("artwork") is not None:
+        raise ValueError(
+            "artwork: is no longer a template setting (ADR-0053) -- remove it; the "
+            "listing's design: decides which file each colour prints"
+        )
+    if isinstance(value, Mapping) and "artwork" in value:
+        # Dropped here: these models forbid unknown keys (ADR-0054).
+        return {k: v for k, v in value.items() if k != "artwork"}
+    return value
+
+
 class Placement(BaseModel):
     """One garment within a ``multiple``-kind scene."""
 
@@ -182,9 +204,11 @@ class Placement(BaseModel):
     id: PlacementId
     colour: str
     bounding_box: BoundingBox
-    artwork: str | None = None
-    """Rare, explicit override: this placement's ink regardless of what
-    artwork resolution would otherwise pick for this colour elsewhere."""
+
+    @model_validator(mode="before")
+    @classmethod
+    def _no_artwork(cls, value: Any) -> Any:  # noqa: ANN401 - pydantic validator boundary
+        return _reject_template_artwork(value)
 
 
 class MultipleTemplate(BaseModel):
@@ -225,12 +249,17 @@ class SingleTemplate(BaseModel):
 
     kind: Literal["single"] = "single"
     colour: str | None = None
-    """Optional context -- which garment colour this depicts, for artwork
-    resolution. There's only one photo, so nothing needs it to disambiguate a
-    filename."""
-    artwork: str | None = None
+    """Which garment colour this photo depicts -- what a light/dark listing
+    resolves its artwork by (ADR-0053). There's only one photo, so nothing needs it
+    to disambiguate a filename; without it, the scene prints ``default`` and
+    cannot be used by a listing with light and dark designs."""
     bounding_box: BoundingBox
     renderer: Renderer
+
+    @model_validator(mode="before")
+    @classmethod
+    def _no_artwork(cls, value: Any) -> Any:  # noqa: ANN401 - pydantic validator boundary
+        return _reject_template_artwork(value)
 
     def render_config(self) -> RenderConfig:
         return photo_warp_config(self.renderer, self.bounding_box)
@@ -243,6 +272,28 @@ The plain union, for annotating variables and return types. Use
 :data:`TemplateConfig` -- the same union carrying pydantic's discriminator --
 wherever pydantic itself does the dispatch (a FastAPI ``response_model``, a
 request body, a ``TypeAdapter``)."""
+
+
+def scene_layers(
+    template: AnyTemplate, colour: str | None
+) -> list[tuple[str | None, RenderConfig]]:
+    """``(depicted colour, render config)`` per layer of one scene, in paint
+    order -- the colour each layer's artwork resolves by (A35, PRD 30).
+
+    A ``colour-matrix`` scene depicts the colour it is rendered for, a
+    ``single`` scene its own ``colour`` (``None`` when it names none), and a
+    ``multiple`` scene one colour per placement. Here, beside the three
+    shapes, because the render stage and the editor's scene preview both need
+    it and a second copy is how the two would come to show different files.
+    """
+    if isinstance(template, ColourMatrixTemplate):
+        # Same geometry in every colour's photo: a colour framed differently
+        # is a `single`-kind template instead, never a per-colour override.
+        return [(colour, template.render_config())]
+    if isinstance(template, SingleTemplate):
+        return [(template.colour, template.render_config())]
+    return [(p.colour, template.render_config_for(p)) for p in template.placements]
+
 
 TemplateConfig = Annotated[AnyTemplate, Field(discriminator="kind")]
 """``mockup-templates/{name}/template.yaml``, written by the calibrator. A

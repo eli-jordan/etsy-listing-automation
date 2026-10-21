@@ -37,8 +37,10 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 
 from etsy_listings.core.config import listing_validation as rules
+from etsy_listings.core.config.artwork import DesignMap, Resolved, Tone, resolve
 from etsy_listings.core.config.garment_profile import GarmentProfile
-from etsy_listings.core.config.listing_validation import Issue
+from etsy_listings.core.config.listing import Listing
+from etsy_listings.core.config.listing_validation import Issue, TemplateInfo
 from etsy_listings.core.config.media import ProbeFailure, VideoFacts
 from etsy_listings.core.engine.stage import Blocked
 
@@ -62,6 +64,36 @@ def _refuse(issues: Sequence[Issue]) -> Blocked | None:
 
 def check_design_resolution(design: Path, profile: GarmentProfile) -> Blocked | None:
     return _refuse(rules.check_design_resolution(design, profile))
+
+
+def check_artwork(
+    listing: Listing, profile: GarmentProfile, templates: Mapping[str, TemplateInfo]
+) -> Blocked | None:
+    """No design, an unclassified colour, an empty slot a colour needs, a
+    colourless ``single`` scene in light/dark mode (ADR-0053). ``templates`` is
+    the configs of the scenes the stage ships -- ``{}`` for a stage that
+    ships no scene, which then asks only about the colours it sells."""
+    return _refuse(rules.check_artwork(listing, profile, templates))
+
+
+def resolved_design(
+    design: DesignMap, colour: str | None, tones: Mapping[str, Tone], *, where: str
+) -> str | Blocked:
+    """The ref ``colour`` prints, or a refusal naming ``where`` it was asked.
+
+    :func:`check_artwork` refuses every outcome but :class:`Resolved` for the
+    colours a listing names; this is the answer for anything it could not
+    see -- a calibrator placement whose colour was never filled in -- so no
+    configuration reaches a stage as a ``ValueError`` (ADR-0053).
+    """
+    resolution = resolve(design, colour, tones)
+    if isinstance(resolution, Resolved):
+        return resolution.ref
+    subject = f"colour {colour!r}" if colour is not None else "a scene that names no colour"
+    return Blocked(
+        f"{where}: no design resolves for {subject}. Check the listing's design: and the "
+        f"colours this template depicts."
+    )
 
 
 def check_garment_profile_chosen(garment_profile: str) -> Blocked | None:

@@ -1,4 +1,4 @@
-"""Explicit versioned native Windows inference installation (ADR-0053)."""
+"""Explicit versioned native Windows inference installation (ADR-0054)."""
 
 from __future__ import annotations
 

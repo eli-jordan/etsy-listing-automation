@@ -5,7 +5,7 @@ and a product design interview; YAML and HTTP contracts agreed through 2026-10-0
 This specification owns the intended integration requirements under the
 [documentation authority rules](../../README.md#documentation-authority).
 The [plan](plan.md) records technical design and delivery;
-[ADR-0053](../../adr/0053-prepare-durable-mockup-maps-before-rendering.md) records
+[ADR-0054](../../adr/0054-prepare-durable-mockup-maps-before-rendering.md) records
 the preparation decision. The frozen PRD and original plan are historical context.
 
 The template format changes outright. Backward-compatible loading is not required.
@@ -327,22 +327,22 @@ rendering and use of prepared maps continue to work.
 
 These are prototype measurements, not service-level promises. See the
 [trial](../../research/marigold-20261001/mockup-marigold-trial.md) and [CPU report](../../research/marigold-20261001/marigold-performance.json).
-GPU: RTX 3070 8 GB. CPU: Intel i9-10850K. Artwork: 4200 Ã— 4800.
+GPU: RTX 3070 8 GB. CPU: Intel i9-10850K. Artwork: 4200 × 4800.
 
 | Operation | Observed time |
 | --- | --- |
-| Warm normals + lighting + depth inference | About 10â€“12 seconds with defaults; 20â€“26 seconds with the trial ensemble. |
+| Warm normals + lighting + depth inference | About 10–12 seconds with defaults; 20–26 seconds with the trial ensemble. |
 | Initial ensemble GPU calls | About 71 seconds combined, plus about 11 seconds model loading; excludes downloads. |
-| CPU maps from cached predictions | About 5â€“7 seconds at 1254 square; 9â€“11 seconds at 2048 square. |
-| Save compressed map | About 1.5â€“3 seconds. |
-| Load accepted map | About 0.3â€“1.1 seconds. |
-| Depth-enabled render at 1254 square | About 2.7â€“3.9 seconds CPU; 3.2â€“4.5 seconds including PNG encoding. |
-| Depth-enabled render at 2048 square | About 4.4â€“6 seconds CPU; 6â€“8 seconds including PNG encoding. |
-| Map size | About 19â€“28 MiB per tested preparation. |
+| CPU maps from cached predictions | About 5–7 seconds at 1254 square; 9–11 seconds at 2048 square. |
+| Save compressed map | About 1.5–3 seconds. |
+| Load accepted map | About 0.3–1.1 seconds. |
+| Depth-enabled render at 1254 square | About 2.7–3.9 seconds CPU; 3.2–4.5 seconds including PNG encoding. |
+| Depth-enabled render at 2048 square | About 4.4–6 seconds CPU; 6–8 seconds including PNG encoding. |
+| Map size | About 19–28 MiB per tested preparation. |
 
-The first complete preparation is estimated around 1.5â€“2 minutes with cached
+The first complete preparation is estimated around 1.5–2 minutes with cached
 weights, not a measured cold end-to-end guarantee. A warm complete preparation
-is estimated around 30â€“40 seconds. Multiple placements can add fitting, baking,
+is estimated around 30–40 seconds. Multiple placements can add fitting, baking,
 storage and possibly inference work; the single-placement measurements must not
 be advertised as a bound for those scenes. Models download separately on first
 setup. GPU use is limited to preparation, not rendering new artwork.
@@ -365,7 +365,7 @@ this feature does not revise it.
 | ADR-0014 | Keep the kind union. Require renderer type/config, with explicit IDs only for multiple placements. Replace the old YAML format. |
 | ADR-0013 / ADR-0046 | Workspace owns paths and assets. Derive mask locations without YAML references. |
 | ADR-0008 / ADR-0039 / ADR-0040 | Include accepted map content in render identity, exclude volatile provenance and preserve preview promotion. |
-| ADR-0041 / ADR-0053 | Deploy lifecycle stays unchanged. Preparation has its own durable, cancellable queue and restart policy. |
+| ADR-0041 / ADR-0054 | Deploy lifecycle stays unchanged. Preparation has its own durable, cancellable queue and restart policy. |
 | ADR-0052 | Core owns calibration and preparation; server owns HTTP/SSE and host lifecycle; CLI uses core directly. |
 
 Foreground masks and durable maps belong to this feature. Missing or stale maps

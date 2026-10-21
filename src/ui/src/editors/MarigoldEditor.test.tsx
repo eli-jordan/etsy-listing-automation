@@ -168,8 +168,8 @@ describe("MarigoldEditor", () => {
       kind: "multiple",
       colour_coverage: "exact",
       placements: [
-        { id: "first", colour: "black", bounding_box: BOX, artwork: null },
-        { id: "second", colour: "white", bounding_box: BOX, artwork: null },
+        { id: "first", colour: "black", bounding_box: BOX },
+        { id: "second", colour: "white", bounding_box: BOX },
       ],
       renderer: MARIGOLD,
     };
@@ -329,8 +329,8 @@ it("has one drawing area and assigns a multiple mask stroke to the selected stab
     kind: "multiple",
     colour_coverage: "exact",
     placements: [
-      { id: "first", colour: "black", bounding_box: BOX, artwork: null },
-      { id: "second", colour: "white", bounding_box: BOX, artwork: null },
+      { id: "first", colour: "black", bounding_box: BOX },
+      { id: "second", colour: "white", bounding_box: BOX },
     ],
     renderer: MARIGOLD,
   };
@@ -373,8 +373,8 @@ it("keeps an interrupted stroke on its starting placement when selection changes
     kind: "multiple",
     colour_coverage: "exact",
     placements: [
-      { id: "first", colour: "black", bounding_box: BOX, artwork: null },
-      { id: "second", colour: "white", bounding_box: BOX, artwork: null },
+      { id: "first", colour: "black", bounding_box: BOX },
+      { id: "second", colour: "white", bounding_box: BOX },
     ],
     renderer: MARIGOLD,
   };

@@ -1,4 +1,4 @@
-"""Explicit authoring preparation, separate from CPU rendering (ADR-0053).
+"""Explicit authoring preparation, separate from CPU rendering (ADR-0054).
 
 Import modules directly. Runtime owns global installation; worker_client owns
 subprocess communication, including idle restart. Predictions validates numeric

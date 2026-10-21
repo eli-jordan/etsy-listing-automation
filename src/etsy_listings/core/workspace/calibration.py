@@ -1,6 +1,6 @@
 """Durable calibration documents and mask edits, protected by template locks.
 
-ADR-0053: revision tokens protect editor saves; they are not render hashes.
+ADR-0054: revision tokens protect editor saves; they are not render hashes.
 Import this module directly. Its storage implementation is not re-exported.
 """
 
@@ -514,7 +514,7 @@ class CalibrationStore:
         self.write_durable(path, json_bytes(value))
 
     def commit(self, name: str, files: dict[Path, bytes]) -> None:
-        """Stage all payloads and backups before durable intent. ADR-0053.
+        """Stage all payloads and backups before durable intent. ADR-0054.
 
         After intent, recovery rolls forward. Payloads remain until every
         destination is verified; an ordinary sequence of renames is insufficient.

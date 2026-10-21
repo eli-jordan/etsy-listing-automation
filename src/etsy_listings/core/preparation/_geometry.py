@@ -1,4 +1,4 @@
-"""Internal robust normal/depth integration and metric fitting. ADR-0053.
+"""Internal robust normal/depth integration and metric fitting. ADR-0054.
 
 Camera normals X right/Y up/Z viewer become image X right/Y down/Z viewer.
 No experimental anchors or overlap controls are exposed.

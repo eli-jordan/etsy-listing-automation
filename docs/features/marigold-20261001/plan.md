@@ -6,7 +6,7 @@ The [product spec](spec.md) defines behaviour; the
 [interaction companion](interactions.md) defines the editor flow.
 Status: approved design, not implemented. The feature began on 2026-10-01.
 Current authority follows the [documentation rules](../../README.md#documentation-authority).
-[ADR-0053](../../adr/0053-prepare-durable-mockup-maps-before-rendering.md) records
+[ADR-0054](../../adr/0054-prepare-durable-mockup-maps-before-rendering.md) records
 the preparation decision. The frozen PRD and original plan are historical context.
 Delivery PR links will be added as this plan ships.
 
@@ -699,7 +699,7 @@ integration before the final visual quality review, as agreed.
 | 6 | Shared readiness, engine identity and preview promotion; idempotency and refusal tests. | Pending |
 | 7 | Colour/multiple-placement quality review, memory/latency measurements and release-gate results. | Pending |
 
-ADR-0053 extends ADR-0012 and ADR-0014 and distinguishes durable preparation from
+ADR-0054 extends ADR-0012 and ADR-0014 and distinguishes durable preparation from
 ADR-0041 deployment runs. Preserve ADR-0008, ADR-0013, ADR-0039, ADR-0040 and
 ADR-0052. Update the living architecture as implementation changes. Do not edit
 frozen history to authorize this feature or describe this plan as shipped.

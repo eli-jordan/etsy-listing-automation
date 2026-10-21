@@ -97,7 +97,7 @@ class Models:
         reused = self.role == role
         if not reused:
             # Bound retained pipelines to one. Components of only that pipeline
-            # enter CUDA via accelerate's model_cpu_offload hooks (ADR-0053).
+            # enter CUDA via accelerate's model_cpu_offload hooks (ADR-0054).
             self.pipe = None
             self.role = None
             gc.collect()

@@ -59,7 +59,6 @@ describe("the default kind follows the photo count", () => {
     const assignSpy = vi.spyOn(calibrator, "assignKind").mockResolvedValue({
       kind: "single",
       colour: null,
-      artwork: null,
       bounding_box: [
         { x: 0, y: 0 },
         { x: 1, y: 0 },

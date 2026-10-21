@@ -8,7 +8,7 @@ decision rationale lives in [ADRs](adr/README.md). The
 Last audited against the implementation on 2026-10-02, after the
 [module-structure restructure](features/module-structure-20260930/spec.md)
 (ADR-0052). The 2026-09-30 [audit report](research/architecture-audit-20260930.html)
-records the evidence behind the finding ids (F02, F04, â€¦) cited below; the
+records the evidence behind the finding ids (F02, F04, …) cited below; the
 invariants describe intended contracts and name the known gaps rather than
 claiming every caller already obeys them.
 
@@ -16,7 +16,7 @@ Module paths in this document are relative to `src/etsy_listings/` unless they
 start with `src/`, `tests/`, `scripts/` or `docs/`.
 
 The [Marigold design](features/marigold-20261001/plan.md) is being implemented
-in stages under ADR-0053. Renderer configuration and recoverable calibration
+in stages under ADR-0054. Renderer configuration and recoverable calibration
 storage, the explicit native worker, pure numerical preparation, durable map
 publication and CPU composition are implemented. Queue, editor and deployment
 integration remain later stages. Existing application rendering still refuses
@@ -195,7 +195,7 @@ sequenceDiagram
     User->>CLI: etsy-listings apply take-a-hike
     CLI->>Engine: apply_listings(ctx, names, STAGES)
     Engine->>Engine: build_plan(...), then execute(ctx, planned, lock)
-    Engine->>Stage: apply(...) â€” strictly sequential (ADR-0009)
+    Engine->>Stage: apply(...) — strictly sequential (ADR-0009)
     Stage->>Render: render(design, base, cfg) per colour
     Stage-->>Engine: StageApplyResult(applied, outputs)
     Engine->>Lock: write merged lockfile
@@ -285,7 +285,7 @@ graph LR
     Yaml -->|read by| Stage["engine render stage"]
 ```
 
-The preview is the real renderer, not an approximation â€” that is the whole
+The preview is the real renderer, not an approximation — that is the whole
 point of calibrating in a browser. `template.yaml` is the artefact the
 calibrator produces and the render stage consumes. Separately, browser
 deployment plan runs call `preview_listing()` after planning and write
@@ -298,8 +298,8 @@ calibrator's HTTP previews.
 paths ask `Workspace.scene_photo()` which photo a scene composites over and
 what its derived maps cache under, and both composite through
 `render_scene()`. The one thing the preview does differently is where its
-geometry comes from â€” the unsaved boxes under the user's cursor, not the file
-on disk â€” which is exactly the difference that makes it a preview.
+geometry comes from — the unsaved boxes under the user's cursor, not the file
+on disk — which is exactly the difference that makes it a preview.
 `application.mockup_templates` decides the scene (photo, layers, design) and
 composites it from decoded images the server supplies out of its memo;
 encoding the frame as WebP or PNG is the server's.
@@ -353,7 +353,7 @@ dimensions, filename and the conversion version.
 
 A drag emits a preview request every few frames, and at a real garment photo's
 resolution each one re-decoded the mockup PNG and the design PNG from disk,
-warped at full size, and PNG-encoded several megabytes â€” seconds of work per
+warped at full size, and PNG-encoded several megabytes — seconds of work per
 frame, for an image about to be replaced. So the two things a preview is *for*
 were separated:
 
@@ -369,8 +369,8 @@ is how many pixels the server is asked to spend, which is why the fast one is
 still honest: it is the output, at a size you can drag against.
 
 The Preview tab renders itself on first sight and then holds still. A config
-edit afterwards does not re-run it â€” a full-size set is minutes of work, and a
-nudged box is not a request for it â€” but it must not silently become a picture
+edit afterwards does not re-run it — a full-size set is minutes of work, and a
+nudged box is not a request for it — but it must not silently become a picture
 of geometry that has moved on either, so Re-render turns red. The panel stays
 mounted behind the canvas rather than unmounting, or flicking between tabs
 would throw the renders away and "there is none, so render" would fire on a
@@ -385,8 +385,8 @@ Two consequences worth knowing:
   `TemplateSummary.width`/`height` rather than measuring the image it is
   drawing over. Measuring it would save every box a few times too small, with
   nothing on screen looking wrong.
-- **`server/api/imagecache.py` memoises what the loop re-reads** â€” the decoded
-  photo at each size, the decoded design, and the derived maps â€” keyed on path
+- **`server/api/imagecache.py` memoises what the loop re-reads** — the decoded
+  photo at each size, the decoded design, and the derived maps — keyed on path
   and mtime, bounded by total bytes rather than entry count. It is request-serving
   infrastructure, so it sits in `server`, not in `core/render/io.py` or the
   calibrator operation: the render stage reads each file once per run and
@@ -403,9 +403,9 @@ main thread, which owns Ctrl-C. `create_app` constructs one `WorkspaceLocks`,
 `Deployments` (`core/application/deploy`: registry, FIFO executor and review
 check) per server process. Constructing them starts nothing. The lifespan
 sweeps expired staging, starts deployments, then starts AI work (returning
-interrupted batch rows to the queue). On shutdown it stops AI work first â€” the
+interrupted batch rows to the queue). On shutdown it stops AI work first — the
 batch queue starts nothing more, then every run is cancelled and its provider
-subprocess tree killed â€” and then stops deployments: a queued run is
+subprocess tree killed — and then stops deployments: a queued run is
 cancelled, a plan stops at its next safe point and an apply finishes its
 current stage, recording it (ADR-0037). uvicorn waits for the lifespan without
 a timeout.
@@ -510,7 +510,7 @@ later. Each traces to a decision.
 
 - **Only `core/engine` computes a diff.** The CLI renderer and the server's
   serialiser both consume `Plan` / `StagePlan` / `Change` objects. Neither may
-  compare states itself â€” that is what makes the CLI and browser enforce
+  compare states itself — that is what makes the CLI and browser enforce
   identical rules (ADR-0008).
 - **Only `core/engine` runs a run.** The same rule, one level up: reading a
   listing's lockfile, planning it, executing it, writing the lockfile back and
@@ -528,7 +528,7 @@ later. Each traces to a decision.
   per-stage lookup and `parse_applied_for()` owns the decode. A stage returns
   a `StageApplyResult` and never touches the file; `execute` decides only
   which stages run, in what order.
-- **A stage's applied document is a type, not a dict â€” and the stage does not
+- **A stage's applied document is a type, not a dict — and the stage does not
   decode it.** The lockfile stores it as JSON; `build_plan` hands `plan()` the
   model the stage declared in `applied_model` (`RenderApplied`,
   `AppliedProduct`). A stage that reads its own document with
@@ -542,12 +542,12 @@ later. Each traces to a decision.
   not a `UserFacingError` and so ended a whole `--all` batch.
 - **A refusal is `Blocked`, whichever question produced it.** One vocabulary for
   "this cannot run", reaching the plan two ways because a refusal has two
-  moments. A **pre-flight** refusal â€” no shop configured, copy still a
-  sentinel, a design too small â€” is `desired()` returning `Blocked`, before a
+  moments. A **pre-flight** refusal — no shop configured, copy still a
+  sentinel, a design too small — is `desired()` returning `Blocked`, before a
   document exists for a run that was never going to happen. A refusal only the
-  live state can prove â€” a retail price below Printify's cost, which needs
+  live state can prove — a retail price below Printify's cost, which needs
   `variants[].cost` and therefore cannot be known before `read_live` (ADR-0020's
-  amendment) â€” is `plan()` returning `Verdict.refused(...)`, which the engine
+  amendment) — is `plan()` returning `Verdict.refused(...)`, which the engine
   turns into the same `StagePlan.blocked`. Neither may raise, and a stage still
   never names itself. What is forbidden is the third shape: a stage that will
   not run reporting a `reason` instead. `format_plan` prints a reason only for
@@ -555,11 +555,14 @@ later. Each traces to a decision.
   silence, under a plan reading "No changes."
   Missing render templates/photos, template-kind colour mismatches and
   unresolved artwork use shared config checks and return `Blocked`. Template
-  load failures are adapted to the same stage refusal. Artwork resolution
-  errors are actionable at exceptional boundaries and caught in desired state.
+  load failures are adapted to the same stage refusal. Artwork that cannot
+  resolve — no design, an unclassified colour, an empty light/dark slot, a
+  colourless `single` scene in light/dark mode, a design ref naming no file —
+  is refused through `gates.check_artwork` and `gates.resolved_design`; no
+  artwork configuration raises out of a stage (`ADR-0053`).
 - **One rule behind that vocabulary, not one per reader.**
   `core/config/listing_validation.py` owns every local refusal about a
-  listing â€” predicate, message and all â€” and `core/engine/stages/gates.py` is
+  listing — predicate, message and all — and `core/engine/stages/gates.py` is
   the adapter that turns one into a `Blocked` for a stage, exactly as
   `Issue`'s tab and severity turn one into a line in the editor's banner.
   These were once two modules and the garment-profile rule diverged:
@@ -585,7 +588,7 @@ later. Each traces to a decision.
 - **`plan` checks two things, not one: would the output differ, and is the
   output still there.** The render cache is gitignored and fully derivable, so
   it is a directory users delete. A stage's `read_live()` is called even when
-  `local` is true â€” `local` means "no *remote* state", so no drift reporting
+  `local` is true — `local` means "no *remote* state", so no drift reporting
   and no thread-pool fan-out, not "reads nothing" (`ADR-0007`).
 
 ### Hashing
@@ -622,14 +625,26 @@ later. Each traces to a decision.
   `cvtColor` and `getPerspectiveTransform` have different contracts and do not
   take those keywords. `tests/core/unit/test_no_bare_cv2.py` checks the
   applicable render calls.
+- **One function decides which file a garment colour prints.**
+  `core/config/artwork.py` (`ADR-0053`) is pure: `resolve(design, colour,
+  tones)` answers a colour's own `design[colour]`, then in light/dark mode the
+  `on-light`/`on-dark` slot by the garment profile's tone, then `default`, or
+  says why it cannot. Listing validation, the render stage (per layer, by the
+  colour the layer depicts), the Printify stage (per enabled colour) and the
+  AI workflow (`representative`) all ask it; nothing else restates the rule.
+  Templates choose no artwork. An artwork group — a render layer's design
+  identity, a Printify print area — is the resolved file's **content hash**,
+  so renaming a file or reshaping `design:` without changing what any garment
+  prints plans nothing. `design:` is always written as a map
+  (`ListingDocuments` normalises a bare string or `null`).
 - **Rendering is driven purely by `media`.** A scene renders only if some
-  `media` entry references it â€” `listing.colors` drives which Printify
+  `media` entry references it — `listing.colors` drives which Printify
   variants sell, not which photos get rendered.
-- **A template is exactly one of three kinds â€” never a mix.** `kind:
+- **A template is exactly one of three kinds — never a mix.** `kind:
   colour-matrix | multiple | single`, a discriminated union (`ADR-0014`). **No
-  garment-profile-level registry of listing templates** â€” a template lives
+  garment-profile-level registry of listing templates** — a template lives
   purely in `mockup-templates/{name}/`, and any listing may reference any of
-  them. A listing's `media:` always names `{template, colour?}` explicitly â€”
+  them. A listing's `media:` always names `{template, colour?}` explicitly —
   there is no default template and no bare-colour shorthand (`ADR-0015`).
   `GarmentProfile.preview_template` is the one exception: a single
   `colour-matrix` template the editor uses to judge colours, not a `media:`
@@ -637,7 +652,7 @@ later. Each traces to a decision.
 - **`colour-matrix`-kind mockup filename = slugified Printify colour name.**
   Convention, not a mapping table. A sparse `exceptions.yaml` handles what
   will not slugify (ADR-0004). When nothing matches exactly, `template_base_image`
-  falls back to a filename ending in the slug's hyphen segments â€” but only if
+  falls back to a filename ending in the slug's hyphen segments — but only if
   exactly one photo in the directory qualifies; two candidates is refused, not
   guessed at. That fallback is lookup-only: `template_colours` still reports
   a non-matching filename as its own name, since deriving a colour from an
@@ -651,14 +666,14 @@ later. Each traces to a decision.
 
 ### Workspace, credentials and prompts
 
-- **Only `core/workspace` knows the directory layout â€” including how to *list*
+- **Only `core/workspace` knows the directory layout — including how to *list*
   one.** Everything else asks for `workspace.lock_file(name)` rather than
   joining `listings/<name>/state.lock.json`, and for
   `workspace.template_photos(name)` rather than globbing
   `mockup-templates/<name>/*.png`. Two rules enforce it: `resolve()` rejects
   paths escaping the root (`ADR-0013`), and the layout accessors reject any
   name that is not a single path segment. Together they keep the server's
-  endpoints safe â€” template names arrive from URLs â€” so this is a security
+  endpoints safe — template names arrive from URLs — so this is a security
   boundary, not a tidiness rule. A new path-taking CLI option, endpoint or
   application operation goes through them, and so does a new `glob`.
   `Workspace.prune_previews` owns stale-preview enumeration and removal;
@@ -698,7 +713,7 @@ later. Each traces to a decision.
   raw `401` traceback.
 - **A cancelled prompt raises; it is never a `None` a caller might miss.**
   `cli/prompts.py`'s `choose`/`text`/`confirm` answer `None` because that is
-  the honest shape for a backend, but no wizard uses them directly â€” `pick`,
+  the honest shape for a backend, but no wizard uses them directly — `pick`,
   `ask_choice`, `ask_text` and `ask_confirm` raise `prompts.Cancelled`, caught
   once in `cli/app.py`. A missed `None` here writes a `None` to a file.
 - **Every price carries an explicit currency.** Bare numbers are rejected at
@@ -749,8 +764,8 @@ under `tests/core/behaviour` without `TestClient` or `CliRunner`; server and
 CLI tests keep adapter cases for parsing, mapping and wire or terminal shape.
 Browser (`tests/browser`), real-service (`tests/e2e`), shared doubles and
 builders (`tests/support`) and fixtures (`tests/fixtures`) stay shared.
-Project-wide build and CI subjects â€” wheel packaging, CI selection, OpenAPI
-export, import contracts and protected test imports â€” sit directly under
+Project-wide build and CI subjects — wheel packaging, CI selection, OpenAPI
+export, import contracts and protected test imports — sit directly under
 `tests/`. TypeScript tests stay beside their subjects in `src/ui/src/`.
 
 Reach for a fake to test behaviour and a cassette to test payload shape. The
@@ -802,7 +817,7 @@ header-driven `RateGate`; their existence does not imply those future modules.
 ## Native Marigold runtime
 
 Core preparation's Runtime owns explicit setup, update and inspection under
-ADR-0053. The app carries an independent worker distribution and complete
+ADR-0054. The app carries an independent worker distribution and complete
 Windows CUDA installation lock. Installation stages an immutable directory
 beneath <home>/.etsy-listings/marigold/runtimes/<engine-version>/<installation-id>.
 Only verified packages, checkpoint hashes and successful real normals, lighting
@@ -850,7 +865,7 @@ sixteen-pixel halo for photographic blur and material derivatives. Array origins
 retain global photo pixel centres; the renderer returns the complete original-size
 photo. Extents enter schema 2 numerical identity. Schema 1 full-photo assets keep
 their original validation and digest rules without inference or migration.
-ADR-0053 records the measured storage cost behind this amendment.
+ADR-0054 records the measured storage cost behind this amendment.
 
 The editor replays draft masks at the acknowledged calibration revision and fits
 retained validated evidence into a transient 17 by 17 mesh and 1024px composite.
@@ -893,7 +908,7 @@ separate independently prepared templates are the agreed remedy.
 ## Durable preparation jobs
 
 `application.preparation.coordinator.Preparations` owns explicit preparation and
-CPU-only Save reconciliation under ADR-0053. Synchronous host calls run off the
+CPU-only Save reconciliation under ADR-0054. Synchronous host calls run off the
 HTTP event loop. Deep runtime and artifact checks hold no workspace journal lock,
 so another template's status and cancellation remain available. The host supplies
 runtime/worker and executor boundaries; the default owns one GPU executor, one
@@ -931,7 +946,7 @@ calibration status, `WorkspaceFacts` and the render stage. Listing checks block
 referenced templates with unavailable maps. Reusable listing-template saves
 remain structural; their materialized listings must pass deployment readiness.
 
-Under ADR-0053, the render stage resolves artwork through `DesignPlacement` for
+Under ADR-0054, the render stage resolves artwork through `DesignPlacement` for
 each placement and hashes accepted numerical map content, ordered artwork pixel
 identities, target photo pixels and appearance. Its Marigold scene identity is
 shared with authoring previews. YAML formatting, inactive settings, generation
@@ -949,7 +964,7 @@ durable assets without model installation or inference.
 
 The [integrated native report](features/marigold-20261001/quality-validation.md)
 records full-resolution photo comparisons and bounded native experiments under
-ADR-0053. Allocation caps and the one-pipeline tensor budget constrain individual
+ADR-0054. Allocation caps and the one-pipeline tensor budget constrain individual
 operations; they are not total-process RAM or throughput guarantees. The full
 40-percent crop requirement remains conservative. No smaller evidence reuse
 margin is certified.

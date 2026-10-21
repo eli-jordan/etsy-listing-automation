@@ -39,7 +39,7 @@ def prepared_scene_identity(
     photo_pixels: str,
     appearance: MarigoldAppearance,
 ) -> str:
-    """ADR-0053: accepted map content and intentional layer order determine pixels.
+    """ADR-0054: accepted map content and intentional layer order determine pixels.
 
     Each artwork digest comes from artwork_identity. Map content fixes target
     dimensions. Storage, runtime availability and provenance are excluded.

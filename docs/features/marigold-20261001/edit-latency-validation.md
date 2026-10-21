@@ -6,7 +6,7 @@ satisfy this target. Interactive previews use a 1024px longest edge, a transient
 17 by 17 fit, WebP and artwork bounded to 3072px. Smaller native photos are not
 upscaled, and non-square photos preserve their aspect ratio. Full-quality Preview and export
 retain original artwork, photo dimensions, the 49 by 49 fit and accepted durable
-generations. ADR-0053 records this separation.
+generations. ADR-0054 records this separation.
 
 ## Reproduction and measurement
 
@@ -127,7 +127,7 @@ User feedback rejected the earlier 256px frame as too blurry. The editor now
 rasterizes at a 1024px longest edge using artwork sampled from up to 3072px.
 The transient 17 by 17 field fit stays coarse. The renderer never enlarges a
 completed 256px frame or a 512px artwork print to satisfy the resolution check.
-ADR-0053 and the feature amendment were committed before implementation.
+ADR-0054 and the feature amendment were committed before implementation.
 
 The new HTTP detail test uses deterministic 4200 by 4800 artwork with fine black
 lines and text. It compares both regions with an independently rendered,
@@ -271,7 +271,7 @@ without changing arithmetic, convergence criteria or numerical samples. Its
 phase checkpoints still validate revisions and write durable progress. Inner
 cooperation holds no template/coordinator lock and checks cancellation/close
 while waiting. GPU dispatch, leases and complete-generation publication retain
-their existing rules. ADR-0053 records both scheduling amendments before code.
+their existing rules. ADR-0054 records both scheduling amendments before code.
 
 The probes below all use the same real photos and 4200 by 4800 artwork, six
 geometry edits per scene. They retain strict 1024px decoded output and the

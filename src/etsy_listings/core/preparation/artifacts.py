@@ -1,6 +1,6 @@
 """Validated immutable map generations, independent of inference installation.
 
-ADR-0053: manifests describe numerical semantics. ZIP timestamps, generation
+ADR-0054: manifests describe numerical semantics. ZIP timestamps, generation
 names, paths and diagnostic provenance do not enter the content digest.
 """
 

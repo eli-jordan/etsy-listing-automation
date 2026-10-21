@@ -367,7 +367,6 @@ def multiple_template(workspace_root):
     document = workspace.load_template_config("shirt").model_dump(mode="json")
     box = document.pop("bounding_box")
     document.pop("colour")
-    document.pop("artwork")
     document["kind"] = "multiple"
     document["placements"] = [
         {"id": key, "colour": "Navy", "bounding_box": box} for key in ["left", "right"]

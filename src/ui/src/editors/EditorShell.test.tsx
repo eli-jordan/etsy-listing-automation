@@ -17,7 +17,6 @@ import { EditorShell } from "./EditorShell";
 const CONFIG: PhotoWarpTemplate<PhotoWarpTemplate<SingleTemplate>> = {
   kind: "single",
   colour: null,
-  artwork: null,
   bounding_box: [
     { x: 0, y: 0 },
     { x: 10, y: 0 },

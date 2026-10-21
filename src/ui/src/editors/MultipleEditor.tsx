@@ -150,10 +150,7 @@ function PhotoWarpMultipleEditor({
             })) as BoundingBox)
           : CENTRED_BOX;
         return {
-          placements: [
-            ...placements,
-            { id: crypto.randomUUID(), colour: "", bounding_box, artwork: null },
-          ],
+          placements: [...placements, { id: crypto.randomUUID(), colour: "", bounding_box }],
           select: placements.length,
         };
       }),

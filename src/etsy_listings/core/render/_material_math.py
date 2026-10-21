@@ -1,4 +1,4 @@
-"""Internal numerical helpers ported from the evaluated prototype. ADR-0053."""
+"""Internal numerical helpers ported from the evaluated prototype. ADR-0054."""
 
 from __future__ import annotations
 

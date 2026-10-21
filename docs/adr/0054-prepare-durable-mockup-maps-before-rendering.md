@@ -1,4 +1,4 @@
-# ADR-0053: Prepare durable mockup maps before rendering
+# ADR-0054: Prepare durable mockup maps before rendering
 
 Status: accepted, not implemented. Agreed 2026-10-01 through 2026-10-03 in the
 [Marigold specification](../features/marigold-20261001/spec.md) and

@@ -1,6 +1,6 @@
 # Durable material maps, schemas 1 and 2
 
-This is the implemented CPU contract under ADR-0053. Preparation coordination,
+This is the implemented CPU contract under ADR-0054. Preparation coordination,
 HTTP integration and deployment wiring ship in later stack stages. Real photo
 quality and maximum-size performance remain PR7 release gates.
 
@@ -35,7 +35,7 @@ photo. Schema 2 arrays cover a half-open photo-coordinate extent, with shape
 retains the complete main-photo size. Array pixel centres add the extent origin
 before entering the original photo coordinate frame. Preparation retains a
 sixteen-pixel halo around the quad, clipped to the photo. Outside the extent
-visibility is zero. This is the 2026-10-19 amendment to ADR-0053.
+visibility is zero. This is the 2026-10-19 amendment to ADR-0054.
 
 | Field | Channels | Bounds |
 | --- | --- | --- |

@@ -1,4 +1,4 @@
-"""Persisted job and event contract under ADR-0053."""
+"""Persisted job and event contract under ADR-0054."""
 
 from typing import Any, Literal
 
