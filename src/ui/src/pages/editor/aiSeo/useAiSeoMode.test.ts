@@ -98,7 +98,14 @@ describe("useAiSeoMode availability", () => {
 
     const { result } = renderHook(() => useAiSeoMode(detail({ design: {} }), vi.fn(), vi.fn()));
 
-    await waitFor(() => expect(result.current.available).toBe(false));
+    await waitFor(() =>
+      expect(result.current.requirements).toContainEqual({
+        label: "Design selected",
+        ready: false,
+      }),
+    );
+    expect(result.current.available).toBe(false);
+    expect(result.current.reason).toBeNull();
     expect(readiness).not.toHaveBeenCalled();
   });
 
@@ -110,7 +117,14 @@ describe("useAiSeoMode availability", () => {
 
     const { result } = renderHook(() => useAiSeoMode(detail({ design: empty }), vi.fn(), vi.fn()));
 
-    await waitFor(() => expect(result.current.available).toBe(false));
+    await waitFor(() =>
+      expect(result.current.requirements).toContainEqual({
+        label: "Design selected",
+        ready: false,
+      }),
+    );
+    expect(result.current.available).toBe(false);
+    expect(result.current.reason).toBeNull();
     expect(readiness).not.toHaveBeenCalled();
   });
 
