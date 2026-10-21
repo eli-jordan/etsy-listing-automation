@@ -1,3 +1,5 @@
+import type { ReactNode } from "react";
+import type { PhotoWarpTemplate } from "../types";
 import { useCallback, useMemo } from "react";
 import type { PreviewJob } from "../components/PreviewPanel";
 import { usePreview } from "../hooks/usePreview";
@@ -5,8 +7,9 @@ import type { SingleTemplate } from "../types";
 import { EditorShell, OneBoxCanvas } from "./EditorShell";
 
 interface Props {
+  rendererControls?: ReactNode;
   templateName: string;
-  config: SingleTemplate;
+  config: PhotoWarpTemplate<SingleTemplate>;
   /** The photo's true pixel size -- the space the box is in. See
    * `QuadEditor`'s `space`. */
   space: [number, number] | null;
@@ -15,11 +18,9 @@ interface Props {
   onDesignChange: (design: string) => void;
 }
 
-/** The simplest of the three: one box over one photo, nothing to
- * disambiguate. Everything it adds to the shell is the optional garment
- * colour the photo shows -- what a listing with light and dark designs
- * resolves this scene's artwork by (ADR-0053). */
-export function SingleEditor({
+/** One placement over one photo, with the shared preview and realism controls. */
+function PhotoWarpSingleEditor({
+  rendererControls,
   templateName,
   config,
   space,
@@ -30,10 +31,9 @@ export function SingleEditor({
   const body = useMemo(
     () => ({
       bounding_box: config.bounding_box,
-      displace: config.displace,
-      shade: config.shade,
+      renderer: config.renderer,
     }),
-    [config.bounding_box, config.displace, config.shade],
+    [config.bounding_box, config.renderer],
   );
 
   const previewUrl = usePreview(templateName, body, design);
@@ -53,6 +53,7 @@ export function SingleEditor({
 
   return (
     <EditorShell
+      {...(rendererControls ? { rendererControls } : {})}
       templateName={templateName}
       config={config}
       onChange={onChange}
@@ -62,16 +63,19 @@ export function SingleEditor({
       previewUrl={previewUrl}
       jobs={jobs}
       canvas={(ctx) => <OneBoxCanvas {...ctx} box={config.bounding_box} onChange={setBox} />}
-      controls={
-        <label>
-          Garment colour (optional)
-          <input
-            value={config.colour ?? ""}
-            onChange={(e) => onChange({ ...config, colour: e.target.value || null })}
-            placeholder="the shirt colour this photo shows"
-          />
-        </label>
-      }
     />
   );
+}
+
+export function SingleEditor(props: Omit<Props, "config"> & { config: SingleTemplate }) {
+  const renderer = props.config.renderer;
+  if (renderer.type !== "photo-warp") {
+    return (
+      <p role="status">
+        Prepare the template first. Marigold rendering is unavailable until template maps are
+        prepared.
+      </p>
+    );
+  }
+  return <PhotoWarpSingleEditor {...props} config={{ ...props.config, renderer }} />;
 }

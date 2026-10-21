@@ -356,6 +356,26 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/designs/{design}/image": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Design Image
+     * @description Original RGBA artwork for responsive local placement, without rendering.
+     */
+    get: operations["design_image_api_designs__design__image_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/designs/{design}/thumbnail": {
     parameters: {
       query?: never;
@@ -1024,6 +1044,76 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/marigold/runtime": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Runtime Status */
+    get: operations["runtime_status_api_marigold_runtime_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/preparation/jobs": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Jobs */
+    get: operations["jobs_api_preparation_jobs_get"];
+    put?: never;
+    /** Submit */
+    post: operations["submit_api_preparation_jobs_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/preparation/jobs/{identity}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Job Status */
+    get: operations["job_status_api_preparation_jobs__identity__get"];
+    put?: never;
+    post?: never;
+    /** Cancel */
+    delete: operations["cancel_api_preparation_jobs__identity__delete"];
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/preparation/jobs/{identity}/events": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Events */
+    get: operations["events_api_preparation_jobs__identity__events_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/pricing-plans": {
     parameters: {
       query?: never;
@@ -1344,6 +1434,40 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/templates/{name}/mask": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Mask */
+    get: operations["mask_api_templates__name__mask_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/templates/{name}/mask-history": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Mask History */
+    get: operations["mask_history_api_templates__name__mask_history_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/templates/{name}/photo": {
     parameters: {
       query?: never;
@@ -1357,6 +1481,57 @@ export interface paths {
      *     preview stage when no design is picked yet.
      */
     get: operations["photo_api_templates__name__photo_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/templates/{name}/placements/{placement_id}/mask": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Placement Mask */
+    get: operations["placement_mask_api_templates__name__placements__placement_id__mask_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/templates/{name}/placements/{placement_id}/mask-history": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Placement History */
+    get: operations["placement_history_api_templates__name__placements__placement_id__mask_history_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/templates/{name}/preparation": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Status */
+    get: operations["status_api_templates__name__preparation_get"];
     put?: never;
     post?: never;
     delete?: never;
@@ -1958,6 +2133,21 @@ export interface components {
       file: string;
     };
     /**
+     * CalibrationSaveRequest
+     * @description A single recoverable calibration transaction under ADR-0054.
+     */
+    CalibrationSaveRequest: {
+      /** Config */
+      config:
+        | components["schemas"]["ColourMatrixTemplate"]
+        | components["schemas"]["MultipleTemplate"]
+        | components["schemas"]["SingleTemplate"];
+      /** Mask Edits */
+      mask_edits?: components["schemas"]["MaskEdit"][];
+      /** Request Id */
+      request_id: string;
+    };
+    /**
      * ColourMatrixPreviewRequest
      * @description Disambiguated from the other two preview shapes by required fields
      *     alone (``colour`` here, ``placements`` on ``MultiplePreviewRequest``,
@@ -1973,6 +2163,8 @@ export interface components {
         components["schemas"]["Point"],
         components["schemas"]["Point"],
       ];
+      /** Calibration Revision */
+      calibration_revision?: string | null;
       /** Colour */
       colour: string;
       /**
@@ -1981,20 +2173,16 @@ export interface components {
        */
       design: string;
       /**
-       * @default {
-       *       "enabled": false,
-       *       "strength": 0
-       *     }
+       * Kind
+       * @default colour-matrix
+       * @constant
        */
-      displace: components["schemas"]["DisplaceConfig"];
-      /**
-       * @default {
-       *       "blend": "soft-light",
-       *       "enabled": true,
-       *       "opacity": 0.6
-       *     }
-       */
-      shade: components["schemas"]["ShadeConfig"];
+      kind: "colour-matrix";
+      /** Mask Edits */
+      mask_edits?: components["schemas"]["MaskEdit"][];
+      /** Renderer */
+      renderer:
+        components["schemas"]["PhotoWarpRenderer"] | components["schemas"]["MarigoldRenderer"];
     };
     /**
      * ColourMatrixTemplate
@@ -2012,25 +2200,13 @@ export interface components {
         components["schemas"]["Point"],
       ];
       /**
-       * @default {
-       *       "enabled": false,
-       *       "strength": 0
-       *     }
-       */
-      displace: components["schemas"]["DisplaceConfig"];
-      /**
        * @description discriminator enum property added by openapi-typescript
        * @enum {string}
        */
       kind: "colour-matrix";
-      /**
-       * @default {
-       *       "blend": "soft-light",
-       *       "enabled": true,
-       *       "opacity": 0.6
-       *     }
-       */
-      shade: components["schemas"]["ShadeConfig"];
+      /** Renderer */
+      renderer:
+        components["schemas"]["PhotoWarpRenderer"] | components["schemas"]["MarigoldRenderer"];
     };
     /**
      * ColourReportRow
@@ -2113,6 +2289,28 @@ export interface components {
       from_template?: string | null;
       /** Name */
       name: string;
+    };
+    /** CreatePreparationRequest */
+    CreatePreparationRequest: {
+      /**
+       * Action
+       * @default prepare
+       * @enum {string}
+       */
+      action: "prepare" | "prepare_again" | "retry";
+      /** Config Revision */
+      config_revision: string;
+      /** Previous Job */
+      previous_job?: string | null;
+      /** Request Id */
+      request_id: string;
+      /**
+       * Reset Masks For Photo
+       * @default false
+       */
+      reset_masks_for_photo: boolean;
+      /** Template */
+      template: string;
     };
     /** DescriptionConfig */
     DescriptionConfig: {
@@ -2392,6 +2590,29 @@ export interface components {
        * @enum {string}
        */
       stage: "etsy_videos";
+    };
+    /** Event */
+    Event: {
+      /** Elapsed */
+      elapsed: number;
+      /** Error */
+      error?: string | null;
+      /** Job Id */
+      job_id: string;
+      /**
+       * Phase
+       * @enum {string}
+       */
+      phase:
+        "queued" | "running" | "cancelling" | "cancelled" | "superseded" | "failed" | "completed";
+      /** Placements Completed */
+      placements_completed: number;
+      /** Placements Total */
+      placements_total: number;
+      /** Sequence */
+      sequence: number;
+      /** Step */
+      step: string;
     };
     /** FieldChangeDTO */
     FieldChangeDTO: {
@@ -2908,6 +3129,122 @@ export interface components {
       /** Video Id */
       video_id: number;
     };
+    /** MapReadinessResponse */
+    MapReadinessResponse: {
+      /** Can Render */
+      can_render: boolean;
+      /** Content Digest */
+      content_digest?: string | null;
+      /** Message */
+      message?: string | null;
+      /** Reason */
+      reason?: string | null;
+      /**
+       * State
+       * @enum {string}
+       */
+      state: "needs_preparation" | "out_of_date" | "ready" | "not_required";
+    };
+    /** MarigoldAppearance */
+    MarigoldAppearance: {
+      /**
+       * Fabric Texture
+       * @default 0.25
+       */
+      fabric_texture: number;
+      /**
+       * Lighting Source
+       * @default estimated
+       * @enum {string}
+       */
+      lighting_source: "estimated" | "photo";
+      /**
+       * Lighting Strength
+       * @default 1
+       */
+      lighting_strength: number;
+      /**
+       * Print Shine
+       * @default 0
+       */
+      print_shine: number;
+    };
+    /** MarigoldConfig */
+    MarigoldConfig: {
+      /**
+       * @default {
+       *       "fabric_texture": 0.25,
+       *       "lighting_source": "estimated",
+       *       "lighting_strength": 1,
+       *       "print_shine": 0
+       *     }
+       */
+      appearance: components["schemas"]["MarigoldAppearance"];
+      /**
+       * @default {
+       *       "ensemble_size": 3,
+       *       "num_inference_steps": 10
+       *     }
+       */
+      inference: components["schemas"]["MarigoldInference"];
+    };
+    /** MarigoldInference */
+    MarigoldInference: {
+      /**
+       * Ensemble Size
+       * @default 3
+       */
+      ensemble_size: number;
+      /**
+       * Num Inference Steps
+       * @default 10
+       */
+      num_inference_steps: number;
+    };
+    /** MarigoldRenderer */
+    MarigoldRenderer: {
+      /**
+       * @default {
+       *       "appearance": {
+       *         "fabric_texture": 0.25,
+       *         "lighting_source": "estimated",
+       *         "lighting_strength": 1,
+       *         "print_shine": 0
+       *       },
+       *       "inference": {
+       *         "ensemble_size": 3,
+       *         "num_inference_steps": 10
+       *       }
+       *     }
+       */
+      config: components["schemas"]["MarigoldConfig"];
+      /**
+       * @description discriminator enum property added by openapi-typescript
+       * @enum {string}
+       */
+      type: "marigold";
+    };
+    /** MarigoldRuntimeResponse */
+    MarigoldRuntimeResponse: {
+      /** Available */
+      available: boolean;
+      /** Engine Version */
+      engine_version: string | null;
+      /** Installation Id */
+      installation_id: string | null;
+      /** Max Ensemble Size */
+      max_ensemble_size: number;
+      /** Max Image Dimension */
+      max_image_dimension: number;
+      /** Max Num Inference Steps */
+      max_num_inference_steps: number;
+      /** Problem */
+      problem: string | null;
+      /** Required Engine */
+      required_engine: string;
+      /** Update Available */
+      update_available: boolean;
+    };
     /**
      * MarketSnapshot
      * @description One research, as the panel reads it back: the result's fields, when
@@ -2937,6 +3274,32 @@ export interface components {
        * Format: date-time
        */
       searched_at: string;
+    };
+    /** MaskEdit */
+    MaskEdit: {
+      /** Operations */
+      operations: (
+        | components["schemas"]["Stroke"]
+        | components["schemas"]["Undo"]
+        | components["schemas"]["Reset"]
+      )[];
+      /** Placement Id */
+      placement_id?: string | null;
+    };
+    /** MaskHistoryResponse */
+    MaskHistoryResponse: {
+      /** Checksum */
+      checksum: string;
+      /** Strokes */
+      strokes: components["schemas"]["MaskHistoryStroke"][];
+      /** Undo Count */
+      undo_count: number;
+    };
+    /** MaskHistoryStroke */
+    MaskHistoryStroke: {
+      /** Before */
+      before: string;
+      operation: components["schemas"]["Stroke"];
     };
     /** MediaChangeDTO */
     MediaChangeDTO: {
@@ -2973,28 +3336,32 @@ export interface components {
     };
     /** MultiplePreviewRequest */
     MultiplePreviewRequest: {
+      /** Calibration Revision */
+      calibration_revision?: string | null;
+      /**
+       * Colour Coverage
+       * @default exact
+       * @enum {string}
+       */
+      colour_coverage: "exact" | "subset";
       /**
        * Design
        * @default bundled-grid
        */
       design: string;
       /**
-       * @default {
-       *       "enabled": false,
-       *       "strength": 0
-       *     }
+       * Kind
+       * @default multiple
+       * @constant
        */
-      displace: components["schemas"]["DisplaceConfig"];
+      kind: "multiple";
+      /** Mask Edits */
+      mask_edits?: components["schemas"]["MaskEdit"][];
       /** Placements */
       placements: components["schemas"]["Placement"][];
-      /**
-       * @default {
-       *       "blend": "soft-light",
-       *       "enabled": true,
-       *       "opacity": 0.6
-       *     }
-       */
-      shade: components["schemas"]["ShadeConfig"];
+      /** Renderer */
+      renderer:
+        components["schemas"]["PhotoWarpRenderer"] | components["schemas"]["MarigoldRenderer"];
     };
     /**
      * MultipleTemplate
@@ -3010,27 +3377,15 @@ export interface components {
        */
       colour_coverage: "exact" | "subset";
       /**
-       * @default {
-       *       "enabled": false,
-       *       "strength": 0
-       *     }
-       */
-      displace: components["schemas"]["DisplaceConfig"];
-      /**
        * @description discriminator enum property added by openapi-typescript
        * @enum {string}
        */
       kind: "multiple";
       /** Placements */
       placements: components["schemas"]["Placement"][];
-      /**
-       * @default {
-       *       "blend": "soft-light",
-       *       "enabled": true,
-       *       "opacity": 0.6
-       *     }
-       */
-      shade: components["schemas"]["ShadeConfig"];
+      /** Renderer */
+      renderer:
+        components["schemas"]["PhotoWarpRenderer"] | components["schemas"]["MarigoldRenderer"];
     };
     /**
      * PhaseEvent
@@ -3055,6 +3410,46 @@ export interface components {
        * @enum {string}
        */
       type: "phase";
+    };
+    /** PhotoWarpConfig */
+    PhotoWarpConfig: {
+      /**
+       * @default {
+       *       "enabled": false,
+       *       "strength": 0
+       *     }
+       */
+      displace: components["schemas"]["DisplaceConfig"];
+      /**
+       * @default {
+       *       "blend": "soft-light",
+       *       "enabled": true,
+       *       "opacity": 0.6
+       *     }
+       */
+      shade: components["schemas"]["ShadeConfig"];
+    };
+    /** PhotoWarpRenderer */
+    PhotoWarpRenderer: {
+      /**
+       * @default {
+       *       "displace": {
+       *         "enabled": false,
+       *         "strength": 0
+       *       },
+       *       "shade": {
+       *         "blend": "soft-light",
+       *         "enabled": true,
+       *         "opacity": 0.6
+       *       }
+       *     }
+       */
+      config: components["schemas"]["PhotoWarpConfig"];
+      /**
+       * @description discriminator enum property added by openapi-typescript
+       * @enum {string}
+       */
+      type: "photo-warp";
     };
     /**
      * PhraseScore
@@ -3090,6 +3485,8 @@ export interface components {
       ];
       /** Colour */
       colour: string;
+      /** Id */
+      id: string;
     };
     /** PlanDTO */
     PlanDTO: {
@@ -3191,6 +3588,82 @@ export interface components {
       x: number;
       /** Y */
       y: number;
+    };
+    /** PreparationJobResponse */
+    PreparationJobResponse: {
+      /** Config Revision */
+      config_revision: string;
+      /** Elapsed */
+      elapsed: number;
+      /** Engine Version */
+      engine_version: string | null;
+      /** Error */
+      error: string | null;
+      /** Id */
+      id: string;
+      /**
+       * Kind
+       * @enum {string}
+       */
+      kind: "prepare" | "rebuild";
+      /** Last Event Sequence */
+      last_event_sequence: number;
+      /**
+       * Phase
+       * @enum {string}
+       */
+      phase:
+        "queued" | "running" | "cancelling" | "cancelled" | "superseded" | "failed" | "completed";
+      /** Placements Completed */
+      placements_completed: number;
+      /** Placements Total */
+      placements_total: number;
+      /** Queue Position */
+      queue_position: number | null;
+      /** Step */
+      step: string;
+      /** Template */
+      template: string;
+    };
+    /** PreparationPlacementResponse */
+    PreparationPlacementResponse: {
+      /** Mask Available */
+      mask_available: boolean;
+      /** Mask Reason */
+      mask_reason: string | null;
+      /** Placement Id */
+      placement_id: string | null;
+      /** Undo Count */
+      undo_count: number;
+    };
+    /** PreparationResponse */
+    PreparationResponse: {
+      active_job: components["schemas"]["PreparationJobResponse"] | null;
+      /** Config Revision */
+      config_revision: string;
+      latest_job: components["schemas"]["PreparationJobResponse"] | null;
+      /** Main Photo */
+      main_photo: string;
+      maps: components["schemas"]["MapReadinessResponse"];
+      /** Placements */
+      placements: components["schemas"]["PreparationPlacementResponse"][];
+      /** Prepared Engine */
+      prepared_engine: string | null;
+      /** Renderer Settings */
+      renderer_settings: {
+        [key: string]: unknown;
+      };
+      /** Template */
+      template: string;
+    };
+    /** PreparationResyncResponse */
+    PreparationResyncResponse: {
+      /**
+       * Resync
+       * @default true
+       * @constant
+       */
+      resync: true;
     };
     /** PreviewRenderedEvent */
     PreviewRenderedEvent: {
@@ -3476,6 +3949,14 @@ export interface components {
        */
       stage: "render";
     };
+    /** Reset */
+    Reset: {
+      /**
+       * @description discriminator enum property added by openapi-typescript
+       * @enum {string}
+       */
+      type: "reset";
+    };
     /** ResolvedPrice */
     ResolvedPrice: {
       /** Amount */
@@ -3672,6 +4153,8 @@ export interface components {
     };
     /** SinglePreviewRequest */
     SinglePreviewRequest: {
+      /** Artwork */
+      artwork?: string | null;
       /** Bounding Box */
       bounding_box: [
         components["schemas"]["Point"],
@@ -3679,26 +4162,26 @@ export interface components {
         components["schemas"]["Point"],
         components["schemas"]["Point"],
       ];
+      /** Calibration Revision */
+      calibration_revision?: string | null;
+      /** Colour */
+      colour?: string | null;
       /**
        * Design
        * @default bundled-grid
        */
       design: string;
       /**
-       * @default {
-       *       "enabled": false,
-       *       "strength": 0
-       *     }
+       * Kind
+       * @default single
+       * @constant
        */
-      displace: components["schemas"]["DisplaceConfig"];
-      /**
-       * @default {
-       *       "blend": "soft-light",
-       *       "enabled": true,
-       *       "opacity": 0.6
-       *     }
-       */
-      shade: components["schemas"]["ShadeConfig"];
+      kind: "single";
+      /** Mask Edits */
+      mask_edits?: components["schemas"]["MaskEdit"][];
+      /** Renderer */
+      renderer:
+        components["schemas"]["PhotoWarpRenderer"] | components["schemas"]["MarigoldRenderer"];
     };
     /**
      * SingleTemplate
@@ -3716,25 +4199,13 @@ export interface components {
       /** Colour */
       colour?: string | null;
       /**
-       * @default {
-       *       "enabled": false,
-       *       "strength": 0
-       *     }
-       */
-      displace: components["schemas"]["DisplaceConfig"];
-      /**
        * @description discriminator enum property added by openapi-typescript
        * @enum {string}
        */
       kind: "single";
-      /**
-       * @default {
-       *       "blend": "soft-light",
-       *       "enabled": true,
-       *       "opacity": 0.6
-       *     }
-       */
-      shade: components["schemas"]["ShadeConfig"];
+      /** Renderer */
+      renderer:
+        components["schemas"]["PhotoWarpRenderer"] | components["schemas"]["MarigoldRenderer"];
     };
     /** StageAppliedEvent */
     StageAppliedEvent: {
@@ -3911,6 +4382,23 @@ export interface components {
       /** Typed */
       typed: boolean;
     };
+    /** Stroke */
+    Stroke: {
+      /** Diameter Px */
+      diameter_px: number;
+      /**
+       * Mode
+       * @enum {string}
+       */
+      mode: "mask" | "unmask";
+      /** Points */
+      points: [number, number][];
+      /**
+       * @description discriminator enum property added by openapi-typescript
+       * @enum {string}
+       */
+      type: "stroke";
+    };
     /**
      * SwatchResponse
      * @description A colour-matrix colour's real garment shade, sampled off its own scene
@@ -3996,6 +4484,7 @@ export interface components {
       height?: number | null;
       /** Kind */
       kind: ("colour-matrix" | "multiple" | "single") | null;
+      maps?: components["schemas"]["MapReadinessResponse"] | null;
       /** Name */
       name: string;
       /**
@@ -4003,6 +4492,8 @@ export interface components {
        * @default []
        */
       photos: components["schemas"]["TemplatePhoto"][];
+      /** Renderer */
+      renderer?: ("photo-warp" | "marigold") | null;
       /**
        * Status
        * @enum {string}
@@ -4012,6 +4503,14 @@ export interface components {
       status_reason?: string | null;
       /** Width */
       width?: number | null;
+    };
+    /** Undo */
+    Undo: {
+      /**
+       * @description discriminator enum property added by openapi-typescript
+       * @enum {string}
+       */
+      type: "undo";
     };
     /** ValidationError */
     ValidationError: {
@@ -4797,6 +5296,37 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["DesignSummary"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  design_image_api_designs__design__image_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        design: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": unknown;
         };
       };
       /** @description Validation Error */
@@ -5922,6 +6452,189 @@ export interface operations {
       };
     };
   };
+  runtime_status_api_marigold_runtime_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["MarigoldRuntimeResponse"];
+        };
+      };
+    };
+  };
+  jobs_api_preparation_jobs_get: {
+    parameters: {
+      query?: {
+        template?: string | null;
+        offset?: number;
+        limit?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PreparationJobResponse"][];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  submit_api_preparation_jobs_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["CreatePreparationRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      202: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PreparationJobResponse"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  job_status_api_preparation_jobs__identity__get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        identity: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PreparationJobResponse"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  cancel_api_preparation_jobs__identity__delete: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        identity: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PreparationJobResponse"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  events_api_preparation_jobs__identity__events_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        identity: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json":
+            | components["schemas"]["Event"]
+            | components["schemas"]["PreparationJobResponse"]
+            | components["schemas"]["PreparationResyncResponse"];
+          "text/event-stream": unknown;
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
   list_pricing_plans_api_pricing_plans_get: {
     parameters: {
       query?: {
@@ -6438,7 +7151,9 @@ export interface operations {
   put_config_api_templates__name__config_put: {
     parameters: {
       query?: never;
-      header?: never;
+      header: {
+        "if-match": string;
+      };
       path: {
         name: string;
       };
@@ -6446,10 +7161,7 @@ export interface operations {
     };
     requestBody: {
       content: {
-        "application/json":
-          | components["schemas"]["ColourMatrixTemplate"]
-          | components["schemas"]["MultipleTemplate"]
-          | components["schemas"]["SingleTemplate"];
+        "application/json": components["schemas"]["CalibrationSaveRequest"];
       };
     };
     responses: {
@@ -6550,6 +7262,70 @@ export interface operations {
       };
     };
   };
+  mask_api_templates__name__mask_get: {
+    parameters: {
+      query?: {
+        source?: "edited" | "automatic";
+      };
+      header?: never;
+      path: {
+        name: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": unknown;
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  mask_history_api_templates__name__mask_history_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        name: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["MaskHistoryResponse"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
   photo_api_templates__name__photo_get: {
     parameters: {
       query?: {
@@ -6570,6 +7346,103 @@ export interface operations {
         };
         content: {
           "application/json": unknown;
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  placement_mask_api_templates__name__placements__placement_id__mask_get: {
+    parameters: {
+      query?: {
+        source?: "edited" | "automatic";
+      };
+      header?: never;
+      path: {
+        name: string;
+        placement_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": unknown;
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  placement_history_api_templates__name__placements__placement_id__mask_history_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        name: string;
+        placement_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["MaskHistoryResponse"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  status_api_templates__name__preparation_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        name: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PreparationResponse"];
         };
       };
       /** @description Validation Error */

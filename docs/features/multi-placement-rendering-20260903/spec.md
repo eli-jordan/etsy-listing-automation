@@ -1,5 +1,10 @@
 # Multi-Template Mockups: Kinds, Multi-Artwork, and the Calibrator
 
+The later [Marigold specification](../marigold-20261001/spec.md) amends renderer
+configuration, masks and preparation while retaining these kinds and artwork
+selection. That extension is agreed but unimplemented. YAML below describes
+the shipped format before that change.
+
 This specification covers the change that let a listing use more than one mockup
 template, and a design carry more than one artwork file (light-ink vs
 dark-ink). It supersedes an earlier draft of the same name that modelled
@@ -292,10 +297,10 @@ on `PATH`.
 None. This was a young, unreleased codebase at the time of the change — the
 schema changed directly, and every fixture was updated in the same change
 rather than carrying a transitional shape. The garment profile's mockup-template
-field went through two shapes in quick succession: `mockup_template: str` →
-`templates: list[str]` (a per-garment registry) → removed entirely once it
+field went through two shapes in quick succession: `mockup_template: str` â†’
+`templates: list[str]` (a per-garment registry) â†’ removed entirely once it
 became clear the registry didn't earn its keep (see "Multiple templates per
-listing" above). `warp.quad` → `bounding_box`, and the bare `mockup:` media
+listing" above). `warp.quad` â†’ `bounding_box`, and the bare `mockup:` media
 shorthand was removed, in the same spirit.
 
 ## Decision log

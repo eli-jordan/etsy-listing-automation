@@ -168,3 +168,22 @@ def test_replacing_any_colours_photo_triggers_a_rerender(workspace_root: Path, c
     )
     assert render_plan.will_run is True
     assert render_plan.reason == "design or template changed"
+
+
+def test_marigold_configuration_blocks_plan_without_photo_warp_fallback(
+    workspace_root: Path,
+) -> None:
+    from etsy_listings.core.render.config import load_template_config
+
+    ctx = a_context(workspace_root)
+    saved = ctx.workspace.load_template_config("flat-lay-01")
+    ctx.workspace.save_template_config(
+        "flat-lay-01",
+        load_template_config(
+            {**saved.model_dump(mode="json"), "renderer": {"type": "marigold", "config": {}}}
+        ),
+    )
+    planned = build_plan(ctx, LISTING, a_lock(), STAGES)
+    render_plan = next(stage for stage in planned.plan.stage_plans if stage.stage == "render")
+    assert render_plan.blocked is not None
+    assert "Prepare the template first" in str(render_plan.blocked)

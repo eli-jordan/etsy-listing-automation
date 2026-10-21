@@ -143,7 +143,11 @@ def test_a_needed_slot_left_empty_blocks_render(workspace_root: Path) -> None:
 def test_a_colourless_single_scene_blocks_render_in_light_dark_mode(
     workspace_root: Path,
 ) -> None:
-    _write_template(workspace_root, "lifestyle-01", {"kind": "single", "bounding_box": BOX})
+    _write_template(
+        workspace_root,
+        "lifestyle-01",
+        {"kind": "single", "bounding_box": BOX, "renderer": {"type": "photo-warp", "config": {}}},
+    )
     edit_listing(
         workspace_root,
         design={"on-light": DESIGN, "on-dark": DESIGN},
@@ -157,7 +161,11 @@ def test_a_colourless_single_scene_blocks_render_in_light_dark_mode(
 
 
 def test_a_colourless_single_scene_prints_default_in_single_mode(workspace_root: Path) -> None:
-    _write_template(workspace_root, "lifestyle-01", {"kind": "single", "bounding_box": BOX})
+    _write_template(
+        workspace_root,
+        "lifestyle-01",
+        {"kind": "single", "bounding_box": BOX, "renderer": {"type": "photo-warp", "config": {}}},
+    )
     edit_listing(workspace_root, media=[{"template": "lifestyle-01"}])
 
     render_plan = _render_plan(a_context(workspace_root), a_lock())

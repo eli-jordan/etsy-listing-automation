@@ -1,3 +1,4 @@
+import type { PhotoWarpTemplate } from "../types";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as calibrator from "../api/calibrator";
@@ -13,7 +14,7 @@ import { EditorShell } from "./EditorShell";
  * answer cover all three, and it needs no template kind at all to do it.
  */
 
-const CONFIG: SingleTemplate = {
+const CONFIG: PhotoWarpTemplate<PhotoWarpTemplate<SingleTemplate>> = {
   kind: "single",
   colour: null,
   bounding_box: [
@@ -22,8 +23,13 @@ const CONFIG: SingleTemplate = {
     { x: 10, y: 10 },
     { x: 0, y: 10 },
   ],
-  displace: { enabled: false, strength: 0 },
-  shade: { enabled: true, opacity: 0.6, blend: "soft-light" },
+  renderer: {
+    type: "photo-warp",
+    config: {
+      displace: { enabled: false, strength: 0 },
+      shade: { enabled: true, opacity: 0.6, blend: "soft-light" },
+    },
+  },
 };
 
 afterEach(() => vi.restoreAllMocks());
@@ -34,7 +40,9 @@ beforeEach(() => {
   vi.spyOn(calibrator, "listDesigns").mockResolvedValue([]);
 });
 
-function setup(overrides: Partial<Parameters<typeof EditorShell<SingleTemplate>>[0]> = {}) {
+function setup(
+  overrides: Partial<Parameters<typeof EditorShell<PhotoWarpTemplate<SingleTemplate>>>[0]> = {},
+) {
   const onChange = vi.fn();
   render(
     <EditorShell
@@ -60,7 +68,7 @@ describe("EditorShell", () => {
     setup();
 
     expect(screen.getByTestId("canvas")).toHaveTextContent("outlined");
-    const toggle = screen.getByLabelText("show placement outline");
+    const toggle = screen.getByRole("switch", { name: "Show design box" });
     expect(toggle).toBeChecked();
 
     fireEvent.click(toggle);
@@ -70,9 +78,9 @@ describe("EditorShell", () => {
   });
 
   it("takes the outline label from the kind, since one box reads differently", () => {
-    setup({ outlineLabel: "show all outlines" });
+    setup({ outlineLabel: "Show all design boxes" });
 
-    expect(screen.getByLabelText("show all outlines")).toBeInTheDocument();
+    expect(screen.getByRole("switch", { name: "Show all design boxes" })).toBeInTheDocument();
   });
 
   it("switching to Preview hides the calibration controls", () => {
@@ -82,7 +90,7 @@ describe("EditorShell", () => {
     fireEvent.click(screen.getByRole("tab", { name: "Preview" }));
 
     expect(screen.queryByTestId("canvas")).not.toBeInTheDocument();
-    expect(screen.queryByLabelText("show placement outline")).not.toBeInTheDocument();
+    expect(screen.queryByRole("switch", { name: "Show design box" })).not.toBeInTheDocument();
   });
 
   it("holds the canvas back until there is both an image and a space to draw it in", () => {
@@ -106,7 +114,9 @@ describe("EditorShell", () => {
     expect(onChange).toHaveBeenCalledWith(
       expect.objectContaining({
         kind: "single",
-        displace: expect.objectContaining({ enabled: true }),
+        renderer: expect.objectContaining({
+          config: expect.objectContaining({ displace: expect.objectContaining({ enabled: true }) }),
+        }),
       }),
     );
   });

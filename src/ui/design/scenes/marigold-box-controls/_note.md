@@ -1,0 +1,1 @@
+The box control affects only placement guides and handles; the design remains visible. Mask editing retains its own automatic overlay visibility. A switch, paired view modes, an image chip, a bottom view strip and a display menu are compared in the same app context. Local fixture interactions only.

@@ -83,7 +83,7 @@ class Issue:
 
 @dataclass(frozen=True)
 class TemplateInfo:
-    """The two facts a listing's media can be checked against, per template it
+    """The kind, colours and map refusal a listing checks, per template it
     references -- a slice of the calibrator's `TemplateSummary`
     (`GET /api/templates`), so kind and colours are the real ones on disk,
     never re-derived here. A template this listing names that isn't in the
@@ -92,6 +92,7 @@ class TemplateInfo:
 
     kind: Literal["colour-matrix", "multiple", "single"]
     colours: frozenset[str]
+    preparation_error: str | None = None
 
 
 _GARMENT_PROFILE_WHERE = "Variants › Garment profile"
@@ -399,6 +400,12 @@ def _check_template_kind_colour_match(
             continue
         issues.extend(check_scene_colour(entry.template, info.kind, entry.colour))
     return issues
+
+
+def check_prepared_maps(template: str, error: str | None) -> list[Issue]:
+    if error is None:
+        return []
+    return [Issue("block", "images", f"Listing Images › {template}", error)]
 
 
 def check_scene_colour(template: str, kind: str, colour: str | None) -> list[Issue]:
@@ -777,6 +784,12 @@ def check_listing(
         issues += _check_printify_variant_limit(listing, garment_profile)
     issues += _check_template_kind_colour_match(listing, templates)
     issues += _check_variation_images(listing, templates)
+    for name in dict.fromkeys(
+        entry.template for entry in listing.media if isinstance(entry, TemplateMediaEntry)
+    ):
+        info = templates.get(name)
+        if info is not None:
+            issues += check_prepared_maps(name, info.preparation_error)
     issues += check_videos(videos or {})
     issues += _check_tags(listing)
     if published is not None:

@@ -48,6 +48,8 @@ def test_list_templates_includes_a_directory_with_no_template_yaml(
     by_name = {t["name"]: t for t in client.get("/api/templates").json()}
     assert by_name["not-calibrated-yet"] == {
         "name": "not-calibrated-yet",
+        "renderer": None,
+        "maps": None,
         "kind": None,
         "colours": [],
         # No kind, so no way to say whether its photos are per-colour scenes or
@@ -114,7 +116,13 @@ class TestCalibrationStatus:
         The count matters; "some boxes" would not tell you when you were done."""
         config = client.get("/api/templates/colour-chart-01/config").json()
         config["placements"][0]["colour"] = ""
-        client.put("/api/templates/colour-chart-01/config", json=config)
+        client.put(
+            "/api/templates/colour-chart-01/config",
+            json={"request_id": "update-colour", "config": config},
+            headers={
+                "If-Match": client.get("/api/templates/colour-chart-01/config").headers["etag"]
+            },
+        )
         assert self._status(client, "colour-chart-01") == (
             "needs-calibration",
             "1 box has no colour",
@@ -434,8 +442,9 @@ def test_get_config_returns_the_fixture_bounding_box(client: TestClient) -> None
     assert body["kind"] == "colour-matrix"
     assert len(body["bounding_box"]) == 4
     assert set(body["bounding_box"][0]) == {"x", "y"}
-    assert body["shade"]["enabled"] is True
+    assert body["renderer"]["config"]["shade"]["enabled"] is True
     assert "last-modified" in response.headers
+    assert response.headers["cache-control"] == "no-store"
 
 
 def test_get_config_404s_for_unknown_template(client: TestClient) -> None:
@@ -448,7 +457,11 @@ def test_put_config_updates_the_bounding_box(client: TestClient) -> None:
     new_box = [{"x": 10, "y": 10}, {"x": 200, "y": 10}, {"x": 200, "y": 200}, {"x": 10, "y": 200}]
     current["bounding_box"] = new_box
 
-    put_response = client.put("/api/templates/flat-lay-01/config", json=current)
+    put_response = client.put(
+        "/api/templates/flat-lay-01/config",
+        json={"request_id": "update-box", "config": current},
+        headers={"If-Match": client.get("/api/templates/flat-lay-01/config").headers["etag"]},
+    )
     assert put_response.status_code == 200
     assert put_response.json()["bounding_box"] == new_box
 
@@ -650,6 +663,7 @@ class TestPreviewScale:
         config = client.get("/api/templates/colour-chart-01/config").json()
         config["placements"] = [
             {
+                "id": "scaled-shirt",
                 "colour": "black",
                 "bounding_box": [
                     {"x": width * 0.55, "y": height * 0.55},
@@ -717,6 +731,7 @@ def test_preview_wrong_body_shape_for_kind_is_rejected(client: TestClient) -> No
     response = client.post(
         "/api/templates/colour-chart-01/preview",
         json={
+            "renderer": {"type": "photo-warp", "config": {}},
             "colour": "black",
             "bounding_box": [
                 {"x": 0, "y": 0},
@@ -751,8 +766,13 @@ SINGLE_CONFIG: dict[str, object] = {
         {"x": 100, "y": 100},
         {"x": 0, "y": 100},
     ],
-    "displace": {"enabled": False, "strength": 0.0},
-    "shade": {"enabled": True, "opacity": 0.6, "blend": "soft-light"},
+    "renderer": {
+        "type": "photo-warp",
+        "config": {
+            "displace": {"enabled": False, "strength": 0.0},
+            "shade": {"enabled": True, "opacity": 0.6, "blend": "soft-light"},
+        },
+    },
 }
 """A valid body, so the PUT below is refused for its *name* rather than
 bouncing off request validation before the name is ever looked at."""
@@ -773,7 +793,12 @@ bouncing off request validation before the name is ever looked at."""
         (
             "POST",
             "/api/templates/flat-lay-01/preview",
-            {"colour": "black", "bounding_box": SINGLE_CONFIG["bounding_box"], "design": "a:b"},
+            {
+                "colour": "black",
+                "bounding_box": SINGLE_CONFIG["bounding_box"],
+                "renderer": SINGLE_CONFIG["renderer"],
+                "design": "a:b",
+            },
         ),
     ],
 )
@@ -856,3 +881,21 @@ def test_health_endpoint(client: TestClient) -> None:
     response = client.get("/api/health")
     assert response.status_code == 200
     assert response.json()["status"] == "ok"
+
+
+def test_unsaved_marigold_cannot_render_over_saved_photo_warp(client: TestClient) -> None:
+    config = client.get("/api/templates/flat-lay-01/config").json()
+    config["renderer"] = {"type": "marigold", "config": {}}
+    response = client.post("/api/templates/flat-lay-01/preview", json={**config, "colour": "black"})
+    assert response.status_code == 409
+    assert "Save the Marigold renderer selection" in response.json()["detail"]
+
+
+@pytest.mark.parametrize("old_field", ["shade", "displace"])
+def test_preview_rejects_mixed_old_settings(client: TestClient, old_field: str) -> None:
+    config = client.get("/api/templates/flat-lay-01/config").json()
+    response = client.post(
+        "/api/templates/flat-lay-01/preview",
+        json={**config, "colour": "black", old_field: config["renderer"]["config"][old_field]},
+    )
+    assert response.status_code == 422

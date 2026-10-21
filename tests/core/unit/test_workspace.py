@@ -215,7 +215,10 @@ def test_layout_accessors_point_at_the_documented_locations(workspace_root: Path
     assert (
         ws.template_config_file("flat-lay-01") == ws.template_dir("flat-lay-01") / "template.yaml"
     )
-    assert ws.template_derived_dir("flat-lay-01") == ws.template_dir("flat-lay-01") / "_derived"
+    assert (
+        ws.template_derived_dir("flat-lay-01")
+        == ws.template_dir("flat-lay-01") / "_renderer" / "derived"
+    )
     assert (
         ws.template_base_image("flat-lay-01", "black")
         == ws.template_dir("flat-lay-01") / "black.png"
