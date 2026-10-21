@@ -40,6 +40,12 @@ export interface PreviewJob {
 }
 
 interface Props {
+  fullQuality?: boolean;
+  reference?: string;
+  blocked?: string | null;
+  prepareLabel?: string;
+  onPrepare?: () => void;
+  identity?: string;
   templateName: string;
   jobs: PreviewJob[];
   design: string;
@@ -76,8 +82,20 @@ function requestKey(templateName: string, design: string, jobs: PreviewJob[]): s
   return `${templateName}|${design}|${JSON.stringify(jobs)}`;
 }
 
-export function PreviewPanel({ templateName, jobs, design, active, onApprove }: Props) {
-  const key = requestKey(templateName, design, jobs);
+export function PreviewPanel({
+  fullQuality,
+  reference,
+  templateName,
+  jobs,
+  design,
+  active,
+  onApprove,
+  blocked = null,
+  prepareLabel = "Prepare template",
+  onPrepare,
+  identity = "",
+}: Props) {
+  const key = requestKey(templateName, design, jobs) + identity;
   const [request, setRequest] = useState<Request | null>(null);
   const [result, setResult] = useState<Result | null>(null);
   const [open, setOpen] = useState<string | null>(null);
@@ -111,13 +129,13 @@ export function PreviewPanel({ templateName, jobs, design, active, onApprove }: 
   // `react-hooks/set-state-in-effect` exists to prevent. Nothing to revoke
   // here either: `request` only ever goes from null to set, so there cannot
   // be an earlier run's blobs to clean up. That is why this is not `start()`.
-  if (active && request === null) {
+  if (active && request === null && !blocked) {
     setRequest({ key, templateName, design, jobs });
     setResult({ key, rendered: {}, done: 0, failed: 0 });
   }
 
   useEffect(() => {
-    if (request === null) return;
+    if (request === null || request.key !== key || blocked) return;
     let cancelled = false;
 
     void (async () => {
@@ -154,7 +172,7 @@ export function PreviewPanel({ templateName, jobs, design, active, onApprove }: 
     return () => {
       cancelled = true;
     };
-  }, [request]);
+  }, [request, key, blocked]);
 
   const rendered = result?.key === request?.key ? (result?.rendered ?? {}) : {};
   const done = result?.done ?? 0;
@@ -178,6 +196,16 @@ export function PreviewPanel({ templateName, jobs, design, active, onApprove }: 
       className={jobs.length === 1 ? "preview-grid preview-grid--single" : "preview-grid"}
       hidden={!active}
     >
+      {blocked && (
+        <div className="mg-empty-preview">
+          <p role="status">{blocked}</p>
+          {onPrepare && (
+            <button type="button" className="btn btn-primary" onClick={onPrepare}>
+              {prepareLabel}
+            </button>
+          )}
+        </div>
+      )}
       <div className="preview-grid__head">
         {request === null ? (
           <span className="preview-grid__status">
@@ -186,9 +214,10 @@ export function PreviewPanel({ templateName, jobs, design, active, onApprove }: 
         ) : (
           <span className="preview-grid__count">{`${done} / ${request.jobs.length}`}</span>
         )}
-        {request !== null && !complete && (
+        {request !== null && !complete && !stale && !blocked && (
           <span className="preview-grid__status">rendering at full size…</span>
         )}
+        {fullQuality && complete && <span className="preview-grid__status">Full quality</span>}
         {failed > 0 && (
           <span className="preview-grid__failed">
             {`${failed} ${failed === 1 ? "preview" : "previews"} failed to render`}
@@ -207,6 +236,7 @@ export function PreviewPanel({ templateName, jobs, design, active, onApprove }: 
             className={
               stale ? "btn btn-danger" : approvable ? "btn btn-secondary" : "btn btn-primary"
             }
+            disabled={!!blocked}
             onClick={start}
           >
             {request === null ? "Render preview" : "Re-render"}
@@ -251,6 +281,13 @@ export function PreviewPanel({ templateName, jobs, design, active, onApprove }: 
             );
           })}
         </div>
+      )}
+
+      {fullQuality && request !== null && (
+        <>
+          <p className="mg-help">Full-size renders. Click an image to see it large.</p>
+          {reference && <p className="mg-help">{reference}</p>}
+        </>
       )}
 
       {openIndex >= 0 && (

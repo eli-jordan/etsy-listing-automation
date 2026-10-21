@@ -13,7 +13,6 @@ function detail(over: Partial<ListingDetail> = {}): ListingDetail {
     brief: "",
     prices: {},
     price_overrides: {},
-    artwork: {},
     pricing_plan: null,
     etsy: {
       title: "",
@@ -71,23 +70,26 @@ describe("selectColours", () => {
     expect(mediaLostBy(listing, [])).toBe(0);
   });
 
-  it("drops per-colour artwork and price overrides too", () => {
+  it("drops a colour's own design and price overrides too", () => {
     const patch = selectColours(
       detail({
-        artwork: { white: "on-light", black: "on-dark" },
+        design: { default: "designs/a.png", white: "designs/w.png", black: "designs/b.png" },
         price_overrides: { white: { S: "399 NOK" } },
       }),
       ["black"],
     );
-    expect(patch.artwork).toEqual({ black: "on-dark" });
+    expect(patch.design).toEqual({ default: "designs/a.png", black: "designs/b.png" });
     expect(patch.price_overrides).toEqual({});
   });
 
   it("leaves a colour-keyed field out of the patch when it had nothing to lose", () => {
     /* Rewriting a field to itself is a change the server would store and the
        next reader would have to reason about. */
-    const patch = selectColours(detail({ artwork: { black: "on-dark" } }), ["black"]);
-    expect("artwork" in patch).toBe(false);
+    const patch = selectColours(
+      detail({ design: { default: "designs/a.png", black: "designs/b.png" } }),
+      ["black"],
+    );
+    expect("design" in patch).toBe(false);
     expect("media" in patch).toBe(false);
   });
 
@@ -129,6 +131,29 @@ describe("selectGarmentProfile", () => {
       garment_profile: "gildan-5000",
       colors: ["black"],
       media: [{ template: "flat-lay-01", colour: "black" }],
+    });
+  });
+
+  it("keeps a colour's own design the new profile sells, and drops the rest", () => {
+    /* Spec, *Colour-specific artwork*: changing garment profile preserves
+       colour keys that exist in the new profile and removes the rest. */
+    const listing = detail({
+      colors: ["black", "moss", "white"],
+      design: {
+        "on-light": "designs/dark-ink.png",
+        "on-dark": "designs/light-ink.png",
+        moss: "designs/moss.png",
+        white: "designs/white.png",
+      },
+    });
+    expect(selectGarmentProfile(listing, "gildan-5000", ["black", "ivory", "moss"])).toEqual({
+      garment_profile: "gildan-5000",
+      colors: ["black", "ivory", "moss"],
+      design: {
+        "on-light": "designs/dark-ink.png",
+        "on-dark": "designs/light-ink.png",
+        moss: "designs/moss.png",
+      },
     });
   });
 });

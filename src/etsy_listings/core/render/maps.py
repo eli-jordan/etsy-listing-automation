@@ -1,4 +1,4 @@
-"""Derived height/luminance maps, and the ``_derived/`` disk cache for them.
+"""Derived height/luminance maps, and the ``_renderer/derived/`` disk cache for them.
 
 Pure computation ( :func:`luminance_map`, :func:`height_map`) is separated from
 the cache ( :class:`DerivedMapCache`), which is the one place in this module
@@ -53,7 +53,7 @@ def _cache_key(base_rgb: RGB, kind: str, params: str) -> str:
 
 
 class DerivedMapCache:
-    """Caches maps to ``mockup-templates/{name}/_derived/``, keyed by
+    """Caches maps to ``mockup-templates/{name}/_renderer/derived/``, keyed by
     ``hash(source image bytes + map params)`` -- a template edit invalidates
     the cache without a manual clear, since the hash changes with the bytes.
     """

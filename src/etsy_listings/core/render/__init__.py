@@ -13,19 +13,30 @@ already in hand).
 """
 
 from etsy_listings.core.render.config import (
+    AnyRenderer,
     AnyTemplate,
     BoundingBox,
     ColourMatrixTemplate,
     DisplaceConfig,
+    MarigoldAppearance,
+    MarigoldConfig,
+    MarigoldInference,
+    MarigoldRenderer,
     MultipleTemplate,
+    PhotoWarpConfig,
+    PhotoWarpRenderer,
     Placement,
+    PlacementId,
     Point,
+    PreparationRequired,
     RenderConfig,
+    Renderer,
     ShadeConfig,
     SingleTemplate,
     TemplateConfig,
     dump_template_config,
     load_template_config,
+    scene_layers,
 )
 from etsy_listings.core.render.io import (
     DesignValidationError,
@@ -35,6 +46,12 @@ from etsy_listings.core.render.io import (
     save_png,
 )
 from etsy_listings.core.render.maps import DerivedMapCache, height_map, luminance_map
+from etsy_listings.core.render.material import (
+    MaterialLayer,
+    MaterialMaps,
+    prepare_material_artwork,
+    render_marigold_scene,
+)
 from etsy_listings.core.render.pipeline import Layer, render_scene
 from etsy_listings.core.render.swatch import sample_swatch
 from etsy_listings.core.render.types import RGB, RGBA, FloatMap
@@ -45,6 +62,16 @@ __all__ = [
     "RGBA",
     "FloatMap",
     # Render configuration, and the three shapes a template.yaml can take.
+    "AnyRenderer",
+    "Renderer",
+    "PhotoWarpConfig",
+    "PhotoWarpRenderer",
+    "MarigoldInference",
+    "MarigoldAppearance",
+    "MarigoldConfig",
+    "MarigoldRenderer",
+    "PlacementId",
+    "PreparationRequired",
     "AnyTemplate",
     "BoundingBox",
     "ColourMatrixTemplate",
@@ -58,9 +85,14 @@ __all__ = [
     "TemplateConfig",
     "dump_template_config",
     "load_template_config",
+    "scene_layers",
     # Compositing. One function for all three kinds -- see pipeline.py.
     "Layer",
     "render_scene",
+    "MaterialMaps",
+    "MaterialLayer",
+    "prepare_material_artwork",
+    "render_marigold_scene",
     # Derived maps, and their on-disk cache.
     "DerivedMapCache",
     "height_map",
@@ -73,7 +105,13 @@ __all__ = [
     "save_png",
     "sample_swatch",
 ]
-"""The individual passes (``warp``/``displace``/``shade``/``export``) are
+"""MaterialMaps carries an explicit photo origin and optional reference size for
+compact preparation maps. The pure renderer returns the complete reference photo.
+
+The public identity module provides decoded artwork and prepared scene
+identities for CPU preview promotion; it imports no orchestration code.
+
+The individual passes (``warp``/``displace``/``shade``/``export``) are
 deliberately absent: they are the *inside* of ``render_scene``, goldened
 per-pass so a pixel change can be attributed, and composing them in some other
 order elsewhere is exactly what ADR-0012 exists to prevent. Import

@@ -169,3 +169,12 @@ describe("TemplateRail", () => {
     expect(rowNames()).toEqual([]);
   });
 });
+
+it("keeps unknown Marigold readiness out of ready and needs-map filters", () => {
+  renderRail({ templates: [summary({ name: "pending", renderer: "marigold", maps: null })] });
+  expect(screen.getByText("Checking maps")).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Ready 0" })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Needs maps 0" })).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Ready 0" }));
+  expect(rowNames()).toEqual([]);
+});

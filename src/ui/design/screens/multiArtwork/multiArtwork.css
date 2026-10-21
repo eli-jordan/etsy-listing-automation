@@ -1,0 +1,383 @@
+/* Multi-artwork listing editor (docs/multi-artwork-ui.md). Everything here is
+   new; the rest of the screen is the app's own editor classes. */
+
+/* — design strip: mode + base slots — */
+.ma-strip {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.ma-strip__head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.ma-strip__own {
+  font-size: 12px;
+  color: color-mix(in srgb, var(--color-text) 65%, transparent);
+}
+
+.ma-link {
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  font-weight: 600;
+  color: var(--color-accent-700);
+  cursor: pointer;
+}
+
+.ma-link:hover {
+  text-decoration: underline;
+}
+
+.ma-slots {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-2);
+}
+
+.ma-slot {
+  padding: 6px 12px 6px 6px;
+  border: 1px solid var(--color-divider);
+  border-radius: var(--radius-md);
+  background: var(--color-neutral-100);
+}
+
+.ma-slot--missing {
+  border-style: dashed;
+  border-color: var(--color-warning);
+  background: color-mix(in srgb, var(--color-warning) 8%, var(--color-neutral-100));
+}
+
+.ma-slot__title {
+  font-size: 11px;
+  font-weight: 700;
+  color: color-mix(in srgb, var(--color-text) 68%, transparent);
+}
+
+.ma-slot__users {
+  font-size: 11.5px;
+  color: color-mix(in srgb, var(--color-text) 60%, transparent);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ma-slot__users--idle {
+  font-style: italic;
+}
+
+.ma-slot .design-row__change {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* A thumbnail on the cloth it prints on: light ink on a light tile would be
+   invisible, and "does this ink suit the shirt" is the point of looking. */
+.ma-tile {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.ma-tile img {
+  width: 82%;
+  height: 82%;
+  object-fit: contain;
+}
+
+.ma-tile--empty {
+  background: transparent;
+  border: 1.5px dashed color-mix(in srgb, var(--color-text) 30%, transparent);
+  box-shadow: none;
+}
+
+/* — Variants rows — */
+.ma-own-tag {
+  padding: 1px 7px;
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.ma-chip {
+  flex: none;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid color-mix(in srgb, var(--color-text) 18%, transparent);
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  cursor: pointer;
+  transition: box-shadow 0.12s ease;
+}
+
+.ma-chip img {
+  width: 88%;
+  height: 88%;
+  object-fit: contain;
+}
+
+.ma-chip:hover,
+.ma-chip:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--color-accent);
+}
+
+.ma-chip--own {
+  box-shadow: 0 0 0 2px var(--color-accent-2);
+}
+
+.ma-chip--empty {
+  background: transparent;
+  border: 1.5px dashed var(--color-warning);
+}
+
+/* — preview stage + what this colour prints — */
+.ma-stage {
+  min-height: 400px;
+}
+
+.ma-shirt {
+  width: min(100%, 400px);
+  height: auto;
+  display: block;
+}
+
+.ma-prints {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--color-neutral-100);
+  border: 1px solid var(--color-divider);
+}
+
+.ma-prints--blocked {
+  border-color: var(--color-warning);
+  background: color-mix(in srgb, var(--color-warning) 8%, var(--color-neutral-100));
+}
+
+.ma-prints__thumb {
+  flex: none;
+  width: 52px;
+  height: 52px;
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  box-shadow: var(--shadow-sm);
+}
+
+.ma-prints__thumb img {
+  width: 84%;
+  height: 84%;
+  object-fit: contain;
+}
+
+.ma-prints__text {
+  flex: 1;
+  min-width: 0;
+}
+
+.ma-prints__title {
+  font-weight: 700;
+  font-size: 14px;
+}
+
+.ma-prints__why {
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: color-mix(in srgb, var(--color-text) 72%, transparent);
+  max-width: 62ch;
+}
+
+.ma-prints__note {
+  margin-top: 4px;
+  font-size: 11px;
+  color: color-mix(in srgb, var(--color-text) 55%, transparent);
+}
+
+.ma-prints__actions {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+  flex: none;
+}
+
+/* Same body-face override the design picker's ghost button already uses:
+   Caprasimo is for headings, not 12px row actions. */
+.ma-btn {
+  font-family: var(--font-body);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* — library picker — */
+.ma-picker {
+  width: 460px;
+}
+
+.ma-picker__hint {
+  margin: calc(-1 * var(--space-2)) 0 0;
+  font-size: 12.5px;
+  color: color-mix(in srgb, var(--color-text) 68%, transparent);
+}
+
+.ma-search {
+  position: relative;
+}
+
+.ma-search svg {
+  position: absolute;
+  left: 11px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: color-mix(in srgb, var(--color-text) 50%, transparent);
+}
+
+.ma-search .input {
+  width: 100%;
+  padding-left: 32px;
+}
+
+.ma-pick {
+  width: 100%;
+}
+
+.ma-pick .modal-design-row__thumb {
+  width: 44px;
+  height: 44px;
+}
+
+.ma-pick__text {
+  flex: 1;
+  min-width: 0;
+}
+
+.ma-pick--on {
+  background: color-mix(in srgb, var(--color-accent) 10%, transparent);
+}
+
+.ma-pick__current {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--color-accent-700);
+}
+
+/* — back to one design — */
+.ma-leave {
+  width: 440px;
+}
+
+.ma-leave__body,
+.ma-leave__note {
+  margin: 0;
+  font-size: 13px;
+  color: color-mix(in srgb, var(--color-text) 72%, transparent);
+}
+
+.ma-leave__options {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ma-keep {
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-start;
+  gap: var(--space-2);
+  padding: 8px;
+}
+
+.ma-keep__text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.ma-keep .template-card__kind {
+  font-size: 11px;
+}
+
+/* — recent panel, linked pair — */
+.ma-strip__label {
+  margin: 0;
+}
+
+.ma-recent {
+  margin-top: 0;
+}
+
+.ma-recent__mode {
+  width: 100%;
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--color-divider);
+}
+
+.ma-slot--open {
+  border-color: var(--color-accent);
+}
+
+/* the linked pair */
+.ma-slots--linked {
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+}
+
+.ma-chain {
+  height: 30px;
+  padding: 0 11px 0 9px;
+  gap: 5px;
+  font-family: var(--font-body);
+  font-size: 11.5px;
+  font-weight: 700;
+  border-radius: 999px;
+  border: 1px solid var(--color-divider);
+  background: var(--color-bg);
+  color: color-mix(in srgb, var(--color-text) 60%, transparent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.ma-chain:hover {
+  border-color: var(--color-accent);
+  color: var(--color-accent-700);
+}
+
+.ma-chain--on {
+  background: var(--color-accent-100);
+  border-color: var(--color-accent-300);
+  color: var(--color-accent-700);
+}
+
+.ma-slot--mirrored {
+  border-style: dashed;
+  background: transparent;
+}
+
+.ma-slot--mirrored .ma-tile {
+  opacity: 0.75;
+}
+
+.ma-slot__same {
+  font-weight: 600;
+  color: color-mix(in srgb, var(--color-text) 55%, transparent);
+}

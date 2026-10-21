@@ -12,6 +12,8 @@ from PIL import Image
 
 from etsy_listings.core.render.types import RGB, RGBA
 
+MARIGOLD_PNG_COMPRESSION = 1
+
 
 class DesignValidationError(ValueError):
     """Validation: design files must be RGB with an alpha channel, never
@@ -35,7 +37,7 @@ def load_template_base(path: Path) -> RGB:
     return array
 
 
-def encode_png(image: Image.Image) -> bytes:
+def encode_png(image: Image.Image, *, compression: int = 6) -> bytes:
     """Deterministic PNG encode: 8-bit sRGB, no ``pnginfo`` (so no ``tIME`` or
     other timestamp/metadata chunk enters the file), fixed compression level so
     the same pixels always produce the same bytes on a given Pillow version --
@@ -45,10 +47,10 @@ def encode_png(image: Image.Image) -> bytes:
     if image.mode != "RGB":
         image = image.convert("RGB")
     buffer = io.BytesIO()
-    image.save(buffer, format="PNG", optimize=False, compress_level=6, pnginfo=None)
+    image.save(buffer, format="PNG", optimize=False, compress_level=compression, pnginfo=None)
     return buffer.getvalue()
 
 
-def save_png(image: Image.Image, path: Path) -> None:
+def save_png(image: Image.Image, path: Path, *, compression: int = 6) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_bytes(encode_png(image))
+    path.write_bytes(encode_png(image, compression=compression))
