@@ -28,6 +28,8 @@ def test_failed_update_keeps_previous_installation_and_engine_selection(tmp_path
         def inspect(self, target, weights, version):
             return Capability(True, None, engine_version=version, python=str(target / "python.exe"))
 
+        verify = inspect
+
     installer = Installer()
     runtime = Runtime(home=tmp_path, installer=installer)
     selected = runtime.setup()
@@ -65,6 +67,8 @@ def test_explicit_same_engine_repair_keeps_selected_installation(tmp_path):
                 python=str(target / "python.exe"),
             )
 
+        verify = inspect
+
     runtime = Runtime(home=tmp_path, installer=Installer())
     original = runtime.setup()
     Path(original.python).write_bytes(b"damaged")
@@ -96,6 +100,8 @@ def test_failed_post_rename_probe_leaves_previous_current_and_allows_retry(tmp_p
                 python=str(target / "python.exe"),
             )
 
+        verify = inspect
+
     installer = Installer()
     runtime = Runtime(home=tmp_path, installer=installer)
     previous = runtime.setup()
@@ -121,6 +127,8 @@ def test_malformed_installation_pointers_are_actionable_and_repairable(tmp_path)
 
         def inspect(self, target, weights, version):
             return Capability(True, None, engine_version=version, python=str(target / "python.exe"))
+
+        verify = inspect
 
     runtime = Runtime(home=tmp_path, installer=Installer())
     selected = runtime.setup()

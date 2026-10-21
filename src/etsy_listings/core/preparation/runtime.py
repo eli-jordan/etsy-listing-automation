@@ -57,6 +57,7 @@ class Capability:
 class Installer(Protocol):
     def install(self, target: Path, weights: Path, version: str) -> Capability: ...
     def inspect(self, target: Path, weights: Path, version: str) -> Capability: ...
+    def verify(self, target: Path, weights: Path, version: str) -> Capability: ...
 
 
 class Runtime:
@@ -76,13 +77,17 @@ class Runtime:
             installer = NativeInstaller()
         self.installer = installer
 
-    def inspect(self) -> Capability:
+    def inspect(self, *, verify: bool = False) -> Capability:
+        """``verify`` forces the full integrity check; otherwise the installer may
+        answer from file stamps recorded by the last one."""
         try:
             current = json.loads((self.root / "current.json").read_text(encoding="utf-8"))
             if not isinstance(current, dict) or current.get("schema_version") != 1:
                 raise SetupError("Unsupported installation pointer schema")
             return self.selection(
-                current["engine_version"], installation_id=current["installation_id"]
+                current["engine_version"],
+                installation_id=current["installation_id"],
+                verify=verify,
             )
         except FileNotFoundError:
             return Capability(
@@ -97,7 +102,9 @@ class Runtime:
                 required_engine=self.engine_version,
             )
 
-    def selection(self, version: str, *, installation_id: str | None = None) -> Capability:
+    def selection(
+        self, version: str, *, installation_id: str | None = None, verify: bool = False
+    ) -> Capability:
         """Persist both IDs per job. A repair never redirects its selected files."""
         _segment(version)
         if installation_id is None:
@@ -113,7 +120,8 @@ class Runtime:
         target = self.root / "runtimes" / version / installation_id
         if not target.resolve().is_relative_to((self.root / "runtimes").resolve()):
             raise SetupError("Runtime directory escapes installation")
-        report = self.installer.inspect(target, self.root / "weights", version)
+        check = self.installer.verify if verify else self.installer.inspect
+        report = check(target, self.root / "weights", version)
         return replace(report, required_engine=self.engine_version, installation_id=installation_id)
 
     def worker(self, selected: Capability, *, cache_root: Path) -> WarmWorker:
@@ -135,7 +143,7 @@ class Runtime:
         )
 
     def setup(self) -> Capability:
-        existing = self.inspect()
+        existing = self.inspect(verify=True)
         if existing.available:
             return existing
         return self.update()
@@ -144,7 +152,7 @@ class Runtime:
         """Stage, validate, then switch. Keep failed and in-use installations immutable."""
         with _LOCK:
             try:
-                existing = self.selection(self.engine_version)
+                existing = self.selection(self.engine_version, verify=True)
                 if existing.available:
                     write_json_atomic(
                         self.root / "current.json", self._pointer(existing.installation_id)
@@ -162,7 +170,9 @@ class Runtime:
                 if not report.available or report.engine_version != self.engine_version:
                     raise SetupError(report.problem or "Worker capability mismatch")
                 staging.rename(target)
-                report = self.selection(self.engine_version, installation_id=installation_id)
+                report = self.selection(
+                    self.engine_version, installation_id=installation_id, verify=True
+                )
                 if not report.available:
                     raise SetupError(report.problem or "Relocated worker is unavailable")
             except BaseException as exc:

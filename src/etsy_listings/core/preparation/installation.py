@@ -7,7 +7,6 @@ import json
 import platform
 import shutil
 import subprocess
-import time
 import tomllib
 from pathlib import Path
 from typing import Any, Protocol
@@ -18,8 +17,9 @@ from etsy_listings.core.preparation.runtime import Capability, SetupError
 from etsy_listings.core.preparation.worker_client import Worker, WorkerError
 from etsy_listings.core.workspace.atomic import write_json_atomic
 
-_REPORT_CACHE: dict[Path, tuple[object, float, Capability]] = {}
-CAPABILITY_CACHE_SECONDS = 300.0
+VERIFIED_FILE = "verified.json"
+"""Inside an installation: the file stamps and worker report of its last full
+verification."""
 
 PYTHON_VERSION = "3.12.14"
 REVISIONS = (
@@ -161,38 +161,81 @@ class NativeInstaller:
         if installed != expected:
             raise SetupError("Installed packages do not match the complete worker lock")
 
-    def inspect(self, target: Path, weights: Path, version: str) -> Capability:
-        try:
-            manifest_file = target / "installation.json"
-            if manifest_file.stat().st_size > 1024 * 1024:
-                raise SetupError("Runtime installation manifest exceeds size limit")
-            manifest = json.loads(manifest_file.read_text(encoding="utf-8"))
-            paths = [manifest_file]
-            project = target / "distribution"
-            for relative in manifest["files"]:
-                path = project / relative
-                if not path.resolve().is_relative_to(project.resolve()):
-                    raise SetupError("Unsafe worker distribution path")
+    def _stamps(self, target: Path, weights: Path) -> dict[str, list[int]]:
+        """Size and modification time of every file the installation depends on."""
+        manifest_file = target / "installation.json"
+        if manifest_file.stat().st_size > 1024 * 1024:
+            raise SetupError("Runtime installation manifest exceeds size limit")
+        manifest = json.loads(manifest_file.read_text(encoding="utf-8"))
+        paths = [manifest_file]
+        project = target / "distribution"
+        for relative in manifest["files"]:
+            path = project / relative
+            if not path.resolve().is_relative_to(project.resolve()):
+                raise SetupError("Unsafe worker distribution path")
+            paths.append(path)
+        for revision, files in manifest["weights"].items():
+            for relative in files:
+                path = weights / revision / relative
+                if not path.resolve().is_relative_to(weights.resolve()):
+                    raise SetupError("Unsafe checkpoint path")
                 paths.append(path)
-            for revision, files in manifest["weights"].items():
-                for relative in files:
-                    path = weights / revision / relative
-                    if not path.resolve().is_relative_to(weights.resolve()):
-                        raise SetupError("Unsafe checkpoint path")
-                    paths.append(path)
-            paths.extend((project / ".venv/Lib/site-packages").glob("*.dist-info/METADATA"))
-            signature = tuple(
-                (str(path), path.stat().st_size, path.stat().st_mtime_ns) for path in paths
+        paths.extend((project / ".venv/Lib/site-packages").glob("*.dist-info/METADATA"))
+        stamps = {}
+        for path in paths:
+            stat = path.stat()
+            stamps[str(path)] = [stat.st_size, stat.st_mtime_ns]
+        return stamps
+
+    def inspect(self, target: Path, weights: Path, version: str) -> Capability:
+        """Everyday check: compare sizes and modification times against the last
+        full verification. Hashing ~7 GB of weights and starting the worker took
+        ~30 s, so that only happens again when a file has changed, or through
+        :meth:`verify` from setup and update."""
+        try:
+            stamps = self._stamps(target, weights)
+            record_file = target / VERIFIED_FILE
+            if record_file.is_file():
+                record = json.loads(record_file.read_text(encoding="utf-8"))
+                if (
+                    record.get("schema_version") == 1
+                    and record.get("engine_version") == version
+                    and record.get("stamps") == stamps
+                ):
+                    return Capability(
+                        True,
+                        None,
+                        engine_version=version,
+                        python=record["python"],
+                        details=record["capabilities"],
+                    )
+        except (OSError, ValueError, KeyError, TypeError, AttributeError, SetupError) as exc:
+            return Capability(
+                False, f"{exc}. Run etsy-listings marigold update.", engine_version=version
             )
-            cached = _REPORT_CACHE.get(target)
-            if (
-                cached
-                and cached[0] == signature
-                and time.monotonic() - cached[1] < CAPABILITY_CACHE_SECONDS
-            ):
-                return cached[2]
+        return self.verify(target, weights, version)
+
+    def verify(self, target: Path, weights: Path, version: str) -> Capability:
+        """Full check: hash every file, ask the worker for its packages and CUDA,
+        and record the file stamps that :meth:`inspect` compares against."""
+        record_file = target / VERIFIED_FILE
+        try:
+            before = self._stamps(target, weights)
             report = self._inspect(target, weights, version)
-            _REPORT_CACHE[target] = (signature, time.monotonic(), report)
+            # A file that changed while it was being hashed was not verified.
+            if report.available and self._stamps(target, weights) == before:
+                write_json_atomic(
+                    record_file,
+                    {
+                        "schema_version": 1,
+                        "engine_version": version,
+                        "python": report.python,
+                        "capabilities": report.details,
+                        "stamps": before,
+                    },
+                )
+            else:
+                record_file.unlink(missing_ok=True)
             return report
         except (OSError, ValueError, KeyError, TypeError, SetupError) as exc:
             return Capability(

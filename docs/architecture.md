@@ -811,11 +811,14 @@ new installation ID. A job retains both its engine version and installation ID;
 updates never overwrite the selected directory. Failed relocated installations
 remain unreferenced for diagnosis and do not prevent an explicit retry.
 
-Status performs deep validation on first inspection, then caches the report for
-five minutes while its distribution files, weights and installed package metadata
-retain the same sizes and modification times. A changed file forces verification.
-Repeated HTTP polling should reuse this process cache. A fresh worker handshake
-always checks actual CUDA and engine capability, even with a cached report.
+Setup and update always perform deep validation: hashing every distribution file
+and pinned weight, and asking the worker for its package inventory and CUDA. A pass
+records each file's size and modification time, with the worker report, in the
+installation's `verified.json`. Status compares against that record and answers
+from it, across server restarts, while every file is unchanged; a changed, added
+or missing file forces deep validation again. Same-size, same-time damage is only
+caught by setup or update. A fresh worker handshake always checks actual CUDA and
+engine capability, even with a recorded report.
 
 WarmWorker restarts a worker that exited idle, without retrying an active failed
 call. It accepts one call at a time and refuses implicit queuing. The coordinator

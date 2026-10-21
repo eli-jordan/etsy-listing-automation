@@ -33,7 +33,10 @@ def _show(report: Capability, *, as_json: bool) -> None:
 def status(
     json_output: bool = typer.Option(False, "--json", help="Return the capability report as JSON."),
 ) -> None:
-    """Inspect installation, pinned weights and CUDA. Never download or install."""
+    """Inspect installation, pinned weights and CUDA. Never download or install.
+
+    Answers from the last full verification unless a file has changed since;
+    setup and update always re-verify every file."""
     _show(Runtime().inspect(), as_json=json_output)
 
 
