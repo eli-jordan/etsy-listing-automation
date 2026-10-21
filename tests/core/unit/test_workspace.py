@@ -831,7 +831,7 @@ def test_design_content_hash_tolerates_an_empty_slot(workspace_root: Path) -> No
     """A light/dark pair saved before both files are chosen still has an
     identity, and emptying a slot changes it -- the whole map is hashed,
     ``null`` slots included (multi-artwork plan, *Settled decisions*)."""
-    ws = Workspace.discover(start=workspace_root)
+    ws = Workspace.discover(root_override=workspace_root)
     listing_dir = ws.listing_dir("take-a-hike")
     partial = ws.design_content_hash(
         {"on-light": None, "on-dark": "designs/take-a-hike.png"}, listing_dir=listing_dir
