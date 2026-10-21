@@ -17,7 +17,7 @@ from typing import Any
 import yaml
 
 
-def write_bytes_atomic(path: Path, data: bytes) -> None:
+def write_bytes_atomic(path: Path, data: bytes, *, durable: bool = False) -> None:
     """Write ``data`` to a temporary file beside ``path``, then ``os.replace``
     it over ``path``. Same directory, so the rename never crosses a
     filesystem; a uniquely named temporary, so two writers never share one.
@@ -27,6 +27,9 @@ def write_bytes_atomic(path: Path, data: bytes) -> None:
     try:
         with os.fdopen(handle, "wb") as stream:
             stream.write(data)
+            if durable:
+                stream.flush()
+                os.fsync(stream.fileno())
         _replace(temporary, path)
     except BaseException:
         Path(temporary).unlink(missing_ok=True)

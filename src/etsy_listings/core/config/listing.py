@@ -12,9 +12,11 @@ from pydantic import (
     ConfigDict,
     ValidationError,
     ValidationInfo,
+    field_validator,
     model_validator,
 )
 
+from etsy_listings.core.config.artwork import BASE_KEYS, DEFAULT, TONE_KEYS, is_light_dark
 from etsy_listings.core.config.description import DescriptionConfig
 from etsy_listings.core.config.errors import ConfigLoadError, format_validation_error, parse_yaml
 from etsy_listings.core.config.media import (
@@ -37,7 +39,6 @@ EMPTY_DRAFT: Final[dict[str, Any]] = {
     "prices": {},
     "pricing_plan": None,
     "price_overrides": {},
-    "artwork": {},
     "etsy": {},
     "media": [],
 }
@@ -54,22 +55,72 @@ MAX_TAG_LENGTH = 20
 MAX_TITLE_LENGTH = 140
 
 
-def _coerce_design(raw: Any) -> dict[str, str]:  # noqa: ANN401 - pydantic validator boundary
-    """A bare path is shorthand for the common single-artwork case -- it
-    normalises to one entry, so the artwork resolver's "sole key" rule
-    picks it with no other machinery involved."""
+def _coerce_design(raw: Any) -> Any:  # noqa: ANN401 - pydantic validator boundary
+    """The written forms a ``design:`` has had, read as the one map.
+
+    A bare path is the single-artwork shorthand written before the map
+    existed, and ``null`` is "nothing chosen" -- both still load, and both
+    are normalised by the next write (:func:`canonical_document`)."""
+    if raw is None:
+        return {}
     if isinstance(raw, str):
-        return {"default": raw}
-    result: dict[str, str] = raw
+        return {DEFAULT: raw}
+    return raw
+
+
+DesignField = Annotated[dict[str, str | None], BeforeValidator(_coerce_design)]
+"""The listing's complete artwork map (ADR-0053, docs/features/multi-artwork-20260928/spec.md).
+
+Reserved base keys -- ``default``, or ``on-light``/``on-dark`` -- and colour
+keys, each a workspace-rooted ref. Only a tone key may be ``None``: a slot
+the seller has not filled yet. *Which* file a colour prints is
+`config/artwork.py`'s question, never a reader's (ADR-0053)."""
+
+
+def _check_design(design: Mapping[str, str | None], colors: list[str] | None) -> None:
+    """The malformed maps -- refused writes, not blockers (spec: *Saving,
+    blockers and warnings*). Incomplete ones (an empty slot, no design at
+    all) are `config/listing_validation.py`'s to explain."""
+    if DEFAULT in design and is_light_dark(design):
+        raise ValueError(
+            "design: default cannot be combined with on-light or on-dark -- a listing "
+            "prints one design on every shirt, or one for light shirts and one for dark"
+        )
+    for key, ref in design.items():
+        if key in TONE_KEYS.values():
+            if ref is not None and not ref.strip():
+                raise ValueError(f"design.{key} has no file; leave it null until one is chosen")
+            continue
+        if ref is None or not ref.strip():
+            raise ValueError(
+                f"design.{key} has no file; only on-light and on-dark may be left unchosen"
+            )
+        if key != DEFAULT and colors is not None and key not in colors:
+            raise ValueError(
+                f"design.{key} is not a colour this listing sells -- a key other than "
+                f"default, on-light and on-dark must name one of colors"
+            )
+    has_colour_keys = any(key not in BASE_KEYS for key in design)
+    if has_colour_keys and not any(key in design for key in BASE_KEYS):
+        raise ValueError(
+            "design has colour-specific designs but no base design -- set default, or "
+            "on-light and on-dark, for the colours without their own"
+        )
+
+
+def canonical_document(document: Mapping[str, Any]) -> dict[str, Any]:
+    """``document`` as it is written back: ``design`` always a map.
+
+    Every writer of ``listing.yaml`` goes through this -- the editor's
+    PATCH, create, the AI run's brief write, and ``new`` -- so a bare string
+    or ``null`` written by hand converges on the one written form the next
+    time anything saves (plan, *Settled decisions*). Nothing else is touched:
+    the server writes the document it was given, not a re-serialised model.
+    """
+    result = dict(document)
+    if "design" in result:
+        result["design"] = _coerce_design(result["design"])
     return result
-
-
-DesignField = Annotated[dict[str, str], BeforeValidator(_coerce_design)]
-"""Artwork key -> workspace-relative design path. A design needing different
-ink for light vs dark shirts carries more than one entry, conventionally keyed
-``on-light``/``on-dark``; resolution order lives in the render stage
-(engine/stages/render.py), since it needs the garment profile and template
-too."""
 
 
 def _check_gallery(media: list[MediaEntry]) -> None:
@@ -206,8 +257,11 @@ class Listing(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     garment_profile: str
-    design: DesignField
     colors: list[str]
+    design: DesignField = {}
+    """After ``colors``, deliberately: pydantic validates in field order, and
+    a colour key is checked against the colours the listing sells, so this
+    field's error lands on ``design`` itself (``_design_keys``)."""
     brief: str
     prices: dict[str, PriceField] = {}
     """Per-size overrides on top of ``pricing_plan`` -- optional and partial.
@@ -220,10 +274,6 @@ class Listing(BaseModel):
     Resolution and
     loading are the caller's job; ``Listing`` never touches ``Workspace``."""
     price_overrides: dict[str, dict[str, PriceField]] = {}
-    artwork: dict[str, str] = {}
-    """Explicit per-design artwork override, colour -> artwork key. Wins over
-    everything else in the artwork resolution order -- the thing a human is most
-    likely to actually revisit per design."""
     etsy: EtsyListingConfig = EtsyListingConfig()
     media: list[MediaEntry]
     lifecycle: Literal["retired", "deleted", "renew"] | None = None
@@ -231,6 +281,27 @@ class Listing(BaseModel):
     after Un-retire. ``plan`` never writes this key; wrong verb is ``Blocked``,
     never rewritten as the right one. Named ``lifecycle``, not ``status``,
     because the listings table already has a Status column."""
+
+    @model_validator(mode="before")
+    @classmethod
+    def _reject_listing_artwork(cls, value: Any) -> Any:
+        """ADR-0053 removed the per-colour ``artwork:`` map; a colour's own file is
+        a ``design:`` key now. Named, like ``etsy.materials``, rather than the
+        generic ``extra_forbidden`` an existing workspace would not act on."""
+        if isinstance(value, Mapping) and "artwork" in value:
+            raise ValueError(
+                "artwork: has been removed; give a colour its own design as "
+                "design.<colour>: <file> instead (ADR-0053)"
+            )
+        return value
+
+    @field_validator("design")
+    @classmethod
+    def _design_keys(
+        cls, design: dict[str, str | None], info: ValidationInfo
+    ) -> dict[str, str | None]:
+        _check_design(design, info.data.get("colors"))
+        return design
 
     @model_validator(mode="after")
     def _validate(self, info: ValidationInfo) -> Listing:
@@ -241,9 +312,6 @@ class Listing(BaseModel):
             media=self.media,
             currency=(info.context or {}).get("currency"),
         )
-        for color in self.artwork:
-            if color not in self.colors:
-                raise ValueError(f"artwork has an entry for {color!r}, which is not in colors")
         return self
 
     @classmethod

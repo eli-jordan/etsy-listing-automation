@@ -1,3 +1,4 @@
+import type { PhotoWarpTemplate } from "../types";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as calibrator from "../api/calibrator";
@@ -6,18 +7,22 @@ import { SingleEditor } from "./SingleEditor";
 
 const SPACE: [number, number] = [400, 200];
 
-const CONFIG: SingleTemplate = {
+const CONFIG: PhotoWarpTemplate<SingleTemplate> = {
   kind: "single",
   colour: null,
-  artwork: null,
   bounding_box: [
     { x: 0, y: 0 },
     { x: 100, y: 0 },
     { x: 100, y: 100 },
     { x: 0, y: 100 },
   ],
-  displace: { enabled: false, strength: 0 },
-  shade: { enabled: true, opacity: 0.6, blend: "soft-light" },
+  renderer: {
+    type: "photo-warp",
+    config: {
+      displace: { enabled: false, strength: 0 },
+      shade: { enabled: true, opacity: 0.6, blend: "soft-light" },
+    },
+  },
 };
 
 afterEach(() => vi.restoreAllMocks());
@@ -47,8 +52,7 @@ describe("SingleEditor", () => {
         "lifestyle-01",
         {
           bounding_box: CONFIG.bounding_box,
-          displace: CONFIG.displace,
-          shade: CONFIG.shade,
+          renderer: CONFIG.renderer,
         },
         "bundled-grid",
         "editor",
@@ -57,13 +61,13 @@ describe("SingleEditor", () => {
     await screen.findByAltText("Rendered preview");
   });
 
-  it("editing the colour field updates the config", async () => {
+  it("retains the saved colour without a garment colour field", async () => {
     vi.spyOn(calibrator, "renderPreview").mockResolvedValue("blob:preview");
     const onChange = vi.fn();
     render(
       <SingleEditor
         templateName="lifestyle-01"
-        config={CONFIG}
+        config={{ ...CONFIG, colour: "black" }}
         space={SPACE}
         onChange={onChange}
         design="bundled-grid"
@@ -71,10 +75,9 @@ describe("SingleEditor", () => {
       />,
     );
 
-    fireEvent.change(screen.getByLabelText("Garment colour (optional)"), {
-      target: { value: "black" },
-    });
-    expect(onChange).toHaveBeenCalledWith({ ...CONFIG, colour: "black" });
+    expect(screen.queryByLabelText("Garment colour (optional)")).not.toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Wrinkle strength"), { target: { value: "75" } });
+    expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ colour: "black" }));
   });
 
   /** One box, always selected: without this there was no way to get the
@@ -98,7 +101,7 @@ describe("SingleEditor", () => {
     fireEvent.load(img);
     expect(container.querySelectorAll(".quad-editor__box")).toHaveLength(1);
 
-    fireEvent.click(screen.getByLabelText("show placement outline"));
+    fireEvent.click(screen.getByRole("switch", { name: "Show design box" }));
     expect(container.querySelectorAll(".quad-editor__box")).toHaveLength(0);
     expect(container.querySelectorAll(".quad-editor__handle")).toHaveLength(0);
   });

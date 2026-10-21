@@ -1,6 +1,6 @@
 import { MutedClip } from "../../components/MutedClip";
-import { pictureFor, singleDesignName } from "../../media";
-import type { ListingDetail, RenderSnapshot } from "../../types";
+import { pictureFor, type SceneSource } from "../../media";
+import type { RenderSnapshot } from "../../types";
 import type {
   AfterImageTile,
   AfterVideoTile,
@@ -45,7 +45,9 @@ import { wordDiff } from "./wordDiff";
 
 export interface ListingMediaContext {
   name: string;
-  design: ListingDetail["design"];
+  /** Where a cached scene's picture resolves its artwork from (A35), or
+   * `null` to show the bare photo. */
+  scene: SceneSource | null;
 }
 
 function parseRef(ref: string): { template: string; colour: string | null } | null {
@@ -83,14 +85,13 @@ function AfterTile({
   imageUrlForRef: ((ref: string) => string | null) | undefined;
 }) {
   const parsed = parseRef(tile.ref);
-  const design = singleDesignName(listing.design);
   let src: string | null = null;
   let pending = false;
 
   if (imageUrlForRef !== undefined) {
     src = imageUrlForRef(tile.ref);
   } else if (parsed === null) {
-    src = pictureFor(tile.ref, design, "full", listing.name || null);
+    src = pictureFor(tile.ref, listing.scene, "full", listing.name || null);
   } else {
     const scene = sceneState(renderSnapshot, parsed.template, parsed.colour);
     const key = `${parsed.template}|${parsed.colour ?? ""}`;
@@ -100,7 +101,7 @@ function AfterTile({
       src =
         scene !== null && scene.state !== "cached"
           ? previewUrl(listing.name, parsed.template, parsed.colour)
-          : pictureFor({ template: parsed.template, colour: parsed.colour }, design, "full");
+          : pictureFor({ template: parsed.template, colour: parsed.colour }, listing.scene, "full");
     } else {
       pending = true;
     }

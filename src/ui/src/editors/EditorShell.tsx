@@ -1,16 +1,16 @@
 import { type ReactNode, useState } from "react";
+import { BoxToggle } from "../components/BoxToggle";
 import { PreviewPanel, type PreviewJob } from "../components/PreviewPanel";
 import { PrintRealismPanel } from "../components/PrintRealismPanel";
 import { QuadEditor } from "../components/QuadEditor";
 import { TestDesignPicker } from "../components/TestDesignPicker";
 import { ViewTabs, type View } from "../components/ViewTabs";
-import type { BoundingBox, DisplaceConfig, ShadeConfig } from "../types";
+import type { BoundingBox, PhotoWarpRenderer } from "../types";
 
 /** The parts of a template.yaml every kind has, and this shell edits directly.
  * Everything else about a config is the kind's own business. */
 export interface RealismConfig {
-  displace: DisplaceConfig;
-  shade: ShadeConfig;
+  renderer: PhotoWarpRenderer;
 }
 
 /** What a canvas is handed once the shell knows there is something to draw. */
@@ -21,6 +21,7 @@ export interface CanvasContext {
 }
 
 interface Props<T extends RealismConfig> {
+  rendererControls?: ReactNode;
   templateName: string;
   config: T;
   onChange: (config: T) => void;
@@ -34,7 +35,7 @@ interface Props<T extends RealismConfig> {
   previewUrl: string | null;
   jobs: PreviewJob[];
   onApprove?: () => void;
-  /** What the outline checkbox says. One box or twelve changes the wording,
+  /** What the design-box toggle says. One box or twelve changes the wording,
    * not the control. */
   outlineLabel?: string;
   /** The calibration canvas. A function, not a node, because everything it
@@ -70,6 +71,7 @@ interface Props<T extends RealismConfig> {
  * them.
  */
 export function EditorShell<T extends RealismConfig>({
+  rendererControls,
   templateName,
   config,
   onChange,
@@ -79,7 +81,7 @@ export function EditorShell<T extends RealismConfig>({
   previewUrl,
   jobs,
   onApprove,
-  outlineLabel = "show placement outline",
+  outlineLabel = "Show design box",
   canvas,
   barExtras,
   controls,
@@ -96,16 +98,12 @@ export function EditorShell<T extends RealismConfig>({
           {/* Two views of the same template: one to adjust in, one to judge
               in. Shared by all three kinds -- see ViewTabs. */}
           <ViewTabs value={tab} onChange={setTab} />
+          <TestDesignPicker compact value={design} onChange={onDesignChange} />
           {calibrating && barExtras}
           {calibrating && (
-            <label className="app__outline-toggle">
-              <input
-                type="checkbox"
-                checked={showOutlines}
-                onChange={(e) => setShowOutlines(e.target.checked)}
-              />
-              {outlineLabel}
-            </label>
+            <div className="app__outline-toggle">
+              <BoxToggle checked={showOutlines} onChange={setShowOutlines} label={outlineLabel} />
+            </div>
           )}
         </div>
 
@@ -133,12 +131,22 @@ export function EditorShell<T extends RealismConfig>({
 
       <aside className="app__controls">
         {controls}
-        <TestDesignPicker value={design} onChange={onDesignChange} />
+        {rendererControls}
         <PrintRealismPanel
-          displace={config.displace}
-          shade={config.shade}
-          onDisplaceChange={(displace) => onChange({ ...config, displace })}
-          onShadeChange={(shade) => onChange({ ...config, shade })}
+          displace={config.renderer.config.displace}
+          shade={config.renderer.config.shade}
+          onDisplaceChange={(displace) =>
+            onChange({
+              ...config,
+              renderer: { ...config.renderer, config: { ...config.renderer.config, displace } },
+            })
+          }
+          onShadeChange={(shade) =>
+            onChange({
+              ...config,
+              renderer: { ...config.renderer, config: { ...config.renderer.config, shade } },
+            })
+          }
         />
       </aside>
     </main>

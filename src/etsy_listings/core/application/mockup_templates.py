@@ -44,19 +44,24 @@ from etsy_listings.core.application.refusals import (
 from etsy_listings.core.config.errors import ConfigLoadError
 from etsy_listings.core.config.slug import slug_map
 from etsy_listings.core.render.config import (
+    AnyRenderer,
     AnyTemplate,
     BoundingBox,
     ColourMatrixTemplate,
     DisplaceConfig,
     MultipleTemplate,
+    PhotoWarpRenderer,
     Point,
+    PreparationRequired,
     RenderConfig,
     ShadeConfig,
     SingleTemplate,
+    scene_layers,
 )
 from etsy_listings.core.render.pipeline import Layer, render_scene
 from etsy_listings.core.render.swatch import sample_swatch
 from etsy_listings.core.render.types import RGB, RGBA, FloatMap
+from etsy_listings.core.workspace.calibration import Calibration, CalibrationStore, MaskEdit
 from etsy_listings.core.workspace.workspace import (
     AmbiguousColourSuffixError,
     ScenePhoto,
@@ -118,7 +123,7 @@ def list_templates(workspace: Workspace) -> list[TemplateOverview]:
 def _overview(workspace: Workspace, name: str) -> TemplateOverview:
     width, height = _photo_size(workspace, name)
     try:
-        config = workspace.load_template_config(name)
+        config = CalibrationStore(workspace).config(name)
     except ConfigLoadError:
         return TemplateOverview(
             name=name,
@@ -152,7 +157,11 @@ def _photo_size(workspace: Workspace, name: str) -> tuple[int | None, int | None
     """From the image header alone (``Image.open`` is lazy). An unreadable
     file answers ``None``: listing a template is how the seller reaches the
     UI that fixes it."""
-    photo = workspace.template_preview_photo(name)
+    photo: Path | None
+    try:
+        photo = workspace.template_main_photo(name, CalibrationStore(workspace).config(name))
+    except (ConfigLoadError, FileNotFoundError):
+        photo = workspace.template_preview_photo(name)
     if photo is None:
         return None, None
     try:
@@ -204,7 +213,10 @@ def template_photo(workspace: Workspace, name: str, colour: str | None) -> Path:
     require_template(workspace, name)
     source: Path | None
     if colour is None:
-        source = workspace.template_preview_photo(name)
+        try:
+            source = workspace.template_main_photo(name, CalibrationStore(workspace).config(name))
+        except (ConfigLoadError, FileNotFoundError):
+            source = workspace.template_preview_photo(name)
     else:
         try:
             source = workspace.template_base_image(name, colour)
@@ -268,7 +280,9 @@ def assign_kind(workspace: Workspace, name: str, kind: TemplateKind) -> AnyTempl
         photos = _rename_photos_to_slugs(workspace, photos)
         with Image.open(photos[0]) as img:
             size = img.size
-        config = ColourMatrixTemplate(bounding_box=_default_box(size))
+        config = ColourMatrixTemplate(
+            renderer=PhotoWarpRenderer(type="photo-warp"), bounding_box=_default_box(size)
+        )
     else:
         if len(photos) != 1:
             raise TemplateKindRefused(f"{kind} kind expects one photo, found {len(photos)}")
@@ -277,9 +291,11 @@ def assign_kind(workspace: Workspace, name: str, kind: TemplateKind) -> AnyTempl
         with Image.open(scene) as img:
             size = img.size
         config = (
-            MultipleTemplate(placements=[])
+            MultipleTemplate(renderer=PhotoWarpRenderer(type="photo-warp"), placements=[])
             if kind == "multiple"
-            else SingleTemplate(bounding_box=_default_box(size))
+            else SingleTemplate(
+                renderer=PhotoWarpRenderer(type="photo-warp"), bounding_box=_default_box(size)
+            )
         )
     workspace.save_template_config(name, config)
     return config
@@ -334,17 +350,24 @@ def _rename_photos_to_slugs(workspace: Workspace, photos: list[Path]) -> list[Pa
 class SavedConfig:
     config: AnyTemplate
     modified_at: datetime
+    revision: str
 
 
 def read_config(workspace: Workspace, name: str) -> SavedConfig:
     """The template's ``template.yaml`` and when it was last written.
     :class:`TemplateConfigMissing` for one with no config yet -- loaded
     before its file is stat()ed, so that is a refusal, not an ``OSError``."""
-    config = _load_config(workspace, name)
-    modified_at = datetime.fromtimestamp(
-        workspace.template_config_file(name).stat().st_mtime, tz=UTC
-    )
-    return SavedConfig(config=config, modified_at=modified_at)
+    require_template(workspace, name)
+    store = CalibrationStore(workspace)
+    with store.lock(name):
+        try:
+            saved = store.read(name)
+        except ConfigLoadError as exc:
+            raise TemplateConfigMissing(name) from exc
+        modified_at = datetime.fromtimestamp(
+            workspace.template_config_file(name).stat().st_mtime, tz=UTC
+        )
+        return SavedConfig(config=saved.config, modified_at=modified_at, revision=saved.revision)
 
 
 def save_config(workspace: Workspace, name: str, config: AnyTemplate) -> None:
@@ -354,10 +377,34 @@ def save_config(workspace: Workspace, name: str, config: AnyTemplate) -> None:
     workspace.save_template_config(name, config)
 
 
+def save_calibration(
+    workspace: Workspace,
+    name: str,
+    config: AnyTemplate,
+    *,
+    expected_revision: str,
+    request_id: str,
+    mask_edits: list[MaskEdit] | None = None,
+) -> Calibration:
+    """ADR-0054: configuration and flattened masks commit as one revision."""
+    require_template(workspace, name)
+    store = CalibrationStore(workspace)
+    with store.lock(name):
+        if store.read(name).config.kind != config.kind:
+            raise TemplateKindRefused("Template kind cannot be changed after calibration")
+        return store.save(
+            name,
+            config,
+            expected_revision=expected_revision,
+            request_id=request_id,
+            mask_edits=mask_edits,
+        )
+
+
 def _load_config(workspace: Workspace, name: str) -> AnyTemplate:
     require_template(workspace, name)
     try:
-        return workspace.load_template_config(name)
+        return CalibrationStore(workspace).config(name)
     except ConfigLoadError as exc:
         raise TemplateConfigMissing(name) from exc
 
@@ -375,6 +422,7 @@ class PreviewGeometry:
     kind: TemplateKind
     boxes: tuple[BoundingBox, ...]
     colour: str | None = None
+    renderer: AnyRenderer | None = None
     displace: DisplaceConfig = field(default_factory=DisplaceConfig)
     shade: ShadeConfig = field(default_factory=ShadeConfig)
 
@@ -388,8 +436,17 @@ class PreviewScene:
     photo: ScenePhoto
     derived_dir: Path
     layers: tuple[RenderConfig, ...]
-    design: Path
-    """The design file to composite, as the caller resolved it."""
+    designs: tuple[Path | None, ...]
+    """The design file each layer composites, as the caller resolved it --
+    parallel to ``layers``. ``None`` leaves that layer's garment bare."""
+
+
+LayerDesign = Callable[[str | None], Path | None]
+"""``depicted colour -> design file`` for one layer of a saved scene, or
+``None`` to leave the layer bare. The colour is the one
+:func:`~etsy_listings.core.render.config.scene_layers` says the layer
+depicts, so a ``multiple`` scene can print a different file per placement
+(A35)."""
 
 
 def unsaved_preview(
@@ -398,40 +455,50 @@ def unsaved_preview(
     """The calibrator's live preview. Geometry shaped for another kind than
     the template is refuses with :class:`TemplatePreviewKindMismatch`.
 
-    ``design`` resolves the file to composite -- a calibrator test design or
-    a listing's artwork, whose libraries are the caller's -- and may refuse;
-    it is asked after the kind check and before the photo is looked for.
+    ``design`` resolves the one file every layer composites -- a calibrator
+    test design, whose library is the caller's -- and may refuse; it is asked
+    after the kind check and before the photo is looked for.
     Refusals: :class:`TemplateMissing`, :class:`TemplateConfigMissing`,
     :class:`TemplatePhotoMissing`."""
-    kind = _load_config(workspace, name).kind
+    config = _load_config(workspace, name)
+    # Authoring previews use the explicit draft renderer before autosave.
+    # An omitted renderer still follows the saved template, so a Marigold
+    # template cannot accidentally fall through to the Photo warp pipeline.
+    if not isinstance(geometry.renderer or config.renderer, PhotoWarpRenderer):
+        raise PreparationRequired("Prepare the template first: Marigold maps are required")
+    kind = config.kind
     if geometry.kind != kind:
         raise TemplatePreviewKindMismatch(kind)
+    settings = (
+        geometry.renderer.config if isinstance(geometry.renderer, PhotoWarpRenderer) else None
+    )
     layers = tuple(
-        RenderConfig(bounding_box=box, displace=geometry.displace, shade=geometry.shade)
+        RenderConfig(
+            bounding_box=box,
+            displace=settings.displace if settings else geometry.displace,
+            shade=settings.shade if settings else geometry.shade,
+        )
         for box in geometry.boxes
     )
-    return _scene(workspace, name, geometry.colour, layers, design)
+    path = design()
+    return _scene(workspace, name, geometry.colour, layers, tuple(path for _ in layers))
 
 
 def saved_preview(
-    workspace: Workspace, name: str, *, colour: str | None, design: Callable[[], Path]
+    workspace: Workspace, name: str, *, colour: str | None, design: LayerDesign
 ) -> PreviewScene:
     """The saved geometry, as the render stage composites it -- the listing
     editors' read-only preview. ``colour`` picks the photo of a
-    colour-matrix set and means nothing to the other kinds."""
+    colour-matrix set and means nothing to the other kinds.
+
+    ``design`` is asked once per layer, with the colour that layer depicts
+    (:func:`~etsy_listings.core.render.config.scene_layers`, the render
+    stage's own pairing), before the photo is looked for."""
     config = _load_config(workspace, name)
-    layers: tuple[RenderConfig, ...]
-    if isinstance(config, MultipleTemplate):
-        layers = tuple(config.render_config_for(p) for p in config.placements)
-    else:
-        layers = (config.render_config(),)
-    return _scene(
-        workspace,
-        name,
-        colour if isinstance(config, ColourMatrixTemplate) else None,
-        layers,
-        design,
-    )
+    depicted = colour if isinstance(config, ColourMatrixTemplate) else None
+    pairs = scene_layers(config, depicted)
+    designs = tuple(design(layer_colour) for layer_colour, _ in pairs)
+    return _scene(workspace, name, depicted, tuple(cfg for _, cfg in pairs), designs)
 
 
 def _scene(
@@ -439,11 +506,11 @@ def _scene(
     name: str,
     colour: str | None,
     layers: tuple[RenderConfig, ...],
-    design: Callable[[], Path],
+    designs: tuple[Path | None, ...],
 ) -> PreviewScene:
-    # The design is resolved before the photo is looked for: an unknown design
-    # was refused ahead of a missing photo before this moved out of the route.
-    design_path = design()
+    # The designs are resolved by the caller before the photo is looked for:
+    # an unknown design was refused ahead of a missing photo before this moved
+    # out of the route.
     photo = workspace.scene_photo(name, colour)
     if not photo.path.is_file():
         missing = f"colour {colour!r}" if colour is not None else f"{name!r}"
@@ -452,7 +519,7 @@ def _scene(
         photo=photo,
         derived_dir=workspace.template_derived_dir(name),
         layers=layers,
-        design=design_path,
+        designs=designs,
     )
 
 
@@ -461,18 +528,25 @@ def compose_preview(
     *,
     base: RGB,
     scale: float,
-    design: RGBA,
+    design: Callable[[Path], RGBA],
     height: Callable[[], FloatMap],
     luminance: Callable[[], FloatMap],
 ) -> Image.Image:
-    """Composite ``design`` onto ``base`` -- the scene's photo, possibly
-    downscaled by ``scale`` -- at the scene's layers, scaled to match.
-    ``height`` and ``luminance`` supply the derived maps at ``base``'s size,
-    and are asked only when a layer displaces or shades."""
-    layers = [scaled(cfg, scale) for cfg in scene.layers]
+    """Composite each layer's design onto ``base`` -- the scene's photo,
+    possibly downscaled by ``scale`` -- at the scene's layers, scaled to
+    match. ``design`` decodes a layer's file; a layer with none stays bare,
+    so no layers at all is the photo itself. ``height`` and ``luminance``
+    supply the derived maps at ``base``'s size, and are asked only when a
+    painted layer displaces or shades."""
+    painted = [
+        (scaled(cfg, scale), path)
+        for cfg, path in zip(scene.layers, scene.designs, strict=True)
+        if path is not None
+    ]
+    layers = [cfg for cfg, _ in painted]
     return render_scene(
         base,
-        [Layer(design=design, cfg=cfg) for cfg in layers],
+        [Layer(design=design(path), cfg=cfg) for cfg, path in painted],
         height=height() if any(cfg.displace.enabled for cfg in layers) else None,
         luminance=luminance() if any(cfg.shade.enabled for cfg in layers) else None,
     )
