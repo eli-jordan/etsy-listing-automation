@@ -9,7 +9,7 @@ import type { ListingDetail, MediaEntry } from "../../types";
  * a colour the listing no longer sells:
  *
  * * `media[]` -- a `{template, colour}` entry pointing at a dropped colour
- * * `artwork{}` -- a per-colour ink override
+ * * `design{}` -- a colour's own design, `design.<colour>` (A35)
  * * `price_overrides{}` -- a per-colour price
  *
  * Sending `colors` alone is what made the Variants tab's switch appear to
@@ -35,8 +35,10 @@ export function selectColours(detail: ListingDetail, next: string[]): Record<str
   );
   if (media.length !== detail.media.length) patch.media = media;
 
-  const artwork = withoutKeys(detail.artwork, gone);
-  if (artwork !== null) patch.artwork = artwork;
+  // A colour's own design goes with it: `design` keys other than the base
+  // keys must name an enabled colour (ADR-0053).
+  const design = withoutKeys(detail.design, gone);
+  if (design !== null) patch.design = design;
 
   const prices = withoutKeys(detail.price_overrides, gone);
   if (prices !== null) patch.price_overrides = prices;
@@ -45,10 +47,15 @@ export function selectColours(detail: ListingDetail, next: string[]): Record<str
 }
 
 /** Picking a garment profile, and enabling every colour it classifies.
-
+ *
+ * A colour's own design survives the change when the new profile sells that
+ * colour, and goes when it does not (spec: *Colour-specific artwork*) -- the
+ * same treatment as the other colour-keyed fields, and for the same reason.
+ *
  * The Variants tab passes `Object.keys(profile.colors)`. Going through
- * `selectColours` is what drops mockups of colours the new garment does
- * not sell, the same cascade a Dark/Light switch already uses.
+ * `selectColours` is what drops mockups, own designs and prices of colours
+ * the new garment does not sell, the same cascade a Dark/Light switch
+ * already uses.
  */
 export function selectGarmentProfile(
   detail: ListingDetail,
