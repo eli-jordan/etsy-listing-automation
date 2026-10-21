@@ -77,10 +77,21 @@ def test_both_prompts_every_run_reads_are_needed(
     assert reason.endswith("is missing; run `etsy-listings setup` to seed it")
 
 
-def test_a_listing_without_a_design_is_not_ready(
-    workspace: Workspace, workspace_root: Path
+@pytest.mark.parametrize(
+    "design",
+    [
+        {},
+        # Light/dark mode with neither slot filled: there is no representative
+        # artwork to send, and a colour's own file is never promoted to one
+        # (spec: *Representative artwork*).
+        {"on-light": None, "on-dark": None},
+        {"on-light": None, "on-dark": None, "moss": "designs/take-a-hike.png"},
+    ],
+)
+def test_a_listing_without_a_representative_design_is_not_ready(
+    workspace: Workspace, workspace_root: Path, design: dict[str, str | None]
 ) -> None:
-    edit_listing(workspace_root, design={})
+    edit_listing(workspace_root, design=design)
 
     assert _reason(workspace) == "the listing has no selected design"
 

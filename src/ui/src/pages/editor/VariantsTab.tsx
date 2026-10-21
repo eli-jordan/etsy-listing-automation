@@ -1,9 +1,33 @@
 import { useEffect, useMemo, useState } from "react";
 import { getTemplateSwatch, listTemplates } from "../../api/calibrator";
-import { listGarmentProfiles } from "../../api/listings";
-import { type Artwork, singleDesignName, templatePicture } from "../../media";
-import type { GarmentProfileSummary, ListingDetail, TemplateSummary } from "../../types";
+import {
+  listGarmentProfiles,
+  listingDesignThumbnailUrl,
+  listListingDesigns,
+} from "../../api/listings";
+import { type Artwork, refName, sceneSource, templatePicture } from "../../media";
+import type {
+  DesignMap,
+  GarmentProfileSummary,
+  ListingDesignSummary,
+  ListingDetail,
+  TemplateSummary,
+} from "../../types";
+import { ArtworkPicker } from "./ArtworkPicker";
+import {
+  automatic,
+  canHaveOwnDesign,
+  cap,
+  clothFor,
+  isLinked,
+  listNames,
+  pickForColour,
+  resolve,
+  toneLabel,
+  type Tone,
+} from "./artwork";
 import { mediaLostBy, selectColours, selectGarmentProfile } from "./colourSelection";
+import { PrintsCard } from "./PrintsCard";
 
 /**
  * Garment dropdown, sizes, colour list, and a preview of the colour under the
@@ -14,12 +38,15 @@ import { mediaLostBy, selectColours, selectGarmentProfile } from "./colourSelect
  * `preview_template` (`render/swatch.py`'s `sample_swatch`, via
  * `GET.../swatch`). It answers "roughly what colour is this" for scanning
  * the whole list; "does this colour suit the design" is still the big
- * preview stage beside it, which overlays the listing's real artwork
- * (`GET.../design-preview`) rather than showing a bare photo -- and is
- * rendered large, because that judgement is about the ink on the cloth and
- * a postage stamp cannot carry it. The preview template is a colour-matrix
- * on the garment, not a `media:` entry, so a new listing can judge colours
- * before it has picked listing images.
+ * preview stage beside it, which renders the colour with the file it
+ * resolves to in the saved listing (`GET .../scene-preview`, A35) rather
+ * than a bare photo -- and is rendered large, because that judgement is about
+ * the ink on the cloth and a postage stamp cannot carry it. The preview
+ * template is a colour-matrix on the garment, not a `media:` entry, so a new
+ * listing can judge colours before it has picked listing images (A13). The
+ * card under it says which file that is and why (`PrintsCard`). A listing
+ * template has no artwork, so it previews through the design its editor
+ * picked to preview with (`artwork`), and has no file to explain.
  *
  * Two different states, deliberately distinguished, because conflating them
  * painted every enabled row in the selected-row highlight:
@@ -31,6 +58,16 @@ import { mediaLostBy, selectColours, selectGarmentProfile } from "./colourSelect
  * A disabled colour is dimmed (`--off`) rather than hidden, so turning one
  * back on does not require remembering it existed.
  *
+ * Which colour is previewed is the shell's state, not this tab's: the design
+ * strip's "Also printing their own design" names preview a colour too.
+ *
+ * Each enabled row carries a chip of the file it prints, on its own cloth,
+ * which opens that colour's picker (interactions Part 1 §6, Part 2 §5). A
+ * pick is the colour's own design -- `design.<colour>` -- written through
+ * `onUpdate` rather than the strip's design change, because a colour's own
+ * design is print treatment and never arms AI (spec: *Representative
+ * artwork*).
+ *
  * Every change to which colours are sold goes through `selectColours`, never
  * through a bare `{ colors }` patch -- see that module for the three fields
  * keyed by colour that have to move with it.
@@ -39,8 +76,15 @@ import { mediaLostBy, selectColours, selectGarmentProfile } from "./colourSelect
 interface Props {
   detail: ListingDetail;
   onUpdate: (patch: Record<string, unknown>) => void;
+  /** The colour the seller last asked to preview; `null` until they do. */
+  previewed: string | null;
+  onPreview: (colour: string) => void;
+  /** Opens a base slot's Recent designs panel in the strip above the tabs --
+   * the card under the stage's fix for a colour whose slot is empty. */
+  onChooseSlot?: (tone: Tone) => void;
   /** What the preview composites, when it is not the listing's own design:
-   * the listing-template editor's preview design (UI doc §3). */
+   * the listing-template editor's preview design (UI doc §3). A listing
+   * template has no artwork, so with this set nothing per-colour is offered. */
   artwork?: Artwork | null;
 }
 
@@ -60,14 +104,26 @@ function previewTemplate(
   return name;
 }
 
-export function VariantsTab({ detail, onUpdate, artwork }: Props) {
+export function VariantsTab({
+  detail,
+  onUpdate,
+  previewed,
+  onPreview,
+  onChooseSlot = () => undefined,
+  artwork,
+}: Props) {
   const [profiles, setProfiles] = useState<GarmentProfileSummary[]>([]);
   const [templates, setTemplates] = useState<TemplateSummary[]>([]);
+  const [library, setLibrary] = useState<ListingDesignSummary[]>([]);
   const [swatches, setSwatches] = useState<Record<string, string>>({});
   const [status, setStatus] = useState("");
-  const [previewColour, setPreviewColour] = useState<string | null>(null);
+  /** The colour whose own-design picker is open. */
+  const [picking, setPicking] = useState<string | null>(null);
 
   useEffect(() => {
+    listListingDesigns()
+      .then(setLibrary)
+      .catch(() => setLibrary([]));
     listGarmentProfiles()
       .then(setProfiles)
       .catch(() => setStatus("failed to load garment profiles"));
@@ -92,12 +148,14 @@ export function VariantsTab({ detail, onUpdate, artwork }: Props) {
   // colour switched off, or renamed, should not leave the stage pointing at
   // something this listing no longer sells.
   const shown =
-    previewColour !== null && colourNames.includes(previewColour)
-      ? previewColour
+    previewed !== null && colourNames.includes(previewed)
+      ? previewed
       : (detail.colors[0] ?? colourNames[0] ?? null);
 
   const template = previewTemplate(profile, templates);
-  const design = artwork !== undefined ? artwork : singleDesignName(detail.design);
+  const ownArtwork = artwork === undefined;
+  const scene = ownArtwork ? sceneSource(detail.name, detail.design_content_hash) : artwork;
+  const tones: Record<string, Tone> = profile?.colors ?? {};
 
   // One request per colour, fired once the preview template and colour list
   // are known -- not per row-render, so scrolling or re-toggling a switch
@@ -136,6 +194,14 @@ export function VariantsTab({ detail, onUpdate, artwork }: Props) {
     );
   }
 
+  /** A colour's own design: written straight into `design`, then previewed,
+   * so the seller sees it on the stage (interactions Part 1 §6). */
+  function pickOwn(colour: string, ref: string) {
+    onUpdate({ design: pickForColour(detail.design, colour, ref) });
+    setPicking(null);
+    onPreview(colour);
+  }
+
   function toggleColour(colour: string, enabled: boolean) {
     setColours(enabled ? [...detail.colors, colour] : detail.colors.filter((c) => c !== colour));
   }
@@ -168,6 +234,8 @@ export function VariantsTab({ detail, onUpdate, artwork }: Props) {
   // profile that classifies no colours (`colors: {}`) would give two buttons
   // that clear the list and call it a shade.
   const hasShades = profile !== undefined && Object.keys(profile.colors).length > 0;
+  // A colour key needs a base key beside it; an empty draft picks that first.
+  const ownable = ownArtwork && canHaveOwnDesign(detail.design);
 
   return (
     <div className="layout--variants">
@@ -237,6 +305,8 @@ export function VariantsTab({ detail, onUpdate, artwork }: Props) {
           {colourNames.map((colour) => {
             const enabled = detail.colors.includes(colour);
             const classification = profile?.colors[colour];
+            const file = resolvedFile(detail.design, colour, tones);
+            const own = (detail.design[colour] ?? null) !== null;
             const rowClass = [
               "color-row",
               colour === shown ? "color-row--selected" : "",
@@ -250,7 +320,7 @@ export function VariantsTab({ detail, onUpdate, artwork }: Props) {
                   type="button"
                   className="color-row__text"
                   aria-label={`Preview ${colour}`}
-                  onClick={() => setPreviewColour(colour)}
+                  onClick={() => onPreview(colour)}
                 >
                   {swatches[colour] && (
                     <span
@@ -260,16 +330,50 @@ export function VariantsTab({ detail, onUpdate, artwork }: Props) {
                     />
                   )}
                   <span className="color-row__name">{colour}</span>
+                  {own && enabled && (
+                    <span className="tag tag-accent-2 color-row__own">own design</span>
+                  )}
                 </button>
+                {/* Only rows that are sold print anything, so only they
+                    have a file to show or to change. */}
+                {enabled && ownable && profile !== undefined && (
+                  <button
+                    type="button"
+                    className={[
+                      "color-row__chip",
+                      own ? "color-row__chip--own" : "",
+                      file === null ? "color-row__chip--empty" : "",
+                    ]
+                      .filter(Boolean)
+                      .join(" ")}
+                    style={
+                      file !== null
+                        ? { background: clothFor(colour, swatches[colour], detail.design, tones) }
+                        : undefined
+                    }
+                    aria-label={`Select different design for ${cap(colour)}`}
+                    title="Select different design"
+                    onClick={() => {
+                      onPreview(colour);
+                      setPicking(colour);
+                    }}
+                  >
+                    {file !== null && <img src={listingDesignThumbnailUrl(refName(file))} alt="" />}
+                  </button>
+                )}
                 {/* Beside the switch, not beside the name: the shade is what
                     the two bulk buttons above act on, so it reads as a
                     property of the decision rather than of the label. */}
-                {classification && (
+                {classification ? (
                   <span
                     className={classification === "dark" ? "tag tag-neutral" : "tag tag-accent"}
                   >
                     {classification}
                   </span>
+                ) : (
+                  // Shared garment data the listing cannot supply: which base
+                  // design it prints depends on it (spec, *Artwork resolution*).
+                  profile !== undefined && <span className="tag tag-dirty">no tone</span>
                 )}
                 <button
                   type="button"
@@ -290,13 +394,28 @@ export function VariantsTab({ detail, onUpdate, artwork }: Props) {
       <div className="variants-preview">
         <div className="preview-stage preview-stage--large">
           {template !== null && shown !== null ? (
-            <img src={templatePicture(template, shown, design)} alt={`${shown} on ${template}`} />
+            <img src={templatePicture(template, shown, scene)} alt={`${shown} on ${template}`} />
           ) : (
             <div className="image-placeholder">
               <span>Set preview_template on the garment profile to a colour-matrix mockup.</span>
             </div>
           )}
         </div>
+        {/* Once the profile has loaded: before then every colour of a
+            light/dark listing would read as having no tone. */}
+        {ownArtwork && shown !== null && profile !== undefined && (
+          <PrintsCard
+            colour={shown}
+            enabled={detail.colors.includes(shown)}
+            design={detail.design}
+            profile={detail.garment_profile}
+            tones={tones}
+            swatch={swatches[shown]}
+            onChooseSlot={onChooseSlot}
+            onPickColour={() => setPicking(shown)}
+            onAutomatic={() => onUpdate({ design: automatic(detail.design, shown) })}
+          />
+        )}
         <p className="variants-preview__hint">
           Click a colour to preview it — helps judge whether it suits the design.
         </p>
@@ -304,6 +423,54 @@ export function VariantsTab({ detail, onUpdate, artwork }: Props) {
           {status}
         </p>
       </div>
+
+      {picking !== null && (
+        <ArtworkPicker
+          title={`Design for ${cap(picking)}`}
+          hint={ownDesignHint(detail.design, picking, detail.colors, tones)}
+          tile={clothFor(picking, swatches[picking], detail.design, tones)}
+          current={resolvedFile(detail.design, picking, tones)}
+          library={library}
+          onPick={(ref) => pickOwn(picking, ref)}
+          onClose={() => setPicking(null)}
+        />
+      )}
     </div>
   );
+}
+
+/** The file a colour prints, or `null` when it resolves to nothing. */
+function resolvedFile(
+  design: DesignMap,
+  colour: string,
+  tones: Readonly<Record<string, Tone>>,
+): string | null {
+  const resolution = resolve(design, colour, tones);
+  return resolution.kind === "resolved" ? resolution.ref : null;
+}
+
+/** "Only Moss changes. Black and Navy keep the design for dark shirts." --
+ * who else prints what this colour prints now, so a colour's own design is
+ * not mistaken for a change to every dark shirt (interactions Part 1 §6).
+ * The siblings are the other automatic colours sold that share its source:
+ * every one while linked, those of its tone while unlinked. */
+function ownDesignHint(
+  design: DesignMap,
+  colour: string,
+  enabled: readonly string[],
+  tones: Readonly<Record<string, Tone>>,
+): string {
+  const linked = isLinked(design);
+  const tone = tones[colour];
+  const siblings = enabled.filter(
+    (c) => c !== colour && (design[c] ?? null) === null && (linked || tones[c] === tone),
+  );
+  const only = `Only ${cap(colour)} changes.`;
+  if (siblings.length === 0) return only;
+  const what = linked
+    ? "the design for all shirts"
+    : tone === undefined
+      ? "their design"
+      : `the design for ${toneLabel(tone)}`;
+  return `${only} ${listNames(siblings)} keep${siblings.length === 1 ? "s" : ""} ${what}.`;
 }

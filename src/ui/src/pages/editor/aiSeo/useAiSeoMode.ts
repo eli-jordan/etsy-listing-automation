@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { SaveState } from "../../../hooks/useAutosave";
 import { getSeoReadiness } from "../../../api/seo";
 import type { ListingDetail, ListingProposal } from "../../../types";
+import { representative } from "../artwork";
 import { useProposalReview } from "./useProposalReview";
 import { type AiRun, useAiRun } from "./useAiRun";
 import type { MarketPanelState } from "../market/MarketListingsPanel";
@@ -143,7 +144,10 @@ export function useAiSeoMode(
   const run = useAiRun(detail, save, { onBrief, onProposal: review.onProposal });
   const market = useMarketPanel(detail.name, run);
 
-  const hasDesign = Object.keys(detail.design).length > 0;
+  // The representative artwork, not any key: it is the one image a run
+  // sends, and the server refuses a map without one (spec, *Representative
+  // artwork*).
+  const hasDesign = representative(detail.design) !== null;
   const hasBrief = detail.brief.trim() !== "";
   const name = detail.name;
   // The client-observable prerequisites, checked before any network call.

@@ -69,7 +69,12 @@ LOCK_FILE = "state.lock.json"
 # listing template, inside LISTING_TEMPLATES_DIR/<name>/. One name for
 # both files: the directory says which kind of template it is.
 TEMPLATE_FILE = "template.yaml"
-DERIVED_DIR = "_derived"
+RENDERER_DIR = "_renderer"
+"""Inside MOCKUP_TEMPLATES_DIR/<name>/: every file the app writes for a
+mockup template besides ``template.yaml``, so the seller's photos and config
+are all that is visible at the top level."""
+DERIVED_DIR = "derived"
+"""Inside RENDERER_DIR."""
 LISTING_TEMPLATE_ASSETS_DIR = "assets"
 """Inside LISTING_TEMPLATES_DIR/<name>/: the listing-local media Save as
 listing template copied, which its ``./assets/...`` refs name. ADR-0047
@@ -121,3 +126,21 @@ RUNS_DB = "runs.db"
 FX_CACHE_FILE = "fx.json"
 
 ROOT_ENV_VAR = "ETSY_LISTINGS_ROOT"
+
+# ADR-0054: durable calibration assets, outside disposable workspace cache,
+# inside RENDERER_DIR.
+RENDERER_SETTINGS_FILE = "renderer-settings.json"
+CALIBRATION_TRANSACTION_DIR = "calibration-transaction"
+CALIBRATION_RECEIPT_FILE = "calibration-receipt.json"
+MASKS_DIR = "masks"
+AUTOMATIC_MASK_FILE = "automatic.png"
+EDITED_MASK_FILE = "edited.png"
+MASK_METADATA_FILE = "metadata.json"
+PREPARATION_DIR = "preparation"
+BRUSHES_DIR = "brushes"
+
+MAPS_DIR = "maps"
+MAP_CURRENT_FILE = "current.json"
+MAP_GENERATIONS_DIR = "generations"
+MAP_STAGING_DIR = "staging"
+MAP_MANIFEST_FILE = "manifest.json"
