@@ -213,25 +213,22 @@ def test_watchdog_fails_without_publishing_partial_artifact(tmp_path):
 
 @pytest.mark.parametrize("adapter", [Worker, WarmWorker])
 def test_dispatch_guard_refuses_cancelled_call_and_allows_later_retry(tmp_path, adapter):
-    import threading
     from contextlib import contextmanager
 
     from PIL import Image
 
     from etsy_listings.core.preparation.worker_client import WorkerError
 
+    from tests.support.gates import Gate, workers
     from tests.support.marigold import controlled_worker
 
     Image.new("RGB", (12, 8)).save(tmp_path / "crop.png")
-    reached = threading.Event()
-    release = threading.Event()
+    dispatch = Gate("the dispatch guard")
     cancelled = threading.Event()
-    errors = []
 
     @contextmanager
     def dispatch_guard():
-        reached.set()
-        assert release.wait(5)
+        dispatch.hold()
         if cancelled.is_set():
             raise WorkerError("Cancelled before dispatch")
         yield
@@ -239,31 +236,25 @@ def test_dispatch_guard_refuses_cancelled_call_and_allows_later_retry(tmp_path, 
     with adapter(
         controlled_worker(tmp_path), cache_root=tmp_path, engine_version="1.0.0"
     ) as worker:
-
-        def infer():
-            try:
-                worker.infer(
+        with workers(dispatch) as start:
+            pending = start(
+                "pending inference",
+                lambda: worker.infer(
                     request_id="pending",
                     role="depth",
                     input="crop.png",
                     output="refused.npz",
                     size=(12, 8),
                     dispatch_guard=dispatch_guard,
-                )
-            except BaseException as exc:
-                errors.append(exc)
-
-        thread = threading.Thread(target=infer)
-        thread.start()
-        assert reached.wait(5)
-        cancelled.set()
-        worker.cancel("pending")
-        release.set()
-        thread.join(5)
-        assert not thread.is_alive()
-        assert len(errors) == 1
-        assert isinstance(errors[0], WorkerError)
-        assert "before dispatch" in str(errors[0])
+                ),
+            )
+            dispatch.wait_entered()
+            cancelled.set()
+            worker.cancel("pending")
+            dispatch.release()
+            error = pending.outcome()
+        assert isinstance(error, WorkerError)
+        assert "before dispatch" in str(error)
         assert not (tmp_path / "refused.npz").exists()
         output = adapter.__name__ + ".npz"
         assert (
@@ -275,15 +266,14 @@ def test_dispatch_guard_refuses_cancelled_call_and_allows_later_retry(tmp_path, 
 
 
 def test_warm_startup_cancellation_is_rechecked_before_dispatch(tmp_path):
-    import threading
-    import time
     from contextlib import contextmanager
 
     from PIL import Image
 
     from etsy_listings.core.preparation.worker_client import WorkerError
 
-    from tests.support.marigold import controlled_worker
+    from tests.support.gates import workers
+    from tests.support.marigold import controlled_worker, wait_until
 
     Image.new("RGB", (12, 8)).save(tmp_path / "crop.png")
     command = controlled_worker(tmp_path)
@@ -294,7 +284,10 @@ def test_warm_startup_cancellation_is_rechecked_before_dispatch(tmp_path):
         """    def capabilities(self):
         from pathlib import Path
         Path('startup-ready').touch()
+        deadline = time.monotonic() + 15
         while not Path('startup-release').exists():
+            if time.monotonic() > deadline:
+                raise RuntimeError('held startup was never released')
             time.sleep(0.01)""",
     )
     source = source.replace(
@@ -309,7 +302,6 @@ def test_warm_startup_cancellation_is_rechecked_before_dispatch(tmp_path):
     )
     script.write_text(source, encoding="utf-8")
     cancelled = threading.Event()
-    errors = []
 
     @contextmanager
     def guard():
@@ -318,32 +310,26 @@ def test_warm_startup_cancellation_is_rechecked_before_dispatch(tmp_path):
         yield
 
     with WarmWorker(command, cache_root=tmp_path, engine_version="1.0.0") as worker:
-
-        def infer():
+        with workers() as start:
             try:
-                worker.infer(
-                    request_id="starting",
-                    role="depth",
-                    input="crop.png",
-                    output="refused.npz",
-                    size=(12, 8),
-                    dispatch_guard=guard,
+                starting = start(
+                    "starting inference",
+                    lambda: worker.infer(
+                        request_id="starting",
+                        role="depth",
+                        input="crop.png",
+                        output="refused.npz",
+                        size=(12, 8),
+                        dispatch_guard=guard,
+                    ),
                 )
-            except BaseException as exc:
-                errors.append(exc)
-
-        thread = threading.Thread(target=infer)
-        thread.start()
-        deadline = time.monotonic() + 5
-        while not (tmp_path / "startup-ready").exists() and time.monotonic() < deadline:
-            time.sleep(0.01)
-        assert (tmp_path / "startup-ready").exists()
-        cancelled.set()
-        worker.cancel("starting")
-        (tmp_path / "startup-release").touch()
-        thread.join(5)
-        assert not thread.is_alive()
-        assert len(errors) == 1 and "during startup" in str(errors[0])
+                wait_until((tmp_path / "startup-ready").exists, "the worker's held startup")
+                cancelled.set()
+                worker.cancel("starting")
+            finally:
+                (tmp_path / "startup-release").touch()
+            error = starting.outcome()
+        assert isinstance(error, WorkerError) and "during startup" in str(error)
         assert not (tmp_path / "refused.npz").exists()
         assert (
             worker.infer(
