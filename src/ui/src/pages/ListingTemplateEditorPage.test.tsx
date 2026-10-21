@@ -269,6 +269,10 @@ describe("ListingTemplateEditorPage, saved", () => {
     await screen.findByRole("button", { name: /^Saved / });
     await editBody("Linen.");
     await screen.findByText("1 to fix before this template saves");
+    // `useBlocker` arms itself in a passive effect, after the render that
+    // shows the issue commits. Flush it, so the click below meets the armed
+    // warning rather than racing it on a busy runner.
+    await act(async () => {});
 
     fireEvent.click(screen.getByText("Listing templates"));
 

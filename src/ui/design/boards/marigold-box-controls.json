@@ -1,0 +1,50 @@
+{
+  "version": 1,
+  "name": "marigold-box-controls",
+  "title": "Archive \u00b7 Design Box Options",
+  "description": "Option A selected with icon and switch only; integrated into the full workflow.",
+  "auto": false,
+  "order": 89,
+  "layout": {
+    "rows": [
+      [
+        "marigold-box-controls"
+      ]
+    ],
+    "scenes": {
+      "marigold-box-controls": {
+        "rows": [
+          [
+            "a-switch",
+            "b-view-modes",
+            "c-canvas-chip",
+            "d-bottom-strip",
+            "e-display-menu"
+          ]
+        ]
+      }
+    }
+  },
+  "nodes": [
+    {
+      "key": "mb_a-switch",
+      "frame": "marigold-box-controls/a-switch"
+    },
+    {
+      "key": "mb_b-view-modes",
+      "frame": "marigold-box-controls/b-view-modes"
+    },
+    {
+      "key": "mb_c-canvas-chip",
+      "frame": "marigold-box-controls/c-canvas-chip"
+    },
+    {
+      "key": "mb_d-bottom-strip",
+      "frame": "marigold-box-controls/d-bottom-strip"
+    },
+    {
+      "key": "mb_e-display-menu",
+      "frame": "marigold-box-controls/e-display-menu"
+    }
+  ]
+}

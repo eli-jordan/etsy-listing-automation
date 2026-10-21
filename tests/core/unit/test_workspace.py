@@ -221,7 +221,10 @@ def test_layout_accessors_point_at_the_documented_locations(workspace_root: Path
     assert (
         ws.template_config_file("flat-lay-01") == ws.template_dir("flat-lay-01") / "template.yaml"
     )
-    assert ws.template_derived_dir("flat-lay-01") == ws.template_dir("flat-lay-01") / "_derived"
+    assert (
+        ws.template_derived_dir("flat-lay-01")
+        == ws.template_dir("flat-lay-01") / "_renderer" / "derived"
+    )
     assert (
         ws.template_base_image("flat-lay-01", "black")
         == ws.template_dir("flat-lay-01") / "black.png"
@@ -822,3 +825,23 @@ def test_a_listing_template_read_while_it_is_replaced_still_loads(
     refuse_reads(monkeypatch, 3)
 
     assert ws.load_listing_template("heavyweight-tee").colors == ["black"]
+
+
+def test_design_content_hash_tolerates_an_empty_slot(workspace_root: Path) -> None:
+    """A light/dark pair saved before both files are chosen still has an
+    identity, and emptying a slot changes it -- the whole map is hashed,
+    ``null`` slots included (multi-artwork plan, *Settled decisions*)."""
+    ws = Workspace.discover(root_override=workspace_root)
+    listing_dir = ws.listing_dir("take-a-hike")
+    partial = ws.design_content_hash(
+        {"on-light": None, "on-dark": "designs/take-a-hike.png"}, listing_dir=listing_dir
+    )
+    without = ws.design_content_hash(
+        {"on-dark": "designs/take-a-hike.png"}, listing_dir=listing_dir
+    )
+    empty_pair = ws.design_content_hash(
+        {"on-light": None, "on-dark": None}, listing_dir=listing_dir
+    )
+
+    assert partial is not None and empty_pair is not None
+    assert len({partial, without, empty_pair}) == 3

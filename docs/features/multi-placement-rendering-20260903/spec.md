@@ -1,5 +1,10 @@
 # Multi-Template Mockups: Kinds, Multi-Artwork, and the Calibrator
 
+The later [Marigold specification](../marigold-20261001/spec.md) amends renderer
+configuration, masks and preparation while retaining these kinds and artwork
+selection. That extension is agreed but unimplemented. YAML below describes
+the shipped format before that change.
+
 This specification covers the change that let a listing use more than one mockup
 template, and a design carry more than one artwork file (light-ink vs
 dark-ink). It supersedes an earlier draft of the same name that modelled
@@ -7,6 +12,15 @@ templates as a single generic schema with a default placement plus sparse
 per-scene overrides — that design was replaced before any code shipped
 against it, in favour of the simpler, kind-based one documented here, which
 *is* implemented.
+
+**Multi-artwork amendment:** The [multi-artwork specification](../multi-artwork-20260928/spec.md) and
+ADR-0053 supersede this document's artwork-key resolution, separate listing
+`artwork:` field, and template/placement artwork overrides. The approved target
+uses one `design:` map for reserved base keys and direct colour keys. Those
+passages describe the current implementation only, not the approved product
+target. The template kinds, rendering geometry and media-addressing decisions
+remain in force. The [multi-artwork plan](../multi-artwork-20260928/plan.md)
+replaces the superseded mechanics.
 
 ## Two things this solves
 
@@ -283,10 +297,10 @@ on `PATH`.
 None. This was a young, unreleased codebase at the time of the change — the
 schema changed directly, and every fixture was updated in the same change
 rather than carrying a transitional shape. The garment profile's mockup-template
-field went through two shapes in quick succession: `mockup_template: str` →
-`templates: list[str]` (a per-garment registry) → removed entirely once it
+field went through two shapes in quick succession: `mockup_template: str` â†’
+`templates: list[str]` (a per-garment registry) â†’ removed entirely once it
 became clear the registry didn't earn its keep (see "Multiple templates per
-listing" above). `warp.quad` → `bounding_box`, and the bare `mockup:` media
+listing" above). `warp.quad` â†’ `bounding_box`, and the bare `mockup:` media
 shorthand was removed, in the same spirit.
 
 ## Decision log
