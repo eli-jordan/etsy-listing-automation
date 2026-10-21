@@ -19,16 +19,8 @@ from fastapi.testclient import TestClient
 from PIL import Image
 
 from etsy_listings.core.clients.etsy.fakes import FakeEtsyListingClient
-from etsy_listings.core.clients.printify.fakes import FakeCatalogClient, FakePrintifyClient
-from etsy_listings.core.clients.printify.models import (
-    Blueprint,
-    PrintAreaPlaceholder,
-    PrintProvider,
-    Shop,
-    Variant,
-    VariantOptions,
-    VariantSet,
-)
+from etsy_listings.core.clients.printify.fakes import FakePrintifyClient
+from etsy_listings.core.clients.printify.models import Shop
 from etsy_listings.core.engine.apply import execute
 from etsy_listings.core.engine.change import StagePlan
 from etsy_listings.core.engine.context import RunContext
@@ -52,8 +44,8 @@ from tests.support.builders import (
     set_copy,
     set_etsy_shop_id,
     set_shop_id,
-    write_design,
 )
+from tests.support.pipeline import PRINT_AREA, SHOP_ID, SIZES, a_catalog, at_print_area
 from tests.support.scenes import expected_scene
 
 PROFILE = "comfort-colors-1717"
@@ -269,30 +261,8 @@ def test_the_first_plan_after_upgrade_re_renders_the_same_bytes_and_uploads_noth
 
 # ------------------------------------------------------------------ printify
 
-BLUEPRINT = Blueprint(
-    id=706, title="Unisex Garment-Dyed T-shirt", brand="Comfort Colors®", model="1717"
-)
-PROVIDER = PrintProvider(id=29, title="Monster Digital")
-COLOURS = ["Black", "Blue Jean", "Ivory", "Moss"]
-SIZES = ["S", "M", "L", "XL", "XXL", "XXXL"]
-SHOP_ID = 28819281
-PRINT_AREA = (4500, 5400)
-
-
-def _variants() -> VariantSet:
-    placeholder = PrintAreaPlaceholder(position="front", width=PRINT_AREA[0], height=PRINT_AREA[1])
-    return VariantSet(
-        variants=tuple(
-            Variant(
-                id=1000 + colour_index * 10 + size_index,
-                title=f"{colour} / {size}",
-                options=VariantOptions(color=colour, size=size),
-                placeholders=(placeholder,),
-            )
-            for colour_index, colour in enumerate(COLOURS)
-            for size_index, size in enumerate(SIZES)
-        )
-    )
+# Shared small catalog, profile and design (T05): grouping, idempotency and
+# blocking do not depend on pixel count, and the resolution gate still runs.
 
 
 def _upload_id(path: Path) -> str:
@@ -313,13 +283,8 @@ def printify() -> FakePrintifyClient:
 def product_ctx(workspace_root: Path, printify: FakePrintifyClient) -> RunContext:
     set_shop_id(workspace_root, SHOP_ID)
     set_copy(workspace_root, title="Take A Hike Tee", description="A retro sunset.")
-    write_design(workspace_root, PRINT_AREA)
-    catalog = FakeCatalogClient(
-        blueprints=[BLUEPRINT],
-        providers_by_blueprint={706: [PROVIDER]},
-        variants_by_key={(706, 29): _variants()},
-    )
-    return a_context(workspace_root, catalog=catalog, printify=printify)
+    at_print_area(workspace_root)
+    return a_context(workspace_root, catalog=a_catalog(), printify=printify)
 
 
 def _product_plan(ctx: RunContext, lock: Lockfile) -> StagePlan:
