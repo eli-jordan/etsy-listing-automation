@@ -39,6 +39,11 @@ identify the start of the work, not its release date.
 | Marigold mockup rendering | [Spec](features/marigold-20261001/spec.md) | [Interactions](features/marigold-20261001/interactions.md) | [Plan](features/marigold-20261001/plan.md) |
 | Test suite quality | [Spec](features/test-suite-quality-20261003/spec.md) | [Preserved interactions](features/test-suite-quality-20261003/interactions.md) | [Plan](features/test-suite-quality-20261003/plan.md) |
 
+Test suite quality also keeps an [audit-to-delivery map](features/test-suite-quality-20261003/coverage-map.md)
+and an [execution record](features/test-suite-quality-20261003/execution.md)
+that holds the PR ledger, every replaced or removed case with its lower
+oracle, sensitivity results and the matched measurements.
+
 The AI SEO interactions are amended by market-informed SEO and durable batch
 proposals; the video requirements also live in the Etsy integration spec.
 Batch-creation interactions override that feature's spec where they differ.

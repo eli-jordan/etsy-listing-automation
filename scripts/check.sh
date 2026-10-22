@@ -36,7 +36,8 @@ uv run lint-imports
 # Coverage is measured over the whole suite, browser layer included. Those
 # tests skip themselves when chromium or src/ui/dist is missing, which
 # costs about a point -- the gate has enough headroom to pass either way, so a
-# missing browser never fails the build for the wrong reason.
+# missing browser never fails the build for the wrong reason. The opt-in
+# `capture` screenshots are deselected here as in CI's browser job.
 echo "== pytest + coverage (branch, fail under 85%) =="
 uv run pytest --cov --cov-report=term-missing --cov-report=html
 

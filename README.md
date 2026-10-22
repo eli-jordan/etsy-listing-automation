@@ -156,6 +156,7 @@ uv run pytest tests/core/unit/test_money.py                      # one file
 uv run pytest tests/core/unit/test_money.py::test_parses_amount_and_currency  # one test
 uv run pytest -k "currency"                                   # by keyword
 uv run pytest -m browser                                       # only the browser tests
+uv run pytest -m capture                                       # opt-in: write the calibrator and Marigold review screenshots
 uv run pytest -m "not browser and not e2e"                     # hermetic layers
 uv run pytest --update-goldens                                 # regenerate render goldens
 uv run pytest -m e2e                                           # real Printify/Etsy; see below
@@ -170,6 +171,13 @@ uv run playwright install chromium
 cd src/ui && npm run build
 ```
 
+The six **capture** cases write review screenshots rather than asserting
+anything, so no selection runs them unless `-m` names `capture`. The five
+calibrator scenes in `tests/browser/test_calibrator_design.py` write to
+`tests/browser/_screenshots/` (gitignored), or to `CALIBRATOR_SCREENSHOT_DIR`.
+The Marigold journey in `tests/browser/test_marigold_screenshots.py` writes its
+nine states to `MARIGOLD_SCREENSHOT_DIR`, or to a pytest temporary directory.
+
 The **e2e layer** talks to the real Printify and Etsy shops and is never part of
 a default run. It needs `PRINTIFY_API_TOKEN`, or `ETSY_LISTINGS_ROOT` pointing at
 a workspace whose `.env` carries the credentials:
@@ -177,7 +185,13 @@ a workspace whose `.env` carries the credentials:
 ```bash
 ETSY_LISTINGS_ROOT=/path/to/workspace uv run pytest -m e2e
 E2E_REAL_AI=1 ETSY_LISTINGS_ROOT=/path/to/workspace uv run pytest -m e2e tests/e2e/test_ai_run_e2e.py   # with signed-in Codex/Claude
+ETSY_LISTINGS_ROOT=/path/to/workspace uv run pytest -m e2e tests/e2e/test_phase3_publish_e2e.py::test_the_full_cycle_from_nothing_to_a_media_complete_draft   # the Phase 3 journey alone
 ```
+
+Each live case arranges its own state. The Phase 3 publish cycle is one
+journey whose milestones (first apply, idempotent plan, media order, videos,
+unchanged re-apply) run in order against copy unique to the run, so a failure
+names its milestone and cleanup can always find the product it made.
 
 No real designs or garment photography live in this repo. Golden and behaviour
 tests use procedurally generated fixtures; regenerate them (deterministically)
