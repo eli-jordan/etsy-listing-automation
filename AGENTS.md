@@ -59,7 +59,7 @@ uv run pytest --cov # coverage, enforcing the 85% branch floor
 uv run pytest --cov --cov-report=html # then open htmlcov/index.html
 uv run pytest -m e2e # env-gated e2e layer (real shop, see Testing)
 uv run pytest -m browser # playwright browser tests (opt-in captures excluded)
-uv run pytest -m capture # opt-in: the five calibrator review screenshots, to tests/browser/_screenshots/ or $CALIBRATOR_SCREENSHOT_DIR
+uv run pytest -m capture # opt-in: calibrator (tests/browser/_screenshots/ or $CALIBRATOR_SCREENSHOT_DIR) and Marigold ($MARIGOLD_SCREENSHOT_DIR) review screenshots
 uv run pytest -m "not browser and not e2e" # hermetic layers (e.g. no chromium installed)
 uv run playwright install chromium # one-off, enables the browser layer
 uv run pytest --update-goldens # regenerate render goldens

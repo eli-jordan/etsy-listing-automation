@@ -156,7 +156,7 @@ uv run pytest tests/core/unit/test_money.py                      # one file
 uv run pytest tests/core/unit/test_money.py::test_parses_amount_and_currency  # one test
 uv run pytest -k "currency"                                   # by keyword
 uv run pytest -m browser                                       # only the browser tests
-uv run pytest -m capture                                       # opt-in: write the five calibrator review screenshots
+uv run pytest -m capture                                       # opt-in: write the calibrator and Marigold review screenshots
 uv run pytest -m "not browser and not e2e"                     # hermetic layers
 uv run pytest --update-goldens                                 # regenerate render goldens
 uv run pytest -m e2e                                           # real Printify/Etsy; see below
@@ -171,11 +171,12 @@ uv run playwright install chromium
 cd src/ui && npm run build
 ```
 
-The five **capture** scenes in `tests/browser/test_calibrator_design.py` write
-review screenshots of the calibrator rather than asserting anything, so no
-selection runs them unless `-m` names `capture`. `uv run pytest -m capture`
-writes them to `tests/browser/_screenshots/` (gitignored), or to
-`CALIBRATOR_SCREENSHOT_DIR` when it is set.
+The six **capture** cases write review screenshots rather than asserting
+anything, so no selection runs them unless `-m` names `capture`. The five
+calibrator scenes in `tests/browser/test_calibrator_design.py` write to
+`tests/browser/_screenshots/` (gitignored), or to `CALIBRATOR_SCREENSHOT_DIR`.
+The Marigold journey in `tests/browser/test_marigold_screenshots.py` writes its
+nine states to `MARIGOLD_SCREENSHOT_DIR`, or to a pytest temporary directory.
 
 The **e2e layer** talks to the real Printify and Etsy shops and is never part of
 a default run. It needs `PRINTIFY_API_TOKEN`, or `ETSY_LISTINGS_ROOT` pointing at
