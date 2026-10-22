@@ -37,7 +37,6 @@ export function templateAsListing(template: ListingTemplateDetail): ListingDetai
     price_overrides: template.price_overrides,
     media: template.media,
     design: {},
-    artwork: {},
     brief: "",
     etsy: {
       title: "",

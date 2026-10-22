@@ -1,0 +1,180 @@
+.mg-maskbar,
+.mg-mask-dock {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font: 12px var(--font-body);
+  background: var(--color-bg);
+}
+.mg-maskbar {
+  position: relative;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--color-divider);
+}
+.mg-maskbar button,
+.mg-mask-dock button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 7px 9px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--color-text);
+  font: inherit;
+  white-space: nowrap;
+}
+.mg-maskbar button:hover,
+.mg-mask-dock button:hover {
+  background: var(--color-accent-100);
+}
+.mg-maskbar button:disabled {
+  opacity: 0.35;
+}
+.mg-maskbar svg,
+.mg-mask-dock svg {
+  width: 16px;
+  height: 16px;
+}
+.mg-mask-spacer {
+  flex: 1;
+}
+.mg-box-control {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-right: 12px;
+}
+.mg-maskbar .mg-box-switch {
+  display: block;
+  width: 30px;
+  min-width: 30px;
+  height: 18px;
+  padding: 2px;
+  border: 0;
+  border-radius: 12px;
+  background: var(--color-neutral-500);
+}
+.mg-maskbar .mg-box-switch[aria-checked="true"] {
+  background: var(--color-accent);
+}
+.mg-box-switch i {
+  display: block;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: white;
+  box-shadow: 0 1px 2px #0002;
+  transition: transform 0.12s;
+}
+.mg-box-switch[aria-checked="true"] i {
+  transform: translateX(12px);
+}
+.mg-mask-legend {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--color-neutral-700);
+  font-size: 10px;
+}
+.mg-mask-legend i {
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+  background: rgba(237, 55, 55, 0.38);
+  border: 1px solid #df5050;
+}
+.mg-mask-legend i.is-hidden {
+  background: transparent;
+  border-color: var(--color-neutral-600);
+}
+.mg-maskbar .mg-mask-done {
+  background: var(--color-neutral-900, #38352f);
+  color: var(--color-bg);
+  padding-inline: 12px;
+}
+.mg-maskbar .mg-mask-edit {
+  border: 1px solid var(--color-divider);
+}
+.mg-mask-more {
+  position: relative;
+}
+.mg-mask-menu {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 10px);
+  z-index: 20;
+  width: 160px;
+  padding: 6px;
+  border: 1px solid var(--color-divider);
+  border-radius: 6px;
+  background: var(--color-bg);
+  box-shadow: 0 4px 16px #30282020;
+}
+.mg-mask-menu button {
+  width: 100%;
+  justify-content: flex-start;
+}
+.mg-stage:has(.mg-mask-dock) {
+  margin-bottom: 60px;
+  overflow: visible;
+}
+.mg-mask-dock {
+  position: absolute;
+  left: 50%;
+  bottom: -36px;
+  transform: translateX(-50%);
+  z-index: 8;
+  padding: 7px;
+  border: 1px solid var(--color-divider);
+  border-radius: 10px;
+  box-shadow: 0 4px 16px #30282020;
+}
+.mg-mask-dock button[aria-pressed="true"] {
+  background: var(--color-accent-100);
+  color: var(--color-accent-800);
+  box-shadow: inset 0 0 0 1px var(--color-accent);
+}
+.mg-mask-divider {
+  width: 1px;
+  height: 22px;
+  background: var(--color-divider);
+  margin: 0 4px;
+}
+.mg-mask-size {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+  white-space: nowrap;
+}
+.mg-mask-size i {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--color-neutral-700);
+}
+.mg-mask-size input {
+  width: 55px;
+  accent-color: var(--color-accent);
+}
+@media (max-width: 600px) {
+  .mg-maskbar {
+    flex-wrap: wrap;
+  }
+  .mg-mask-dock {
+    gap: 2px;
+    padding: 5px;
+  }
+  .mg-mask-dock button {
+    padding: 7px 6px;
+  }
+  .mg-mask-size input {
+    width: 40px;
+  }
+}
+
+.mg-mask-dock button:disabled {
+  opacity: 0.35;
+}

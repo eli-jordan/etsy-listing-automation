@@ -1,3 +1,4 @@
+import type { PhotoWarpTemplate } from "./types";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "./App";
@@ -7,7 +8,7 @@ import { controlledClock } from "./test/clock";
 import { deferred } from "./test/helpers";
 import type { ColourMatrixTemplate, MultipleTemplate, TemplateSummary } from "./types";
 
-const COLOUR_MATRIX: ColourMatrixTemplate = {
+const COLOUR_MATRIX: PhotoWarpTemplate<ColourMatrixTemplate> = {
   kind: "colour-matrix",
   bounding_box: [
     { x: 0, y: 0 },
@@ -15,16 +16,26 @@ const COLOUR_MATRIX: ColourMatrixTemplate = {
     { x: 100, y: 100 },
     { x: 0, y: 100 },
   ],
-  displace: { enabled: false, strength: 0 },
-  shade: { enabled: true, opacity: 0.6, blend: "soft-light" },
+  renderer: {
+    type: "photo-warp",
+    config: {
+      displace: { enabled: false, strength: 0 },
+      shade: { enabled: true, opacity: 0.6, blend: "soft-light" },
+    },
+  },
 };
 
-const MULTIPLE: MultipleTemplate = {
+const MULTIPLE: PhotoWarpTemplate<MultipleTemplate> = {
   kind: "multiple",
   colour_coverage: "exact",
   placements: [],
-  displace: { enabled: false, strength: 0 },
-  shade: { enabled: true, opacity: 0.6, blend: "soft-light" },
+  renderer: {
+    type: "photo-warp",
+    config: {
+      displace: { enabled: false, strength: 0 },
+      shade: { enabled: true, opacity: 0.6, blend: "soft-light" },
+    },
+  },
 };
 
 const MODIFIED_AT = "Wed, 17 Sep 2026 18:30:00 GMT";
@@ -89,14 +100,14 @@ describe("App", () => {
 
   it("shows the open template's calibration state and contents in the header", async () => {
     vi.spyOn(calibrator, "listTemplates").mockResolvedValue([
-      summary({ name: "tote", kind: "multiple", colours: [], status_reason: null }),
+      summary({ name: "tote", kind: "multiple", colours: ["black", "moss"], status_reason: null }),
     ]);
     vi.spyOn(calibrator, "getTemplateConfig").mockResolvedValue(configDocument(MULTIPLE));
     vi.spyOn(calibrator, "renderPreview").mockResolvedValue("blob:preview");
 
     render(<App />);
     await waitFor(() => expect(header().getByText("calibrated")).toBeInTheDocument());
-    expect(header().getByText("Multiple · 0 colours")).toBeInTheDocument();
+    expect(header().getByText("Multiple · 0 placements")).toBeInTheDocument();
   });
 
   it("shows the template file's saved time on initial load", async () => {
@@ -141,9 +152,11 @@ describe("App", () => {
     await screen.findByText("Loading preview…");
 
     selectTemplate("colour-chart-01");
-    // "show all outlines" is the multiple editor's toggle, and only its own --
-    // a colour set says "show placement outline".
-    await waitFor(() => expect(screen.getByText("show all outlines")).toBeInTheDocument());
+    // "Show all design boxes" is the multiple editor's toggle, and only its own --
+    // a colour set says "Show design box".
+    await waitFor(() =>
+      expect(screen.getByRole("switch", { name: "Show all design boxes" })).toBeInTheDocument(),
+    );
   });
 
   it("replaces the workspace with the kind picker when a template has no config", async () => {
@@ -202,7 +215,10 @@ describe("App", () => {
     expect(saveSpy).toHaveBeenCalledTimes(1);
     expect(saveSpy.mock.calls[0]?.[0]).toBe("flat-lay-01");
     expect(saveSpy.mock.calls[0]?.[1]).toMatchObject({
-      displace: { enabled: false, strength: 0.75 },
+      renderer: {
+        type: "photo-warp",
+        config: expect.objectContaining({ displace: { enabled: false, strength: 0.75 } }),
+      },
     });
     expect(screen.queryByText("Saved a moment ago")).not.toBeInTheDocument();
 
@@ -257,55 +273,52 @@ describe("App", () => {
     });
   });
 
-  describe("Reset", () => {
-    /** Reset is the header's, but the only way to make the page dirty is
-     * through a real control -- so this drives the wrinkle slider, which the
-     * Print realism panel exposes as a 0-100 percentage over a 0..1 config. */
-    async function mount() {
-      vi.spyOn(calibrator, "listTemplates").mockResolvedValue([summary({ name: "flat-lay-01" })]);
-      vi.spyOn(calibrator, "getTemplateConfig").mockResolvedValue(configDocument(COLOUR_MATRIX));
-      vi.spyOn(calibrator, "renderPreview").mockResolvedValue("blob:preview");
-      render(<App />);
-      return await screen.findByLabelText("Wrinkle strength");
-    }
-
-    async function mountAndEdit() {
-      const strength = await mount();
-      fireEvent.change(strength, { target: { value: "75" } });
-      await waitFor(() => expect(strength).toHaveValue("75"));
-      return strength;
-    }
-
-    it("is disabled until something is edited", async () => {
-      await mount();
-      expect(screen.getByRole("button", { name: "Reset" })).toBeDisabled();
-    });
-
-    it("throws away unsaved edits and goes back to what is on disk", async () => {
-      const strength = await mountAndEdit();
-      fireEvent.click(screen.getByRole("button", { name: "Reset" }));
-      await waitFor(() => expect(strength).toHaveValue("0"));
-    });
-
-    it("goes back to the last successful save, not the config it opened with", async () => {
-      const clock = controlledClock();
-      const write = deferred<ColourMatrixTemplate>();
-      vi.spyOn(calibrator, "saveTemplateConfig").mockReturnValue(write.promise);
-      const strength = await mountAndEdit();
-      // What the server holds after the save, should Reset choose to ask.
-      const saved = { ...COLOUR_MATRIX, displace: { enabled: false, strength: 0.75 } };
-
-      await clock.advance(AUTOSAVE_DEBOUNCE_MS);
-      expect(calibrator.saveTemplateConfig).toHaveBeenCalledTimes(1);
-      vi.mocked(calibrator.getTemplateConfig).mockResolvedValue(configDocument(saved));
-      await act(async () => write.resolve(saved));
-
-      fireEvent.change(strength, { target: { value: "40" } });
-      await waitFor(() => expect(strength).toHaveValue("40"));
-      fireEvent.click(screen.getByRole("button", { name: "Reset" }));
-
-      await waitFor(() => expect(strength).toHaveValue("75"));
-      expect(screen.getByRole("button", { name: "Reset" })).toBeDisabled();
-    });
+  it("keeps print realism Reset without a global header Reset", async () => {
+    vi.spyOn(calibrator, "listTemplates").mockResolvedValue([summary({ name: "flat-lay-01" })]);
+    vi.spyOn(calibrator, "getTemplateConfig").mockResolvedValue(configDocument(COLOUR_MATRIX));
+    vi.spyOn(calibrator, "renderPreview").mockResolvedValue("blob:preview");
+    render(<App />);
+    await screen.findByLabelText("Wrinkle strength");
+    expect(header().queryByRole("button", { name: "Reset" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Reset print realism" })).toBeInTheDocument();
   });
+});
+
+it("waits for the initial catalog before claiming the workspace is empty", async () => {
+  let finish!: (templates: TemplateSummary[]) => void;
+  const pending = new Promise<TemplateSummary[]>((resolve) => {
+    finish = resolve;
+  });
+  vi.spyOn(calibrator, "listTemplates").mockReturnValue(pending);
+  render(<App />);
+  expect(screen.getByText("Loading templates...")).toBeInTheDocument();
+  expect(screen.queryByText(/No templates yet/)).not.toBeInTheDocument();
+  await act(async () => finish([]));
+  expect(screen.getByText(/No templates yet/)).toBeInTheDocument();
+});
+
+it("keeps a newer template selection when an autosave catalog refresh arrives late", async () => {
+  const clock = controlledClock();
+  const rows = [summary({ name: "first" }), summary({ name: "second" })];
+  const refresh = deferred<TemplateSummary[]>();
+  const write = deferred<ColourMatrixTemplate>();
+  const list = vi
+    .spyOn(calibrator, "listTemplates")
+    .mockResolvedValueOnce(rows)
+    .mockReturnValue(refresh.promise);
+  vi.spyOn(calibrator, "getTemplateConfig").mockResolvedValue(configDocument(COLOUR_MATRIX));
+  vi.spyOn(calibrator, "renderPreview").mockResolvedValue("blob:preview");
+  vi.spyOn(calibrator, "saveTemplateConfig").mockReturnValue(write.promise);
+  render(<App />);
+  fireEvent.change(await screen.findByLabelText("Wrinkle strength"), { target: { value: "25" } });
+
+  await clock.advance(AUTOSAVE_DEBOUNCE_MS);
+  expect(calibrator.saveTemplateConfig).toHaveBeenCalledTimes(1);
+  await act(async () => write.resolve(COLOUR_MATRIX));
+  expect(list).toHaveBeenCalledTimes(2);
+
+  await clock.user.click(screen.getByRole("button", { name: /second/ }));
+  await waitFor(() => expect(header().getByText("second")).toBeInTheDocument());
+  await act(async () => refresh.resolve(rows));
+  expect(header().getByText("second")).toBeInTheDocument();
 });

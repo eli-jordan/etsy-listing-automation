@@ -1,0 +1,40 @@
+{
+  "version": 1,
+  "name": "marigold-controls",
+  "title": "Archive \u00b7 Marigold Mask Options",
+  "auto": false,
+  "order": 89,
+  "description": "Retired comparison: option D selected and integrated into the full Marigold workflow.",
+  "layout": {
+    "rows": [["marigold-controls"]],
+    "scenes": {
+      "marigold-controls": {
+        "rows": [
+          ["a-action-bar", "b-editing-tabs", "c-brush-menu", "d-named-actions", "e-popover-editor"]
+        ]
+      }
+    }
+  },
+  "nodes": [
+    {
+      "key": "mc_a-action-bar",
+      "frame": "marigold-controls/a-action-bar"
+    },
+    {
+      "key": "mc_b-editing-tabs",
+      "frame": "marigold-controls/b-editing-tabs"
+    },
+    {
+      "key": "mc_c-brush-menu",
+      "frame": "marigold-controls/c-brush-menu"
+    },
+    {
+      "key": "mc_d-named-actions",
+      "frame": "marigold-controls/d-named-actions"
+    },
+    {
+      "key": "mc_e-popover-editor",
+      "frame": "marigold-controls/e-popover-editor"
+    }
+  ]
+}

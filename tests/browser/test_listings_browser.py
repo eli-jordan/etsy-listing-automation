@@ -186,18 +186,24 @@ def test_switching_a_colour_off_stays_off(page, workspace_root: Path) -> None:  
     # The file is the assertion, not the switch: what re-enabled it was the
     # server refusing the write and answering with the unchanged listing, so a
     # `listing.yaml` that no longer sells the colour is the thing that was
-    # actually wrong. (The row itself is gone here -- the fixture garment
-    # profile classifies no colours, so a colour the listing has dropped is no
-    # longer one this tab knows about.)
+    # actually wrong.
 
 
-def test_the_shade_buttons_need_a_profile_that_classifies_its_colours(page) -> None:  # noqa: ANN001
-    """Dark/Light are driven by the garment profile's light/dark map, and the
-    fixture profile declares none -- so with nothing to act on they are not
-    offered at all, rather than offered and silently doing nothing."""
+def test_the_shade_buttons_need_a_profile_that_classifies_its_colours(  # noqa: ANN001
+    page, workspace_root: Path
+) -> None:
+    """Dark/Light are driven by the garment profile's light/dark map, and a
+    profile that declares none gives them nothing to act on -- so they are
+    not offered at all, rather than offered and silently doing nothing."""
+    profile = workspace_root / "garment-profiles" / "comfort-colors-1717.yaml"
+    document = yaml.safe_load(profile.read_text(encoding="utf-8"))
+    profile.write_text(yaml.safe_dump({**document, "colors": {}}), encoding="utf-8")
+
     page.goto(page.url.rsplit("/", 1)[0] + "/listings/take-a-hike")
     page.get_by_role("heading", name="take-a-hike").wait_for(state="visible")
     page.get_by_role("switch", name="moss").wait_for(state="visible")
 
-    assert page.get_by_role("button", name="Dark").count() == 0
-    assert page.get_by_role("button", name="Light").count() == 0
+    # Exact: the design strip's "Use a different design for dark shirts" is
+    # a button whose name contains the word too.
+    assert page.get_by_role("button", name="Dark", exact=True).count() == 0
+    assert page.get_by_role("button", name="Light", exact=True).count() == 0

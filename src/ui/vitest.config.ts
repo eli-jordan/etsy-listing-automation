@@ -32,6 +32,7 @@ const NODE_TESTS = [
   "src/pages/deploy/deployState.test.ts",
   "src/pages/deploy/listingRunState.test.ts",
   "src/pages/deploy/wordDiff.test.ts",
+  "src/pages/editor/artwork.test.ts",
   "src/pages/editor/colourSelection.test.ts",
   "src/pages/editor/focus.test.ts",
   "src/pages/editor/mediaEdits.test.ts",

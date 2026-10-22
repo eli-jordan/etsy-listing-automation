@@ -9,6 +9,10 @@ export type ShadeBlend = ShadeConfig["blend"];
 
 export type Placement = components["schemas"]["Placement"];
 
+/** `Listing.design`: reserved base keys and colour keys, each a ref. Only
+ * `on-light`/`on-dark` may be `null` -- a slot not filled yet (ADR-0053). */
+export type DesignMap = Record<string, string | null>;
+
 export type TemplateKind = "colour-matrix" | "multiple" | "single";
 /** the calibration-design library: the test design is an open library now, so a selection is an id
  * string, not a closed union -- the bundled targets keep their ids, an upload
@@ -177,3 +181,9 @@ export type EtsyMediaSnapshot = components["schemas"]["EtsyMediaSnapshot"];
 export type DesiredVideoSnapshot = components["schemas"]["DesiredVideoSnapshot"];
 export type LiveVideoSnapshot = components["schemas"]["LiveVideoSnapshot"];
 export type EtsyVideosSnapshot = components["schemas"]["EtsyVideosSnapshot"];
+
+export type PhotoWarpRenderer = components["schemas"]["PhotoWarpRenderer"];
+export type PhotoWarpTemplate<T> = Omit<T, "renderer"> & { renderer: PhotoWarpRenderer };
+
+export type Renderer =
+  components["schemas"]["PhotoWarpRenderer"] | components["schemas"]["MarigoldRenderer"];

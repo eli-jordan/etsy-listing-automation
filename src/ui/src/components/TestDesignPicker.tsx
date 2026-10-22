@@ -16,11 +16,12 @@ import type { DesignSummary } from "../types";
  */
 
 interface Props {
+  compact?: boolean;
   value: string;
   onChange: (id: string) => void;
 }
 
-export function TestDesignPicker({ value, onChange }: Props) {
+export function TestDesignPicker({ value, onChange, compact = false }: Props) {
   const [designs, setDesigns] = useState<DesignSummary[]>([]);
   const [status, setStatus] = useState("");
 
@@ -51,10 +52,10 @@ export function TestDesignPicker({ value, onChange }: Props) {
   }
 
   return (
-    <section className="design-picker">
+    <section className={compact ? "design-picker design-picker--compact" : "design-picker"}>
       {/* The heading names the control, so the select carries the accessible
           name rather than a second visible label repeating it. */}
-      <h3 className="design-picker__heading">Test design</h3>
+      <h3 className="design-picker__heading">{compact ? "Design" : "Test design"}</h3>
 
       <select
         className="input design-picker__select"
@@ -80,8 +81,8 @@ export function TestDesignPicker({ value, onChange }: Props) {
         )}
       </select>
 
-      <label className="design-picker__upload">
-        <span>＋ Upload a PNG…</span>
+      <label className="design-picker__upload" title="Upload a PNG design">
+        <span>{compact ? "+ Upload" : "＋ Upload a PNG…"}</span>
         <input type="file" accept="image/png" onChange={(e) => handleUpload(e.target.files?.[0])} />
       </label>
 

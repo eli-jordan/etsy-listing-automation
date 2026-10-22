@@ -167,23 +167,34 @@ class TestListListings:
         assert row["design"] == "take-a-hike"
         assert client.get(f"/api/listing-designs/{row['design']}/thumbnail").status_code == 200
 
-    def test_a_row_with_a_multi_artwork_design_has_no_single_thumbnail(
-        self, client: TestClient, workspace_root: Path
+    @pytest.mark.parametrize(
+        ("design", "thumbnail"),
+        [
+            ({"default": "designs/one.png"}, "one"),
+            ({"on-light": "designs/light.png", "on-dark": "designs/dark.png"}, "light"),
+            ({"on-light": "designs/light.png", "on-dark": None}, "light"),
+            ({"on-light": None, "on-dark": "designs/dark.png"}, "dark"),
+            ({"on-light": None, "on-dark": None}, None),
+            # A colour's own design is never promoted to stand for the listing.
+            ({"on-light": None, "on-dark": None, "moss": "designs/moss.png"}, None),
+            ({}, None),
+        ],
+    )
+    def test_a_row_shows_the_representative_artwork(
+        self,
+        client: TestClient,
+        workspace_root: Path,
+        design: dict[str, str | None],
+        thumbnail: str | None,
     ) -> None:
-        """A design keyed ``on-light``/``on-dark`` has no one picture that
-        stands for the listing, and picking an arbitrary key would show the
-        wrong ink half the time. ``None`` -- the row falls back to a
-        placeholder rather than lying."""
-        path = workspace_root / "listings" / "take-a-hike" / "listing.yaml"
-        raw = yaml.safe_load(path.read_text(encoding="utf-8"))
-        raw["design"] = {
-            "on-light": "designs/take-a-hike.png",
-            "on-dark": "designs/take-a-hike.png",
-        }
-        path.write_text(yaml.safe_dump(raw, sort_keys=False), encoding="utf-8")
+        """Spec, *Representative artwork*: the thumbnail is the first
+        non-null of ``default``, ``on-light``, ``on-dark`` (A35's
+        ``representative``); with none there is no picture, and the row falls
+        back to a placeholder rather than showing a colour's own file."""
+        edit_listing(workspace_root, design=design)
 
         row = {r["name"]: r for r in client.get("/api/listings").json()}["take-a-hike"]
-        assert row["design"] is None
+        assert row["design"] == thumbnail
 
     def test_an_applied_row_carries_the_ids_its_open_menu_links_to(
         self, client: TestClient, workspace_root: Path
@@ -243,7 +254,7 @@ class TestGetListingDetail:
             workspace_root,
             design={
                 "default": "designs/take-a-hike.png",
-                "alternate": "designs/missing.png",
+                "moss": "designs/missing.png",
             },
         )
         first = client.get("/api/listings/take-a-hike").json()["design_content_hash"]
@@ -461,14 +472,26 @@ class TestGetListingDetail:
         assert [i["severity"] for i in issues if "./clip.mp4" in i["message"]] == ["info"]
         assert after == before
 
-    def test_warns_about_colours_the_garment_profile_does_not_classify(
-        self, client: TestClient
+    def test_blocks_on_colours_the_garment_profile_does_not_classify(
+        self, client: TestClient, workspace_root: Path
     ) -> None:
-        """The fixture garment profile has an empty `colors:` dict, so every
-        one of the listing's four colours is an unclassified proxy-warning."""
+        """Tone classification is mandatory shared garment data (ADR-0053): a colour
+        the profile leaves out blocks deploying and names the file to fix."""
+        edit_garment_profile(workspace_root, "comfort-colors-1717", colors={"black": "dark"})
+
         issues = client.get("/api/listings/take-a-hike").json()["issues"]
-        warning = next(i for i in issues if i["tab"] == "variants" and i["severity"] == "warn")
-        assert all(c in warning["message"] for c in ["black", "blue-jean", "ivory", "moss"])
+
+        assert {
+            "severity": "block",
+            "tab": "variants",
+            "where": "Fix it in garment-profiles/comfort-colors-1717.yaml",
+            "message": "Blue-jean, Ivory and Moss aren't marked light or dark in the "
+            "comfort-colors-1717 garment profile",
+        } in issues
+
+    def test_a_classified_listing_has_no_artwork_issue(self, client: TestClient) -> None:
+        issues = client.get("/api/listings/take-a-hike").json()["issues"]
+        assert not [i for i in issues if i["where"].startswith(("Artwork", "Fix it in"))]
 
     def test_an_applied_listing_carries_its_remote_ids(
         self, client: TestClient, workspace_root: Path
@@ -807,7 +830,7 @@ class TestListingDraft:
             if i["severity"] == "block"
         }
         assert "Variants › Garment profile" in blocks
-        assert "Design" in blocks
+        assert "Artwork" in blocks
         assert "Variants › Colours" in blocks
         assert "Pricing" in blocks
         assert "Listing Images" in blocks
