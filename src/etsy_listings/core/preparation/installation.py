@@ -9,10 +9,14 @@ import shutil
 import subprocess
 import tomllib
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Protocol
 
 from PIL import Image
 
+from etsy_listings.core.preparation.distribution.src.marigold_worker.protocol import (
+    ROLES,
+    Capabilities,
+)
 from etsy_listings.core.preparation.runtime import Capability, SetupError
 from etsy_listings.core.preparation.worker_client import Worker, WorkerError
 from etsy_listings.core.workspace.atomic import write_json_atomic
@@ -105,7 +109,7 @@ class NativeInstaller:
         python = project / ".venv" / "Scripts" / "python.exe"
         command = worker_command(python, weights)
         self._run([*command, "--install-weights"])
-        capabilities: dict[str, Any] = json.loads(
+        capabilities = Capabilities.model_validate_json(
             self._run([*command, "--capabilities"], timeout=120)
         )
         self._verify_packages(project, capabilities)
@@ -116,7 +120,7 @@ class NativeInstaller:
         with Worker(
             worker_command(python, weights, evidence), cache_root=evidence, engine_version=version
         ) as worker:
-            for role in ("normals", "lighting", "depth"):
+            for role in ROLES:
                 result = worker.infer(
                     request_id="setup-" + role,
                     role=role,
@@ -124,7 +128,7 @@ class NativeInstaller:
                     output=role + ".npz",
                     size=(128, 128),
                 )
-                smoke[role] = result["metadata"]
+                smoke[role] = result.metadata.model_dump(mode="json")
         verified = {}
         for revision in REVISIONS:
             manifest = json.loads(
@@ -146,19 +150,22 @@ class NativeInstaller:
                 "python": PYTHON_VERSION,
                 "files": files,
                 "weights": verified,
-                "packages": capabilities["installed_packages"],
+                "packages": capabilities.installed_packages,
                 "smoke": smoke,
             },
         )
         return Capability(
-            True, None, engine_version=version, python=str(python), details=capabilities
+            True,
+            None,
+            engine_version=version,
+            python=str(python),
+            details=capabilities.model_dump(mode="json"),
         )
 
-    def _verify_packages(self, project: Path, capabilities: dict[str, Any]) -> None:
+    def _verify_packages(self, project: Path, capabilities: Capabilities) -> None:
         lock = tomllib.loads((project / "uv.lock").read_text(encoding="utf-8"))
         expected = {p["name"]: p["version"] for p in lock["package"]}
-        installed = capabilities["installed_packages"]
-        if installed != expected:
+        if capabilities.installed_packages != expected:
             raise SetupError("Installed packages do not match the complete worker lock")
 
     def _stamps(self, target: Path, weights: Path) -> dict[str, list[int]]:
@@ -268,14 +275,18 @@ class NativeInstaller:
                     ):
                         raise SetupError("Pinned weights failed integrity verification")
             python = project / ".venv" / "Scripts" / "python.exe"
-            capabilities = json.loads(
+            capabilities = Capabilities.model_validate_json(
                 self._run([*worker_command(python, weights), "--capabilities"], timeout=120)
             )
             self._verify_packages(project, capabilities)
-            if capabilities["engine_version"] != version or capabilities["cuda"] is not True:
+            if capabilities.engine_version != version or capabilities.cuda is not True:
                 raise SetupError("Native worker or CUDA capability is unavailable")
             return Capability(
-                True, None, engine_version=version, python=str(python), details=capabilities
+                True,
+                None,
+                engine_version=version,
+                python=str(python),
+                details=capabilities.model_dump(mode="json"),
             )
         except (OSError, ValueError, KeyError, TypeError, SetupError) as exc:
             return Capability(

@@ -229,8 +229,10 @@ def run(output: Path) -> None:
         "smaller": evidence_covers(crop, identity, small, (2048, 2048), identity),
         "shift_one_pixel": evidence_covers(crop, identity, box + 1, (2048, 2048), identity),
     }
-    (output / "multiple.json").write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
-    print(json.dumps(report, indent=2), flush=True)
+    # Worker replies are protocol models.
+    text = json.dumps(report, indent=2, default=lambda reply: reply.model_dump(mode="json"))
+    (output / "multiple.json").write_text(text + "\n", encoding="utf-8")
+    print(text, flush=True)
 
 
 if __name__ == "__main__":

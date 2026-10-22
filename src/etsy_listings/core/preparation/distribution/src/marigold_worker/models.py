@@ -13,7 +13,9 @@ import numpy as np
 from numpy.typing import NDArray
 from PIL import Image
 
-MODELS = {
+from .protocol import Capabilities, InferenceMetadata, InferenceSettings, Role, Transforms
+
+MODELS: dict[Role, tuple[str, str, str]] = {
     "normals": (
         "prs-eth/marigold-normals-v1-1",
         "MarigoldNormalsPipeline",
@@ -64,31 +66,31 @@ class Models:
         torch.set_num_threads(4)
         self.weights = weights
         self.pipe: Any = None
-        self.role: str | None = None
+        self.role: Role | None = None
         self.model_bytes = 0
 
-    def capabilities(self) -> dict[str, Any]:
+    def capabilities(self) -> Capabilities:
         import torch
 
-        return {
-            "engine_version": importlib.metadata.version("etsy-marigold-worker"),
-            "roles": list(MODELS),
-            "cuda": True,
-            "gpu": torch.cuda.get_device_name(),
-            "cuda_version": torch.version.cuda,
-            "model_ram_budget": MODEL_RAM_BUDGET,
-            "resident_models": 1,
-            "installed_packages": {
+        return Capabilities(
+            engine_version=importlib.metadata.version("etsy-marigold-worker"),
+            roles=list(MODELS),
+            cuda=True,
+            gpu=torch.cuda.get_device_name(),
+            cuda_version=torch.version.cuda,
+            model_ram_budget=MODEL_RAM_BUDGET,
+            resident_models=1,
+            installed_packages={
                 d.metadata["Name"].lower().replace("_", "-"): d.version
                 for d in importlib.metadata.distributions()
                 if d.metadata["Name"]
             },
-            "packages": {p: importlib.metadata.version(p) for p in PACKAGES},
-        }
+            packages={p: importlib.metadata.version(p) for p in PACKAGES},
+        )
 
     def infer(
-        self, role: str, image: Image.Image, settings: dict[str, int]
-    ) -> tuple[NDArray[np.float32], dict[str, Any]]:
+        self, role: Role, image: Image.Image, settings: InferenceSettings
+    ) -> tuple[NDArray[np.float32], InferenceMetadata]:
         import psutil
         import torch
 
@@ -133,7 +135,7 @@ class Models:
                 match_input_resolution=True,
                 resample_method_input="bilinear",
                 resample_method_output="bilinear",
-                **settings,
+                **settings.model_dump(),
             )
         torch.cuda.synchronize()
         elapsed = time.perf_counter() - started
@@ -153,7 +155,7 @@ class Models:
             device=torch.device("cpu"),
             dtype=torch.float32,
         )
-        metadata = dict(
+        metadata = InferenceMetadata(
             checkpoint=checkpoint,
             revision=revision,
             role=role,
@@ -162,12 +164,12 @@ class Models:
             settings=settings,
             target_properties=properties,
             normal_frame="x right, y up, z toward viewer; image rows down",
-            transforms={
-                "original_crop_hw": list(original),
-                "processed_padded_hw": list(processed.shape[-2:]),
-                "padding": list(padding),
-                "output_pixel_centres": "integer pixel centres aligned to original crop",
-            },
+            transforms=Transforms(
+                original_crop_hw=list(original),
+                processed_padded_hw=list(processed.shape[-2:]),
+                padding=list(padding),
+                output_pixel_centres="integer pixel centres aligned to original crop",
+            ),
             load_seconds=load_seconds,
             inference_seconds=elapsed,
             warm_reuse=reused,
@@ -175,6 +177,6 @@ class Models:
             peak_allocated_bytes=torch.cuda.max_memory_allocated(),
             peak_reserved_bytes=torch.cuda.max_memory_reserved(),
             process_rss_bytes=psutil.Process().memory_info().rss,
-            **self.capabilities(),
+            **self.capabilities().model_dump(),
         )
         return prediction, metadata

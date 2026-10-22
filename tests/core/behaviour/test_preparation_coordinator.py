@@ -633,7 +633,8 @@ def test_model_lighting_component_order_preserves_estimated_shading_gradient(wor
                 np.savez_compressed(path, prediction=prediction)
                 import hashlib
 
-                result["checksum"] = hashlib.sha256(path.read_bytes()).hexdigest()
+                checksum = hashlib.sha256(path.read_bytes()).hexdigest()
+                result = result.model_copy(update={"checksum": checksum})
             return result
 
     workspace = template(workspace_root)

@@ -20,6 +20,11 @@ from PIL import Image
 
 from etsy_listings.core.application.preparation.coordinator import Preparations
 from etsy_listings.core.application.preparation.models import TERMINAL
+from etsy_listings.core.preparation.distribution.src.marigold_worker.protocol import (
+    InferenceResult,
+    Progress,
+    Role,
+)
 from etsy_listings.core.preparation.runtime import Capability
 from etsy_listings.core.render import load_template_config
 from etsy_listings.core.workspace import Workspace
@@ -34,15 +39,15 @@ class FixedWorker:
         self,
         *,
         request_id: str,
-        role: str,
+        role: Role,
         input: str,
         output: str,
         size: tuple[int, int],
         num_inference_steps: int = 10,
         ensemble_size: int = 3,
-        progress: Callable[[dict[str, Any]], None] | None = None,
+        progress: Callable[[Progress], None] | None = None,
         dispatch_guard: Callable[[], AbstractContextManager[None]] = nullcontext,
-    ) -> dict[str, Any]:
+    ) -> InferenceResult:
         with dispatch_guard():
             width, height = size
             yy, xx = np.mgrid[:height, :width].astype(np.float32)
@@ -57,7 +62,50 @@ class FixedWorker:
             path = self.root / output
             path.parent.mkdir(parents=True, exist_ok=True)
             np.savez(path, prediction=array.astype(np.float32))
-            return {"checksum": hashlib.sha256(path.read_bytes()).hexdigest(), "artifact": output}
+            # Only the checksum reaches preparation; the metadata records fixed numerics.
+            return InferenceResult.model_validate(
+                {
+                    "request_id": request_id,
+                    "artifact": output,
+                    "checksum": hashlib.sha256(path.read_bytes()).hexdigest(),
+                    "cancelled": False,
+                    "metadata": {
+                        "engine_version": "1.0.0",
+                        "roles": ["normals", "lighting", "depth"],
+                        "cuda": False,
+                        "gpu": "none",
+                        "cuda_version": "none",
+                        "model_ram_budget": 0,
+                        "resident_models": 0,
+                        "installed_packages": {},
+                        "packages": {},
+                        "checkpoint": "fixed-numeric-fixture",
+                        "revision": "fixed",
+                        "role": role,
+                        "seed": 0,
+                        "processing_resolution": max(size),
+                        "settings": {
+                            "num_inference_steps": num_inference_steps,
+                            "ensemble_size": ensemble_size,
+                        },
+                        "target_properties": {},
+                        "normal_frame": "x right, y up, z toward viewer; image rows down",
+                        "transforms": {
+                            "original_crop_hw": [height, width],
+                            "processed_padded_hw": [height, width],
+                            "padding": [0, 0, 0, 0],
+                            "output_pixel_centres": "integer pixel centres",
+                        },
+                        "load_seconds": 0.0,
+                        "inference_seconds": 0.0,
+                        "warm_reuse": True,
+                        "resident_model_bytes": 0,
+                        "peak_allocated_bytes": 0,
+                        "peak_reserved_bytes": 0,
+                        "process_rss_bytes": 0,
+                    },
+                }
+            )
 
     def close(self) -> None:
         pass

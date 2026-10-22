@@ -3,6 +3,8 @@ import json
 
 from etsy_listings.core.preparation.installation import REVISIONS, NativeInstaller
 
+from tests.support.marigold import capabilities_document
+
 
 def test_status_reuses_verified_report_and_changed_weights_invalidate_it(tmp_path):
     target = tmp_path / "installation"
@@ -40,13 +42,7 @@ def test_status_reuses_verified_report_and_changed_weights_invalidate_it(tmp_pat
 
     def runner(command, **kwargs):
         calls.append(command)
-        return json.dumps(
-            {
-                "engine_version": "1.0.0",
-                "cuda": True,
-                "installed_packages": packages,
-            }
-        )
+        return json.dumps({**capabilities_document(), "installed_packages": packages})
 
     installer = NativeInstaller(command_runner=runner)
     assert installer.inspect(target, weights, "1.0.0").available
@@ -97,13 +93,7 @@ def test_same_size_damage_is_caught_by_explicit_verification_only(tmp_path):
     )
 
     def runner(command, **kwargs):
-        return json.dumps(
-            {
-                "engine_version": "1.0.0",
-                "cuda": True,
-                "installed_packages": {"etsy-marigold-worker": "1.0.0"},
-            }
-        )
+        return json.dumps(capabilities_document())
 
     installer = NativeInstaller(command_runner=runner)
     assert installer.verify(target, weights, "1.0.0").available

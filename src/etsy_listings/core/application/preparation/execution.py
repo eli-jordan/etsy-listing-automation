@@ -220,7 +220,7 @@ class Execution:
                     finally:
                         with self.owner.store.condition:
                             self.owner._call = None
-                    checksum = result.get("checksum", "")
+                    checksum = result.checksum
                     read_prediction(output, role=role, checksum=checksum, size=selected.size)
                     prediction = Prediction(
                         role=role,
