@@ -3,9 +3,62 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { must } from "../test/helpers";
 import type { ColourMatrixTemplate } from "../types";
 
-vi.mock("./client", () => ({
-  api: { GET: vi.fn(), PUT: vi.fn() },
-}));
+/** The generated client's requests, answered with real `Response`s. `api`
+ * captures `fetch` and `Request` when it is created, so each test stubs them
+ * and then imports a fresh copy. The base URL is relative (the SPA is served
+ * by the API's own origin); jsdom has no origin for undici's `Request`, so the
+ * stub resolves it against one. */
+const sent: Request[] = [];
+
+type Answer = Response | Promise<Response>;
+
+function json(status: number, body: unknown, headers: Record<string, string> = {}): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { "Content-Type": "application/json", ...headers },
+  });
+}
+
+/** Answers each request in turn with `respond`, recording it in `sent`. */
+function answeringWith(respond: (request: Request) => Answer) {
+  sent.length = 0;
+  vi.stubGlobal(
+    "Request",
+    class extends Request {
+      constructor(input: RequestInfo | URL, init?: RequestInit) {
+        super(typeof input === "string" ? new URL(input, "http://ui.test") : input, init);
+      }
+    },
+  );
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (request: Request) => {
+      sent.push(request);
+      return respond(request);
+    }),
+  );
+  vi.resetModules();
+  return import("./calibrator");
+}
+
+function answering(status: number, body: unknown, headers: Record<string, string> = {}) {
+  return answeringWith(() => json(status, body, headers));
+}
+
+/** Method, path and If-Match of a recorded request, plus its JSON body. */
+async function described(request: Request) {
+  return {
+    method: request.method,
+    path: new URL(request.url).pathname,
+    ifMatch: request.headers.get("If-Match"),
+    body: request.method === "GET" ? undefined : await request.clone().json(),
+  };
+}
+
+function onlyRequest(): Request {
+  expect(sent).toHaveLength(1);
+  return must(sent[0]);
+}
 
 const CONFIG: PhotoWarpTemplate<ColourMatrixTemplate> = {
   kind: "colour-matrix",
@@ -24,66 +77,111 @@ const CONFIG: PhotoWarpTemplate<ColourMatrixTemplate> = {
   },
 };
 
+const SAVED_AT = "Wed, 17 Sep 2026 18:30:00 GMT";
+
 afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
 
 describe("listTemplates", () => {
-  it("returns the data on success", async () => {
-    const { api } = await import("./client");
-    vi.mocked(api.GET).mockResolvedValue({ data: [{ name: "a" }], error: undefined } as never);
-    const { listTemplates } = await import("./calibrator");
+  it("GETs the template list and returns it", async () => {
+    const { listTemplates } = await answering(200, [{ name: "a" }]);
+
     expect(await listTemplates()).toEqual([{ name: "a" }]);
+    const request = onlyRequest();
+    expect([request.method, new URL(request.url).pathname]).toEqual(["GET", "/api/templates"]);
   });
 
-  it("throws CalibratorApiError on failure", async () => {
-    const { api } = await import("./client");
-    vi.mocked(api.GET).mockResolvedValue({ data: undefined, error: "boom" } as never);
-    const { listTemplates, CalibratorApiError } = await import("./calibrator");
+  it("throws CalibratorApiError on a 500", async () => {
+    const { listTemplates, CalibratorApiError } = await answering(500, { detail: "boom" });
+
     await expect(listTemplates()).rejects.toBeInstanceOf(CalibratorApiError);
   });
 });
 
 describe("getTemplateConfig", () => {
-  it("returns null on a 404 (no template.yaml yet)", async () => {
-    const { api } = await import("./client");
-    vi.mocked(api.GET).mockResolvedValue({ data: undefined, error: "not found" } as never);
-    const { getTemplateConfig } = await import("./calibrator");
-    expect(await getTemplateConfig("brand-new")).toBeNull();
+  it("GETs the named template's config with its Last-Modified time", async () => {
+    const { getTemplateConfig } = await answering(200, CONFIG, { "Last-Modified": SAVED_AT });
+
+    expect(await getTemplateConfig("flat lay/01")).toEqual({
+      config: CONFIG,
+      modifiedAt: SAVED_AT,
+    });
+    const request = onlyRequest();
+    expect(request.method).toBe("GET");
+    expect(new URL(request.url).pathname).toBe("/api/templates/flat%20lay%2F01/config");
   });
 
-  it("returns the config on success", async () => {
-    const { api } = await import("./client");
-    vi.mocked(api.GET).mockResolvedValue({
-      data: CONFIG,
-      error: undefined,
-      response: new Response(null, {
-        headers: { "Last-Modified": "Wed, 17 Sep 2026 18:30:00 GMT" },
-      }),
-    } as never);
-    const { getTemplateConfig } = await import("./calibrator");
-    expect(await getTemplateConfig("flat-lay-01")).toEqual({
-      config: CONFIG,
-      modifiedAt: "Wed, 17 Sep 2026 18:30:00 GMT",
-    });
+  it("refuses a config the server sent without its modification time", async () => {
+    const { getTemplateConfig, CalibratorApiError } = await answering(200, CONFIG);
+
+    await expect(getTemplateConfig("flat-lay-01")).rejects.toBeInstanceOf(CalibratorApiError);
   });
+
+  // Existing contract: every error answer reads as "no template.yaml yet",
+  // not only the 404 the server sends for one -- a 500 is not told apart.
+  it.each([404, 500])(
+    "returns null for a %i, as for a template with no template.yaml",
+    async (status) => {
+      const { getTemplateConfig } = await answering(status, { detail: "no" });
+
+      expect(await getTemplateConfig("brand-new")).toBeNull();
+    },
+  );
 });
 
 describe("saveTemplateConfig", () => {
-  it("returns the saved config on success", async () => {
-    const { api } = await import("./client");
-    vi.mocked(api.PUT).mockResolvedValue({ data: CONFIG, error: undefined } as never);
-    const { saveTemplateConfig } = await import("./calibrator");
-    expect(await saveTemplateConfig("flat-lay-01", CONFIG)).toEqual(CONFIG);
+  it("PUTs the config with the read revision and a request id, and returns the saved one", async () => {
+    const saved = {
+      ...CONFIG,
+      renderer: {
+        ...CONFIG.renderer,
+        config: { ...CONFIG.renderer.config, displace: { enabled: true, strength: 4 } },
+      },
+    };
+    const { getTemplateConfig, saveTemplateConfig } = await answeringWith((request) =>
+      request.method === "GET"
+        ? json(200, CONFIG, { ETag: '"sha256:read"', "Last-Modified": SAVED_AT })
+        : json(200, saved, { ETag: '"sha256:saved"' }),
+    );
+    await getTemplateConfig("flat lay/01");
+
+    expect(await saveTemplateConfig("flat lay/01", CONFIG)).toEqual(saved);
+    expect(sent).toHaveLength(2);
+    const request = must(sent[1]);
+    expect(request.headers.get("Content-Type")).toBe("application/json");
+    expect(await described(request)).toEqual({
+      method: "PUT",
+      path: "/api/templates/flat%20lay%2F01/config",
+      ifMatch: '"sha256:read"',
+      body: { request_id: expect.any(String), config: CONFIG, mask_edits: [] },
+    });
   });
 
-  it("throws CalibratorApiError on failure", async () => {
-    const { api } = await import("./client");
-    vi.mocked(api.PUT).mockResolvedValue({ data: undefined, error: "bad" } as never);
-    const { saveTemplateConfig, CalibratorApiError } = await import("./calibrator");
+  it("sends a fresh request id with every save", async () => {
+    const { saveTemplateConfig } = await answering(200, CONFIG, { ETag: '"sha256:saved"' });
+
+    await saveTemplateConfig("flat-lay-01", CONFIG);
+    await saveTemplateConfig("flat-lay-01", CONFIG);
+    const [first, second] = await Promise.all(sent.map((r) => r.clone().json()));
+    expect(first.request_id).toEqual(expect.any(String));
+    expect(second.request_id).not.toBe(first.request_id);
+  });
+
+  it.each([404, 500])("throws CalibratorApiError on a %i", async (status) => {
+    const { saveTemplateConfig, CalibratorApiError } = await answering(status, { detail: "bad" });
+
     await expect(saveTemplateConfig("flat-lay-01", CONFIG)).rejects.toBeInstanceOf(
       CalibratorApiError,
+    );
+  });
+
+  it.each([409, 412])("tells the user to reload on a %i", async (status) => {
+    const { saveTemplateConfig } = await answering(status, { detail: "stale" });
+
+    await expect(saveTemplateConfig("flat-lay-01", CONFIG)).rejects.toThrow(
+      "Template changed elsewhere. Reload before saving.",
     );
   });
 });
@@ -138,27 +236,19 @@ describe("renderPreview", () => {
 
 describe("revision-aware mask saves", () => {
   it("serializes saves with the new revision and consumes each pending stroke once", async () => {
-    const { api } = await import("./client");
-    const { getTemplateConfig, saveTemplateConfig } = await import("./calibrator");
-    vi.mocked(api.GET).mockResolvedValue({
-      data: CONFIG,
-      response: new Response(null, {
-        headers: { ETag: "revision-1", "Last-Modified": "Wed, 17 Sep 2026 18:30:00 GMT" },
-      }),
-    } as never);
+    let finish!: (response: Response) => void;
+    let puts = 0;
+    const { getTemplateConfig, saveTemplateConfig } = await answeringWith((request) => {
+      if (request.method === "GET")
+        return json(200, CONFIG, { ETag: "revision-1", "Last-Modified": SAVED_AT });
+      puts += 1;
+      return puts === 1
+        ? new Promise<Response>((resolve) => {
+            finish = resolve;
+          })
+        : json(200, CONFIG, { ETag: "revision-3" });
+    });
     await getTemplateConfig("race");
-    let finish!: (v: never) => void;
-    vi.mocked(api.PUT)
-      .mockImplementationOnce(
-        () =>
-          new Promise((r) => {
-            finish = r;
-          }),
-      )
-      .mockResolvedValueOnce({
-        data: CONFIG,
-        response: new Response(null, { headers: { ETag: "revision-3" } }),
-      } as never);
     const operation = {
       type: "stroke" as const,
       mode: "mask" as const,
@@ -168,29 +258,25 @@ describe("revision-aware mask saves", () => {
     const edits = [{ placement_id: null, operations: [operation] }];
     const first = saveTemplateConfig("race", CONFIG, edits);
     const second = saveTemplateConfig("race", CONFIG, edits);
-    expect(api.PUT).toHaveBeenCalledTimes(1);
-    expect(api.PUT).toHaveBeenNthCalledWith(
-      1,
-      "/api/templates/{name}/config",
-      expect.objectContaining({
-        params: { path: { name: "race" }, header: { "if-match": "revision-1" } },
-        body: { request_id: expect.any(String), config: CONFIG, mask_edits: edits },
-      }),
-    );
-    finish({
-      data: CONFIG,
-      response: new Response(null, { headers: { ETag: "revision-2" } }),
-    } as never);
+    await vi.waitFor(() => expect(sent).toHaveLength(2));
+    await Promise.resolve();
+    expect(sent).toHaveLength(2);
+    expect(await described(must(sent[1]))).toEqual({
+      method: "PUT",
+      path: "/api/templates/race/config",
+      ifMatch: "revision-1",
+      body: { request_id: expect.any(String), config: CONFIG, mask_edits: edits },
+    });
+    finish(json(200, CONFIG, { ETag: "revision-2" }));
     await first;
     await second;
-    expect(api.PUT).toHaveBeenNthCalledWith(
-      2,
-      "/api/templates/{name}/config",
-      expect.objectContaining({
-        params: { path: { name: "race" }, header: { "if-match": "revision-2" } },
-        body: { request_id: expect.any(String), config: CONFIG, mask_edits: [] },
-      }),
-    );
+    expect(sent).toHaveLength(3);
+    expect(await described(must(sent[2]))).toEqual({
+      method: "PUT",
+      path: "/api/templates/race/config",
+      ifMatch: "revision-2",
+      body: { request_id: expect.any(String), config: CONFIG, mask_edits: [] },
+    });
   });
 });
 
@@ -198,48 +284,39 @@ describe("prepared revision refresh", () => {
   it.each(["original", "reordered"])(
     "accepts unchanged saved configuration with %s keys",
     async (order) => {
-      const { api } = await import("./client");
-      const { refreshPreparedRevision, saveTemplateConfig } = await import("./calibrator");
-      vi.mocked(api.GET).mockResolvedValue({
-        data:
-          order === "reordered"
-            ? {
-                renderer: CONFIG.renderer,
-                bounding_box: CONFIG.bounding_box,
-                kind: CONFIG.kind,
-              }
-            : CONFIG,
-        error: undefined,
-        response: new Response(null, { headers: { ETag: '"sha256:baseline"' } }),
-      } as never);
-      expect(await refreshPreparedRevision("fresh-baseline", CONFIG, "sha256:baseline")).toBe(true);
-      vi.mocked(api.PUT).mockResolvedValue({
-        data: CONFIG,
-        error: undefined,
-        response: new Response(null, { headers: { ETag: '"sha256:saved"' } }),
-      } as never);
-      await saveTemplateConfig("fresh-baseline", CONFIG);
-      expect(api.PUT).toHaveBeenLastCalledWith(
-        "/api/templates/{name}/config",
-        expect.objectContaining({
-          params: {
-            path: { name: "fresh-baseline" },
-            header: { "if-match": '"sha256:baseline"' },
-          },
-        }),
+      const read =
+        order === "reordered"
+          ? { renderer: CONFIG.renderer, bounding_box: CONFIG.bounding_box, kind: CONFIG.kind }
+          : CONFIG;
+      const { refreshPreparedRevision, saveTemplateConfig } = await answeringWith((request) =>
+        request.method === "GET"
+          ? json(200, read, { ETag: '"sha256:baseline"' })
+          : json(200, CONFIG, { ETag: '"sha256:saved"' }),
       );
+      expect(await refreshPreparedRevision("fresh-baseline", CONFIG, "sha256:baseline")).toBe(true);
+      await saveTemplateConfig("fresh-baseline", CONFIG);
+
+      expect(sent).toHaveLength(2);
+      expect(await described(must(sent[0]))).toMatchObject({
+        method: "GET",
+        path: "/api/templates/fresh-baseline/config",
+      });
+      expect(await described(must(sent[1]))).toEqual({
+        method: "PUT",
+        path: "/api/templates/fresh-baseline/config",
+        ifMatch: '"sha256:baseline"',
+        body: { request_id: expect.any(String), config: CONFIG, mask_edits: [] },
+      });
     },
   );
+
   it.each(["revision", "configuration"])("refuses a newer external %s", async (changed) => {
-    const { api } = await import("./client");
-    const { refreshPreparedRevision } = await import("./calibrator");
-    vi.mocked(api.GET).mockResolvedValue({
-      data: changed === "configuration" ? { ...CONFIG, kind: "single" } : CONFIG,
-      error: undefined,
-      response: new Response(null, {
-        headers: { ETag: changed === "revision" ? '"sha256:external"' : '"sha256:completed"' },
-      }),
-    } as never);
+    const { refreshPreparedRevision } = await answering(
+      200,
+      changed === "configuration" ? { ...CONFIG, kind: "single" } : CONFIG,
+      { ETag: changed === "revision" ? '"sha256:external"' : '"sha256:completed"' },
+    );
+
     expect(await refreshPreparedRevision("external-" + changed, CONFIG, "sha256:completed")).toBe(
       false,
     );

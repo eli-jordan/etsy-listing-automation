@@ -114,6 +114,11 @@ jobs:
       - name: vitest + coverage (branch, fail under 85%)
         run: npm run test:coverage
 
+      # Required, but outside production coverage: the prototype frames
+      # import production components (vitest.config.ts's `design` project).
+      - name: vitest design prototypes
+        run: npm run test:design
+
   browser:
     # Every trigger runs browsers after the Python and frontend gates.
     name: browser
@@ -149,6 +154,8 @@ jobs:
       # built SPA -- and a layer that runs nothing still reports green.
       # ETSY_LISTINGS_REQUIRE_EVERY_LAYER makes that a failure naming the
       # prerequisite, so this job cannot pass without doing its job.
+      # The opt-in `capture` screenshots stay out unless -m names them
+      # (tests/conftest.py); check.sh's default selection agrees.
       - name: pytest -m browser
         env:
           ETSY_LISTINGS_REQUIRE_EVERY_LAYER: "1"

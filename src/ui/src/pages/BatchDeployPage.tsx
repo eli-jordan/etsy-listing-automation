@@ -16,7 +16,7 @@ import {
 } from "./batchDeploy/batchDeployState";
 import { batchResult, planGroup } from "./batchDeploy/batchDeployPresentation";
 import { openRunStream, type RunStreamHandle } from "./deploy/runStream";
-import { TERMINAL_PHASES } from "./deploy/runPhases";
+import { MARK_SEEN_GRACE_MS, TERMINAL_PHASES } from "./deploy/runPhases";
 
 function formatGeneratedAt(value: string | null): string {
   if (value === null) return "";
@@ -205,7 +205,7 @@ export function BatchDeployPage() {
       markSeen();
       return;
     }
-    const timer = window.setTimeout(markSeen, 750);
+    const timer = window.setTimeout(markSeen, MARK_SEEN_GRACE_MS);
     return () => window.clearTimeout(timer);
   }, [run, runId, state]);
 
