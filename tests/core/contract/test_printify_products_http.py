@@ -407,6 +407,41 @@ def test_the_walk_follows_every_page() -> None:
     assert requested == ["1", "2"]
 
 
+def test_the_walk_pages_a_server_that_honours_page_and_limit() -> None:
+    """A controlled two-page shop: the server slices one list of distinct
+    products by the ``page`` and ``limit`` it is sent, as Printify does, and
+    the match is the only product on page two. The walk has to send both
+    parameters and read two different pages -- re-reading page one, or
+    letting the server's own page size decide, sees different products.
+    """
+    from etsy_listings.core.clients.printify.products import PRODUCTS_PAGE_SIZE
+
+    others = [
+        {**PRODUCT_PAYLOAD, "id": f"other-{n}", "title": f"Other {n}"}
+        for n in range(PRODUCTS_PAGE_SIZE)
+    ]
+    shop = [*others, PRODUCT_PAYLOAD]
+    served: list[tuple[int, list[str]]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        page = int(request.url.params.get("page", 1))
+        limit = int(request.url.params.get("limit", 10))  # Printify's own default
+        data = shop[(page - 1) * limit : page * limit]
+        served.append((page, [product["id"] for product in data]))
+        last = -(-len(shop) // limit)
+        return httpx.Response(200, json=_page(data, page=page, last=last))
+
+    found = _client(handler).find_product_by_copy(
+        SHOP_ID, title="Take A Hike Tee", description="A retro sunset."
+    )
+
+    assert found == PRODUCT_ID
+    assert served == [
+        (1, [product["id"] for product in others]),
+        (2, [PRODUCT_ID]),
+    ]
+
+
 def test_the_walk_stops_at_the_last_page_rather_than_looping() -> None:
     calls: list[int] = []
 

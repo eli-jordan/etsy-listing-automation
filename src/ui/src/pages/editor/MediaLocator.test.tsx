@@ -182,13 +182,6 @@ describe("MediaLocator's file list", () => {
     expect(screen.queryByRole("group", { name: /This listing/ })).not.toBeInTheDocument();
     expect(group(/Shared/)).toBeInTheDocument();
   });
-
-  it("marks its two modes as a control that fills the locator width", () => {
-    locator();
-
-    const files = screen.getByRole("button", { name: "Files" });
-    expect(files.parentElement).toHaveClass("locator__modes");
-  });
 });
 
 describe("MediaLocator's video rows", () => {

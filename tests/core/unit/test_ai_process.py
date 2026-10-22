@@ -3,28 +3,22 @@ helper both CLI adapters (`ai/codex.py`, `ai/claude.py`) run their child
 process through (AI SEO implementation plan, PR4, item 5: "process-tree
 cleanup for timeouts, cancellation, and request disconnects").
 
-Most tests here replace `etsy_listings.core.ai.process.subprocess.Popen` with a
-hand-rolled double -- never a real child process -- so this suite proves the
-*launch and cleanup wiring* (process-group flags, what gets killed and how,
+Every test here replaces `etsy_listings.core.ai.process.subprocess.Popen` with
+a hand-rolled double -- never a real child process -- so this subject proves
+the *launch and cleanup wiring* (process-group flags, what gets killed and how,
 on which platform) without depending on timing or an actual hung process.
+A double's child is finished only once `run_managed` has created it.
 
-The "real process tree" section at the bottom is deliberately different: it
-launches genuine `sys.executable` child *and grandchild* processes (never
-`codex`/`claude` -- no provider CLI, no cost, no network) and asserts they
-are actually dead afterwards, by checking OS-visible liveness rather than a
-mock's call log. The mocked tests above prove the wiring is correct; these
-prove the wiring's actual effect on a real OS process tree -- the specific
-gap a double covering only `_kill_process_tree`'s call site cannot close,
-since a mock recording "I was asked to kill pid 4321" never proves pid 4321
-(or anything it spawned) is actually gone.
+What that wiring actually does to a real OS process tree, and real UTF-8 on
+a real pipe, is ``tests/core/behaviour/test_ai_process_tree.py``'s (T13).
 """
 
 from __future__ import annotations
 
-import sys
 import threading
 import time
-from dataclasses import dataclass, field
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
@@ -32,6 +26,8 @@ import pytest
 
 from etsy_listings.core.ai import process
 from etsy_listings.core.ai.models import Deadline
+
+from tests.support.gates import GATE_TIMEOUT, workers
 
 
 class FakePopen:
@@ -80,33 +76,59 @@ class FakePopen:
             self.finish(returncode=-9)
 
 
+class Launches(list[FakePopen]):
+    """Every `FakePopen` `run_managed` created, and an event set as each one
+    is -- so a test finishes the child only once it exists."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.created = threading.Event()
+
+    def first(self) -> FakePopen:
+        if not self.created.wait(GATE_TIMEOUT):
+            pytest.fail("run_managed never created its child process")
+        return self[0]
+
+
 @pytest.fixture
-def fake_popen(monkeypatch: pytest.MonkeyPatch) -> list[FakePopen]:
-    created: list[FakePopen] = []
+def fake_popen(monkeypatch: pytest.MonkeyPatch) -> Launches:
+    launches = Launches()
 
     def factory(argv: list[str], **kwargs: Any) -> FakePopen:
         proc = FakePopen(argv, **kwargs)
-        created.append(proc)
+        launches.append(proc)
+        launches.created.set()
         return proc
 
     monkeypatch.setattr(process.subprocess, "Popen", factory)
-    return created
+    return launches
 
 
-def test_run_managed_returns_completed_output(fake_popen: list[FakePopen]) -> None:
-    def _complete() -> None:
-        time.sleep(0.01)
-        fake_popen[0].finish(returncode=0, stdout="hello", stderr="")
+@contextmanager
+def finishing(launches: Launches, **outcome: Any) -> Iterator[None]:  # noqa: ANN401
+    """Finish the child with ``outcome`` once `run_managed` has created it,
+    from a helper joined on the way out; a child left running is finished so
+    `run_managed` cannot outlive a failed test."""
+    with workers() as start:
+        finisher = start("finisher", lambda: launches.first().finish(**outcome))
+        try:
+            yield
+        finally:
+            for proc in launches:
+                if proc.poll() is None:
+                    proc.finish(returncode=-9)
+        finisher.result()
 
-    threading.Thread(target=_complete).start()
 
-    result = process.run_managed(
-        ["codex", "exec"],
-        cwd=Path("/workspace"),
-        input_text="prompt text",
-        deadline=Deadline.starting_now(seconds=60),
-        poll_interval=0.01,
-    )
+def test_run_managed_returns_completed_output(fake_popen: Launches) -> None:
+    with finishing(fake_popen, returncode=0, stdout="hello", stderr=""):
+        result = process.run_managed(
+            ["codex", "exec"],
+            cwd=Path("/workspace"),
+            input_text="prompt text",
+            deadline=Deadline.starting_now(seconds=60),
+            poll_interval=0.01,
+        )
 
     assert result.returncode == 0
     assert result.stdout == "hello"
@@ -115,27 +137,22 @@ def test_run_managed_returns_completed_output(fake_popen: list[FakePopen]) -> No
     assert fake_popen[0].stdin_received == "prompt text"
 
 
-def test_run_managed_passes_cwd_and_argv(fake_popen: list[FakePopen]) -> None:
-    def _complete() -> None:
-        time.sleep(0.01)
-        fake_popen[0].finish(returncode=0)
-
-    threading.Thread(target=_complete).start()
-
-    process.run_managed(
-        ["claude", "-p", "hi"],
-        cwd=Path("/some/workspace"),
-        input_text="",
-        deadline=Deadline.starting_now(seconds=60),
-        poll_interval=0.01,
-    )
+def test_run_managed_passes_cwd_and_argv(fake_popen: Launches) -> None:
+    with finishing(fake_popen, returncode=0):
+        process.run_managed(
+            ["claude", "-p", "hi"],
+            cwd=Path("/some/workspace"),
+            input_text="",
+            deadline=Deadline.starting_now(seconds=60),
+            poll_interval=0.01,
+        )
 
     assert fake_popen[0].argv == ["claude", "-p", "hi"]
     assert fake_popen[0].kwargs["cwd"] == str(Path("/some/workspace"))
 
 
 def test_run_managed_kills_the_process_tree_on_timeout(
-    fake_popen: list[FakePopen], monkeypatch: pytest.MonkeyPatch
+    fake_popen: Launches, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     killed_pids: list[int] = []
     monkeypatch.setattr(
@@ -158,7 +175,7 @@ def test_run_managed_kills_the_process_tree_on_timeout(
 
 
 def test_run_managed_kills_the_process_tree_on_cancellation(
-    fake_popen: list[FakePopen], monkeypatch: pytest.MonkeyPatch
+    fake_popen: Launches, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     killed_pids: list[int] = []
     monkeypatch.setattr(
@@ -182,24 +199,19 @@ def test_run_managed_kills_the_process_tree_on_cancellation(
 
 
 def test_run_managed_does_not_kill_a_process_that_finishes_in_time(
-    fake_popen: list[FakePopen], monkeypatch: pytest.MonkeyPatch
+    fake_popen: Launches, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     killed_pids: list[int] = []
     monkeypatch.setattr(process, "_kill_process_tree", lambda proc: killed_pids.append(proc.pid))
 
-    def _complete() -> None:
-        time.sleep(0.01)
-        fake_popen[0].finish(returncode=0, stdout="ok")
-
-    threading.Thread(target=_complete).start()
-
-    result = process.run_managed(
-        ["codex", "exec"],
-        cwd=Path("/workspace"),
-        input_text="prompt",
-        deadline=Deadline.starting_now(seconds=60),
-        poll_interval=0.01,
-    )
+    with finishing(fake_popen, returncode=0, stdout="ok"):
+        result = process.run_managed(
+            ["codex", "exec"],
+            cwd=Path("/workspace"),
+            input_text="prompt",
+            deadline=Deadline.starting_now(seconds=60),
+            poll_interval=0.01,
+        )
 
     assert result.returncode == 0
     assert killed_pids == []
@@ -321,152 +333,6 @@ def test_posix_descendant_pids_returns_empty_without_proc(
     assert process._posix_descendant_pids(555) == []
 
 
-# ---------------------------------------------------- real process tree
-
-_GRANDCHILD_SCRIPT = (
-    "import sys, time\n"
-    "marker = sys.argv[1]\n"
-    "while True:\n"
-    "    with open(marker, 'a') as f:\n"
-    "        f.write('x')\n"
-    "    time.sleep(0.05)\n"
-)
-
-_CHILD_SCRIPT = (
-    "import subprocess, sys, time\n"
-    "grandchild_script, grandchild_marker, child_marker = sys.argv[1:4]\n"
-    "subprocess.Popen([sys.executable, '-c', grandchild_script, grandchild_marker])\n"
-    "while True:\n"
-    "    with open(child_marker, 'a') as f:\n"
-    "        f.write('x')\n"
-    "    time.sleep(0.05)\n"
-)
-"""Two genuine (never-terminating, so a graceful exit can never race the
-kill) `sys.executable` scripts -- never `codex`/`claude`, no provider CLI, no
-cost. The child spawns the grandchild as an ordinary subprocess (no
-`start_new_session` of its own), so it inherits whatever process group/tree
-`run_managed` placed the child into -- exactly the shape a coding-agent CLI
-spawning its own helper process takes, and exactly what a plain
-`proc.kill()` (the direct child only) would leave running."""
-
-
-def _wait_for_file_to_appear(path: Path, *, timeout: float) -> None:
-    deadline = time.monotonic() + timeout
-    while time.monotonic() < deadline:
-        if path.is_file() and path.stat().st_size > 0:
-            return
-        time.sleep(0.02)
-    raise AssertionError(f"{path} never appeared -- the process tree never started writing")
-
-
-def _assert_stopped_growing(path: Path, *, settle: float) -> None:
-    size_before = path.stat().st_size
-    time.sleep(settle)
-    size_after = path.stat().st_size
-    assert size_after == size_before, (
-        f"{path} grew from {size_before} to {size_after} bytes after the kill -- "
-        "the process that writes it is still alive"
-    )
-
-
-@dataclass(frozen=True)
-class _ExpiresOnceWritten(Deadline):
-    """A deadline that passes only once every marker has been written -- so
-    the tree it kills is known to be up -- or after a generous safety budget,
-    when the assertions below say what never started.
-
-    A fixed 1.5 s deadline raced the process tree's own start: under a
-    loaded full-suite run two interpreter start-ups (the child, then the
-    grandchild it spawns) can take longer than that, the kill landed before
-    the grandchild existed, and the test failed with "never appeared". The
-    cancellation test already waits for the grandchild; this is the timeout
-    path's equivalent."""
-
-    markers: tuple[Path, ...] = ()
-    safety_at: float = field(default_factory=lambda: time.monotonic() + 30.0)
-
-    @property
-    def expired(self) -> bool:
-        if time.monotonic() > self.safety_at:
-            return True
-        return all(m.is_file() and m.stat().st_size > 0 for m in self.markers)
-
-
-def test_run_managed_actually_kills_a_real_process_and_its_grandchild_on_timeout(
-    tmp_path: Path,
-) -> None:
-    grandchild_marker = tmp_path / "grandchild_alive.txt"
-    child_marker = tmp_path / "child_alive.txt"
-    argv = [
-        sys.executable,
-        "-c",
-        _CHILD_SCRIPT,
-        _GRANDCHILD_SCRIPT,
-        str(grandchild_marker),
-        str(child_marker),
-    ]
-
-    result = process.run_managed(
-        argv,
-        cwd=tmp_path,
-        input_text="",
-        deadline=_ExpiresOnceWritten(markers=(child_marker, grandchild_marker)),
-        poll_interval=0.02,
-    )
-
-    assert result.timed_out is True
-
-    # Both scripts loop forever, writing every 0.05s, until killed -- so
-    # each marker file existing at all already proves the child and the
-    # grandchild it spawned were both alive at some point.
-    _wait_for_file_to_appear(child_marker, timeout=5.0)
-    _wait_for_file_to_appear(grandchild_marker, timeout=5.0)
-
-    # And neither file grows any further once `run_managed` has returned --
-    # proof the whole tree (not just the direct child `_kill_process_tree`
-    # was handed) is actually dead, not merely that a mock was asked to kill
-    # it.
-    _assert_stopped_growing(child_marker, settle=0.5)
-    _assert_stopped_growing(grandchild_marker, settle=0.5)
-
-
-def test_run_managed_actually_kills_a_real_process_tree_on_cancellation(
-    tmp_path: Path,
-) -> None:
-    grandchild_marker = tmp_path / "grandchild_alive.txt"
-    child_marker = tmp_path / "child_alive.txt"
-    argv = [
-        sys.executable,
-        "-c",
-        _CHILD_SCRIPT,
-        _GRANDCHILD_SCRIPT,
-        str(grandchild_marker),
-        str(child_marker),
-    ]
-    cancel_event = threading.Event()
-
-    def _cancel_soon() -> None:
-        _wait_for_file_to_appear(grandchild_marker, timeout=5.0)
-        cancel_event.set()
-
-    canceller = threading.Thread(target=_cancel_soon)
-    canceller.start()
-
-    result = process.run_managed(
-        argv,
-        cwd=tmp_path,
-        input_text="",
-        deadline=Deadline.starting_now(seconds=60),
-        cancel_event=cancel_event,
-        poll_interval=0.02,
-    )
-    canceller.join(timeout=5.0)
-
-    assert result.cancelled is True
-    _assert_stopped_growing(child_marker, settle=0.5)
-    _assert_stopped_growing(grandchild_marker, settle=0.5)
-
-
 def test_kill_process_tree_on_posix_survives_a_process_that_already_exited(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -493,23 +359,3 @@ def test_kill_process_tree_on_posix_survives_a_process_that_already_exited(
             pass
 
     process._kill_process_tree(_Proc())  # type: ignore[arg-type]
-
-
-def test_run_managed_speaks_utf8_to_a_real_process_whatever_the_locale(tmp_path: Path) -> None:
-    # The proposal prompt carries Etsy listing titles verbatim (the market
-    # block), and those hold characters a Windows ANSI code page cannot
-    # encode. The CLIs read and write UTF-8; the locale's code page is
-    # neither here nor there.
-    text = "Retro tee ✓ 日本語 — café 🏔️"
-    echo = "import sys; sys.stdout.buffer.write(sys.stdin.buffer.read())"
-
-    result = process.run_managed(
-        [sys.executable, "-c", echo],
-        cwd=tmp_path,
-        input_text=text,
-        deadline=Deadline.starting_now(seconds=30),
-        poll_interval=0.02,
-    )
-
-    assert result.returncode == 0
-    assert result.stdout == text
