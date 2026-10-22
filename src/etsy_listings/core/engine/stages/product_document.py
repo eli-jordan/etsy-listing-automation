@@ -21,17 +21,18 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from decimal import Decimal
+from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict
 
 from etsy_listings.core.config.money import Money
 from etsy_listings.core.engine.stage import Blocked
-from etsy_listings.core.engine.stages.placement import ArtworkGroup
 
 __all__ = [
     "AppliedPrintArea",
     "AppliedProduct",
     "AppliedVariant",
+    "ArtworkGroup",
     "PricedVariant",
     "PrintifyProductDesired",
     "check_garment_unchanged",
@@ -52,10 +53,35 @@ class AppliedVariant(BaseModel):
     exactly the run a removal needs to be visible on."""
 
 
+@dataclass(frozen=True)
+class ArtworkGroup:
+    """One design file, and the garment colours that print it.
+
+    Colours rather than Printify variant ids: which file a colour gets is a
+    fact about the listing, and turning it into ids is
+    :meth:`PrintifyProductDesired.variant_ids`'s job. One group per *file*,
+    identified by its content hash (ADR-0053) -- ADR-0053's light/dark split and a
+    colour's own design are both simply more than one group, and a
+    single-artwork listing is the one-group case.
+    """
+
+    design: Path
+    design_hash: str
+    colours: tuple[str, ...]
+
+
 class AppliedPrintArea(BaseModel):
+    """One print area as last applied: the file's content hash and the
+    variants that print it (ADR-0053).
+
+    A lockfile written before ADR-0053 also carries the ``artwork`` key each area
+    was grouped by. ``extra="ignore"`` reads it past, and since that
+    document's hash and variant ids are the ones this version computes for an
+    unchanged listing, an upgrade sends Printify nothing.
+    """
+
     model_config = ConfigDict(frozen=True, extra="ignore")
 
-    artwork: str
     design_hash: str
     variant_ids: list[int]
 
@@ -163,14 +189,14 @@ class PrintifyProductDesired:
         hash independent of the colour-outer, size-inner order the catalog
         resolves cells in.
 
-        **Print areas are sorted by artwork** for the same reason, one level
-        up. ``group_by_artwork`` deduplicates in first-seen order on purpose,
-        so the payload's print areas follow the order the listing wrote its
-        colours in -- which is right for the wire and wrong for a document
-        that is compared and hashed: moving a colour to the top of ``colors:``
-        reordered this list and made an unchanged product look changed. The
-        wire keeps its order; only the record is canonicalised. ``artwork`` is
-        the key ``group_by_artwork`` partitioned on, so it is unique here.
+        **Print areas are sorted by design hash** for the same reason, one
+        level up. Groups come in first-seen order on purpose, so the payload's
+        print areas follow the order the listing wrote its colours in -- which
+        is right for the wire and wrong for a document that is compared and
+        hashed: moving a colour to the top of ``colors:`` reordered this list
+        and made an unchanged product look changed. The wire keeps its order;
+        only the record is canonicalised. The design hash is the key the
+        groups were partitioned on (ADR-0053), so it is unique here.
         """
         return AppliedProduct(
             title=self.title,
@@ -185,13 +211,12 @@ class PrintifyProductDesired:
             print_areas=sorted(
                 (
                     AppliedPrintArea(
-                        artwork=group.artwork,
                         design_hash=group.design_hash,
                         variant_ids=list(self.variant_ids(group)),
                     )
                     for group in self.groups
                 ),
-                key=lambda area: area.artwork,
+                key=lambda area: area.design_hash,
             ),
         )
 

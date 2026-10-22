@@ -71,7 +71,7 @@ def test_frontend_gate_runs_production_and_prototype_tests_in_ci_and_check_sh() 
     assert ci == check == ["test:coverage", "test:design"]
 
 
-# The five screenshot scenes are review artifacts, not regression tests (T11):
+# The six screenshot scenes are review artifacts, not regression tests (T11):
 # they only assert that a PNG was written. They run when asked for by marker.
 CAPTURE_SCENES = {
     "test_capture_full_page_screenshot",
@@ -79,6 +79,7 @@ CAPTURE_SCENES = {
     "test_capture_lightbox_screenshot",
     "test_capture_multiple_editor_screenshot",
     "test_capture_workbench_screenshot",
+    "test_capture_approved_marigold_states",
 }
 
 
@@ -115,9 +116,10 @@ def test_required_browser_selection_excludes_only_the_opt_in_captures(tmp_path: 
     assert not _names(required) & CAPTURE_SCENES
     # Real witnesses -- decoded PNGs, saved YAML, geometry -- stay required.
     assert "test_the_preview_sits_on_the_surface_tone" in _names(required)
+    assert "test_the_marigold_toolbar_fits_its_bar_at_desktop_widths" in _names(required)
     assert everything - required == {n for n in everything if _names({n}) <= CAPTURE_SCENES}
 
 
-def test_the_capture_marker_selects_exactly_the_five_scenes(tmp_path: Path) -> None:
+def test_the_capture_marker_selects_exactly_the_six_scenes(tmp_path: Path) -> None:
     root = Path(__file__).resolve().parents[1]
     assert _names(_collected(root, tmp_path, "-m", "capture")) == CAPTURE_SCENES

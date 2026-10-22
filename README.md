@@ -62,6 +62,9 @@ uv run etsy-listings apply <listing-name>   # execute the plan; writes state.loc
 uv run etsy-listings apply --all
 uv run etsy-listings unlock <listing-name>  # clear a stuck Printify publish
 uv run etsy-listings ui --root <workspace>  # serves the UI at :8000
+uv run etsy-listings marigold setup        # explicit native GPU worker + weights
+uv run etsy-listings marigold status       # inspect capabilities; never install
+uv run etsy-listings marigold update       # select required engine; retain old installs
 ```
 
 ## The calibrator
@@ -153,7 +156,7 @@ uv run pytest tests/core/unit/test_money.py                      # one file
 uv run pytest tests/core/unit/test_money.py::test_parses_amount_and_currency  # one test
 uv run pytest -k "currency"                                   # by keyword
 uv run pytest -m browser                                       # only the browser tests
-uv run pytest -m capture                                       # opt-in: write the five calibrator review screenshots
+uv run pytest -m capture                                       # opt-in: write the calibrator and Marigold review screenshots
 uv run pytest -m "not browser and not e2e"                     # hermetic layers
 uv run pytest --update-goldens                                 # regenerate render goldens
 uv run pytest -m e2e                                           # real Printify/Etsy; see below
@@ -168,11 +171,12 @@ uv run playwright install chromium
 cd src/ui && npm run build
 ```
 
-The five **capture** scenes in `tests/browser/test_calibrator_design.py` write
-review screenshots of the calibrator rather than asserting anything, so no
-selection runs them unless `-m` names `capture`. `uv run pytest -m capture`
-writes them to `tests/browser/_screenshots/` (gitignored), or to
-`CALIBRATOR_SCREENSHOT_DIR` when it is set.
+The six **capture** cases write review screenshots rather than asserting
+anything, so no selection runs them unless `-m` names `capture`. The five
+calibrator scenes in `tests/browser/test_calibrator_design.py` write to
+`tests/browser/_screenshots/` (gitignored), or to `CALIBRATOR_SCREENSHOT_DIR`.
+The Marigold journey in `tests/browser/test_marigold_screenshots.py` writes its
+nine states to `MARIGOLD_SCREENSHOT_DIR`, or to a pytest temporary directory.
 
 The **e2e layer** talks to the real Printify and Etsy shops and is never part of
 a default run. It needs `PRINTIFY_API_TOKEN`, or `ETSY_LISTINGS_ROOT` pointing at
@@ -199,3 +203,28 @@ exec bit), and `LF → CRLF` warnings from git are harmless.
 ## Contributing with AI agents
 
 [AGENTS.md](AGENTS.md) holds the working rules for coding agents.
+
+### Marigold runtime
+
+Marigold inference is an optional authoring dependency on native Windows x64.
+Run etsy-listings marigold setup explicitly. It installs Python 3.12.14 and a
+complete pinned worker environment, verifies the three pinned checkpoints,
+and runs normals, lighting and depth before selecting the installation. No
+workspace is needed for these commands. Packages and weights live under
+`<home>/.etsy-listings/marigold`, separate from production imaging dependencies.
+Status and preparation never install packages or download weights.
+
+Marigold update retains previous installations and an active job's engine
+selection. It also repairs a damaged installation into a new immutable directory.
+Failed setup does not replace the last usable installation. Status --json
+returns capabilities and operational bounds. Engine 1.0.0 accepts 1-10 inference
+steps, 1-3 ensemble members and images up to 4096 pixels on each axis. These are
+conservative safety bounds, not quality guarantees. It keeps one pipeline in
+RAM, caps retained model tensors at 4 GiB and exits after five idle minutes.
+
+The production setup and cancellation checks passed on an RTX 3070 with 8 GiB
+VRAM. This stage installs inference only; durable Marigold maps and editor
+preparation arrive in subsequent integration stages. Full-resolution
+photo quality and supported input limits still require the feature's final
+integration validation. Measurements and current limits are recorded in the
+[Marigold runtime report](docs/features/marigold-20261001/runtime-validation.md).

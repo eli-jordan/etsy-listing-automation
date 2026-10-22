@@ -21,10 +21,9 @@ from __future__ import annotations
 
 from typing import Any
 
-import httpx
 import pytest
 
-from etsy_listings.core.clients.printify import BASE_URL, HttpCatalogClient
+from etsy_listings.core.clients.printify import HttpCatalogClient
 from etsy_listings.core.clients.printify.models import Blueprint, PrintProvider
 from etsy_listings.core.clients.printify.resolve import CatalogResolutionError, resolve_blueprint
 
@@ -101,40 +100,34 @@ class TestTheCatalogAnswers:
         assert provider.title
 
 
-class TestWhatTheCatalogActuallyRequires:
-    """What the catalog checks, measured rather than assumed.
+class TestAuthenticatedCatalogEndpoints:
+    """Validate the supported authenticated catalog contract.
 
-    ``clients/printify/catalog.py`` and docs/guides/setup.md say every ``/v1/catalog/*.json`` call
-    needs a personal access token with the ``catalog.read`` scope. Two of them
-    plainly do not: ``blueprints`` and ``print_providers`` are served with no
-    ``Authorization`` header at all. That matters for how hard ``new`` should
-    push a user to get a token before it will run, so it is measured here
-    rather than believed.
-
-    What this class deliberately no longer asserts is how the API treats a
-    *bad* token. It used to serve the per-provider endpoints to any header at
-    all, junk included, and tests pinned that down; Printify now 401s some of
-    them and not others, differing between machines in a way that looks like a
-    rollout mid-flight. Nothing here depends on the answer -- a valid token
-    works, and ``PrintifyAuthError`` already turns a 401 into a named failure
-    (see the contract layer) -- so those assertions were dropped rather than
-    re-pinned to a moving target.
-
-    This takes ``printify_token`` despite not needing one, so it skips with the
-    rest of the layer: an e2e run on an unconfigured machine should reach the
-    network exactly nowhere.
+    Printify documents bearer authentication and the catalog.read scope:
+    https://developers.printify.com/#authentication
+    Unauthenticated access has varied by endpoint and rollout; the application
+    does not depend on it. A 200 here must still contain a decodable nonempty
+    catalog list, so auth failures or malformed responses cannot pass.
     """
 
-    PUBLIC = [
-        "/v1/catalog/blueprints.json",
-        "/v1/catalog/blueprints/706/print_providers.json",
-    ]
-
-    @pytest.mark.parametrize("path", PUBLIC)
-    def test_the_listing_endpoints_need_no_header_at_all(
-        self, printify_token: str, path: str
+    @pytest.mark.parametrize(
+        ("path", "model"),
+        [
+            ("/v1/catalog/blueprints.json", Blueprint),
+            ("/v1/catalog/blueprints/706/print_providers.json", PrintProvider),
+        ],
+    )
+    def test_listing_endpoints_accept_the_configured_token(
+        self, catalog: HttpCatalogClient, path: str, model: type[Blueprint] | type[PrintProvider]
     ) -> None:
-        assert httpx.get(BASE_URL + path, timeout=30.0).status_code == 200
+        response = catalog._transport.get(path)  # noqa: SLF001 - validates the real wire contract
+        assert response.status_code == 200
+        payload = response.json()
+        assert isinstance(payload, list) and payload
+        for item in payload:
+            decoded = model.model_validate(item)
+            assert decoded.id > 0
+            assert decoded.title
 
 
 class TestVariantsMatchWhatTheCodeAssumes:

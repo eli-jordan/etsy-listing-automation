@@ -16,8 +16,13 @@ const BODY: Body = {
     { x: 100, y: 100 },
     { x: 0, y: 100 },
   ],
-  displace: { enabled: false, strength: 0 },
-  shade: { enabled: true, opacity: 0.6, blend: "soft-light" },
+  renderer: {
+    type: "photo-warp",
+    config: {
+      displace: { enabled: false, strength: 0 },
+      shade: { enabled: true, opacity: 0.6, blend: "soft-light" },
+    },
+  },
 };
 
 beforeEach(() => {
@@ -209,4 +214,71 @@ describe("usePreview's one-at-a-time rule", () => {
     await settle(1, "blob:other");
     expect(result.current).toBe("blob:other");
   });
+});
+
+it("discards a superseded strict editor composite before showing the latest edit", async () => {
+  const { spy, settle } = heldRenders();
+  const { result, rerender } = renderHook(({ design }) => usePreview("shirt", BODY, design, true), {
+    initialProps: { design: "first" },
+  });
+  await debounce();
+  expect(spy).toHaveBeenCalledTimes(1);
+
+  rerender({ design: "latest" });
+  await settle(0, "blob:superseded");
+  expect(URL.revokeObjectURL).toHaveBeenCalledWith("blob:superseded");
+  expect(result.current).toBeNull();
+
+  await debounce();
+  expect(spy).toHaveBeenCalledTimes(2);
+  await settle(1, "blob:latest");
+  expect(result.current).toBe("blob:latest");
+});
+
+it("hides the previous template's decoded image immediately in strict mode", async () => {
+  const { settle } = heldRenders();
+  const { result, rerender } = renderHook(({ name }) => usePreview(name, BODY, "grid", true), {
+    initialProps: { name: "first" },
+  });
+  await debounce();
+  await settle(0, "blob:first");
+  expect(result.current).toBe("blob:first");
+
+  rerender({ name: "second" });
+  expect(result.current).toBeNull();
+});
+
+it("clears a refused strict frame so an old composite cannot impersonate current geometry", async () => {
+  const { spy, settle, fail } = heldRenders();
+  const { result, rerender } = renderHook(({ design }) => usePreview("shirt", BODY, design, true), {
+    initialProps: { design: "old" },
+  });
+  await debounce();
+  await settle(0, "blob:old");
+
+  rerender({ design: "new" });
+  await debounce();
+  expect(spy).toHaveBeenCalledTimes(2);
+  // The old frame stands while the request is out, so it is the refusal
+  // itself, settled here, that has to take it down.
+  expect(result.current).toBe("blob:old");
+  await fail(1);
+  expect(result.current).toBeNull();
+  expect(URL.revokeObjectURL).toHaveBeenCalledWith("blob:old");
+});
+
+it("clears pending for the departing template without clearing the new template", () => {
+  vi.useFakeTimers();
+  const listeners = { first: vi.fn(), second: vi.fn() };
+  const { rerender, unmount } = renderHook(
+    ({ name }: { name: "first" | "second" }) =>
+      usePreview(name, BODY, "grid", true, listeners[name]),
+    { initialProps: { name: "first" } },
+  );
+  expect(listeners.first).toHaveBeenLastCalledWith(true);
+  rerender({ name: "second" });
+  expect(listeners.first).toHaveBeenLastCalledWith(false);
+  expect(listeners.second).toHaveBeenLastCalledWith(true);
+  unmount();
+  expect(listeners.second).toHaveBeenLastCalledWith(false);
 });
