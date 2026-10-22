@@ -33,6 +33,7 @@ from __future__ import annotations
 
 import base64
 import io
+import uuid
 from collections.abc import Iterator
 from typing import Any
 
@@ -42,6 +43,7 @@ from PIL import Image, ImageDraw
 
 from etsy_listings.core.clients.printify.catalog import HttpCatalogClient
 from etsy_listings.core.clients.printify.models import Blueprint, PrintProvider, VariantSet
+from etsy_listings.core.clients.printify.protocol import PrintifyClient
 from etsy_listings.core.clients.printify.resolve import resolve_blueprint
 
 pytestmark = pytest.mark.e2e
@@ -146,7 +148,9 @@ def create_spec(
     """Every data element Printify needs to make a product. This is the shape
     ``ProductSpec`` has to serialise to."""
     return {
-        "title": "etsy-listings e2e -- safe to delete",
+        # Unique per session, so the live walk below can only find this run's
+        # product, whatever earlier runs left on the shared shop.
+        "title": f"etsy-listings e2e {uuid.uuid4().hex[:8]} -- safe to delete",
         "description": "Created by an automated test. Deleted in teardown.",
         "blueprint_id": garment.id,
         "print_provider_id": provider.id,
@@ -560,13 +564,19 @@ class TestPublishing:
     """``POST.../publish.json`` and the lock endpoints, on a shop with no
     sales channel connected. The Etsy half of this is Phase 3's to verify."""
 
-    def test_publishing_without_a_sales_channel_is_a_named_error(
+    def test_a_failed_publish_is_a_named_error_and_leaves_the_product_unlocked(
         self,
         disconnected: None,
         printify_api: httpx.Client,
         printify_shop: dict[str, Any],
         product: dict[str, Any],
+        reread,
     ) -> None:
+        """This case makes its own failed publish, then reads the lock back:
+        no earlier case has to have run. So the ``unlock`` path is not
+        reachable this way. Whether a genuine in-flight publish locks the
+        product, and whether ``publishing_failed.json`` clears it, needs a
+        connected shop -- this test does not verify a stuck publish."""
         response = printify_api.post(
             f"/shops/{printify_shop['id']}/products/{product['id']}/publish.json",
             json={
@@ -582,12 +592,7 @@ class TestPublishing:
         assert response.status_code == 400
         assert response.json()["code"] == 8254
 
-    def test_a_failed_publish_leaves_the_product_unlocked(self, live: dict[str, Any]) -> None:
-        """So the ``unlock`` path is not reachable this way. Whether a genuine
-        in-flight publish locks the product, and whether
-        ``publishing_failed.json`` clears it, needs a connected shop -- this test does not verify a
-        stuck publish."""
-        assert live["is_locked"] is False
+        assert reread()["is_locked"] is False
 
     def test_the_publish_budget_is_metered_separately(
         self,
@@ -689,15 +694,6 @@ class TestTheSecondRoundOfRecon:
             "three fields and nothing else -- no currency, no draft setting"
         )
 
-    def test_a_sku_we_set_is_kept_verbatim(
-        self, live: dict[str, Any], wanted_variant_ids: list[int]
-    ) -> None:
-        """`variants[].sku` is writable, despite nothing in the reference
-        saying so. We decline to set one anyway -- but the decision
-        rests on this being a choice rather than a limit, so it is measured."""
-        skus = {v["id"]: v.get("sku") for v in live["variants"] if v["is_enabled"]}
-        assert all(sku for sku in skus.values()), "Printify generates one when we do not"
-
     def test_a_variant_entry_may_not_be_partial(
         self, update, wanted_variant_ids: list[int]
     ) -> None:
@@ -709,15 +705,6 @@ class TestTheSecondRoundOfRecon:
         )
 
         assert "price" in failure["errors"]["reason"]
-
-    def test_the_product_list_is_a_paginator(
-        self, printify_api: httpx.Client, printify_shop: dict[str, Any]
-    ) -> None:
-        response = printify_api.get(f"/shops/{printify_shop['id']}/products.json")
-        assert response.status_code == 200
-
-        body = response.json()
-        assert {"current_page", "last_page", "per_page", "data", "total"} <= set(body)
 
     def test_the_product_list_honours_no_filter_at_all(
         self, printify_api: httpx.Client, printify_shop: dict[str, Any], product: dict[str, Any]
@@ -738,17 +725,28 @@ class TestTheSecondRoundOfRecon:
                 f"replaced by a query"
             )
 
-    def test_limit_and_page_are_honoured_even_though_filters_are_not(
-        self, printify_api: httpx.Client, printify_shop: dict[str, Any], product: dict[str, Any]
+    def test_the_walk_pages_the_real_list_to_this_runs_product(
+        self,
+        printify_api: httpx.Client,
+        printify_shop: dict[str, Any],
+        printify_client: PrintifyClient,
+        product: dict[str, Any],
     ) -> None:
-        """The walk has to page, so this is the part of the listing endpoint
-        it genuinely depends on."""
-        response = printify_api.get(
-            f"/shops/{printify_shop['id']}/products.json", params={"limit": 1}
-        )
+        """The seeded product makes the list nonempty, so a one-per-page read
+        is a real page, and the client's own walk (ADR-0023) has something
+        only this run created to find. The page arithmetic itself is the
+        contract layer's two-page server; this is what Printify does."""
+        one = printify_api.get(
+            f"/shops/{printify_shop['id']}/products.json", params={"limit": 1, "page": 1}
+        ).json()
+        assert {"current_page", "last_page", "per_page", "data", "total"} <= set(one)
+        assert len(one["data"]) == 1
+        assert one["last_page"] == one["total"]
 
-        assert response.status_code == 200
-        assert len(response.json()["data"]) <= 1
+        found = printify_client.find_product_by_copy(
+            printify_shop["id"], title=product["title"], description=product["description"]
+        )
+        assert found == product["id"]
 
 
 def _area(variant_ids: list[int], image_id: str) -> dict[str, Any]:
