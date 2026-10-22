@@ -808,12 +808,15 @@ command-line marker replaces the default, so both exclusions must be stated.
 Browser checks require Chromium and the built SPA and prohibit clean skips.
 
 Some selections carry roles rather than layers. The five calibrator review
-screenshots are artifacts, not oracles, so they carry the `capture` marker and
-`tests/conftest.py` deselects them unless `-m` names it: a screenshot whose
-only assertion is that a file exists cannot fail for a product reason, and
-keeping it opt-in beat deleting it because reviewers still want the frames.
+screenshots and the Marigold screenshot journey are artifacts, not oracles, so
+they carry the `capture` marker and `tests/conftest.py` deselects them unless
+`-m` names it: a screenshot whose only assertion is that a file exists cannot
+fail for a product reason, and keeping it opt-in beat deleting it because
+reviewers still want the frames. The Marigold journey's real checks (font
+size, rail state, toolbar geometry) stay required in
+`test_the_marigold_toolbar_fits_its_bar_at_desktop_widths`.
 `tests/test_ci_selection.py` proves CI's browser selection equals `check.sh`'s
-and excludes exactly those scenes. Real process-tree timeout, cancellation and
+and excludes exactly those six cases. Real process-tree timeout, cancellation and
 UTF-8 cases live in their own behaviour subject,
 `tests/core/behaviour/test_ai_process_tree.py`, apart from the fake-`Popen`
 wiring units. The live Phase 3 publish cycle is one self-contained journey
