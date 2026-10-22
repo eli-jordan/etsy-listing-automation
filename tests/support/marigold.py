@@ -245,3 +245,24 @@ def marigold_template(workspace_root, kind="single", name="shirt", renderer="mar
         config["bounding_box"] = box
     workspace.save_template_config(name, load_template_config(config))
     return workspace
+
+
+def listing_with_marigold(workspace_root, *, prepare=False):
+    """The fixture listing showing a single Marigold template, ``shirt``,
+    optionally with a published synthetic generation it can render from."""
+    from etsy_listings.core.preparation.artifacts import Artifacts
+    from etsy_listings.core.workspace.listing_documents import ListingDocuments
+
+    from tests.support.builders import FIXTURE_LISTING
+
+    workspace = marigold_template(workspace_root)
+    ListingDocuments(workspace).edit(
+        FIXTURE_LISTING, lambda document: {**document, "media": [{"template": "shirt"}]}
+    )
+    if prepare:
+        artifacts = Artifacts(workspace)
+        inputs = artifacts.saved_inputs("shirt", evidence={None: "a" * 64})
+        artifacts.publish(
+            "shirt", inputs, {None: material_maps((64, 64))}, current_inputs=lambda: inputs
+        )
+    return workspace, workspace.load_listing(FIXTURE_LISTING)

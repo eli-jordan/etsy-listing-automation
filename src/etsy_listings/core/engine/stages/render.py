@@ -51,13 +51,11 @@ that reconnects mid-run does not lose images already promoted to renders.
 
 from __future__ import annotations
 
-import hashlib
 import os
 import shutil
 import tempfile
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
-from contextlib import ExitStack
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Literal
@@ -84,18 +82,18 @@ from etsy_listings.core.engine.stages.gates import (
     check_scene_colour,
     resolved_design,
 )
-from etsy_listings.core.preparation.artifacts import ArtifactError, Artifacts, PreparationInputs
-from etsy_listings.core.preparation.readiness import saved_readiness
+from etsy_listings.core.preparation.artifacts import ArtifactError, PreparationInputs
+from etsy_listings.core.preparation.readiness import template_readiness
+from etsy_listings.core.preparation.scenes import PreparedLayer, lease_scene
 from etsy_listings.core.render.config import (
     AnyTemplate,
     MarigoldAppearance,
     MarigoldRenderer,
-    MultipleTemplate,
     PhotoWarpRenderer,
     RenderConfig,
+    scene_colours,
     scene_layers,
 )
-from etsy_listings.core.render.identity import artwork_identity, prepared_scene_identity
 from etsy_listings.core.render.io import (
     MARIGOLD_PNG_COMPRESSION,
     load_design,
@@ -103,7 +101,6 @@ from etsy_listings.core.render.io import (
     save_png,
 )
 from etsy_listings.core.render.maps import DerivedMapCache
-from etsy_listings.core.render.material import MaterialLayer, render_marigold_scene
 from etsy_listings.core.render.pipeline import Layer, render_scene
 from etsy_listings.core.render.swatch import sample_swatch
 from etsy_listings.core.render.types import RGBA
@@ -449,22 +446,26 @@ def _layer_specs(
     template_cfg: AnyTemplate, colour: str | None
 ) -> list[tuple[str | None, str | None, RenderConfig]]:
     """``(depicted colour, placement ID, render config)`` per layer, in paint
-    order. The colours are :func:`scene_layers`'s; a prepared scene takes only
-    each layer's geometry from it, since its material passes consume accepted
-    maps, never Photo warp (ADR-0054)."""
+    order. A prepared scene takes only each layer's geometry from the config,
+    since its material passes consume accepted maps, never Photo warp
+    (ADR-0054)."""
+    geometry = template_cfg
     if isinstance(template_cfg.renderer, MarigoldRenderer):
         geometry = template_cfg.model_copy(
             update={"renderer": PhotoWarpRenderer(type="photo-warp")}
         )
-        pairs = scene_layers(geometry, colour)
-    else:
-        pairs = scene_layers(template_cfg, colour)
-    ids: list[str | None] = (
-        [p.id for p in template_cfg.placements]
-        if isinstance(template_cfg, MultipleTemplate)
-        else [None]
-    )
-    return [(c, i, cfg) for (c, cfg), i in zip(pairs, ids, strict=True)]
+    return [
+        (depicted, placement, cfg)
+        for (depicted, placement), (_, cfg) in zip(
+            scene_colours(template_cfg, colour), scene_layers(geometry, colour), strict=True
+        )
+    ]
+
+
+def _prepared_layers(
+    layers: Sequence[ResolvedLayer], design: Callable[[Path], RGBA]
+) -> list[PreparedLayer]:
+    return [PreparedLayer(design(layer.design), layer.placement_id) for layer in layers]
 
 
 def _resolve_scene(
@@ -507,24 +508,18 @@ def _resolve_scene(
     identity = None
     map_content = None
     if isinstance(template_cfg.renderer, MarigoldRenderer):
-        artifacts = Artifacts(workspace)
+        appearance = template_cfg.renderer.config.appearance
         try:
-            preparation = artifacts.saved_inputs(template_name)
-            base = load_template_base(photo.path)
-            with artifacts.acquire(
-                template_name, preparation, target_size=(base.shape[1], base.shape[0])
-            ) as acquired:
-                appearance = template_cfg.renderer.config.appearance
-                map_content = acquired.manifest.content_digest
-                identity = prepared_scene_identity(
-                    map_content=acquired.manifest.content_digest,
-                    placement_ids=[layer.placement_id for layer in layers],
-                    artwork_digests=[
-                        artwork_identity(load_design(layer.design)) for layer in layers
-                    ],
-                    photo_pixels=hashlib.sha256(base.tobytes()).hexdigest(),
-                    appearance=appearance,
-                )
+            with lease_scene(
+                workspace,
+                template_name,
+                base=load_template_base(photo.path),
+                layers=_prepared_layers(layers, load_design),
+                appearance=appearance,
+            ) as scene:
+                preparation = scene.inputs
+                map_content = scene.manifest.content_digest
+                identity = scene.identity
         except ArtifactError as exc:
             return Blocked(str(exc))
     return SceneWork(
@@ -586,13 +581,10 @@ class RenderStage:
                 template_configs[template_name] = workspace.load_template_config(template_name)
             except ConfigLoadError as exc:
                 return Blocked(str(exc))
-            if isinstance(template_configs[template_name].renderer, MarigoldRenderer):
-                maps = saved_readiness(workspace, template_name)
-                blocked = check_prepared_maps(
-                    template_name, None if maps.can_render else maps.message
-                )
-                if blocked is not None:
-                    return blocked
+            maps = template_readiness(workspace, template_name, template_configs[template_name])
+            blocked = check_prepared_maps(template_name, None if maps.can_render else maps.message)
+            if blocked is not None:
+                return blocked
 
         # ADR-0053: every depicted colour must resolve before anything is hashed,
         # and a failure is this stage refusing, never a raise.
@@ -886,43 +878,21 @@ class RenderStage:
         workspace: Workspace, work: SceneWork, target: Path, *, preview: Path | None = None
     ) -> None:
         assert work.preparation is not None and work.appearance is not None
-        base = load_template_base(work.base_image)
-        designs = [load_design(layer.design) for layer in work.layers]
-        artifacts = Artifacts(workspace)
         try:
-            with ExitStack() as lease:
-                # Check calibration and acquire together; publication and edits
-                # share this short lock, then composition owns only its lease.
-                with artifacts.calibration.lock(work.template):
-                    current = artifacts.saved_inputs(work.template)
-                    if current.identity() != work.preparation.identity():
-                        raise ArtifactError("Prepared maps are out of date; plan and prepare again")
-                    acquired = lease.enter_context(
-                        artifacts.acquire(
-                            work.template, current, target_size=(base.shape[1], base.shape[0])
-                        )
-                    )
-                identity = prepared_scene_identity(
-                    map_content=acquired.manifest.content_digest,
-                    placement_ids=[layer.placement_id for layer in work.layers],
-                    artwork_digests=[artwork_identity(design) for design in designs],
-                    photo_pixels=hashlib.sha256(base.tobytes()).hexdigest(),
-                    appearance=work.appearance,
-                )
-                if identity != work.render_identity:
+            with lease_scene(
+                workspace,
+                work.template,
+                base=load_template_base(work.base_image),
+                layers=_prepared_layers(work.layers, load_design),
+                appearance=work.appearance,
+                expected=work.preparation,
+            ) as scene:
+                if scene.identity != work.render_identity:
                     raise ArtifactError("Render inputs changed; plan the listing again")
                 if preview is not None and preview.is_file():
                     _copy_preview(preview, target)
                     return
-                image = render_marigold_scene(
-                    base,
-                    [
-                        MaterialLayer(design, acquired.maps[layer.placement_id], layer.placement_id)
-                        for layer, design in zip(work.layers, designs, strict=True)
-                    ],
-                    appearance=work.appearance,
-                )
-                save_png(image, target, compression=MARIGOLD_PNG_COMPRESSION)
+                save_png(scene.render(), target, compression=MARIGOLD_PNG_COMPRESSION)
         except ArtifactError as exc:
             raise StageBlockedError(str(exc)) from exc
 

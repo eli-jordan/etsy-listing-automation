@@ -24,6 +24,31 @@ export async function listTemplates(): Promise<TemplateSummary[]> {
   return data;
 }
 
+/** A template.yaml as read, with the revision a save must name in `If-Match`.
+ *
+ * `revision` is the bare revision id -- the same string preparation reports as
+ * `config_revision` and a preview takes as `calibration_revision` -- not the
+ * quoted ETag. Quoting is HTTP's business and stays in this file. `""` when
+ * the server sent no ETag. */
+export interface TemplateConfigDocument {
+  config: TemplateConfigState;
+  modifiedAt: string;
+  revision: string;
+}
+
+/** A save the server refused because the file moved on since `revision`
+ * was read (409 or 412): another tab, an external edit, or a preparation
+ * that rewrote it. Only a reload resolves it. */
+export class TemplateConflictError extends CalibratorApiError {
+  constructor() {
+    super("Template changed elsewhere. Reload before saving.");
+  }
+}
+
+function revisionOf(response: Response | undefined): string {
+  return (response?.headers.get("ETag") ?? "").replace(/^"|"$/g, "");
+}
+
 /**
  * Returns null when the template has no template.yaml yet -- a folder of
  * photos that has not been given a kind.
@@ -32,12 +57,6 @@ export async function listTemplates(): Promise<TemplateSummary[]> {
  * plain array when inferring the response type of a 3-way discriminated
  * union -- the server still enforces exactly 4 points either way.
  */
-const templateRevisions = new Map<string, string>();
-export interface TemplateConfigDocument {
-  config: TemplateConfigState;
-  modifiedAt: string;
-}
-
 export async function getTemplateConfig(name: string): Promise<TemplateConfigDocument | null> {
   const { data, error, response } = await api.GET("/api/templates/{name}/config", {
     // Bypass configs cached before the server added its no-store policy too.
@@ -47,102 +66,39 @@ export async function getTemplateConfig(name: string): Promise<TemplateConfigDoc
   if (error) return null;
   const modifiedAt = response.headers.get("Last-Modified");
   if (modifiedAt === null) throw new CalibratorApiError("template config has no modification time");
-  const revision = response.headers.get("ETag");
-  if (revision) templateRevisions.set(name, revision);
-  return { config: data as unknown as TemplateConfigState, modifiedAt };
+  return {
+    config: data as unknown as TemplateConfigState,
+    modifiedAt,
+    revision: revisionOf(response),
+  };
 }
 
-/** Revision acknowledged by this client's last config read or successful save. */
-export function acknowledgedTemplateRevision(name: string): string {
-  return (templateRevisions.get(name) ?? "").replace(/^"|"$/g, "");
+export interface SavedTemplateConfig {
+  config: TemplateConfigState;
+  revision: string;
 }
 
-function canonicalConfig(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(canonicalConfig);
-  if (value !== null && typeof value === "object")
-    return Object.fromEntries(
-      Object.entries(value)
-        .sort(([left], [right]) => left.localeCompare(right))
-        .map(([key, item]) => [key, canonicalConfig(item)]),
-    );
-  return value;
-}
-
-/** Accept this editor's completed baseline revision only while the saved
- * configuration and the coordinator's exact revision still match the disk. */
-export async function refreshPreparedRevision(
-  name: string,
-  savedConfig: TemplateConfigState,
-  preparedRevision: string,
-): Promise<boolean> {
-  const expected = '"' + preparedRevision + '"';
-  if (templateRevisions.get(name) === expected) return true;
-  const { data, error, response } = await api.GET("/api/templates/{name}/config", {
-    cache: "no-store",
-    params: { path: { name } },
-  });
-  if (
-    error ||
-    response.headers.get("ETag") !== expected ||
-    JSON.stringify(canonicalConfig(data)) !== JSON.stringify(canonicalConfig(savedConfig))
-  )
-    return false;
-  templateRevisions.set(name, expected);
-  return true;
-}
-
-async function writeTemplateConfig(
+/** Writes the whole template.yaml, plus any mask edits, over `revision`.
+ * Stateless: the caller holds the revision it read and the one this returns
+ * (`useTemplateSession` does), and decides which mask operations still need
+ * sending. */
+export async function saveTemplateConfig(
   name: string,
   config: TemplateConfigState,
-  maskEdits: MaskEdit[] = [],
-): Promise<TemplateConfigState> {
+  maskEdits: MaskEdit[],
+  revision: string,
+): Promise<SavedTemplateConfig> {
   const { data, error, response } = await api.PUT("/api/templates/{name}/config", {
-    params: { path: { name }, header: { "if-match": templateRevisions.get(name) ?? "" } },
-
+    params: { path: { name }, header: { "if-match": revision ? '"' + revision + '"' : "" } },
     body: { request_id: crypto.randomUUID(), config, mask_edits: maskEdits },
   });
-  if (error)
-    throw new CalibratorApiError(
-      response?.status === 409 || response?.status === 412
-        ? "Template changed elsewhere. Reload before saving."
-        : "could not save template.yaml",
-    );
-  const revision = response?.headers.get("ETag");
-  if (revision) templateRevisions.set(name, revision);
-  return data as unknown as TemplateConfigState;
+  if (error) {
+    if (response?.status === 409 || response?.status === 412) throw new TemplateConflictError();
+    throw new CalibratorApiError("could not save template.yaml");
+  }
+  return { config: data as unknown as TemplateConfigState, revision: revisionOf(response) };
 }
 
-// Keep one revision-bearing save in flight per template. Operations are objects
-// shared by successive draft snapshots; consume each only after its commit.
-const pendingSaves = new Map<string, Promise<TemplateConfigState>>();
-const committedOperations = new WeakSet<MaskEdit["operations"][number]>();
-export function saveTemplateConfig(
-  name: string,
-  config: TemplateConfigState,
-  maskEdits: MaskEdit[] = [],
-): Promise<TemplateConfigState> {
-  const previous = pendingSaves.get(name);
-  const write = async () => {
-    const edits = maskEdits
-      .map((edit) => ({
-        ...edit,
-        operations: edit.operations.filter((op) => !committedOperations.has(op)),
-      }))
-      .filter((edit) => edit.operations.length > 0);
-    const saved = await writeTemplateConfig(name, config, edits);
-    for (const edit of edits)
-      for (const operation of edit.operations) committedOperations.add(operation);
-    return saved;
-  };
-  const promise = previous ? previous.then(write) : write();
-  pendingSaves.set(name, promise);
-  void promise
-    .finally(() => {
-      if (pendingSaves.get(name) === promise) pendingSaves.delete(name);
-    })
-    .catch(() => {});
-  return promise;
-}
 /** What each photo will be taken as if this becomes a colour-matrix set.
  * Reporting only -- ADR-0004 makes the filename the source of truth. */
 export async function getColourReport(name: string): Promise<ColourReportRow[]> {

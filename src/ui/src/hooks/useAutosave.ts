@@ -134,8 +134,9 @@ interface UseAutosave {
 }
 
 /**
- * Autosave for listings. The mockup-template calibrator shares the debounce
- * interval but has a simpler full-document transport.
+ * Autosave for listings. The mockup-template calibrator follows the same
+ * rules (debounce, single flight, flush on unmount) in `useTemplateSession`,
+ * whose document is a whole template.yaml PUT over a revision.
  *
  * It holds three transports, not one, because the editor is also the create
  * form and a listing therefore passes through three states in one sitting:

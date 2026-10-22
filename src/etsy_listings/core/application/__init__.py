@@ -62,8 +62,11 @@ import names the module it depends on. Public interfaces:
 ``preparation_views``
     Read-only authoring readiness and per-placement mask access.
 ``prepared_previews``
-    CPU previews acquire one immutable map generation for the whole scene and
-    return exact PNG bytes with a canonical scene identity for promotion.
+    ``saved_scene`` is every saved-scene preview's entry point and picks the
+    renderer: a Photo warp ``PreviewScene`` or a ``PreparedPreview``.
+    ``prepared_preview`` composes through ``preparation.scenes.lease_scene``,
+    the render stage's own path, returning a canonical scene identity for
+    promotion.
 ``calibration_designs``
     The calibrator's uploaded test designs: ``save_uploaded_design`` (name
     and image checks, then the write), ``uploaded_design``.
