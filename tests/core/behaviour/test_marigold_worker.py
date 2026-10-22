@@ -9,20 +9,22 @@ from tests.support.gates import GATE_TIMEOUT
 
 
 def test_worker_handshake_drains_stderr_independently(tmp_path):
+    from tests.support.marigold import capabilities_document
+
     script = tmp_path / "worker.py"
     script.write_text(
-        """import json, sys
+        f"""import json, sys
 for line in sys.stdin:
     message = json.loads(line)
     if message['type'] == 'hello':
         sys.stderr.write('diagnostic ' * 20000)
         sys.stderr.flush()
         print(json.dumps(dict(protocol=1, type='hello',
-            request_id=message['request_id'], engine_version='1.0.0',
-            roles=['normals','lighting','depth'], cuda=True)), flush=True)
+            request_id=message['request_id'], **{capabilities_document()!r})),
+            flush=True)
     elif message['type'] == 'shutdown':
         print(json.dumps(dict(protocol=1, type='result',
-            request_id=message['request_id'])), flush=True)
+            request_id=message['request_id'], acknowledged=True)), flush=True)
         break
 """,
         encoding="utf-8",
@@ -30,7 +32,7 @@ for line in sys.stdin:
     with Worker(
         [sys.executable, str(script)], cache_root=tmp_path, engine_version="1.0.0"
     ) as worker:
-        assert worker.capabilities["roles"] == ["normals", "lighting", "depth"]
+        assert worker.capabilities.roles == ["normals", "lighting", "depth"]
 
 
 def test_cancellation_completes_active_call_and_retains_valid_evidence(tmp_path):
@@ -63,12 +65,12 @@ def test_cancellation_completes_active_call_and_retains_valid_evidence(tmp_path)
                 result = active.result()
             finally:
                 (tmp_path / "infer-release").touch()
-        assert isinstance(result, dict) and result["cancelled"] is True
+        assert result.cancelled is True
         assert (tmp_path / "depth.npz").exists()
         assert (
             worker.infer(
                 request_id="retry", role="depth", input="crop.png", output="retry.npz", size=(12, 8)
-            )["cancelled"]
+            ).cancelled
             is False
         )
 
@@ -143,7 +145,7 @@ def test_idle_exit_restarts_on_next_call_without_failed_attempt(tmp_path):
                 input="crop.png",
                 output="second.npz",
                 size=(12, 8),
-            )["artifact"]
+            ).artifact
             == "second.npz"
         )
         starts = worker_pids(tmp_path)
@@ -260,7 +262,7 @@ def test_dispatch_guard_refuses_cancelled_call_and_allows_later_retry(tmp_path, 
         assert (
             worker.infer(
                 request_id="retry", role="depth", input="crop.png", output=output, size=(12, 8)
-            )["artifact"]
+            ).artifact
             == output
         )
 
@@ -334,6 +336,6 @@ def test_warm_startup_cancellation_is_rechecked_before_dispatch(tmp_path):
         assert (
             worker.infer(
                 request_id="retry", role="depth", input="crop.png", output="retry.npz", size=(12, 8)
-            )["artifact"]
+            ).artifact
             == "retry.npz"
         )

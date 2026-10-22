@@ -876,6 +876,16 @@ thread started stalled the measured Windows process. Models stay in RAM under a
 one-pipeline and 4 GiB tensor budget; only active components enter CUDA.
 Diagnostics drain separately from protocol output.
 
+The wire format is one pydantic module, the worker distribution's
+`marigold_worker/protocol.py`. The worker validates every request line against
+it and the application validates every reply line against it. The application
+imports it from the embedded distribution, so both sides read one definition
+and neither side keeps its own copy of the schema. It depends only on pydantic,
+which the worker lock pins at the application's version. The models describe
+the bytes 1.0.0 workers already emit, so editing them in place must never refuse
+an installed worker. A change that worker would not understand needs a new
+protocol and engine version, which forces `marigold update`.
+
 Prediction files contain float32 arrays only. Readers check archive bounds,
 headers, role/shape, finite values, ranges and checksums with pickle disabled.
 Import contracts keep runtime installation and torch out of CPU rendering and

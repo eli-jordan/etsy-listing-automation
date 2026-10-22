@@ -26,7 +26,9 @@ def run(output: Path) -> None:
     path = output / "lifecycle.json"
 
     def save() -> None:
-        path.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
+        # Worker replies are protocol models.
+        text = json.dumps(report, indent=2, default=lambda reply: reply.model_dump(mode="json"))
+        path.write_text(text + "\n", encoding="utf-8")
 
     runtime = Runtime()
     capability = runtime.inspect()
@@ -149,7 +151,8 @@ def run(output: Path) -> None:
                 report.setdefault("invalid_settings", []).append(
                     {"steps": steps, "ensemble": ensemble, "unexpected_success": True}
                 )
-            except WorkerError as exc:
+            # The request model refuses these before anything reaches the worker.
+            except (WorkerError, ValueError) as exc:
                 report.setdefault("invalid_settings", []).append(
                     {"steps": steps, "ensemble": ensemble, "error": str(exc)}
                 )

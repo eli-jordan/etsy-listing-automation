@@ -1,9 +1,12 @@
-"""A warm JSON-lines v1 worker, without any model-package import."""
+"""A warm JSON-lines v1 worker, without any model-package import.
+
+The wire format is the worker distribution's own ``protocol`` module, imported
+from the embedded copy this package ships: it needs only pydantic.
+"""
 
 from __future__ import annotations
 
 import io
-import json
 import os
 import queue
 import subprocess
@@ -14,14 +17,32 @@ from collections import deque
 from collections.abc import Callable, Sequence
 from contextlib import AbstractContextManager, nullcontext
 from pathlib import Path
-from typing import Any, Self, cast
+from typing import Self, cast
 
+from pydantic import ValidationError
+
+from etsy_listings.core.preparation.distribution.src.marigold_worker.protocol import (
+    MAX_LINE,
+    REPLY,
+    CancelRequest,
+    Failure,
+    HelloReply,
+    HelloRequest,
+    InferenceResult,
+    InferenceSettings,
+    InferRequest,
+    Progress,
+    Reply,
+    Request,
+    Role,
+    ShutdownRequest,
+    describe,
+    encode,
+)
 from etsy_listings.core.preparation.predictions import cache_path, read_prediction
 
-PROTOCOL = 1
 CALL_TIMEOUT = 900.0
 SHUTDOWN_TIMEOUT = 15.0
-MAX_LINE = 64 * 1024
 
 
 class WorkerError(RuntimeError):
@@ -40,7 +61,7 @@ class Worker:
         self.cache_root = cache_root.resolve()
         self.engine_version = engine_version
         self.timeout = timeout
-        self._messages: queue.Queue[dict[str, Any] | BaseException] = queue.Queue()
+        self._messages: queue.Queue[Reply | BaseException] = queue.Queue()
         self._diagnostics: deque[str] = deque(maxlen=32)
         self._controls: set[str] = set()
         self._write_lock = threading.Lock()
@@ -59,15 +80,16 @@ class Worker:
         self._stderr_thread.start()
         threading.Thread(target=self._stdout, daemon=True).start()
         try:
-            request_id = self._send("hello")
-            self.capabilities = self._receive(request_id, timeout=60)
+            hello = self._send(HelloRequest(request_id=uuid.uuid4().hex))
+            capabilities = self._receive(hello.request_id, timeout=60)
             if (
-                self.capabilities["type"] != "hello"
-                or self.capabilities.get("engine_version") != engine_version
-                or set(self.capabilities.get("roles", [])) != {"normals", "lighting", "depth"}
-                or self.capabilities.get("cuda") is not True
+                not isinstance(capabilities, HelloReply)
+                or capabilities.engine_version != engine_version
+                or set(capabilities.roles) != {"normals", "lighting", "depth"}
+                or capabilities.cuda is not True
             ):
                 raise WorkerError("Worker capability mismatch; run etsy-listings marigold update.")
+            self.capabilities = capabilities
         except BaseException:
             self.close(force=True)
             raise
@@ -78,15 +100,12 @@ class Worker:
             while line := self._process.stdout.readline(MAX_LINE + 1):
                 if len(line) > MAX_LINE or not line.endswith(chr(10)):
                     raise WorkerError("Worker emitted an oversized or incomplete protocol line")
-                message = json.loads(line)
-                if (
-                    not isinstance(message, dict)
-                    or message.get("protocol") != PROTOCOL
-                    or not isinstance(message.get("request_id"), str)
-                    or message.get("type") not in ("hello", "progress", "result", "error")
-                ):
-                    raise WorkerError("Malformed worker protocol message")
-                self._messages.put(message)
+                try:
+                    self._messages.put(REPLY.validate_json(line))
+                except ValidationError as exc:
+                    raise WorkerError(
+                        "Malformed worker protocol message: " + describe(exc)
+                    ) from exc
             self._stderr_thread.join(timeout=0.2)
             raise WorkerError("Worker exited unexpectedly; retry preparation. " + self.diagnostics)
         except BaseException as exc:
@@ -105,25 +124,23 @@ class Worker:
     def diagnostics(self) -> str:
         return "".join(self._diagnostics)[-8192:]
 
-    def _send(self, kind: str, *, request_id: str | None = None, **body: Any) -> str:
-        selected = request_id or uuid.uuid4().hex
-        message = dict(protocol=PROTOCOL, type=kind, request_id=selected, **body)
+    def _send[R: Request](self, request: R) -> R:
         with self._write_lock:
             try:
                 assert self._process.stdin is not None
-                self._process.stdin.write(json.dumps(message) + chr(10))
+                self._process.stdin.write(encode(request))
                 self._process.stdin.flush()
             except (OSError, ValueError) as exc:
                 raise WorkerError("Worker is unavailable; retry preparation.") from exc
-        return selected
+        return request
 
     def _receive(
         self,
         request_id: str,
         *,
         timeout: float,
-        progress: Callable[[dict[str, Any]], None] | None = None,
-    ) -> dict[str, Any]:
+        progress: Callable[[Progress], None] | None = None,
+    ) -> Reply:
         deadline = time.monotonic() + timeout
         while True:
             try:
@@ -135,16 +152,14 @@ class Worker:
                 ) from exc
             if isinstance(message, BaseException):
                 raise WorkerError(str(message)) from message
-            if message["request_id"] in self._controls:
-                self._controls.discard(message["request_id"])
+            if message.request_id in self._controls:
+                self._controls.discard(message.request_id)
                 continue
-            if message["request_id"] != request_id:
+            if message.request_id != request_id:
                 raise WorkerError("Worker reply request ID does not match the active call")
-            if message["type"] == "error":
-                raise WorkerError(
-                    str(message.get("message", "Inference failed; retry preparation."))
-                )
-            if message["type"] == "progress":
+            if isinstance(message, Failure):
+                raise WorkerError(message.message)
+            if isinstance(message, Progress):
                 if progress:
                     progress(message)
                 continue
@@ -154,17 +169,26 @@ class Worker:
         self,
         *,
         request_id: str,
-        role: str,
+        role: Role,
         input: str,
         output: str,
         size: tuple[int, int],
         num_inference_steps: int = 10,
         ensemble_size: int = 3,
-        progress: Callable[[dict[str, Any]], None] | None = None,
+        progress: Callable[[Progress], None] | None = None,
         dispatch_guard: Callable[[], AbstractContextManager[None]] = nullcontext,
-    ) -> dict[str, Any]:
+    ) -> InferenceResult:
         cache_path(self.cache_root, input, suffix=".png")
         destination = cache_path(self.cache_root, output, suffix=".npz")
+        request = InferRequest(
+            request_id=request_id,
+            role=role,
+            input=input,
+            output=output,
+            settings=InferenceSettings(
+                num_inference_steps=num_inference_steps, ensemble_size=ensemble_size
+            ),
+        )
         if not self._call_lock.acquire(blocking=False):
             raise WorkerError(
                 "Worker is busy; additional calls must remain in the coordinator queue"
@@ -173,21 +197,11 @@ class Worker:
             # The coordinator atomically rechecks cancellation with dispatch.
             # Do not hold its guard during handshake or model execution.
             with dispatch_guard():
-                self._send(
-                    "infer",
-                    request_id=request_id,
-                    role=role,
-                    input=input,
-                    output=output,
-                    settings={
-                        "num_inference_steps": num_inference_steps,
-                        "ensemble_size": ensemble_size,
-                    },
-                )
+                self._send(request)
             result = self._receive(request_id, timeout=self.timeout, progress=progress)
-            if result["type"] != "result" or result.get("artifact") != output:
+            if not isinstance(result, InferenceResult) or result.artifact != output:
                 raise WorkerError("Worker returned an unexpected artifact")
-            read_prediction(destination, role=role, checksum=result.get("checksum", ""), size=size)
+            read_prediction(destination, role=role, checksum=result.checksum, size=size)
             return result
         finally:
             self._call_lock.release()
@@ -198,15 +212,15 @@ class Worker:
 
     def cancel(self, request_id: str) -> None:
         """Control writes do not wait for the active inference response."""
-        control = uuid.uuid4().hex
-        self._controls.add(control)
-        self._send("cancel", request_id=control, target=request_id)
+        control = CancelRequest(request_id=uuid.uuid4().hex, target=request_id)
+        self._controls.add(control.request_id)
+        self._send(control)
 
     def close(self, *, force: bool = False) -> None:
         if self._process.poll() is None:
             if not force:
                 try:
-                    self._send("shutdown")
+                    self._send(ShutdownRequest(request_id=uuid.uuid4().hex))
                     self._process.wait(timeout=SHUTDOWN_TIMEOUT)
                 except (WorkerError, subprocess.TimeoutExpired):
                     force = True
@@ -258,15 +272,15 @@ class WarmWorker:
         self,
         *,
         request_id: str,
-        role: str,
+        role: Role,
         input: str,
         output: str,
         size: tuple[int, int],
         num_inference_steps: int = 10,
         ensemble_size: int = 3,
-        progress: Callable[[dict[str, Any]], None] | None = None,
+        progress: Callable[[Progress], None] | None = None,
         dispatch_guard: Callable[[], AbstractContextManager[None]] = nullcontext,
-    ) -> dict[str, Any]:
+    ) -> InferenceResult:
         if not self._lock.acquire(blocking=False):
             raise WorkerError("Worker is busy; keep additional work in the coordinator queue")
         try:

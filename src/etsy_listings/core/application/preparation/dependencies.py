@@ -3,8 +3,13 @@
 from collections.abc import Callable
 from contextlib import AbstractContextManager, nullcontext
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Protocol
 
+from etsy_listings.core.preparation.distribution.src.marigold_worker.protocol import (
+    InferenceResult,
+    Progress,
+    Role,
+)
 from etsy_listings.core.preparation.runtime import Capability
 
 
@@ -13,15 +18,15 @@ class InferenceWorker(Protocol):
         self,
         *,
         request_id: str,
-        role: str,
+        role: Role,
         input: str,
         output: str,
         size: tuple[int, int],
         num_inference_steps: int = 10,
         ensemble_size: int = 3,
-        progress: Callable[[dict[str, Any]], None] | None = None,
+        progress: Callable[[Progress], None] | None = None,
         dispatch_guard: Callable[[], AbstractContextManager[None]] = nullcontext,
-    ) -> dict[str, Any]: ...
+    ) -> InferenceResult: ...
     def cancel(self, request_id: str) -> None: ...
     def close(self) -> None: ...
 

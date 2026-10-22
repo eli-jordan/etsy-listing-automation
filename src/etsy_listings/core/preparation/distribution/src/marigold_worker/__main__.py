@@ -65,7 +65,7 @@ def main() -> None:
         return
     backend = Models(args.weights)
     if args.capabilities:
-        print(json.dumps(backend.capabilities()), flush=True)
+        print(backend.capabilities().model_dump_json(), flush=True)
         return
     if args.cache_root is None:
         parser.error("--cache-root is required for inference")

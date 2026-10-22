@@ -16,26 +16,44 @@ from typing import Any, Protocol
 import numpy as np
 from numpy.typing import NDArray
 from PIL import Image
+from pydantic import ValidationError
 
-MAX_LINE = 65536
+from .protocol import (
+    MAX_LINE,
+    REQUEST,
+    Acknowledged,
+    CancelRequest,
+    Capabilities,
+    Envelope,
+    Failure,
+    HelloReply,
+    HelloRequest,
+    InferenceMetadata,
+    InferenceResult,
+    InferenceSettings,
+    InferRequest,
+    Progress,
+    Role,
+    ShutdownRequest,
+    describe,
+    encode,
+)
+
 MAX_PIXELS = 4096 * 4096
 
 
 class Backend(Protocol):
-    def capabilities(self) -> dict[str, Any]: ...
+    def capabilities(self) -> Capabilities: ...
     def infer(
-        self, role: str, image: Image.Image, settings: dict[str, int]
-    ) -> tuple[NDArray[np.float32], dict[str, Any]]: ...
+        self, role: Role, image: Image.Image, settings: InferenceSettings
+    ) -> tuple[NDArray[np.float32], InferenceMetadata]: ...
 
 
-def safe_path(root: Path, relative: object, suffix: str) -> Path:
-    if not isinstance(relative, str) or ":" in relative or chr(92) in relative:
-        raise ValueError("Expected a relative cache path")
-    if any(part in ("", ".", "..") for part in relative.split("/")):
-        raise ValueError("Unsafe relative cache path")
+def safe_path(root: Path, relative: str) -> Path:
+    """The request model has already refused unsafe path syntax."""
     path = root.joinpath(*relative.split("/")).resolve()
-    if not path.is_relative_to(root) or path.suffix != suffix:
-        raise ValueError("Cache path escape or unexpected file type")
+    if not path.is_relative_to(root):
+        raise ValueError("Cache path escapes the cache root")
     return path
 
 
@@ -45,16 +63,15 @@ def serve(backend: Backend, *, cache_root: str, idle_seconds: float = 300) -> No
         raise ValueError("Worker cache root must be native absolute")
     root = root.resolve()
     capabilities = backend.capabilities()
-    pending: queue.Queue[dict[str, Any] | None] = queue.Queue(maxsize=1)
+    pending: queue.Queue[InferRequest | None] = queue.Queue(maxsize=1)
     lock = threading.Lock()
     output_lock = threading.Lock()
     active: dict[str, Any] = {"id": None, "cancelled": False, "shutdown": False, "hello": False}
 
-    def emit(kind: str, request_id: str, **body: Any) -> None:
+    def emit(reply: HelloReply | Progress | InferenceResult | Acknowledged | Failure) -> None:
         with output_lock:
-            print(
-                json.dumps(dict(protocol=1, type=kind, request_id=request_id, **body)), flush=True
-            )
+            sys.stdout.write(encode(reply))
+            sys.stdout.flush()
 
     def read() -> None:
         try:
@@ -63,33 +80,27 @@ def serve(backend: Backend, *, cache_root: str, idle_seconds: float = 300) -> No
                 try:
                     if len(line) > MAX_LINE or not line.endswith(chr(10)):
                         raise ValueError("Oversized or incomplete request")
-                    message = json.loads(line)
-                    if not isinstance(message, dict) or message.get("protocol") != 1:
-                        raise ValueError("Unsupported protocol")
-                    candidate = message.get("request_id")
-                    if not isinstance(candidate, str) or not candidate or len(candidate) > 128:
-                        request_id = "invalid"
-                        raise ValueError("Invalid request ID")
-                    request_id = candidate
-                    kind = message.get("type")
+                    raw = json.loads(line)
+                    request_id = Envelope.model_validate(raw).request_id
+                    request = REQUEST.validate_python(raw)
                     with lock:
-                        if kind == "cancel":
-                            if message.get("target") == active["id"]:
+                        if isinstance(request, CancelRequest):
+                            if request.target == active["id"]:
                                 active["cancelled"] = True
-                            emit("result", request_id, acknowledged=True)
-                        elif kind == "shutdown":
+                            emit(Acknowledged(request_id=request_id))
+                        elif isinstance(request, ShutdownRequest):
                             active["shutdown"] = True
                             active["cancelled"] = True
-                            emit("result", request_id, acknowledged=True)
+                            emit(Acknowledged(request_id=request_id))
                             if active["id"] is None:
                                 pending.put_nowait(None)
                             return
-                        elif kind == "hello":
+                        elif isinstance(request, HelloRequest):
                             if active["id"] is not None:
                                 raise ValueError("Worker is busy")
                             active["hello"] = True
-                            emit("hello", request_id, **capabilities)
-                        elif kind == "infer":
+                            emit(HelloReply(request_id=request_id, **capabilities.model_dump()))
+                        else:
                             if not active["hello"]:
                                 raise ValueError("Handshake required before inference")
                             if active["id"] is not None:
@@ -98,11 +109,10 @@ def serve(backend: Backend, *, cache_root: str, idle_seconds: float = 300) -> No
                                 )
                             active["id"] = request_id
                             active["cancelled"] = False
-                            pending.put_nowait(message)
-                        else:
-                            raise ValueError("Unknown protocol request type")
+                            pending.put_nowait(request)
                 except (ValueError, TypeError, queue.Full) as exc:
-                    emit("error", str(request_id), code="invalid_request", message=str(exc))
+                    reason = describe(exc) if isinstance(exc, ValidationError) else str(exc)
+                    emit(Failure(request_id=request_id, code="invalid_request", message=reason))
         finally:
             with lock:
                 active["shutdown"] = True
@@ -119,31 +129,20 @@ def serve(backend: Backend, *, cache_root: str, idle_seconds: float = 300) -> No
             return
         if message is None:
             return
-        request_id = message["request_id"]
+        request_id = message.request_id
         temporary: Path | None = None
         try:
-            role = message.get("role")
-            if role not in ("normals", "lighting", "depth"):
-                raise ValueError("Unsupported prediction role")
-            settings = message.get("settings")
-            if not isinstance(settings, dict) or set(settings) != {
-                "num_inference_steps",
-                "ensemble_size",
-            }:
-                raise ValueError("Expected explicit inference steps and ensemble size")
-            for key, limit in (("num_inference_steps", 10), ("ensemble_size", 3)):
-                if type(settings[key]) is not int or not 1 <= settings[key] <= limit:
-                    raise ValueError(f"{key} must be an integer in [1, {limit}] for this engine")
-            source = safe_path(root, message.get("input"), ".png")
-            destination = safe_path(root, message.get("output"), ".npz")
+            role = message.role
+            source = safe_path(root, message.input)
+            destination = safe_path(root, message.output)
             if destination.exists():
                 raise ValueError("Output already exists; choose a new evidence artifact")
             with Image.open(source) as opened:
                 if max(opened.size) > 4096 or opened.width * opened.height > MAX_PIXELS:
                     raise ValueError("Inference image exceeds 4096 by 4096 pixel budget")
                 image = opened.convert("RGB")
-            emit("progress", request_id, step=role)
-            prediction, metadata = backend.infer(role, image, settings)
+            emit(Progress(request_id=request_id, step=role))
+            prediction, metadata = backend.infer(role, image, message.settings)
             expected = (
                 3 if role == "lighting" else 1,
                 image.height,
@@ -174,12 +173,13 @@ def serve(backend: Backend, *, cache_root: str, idle_seconds: float = 300) -> No
                 cancelled = active["cancelled"]
                 active["id"] = None
                 emit(
-                    "result",
-                    request_id,
-                    artifact=message["output"],
-                    checksum=checksum,
-                    cancelled=cancelled,
-                    metadata=metadata,
+                    InferenceResult(
+                        request_id=request_id,
+                        artifact=message.output,
+                        checksum=checksum,
+                        cancelled=cancelled,
+                        metadata=metadata,
+                    )
                 )
         except Exception as exc:
             if temporary:
@@ -187,10 +187,12 @@ def serve(backend: Backend, *, cache_root: str, idle_seconds: float = 300) -> No
             with lock:
                 active["id"] = None
                 emit(
-                    "error",
-                    request_id,
-                    code="inference_failed",
-                    message=f"{exc}. Earlier evidence is retained; retry with unchanged settings.",
+                    Failure(
+                        request_id=request_id,
+                        code="inference_failed",
+                        message=f"{exc}. Earlier evidence is retained; "
+                        "retry with unchanged settings.",
+                    )
                 )
         with lock:
             if active["shutdown"]:

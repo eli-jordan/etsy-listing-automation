@@ -15,18 +15,22 @@ def controlled_worker(
     acknowledged a control (a cancel, or the shutdown on close) or the test
     creates ``infer-release`` -- so a cancel provably lands during the call
     rather than racing a fixed ``delay``. The hold is bounded."""
-    source = Path(__file__).parents[2] / "src/etsy_listings/core/preparation/distribution/src"
+    repo = Path(__file__).parents[2]
+    source = repo / "src/etsy_listings/core/preparation/distribution/src"
     script = tmp_path / "controlled_worker.py"
     script.write_text(
         f"""import sys, time, threading
 sys.path.insert(0, {str(source)!r})
+sys.path.insert(0, {str(repo)!r})
 import numpy as np
+from marigold_worker.protocol import Capabilities, InferenceMetadata
 from marigold_worker.server import serve
+from tests.support.marigold import capabilities_document, metadata_document
 class Backend:
     def capabilities(self):
         if threading.current_thread() is not threading.main_thread():
             raise RuntimeError('Native model startup must finish before the control reader')
-        return dict(engine_version='1.0.0', roles=['normals','lighting','depth'], cuda=True)
+        return Capabilities.model_validate(capabilities_document())
     def infer(self, role, image, settings):
         if {hold!r}:
             deadline = time.monotonic() + 15
@@ -36,7 +40,8 @@ class Backend:
                 time.sleep(0.01)
         else:
             time.sleep({delay!r})
-        return np.full((1,image.height,image.width,1), 0.5, dtype=np.float32), dict(test=True)
+        metadata = InferenceMetadata.model_validate(metadata_document(role, settings.model_dump()))
+        return np.full((1,image.height,image.width,1), 0.5, dtype=np.float32), metadata
 import os
 def _exists(name):
     return os.path.exists(os.path.join({str(tmp_path)!r}, name))
@@ -49,7 +54,7 @@ class _Acknowledgements:
         self._stream = stream
     def write(self, text):
         written = self._stream.write(text)
-        if '"acknowledged": true' in text:
+        if '"acknowledged":true' in text:
             _mark('control-acknowledged')
         return written
     def flush(self):
@@ -62,6 +67,68 @@ serve(Backend(), cache_root={str(tmp_path)!r}, idle_seconds={idle!r})
         encoding="utf-8",
     )
     return [sys.executable, str(script)]
+
+
+def capabilities_document() -> dict:
+    """What a stub engine reports: every field the protocol requires."""
+    return {
+        "engine_version": "1.0.0",
+        "roles": ["normals", "lighting", "depth"],
+        "cuda": True,
+        "gpu": "Stub GPU",
+        "cuda_version": "12.8",
+        "model_ram_budget": 4 * 1024**3,
+        "resident_models": 1,
+        "installed_packages": {"etsy-marigold-worker": "1.0.0"},
+        "packages": {},
+    }
+
+
+def metadata_document(role: str, settings: dict | None = None) -> dict:
+    """Plain data, so the worker subprocess validates it with its own protocol copy."""
+    return {
+        **capabilities_document(),
+        "checkpoint": "stub/" + role,
+        "revision": "0" * 40,
+        "role": role,
+        "seed": 2026,
+        "processing_resolution": 768,
+        "settings": settings or {"num_inference_steps": 10, "ensemble_size": 3},
+        "target_properties": {},
+        "normal_frame": "x right, y up, z toward viewer; image rows down",
+        "transforms": {
+            "original_crop_hw": [1, 1],
+            "processed_padded_hw": [768, 768],
+            "padding": [0, 0, 0, 0],
+            "output_pixel_centres": "integer pixel centres aligned to original crop",
+        },
+        "load_seconds": 0.0,
+        "inference_seconds": 0.0,
+        "warm_reuse": False,
+        "resident_model_bytes": 0,
+        "peak_allocated_bytes": 0,
+        "peak_reserved_bytes": 0,
+        "process_rss_bytes": 0,
+    }
+
+
+def inference_result(*, request_id: str, role: str, output: str, path: Path):
+    """The reply a worker sends for the archive it wrote at ``path``."""
+    import hashlib
+
+    from etsy_listings.core.preparation.distribution.src.marigold_worker.protocol import (
+        InferenceResult,
+    )
+
+    return InferenceResult.model_validate(
+        {
+            "request_id": request_id,
+            "artifact": output,
+            "checksum": hashlib.sha256(path.read_bytes()).hexdigest(),
+            "cancelled": False,
+            "metadata": metadata_document(role),
+        }
+    )
 
 
 def worker_pids(tmp_path: Path) -> list[str]:
@@ -159,7 +226,6 @@ class PreparationWorker:
         self.failure = None
 
     def infer(self, *, request_id, role, input, output, size, **settings):
-        import hashlib
         from contextlib import nullcontext
 
         import numpy as np
@@ -183,7 +249,7 @@ class PreparationWorker:
         path = self.root / output
         path.parent.mkdir(parents=True, exist_ok=True)
         np.savez_compressed(path, prediction=array)
-        return {"checksum": hashlib.sha256(path.read_bytes()).hexdigest(), "artifact": output}
+        return inference_result(request_id=request_id, role=role, output=output, path=path)
 
     def cancel(self, request_id):
         self.cancelled.append(request_id)
