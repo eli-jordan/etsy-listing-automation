@@ -41,9 +41,11 @@ from typing import Any, TypeVar
 import numpy as np
 from PIL import Image
 
-from etsy_listings.core.render.io import load_design
+from etsy_listings.core.render import prepare_material_artwork
+from etsy_listings.core.render.io import DesignValidationError, load_design
 from etsy_listings.core.render.maps import DerivedMapCache
 from etsy_listings.core.render.types import RGB, RGBA, FloatMap
+from etsy_listings.core.workspace.file_version import file_version
 
 EDITOR_MAX_EDGE = 900
 """Longest edge, in px, that the editor's canvas renders at.
@@ -51,7 +53,7 @@ EDITOR_MAX_EDGE = 900
 A single fixed number rather than "however wide the pane happens to be": the
 derived height/luminance maps are cached on disk under a hash of the base
 image's bytes, so an arbitrary per-request size would leave one ``.npy`` pair
-per window width sitting in every template's ``_derived/``. Two sizes exist --
+per window width sitting in every template's ``_renderer/derived/``. Two sizes exist --
 this one and full -- so at most two pairs do.
 
 900 is comfortably above the ~700px the canvas occupies on a 1280px window at
@@ -147,14 +149,14 @@ class _ArrayCache:
             self._held = 0
 
 
-def _stamp(path: Path) -> int:
-    """Mtime in ns, or -1 for a file that has gone. Part of every cache key:
+def _stamp(path: Path) -> tuple[int | str, ...]:
+    """Completed-write token, or a sentinel for a file that has gone:
     a re-exported photo or a replaced test design must not be served from a
     memo of the old bytes."""
     try:
-        return path.stat().st_mtime_ns
+        return file_version(path)
     except OSError:
-        return -1
+        return (-1,)
 
 
 class PreviewImages:
@@ -201,15 +203,46 @@ class PreviewImages:
             token=f"{path}|{stamp}|{target[0]}x{target[1]}",
         )
 
-    def design(self, path: Path) -> RGBA:
-        """The test design, at full size.
+    def design(self, path: Path, max_edge: int | None = None) -> RGBA:
+        """Cache full artwork, or an explicitly approximate editor-only size.
 
-        Not downscaled along with the base: ``warp`` costs one sample per
-        *destination* pixel, so a smaller canvas already pays for itself, and
-        resampling the source as well would make the editor's preview differ
-        from the render for a reason nothing on screen explains.
+        Photo warp and full-quality callers keep their original source. The
+        Marigold editor caps its source before floating-point mip construction;
+        otherwise a 4800px design dominates even a 1024px destination frame.
         """
-        return self._cache.get(("design", str(path), _stamp(path)), lambda: load_design(path))
+
+        def decode() -> RGBA:
+            if max_edge is None:
+                return load_design(path)
+            if max_edge < 1:
+                raise ValueError("Editor artwork size must be positive")
+            with Image.open(path) as image:
+                if image.mode != "RGBA":
+                    raise DesignValidationError("Design must have an alpha channel (RGBA)")
+                image.thumbnail((max_edge, max_edge), Image.Resampling.LANCZOS)
+                array: RGBA = np.array(image, dtype=np.uint8)
+                return array
+
+        return self._cache.get(("design", str(path), _stamp(path), max_edge), decode)
+
+    def material_design(self, path: Path, max_edge: int) -> tuple[RGBA, FloatMap]:
+        """Retain exact linear artwork samples under the same total byte budget.
+
+        Capture the file token before decoding, so a concurrent replacement
+        cannot cache old samples under its new file version.
+        """
+        for _ in range(3):
+            stamp = _stamp(path)
+            design = self.design(path, max_edge=max_edge)
+            if _stamp(path) == stamp:
+                break
+        else:
+            raise OSError("Artwork changed repeatedly while reading preview samples; retry")
+        packed = self._cache.get(
+            ("material-design", str(path), stamp, max_edge),
+            lambda: prepare_material_artwork(design),
+        )
+        return design, packed
 
     def height(self, derived_dir: Path, map_key: str, base: ScaledBase) -> FloatMap:
         cache = DerivedMapCache(derived_dir)

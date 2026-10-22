@@ -13,6 +13,7 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from starlette.concurrency import run_in_threadpool
 from starlette.requests import Request
 from starlette.responses import FileResponse, JSONResponse, Response
 
@@ -26,6 +27,8 @@ from etsy_listings.core.application.dependencies import (
     default_market_client,
 )
 from etsy_listings.core.application.deploy.deployments import Deployments
+from etsy_listings.core.application.preparation.coordinator import Preparations
+from etsy_listings.core.application.preparation.dependencies import PreparationRuntime
 from etsy_listings.core.application.workspace_locks import WorkspaceLocks
 from etsy_listings.core.batches import BatchStore, StagingStore
 from etsy_listings.core.workspace.workspace import InvalidNameError, Workspace
@@ -36,6 +39,7 @@ from etsy_listings.server.api.listing_templates import router as listing_templat
 from etsy_listings.server.api.listings import router as listings_router
 from etsy_listings.server.api.listings import support_router as listings_support_router
 from etsy_listings.server.api.media_files import router as media_files_router
+from etsy_listings.server.api.preparation import router as preparation_router
 from etsy_listings.server.api.runs import router as runs_router
 from etsy_listings.server.api.seo import router as seo_router
 from etsy_listings.server.api.templates import router as templates_router
@@ -58,10 +62,12 @@ def create_app(
     context_factory: ContextFactory = connections.run_context,
     seo_provider_factory: ProviderFactory = default_ai_providers,
     market_client_factory: MarketClientFactory = default_market_client,
+    preparation_runtime: PreparationRuntime | None = None,
 ) -> FastAPI:
     # One of each per process, so their locks mean something: the listing
     # template write locks, and the cache records' stores. Listing locks
     # need no instance; every `ListingDocuments` over one workspace shares them.
+    preparations = Preparations(workspace, runtime=preparation_runtime)
     locks = WorkspaceLocks()
     proposal_store = ProposalStore(workspace)
     staging_store = StagingStore(workspace)
@@ -93,6 +99,7 @@ def create_app(
         Expired staging sessions are swept on the way in. The batch queue
         starts with the app, returning rows a previous server left running
         to the queue."""
+        await run_in_threadpool(preparations.start)
         staging_store.sweep(now=datetime.now(UTC))
         deployments.start()
         ai.start()
@@ -101,8 +108,10 @@ def create_app(
         finally:
             ai.stop()
             deployments.stop()
+            await run_in_threadpool(preparations.close)
 
     app = FastAPI(title="etsy-listings", version="0.1.0", lifespan=lifespan)
+    app.state.preparations = preparations
     app.state.workspace = workspace
     app.state.deployments = deployments
     # Shared with the preview endpoint (`listings.py`), which needs a
@@ -145,6 +154,7 @@ def create_app(
         """
         return JSONResponse(status_code=400, content={"detail": str(exc)})
 
+    app.include_router(preparation_router)
     app.include_router(templates_router)
     app.include_router(designs_router)
     app.include_router(listings_router)

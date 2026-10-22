@@ -101,10 +101,7 @@ export function PrintRealismPanel({ displace, shade, onDisplaceChange, onShadeCh
     <section className="realism" aria-label="Print realism">
       <div className="realism__head">
         <h3 className="realism__heading">Print realism</h3>
-        {/* Reads "Reset" but announces what it resets: the header has its own
-            Reset that throws away every unsaved edit, and two controls with
-            the same name doing different things is a trap for anyone not
-            looking directly at them. */}
+        {/* Keep the accessible name specific to the controls it restores. */}
         <button
           type="button"
           className="btn btn-ghost"

@@ -31,7 +31,6 @@ export function listingDetail(over: Partial<ListingDetail> = {}): ListingDetail 
     brief: "",
     prices: {},
     price_overrides: {},
-    artwork: {},
     pricing_plan: null,
     etsy: listingEtsy(),
     media: [],
