@@ -4,6 +4,8 @@ import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as listingsApi from "../api/listings";
 import * as runsApi from "../api/runs";
+import { MARK_SEEN_GRACE_MS } from "./deploy/runPhases";
+import { controlledClock } from "../test/clock";
 import type {
   ListingSummary,
   PlanDTO,
@@ -335,6 +337,7 @@ describe("BatchDeployPage", () => {
   });
 
   it("overlays a reattached apply on the preserved review and refreshes listings after a result", async () => {
+    const clock = controlledClock();
     const reviewed = runDetail({
       id: "plan-1",
       phase: "ready",
@@ -391,11 +394,11 @@ describe("BatchDeployPage", () => {
     expect(screen.getByText(/1 listing failed/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Plan again" })).toBeInTheDocument();
     await waitFor(() => expect(listingsApi.listListings).toHaveBeenCalledTimes(2));
-    await waitFor(() => expect(runsApi.markRunSeen).toHaveBeenCalledWith("apply-1"), {
-      timeout: 2_000,
-    });
+    expect(runsApi.markRunSeen).not.toHaveBeenCalledWith("apply-1");
+    await clock.advance(MARK_SEEN_GRACE_MS);
+    expect(runsApi.markRunSeen).toHaveBeenCalledWith("apply-1");
 
-    await userEvent.click(screen.getByRole("button", { name: "Plan again" }));
+    await clock.user.click(screen.getByRole("button", { name: "Plan again" }));
     await waitFor(() =>
       expect(runsApi.createRun).toHaveBeenCalledWith({
         kind: "plan",
@@ -507,6 +510,7 @@ describe("BatchDeployPage", () => {
   });
 
   it("keeps a just-finished workspace apply unseen when Back is clicked immediately", async () => {
+    const clock = controlledClock();
     // Reproduces the race behind the flaky
     // test_batch_apply_leaves_reattaches_and_continues_after_stale_listing
     // browser test: handleApply's own re-navigate to this apply run's URL
@@ -542,9 +546,9 @@ describe("BatchDeployPage", () => {
 
     renderPage("/listings/deploy/apply-fast");
     await screen.findByText("Some listings became stale.");
-    await userEvent.click(screen.getByRole("button", { name: "← Back to listings" }));
+    await clock.user.click(screen.getByRole("button", { name: "← Back to listings" }));
     await screen.findByText("listings page");
-    await new Promise((resolve) => window.setTimeout(resolve, 800));
+    await clock.advance(MARK_SEEN_GRACE_MS);
 
     expect(runsApi.markRunSeen).not.toHaveBeenCalledWith("apply-fast");
   });

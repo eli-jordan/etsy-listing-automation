@@ -5,32 +5,38 @@
 stage of its plan was blocked, and its lockfile carries no ``incomplete``
 marker. ``ok`` alone is not enough -- a blocked stage is not a failure, so a
 listing that deployed nothing to Etsy still reads ``ok``. The rule lives in
-``engine/run.py``, so every entry point that applies gets it; these drive
-``apply_listings`` directly, as both the CLI and the UI's executor do.
+``engine/run.py``, so every entry point that applies gets it. The predicate's
+cases are tabulated in ``tests/core/unit/test_fully_applied.py``; here simple
+stages prove which outcomes physically remove the proposal, and the real
+pipeline is kept for one full success, the CLI and HTTP wiring, and a stop
+after the last runnable stage.
 """
 
 from __future__ import annotations
 
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from pathlib import Path
+from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
+from pydantic import BaseModel, ConfigDict
 from typer.testing import CliRunner
 
 from etsy_listings.cli import app as cli_app
-from etsy_listings.core.clients.etsy.transport import EtsyApiError
-from etsy_listings.core.clients.printify.fakes import FakePrintifyClient
+from etsy_listings.core.engine.change import Verdict
 from etsy_listings.core.engine.context import EventSink, RunContext
 from etsy_listings.core.engine.events import EngineRunEvent, EngineStageApplying
 from etsy_listings.core.engine.lock import Lockfile
-from etsy_listings.core.engine.run import apply_listings, fully_applied, plan_listings
+from etsy_listings.core.engine.run import ListingOutcome, apply_listings, plan_listings
+from etsy_listings.core.engine.stage import StageApplyResult
+from etsy_listings.core.errors import UserFacingError
 from etsy_listings.core.workspace.workspace import Workspace
 from etsy_listings.server.api.app import create_app
 
 from tests.support.ai_runs import has_proposal, seed_proposal
 from tests.support.builders import FIXTURE_LISTING as LISTING
-from tests.support.builders import a_context, a_lock
+from tests.support.builders import a_context
 from tests.support.pipeline import a_deployable_context, real_stages
 
 
@@ -89,71 +95,95 @@ def test_ui_apply_removes_the_proposal_after_a_full_success(workspace_root: Path
     assert not has_proposal(workspace_root)
 
 
-def test_an_ok_apply_with_a_blocked_stage_keeps_the_proposal(workspace_root: Path) -> None:
-    """The fixture workspace has no Printify shop, so `render` applies and
-    every stage after it is blocked: ``ok``, and nothing reached Etsy."""
-    seed_proposal(workspace_root)
+class _Applied(BaseModel):
+    model_config = ConfigDict(extra="ignore")
 
-    report = apply_listings(
-        a_context(workspace_root, printify=FakePrintifyClient([])), [LISTING], real_stages()
-    )
 
-    outcome = report.outcomes[0]
+@dataclass
+class _Stage:
+    """A stage that works, refuses, raises or idles on request: the subject is
+    which outcomes physically remove a proposal, not what any real stage does."""
+
+    name: str
+    local: bool = True
+    group: str | None = None
+    applied_model: type[_Applied] = _Applied
+    verdict: str = "work"
+    fails: bool = False
+
+    def desired(self, ctx: RunContext, listing: str, applied: _Applied | None) -> str:
+        return self.name
+
+    def read_live(self, ctx: RunContext, listing: str, lock: Lockfile, applied: object) -> None:
+        return None
+
+    def plan(self, desired: object, applied: object, live: object) -> Verdict:
+        if self.verdict == "refused":
+            return Verdict.refused(f"{self.name} cannot run")
+        if self.verdict == "idle":
+            return Verdict.no_work()
+        return Verdict.work(f"{self.name} has work")
+
+    def apply(
+        self, ctx: RunContext, desired: object, applied: object, live: object, lock: Lockfile
+    ) -> StageApplyResult:
+        if self.fails:
+            raise UserFacingError(f"{self.name} refused")
+        return StageApplyResult(applied={})
+
+
+def _apply_simple(root: Path, *stages: _Stage, **kwargs: Any) -> ListingOutcome:
+    seed_proposal(root)
+    return apply_listings(a_context(root), [LISTING], list(stages), **kwargs).outcomes[0]
+
+
+def test_a_simple_full_success_removes_the_proposal(workspace_root: Path) -> None:
+    outcome = _apply_simple(workspace_root, _Stage("render"), _Stage("etsy", verdict="idle"))
+
     assert outcome.ok, outcome.error
-    assert outcome.planned is not None
-    assert any(sp.blocked for sp in outcome.planned.plan.stage_plans)
+    assert not has_proposal(workspace_root)
+
+
+def test_an_ok_apply_with_a_blocked_stage_keeps_the_proposal(workspace_root: Path) -> None:
+    """A blocked stage is not a failure: ``ok``, yet nothing reached it."""
+    outcome = _apply_simple(workspace_root, _Stage("render"), _Stage("etsy", verdict="refused"))
+
+    assert outcome.ok, outcome.error
     assert has_proposal(workspace_root)
 
 
-def _etsy_refuses_patches(ctx: RunContext, monkeypatch: pytest.MonkeyPatch) -> None:
-    def refuse(*args: object, **kwargs: object) -> None:
-        raise EtsyApiError(500, error="Etsy is down")
+def test_a_failed_apply_keeps_the_proposal(workspace_root: Path) -> None:
+    outcome = _apply_simple(workspace_root, _Stage("render"), _Stage("etsy", fails=True))
 
-    monkeypatch.setattr(ctx.require_etsy(), "update_listing", refuse)
-
-
-def test_a_failed_apply_keeps_the_proposal(
-    workspace_root: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    ctx = a_deployable_context(workspace_root)
-    _etsy_refuses_patches(ctx, monkeypatch)
-    seed_proposal(workspace_root)
-
-    report = apply_listings(ctx, [LISTING], real_stages())
-
-    assert not report.outcomes[0].ok
+    assert not outcome.ok
     assert has_proposal(workspace_root)
 
 
 def test_an_ok_apply_that_leaves_the_incomplete_marker_keeps_the_proposal(
-    workspace_root: Path, monkeypatch: pytest.MonkeyPatch
+    workspace_root: Path,
 ) -> None:
-    """A failed apply marks the lockfile incomplete. A retry that
-    returns ``ok`` without walking every stage -- stopped at a stage
-    boundary, as a server shutdown stops one -- leaves the marker set."""
-    ctx = a_deployable_context(workspace_root)
-    with monkeypatch.context() as patched:
-        _etsy_refuses_patches(ctx, patched)
-        apply_listings(ctx, [LISTING], real_stages())
-    seed_proposal(workspace_root)
-    stages = {"started": 0}
+    """A failed apply marks the lockfile incomplete. A retry that returns
+    ``ok`` without walking every stage -- stopped at a stage boundary, as a
+    server shutdown stops one -- leaves the marker set."""
+    stages = (_Stage("render"), _Stage("etsy", fails=True))
+    assert not _apply_simple(workspace_root, *stages).ok
+    started: list[str] = []
 
-    def stop_after_render(event: EngineRunEvent) -> None:
+    def count(event: EngineRunEvent) -> None:
         if isinstance(event, EngineStageApplying):
-            stages["started"] += 1
+            started.append(event.stage)
 
-    report = apply_listings(
-        ctx,
-        [LISTING],
-        real_stages(),
-        on_event=stop_after_render,
-        should_stop=lambda: stages["started"] > 0,
+    retried = _apply_simple(
+        workspace_root,
+        _Stage("render"),
+        _Stage("etsy"),
+        on_event=count,
+        should_stop=lambda: bool(started),
     )
 
-    assert report.outcomes[0].ok, report.outcomes[0].error
-    lock = Lockfile.read(ctx.workspace.lock_file(LISTING))
-    assert lock is not None
-    assert lock.incomplete is not None
+    assert retried.ok, retried.error
+    lock = Lockfile.read(a_context(workspace_root).workspace.lock_file(LISTING))
+    assert lock is not None and lock.incomplete is not None
     assert has_proposal(workspace_root)
 
 
@@ -190,16 +220,3 @@ def test_a_stop_after_the_last_runnable_stage_still_removes_the_proposal(
 
     assert report.outcomes[0].ok, report.outcomes[0].error
     assert not has_proposal(workspace_root)
-
-
-def test_full_success_needs_the_marker_clear_whatever_else_holds(workspace_root: Path) -> None:
-    """The marker is ADR-0050's third condition on its own: the same ``ok``,
-    unblocked outcome is a full success with a clean lockfile and is not
-    with a marked one."""
-    ctx = a_deployable_context(workspace_root)
-    outcome = plan_listings(ctx, [LISTING], real_stages()).outcomes[0]
-    assert outcome.planned is not None
-    assert not any(sp.blocked for sp in outcome.planned.plan.stage_plans)
-
-    assert fully_applied(outcome, a_lock())
-    assert not fully_applied(outcome, a_lock().marked_incomplete("etsy_listing"))

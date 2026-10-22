@@ -14,16 +14,7 @@ from pathlib import Path
 import pytest
 
 from etsy_listings.core.clients.printify.fakes import FakeCatalogClient, FakePrintifyClient
-from etsy_listings.core.clients.printify.models import (
-    Blueprint,
-    PrintAreaPlaceholder,
-    PrintProvider,
-    ProductExternal,
-    Shop,
-    Variant,
-    VariantOptions,
-    VariantSet,
-)
+from etsy_listings.core.clients.printify.models import ProductExternal, Shop
 from etsy_listings.core.engine.apply import execute
 from etsy_listings.core.engine.change import Plan, StagePlan
 from etsy_listings.core.engine.context import RunContext
@@ -37,23 +28,10 @@ from etsy_listings.core.engine.stages.publish import (
 )
 
 from tests.support.builders import FIXTURE_LISTING as LISTING
-from tests.support.builders import (
-    a_context,
-    a_lock,
-    edit_listing,
-    set_copy,
-    set_shop_id,
-    write_design,
-)
+from tests.support.builders import a_context, a_lock, edit_listing, set_copy, set_shop_id
+from tests.support.pipeline import COLOURS, SIZES, a_catalog, at_print_area
 
-BLUEPRINT = Blueprint(
-    id=706, title="Unisex Garment-Dyed T-shirt", brand="Comfort Colors®", model="1717"
-)
-PROVIDER = PrintProvider(id=29, title="Monster Digital")
-COLOURS = ["Black", "Blue Jean", "Ivory", "Moss"]
-SIZES = ["S", "M", "L", "XL", "XXL", "XXXL"]
 SHOP_ID = 28819281
-PRINT_AREA = (4500, 5400)
 FIRST_FAKE_PRODUCT_ID = "fake-product-1"
 """`FakePrintifyClient` mints ids as `fake-product-{n}`, counting from one per
 instance -- predictable enough that a test can seed `publish_external` for
@@ -63,29 +41,9 @@ ETSY_LISTING_ID = 4572550919
 ETSY_LISTING_HANDLE = "https://www.etsy.com/listing/4572550919/probe"
 
 
-def _variants() -> VariantSet:
-    placeholder = PrintAreaPlaceholder(position="front", width=PRINT_AREA[0], height=PRINT_AREA[1])
-    return VariantSet(
-        variants=tuple(
-            Variant(
-                id=1000 + colour_index * 10 + size_index,
-                title=f"{colour} / {size}",
-                options=VariantOptions(color=colour, size=size),
-                placeholders=(placeholder,),
-            )
-            for colour_index, colour in enumerate(COLOURS)
-            for size_index, size in enumerate(SIZES)
-        )
-    )
-
-
 @pytest.fixture
 def catalog() -> FakeCatalogClient:
-    return FakeCatalogClient(
-        blueprints=[BLUEPRINT],
-        providers_by_blueprint={706: [PROVIDER]},
-        variants_by_key={(706, 29): _variants()},
-    )
+    return a_catalog()
 
 
 @pytest.fixture
@@ -104,7 +62,7 @@ def printify() -> FakePrintifyClient:
 def root(workspace_root: Path) -> Path:
     set_shop_id(workspace_root, SHOP_ID)
     set_copy(workspace_root, title="Take A Hike Tee", description="A retro sunset.")
-    write_design(workspace_root, PRINT_AREA)
+    at_print_area(workspace_root)
     return workspace_root
 
 
@@ -192,26 +150,40 @@ def test_a_second_apply_with_nothing_changed_does_not_republish(root, catalog, p
 # ------------------------------------------------------------- variant changes
 
 
-def test_a_changed_price_triggers_a_republish(root, catalog, printify) -> None:
+RAISED_PRICES = {
+    "S": "399 NOK",
+    "M": "399 NOK",
+    "L": "399 NOK",
+    "XL": "409 NOK",
+    "XXL": "419 NOK",
+    "XXXL": "429 NOK",
+}
+
+
+def test_a_changed_price_plans_a_republish(root, catalog, printify) -> None:
     ctx = _ctx(root, catalog, printify)
     lock = _apply(ctx, a_lock())
 
-    edit_listing(
-        root,
-        prices={
-            "S": "399 NOK",
-            "M": "399 NOK",
-            "L": "399 NOK",
-            "XL": "409 NOK",
-            "XXL": "419 NOK",
-            "XXXL": "429 NOK",
-        },
-    )
+    edit_listing(root, prices=RAISED_PRICES)
 
     stage_plan = _publish_plan(ctx, lock)
 
     assert stage_plan.will_run
     assert "differ" in (stage_plan.reason or "")
+
+
+def test_a_changed_price_is_republished(root, catalog, printify) -> None:
+    """Planning it is not doing it: the second apply must actually call
+    publish on the same product, after the price update reached Printify."""
+    ctx = _ctx(root, catalog, printify)
+    lock = _apply(ctx, a_lock())
+    edit_listing(root, prices=RAISED_PRICES)
+
+    result = _apply(ctx, lock)
+
+    assert [product_id for product_id, _ in printify.published] == [FIRST_FAKE_PRODUCT_ID] * 2
+    assert 39900 in printify.updated[0].variants.values()
+    assert result.remote["etsy_listing_id"] == ETSY_LISTING_ID
 
 
 # --------------------------------------------------------------------- timeout
@@ -312,17 +284,7 @@ def test_a_stage_that_will_run_has_no_below_cost_rows(root, catalog, printify) -
     ctx = _ctx(root, catalog, printify)
     lock = _apply(ctx, a_lock())
 
-    edit_listing(
-        root,
-        prices={
-            "S": "399 NOK",
-            "M": "399 NOK",
-            "L": "399 NOK",
-            "XL": "409 NOK",
-            "XXL": "419 NOK",
-            "XXXL": "429 NOK",
-        },
-    )
+    edit_listing(root, prices=RAISED_PRICES)
 
     stage_plan = _publish_plan(ctx, lock)
 

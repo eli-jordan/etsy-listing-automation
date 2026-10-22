@@ -8,39 +8,13 @@ import * as seoApi from "../api/seo";
 import { briefEvent, type FakeAiRuns, fakeAiRuns, stepEvent } from "../test/aiRuns";
 import type { DesignMap, ListingDetail } from "../types";
 import { ListingEditorPage } from "./ListingEditorPage";
+import { listingDetail } from "../test/listings";
+import { AUTOSAVE_DEBOUNCE_MS } from "../hooks/useAutosave";
+import { controlledClock } from "../test/clock";
+import { type Deferred, deferred, must } from "../test/helpers";
 
 function detail(over: Partial<ListingDetail> = {}): ListingDetail {
-  return {
-    garment_profile: "comfort-colors-1717",
-    design: { default: "designs/take-a-hike.png" },
-    colors: ["black"],
-    brief: "",
-    prices: {},
-    price_overrides: {},
-    pricing_plan: null,
-    etsy: {
-      title: "",
-      description: { lead: "", text: null, ref: null },
-      tags: [],
-      variation_images: null,
-      renewal: null,
-      section: null,
-      shipping_profile: null,
-    },
-    media: [],
-    name: "take-a-hike",
-    modified_at: "2026-09-17T10:00:00Z",
-    status: "draft",
-    issues: [],
-    field_errors: {},
-    etsy_listing_id: null,
-    printify_product_id: null,
-    pricing_plan_name: null,
-    resolved_prices: [],
-    gestures: [],
-    description_composed: "",
-    ...over,
-  };
+  return listingDetail(over);
 }
 
 function NewTemplateProbe() {
@@ -449,6 +423,7 @@ describe("ListingEditorPage", () => {
   });
 
   it("saves a newly picked design", async () => {
+    const clock = controlledClock();
     vi.spyOn(listingsApi, "listListingDesigns").mockResolvedValue([
       { name: "take-a-hike", file: "designs/take-a-hike.png" },
       { name: "cosmic-cat", file: "designs/cosmic-cat.png" },
@@ -458,17 +433,17 @@ describe("ListingEditorPage", () => {
     renderAt("/listings/take-a-hike");
     await screen.findByText("For all shirts");
 
-    fireEvent.click(screen.getByRole("button", { name: /Change design/ }));
-    fireEvent.click(await screen.findByRole("button", { name: /cosmic-cat/ }));
+    await clock.user.click(screen.getByRole("button", { name: /Change design/ }));
+    await clock.user.click(await screen.findByRole("button", { name: /cosmic-cat/ }));
+    await clock.advance(AUTOSAVE_DEBOUNCE_MS);
 
-    await waitFor(() =>
-      expect(patchSpy).toHaveBeenCalledWith("take-a-hike", {
-        design: { default: "designs/cosmic-cat.png" },
-      }),
-    );
+    expect(patchSpy).toHaveBeenCalledWith("take-a-hike", {
+      design: { default: "designs/cosmic-cat.png" },
+    });
   });
 
   it("runs the AI chain once the picked design is saved, and fills in the brief it drafts", async () => {
+    const clock = controlledClock();
     /* ADR-0003: a pick on a listing whose brief is empty arms the chain; the
        save that follows fires it. The server writes the drafted brief, so
        the field fills in without another save. */
@@ -483,12 +458,11 @@ describe("ListingEditorPage", () => {
     renderAt("/listings/take-a-hike");
     await screen.findByText("For all shirts");
 
-    fireEvent.click(screen.getByRole("button", { name: /Change design/ }));
-    fireEvent.click(await screen.findByRole("button", { name: /cosmic-cat/ }));
+    await clock.user.click(screen.getByRole("button", { name: /Change design/ }));
+    await clock.user.click(await screen.findByRole("button", { name: /cosmic-cat/ }));
+    await clock.advance(AUTOSAVE_DEBOUNCE_MS);
 
-    await waitFor(() =>
-      expect(runs.start).toHaveBeenCalledWith("take-a-hike", { draftBrief: true }),
-    );
+    expect(runs.start).toHaveBeenCalledWith("take-a-hike", { draftBrief: true });
     await waitFor(() => expect(runs.streams).toHaveLength(1));
     runs.emit(stepEvent("brief", "active", "Reading cosmic-cat.png"));
     expect(screen.getByText("Drafting brief…")).toBeInTheDocument();
@@ -517,6 +491,7 @@ describe("ListingEditorPage", () => {
   });
 
   it("does not rename a listing that already has a name when its design changes", async () => {
+    const clock = controlledClock();
     /* A listing called something is called that on purpose. Only a draft
        with no name at all takes one from its artwork. */
     vi.spyOn(listingsApi, "listListingDesigns").mockResolvedValue([
@@ -529,10 +504,11 @@ describe("ListingEditorPage", () => {
     renderAt("/listings/take-a-hike");
     await screen.findByText("For all shirts");
 
-    fireEvent.click(screen.getByRole("button", { name: /Change design/ }));
-    fireEvent.click(await screen.findByRole("button", { name: /cosmic-cat/ }));
+    await clock.user.click(screen.getByRole("button", { name: /Change design/ }));
+    await clock.user.click(await screen.findByRole("button", { name: /cosmic-cat/ }));
+    await clock.advance(AUTOSAVE_DEBOUNCE_MS);
 
-    await waitFor(() => expect(listingsApi.patchListing).toHaveBeenCalled());
+    expect(listingsApi.patchListing).toHaveBeenCalled();
     expect(rename).not.toHaveBeenCalled();
     expect(screen.getByRole("heading", { name: "take-a-hike" })).toBeInTheDocument();
   });
@@ -577,19 +553,21 @@ describe("ListingEditorPage", () => {
       { name: "light-ink", file: "designs/light-ink.png" },
     ]);
     vi.spyOn(listingsApi, "getListing").mockResolvedValue(detail());
+    const clock = controlledClock();
     const patchSpy = vi.spyOn(listingsApi, "patchListing").mockResolvedValue(detail());
     renderAt("/listings/take-a-hike");
     await screen.findByText("For all shirts");
 
-    fireEvent.click(screen.getByRole("button", { name: "Unlink" }));
-    fireEvent.click(await screen.findByRole("button", { name: /Change design for dark shirts/ }));
-    fireEvent.click(await screen.findByRole("button", { name: /light-ink/ }));
-
-    await waitFor(() =>
-      expect(patchSpy).toHaveBeenCalledWith("take-a-hike", {
-        design: { "on-light": "designs/take-a-hike.png", "on-dark": "designs/light-ink.png" },
-      }),
+    await clock.user.click(screen.getByRole("button", { name: "Unlink" }));
+    await clock.user.click(
+      await screen.findByRole("button", { name: /Change design for dark shirts/ }),
     );
+    await clock.user.click(await screen.findByRole("button", { name: /light-ink/ }));
+    await clock.advance(AUTOSAVE_DEBOUNCE_MS);
+
+    expect(patchSpy).toHaveBeenCalledWith("take-a-hike", {
+      design: { "on-light": "designs/take-a-hike.png", "on-dark": "designs/light-ink.png" },
+    });
     expect(patchSpy).toHaveBeenCalledTimes(1);
   });
 
@@ -675,19 +653,21 @@ describe("ListingEditorPage", () => {
         design: { default: "designs/take-a-hike.png", moss: "designs/moss-special.png" },
       }),
     );
+    const clock = controlledClock();
     renderAt("/listings/take-a-hike");
 
-    fireEvent.click(
+    await clock.user.click(
       await screen.findByRole("button", { name: "Select different design for Moss" }),
     );
     const dialog = await screen.findByRole("dialog", { name: "Design for Moss" });
-    fireEvent.click(await within(dialog).findByRole("button", { name: /moss-special/ }));
+    await clock.user.click(await within(dialog).findByRole("button", { name: /moss-special/ }));
+    await clock.advance(AUTOSAVE_DEBOUNCE_MS);
 
-    await waitFor(() =>
-      expect(patchSpy).toHaveBeenCalledWith("take-a-hike", {
-        design: { default: "designs/take-a-hike.png", moss: "designs/moss-special.png" },
-      }),
-    );
+    expect(patchSpy).toHaveBeenCalledWith("take-a-hike", {
+      design: { default: "designs/take-a-hike.png", moss: "designs/moss-special.png" },
+    });
+    // The save has landed, and anything it would have started with it.
+    await act(async () => {});
     expect(runs.start).not.toHaveBeenCalled();
   });
 
@@ -845,6 +825,7 @@ describe("ListingEditorPage at /listings/new", () => {
   });
 
   it("leaves a name the seller is part-way through typing alone", async () => {
+    const clock = controlledClock();
     /* An uncommitted name is not the listing's name -- `detail.name` is still
        empty -- so the pick has to be told about the field's own text or it
        would overwrite what they were in the middle of writing. */
@@ -859,12 +840,15 @@ describe("ListingEditorPage at /listings/new", () => {
     renderAt("/listings/new");
 
     const input = await screen.findByLabelText("Listing name");
-    fireEvent.change(input, { target: { value: "my-shi" } });
+    await clock.user.type(input, "my-shi");
 
+    // Dispatched, not clicked: a real click elsewhere blurs the field, and
+    // blur commits the name -- the field would no longer be part-way typed.
     fireEvent.click(screen.getByRole("button", { name: /Choose design for all shirts/ }));
     fireEvent.click(await screen.findByRole("button", { name: /cosmic-cat/ }));
+    await clock.advance(AUTOSAVE_DEBOUNCE_MS);
 
-    await waitFor(() => expect(describe).toHaveBeenCalled());
+    expect(describe).toHaveBeenCalled();
     expect(create).not.toHaveBeenCalled();
     expect(screen.getByLabelText("Listing name")).toHaveValue("my-shi");
 
@@ -876,6 +860,7 @@ describe("ListingEditorPage at /listings/new", () => {
   });
 
   it("keeps a name the seller already typed, even if the design is picked after", async () => {
+    const clock = controlledClock();
     vi.spyOn(listingsApi, "getListingDraft").mockResolvedValue(draft());
     vi.spyOn(listingsApi, "listListingDesigns").mockResolvedValue([
       { name: "cosmic-cat", file: "designs/cosmic-cat.png" },
@@ -887,16 +872,16 @@ describe("ListingEditorPage at /listings/new", () => {
     renderAt("/listings/new");
 
     const input = await screen.findByLabelText("Listing name");
-    fireEvent.change(input, { target: { value: "my-shirt" } });
-    fireEvent.keyDown(input, { key: "Enter" });
+    await clock.user.type(input, "my-shirt{Enter}");
     await waitFor(() =>
       expect(screen.getByRole("heading", { name: "my-shirt" })).toBeInTheDocument(),
     );
 
-    fireEvent.click(screen.getByRole("button", { name: /Change design for all shirts/ }));
-    fireEvent.click(await screen.findByRole("button", { name: /cosmic-cat/ }));
+    await clock.user.click(screen.getByRole("button", { name: /Change design for all shirts/ }));
+    await clock.user.click(await screen.findByRole("button", { name: /cosmic-cat/ }));
+    await clock.advance(AUTOSAVE_DEBOUNCE_MS);
 
-    await waitFor(() => expect(listingsApi.patchListing).toHaveBeenCalled());
+    expect(listingsApi.patchListing).toHaveBeenCalled();
     expect(create).toHaveBeenCalledTimes(1);
     expect(screen.getByRole("heading", { name: "my-shirt" })).toBeInTheDocument();
   });
@@ -926,41 +911,43 @@ describe("ListingEditorPage's AI chain follows the representative artwork (PRD 6
       { name: "cosmic-cat", file: "designs/cosmic-cat.png" },
     ]);
     vi.spyOn(listingsApi, "getListing").mockResolvedValue(detail({ design }));
-    const patch = vi
-      .spyOn(listingsApi, "patchListing")
-      .mockImplementation(async (_name, body) =>
-        detail({ design: (body as { design: DesignMap }).design }),
-      );
-    renderAt("/listings/take-a-hike");
-    return patch;
-  }
-
-  /** The save landed, and whatever it would have fired has had its turn. */
-  async function settled(patch: ReturnType<typeof open>) {
-    await waitFor(() => expect(patch).toHaveBeenCalled());
-    await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 0));
+    const clock = controlledClock();
+    const writes: Deferred<ListingDetail>[] = [];
+    const patch = vi.spyOn(listingsApi, "patchListing").mockImplementation(() => {
+      const write = deferred<ListingDetail>();
+      writes.push(write);
+      return write.promise;
     });
+    renderAt("/listings/take-a-hike");
+
+    /** The debounce has run out, the one save it sent has landed with what
+     * it sent, and whatever that save would fire has had its turn. */
+    async function settled() {
+      await clock.advance(AUTOSAVE_DEBOUNCE_MS);
+      expect(patch).toHaveBeenCalledTimes(1);
+      const body = must(patch.mock.calls[0])[1] as { design: DesignMap };
+      await act(async () => must(writes[0]).resolve(detail({ design: body.design })));
+    }
+    return { user: clock.user, patch, settled };
   }
 
   it("arms on a pick for the light slot, which holds the representative", async () => {
-    open({ "on-light": LIGHT, "on-dark": DARK });
+    const { user, settled } = open({ "on-light": LIGHT, "on-dark": DARK });
 
-    fireEvent.click(await screen.findByRole("button", { name: /Change design for light shirts/ }));
-    fireEvent.click(await screen.findByRole("button", { name: /cosmic-cat/ }));
+    await user.click(await screen.findByRole("button", { name: /Change design for light shirts/ }));
+    await user.click(await screen.findByRole("button", { name: /cosmic-cat/ }));
 
-    await waitFor(() =>
-      expect(runs.start).toHaveBeenCalledWith("take-a-hike", { draftBrief: true }),
-    );
+    await settled();
+    expect(runs.start).toHaveBeenCalledWith("take-a-hike", { draftBrief: true });
   });
 
   it("does not arm on a pick for the dark slot while the light slot holds a file", async () => {
-    const patch = open({ "on-light": LIGHT, "on-dark": DARK });
+    const { user, patch, settled } = open({ "on-light": LIGHT, "on-dark": DARK });
 
-    fireEvent.click(await screen.findByRole("button", { name: /Change design for dark shirts/ }));
-    fireEvent.click(await screen.findByRole("button", { name: /cosmic-cat/ }));
+    await user.click(await screen.findByRole("button", { name: /Change design for dark shirts/ }));
+    await user.click(await screen.findByRole("button", { name: /cosmic-cat/ }));
 
-    await settled(patch);
+    await settled();
     expect(patch).toHaveBeenCalledWith("take-a-hike", {
       design: { "on-light": LIGHT, "on-dark": "designs/cosmic-cat.png" },
     });
@@ -968,29 +955,30 @@ describe("ListingEditorPage's AI chain follows the representative artwork (PRD 6
   });
 
   it("arms on a pick for the dark slot when it is the only base file", async () => {
-    open({ "on-light": null, "on-dark": DARK });
+    const { user, settled } = open({ "on-light": null, "on-dark": DARK });
 
-    fireEvent.click(await screen.findByRole("button", { name: /Change design for dark shirts/ }));
-    fireEvent.click(await screen.findByRole("button", { name: /cosmic-cat/ }));
+    await user.click(await screen.findByRole("button", { name: /Change design for dark shirts/ }));
+    await user.click(await screen.findByRole("button", { name: /cosmic-cat/ }));
 
-    await waitFor(() => expect(runs.start).toHaveBeenCalledTimes(1));
+    await settled();
+    expect(runs.start).toHaveBeenCalledTimes(1);
   });
 
   it("does not arm on Unlink, which keeps the file in the light slot", async () => {
-    const patch = open({ default: LIGHT });
+    const { user, settled } = open({ default: LIGHT });
 
-    fireEvent.click(await screen.findByRole("button", { name: "Unlink" }));
+    await user.click(await screen.findByRole("button", { name: "Unlink" }));
 
-    await settled(patch);
+    await settled();
     expect(runs.start).not.toHaveBeenCalled();
   });
 
   it("does not arm on Unlink of an empty design, which leaves both slots null", async () => {
-    const patch = open({});
+    const { user, patch, settled } = open({});
 
-    fireEvent.click(await screen.findByRole("button", { name: "Unlink" }));
+    await user.click(await screen.findByRole("button", { name: "Unlink" }));
 
-    await settled(patch);
+    await settled();
     expect(patch).toHaveBeenCalledWith("take-a-hike", {
       design: { "on-light": null, "on-dark": null },
     });
@@ -998,23 +986,24 @@ describe("ListingEditorPage's AI chain follows the representative artwork (PRD 6
   });
 
   it("arms when Link keeps the dark-shirt file", async () => {
-    open({ "on-light": LIGHT, "on-dark": DARK });
+    const { user, settled } = open({ "on-light": LIGHT, "on-dark": DARK });
 
-    fireEvent.click(await screen.findByRole("button", { name: "Link" }));
-    fireEvent.click(screen.getByRole("radio", { name: /dark-ink/ }));
-    fireEvent.click(screen.getByRole("button", { name: "Use one design" }));
+    await user.click(await screen.findByRole("button", { name: "Link" }));
+    await user.click(screen.getByRole("radio", { name: /dark-ink/ }));
+    await user.click(screen.getByRole("button", { name: "Use one design" }));
 
-    await waitFor(() => expect(runs.start).toHaveBeenCalledTimes(1));
+    await settled();
+    expect(runs.start).toHaveBeenCalledTimes(1);
   });
 
   it("does not arm when Link keeps the light-shirt file, already the representative", async () => {
-    const patch = open({ "on-light": LIGHT, "on-dark": DARK });
+    const { user, patch, settled } = open({ "on-light": LIGHT, "on-dark": DARK });
 
-    fireEvent.click(await screen.findByRole("button", { name: "Link" }));
-    fireEvent.click(screen.getByRole("radio", { name: /light-ink/ }));
-    fireEvent.click(screen.getByRole("button", { name: "Use one design" }));
+    await user.click(await screen.findByRole("button", { name: "Link" }));
+    await user.click(screen.getByRole("radio", { name: /light-ink/ }));
+    await user.click(screen.getByRole("button", { name: "Use one design" }));
 
-    await settled(patch);
+    await settled();
     expect(patch).toHaveBeenCalledWith("take-a-hike", { design: { default: LIGHT } });
     expect(runs.start).not.toHaveBeenCalled();
   });
@@ -1033,32 +1022,35 @@ describe("ListingEditorPage names a draft after its representative artwork", () 
       .spyOn(listingsApi, "createListing")
       .mockResolvedValue(detail({ name: "cosmic-cat" }));
     const describe = vi.spyOn(listingsApi, "describeListingDraft").mockResolvedValue(draft(design));
+    const clock = controlledClock();
     renderAt("/listings/new");
-    return { create, describe };
+    return { user: clock.user, advance: clock.advance, create, describe };
   }
 
   it("takes the name of the dark-shirt file when that becomes the representative", async () => {
-    const { create } = openDraft({ "on-light": null, "on-dark": null });
+    const { user, advance, create } = openDraft({ "on-light": null, "on-dark": null });
     await screen.findByLabelText("Listing name");
 
-    fireEvent.click(screen.getByRole("button", { name: /Choose design for dark shirts/ }));
-    fireEvent.click(await screen.findByRole("button", { name: /cosmic-cat/ }));
+    await user.click(screen.getByRole("button", { name: /Choose design for dark shirts/ }));
+    await user.click(await screen.findByRole("button", { name: /cosmic-cat/ }));
 
-    await waitFor(() => expect(create).toHaveBeenCalledTimes(1));
+    await advance(AUTOSAVE_DEBOUNCE_MS);
+    expect(create).toHaveBeenCalledTimes(1);
     expect(create.mock.calls[0]?.[0].name).toBe("cosmic-cat");
   });
 
   it("is not named after the dark-shirt file while the light slot holds the representative", async () => {
-    const { create, describe } = openDraft({
+    const { user, advance, create, describe } = openDraft({
       "on-light": "designs/light-ink.png",
       "on-dark": null,
     });
     await screen.findByLabelText("Listing name");
 
-    fireEvent.click(screen.getByRole("button", { name: /Choose design for dark shirts/ }));
-    fireEvent.click(await screen.findByRole("button", { name: /cosmic-cat/ }));
+    await user.click(screen.getByRole("button", { name: /Choose design for dark shirts/ }));
+    await user.click(await screen.findByRole("button", { name: /cosmic-cat/ }));
 
-    await waitFor(() => expect(describe).toHaveBeenCalled());
+    await advance(AUTOSAVE_DEBOUNCE_MS);
+    expect(describe).toHaveBeenCalled();
     expect(create).not.toHaveBeenCalled();
     expect(screen.getByLabelText("Listing name")).toHaveValue("");
     // As in "leaves a name the seller is part-way through typing alone": an
