@@ -41,7 +41,11 @@ const MULTIPLE: PhotoWarpTemplate<MultipleTemplate> = {
 const MODIFIED_AT = "Wed, 17 Sep 2026 18:30:00 GMT";
 
 function configDocument(config: ColourMatrixTemplate | MultipleTemplate) {
-  return { config, modifiedAt: MODIFIED_AT };
+  return { config, modifiedAt: MODIFIED_AT, revision: "sha256:read" };
+}
+
+function saved(config: ColourMatrixTemplate): calibrator.SavedTemplateConfig {
+  return { config, revision: "sha256:saved" };
 }
 
 function summary(over: Partial<TemplateSummary> & { name: string }): TemplateSummary {
@@ -201,7 +205,7 @@ describe("App", () => {
     vi.spyOn(calibrator, "listTemplates").mockResolvedValue([summary({ name: "flat-lay-01" })]);
     vi.spyOn(calibrator, "getTemplateConfig").mockResolvedValue(configDocument(COLOUR_MATRIX));
     vi.spyOn(calibrator, "renderPreview").mockResolvedValue("blob:preview");
-    const write = deferred<ColourMatrixTemplate>();
+    const write = deferred<calibrator.SavedTemplateConfig>();
     const saveSpy = vi.spyOn(calibrator, "saveTemplateConfig").mockReturnValue(write.promise);
     const clock = controlledClock();
 
@@ -222,10 +226,44 @@ describe("App", () => {
     });
     expect(screen.queryByText("Saved a moment ago")).not.toBeInTheDocument();
 
-    await act(async () => write.resolve(COLOUR_MATRIX));
+    await act(async () => write.resolve(saved(COLOUR_MATRIX)));
     expect(screen.getByText("Saved a moment ago")).toBeInTheDocument();
     expect(document.querySelector(".page-head__saved .page-head__dot")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Save template/ })).not.toBeInTheDocument();
+  });
+
+  it("offers a reload for a conflicting save, and only for one", async () => {
+    vi.spyOn(calibrator, "listTemplates").mockResolvedValue([summary({ name: "flat-lay-01" })]);
+    const read = vi
+      .spyOn(calibrator, "getTemplateConfig")
+      .mockResolvedValue(configDocument(COLOUR_MATRIX));
+    vi.spyOn(calibrator, "renderPreview").mockResolvedValue("blob:preview");
+    const write = vi
+      .spyOn(calibrator, "saveTemplateConfig")
+      .mockRejectedValue(new calibrator.CalibratorApiError("could not save template.yaml"));
+    const clock = controlledClock();
+
+    render(<App />);
+    const strength = await screen.findByLabelText("Wrinkle strength");
+    fireEvent.change(strength, { target: { value: "75" } });
+    await clock.advance(AUTOSAVE_DEBOUNCE_MS);
+    await waitFor(() =>
+      expect(header().getByRole("status")).toHaveTextContent("could not save template.yaml"),
+    );
+    expect(screen.queryByRole("button", { name: "Reload template" })).not.toBeInTheDocument();
+
+    write.mockRejectedValue(new calibrator.TemplateConflictError());
+    fireEvent.change(strength, { target: { value: "50" } });
+    await clock.advance(AUTOSAVE_DEBOUNCE_MS);
+    await waitFor(() =>
+      expect(header().getByRole("status")).toHaveTextContent(
+        "Template changed elsewhere. Reload before saving.",
+      ),
+    );
+    await clock.user.click(screen.getByRole("button", { name: "Reload template" }));
+    await waitFor(() => expect(read).toHaveBeenCalledTimes(2));
+    expect(await screen.findByText(/^Saved /)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Reload template" })).not.toBeInTheDocument();
   });
 
   describe("racing refreshes", () => {
@@ -248,7 +286,7 @@ describe("App", () => {
         .mockResolvedValue(newest); // second save: lands first, and wins
       vi.spyOn(calibrator, "getTemplateConfig").mockResolvedValue(configDocument(COLOUR_MATRIX));
       vi.spyOn(calibrator, "renderPreview").mockResolvedValue("blob:preview");
-      vi.spyOn(calibrator, "saveTemplateConfig").mockResolvedValue(COLOUR_MATRIX);
+      vi.spyOn(calibrator, "saveTemplateConfig").mockResolvedValue(saved(COLOUR_MATRIX));
 
       const clock = controlledClock();
 
@@ -301,7 +339,7 @@ it("keeps a newer template selection when an autosave catalog refresh arrives la
   const clock = controlledClock();
   const rows = [summary({ name: "first" }), summary({ name: "second" })];
   const refresh = deferred<TemplateSummary[]>();
-  const write = deferred<ColourMatrixTemplate>();
+  const write = deferred<calibrator.SavedTemplateConfig>();
   const list = vi
     .spyOn(calibrator, "listTemplates")
     .mockResolvedValueOnce(rows)
@@ -314,7 +352,7 @@ it("keeps a newer template selection when an autosave catalog refresh arrives la
 
   await clock.advance(AUTOSAVE_DEBOUNCE_MS);
   expect(calibrator.saveTemplateConfig).toHaveBeenCalledTimes(1);
-  await act(async () => write.resolve(COLOUR_MATRIX));
+  await act(async () => write.resolve(saved(COLOUR_MATRIX)));
   expect(list).toHaveBeenCalledTimes(2);
 
   await clock.user.click(screen.getByRole("button", { name: /second/ }));

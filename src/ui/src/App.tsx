@@ -1,37 +1,25 @@
-import { usePreparationQueue } from "./hooks/usePreparationQueue";
-import { RendererPanel } from "./components/RendererPanel";
-import { preparationLabel, marigoldMapsReady } from "./components/preparationLabel";
-import { InferenceSettings } from "./components/InferenceSettings";
-import { MARIGOLD_DEFAULTS } from "./editors/marigoldDefaults";
-import { MarigoldEditor } from "./editors/MarigoldEditor";
-import { usePreparation } from "./hooks/usePreparation";
-import { useTemplateReadiness } from "./hooks/useTemplateReadiness";
-import {
-  cancelPreparation,
-  prepareTemplate,
-  getPreparation,
-  type MaskEdit,
-} from "./api/preparation";
-import type { Renderer } from "./types";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import {
-  acknowledgedTemplateRevision,
-  getTemplateConfig,
-  listTemplates,
-  refreshPreparedRevision,
-  saveTemplateConfig,
-} from "./api/calibrator";
+import { listTemplates } from "./api/calibrator";
+import { InferenceSettings } from "./components/InferenceSettings";
 import { KindPicker } from "./components/KindPicker";
+import { preparationLabel, marigoldMapsReady } from "./components/preparationLabel";
+import { RendererPanel } from "./components/RendererPanel";
 import { TemplateRail } from "./components/TemplateRail";
 import { ColourMatrixEditor } from "./editors/ColourMatrixEditor";
+import { MARIGOLD_DEFAULTS } from "./editors/marigoldDefaults";
+import { MarigoldEditor } from "./editors/MarigoldEditor";
 import { MultipleEditor } from "./editors/MultipleEditor";
 import { SingleEditor } from "./editors/SingleEditor";
-import { AUTOSAVE_DEBOUNCE_MS } from "./hooks/useAutosave";
+import { usePreparationQueue } from "./hooks/usePreparationQueue";
+import { useTemplateReadiness } from "./hooks/useTemplateReadiness";
+import { useTemplateSession } from "./hooks/useTemplateSession";
 import { SavedAgo } from "./pages/editor/SavedAgo";
-import type { TemplateConfigState, TemplateKind, TemplateSummary } from "./types";
+import type { Renderer, TemplateKind, TemplateSummary } from "./types";
 
-/** A thin router: loads the selected template's config and picks an editor
- * by `kind` -- a template.yaml is exactly one of three shapes, never a mix.
+/** A thin router: picks the template, hands it to an authoring session
+ * (`useTemplateSession`, which reads, saves and prepares it) and picks an
+ * editor by `kind` -- a template.yaml is exactly one of three shapes, never a
+ * mix.
  *
  * Wireframe 2a turns the page into a workbench: the rail on the left picks the
  * template (replacing the dropdown that used to sit in the header), and the
@@ -46,66 +34,15 @@ const KIND_LABELS: Record<TemplateKind, string> = {
 
 export function App() {
   const preparationJobs = usePreparationQueue();
-  const [previewPending, setPreviewPending] = useState<{
-    name: string | null;
-    pending: boolean;
-  } | null>(null);
-  const lastEditAt = useRef(0);
-  const [maskDraft, setMaskDraft] = useState<{ name: string; edits: MaskEdit[] } | null>(null);
-  const [preparationVersion, setPreparationVersion] = useState(0);
-  const [calibrationFence, setCalibrationFence] = useState<{
-    name: string;
-    revision: string;
-  } | null>(null);
-  const ownPreparations = useRef(new Set<string>());
-  const [preparing, setPreparing] = useState(false);
-  const [preparationError, setPreparationError] = useState("");
   const rendererCache = useRef<Record<string, Partial<Record<Renderer["type"], Renderer>>>>({});
   const [templates, setTemplates] = useState<TemplateSummary[]>([]);
   const [catalogState, setCatalogState] = useState<"loading" | "ready" | "error">("loading");
   const [templateName, setTemplateName] = useState<string | null>(null);
-  const waitingForPreview = previewPending?.name === templateName && previewPending.pending;
-  const {
-    preparation,
-    error: mapError,
-    reload: reloadPreparation,
-  } = usePreparation(templateName, preparationVersion, waitingForPreview);
-  const maskEdits = useMemo(
-    () => (maskDraft?.name === templateName ? maskDraft.edits : []),
-    [maskDraft, templateName],
-  );
-  // Tagged with the name it was fetched for, so a template switch never
-  // briefly renders the previous template's config under the new name while
-  // the fetch for the new one is still in flight.
-  const [configEntry, setConfigEntry] = useState<{
-    name: string;
-    config: TemplateConfigState;
-  } | null>(null);
-  // Comparing against the last saved config identifies unsaved edits without
-  // fetching the document again.
-  const [savedEntry, setSavedEntry] = useState<{
-    name: string;
-    config: TemplateConfigState;
-  } | null>(null);
-  const authoringState = useRef({ preparation, savedEntry });
-  useEffect(() => {
-    authoringState.current = { preparation, savedEntry };
-  }, [preparation, savedEntry]);
-  const [configLoad, setConfigLoad] = useState<{
-    name: string;
-    version: number;
-    phase: "ready" | "error";
-  } | null>(null);
-  const [status, setStatus] = useState("");
-  const [savedAt, setSavedAt] = useState<number | null>(null);
   // Which test artwork the previews render with. A way of looking at a
   // template rather than a property of one, so it lives here and never enters
   // template.yaml -- and it deliberately survives switching template, since
   // "show me all of these against my real artwork" is the point of changing it.
   const [design, setDesign] = useState("bundled-grid");
-  // Bumped when a kind is assigned, to re-run the config fetch for a template
-  // whose name has not changed but which now has a template.yaml.
-  const [configVersion, setConfigVersion] = useState(0);
 
   // Refreshes overlap: assigning a kind fires one and saving fires another
   // moments later. They are separate requests, so the *older* can resolve
@@ -113,7 +50,6 @@ export function App() {
   // "no kind set" on screen while the file on disk says otherwise. The
   // sequence number makes a late response a no-op instead.
   const refreshSeq = useRef(0);
-  const saveSeq = useRef(0);
   const currentTemplate = useRef<string | null>(templateName);
 
   useEffect(() => {
@@ -140,7 +76,6 @@ export function App() {
       .catch(() => {
         if (seq !== refreshSeq.current) return;
         setCatalogState("error");
-        setStatus("failed to load templates");
       });
   }, []);
 
@@ -148,234 +83,14 @@ export function App() {
     refreshTemplates();
   }, [refreshTemplates]);
 
-  useEffect(() => {
-    if (!templateName) return;
-    // Same guard as the template list: assigning a kind bumps configVersion
-    // while the previous fetch may still be in flight, and the stale answer
-    // (no template.yaml) would put the kind picker back over a template that
-    // now has one.
-    let current = true;
-    getTemplateConfig(templateName)
-      .then((loaded) => {
-        if (!current) return;
-        setConfigLoad({ name: templateName, version: configVersion, phase: "ready" });
-        const entry = loaded ? { name: templateName, config: loaded.config } : null;
-        setConfigEntry(entry);
-        setSavedEntry(entry);
-        setCalibrationFence(
-          loaded
-            ? {
-                name: templateName,
-                revision: acknowledgedTemplateRevision(templateName),
-              }
-            : null,
-        );
-        setSavedAt(loaded ? Date.parse(loaded.modifiedAt) : null);
-        setStatus(loaded ? "Saved" : "");
-      })
-      .catch(() => {
-        if (current) {
-          setConfigLoad({ name: templateName, version: configVersion, phase: "error" });
-          setStatus("failed to load template config");
-        }
-      });
-    return () => {
-      current = false;
-    };
-  }, [templateName, configVersion]);
-
-  useEffect(() => {
-    const completed = preparation?.latest_job;
-    if (
-      completed?.phase !== "completed" ||
-      !ownPreparations.current.has(completed.id) ||
-      completed.config_revision !== preparation?.config_revision
-    )
-      return;
-    setCalibrationFence((current) =>
-      current?.name === completed.template && current.revision === completed.config_revision
-        ? current
-        : { name: completed.template, revision: completed.config_revision },
-    );
-  }, [preparation]);
+  const session = useTemplateSession(templateName, { onCatalogChanged: refreshTemplates });
+  const { config, preparation, preparing, save, update: setConfig, reloadPreparation } = session;
 
   const mapState = preparation?.maps.state;
   useEffect(() => {
     if (mapState) refreshTemplates();
   }, [mapState, refreshTemplates]);
-  const config = configEntry?.name === templateName ? configEntry.config : null;
-  const saved = savedEntry?.name === templateName ? savedEntry.config : null;
 
-  const dirty = useMemo(
-    () =>
-      config !== null &&
-      saved !== null &&
-      (JSON.stringify(config) !== JSON.stringify(saved) || maskEdits.length > 0),
-    [config, saved, maskEdits],
-  );
-
-  const setConfig = useCallback(
-    (next: TemplateConfigState) => {
-      if (!templateName) return;
-      setConfigEntry({ name: templateName, config: next });
-    },
-    [templateName],
-  );
-
-  const saveConfig = useCallback(
-    (name: string, next: TemplateConfigState, edits: MaskEdit[] = []) => {
-      const seq = ++saveSeq.current;
-      setStatus("Saving…");
-      const current = authoringState.current;
-      const completed = current.preparation?.latest_job;
-      const sync =
-        completed?.phase === "completed" &&
-        completed.template === name &&
-        ownPreparations.current.has(completed.id) &&
-        completed.config_revision === current.preparation?.config_revision &&
-        current.savedEntry?.name === name
-          ? refreshPreparedRevision(
-              name,
-              current.savedEntry.config,
-              completed.config_revision,
-            ).then((accepted) => {
-              if (accepted) ownPreparations.current.delete(completed.id);
-            })
-          : Promise.resolve();
-      return sync
-        .then(() => saveTemplateConfig(name, next, edits))
-        .then(() => {
-          setMaskDraft((current) => {
-            if (current?.name !== name) return current;
-            const remaining = current.edits
-              .map((edit) => {
-                const committed =
-                  edits.find((e) => e.placement_id === edit.placement_id)?.operations ?? [];
-                return {
-                  ...edit,
-                  operations: edit.operations.filter((op) => !committed.includes(op)),
-                };
-              })
-              .filter((edit) => edit.operations.length > 0);
-            return remaining.length ? { name, edits: remaining } : null;
-          });
-          if (seq !== saveSeq.current || name !== currentTemplate.current) return;
-          setSavedEntry({ name, config: next });
-          setCalibrationFence({ name, revision: acknowledgedTemplateRevision(name) });
-
-          setPreparationVersion((v) => v + 1);
-          setSavedAt(Date.now());
-          setStatus("Saved");
-          // The save may have changed whether this template still counts as
-          // needing calibration, and the rail is what shows that.
-          refreshTemplates(name);
-        })
-        .catch((e: unknown) => {
-          if (seq === saveSeq.current && name === currentTemplate.current)
-            setStatus(e instanceof Error ? e.message : "Save failed");
-          throw e;
-        });
-    },
-    [refreshTemplates],
-  );
-
-  useEffect(() => {
-    lastEditAt.current = Date.now();
-  }, [config, maskEdits, templateName]);
-
-  // Match the listing editor: wait until a run of edits settles, then write
-  // it as one request. Changing template clears the pending
-  // timer through the effect cleanup.
-  useEffect(() => {
-    if (
-      !templateName ||
-      !config ||
-      !dirty ||
-      (config.renderer.type === "marigold" && waitingForPreview)
-    )
-      return;
-    const timer = setTimeout(
-      () => void saveConfig(templateName, config, maskEdits).catch(() => {}),
-      Math.max(0, AUTOSAVE_DEBOUNCE_MS - (Date.now() - lastEditAt.current)),
-    );
-    return () => clearTimeout(timer);
-  }, [config, dirty, saveConfig, templateName, maskEdits, waitingForPreview]);
-
-  const handleApprove = useCallback(() => {
-    if (!templateName || !config) return;
-    void saveConfig(templateName, config, maskEdits).catch(() => {});
-  }, [templateName, config, saveConfig, maskEdits]);
-
-  const selectTemplate = useCallback((name: string) => {
-    setStatus("");
-    setSavedAt(null);
-    setTemplateName(name);
-  }, []);
-
-  const startPreparation = useCallback(
-    async (
-      action: "prepare" | "prepare_again" | "retry" = "prepare",
-      resetMasksForPhoto = false,
-    ) => {
-      if (!templateName || !config || preparing) return;
-      setPreparing(true);
-      setPreparationError("");
-      try {
-        const staleIds = new Set(
-          preparation?.placements
-            .filter((p) => !p.mask_available && p.mask_reason?.toLowerCase().includes("photo"))
-            .map((p) => p.placement_id),
-        );
-        const validEdits = resetMasksForPhoto
-          ? maskEdits.filter((edit) => !staleIds.has(edit.placement_id ?? null))
-          : maskEdits;
-        if (resetMasksForPhoto)
-          setMaskDraft(validEdits.length ? { name: templateName, edits: validEdits } : null);
-        if (dirty) await saveConfig(templateName, config, validEdits);
-        const current = await getPreparation(templateName);
-        const submitted = await prepareTemplate({
-          template: templateName,
-          config_revision: current.config_revision,
-          request_id: crypto.randomUUID(),
-          action,
-          reset_masks_for_photo: resetMasksForPhoto,
-          ...(action === "retry" && current.latest_job
-            ? { previous_job: current.latest_job.id }
-            : {}),
-        });
-        ownPreparations.current.add(submitted.id);
-        reloadPreparation();
-        refreshTemplates();
-      } catch (e) {
-        setPreparationError(e instanceof Error ? e.message : "Preparation could not start");
-      } finally {
-        setPreparing(false);
-      }
-    },
-    [
-      templateName,
-      config,
-      preparing,
-      dirty,
-      saveConfig,
-      maskEdits,
-      preparation,
-      reloadPreparation,
-      refreshTemplates,
-    ],
-  );
-  const stopPreparation = async () => {
-    if (!preparation?.active_job) return;
-    setPreparing(true);
-    try {
-      await cancelPreparation(preparation.active_job.id);
-      reloadPreparation();
-    } catch (e) {
-      setPreparationError(e instanceof Error ? e.message : "Cancellation failed");
-    } finally {
-      setPreparing(false);
-    }
-  };
   const switchRenderer = (type: Renderer["type"]) => {
     if (!config || !templateName || type === config.renderer.type) return;
     const cache = rendererCache.current[templateName] ?? {};
@@ -423,10 +138,10 @@ export function App() {
         renderer={config.renderer}
         onRendererChange={switchRenderer}
         preparation={preparation}
-        onPrepare={(action, recovery) => void startPreparation(action, recovery)}
-        onCancel={() => void stopPreparation()}
+        onPrepare={(action, recovery) => void session.prepare(action, recovery)}
+        onCancel={() => void session.cancelPreparation()}
         pending={preparing}
-        error={preparationError || mapError}
+        error={session.preparationError}
         settings={(runtime) =>
           config.renderer.type === "marigold" ? (
             <InferenceSettings
@@ -519,26 +234,24 @@ export function App() {
 
         <div className="app__actions">
           <p className="app__status" role="status">
-            {status === "Saved" && savedAt !== null ? (
+            {save.kind === "saved" ? (
               <span className="page-head__saved">
                 <span className="page-head__dot" aria-hidden="true" />
-                <SavedAgo savedAt={savedAt} />
+                <SavedAgo savedAt={save.savedAt} />
               </span>
+            ) : save.kind === "saving" ? (
+              "Saving…"
+            ) : save.kind === "failed" || save.kind === "conflict" ? (
+              save.message
+            ) : session.load === "error" ? (
+              "failed to load template config"
+            ) : catalogState === "error" ? (
+              "failed to load templates"
             ) : (
-              status
+              ""
             )}
           </p>
-          {status.includes("changed elsewhere") && (
-            <button
-              onClick={() => {
-                setMaskDraft(null);
-                setConfigVersion((v) => v + 1);
-                setStatus("");
-              }}
-            >
-              Reload template
-            </button>
-          )}
+          {save.kind === "conflict" && <button onClick={session.reload}>Reload template</button>}
         </div>
       </header>
 
@@ -553,7 +266,7 @@ export function App() {
               : null
           }
           selected={templateName}
-          onSelect={selectTemplate}
+          onSelect={setTemplateName}
           jobs={preparationJobs}
         />
 
@@ -562,12 +275,9 @@ export function App() {
               choice, so nothing else can be touched yet. Kind decides the
               whole shape of template.yaml (ADR-0014) -- every other control is
               meaningless or wrong until it is answered. */}
-          {templateName &&
-          (configLoad?.name !== templateName ||
-            configLoad.version !== configVersion ||
-            configLoad.phase !== "ready") ? (
-            <p role={configLoad?.phase === "error" ? "alert" : "status"}>
-              {configLoad?.phase === "error"
+          {templateName && session.load !== "ready" ? (
+            <p role={session.load === "error" ? "alert" : "status"}>
+              {session.load === "error"
                 ? "Could not load template configuration. Reload to try again."
                 : "Loading template..."}
             </p>
@@ -576,7 +286,7 @@ export function App() {
               key={templateName}
               templateName={templateName}
               onAssigned={() => {
-                setConfigVersion((v) => v + 1);
+                session.reload();
                 refreshTemplates(templateName);
               }}
             />
@@ -595,15 +305,13 @@ export function App() {
                   onChange={setConfig}
                   preparation={preparation}
                   rendererControls={rendererControls}
-                  calibrationRevision={
-                    calibrationFence?.name === templateName ? calibrationFence.revision : ""
-                  }
-                  maskEdits={maskEdits}
-                  onMaskEdits={(edits) => setMaskDraft({ name: templateName, edits })}
-                  onPreviewPending={(pending) => setPreviewPending({ name: templateName, pending })}
-                  savedConfig={saved}
+                  calibrationRevision={session.calibrationRevision}
+                  maskEdits={session.maskEdits}
+                  onMaskEdits={session.setMaskEdits}
+                  onPreviewPending={session.setPreviewPending}
+                  savedConfig={session.saved}
                   onPrepare={() =>
-                    void startPreparation(
+                    void session.prepare(
                       preparation?.maps.reason === "photo_changed" ? "prepare_again" : "prepare",
                       preparation?.maps.reason === "photo_changed",
                     )
@@ -623,7 +331,7 @@ export function App() {
                     onChange={setConfig}
                     design={design}
                     onDesignChange={setDesign}
-                    onApprove={handleApprove}
+                    onApprove={() => void session.approve()}
                   />
                 )}
               {templateName &&

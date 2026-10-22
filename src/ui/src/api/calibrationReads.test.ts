@@ -1,7 +1,7 @@
 import { afterEach, expect, it, vi } from "vitest";
 import type { Middleware } from "openapi-fetch";
 import { api } from "./client";
-import { getTemplateConfig, refreshPreparedRevision } from "./calibrator";
+import { getTemplateConfig } from "./calibrator";
 import { getMaskHistory, getPreparation } from "./preparation";
 import { READY, SINGLE } from "../test/marigold";
 
@@ -43,10 +43,9 @@ it("bypasses previously cached calibration documents and mutable preparation sta
   // openapi-fetch's generated paths are relative in production. Its transport
   // hook receives the Request before it reaches the browser's HTTP cache.
   await getTemplateConfig(name);
-  await refreshPreparedRevision(name, SINGLE, "prepared");
   await getPreparation(name);
   await getMaskHistory(name, null);
   await getMaskHistory(name, "front");
-  expect(requests).toHaveLength(5);
+  expect(requests).toHaveLength(4);
   expect(requests.every((request) => request.cache === "no-store")).toBe(true);
 });

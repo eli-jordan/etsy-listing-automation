@@ -35,8 +35,12 @@ beforeEach(() => {
   vi.spyOn(calibrator, "getTemplateConfig").mockResolvedValue({
     config: { ...SINGLE, renderer: PHOTOWARP },
     modifiedAt: "Wed, 17 Sep 2026 18:30:00 GMT",
+    revision: "sha256:revision",
   });
-  vi.spyOn(calibrator, "saveTemplateConfig").mockImplementation(async (_name, value) => value);
+  vi.spyOn(calibrator, "saveTemplateConfig").mockImplementation(async (_name, config) => ({
+    config,
+    revision: "sha256:saved",
+  }));
   vi.spyOn(prep, "getPreparation").mockResolvedValue({
     ...READY,
     maps: { ...READY.maps, can_render: false, state: "needs_preparation" },
@@ -96,9 +100,9 @@ describe("App Marigold workflow", () => {
       },
     });
     const events: string[] = [];
-    vi.mocked(calibrator.saveTemplateConfig).mockImplementation(async (_name, value) => {
+    vi.mocked(calibrator.saveTemplateConfig).mockImplementation(async (_name, config) => {
       events.push("save");
-      return value;
+      return { config, revision: "sha256:saved" };
     });
     vi.spyOn(prep, "prepareTemplate").mockImplementation(async (request) => {
       events.push("prepare");
@@ -132,11 +136,12 @@ describe("App Marigold workflow", () => {
       "tee",
       expect.objectContaining({ renderer: expect.objectContaining({ type: "marigold" }) }),
       [],
+      "sha256:revision",
     );
   });
   it("refuses to enqueue when the revision save failed", async () => {
     vi.mocked(calibrator.saveTemplateConfig).mockRejectedValue(
-      new Error("Template changed elsewhere. Reload before saving."),
+      new calibrator.TemplateConflictError(),
     );
     const start = vi.spyOn(prep, "prepareTemplate");
     render(<App />);
@@ -154,6 +159,7 @@ describe("App Marigold workflow", () => {
     vi.mocked(calibrator.getTemplateConfig).mockResolvedValue({
       config: SINGLE,
       modifiedAt: "Wed, 17 Sep 2026 18:30:00 GMT",
+      revision: "sha256:revision",
     });
     render(<App />);
     fireEvent.click(await screen.findByText("Advanced settings", { exact: false }));
@@ -167,6 +173,7 @@ it("authorizes changed-photo mask recovery explicitly and preserves calibration 
   vi.mocked(calibrator.getTemplateConfig).mockResolvedValue({
     config: SINGLE,
     modifiedAt: "Wed, 17 Sep 2026 18:30:00 GMT",
+    revision: "sha256:revision",
   });
   vi.mocked(prep.getPreparation).mockResolvedValue({
     ...READY,
@@ -217,6 +224,7 @@ it("authorizes changed-photo mask recovery explicitly and preserves calibration 
       }),
     }),
     [],
+    "sha256:revision",
   );
 });
 
@@ -236,6 +244,7 @@ it("shows loading while a saved template config is pending instead of kind assig
     finish({
       config: { ...SINGLE, renderer: PHOTOWARP },
       modifiedAt: "Wed, 17 Sep 2026 18:30:00 GMT",
+      revision: "sha256:revision",
     }),
   );
   expect(await screen.findByLabelText("Renderer")).toHaveValue("photo-warp");
@@ -270,6 +279,7 @@ it("shows Preparing while an explicit prepare request is pending", async () => {
   vi.mocked(calibrator.getTemplateConfig).mockResolvedValue({
     config: SINGLE,
     modifiedAt: "Wed, 17 Sep 2026 18:30:00 GMT",
+    revision: "sha256:revision",
   });
   vi.mocked(prep.getPreparation).mockResolvedValue(READY);
   vi.spyOn(prep, "prepareTemplate").mockImplementation(() => new Promise(() => {}));
@@ -295,6 +305,7 @@ it("waits for the current composite before autosaving and refreshing readiness",
   vi.mocked(calibrator.getTemplateConfig).mockResolvedValue({
     config: SINGLE,
     modifiedAt: "Wed, 17 Sep 2026 18:30:00 GMT",
+    revision: "sha256:revision",
   });
   vi.mocked(prep.getPreparation).mockResolvedValue(READY);
   const clock = controlledClock();
@@ -328,6 +339,7 @@ it("resumes fresh readiness when a pending Marigold preview is unmounted by rend
   vi.mocked(calibrator.getTemplateConfig).mockResolvedValue({
     config: SINGLE,
     modifiedAt: "Wed, 17 Sep 2026 18:30:00 GMT",
+    revision: "sha256:revision",
   });
   vi.mocked(prep.getPreparation).mockResolvedValue(READY);
   let finish!: (url: string) => void;
