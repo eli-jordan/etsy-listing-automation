@@ -17,6 +17,7 @@ import shutil
 import stat
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
+from functools import lru_cache
 from pathlib import Path, PureWindowsPath
 
 import yaml
@@ -39,7 +40,7 @@ from etsy_listings.core.config.slug import ColourExceptions
 # `config`, which owns the commercial/product files. Loading it here is the same
 # edge `load_listing` already has to `config`: the workspace knows where every
 # file lives, and asks whichever module owns a file's shape to parse it.
-from etsy_listings.core.render.config import AnyTemplate, dump_template_config
+from etsy_listings.core.render.config import AnyTemplate
 from etsy_listings.core.render.config import load_template_config as parse_template_config
 from etsy_listings.core.workspace import layout
 from etsy_listings.core.workspace.atomic import read_bytes_retrying, write_bytes_atomic
@@ -62,6 +63,13 @@ class WorkspaceNotFoundError(FileNotFoundError):
 class PathEscapesWorkspaceError(ValueError):
     def __init__(self, ref: str, root: Path) -> None:
         super().__init__(f"path {ref!r} escapes the workspace root ({root})")
+
+
+@lru_cache(maxsize=64)
+def _parsed_template_config(text: str) -> AnyTemplate:
+    # Key by actual contents, never timestamps. The reader still observes
+    # every external edit and transaction before reusing the parse result.
+    return parse_template_config(yaml.safe_load(text))
 
 
 MIGRATION_SCRIPT = "scripts/migrate_workspace_refs.py"
@@ -542,36 +550,76 @@ class Workspace:
             return sorted(p.name for p in parent.iterdir() if p.is_dir())
         return sorted(p.stem for p in parent.glob("*.json") if p.is_file())
 
+    def preparation_jobs(self) -> list[str]:
+        return self._cache_entries("preparation/jobs", directories=False)
+
+    def preparation_job_file(self, job: str) -> Path:
+        return self.cache("preparation", "jobs", _segment(job) + ".json")
+
+    def preparation_work(self, job: str, file: str | None = None) -> Path:
+        directory = self.cache("preparation", "work", _segment(job))
+        return directory if file is None else directory / _segment(file)
+
+    def preparation_prediction_current(self, template: str) -> Path:
+        return self.cache("preparation", "predictions", _segment(template), "current.json")
+
+    def preparation_prediction_set(self, template: str, identity: str) -> Path:
+        return self.cache(
+            "preparation", "predictions", _segment(template), "sets", _segment(identity)
+        )
+
+    def preparation_prediction_sets(self, template: str) -> list[str]:
+        directory = self.cache("preparation", "predictions", _segment(template), "sets")
+        return (
+            sorted(p.name for p in directory.iterdir() if p.is_dir()) if directory.is_dir() else []
+        )
+
+    def preparation_work_ids(self) -> list[str]:
+        return self._cache_entries("preparation/work", directories=True)
+
+    def remove_preparation_work(self, job: str) -> None:
+        remove_tree(self.preparation_work(job))
+
+    def remove_prediction_set(self, template: str, identity: str) -> None:
+        remove_tree(self.preparation_prediction_set(template, identity))
+
     def design_ref(self, design: str) -> str:
         """The workspace-rooted ref ``listing.yaml`` names ``designs/<design>.png``
         by -- what batch creation writes into every listing it makes
         (spec, *Design validation*)."""
         return f"{layout.DESIGNS_DIR}/{_segment(design)}.png"
 
-    def design_content_hash(self, design: Mapping[str, str], *, listing_dir: Path) -> str | None:
+    def design_content_hash(
+        self, design: Mapping[str, str | None], *, listing_dir: Path
+    ) -> str | None:
         """Content identity for the design the editor and SEO request see.
 
         Keys and refs are sorted, and the hash contains no absolute path. A
         missing secondary file gets a stable marker so changes to readable
-        artwork still change the identity of an incomplete draft.
+        artwork still change the identity of an incomplete draft. The whole
+        map, ``null`` slots included: an emptied slot is a different listing
+        to review (multi-artwork plan, *Settled decisions*).
         """
         if not design:
             return None
         digest = hashlib.sha256()
         for key, ref in sorted(design.items()):
-            content_hash: str | None = None
-            try:
-                path = self.resolve_ref(ref, listing_dir=listing_dir)
-                file_digest = hashlib.sha256()
-                with path.open("rb") as source:
-                    for chunk in iter(lambda: source.read(1024 * 1024), b""):
-                        file_digest.update(chunk)
-                content_hash = file_digest.hexdigest()
-            except (OSError, InvalidRefError):
-                pass
+            content_hash = None if ref is None else self._readable_hash(ref, listing_dir)
             entry = json.dumps((key, ref, content_hash), ensure_ascii=False)
             digest.update(entry.encode("utf-8"))
         return digest.hexdigest()
+
+    def _readable_hash(self, ref: str, listing_dir: Path) -> str | None:
+        """The file's sha256, or ``None`` when it cannot be read."""
+        try:
+            path = self.resolve_ref(ref, listing_dir=listing_dir)
+            file_digest = hashlib.sha256()
+            with path.open("rb") as source:
+                for chunk in iter(lambda: source.read(1024 * 1024), b""):
+                    file_digest.update(chunk)
+        except (OSError, InvalidRefError):
+            return None
+        return file_digest.hexdigest()
 
     def lock_file(self, listing: str) -> Path:
         return self.listing_dir(listing) / layout.LOCK_FILE
@@ -902,8 +950,105 @@ class Workspace:
     def template_config_file(self, template: str) -> Path:
         return self.template_dir(template) / layout.TEMPLATE_FILE
 
+    def template_main_photo(self, template: str, config: AnyTemplate | None = None) -> Path:
+        """ADR-0054: ordinal first actual colour photo; fixed kinds use scene."""
+        config = config if config is not None else self.load_template_config(template)
+        if config.kind == "colour-matrix":
+            photos = sorted(self.template_photos(template), key=lambda photo: photo.name)
+            if not photos:
+                raise FileNotFoundError(f"No main photo for template {template!r}")
+            return photos[0]
+        return self.template_scene_image(template)
+
+    def template_renderer_dir(self, template: str) -> Path:
+        return self.template_dir(template) / layout.RENDERER_DIR
+
+    def template_renderer_settings_file(self, template: str) -> Path:
+        return self.template_renderer_dir(template) / layout.RENDERER_SETTINGS_FILE
+
+    def template_calibration_transaction(self, template: str) -> Path:
+        return self.template_renderer_dir(template) / layout.CALIBRATION_TRANSACTION_DIR
+
+    def template_calibration_receipt(self, template: str) -> Path:
+        return self.template_renderer_dir(template) / layout.CALIBRATION_RECEIPT_FILE
+
+    def template_mask_dir(self, template: str, placement_id: str | None = None) -> Path:
+        from pydantic import TypeAdapter
+
+        from etsy_listings.core.render.config import PlacementId
+
+        directory = self.template_renderer_dir(template) / layout.MASKS_DIR
+        if placement_id is not None:
+            directory /= TypeAdapter(PlacementId).validate_python(placement_id)
+        return self.resolve(directory.relative_to(self.root).as_posix(), self.root)
+
+    def template_mask_file(
+        self, template: str, placement_id: str | None = None, *, source: str = "edited"
+    ) -> Path:
+        if source not in ("automatic", "edited", "metadata"):
+            raise ValueError("Unknown mask source")
+        filename = {
+            "automatic": layout.AUTOMATIC_MASK_FILE,
+            "edited": layout.EDITED_MASK_FILE,
+            "metadata": layout.MASK_METADATA_FILE,
+        }[source]
+        return self.template_mask_dir(template, placement_id) / filename
+
+    def template_brush_history(self, template: str, placement_id: str | None = None) -> Path:
+        # Validate both names through the durable location's accessor.
+        self.template_mask_dir(template, placement_id)
+        directory = self.cache(layout.PREPARATION_DIR, layout.BRUSHES_DIR, _segment(template))
+        return directory / (f"{placement_id}.json" if placement_id is not None else "implicit.json")
+
+    def template_maps_dir(self, template: str) -> Path:
+        directory = self.template_renderer_dir(template) / layout.MAPS_DIR
+        return self.resolve(directory.relative_to(self.root).as_posix(), self.root)
+
+    def template_map_current(self, template: str) -> Path:
+        return self.template_maps_dir(template) / layout.MAP_CURRENT_FILE
+
+    def template_map_generation_dir(
+        self, template: str, generation: str, *, staging: bool = False
+    ) -> Path:
+        directory = (
+            self.template_maps_dir(template)
+            / (layout.MAP_STAGING_DIR if staging else layout.MAP_GENERATIONS_DIR)
+            / _segment(generation)
+        )
+        return self.resolve(directory.relative_to(self.root).as_posix(), self.root)
+
+    def template_map_manifest(
+        self, template: str, generation: str, *, staging: bool = False
+    ) -> Path:
+        return (
+            self.template_map_generation_dir(template, generation, staging=staging)
+            / layout.MAP_MANIFEST_FILE
+        )
+
+    def template_map_file(
+        self, template: str, generation: str, placement_id: str | None, *, staging: bool = False
+    ) -> Path:
+        # Explicit IDs may be named "placement"; implicit and explicit sets never mix.
+        filename = f"{_segment(placement_id) if placement_id is not None else 'placement'}.npz"
+        path = self.template_map_generation_dir(template, generation, staging=staging) / filename
+        return self.resolve(path.relative_to(self.root).as_posix(), self.root)
+
+    def template_map_generations(self, template: str, *, staging: bool = False) -> list[str]:
+        directory = self.template_maps_dir(template) / (
+            layout.MAP_STAGING_DIR if staging else layout.MAP_GENERATIONS_DIR
+        )
+        directory = self.resolve(directory.relative_to(self.root).as_posix(), self.root)
+        if not directory.exists():
+            return []
+        return sorted(path.name for path in directory.iterdir() if path.is_dir())
+
+    def remove_map_generation(
+        self, template: str, generation: str, *, staging: bool = False
+    ) -> None:
+        remove_tree(self.template_map_generation_dir(template, generation, staging=staging))
+
     def template_derived_dir(self, template: str) -> Path:
-        return self.template_dir(template) / layout.DERIVED_DIR
+        return self.template_renderer_dir(template) / layout.DERIVED_DIR
 
     def template_base_image(self, template: str, colour: str) -> Path:
         """``colour-matrix``-kind templates only: the mockup filename
@@ -1094,6 +1239,12 @@ class Workspace:
         return load_exceptions(self.exceptions_file())
 
     def load_template_config(self, template: str) -> AnyTemplate:
+        from etsy_listings.core.workspace.calibration import CalibrationStore
+
+        with CalibrationStore(self).lock(template):
+            return self._read_template_config(template)
+
+    def _read_template_config(self, template: str) -> AnyTemplate:
         """One ``template.yaml``, parsed into whichever of the three kinds it is.
 
         The read used to be open-coded at each of its four call sites -- the
@@ -1103,11 +1254,22 @@ class Workspace:
         of a layout that the layout accessors above exist to prevent, so it
         lives here with ``load_listing`` and ``load_garment_profile``.
         """
+        from etsy_listings.core.workspace.calibration import CalibrationRepairRequired
+
+        if self.template_calibration_transaction(template).exists():
+            raise CalibrationRepairRequired(
+                "Active calibration transaction; retry after server recovery"
+            )
         path = self.template_config_file(template)
         if not path.is_file():
             raise ConfigLoadError(path, "template config not found -- calibrate it with `ui` first")
         try:
-            return parse_template_config(yaml.safe_load(path.read_text(encoding="utf-8")))
+            text = path.read_text(encoding="utf-8")
+            if len(text.encode("utf-8")) > 64 * 1024:
+                return parse_template_config(yaml.safe_load(text))
+            # Frozen template models can still contain mutable placement lists.
+            # Never expose the retained parse object to a caller.
+            return _parsed_template_config(text).model_copy(deep=True)
         except ValidationError as exc:
             raise format_validation_error(path, exc) from exc
 
@@ -1115,8 +1277,6 @@ class Workspace:
         """Write ``template.yaml``. The calibrator is the only caller -- it is
         what produces this file -- but the
         path and the serialisation belong here, beside the read."""
-        path = self.template_config_file(template)
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(
-            yaml.safe_dump(dump_template_config(config), sort_keys=False), encoding="utf-8"
-        )
+        from etsy_listings.core.workspace.calibration import CalibrationStore
+
+        CalibrationStore(self).write_config(template, config)

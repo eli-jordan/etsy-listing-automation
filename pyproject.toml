@@ -228,3 +228,69 @@ allowed_importers = [
     "etsy_listings.core.application.ai.batch_queue",
 ]
 as_packages = false
+
+# The isolated worker is checked without installing its model dependencies in
+# the application environment. They are complete and pinned in distribution/uv.lock.
+[[tool.mypy.overrides]]
+module = ["torch.*", "diffusers.*", "huggingface_hub.*", "psutil.*"]
+ignore_missing_imports = true
+
+[[tool.importlinter.contracts]]
+name = "CPU rendering and prediction loading never reach model installation or inference"
+type = "forbidden"
+source_modules = [
+    "etsy_listings.core.render",
+    "etsy_listings.core.preparation.predictions",
+    "etsy_listings.core.preparation.artifacts",
+    "etsy_listings.core.preparation.numerics",
+]
+forbidden_modules = [
+    "etsy_listings.core.preparation.runtime",
+    "etsy_listings.core.preparation.installation",
+    "etsy_listings.core.preparation.worker_client",
+    "etsy_listings.core.preparation.distribution",
+    "torch",
+    "diffusers",
+]
+
+[[tool.importlinter.contracts]]
+name = "Native installation is reached through the explicit Runtime interface"
+type = "protected"
+protected_modules = ["etsy_listings.core.preparation.installation"]
+allowed_importers = ["etsy_listings.core.preparation.runtime"]
+as_packages = false
+
+[[tool.importlinter.contracts]]
+name = "Material fitting is reached through pure preparation"
+type = "protected"
+protected_modules = ["etsy_listings.core.preparation._geometry"]
+allowed_importers = ["etsy_listings.core.preparation.numerics"]
+as_packages = false
+
+[[tool.importlinter.contracts]]
+name = "Material numerical helpers belong to CPU fitting and composition"
+type = "protected"
+protected_modules = ["etsy_listings.core.render._material_math"]
+allowed_importers = [
+    "etsy_listings.core.render.material",
+    "etsy_listings.core.preparation.numerics",
+    "etsy_listings.core.preparation._geometry",
+]
+as_packages = false
+
+[[tool.importlinter.contracts]]
+name = "Preparation jobs go through Preparations"
+type = "protected"
+protected_modules = [
+    "etsy_listings.core.application.preparation.execution",
+    "etsy_listings.core.application.preparation.store",
+]
+allowed_importers = ["etsy_listings.core.application.preparation.coordinator"]
+as_packages = false
+
+[[tool.importlinter.contracts]]
+name = "Preparation prediction retention belongs to job execution"
+type = "protected"
+protected_modules = ["etsy_listings.core.application.preparation.evidence"]
+allowed_importers = ["etsy_listings.core.application.preparation.execution"]
+as_packages = false

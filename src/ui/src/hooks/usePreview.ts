@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { renderPreview } from "../api/calibrator";
 
 /** How long the editor waits after the last edit before asking the server for
@@ -51,7 +51,19 @@ export function usePreview(
   templateName: string,
   body: PreviewBody | null,
   design: string,
+  strict = false,
+  onPending?: (pending: boolean) => void,
 ): string | null {
+  const pendingListener = useRef(onPending);
+  const [displayedTemplate, setDisplayedTemplate] = useState(templateName);
+  const latest = useRef("");
+  const requestIdentity = JSON.stringify({ templateName, body, design });
+  const strictMode = useRef(strict);
+  useLayoutEffect(() => {
+    latest.current = requestIdentity;
+    strictMode.current = strict;
+    pendingListener.current = onPending;
+  }, [requestIdentity, strict, onPending]);
   const [url, setUrl] = useState<string | null>(null);
 
   // The URL currently on screen, for the unmount revoke below. A ref, because
@@ -95,16 +107,44 @@ export function usePreview(
           // A response for a template the editor has already left: revoked
           // here rather than stored, or it leaks exactly like the old cleanup
           // let the displayed one leak.
-          if (sent !== generation.current) {
+          if (
+            sent !== generation.current ||
+            (strictMode.current &&
+              latest.current !==
+                JSON.stringify({
+                  templateName: job.templateName,
+                  body: JSON.parse(job.key) as PreviewBody,
+                  design: job.design,
+                }))
+          ) {
             URL.revokeObjectURL(next);
             continue;
           }
+          setDisplayedTemplate(job.templateName);
           setUrl((previous) => {
             if (previous) URL.revokeObjectURL(previous);
             return next;
           });
+          pendingListener.current?.(false);
         } catch {
-          /* a failed preview leaves the last good one on screen */
+          // A refused strict frame must not leave an old material composite
+          // under newly edited geometry. Its caller can show the local overlay.
+          if (
+            sent === generation.current &&
+            latest.current ===
+              JSON.stringify({
+                templateName: job.templateName,
+                body: JSON.parse(job.key) as PreviewBody,
+                design: job.design,
+              })
+          )
+            pendingListener.current?.(false);
+          if (strictMode.current && sent === generation.current) {
+            setUrl((previous) => {
+              if (previous) URL.revokeObjectURL(previous);
+              return null;
+            });
+          }
         }
       }
     } finally {
@@ -115,9 +155,13 @@ export function usePreview(
   // Anything still in flight belongs to the previous template, so its result
   // must not land on this one's canvas.
   useEffect(() => {
+    // Capture this template's listener. A newer render can already have
+    // installed the next template's listener before this cleanup runs.
+    const notify = pendingListener.current;
     return () => {
       generation.current += 1;
       queued.current = null;
+      notify?.(false);
     };
   }, [templateName]);
 
@@ -132,7 +176,11 @@ export function usePreview(
   const key = body === null ? null : JSON.stringify(body);
 
   useEffect(() => {
-    if (key === null) return;
+    if (key === null) {
+      pendingListener.current?.(false);
+      return;
+    }
+    pendingListener.current?.(true);
     const timer = setTimeout(() => {
       queued.current = { templateName, key, design };
       void pump();
@@ -140,5 +188,5 @@ export function usePreview(
     return () => clearTimeout(timer);
   }, [templateName, key, design, pump]);
 
-  return url;
+  return strict && displayedTemplate !== templateName ? null : url;
 }

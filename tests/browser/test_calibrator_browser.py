@@ -375,7 +375,7 @@ class TestColourMatrixKind:
         the boxes you are not working on."""
         _select_template(page, COLOUR_MATRIX_TEMPLATE)
         page.wait_for_selector(HANDLE)
-        page.get_by_label("show placement outline").uncheck()
+        page.get_by_role("switch", name="Show design box").uncheck()
         page.wait_for_function("() => document.querySelectorAll('.quad-editor__box').length === 0")
         assert page.locator(HANDLE).count() == 0
 
@@ -400,20 +400,30 @@ class TestColourMatrixKind:
         self, page
     ) -> None:
         """The control is named for what it does to the photograph now, but it
-        still writes `displace` -- this is the test that the rename stayed a
+        still writes `renderer.config.displace` -- this is the test that the rename stayed a
         rename and did not quietly repoint the toggle."""
         _select_template(page, COLOUR_MATRIX_TEMPLATE)
         page.wait_for_selector(PREVIEW_IMAGE)
         log = TrafficLog(page, "/preview")
         page.get_by_label("Follow fabric wrinkles").check()
-        log.wait_for(lambda r: _sent(r).get("displace", {}).get("enabled") is True)
+        log.wait_for(
+            lambda r: (
+                _sent(r).get("renderer", {}).get("config", {}).get("displace", {}).get("enabled")
+                is True
+            )
+        )
 
     def test_the_shading_presets_write_a_blend_mode(self, page) -> None:  # noqa: ANN001
         _select_template(page, COLOUR_MATRIX_TEMPLATE)
         page.wait_for_selector(PREVIEW_IMAGE)
         log = TrafficLog(page, "/preview")
         page.get_by_role("button", name="Rich").click()
-        log.wait_for(lambda r: _sent(r).get("shade", {}).get("blend") == "multiply")
+        log.wait_for(
+            lambda r: (
+                _sent(r).get("renderer", {}).get("config", {}).get("shade", {}).get("blend")
+                == "multiply"
+            )
+        )
 
     def test_choosing_a_test_design_rerenders_against_it(self, page) -> None:  # noqa: ANN001
         _select_template(page, COLOUR_MATRIX_TEMPLATE)
@@ -571,7 +581,7 @@ class TestMultipleKind:
         _select_template(page, MULTIPLE_TEMPLATE)
         page.wait_for_selector(".quad-editor__box")
         assert page.locator(".quad-editor__box").count() == 2
-        page.get_by_label("show all outlines").uncheck()
+        page.get_by_role("switch", name="Show all design boxes").uncheck()
         # The selected box keeps its handles -- the toggle is for judging the
         # render, not for giving up the ability to fix it.
         page.wait_for_function("() => document.querySelectorAll('.quad-editor__box').length === 1")
@@ -789,7 +799,7 @@ class TestKindPickerCreatesEachKind:
         page.get_by_role("button", name="Start calibrating →").click()
         page.wait_for_selector(HANDLE)
 
-        page.get_by_label("show placement outline").uncheck()
+        page.get_by_role("switch", name="Show design box").uncheck()
         page.wait_for_function("() => document.querySelectorAll('.quad-editor__box').length === 0")
         assert page.locator(HANDLE).count() == 0
 

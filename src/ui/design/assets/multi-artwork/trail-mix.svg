@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200">
+  <circle cx="100" cy="82" r="50" fill="none" stroke="#56633f" stroke-width="8"/>
+  <path d="M64 110 L90 72 L104 90 L116 76 L138 110 Z" fill="#56633f"/>
+  <text x="100" y="170" text-anchor="middle" font-family="Arial Black, Helvetica, sans-serif" font-weight="900" font-size="26" fill="#56633f">TRAIL MIX</text>
+</svg>
