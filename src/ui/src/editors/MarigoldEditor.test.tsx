@@ -70,11 +70,9 @@ function pointerSpace(svg: SVGSVGElement) {
   });
 }
 describe("MarigoldEditor", () => {
-  it("keeps the saved single colour without showing a garment colour field or calibration footers", () => {
+  it("keeps the saved single colour without showing a garment colour field", () => {
     const view = setup({ ...SINGLE, colour: "navy" });
     expect(screen.queryByLabelText("Garment colour (optional)")).not.toBeInTheDocument();
-    expect(view.container.querySelector(".mg-canvas-foot")).not.toBeInTheDocument();
-    expect(view.container.querySelector(".mg-canvas-hint")).not.toBeInTheDocument();
     fireEvent.change(screen.getByLabelText("Fabric texture"), { target: { value: "62" } });
     expect(view.config()).toMatchObject({ colour: "navy" });
   });

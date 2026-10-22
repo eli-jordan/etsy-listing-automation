@@ -34,6 +34,7 @@ from etsy_listings.core.engine.stages.publish import PublishStage
 
 from tests.support.builders import (
     a_context,
+    edit_garment_profile,
     edit_listing,
     set_copy,
     set_etsy_listing_defaults,
@@ -45,16 +46,26 @@ from tests.support.builders import (
 SHOP_ID = 28819281
 ETSY_SHOP_ID = 12345678
 ETSY_LISTING_ID = 4572550919
-PRINT_AREA = (4500, 5400)
+GARMENT_PROFILE = "comfort-colors-1717"
+FULL_PRINT_AREA = (4500, 5400)
+"""The fixture profile's own print area, as Printify reports it for this
+garment. Only a test about resolution itself needs a design this size."""
+PRINT_AREA = (450, 540)
+"""A tenth of :data:`FULL_PRINT_AREA`, written into the profile, the catalog
+placeholder and the design together (T05). A stage that prices, adopts or
+diffs a product does not care how many pixels the art has, and a 4500x5400
+RGBA design costs every such case a ~100 MB encode and hash. The resolution
+gate still runs against the shrunken profile; nothing here bypasses it."""
 PLAN = "pricing-plans/launch.yaml"
 DESIGN = "designs/take-a-hike.png"
 COLOURS = ["Black", "Blue Jean", "Ivory", "Moss"]
 SIZES = ["S", "M", "L", "XL", "XXL", "XXXL"]
 
 
-def _catalog() -> FakeCatalogClient:
-    placeholder = PrintAreaPlaceholder(position="front", width=PRINT_AREA[0], height=PRINT_AREA[1])
-    variants = VariantSet(
+def variants(print_area: tuple[int, int] = PRINT_AREA) -> VariantSet:
+    """Every colour in every size, ids ``1000 + colour * 10 + size``."""
+    placeholder = PrintAreaPlaceholder(position="front", width=print_area[0], height=print_area[1])
+    return VariantSet(
         variants=tuple(
             Variant(
                 id=1000 + c * 10 + s,
@@ -66,6 +77,11 @@ def _catalog() -> FakeCatalogClient:
             for s, size in enumerate(SIZES)
         )
     )
+
+
+def a_catalog(print_area: tuple[int, int] = PRINT_AREA) -> FakeCatalogClient:
+    """The fixture garment's blueprint 706 / provider 29, its front placeholder
+    matching ``print_area``."""
     return FakeCatalogClient(
         blueprints=[
             Blueprint(
@@ -73,8 +89,17 @@ def _catalog() -> FakeCatalogClient:
             )
         ],
         providers_by_blueprint={706: [PrintProvider(id=29, title="Monster Digital")]},
-        variants_by_key={(706, 29): variants},
+        variants_by_key={(706, 29): variants(print_area)},
     )
+
+
+def at_print_area(root: Path, print_area: tuple[int, int] = PRINT_AREA) -> Path:
+    """Set the fixture profile's print area and write a design exactly that
+    size: the passing value of the resolution gate, at whatever scale."""
+    edit_garment_profile(
+        root, GARMENT_PROFILE, print_area={"width": print_area[0], "height": print_area[1]}
+    )
+    return write_design(root, print_area)
 
 
 def a_deployable_context(root: Path) -> RunContext:
@@ -82,7 +107,7 @@ def a_deployable_context(root: Path) -> RunContext:
     set_etsy_shop_id(root, ETSY_SHOP_ID)
     set_etsy_listing_defaults(root, shipping_profile="NOK standard tee")
     set_copy(root, title="Take A Hike Tee", description="A retro sunset.")
-    write_design(root, PRINT_AREA)
+    at_print_area(root)
     (root / "pricing-plans").mkdir()
     (root / PLAN).write_text(
         "garment_profile: comfort-colors-1717\nprices:\n"
@@ -107,7 +132,7 @@ def a_deployable_context(root: Path) -> RunContext:
         ],
     )
     etsy.seed_listing(ETSY_LISTING_ID, shop_id=ETSY_SHOP_ID, state="draft")
-    return a_context(root, catalog=_catalog(), printify=printify, etsy=etsy)
+    return a_context(root, catalog=a_catalog(), printify=printify, etsy=etsy)
 
 
 def real_stages() -> list[Stage]:

@@ -36,7 +36,8 @@ uv run lint-imports
 # Coverage is measured over the whole suite, browser layer included. Those
 # tests skip themselves when chromium or src/ui/dist is missing, which
 # costs about a point -- the gate has enough headroom to pass either way, so a
-# missing browser never fails the build for the wrong reason.
+# missing browser never fails the build for the wrong reason. The opt-in
+# `capture` screenshots are deselected here as in CI's browser job.
 echo "== pytest + coverage (branch, fail under 85%) =="
 uv run pytest --cov --cov-report=term-missing --cov-report=html
 
@@ -47,11 +48,13 @@ uv run pytest --cov --cov-report=term-missing --cov-report=html
 # don't have installed.
 FRONTEND_DIR="src/ui"
 if command -v npm >/dev/null 2>&1; then
-  echo "== frontend: prettier, lint, typecheck, test + coverage (branch, fail under 85%) =="
+  echo "== frontend: prettier, lint, typecheck, test + coverage (branch, fail under 85%), design prototypes =="
   # `npm run format` writes, exactly as `ruff format .` does above: this script
   # is what you run before committing, so it fixes rather than reports. CI runs
   # `format:check` instead -- the same split as ruff.
-  (cd "$FRONTEND_DIR" && npm run format && npm run lint && npm run typecheck && npm run test:coverage)
+  # `test:design` runs the marver prototype frames' tests: required, but a
+  # separate Vitest project outside the production coverage measurement.
+  (cd "$FRONTEND_DIR" && npm run format && npm run lint && npm run typecheck && npm run test:coverage && npm run test:design)
 else
   echo "== frontend checks skipped: npm not on PATH =="
 fi
