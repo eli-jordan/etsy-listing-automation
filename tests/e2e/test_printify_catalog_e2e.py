@@ -110,22 +110,26 @@ class TestAuthenticatedCatalogEndpoints:
     catalog list, so auth failures or malformed responses cannot pass.
     """
 
-    @pytest.mark.parametrize(
-        ("path", "model"),
-        [
-            ("/v1/catalog/blueprints.json", Blueprint),
-            ("/v1/catalog/blueprints/706/print_providers.json", PrintProvider),
-        ],
-    )
-    def test_listing_endpoints_accept_the_configured_token(
-        self, catalog: HttpCatalogClient, path: str, model: type[Blueprint] | type[PrintProvider]
+    def test_blueprints_decode_from_the_shared_authenticated_fetch(
+        self, blueprints: list[Blueprint]
     ) -> None:
-        response = catalog._transport.get(path)  # noqa: SLF001 - validates the real wire contract
+        """Reads the session ``blueprints`` fixture rather than downloading the
+        whole catalog a second time: that fixture came through the same
+        authenticated transport, which raises on any non-2xx."""
+        assert blueprints
+        for blueprint in blueprints:
+            assert blueprint.id > 0
+            assert blueprint.title
+
+    def test_print_providers_accept_the_configured_token(self, catalog: HttpCatalogClient) -> None:
+        response = catalog._transport.get(  # noqa: SLF001 - validates the real wire contract
+            "/v1/catalog/blueprints/706/print_providers.json"
+        )
         assert response.status_code == 200
         payload = response.json()
         assert isinstance(payload, list) and payload
         for item in payload:
-            decoded = model.model_validate(item)
+            decoded = PrintProvider.model_validate(item)
             assert decoded.id > 0
             assert decoded.title
 
