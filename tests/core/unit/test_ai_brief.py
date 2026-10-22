@@ -12,9 +12,11 @@ around it is `test_ai_orchestrator.py`'s.
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
+from etsy_listings.core.ai import brief as brief_module
 from etsy_listings.core.ai.brief import (
     BRIEF_RESPONSE_SCHEMA,
     MAX_BRIEF_LENGTH,
@@ -52,8 +54,29 @@ def test_the_packaged_prompt_asks_for_the_design_text_verbatim() -> None:
     assert "exactly" in default_brief_prompt_text().lower()
 
 
-def test_the_packaged_prompt_is_read_fresh_each_call() -> None:
-    assert default_brief_prompt_text() == default_brief_prompt_text()
+def test_the_packaged_prompt_is_read_fresh_each_call(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Change the packaged resource between calls: a reader that cached its
+    first answer would return it twice."""
+    texts = iter(["first edition", "second edition"])
+    reads: list[tuple[str, str]] = []
+
+    class _Resource:
+        def __init__(self, package: str) -> None:
+            self._package = package
+
+        def joinpath(self, name: str) -> _Resource:
+            self._name = name
+            return self
+
+        def read_text(self, encoding: str) -> str:
+            reads.append((self._package, self._name))
+            return next(texts)
+
+    monkeypatch.setattr(brief_module, "resources", SimpleNamespace(files=_Resource))
+
+    assert default_brief_prompt_text() == "first edition"
+    assert default_brief_prompt_text() == "second edition"
+    assert reads == [("etsy_listings.core.ai.resources", "brief.md")] * 2
 
 
 # ---------------------------------------------------------------------- task
