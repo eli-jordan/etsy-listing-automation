@@ -3,6 +3,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "./App";
 import * as calibrator from "./api/calibrator";
 import * as prep from "./api/preparation";
+import { AUTOSAVE_DEBOUNCE_MS } from "./hooks/useAutosave";
+import { PREVIEW_DEBOUNCE_MS } from "./hooks/usePreview";
+import { controlledClock } from "./test/clock";
+import { deferred } from "./test/helpers";
 import { READY, SINGLE } from "./test/marigold";
 
 const PHOTOWARP = {
@@ -293,30 +297,31 @@ it("waits for the current composite before autosaving and refreshing readiness",
     modifiedAt: "Wed, 17 Sep 2026 18:30:00 GMT",
   });
   vi.mocked(prep.getPreparation).mockResolvedValue(READY);
-  let finish!: (url: string) => void;
-  const pending = new Promise<string>((resolve) => {
-    finish = resolve;
-  });
+  const clock = controlledClock();
+  const edited = deferred<string>();
   vi.mocked(calibrator.renderPreview)
     .mockResolvedValueOnce("blob:initial")
-    .mockReturnValue(pending);
+    .mockReturnValue(edited.promise);
   render(<App />);
   const texture = await screen.findByLabelText("Fabric texture");
   await waitFor(() => expect(calibrator.renderPreview).toHaveBeenCalledTimes(1));
   fireEvent.change(texture, { target: { value: "62" } });
-  await waitFor(() => expect(calibrator.renderPreview).toHaveBeenCalledTimes(2));
-  await act(async () => {
-    await new Promise((resolve) => setTimeout(resolve, 900));
-  });
+  await clock.advance(PREVIEW_DEBOUNCE_MS);
+  expect(calibrator.renderPreview).toHaveBeenCalledTimes(2);
+  // The whole autosave debounce, measured from the edit: a save would be due
+  // now were the composite not still out.
+  await clock.advance(AUTOSAVE_DEBOUNCE_MS);
   expect(calibrator.saveTemplateConfig).not.toHaveBeenCalled();
   const reads = vi.mocked(prep.getPreparation).mock.calls.length;
   await act(async () => window.dispatchEvent(new Event("focus")));
   expect(prep.getPreparation).toHaveBeenCalledTimes(reads);
-  await act(async () => finish("blob:edited"));
+  await act(async () => edited.resolve("blob:edited"));
   await waitFor(() =>
     expect(vi.mocked(prep.getPreparation).mock.calls.length).toBeGreaterThan(reads),
   );
-  await waitFor(() => expect(calibrator.saveTemplateConfig).toHaveBeenCalledTimes(1));
+  // Already past its debounce, so the save is due the moment the gate opens.
+  await clock.advance(0);
+  expect(calibrator.saveTemplateConfig).toHaveBeenCalledTimes(1);
 });
 
 it("resumes fresh readiness when a pending Marigold preview is unmounted by renderer selection", async () => {
