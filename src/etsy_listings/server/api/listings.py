@@ -55,7 +55,7 @@ from etsy_listings.core.application.listing_reads import (
 from etsy_listings.core.application.listing_reads import (
     list_listings as listing_rows,
 )
-from etsy_listings.core.application.mockup_templates import saved_preview
+from etsy_listings.core.application.prepared_previews import saved_scene
 from etsy_listings.core.application.pricing_plans import (
     load_candidate_pricing_plans,
     pricing_plan_options,
@@ -65,9 +65,6 @@ from etsy_listings.core.application.refusals import (
     ListingMissing,
     ListingNameTaken,
     PublishedListingDeletion,
-    TemplateConfigMissing,
-    TemplateMissing,
-    TemplatePhotoMissing,
 )
 from etsy_listings.core.batches import BatchStore
 from etsy_listings.core.clients.etsy.tokens import EtsyAuthError
@@ -101,7 +98,11 @@ from etsy_listings.server.api.schemas import (
     ResolvedPrice,
     WorkspaceSummary,
 )
-from etsy_listings.server.api.templates import PreviewScale, render_preview_response
+from etsy_listings.server.api.templates import (
+    PreviewScale,
+    preview_refusals,
+    render_preview_response,
+)
 from etsy_listings.server.api.thumbnails import thumbnail_response
 
 router = APIRouter(prefix="/api/listings", tags=["listings"])
@@ -423,10 +424,8 @@ def scene_preview(
         raise HTTPException(
             status_code=404, detail=f"listing {target.name!r} does not load"
         ) from exc
-    try:
-        scene = saved_preview(workspace, template, colour=colour, design=artwork)
-    except (TemplateMissing, TemplateConfigMissing, TemplatePhotoMissing) as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    with preview_refusals():
+        scene = saved_scene(workspace, template, colour=colour, design=artwork)
     return render_preview_response(scene, scale)
 
 

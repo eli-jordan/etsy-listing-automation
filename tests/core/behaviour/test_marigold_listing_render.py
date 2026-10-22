@@ -8,21 +8,7 @@ from etsy_listings.core.workspace import WorkspaceFacts
 from etsy_listings.core.workspace.listing_documents import ListingDocuments
 
 from tests.support.builders import FIXTURE_LISTING, a_context, a_lock, edit_garment_profile
-from tests.support.marigold import marigold_template, material_maps
-
-
-def listing_with_marigold(workspace_root, *, prepare=False):
-    workspace = marigold_template(workspace_root)
-    ListingDocuments(workspace).edit(
-        FIXTURE_LISTING, lambda document: {**document, "media": [{"template": "shirt"}]}
-    )
-    if prepare:
-        artifacts = Artifacts(workspace)
-        inputs = artifacts.saved_inputs("shirt", evidence={None: "a" * 64})
-        artifacts.publish(
-            "shirt", inputs, {None: material_maps((64, 64))}, current_inputs=lambda: inputs
-        )
-    return workspace, workspace.load_listing(FIXTURE_LISTING)
+from tests.support.marigold import listing_with_marigold, marigold_template, material_maps
 
 
 def test_missing_maps_have_the_same_listing_and_engine_refusal(workspace_root):
@@ -77,8 +63,8 @@ def test_preview_is_promoted_only_while_actual_scene_identity_matches(workspace_
 
 def test_matching_preview_promotes_exact_bytes_without_composition(workspace_root, monkeypatch):
     from etsy_listings.core.application.prepared_previews import prepared_preview
-    from etsy_listings.core.engine.stages import render as render_module
     from etsy_listings.core.engine.stages.render import scene_hash
+    from etsy_listings.core.preparation import scenes
     from etsy_listings.core.render import encode_png
 
     workspace, _ = listing_with_marigold(workspace_root, prepare=True)
@@ -87,7 +73,7 @@ def test_matching_preview_promotes_exact_bytes_without_composition(workspace_roo
     desired = stage.desired(ctx, FIXTURE_LISTING, None)
     work = desired.works[0]
     authoring = prepared_preview(
-        workspace, "shirt", config=None, colour=None, design=lambda: work.layers[0].design
+        workspace, "shirt", config=None, colour=None, design=lambda _colour: work.layers[0].design
     )
     assert authoring.render_identity == scene_hash(desired, work)
     stage.preview(ctx, desired, None)
@@ -100,7 +86,7 @@ def test_matching_preview_promotes_exact_bytes_without_composition(workspace_roo
     def unexpected_render(*args, **kwargs):
         raise AssertionError("matching preview must be promoted")
 
-    monkeypatch.setattr(render_module, "render_marigold_scene", unexpected_render)
+    monkeypatch.setattr(scenes, "render_marigold_scene", unexpected_render)
     stage.apply(ctx, desired)
     assert workspace.render_file(FIXTURE_LISTING, "shirt", None).read_bytes() == expected
 
@@ -196,7 +182,9 @@ def test_multiple_placements_resolve_actual_artwork_and_preserve_paint_order(wor
     stage = RenderStage()
     desired = stage.desired(ctx, FIXTURE_LISTING, None)
     work = desired.works[0]
-    authoring = prepared_preview(workspace, "shirt", config=None, colour=None, design=lambda: red)
+    authoring = prepared_preview(
+        workspace, "shirt", config=None, colour=None, design=lambda _colour: red
+    )
     assert scene_hash(desired, work) != authoring.render_identity
     first = execute(ctx, build_plan(ctx, FIXTURE_LISTING, a_lock(), (stage,)), a_lock())
     expected = render_marigold_scene(
@@ -256,7 +244,7 @@ def test_listing_preview_uses_the_same_missing_map_explanation(workspace_root):
             "shirt",
             config=None,
             colour=None,
-            design=lambda: workspace.design_file("take-a-hike"),
+            design=lambda _colour: workspace.design_file("take-a-hike"),
         )
     assert str(error.value) == refusal
 

@@ -19,7 +19,7 @@ from contextlib import ExitStack, contextmanager, suppress
 from dataclasses import dataclass
 from pathlib import Path
 from types import MappingProxyType
-from typing import Any, Literal
+from typing import Any, ClassVar, Literal
 from uuid import uuid4
 
 import numpy as np
@@ -60,12 +60,44 @@ BOUNDS = {
 }
 
 
+ReadinessReason = Literal[
+    "missing_maps",
+    "missing_placements",
+    "placement_changed",
+    "photo_changed",
+    "inference_changed",
+    "mask_changed",
+    "unsupported_schema",
+    "incompatible_dimensions",
+    "invalid_artifact",
+]
+
+
 class ArtifactError(ValueError):
-    """Prepare the template again instead of interpreting an invalid map."""
+    """Prepare the template again instead of interpreting an invalid map.
+
+    ``reason`` is the readiness cause each refusal reports, so status is read
+    from the type raised and never from its message."""
+
+    reason: ClassVar[ReadinessReason] = "invalid_artifact"
 
 
 class StalePreparation(ArtifactError):
     """Current geometry, masks or evidence changed before publication."""
+
+    reason: ClassVar[ReadinessReason] = "placement_changed"
+
+
+class UnsupportedSchema(ArtifactError):
+    """A map pointer or manifest this version cannot read."""
+
+    reason: ClassVar[ReadinessReason] = "unsupported_schema"
+
+
+class IncompatibleDimensions(ArtifactError):
+    """A target photo whose size differs from the prepared main photo."""
+
+    reason: ClassVar[ReadinessReason] = "incompatible_dimensions"
 
 
 class Record(BaseModel):
@@ -156,7 +188,7 @@ class Acquired:
 @dataclass(frozen=True)
 class Readiness:
     state: Literal["needs_preparation", "out_of_date", "ready", "not_required"]
-    reason: str | None = None
+    reason: ReadinessReason | None = None
     message: str | None = None
     content_digest: str | None = None
 
@@ -178,7 +210,7 @@ def validate_maps(maps: MaterialMaps, size: tuple[int, int]) -> None:
         raise ArtifactError("Prepared map extent does not match main photo")
     width, height = right - left, bottom - top
     if min(size) < 1 or max(size) > 8192 or width * height > MAX_PIXELS:
-        raise ArtifactError("Unsupported prepared-map dimensions")
+        raise UnsupportedSchema("Unsupported prepared-map dimensions")
     arrays = arrays_of(maps)
     for name, (low, high, channels) in BOUNDS.items():
         if name == "patch_ids" and name not in arrays:
@@ -310,7 +342,7 @@ def read_maps(
                             stream
                         )
                     else:
-                        raise ArtifactError("Unsupported prepared NPY format")
+                        raise UnsupportedSchema("Unsupported prepared NPY format")
                     header_size = stream.tell()
                 if (
                     actual_shape != shape
@@ -452,7 +484,7 @@ class Artifacts:
         }:
             raise ArtifactError("Invalid current map pointer")
         if type(value["schema_version"]) is not int or value["schema_version"] not in (1, SCHEMA):
-            raise ArtifactError("Unsupported map schema; migrate or prepare the template again")
+            raise UnsupportedSchema("Unsupported map schema; migrate or prepare the template again")
         if not isinstance(value["generation_id"], str) or not isinstance(
             value["manifest_checksum"], str
         ):
@@ -472,10 +504,10 @@ class Artifacts:
         if type(document.get("schema_version")) is not int or document.get(
             "schema_version"
         ) not in (1, SCHEMA):
-            raise ArtifactError("Unsupported map schema; migrate or prepare the template again")
+            raise UnsupportedSchema("Unsupported map schema; migrate or prepare the template again")
         manifest = Manifest.model_validate(document)
         if manifest.generation_id != generation or manifest.semantics != SEMANTICS:
-            raise ArtifactError("Unsupported map coordinate semantics")
+            raise UnsupportedSchema("Unsupported map coordinate semantics")
         ids = [p.id for p in manifest.placements]
         if len(ids) != len(set(ids)) or set(ids) != set(manifest.preparation_inputs.ids):
             raise ArtifactError("Prepared generation does not contain the exact placement set")
@@ -531,7 +563,9 @@ class Artifacts:
         if manifest.preparation_inputs.identity() != inputs.identity():
             raise StalePreparation("Prepared maps are out of date; rebuild or prepare the template")
         if target_size is not None and target_size != (inputs.photo.width, inputs.photo.height):
-            raise ArtifactError("Shared colour photo dimensions differ from the main photo")
+            raise IncompatibleDimensions(
+                "Shared colour photo dimensions differ from the main photo"
+            )
 
     def _load(
         self,
@@ -858,7 +892,7 @@ class Artifacts:
             return Readiness("ready", content_digest=manifest.content_digest)
         except StalePreparation as exc:
             # The accepted inputs are immutable, so explain the first relevant change.
-            reason = "placement_changed"
+            reason: ReadinessReason = exc.reason
             try:
                 pointer = self._pointer(name)
                 accepted = self._read_manifest(
@@ -876,10 +910,7 @@ class Artifacts:
                 pass
             return Readiness("out_of_date", reason, str(exc))
         except ArtifactError as exc:
-            reason = "unsupported_schema" if "Unsupported" in str(exc) else "invalid_artifact"
-            if "dimensions differ" in str(exc):
-                reason = "incompatible_dimensions"
-            return Readiness("out_of_date", reason, str(exc))
+            return Readiness("out_of_date", exc.reason, str(exc))
 
     def cleanup(self, name: str, *, retained_generations: set[str] | None = None) -> list[str]:
         """Remove unreferenced generations; caller supplies all persisted job refs."""

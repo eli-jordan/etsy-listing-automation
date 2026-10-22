@@ -10,10 +10,13 @@ PreparationInputs and Artifacts.saved_inputs/inspect/readiness/publish/acquire/
 reusable/cleanup. inspect reuses bounded immutable-generation validation proofs;
 reusable leases exact unchanged placements during a CPU rebuild. Schema 2 maps
 carry photo-coordinate extents; schema 1 full-photo generations remain readable.
-readiness.saved_readiness and saved_preparation_facts validate saved assets for editor status,
-listing
-checks and engine refusals without consulting inference runtime or cache.
-Rendering consumes MaterialMaps through render.render_marigold_scene. Neither
+Each refusal's ArtifactError subclass carries its typed readiness reason.
+readiness.template_readiness answers whether any saved template can render, for
+editor status, listing checks, engine refusals and the catalogue
+(catalog_readiness), without consulting inference runtime or cache;
+saved_preparation_facts adds the prepared engine for authoring status.
+scenes.lease_scene is the one path from accepted maps to a composed scene and
+its identity, shared by the render stage and every preview. Neither
 artifact loading nor numerical preparation depends on the installed runtime.
 Importing this package never starts workers or loads torch.
 """

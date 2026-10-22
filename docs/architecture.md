@@ -972,9 +972,12 @@ resynchronization. Receipt-only changes do not emit another step event.
 
 ## Prepared listing rendering
 
-`preparation.readiness.saved_readiness` provides the same durable-map facts to
-calibration status, `WorkspaceFacts` and the render stage. Listing checks block
-referenced templates with unavailable maps. Reusable listing-template saves
+`preparation.readiness.template_readiness` answers whether any saved template
+can render, for calibration status, `WorkspaceFacts`, the render stage and the
+template catalogue. Callers do not check the renderer first: Photo warp is
+`not_required` without reading maps. Each cause is a typed reason carried by the
+`ArtifactError` subclass raised, never parsed from a message. Listing checks
+block referenced templates with unavailable maps. Reusable listing-template saves
 remain structural; their materialized listings must pass deployment readiness.
 
 Under ADR-0054, the render stage resolves artwork through `DesignPlacement` for
@@ -984,7 +987,11 @@ shared with authoring previews. YAML formatting, inactive settings, generation
 names and inference provenance do not enter that identity. Photo warp keeps its
 existing byte hashes and composition pipeline.
 
-Preview and apply acquire one immutable generation per scene. Before composing
+Plan, apply and every preview compose through `preparation.scenes.lease_scene`,
+which reads saved inputs, acquires one immutable generation for the target photo
+and names the scene identity in one place. `application.prepared_previews.saved_scene`
+picks the renderer for the listing and listing-template previews, so no route
+does. Before composing
 or promoting a deployment preview, apply rechecks saved preparation inputs and
 actual scene identity. Matching previews copy their exact PNG bytes; changed
 artwork, photos or maps cannot authorize stale promotion. Output file hashes

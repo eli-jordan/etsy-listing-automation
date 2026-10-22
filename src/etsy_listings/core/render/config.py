@@ -295,6 +295,16 @@ def scene_layers(
     return [(p.colour, template.render_config_for(p)) for p in template.placements]
 
 
+def scene_colours(template: AnyTemplate, colour: str | None) -> list[tuple[str | None, str | None]]:
+    """``(depicted colour, placement ID)`` per layer of one scene, in
+    :func:`scene_layers`'s order, for any renderer: a prepared scene pairs
+    each layer's artwork with its placement's accepted maps rather than a
+    Photo warp configuration (ADR-0054)."""
+    if isinstance(template, MultipleTemplate):
+        return [(p.colour, p.id) for p in template.placements]
+    return [(colour if isinstance(template, ColourMatrixTemplate) else template.colour, None)]
+
+
 TemplateConfig = Annotated[AnyTemplate, Field(discriminator="kind")]
 """``mockup-templates/{name}/template.yaml``, written by the calibrator. A
 discriminated union, not a wrapping model -- the file *is* one of the three

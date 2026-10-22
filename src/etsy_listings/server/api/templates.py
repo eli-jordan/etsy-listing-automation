@@ -19,9 +19,9 @@ what only serving a browser needs:
 
 from __future__ import annotations
 
-from collections.abc import Callable
-from contextlib import suppress
-from dataclasses import dataclass
+from collections.abc import Iterator
+from contextlib import contextmanager, suppress
+from dataclasses import asdict, dataclass
 from email.utils import format_datetime
 from functools import cache
 from io import BytesIO
@@ -41,13 +41,16 @@ from etsy_listings.core.application.mockup_templates import (
     read_config,
     require_template,
     save_calibration,
-    saved_preview,
     template_photo,
     template_swatch,
     unsaved_preview,
 )
 from etsy_listings.core.application.preparation.previews import EDITOR_ARTWORK_EDGE, editor_preview
-from etsy_listings.core.application.prepared_previews import prepared_preview
+from etsy_listings.core.application.prepared_previews import (
+    PreparedPreview,
+    prepared_preview,
+    saved_scene,
+)
 from etsy_listings.core.application.refusals import (
     TemplateAlreadyCalibrated,
     TemplateConfigMissing,
@@ -58,6 +61,7 @@ from etsy_listings.core.application.refusals import (
 )
 from etsy_listings.core.config.slug import SlugCollisionError
 from etsy_listings.core.errors import UserFacingError
+from etsy_listings.core.preparation.readiness import catalog_readiness
 from etsy_listings.core.render import MarigoldRenderer, load_template_config
 from etsy_listings.core.render.config import AnyTemplate, PreparationRequired, TemplateConfig
 from etsy_listings.core.render.io import MARIGOLD_PNG_COMPRESSION, encode_png
@@ -145,8 +149,9 @@ def list_templates(request: Request) -> list[TemplateSummary]:
             summary.renderer = config.renderer.type
             # Catalog reads metadata only. The selected status endpoint validates
             # maps; background client reads fill the other rows without blocking entry.
-            if config.renderer.type == "photo-warp":
-                summary.maps = MapReadinessResponse(state="not_required", can_render=True)
+            known = catalog_readiness(config)
+            if known is not None:
+                summary.maps = MapReadinessResponse(**asdict(known), can_render=known.can_render)
         summaries.append(summary)
     return summaries
 
@@ -321,10 +326,23 @@ def _encode_preview(image: Image.Image, scale: PreviewScale) -> Response:
     return Response(content=buffer.getvalue(), media_type=EDITOR_MEDIA_TYPE)
 
 
-def render_preview_response(scene: PreviewScene, scale: PreviewScale) -> Response:
-    """Composite the scene from the shared memo rather than off disk: a drag
-    is a burst of requests for the same photo, design and derived maps, and
-    re-reading them is what made the old editor take seconds per frame."""
+def render_preview_response(scene: PreviewScene | PreparedPreview, scale: PreviewScale) -> Response:
+    """Composite a Photo warp scene from the shared memo rather than off disk:
+    a drag is a burst of requests for the same photo, design and derived maps,
+    and re-reading them is what made the old editor take seconds per frame. A
+    prepared scene arrives composed, as the full-size PNG the render stage
+    writes, with the identities that let the editor promote it."""
+    if isinstance(scene, PreparedPreview):
+        return Response(
+            encode_png(scene.image, compression=MARIGOLD_PNG_COMPRESSION),
+            media_type="image/png",
+            headers={
+                "X-Render-Identity": scene.render_identity,
+                "X-Map-Generation": scene.generation_id,
+                "X-Calibration-Revision": scene.config_revision,
+                "Cache-Control": "no-cache",
+            },
+        )
     base = PREVIEW_IMAGES.base(scene.photo.path, EDITOR_MAX_EDGE if scale == "editor" else None)
     image = compose_preview(
         scene,
@@ -371,12 +389,15 @@ def preview(template: Existing, body: PreviewRequest, scale: PreviewScale = "ful
             return response
         if body.mask_edits:
             raise HTTPException(status_code=409, detail="Save draft mask edits before full preview")
-        return _prepared_response(
-            template,
-            config,
-            body.colour if isinstance(body, ColourMatrixPreviewRequest) else None,
-            lambda: resolve_design(workspace, body.design),
-        )
+        with preview_refusals():
+            prepared = prepared_preview(
+                workspace,
+                template.name,
+                config=config,
+                colour=body.colour if isinstance(body, ColourMatrixPreviewRequest) else None,
+                design=lambda _colour: resolve_design(workspace, body.design),
+            )
+        return render_preview_response(prepared, scale)
     try:
         scene = unsaved_preview(
             workspace,
@@ -431,16 +452,10 @@ def design_preview(
 
     # Every layer shows the one file, resolved (and refused) once.
     one_design = cache(design_path)
-    if isinstance(read_config(workspace, template.name).config.renderer, MarigoldRenderer):
-        return _prepared_response(template, None, colour, one_design)
-    try:
-        scene = saved_preview(
+    with preview_refusals():
+        scene = saved_scene(
             workspace, template.name, colour=colour, design=lambda _colour: one_design()
         )
-    except PreparationRequired as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
-    except (TemplateConfigMissing, TemplatePhotoMissing) as exc:
-        raise _not_found(exc) from exc
     return render_preview_response(scene, scale)
 
 
@@ -461,26 +476,14 @@ def swatch(template: Existing, colour: str) -> SwatchResponse:
     return SwatchResponse(hex=hex_colour)
 
 
-def _prepared_response(
-    template: Target, config: AnyTemplate | None, colour: str | None, design: Callable[[], Path]
-) -> Response:
+@contextmanager
+def preview_refusals() -> Iterator[None]:
+    """A saved or prepared preview's refusals, as every preview route reports them."""
     try:
-        preview = prepared_preview(
-            template.workspace, template.name, config=config, colour=colour, design=design
-        )
+        yield
     except PreparationRequired as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     except TemplatePreviewKindMismatch as exc:
         raise _bad_request(exc) from exc
-    except (TemplateConfigMissing, TemplatePhotoMissing) as exc:
+    except (TemplateMissing, TemplateConfigMissing, TemplatePhotoMissing) as exc:
         raise _not_found(exc) from exc
-    return Response(
-        encode_png(preview.image, compression=MARIGOLD_PNG_COMPRESSION),
-        media_type="image/png",
-        headers={
-            "X-Render-Identity": preview.render_identity,
-            "X-Map-Generation": preview.generation_id,
-            "X-Calibration-Revision": preview.config_revision,
-            "Cache-Control": "no-cache",
-        },
-    )

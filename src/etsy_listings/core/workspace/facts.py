@@ -51,7 +51,6 @@ from etsy_listings.core.config.media import ProbeFailure, VideoFacts, media_kind
 from etsy_listings.core.render.config import (
     AnyTemplate,
     ColourMatrixTemplate,
-    MarigoldRenderer,
     MultipleTemplate,
 )
 from etsy_listings.core.workspace.video import probe_video
@@ -163,13 +162,12 @@ def _template_info_map(workspace: Workspace) -> dict[str, TemplateInfo]:
         except ConfigLoadError:
             continue
         info = template_info(workspace, name, config)
-        if isinstance(config.renderer, MarigoldRenderer):
-            # Local import avoids the workspace package's construction cycle.
-            from etsy_listings.core.preparation.readiness import saved_readiness
+        # Local import avoids the workspace package's construction cycle.
+        from etsy_listings.core.preparation.readiness import template_readiness
 
-            maps = saved_readiness(workspace, name)
-            if not maps.can_render:
-                info = replace(info, preparation_error=maps.message)
+        maps = template_readiness(workspace, name, config)
+        if not maps.can_render:
+            info = replace(info, preparation_error=maps.message)
         result[name] = info
     return result
 

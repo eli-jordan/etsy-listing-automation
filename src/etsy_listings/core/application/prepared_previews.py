@@ -1,32 +1,41 @@
-"""Immutable map acquisition and CPU composition for authoring previews."""
+"""Previews of a template's *saved* scene, whichever renderer it uses.
 
-import hashlib
-from collections.abc import Callable
-from contextlib import ExitStack
+:func:`saved_scene` is the one entry point for the listing editors and the
+listing-template editor: it picks the renderer, so a route never has to. A
+prepared scene composes through :func:`~etsy_listings.core.preparation.scenes.lease_scene`,
+the render stage's own path, so a preview's identity is the rendered file's.
+"""
+
 from dataclasses import dataclass
 from pathlib import Path
 
 from PIL import Image
 
-from etsy_listings.core.application.mockup_templates import require_template
+from etsy_listings.core.application.mockup_templates import (
+    LayerDesign,
+    PreviewScene,
+    read_config,
+    require_template,
+    saved_preview,
+)
 from etsy_listings.core.application.refusals import (
     TemplatePhotoMissing,
     TemplatePreviewKindMismatch,
 )
 from etsy_listings.core.preparation.artifacts import ArtifactError, Artifacts
-from etsy_listings.core.preparation.readiness import saved_readiness
+from etsy_listings.core.preparation.readiness import template_readiness
+from etsy_listings.core.preparation.scenes import PreparedLayer, lease_scene
 from etsy_listings.core.render import (
     AnyTemplate,
     ColourMatrixTemplate,
     MarigoldRenderer,
-    MaterialLayer,
     MultipleTemplate,
     PreparationRequired,
     load_design,
     load_template_base,
-    render_marigold_scene,
+    scene_colours,
 )
-from etsy_listings.core.render.identity import artwork_identity, prepared_scene_identity
+from etsy_listings.core.render.types import RGBA
 from etsy_listings.core.workspace import Workspace
 from etsy_listings.core.workspace.calibration import CalibrationStore
 
@@ -39,82 +48,92 @@ class PreparedPreview:
     config_revision: str
 
 
+def saved_scene(
+    workspace: Workspace, name: str, *, colour: str | None, design: LayerDesign
+) -> PreviewScene | PreparedPreview:
+    """``name``'s saved scene with ``design`` asked once per layer, as
+    :func:`~etsy_listings.core.application.mockup_templates.saved_preview`
+    asks it. Photo warp returns the scene for the host to composite from its
+    image memo; Marigold returns the composed image. Refusals:
+    :class:`TemplateMissing`, :class:`TemplateConfigMissing`,
+    :class:`TemplatePhotoMissing`, :class:`PreparationRequired`."""
+    if isinstance(read_config(workspace, name).config.renderer, MarigoldRenderer):
+        return prepared_preview(workspace, name, config=None, colour=colour, design=design)
+    return saved_preview(workspace, name, colour=colour, design=design)
+
+
 def prepared_preview(
     workspace: Workspace,
     name: str,
     *,
     config: AnyTemplate | None,
     colour: str | None,
-    design: Callable[[], Path],
+    design: LayerDesign,
 ) -> PreparedPreview:
+    """A Marigold scene at ``config``'s geometry (the saved one when
+    ``None``), which must match the saved, prepared inputs. ``design`` is
+    asked once per layer with the colour it depicts; a layer with no file is
+    left bare."""
     require_template(workspace, name)
     store = CalibrationStore(workspace)
     artifacts = Artifacts(workspace)
-    # Capture saved geometry/masks/reference and the selected target once. The
-    # acquired generation stays leased until the complete scene is composed.
-    with ExitStack() as lease:
-        with store.lock(name):
-            saved = store.read(name)
-            requested = config if config is not None else saved.config
-            if requested.kind != saved.config.kind:
-                raise TemplatePreviewKindMismatch(saved.config.kind)
-            if not isinstance(requested.renderer, MarigoldRenderer) or not isinstance(
-                saved.config.renderer, MarigoldRenderer
-            ):
-                raise PreparationRequired("Save the Marigold renderer selection before rendering")
-            readiness = saved_readiness(workspace, name)
-            if not readiness.can_render:
-                raise PreparationRequired(readiness.message or "Prepare the template first")
-            inputs = artifacts.saved_inputs(name)
-            boxes = (
-                {p.id: p.bounding_box for p in requested.placements}
-                if isinstance(requested, MultipleTemplate)
-                else {None: requested.bounding_box}
+    # Capture saved geometry/masks/reference and the selected target once;
+    # lease_scene re-checks them after the images are decoded.
+    with store.lock(name):
+        saved = store.read(name)
+        requested = config if config is not None else saved.config
+        if requested.kind != saved.config.kind:
+            raise TemplatePreviewKindMismatch(saved.config.kind)
+        if not isinstance(requested.renderer, MarigoldRenderer) or not isinstance(
+            saved.config.renderer, MarigoldRenderer
+        ):
+            raise PreparationRequired("Save the Marigold renderer selection before rendering")
+        readiness = template_readiness(workspace, name, saved.config)
+        if not readiness.can_render:
+            raise PreparationRequired(readiness.message or "Prepare the template first")
+        inputs = artifacts.saved_inputs(name)
+        boxes = (
+            {p.id: p.bounding_box for p in requested.placements}
+            if isinstance(requested, MultipleTemplate)
+            else {None: requested.bounding_box}
+        )
+        expected = {p.id: p.quad for p in inputs.placements}
+        if {
+            key: tuple((p.x, p.y) for p in box) for key, box in boxes.items()
+        } != expected or requested.renderer.config.inference != inputs.inference:
+            raise PreparationRequired(
+                "Save geometry and inference settings, then rebuild or prepare the template"
             )
-            expected = {p.id: p.quad for p in inputs.placements}
-            if {
-                key: tuple((p.x, p.y) for p in box) for key, box in boxes.items()
-            } != expected or requested.renderer.config.inference != inputs.inference:
-                raise PreparationRequired(
-                    "Save geometry and inference settings, then rebuild or prepare the template"
-                )
-            path = workspace.scene_photo(
-                name, colour if isinstance(requested, ColourMatrixTemplate) else None
-            ).path
-            if not path.is_file():
-                raise TemplatePhotoMissing("Selected target photo is missing")
-            base = load_template_base(path)
-            artwork = load_design(design())
-            ids = (
-                [p.id for p in requested.placements]
-                if isinstance(requested, MultipleTemplate)
-                else [None]
+        depicted = colour if isinstance(requested, ColourMatrixTemplate) else None
+        path = workspace.scene_photo(name, depicted).path
+        if not path.is_file():
+            raise TemplatePhotoMissing("Selected target photo is missing")
+        base = load_template_base(path)
+        layers = _layers(requested, depicted, design)
+    try:
+        with lease_scene(
+            workspace,
+            name,
+            base=base,
+            layers=layers,
+            appearance=requested.renderer.config.appearance,
+            expected=inputs,
+        ) as scene:
+            return PreparedPreview(
+                scene.render(), scene.identity, scene.manifest.generation_id, saved.revision
             )
-        try:
-            with store.lock(name):
-                # Re-check saved inputs after image decoding, then release the
-                # authoring lock while the fixed generation remains leased.
-                current = artifacts.saved_inputs(name)
-                if current.identity() != inputs.identity():
-                    raise PreparationRequired(
-                        "Calibration changed; save and prepare before rendering"
-                    )
-                acquired = lease.enter_context(
-                    artifacts.acquire(name, inputs, target_size=(base.shape[1], base.shape[0]))
-                )
-            appearance = requested.renderer.config.appearance
-            identity = prepared_scene_identity(
-                map_content=acquired.manifest.content_digest,
-                placement_ids=ids,
-                artwork_digests=[artwork_identity(artwork)] * len(ids),
-                photo_pixels=hashlib.sha256(base.tobytes()).hexdigest(),
-                appearance=appearance,
-            )
-            image = render_marigold_scene(
-                base,
-                [MaterialLayer(artwork, acquired.maps[key], key) for key in ids],
-                appearance=appearance,
-            )
-            return PreparedPreview(image, identity, acquired.manifest.generation_id, saved.revision)
-        except ArtifactError as exc:
-            raise PreparationRequired(str(exc)) from exc
+    except ArtifactError as exc:
+        raise PreparationRequired(str(exc)) from exc
+
+
+def _layers(config: AnyTemplate, colour: str | None, design: LayerDesign) -> list[PreparedLayer]:
+    decoded: dict[Path, RGBA] = {}
+    layers = []
+    for depicted, placement in scene_colours(config, colour):
+        path = design(depicted)
+        if path is None:
+            continue
+        if path not in decoded:
+            decoded[path] = load_design(path)
+        layers.append(PreparedLayer(decoded[path], placement))
+    return layers

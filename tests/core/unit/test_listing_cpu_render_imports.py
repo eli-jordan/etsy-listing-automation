@@ -10,7 +10,7 @@ def test_listing_render_imports_no_inference_runtime_or_model_library():
 import json, sys
 from etsy_listings.core.engine.stages.render import RenderStage
 from etsy_listings.core.workspace import WorkspaceFacts
-from etsy_listings.core.preparation.readiness import saved_readiness
+from etsy_listings.core.preparation.readiness import template_readiness
 forbidden = (
     'torch', 'diffusers', 'transformers',
     'etsy_listings.core.preparation.runtime',
