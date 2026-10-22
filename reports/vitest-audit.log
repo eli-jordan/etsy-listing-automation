@@ -1,0 +1,5 @@
+
+> etsy-listings-calibrator@0.1.0 test
+> vitest run --reporter=json --outputFile=../../reports/vitest-audit.json
+
+JSON report written to C:/Users/Admin/.t3/worktrees/etsy-listing-automation/t3code-a1bbd609/reports/vitest-audit.json

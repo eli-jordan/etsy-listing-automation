@@ -36,7 +36,12 @@ def test_prune_previews_keeps_current_scenes_and_removes_stale_templates(
     assert not removed.parent.exists()
 
 
-def test_discover_finds_root_from_nested_cwd(workspace_root: Path) -> None:
+def test_discover_finds_root_from_nested_cwd(
+    workspace_root: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Arranged, not inherited: a contributor's shell may export a workspace
+    # root, which discovery deliberately prefers over walking up (T03).
+    monkeypatch.delenv("ETSY_LISTINGS_ROOT", raising=False)
     nested = workspace_root / "listings" / "take-a-hike"
     ws = Workspace.discover(start=nested)
     assert ws.root == workspace_root.resolve()
@@ -55,7 +60,8 @@ def test_discover_env_var(
     assert ws.root == workspace_root.resolve()
 
 
-def test_discover_raises_when_not_found(tmp_path: Path) -> None:
+def test_discover_raises_when_not_found(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("ETSY_LISTINGS_ROOT", raising=False)
     with pytest.raises(WorkspaceNotFoundError):
         Workspace.discover(start=tmp_path)
 
@@ -450,7 +456,7 @@ def test_template_names_can_include_uncalibrated_directories(workspace_root: Pat
     order to calibrate it. A stray file stays out either way.
 
     The default (calibrated-only) behaviour the `new` picker relies on is
-    covered in tests/cli/behaviour/test_new_picker.py.
+    covered by `test_template_names_lists_only_calibrated_templates` below.
     """
     templates = workspace_root / "mockup-templates"
     (templates / "not-calibrated-yet").mkdir()
@@ -821,11 +827,45 @@ def test_a_listing_template_read_while_it_is_replaced_still_loads(
     assert ws.load_listing_template("heavyweight-tee").colors == ["black"]
 
 
+def test_template_names_lists_only_calibrated_templates(workspace_root: Path) -> None:
+    """A directory without a template.yaml has no kind and no geometry, so
+    offering it in the picker would only move the failure later."""
+    (workspace_root / "mockup-templates" / "half-built").mkdir()
+    workspace = Workspace.discover(root_override=workspace_root)
+    assert workspace.template_names() == ["colour-chart-01", "flat-lay-01"]
+
+
+def test_template_names_is_empty_without_a_templates_directory(tmp_path: Path) -> None:
+    (tmp_path / "shop.yaml").write_text(
+        "etsy:\n  shop_id: 1\n  currency: NOK\n",
+        encoding="utf-8",
+    )
+    assert Workspace.discover(root_override=tmp_path).template_names() == []
+
+
+def test_design_files_lists_only_flat_pngs(workspace_root: Path) -> None:
+    (workspace_root / "designs" / "notes.txt").write_text("not artwork", encoding="utf-8")
+    nested = workspace_root / "designs" / "archive"
+    nested.mkdir()
+    (nested / "old.png").write_bytes(b"")
+    workspace = Workspace.discover(root_override=workspace_root)
+
+    assert [p.name for p in workspace.design_files()] == ["take-a-hike.png"]
+
+
+def test_design_files_is_empty_without_a_designs_directory(tmp_path: Path) -> None:
+    (tmp_path / "shop.yaml").write_text(
+        "etsy:\n  shop_id: 1\n  currency: NOK\n",
+        encoding="utf-8",
+    )
+    assert Workspace.discover(root_override=tmp_path).design_files() == []
+
+
 def test_design_content_hash_tolerates_an_empty_slot(workspace_root: Path) -> None:
     """A light/dark pair saved before both files are chosen still has an
     identity, and emptying a slot changes it -- the whole map is hashed,
     ``null`` slots included (multi-artwork plan, *Settled decisions*)."""
-    ws = Workspace.discover(start=workspace_root)
+    ws = Workspace.discover(root_override=workspace_root)
     listing_dir = ws.listing_dir("take-a-hike")
     partial = ws.design_content_hash(
         {"on-light": None, "on-dark": "designs/take-a-hike.png"}, listing_dir=listing_dir

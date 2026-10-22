@@ -1,4 +1,5 @@
 import { fireEvent, render, screen } from "@testing-library/react";
+import { useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { must } from "../test/helpers";
 import type { BoundingBox } from "../types";
@@ -258,21 +259,6 @@ describe("QuadEditor", () => {
       expect(menu.bottom).toBeLessThanOrEqual(200);
     });
 
-    it("pulls back on each axis independently", () => {
-      const menu = openAt(renderWithMenu(), 380, 20);
-      expect(menu.right).toBeLessThanOrEqual(400);
-      expect(menu.top).toBe(20); // vertical had room; left alone
-    });
-
-    it("pulls back vertically even when the click is above the canvas midpoint", () => {
-      /* The clip box is shorter than the canvas, so "past the midpoint of the
-       * canvas" is the wrong question -- a click at 40% of a 400px canvas
-       * still overflows a 200px clip box. Measuring is the point. */
-      const menu = openAt(renderWithMenu(), 20, 160);
-      expect(menu.bottom).toBeLessThanOrEqual(200);
-      expect(menu.top).toBeLessThan(160);
-    });
-
     it("is not offered when the editor has no box actions", () => {
       render(
         <QuadEditor
@@ -394,6 +380,46 @@ describe("sliding a whole box", () => {
     fireEvent.pointerUp(overlay(container));
     fireEvent.pointerMove(overlay(container), { clientX: 90, clientY: 90 });
     expect(onChangeBox).not.toHaveBeenCalled();
+  });
+
+  it("slides from the box as it was when the gesture started, not compounding", () => {
+    // A parent that applies each change, as the calibrator does, so the
+    // second move sees the already-moved box in props. Measured from the live
+    // box, the same pointer position would move it again.
+    const onChangeBox = vi.fn();
+    function Controlled() {
+      const [box, setBox] = useState(BOX_A);
+      return (
+        <QuadEditor
+          imageUrl="preview.png"
+          space={SPACE}
+          boxes={[box]}
+          selectedIndex={0}
+          onSelect={vi.fn()}
+          onChangeBox={(index, next) => {
+            onChangeBox(index, next);
+            setBox(next);
+          }}
+        />
+      );
+    }
+    const { container } = render(<Controlled />);
+    loadImage();
+    press(must(container.querySelector(".quad-editor__polygon")), 10, 10);
+    fireEvent.pointerMove(overlay(container), { clientX: 40, clientY: 25 });
+    fireEvent.pointerMove(overlay(container), { clientX: 40, clientY: 25 });
+    fireEvent.pointerUp(overlay(container));
+
+    const slid = [
+      { x: 30, y: 15 },
+      { x: 130, y: 15 },
+      { x: 130, y: 115 },
+      { x: 30, y: 115 },
+    ];
+    expect(onChangeBox.mock.calls).toEqual([
+      [0, slid],
+      [0, slid],
+    ]);
   });
 
   it("ignores a right-press, which is the context-menu gesture", () => {
@@ -549,22 +575,6 @@ describe("resizing a box from a corner", () => {
     ]);
   });
 
-  it("shift-drag keeps the shape when the pointer leaves the diagonal", () => {
-    const onChangeBox = vi.fn();
-    const container = renderResizable(onChangeBox);
-    grabBottomRight(container);
-    // Half-way along the diagonal, then well off it sideways. Only the
-    // projection counts, so the box is still square -- which is the whole
-    // promise of the gesture.
-    fireEvent.pointerMove(overlay(container), { clientX: 100, clientY: 0, shiftKey: true });
-
-    const [, box] = must(onChangeBox.mock.calls.at(-1)) as [number, typeof BOX_A];
-    const width = box[1].x - box[0].x;
-    const height = box[3].y - box[0].y;
-    expect(width).toBeCloseTo(height);
-    expect(width).toBeCloseTo(50);
-  });
-
   it("alt-drag scales about the box's own centre", () => {
     const onChangeBox = vi.fn();
     const container = renderResizable(onChangeBox);
@@ -582,38 +592,45 @@ describe("resizing a box from a corner", () => {
     ]);
   });
 
-  it("will not shrink a box past the point of having corners to grab", () => {
-    const onChangeBox = vi.fn();
-    const container = renderResizable(onChangeBox);
-    grabBottomRight(container);
-    // Dragged past the anchor entirely, which would otherwise invert the box.
-    fireEvent.pointerMove(overlay(container), { clientX: -400, clientY: -400, shiftKey: true });
-
-    const [, box] = must(onChangeBox.mock.calls.at(-1)) as [number, typeof BOX_A];
-    expect(box[2].x).toBeGreaterThan(0);
-    expect(box[2].y).toBeGreaterThan(0);
-  });
-
   it("scales from the box as it was when the gesture started, not compounding", () => {
     const onChangeBox = vi.fn();
-    const container = renderResizable(onChangeBox);
+    // A parent that applies each change, as the calibrator does, so the
+    // second move sees the already-doubled box in props.
+    function Controlled() {
+      const [box, setBox] = useState(BOX_A);
+      return (
+        <QuadEditor
+          imageUrl="preview.png"
+          space={SPACE}
+          boxes={[box]}
+          selectedIndex={0}
+          onSelect={vi.fn()}
+          onChangeBox={(index, next) => {
+            onChangeBox(index, next);
+            setBox(next);
+          }}
+        />
+      );
+    }
+    const { container } = render(<Controlled />);
+    loadImage();
     grabBottomRight(container);
     fireEvent.pointerMove(overlay(container), { clientX: 200, clientY: 200, shiftKey: true });
     fireEvent.pointerMove(overlay(container), { clientX: 200, clientY: 200, shiftKey: true });
 
-    // Same pointer position twice means the same box twice. Derived from the
-    // live box instead, the second move would have doubled the doubling.
-    const calls = onChangeBox.mock.calls;
-    expect(calls.at(-1)).toEqual(calls.at(-2));
-  });
-
-  it("puts nothing over the photograph to explain itself", () => {
-    /* The gesture hint and the "box N selected" readout both used to sit in
-     * pills on the canvas. This view exists to be looked at, and the box
-     * wearing handles is already the answer to which one is selected. */
-    const container = renderResizable();
-    expect(container.querySelector(".quad-editor__status")).toBeNull();
-    expect(container.querySelector(".quad-editor__hint")).toBeNull();
-    expect(container.querySelector(".quad-editor__readout")).toBeNull();
+    // Same pointer position twice means the same doubled box twice. A
+    // projection about a fixed anchor happens to land in the same place from
+    // the live box too, so the sliding case above is the one that catches a
+    // gesture reading live props; this one pins the callback sequence.
+    const doubled = [
+      { x: 0, y: 0 },
+      { x: 200, y: 0 },
+      { x: 200, y: 200 },
+      { x: 0, y: 200 },
+    ];
+    expect(onChangeBox.mock.calls).toEqual([
+      [0, doubled],
+      [0, doubled],
+    ]);
   });
 });

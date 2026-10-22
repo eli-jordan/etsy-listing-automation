@@ -46,12 +46,6 @@ def _seeded() -> FakeEtsyMarketClient:
     return fake
 
 
-def test_the_fake_satisfies_the_protocol() -> None:
-    client: EtsyMarketClient = FakeEtsyMarketClient()
-
-    assert client.search_active("anything") == []
-
-
 def test_a_search_answers_the_seeded_listings_in_rank_order_as_candidates() -> None:
     found = _seeded().search_active("retro sunset hiking shirt")
 
@@ -65,7 +59,10 @@ def test_a_search_honours_its_limit() -> None:
 
 
 def test_an_unseeded_query_finds_nothing() -> None:
-    assert _seeded().search_active("velvet ballgown") == []
+    # Annotated so mypy checks the fake against the protocol it stands in for.
+    client: EtsyMarketClient = _seeded()
+
+    assert client.search_active("velvet ballgown") == []
 
 
 def test_the_batch_answers_known_ids_with_their_stats_and_leaves_unknown_ones_out() -> None:

@@ -1,4 +1,9 @@
-"""Capture approved states through the built editor, real queue and CPU renderer."""
+"""Marigold editor states through the built editor, real queue and CPU renderer.
+
+The toolbar case is a required regression test. The `capture` journey only
+writes review screenshots (`MARIGOLD_SCREENSHOT_DIR`), so it is opt-in:
+`uv run pytest -m capture` runs it and `-m browser` leaves it out (T11).
+"""
 
 import os
 from pathlib import Path
@@ -64,15 +69,9 @@ def ready(page):
     )
 
 
-def test_capture_approved_marigold_states(page, tmp_path: Path, preparation_runtime):
+def test_the_marigold_toolbar_fits_its_bar_at_desktop_widths(page):
+    """Computed type and toolbar geometry: the required half of the screenshot journey."""
     page.set_viewport_size({"width": 1280, "height": 800})
-    destination = Path(os.environ.get("MARIGOLD_SCREENSHOT_DIR", str(tmp_path / "screenshots")))
-    destination.mkdir(parents=True, exist_ok=True)
-
-    def shot(state):
-        page.screenshot(path=str(destination / f"app-{state}.png"), animations="disabled")
-        assert Image.open(destination / f"app-{state}.png").size == (1280, 800)
-
     select(page, "hanging-on-fence")
     page.get_by_role("button", name="Prepare template", exact=True).wait_for()
     assert (
@@ -103,6 +102,20 @@ def test_capture_approved_marigold_states(page, tmp_path: Path, preparation_runt
             assert bar["y"] <= bounds["y"]
             assert bounds["y"] + bounds["height"] <= bar["y"] + bar["height"]
         assert page.locator(".app__header").bounding_box()["height"] < 65
+
+
+@pytest.mark.capture
+def test_capture_approved_marigold_states(page, tmp_path: Path, preparation_runtime):
+    page.set_viewport_size({"width": 1280, "height": 800})
+    destination = Path(os.environ.get("MARIGOLD_SCREENSHOT_DIR", str(tmp_path / "screenshots")))
+    destination.mkdir(parents=True, exist_ok=True)
+
+    def shot(state):
+        page.screenshot(path=str(destination / f"app-{state}.png"), animations="disabled")
+        assert Image.open(destination / f"app-{state}.png").size == (1280, 800)
+
+    select(page, "hanging-on-fence")
+    page.get_by_role("button", name="Prepare template", exact=True).wait_for()
     shot("edit")
     page.get_by_role("button", name="About Light & shadow strength", exact=True).click()
     shot("realism-help")

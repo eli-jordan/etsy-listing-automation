@@ -1,0 +1,295 @@
+   Building etsy-listings @ file:///C:/Users/Admin/.t3/worktrees/etsy-listing-automation/t3code-a1bbd609
+      Built etsy-listings @ file:///C:/Users/Admin/.t3/worktrees/etsy-listing-automation/t3code-a1bbd609
+Installed 55 packages in 3.35s
+============================= test session starts =============================
+platform win32 -- Python 3.12.14, pytest-9.1.1, pluggy-1.6.0
+rootdir: C:\Users\Admin\.t3\worktrees\etsy-listing-automation\t3code-a1bbd609
+configfile: pyproject.toml
+testpaths: tests
+plugins: anyio-4.15.0, cov-7.1.0
+collected 3034 items / 159 deselected / 2875 selected
+
+tests\cli\behaviour\test_auth.py ..............                          [  0%]
+tests\cli\behaviour\test_cli_surface.py ...........................      [  1%]
+tests\cli\behaviour\test_closed_stdout.py .                              [  1%]
+tests\cli\behaviour\test_new.py ......                                   [  1%]
+tests\cli\behaviour\test_new_picker.py ................................. [  2%]
+.............                                                            [  3%]
+tests\cli\behaviour\test_plan_reporting.py ....................          [  3%]
+tests\cli\behaviour\test_plan_skeleton.py .....                          [  4%]
+tests\cli\behaviour\test_setup_command.py .............................. [  5%]
+..                                                                       [  5%]
+tests\cli\behaviour\test_setup_prompts.py ...........                    [  5%]
+tests\cli\behaviour\test_ui_command.py ....                              [  5%]
+tests\cli\behaviour\test_unlock_command.py ....                          [  5%]
+tests\cli\unit\test_auth_logic.py ...........                            [  6%]
+tests\cli\unit\test_cli_imports.py .....                                 [  6%]
+tests\cli\unit\test_prompts.py ..............................            [  7%]
+tests\cli\unit\test_terminal.py ....................                     [  8%]
+tests\core\behaviour\test_ai_coordinator.py ..........                   [  8%]
+tests\core\behaviour\test_ai_readiness.py ..............                 [  9%]
+tests\core\behaviour\test_ai_runner.py ...............................   [ 10%]
+tests\core\behaviour\test_apply_observer.py ......                       [ 10%]
+tests\core\behaviour\test_batch_archive.py ............................. [ 11%]
+...                                                                      [ 11%]
+tests\core\behaviour\test_batch_creation.py ............................ [ 12%]
+....                                                                     [ 12%]
+tests\core\behaviour\test_batch_operations.py .......................... [ 13%]
+...........                                                              [ 13%]
+tests\core\behaviour\test_batch_queue.py ..........                      [ 14%]
+tests\core\behaviour\test_batch_staging.py ...........s.......           [ 14%]
+tests\core\behaviour\test_calibration_designs.py ......                  [ 15%]
+tests\core\behaviour\test_credential_operations.py ................      [ 15%]
+tests\core\behaviour\test_deploy_precedence.py ......                    [ 15%]
+tests\core\behaviour\test_deployments.py .......................         [ 16%]
+tests\core\behaviour\test_etsy_callback.py ......                        [ 16%]
+tests\core\behaviour\test_etsy_listing_stage.py ........................ [ 17%]
+                                                                         [ 17%]
+tests\core\behaviour\test_etsy_listings_fake.py ........                 [ 17%]
+tests\core\behaviour\test_etsy_market_fake.py ...............            [ 18%]
+tests\core\behaviour\test_etsy_media_stage.py .....................      [ 19%]
+tests\core\behaviour\test_etsy_video_gallery_fake.py ................... [ 19%]
+.                                                                        [ 19%]
+tests\core\behaviour\test_etsy_videos_stage.py ....................      [ 20%]
+tests\core\behaviour\test_garment_operations.py .....                    [ 20%]
+tests\core\behaviour\test_lifecycle.py ..................                [ 21%]
+tests\core\behaviour\test_listing_ai_inputs.py ..                        [ 21%]
+tests\core\behaviour\test_listing_creation.py ...........                [ 21%]
+tests\core\behaviour\test_listing_operations.py ........................ [ 22%]
+.........                                                                [ 22%]
+tests\core\behaviour\test_listing_proposals.py .........                 [ 23%]
+tests\core\behaviour\test_listing_template_discovery.py ...              [ 23%]
+tests\core\behaviour\test_listing_template_operations.py ............... [ 23%]
+.............                                                            [ 24%]
+tests\core\behaviour\test_market_cache.py ................               [ 24%]
+tests\core\behaviour\test_market_research.py .......................     [ 25%]
+tests\core\behaviour\test_migrate_refs_cost.py .                         [ 25%]
+tests\core\behaviour\test_mockup_template_operations.py ................ [ 26%]
+.................                                                        [ 26%]
+tests\core\behaviour\test_partial_apply.py ........                      [ 27%]
+tests\core\behaviour\test_printify_product_stage.py .................... [ 27%]
+.............                                                            [ 28%]
+tests\core\behaviour\test_proposal_cleanup.py ........                   [ 28%]
+tests\core\behaviour\test_publish_stage.py ...........                   [ 29%]
+tests\core\behaviour\test_render_outputs.py ..........                   [ 29%]
+tests\core\behaviour\test_render_preview.py ...............              [ 29%]
+tests\core\behaviour\test_render_stage.py ............                   [ 30%]
+tests\core\behaviour\test_run.py .............................           [ 31%]
+tests\core\behaviour\test_runs_executor.py ............                  [ 31%]
+tests\core\behaviour\test_should_stop.py .........                       [ 32%]
+tests\core\behaviour\test_stage_remote_state.py .......                  [ 32%]
+tests\core\behaviour\test_video_in_media.py ..                           [ 32%]
+tests\core\behaviour\test_workspace_setup_operations.py ................ [ 32%]
+.                                                                        [ 32%]
+tests\core\contract\test_catalog_http.py ...............                 [ 33%]
+tests\core\contract\test_etsy_auth_http.py .............                 [ 33%]
+tests\core\contract\test_etsy_listings_http.py ......................... [ 34%]
+................                                                         [ 35%]
+tests\core\contract\test_etsy_market_http.py ........................... [ 36%]
+.........                                                                [ 36%]
+tests\core\contract\test_etsy_shops_http.py ...........                  [ 36%]
+tests\core\contract\test_fx_rate.py ........                             [ 37%]
+tests\core\contract\test_printify_products_http.py ..................... [ 37%]
+.......                                                                  [ 38%]
+tests\core\contract\test_printify_shops_http.py ................         [ 38%]
+tests\core\contract\test_unofficial_variant_costs_http.py ......         [ 38%]
+tests\core\golden\e2e\test_render_e2e_golden.py ...                      [ 39%]
+tests\core\golden\passes\test_passes_golden.py ....                      [ 39%]
+tests\core\golden\test_ai_prompts.py ....                                [ 39%]
+tests\core\golden\test_market_block.py ...                               [ 39%]
+tests\core\golden\test_preview_promotion.py .                            [ 39%]
+tests\core\unit\test_ai_brief.py ............                            [ 39%]
+tests\core\unit\test_ai_claude.py .......................                [ 40%]
+tests\core\unit\test_ai_codex.py ................                        [ 41%]
+tests\core\unit\test_ai_errors.py .......................                [ 42%]
+tests\core\unit\test_ai_grok.py ............                             [ 42%]
+tests\core\unit\test_ai_market_queries.py ...............                [ 43%]
+tests\core\unit\test_ai_models.py ...........                            [ 43%]
+tests\core\unit\test_ai_orchestrator.py ....................             [ 44%]
+tests\core\unit\test_ai_packaged_prompts.py ...........                  [ 44%]
+tests\core\unit\test_ai_process.py ................                      [ 45%]
+tests\core\unit\test_ai_prompt.py .............                          [ 45%]
+tests\core\unit\test_ai_providers.py ......                              [ 45%]
+tests\core\unit\test_ai_validation.py .................................. [ 46%]
+......                                                                   [ 47%]
+tests\core\unit\test_airuns_registry.py ...................              [ 47%]
+tests\core\unit\test_atomic.py ........                                  [ 48%]
+tests\core\unit\test_batch_naming.py ......                              [ 48%]
+tests\core\unit\test_batch_status.py ..............                      [ 48%]
+tests\core\unit\test_batch_store.py ...............                      [ 49%]
+tests\core\unit\test_catalog.py ..................                       [ 49%]
+tests\core\unit\test_colour_property.py ........                         [ 50%]
+tests\core\unit\test_common_copy.py ..............                       [ 50%]
+tests\core\unit\test_config_yaml_errors.py .......                       [ 50%]
+tests\core\unit\test_connections.py ............                         [ 51%]
+tests\core\unit\test_core_imports.py ..............                      [ 51%]
+tests\core\unit\test_defaults.py ..................                      [ 52%]
+tests\core\unit\test_description.py ............                         [ 52%]
+tests\core\unit\test_etsy_oauth.py ........................              [ 53%]
+tests\core\unit\test_etsy_pacing.py ..........                           [ 54%]
+tests\core\unit\test_etsy_shopcatalog.py .......................         [ 54%]
+tests\core\unit\test_etsy_target.py ......                               [ 55%]
+tests\core\unit\test_etsy_tokens.py ..................                   [ 55%]
+tests\core\unit\test_garment_profile.py ....                             [ 55%]
+tests\core\unit\test_listing.py ........................................ [ 57%]
+.............                                                            [ 57%]
+tests\core\unit\test_listing_artifacts.py .........                      [ 57%]
+tests\core\unit\test_listing_documents.py .....................          [ 58%]
+tests\core\unit\test_listing_status.py ................................. [ 59%]
+.......                                                                  [ 60%]
+tests\core\unit\test_listing_template.py .............                   [ 60%]
+tests\core\unit\test_listing_template_convert.py .............           [ 60%]
+tests\core\unit\test_listing_validation.py ............................. [ 61%]
+...........................................                              [ 63%]
+tests\core\unit\test_lock.py ...............................             [ 64%]
+tests\core\unit\test_market_lead.py ..........                           [ 64%]
+tests\core\unit\test_market_phrases.py .......                           [ 65%]
+tests\core\unit\test_market_scoring.py ...................               [ 65%]
+tests\core\unit\test_market_snapshot.py ..........                       [ 66%]
+tests\core\unit\test_media.py ...........                                [ 66%]
+tests\core\unit\test_money.py ..............                             [ 67%]
+tests\core\unit\test_no_bare_cv2.py .                                    [ 67%]
+tests\core\unit\test_plan_fingerprint.py ........                        [ 67%]
+tests\core\unit\test_preview.py .......                                  [ 67%]
+tests\core\unit\test_pricing_plan.py .........                           [ 67%]
+tests\core\unit\test_product_diff.py .........................           [ 68%]
+tests\core\unit\test_product_document.py ...........                     [ 69%]
+tests\core\unit\test_product_gates.py .................................. [ 70%]
+...                                                                      [ 70%]
+tests\core\unit\test_proposal_staleness.py ...................           [ 71%]
+tests\core\unit\test_proposal_store.py ...................s.             [ 71%]
+tests\core\unit\test_render_config.py ...........                        [ 72%]
+tests\core\unit\test_render_maps.py ......                               [ 72%]
+tests\core\unit\test_render_passes.py ..............                     [ 72%]
+tests\core\unit\test_retry.py ....................................       [ 74%]
+tests\core\unit\test_run_commands.py .........                           [ 74%]
+tests\core\unit\test_run_context.py ..                                   [ 74%]
+tests\core\unit\test_run_events.py ...............                       [ 75%]
+tests\core\unit\test_runs_registry.py ...........................        [ 76%]
+tests\core\unit\test_scaffold.py ............                            [ 76%]
+tests\core\unit\test_scene_hash.py .....                                 [ 76%]
+tests\core\unit\test_secrets.py .......                                  [ 76%]
+tests\core\unit\test_settings.py .........................               [ 77%]
+tests\core\unit\test_setup_logic.py ..........................           [ 78%]
+tests\core\unit\test_slug.py .........                                   [ 78%]
+tests\core\unit\test_stage_outcome.py ..                                 [ 78%]
+tests\core\unit\test_swatch.py .....                                     [ 79%]
+tests\core\unit\test_unofficial_variant_costs.py ............            [ 79%]
+tests\core\unit\test_userpath.py .........                               [ 79%]
+tests\core\unit\test_variant_resolution.py ...........                   [ 80%]
+tests\core\unit\test_video_probe.py ........                             [ 80%]
+tests\core\unit\test_workspace.py .F..F........................s........ [ 81%]
+...s........s...........s............................................... [ 84%]
+..                                                                       [ 84%]
+tests\core\unit\test_workspace_common_copy.py .............              [ 84%]
+tests\core\unit\test_workspace_facts.py .............                    [ 85%]
+tests\server\behaviour\test_batch_review.py ..........                   [ 85%]
+tests\server\behaviour\test_calibrator_api.py .......................... [ 86%]
+...........................................                              [ 88%]
+tests\server\behaviour\test_durable_proposals.py ..                      [ 88%]
+tests\server\behaviour\test_listing_preview_api.py .........             [ 88%]
+tests\server\behaviour\test_listing_writes_api.py ..                     [ 88%]
+tests\server\behaviour\test_listings_api.py ............................ [ 89%]
+...........................................................              [ 91%]
+tests\server\behaviour\test_media_files_api.py ......................... [ 92%]
+..............s                                                          [ 92%]
+tests\server\contract\test_ai_runs_api.py ............................   [ 93%]
+tests\server\contract\test_ai_seo_api.py ....                            [ 94%]
+tests\server\contract\test_batches_api.py .............................. [ 95%]
+..                                                                       [ 95%]
+tests\server\contract\test_listing_templates_api.py .................... [ 95%]
+...                                                                      [ 96%]
+tests\server\contract\test_market_api.py ......                          [ 96%]
+tests\server\contract\test_proposals_api.py .............                [ 96%]
+tests\server\contract\test_runs_api.py ..............................    [ 97%]
+tests\server\unit\test_etsy_state_memo.py .......                        [ 97%]
+tests\server\unit\test_preview_imagecache.py ...................         [ 98%]
+tests\server\unit\test_server_imports.py .                               [ 98%]
+tests\test_ci_selection.py .                                             [ 98%]
+tests\test_export_openapi.py .                                           [ 98%]
+tests\test_import_contracts.py ...............                           [ 99%]
+tests\test_migrate_workspace_refs.py .........                           [ 99%]
+tests\test_protected_test_imports.py ........                            [ 99%]
+tests\test_wheel_frontend.py .....                                       [100%]
+
+================================== FAILURES ===================================
+__________________ test_discover_finds_root_from_nested_cwd ___________________
+
+workspace_root = WindowsPath('C:/cygwin64/tmp/pytest-of-Admin/pytest-997/test_discover_finds_root_from_0/workspace')
+
+    def test_discover_finds_root_from_nested_cwd(workspace_root: Path) -> None:
+        nested = workspace_root / "listings" / "take-a-hike"
+        ws = Workspace.discover(start=nested)
+>       assert ws.root == workspace_root.resolve()
+E       AssertionError: assert WindowsPath('C:/Users/Admin/Desktop/try-workspace') == WindowsPath('C:/cygwin64/tmp/pytest-of-Admin/pytest-997/test_discover_finds_root_from_0/workspace')
+E        +  where WindowsPath('C:/Users/Admin/Desktop/try-workspace') = <etsy_listings.core.workspace.workspace.Workspace object at 0x0000018409EE7BC0>.root
+E        +  and   WindowsPath('C:/cygwin64/tmp/pytest-of-Admin/pytest-997/test_discover_finds_root_from_0/workspace') = resolve()
+E        +    where resolve = WindowsPath('C:/cygwin64/tmp/pytest-of-Admin/pytest-997/test_discover_finds_root_from_0/workspace').resolve
+
+tests\core\unit\test_workspace.py:42: AssertionError
+_____________________ test_discover_raises_when_not_found _____________________
+
+tmp_path = WindowsPath('C:/cygwin64/tmp/pytest-of-Admin/pytest-997/test_discover_raises_when_not_0')
+
+    def test_discover_raises_when_not_found(tmp_path: Path) -> None:
+>       with pytest.raises(WorkspaceNotFoundError):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE WorkspaceNotFoundError
+
+tests\core\unit\test_workspace.py:59: Failed
+============================== warnings summary ===============================
+.venv\Lib\site-packages\fastapi\testclient.py:1
+  C:\Users\Admin\.t3\worktrees\etsy-listing-automation\t3code-a1bbd609\.venv\Lib\site-packages\fastapi\testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+.venv\Lib\site-packages\starlette\testclient.py:53
+  C:\Users\Admin\.t3\worktrees\etsy-listing-automation\t3code-a1bbd609\.venv\Lib\site-packages\starlette\testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+- generated xml file: C:\Users\Admin\.t3\worktrees\etsy-listing-automation\t3code-a1bbd609\reports\pytest-audit.xml -
+============================ slowest 40 durations =============================
+50.38s call     tests/test_wheel_frontend.py::test_installed_wheel_serves_the_spa_without_node_or_the_checkout
+36.96s call     tests/test_wheel_frontend.py::test_sdist_carries_what_a_wheel_build_needs
+36.44s call     tests/test_wheel_frontend.py::test_wheel_ships_built_assets_but_no_npm_project
+36.06s call     tests/test_wheel_frontend.py::test_wheel_rebuilds_stale_assets_from_current_source
+32.43s call     tests/test_wheel_frontend.py::test_wheel_build_fails_when_the_frontend_build_emits_no_index
+4.47s call     tests/test_ci_selection.py::test_python_ci_collects_only_hermetic_layers
+4.14s call     tests/core/behaviour/test_etsy_callback.py::test_a_favicon_request_does_not_consume_the_wait
+3.19s call     tests/server/unit/test_server_imports.py::test_each_server_module_imports_first
+2.26s call     tests/core/behaviour/test_proposal_cleanup.py::test_a_stop_after_the_last_runnable_stage_still_removes_the_proposal
+2.24s call     tests/core/behaviour/test_batch_queue.py::test_a_row_running_when_the_server_stops_reruns_after_a_restart
+2.08s call     tests/core/behaviour/test_etsy_callback.py::test_a_refusal_on_the_consent_screen_becomes_an_oauth_error
+2.07s call     tests/core/behaviour/test_etsy_callback.py::test_a_redirect_hands_back_the_code_and_state
+2.06s call     tests/core/behaviour/test_etsy_callback.py::test_the_browser_is_told_it_can_close_the_tab
+2.05s call     tests/server/behaviour/test_durable_proposals.py::test_a_regenerated_proposal_replaces_the_one_before_it
+2.04s call     tests/core/behaviour/test_proposal_cleanup.py::test_ui_apply_removes_the_proposal_after_a_full_success
+1.98s call     tests/core/unit/test_product_gates.py::test_a_design_larger_than_the_print_area_passes
+1.76s call     tests/cli/unit/test_prompts.py::test_without_fzf_prompt_toolkit_gets_a_plain_select_not_an_autocomplete
+1.68s call     tests/core/behaviour/test_proposal_cleanup.py::test_an_ok_apply_that_leaves_the_incomplete_marker_keeps_the_proposal
+1.65s call     tests/core/behaviour/test_proposal_cleanup.py::test_a_failed_apply_keeps_the_proposal
+1.59s call     tests/core/behaviour/test_proposal_cleanup.py::test_cli_apply_removes_the_proposal_after_a_full_success
+1.57s call     tests/core/unit/test_core_imports.py::test_core_module_imports_no_adapter_or_framework[etsy_listings.core.engine]
+1.54s call     tests/server/behaviour/test_durable_proposals.py::test_a_manual_runs_proposal_survives_a_restart
+1.54s call     tests/core/behaviour/test_batch_operations.py::TestSteerAndKeep::test_a_never_created_row_shows_its_kept_upload
+1.47s call     tests/core/behaviour/test_batch_queue.py::test_two_batches_are_served_round_robin_oldest_first
+1.45s call     tests/core/unit/test_core_imports.py::test_core_module_imports_no_adapter_or_framework[etsy_listings.core.application]
+1.41s call     tests/core/behaviour/test_video_in_media.py::test_adding_a_featured_video_is_work_for_the_video_stage_alone
+1.40s call     tests/core/behaviour/test_proposal_cleanup.py::test_a_full_apply_removes_the_listing_s_proposal
+1.38s call     tests/core/behaviour/test_video_in_media.py::test_the_whole_pipeline_places_the_video_at_position_two
+1.34s call     tests/core/behaviour/test_runs_executor.py::test_a_defect_ends_the_run_failed_with_the_generic_message
+1.31s call     tests/core/behaviour/test_batch_operations.py::TestReads::test_a_session_kept_for_a_failed_row_is_listed_once_as_its_batch
+1.30s call     tests/core/unit/test_core_imports.py::test_core_module_imports_no_adapter_or_framework[etsy_listings.core.connections]
+1.30s call     tests/core/unit/test_ai_process.py::test_run_managed_actually_kills_a_real_process_and_its_grandchild_on_timeout
+1.28s call     tests/core/behaviour/test_batch_creation.py::TestFailureAndRetry::test_a_write_failure_on_one_row_leaves_the_others_and_retry_creates_it
+1.26s call     tests/core/unit/test_ai_process.py::test_run_managed_actually_kills_a_real_process_tree_on_cancellation
+1.25s call     tests/core/behaviour/test_batch_operations.py::TestRetry::test_unknown_batches_and_rows_are_refused
+1.21s call     tests/core/behaviour/test_batch_operations.py::TestRetry::test_a_failed_creation_is_created_and_the_queue_woken
+1.21s call     tests/core/behaviour/test_batch_operations.py::TestRetry::test_retry_all_creates_failed_rows_then_requeues_failed_ai
+1.15s call     tests/server/contract/test_batches_api.py::test_an_expired_session_is_swept_when_the_server_starts
+1.14s call     tests/server/contract/test_batches_api.py::TestConfirm::test_retry_creates_a_failed_row
+1.12s call     tests/server/contract/test_batches_api.py::test_a_row_that_was_never_created_shows_its_kept_upload
+=========================== short test summary info ===========================
+FAILED tests/core/unit/test_workspace.py::test_discover_finds_root_from_nested_cwd
+FAILED tests/core/unit/test_workspace.py::test_discover_raises_when_not_found
+= 2 failed, 2866 passed, 7 skipped, 159 deselected, 2 warnings in 565.23s (0:09:25) =

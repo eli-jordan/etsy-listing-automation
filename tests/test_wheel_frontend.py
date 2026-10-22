@@ -1,13 +1,19 @@
 """Distributions must carry the React application the way a release needs it.
 
-Each test builds a copy of the real project -- its ``pyproject.toml``,
+Each build uses a copy of the real project -- its ``pyproject.toml``,
 ``hatch_build.py``, ``.gitignore`` and Python package -- around a tiny npm
 project standing in for ``src/ui``, so the packaging configuration under test
 is the one that ships, while the frontend build takes milliseconds.
+
+Freshness, archive contents and installation read one wheel built once per
+module from deliberately stale ``dist/`` assets; its project is deleted once
+the wheel exists, so no consumer can lean on the checkout. The missing-index
+and sdist-to-wheel cases need their own inputs and keep their own builds.
 """
 
 from __future__ import annotations
 
+import hashlib
 import os
 import shutil
 import subprocess
@@ -15,7 +21,10 @@ import sys
 import tarfile
 import textwrap
 import zipfile
+from collections.abc import Iterator
 from pathlib import Path
+
+import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -78,17 +87,30 @@ def _build_wheel(project: Path, out_dir: Path) -> Path:
     return next(out_dir.glob("*.whl"))
 
 
-def test_wheel_rebuilds_stale_assets_from_current_source(tmp_path: Path) -> None:
-    wheel = _build_wheel(_project(tmp_path), tmp_path / "wheels")
-    with zipfile.ZipFile(wheel) as archive:
+@pytest.fixture(scope="module")
+def stale_project_wheel(tmp_path_factory: pytest.TempPathFactory) -> Iterator[Path]:
+    """The one successful wheel the read-only consumers share. Its project
+    started with stale ``dist/`` output and is gone before any consumer runs;
+    the wheel is read-only and must be byte-identical when the module ends."""
+    base = tmp_path_factory.mktemp("shared-wheel")
+    project = _project(base)
+    wheel = _build_wheel(project, base / "wheels")
+    shutil.rmtree(project)
+    wheel.chmod(0o444)
+    digest = hashlib.sha256(wheel.read_bytes()).hexdigest()
+    yield wheel
+    assert hashlib.sha256(wheel.read_bytes()).hexdigest() == digest, "a consumer mutated the wheel"
+
+
+def test_wheel_rebuilds_stale_assets_from_current_source(stale_project_wheel: Path) -> None:
+    with zipfile.ZipFile(stale_project_wheel) as archive:
         index = archive.read(f"{WHEEL_ASSETS}/index.html").decode()
     assert "current frontend" in index
     assert "stale" not in index
 
 
-def test_wheel_ships_built_assets_but_no_npm_project(tmp_path: Path) -> None:
-    wheel = _build_wheel(_project(tmp_path), tmp_path / "wheels")
-    with zipfile.ZipFile(wheel) as archive:
+def test_wheel_ships_built_assets_but_no_npm_project(stale_project_wheel: Path) -> None:
+    with zipfile.ZipFile(stale_project_wheel) as archive:
         names = archive.namelist()
     assert f"{WHEEL_ASSETS}/assets/app.js" in names
     frontend_source = [
@@ -164,21 +186,28 @@ SERVE_SCRIPT = textwrap.dedent(
 
 
 def test_installed_wheel_serves_the_spa_without_node_or_the_checkout(
-    tmp_path: Path, workspace_root: Path
+    tmp_path: Path, workspace_root: Path, stale_project_wheel: Path
 ) -> None:
-    wheel = _build_wheel(_project(tmp_path), tmp_path / "wheels")
     install = tmp_path / "installed"
     uv = shutil.which("uv")
     assert uv is not None
     installed = subprocess.run(
-        [uv, "pip", "install", "--offline", "--no-deps", "--target", str(install), str(wheel)],
+        [
+            uv,
+            "pip",
+            "install",
+            "--offline",
+            "--no-deps",
+            "--target",
+            str(install),
+            str(stale_project_wheel),
+        ],
         capture_output=True,
         text=True,
     )
     assert installed.returncode == 0, installed.stderr
-    # The project and its build output are gone: nothing but the installed
-    # package can supply the assets.
-    shutil.rmtree(tmp_path / "project")
+    # The fixture already deleted the project and its build output: nothing
+    # but the installed package can supply the assets.
 
     elsewhere = tmp_path / "elsewhere"
     elsewhere.mkdir()

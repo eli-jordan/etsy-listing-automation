@@ -259,23 +259,26 @@ def test_active_cancel_saves_current_role_and_retry_reuses_it_with_warm_worker(w
         request_id="first",
     )
     coordinator.start()
-    assert worker.entered.wait(5)
-    assert coordinator.cancel(job.id).phase == "cancelling"
-    assert worker.cancelled
-    worker.release.set()
-    result = wait_terminal(coordinator, job.id)
-    assert result.phase == "cancelled"
-    assert len(result.evidence[0].predictions) == 1
-    assert not worker.closed
-    retry = coordinator.submit(
-        "shirt",
-        config_revision=CalibrationStore(workspace).read("shirt").revision,
-        request_id="retry",
-        action="retry",
-        previous_job=job.id,
-    )
-    assert wait_terminal(coordinator, retry.id).phase == "completed"
-    coordinator.close()
+    try:
+        assert worker.entered.wait(5)
+        assert coordinator.cancel(job.id).phase == "cancelling"
+        assert worker.cancelled
+        worker.release.set()
+        result = wait_terminal(coordinator, job.id)
+        assert result.phase == "cancelled"
+        assert len(result.evidence[0].predictions) == 1
+        assert not worker.closed
+        retry = coordinator.submit(
+            "shirt",
+            config_revision=CalibrationStore(workspace).read("shirt").revision,
+            request_id="retry",
+            action="retry",
+            previous_job=job.id,
+        )
+        assert wait_terminal(coordinator, retry.id).phase == "completed"
+    finally:
+        worker.release.set()
+        coordinator.close()
     assert [call[0] for call in worker.calls] == ["normals", "lighting", "depth"]
 
 
@@ -294,11 +297,14 @@ def test_cancel_during_worker_startup_prevents_undispatched_model_call(workspace
         request_id="first",
     )
     coordinator.start()
-    assert worker.dispatch_entered.wait(5)
-    assert coordinator.cancel(job.id).phase == "cancelling"
-    worker.dispatch_release.set()
-    assert wait_terminal(coordinator, job.id).phase == "cancelled"
-    coordinator.close()
+    try:
+        assert worker.dispatch_entered.wait(5)
+        assert coordinator.cancel(job.id).phase == "cancelling"
+        worker.dispatch_release.set()
+        assert wait_terminal(coordinator, job.id).phase == "cancelled"
+    finally:
+        worker.dispatch_release.set()
+        coordinator.close()
     assert worker.calls == []
     assert not workspace.template_map_current("shirt").exists()
 
@@ -877,13 +883,16 @@ def test_geometry_save_during_cpu_phase_refuses_old_publication_and_rebuilds_lat
     move_box(workspace, 1)
     old = coordinator.reconcile_saved("shirt")
     coordinator.start()
-    assert entered.wait(10)
-    move_box(workspace, 2)
-    latest = coordinator.reconcile_saved("shirt")
-    release.set()
-    assert wait_terminal(coordinator, old.id).phase == "superseded"
-    result = wait_terminal(coordinator, latest.id)
-    coordinator.close()
+    try:
+        assert entered.wait(10)
+        move_box(workspace, 2)
+        latest = coordinator.reconcile_saved("shirt")
+        release.set()
+        assert wait_terminal(coordinator, old.id).phase == "superseded"
+        result = wait_terminal(coordinator, latest.id)
+    finally:
+        release.set()
+        coordinator.close()
     assert result.phase == "completed", result.error
     assert len(runtime.workers) == 1
     assert len(runtime.workers[0].calls) == 3
@@ -906,11 +915,14 @@ def test_cpu_cancel_stops_at_phase_boundary_and_is_persisted(workspace_root):
     move_box(workspace, 1)
     job = coordinator.reconcile_saved("shirt")
     coordinator.start()
-    assert entered.wait(10)
-    assert coordinator.cancel(job.id).cancel_intent
-    release.set()
-    assert wait_terminal(coordinator, job.id).phase == "cancelled"
-    coordinator.close()
+    try:
+        assert entered.wait(10)
+        assert coordinator.cancel(job.id).cancel_intent
+        release.set()
+        assert wait_terminal(coordinator, job.id).phase == "cancelled"
+    finally:
+        release.set()
+        coordinator.close()
     restarted = Preparations(workspace, runtime=runtime)
     restarted.recover()
     assert restarted.status(job.id).phase == "cancelled"

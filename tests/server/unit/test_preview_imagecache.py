@@ -85,12 +85,18 @@ class TestMemo:
     def test_editing_the_photo_invalidates_it(self, photo: Path) -> None:
         images = PreviewImages()
         first = images.base(photo, 200)
+        assert first.image.any()  # the fixture is noise, not already black
         Image.fromarray(np.zeros((800, 400, 3), dtype=np.uint8), "RGB").save(photo)
         # Written in the same second on a coarse clock, so the mtime is nudged
         # explicitly rather than relying on the filesystem's resolution.
         stat = photo.stat()
         os.utime(photo, ns=(stat.st_atime_ns, stat.st_mtime_ns + 10**9))
-        assert images.base(photo, 200).image is not first.image
+
+        edited = images.base(photo, 200)
+
+        # The edit's own pixels, not a fresh copy of the stale ones.
+        assert edited.image is not first.image
+        assert not edited.image.any()
 
     def test_a_design_is_decoded_once(self, design: Path) -> None:
         images = PreviewImages()
@@ -136,16 +142,24 @@ class TestBudget:
         with pytest.raises(ValueError):
             base.image[0, 0, 0] = 1
 
-    def test_the_least_recently_used_entry_goes_first(self, photo: Path, tmp_path: Path) -> None:
-        other = tmp_path / "second.png"
-        Image.fromarray(np.zeros((800, 400, 3), dtype=np.uint8), "RGB").save(other)
-        # Room for one 100x200 base (60_000 bytes) and not two.
-        images = PreviewImages(budget_bytes=100_000)
+    def test_the_least_recently_used_entry_goes_first(self, tmp_path: Path) -> None:
+        paths = {}
+        for name in ("a", "b", "c"):
+            paths[name] = tmp_path / f"{name}.png"
+            Image.fromarray(np.zeros((800, 400, 3), dtype=np.uint8), "RGB").save(paths[name])
+        # Room for two 100x200 bases (60_000 bytes each) and not three.
+        images = PreviewImages(budget_bytes=130_000)
 
-        first = images.base(photo, 200)
-        images.base(other, 200)
-        assert images.held_bytes <= 100_000
-        assert images.base(photo, 200).image is not first.image
+        a = images.base(paths["a"], 200).image
+        b = images.base(paths["b"], 200).image
+        assert images.base(paths["a"], 200).image is a  # touch A: B is now oldest
+        images.base(paths["c"], 200)
+
+        assert images.held_bytes <= 130_000
+        # A was used after B, so B is the one that went. (A is asked first:
+        # reloading B evicts again, and must not be what removes A.)
+        assert images.base(paths["a"], 200).image is a
+        assert images.base(paths["b"], 200).image is not b
 
     def test_an_entry_larger_than_the_whole_budget_is_served_but_not_kept(
         self, photo: Path

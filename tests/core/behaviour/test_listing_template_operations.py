@@ -12,15 +12,13 @@ conversion rules themselves are ``listing_templates``' and unit-tested there.
 
 from __future__ import annotations
 
-import time
 from collections.abc import Callable
-from concurrent.futures import ThreadPoolExecutor
+from contextlib import AbstractContextManager
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 import pytest
-import yaml
 from PIL import Image
 
 from etsy_listings.core.application.listing_template_library import (
@@ -46,6 +44,7 @@ from etsy_listings.core.workspace.workspace import InvalidNameError, Workspace
 
 from tests.support.batches import png, small_print_area, uploads
 from tests.support.builders import FIXTURE_LISTING, edit_listing
+from tests.support.gates import LockGate, workers
 
 NAME = "heavyweight-tee"
 BLACK = {"template": "flat-lay-01", "colour": "black"}
@@ -405,81 +404,91 @@ class TestRenameAndDelete:
 # ------------------------------------------------------- competing writes
 
 
+class _GatedLocks(WorkspaceLocks):
+    """The process's template locks, with the first one taken held at a gate."""
+
+    def __init__(self, gate: LockGate) -> None:
+        super().__init__()
+        self._gate = gate
+
+    def listing_template(self, name: str, *more: str) -> AbstractContextManager[None]:
+        real = super().listing_template
+        return self._gate.around(lambda: real(name, *more))
+
+
 @pytest.fixture
-def slow_renames(monkeypatch: pytest.MonkeyPatch) -> None:
-    real = Path.rename
-
-    def slow(self: Path, target: Any) -> Path:  # noqa: ANN401
-        time.sleep(0.3)
-        return real(self, target)
-
-    monkeypatch.setattr(Path, "rename", slow)
+def template_lock() -> LockGate:
+    return LockGate("the template")
 
 
-@pytest.fixture
-def slow_writes(monkeypatch: pytest.MonkeyPatch) -> None:
-    real = yaml.safe_dump
+def _contend(
+    gate: LockGate, holder: Callable[[], object], contender: Callable[[], object]
+) -> tuple[object, object]:
+    """Run ``holder`` until it holds the lock, then ``contender``; check the
+    contender waits outside, release, and return both outcomes (a refusal in
+    place of a result)."""
 
-    def slow(*args: Any, **kwargs: Any) -> Any:  # noqa: ANN401
-        time.sleep(0.3)
-        return real(*args, **kwargs)
+    def refused(call: Callable[[], object]) -> Callable[[], object]:
+        def outcome() -> object:
+            try:
+                return call()
+            except (ListingTemplateMissing, ListingTemplateExistsError) as exc:
+                return exc
 
-    monkeypatch.setattr(yaml, "safe_dump", slow)
+        return outcome
 
-
-def _together(*calls: Callable[[], object]) -> list[object]:
-    """Each call a moment after the one before; a refusal in its place."""
-
-    def outcome(call: Callable[[], object]) -> object:
-        try:
-            return call()
-        except (ListingTemplateMissing, ListingTemplateExistsError) as exc:
-            return exc
-
-    with ThreadPoolExecutor(max_workers=len(calls)) as pool:
-        futures = []
-        for call in calls:
-            futures.append(pool.submit(outcome, call))
-            time.sleep(0.1)
-        return [future.result() for future in futures]
+    with workers(gate) as start:
+        first = start("holder", refused(holder))
+        gate.held.wait_entered()
+        second = start("contender", refused(contender))
+        gate.assert_contender_kept_out()
+        gate.held.release()
+        return first.outcome(), second.outcome()
 
 
 class TestCompetingWrites:
     def test_an_edit_queued_behind_a_rename_finds_the_template_gone(
-        self, workspace: Workspace, locks: WorkspaceLocks, slow_renames: None
+        self, workspace: Workspace, template_lock: LockGate
     ) -> None:
         """It must not write a fresh ``template.yaml`` under the old name."""
         _create(workspace)
         document = {**_document(workspace), "colors": ["black"], "media": [BLACK]}
+        locks = _GatedLocks(template_lock)
 
-        rename, edit = _together(
+        rename, edit = _contend(
+            template_lock,
             lambda: _rename(workspace, NAME, "everyday-tee", locks),
             lambda: edit_listing_template(workspace, NAME, document, locks=locks),
         )
 
         assert rename is None
         assert isinstance(edit, ListingTemplateMissing)
-        assert not workspace.listing_template_dir(NAME).exists()
+        assert workspace.listing_template_names() == ["everyday-tee"]
         assert len(workspace.load_listing_template("everyday-tee").colors) == 4
 
     def test_a_create_and_a_rename_to_the_same_name_do_not_both_win(
-        self, workspace: Workspace, locks: WorkspaceLocks, slow_renames: None
+        self, workspace: Workspace, template_lock: LockGate
     ) -> None:
         _create(workspace)
+        locks = _GatedLocks(template_lock)
 
-        outcomes = _together(
+        rename, create = _contend(
+            template_lock,
             lambda: _rename(workspace, NAME, "everyday-tee", locks),
             lambda: _create(workspace, "everyday-tee", locks=locks, from_template=NAME),
         )
 
-        assert outcomes[0] is None
-        assert isinstance(outcomes[1], ListingTemplateMissing | ListingTemplateExistsError)
+        assert rename is None
+        assert isinstance(create, ListingTemplateMissing | ListingTemplateExistsError)
         assert workspace.listing_template_names() == ["everyday-tee"]
 
     def test_two_creates_of_one_name_write_it_once(
-        self, workspace: Workspace, locks: WorkspaceLocks, slow_writes: None
+        self, workspace: Workspace, template_lock: LockGate
     ) -> None:
-        first, second = _together(
+        locks = _GatedLocks(template_lock)
+
+        first, second = _contend(
+            template_lock,
             lambda: _create(workspace, locks=locks),
             lambda: _create(workspace, locks=locks),
         )

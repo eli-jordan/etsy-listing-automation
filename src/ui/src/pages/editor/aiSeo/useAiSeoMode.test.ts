@@ -2,6 +2,7 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as seoApi from "../../../api/seo";
 import {
+  AI_RUN_CREATED_AT,
   aiRunSummary,
   briefEvent,
   type FakeAiRuns,
@@ -10,46 +11,22 @@ import {
   phaseEvent,
   proposalEvent,
 } from "../../../test/aiRuns";
+import { deferred } from "../../../test/helpers";
 import type { ListingDetail, ListingProposal, SeoReadinessResponse } from "../../../types";
 import { BATCH_POLL_MS, useAiSeoMode } from "./useAiSeoMode";
+import { listingDetail, listingEtsy } from "../../../test/listings";
 
 function detail(over: Partial<ListingDetail> = {}): ListingDetail {
-  return {
-    garment_profile: "comfort-colors-1717",
-    design: { default: "designs/take-a-hike.png" },
-    colors: ["black"],
+  return listingDetail({
     brief: "A relaxed hiking tee.",
     garment_materials: ["ring-spun cotton"],
     garment_product_type: "tee",
     garment_brand: "Comfort Colors",
     garment_model: "1717",
-    prices: {},
-    price_overrides: {},
-    pricing_plan: null,
-    etsy: {
-      title: "Take A Hike Tee",
-      description: { lead: "", text: null, ref: null },
-      tags: [],
-      variation_images: null,
-      renewal: null,
-      section: "Graphic Tees",
-      shipping_profile: null,
-    },
-    media: [],
-    name: "take-a-hike",
-    modified_at: "2026-09-17T10:00:00Z",
-    status: "draft",
-    issues: [],
-    field_errors: {},
-    etsy_listing_id: null,
-    printify_product_id: null,
-    pricing_plan_name: null,
-    resolved_prices: [],
-    gestures: [],
-    description_composed: "",
+    etsy: listingEtsy({ title: "Take A Hike Tee", section: "Graphic Tees" }),
     design_content_hash: null,
     ...over,
-  };
+  });
 }
 
 const proposal = listingProposal;
@@ -97,7 +74,14 @@ describe("useAiSeoMode availability", () => {
 
     const { result } = renderHook(() => useAiSeoMode(detail({ design: {} }), vi.fn(), vi.fn()));
 
-    await waitFor(() => expect(result.current.available).toBe(false));
+    await waitFor(() =>
+      expect(result.current.requirements).toContainEqual({
+        label: "Design selected",
+        ready: false,
+      }),
+    );
+    expect(result.current.available).toBe(false);
+    expect(result.current.reason).toBeNull();
     expect(readiness).not.toHaveBeenCalled();
   });
 
@@ -109,7 +93,14 @@ describe("useAiSeoMode availability", () => {
 
     const { result } = renderHook(() => useAiSeoMode(detail({ design: empty }), vi.fn(), vi.fn()));
 
-    await waitFor(() => expect(result.current.available).toBe(false));
+    await waitFor(() =>
+      expect(result.current.requirements).toContainEqual({
+        label: "Design selected",
+        ready: false,
+      }),
+    );
+    expect(result.current.available).toBe(false);
+    expect(result.current.reason).toBeNull();
     expect(readiness).not.toHaveBeenCalled();
   });
 
@@ -129,32 +120,59 @@ describe("useAiSeoMode availability", () => {
   });
 
   it("asks the readiness endpoint once name/design/brief are present, and reflects its answer", async () => {
-    mockReadiness({ ready: true, batch_pending: false, deploying: false });
+    const readiness = vi
+      .spyOn(seoApi, "getSeoReadiness")
+      .mockResolvedValue({ ready: true, batch_pending: false, deploying: false });
 
     const { result } = renderHook(() => useAiSeoMode(detail(), vi.fn(), vi.fn()));
 
     await waitFor(() => expect(result.current.available).toBe(true));
+    expect(readiness).toHaveBeenCalledWith("take-a-hike");
+    expect(result.current.reason).toBeNull();
   });
 
-  it("stays unavailable when the readiness endpoint says not ready", async () => {
-    mockReadiness({
-      ready: false,
-      reason: "no AI provider is ready",
-      batch_pending: false,
-      deploying: false,
+  /** Holds the readiness answer back, so a case sees "checking" before it settles. */
+  function pendingReadiness() {
+    const answer = deferred<SeoReadinessResponse>();
+    const readiness = vi.spyOn(seoApi, "getSeoReadiness").mockReturnValue(answer.promise);
+    const { result } = renderHook(() => useAiSeoMode(detail(), vi.fn(), vi.fn()));
+    expect(result.current.available).toBe(false);
+    expect(result.current.reason).toBe("Checking AI setup...");
+    expect(readiness).toHaveBeenCalledWith("take-a-hike");
+    return { answer, result };
+  }
+
+  it("stays unavailable when the readiness endpoint says not ready, and says why", async () => {
+    const { answer, result } = pendingReadiness();
+
+    await act(async () => {
+      answer.resolve({
+        ready: false,
+        reason: "no AI provider is ready",
+        batch_pending: false,
+        deploying: false,
+      });
+      await answer.promise;
     });
 
-    const { result } = renderHook(() => useAiSeoMode(detail(), vi.fn(), vi.fn()));
-
-    await waitFor(() => expect(result.current.available).toBe(false));
+    await waitFor(() => expect(result.current.reason).toBe("no AI provider is ready"));
+    expect(result.current.available).toBe(false);
+    expect(result.current.requirements.at(-1)).toEqual({
+      label: "SEO prompt and AI provider ready",
+      ready: false,
+    });
   });
 
-  it("stays unavailable when the readiness check itself fails", async () => {
-    vi.spyOn(seoApi, "getSeoReadiness").mockRejectedValue(new Error("network down"));
+  it("stays unavailable when the readiness check itself fails, and says so", async () => {
+    const { answer, result } = pendingReadiness();
 
-    const { result } = renderHook(() => useAiSeoMode(detail(), vi.fn(), vi.fn()));
+    await act(async () => {
+      answer.reject(new Error("network down"));
+      await answer.promise.catch(() => undefined);
+    });
 
-    await waitFor(() => expect(result.current.available).toBe(false));
+    await waitFor(() => expect(result.current.reason).toBe("Could not check AI setup."));
+    expect(result.current.available).toBe(false);
   });
 });
 
@@ -183,8 +201,8 @@ describe("useAiSeoMode generation", () => {
     act(() => result.current.generate());
 
     await waitFor(() => expect(result.current.run.steps).toHaveLength(3));
-    expect(result.current.startedAt).toBe(result.current.run.startedAt);
-    expect(result.current.startedAt).not.toBeNull();
+    // The server's start, which the elapsed-time readout counts from.
+    expect(result.current.startedAt).toBe(Date.parse(AI_RUN_CREATED_AT));
   });
 
   it("moves to a failed phase, says why, and stores nothing when the run fails", async () => {

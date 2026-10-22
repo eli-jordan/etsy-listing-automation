@@ -30,7 +30,8 @@ def _task(prompt_text: str = "do the thing") -> ProviderTask:
 
 
 def test_fake_provider_is_ready_by_default() -> None:
-    provider = FakeAiProvider(name="codex")
+    # Annotated so mypy checks the fake against the protocol it stands in for.
+    provider: AiProvider = FakeAiProvider(name="codex")
     assert provider.readiness() == ProviderReadiness(ready=True)
 
 
@@ -67,8 +68,3 @@ def test_fake_provider_raises_when_asked_for_more_responses_than_queued() -> Non
     provider = FakeAiProvider(name="codex", responses=[])
     with pytest.raises(AssertionError):
         provider.generate(_task(), Deadline.starting_now(seconds=60))
-
-
-def test_fake_provider_satisfies_the_provider_protocol() -> None:
-    provider: AiProvider = FakeAiProvider(name="codex", responses=["{}"])
-    assert isinstance(provider.readiness(), ProviderReadiness)

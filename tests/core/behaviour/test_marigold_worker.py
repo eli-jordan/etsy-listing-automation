@@ -1,8 +1,11 @@
 import sys
+import threading
 
 import pytest
 
 from etsy_listings.core.preparation.worker_client import WarmWorker, Worker
+
+from tests.support.gates import GATE_TIMEOUT
 
 
 def test_worker_handshake_drains_stderr_independently(tmp_path):
@@ -31,36 +34,36 @@ for line in sys.stdin:
 
 
 def test_cancellation_completes_active_call_and_retains_valid_evidence(tmp_path):
-    import threading
-
     from PIL import Image
 
+    from tests.support.gates import workers
     from tests.support.marigold import controlled_worker
 
     Image.new("RGB", (12, 8)).save(tmp_path / "crop.png")
-    results = []
     with Worker(
-        controlled_worker(tmp_path, delay=0.5), cache_root=tmp_path, engine_version="1.0.0"
+        controlled_worker(tmp_path, hold=True), cache_root=tmp_path, engine_version="1.0.0"
     ) as worker:
         started = threading.Event()
-        thread = threading.Thread(
-            target=lambda: results.append(
-                worker.infer(
-                    request_id="active",
-                    role="depth",
-                    input="crop.png",
-                    output="depth.npz",
-                    size=(12, 8),
-                    progress=lambda _: started.set(),
+        with workers() as start:
+            try:
+                active = start(
+                    "active inference",
+                    lambda: worker.infer(
+                        request_id="active",
+                        role="depth",
+                        input="crop.png",
+                        output="depth.npz",
+                        size=(12, 8),
+                        progress=lambda _: started.set(),
+                    ),
                 )
-            )
-        )
-        thread.start()
-        assert started.wait(5)
-        worker.cancel("active")
-        thread.join(5)
-        assert not thread.is_alive()
-        assert results[0]["cancelled"] is True
+                assert started.wait(GATE_TIMEOUT)
+                # The model call is held until this cancel is acknowledged.
+                worker.cancel("active")
+                result = active.result()
+            finally:
+                (tmp_path / "infer-release").touch()
+        assert isinstance(result, dict) and result["cancelled"] is True
         assert (tmp_path / "depth.npz").exists()
         assert (
             worker.infer(
@@ -71,53 +74,53 @@ def test_cancellation_completes_active_call_and_retains_valid_evidence(tmp_path)
 
 
 def test_worker_refuses_a_second_call_instead_of_queuing_after_cancellation(tmp_path):
-    import threading
-
-    import pytest
     from PIL import Image
 
     from etsy_listings.core.preparation.worker_client import WorkerError
 
+    from tests.support.gates import workers
     from tests.support.marigold import controlled_worker
 
     Image.new("RGB", (12, 8)).save(tmp_path / "crop.png")
     started = threading.Event()
     with Worker(
-        controlled_worker(tmp_path, delay=0.4), cache_root=tmp_path, engine_version="1.0.0"
+        controlled_worker(tmp_path, hold=True), cache_root=tmp_path, engine_version="1.0.0"
     ) as worker:
-        thread = threading.Thread(
-            target=lambda: worker.infer(
-                request_id="active",
-                role="depth",
-                input="crop.png",
-                output="depth.npz",
-                size=(12, 8),
-                progress=lambda _: started.set(),
-            )
-        )
-        thread.start()
-        assert started.wait(5)
-        with pytest.raises(WorkerError, match="busy"):
-            worker.infer(
-                request_id="remaining",
-                role="depth",
-                input="crop.png",
-                output="remaining.npz",
-                size=(12, 8),
-            )
-        worker.cancel("active")
-        thread.join(5)
+        with workers() as start:
+            try:
+                active = start(
+                    "active inference",
+                    lambda: worker.infer(
+                        request_id="active",
+                        role="depth",
+                        input="crop.png",
+                        output="depth.npz",
+                        size=(12, 8),
+                        progress=lambda _: started.set(),
+                    ),
+                )
+                assert started.wait(GATE_TIMEOUT)
+                with pytest.raises(WorkerError, match="busy"):
+                    worker.infer(
+                        request_id="remaining",
+                        role="depth",
+                        input="crop.png",
+                        output="remaining.npz",
+                        size=(12, 8),
+                    )
+                worker.cancel("active")
+                active.result()
+            finally:
+                (tmp_path / "infer-release").touch()
         assert not (tmp_path / "remaining.npz").exists()
 
 
 def test_idle_exit_restarts_on_next_call_without_failed_attempt(tmp_path):
-    import time
-
     from PIL import Image
 
     from etsy_listings.core.preparation.worker_client import WarmWorker
 
-    from tests.support.marigold import controlled_worker
+    from tests.support.marigold import controlled_worker, wait_until, worker_pids
 
     Image.new("RGB", (12, 8)).save(tmp_path / "crop.png")
     with WarmWorker(
@@ -126,7 +129,13 @@ def test_idle_exit_restarts_on_next_call_without_failed_attempt(tmp_path):
         worker.infer(
             request_id="first", role="depth", input="crop.png", output="first.npz", size=(12, 8)
         )
-        time.sleep(0.3)
+        [first] = worker_pids(tmp_path)
+        # The idle exit is observed, not guessed: the process is gone (and
+        # reaped) before the next call. Waiting only for ``serve`` to return
+        # races the interpreter's own exit.
+        idle = worker._worker
+        assert idle is not None
+        wait_until(lambda: not idle.alive, "the idle worker's exit")
         assert (
             worker.infer(
                 request_id="second",
@@ -137,6 +146,8 @@ def test_idle_exit_restarts_on_next_call_without_failed_attempt(tmp_path):
             )["artifact"]
             == "second.npz"
         )
+        starts = worker_pids(tmp_path)
+        assert len(starts) == 2 and starts[0] == first and starts[1] != first
 
 
 def test_worker_protocol_rejects_unsafe_paths_and_malformed_requests(tmp_path):
@@ -202,25 +213,22 @@ def test_watchdog_fails_without_publishing_partial_artifact(tmp_path):
 
 @pytest.mark.parametrize("adapter", [Worker, WarmWorker])
 def test_dispatch_guard_refuses_cancelled_call_and_allows_later_retry(tmp_path, adapter):
-    import threading
     from contextlib import contextmanager
 
     from PIL import Image
 
     from etsy_listings.core.preparation.worker_client import WorkerError
 
+    from tests.support.gates import Gate, workers
     from tests.support.marigold import controlled_worker
 
     Image.new("RGB", (12, 8)).save(tmp_path / "crop.png")
-    reached = threading.Event()
-    release = threading.Event()
+    dispatch = Gate("the dispatch guard")
     cancelled = threading.Event()
-    errors = []
 
     @contextmanager
     def dispatch_guard():
-        reached.set()
-        assert release.wait(5)
+        dispatch.hold()
         if cancelled.is_set():
             raise WorkerError("Cancelled before dispatch")
         yield
@@ -228,31 +236,25 @@ def test_dispatch_guard_refuses_cancelled_call_and_allows_later_retry(tmp_path, 
     with adapter(
         controlled_worker(tmp_path), cache_root=tmp_path, engine_version="1.0.0"
     ) as worker:
-
-        def infer():
-            try:
-                worker.infer(
+        with workers(dispatch) as start:
+            pending = start(
+                "pending inference",
+                lambda: worker.infer(
                     request_id="pending",
                     role="depth",
                     input="crop.png",
                     output="refused.npz",
                     size=(12, 8),
                     dispatch_guard=dispatch_guard,
-                )
-            except BaseException as exc:
-                errors.append(exc)
-
-        thread = threading.Thread(target=infer)
-        thread.start()
-        assert reached.wait(5)
-        cancelled.set()
-        worker.cancel("pending")
-        release.set()
-        thread.join(5)
-        assert not thread.is_alive()
-        assert len(errors) == 1
-        assert isinstance(errors[0], WorkerError)
-        assert "before dispatch" in str(errors[0])
+                ),
+            )
+            dispatch.wait_entered()
+            cancelled.set()
+            worker.cancel("pending")
+            dispatch.release()
+            error = pending.outcome()
+        assert isinstance(error, WorkerError)
+        assert "before dispatch" in str(error)
         assert not (tmp_path / "refused.npz").exists()
         output = adapter.__name__ + ".npz"
         assert (
@@ -264,15 +266,14 @@ def test_dispatch_guard_refuses_cancelled_call_and_allows_later_retry(tmp_path, 
 
 
 def test_warm_startup_cancellation_is_rechecked_before_dispatch(tmp_path):
-    import threading
-    import time
     from contextlib import contextmanager
 
     from PIL import Image
 
     from etsy_listings.core.preparation.worker_client import WorkerError
 
-    from tests.support.marigold import controlled_worker
+    from tests.support.gates import workers
+    from tests.support.marigold import controlled_worker, wait_until
 
     Image.new("RGB", (12, 8)).save(tmp_path / "crop.png")
     command = controlled_worker(tmp_path)
@@ -283,7 +284,10 @@ def test_warm_startup_cancellation_is_rechecked_before_dispatch(tmp_path):
         """    def capabilities(self):
         from pathlib import Path
         Path('startup-ready').touch()
+        deadline = time.monotonic() + 15
         while not Path('startup-release').exists():
+            if time.monotonic() > deadline:
+                raise RuntimeError('held startup was never released')
             time.sleep(0.01)""",
     )
     source = source.replace(
@@ -298,7 +302,6 @@ def test_warm_startup_cancellation_is_rechecked_before_dispatch(tmp_path):
     )
     script.write_text(source, encoding="utf-8")
     cancelled = threading.Event()
-    errors = []
 
     @contextmanager
     def guard():
@@ -307,32 +310,26 @@ def test_warm_startup_cancellation_is_rechecked_before_dispatch(tmp_path):
         yield
 
     with WarmWorker(command, cache_root=tmp_path, engine_version="1.0.0") as worker:
-
-        def infer():
+        with workers() as start:
             try:
-                worker.infer(
-                    request_id="starting",
-                    role="depth",
-                    input="crop.png",
-                    output="refused.npz",
-                    size=(12, 8),
-                    dispatch_guard=guard,
+                starting = start(
+                    "starting inference",
+                    lambda: worker.infer(
+                        request_id="starting",
+                        role="depth",
+                        input="crop.png",
+                        output="refused.npz",
+                        size=(12, 8),
+                        dispatch_guard=guard,
+                    ),
                 )
-            except BaseException as exc:
-                errors.append(exc)
-
-        thread = threading.Thread(target=infer)
-        thread.start()
-        deadline = time.monotonic() + 5
-        while not (tmp_path / "startup-ready").exists() and time.monotonic() < deadline:
-            time.sleep(0.01)
-        assert (tmp_path / "startup-ready").exists()
-        cancelled.set()
-        worker.cancel("starting")
-        (tmp_path / "startup-release").touch()
-        thread.join(5)
-        assert not thread.is_alive()
-        assert len(errors) == 1 and "during startup" in str(errors[0])
+                wait_until((tmp_path / "startup-ready").exists, "the worker's held startup")
+                cancelled.set()
+                worker.cancel("starting")
+            finally:
+                (tmp_path / "startup-release").touch()
+            error = starting.outcome()
+        assert isinstance(error, WorkerError) and "during startup" in str(error)
         assert not (tmp_path / "refused.npz").exists()
         assert (
             worker.infer(

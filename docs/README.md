@@ -37,6 +37,12 @@ identify the start of the work, not its release date.
 | Multi-artwork listings | [Spec](features/multi-artwork-20260928/spec.md) | [Interactions](features/multi-artwork-20260928/interactions.md) | [Plan](features/multi-artwork-20260928/plan.md) |
 | Module structure and shared operations | [Spec](features/module-structure-20260930/spec.md) | — | [Plan](features/module-structure-20260930/plan.md) |
 | Marigold mockup rendering | [Spec](features/marigold-20261001/spec.md) | [Interactions](features/marigold-20261001/interactions.md) | [Plan](features/marigold-20261001/plan.md) |
+| Test suite quality | [Spec](features/test-suite-quality-20261003/spec.md) | [Preserved interactions](features/test-suite-quality-20261003/interactions.md) | [Plan](features/test-suite-quality-20261003/plan.md) |
+
+Test suite quality also keeps an [audit-to-delivery map](features/test-suite-quality-20261003/coverage-map.md)
+and an [execution record](features/test-suite-quality-20261003/execution.md)
+that holds the PR ledger, every replaced or removed case with its lower
+oracle, sensitivity results and the matched measurements.
 
 The AI SEO interactions are amended by market-informed SEO and durable batch
 proposals; the video requirements also live in the Etsy integration spec.
@@ -52,6 +58,7 @@ does not imply a missing implementation.
 | [API findings](research/api-findings.md) | Measured requests, responses and integration surprises |
 | [Architecture audit, 2026-09-30](research/architecture-audit-20260930.html) | Current module/dependency inventory, invariant violations, reproductions and proposed repairs |
 | [Marigold experiments, 2026-10-01](research/marigold-20261001/README.md) | Native Windows model trials, rendering comparisons, performance data and prototypes |
+| [Test suite audit, 2026-10-03](../reports/test-suite-audit.html) | Prioritized test-quality findings, measured costs, deletion decisions and retained validation |
 
 Research records evidence from the investigation date. Consult the current
 feature requirements and client code for application behaviour; a measurement
