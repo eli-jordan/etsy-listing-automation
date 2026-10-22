@@ -1,5 +1,6 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
+import { must } from "../../test/helpers";
 import type { MediaFileSummary, MediaEntry } from "../../types";
 import { MediaReel } from "./MediaReel";
 
@@ -78,12 +79,28 @@ describe("MediaReel", () => {
   it("marks the first tile as the Etsy thumbnail, and only the first", () => {
     reel({ media: THREE });
     expect(screen.getAllByText("Etsy thumbnail")).toHaveLength(1);
+    expect(within(must(tiles()[0])).getByText("Etsy thumbnail")).toBeTruthy();
   });
 
-  it("invites a drag while there is room, and says what to do at the ceiling", () => {
-    const media: MediaEntry[] = Array.from({ length: 20 }, (_, i) => `a-${i}.png`);
-    reel({ media });
+  it("numbers every tile by the position Etsy will show it in", () => {
+    reel({ media: THREE });
+    expect(tiles().map((tile) => tile.querySelector(".rtile__pos")?.textContent)).toEqual([
+      "1",
+      "2",
+      "3",
+    ]);
+  });
+
+  it("invites a drag while there is room", () => {
+    reel({ media: Array.from({ length: 19 }, (_, i) => `a-${i}.png`) });
+    expect(screen.getByText("Drag a tile to change the order Etsy shows them in")).toBeTruthy();
+    expect(screen.queryByText(/remove one before adding another/)).toBeNull();
+  });
+
+  it("says what to do at the ceiling instead of how to reorder", () => {
+    reel({ media: Array.from({ length: 20 }, (_, i) => `a-${i}.png`) });
     expect(screen.getByText(/remove one before adding another/)).toBeTruthy();
+    expect(screen.queryByText(/Drag a tile/)).toBeNull();
   });
 
   it("says nothing is there yet for an empty listing", () => {

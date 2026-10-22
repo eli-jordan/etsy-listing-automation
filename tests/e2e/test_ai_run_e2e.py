@@ -70,13 +70,17 @@ def test_full_ai_run_drafts_brief_researches_market_and_proposes_seo(
         detail = client.get(f"/api/ai/runs/{run_id}").json()
 
     assert [event["seq"] for event in events] == list(range(1, len(events) + 1))
-    assert [(event["id"], event["state"]) for event in events if event["type"] == "step"] == [
+    # The required milestones, in order. A step may re-announce its state
+    # with a new `detail` as it progresses (spec: "on every step change"), so
+    # repeats are collapsed rather than counted -- how many progress
+    # messages a phase sends is not the contract.
+    transitions = [(event["id"], event["state"]) for event in events if event["type"] == "step"]
+    assert [t for i, t in enumerate(transitions) if i == 0 or t != transitions[i - 1]] == [
         ("brief", "pending"),
         ("market", "pending"),
         ("seo", "pending"),
         ("brief", "active"),
         ("brief", "done"),
-        ("market", "active"),
         ("market", "active"),
         ("market", "done"),
         ("seo", "active"),
