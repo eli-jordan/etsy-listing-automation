@@ -298,23 +298,27 @@ it("waits for the initial catalog before claiming the workspace is empty", async
 });
 
 it("keeps a newer template selection when an autosave catalog refresh arrives late", async () => {
+  const clock = controlledClock();
   const rows = [summary({ name: "first" }), summary({ name: "second" })];
-  let finish!: (value: TemplateSummary[]) => void;
-  const pending = new Promise<TemplateSummary[]>((resolve) => {
-    finish = resolve;
-  });
+  const refresh = deferred<TemplateSummary[]>();
+  const write = deferred<ColourMatrixTemplate>();
   const list = vi
     .spyOn(calibrator, "listTemplates")
     .mockResolvedValueOnce(rows)
-    .mockReturnValue(pending);
+    .mockReturnValue(refresh.promise);
   vi.spyOn(calibrator, "getTemplateConfig").mockResolvedValue(configDocument(COLOUR_MATRIX));
   vi.spyOn(calibrator, "renderPreview").mockResolvedValue("blob:preview");
-  vi.spyOn(calibrator, "saveTemplateConfig").mockResolvedValue(COLOUR_MATRIX);
+  vi.spyOn(calibrator, "saveTemplateConfig").mockReturnValue(write.promise);
   render(<App />);
   fireEvent.change(await screen.findByLabelText("Wrinkle strength"), { target: { value: "25" } });
-  await waitFor(() => expect(list).toHaveBeenCalledTimes(2), { timeout: 2000 });
-  selectTemplate("second");
+
+  await clock.advance(AUTOSAVE_DEBOUNCE_MS);
+  expect(calibrator.saveTemplateConfig).toHaveBeenCalledTimes(1);
+  await act(async () => write.resolve(COLOUR_MATRIX));
+  expect(list).toHaveBeenCalledTimes(2);
+
+  await clock.user.click(screen.getByRole("button", { name: /second/ }));
   await waitFor(() => expect(header().getByText("second")).toBeInTheDocument());
-  await act(async () => finish(rows));
+  await act(async () => refresh.resolve(rows));
   expect(header().getByText("second")).toBeInTheDocument();
 });
