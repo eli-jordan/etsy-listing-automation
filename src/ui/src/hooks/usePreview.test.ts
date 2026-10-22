@@ -1,4 +1,4 @@
-import { act, renderHook, waitFor } from "@testing-library/react";
+import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as calibrator from "../api/calibrator";
 import { type Deferred, deferred, must } from "../test/helpers";
@@ -217,58 +217,53 @@ describe("usePreview's one-at-a-time rule", () => {
 });
 
 it("discards a superseded strict editor composite before showing the latest edit", async () => {
-  vi.useRealTimers(); // main's form; the next commit puts it on the file's clock
-  let first: (url: string) => void = () => {};
-  let second: (url: string) => void = () => {};
-  const spy = vi
-    .spyOn(calibrator, "renderPreview")
-    .mockImplementationOnce(
-      () =>
-        new Promise<string>((resolve) => {
-          first = resolve;
-        }),
-    )
-    .mockImplementationOnce(
-      () =>
-        new Promise<string>((resolve) => {
-          second = resolve;
-        }),
-    );
+  const { spy, settle } = heldRenders();
   const { result, rerender } = renderHook(({ design }) => usePreview("shirt", BODY, design, true), {
     initialProps: { design: "first" },
   });
-  await waitFor(() => expect(spy).toHaveBeenCalledTimes(1));
+  await debounce();
+  expect(spy).toHaveBeenCalledTimes(1);
+
   rerender({ design: "latest" });
-  first("blob:superseded");
-  await waitFor(() => expect(URL.revokeObjectURL).toHaveBeenCalledWith("blob:superseded"));
+  await settle(0, "blob:superseded");
+  expect(URL.revokeObjectURL).toHaveBeenCalledWith("blob:superseded");
   expect(result.current).toBeNull();
-  await waitFor(() => expect(spy).toHaveBeenCalledTimes(2));
-  second("blob:latest");
-  await waitFor(() => expect(result.current).toBe("blob:latest"));
+
+  await debounce();
+  expect(spy).toHaveBeenCalledTimes(2);
+  await settle(1, "blob:latest");
+  expect(result.current).toBe("blob:latest");
 });
 
 it("hides the previous template's decoded image immediately in strict mode", async () => {
-  vi.useRealTimers(); // main's form; the next commit puts it on the file's clock
-  vi.spyOn(calibrator, "renderPreview").mockResolvedValue("blob:first");
+  const { settle } = heldRenders();
   const { result, rerender } = renderHook(({ name }) => usePreview(name, BODY, "grid", true), {
     initialProps: { name: "first" },
   });
-  await waitFor(() => expect(result.current).toBe("blob:first"));
+  await debounce();
+  await settle(0, "blob:first");
+  expect(result.current).toBe("blob:first");
+
   rerender({ name: "second" });
   expect(result.current).toBeNull();
 });
 
 it("clears a refused strict frame so an old composite cannot impersonate current geometry", async () => {
-  vi.useRealTimers(); // main's form; the next commit puts it on the file's clock
-  vi.spyOn(calibrator, "renderPreview")
-    .mockResolvedValueOnce("blob:old")
-    .mockRejectedValue(new Error("Evidence does not cover this geometry"));
+  const { spy, settle, fail } = heldRenders();
   const { result, rerender } = renderHook(({ design }) => usePreview("shirt", BODY, design, true), {
     initialProps: { design: "old" },
   });
-  await waitFor(() => expect(result.current).toBe("blob:old"));
+  await debounce();
+  await settle(0, "blob:old");
+
   rerender({ design: "new" });
-  await waitFor(() => expect(result.current).toBeNull());
+  await debounce();
+  expect(spy).toHaveBeenCalledTimes(2);
+  // The old frame stands while the request is out, so it is the refusal
+  // itself, settled here, that has to take it down.
+  expect(result.current).toBe("blob:old");
+  await fail(1);
+  expect(result.current).toBeNull();
   expect(URL.revokeObjectURL).toHaveBeenCalledWith("blob:old");
 });
 
