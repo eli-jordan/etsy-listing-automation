@@ -65,7 +65,6 @@ def test_matching_preview_promotes_exact_bytes_without_composition(workspace_roo
     from etsy_listings.core.application.prepared_previews import prepared_preview
     from etsy_listings.core.engine.stages.render import scene_hash
     from etsy_listings.core.preparation import scenes
-    from etsy_listings.core.render import encode_png
 
     workspace, _ = listing_with_marigold(workspace_root, prepare=True)
     ctx = a_context(workspace_root)
@@ -81,7 +80,7 @@ def test_matching_preview_promotes_exact_bytes_without_composition(workspace_roo
         FIXTURE_LISTING, "shirt", None, authoring.render_identity.removeprefix("sha256:")
     )
     expected = target.read_bytes()
-    assert expected == encode_png(authoring.image, compression=1)
+    assert expected == authoring.png
 
     def unexpected_render(*args, **kwargs):
         raise AssertionError("matching preview must be promoted")

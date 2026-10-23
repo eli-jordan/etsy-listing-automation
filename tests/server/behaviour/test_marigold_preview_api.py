@@ -142,3 +142,27 @@ def test_photo_warp_draft_previews_before_renderer_switch_is_saved(workspace_roo
     assert image.getpixel((30, 30)) != image.getpixel((0, 0))
     assert client.get(url).headers["etag"] == saved.headers["etag"]
     assert client.get(url).json()["renderer"]["type"] == "marigold"
+
+
+def test_a_browser_holding_the_scene_is_answered_not_modified(workspace_root: Path) -> None:
+    from tests.support.builders import FIXTURE_LISTING
+    from tests.support.marigold import listing_with_marigold
+
+    workspace, _ = listing_with_marigold(workspace_root, prepare=True)
+    client = TestClient(create_app(workspace))
+    url = f"/api/listings/{FIXTURE_LISTING}/scene-preview"
+
+    first = client.get(url, params={"template": "shirt"})
+    assert first.status_code == 200, first.text
+    assert first.headers["etag"] == f'"{first.headers["x-render-identity"]}"'
+
+    again = client.get(
+        url, params={"template": "shirt"}, headers={"If-None-Match": first.headers["etag"]}
+    )
+    assert again.status_code == 304
+    assert again.content == b""
+    assert again.headers["x-render-identity"] == first.headers["x-render-identity"]
+
+    other = client.get(url, params={"template": "shirt"}, headers={"If-None-Match": '"sha256:0"'})
+    assert other.status_code == 200
+    assert other.content == first.content

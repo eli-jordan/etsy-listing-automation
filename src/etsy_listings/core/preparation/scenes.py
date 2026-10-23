@@ -6,7 +6,6 @@ target photo and naming the result's identity happen in one place, so the
 identity a plan records is the identity apply and a preview compute.
 """
 
-import hashlib
 import threading
 from collections.abc import Iterator, Mapping, Sequence
 from contextlib import ExitStack, contextmanager
@@ -20,8 +19,10 @@ from etsy_listings.core.preparation.artifacts import (
     PreparationInputs,
     StalePreparation,
 )
+from etsy_listings.core.preparation.scene_cache import SceneCache, photo_digest
 from etsy_listings.core.render.config import MarigoldAppearance
 from etsy_listings.core.render.identity import artwork_identity, prepared_scene_identity
+from etsy_listings.core.render.io import MARIGOLD_PNG_COMPRESSION, encode_png
 from etsy_listings.core.render.material import MaterialLayer, MaterialMaps, render_marigold_scene
 from etsy_listings.core.render.types import RGB, RGBA
 from etsy_listings.core.workspace import Workspace
@@ -70,6 +71,14 @@ class PreparedScene:
                 appearance=self.appearance,
             )
 
+    def encoded(self, cache: SceneCache) -> bytes:
+        """The scene's PNG: ``cache``'s entry for :attr:`identity`, or a
+        fresh composition, stored there before it is returned."""
+        return cache.get_or_compose(
+            self.identity,
+            lambda: encode_png(self.render(), compression=MARIGOLD_PNG_COMPRESSION),
+        )
+
 
 @contextmanager
 def lease_scene(
@@ -103,7 +112,7 @@ def lease_scene(
             map_content=acquired.manifest.content_digest,
             placement_ids=[layer.placement_id for layer in layers],
             artwork_digests=[artwork_identity(layer.artwork) for layer in layers],
-            photo_pixels=hashlib.sha256(base.tobytes()).hexdigest(),
+            photo_pixels=photo_digest(base),
             appearance=appearance,
         )
         yield PreparedScene(

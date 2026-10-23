@@ -398,6 +398,7 @@ def listing_preview_coloured(
 def scene_preview(
     target: Existing,
     template: str,
+    request: Request,
     colour: str | None = None,
     scale: PreviewScale = "full",
     v: str | None = None,
@@ -426,7 +427,9 @@ def scene_preview(
         ) from exc
     with preview_refusals():
         scene = saved_scene(workspace, template, colour=colour, design=artwork)
-    return render_preview_response(scene, scale)
+    return render_preview_response(
+        scene, scale, workspace=workspace, if_none_match=request.headers.get("if-none-match")
+    )
 
 
 @support_router.get("/api/listing-draft", response_model=ListingDetail)

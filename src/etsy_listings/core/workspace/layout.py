@@ -89,6 +89,10 @@ PREVIEWS_DIR = "previews"
 by `scene_hash` under `PREVIEWS_DIR/<listing>/<template>/`. Sibling to
 `RENDERS_DIR` rather than nested inside it -- a preview is not yet an applied
 render, and either must be wipeable without the other."""
+SCENES_DIR = "scenes"
+"""Composed Marigold scenes, one PNG per scene identity, shared by every
+listing and template (``core/preparation/scene_cache.py``). Least recently
+read go first past a byte budget, so nothing here follows a listing."""
 MARKET_DIR = "market"
 """Market-informed SEO's caches (features/market-seo-20260924/spec.md, *Cache*), each a directory
 inside it: :data:`MARKET_SEARCH_DIR` and :data:`MARKET_STATS_DIR` hold the

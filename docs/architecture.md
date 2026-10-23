@@ -1008,6 +1008,20 @@ artwork, photos or maps cannot authorize stale promotion. Output file hashes
 remain the separate upload axis. Cache removal recreates rendered images from
 durable assets without model installation or inference.
 
+Every full-size scene of either renderer, previewed or applied, is kept in
+`preparation.scene_cache.SceneCache` (`.cache/scenes/`), named by its pixel
+identity (`prepared_scene_identity`, or `photo_warp_scene_identity`: photo
+pixels plus each layer's render config and artwork pixels) and evicted least
+recently read first past 2 GiB. It is separate from the per-listing
+`.cache/previews/`, which deploy review keeps and prunes. Every entry is
+written under an identity computed from the very arrays composed, so apply and
+previews share entries without trusting anything but that identity. A preview
+reaches the identity without decoding through `PIXEL_DIGESTS`, which keeps each
+photo's and design's pixel digest only while its `file_version` stamp is
+unchanged; preview responses carry the identity as their ETag. One composition
+runs per identity: a second request waits and reads the first one's entry. At
+most four Marigold compositions run at once, across previews and apply.
+
 ## Native operational validation
 
 The [integrated native report](features/marigold-20261001/quality-validation.md)
