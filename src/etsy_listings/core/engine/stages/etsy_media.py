@@ -45,8 +45,9 @@ from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict
 
+from etsy_listings.core.clients.etsy.listings import EtsyListingClient
 from etsy_listings.core.config.listing import TemplateMediaEntry
-from etsy_listings.core.config.media import media_kind
+from etsy_listings.core.config.media import MAX_IMAGES, media_kind
 from etsy_listings.core.engine.change import Action, Drift, MediaChange, Verdict
 from etsy_listings.core.engine.context import RunContext
 from etsy_listings.core.engine.lock import Lockfile, hash_file, to_workspace_relative_posix
@@ -369,10 +370,11 @@ class EtsyMediaStage:
 
         image_ids: dict[str, int] = {}
         sent_hashes: dict[str, str] = {}
-        for rank, entry in enumerate(desired.manifest, start=1):
+        for entry in desired.manifest:
             if not entry.source.is_file():
                 raise MediaNotRenderedError(entry.ref)
             current_hash = hash_file(entry.source)
+            sent_hashes[entry.ref] = current_hash
             existing_id = known_ids.get(entry.ref)
             if (
                 existing_id is not None
@@ -380,9 +382,18 @@ class EtsyMediaStage:
                 and current_hash == applied_hashes.get(entry.ref)
             ):
                 image_ids[entry.ref] = existing_id
-                sent_hashes[entry.ref] = current_hash
-                continue
 
+        # What the listing carries as uploads proceed. Etsy refuses an upload
+        # past its 20-image cap, and the `image_ids` PATCH below that detaches
+        # what we are replacing only comes after them.
+        attached = [image.image_id for image in live.images] if live is not None else []
+        for rank, entry in enumerate(desired.manifest, start=1):
+            if entry.ref in image_ids:
+                continue
+            if len(attached) >= MAX_IMAGES:
+                attached = _make_room(
+                    ctx, client, shop_id, listing_id, attached, keep=set(image_ids.values())
+                )
             ctx.emit(f"uploading {entry.ref}")
             image = client.upload_listing_image(
                 shop_id,
@@ -393,7 +404,7 @@ class EtsyMediaStage:
                 alt_text=entry.alt_text,
             )
             image_ids[entry.ref] = image.listing_image_id
-            sent_hashes[entry.ref] = current_hash
+            attached.append(image.listing_image_id)
 
         ctx.emit(f"setting image order ({len(image_ids)} images)")
         client.update_listing(
@@ -431,6 +442,26 @@ class MediaNotRenderedError(RuntimeError):
 
     def __init__(self, ref: str) -> None:
         super().__init__(f"cannot upload {ref!r}: its render output does not exist on disk yet.")
+
+
+def _make_room(
+    ctx: RunContext,
+    client: EtsyListingClient,
+    shop_id: int,
+    listing_id: int,
+    attached: list[int],
+    *,
+    keep: set[int],
+) -> list[int]:
+    """Detach what the manifest no longer wants, so the next upload fits.
+
+    The same detach the closing `image_ids` PATCH would do, brought forward.
+    A listing cannot be emptied of images, so when nothing on it is ours yet
+    the first image stays until an upload of ours can take its place."""
+    remaining = [image_id for image_id in attached if image_id in keep] or attached[:1]
+    ctx.emit(f"detaching {len(attached) - len(remaining)} image(s) to stay within Etsy's limit")
+    client.update_listing(shop_id, listing_id, {"image_ids": remaining})
+    return remaining
 
 
 def _first_run_reason(desired: EtsyMediaDesired) -> str:

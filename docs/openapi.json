@@ -5350,6 +5350,10 @@
             "title": "Scene",
             "type": "string"
           },
+          "scene_hash": {
+            "title": "Scene Hash",
+            "type": "string"
+          },
           "state": {
             "enum": [
               "cached",
@@ -5369,7 +5373,8 @@
           "template",
           "colour",
           "state",
-          "preview"
+          "preview",
+          "scene_hash"
         ],
         "title": "RenderSceneSnapshot",
         "type": "object"
@@ -9230,6 +9235,22 @@
               "title": "Name",
               "type": "string"
             }
+          },
+          {
+            "in": "query",
+            "name": "hash",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Hash"
+            }
           }
         ],
         "responses": {
@@ -9288,6 +9309,22 @@
             "schema": {
               "title": "Name",
               "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "hash",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Hash"
             }
           }
         ],

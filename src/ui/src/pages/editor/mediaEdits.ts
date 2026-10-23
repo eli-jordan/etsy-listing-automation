@@ -45,8 +45,8 @@ type Patch = Record<string, unknown>;
 /** Add a template/colour to the reel, or take it out again.
  *
  * A removal is allowed unless it would leave no image to be the thumbnail
- * (see {@link settle}); an addition stops at the ceiling rather than writing a
- * twenty-first image the server would refuse.
+ * (see {@link settleGallery}); an addition stops at the ceiling rather than
+ * writing a twenty-first image the server would refuse.
  */
 export function toggleEntry(
   detail: MediaState,
@@ -199,7 +199,7 @@ function count(media: readonly MediaEntry[], kind: "image" | "video"): number {
  * no image has no thumbnail to offer at all, so that removal is declined
  * rather than written and refused.
  */
-function settle(media: readonly MediaEntry[]): MediaEntry[] | null {
+export function settleGallery(media: readonly MediaEntry[]): MediaEntry[] | null {
   const firstVideo = media.findIndex((m) => mediaKind(m) === "video");
   if (firstVideo === -1) return [...media];
   const firstImage = media.findIndex((m) => mediaKind(m) === "image");
@@ -212,6 +212,6 @@ function settle(media: readonly MediaEntry[]): MediaEntry[] | null {
 }
 
 function settled(media: readonly MediaEntry[]): Patch | null {
-  const next = settle(media);
+  const next = settleGallery(media);
   return next === null ? null : { media: next };
 }

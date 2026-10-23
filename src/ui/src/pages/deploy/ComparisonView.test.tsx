@@ -191,6 +191,51 @@ describe("ComparisonView", () => {
   });
 });
 
+describe("ComparisonView's rendered scenes", () => {
+  it("asks for the plan's own preview of a scene by the hash the plan computed", () => {
+    const sceneHash = "c".repeat(64);
+    const p = plan([
+      stage({
+        stage: "etsy_media",
+        snapshot: {
+          desired: [{ rank: 1, ref: "flat-lay:black", file: "x.png" }],
+          live: [],
+        },
+      }),
+    ]);
+    render(
+      <ComparisonView
+        comparison={buildComparison(p)}
+        listing={{
+          name: detail().name,
+          scene: sceneSource(detail().name, detail().design_content_hash),
+        }}
+        renderSnapshot={{
+          scenes: [
+            {
+              scene: "flat-lay:black",
+              template: "flat-lay",
+              colour: "black",
+              state: "missing",
+              preview: true,
+              scene_hash: sceneHash,
+            },
+          ],
+        }}
+        previewsRendered={new Set()}
+        collapsed={false}
+        etsyListingId={1698234512}
+      />,
+    );
+
+    expect(
+      document.querySelector(
+        `img[src="/api/listings/take-a-hike/previews/flat-lay/black?hash=${sceneHash}"]`,
+      ),
+    ).not.toBeNull();
+  });
+});
+
 describe("ComparisonView's videos", () => {
   const FEATURED = "common-media/size-guide.mp4";
   const SECOND = "./how-it-fits.mp4";

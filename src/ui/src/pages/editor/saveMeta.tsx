@@ -34,7 +34,9 @@ export function metaFor(
     case "save-failed":
       return "Couldn't save — the edit is kept locally and retries on your next change";
     case "unsaved":
-      return "Not saved — fix the highlighted field and it will be written";
+      return save.reason === undefined
+        ? "Not saved — fix the highlighted field and it will be written"
+        : `Not saved — ${save.reason}`;
     case "saving":
       return "Saving…";
     case "saved":

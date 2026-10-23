@@ -190,6 +190,7 @@ describe("BatchDeployPage", () => {
                 colour: null,
                 state: "missing",
                 preview: false,
+                scene_hash: "a".repeat(64),
               },
             ],
           },

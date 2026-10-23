@@ -18,6 +18,11 @@ describe("metaFor", () => {
     );
   });
 
+  it("shows a refusal that has no field to highlight", () => {
+    const reason = "media position 1 is the thumbnail and must be an image";
+    expect(metaFor({ kind: "unsaved", reason }, "my-shirt")).toBe(`Not saved — ${reason}`);
+  });
+
   it("names the listing that took the name", () => {
     expect(metaFor({ kind: "name-taken", name: "take-a-hike" }, null)).toMatch(/take-a-hike/);
   });

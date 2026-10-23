@@ -5,7 +5,7 @@ import json
 from collections.abc import Sequence
 from typing import Any
 
-from etsy_listings.core.render.config import MarigoldAppearance
+from etsy_listings.core.render.config import MarigoldAppearance, RenderConfig
 from etsy_listings.core.render.io import MARIGOLD_PNG_COMPRESSION
 from etsy_listings.core.render.types import RGBA
 
@@ -57,5 +57,31 @@ def prepared_scene_identity(
             ],
             "photo_pixels": photo_pixels,
             "appearance": appearance.model_dump(mode="json"),
+        }
+    )
+
+
+PHOTO_WARP_PNG_COMPRESSION = 6
+"""What the render stage and full-size previews encode photo warp with."""
+
+
+def photo_warp_scene_identity(
+    *, photo_pixels: str, layers: Sequence[tuple[RenderConfig, str]]
+) -> str:
+    """A photo-warp scene's pixels: the photo's, then each painted layer's
+    settings and artwork (from artwork_identity) in paint order. The derived
+    height and luminance maps are functions of the photo's pixels alone.
+
+    Bump ``renderer`` when the warp, its maps or their fixed parameters change.
+    """
+    return _canonical(
+        {
+            "renderer": "photo-warp-v1",
+            "png_compression": PHOTO_WARP_PNG_COMPRESSION,
+            "photo_pixels": photo_pixels,
+            "layers": [
+                {"render_config": json.loads(cfg.canonical_json()), "artwork": artwork}
+                for cfg, artwork in layers
+            ],
         }
     )

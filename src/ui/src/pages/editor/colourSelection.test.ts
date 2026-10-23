@@ -30,6 +30,35 @@ describe("selectColours", () => {
     expect(patch.media).toEqual([{ template: "flat-lay-01", colour: "black" }]);
   });
 
+  it("brings the next image forward when the thumbnail's colour goes, keeping the video 2nd", () => {
+    /* Left as filtered, the video became position 1, a document the server
+       refuses -- and the whole colour change with it. */
+    const patch = selectColours(
+      detail({
+        media: [
+          { template: "flat-lay-01", colour: "white" },
+          "common-media/size-guide.mp4",
+          "common-media/size-chart.png",
+          { template: "flat-lay-01", colour: "black" },
+        ],
+      }),
+      ["black"],
+    );
+    expect(patch.media).toEqual([
+      "common-media/size-chart.png",
+      "common-media/size-guide.mp4",
+      { template: "flat-lay-01", colour: "black" },
+    ]);
+  });
+
+  it("drops the videos too when no image is left to be the thumbnail", () => {
+    const patch = selectColours(
+      detail({ media: [{ template: "flat-lay-01", colour: "white" }, "common-media/clip.mp4"] }),
+      ["black"],
+    );
+    expect(patch.media).toEqual([]);
+  });
+
   it("keeps entries with no colour of their own", () => {
     /* A `multiple`/`single` template has one output and no colour, and a
        shared asset is a bare path -- neither is about a variant, so dropping

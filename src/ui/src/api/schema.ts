@@ -3911,6 +3911,8 @@ export interface components {
       preview: boolean;
       /** Scene */
       scene: string;
+      /** Scene Hash */
+      scene_hash: string;
       /**
        * State
        * @enum {string}
@@ -6231,7 +6233,9 @@ export interface operations {
   };
   listing_preview_api_listings__name__previews__template__get: {
     parameters: {
-      query?: never;
+      query?: {
+        hash?: string | null;
+      };
       header?: never;
       path: {
         template: string;
@@ -6263,7 +6267,9 @@ export interface operations {
   };
   listing_preview_coloured_api_listings__name__previews__template___colour__get: {
     parameters: {
-      query?: never;
+      query?: {
+        hash?: string | null;
+      };
       header?: never;
       path: {
         template: string;
