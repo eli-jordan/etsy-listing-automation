@@ -28,7 +28,6 @@ function reel(over: Partial<Parameters<typeof MediaReel>[0]> = {}) {
     selectedIndex: null,
     listing: "take-a-hike" as string | null,
     files: [SIZING],
-    onOpen: vi.fn(),
     onRemove: vi.fn(),
     onReorder: vi.fn(),
     onFocus: vi.fn(),
@@ -162,7 +161,7 @@ describe("MediaReel's videos", () => {
 
     fireEvent.mouseEnter(face);
     expect(play).toHaveBeenCalledTimes(1);
-    expect(props.onFocus).toHaveBeenCalledWith({ kind: "file", asset: INTRO });
+    expect(props.onFocus).not.toHaveBeenCalled();
 
     fireEvent.mouseLeave(face);
     expect(pause).toHaveBeenCalledTimes(1);
@@ -236,22 +235,22 @@ describe("MediaReel's drag", () => {
 });
 
 describe("MediaReel's other clicks", () => {
-  it("opens the carousel on a tile", () => {
+  it("leaves the preview alone when a tile is only hovered", () => {
     const props = reel({ media: THREE });
-    fireEvent.click(document.querySelectorAll(".rtile__face")[1] as HTMLElement);
-    expect(props.onOpen).toHaveBeenCalledWith(1);
+    fireEvent.mouseEnter(document.querySelectorAll(".rtile__face")[0] as HTMLElement);
+    expect(props.onFocus).not.toHaveBeenCalled();
   });
 
-  it("removes without also opening the tile that slid into its place", () => {
+  it("removes without also previewing the tile that slid into its place", () => {
     const props = reel({ media: THREE });
     fireEvent.click(screen.getByLabelText("Remove flat-lay-01 · ivory"));
     expect(props.onRemove).toHaveBeenCalledWith(1);
-    expect(props.onOpen).not.toHaveBeenCalled();
+    expect(props.onFocus).not.toHaveBeenCalled();
   });
 
-  it("previews a template tile on hover", () => {
+  it("previews a template tile on click", () => {
     const props = reel({ media: THREE });
-    fireEvent.mouseEnter(document.querySelectorAll(".rtile__face")[0] as HTMLElement);
+    fireEvent.click(document.querySelectorAll(".rtile__face")[0] as HTMLElement);
     expect(props.onFocus).toHaveBeenCalledWith({
       kind: "template",
       template: "flat-lay-01",
@@ -259,15 +258,15 @@ describe("MediaReel's other clicks", () => {
     });
   });
 
-  it("previews a shared tile on hover", () => {
+  it("previews a shared tile on click", () => {
     const props = reel({ media: THREE });
-    fireEvent.mouseEnter(document.querySelectorAll(".rtile__face")[2] as HTMLElement);
+    fireEvent.click(document.querySelectorAll(".rtile__face")[2] as HTMLElement);
     expect(props.onFocus).toHaveBeenCalledWith({ kind: "file", asset: SIZING });
   });
 
   it("stays silent for a ref whose file has gone from common-media/", () => {
     const props = reel({ media: ["common-media/deleted.png"], files: [SIZING] });
-    fireEvent.mouseEnter(document.querySelectorAll(".rtile__face")[0] as HTMLElement);
+    fireEvent.click(document.querySelectorAll(".rtile__face")[0] as HTMLElement);
     expect(props.onFocus).not.toHaveBeenCalled();
     expect(screen.getByText("deleted")).toBeTruthy();
   });

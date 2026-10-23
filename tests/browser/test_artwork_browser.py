@@ -187,7 +187,7 @@ def test_give_moss_its_own_design_and_return_it_to_automatic(
     own = _signature(page)
 
     page.get_by_text("Listing Images", exact=True).click()
-    page.locator(".rtile img[alt*='colour-chart-01']").hover()
+    page.locator(".rtile img[alt*='colour-chart-01']").click()
     shown = _shown(page, _stage_once_saved(page, "colour-chart-01", before))
     assert shown == expected_scene(
         workspace_root, "colour-chart-01", None, {"black": HIKE, "moss": MOSS_SPECIAL}
