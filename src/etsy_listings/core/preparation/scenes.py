@@ -7,6 +7,7 @@ identity a plan records is the identity apply and a preview compute.
 """
 
 import hashlib
+import threading
 from collections.abc import Iterator, Mapping, Sequence
 from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass
@@ -24,6 +25,16 @@ from etsy_listings.core.render.identity import artwork_identity, prepared_scene_
 from etsy_listings.core.render.material import MaterialLayer, MaterialMaps, render_marigold_scene
 from etsy_listings.core.render.types import RGB, RGBA
 from etsy_listings.core.workspace import Workspace
+
+MAX_CONCURRENT_RENDERS = 4
+"""Compositions that may run at once, across previews and the render stage.
+
+One peaks at about 1 GB for a 2048px photo, and the server answers each
+preview request on its own thread: a page of full-size scenes arriving
+together used to compose them all at once and exhaust memory. The rest
+queue here, so four running together peak near 4 GB."""
+
+_RENDER_SLOTS = threading.BoundedSemaphore(MAX_CONCURRENT_RENDERS)
 
 
 @dataclass(frozen=True)
@@ -49,14 +60,15 @@ class PreparedScene:
     maps: Mapping[str | None, MaterialMaps]
 
     def render(self) -> Image.Image:
-        return render_marigold_scene(
-            self.base,
-            [
-                MaterialLayer(layer.artwork, self.maps[layer.placement_id], layer.placement_id)
-                for layer in self.layers
-            ],
-            appearance=self.appearance,
-        )
+        with _RENDER_SLOTS:
+            return render_marigold_scene(
+                self.base,
+                [
+                    MaterialLayer(layer.artwork, self.maps[layer.placement_id], layer.placement_id)
+                    for layer in self.layers
+                ],
+                appearance=self.appearance,
+            )
 
 
 @contextmanager
