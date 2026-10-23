@@ -38,6 +38,7 @@ from etsy_listings.core.clients.etsy.models import (
     VariationImageLink,
 )
 from etsy_listings.core.clients.etsy.transport import EtsyApiError
+from etsy_listings.core.config.media import MAX_IMAGES
 
 
 @dataclass(frozen=True)
@@ -323,6 +324,16 @@ class FakeEtsyListingClient:
         overwrite: bool = False,
         listing_image_id: int | None = None,
     ) -> ListingImage:
+        replacing = overwrite and listing_image_id is not None
+        if not replacing and len(self._images.get(listing_id, [])) >= MAX_IMAGES:
+            # Measured: a 21st upload is refused, nothing changed.
+            raise EtsyApiError(
+                400,
+                error=(
+                    f"Listings are only allowed {MAX_IMAGES} images. "
+                    "Please delete a ListingImage before trying to upload another."
+                ),
+            )
         self.uploads.append(contents)
         self._next_image_id += 1
         image = ListingImage(
