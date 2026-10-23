@@ -100,7 +100,7 @@ function AfterTile({
     if (ready) {
       src =
         scene !== null && scene.state !== "cached"
-          ? previewUrl(listing.name, parsed.template, parsed.colour)
+          ? previewUrl(listing.name, parsed.template, parsed.colour, scene.scene_hash)
           : pictureFor({ template: parsed.template, colour: parsed.colour }, listing.scene, "full");
     } else {
       pending = true;
@@ -124,9 +124,17 @@ function AfterTile({
   );
 }
 
-function previewUrl(listing: string, template: string, colour: string | null): string {
+/** This plan's own preview of the scene, named by the hash the plan computed
+ * for it -- a file read, where asking without the hash re-plans the listing. */
+function previewUrl(
+  listing: string,
+  template: string,
+  colour: string | null,
+  sceneHash: string,
+): string {
   const base = `/api/listings/${encodeURIComponent(listing)}/previews/${encodeURIComponent(template)}`;
-  return colour !== null ? `${base}/${encodeURIComponent(colour)}` : base;
+  const path = colour !== null ? `${base}/${encodeURIComponent(colour)}` : base;
+  return `${path}?hash=${encodeURIComponent(sceneHash)}`;
 }
 
 function BeforeTile({ tile }: { tile: BeforeImageTile }) {

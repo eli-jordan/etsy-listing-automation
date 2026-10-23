@@ -372,6 +372,10 @@ class RenderSceneSnapshot(BaseModel):
     colour: str | None
     state: RenderSceneState
     preview: bool
+    scene_hash: str
+    """:func:`scene_hash` as this plan computed it, without its ``sha256:``
+    prefix -- what names this plan's preview file, so the review can ask for
+    exactly that file rather than have the server plan the listing again."""
 
 
 class RenderSnapshot(BaseModel):
@@ -761,6 +765,7 @@ class RenderStage:
                     colour=work.colour,
                     state=state,
                     preview=desired.preview_exists.get(work.key, False),
+                    scene_hash=_hash_token(scene_hash(desired, work)),
                 )
             )
         return RenderSnapshot(scenes=tuple(scenes))

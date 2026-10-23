@@ -59,6 +59,7 @@ const RENDER_RUN = stagePlan({
         colour: "moss",
         state: "missing",
         preview: false,
+        scene_hash: "a".repeat(64),
       },
     ],
   },

@@ -357,12 +357,21 @@ def rename_listing(target: Existing, body: RenameListingRequest, request: Reques
 
 
 def _preview_response(
-    request: Request, target: Target, template: str, colour: str | None
+    request: Request, target: Target, template: str, colour: str | None, scene_hash: str | None
 ) -> Response:
-    """ADR-0040, ADR-0041: the preview a plan run already rendered for this scene, at its
-    *current* hash. :func:`~etsy_listings.core.engine.preview.lookup_preview` owns
-    the hash and the path; this is the HTTP adapter over it.
+    """ADR-0040, ADR-0041: the preview a plan run already rendered for this scene.
+
+    With ``hash``, the scene hash the plan under review reported for it
+    (``RenderSceneSnapshot.scene_hash``), that plan's file is served as it
+    stands -- the review shows that plan, and apply runs exactly it. Without,
+    :func:`~etsy_listings.core.engine.preview.lookup_preview` recomputes the
+    *current* hash, which plans the whole listing again.
     """
+    if scene_hash is not None:
+        path = target.workspace.preview_file(target.name, template, colour, scene_hash)
+        if not path.is_file():
+            raise HTTPException(status_code=404, detail="no preview rendered yet for this scene")
+        return _png(path)
     factory: ContextFactory = request.app.state.context_factory
     found = lookup_preview(factory(target.workspace, None), target.name, template, colour)
     if found.miss == "blocked":
@@ -372,26 +381,30 @@ def _preview_response(
         raise HTTPException(status_code=404, detail=f"no scene for {where}")
     if found.path is None or not found.path.is_file():
         raise HTTPException(status_code=404, detail="no preview rendered yet for this scene")
+    return _png(found.path)
+
+
+def _png(path: Path) -> Response:
     return Response(
-        content=found.path.read_bytes(),
-        media_type="image/png",
-        headers={"Cache-Control": "no-cache"},
+        content=path.read_bytes(), media_type="image/png", headers={"Cache-Control": "no-cache"}
     )
 
 
 @router.get("/{name}/previews/{template}")
-def listing_preview(target: Existing, template: str, request: Request) -> Response:
+def listing_preview(
+    target: Existing, template: str, request: Request, hash: str | None = None
+) -> Response:
     """A ``multiple``/``single``-kind scene: no per-colour photo, so no
     colour segment (ADR-0014's rule, mirrored from ``render_file``)."""
-    return _preview_response(request, target, template, None)
+    return _preview_response(request, target, template, None, hash)
 
 
 @router.get("/{name}/previews/{template}/{colour}")
 def listing_preview_coloured(
-    target: Existing, template: str, colour: str, request: Request
+    target: Existing, template: str, colour: str, request: Request, hash: str | None = None
 ) -> Response:
     """A ``colour-matrix``-kind scene: one preview per colour."""
-    return _preview_response(request, target, template, colour)
+    return _preview_response(request, target, template, colour, hash)
 
 
 @router.get("/{name}/scene-preview")
