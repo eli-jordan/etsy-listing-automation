@@ -587,16 +587,19 @@ describe("ImagesTab's own files (./) and videos", () => {
     expect(foot).not.toHaveTextContent("other");
   });
 
-  it("opens a video from the reel in the lightbox as a playable clip", async () => {
+  it("puts a clicked video from the reel on the stage as a playable clip", async () => {
     vi.spyOn(listingsApi, "listListingMediaFiles").mockResolvedValue([CLOSE_UP]);
-    render(
+    const { container } = render(
       <ImagesTab detail={detail({ media: ["a.png", "./close-up.mp4"] })} onUpdate={vi.fn()} />,
     );
+    // The tile previews only once the file list says the clip is on disk.
+    await waitFor(() => expect(listingsApi.listListingMediaFiles).toHaveBeenCalled());
 
-    fireEvent.click(document.querySelectorAll(".rtile__face")[1] as HTMLElement);
-
-    const dialog = await screen.findByRole("dialog");
-    expect(dialog.querySelector("video")).toHaveAttribute("controls");
+    await waitFor(() => {
+      fireEvent.click(document.querySelectorAll(".rtile__face")[1] as HTMLElement);
+      expect(container.querySelector(".preview-stage video")).toHaveAttribute("controls");
+    });
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
   it("says so when the listing's files cannot be loaded", async () => {
@@ -662,7 +665,7 @@ describe("ImagesTab's full-size carousel", () => {
 
   it("previews the real render at full size, not a 160px thumbnail", async () => {
     const { container } = renderReel();
-    fireEvent.mouseEnter(await tile("flat-lay-01 · black"));
+    fireEvent.click(await tile("flat-lay-01 · black"));
 
     // `scene-preview` is the real pipeline at the photo's own resolution,
     // each layer resolved from the saved listing (A35); `thumbnail` is a
@@ -690,7 +693,7 @@ describe("ImagesTab's full-size carousel", () => {
         onUpdate={vi.fn()}
       />,
     );
-    fireEvent.mouseEnter(await tile("colour-chart-01"));
+    fireEvent.click(await tile("colour-chart-01"));
 
     expect(previewImage(container)).toHaveAttribute(
       "src",
@@ -711,7 +714,7 @@ describe("ImagesTab's full-size carousel", () => {
         owner={{ kind: "listing-template", name: "heavyweight-tee" }}
       />,
     );
-    fireEvent.mouseEnter(await tile("flat-lay-01 · black"));
+    fireEvent.click(await tile("flat-lay-01 · black"));
 
     expect(previewImage(container)).toHaveAttribute(
       "src",
@@ -725,31 +728,68 @@ describe("ImagesTab's full-size carousel", () => {
     /* Aligns the photo with the locator on the left; the colour is already
        in the image's alt and the locator chip that pointed here. */
     const { container } = renderReel();
-    fireEvent.mouseEnter(await tile("flat-lay-01 · black"));
+    fireEvent.click(await tile("flat-lay-01 · black"));
     expect(previewImage(container)).toBeTruthy();
     expect(screen.queryByText(/^Preview$/)).not.toBeInTheDocument();
     expect(container.querySelector(".preview-stage__tag")).toBeNull();
   });
 
-  it("opens the whole reel when a tile is clicked, at that tile", async () => {
-    renderReel();
+  /** Point the stage at a tile, then click the stage: the only way into the
+   * carousel. */
+  async function openAt(alt: string, container: HTMLElement) {
+    fireEvent.click(await tile(alt));
+    fireEvent.click(container.querySelector(".preview-stage__open") as HTMLElement);
+  }
+
+  it("previews a tile on click without opening the carousel", async () => {
+    const { container } = renderReel();
     fireEvent.click(await tile("flat-lay-01 · white"));
+
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(previewImage(container).getAttribute("src")).toContain("colour=white");
+  });
+
+  it("leaves the preview alone when a tile is only hovered", async () => {
+    const { container } = renderReel();
+    fireEvent.click(await tile("flat-lay-01 · black"));
+    fireEvent.mouseEnter(await tile("flat-lay-01 · white"));
+
+    expect(previewImage(container).getAttribute("src")).toContain("colour=black");
+  });
+
+  it("opens the whole reel when the stage is clicked, at what it shows", async () => {
+    const { container } = renderReel();
+    await openAt("flat-lay-01 · white", container);
 
     const dialog = screen.getByRole("dialog");
     expect(dialog).toHaveAccessibleName("flat-lay-01 · white, preview 2 of 3");
   });
 
   it("steps through the reel with the arrow keys", async () => {
-    renderReel();
-    fireEvent.click(await tile("flat-lay-01 · black"));
+    const { container } = renderReel();
+    await openAt("flat-lay-01 · black", container);
 
     fireEvent.keyDown(window, { key: "ArrowRight" });
     expect(screen.getByRole("dialog")).toHaveAccessibleName("flat-lay-01 · white, preview 2 of 3");
   });
 
   it("shows a shared asset at its own size in the carousel too", async () => {
-    renderReel();
-    fireEvent.click(await tile("size-guide"));
+    vi.spyOn(listingsApi, "listCommonMedia").mockResolvedValue([
+      {
+        name: "size-guide.png",
+        file: "common-media/size-guide.png",
+        ref: "common-media/size-guide.png",
+        kind: "image",
+      },
+    ]);
+    const { container } = renderReel();
+    // The tile previews only once the shared list says the file is there.
+    const sizeGuide = await tile("size-guide");
+    await waitFor(() => {
+      fireEvent.click(sizeGuide);
+      expect(container.querySelector(".preview-stage__open")).not.toBeNull();
+    });
+    fireEvent.click(container.querySelector(".preview-stage__open") as HTMLElement);
 
     expect(screen.getByRole("dialog")).toHaveAccessibleName("size-guide, preview 3 of 3");
     const stage = screen.getByRole("dialog").querySelector(".lightbox__image");

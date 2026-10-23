@@ -35,7 +35,6 @@ interface Props {
   /** Every file the locator lists, both groups -- what a file ref's tile
    * points the preview at. */
   files: readonly MediaFileSummary[];
-  onOpen: (index: number) => void;
   onRemove: (index: number) => void;
   onReorder: (from: number, to: number) => void;
   onFocus: (focus: Focus) => void;
@@ -48,7 +47,6 @@ export function MediaReel({
   selectedIndex,
   listing,
   files,
-  onOpen,
   onRemove,
   onReorder,
   onFocus,
@@ -119,7 +117,6 @@ export function MediaReel({
                 setDragIndex(null);
                 setDragOverIndex(null);
               }}
-              onOpen={() => onOpen(index)}
               onFocus={() => focusFor(entry)}
               onRemove={() => onRemove(index)}
             />
@@ -143,7 +140,6 @@ interface TileProps {
   onDragOver: () => void;
   onDrop: () => void;
   onDragEnd: () => void;
-  onOpen: () => void;
   onFocus: () => void;
   onRemove: () => void;
 }
@@ -160,7 +156,6 @@ function ReelTile({
   onDragOver,
   onDrop,
   onDragEnd,
-  onOpen,
   onFocus,
   onRemove,
 }: TileProps) {
@@ -181,11 +176,11 @@ function ReelTile({
     >
       <div
         className="rtile__face"
-        onClick={onOpen}
-        onMouseEnter={() => {
-          onFocus();
-          if (isVideo) play();
-        }}
+        // A click, not a hover, points the preview here: the pointer crosses
+        // the reel on its way to anything below it, and every tile it passed
+        // used to swap the stage's picture and start another full render.
+        onClick={onFocus}
+        onMouseEnter={isVideo ? play : undefined}
         onMouseLeave={isVideo ? rest : undefined}
       >
         {isVideo ? (
@@ -210,8 +205,8 @@ function ReelTile({
           className="rtile__x"
           role="button"
           aria-label={`Remove ${label}`}
-          // The × sits inside the face, which opens the carousel -- so
-          // removing a tile must not also open the one that slid into its
+          // The × sits inside the face, which points the preview at it -- so
+          // removing a tile must not also preview the one that slid into its
           // place.
           onClick={(event) => {
             event.stopPropagation();

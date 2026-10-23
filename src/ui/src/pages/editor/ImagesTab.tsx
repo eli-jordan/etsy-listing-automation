@@ -62,7 +62,6 @@ export function ImagesTab({ detail, onUpdate, artwork, owner }: Props) {
   const [local, setLocal] = useState<MediaFileSummary[]>([]);
   const [status, setStatus] = useState("");
   const [focus, setFocus] = useState<Focus | null>(null);
-  const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const [actualSize, setActualSize] = useState(false);
 
@@ -113,6 +112,9 @@ export function ImagesTab({ detail, onUpdate, artwork, owner }: Props) {
   }));
 
   const view = focus === null ? null : viewFocus(focus, detail, templates, scene, listing);
+  // The reel highlights whatever the stage is showing, wherever the pointing
+  // came from.
+  const selectedIndex = view !== null && view.reelIndex >= 0 ? view.reelIndex : null;
 
   function toggleFocused() {
     if (focus === null) return;
@@ -180,35 +182,39 @@ export function ImagesTab({ detail, onUpdate, artwork, owner }: Props) {
             )}
           </div>
 
-          {view !== null && (
-            <div className="preview-foot">
-              <span className="preview-meta">
-                <span className="preview-meta__title">{view.title}</span>
-                <span className="preview-meta__path">{view.path}</span>
-                {view.notes.map((note) => (
-                  <span
-                    key={note.message}
-                    className={`preview-meta__note preview-meta__note--${note.severity}`}
+          {/* Always there, so the reel below does not jump when the stage
+              first gets something to show. */}
+          <div className="preview-foot">
+            {view !== null && (
+              <>
+                <span className="preview-meta">
+                  <span className="preview-meta__title">{view.title}</span>
+                  <span className="preview-meta__path">{view.path}</span>
+                  {view.notes.map((note) => (
+                    <span
+                      key={note.message}
+                      className={`preview-meta__note preview-meta__note--${note.severity}`}
+                    >
+                      {note.message}
+                    </span>
+                  ))}
+                </span>
+                <span className="preview-actions">
+                  <button
+                    type="button"
+                    className={
+                      view.inListing
+                        ? "btn-like btn-like--ghost btn-sm"
+                        : "btn-like btn-like--primary btn-sm"
+                    }
+                    onClick={toggleFocused}
                   >
-                    {note.message}
-                  </span>
-                ))}
-              </span>
-              <span className="preview-actions">
-                <button
-                  type="button"
-                  className={
-                    view.inListing
-                      ? "btn-like btn-like--ghost btn-sm"
-                      : "btn-like btn-like--primary btn-sm"
-                  }
-                  onClick={toggleFocused}
-                >
-                  {view.inListing ? "Remove from listing" : "+ Add to listing"}
-                </button>
-              </span>
-            </div>
-          )}
+                    {view.inListing ? "Remove from listing" : "+ Add to listing"}
+                  </button>
+                </span>
+              </>
+            )}
+          </div>
         </div>
 
         <MediaReel
@@ -218,10 +224,6 @@ export function ImagesTab({ detail, onUpdate, artwork, owner }: Props) {
           selectedIndex={selectedIndex}
           listing={listing}
           files={directory === null ? shared : [...local, ...shared]}
-          onOpen={(index) => {
-            setSelectedIndex(index);
-            setLightboxIndex(index);
-          }}
           onRemove={(index) => apply(edits.removeAt(detail, index))}
           onReorder={(from, to) => apply(edits.reorder(detail, from, to))}
           onFocus={setFocus}

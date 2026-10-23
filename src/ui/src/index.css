@@ -4618,6 +4618,19 @@ table.listings tbody tr:last-child td {
   max-height: min(1024px, calc(100vh - 260px));
 }
 
+/* Listing Images: the stage is always the size of the largest picture it can
+   show, not the size of the one it is showing. A render arrives a second or
+   two after it is asked for, and a stage that grew and shrank with each one
+   shoved the reel below it up and down while it loaded. */
+.images-tab .preview-stage--large {
+  height: calc(min(1024px, 100vh - 260px) + 2 * var(--space-2));
+}
+
+/* The title and path lines, held open before anything is pointed at. */
+.images-tab .preview-foot {
+  min-height: 34px;
+}
+
 /* Variants: the "what this colour prints" card sits under the stage, and the
    two are read together -- so the photo leaves room for it on a laptop. */
 .variants-preview .preview-stage--large img {
