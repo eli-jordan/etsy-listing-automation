@@ -319,6 +319,102 @@ describe("useAutosave", () => {
   });
 });
 
+describe("useAutosave when the server will not write an edit", () => {
+  /* A PATCH whose merged document contradicts itself is answered 200 with
+     `field_errors` and the listing unchanged. Treating that as saved dropped
+     the edit from `pending` while it stayed on screen; the next edit then
+     saved on its own, and its response put the unwritten values back to
+     what the file still held -- colours and the swatch template snapping
+     back with no sign anything had failed. */
+  const ROOT = "media position 1 is the thumbnail and must be an image";
+
+  function refusing(): ListingDetail {
+    return detail({ field_errors: { __root__: ROOT } });
+  }
+
+  it("waits for another edit to retry even when onNamed changes on every render", async () => {
+    const patch = vi
+      .spyOn(listingsApi, "patchListing")
+      .mockResolvedValueOnce(refusing())
+      .mockReturnValue(new Promise(() => undefined));
+    const { result } = renderHook(() =>
+      useAutosave("take-a-hike", detail(), { onNamed: () => undefined }),
+    );
+
+    act(() => result.current.update({ colors: ["white"] }));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(AUTOSAVE_DEBOUNCE_MS);
+    });
+
+    expect(patch).toHaveBeenCalledTimes(1);
+    expect(result.current.save).toEqual({ kind: "unsaved", reason: ROOT });
+  });
+
+  it("says it is not saved, and why", async () => {
+    vi.spyOn(listingsApi, "patchListing").mockResolvedValue(refusing());
+    const { result } = renderHook(() => useAutosave("take-a-hike", detail()));
+
+    act(() => result.current.update({ colors: ["white"] }));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(AUTOSAVE_DEBOUNCE_MS);
+    });
+
+    expect(result.current.save).toEqual({ kind: "unsaved", reason: ROOT });
+    expect(result.current.detail.colors).toEqual(["white"]);
+  });
+
+  it("sends the refused edit again with the next one, so it is never lost", async () => {
+    const patch = vi
+      .spyOn(listingsApi, "patchListing")
+      .mockResolvedValueOnce(refusing())
+      .mockResolvedValueOnce(detail({ colors: ["white"], brief: "x" }));
+    const { result } = renderHook(() => useAutosave("take-a-hike", detail()));
+
+    act(() => result.current.update({ colors: ["white"] }));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(AUTOSAVE_DEBOUNCE_MS);
+    });
+    act(() => result.current.update({ brief: "x" }));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(AUTOSAVE_DEBOUNCE_MS);
+    });
+
+    expect(patch).toHaveBeenLastCalledWith("take-a-hike", { colors: ["white"], brief: "x" });
+    expect(result.current.detail.colors).toEqual(["white"]);
+    expect(result.current.save.kind).toBe("saved");
+  });
+
+  it("keeps newer values when retrying a refused save that was still in flight", async () => {
+    let finishFirst!: (value: ListingDetail) => void;
+    const first = new Promise<ListingDetail>((resolve) => {
+      finishFirst = resolve;
+    });
+    const patch = vi
+      .spyOn(listingsApi, "patchListing")
+      .mockReturnValueOnce(first)
+      .mockResolvedValueOnce(detail({ colors: ["black"], brief: "x" }));
+    const { result } = renderHook(() => useAutosave("take-a-hike", detail()));
+
+    act(() => result.current.update({ colors: ["white"], brief: "x" }));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(AUTOSAVE_DEBOUNCE_MS);
+    });
+    act(() => result.current.update({ colors: ["black"] }));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(AUTOSAVE_DEBOUNCE_MS);
+    });
+    expect(patch).toHaveBeenCalledTimes(1);
+
+    await act(async () => finishFirst(refusing()));
+
+    expect(patch).toHaveBeenCalledTimes(2);
+    expect(patch).toHaveBeenLastCalledWith("take-a-hike", { colors: ["black"], brief: "x" });
+    expect(result.current.detail.colors).toEqual(["black"]);
+    expect(result.current.detail.brief).toBe("x");
+    expect(result.current.save.kind).toBe("saved");
+  });
+});
+
 describe("useAutosave adopting what the server wrote", () => {
   it("shows the value without saving it again", async () => {
     const patch = vi.spyOn(listingsApi, "patchListing").mockResolvedValue(detail());

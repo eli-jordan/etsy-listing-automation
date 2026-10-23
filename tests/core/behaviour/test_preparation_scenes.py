@@ -76,12 +76,16 @@ def test_concurrent_renders_compose_at_most_the_cap_at_once(workspace_root, monk
     active = 0
     peak = 0
     lock = threading.Lock()
+    rendezvous = threading.Barrier(scenes.MAX_CONCURRENT_RENDERS)
 
     def slow_render(base, layers, *, appearance):
         nonlocal active, peak
         with lock:
             active += 1
             peak = max(peak, active)
+        # Hold the first arrivals until a full batch has entered. Decoding
+        # photos under load can otherwise stagger requests beyond the sleep.
+        rendezvous.wait(timeout=10)
         time.sleep(0.05)
         with lock:
             active -= 1
@@ -99,8 +103,9 @@ def test_concurrent_renders_compose_at_most_the_cap_at_once(workspace_root, monk
         ) as scene:
             scene.render()
 
-    with ThreadPoolExecutor(max_workers=12) as pool:
-        for future in [pool.submit(render) for _ in range(12)]:
+    requests = scenes.MAX_CONCURRENT_RENDERS * 3
+    with ThreadPoolExecutor(max_workers=requests) as pool:
+        for future in [pool.submit(render) for _ in range(requests)]:
             future.result()
 
     assert peak == scenes.MAX_CONCURRENT_RENDERS

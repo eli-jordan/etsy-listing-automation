@@ -23,7 +23,7 @@ export type SaveState =
   | { kind: "unnamed" }
   | { kind: "saving" }
   | { kind: "saved"; savedAt: number }
-  | { kind: "unsaved" }
+  | { kind: "unsaved"; reason?: string }
   | { kind: "name-taken"; name: string }
   | { kind: "save-failed" };
 
@@ -62,7 +62,15 @@ export const LISTING_TRANSPORT: AutosaveTransport = {
     if (fresh.name === "") return { saved: false, issues: null, field_errors: fresh.field_errors };
     return { saved: true, detail: fresh };
   },
-  save: async (name, patch) => ({ saved: true, detail: await patchListing(name, patch) }),
+  // A PATCH whose merged document contradicts itself answers 200 with
+  // `field_errors` and the listing unchanged: not written, so not saved.
+  save: async (name, patch) => {
+    const fresh = await patchListing(name, patch);
+    if (Object.keys(fresh.field_errors ?? {}).length > 0) {
+      return { saved: false, issues: null, field_errors: fresh.field_errors };
+    }
+    return { saved: true, detail: fresh };
+  },
   rename: (from, to) => renameListing(from, to),
 };
 
@@ -252,7 +260,10 @@ export function useAutosave(
       field_errors: outcome.field_errors,
       ...(outcome.issues === null ? {} : { issues: outcome.issues }),
     }));
-    setSave({ kind: "unsaved" });
+    // A contradiction no single field owns has no field to highlight, so
+    // the page head is the only place left to say what it is.
+    const reason = outcome.field_errors.__root__;
+    setSave(reason === undefined ? { kind: "unsaved" } : { kind: "unsaved", reason });
   }, []);
 
   const create = useCallback(
@@ -332,8 +343,11 @@ export function useAutosave(
             // would hide it until the next iteration starts.
             if (pending.current === null) setSave(saved());
           } else {
-            // Not written: the values stay on screen, and the next edit
-            // sends the whole document again -- which is the retry.
+            // Not written: the values stay on screen and the edit stays
+            // pending, so the next edit sends it again -- which is the
+            // retry. Dropping it let that next edit save alone, and its
+            // response put the unwritten values back to the file's.
+            pending.current = mergePatch(patch, pending.current ?? {});
             applyRefusal(outcome);
           }
         } catch {
@@ -444,9 +458,15 @@ export function useAutosave(
     latest.current = detail;
   }, [detail]);
 
+  const flushOnUnmount = useRef(flush);
+  useEffect(() => {
+    flushOnUnmount.current = flush;
+  }, [flush]);
+
   // Flush on unmount so a listing switch (or navigating away) never silently
-  // drops the last few hundred milliseconds of typing.
-  useEffect(() => () => void flush(), [flush]);
+  // drops the last few hundred milliseconds of typing. Changing callbacks
+  // while still mounted must not flush a refused edit in a retry loop.
+  useEffect(() => () => void flushOnUnmount.current(), []);
 
   return { detail, update, adopt, flush, commitName, save };
 }
