@@ -334,6 +334,21 @@ def test_a_listing_full_of_old_images_makes_room_before_uploading(
     assert _live_image_ids(etsy) == [ours[f"{TEMPLATE}:{c}"] for c in COLOURS]
 
 
+def test_images_added_after_the_plan_was_read_still_get_room(workspace_root: Path, etsy) -> None:
+    """Printify's publish runs earlier in the same apply and puts its own
+    mockups on the listing after this stage's plan read it empty."""
+    _write_renders(workspace_root)
+    ctx = _ctx(workspace_root, etsy)
+    lock = _lock_with_listing_id()
+    planned = _plan(ctx, lock)
+    _fill_with_foreign_images(etsy, MAX_IMAGES)
+
+    lock = execute(ctx, planned, lock)
+
+    ours = lock.remote["etsy_image_ids"]
+    assert _live_image_ids(etsy) == [ours[f"{TEMPLATE}:{c}"] for c in COLOURS]
+
+
 def test_a_full_listing_keeps_our_unchanged_images_while_making_room(
     workspace_root: Path, etsy
 ) -> None:

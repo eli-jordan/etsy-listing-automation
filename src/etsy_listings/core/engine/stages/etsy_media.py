@@ -362,7 +362,12 @@ class EtsyMediaStage:
         shop_id = ctx.workspace.defaults.etsy.require_shop_id()
 
         known_ids: dict[str, int] = dict(lock.remote.get(IMAGE_IDS_KEY) or {})
-        live_ids = live.live_image_ids if live is not None else frozenset()
+        # Read again rather than trusting the plan's `live`: a stage earlier in
+        # this same apply can have changed the listing since. Printify's
+        # publish puts its own mockups on a listing the plan read as empty.
+        current = client.get_listing(listing_id, include_images=True)
+        attached = [image.listing_image_id for image in current.images] if current else []
+        live_ids = frozenset(attached)
         # The document the engine decoded during planning, not a second read
         # of the same subtree: an upload is skipped only when the bytes match
         # what was *last uploaded*, and that is the only thing that knows.
@@ -383,10 +388,9 @@ class EtsyMediaStage:
             ):
                 image_ids[entry.ref] = existing_id
 
-        # What the listing carries as uploads proceed. Etsy refuses an upload
-        # past its 20-image cap, and the `image_ids` PATCH below that detaches
-        # what we are replacing only comes after them.
-        attached = [image.image_id for image in live.images] if live is not None else []
+        # `attached` tracks what the listing carries as uploads proceed. Etsy
+        # refuses an upload past its 20-image cap, and the `image_ids` PATCH
+        # below that detaches what we are replacing only comes after them.
         for rank, entry in enumerate(desired.manifest, start=1):
             if entry.ref in image_ids:
                 continue
