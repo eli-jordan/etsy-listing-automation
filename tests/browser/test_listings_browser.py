@@ -203,7 +203,7 @@ def test_the_shade_buttons_need_a_profile_that_classifies_its_colours(  # noqa: 
     page.get_by_role("heading", name="take-a-hike").wait_for(state="visible")
     page.get_by_role("switch", name="moss").wait_for(state="visible")
 
-    # Exact: the design strip's "Use a different design for dark shirts" is
+    # Exact: the design strip's "Use different designs on light & dark shirts" is
     # a button whose name contains the word too.
     assert page.get_by_role("button", name="Dark", exact=True).count() == 0
     assert page.get_by_role("button", name="Light", exact=True).count() == 0

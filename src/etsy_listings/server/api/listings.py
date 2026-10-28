@@ -33,13 +33,14 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile
 from fastapi.responses import Response
 
 from etsy_listings.core import connections
 from etsy_listings.core.application.ai.registry import AiRunRegistry
 from etsy_listings.core.application.dependencies import ContextFactory, EtsyStates
 from etsy_listings.core.application.listing_creation import create_listing as create
+from etsy_listings.core.application.listing_designs import save_listing_design
 from etsy_listings.core.application.listing_edits import edit_listing
 from etsy_listings.core.application.listing_identity import delete_listing as delete
 from etsy_listings.core.application.listing_identity import rename_listing as rename
@@ -62,6 +63,7 @@ from etsy_listings.core.application.pricing_plans import (
     pricing_plan_ref,
 )
 from etsy_listings.core.application.refusals import (
+    ListingDesignUploadRefused,
     ListingMissing,
     ListingNameTaken,
     PublishedListingDeletion,
@@ -610,6 +612,20 @@ def list_listing_designs(request: Request) -> list[ListingDesignSummary]:
         ListingDesignSummary(name=path.stem, file=f"designs/{path.name}")
         for path in workspace.design_files()
     ]
+
+
+@support_router.post("/api/listing-designs", response_model=ListingDesignSummary)
+async def upload_listing_design(request: Request, file: UploadFile) -> ListingDesignSummary:
+    """A PNG dropped on the editor's design strip, added to ``designs/``.
+    The answer names where it landed, which is not always its filename: a
+    name already taken by other artwork gets a ``-2`` suffix rather than
+    overwriting what another listing may print."""
+    payload = await file.read()
+    try:
+        name = save_listing_design(_workspace(request), file.filename or "", payload)
+    except ListingDesignUploadRefused as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return ListingDesignSummary(name=name, file=f"designs/{name}.png")
 
 
 @support_router.get("/api/listing-designs/{name}/thumbnail")

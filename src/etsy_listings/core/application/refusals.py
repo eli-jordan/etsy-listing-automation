@@ -121,6 +121,11 @@ class DesignUploadRefused(UserFacingError, ValueError):
     written."""
 
 
+class ListingDesignUploadRefused(UserFacingError, ValueError):
+    """An upload ``designs/`` will not take: no filename, a name that is not
+    a plain filename, or bytes that are not a PNG. Nothing is written."""
+
+
 class CalibrationDesignMissing(UserFacingError, LookupError):
     """No uploaded test design by that id. The id came from a list the
     library handed out, so a missing one means the list moved on."""

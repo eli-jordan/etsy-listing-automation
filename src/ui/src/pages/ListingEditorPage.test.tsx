@@ -558,7 +558,9 @@ describe("ListingEditorPage", () => {
     renderAt("/listings/take-a-hike");
     await screen.findByText("For all shirts");
 
-    await clock.user.click(screen.getByRole("button", { name: "Unlink" }));
+    await clock.user.click(
+      screen.getByRole("button", { name: "Use different designs on light & dark shirts" }),
+    );
     await clock.user.click(
       await screen.findByRole("button", { name: /Change design for dark shirts/ }),
     );
@@ -964,19 +966,23 @@ describe("ListingEditorPage's AI chain follows the representative artwork (PRD 6
     expect(runs.start).toHaveBeenCalledTimes(1);
   });
 
-  it("does not arm on Unlink, which keeps the file in the light slot", async () => {
+  it("does not arm on splitting, which keeps the file in the light slot", async () => {
     const { user, settled } = open({ default: LIGHT });
 
-    await user.click(await screen.findByRole("button", { name: "Unlink" }));
+    await user.click(
+      await screen.findByRole("button", { name: "Use different designs on light & dark shirts" }),
+    );
 
     await settled();
     expect(runs.start).not.toHaveBeenCalled();
   });
 
-  it("does not arm on Unlink of an empty design, which leaves both slots null", async () => {
+  it("does not arm on splitting an empty design, which leaves both slots null", async () => {
     const { user, patch, settled } = open({});
 
-    await user.click(await screen.findByRole("button", { name: "Unlink" }));
+    await user.click(
+      await screen.findByRole("button", { name: "Use different designs on light & dark shirts" }),
+    );
 
     await settled();
     expect(patch).toHaveBeenCalledWith("take-a-hike", {
@@ -985,10 +991,10 @@ describe("ListingEditorPage's AI chain follows the representative artwork (PRD 6
     expect(runs.start).not.toHaveBeenCalled();
   });
 
-  it("arms when Link keeps the dark-shirt file", async () => {
+  it("arms when going back to one design keeps the dark-shirt file", async () => {
     const { user, settled } = open({ "on-light": LIGHT, "on-dark": DARK });
 
-    await user.click(await screen.findByRole("button", { name: "Link" }));
+    await user.click(await screen.findByRole("button", { name: "Use one design for all shirts" }));
     await user.click(screen.getByRole("radio", { name: /dark-ink/ }));
     await user.click(screen.getByRole("button", { name: "Use one design" }));
 
@@ -996,10 +1002,10 @@ describe("ListingEditorPage's AI chain follows the representative artwork (PRD 6
     expect(runs.start).toHaveBeenCalledTimes(1);
   });
 
-  it("does not arm when Link keeps the light-shirt file, already the representative", async () => {
+  it("does not arm when going back to one design keeps the light-shirt file, already the representative", async () => {
     const { user, patch, settled } = open({ "on-light": LIGHT, "on-dark": DARK });
 
-    await user.click(await screen.findByRole("button", { name: "Link" }));
+    await user.click(await screen.findByRole("button", { name: "Use one design for all shirts" }));
     await user.click(screen.getByRole("radio", { name: /light-ink/ }));
     await user.click(screen.getByRole("button", { name: "Use one design" }));
 

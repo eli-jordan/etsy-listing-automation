@@ -81,18 +81,18 @@ function card(title: string): HTMLElement {
   return el as HTMLElement;
 }
 
-describe("ArtworkStrip reading a linked pair (interactions §1)", () => {
-  it("shows one design for all shirts, mirrored on the dark card", async () => {
+const SPLIT = "Use different designs on light & dark shirts";
+const JOIN = "Use one design for all shirts";
+
+describe("ArtworkStrip reading one design", () => {
+  it("shows one selector for all shirts, and no separate dark-shirt selector", async () => {
     renderStrip({ default: HIKE });
     await screen.findByText("Prints on every colour you sell");
 
-    const all = card("For all shirts");
-    expect(all).toHaveTextContent("take-a-hike");
-    const dark = card("For dark shirts");
-    expect(dark).toHaveClass("design-row--mirrored");
-    expect(dark).toHaveTextContent("take-a-hike · linked");
-    expect(dark).toHaveTextContent("Same as all shirts");
-    expect(screen.getByRole("button", { name: "Unlink" })).toHaveAttribute("aria-pressed", "true");
+    expect(card("For all shirts")).toHaveTextContent("take-a-hike");
+    expect(screen.queryByText("For dark shirts")).not.toBeInTheDocument();
+    expect(screen.queryByText("For light shirts")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: SPLIT })).toBeInTheDocument();
   });
 
   it("says when some colours print their own design", async () => {
@@ -123,7 +123,7 @@ describe("ArtworkStrip reading a linked pair (interactions §1)", () => {
 
   it("notes, when linking two files, which colours keep their own design", async () => {
     renderStrip({ "on-light": DARK_INK, "on-dark": LIGHT_INK, moss: "designs/moss.png" });
-    fireEvent.click(await screen.findByRole("button", { name: "Link" }));
+    fireEvent.click(await screen.findByRole("button", { name: JOIN }));
     expect(
       screen.getByRole("dialog", { name: "Which design should every shirt print?" }),
     ).toHaveTextContent("Moss keeps its own design.");
@@ -139,14 +139,14 @@ describe("ArtworkStrip reading a linked pair (interactions §1)", () => {
   });
 });
 
-describe("ArtworkStrip reading an unlinked pair", () => {
+describe("ArtworkStrip reading light and dark designs", () => {
   it("names each slot's file and the colours it prints on", async () => {
     renderStrip({ "on-light": DARK_INK, "on-dark": LIGHT_INK });
     expect(await screen.findByText("Prints on Ivory and Natural")).toBeInTheDocument();
     expect(card("For light shirts")).toHaveTextContent("take-a-hike-dark-ink");
     expect(card("For dark shirts")).toHaveTextContent("take-a-hike-light-ink");
     expect(card("For dark shirts")).toHaveTextContent("Prints on Black, Moss and Navy");
-    expect(screen.getByRole("button", { name: "Link" })).toHaveAttribute("aria-pressed", "false");
+    expect(screen.getByRole("button", { name: JOIN })).toBeInTheDocument();
   });
 
   it("marks an empty slot a colour needs as missing", async () => {
@@ -171,9 +171,9 @@ describe("ArtworkStrip reading an unlinked pair", () => {
 });
 
 describe("ArtworkStrip's §3 transitions", () => {
-  it("Unlink puts the current file in both slots", async () => {
+  it("splitting puts the current file in both slots", async () => {
     const { onChange } = renderStrip({ default: HIKE, moss: "designs/moss.png" });
-    fireEvent.click(await screen.findByRole("button", { name: "Unlink" }));
+    fireEvent.click(await screen.findByRole("button", { name: SPLIT }));
     expect(onChange).toHaveBeenCalledWith({
       "on-light": HIKE,
       "on-dark": HIKE,
@@ -181,9 +181,9 @@ describe("ArtworkStrip's §3 transitions", () => {
     });
   });
 
-  it("Unlink on an empty draft records the mode with two nulls", async () => {
+  it("splitting an empty draft records the mode with two nulls", async () => {
     const { onChange } = renderStrip({});
-    fireEvent.click(await screen.findByRole("button", { name: "Unlink" }));
+    fireEvent.click(await screen.findByRole("button", { name: SPLIT }));
     expect(onChange).toHaveBeenCalledWith({ "on-light": null, "on-dark": null });
   });
 
@@ -207,35 +207,32 @@ describe("ArtworkStrip's §3 transitions", () => {
     expect(screen.queryByText("Recent designs for all shirts")).not.toBeInTheDocument();
   });
 
-  it("Use a different one splits the pair, light keeping the old file", async () => {
-    const { onChange } = renderStrip({ default: HIKE });
-    fireEvent.click(
-      await screen.findByRole("button", { name: /Use a different design for dark shirts/ }),
-    );
-    expect(screen.getByText("Recent designs for dark shirts")).toBeInTheDocument();
+  it("a dark-shirt pick asked for elsewhere splits, light keeping the old file", async () => {
+    const { onChange } = renderStrip({ default: HIKE }, ALL, { kind: "slot", tone: "dark" });
+    expect(await screen.findByText("Recent designs for dark shirts")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /take-a-hike-light-ink/ }));
 
     expect(onChange).toHaveBeenCalledWith({ "on-light": HIKE, "on-dark": LIGHT_INK });
   });
 
-  it("picks for one slot of an unlinked pair", async () => {
+  it("picks for one slot of a light and dark pair", async () => {
     const { onChange } = renderStrip({ "on-light": null, "on-dark": LIGHT_INK });
     fireEvent.click(await screen.findByRole("button", { name: /Choose design for light shirts/ }));
     fireEvent.click(screen.getByRole("button", { name: /take-a-hike-dark-ink/ }));
     expect(onChange).toHaveBeenCalledWith({ "on-light": DARK_INK, "on-dark": LIGHT_INK });
   });
 
-  it("Link keeps the one distinct file without asking", async () => {
+  it("going back to one design keeps the one distinct file without asking", async () => {
     const { onChange } = renderStrip({ "on-light": null, "on-dark": LIGHT_INK });
-    fireEvent.click(await screen.findByRole("button", { name: "Link" }));
+    fireEvent.click(await screen.findByRole("button", { name: JOIN }));
     expect(onChange).toHaveBeenCalledWith({ default: LIGHT_INK });
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
-  it("Link with two files asks which to keep, and Cancel changes nothing", async () => {
+  it("going back to one design with two files asks which to keep, and Cancel changes nothing", async () => {
     const { onChange } = renderStrip({ "on-light": DARK_INK, "on-dark": LIGHT_INK });
-    fireEvent.click(await screen.findByRole("button", { name: "Link" }));
+    fireEvent.click(await screen.findByRole("button", { name: JOIN }));
 
     expect(
       screen.getByRole("dialog", { name: "Which design should every shirt print?" }),
@@ -246,9 +243,9 @@ describe("ArtworkStrip's §3 transitions", () => {
     expect(onChange).not.toHaveBeenCalled();
   });
 
-  it("Link with two files writes the chosen one as the design for every shirt", async () => {
+  it("going back to one design with two files writes the chosen one", async () => {
     const { onChange } = renderStrip({ "on-light": DARK_INK, "on-dark": LIGHT_INK });
-    fireEvent.click(await screen.findByRole("button", { name: "Link" }));
+    fireEvent.click(await screen.findByRole("button", { name: JOIN }));
     fireEvent.click(screen.getByRole("radio", { name: /take-a-hike-light-ink/ }));
     fireEvent.click(screen.getByRole("button", { name: "Use one design" }));
 
@@ -302,12 +299,110 @@ describe("ArtworkStrip's full design list (interactions §4)", () => {
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
-  it("is the design for all shirts while linked", async () => {
+  it("is the design for all shirts on one design", async () => {
     renderStrip({ default: HIKE });
     fireEvent.click(await screen.findByRole("button", { name: /Change design for all shirts/ }));
     fireEvent.click(screen.getByRole("button", { name: "Find a design…" }));
     expect(screen.getByRole("dialog", { name: "Design for all shirts" })).toHaveTextContent(
       "Every colour prints it, apart from any with their own design.",
+    );
+  });
+});
+
+const png = (name: string) =>
+  new File([new Uint8Array([137, 80, 78, 71])], name, { type: "image/png" });
+
+/** A file dragged over `el` and dropped on it, as the browser fires it. */
+function drop(el: HTMLElement, file: File) {
+  const dataTransfer = { files: [file], types: ["Files"] };
+  fireEvent.dragEnter(el, { dataTransfer });
+  fireEvent.dragOver(el, { dataTransfer });
+  fireEvent.drop(el, { dataTransfer });
+}
+
+describe("ArtworkStrip taking a dropped file", () => {
+  it("uploads a file dropped on the one design and picks it for all shirts", async () => {
+    const upload = vi
+      .spyOn(listingsApi, "uploadListingDesign")
+      .mockResolvedValue({ name: "sunset", file: "designs/sunset.png" });
+    const { onChange } = renderStrip({ default: HIKE, moss: "designs/moss.png" });
+    await screen.findByText("Prints on every colour without its own design");
+
+    drop(card("For all shirts"), png("sunset.png"));
+
+    expect(upload).toHaveBeenCalledWith(expect.objectContaining({ name: "sunset.png" }));
+    await vi.waitFor(() =>
+      expect(onChange).toHaveBeenCalledWith({
+        default: "designs/sunset.png",
+        moss: "designs/moss.png",
+      }),
+    );
+  });
+
+  it("drops onto one tone of a light and dark pair without touching the other", async () => {
+    vi.spyOn(listingsApi, "uploadListingDesign").mockResolvedValue({
+      name: "night-ink",
+      file: "designs/night-ink.png",
+    });
+    const { onChange } = renderStrip({ "on-light": DARK_INK, "on-dark": LIGHT_INK });
+    await screen.findByText("Prints on Ivory and Natural");
+
+    drop(card("For dark shirts"), png("night-ink.png"));
+
+    await vi.waitFor(() =>
+      expect(onChange).toHaveBeenCalledWith({
+        "on-light": DARK_INK,
+        "on-dark": "designs/night-ink.png",
+      }),
+    );
+  });
+
+  it("offers only the selectors on show as targets, so a drop never splits", async () => {
+    renderStrip({ default: HIKE });
+    await screen.findByText("Prints on every colour you sell");
+    const all = card("For all shirts");
+
+    fireEvent.dragEnter(all, { dataTransfer: { files: [], types: ["Files"] } });
+
+    expect(document.querySelectorAll(".design-row--target")).toHaveLength(1);
+    expect(all).toHaveTextContent("Drop to upload and use on all shirts");
+    expect(
+      screen.queryByText(/Drop to upload and use on (light|dark) shirts/),
+    ).not.toBeInTheDocument();
+  });
+
+  it("says why an upload was refused and leaves the design alone", async () => {
+    vi.spyOn(listingsApi, "uploadListingDesign").mockRejectedValue(
+      new listingsApi.ListingsApiError("designs must be PNG files, and photo.jpg is a JPEG image"),
+    );
+    const { onChange } = renderStrip({ default: HIKE });
+    await screen.findByText("Prints on every colour you sell");
+
+    drop(card("For all shirts"), png("photo.jpg"));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Couldn't upload photo.jpg: designs must be PNG files, and photo.jpg is a JPEG image",
+    );
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it("uploads from the Recent designs panel for the slot it is open for", async () => {
+    vi.spyOn(listingsApi, "uploadListingDesign").mockResolvedValue({
+      name: "sunset",
+      file: "designs/sunset.png",
+    });
+    const { onChange } = renderStrip({ "on-light": DARK_INK, "on-dark": LIGHT_INK });
+    fireEvent.click(await screen.findByRole("button", { name: /Change design for light shirts/ }));
+
+    fireEvent.change(screen.getByLabelText("Upload a PNG…"), {
+      target: { files: [png("sunset.png")] },
+    });
+
+    await vi.waitFor(() =>
+      expect(onChange).toHaveBeenCalledWith({
+        "on-light": "designs/sunset.png",
+        "on-dark": LIGHT_INK,
+      }),
     );
   });
 });

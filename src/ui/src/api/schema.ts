@@ -473,7 +473,14 @@ export interface paths {
     /** List Listing Designs */
     get: operations["list_listing_designs_api_listing_designs_get"];
     put?: never;
-    post?: never;
+    /**
+     * Upload Listing Design
+     * @description A PNG dropped on the editor's design strip, added to ``designs/``.
+     *     The answer names where it landed, which is not always its filename: a
+     *     name already taken by other artwork gets a ``-2`` suffix rather than
+     *     overwriting what another listing may print.
+     */
+    post: operations["upload_listing_design_api_listing_designs_post"];
     delete?: never;
     options?: never;
     head?: never;
@@ -2129,6 +2136,11 @@ export interface components {
     };
     /** Body_upload_design_api_designs_post */
     Body_upload_design_api_designs_post: {
+      /** File */
+      file: string;
+    };
+    /** Body_upload_listing_design_api_listing_designs_post */
+    Body_upload_listing_design_api_listing_designs_post: {
       /** File */
       file: string;
     };
@@ -5484,6 +5496,39 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["ListingDesignSummary"][];
+        };
+      };
+    };
+  };
+  upload_listing_design_api_listing_designs_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "multipart/form-data": components["schemas"]["Body_upload_listing_design_api_listing_designs_post"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ListingDesignSummary"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
         };
       };
     };
