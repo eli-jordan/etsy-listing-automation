@@ -4,6 +4,7 @@ from pathlib import Path
 
 from etsy_listings.core.ai.listing_inputs import ListingAiInputs
 from etsy_listings.core.ai.proposals import proposal_staleness
+from etsy_listings.core.ai.viewable import viewable_design
 from etsy_listings.core.workspace import Workspace
 
 from tests.support.builders import FIXTURE_LISTING
@@ -42,7 +43,12 @@ def test_preparation_pairs_the_request_with_its_comparison_inputs(workspace_root
     assert request.colors == tuple(snapshot.colors)
     assert request.etsy_category == snapshot.etsy_category
     assert request.market_block == "buyer phrases"
-    assert request.design_image == workspace.resolve_ref(
-        snapshot.design["default"], listing_dir=workspace.listing_dir(FIXTURE_LISTING)
+    # The fixture design is transparent, so the provider sees a flattened copy.
+    assert request.design_image == viewable_design(
+        workspace.resolve_ref(
+            snapshot.design["default"], listing_dir=workspace.listing_dir(FIXTURE_LISTING)
+        ),
+        workspace.ai_image_cache_dir(),
     )
+    assert request.design_image.parent.parent == workspace.ai_image_cache_dir()
     assert snapshot.design_content_hash is not None

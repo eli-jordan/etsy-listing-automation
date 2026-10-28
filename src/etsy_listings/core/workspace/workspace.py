@@ -1165,6 +1165,9 @@ class Workspace:
     def scene_cache_dir(self) -> Path:
         return self.cache(layout.SCENES_DIR)
 
+    def ai_image_cache_dir(self) -> Path:
+        return self.cache(layout.AI_IMAGES_DIR)
+
     def relative_path(self, path: Path) -> str:
         """Serialize an owned path for API responses, with portable separators."""
         return path.relative_to(self.root).as_posix()

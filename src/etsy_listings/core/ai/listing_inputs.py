@@ -18,6 +18,7 @@ from etsy_listings.core.ai.proposals import (
     SeoProposalSnapshot,
     proposal_staleness,
 )
+from etsy_listings.core.ai.viewable import viewable_design
 from etsy_listings.core.config.artwork import representative
 from etsy_listings.core.errors import UserFacingError
 from etsy_listings.core.workspace.facts import WorkspaceFacts
@@ -75,8 +76,11 @@ class ListingAiInputs:
         ref = representative(snapshot.design)
         if ref is None:
             raise UserFacingError("the listing has no selected design")
-        design: Path = self._workspace.resolve_ref(
-            ref, listing_dir=self._workspace.listing_dir(self._name)
+        # Flattened when transparent: the provider CLIs show transparency as
+        # black, which hides dark artwork entirely (`ai/viewable.py`).
+        design: Path = viewable_design(
+            self._workspace.resolve_ref(ref, listing_dir=self._workspace.listing_dir(self._name)),
+            self._workspace.ai_image_cache_dir(),
         )
         request = SeoRequest(
             market_block=market_block,

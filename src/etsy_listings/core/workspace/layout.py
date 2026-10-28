@@ -126,6 +126,9 @@ PROPOSALS_DIR = "proposals"
 ADR-0003's layout): the exact name, like the market snapshot, so two listings that
 differ only in case -- possible on a case-sensitive filesystem -- never share
 a record. Moves and goes with the listing."""
+AI_IMAGES_DIR = "ai-images"
+"""Designs flattened onto an opaque background for an AI provider to look at
+(``core/ai/viewable.py``), one directory per source content hash."""
 RUNS_DB = "runs.db"
 FX_CACHE_FILE = "fx.json"
 
