@@ -459,6 +459,13 @@ queued rows through the existing AI runner, defaults to one concurrent batch
 row, reads the workspace concurrency setting, round-robins across batches and
 recovers interrupted rows on restart (ADR-0048).
 
+Batch-origin AI runs stop after drafting an empty brief, preserving a brief the
+seller has already written. Their market and SEO steps are skipped, and no
+snapshot or proposal is generated. Batch readiness therefore checks only the
+brief prompt and provider. Manual AI Mode runs the full chain from the current
+saved brief after the seller has reviewed it. Retry, Resume, and restart recovery
+retain the brief-only boundary (ADR-0048, amendment 2026-10-29).
+
 Before a browser plan or apply begins, `Deployments` yields its listings to the
 `AiCoordinator`, which cancels their queued batch AI, stops and awaits active
 AI, and holds those names against new AI until deployment ends (ADR-0050).

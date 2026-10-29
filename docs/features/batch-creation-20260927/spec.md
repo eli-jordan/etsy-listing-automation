@@ -11,13 +11,13 @@ applied here. The build is planned in
 The seller can capture the reusable production settings of a listing as a
 **listing template**, drop up to 25 finished design PNGs onto that template,
 review the cleaned names and validation results, and create one ordinary local
-listing per design. The application then runs the existing brief, market
-research, and SEO proposal chain for those listings through a resumable batch
-queue.
+listing per design. A resumable batch queue generates a brief for each listing
+and stops so the seller can review and edit it. Market research and SEO proposal
+generation start only when the seller triggers AI Mode in that listing.
 
 The result is a set of local listing drafts ready for human review. Generation
-writes a fresh design brief, but title, tags, and description lead remain
-suggestions until the seller accepts them. Nothing in batch creation deploys to
+writes a fresh design brief. AI Mode later generates title, tag, and description
+lead suggestions for the seller to accept. Nothing in batch creation deploys to
 Printify or Etsy.
 
 This feature optimises the repeated workflow, not the listing model. Every
@@ -54,8 +54,8 @@ proposal is not listing content.
    per design and rule-based template routing are out of scope.
 4. Batch creation creates local listings only. Review and deployment remain
    separate seller actions.
-5. AI generation may write only a fresh brief automatically. Title, tags, and
-   description lead still require explicit seller acceptance.
+5. Automatic batch AI stops after writing a fresh brief. Research and SEO wait
+   for explicit AI Mode; title, tags, and description lead require seller acceptance.
 6. All batch writes are retry-safe. A reload, process restart, Resume, or Retry
    must not duplicate a listing row within the same batch.
 7. A failed row does not stop unrelated rows. Successful work remains visible,
@@ -114,7 +114,7 @@ It deliberately excludes or resets these fields:
 |---|---|---|
 | Artwork | `design`, `artwork` | Every batch row supplies one new complete PNG; per-design artwork routing is not reusable. |
 | Generation input | `brief` | The artwork-specific brief is generated afresh for every instance. |
-| SEO copy | `etsy.title`, `etsy.tags`, `etsy.description.lead` | Every instance receives its own reviewable proposal. |
+| SEO copy | `etsy.title`, `etsy.tags`, `etsy.description.lead` | AI Mode generates a reviewable proposal after the seller reviews the brief. |
 | Lifecycle | `lifecycle` | A new instance is a new working listing. |
 | Applied/remote state | lockfile, provider IDs, renders, market snapshots, runs, proposals | A template cannot inherit deployment identity or generated state. |
 
@@ -234,9 +234,9 @@ garment profile using the existing design rules. It must:
 The importer never converts or upscales artwork. Invalid rows show the existing
 specific refusal and can be removed so the remaining valid rows may proceed.
 Confirm requires at least one valid row. The application checks shared AI
-prerequisites before confirmation: required prompts, at least one ready provider,
-and Etsy market credentials must all be available so the batch is not knowingly
-created into a queue that cannot run. Confirmation also revalidates the frozen
+prerequisites before confirmation: the brief prompt and at least one ready
+provider must be available. Research and SEO prompts and Etsy market credentials
+are not batch-creation prerequisites. Confirmation also revalidates the frozen
 document's workspace-shared refs, since those dependencies may have changed
 after staging began.
 
@@ -333,30 +333,29 @@ row atomically.
 
 ### Per-row run
 
-Each row runs the existing chain:
-
-1. generate a fresh brief from the design and write it directly to the empty
-   `brief` field;
-2. derive market queries and research Etsy;
-3. generate the SEO proposal; and
-4. persist the latest proposal in server-side cache.
+Each row uses the existing runner to generate a fresh brief from the design and
+write it directly to the empty `brief` field. It then finishes successfully with
+market research and SEO skipped. No market queries, market snapshot, or proposal
+are generated automatically. The seller reviews or edits the saved brief, then
+starts AI Mode in the listing editor to research Etsy and generate a proposal
+from the current saved values (ADR-0048).
 
 Brief writing follows the existing seller-wins rule. The worker rechecks the
 field under the listing write lock immediately before writing; if the seller
-has supplied text while the row waited, it keeps that text and uses it for SEO
-instead of generating over it.
+has supplied text while the row waited or while drafting was in flight, it keeps
+that text. Such a row also finishes without running research or SEO.
 
-The run freezes its relevant listing inputs. Changes while it runs do not get
-silently mixed into that generation; they make the resulting proposal stale.
 A pending row uses the listing's current saved values when its turn begins.
+AI Mode later freezes its own relevant inputs; edits during that generation make
+the resulting proposal stale.
 Listing rename must update batch and proposal ownership without attributing a
 result to the old name. Deleting a listing cancels its work and leaves a deleted
 row in the batch summary.
 
 If a row fails, later rows continue. The failed row retains its listing and
 design and exposes Retry. If brief generation had already succeeded, Retry
-keeps that saved brief, including any seller edits, and reruns the remaining
-work rather than replacing it.
+keeps that saved brief, including any seller edits, and finishes without
+research or SEO. Retry and Resume never start the deferred AI Mode stages.
 
 ### Cancellation and deletion
 
@@ -371,8 +370,10 @@ designs, listings, written briefs, or proposals.
 
 ## Durable AI proposals
 
-Every AI run, whether started by a batch or manually in an editor, writes one
-latest proposal to server-side cache. Regeneration replaces the previous
+Every successful manual AI Mode run writes one latest proposal to server-side
+cache. Brief-only batch runs do not create or replace proposals. Existing
+proposals, including those generated by earlier batch runs, remain reviewable.
+Regeneration replaces the previous
 proposal; there is no proposal history. Proposals do not expire automatically.
 They remain until replaced, the listing is deleted or fully deployed, or cache
 data is cleared.
@@ -556,9 +557,10 @@ The feature is complete when all of the following are observable:
 6. Batch AI honours the workspace-wide configured concurrency and round-robin
    scheduling across batches, resumes after restart, and continues after one
    row fails.
-7. Every successful row has a fresh saved brief, unless the seller supplied one
-   before drafting, and one latest server-cached SEO proposal; accepted title,
-   tags, and lead still require seller actions.
+7. Every successful row has a fresh saved brief unless the seller supplied one
+   before or during drafting. It has generated no market data or SEO proposal;
+   those wait for the seller to trigger AI Mode. Accepted title, tags, and lead
+   still require seller actions.
 8. A stale proposal is clearly labelled as out of date and its choices remain
    usable without a confirmation dialog.
 9. Batch summary, Recent batches with derived status, Retry, Cancel/Resume, and
