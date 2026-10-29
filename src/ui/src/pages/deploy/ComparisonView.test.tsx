@@ -81,6 +81,55 @@ const ETSY_LISTING_SNAPSHOT: EtsyListingSnapshot = {
   },
 };
 
+describe("ComparisonView: an image re-rendered in place", () => {
+  it("shows Etsy's image replaced beside this plan's preview of it", () => {
+    const ref = "hanging-on-fence:chambray";
+    const p = plan([
+      stage({ stage: "render", will_run: true, reason: "design or template changed" }),
+      stage({
+        stage: "etsy_media",
+        will_run: true,
+        reason: "the media manifest changed",
+        snapshot: {
+          live: [{ rank: 1, ref, image_id: 1, url: "https://etsy.cdn/1.jpg" }],
+          desired: [{ rank: 1, ref, file: ".cache/renders/x/hanging-on-fence/chambray.png" }],
+        },
+        changes: [{ kind: "media", rank: 1, before: ref, after: ref }],
+      }),
+    ]);
+    render(
+      <ComparisonView
+        comparison={buildComparison(p)}
+        listing={{ name: "x", scene: null }}
+        renderSnapshot={{
+          scenes: [
+            {
+              scene: "hanging-on-fence/chambray",
+              template: "hanging-on-fence",
+              colour: "chambray",
+              state: "stale",
+              preview: true,
+              scene_hash: "abc",
+            },
+          ],
+        }}
+        previewsRendered={new Set()}
+        collapsed={false}
+        etsyListingId={1}
+      />,
+    );
+
+    const [before, after] = screen.getAllByAltText(ref);
+    expect(before?.parentElement).toHaveClass("dv-thumb--replaced");
+    expect(after?.parentElement).toHaveClass("dv-thumb--replaced");
+    expect(before).toHaveAttribute("src", "https://etsy.cdn/1.jpg");
+    expect(after).toHaveAttribute(
+      "src",
+      "/api/listings/x/previews/hanging-on-fence/chambray?hash=abc",
+    );
+  });
+});
+
 describe("ComparisonView", () => {
   it("shows a single 'Not on Etsy yet' column when the plan has no listing id", () => {
     const p = plan(
@@ -186,6 +235,51 @@ describe("ComparisonView", () => {
     expect(
       document.querySelector(
         'img[src="/api/listings/take-a-hike/media-files/shots/back.png/file"]',
+      ),
+    ).not.toBeNull();
+  });
+});
+
+describe("ComparisonView's rendered scenes", () => {
+  it("asks for the plan's own preview of a scene by the hash the plan computed", () => {
+    const sceneHash = "c".repeat(64);
+    const p = plan([
+      stage({
+        stage: "etsy_media",
+        snapshot: {
+          desired: [{ rank: 1, ref: "flat-lay:black", file: "x.png" }],
+          live: [],
+        },
+      }),
+    ]);
+    render(
+      <ComparisonView
+        comparison={buildComparison(p)}
+        listing={{
+          name: detail().name,
+          scene: sceneSource(detail().name, detail().design_content_hash),
+        }}
+        renderSnapshot={{
+          scenes: [
+            {
+              scene: "flat-lay:black",
+              template: "flat-lay",
+              colour: "black",
+              state: "missing",
+              preview: true,
+              scene_hash: sceneHash,
+            },
+          ],
+        }}
+        previewsRendered={new Set()}
+        collapsed={false}
+        etsyListingId={1698234512}
+      />,
+    );
+
+    expect(
+      document.querySelector(
+        `img[src="/api/listings/take-a-hike/previews/flat-lay/black?hash=${sceneHash}"]`,
       ),
     ).not.toBeNull();
   });

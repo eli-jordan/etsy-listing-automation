@@ -1,5 +1,5 @@
 import "./fakeApi";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { EditableName } from "../../../src/components/EditableName";
 import { EditorHead } from "../../../src/pages/ListingEditorPage";
 import { IssuesBanner } from "../../../src/pages/editor/IssuesBanner";
@@ -30,6 +30,22 @@ export interface ArtworkEditorProps {
   picking?: PickTarget | null;
   leaving?: boolean;
   recentOpen?: SlotTarget | null;
+  /** Replaces the design strip -- the design-selector scene's variants. */
+  strip?: (api: StripApi) => ReactNode;
+}
+
+/** What a replacement design strip gets to work with. */
+export interface StripApi {
+  base: Base;
+  colours: Colour[];
+  library: Design[];
+  onPick: (target: SlotTarget, design: Design) => void;
+  onFind: (target: PickTarget) => void;
+  onLink: () => void;
+  onUnlink: () => void;
+  /** Fakes an upload (a short wait), adds the file to the library and picks it. */
+  onUpload: (target: SlotTarget, file: File) => Promise<Design>;
+  onPreview: (name: string) => void;
 }
 
 const TABS = [
@@ -56,6 +72,7 @@ export function ArtworkEditorScreen(props: ArtworkEditorProps) {
   const [picking, setPicking] = useState<PickTarget | null>(props.picking ?? null);
   const [leaving, setLeaving] = useState(props.leaving ?? false);
   const [recent, setRecent] = useState<SlotTarget | null>(props.recentOpen ?? null);
+  const [library, setLibrary] = useState<Design[]>(props.library);
 
   const issues = artworkIssues(base, colours, props.profile);
   const detail = {
@@ -96,6 +113,18 @@ export function ArtworkEditorScreen(props: ArtworkEditorProps) {
     setPicking(null);
   }
 
+  async function upload(target: SlotTarget, file: File): Promise<Design> {
+    await new Promise((r) => setTimeout(r, 1100));
+    const design: Design = {
+      name: file.name.replace(/\.[^.]+$/, ""),
+      file: `designs/${file.name}`,
+      url: URL.createObjectURL(file),
+    };
+    setLibrary((l) => [design, ...l.filter((d) => d.file !== design.file)]);
+    pick(target, design);
+    return design;
+  }
+
   // Turning a colour off drops its own design with it.
   const setEnabled = (keep: (c: Colour) => boolean) =>
     setColours((cs) => cs.map((c) => ({ ...c, enabled: keep(c), own: keep(c) ? c.own : null })));
@@ -114,10 +143,23 @@ export function ArtworkEditorScreen(props: ArtworkEditorProps) {
 
       <IssuesBanner issues={issues} activeTab="variants" onJumpTo={() => {}} />
 
+      {props.strip ? (
+        props.strip({
+          base,
+          colours,
+          library,
+          onPick: pick,
+          onFind: setPicking,
+          onLink: link,
+          onUnlink: unlink,
+          onUpload: upload,
+          onPreview: setPreviewed,
+        })
+      ) : (
       <ArtworkStrip
         base={base}
         colours={colours}
-        library={props.library}
+        library={library}
         open={recent}
         setOpen={setRecent}
         onLink={link}
@@ -126,6 +168,7 @@ export function ArtworkEditorScreen(props: ArtworkEditorProps) {
         onFind={setPicking}
         onPreview={setPreviewed}
       />
+      )}
 
       <div className="tabs seg">
         {TABS.map((t) => (
@@ -162,7 +205,7 @@ export function ArtworkEditorScreen(props: ArtworkEditorProps) {
           target={picking}
           base={base}
           colours={colours}
-          library={props.library}
+          library={library}
           onPick={(d) => pick(picking, d)}
           onClose={() => setPicking(null)}
         />

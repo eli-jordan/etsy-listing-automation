@@ -1,4 +1,5 @@
 import type { ListingDetail, MediaEntry } from "../../types";
+import { settleGallery } from "./mediaEdits";
 
 /**
  * Changing which colours a listing sells, and everything that has to move
@@ -33,7 +34,11 @@ export function selectColours(detail: ListingDetail, next: string[]): Record<str
   const media = detail.media.filter(
     (entry: MediaEntry) => typeof entry === "string" || !entry.colour || !gone.has(entry.colour),
   );
-  if (media.length !== detail.media.length) patch.media = media;
+  if (media.length !== detail.media.length) {
+    // Removing the thumbnail's colour must leave an image first and the
+    // featured video second. If no image survives, the videos go too.
+    patch.media = settleGallery(media) ?? [];
+  }
 
   // A colour's own design goes with it: `design` keys other than the base
   // keys must name an enabled colour (ADR-0053).

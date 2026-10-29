@@ -38,6 +38,9 @@ class PriceChange:
 
 @dataclass(frozen=True)
 class MediaChange:
+    """One gallery position whose image changes. ``before == after`` is the
+    same image at the same position with new bytes -- a re-rendered mockup."""
+
     rank: int
     before: str | None
     after: str | None

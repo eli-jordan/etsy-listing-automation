@@ -192,8 +192,9 @@ def test_workspace_apply_reuses_exact_reviewed_targets_and_retains_the_plan(
     reviewed = client.post("/api/runs", json={"kind": "plan", "scope": "workspace"}).json()
     reviewed_detail = _wait_until_terminal(client, reviewed["id"])
     planned = [event for event in reviewed_detail["events"] if event["type"] == "listing_planned"]
-    listings = [event["listing"] for event in planned]
+    # A listing planned again once its previews exist: the later event counts.
     expect = {event["listing"]: event["fingerprint"] for event in planned}
+    listings = list(expect)
 
     applied = client.post(
         "/api/runs",
@@ -224,8 +225,9 @@ def test_a_workspace_apply_differing_from_its_review_is_409_with_the_refusal(
     reviewed = client.post("/api/runs", json={"kind": "plan", "scope": "workspace"}).json()
     detail = _wait_until_terminal(client, reviewed["id"])
     planned = [event for event in detail["events"] if event["type"] == "listing_planned"]
-    listings = [event["listing"] for event in planned]
+    # A listing planned again once its previews exist: the later event counts.
     expect = {event["listing"]: event["fingerprint"] for event in planned}
+    listings = list(expect)
     expect[listings[0]] = "sha256:" + "0" * 64
 
     response = client.post(

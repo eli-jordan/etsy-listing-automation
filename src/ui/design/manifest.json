@@ -20,19 +20,24 @@
       "description": "Hi-fi mockups: the three-step AI workflow indicator in the top bar and the related listings panel on Listing Details."
     },
     {
-      "name": "multi-artwork",
-      "title": "Multi-artwork Listings",
-      "description": "App-styled mockups built from the real editor components: one design or a linked light/dark pair, per-colour designs, and the deploy blockers they create."
-    },
-    {
       "name": "batch-create",
       "title": "Batch Listing Creation",
       "description": "Hi-fi (round 4) from the app's real components: template editor, templates and batches, staging, batch summary, listing from a batch."
     },
     {
+      "name": "multi-artwork",
+      "title": "Multi-artwork Listings",
+      "description": "App-styled mockups built from the real editor components: one design or a linked light/dark pair, per-colour designs, and the deploy blockers they create."
+    },
+    {
       "name": "editor-header",
       "title": "Listing editor header",
       "description": "Chosen listing-editor head (round 4): identity row with auto-save chip over an icon + label action row, its states, and the batch context."
+    },
+    {
+      "name": "design-selector",
+      "title": "Design selector",
+      "description": "Four candidate designs (A-D) for the artwork selector with drag-and-drop upload; D won and is built in ArtworkStrip, with drop targets that never split."
     },
     {
       "name": "template-cards",
@@ -150,6 +155,14 @@
     {
       "name": "demo",
       "frames": 3
+    },
+    {
+      "name": "design-selector",
+      "frames": 12,
+      "brief": "design/scenes/design-selector/_brief.md",
+      "title": "Design selector",
+      "description": "Design selector - four variants of a one-by-default artwork selector with drag-and-drop upload; D chosen and built (each split selector beside its own shirt, drops never split)",
+      "note": "## Design selector: 4 options\n\nRows are states (one design / light & dark / file held over it), columns are variants A–D. Every frame works: drag an image from your desktop onto it.\n\n| | Split control | Picking | Where you can drop |\n|---|---|---|---|\n| **A** switch card | switch on the card's edge | Change ▾ → recent panel | whole card, or each half |\n| **B** mode + rail | One design / Light & dark tabs | recent rail always visible | tiles and the rail |\n| **C** form rows | checkbox under the row | Change ▾ → recent panel | each row |\n| **D** drop picks scope | text link | Change ▾ → recent panel | all / light-only / dark-only zones |\n\nOpen question: should dropping in one-design mode ever split (D), or should splitting always be a deliberate toggle (A–C)?"
     },
     {
       "name": "editor-header",
@@ -1020,6 +1033,138 @@
       "scene": "demo",
       "title": "Demo - welcome",
       "viewport": "mobile"
+    },
+    {
+      "id": "design-selector/dropping/a-switch-card",
+      "file": "design/scenes/design-selector/dropping/a-switch-card.tsx",
+      "kind": "tsx",
+      "scene": "design-selector",
+      "title": "A · switch card — file held over it",
+      "viewport": "laptop",
+      "description": "One card with a switch on its right edge; switching on splits the card into light and dark halves in place. Each half is a drop target.",
+      "variantGroup": "design-selector/dropping",
+      "variant": "a"
+    },
+    {
+      "id": "design-selector/dropping/b-mode-rail",
+      "file": "design/scenes/design-selector/dropping/b-mode-rail.tsx",
+      "kind": "tsx",
+      "scene": "design-selector",
+      "title": "B · mode tabs + design rail — file held over it",
+      "viewport": "laptop",
+      "description": "No dropdowns: a One design / Light & dark segmented control, big tiles for the chosen designs, and an always-visible recent-designs rail.",
+      "variantGroup": "design-selector/dropping",
+      "variant": "b"
+    },
+    {
+      "id": "design-selector/dropping/c-form-rows",
+      "file": "design/scenes/design-selector/dropping/c-form-rows.tsx",
+      "kind": "tsx",
+      "scene": "design-selector",
+      "title": "C · compact form rows — file held over it",
+      "viewport": "laptop",
+      "description": "The quietest option: a settings-style row with a checkbox to add a dark-shirts row. Dropping turns a row into a labelled drop zone.",
+      "variantGroup": "design-selector/dropping",
+      "variant": "c"
+    },
+    {
+      "id": "design-selector/dropping/d-drop-scope",
+      "file": "design/scenes/design-selector/dropping/d-drop-scope.tsx",
+      "kind": "tsx",
+      "scene": "design-selector",
+      "title": "D · drop picks the scope — file held over it",
+      "viewport": "laptop",
+      "description": "A light and a dark shirt wearing their prints; holding a file over it opens all / light-only / dark-only drop targets, so dropping can split.",
+      "variantGroup": "design-selector/dropping",
+      "variant": "d"
+    },
+    {
+      "id": "design-selector/one/a-switch-card",
+      "file": "design/scenes/design-selector/one/a-switch-card.tsx",
+      "kind": "tsx",
+      "scene": "design-selector",
+      "title": "A · switch card — one design",
+      "viewport": "laptop",
+      "description": "One card with a switch on its right edge; switching on splits the card into light and dark halves in place. Each half is a drop target.",
+      "variantGroup": "design-selector/one",
+      "variant": "a"
+    },
+    {
+      "id": "design-selector/one/b-mode-rail",
+      "file": "design/scenes/design-selector/one/b-mode-rail.tsx",
+      "kind": "tsx",
+      "scene": "design-selector",
+      "title": "B · mode tabs + design rail — one design",
+      "viewport": "laptop",
+      "description": "No dropdowns: a One design / Light & dark segmented control, big tiles for the chosen designs, and an always-visible recent-designs rail.",
+      "variantGroup": "design-selector/one",
+      "variant": "b"
+    },
+    {
+      "id": "design-selector/one/c-form-rows",
+      "file": "design/scenes/design-selector/one/c-form-rows.tsx",
+      "kind": "tsx",
+      "scene": "design-selector",
+      "title": "C · compact form rows — one design",
+      "viewport": "laptop",
+      "description": "The quietest option: a settings-style row with a checkbox to add a dark-shirts row. Dropping turns a row into a labelled drop zone.",
+      "variantGroup": "design-selector/one",
+      "variant": "c"
+    },
+    {
+      "id": "design-selector/one/d-drop-scope",
+      "file": "design/scenes/design-selector/one/d-drop-scope.tsx",
+      "kind": "tsx",
+      "scene": "design-selector",
+      "title": "D · drop picks the scope — one design",
+      "viewport": "laptop",
+      "description": "A light and a dark shirt wearing their prints; holding a file over it opens all / light-only / dark-only drop targets, so dropping can split.",
+      "variantGroup": "design-selector/one",
+      "variant": "d"
+    },
+    {
+      "id": "design-selector/split/a-switch-card",
+      "file": "design/scenes/design-selector/split/a-switch-card.tsx",
+      "kind": "tsx",
+      "scene": "design-selector",
+      "title": "A · switch card — light & dark",
+      "viewport": "laptop",
+      "description": "One card with a switch on its right edge; switching on splits the card into light and dark halves in place. Each half is a drop target.",
+      "variantGroup": "design-selector/split",
+      "variant": "a"
+    },
+    {
+      "id": "design-selector/split/b-mode-rail",
+      "file": "design/scenes/design-selector/split/b-mode-rail.tsx",
+      "kind": "tsx",
+      "scene": "design-selector",
+      "title": "B · mode tabs + design rail — light & dark",
+      "viewport": "laptop",
+      "description": "No dropdowns: a One design / Light & dark segmented control, big tiles for the chosen designs, and an always-visible recent-designs rail.",
+      "variantGroup": "design-selector/split",
+      "variant": "b"
+    },
+    {
+      "id": "design-selector/split/c-form-rows",
+      "file": "design/scenes/design-selector/split/c-form-rows.tsx",
+      "kind": "tsx",
+      "scene": "design-selector",
+      "title": "C · compact form rows — light & dark",
+      "viewport": "laptop",
+      "description": "The quietest option: a settings-style row with a checkbox to add a dark-shirts row. Dropping turns a row into a labelled drop zone.",
+      "variantGroup": "design-selector/split",
+      "variant": "c"
+    },
+    {
+      "id": "design-selector/split/d-drop-scope",
+      "file": "design/scenes/design-selector/split/d-drop-scope.tsx",
+      "kind": "tsx",
+      "scene": "design-selector",
+      "title": "D · drop picks the scope — light & dark",
+      "viewport": "laptop",
+      "description": "A light and a dark shirt wearing their prints; holding a file over it opens all / light-only / dark-only drop targets, so dropping can split.",
+      "variantGroup": "design-selector/split",
+      "variant": "d"
     },
     {
       "id": "editor-header-v1/a-overflow-menu",

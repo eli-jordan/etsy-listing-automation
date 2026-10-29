@@ -1,6 +1,7 @@
 """Browser tests for a listing's artwork (multi-artwork plan, PRs 2 and 3):
-unlink, pick both files, reload and see both; link a pair of two files and
-choose one; give Moss its own design and take it back. Asserted on the
+split into light and dark, pick both files, reload and see both; go back to
+one design from two files and choose one; drop a PNG on the strip; give Moss
+its own design and take it back. Asserted on the
 `listing.yaml` the UI wrote and on pictures the browser actually decoded,
 like the rest of this layer.
 
@@ -12,6 +13,7 @@ from __future__ import annotations
 
 import re
 import shutil
+from io import BytesIO
 from pathlib import Path
 from typing import Any
 
@@ -64,11 +66,11 @@ def _pick_recent(page: Any, name: str) -> None:  # noqa: ANN401
     page.locator(".add-panel").get_by_role("button", name=re.compile(rf"^{name} ")).click()
 
 
-def test_unlink_pick_both_files_and_reload(page: Any, workspace_root: Path) -> None:  # noqa: ANN401
+def test_split_pick_both_files_and_reload(page: Any, workspace_root: Path) -> None:  # noqa: ANN401
     _designs(workspace_root)
     _open(page)
 
-    page.get_by_role("button", name="Unlink").click()
+    page.get_by_role("button", name="Use different designs on light & dark shirts").click()
     _wait_for_design(page, workspace_root, {"on-light": HIKE, "on-dark": HIKE})
 
     page.get_by_role("button", name="Change design for light shirts").click()
@@ -81,7 +83,7 @@ def test_unlink_pick_both_files_and_reload(page: Any, workspace_root: Path) -> N
     page.get_by_role("heading", name="take-a-hike").wait_for(state="visible")
     assert "dark-ink" in _card(page, "For light shirts").inner_text()
     assert "light-ink" in _card(page, "For dark shirts").inner_text()
-    assert page.get_by_role("button", name="Link", exact=True).is_visible()
+    assert page.get_by_role("button", name="Use one design for all shirts").is_visible()
 
     # The stage renders the previewed colour with its resolved file, and the
     # browser really decoded it -- not a bare photo, and not a broken image.
@@ -97,12 +99,12 @@ def test_an_empty_pair_survives_a_reload(page: Any, workspace_root: Path) -> Non
     edit_listing(workspace_root, design={})
     _open(page)
 
-    page.get_by_role("button", name="Unlink").click()
+    page.get_by_role("button", name="Use different designs on light & dark shirts").click()
     _wait_for_design(page, workspace_root, {"on-light": None, "on-dark": None})
 
     page.reload()
     page.get_by_role("heading", name="take-a-hike").wait_for(state="visible")
-    assert page.get_by_role("button", name="Link", exact=True).is_visible()
+    assert page.get_by_role("button", name="Use one design for all shirts").is_visible()
     assert "Choose the design for light shirts" in _card(page, "For light shirts").inner_text()
     assert "Choose the design for dark shirts" in _card(page, "For dark shirts").inner_text()
 
@@ -112,7 +114,7 @@ def test_link_a_pair_of_two_files_and_choose_one(page: Any, workspace_root: Path
     edit_listing(workspace_root, design={"on-light": DARK_INK, "on-dark": LIGHT_INK})
     _open(page)
 
-    page.get_by_role("button", name="Link", exact=True).click()
+    page.get_by_role("button", name="Use one design for all shirts").click()
     dialog = page.get_by_role("dialog", name="Which design should every shirt print?")
     confirm = dialog.get_by_role("button", name="Use one design")
     assert confirm.is_disabled()
@@ -121,7 +123,9 @@ def test_link_a_pair_of_two_files_and_choose_one(page: Any, workspace_root: Path
     confirm.click()
 
     _wait_for_design(page, workspace_root, {"default": LIGHT_INK})
-    assert page.get_by_role("button", name="Unlink").is_visible()
+    assert page.get_by_role(
+        "button", name="Use different designs on light & dark shirts"
+    ).is_visible()
 
 
 MOSS_SPECIAL = "designs/moss-special.png"
@@ -203,3 +207,39 @@ def test_give_moss_its_own_design_and_return_it_to_automatic(
     assert row.get_by_text("own design").count() == 0
     shown = _shown(page, _stage_once_saved(page, "flat-lay-01", own))
     assert shown == expected_scene(workspace_root, "flat-lay-01", "moss", {"moss": HIKE})
+
+
+def _drop_png(page: Any, selector: str, filename: str, payload: bytes) -> None:  # noqa: ANN401
+    """Drop a file on ``selector`` the way the browser does: a DataTransfer
+    holding it, through dragenter, dragover and drop."""
+    page.evaluate(
+        """([selector, filename, bytes]) => {
+            const target = document.querySelector(selector);
+            const data = new DataTransfer();
+            data.items.add(new File([new Uint8Array(bytes)], filename, { type: "image/png" }));
+            for (const type of ["dragenter", "dragover", "drop"]) {
+                const init = { bubbles: true, cancelable: true, dataTransfer: data };
+                target.dispatchEvent(new DragEvent(type, init));
+            }
+        }""",
+        [selector, filename, list(payload)],
+    )
+
+
+def test_a_png_dropped_on_the_design_is_uploaded_and_printed_on_every_shirt(
+    page: Any,  # noqa: ANN401
+    workspace_root: Path,
+) -> None:
+    """The drop target is the one design on show: the file lands in
+    ``designs/`` and becomes ``design.default``, and the listing stays on one
+    design."""
+    buffer = BytesIO()
+    Image.new("RGBA", (64, 64), (30, 90, 200, 255)).save(buffer, format="PNG")
+    _open(page)
+    _card(page, "For all shirts").wait_for(state="visible")
+
+    _drop_png(page, ".design-row--slot", "sunset-ridge.png", buffer.getvalue())
+
+    _wait_for_design(page, workspace_root, {"default": "designs/sunset-ridge.png"})
+    assert (workspace_root / "designs" / "sunset-ridge.png").read_bytes() == buffer.getvalue()
+    assert "sunset-ridge" in _card(page, "For all shirts").inner_text()

@@ -292,7 +292,13 @@ deployment plan runs call `preview_listing()` after planning and write
 full-size, content-addressed previews. Apply copies a matching preview into
 render outputs instead of rendering again, retaining the preview for
 reattachment (ADR-0040). Those deployment previews are distinct from the
-calibrator's HTTP previews.
+calibrator's HTTP previews. While planning, the render stage declares the
+outputs it will rewrite (`rewrites()`, carried to later stages as
+`RunContext.rewrites`), so `etsy_media` hashes the preview — or reports the
+image pending — instead of the render about to be replaced. A plan run plans
+each previewed listing again once its previews exist; that later plan is the
+one reviewed, and it reports a re-rendered image as changed only when its
+bytes differ.
 
 "Real renderer" is structural rather than a claim maintained by hand. Both
 paths ask `Workspace.scene_photo()` which photo a scene composites over and
@@ -458,6 +464,13 @@ days after its last edit and is swept at startup. `BatchQueue` dispatches
 queued rows through the existing AI runner, defaults to one concurrent batch
 row, reads the workspace concurrency setting, round-robins across batches and
 recovers interrupted rows on restart (ADR-0048).
+
+Batch-origin AI runs stop after drafting an empty brief, preserving a brief the
+seller has already written. Their market and SEO steps are skipped, and no
+snapshot or proposal is generated. Batch readiness therefore checks only the
+brief prompt and provider. Manual AI Mode runs the full chain from the current
+saved brief after the seller has reviewed it. Retry, Resume, and restart recovery
+retain the brief-only boundary (ADR-0048, amendment 2026-10-29).
 
 Before a browser plan or apply begins, `Deployments` yields its listings to the
 `AiCoordinator`, which cancels their queued batch AI, stops and awaits active
@@ -1007,6 +1020,20 @@ actual scene identity. Matching previews copy their exact PNG bytes; changed
 artwork, photos or maps cannot authorize stale promotion. Output file hashes
 remain the separate upload axis. Cache removal recreates rendered images from
 durable assets without model installation or inference.
+
+Every full-size scene of either renderer, previewed or applied, is kept in
+`preparation.scene_cache.SceneCache` (`.cache/scenes/`), named by its pixel
+identity (`prepared_scene_identity`, or `photo_warp_scene_identity`: photo
+pixels plus each layer's render config and artwork pixels) and evicted least
+recently read first past 2 GiB. It is separate from the per-listing
+`.cache/previews/`, which deploy review keeps and prunes. Every entry is
+written under an identity computed from the very arrays composed, so apply and
+previews share entries without trusting anything but that identity. A preview
+reaches the identity without decoding through `PIXEL_DIGESTS`, which keeps each
+photo's and design's pixel digest only while its `file_version` stamp is
+unchanged; preview responses carry the identity as their ETag. One composition
+runs per identity: a second request waits and reads the first one's entry. At
+most four Marigold compositions run at once, across previews and apply.
 
 ## Native operational validation
 

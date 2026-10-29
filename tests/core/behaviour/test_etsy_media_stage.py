@@ -18,6 +18,7 @@ from etsy_listings.core.clients.etsy.models import (
     InventoryProduct,
     InventoryPropertyValue,
 )
+from etsy_listings.core.config.media import MAX_IMAGES
 from etsy_listings.core.engine.apply import execute
 from etsy_listings.core.engine.change import MediaChange
 from etsy_listings.core.engine.context import RunContext
@@ -302,6 +303,67 @@ def test_an_image_deleted_outside_the_tool_is_drift_and_gets_reuploaded(
 
     assert stage_plan.will_run
     assert stage_plan.drift
+
+
+# --------------------------------------------------------------- image limit
+
+
+def _fill_with_foreign_images(etsy: FakeEtsyListingClient, count: int) -> None:
+    for n in range(count):
+        etsy.upload_listing_image(
+            SHOP_ID, ETSY_LISTING_ID, file_name=f"old-{n}.png", contents=b"old", rank=n + 1
+        )
+
+
+def _live_image_ids(etsy: FakeEtsyListingClient) -> list[int]:
+    live = etsy.get_listing(ETSY_LISTING_ID, include_images=True)
+    assert live is not None
+    return [image.listing_image_id for image in live.images]
+
+
+def test_a_listing_full_of_old_images_makes_room_before_uploading(
+    workspace_root: Path, etsy
+) -> None:
+    _write_renders(workspace_root)
+    _fill_with_foreign_images(etsy, MAX_IMAGES)
+    ctx = _ctx(workspace_root, etsy)
+
+    lock = _apply(ctx, _lock_with_listing_id())
+
+    ours = lock.remote["etsy_image_ids"]
+    assert _live_image_ids(etsy) == [ours[f"{TEMPLATE}:{c}"] for c in COLOURS]
+
+
+def test_images_added_after_the_plan_was_read_still_get_room(workspace_root: Path, etsy) -> None:
+    """Printify's publish runs earlier in the same apply and puts its own
+    mockups on the listing after this stage's plan read it empty."""
+    _write_renders(workspace_root)
+    ctx = _ctx(workspace_root, etsy)
+    lock = _lock_with_listing_id()
+    planned = _plan(ctx, lock)
+    _fill_with_foreign_images(etsy, MAX_IMAGES)
+
+    lock = execute(ctx, planned, lock)
+
+    ours = lock.remote["etsy_image_ids"]
+    assert _live_image_ids(etsy) == [ours[f"{TEMPLATE}:{c}"] for c in COLOURS]
+
+
+def test_a_full_listing_keeps_our_unchanged_images_while_making_room(
+    workspace_root: Path, etsy
+) -> None:
+    _write_renders(workspace_root)
+    ctx = _ctx(workspace_root, etsy)
+    lock = _apply(ctx, _lock_with_listing_id())
+    _fill_with_foreign_images(etsy, MAX_IMAGES - len(COLOURS))
+    _write_renders(workspace_root, colours=["black"], content=b"changed-bytes")
+    uploads_before = len(etsy.uploads)
+
+    lock = _apply(ctx, lock)
+
+    assert len(etsy.uploads) == uploads_before + 1
+    ours = lock.remote["etsy_image_ids"]
+    assert _live_image_ids(etsy) == [ours[f"{TEMPLATE}:{c}"] for c in COLOURS]
 
 
 # ------------------------------------------------------------------ snapshot

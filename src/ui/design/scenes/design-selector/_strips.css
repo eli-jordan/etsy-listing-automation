@@ -1,0 +1,626 @@
+/* Design selector variants (design-selector scene). Built on the app's tokens;
+   every class here is new and prefixed ds-. */
+
+/* — shared — */
+.ds-thumb {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-sm);
+}
+
+.ds-thumb img {
+  width: 82%;
+  height: 82%;
+  object-fit: contain;
+}
+
+.ds-thumb--empty {
+  background: transparent;
+  border: 1.5px dashed color-mix(in srgb, var(--color-text) 30%, transparent);
+  box-shadow: none;
+}
+
+.ds-thumb .ds-spin {
+  width: 40%;
+  height: 40%;
+  color: var(--color-accent);
+  filter: drop-shadow(0 0 2px rgb(255 255 255 / 0.8));
+}
+
+.ds-spin {
+  animation: ds-spin 0.9s linear infinite;
+}
+
+@keyframes ds-spin {
+  to {
+    transform: rotate(1turn);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ds-spin {
+    animation: none;
+  }
+}
+
+.ds-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: color-mix(in srgb, var(--color-text) 68%, transparent);
+}
+
+.ds-name {
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ds-name--lg {
+  font-size: 17px;
+}
+
+.ds-name--empty {
+  font-weight: 400;
+  font-style: italic;
+  color: color-mix(in srgb, var(--color-text) 60%, transparent);
+}
+
+.ds-sub {
+  font-size: 11.5px;
+  color: color-mix(in srgb, var(--color-text) 60%, transparent);
+}
+
+.ds-change {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.ds-textbtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-accent-700);
+  cursor: pointer;
+}
+
+.ds-textbtn:hover {
+  text-decoration: underline;
+}
+
+.ds-textbtn:focus-visible,
+.ds-pick:focus-visible,
+.ds-b__tile:focus-visible,
+.ds-b__mini:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+/* A file held over a target: dashed accent edge, warm wash, a message. */
+.ds-over {
+  position: relative;
+  outline: 2px dashed var(--color-accent);
+  outline-offset: -2px;
+  background: color-mix(in srgb, var(--color-accent) 10%, var(--color-neutral-100)) !important;
+}
+
+.ds-veil {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border-radius: inherit;
+  background: color-mix(in srgb, var(--color-accent-100) 88%, transparent);
+  color: var(--color-accent-700);
+  font-weight: 700;
+  font-size: 13.5px;
+  pointer-events: none;
+}
+
+.ds-veil svg {
+  width: 18px;
+  height: 18px;
+}
+
+/* — recent designs panel — */
+.ds-recent {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: 1px solid var(--color-divider);
+  border-radius: var(--radius-md);
+  background: var(--color-neutral-100);
+}
+
+.ds-recent__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.ds-recent__hint {
+  font-size: 11.5px;
+  color: color-mix(in srgb, var(--color-text) 55%, transparent);
+}
+
+.ds-recent__grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: var(--space-2);
+}
+
+.ds-pick {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 6px;
+  border: 1px solid var(--color-divider);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.ds-pick:hover {
+  border-color: var(--color-accent-400);
+}
+
+.ds-pick--on {
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 1px var(--color-accent);
+}
+
+.ds-pick__name {
+  font-size: 12px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ds-recent__foot {
+  display: flex;
+  gap: var(--space-2);
+}
+
+/* — A · switch card — */
+.ds-a {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.ds-a__card {
+  display: flex;
+  align-items: stretch;
+  border: 1px solid var(--color-divider);
+  border-radius: var(--radius-md);
+  background: var(--color-neutral-100);
+  overflow: hidden;
+}
+
+.ds-a__body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+}
+
+.ds-a__half {
+  flex: 1;
+  min-width: 0;
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: 8px 16px 8px 8px;
+  transition: background 0.12s ease;
+}
+
+.ds-a__half + .ds-a__half {
+  border-left: 1px solid var(--color-divider);
+}
+
+.ds-a__half--missing {
+  background: color-mix(in srgb, var(--color-warning) 8%, var(--color-neutral-100));
+}
+
+.ds-a__text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.ds-a__mode {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 18px;
+  border-left: 1px solid var(--color-divider);
+  background: var(--color-neutral-200);
+  font-size: 12px;
+  line-height: 1.3;
+  cursor: pointer;
+}
+
+/* — B · mode tabs + rail — */
+.ds-b {
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr);
+  align-items: stretch;
+  gap: var(--space-4);
+  padding: var(--space-3);
+  border: 1px solid var(--color-divider);
+  border-radius: var(--radius-md);
+  background: var(--color-neutral-100);
+}
+
+.ds-b__mode {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 8px;
+}
+
+.ds-b__mode .tabs.seg {
+  margin: 0;
+}
+
+.ds-b__tiles {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.ds-b__tile {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-width: 220px;
+  padding: 8px 14px 8px 8px;
+  border: 1px solid var(--color-divider);
+  border-radius: var(--radius-md);
+  background: var(--color-bg);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.ds-b__tile--active {
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 1px var(--color-accent);
+}
+
+.ds-b__cap {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.ds-b__rail {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 6px 10px;
+  border-left: 1px solid var(--color-divider);
+  border-radius: var(--radius-sm);
+}
+
+.ds-b__railhead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.ds-b__railrow {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.ds-b__mini {
+  padding: 0;
+  border: 2px solid transparent;
+  border-radius: calc(var(--radius-sm) + 2px);
+  background: none;
+  cursor: pointer;
+}
+
+.ds-b__mini:hover {
+  border-color: var(--color-accent-300);
+}
+
+.ds-b__mini--on {
+  border-color: var(--color-accent);
+}
+
+.ds-b__add {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 44px;
+  padding: 0 12px;
+  border: 1.5px dashed color-mix(in srgb, var(--color-text) 30%, transparent);
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  font-weight: 600;
+  color: color-mix(in srgb, var(--color-text) 70%, transparent);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.ds-b__add:hover {
+  border-color: var(--color-accent);
+  color: var(--color-accent-700);
+}
+
+/* — C · compact form rows — */
+.ds-c {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ds-c__rows {
+  border-top: 1px solid var(--color-divider);
+  border-bottom: 1px solid var(--color-divider);
+}
+
+.ds-c__row {
+  display: grid;
+  grid-template-columns: 110px 34px auto auto 1fr auto;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: 48px;
+  padding: 6px 8px;
+  border-radius: var(--radius-sm);
+}
+
+.ds-c__row + .ds-c__row {
+  border-top: 1px solid var(--color-divider);
+}
+
+.ds-c__row:hover .ds-c__hint {
+  opacity: 1;
+}
+
+.ds-c__row--over {
+  grid-template-columns: 110px 1fr;
+  outline: 2px dashed var(--color-accent);
+  outline-offset: -2px;
+  background: color-mix(in srgb, var(--color-accent) 10%, var(--color-bg));
+}
+
+.ds-c__key {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.ds-c__users {
+  font-size: 12px;
+  color: color-mix(in srgb, var(--color-text) 60%, transparent);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ds-c__hint {
+  font-size: 11.5px;
+  color: color-mix(in srgb, var(--color-text) 50%, transparent);
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+
+.ds-c__dropmsg {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--color-accent-700);
+}
+
+.ds-c__check {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding-left: 8px;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+
+.ds-c__check input {
+  accent-color: var(--color-accent);
+  width: 15px;
+  height: 15px;
+}
+
+/* — D · drop picks the scope — */
+.ds-d {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.ds-d__card {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  min-height: 112px;
+  padding: 8px 16px 8px 8px;
+  border: 1px solid var(--color-divider);
+  border-radius: var(--radius-md);
+  background: var(--color-neutral-100);
+}
+
+.ds-d__card--holding {
+  border-color: var(--color-accent);
+}
+
+.ds-d__shirts {
+  flex: none;
+  display: flex;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--color-neutral-200);
+}
+
+.ds-d__shirt {
+  position: relative;
+  width: 88px;
+}
+
+.ds-d__shirt .ma-shirt {
+  width: 100%;
+}
+
+.ds-d__busy {
+  position: absolute;
+  inset: 30% 0 auto;
+  text-align: center;
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--color-accent-700);
+}
+
+.ds-d__text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ds-d__pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-4);
+}
+
+.ds-d__foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding-top: 6px;
+  border-top: 1px solid var(--color-divider);
+}
+
+.ds-d__drophint {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11.5px;
+  color: color-mix(in srgb, var(--color-text) 55%, transparent);
+}
+
+.ds-d__zones {
+  position: absolute;
+  inset: 6px;
+  display: grid;
+  grid-template-columns: 1.4fr 1fr 1fr;
+  gap: 6px;
+  border-radius: calc(var(--radius-md) - 4px);
+  background: var(--color-neutral-100);
+}
+
+.ds-d__zone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  border: 2px dashed color-mix(in srgb, var(--color-text) 28%, transparent);
+  border-radius: calc(var(--radius-md) - 4px);
+  font-size: 12px;
+  color: color-mix(in srgb, var(--color-text) 65%, transparent);
+  transition:
+    background 0.1s ease,
+    border-color 0.1s ease;
+}
+
+.ds-d__zone strong {
+  font-size: 14px;
+  color: var(--color-text);
+}
+
+.ds-d__zone svg {
+  width: 18px;
+  height: 18px;
+}
+
+/* Each zone wears the cloth it targets, so "light only" reads at a glance. */
+.ds-d__zone--light {
+  background: #efe6d2;
+}
+
+.ds-d__zone--dark {
+  background: #262626;
+  color: rgb(255 255 255 / 0.7);
+}
+
+.ds-d__zone--dark strong {
+  color: #fff;
+}
+
+.ds-d__zone--one {
+  background: var(--color-neutral-200);
+}
+
+.ds-d__zone--over {
+  border-color: var(--color-accent);
+  border-style: solid;
+  box-shadow: inset 0 0 0 2px var(--color-accent);
+  color: var(--color-accent-700);
+}
+
+.ds-d__zone--dark.ds-d__zone--over {
+  color: var(--color-accent-300);
+}
+
+/* B, split: two tiles share the row with the rail, so they give up width. */
+.ds-b__tiles {
+  min-width: 0;
+}
+
+.ds-b__tiles:has(.ds-b__tile + .ds-b__tile) .ds-b__tile {
+  min-width: 0;
+  max-width: 260px;
+}
+
+.ds-b__railrow {
+  overflow: hidden;
+}
+
+.ds-b__railhead .ds-sub {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ds-b__railhead .ds-textbtn {
+  flex: none;
+  white-space: nowrap;
+}

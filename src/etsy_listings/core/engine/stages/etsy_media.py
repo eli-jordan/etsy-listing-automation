@@ -45,8 +45,9 @@ from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict
 
+from etsy_listings.core.clients.etsy.listings import EtsyListingClient
 from etsy_listings.core.config.listing import TemplateMediaEntry
-from etsy_listings.core.config.media import media_kind
+from etsy_listings.core.config.media import MAX_IMAGES, media_kind
 from etsy_listings.core.engine.change import Action, Drift, MediaChange, Verdict
 from etsy_listings.core.engine.context import RunContext
 from etsy_listings.core.engine.lock import Lockfile, hash_file, to_workspace_relative_posix
@@ -215,7 +216,10 @@ def _manifest_entry(
         source = workspace.render_file(listing, entry.template, entry.colour)
         colour = entry.colour if entry.template == variation_template else None
 
-    content_hash = hash_file(source) if source.is_file() else PENDING
+    # A render the render stage is about to rewrite is not what this stage will
+    # upload: its replacement is, and that is the preview apply promotes.
+    current = ctx.rewrites.get(source, source)
+    content_hash = hash_file(current) if current is not None and current.is_file() else PENDING
     file = to_workspace_relative_posix(workspace.root, source)
     return ManifestEntry(
         ref=manifest_ref(entry), source=source, content_hash=content_hash, file=file, colour=colour
@@ -361,7 +365,12 @@ class EtsyMediaStage:
         shop_id = ctx.workspace.defaults.etsy.require_shop_id()
 
         known_ids: dict[str, int] = dict(lock.remote.get(IMAGE_IDS_KEY) or {})
-        live_ids = live.live_image_ids if live is not None else frozenset()
+        # Read again rather than trusting the plan's `live`: a stage earlier in
+        # this same apply can have changed the listing since. Printify's
+        # publish puts its own mockups on a listing the plan read as empty.
+        current = client.get_listing(listing_id, include_images=True)
+        attached = [image.listing_image_id for image in current.images] if current else []
+        live_ids = frozenset(attached)
         # The document the engine decoded during planning, not a second read
         # of the same subtree: an upload is skipped only when the bytes match
         # what was *last uploaded*, and that is the only thing that knows.
@@ -369,10 +378,11 @@ class EtsyMediaStage:
 
         image_ids: dict[str, int] = {}
         sent_hashes: dict[str, str] = {}
-        for rank, entry in enumerate(desired.manifest, start=1):
+        for entry in desired.manifest:
             if not entry.source.is_file():
                 raise MediaNotRenderedError(entry.ref)
             current_hash = hash_file(entry.source)
+            sent_hashes[entry.ref] = current_hash
             existing_id = known_ids.get(entry.ref)
             if (
                 existing_id is not None
@@ -380,9 +390,17 @@ class EtsyMediaStage:
                 and current_hash == applied_hashes.get(entry.ref)
             ):
                 image_ids[entry.ref] = existing_id
-                sent_hashes[entry.ref] = current_hash
-                continue
 
+        # `attached` tracks what the listing carries as uploads proceed. Etsy
+        # refuses an upload past its 20-image cap, and the `image_ids` PATCH
+        # below that detaches what we are replacing only comes after them.
+        for rank, entry in enumerate(desired.manifest, start=1):
+            if entry.ref in image_ids:
+                continue
+            if len(attached) >= MAX_IMAGES:
+                attached = _make_room(
+                    ctx, client, shop_id, listing_id, attached, keep=set(image_ids.values())
+                )
             ctx.emit(f"uploading {entry.ref}")
             image = client.upload_listing_image(
                 shop_id,
@@ -393,7 +411,7 @@ class EtsyMediaStage:
                 alt_text=entry.alt_text,
             )
             image_ids[entry.ref] = image.listing_image_id
-            sent_hashes[entry.ref] = current_hash
+            attached.append(image.listing_image_id)
 
         ctx.emit(f"setting image order ({len(image_ids)} images)")
         client.update_listing(
@@ -433,6 +451,26 @@ class MediaNotRenderedError(RuntimeError):
         super().__init__(f"cannot upload {ref!r}: its render output does not exist on disk yet.")
 
 
+def _make_room(
+    ctx: RunContext,
+    client: EtsyListingClient,
+    shop_id: int,
+    listing_id: int,
+    attached: list[int],
+    *,
+    keep: set[int],
+) -> list[int]:
+    """Detach what the manifest no longer wants, so the next upload fits.
+
+    The same detach the closing `image_ids` PATCH would do, brought forward.
+    A listing cannot be emptied of images, so when nothing on it is ours yet
+    the first image stays until an upload of ours can take its place."""
+    remaining = [image_id for image_id in attached if image_id in keep] or attached[:1]
+    ctx.emit(f"detaching {len(attached) - len(remaining)} image(s) to stay within Etsy's limit")
+    client.update_listing(shop_id, listing_id, {"image_ids": remaining})
+    return remaining
+
+
 def _first_run_reason(desired: EtsyMediaDesired) -> str:
     pending = sum(1 for e in desired.manifest if e.content_hash == PENDING)
     if pending:
@@ -467,15 +505,23 @@ def _media_changes(
     reorder, and the frontend (which also has both full manifests, from the
     snapshot) is what turns "before ref X, after ref Y" into a moved-from-N
     badge, never this stage.
+
+    A rank whose ref is unchanged but whose bytes are not -- a re-rendered
+    mockup, or one not rendered yet -- is a change with ``before == after``:
+    the same image, replaced. A render's bytes are hashed, not the inputs
+    that produced it, so a re-render that comes out identical is no change.
     """
-    wanted_refs = [entry.ref for entry in desired.manifest]
-    applied_refs = [entry.ref for entry in applied.manifest] if applied is not None else []
+    wanted = list(desired.applied().manifest)
+    previous = list(applied.manifest) if applied is not None else []
     changes: list[MediaChange] = []
-    for rank in range(1, max(len(wanted_refs), len(applied_refs), 0) + 1):
-        before = applied_refs[rank - 1] if rank <= len(applied_refs) else None
-        after = wanted_refs[rank - 1] if rank <= len(wanted_refs) else None
-        if before != after:
-            changes.append(MediaChange(rank=rank, before=before, after=after))
+    for rank in range(1, max(len(wanted), len(previous), 0) + 1):
+        before = previous[rank - 1] if rank <= len(previous) else None
+        after = wanted[rank - 1] if rank <= len(wanted) else None
+        before_ref = before.ref if before is not None else None
+        after_ref = after.ref if after is not None else None
+        replaced = before is not None and after is not None and before.hash != after.hash
+        if before_ref != after_ref or replaced:
+            changes.append(MediaChange(rank=rank, before=before_ref, after=after_ref))
     return tuple(changes)
 
 

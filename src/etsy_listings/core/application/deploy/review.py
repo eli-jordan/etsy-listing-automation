@@ -26,10 +26,15 @@ def check_reviewed_apply(reviewed: Run | None, command: WorkspaceApply) -> None:
     if reviewed.phase != "ready":
         raise ReviewedPlanRefused("reviewed workspace plan is not ready")
 
-    planned = [event for event in reviewed.events if isinstance(event, ListingPlannedEvent)]
-    if list(command.listings) != [event.listing for event in planned]:
+    # A listing planned again after its previews rendered has a second event;
+    # the later one is what the seller reviewed, in first-planned order.
+    fingerprints: dict[str, str] = {}
+    for event in reviewed.events:
+        if isinstance(event, ListingPlannedEvent):
+            fingerprints[event.listing] = event.fingerprint
+    if list(command.listings) != list(fingerprints):
         raise ReviewedPlanRefused("apply listings must exactly match the reviewed workspace plan")
-    if dict(command.expect) != {event.listing: event.fingerprint for event in planned}:
+    if dict(command.expect) != fingerprints:
         raise ReviewedPlanRefused(
             "apply fingerprints must exactly match the reviewed workspace plan"
         )

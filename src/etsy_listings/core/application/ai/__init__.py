@@ -1,6 +1,6 @@
 """AI work: brief, market research and proposal as one streamed, cancellable
-run per listing, and the batch queue that drafts every created batch row
-through the same runs (features/market-seo-20260924/spec.md, *AI runs*;
+run per listing, and the batch queue that drafts only the brief for every
+created batch row through the same runner (features/market-seo-20260924/spec.md, *AI runs*;
 ADR-0048 through ADR-0050).
 
 Runs live in memory and are forgotten on restart; each gets its own thread,

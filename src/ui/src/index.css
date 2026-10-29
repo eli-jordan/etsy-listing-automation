@@ -2150,9 +2150,11 @@ table.listings tbody tr:last-child td {
   text-decoration: underline;
 }
 
-/* The linked pair (interactions Part 2 §1): two base-slot cards, for light
-   and for dark shirts, joined by the Link / Unlink pill. */
-.design-select--pair {
+/* The design strip (design-selector board, option D): one selector by
+   default, beside a light and a dark shirt wearing it; split, a selector per
+   shirt tone, each beside its own shirt. A PNG dropped on a selector uploads
+   into it. */
+.design-strip {
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
@@ -2185,17 +2187,59 @@ table.listings tbody tr:last-child td {
   text-decoration: underline;
 }
 
-.design-pair {
+.design-strip__card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 6px;
+  border: 1px solid var(--color-divider);
+  border-radius: var(--radius-md);
+  background: var(--color-neutral-100);
+  transition: border-color 0.12s ease;
+}
+
+.design-strip__card--holding {
+  border-color: var(--color-accent);
+}
+
+.design-strip__slots {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
-  align-items: center;
-  gap: var(--space-2);
+  grid-template-columns: minmax(0, 1fr);
+  gap: 6px;
+}
+
+.design-strip__slots--split {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .design-row--slot {
+  position: relative;
+  align-items: center;
+  gap: var(--space-3);
   padding: 6px 12px 6px 6px;
-  border: 1px solid var(--color-divider);
-  background: var(--color-neutral-100);
+  border: 1px solid transparent;
+}
+
+.design-row--slot .design-row__text {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+}
+
+.design-row--slot .design-row__name {
+  font-size: 15px;
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.design-row--slot .design-row__change {
+  margin: 4px 0 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
 }
 
 /* Empty, and a colour the listing sells needs it. */
@@ -2205,18 +2249,77 @@ table.listings tbody tr:last-child td {
   background: color-mix(in srgb, var(--color-warning) 8%, var(--color-neutral-100));
 }
 
-/* Linked: the dark card only mirrors the one design. */
-.design-row--mirrored {
-  border-style: dashed;
-  background: transparent;
-}
-
-.design-row--mirrored .design-tile {
-  opacity: 0.75;
-}
-
 .design-row--open {
   border-color: var(--color-accent);
+}
+
+/* A file is held over the strip: every selector on show is a drop target,
+   and the one under the pointer says what dropping does. */
+.design-row--target {
+  border: 1.5px dashed color-mix(in srgb, var(--color-accent) 55%, transparent);
+}
+
+.design-row--over {
+  border-style: solid;
+  border-color: var(--color-accent);
+}
+
+.design-strip__veil {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border-radius: inherit;
+  background: color-mix(in srgb, var(--color-accent-100) 90%, transparent);
+  color: var(--color-accent-700);
+  font-size: 13.5px;
+  font-weight: 700;
+  pointer-events: none;
+}
+
+.design-strip__veil svg {
+  width: 18px;
+  height: 18px;
+}
+
+.design-strip__shirts {
+  position: relative;
+  flex: none;
+  display: flex;
+  gap: 4px;
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  background: var(--color-neutral-200);
+}
+
+.shirt-thumb {
+  display: block;
+  width: 76px;
+  height: auto;
+}
+
+.design-strip__spin {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 22px;
+  height: 22px;
+  color: var(--color-accent);
+  animation: design-strip-spin 0.9s linear infinite;
+}
+
+@keyframes design-strip-spin {
+  to {
+    transform: rotate(1turn);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .design-strip__spin {
+    animation: none;
+  }
 }
 
 .design-row__title {
@@ -2226,6 +2329,7 @@ table.listings tbody tr:last-child td {
 }
 
 .design-row__users {
+  max-width: 100%;
   font-size: 11.5px;
   color: color-mix(in srgb, var(--color-text) 60%, transparent);
   white-space: nowrap;
@@ -2237,47 +2341,57 @@ table.listings tbody tr:last-child td {
   font-style: italic;
 }
 
-.design-row__same {
-  font-weight: 600;
-  color: color-mix(in srgb, var(--color-text) 55%, transparent);
-}
-
-.design-row--slot .design-row__change {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.design-link {
-  height: 30px;
-  padding: 0 11px 0 9px;
-  gap: 5px;
-  font-family: var(--font-body);
-  font-size: 11.5px;
-  font-weight: 700;
-  border-radius: 999px;
-  border: 1px solid var(--color-divider);
-  background: var(--color-bg);
-  color: color-mix(in srgb, var(--color-text) 60%, transparent);
+.design-strip__foot {
   display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: 6px 8px 2px;
+  border-top: 1px solid var(--color-divider);
+}
+
+.design-strip__mode {
+  padding: 0;
+  border: none;
+  background: none;
+  font-family: var(--font-body);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-accent-700);
   cursor: pointer;
 }
 
-.design-link:hover {
-  border-color: var(--color-accent);
-  color: var(--color-accent-700);
+.design-strip__mode:hover {
+  text-decoration: underline;
 }
 
-.design-link--on {
-  background: var(--color-accent-100);
-  border-color: var(--color-accent-300);
-  color: var(--color-accent-700);
+.design-strip__mode:focus-visible,
+.design-row--slot .design-row__change:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
 }
 
-.design-select--pair .add-panel {
+.design-strip__hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11.5px;
+  color: color-mix(in srgb, var(--color-text) 55%, transparent);
+}
+
+.design-strip__failed {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-danger-700);
+}
+
+.design-strip .add-panel {
   margin-top: 0;
+}
+
+.design-strip__panel-actions {
+  display: flex;
+  gap: var(--space-2);
 }
 
 /* The inline picker the strip drops open, and the card grid inside it --
@@ -5604,6 +5718,18 @@ table.listings tbody tr:last-child td {
   outline: 2px solid var(--color-accent-2);
   outline-offset: -2px;
 }
+/* A re-rendered image: the after block's green edge, as a red line along
+   the bottom. Drawn over the image, which would cover an inset shadow. */
+.dv-thumb--replaced::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 3px;
+  background: var(--color-danger);
+  pointer-events: none;
+}
 
 .dv-prices {
   border: 1px solid var(--color-divider);
@@ -6769,15 +6895,11 @@ button.seo-ai-mode.seo-ai-mode--busy:disabled {
     flex-wrap: wrap;
   }
 
-  /* The linked pair stacks: narrow widths are not designed yet
+  /* The split strip stacks: narrow widths are not designed yet
      (multi-artwork plan, Uncovered surfaces), but the page must not scroll
      sideways. */
-  .design-pair {
+  .design-strip__slots--split {
     grid-template-columns: minmax(0, 1fr);
-  }
-
-  .design-link {
-    justify-self: center;
   }
 
   .page-head__name {

@@ -84,6 +84,7 @@ from etsy_listings.core.engine.stages.gates import (
 )
 from etsy_listings.core.preparation.artifacts import ArtifactError, PreparationInputs
 from etsy_listings.core.preparation.readiness import template_readiness
+from etsy_listings.core.preparation.scene_cache import SceneCache, photo_digest, write_atomic
 from etsy_listings.core.preparation.scenes import PreparedLayer, lease_scene
 from etsy_listings.core.render.config import (
     AnyTemplate,
@@ -94,16 +95,20 @@ from etsy_listings.core.render.config import (
     scene_colours,
     scene_layers,
 )
+from etsy_listings.core.render.identity import (
+    PHOTO_WARP_PNG_COMPRESSION,
+    artwork_identity,
+    photo_warp_scene_identity,
+)
 from etsy_listings.core.render.io import (
-    MARIGOLD_PNG_COMPRESSION,
+    encode_png,
     load_design,
     load_template_base,
-    save_png,
 )
 from etsy_listings.core.render.maps import DerivedMapCache
 from etsy_listings.core.render.pipeline import Layer, render_scene
 from etsy_listings.core.render.swatch import sample_swatch
-from etsy_listings.core.render.types import RGBA
+from etsy_listings.core.render.types import RGB, RGBA
 from etsy_listings.core.workspace.facts import template_info
 from etsy_listings.core.workspace.workspace import Workspace
 
@@ -367,6 +372,10 @@ class RenderSceneSnapshot(BaseModel):
     colour: str | None
     state: RenderSceneState
     preview: bool
+    scene_hash: str
+    """:func:`scene_hash` as this plan computed it, without its ``sha256:``
+    prefix -- what names this plan's preview file, so the review can ask for
+    exactly that file rather than have the server plan the listing again."""
 
 
 class RenderSnapshot(BaseModel):
@@ -756,9 +765,35 @@ class RenderStage:
                     colour=work.colour,
                     state=state,
                     preview=desired.preview_exists.get(work.key, False),
+                    scene_hash=_hash_token(scene_hash(desired, work)),
                 )
             )
         return RenderSnapshot(scenes=tuple(scenes))
+
+    def rewrites(
+        self, ctx: RunContext, desired: RenderDesired, live: RenderLive | None
+    ) -> dict[Path, Path | None]:
+        """Each ``stale`` or ``missing`` scene's render output, mapped to the
+        preview :meth:`apply` will promote into it, or ``None`` before
+        :meth:`preview` has rendered one.
+
+        A ``cached`` scene is left out: apply writes it again, but with the
+        bytes already on disk, so a stage reading it now reads what it will
+        get. The preview is the exact file apply copies (ADR-0040), which is
+        what lets a plan say whether a re-rendered image actually differs.
+        """
+        changing = {
+            scene.scene for scene in self.snapshot(desired, live).scenes if scene.state != "cached"
+        }
+        rewrites: dict[Path, Path | None] = {}
+        for work in desired.works:
+            if work.key not in changing:
+                continue
+            preview = ctx.workspace.preview_file(
+                desired.listing, work.template, work.colour, _hash_token(scene_hash(desired, work))
+            )
+            rewrites[work.output] = preview if preview.is_file() else None
+        return rewrites
 
     def preview(
         self,
@@ -860,18 +895,41 @@ class RenderStage:
         if work.preparation is not None:
             RenderStage._render_prepared(workspace, work, target)
             return
-        base = load_template_base(work.base_image)
-        map_cache = DerivedMapCache(workspace.template_derived_dir(work.template))
-        height = map_cache.height(work.map_key, base) if work.wants_height else None
-        luminance = map_cache.luminance(work.map_key, base) if work.wants_luminance else None
-        designs: dict[Path, RGBA] = {}
-        layers = []
+        RenderStage._render_photo_warp(
+            workspace, work, target, load_template_base(work.base_image), {}
+        )
+
+    @staticmethod
+    def _render_photo_warp(
+        workspace: Workspace,
+        work: SceneWork,
+        target: Path,
+        base: RGB,
+        designs: dict[Path, tuple[RGBA, str]],
+    ) -> None:
+        """Write a photo-warp scene from the scene cache, else compose and
+        store it. ``designs`` memoises decoded artwork and its pixel identity
+        across scenes; the identity is computed from the arrays composed."""
         for layer in work.layers:
             if layer.design not in designs:
-                designs[layer.design] = load_design(layer.design)
-            layers.append(Layer(design=designs[layer.design], cfg=layer.cfg))
-        image = render_scene(base, layers, height=height, luminance=luminance)
-        save_png(image, target)
+                pixels = load_design(layer.design)
+                designs[layer.design] = (pixels, artwork_identity(pixels))
+        identity = photo_warp_scene_identity(
+            photo_pixels=photo_digest(base),
+            layers=[(layer.cfg, designs[layer.design][1]) for layer in work.layers],
+        )
+
+        def compose() -> bytes:
+            map_cache = DerivedMapCache(workspace.template_derived_dir(work.template))
+            image = render_scene(
+                base,
+                [Layer(design=designs[layer.design][0], cfg=layer.cfg) for layer in work.layers],
+                height=map_cache.height(work.map_key, base) if work.wants_height else None,
+                luminance=map_cache.luminance(work.map_key, base) if work.wants_luminance else None,
+            )
+            return encode_png(image, compression=PHOTO_WARP_PNG_COMPRESSION)
+
+        write_atomic(target, SceneCache(workspace).get_or_compose(identity, compose))
 
     @staticmethod
     def _render_prepared(
@@ -892,7 +950,9 @@ class RenderStage:
                 if preview is not None and preview.is_file():
                     _copy_preview(preview, target)
                     return
-                save_png(scene.render(), target, compression=MARIGOLD_PNG_COMPRESSION)
+                # Keyed by the identity just checked against the plan, which
+                # lease_scene computed from the decoded pixels.
+                write_atomic(target, scene.encoded(SceneCache(workspace)))
         except ArtifactError as exc:
             raise StageBlockedError(str(exc)) from exc
 
@@ -945,8 +1005,7 @@ class RenderStage:
         hash is no longer current.
         """
         workspace = ctx.workspace
-        design_cache: dict[Path, RGBA] = {}
-        map_caches: dict[str, DerivedMapCache] = {}
+        design_cache: dict[Path, tuple[RGBA, str]] = {}
         outputs: dict[str, str] = {}
 
         for work in desired.works:
@@ -963,22 +1022,7 @@ class RenderStage:
                 # progress: a refreshed deploy page still points at it.
                 _copy_preview(preview_path, work.output)
             else:
-                map_cache = map_caches.setdefault(
-                    work.template, DerivedMapCache(workspace.template_derived_dir(work.template))
-                )
-                height = map_cache.height(work.map_key, base) if work.wants_height else None
-                luminance = (
-                    map_cache.luminance(work.map_key, base) if work.wants_luminance else None
-                )
-
-                layers = []
-                for layer in work.layers:
-                    if layer.design not in design_cache:
-                        design_cache[layer.design] = load_design(layer.design)
-                    layers.append(Layer(design=design_cache[layer.design], cfg=layer.cfg))
-
-                image = render_scene(base, layers, height=height, luminance=luminance)
-                save_png(image, work.output)
+                self._render_photo_warp(workspace, work, work.output, base, design_cache)
             outputs[desired.relative(work.output)] = hash_file(work.output)
 
             swatches: tuple[Swatch, ...] = tuple(

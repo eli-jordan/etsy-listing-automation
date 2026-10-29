@@ -121,16 +121,14 @@ class AiReadinessBlock(BaseModel):
 SETUP_REMEDY = "Add one in Setup, then come back. Your staging is kept."
 
 
-def batch_blocked(
-    workspace: Workspace, providers: Sequence[AiProvider], *, has_market: bool
-) -> AiReadinessBlock | None:
-    """Whether a batch created now could draft: every prompt a drafting run
-    reads, a ready provider -- :func:`unready_reason`'s own two checks -- and
-    Etsy market access, which a manual run only finds missing once it
-    reaches research. ``None`` when all three are there; the wording is
-    ``staging.note.md``'s."""
-    prompt_file = missing_prompt(workspace, draft_brief=True)
-    if prompt_file is not None:
+def batch_blocked(workspace: Workspace, providers: Sequence[AiProvider]) -> AiReadinessBlock | None:
+    """Brief-only batch readiness: the brief prompt and a ready provider.
+
+    Research prompts and market access belong to the seller's later AI Mode
+    request (ADR-0048, amendment 2026-10-29).
+    """
+    prompt_file = workspace.brief_prompt_file()
+    if not prompt_file.is_file():
         shown = prompt_file.relative_to(workspace.root).as_posix()
         return AiReadinessBlock(
             message=f"{shown} is missing.",
@@ -138,9 +136,4 @@ def batch_blocked(
         )
     if provider_problem(providers) is not None:
         return AiReadinessBlock(message="No AI provider is ready.", remedy=SETUP_REMEDY)
-    if not has_market:
-        return AiReadinessBlock(
-            message="Etsy market access isn't set up.",
-            remedy="Add the Etsy app key in Setup, then come back. Your staging is kept.",
-        )
     return None

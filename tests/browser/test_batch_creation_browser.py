@@ -6,8 +6,8 @@ browser.
 * Drop three PNGs -> fix one name -> Create 3 listings -> the summary shows
   three rows, and each opens an editor whose design is the dropped file,
   asserted on the ``listing.yaml`` and ``designs/*.png`` the UI wrote.
-* Create a batch of two -> both rows reach *done* on the summary -> the
-  editor has the batch run's suggestions waiting.
+* Create a batch of two -> both briefs are ready -> edit a brief in the
+  editor -> start AI Mode to generate suggestions from the edited brief.
 * The summary -> a listing's name -> Mark reviewed in the editor -> Back to batch ->
   the summary shows the row reviewed, and the batch's record says so
   (batch plan PR 5; UI doc §7, §8).
@@ -83,7 +83,7 @@ def test_drop_three_pngs_fix_a_name_and_create_three_listings(  # noqa: ANN001
     name = page.get_by_label("Listing name for ★★★.png")
     name.fill("summit-coffee")
     name.press("Enter")
-    page.get_by_text("Each listing is a local draft. Nothing goes to Printify or Etsy.").wait_for()
+    page.get_by_text("Briefs are drafted automatically.", exact=False).wait_for()
     create.click()
 
     page.get_by_text("Briefs are written for you", exact=False).wait_for()
@@ -108,7 +108,7 @@ def test_drop_three_pngs_fix_a_name_and_create_three_listings(  # noqa: ANN001
         assert design_name.inner_text() == listing
 
 
-def test_a_batch_of_two_drafts_both_and_the_editor_has_the_suggestions_waiting(  # noqa: ANN001
+def test_a_batch_drafts_briefs_then_the_seller_edits_one_and_starts_ai_mode(  # noqa: ANN001
     page, workspace_root: Path
 ) -> None:
     a_listing_template(Workspace.discover(root_override=workspace_root))
@@ -122,10 +122,11 @@ def test_a_batch_of_two_drafts_both_and_the_editor_has_the_suggestions_waiting( 
     )
     page.get_by_role("button", name="Create 2 listings").click()
 
-    done = page.get_by_text("Brief, market research and SEO done")
+    done = page.get_by_text("Brief ready")
     expect(done).to_have_count(2)
     expect(page.locator(".bc-counts")).to_contain_text("2 drafted")
-    expect(page.get_by_text("Ready to review")).to_have_count(2)
+    expect(page.get_by_text("Start AI Mode in the listing")).to_have_count(2)
+    expect(page.get_by_text("Ready to review")).to_have_count(0)
     for listing in ("lake-loop", "pine-ridge-run"):
         written = yaml.safe_load(
             (workspace_root / "listings" / listing / "listing.yaml").read_text(encoding="utf-8")
@@ -137,6 +138,13 @@ def test_a_batch_of_two_drafts_both_and_the_editor_has_the_suggestions_waiting( 
     ).click()
     page.wait_for_url(re.compile(r"/listings/lake-loop\?batch="))
     page.locator(".tabs .seg-opt", has_text="Listing Details").click()
+    brief = page.get_by_role("textbox", name="Brief")
+    expect(brief).to_have_value(DRAFTED_BRIEF)
+    expect(page.get_by_role("region", name="title AI suggestions")).to_have_count(0)
+    expect(page.get_by_role("region", name="tag AI suggestions")).to_have_count(0)
+    brief.fill("A lake running club shirt for weekend trail runners.")
+    page.locator("#details-title").click()
+    page.get_by_role("button", name="AI Mode").click()
     page.get_by_role("region", name="title AI suggestions").wait_for(state="visible")
     page.get_by_role("region", name="tag AI suggestions").wait_for(state="visible")
 
@@ -152,7 +160,7 @@ def test_open_from_the_summary_mark_reviewed_and_go_back_to_the_batch(  # noqa: 
         [{"name": "lake-loop.png", "mimeType": "image/png", "buffer": png(4)}]
     )
     page.get_by_role("button", name="Create 1 listing").click()
-    expect(page.get_by_text("Brief, market research and SEO done")).to_have_count(1)
+    expect(page.get_by_text("Brief ready")).to_have_count(1)
     counts = page.locator(".bc-counts")
     expect(counts).to_contain_text("0 of 1 reviewed")
     summary = page.url

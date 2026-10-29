@@ -996,6 +996,27 @@ class TestSupportingEndpoints:
     def test_a_design_thumbnail_404s_for_an_unknown_design(self, client: TestClient) -> None:
         assert client.get("/api/listing-designs/no-such-art/thumbnail").status_code == 404
 
+    def test_uploads_a_listing_design_and_lists_it(self, client: TestClient) -> None:
+        """The design strip's drop: the answer is the ref to write into
+        ``design:``, and the new file is in the list the strip offers next."""
+        buffer = BytesIO()
+        Image.new("RGBA", (32, 32), (10, 120, 200, 255)).save(buffer, format="PNG")
+        response = client.post(
+            "/api/listing-designs",
+            files={"file": ("sunset-ridge.png", buffer.getvalue(), "image/png")},
+        )
+        assert response.status_code == 200
+        assert response.json() == {"name": "sunset-ridge", "file": "designs/sunset-ridge.png"}
+        names = {row["name"] for row in client.get("/api/listing-designs").json()}
+        assert "sunset-ridge" in names
+
+    def test_a_listing_design_upload_that_is_not_a_png_is_a_400(self, client: TestClient) -> None:
+        response = client.post(
+            "/api/listing-designs", files={"file": ("notes.png", b"not a png", "image/png")}
+        )
+        assert response.status_code == 400
+        assert "not a readable image" in response.json()["detail"]
+
     def test_lists_common_copy_files_with_their_front_matter(
         self, client: TestClient, workspace_root: Path
     ) -> None:

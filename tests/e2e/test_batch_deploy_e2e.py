@@ -5,8 +5,8 @@ skipped by default.
 The Phase 3 test deploys the fixture listing; this one deploys a listing
 nothing but the batch path made, through the app the seller drives: the
 fixture listing saved as a listing template, one print-size design staged
-and confirmed, the batch queue drafting its brief, market research and
-proposal, the proposal's first title and lead accepted into the listing,
+and confirmed, the batch queue drafting its brief, manual AI Mode researching
+the market and generating a proposal, its first title and lead accepted into the listing,
 and then a UI plan and an apply through the runs resource. A listing
 template carries no title or lead, so until the seller accepts them the
 listing cannot deploy at all -- which is why accepting them is the step
@@ -168,11 +168,20 @@ def test_a_batch_created_listing_deploys_and_its_proposal_goes(
     batch_id = _ok(client.post(f"/api/staging/{staged['id']}/confirm"))["id"]
     assert _row(client, batch_id)["name"] == DESIGN
 
-    # The queue drafts the brief, researches the market and caches a
-    # proposal (PR 3, PR 4).
+    # The batch stops after the brief. The seller starts AI Mode when ready.
     wait_for(lambda: _row(client, batch_id)["ai"] in {"done", "failed"}, timeout=AI_SECONDS)
     row = _row(client, batch_id)
     assert row["ai"] == "done", row
+    assert row["proposal"] is None
+    assert workspace.load_listing(DESIGN).brief.strip()
+    ai_run_id = _ok(
+        client.post("/api/ai/runs", json={"listing": DESIGN, "draft_brief": False}), 202
+    )["id"]
+    wait_for(
+        lambda: _ok(client.get(f"/api/ai/runs/{ai_run_id}"))["phase"] in {"done", "failed"},
+        timeout=AI_SECONDS,
+    )
+    assert _ok(client.get(f"/api/ai/runs/{ai_run_id}"))["phase"] == "done"
     proposal = _ok(client.get(f"/api/listings/{DESIGN}/proposal"))
     title = proposal["proposal"]["titles"][0]
     lead = proposal["proposal"]["description_leads"][0]

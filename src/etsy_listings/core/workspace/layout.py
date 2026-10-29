@@ -89,6 +89,10 @@ PREVIEWS_DIR = "previews"
 by `scene_hash` under `PREVIEWS_DIR/<listing>/<template>/`. Sibling to
 `RENDERS_DIR` rather than nested inside it -- a preview is not yet an applied
 render, and either must be wipeable without the other."""
+SCENES_DIR = "scenes"
+"""Composed Marigold scenes, one PNG per scene identity, shared by every
+listing and template (``core/preparation/scene_cache.py``). Least recently
+read go first past a byte budget, so nothing here follows a listing."""
 MARKET_DIR = "market"
 """Market-informed SEO's caches (features/market-seo-20260924/spec.md, *Cache*), each a directory
 inside it: :data:`MARKET_SEARCH_DIR` and :data:`MARKET_STATS_DIR` hold the
@@ -122,6 +126,9 @@ PROPOSALS_DIR = "proposals"
 ADR-0003's layout): the exact name, like the market snapshot, so two listings that
 differ only in case -- possible on a case-sensitive filesystem -- never share
 a record. Moves and goes with the listing."""
+AI_IMAGES_DIR = "ai-images"
+"""Designs flattened onto an opaque background for an AI provider to look at
+(``core/ai/viewable.py``), one directory per source content hash."""
 RUNS_DB = "runs.db"
 FX_CACHE_FILE = "fx.json"
 

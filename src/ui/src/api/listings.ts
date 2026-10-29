@@ -243,6 +243,22 @@ export async function listListingDesigns(): Promise<ListingDesignSummary[]> {
   return data;
 }
 
+/** Adds a PNG to `designs/` and answers where it landed -- not always its
+ * filename: a name taken by other artwork gets a `-2` suffix. Hand-rolled
+ * multipart, as `uploadDesign` is; the error carries the server's reason. */
+export async function uploadListingDesign(file: File): Promise<ListingDesignSummary> {
+  const body = new FormData();
+  body.append("file", file);
+  const response = await fetch("/api/listing-designs", { method: "POST", body });
+  if (!response.ok) {
+    const detail = (await response.json().catch(() => null)) as { detail?: unknown } | null;
+    throw new ListingsApiError(
+      typeof detail?.detail === "string" ? detail.detail : `could not upload ${file.name}`,
+    );
+  }
+  return (await response.json()) as ListingDesignSummary;
+}
+
 /** The live shop's sections, for the Details tab's Section dropdown.
  * `available: false` (never a rejected promise) means the workspace has no
  * usable Etsy connection and the caller should retain the text fallback;

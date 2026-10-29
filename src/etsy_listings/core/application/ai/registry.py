@@ -37,7 +37,8 @@ StopReason = Literal["cancelled", "timeout", "shutdown", "deploy"]
 belonged to becomes ``cancelled_by_deploy`` rather than ``cancelled``."""
 RunOrigin = Literal["manual", "batch"]
 """Who started the run: the editor's AI Mode, or the batch queue. A
-batch run is otherwise an ordinary run -- same chain, same limit."""
+batch run stops after the brief; manual AI Mode continues through research
+and SEO. Both share the run's cancellation and time limit."""
 FinishListener = Callable[["AiRun"], None]
 
 

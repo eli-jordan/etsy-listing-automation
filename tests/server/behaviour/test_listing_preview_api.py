@@ -143,3 +143,47 @@ class TestServesTheCurrentPreview:
         response = client.get(f"/api/listings/{LISTING}/previews/flat-lay-01/black")
 
         assert response.status_code == 200
+
+
+class TestByPlanHash:
+    """With ``hash``, the file the reviewed plan named is read as it stands,
+    without planning the listing again."""
+
+    def _scene_hash(self, workspace_root: Path) -> str:
+        workspace = Workspace.discover(root_override=workspace_root)
+        planned = build_plan(_context_factory(workspace, None), LISTING, a_lock(), [RenderStage()])
+        snapshot = planned.plan.stage_plans[0].snapshot
+        return next(s.scene_hash for s in snapshot.scenes if s.colour == "black")
+
+    def test_serves_the_plans_preview_without_planning_again(
+        self, workspace_root: Path, monkeypatch
+    ) -> None:
+        _render_previews(workspace_root)
+        scene_hash = self._scene_hash(workspace_root)
+
+        def no_planning(*args, **kwargs):
+            raise AssertionError("a hash-addressed preview must not plan the listing")
+
+        monkeypatch.setattr(RenderStage, "desired", no_planning)
+        response = _client(workspace_root).get(
+            f"/api/listings/{LISTING}/previews/flat-lay-01/black", params={"hash": scene_hash}
+        )
+
+        assert response.status_code == 200
+        assert response.headers["content-type"] == "image/png"
+
+    def test_a_hash_with_no_preview_is_404(self, workspace_root: Path) -> None:
+        response = _client(workspace_root).get(
+            f"/api/listings/{LISTING}/previews/flat-lay-01/black", params={"hash": "0" * 64}
+        )
+
+        assert response.status_code == 404
+
+    def test_a_hash_that_is_not_one_path_segment_is_refused(self, workspace_root: Path) -> None:
+        _render_previews(workspace_root)
+
+        response = _client(workspace_root).get(
+            f"/api/listings/{LISTING}/previews/flat-lay-01/black", params={"hash": "../../x"}
+        )
+
+        assert response.status_code == 400

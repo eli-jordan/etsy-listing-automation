@@ -111,6 +111,17 @@ afterEach(() => {
 });
 
 describe("BatchSummaryPage", () => {
+  it("points a completed brief without a proposal to manual AI Mode", async () => {
+    vi.spyOn(batchesApi, "getBatch").mockResolvedValue(
+      batch([row("night-hike-club")], { status: "in_review" }),
+    );
+    renderPage();
+
+    await screen.findByText("Brief ready");
+    expect(screen.getByText("Start AI Mode in the listing")).toBeInTheDocument();
+    expect(screen.queryByText("Ready to review")).not.toBeInTheDocument();
+  });
+
   it("shows the queue mid-run: counts, each row's AI and its proposal (UI doc §7)", async () => {
     vi.spyOn(batchesApi, "getBatch").mockResolvedValue(batch(MID_RUN));
     renderPage();
@@ -123,7 +134,7 @@ describe("BatchSummaryPage", () => {
     expect(screen.getByText(/Drafting one listing at a time/)).toBeInTheDocument();
 
     const done = within(rowFor("night-hike-club"));
-    expect(done.getByText("Brief, market research and SEO done")).toBeInTheDocument();
+    expect(done.getByText("Brief ready")).toBeInTheDocument();
     expect(done.getByText("Ready to review")).toBeInTheDocument();
     expect(
       within(rowFor("after-rain-trail-2")).getByText("Stale: brief edited since"),
@@ -141,7 +152,7 @@ describe("BatchSummaryPage", () => {
       failed.getByRole("status", { name: "AI Mode: Market research failed" }),
     ).toBeInTheDocument();
     expect(failed.getByText(/rate limit reached/)).toBeInTheDocument();
-    expect(failed.getByText(/The brief is saved; Retry reruns research and SEO/)).toBeVisible();
+    expect(failed.getByText(/The brief is saved\. Retry keeps it\./)).toBeVisible();
     expect(failed.getByRole("button", { name: "Retry" })).toBeInTheDocument();
 
     const uncreated = within(rowFor("trailhead-sunset"));

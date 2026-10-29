@@ -6,7 +6,7 @@ target photo and naming the result's identity happen in one place, so the
 identity a plan records is the identity apply and a preview compute.
 """
 
-import hashlib
+import threading
 from collections.abc import Iterator, Mapping, Sequence
 from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass
@@ -19,11 +19,23 @@ from etsy_listings.core.preparation.artifacts import (
     PreparationInputs,
     StalePreparation,
 )
+from etsy_listings.core.preparation.scene_cache import SceneCache, photo_digest
 from etsy_listings.core.render.config import MarigoldAppearance
 from etsy_listings.core.render.identity import artwork_identity, prepared_scene_identity
+from etsy_listings.core.render.io import MARIGOLD_PNG_COMPRESSION, encode_png
 from etsy_listings.core.render.material import MaterialLayer, MaterialMaps, render_marigold_scene
 from etsy_listings.core.render.types import RGB, RGBA
 from etsy_listings.core.workspace import Workspace
+
+MAX_CONCURRENT_RENDERS = 4
+"""Compositions that may run at once, across previews and the render stage.
+
+One peaks at about 1 GB for a 2048px photo, and the server answers each
+preview request on its own thread: a page of full-size scenes arriving
+together used to compose them all at once and exhaust memory. The rest
+queue here, so four running together peak near 4 GB."""
+
+_RENDER_SLOTS = threading.BoundedSemaphore(MAX_CONCURRENT_RENDERS)
 
 
 @dataclass(frozen=True)
@@ -49,13 +61,22 @@ class PreparedScene:
     maps: Mapping[str | None, MaterialMaps]
 
     def render(self) -> Image.Image:
-        return render_marigold_scene(
-            self.base,
-            [
-                MaterialLayer(layer.artwork, self.maps[layer.placement_id], layer.placement_id)
-                for layer in self.layers
-            ],
-            appearance=self.appearance,
+        with _RENDER_SLOTS:
+            return render_marigold_scene(
+                self.base,
+                [
+                    MaterialLayer(layer.artwork, self.maps[layer.placement_id], layer.placement_id)
+                    for layer in self.layers
+                ],
+                appearance=self.appearance,
+            )
+
+    def encoded(self, cache: SceneCache) -> bytes:
+        """The scene's PNG: ``cache``'s entry for :attr:`identity`, or a
+        fresh composition, stored there before it is returned."""
+        return cache.get_or_compose(
+            self.identity,
+            lambda: encode_png(self.render(), compression=MARIGOLD_PNG_COMPRESSION),
         )
 
 
@@ -91,7 +112,7 @@ def lease_scene(
             map_content=acquired.manifest.content_digest,
             placement_ids=[layer.placement_id for layer in layers],
             artwork_digests=[artwork_identity(layer.artwork) for layer in layers],
-            photo_pixels=hashlib.sha256(base.tobytes()).hexdigest(),
+            photo_pixels=photo_digest(base),
             appearance=appearance,
         )
         yield PreparedScene(

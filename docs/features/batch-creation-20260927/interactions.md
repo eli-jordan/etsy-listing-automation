@@ -230,8 +230,9 @@ Not obvious from the designs:
   upload become one row listing both sources. A file identical to one already
   in `designs/` reuses that file, the one case where the listing name and the
   design file name differ.
-- **AI readiness is only mentioned when it fails.** When prompts, a provider
-  and Etsy market access are all available, nothing is said. When one is
+- **AI readiness is only mentioned when it fails.** When the brief prompt and
+  a provider are available, nothing is said. Market access and the research
+  and SEO prompts are needed only for later AI Mode. When a brief prerequisite is
   missing, a blocking callout appears and Create is disabled (wording in
   [`staging.note.md`](../../../src/ui/design/scenes/batch-create-lofi/staging.note.md)).
 - **The template is frozen when staging starts.** The page says *Using
@@ -260,7 +261,7 @@ Not obvious from the designs:
 Frame: [`batch-summary`](../../../src/ui/design/scenes/batch-create-lofi/batch-summary.tsx).
 
 The batch's only review surface. A progress bar and count strip sit above a
-row per listing, showing AI drafting, the SEO proposal, and the Reviewed flag.
+row per listing, showing brief drafting, any later SEO proposal, and the Reviewed flag.
 
 Not obvious from the designs:
 
@@ -269,16 +270,16 @@ Not obvious from the designs:
 - **Drafting runs one listing at a time by default**, shared across all active
   batches in round-robin order. **Work continues if the tab is closed**, and a
   server restart resumes it.
-- **Running and failed rows show the editor's own AI step indicator** (Brief →
-  Market research → SEO suggestions), so a batch row and an open editor read
-  the same way. Finished rows show a plain *done* line instead, matching the
-  editor, which hides the indicator once a run completes.
-- **The brief is written for the seller; title, tags and lead are not.** They
-  wait as suggestions to accept in each listing. If the seller writes a brief
-  before a row's turn comes, the AI keeps it and uses it.
-- **Retry keeps everything that already succeeded.** A row whose market
-  research failed keeps its saved brief (including any edits) and reruns only
-  research and SEO. A row that was never created retries creating it.
+- **Running and failed rows show brief-drafting progress.** Market research
+  and SEO are skipped in batch runs. Finished rows say *Brief ready*; when no
+  proposal exists, the SEO column points the seller to AI Mode in the listing.
+- **The seller reviews the brief before starting AI Mode.** Batch creation
+  generates no market data or SEO suggestions. AI Mode in each listing uses
+  the current saved brief for research and suggestions. If the seller writes
+  a brief before or during drafting, that text is kept.
+- **Retry keeps a saved brief, including seller edits.** Retry and Resume run
+  only brief drafting, finishing immediately when a brief already exists.
+  A row that was never created retries creating it.
   **Retry 2 failed** retries every failed row at once.
 - **Stale proposals** are flagged in the SEO column (*Stale: brief edited
   since*) but stay usable. See [section 8](#8-a-listing-opened-from-a-batch).

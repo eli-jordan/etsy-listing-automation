@@ -33,13 +33,14 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile
 from fastapi.responses import Response
 
 from etsy_listings.core import connections
 from etsy_listings.core.application.ai.registry import AiRunRegistry
 from etsy_listings.core.application.dependencies import ContextFactory, EtsyStates
 from etsy_listings.core.application.listing_creation import create_listing as create
+from etsy_listings.core.application.listing_designs import save_listing_design
 from etsy_listings.core.application.listing_edits import edit_listing
 from etsy_listings.core.application.listing_identity import delete_listing as delete
 from etsy_listings.core.application.listing_identity import rename_listing as rename
@@ -62,6 +63,7 @@ from etsy_listings.core.application.pricing_plans import (
     pricing_plan_ref,
 )
 from etsy_listings.core.application.refusals import (
+    ListingDesignUploadRefused,
     ListingMissing,
     ListingNameTaken,
     PublishedListingDeletion,
@@ -357,12 +359,21 @@ def rename_listing(target: Existing, body: RenameListingRequest, request: Reques
 
 
 def _preview_response(
-    request: Request, target: Target, template: str, colour: str | None
+    request: Request, target: Target, template: str, colour: str | None, scene_hash: str | None
 ) -> Response:
-    """ADR-0040, ADR-0041: the preview a plan run already rendered for this scene, at its
-    *current* hash. :func:`~etsy_listings.core.engine.preview.lookup_preview` owns
-    the hash and the path; this is the HTTP adapter over it.
+    """ADR-0040, ADR-0041: the preview a plan run already rendered for this scene.
+
+    With ``hash``, the scene hash the plan under review reported for it
+    (``RenderSceneSnapshot.scene_hash``), that plan's file is served as it
+    stands -- the review shows that plan, and apply runs exactly it. Without,
+    :func:`~etsy_listings.core.engine.preview.lookup_preview` recomputes the
+    *current* hash, which plans the whole listing again.
     """
+    if scene_hash is not None:
+        path = target.workspace.preview_file(target.name, template, colour, scene_hash)
+        if not path.is_file():
+            raise HTTPException(status_code=404, detail="no preview rendered yet for this scene")
+        return _png(path)
     factory: ContextFactory = request.app.state.context_factory
     found = lookup_preview(factory(target.workspace, None), target.name, template, colour)
     if found.miss == "blocked":
@@ -372,32 +383,37 @@ def _preview_response(
         raise HTTPException(status_code=404, detail=f"no scene for {where}")
     if found.path is None or not found.path.is_file():
         raise HTTPException(status_code=404, detail="no preview rendered yet for this scene")
+    return _png(found.path)
+
+
+def _png(path: Path) -> Response:
     return Response(
-        content=found.path.read_bytes(),
-        media_type="image/png",
-        headers={"Cache-Control": "no-cache"},
+        content=path.read_bytes(), media_type="image/png", headers={"Cache-Control": "no-cache"}
     )
 
 
 @router.get("/{name}/previews/{template}")
-def listing_preview(target: Existing, template: str, request: Request) -> Response:
+def listing_preview(
+    target: Existing, template: str, request: Request, hash: str | None = None
+) -> Response:
     """A ``multiple``/``single``-kind scene: no per-colour photo, so no
     colour segment (ADR-0014's rule, mirrored from ``render_file``)."""
-    return _preview_response(request, target, template, None)
+    return _preview_response(request, target, template, None, hash)
 
 
 @router.get("/{name}/previews/{template}/{colour}")
 def listing_preview_coloured(
-    target: Existing, template: str, colour: str, request: Request
+    target: Existing, template: str, colour: str, request: Request, hash: str | None = None
 ) -> Response:
     """A ``colour-matrix``-kind scene: one preview per colour."""
-    return _preview_response(request, target, template, colour)
+    return _preview_response(request, target, template, colour, hash)
 
 
 @router.get("/{name}/scene-preview")
 def scene_preview(
     target: Existing,
     template: str,
+    request: Request,
     colour: str | None = None,
     scale: PreviewScale = "full",
     v: str | None = None,
@@ -426,7 +442,9 @@ def scene_preview(
         ) from exc
     with preview_refusals():
         scene = saved_scene(workspace, template, colour=colour, design=artwork)
-    return render_preview_response(scene, scale)
+    return render_preview_response(
+        scene, scale, workspace=workspace, if_none_match=request.headers.get("if-none-match")
+    )
 
 
 @support_router.get("/api/listing-draft", response_model=ListingDetail)
@@ -594,6 +612,20 @@ def list_listing_designs(request: Request) -> list[ListingDesignSummary]:
         ListingDesignSummary(name=path.stem, file=f"designs/{path.name}")
         for path in workspace.design_files()
     ]
+
+
+@support_router.post("/api/listing-designs", response_model=ListingDesignSummary)
+async def upload_listing_design(request: Request, file: UploadFile) -> ListingDesignSummary:
+    """A PNG dropped on the editor's design strip, added to ``designs/``.
+    The answer names where it landed, which is not always its filename: a
+    name already taken by other artwork gets a ``-2`` suffix rather than
+    overwriting what another listing may print."""
+    payload = await file.read()
+    try:
+        name = save_listing_design(_workspace(request), file.filename or "", payload)
+    except ListingDesignUploadRefused as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return ListingDesignSummary(name=name, file=f"designs/{name}.png")
 
 
 @support_router.get("/api/listing-designs/{name}/thumbnail")

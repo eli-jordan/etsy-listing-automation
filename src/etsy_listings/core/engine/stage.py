@@ -200,6 +200,14 @@ class Stage(Protocol[D, A, L]):
     # `None`, on `StagePlan.snapshot` -- documented here because it is still
     # part of what a stage *may* be asked, just not part of what every stage
     # *must* answer.
+    #
+    # def rewrites(self, ctx: RunContext, desired: D, live: L | None)
+    #     -> Mapping[Path, Path | None]: ...
+    #
+    # The local files this stage's apply will rewrite with different bytes,
+    # each mapped to a file already holding those bytes or `None`. Optional
+    # for the same reason, and asked only when the stage will run;
+    # `build_plan` hands the answer to later stages as `RunContext.rewrites`.
 
 
 AnyStage = Stage[Any, Any, Any]

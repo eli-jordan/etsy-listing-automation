@@ -1108,6 +1108,20 @@
         "title": "Body_upload_design_api_designs_post",
         "type": "object"
       },
+      "Body_upload_listing_design_api_listing_designs_post": {
+        "properties": {
+          "file": {
+            "contentMediaType": "application/octet-stream",
+            "title": "File",
+            "type": "string"
+          }
+        },
+        "required": [
+          "file"
+        ],
+        "title": "Body_upload_listing_design_api_listing_designs_post",
+        "type": "object"
+      },
       "CalibrationSaveRequest": {
         "additionalProperties": false,
         "description": "A single recoverable calibration transaction under ADR-0054.",
@@ -5350,6 +5364,10 @@
             "title": "Scene",
             "type": "string"
           },
+          "scene_hash": {
+            "title": "Scene Hash",
+            "type": "string"
+          },
           "state": {
             "enum": [
               "cached",
@@ -5369,7 +5387,8 @@
           "template",
           "colour",
           "state",
-          "preview"
+          "preview",
+          "scene_hash"
         ],
         "title": "RenderSceneSnapshot",
         "type": "object"
@@ -8158,6 +8177,46 @@
         "tags": [
           "listings-support"
         ]
+      },
+      "post": {
+        "description": "A PNG dropped on the editor's design strip, added to ``designs/``.\nThe answer names where it landed, which is not always its filename: a\nname already taken by other artwork gets a ``-2`` suffix rather than\noverwriting what another listing may print.",
+        "operationId": "upload_listing_design_api_listing_designs_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_upload_listing_design_api_listing_designs_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListingDesignSummary"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Upload Listing Design",
+        "tags": [
+          "listings-support"
+        ]
       }
     },
     "/api/listing-designs/{name}/thumbnail": {
@@ -9230,6 +9289,22 @@
               "title": "Name",
               "type": "string"
             }
+          },
+          {
+            "in": "query",
+            "name": "hash",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Hash"
+            }
           }
         ],
         "responses": {
@@ -9288,6 +9363,22 @@
             "schema": {
               "title": "Name",
               "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "hash",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Hash"
             }
           }
         ],

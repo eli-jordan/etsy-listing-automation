@@ -280,14 +280,21 @@ class TestAiReadiness:
         assert blocked["message"] == "No AI provider is ready."
         assert blocked["remedy"] == "Add one in Setup, then come back. Your staging is kept."
 
-    def test_no_etsy_market_access_blocks(
+    def test_briefs_can_be_created_without_market_access_or_seo_prompts(
         self, workspace: Workspace, provider: ChainProvider
     ) -> None:
-        client = TestClient(_app(workspace, provider, market=False))
+        workspace.market_queries_prompt_file().unlink()
+        workspace.seo_prompt_file().unlink()
+        with TestClient(_app(workspace, provider, market=False)) as client:
+            staged = _staged(client, ("a.png", png(1)))
+            assert staged["ai_blocked"] is None
 
-        blocked = _staged(client, ("a.png", png(1)))["ai_blocked"]
+            response = client.post(f"/api/staging/{staged['id']}/confirm")
+            assert response.status_code == 200
+            wait_for(lambda: _ai(client, response.json()["id"]) == [("a", "done")])
 
-        assert blocked["message"] == "Etsy market access isn't set up."
+        assert workspace.load_listing("a").brief.strip()
+        assert provider.calls == ["brief"]
 
 
 def _ai(client: TestClient, batch_id: str) -> list[tuple[str, str | None]]:
@@ -328,29 +335,44 @@ class TestQueue:
         assert allowed.status_code == 202, allowed.text
         assert allowed.json()["origin"] == "manual"
 
-    def test_a_row_shows_its_live_steps_then_its_proposal(
+    def test_a_row_stops_after_its_brief_until_manual_ai_uses_the_reviewed_brief(
         self, workspace: Workspace, provider: ChainProvider
     ) -> None:
-        gate = provider.gate("queries")
+        gate = provider.gate("brief")
         with TestClient(_app(workspace, provider)) as client:
             staged = _staged(client, ("a.png", png(1)))
             batch_id = client.post(f"/api/staging/{staged['id']}/confirm").json()["id"]
-            wait_for(lambda: provider.started["queries"].is_set())
+            wait_for(lambda: provider.started["brief"].is_set())
 
             live = client.get(f"/api/batches/{batch_id}").json()["rows"][0]
             gate.set()
             wait_for(lambda: _ai(client, batch_id) == [("a", "done")])
             done = client.get(f"/api/batches/{batch_id}").json()["rows"][0]
+            assert client.get("/api/listings/a/proposal").status_code == 404
+            assert provider.calls == ["brief"]
+            reviewed = "The seller corrected the design's exact lettering."
+            assert client.patch("/api/listings/a", json={"brief": reviewed}).status_code == 200
+            started = client.post("/api/ai/runs", json={"listing": "a", "draft_brief": True})
+            assert started.status_code == 202
+            run_id = started.json()["id"]
+            wait_for(lambda: client.get(f"/api/ai/runs/{run_id}").json()["phase"] == "done")
             proposal = client.get("/api/listings/a/proposal").json()
 
         assert [(s["id"], s["state"]) for s in live["ai_steps"]] == [
-            ("brief", "done"),
-            ("market", "active"),
-            ("seo", "pending"),
+            ("brief", "active"),
+            ("market", "skipped"),
+            ("seo", "skipped"),
         ]
         assert live["proposal"] is None
-        assert done["proposal"] == "ready"
-        assert proposal["origin"] == "batch"
+        assert done["proposal"] is None
+        assert [(s["id"], s["state"]) for s in done["ai_steps"]] == [
+            ("brief", "done"),
+            ("market", "skipped"),
+            ("seo", "skipped"),
+        ]
+        assert proposal["origin"] == "manual"
+        assert proposal["snapshot"]["brief"] == reviewed
+        assert provider.calls == ["brief", "queries", "seo"]
 
     def test_cancel_resume_and_retry_answer_the_batch(self, client: TestClient) -> None:
         staged = _staged(client, ("a.png", png(1)), ("b.png", png(2)))

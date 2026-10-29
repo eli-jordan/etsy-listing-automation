@@ -38,6 +38,7 @@ def _scene(*, state: RenderSceneState, preview: bool) -> RenderSceneSnapshot:
         colour="black",
         state=state,
         preview=preview,
+        scene_hash="0" * 64,
     )
 
 

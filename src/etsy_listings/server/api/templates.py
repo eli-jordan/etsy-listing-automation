@@ -47,7 +47,9 @@ from etsy_listings.core.application.mockup_templates import (
 )
 from etsy_listings.core.application.preparation.previews import EDITOR_ARTWORK_EDGE, editor_preview
 from etsy_listings.core.application.prepared_previews import (
+    PhotoWarpPreview,
     PreparedPreview,
+    photo_warp_preview,
     prepared_preview,
     saved_scene,
 )
@@ -64,7 +66,7 @@ from etsy_listings.core.errors import UserFacingError
 from etsy_listings.core.preparation.readiness import catalog_readiness
 from etsy_listings.core.render import MarigoldRenderer, load_template_config
 from etsy_listings.core.render.config import AnyTemplate, PreparationRequired, TemplateConfig
-from etsy_listings.core.render.io import MARIGOLD_PNG_COMPRESSION, encode_png
+from etsy_listings.core.render.io import encode_png
 from etsy_listings.core.workspace.calibration import CalibrationConflict
 from etsy_listings.core.workspace.workspace import Workspace
 from etsy_listings.server.api.designs import resolve_design
@@ -326,23 +328,45 @@ def _encode_preview(image: Image.Image, scale: PreviewScale) -> Response:
     return Response(content=buffer.getvalue(), media_type=EDITOR_MEDIA_TYPE)
 
 
-def render_preview_response(scene: PreviewScene | PreparedPreview, scale: PreviewScale) -> Response:
+def render_preview_response(
+    scene: PreviewScene | PreparedPreview,
+    scale: PreviewScale,
+    *,
+    workspace: Workspace,
+    if_none_match: str | None = None,
+) -> Response:
     """Composite a Photo warp scene from the shared memo rather than off disk:
     a drag is a burst of requests for the same photo, design and derived maps,
-    and re-reading them is what made the old editor take seconds per frame. A
-    prepared scene arrives composed, as the full-size PNG the render stage
-    writes, with the identities that let the editor promote it."""
-    if isinstance(scene, PreparedPreview):
-        return Response(
-            encode_png(scene.image, compression=MARIGOLD_PNG_COMPRESSION),
-            media_type="image/png",
-            headers={
-                "X-Render-Identity": scene.render_identity,
-                "X-Map-Generation": scene.generation_id,
-                "X-Calibration-Revision": scene.config_revision,
-                "Cache-Control": "no-cache",
-            },
+    and re-reading them is what made the old editor take seconds per frame.
+
+    A full-size scene of either renderer is the PNG the render stage writes,
+    from the scene cache when it was composed before. A prepared one also
+    carries the identities that let the editor promote it. Its ETag is the
+    scene identity, so a browser holding that picture is answered ``304``
+    without the body."""
+    composed: PreparedPreview | PhotoWarpPreview | None = (
+        scene if isinstance(scene, PreparedPreview) else None
+    )
+    if isinstance(scene, PreviewScene) and scale == "full":
+        composed = photo_warp_preview(
+            workspace,
+            scene,
+            base=lambda path: PREVIEW_IMAGES.base(path).image,
+            design=PREVIEW_IMAGES.design,
         )
+    if composed is not None:
+        headers = {
+            "ETag": f'"{composed.render_identity}"',
+            "X-Render-Identity": composed.render_identity,
+            "Cache-Control": "no-cache",
+        }
+        if isinstance(composed, PreparedPreview):
+            headers["X-Map-Generation"] = composed.generation_id
+            headers["X-Calibration-Revision"] = composed.config_revision
+        if if_none_match == headers["ETag"]:
+            return Response(status_code=304, headers=headers)
+        return Response(composed.png, media_type="image/png", headers=headers)
+    assert isinstance(scene, PreviewScene)  # noqa: S101 - every composed scene returned above
     base = PREVIEW_IMAGES.base(scene.photo.path, EDITOR_MAX_EDGE if scale == "editor" else None)
     image = compose_preview(
         scene,
@@ -397,7 +421,7 @@ def preview(template: Existing, body: PreviewRequest, scale: PreviewScale = "ful
                 colour=body.colour if isinstance(body, ColourMatrixPreviewRequest) else None,
                 design=lambda _colour: resolve_design(workspace, body.design),
             )
-        return render_preview_response(prepared, scale)
+        return render_preview_response(prepared, scale, workspace=workspace)
     try:
         scene = unsaved_preview(
             workspace,
@@ -411,12 +435,13 @@ def preview(template: Existing, body: PreviewRequest, scale: PreviewScale = "ful
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     except TemplatePreviewKindMismatch as exc:
         raise _bad_request(exc) from exc
-    return render_preview_response(scene, scale)
+    return render_preview_response(scene, scale, workspace=workspace)
 
 
 @router.get("/{name}/design-preview")
 def design_preview(
     template: Existing,
+    request: Request,
     design: str | None = None,
     test_design: str | None = None,
     colour: str | None = None,
@@ -456,7 +481,9 @@ def design_preview(
         scene = saved_scene(
             workspace, template.name, colour=colour, design=lambda _colour: one_design()
         )
-    return render_preview_response(scene, scale)
+    return render_preview_response(
+        scene, scale, workspace=workspace, if_none_match=request.headers.get("if-none-match")
+    )
 
 
 @router.get("/{name}/swatch", response_model=SwatchResponse)

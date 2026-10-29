@@ -1,5 +1,5 @@
 """The batch AI queue (spec, *Batch AI queue*; ADR-0048): every created batch row
-drafts its brief, researches the market and gets a proposal, through the
+drafts its brief and leaves research and SEO to manual AI Mode, through the
 same :class:`~etsy_listings.core.application.ai.runner.AiRunner` a manual run uses.
 
 **One dispatcher thread**, woken by a condition whenever a row, a batch or a
@@ -198,7 +198,7 @@ class BatchQueue:
 
     def _brief_is_empty(self, name: str) -> bool:
         """ADR-0048: a brief already there -- the seller's, or a retried row's own
-        -- is kept, and only research and SEO rerun. The runner checks again
+        -- is kept, and the brief-only run finishes. The runner checks again
         under the write lock before it writes."""
         try:
             return not self._workspace.load_listing(name).brief.strip()
@@ -250,8 +250,8 @@ class BatchQueue:
 
     def retry(self, batch_id: str, row_id: str | None = None) -> Batch | None:
         """Retry one row's AI, or every failed row's (UI doc §7). The saved
-        brief is kept, so a row that failed after drafting reruns only
-        research and SEO."""
+        brief is kept, so a row that already has one finishes without
+        generating again. Research and SEO wait for manual AI Mode."""
         if row_id is None:
             return self._requeue(batch_id, lambda row: row.ai == "failed")
         return self._requeue(batch_id, lambda row: row.id == row_id and row.ai in RETRYABLE)
@@ -330,16 +330,12 @@ class BatchQueue:
         return self._limit()
 
     def blocked(self) -> AiReadinessBlock | None:
-        """Why a batch created now could not draft -- a prompt, a ready
-        provider or Etsy market access missing -- or ``None`` while it could
-        (spec, *Design validation*). Asks the providers and market client
-        this queue's runs would use, so a batch is not knowingly created
-        into a queue that cannot run."""
+        """Why a batch could not draft its briefs: the brief prompt or a
+        ready provider is missing (spec, *Design validation*)."""
         workspace = self._workspace
         return batch_blocked(
             workspace,
             self._runner.providers(workspace),
-            has_market=self._runner.market_client(workspace) is not None,
         )
 
     # -------------------------------------------------------------- helpers
