@@ -92,8 +92,9 @@ def test_a_plan_run_reaches_ready_and_streams_the_full_sequence(executor: RunExe
     assert "listing_planned" in kinds
     assert "preview_rendered" in kinds, "every scene in the fixture starts unrendered"
 
+    # Two walks in pipeline order: the plan, then the plan once previews exist.
     stage_checking = [e for e in run.events if e.type == "stage_checking"]
-    assert [e.stage for e in stage_checking] == [
+    assert [e.stage for e in stage_checking] == 2 * [
         "render",
         "printify_product",
         "publish",
@@ -162,7 +163,20 @@ def test_a_workspace_run_executes_the_server_resolved_order(
 
     assert run.phase == "ready"
     planned = [event.listing for event in run.events if event.type == "listing_planned"]
-    assert planned == ["second", LISTING]
+    assert list(dict.fromkeys(planned)) == ["second", LISTING]
+
+
+def test_a_listing_is_planned_again_once_its_previews_exist(executor: RunExecutor) -> None:
+    """The previews are the bytes apply will upload, so the plan the seller
+    reviews is the one made after them."""
+    run = _create(executor, "plan", [LISTING])
+
+    _wait_until(run)
+
+    kinds = [e.type for e in run.events if e.type in ("listing_planned", "preview_rendered")]
+    assert kinds[0] == "listing_planned"
+    assert kinds[-1] == "listing_planned"
+    assert "preview_rendered" in kinds[1:-1]
 
 
 # ------------------------------------------------------------------ apply runs

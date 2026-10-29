@@ -251,10 +251,19 @@ class RunExecutor:
         if needing_preview:
             run.transition_plan("previewing")
 
+            previewed: list[str] = []
             for result in needing_preview:
                 if self._should_stop(run):
                     break
                 preview_listing(ctx, result, emit, should_stop=stop)
+                previewed.append(result.plan.listing)
+
+            # Plan again now the previews exist: they are the bytes apply
+            # will upload, so only now can the media stage tell a re-rendered
+            # image that differs from one that came out identical. The later
+            # `listing_planned` supersedes the first, fingerprint included.
+            if previewed and not self._should_stop(run):
+                plan_listings(ctx, previewed, self.stages, on_event=emit, should_stop=stop)
 
         if self._should_stop(run):
             run.transition_plan("cancelled")

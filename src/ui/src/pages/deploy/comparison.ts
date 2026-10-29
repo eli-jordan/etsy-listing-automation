@@ -89,6 +89,10 @@ export interface AfterImageTile {
   ref: string;
   badge: ImageBadge;
   movedFrom?: number;
+  /** New bytes for an image already on Etsy -- a re-rendered mockup, which
+   * the stage reports as a media change whose ref is the same before and
+   * after. Independent of `badge`: a re-rendered image can also move. */
+  replaced: boolean;
 }
 
 export interface BeforeImageTile {
@@ -96,6 +100,8 @@ export interface BeforeImageTile {
   ref: string | null;
   url: string | null;
   badge: ImageBadge;
+  /** This image is on Etsy and about to be swapped for its re-render. */
+  replaced: boolean;
 }
 
 export interface ImagesBlock {
@@ -299,37 +305,43 @@ function buildPriceRows(
 
 function buildImages(stagePlan: StagePlanFor<"etsy_media"> | undefined): ImagesBlock | null {
   const snapshot = stagePlan?.snapshot;
-  if (!snapshot) return null;
+  if (stagePlan === undefined || !snapshot) return null;
 
   const wasRankByRef = new Map<string, number>();
   for (const image of snapshot.live) {
     if (image.ref != null) wasRankByRef.set(image.ref, image.rank ?? 0);
   }
   const willBeUsed = new Set(snapshot.desired.map((entry) => entry.ref));
+  const mediaChanges = stageChanges(stagePlan).filter((c) => c.kind === "media");
+  const replaced = new Set(
+    mediaChanges.flatMap((c) => (c.before !== null && c.before === c.after ? [c.after] : [])),
+  );
 
   const after: AfterImageTile[] = snapshot.desired.map((entry) => {
     const previousRank = wasRankByRef.get(entry.ref);
+    const tile = { rank: entry.rank, ref: entry.ref, replaced: replaced.has(entry.ref) };
     if (previousRank === undefined) {
-      return { rank: entry.rank, ref: entry.ref, badge: "new" };
+      return { ...tile, badge: "new", replaced: false };
     }
     if (previousRank !== entry.rank) {
-      return { rank: entry.rank, ref: entry.ref, badge: "moved", movedFrom: previousRank };
+      return { ...tile, badge: "moved", movedFrom: previousRank };
     }
-    return { rank: entry.rank, ref: entry.ref, badge: null };
+    return { ...tile, badge: null };
   });
 
-  const before: BeforeImageTile[] = snapshot.live.map((image) => ({
-    rank: image.rank ?? 0,
-    ref: image.ref ?? null,
-    url: image.url ?? null,
-    badge: image.ref != null && !willBeUsed.has(image.ref) ? "removed" : null,
-  }));
+  const before: BeforeImageTile[] = snapshot.live.map((image) => {
+    const ref = image.ref ?? null;
+    const used = ref !== null && willBeUsed.has(ref);
+    return {
+      rank: image.rank ?? 0,
+      ref,
+      url: image.url ?? null,
+      badge: ref !== null && !used ? "removed" : null,
+      replaced: used && replaced.has(ref),
+    };
+  });
 
-  return {
-    before,
-    after,
-    changed: stagePlan !== undefined && stageChanges(stagePlan).some((c) => c.kind === "media"),
-  };
+  return { before, after, changed: mediaChanges.length > 0 };
 }
 
 const VIDEO_SLOTS = ["videos.featured", "videos.second"] as const;

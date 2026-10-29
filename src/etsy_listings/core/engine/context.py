@@ -8,8 +8,9 @@ pacing belongs to the transports, not this context.
 
 from __future__ import annotations
 
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
+from pathlib import Path
 
 from etsy_listings.core.clients.etsy.listings import EtsyListingClient
 from etsy_listings.core.clients.printify.protocol import CatalogClient, PrintifyClient
@@ -67,6 +68,16 @@ class RunContext:
     never signed in to Etsy, and demanding a client there would mean every
     Phase 1/2 workspace needs one to run `plan` at all."""
     on_event: EventSink = field(default=_noop_sink)
+    rewrites: Mapping[Path, Path | None] = field(default_factory=dict)
+    """Local files an earlier stage in this plan will rewrite with different
+    bytes when it applies, each mapped to a file already holding those bytes
+    (a reviewed preview), or ``None`` when they do not exist yet.
+
+    ``build_plan`` fills it from each stage that will run and declares
+    ``rewrites()``, for the stages after it. A later stage that reads such a
+    file at plan time is reading what is about to be replaced: ``etsy_media``
+    hashes the images it will upload, and before this it hashed the previous
+    render and reported nothing to upload."""
 
     def emit(self, message: str, *, swatches: Sequence[Swatch] = ()) -> None:
         self.on_event(Event(message=message, swatches=tuple(swatches)))

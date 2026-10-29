@@ -770,6 +770,31 @@ class RenderStage:
             )
         return RenderSnapshot(scenes=tuple(scenes))
 
+    def rewrites(
+        self, ctx: RunContext, desired: RenderDesired, live: RenderLive | None
+    ) -> dict[Path, Path | None]:
+        """Each ``stale`` or ``missing`` scene's render output, mapped to the
+        preview :meth:`apply` will promote into it, or ``None`` before
+        :meth:`preview` has rendered one.
+
+        A ``cached`` scene is left out: apply writes it again, but with the
+        bytes already on disk, so a stage reading it now reads what it will
+        get. The preview is the exact file apply copies (ADR-0040), which is
+        what lets a plan say whether a re-rendered image actually differs.
+        """
+        changing = {
+            scene.scene for scene in self.snapshot(desired, live).scenes if scene.state != "cached"
+        }
+        rewrites: dict[Path, Path | None] = {}
+        for work in desired.works:
+            if work.key not in changing:
+                continue
+            preview = ctx.workspace.preview_file(
+                desired.listing, work.template, work.colour, _hash_token(scene_hash(desired, work))
+            )
+            rewrites[work.output] = preview if preview.is_file() else None
+        return rewrites
+
     def preview(
         self,
         ctx: RunContext,
