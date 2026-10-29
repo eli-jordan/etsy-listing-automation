@@ -29,6 +29,7 @@ from etsy_listings.core.application.dependencies import (
 from etsy_listings.core.application.deploy.deployments import Deployments
 from etsy_listings.core.application.preparation.coordinator import Preparations
 from etsy_listings.core.application.preparation.dependencies import PreparationRuntime
+from etsy_listings.core.application.scene_warming import SceneWarmer
 from etsy_listings.core.application.workspace_locks import WorkspaceLocks
 from etsy_listings.core.batches import BatchStore, StagingStore
 from etsy_listings.core.workspace.workspace import InvalidNameError, Workspace
@@ -82,6 +83,7 @@ def create_app(
         market_client=market_client_factory,
     )
     deployments = Deployments(workspace, context_factory, ai=ai)
+    scene_warmer = SceneWarmer(workspace)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
@@ -98,14 +100,19 @@ def create_app(
 
         Expired staging sessions are swept on the way in. The batch queue
         starts with the app, returning rows a previous server left running
-        to the queue."""
+        to the queue.
+
+        The scene warmer stops before the rest, abandoning its queue: what
+        it composes is only ever a head start."""
         await run_in_threadpool(preparations.start)
         staging_store.sweep(now=datetime.now(UTC))
         deployments.start()
         ai.start()
+        scene_warmer.start()
         try:
             yield
         finally:
+            scene_warmer.stop()
             ai.stop()
             deployments.stop()
             await run_in_threadpool(preparations.close)
@@ -130,6 +137,9 @@ def create_app(
     # ADR-0049: the cached proposals, written by AI runs and read and resolved
     # through `seo.py`. One store, for the same reason.
     app.state.proposal_store = proposal_store
+    # Composes a saved listing's gallery scenes ahead of the Listing Images
+    # tab asking for them (`listings.py`'s create and PATCH).
+    app.state.scene_warmer = scene_warmer
 
     # Permissive CORS for local dev only -- the Vite dev server proxies /api in
     # production-shaped use, but running `uvicorn` and `vite` as two separate
