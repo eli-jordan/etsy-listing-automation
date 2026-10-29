@@ -9,6 +9,9 @@
    chain goes on; a failure fails the run.
 3. **SEO**: the proposal, with the market block.
 
+Batch-origin runs stop after the brief. Market and SEO wait for the seller's
+AI Mode request, using the reviewed brief (ADR-0048, amendment 2026-10-29).
+
 **A thread per run, never the plan/apply worker.** An AI run spends most of
 its time waiting on a provider CLI or on Etsy, and a deploy must not queue
 behind it (or it behind a deploy). The threads are daemons, and
@@ -209,8 +212,13 @@ class AiRunner:
         drafting = run.draft_brief and not inputs.request.brief.strip()
 
         run.step("brief", "pending" if drafting else "skipped", None if drafting else KEPT_BRIEF)
-        run.step("market", "pending")
-        run.step("seo", "pending")
+        brief_only = run.origin == "batch"
+        for step in ("market", "seo"):
+            run.step(
+                step,
+                "skipped" if brief_only else "pending",
+                "Start AI Mode after reviewing the brief" if brief_only else None,
+            )
 
         if drafting:
             run.step("brief", "active", f"Reading {design.name}")
@@ -230,6 +238,13 @@ class AiRunner:
                 if written
                 else "You wrote the brief, so yours was kept",
             )
+
+        if brief_only:
+            self._check(run)
+            run.finish("done")
+            return
+
+        if drafting:
             inputs = self._load(run)
 
         run.step("market", "active", "Choosing Etsy searches from the brief")

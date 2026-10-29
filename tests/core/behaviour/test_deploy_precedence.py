@@ -247,7 +247,9 @@ def test_retry_queues_a_row_the_deploy_cancelled(host: Host, provider: ChainProv
     )
 
     wait_for(lambda: host.states(batch_id) == ["done", "done"])
-    assert has_proposal(host.workspace.root, "cedar-trail")
+    assert host.workspace.load_listing("cedar-trail").brief.strip()
+    assert not has_proposal(host.workspace.root, "cedar-trail")
+    assert provider.calls == ["brief", "brief"]
 
 
 def test_a_manual_run_is_stopped_and_a_new_one_refused_while_the_deploy_holds_the_listing(

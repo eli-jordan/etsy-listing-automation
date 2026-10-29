@@ -1,5 +1,5 @@
 """The batch AI queue (batch plan PR 4; spec *Batch AI queue*; ADR-0048): every
-created row drafts its brief, researches the market and gets a proposal, a
+created row drafts only its brief, a
 limited number at a time across every batch, round-robin between batches.
 
 Every test drives a real :class:`~etsy_listings.core.application.ai.batch_queue.BatchQueue`
@@ -36,7 +36,14 @@ from etsy_listings.core.clients.etsy.fakes import FakeEtsyMarketClient
 from etsy_listings.core.workspace.workspace import Workspace
 from etsy_listings.server.api.app import create_app
 
-from tests.support.ai_runs import TODAY, ChainProvider, Task, seed_prompts, seeded_market, wait_for
+from tests.support.ai_runs import (
+    TODAY,
+    ChainProvider,
+    seed_prompts,
+    seed_proposal,
+    seeded_market,
+    wait_for,
+)
 from tests.support.batches import LISTING_TEMPLATE, a_listing_template, png, uploads
 from tests.support.builders import edit_listing
 
@@ -101,10 +108,6 @@ class Queue:
     def settle(self, batch: Batch, *states: str) -> None:
         wait_for(lambda: self.states(batch) == list(states))
 
-    def last_prompt(self, task: Task) -> str:
-        calls = zip(self.provider.tasks, self.provider.calls, strict=True)
-        return [t for t, kind in calls if kind == task][-1].prompt_text
-
     def idle(self) -> None:
         assert self.queue.wait_idle(timeout=15)
 
@@ -138,6 +141,26 @@ def q(workspace_root: Path, provider: ChainProvider) -> Iterator[Queue]:
 
 
 # -------------------------------------------------------------- scheduling
+
+
+def test_batch_drafts_only_the_brief_without_research_or_a_proposal(q: Queue) -> None:
+    q.workspace.market_queries_prompt_file().unlink()
+    q.workspace.seo_prompt_file().unlink()
+    q.runner.market_client = lambda _workspace: pytest.fail("batch must not open market access")
+    batch = q.confirm(*_designs("night-hike-club"))
+
+    q.queue.start()
+
+    q.settle(batch, "done")
+    assert q.workspace.load_listing("night-hike-club").brief.strip()
+    assert q.provider.calls == ["brief"]
+    assert q.market.calls == []
+    assert q.proposals.load("night-hike-club") is None
+    assert [(step.id, step.state) for step in q.row(batch, 0).ai_steps] == [
+        ("brief", "done"),
+        ("market", "skipped"),
+        ("seo", "skipped"),
+    ]
 
 
 def test_concurrency_one_drafts_the_rows_strictly_one_at_a_time(q: Queue) -> None:
@@ -190,7 +213,7 @@ def test_a_manual_run_does_not_count_against_the_limit_and_its_listing_waits(
     """Manual runs are outside the batch limit, and a row whose listing a
     manual run holds is skipped until that run ends."""
     batch = q.confirm(*_designs("night-hike-club", "cedar-trail"))
-    gate = q.provider.gate("queries")
+    gate = q.provider.gate("brief")
     manual = q.registry.create("night-hike-club", draft_brief=False)
     assert isinstance(manual, AiRun)
 
@@ -207,10 +230,8 @@ def test_a_manual_run_does_not_count_against_the_limit_and_its_listing_waits(
 # ---------------------------------------------------------------- failures
 
 
-def test_a_failed_row_keeps_its_brief_and_later_rows_carry_on(q: Queue) -> None:
-    # The first row's query extraction answers garbage twice (the answer
-    # and its one repair), so its market step fails after the brief.
-    q.provider.answers["queries"] = ["not json", "still not json"]
+def test_a_failed_brief_leaves_its_listing_and_later_rows_carry_on(q: Queue) -> None:
+    q.provider.answers["brief"] = ["not json", "still not json"]
     batch = q.confirm(*_designs("night-hike-club", "cedar-trail"))
 
     q.queue.start()
@@ -219,19 +240,20 @@ def test_a_failed_row_keeps_its_brief_and_later_rows_carry_on(q: Queue) -> None:
     row = q.row(batch, 0)
     assert row.ai_error is not None
     assert [(s.id, s.state) for s in row.ai_steps] == [
-        ("brief", "done"),
-        ("market", "failed"),
-        ("seo", "pending"),
+        ("brief", "failed"),
+        ("market", "skipped"),
+        ("seo", "skipped"),
     ]
-    assert q.workspace.load_listing("night-hike-club").brief != ""
+    assert q.workspace.load_listing("night-hike-club").brief == ""
     assert q.proposals.load("night-hike-club") is None
-    assert q.proposals.load("cedar-trail") is not None
+    assert q.workspace.load_listing("cedar-trail").brief.strip()
+    assert q.proposals.load("cedar-trail") is None
 
 
-def test_retry_keeps_the_saved_brief_with_the_seller_s_edit_and_reruns_the_rest(
+def test_retry_keeps_the_seller_s_brief_without_running_research_or_seo(
     q: Queue,
 ) -> None:
-    q.provider.answers["queries"] = ["not json", "still not json"]
+    q.provider.answers["brief"] = ["not json", "still not json"]
     batch = q.confirm(*_designs("night-hike-club"))
     q.queue.start()
     q.settle(batch, "failed")
@@ -244,13 +266,11 @@ def test_retry_keeps_the_saved_brief_with_the_seller_s_edit_and_reruns_the_rest(
     q.settle(batch, "done")
     assert q.provider.count("brief") == briefs
     assert q.workspace.load_listing("night-hike-club").brief == edited
-    assert edited in q.last_prompt("queries")
-    record = q.proposals.load("night-hike-club")
-    assert record is not None
-    assert record.origin == "batch"
+    assert q.provider.count("queries") == q.provider.count("seo") == 0
+    assert q.proposals.load("night-hike-club") is None
 
 
-def test_a_brief_the_seller_wrote_before_the_row_s_turn_is_kept_and_used(q: Queue) -> None:
+def test_a_brief_the_seller_wrote_before_the_row_s_turn_is_kept(q: Queue) -> None:
     gate = q.provider.gate("brief")
     batch = q.confirm(*_designs("night-hike-club", "cedar-trail"))
     q.queue.start()
@@ -263,14 +283,39 @@ def test_a_brief_the_seller_wrote_before_the_row_s_turn_is_kept_and_used(q: Queu
     q.settle(batch, "done", "done")
     assert q.provider.count("brief") == 1
     assert q.workspace.load_listing("cedar-trail").brief == theirs
-    assert theirs in q.last_prompt("queries")
+    assert q.provider.calls == ["brief"]
+
+
+def test_a_brief_written_while_drafting_is_in_flight_is_kept(q: Queue) -> None:
+    batch = q.confirm(*_designs("night-hike-club"))
+    theirs = "The seller corrected what is written on the design."
+    q.provider.during["brief"] = lambda: edit_listing(
+        q.workspace.root, "night-hike-club", brief=theirs
+    )
+
+    q.queue.start()
+
+    q.settle(batch, "done")
+    assert q.workspace.load_listing("night-hike-club").brief == theirs
+    assert q.provider.calls == ["brief"]
+
+
+def test_brief_drafting_leaves_an_existing_proposal_intact(q: Queue) -> None:
+    batch = q.confirm(*_designs("night-hike-club"))
+    previous = seed_proposal(q.workspace.root, "night-hike-club")
+
+    q.queue.start()
+
+    q.settle(batch, "done")
+    assert q.proposals.load("night-hike-club") == previous
+    assert q.provider.calls == ["brief"]
 
 
 def test_a_run_that_outlives_the_limit_becomes_a_failed_row(q: Queue) -> None:
-    q.provider.gate("seo")
+    q.provider.gate("brief")
     batch = q.confirm(*_designs("night-hike-club", "cedar-trail"))
     q.queue.start()
-    wait_for(lambda: q.provider.started["seo"].is_set())
+    wait_for(lambda: q.provider.started["brief"].is_set())
 
     q.clock.now = 180.0
 
@@ -300,7 +345,9 @@ def test_cancel_stops_the_running_row_and_leaves_the_queued_ones_stopped(q: Queu
     q.queue.resume(batch.id)
 
     q.settle(batch, "done", "done", "done")
-    assert all(q.proposals.load(name) for name in ("night-hike-club", "cedar-trail", "lake-loop"))
+    for name in ("night-hike-club", "cedar-trail", "lake-loop"):
+        assert q.workspace.load_listing(name).brief.strip()
+        assert q.proposals.load(name) is None
 
 
 # ----------------------------------------------------------------- restart
@@ -310,14 +357,14 @@ def test_a_row_running_when_the_server_stops_reruns_after_a_restart(
     workspace_root: Path,
 ) -> None:
     """A run does not survive its server, so the row it left ``running``
-    is queued again on the next start, and reruns to one listing and one
-    proposal (spec, *Scheduling*; ADR-0048)."""
+    is queued again on the next start, and reruns to one listing with a
+    saved brief (spec, *Scheduling*; ADR-0048)."""
     seed_prompts(workspace_root)
     workspace = Workspace.discover(root_override=workspace_root)
     a_listing_template(workspace)
     market = seeded_market()
     stopping = ChainProvider()
-    stopping.gate("seo")
+    stopping.gate("brief")
 
     def app(provider: ChainProvider) -> TestClient:
         return TestClient(
@@ -335,8 +382,8 @@ def test_a_row_running_when_the_server_stops_reruns_after_a_restart(
             files=[("files", ("night-hike-club.png", png(1), "image/png"))],
         ).json()
         batch_id = client.post(f"/api/staging/{staged['id']}/confirm").json()["id"]
-        wait_for(lambda: stopping.started["seo"].is_set())
-    assert stopping.cancelled == ["seo"]
+        wait_for(lambda: stopping.started["brief"].is_set())
+    assert stopping.cancelled == ["brief"]
     stored = BatchStore(workspace).load(batch_id)
     assert stored is not None
     assert [row.ai for row in stored.rows] == ["running"]
@@ -347,5 +394,5 @@ def test_a_row_running_when_the_server_stops_reruns_after_a_restart(
     assert [n for n in workspace.listing_names() if n != "take-a-hike"] == ["night-hike-club"]
     assert workspace.batch_ids() == [batch_id]
     record = ProposalStore(workspace).load("night-hike-club")
-    assert record is not None
-    assert record.origin == "batch"
+    assert record is None
+    assert workspace.load_listing("night-hike-club").brief.strip()

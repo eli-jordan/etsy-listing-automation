@@ -34,7 +34,7 @@ import { clock, dayMonth } from "../dates";
  * deduplication*) -- both as the server says them.
  *
  * AI readiness is said only when it fails (`staging.note.md`): a missing
- * prompt, provider or Etsy market access replaces the count strip's right
+ * brief prompt or provider replaces the count strip's right
  * side with a blocking callout, and Create is disabled -- the server refuses
  * the confirm anyway (spec, *Design validation*).
  */
@@ -303,7 +303,8 @@ export function StagingPage() {
               </span>
             ) : (
               <span className="bc-small bc-muted">
-                Each listing is a local draft. Nothing goes to Printify or Etsy.
+                Briefs are drafted automatically. Review each brief, then start AI Mode for research
+                and SEO. Nothing goes to Printify or Etsy.
               </span>
             )}
           </div>

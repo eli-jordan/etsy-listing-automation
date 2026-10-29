@@ -230,8 +230,9 @@ Not obvious from the designs:
   upload become one row listing both sources. A file identical to one already
   in `designs/` reuses that file, the one case where the listing name and the
   design file name differ.
-- **AI readiness is only mentioned when it fails.** When prompts, a provider
-  and Etsy market access are all available, nothing is said. When one is
+- **AI readiness is only mentioned when it fails.** When the brief prompt and
+  a provider are available, nothing is said. Market access and the research
+  and SEO prompts are needed only for later AI Mode. When a brief prerequisite is
   missing, a blocking callout appears and Create is disabled (wording in
   [`staging.note.md`](../../../src/ui/design/scenes/batch-create-lofi/staging.note.md)).
 - **The template is frozen when staging starts.** The page says *Using

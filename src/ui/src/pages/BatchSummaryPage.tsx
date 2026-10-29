@@ -30,7 +30,7 @@ import { AiWorkflowIndicator } from "./editor/aiSeo/AiWorkflowIndicator";
 /**
  * The batch summary (UI doc §7; the `batch-summary` frame): the batch's one
  * review surface. A progress bar and a count strip sit above one row per
- * listing, with its AI drafting and its SEO proposal, and the queue's
+ * listing, with its brief drafting and any later SEO proposal, and the queue's
  * controls -- Cancel batch, Resume, Retry N failed.
  *
  * Running and failed rows mount the editor's own step indicator, so a batch
@@ -95,7 +95,9 @@ function failure(row: BatchRow): string {
   const message = (row.ai_error ?? "The AI run failed").replace(/\.?$/, ".");
   const brief = row.ai_steps.find((step) => step.id === "brief");
   const kept = brief?.state === "done" || brief?.state === "skipped";
-  return kept ? `${message} The brief is saved; Retry reruns research and SEO.` : message;
+  return kept
+    ? `${message} The brief is saved. Retry keeps it. Start AI Mode in the listing for research and SEO.`
+    : message;
 }
 
 function AiCell({ row }: { row: BatchRow }) {
@@ -128,7 +130,7 @@ function AiCell({ row }: { row: BatchRow }) {
       return (
         <span className="bc-status bc-status--ok">
           <CheckCircleIcon className="bc-icon" />
-          Brief, market research and SEO done
+          Brief ready
         </span>
       );
     case "running":
@@ -189,6 +191,9 @@ function ProposalCell({ row }: { row: BatchRow }) {
     );
   }
   if (row.proposal === "resolved") return <span className="bc-muted">Suggestions used</span>;
+  if (!row.deleted && row.creation === "created" && row.ai === "done") {
+    return <span className="bc-muted">Start AI Mode in the listing</span>;
+  }
   return <span className="bc-muted">—</span>;
 }
 

@@ -147,10 +147,12 @@ def test_the_listing_s_own_gaps_are_named_before_the_machine_s(
 # ------------------------------------------------------------ a new batch
 
 
-def test_a_batch_can_draft_with_the_prompts_a_provider_and_market_access(
+def test_a_batch_can_draft_without_research_or_seo_prompts(
     workspace: Workspace,
 ) -> None:
-    assert batch_blocked(workspace, READY, has_market=True) is None
+    workspace.market_queries_prompt_file().unlink()
+    workspace.seo_prompt_file().unlink()
+    assert batch_blocked(workspace, READY) is None
 
 
 def test_a_batch_names_the_first_missing_prompt_by_its_workspace_path(
@@ -158,25 +160,18 @@ def test_a_batch_names_the_first_missing_prompt_by_its_workspace_path(
 ) -> None:
     (workspace_root / PROMPTS_DIR / BRIEF_PROMPT_FILE).unlink()
 
-    assert batch_blocked(workspace, READY, has_market=True) == AiReadinessBlock(
+    assert batch_blocked(workspace, READY) == AiReadinessBlock(
         message=f"{PROMPTS_DIR}/{BRIEF_PROMPT_FILE} is missing.",
         remedy="Run `etsy-listings setup` to seed it, then come back. Your staging is kept.",
     )
 
 
 def test_a_batch_needs_a_ready_provider(workspace: Workspace) -> None:
-    assert batch_blocked(workspace, [_unready("codex", "nope")], has_market=True) == (
+    assert batch_blocked(workspace, [_unready("codex", "nope")]) == (
         AiReadinessBlock(
             message="No AI provider is ready.",
             remedy="Add one in Setup, then come back. Your staging is kept.",
         )
-    )
-
-
-def test_a_batch_needs_etsy_market_access(workspace: Workspace) -> None:
-    assert batch_blocked(workspace, READY, has_market=False) == AiReadinessBlock(
-        message="Etsy market access isn't set up.",
-        remedy="Add the Etsy app key in Setup, then come back. Your staging is kept.",
     )
 
 

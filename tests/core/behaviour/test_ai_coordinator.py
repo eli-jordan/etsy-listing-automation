@@ -189,7 +189,8 @@ def test_start_returns_interrupted_rows_to_the_queue_and_drafts_them(
 
     wait_for(lambda: _states(batches, batch) == ["done"])
     record = ProposalStore(workspace).load("night-hike-club")
-    assert record is not None and record.origin == "batch"
+    assert record is None
+    assert workspace.load_listing("night-hike-club").brief.strip()
 
 
 def test_stop_cancels_active_runs_and_starts_nothing_more(

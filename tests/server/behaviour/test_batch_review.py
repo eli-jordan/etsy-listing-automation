@@ -83,6 +83,14 @@ def _drafted(client: TestClient, batch_id: str) -> dict[str, Any]:
     return _summary(client, batch_id)
 
 
+def _generate_proposal(client: TestClient, listing: str) -> None:
+    run = client.post("/api/ai/runs", json={"listing": listing})
+    assert run.status_code == 202, run.text
+    url = f"/api/ai/runs/{run.json()['id']}"
+    wait_for(lambda: client.get(url).json()["phase"] in {"done", "failed"})
+    assert client.get(url).json()["phase"] == "done"
+
+
 def _status(client: TestClient, batch_id: str) -> str:
     entry = next(b for b in client.get("/api/batches").json() if b["id"] == batch_id)
     status: str = entry["status"]
@@ -122,13 +130,12 @@ def test_a_later_edit_or_a_regenerated_proposal_leaves_reviewed_alone(
     batch_id = _batch(client, "night-hike-club")
     row = _drafted(client, batch_id)["rows"][0]["id"]
     _review(client, batch_id, row)
+    _generate_proposal(client, "night-hike-club")
     before = ProposalStore(workspace).load("night-hike-club")
 
     patched = client.patch("/api/listings/night-hike-club", json={"brief": "Rewritten brief."})
     assert patched.status_code == 200, patched.text
-    run = client.post("/api/ai/runs", json={"listing": "night-hike-club"})
-    assert run.status_code == 202, run.text
-    wait_for(lambda: client.get(f"/api/ai/runs/{run.json()['id']}").json()["phase"] == "done")
+    _generate_proposal(client, "night-hike-club")
 
     after = ProposalStore(workspace).load("night-hike-club")
     assert before is not None and after is not None
@@ -163,6 +170,7 @@ def test_a_renamed_listing_is_the_one_its_row_opens_and_its_proposal_follows(
 ) -> None:
     batch_id = _batch(client, "night-hike-club", "cedar-trail")
     _drafted(client, batch_id)
+    _generate_proposal(client, "night-hike-club")
 
     renamed = client.post(
         "/api/listings/night-hike-club/rename", json={"new_name": "night-hike-crew"}
@@ -242,6 +250,7 @@ def test_deleting_a_batch_record_leaves_every_file_it_made(
 ) -> None:
     batch_id = _batch(client, "night-hike-club")
     _drafted(client, batch_id)
+    _generate_proposal(client, "night-hike-club")
     listing = workspace.listing_file("night-hike-club").read_bytes()
 
     assert client.delete(f"/api/batches/{batch_id}").status_code == 204
@@ -307,6 +316,7 @@ def test_a_listing_removed_outside_the_app_does_not_break_its_batch_summary(
 ) -> None:
     batch_id = _batch(client, "missing-tee")
     row = _drafted(client, batch_id)["rows"][0]
+    _generate_proposal(client, row["name"])
     store = ProposalStore(workspace)
     cached = store.load(row["name"])
     assert cached is not None

@@ -181,6 +181,13 @@ describe("once every step is done or skipped", () => {
     expect(container).toBeEmptyDOMElement();
   });
 
+  it("reports a brief ready when research and SEO were deferred", () => {
+    finish(steps("done", "skipped", "skipped"));
+
+    expect(screen.getByRole("status", { name: "AI Mode: Brief ready" })).toBeInTheDocument();
+    expect(screen.queryByText("Suggestions ready")).not.toBeInTheDocument();
+  });
+
   it("hides at once, with no fade, for a seller who asked for less motion", () => {
     vi.stubGlobal("matchMedia", (query: string) => ({
       matches: query === "(prefers-reduced-motion: reduce)",

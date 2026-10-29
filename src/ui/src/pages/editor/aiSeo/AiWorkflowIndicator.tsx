@@ -59,8 +59,10 @@ function summary(steps: WorkflowStep[]): { text: string; tone: Tone } | null {
   if (failed) return { text: `${STEPS[failed.id].name} failed`, tone: "failed" };
   const active = steps.find((s) => s.state === "active");
   if (active) return { text: STEPS[active.id].activeLabel, tone: "busy" };
-  if (steps.length > 0 && steps.every((s) => movedPast(s.state)))
-    return { text: "Suggestions ready", tone: "done" };
+  if (steps.length > 0 && steps.every((s) => movedPast(s.state))) {
+    const briefOnly = steps.find((s) => s.id === "seo")?.state === "skipped";
+    return { text: briefOnly ? "Brief ready" : "Suggestions ready", tone: "done" };
+  }
   return null;
 }
 
