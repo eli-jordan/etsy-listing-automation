@@ -41,17 +41,15 @@ const NODE_TESTS = [
 const jsdom = {
   environment: "jsdom",
   setupFiles: ["./src/test/setup.ts"],
-  // `list`, not the default `stack`: setup.ts's `cleanup()` must unmount
-  // before a test file's own `afterEach(() => vi.restoreAllMocks())`.
-  // Unmounting flushes pending effects, and under `stack` those ran against
-  // real, just-restored API functions -- a stray `fetch` of a relative URL
-  // that failed CI as an unhandled error (BatchDeployPage's mark-seen).
-  sequence: { hooks: "list" },
 } as const;
 
 export default defineConfig({
   plugins: [react()],
   test: {
+    // Workers serialize hook order from the root config, ignoring project
+    // overrides. Unmount in setup.ts before test files restore API spies,
+    // so pending React effects cannot call the real transport during teardown.
+    sequence: { hooks: "list" },
     projects: [
       {
         extends: true,
