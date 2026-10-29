@@ -5877,6 +5877,20 @@ table.listings tbody tr:last-child td {
   padding-top: 14px;
   border-top: 1px solid var(--color-divider);
 }
+.dv-open-etsy {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  text-decoration: none;
+}
+.dv-open-etsy__badge {
+  background: var(--color-bg);
+  color: #f1641e;
+}
+.dv-open-etsy__ext {
+  width: 15px;
+  height: 15px;
+}
 .dv-foot p {
   color: color-mix(in srgb, var(--color-text) 58%, transparent);
   font-size: 13px;

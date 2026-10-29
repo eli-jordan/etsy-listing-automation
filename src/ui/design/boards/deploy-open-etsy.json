@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "name": "deploy-open-etsy",
+  "title": "Open on Etsy after deploy",
+  "description": "Three directions for opening a just-deployed listing on Etsy; A (footer Open on Etsy button) won and is built in ApplyFooter.",
+  "auto": false,
+  "layout": {
+    "rows": [["deploy-open-etsy"]],
+    "scenes": {
+      "deploy-open-etsy": { "rows": [["a-footer", "b-next-step", "c-head-inline"]] }
+    }
+  },
+  "nodes": []
+}

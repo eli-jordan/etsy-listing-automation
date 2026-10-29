@@ -68,6 +68,11 @@
       "name": "archive",
       "title": "Archive",
       "description": "Retired directions, grouped by feature - history, not options."
+    },
+    {
+      "name": "deploy-open-etsy",
+      "title": "Open on Etsy after deploy",
+      "description": "Three directions for opening a just-deployed listing on Etsy; A (footer Open on Etsy button) won and is built in ApplyFooter."
     }
   ],
   "scenes": [
@@ -155,6 +160,12 @@
     {
       "name": "demo",
       "frames": 3
+    },
+    {
+      "name": "deploy-open-etsy",
+      "frames": 3,
+      "brief": "design/scenes/deploy-open-etsy/_brief.md",
+      "description": "Three directions for opening a just-deployed listing on Etsy from the deploy result; A won and is built in ApplyFooter."
     },
     {
       "name": "design-selector",
@@ -1033,6 +1044,40 @@
       "scene": "demo",
       "title": "Demo - welcome",
       "viewport": "mobile"
+    },
+    {
+      "id": "deploy-open-etsy/a-footer",
+      "file": "design/scenes/deploy-open-etsy/a-footer.tsx",
+      "kind": "tsx",
+      "scene": "deploy-open-etsy",
+      "note": "**A won and is built** in `ApplyFooter`. This frame mounts the real component.\n\nThe button always says **Open on Etsy**, for new drafts and live listings alike. It links to Shop Manager's listing editor (`etsyListingUrl`), which opens drafts too. With no Etsy id (for example after a retract), Back stays the only, primary action.\n\nB and C were the alternatives that weren't chosen.",
+      "title": "A · Footer leads to Etsy",
+      "viewport": "laptop",
+      "description": "Chosen and built: the applied footer's primary action is Open on Etsy, for drafts and live listings alike; Back to editor is secondary.",
+      "variantGroup": "deploy-open-etsy",
+      "variant": "a"
+    },
+    {
+      "id": "deploy-open-etsy/b-next-step",
+      "file": "design/scenes/deploy-open-etsy/b-next-step.tsx",
+      "kind": "tsx",
+      "scene": "deploy-open-etsy",
+      "title": "B · Next-step panel",
+      "viewport": "laptop",
+      "description": "The Deployed callout grows into a two-item checklist (done here, left to do on Etsy) with an Etsy-orange button beside it.",
+      "variantGroup": "deploy-open-etsy",
+      "variant": "b"
+    },
+    {
+      "id": "deploy-open-etsy/c-head-inline",
+      "file": "design/scenes/deploy-open-etsy/c-head-inline.tsx",
+      "kind": "tsx",
+      "scene": "deploy-open-etsy",
+      "title": "C · Head button + inline link",
+      "viewport": "laptop",
+      "description": "A quiet Open in Etsy button in the page head, where Plan again sits before apply, plus an inline link in the Deployed sentence.",
+      "variantGroup": "deploy-open-etsy",
+      "variant": "c"
     },
     {
       "id": "design-selector/dropping/a-switch-card",

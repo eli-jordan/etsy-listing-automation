@@ -1,0 +1,150 @@
+/* Styles for the deploy-open-etsy directions only; everything else is the
+   app's own stylesheet. */
+
+.oe-badge {
+  display: inline-grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  background: #f1641e;
+  color: #fff;
+  font-weight: 700;
+  font-size: 12px;
+  line-height: 1;
+  flex: none;
+}
+.oe-ext {
+  width: 15px;
+  height: 15px;
+  flex: none;
+}
+
+/* A — the Etsy button leads the footer */
+.oe-etsy-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  text-decoration: none;
+}
+.oe-etsy-btn:focus-visible,
+.oe-link:focus-visible,
+.oe-head-link:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+.oe-etsy-btn.btn-primary .oe-badge {
+  background: var(--color-bg);
+  color: #f1641e;
+}
+.oe-foot-note strong {
+  color: var(--color-text);
+  font-weight: 600;
+}
+
+/* B — next-step panel */
+.oe-panel {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 18px 32px;
+  align-items: center;
+  padding: 20px 22px;
+  border: 1px solid var(--color-accent-2-300);
+  background: var(--color-accent-2-100);
+  border-radius: var(--radius-sm);
+}
+.oe-panel h2 {
+  margin: 0 0 12px;
+  font-size: 21px;
+  text-wrap: balance;
+}
+.oe-checklist {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 14px;
+}
+.oe-checklist li {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+.oe-checklist .oe-done {
+  color: var(--color-accent-2-800);
+}
+.oe-checklist .oe-todo {
+  font-weight: 600;
+}
+.oe-dot {
+  display: inline-grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 99px;
+  flex: none;
+  box-sizing: border-box;
+}
+.oe-dot--done {
+  background: var(--color-accent-2-600);
+  color: var(--color-bg);
+}
+.oe-dot--todo {
+  border: 2px solid #f1641e;
+}
+.oe-panel__cta {
+  display: grid;
+  justify-items: end;
+  gap: 8px;
+}
+.oe-etsy-solid {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 20px;
+  border-radius: var(--radius-sm);
+  background: #f1641e;
+  color: #fff;
+  font-weight: 700;
+  font-size: 15px;
+  text-decoration: none;
+}
+.oe-etsy-solid .oe-badge {
+  background: #fff;
+  color: #f1641e;
+}
+.oe-etsy-solid:hover {
+  background: #d9541a;
+}
+.oe-etsy-solid:focus-visible {
+  outline: 2px solid var(--color-text);
+  outline-offset: 2px;
+}
+.oe-panel__sub {
+  font-size: 12.5px;
+  color: var(--color-accent-2-800);
+}
+.oe-panel__sub a {
+  color: inherit;
+}
+
+/* C — head action + inline link */
+.oe-head-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  text-decoration: none;
+  color: var(--color-text);
+}
+.oe-link {
+  color: var(--color-accent-2-800);
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  white-space: nowrap;
+}
+.oe-link .oe-ext {
+  vertical-align: -2px;
+  margin-left: 3px;
+}
