@@ -1,3 +1,5 @@
+import { ArrowSquareOutIcon } from "@phosphor-icons/react/dist/csr/ArrowSquareOut";
+import { etsyListingUrl } from "../../components/openOn";
 import type { ControlPhase } from "./deployState";
 
 /**
@@ -41,6 +43,7 @@ export function ApplyFooter({
   appliedStepCount,
   backLabel,
   onBack,
+  etsyListingId,
 }: {
   controlPhase: ControlPhase;
   previewsTotal: number;
@@ -50,17 +53,40 @@ export function ApplyFooter({
   appliedStepCount?: number;
   backLabel?: string;
   onBack?: () => void;
+  /** The listing's Etsy id after apply, when it has one. A new listing is
+   * an Etsy draft the seller still has to publish there, and a live one is
+   * worth checking, so either way Etsy is the next step. */
+  etsyListingId?: number | null;
 }) {
   if (controlPhase === "applied") {
     const count = appliedStepCount ?? 0;
+    const onEtsy = etsyListingId !== null && etsyListingId !== undefined;
     return (
       <div className="dv-foot">
         <p>
           Deployed {count} step{count === 1 ? "" : "s"}.
         </p>
-        <button type="button" className="btn btn-primary dv-big" onClick={onBack}>
+        <button
+          type="button"
+          className={onEtsy ? "btn btn-secondary dv-big" : "btn btn-primary dv-big"}
+          onClick={onBack}
+        >
           {backLabel}
         </button>
+        {onEtsy && (
+          <a
+            className="btn btn-primary dv-big dv-open-etsy"
+            href={etsyListingUrl(etsyListingId)}
+            target="_blank"
+            rel="noreferrer"
+          >
+            <span className="row-menu__badge dv-open-etsy__badge" aria-hidden="true">
+              E
+            </span>
+            Open on Etsy
+            <ArrowSquareOutIcon className="dv-open-etsy__ext" weight="bold" aria-hidden="true" />
+          </a>
+        )}
       </div>
     );
   }
