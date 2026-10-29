@@ -17,7 +17,9 @@ agreement by hand. :class:`PlannedRun` carries them across instead.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from collections.abc import Mapping
+from dataclasses import dataclass, replace
+from pathlib import Path
 from typing import Any
 
 from pydantic import BaseModel
@@ -106,7 +108,13 @@ def build_plan(
             on_event(EngineStageChecking(listing, state.stage.name))
             on_event(EngineStagePlanned(listing, state.stage_plan))
         return planned
-    states = [_walk(ctx, listing, lock, stage, on_event=on_event) for stage in decision.stages]
+    states = []
+    for stage in decision.stages:
+        state = _walk(ctx, listing, lock, stage, on_event=on_event)
+        states.append(state)
+        rewrites = _rewrites(ctx, state)
+        if rewrites:
+            ctx = replace(ctx, rewrites={**ctx.rewrites, **rewrites})
 
     return _assemble(listing, lock, tuple(states), published=decision.published)
 
@@ -178,6 +186,18 @@ def _walk(
     )
     on_event(EngineStagePlanned(listing, stage_plan))
     return state
+
+
+def _rewrites(ctx: RunContext, state: StageState) -> Mapping[Path, Path | None]:
+    """The local files ``state``'s stage will rewrite with different bytes,
+    for :attr:`RunContext.rewrites`. Only a stage that will run rewrites
+    anything, and like ``snapshot`` the hook is optional: ``render`` is the
+    one stage that writes files a later stage reads."""
+    method = getattr(state.stage, "rewrites", None)
+    if method is None or not state.stage_plan.will_run:
+        return {}
+    result: Mapping[Path, Path | None] = method(ctx, state.desired, state.live)
+    return result
 
 
 def _review_hash(stage: AnyStage, desired: Any) -> str | None:

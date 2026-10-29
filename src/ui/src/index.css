@@ -5718,6 +5718,18 @@ table.listings tbody tr:last-child td {
   outline: 2px solid var(--color-accent-2);
   outline-offset: -2px;
 }
+/* A re-rendered image: the after block's green edge, as a red line along
+   the bottom. Drawn over the image, which would cover an inset shadow. */
+.dv-thumb--replaced::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 3px;
+  background: var(--color-danger);
+  pointer-events: none;
+}
 
 .dv-prices {
   border: 1px solid var(--color-divider);

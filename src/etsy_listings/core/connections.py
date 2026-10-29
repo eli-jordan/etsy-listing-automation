@@ -18,6 +18,7 @@ here from that token rather than from the file it is not yet in.
 from __future__ import annotations
 
 from collections.abc import Callable
+from dataclasses import replace
 from datetime import datetime
 from pathlib import Path
 
@@ -192,12 +193,11 @@ def run_context(
     borrows a configured workspace's secrets. Only credentials come from it;
     the catalog cache remains under ``workspace``.
     """
-    sink = {"on_event": on_event} if on_event is not None else {}
     root = credentials_root or workspace.root
-    return RunContext(
+    ctx = RunContext(
         workspace=workspace,
         catalog=catalog_client(workspace, credentials_root=root),
         printify=printify_client(workspace, credentials_root=root),
         etsy=etsy_listing_client(root),
-        **sink,
     )
+    return ctx if on_event is None else replace(ctx, on_event=on_event)

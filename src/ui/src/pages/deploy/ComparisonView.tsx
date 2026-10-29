@@ -109,7 +109,10 @@ function AfterTile({
 
   return (
     <figure className="dv-thumb-wrap">
-      <div className={`dv-thumb${tile.badge === "new" ? " dv-thumb--new" : ""}`}>
+      <div
+        className={`dv-thumb${tile.badge === "new" ? " dv-thumb--new" : ""}${tile.replaced ? " dv-thumb--replaced" : ""}`}
+        title={tile.replaced ? "Changed" : undefined}
+      >
         {pending ? (
           <span className="dv-spinner" aria-hidden="true" />
         ) : (
@@ -140,7 +143,10 @@ function previewUrl(
 function BeforeTile({ tile }: { tile: BeforeImageTile }) {
   return (
     <figure className="dv-thumb-wrap">
-      <div className={`dv-thumb${tile.badge === "removed" ? " dv-thumb--gone" : ""}`}>
+      <div
+        className={`dv-thumb${tile.badge === "removed" ? " dv-thumb--gone" : ""}${tile.replaced ? " dv-thumb--replaced" : ""}`}
+        title={tile.replaced ? "Changed" : undefined}
+      >
         {tile.url !== null ? (
           <img alt={tile.ref ?? "listing image"} src={tile.url} />
         ) : (

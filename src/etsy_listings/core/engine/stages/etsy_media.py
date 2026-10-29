@@ -216,7 +216,10 @@ def _manifest_entry(
         source = workspace.render_file(listing, entry.template, entry.colour)
         colour = entry.colour if entry.template == variation_template else None
 
-    content_hash = hash_file(source) if source.is_file() else PENDING
+    # A render the render stage is about to rewrite is not what this stage will
+    # upload: its replacement is, and that is the preview apply promotes.
+    current = ctx.rewrites.get(source, source)
+    content_hash = hash_file(current) if current is not None and current.is_file() else PENDING
     file = to_workspace_relative_posix(workspace.root, source)
     return ManifestEntry(
         ref=manifest_ref(entry), source=source, content_hash=content_hash, file=file, colour=colour
@@ -502,15 +505,23 @@ def _media_changes(
     reorder, and the frontend (which also has both full manifests, from the
     snapshot) is what turns "before ref X, after ref Y" into a moved-from-N
     badge, never this stage.
+
+    A rank whose ref is unchanged but whose bytes are not -- a re-rendered
+    mockup, or one not rendered yet -- is a change with ``before == after``:
+    the same image, replaced. A render's bytes are hashed, not the inputs
+    that produced it, so a re-render that comes out identical is no change.
     """
-    wanted_refs = [entry.ref for entry in desired.manifest]
-    applied_refs = [entry.ref for entry in applied.manifest] if applied is not None else []
+    wanted = list(desired.applied().manifest)
+    previous = list(applied.manifest) if applied is not None else []
     changes: list[MediaChange] = []
-    for rank in range(1, max(len(wanted_refs), len(applied_refs), 0) + 1):
-        before = applied_refs[rank - 1] if rank <= len(applied_refs) else None
-        after = wanted_refs[rank - 1] if rank <= len(wanted_refs) else None
-        if before != after:
-            changes.append(MediaChange(rank=rank, before=before, after=after))
+    for rank in range(1, max(len(wanted), len(previous), 0) + 1):
+        before = previous[rank - 1] if rank <= len(previous) else None
+        after = wanted[rank - 1] if rank <= len(wanted) else None
+        before_ref = before.ref if before is not None else None
+        after_ref = after.ref if after is not None else None
+        replaced = before is not None and after is not None and before.hash != after.hash
+        if before_ref != after_ref or replaced:
+            changes.append(MediaChange(rank=rank, before=before_ref, after=after_ref))
     return tuple(changes)
 
 

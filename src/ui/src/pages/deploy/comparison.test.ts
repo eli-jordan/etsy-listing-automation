@@ -377,16 +377,68 @@ describe("buildComparison: images", () => {
     const { images } = buildComparison(fullPlan());
 
     expect(images?.after).toEqual([
-      { rank: 1, ref: "lifestyle-02:moss", badge: "new" },
-      { rank: 2, ref: "lifestyle-02:black", badge: "moved", movedFrom: 1 },
-      { rank: 3, ref: "flat-lay-01:ivory", badge: "moved", movedFrom: 2 },
+      { rank: 1, ref: "lifestyle-02:moss", badge: "new", replaced: false },
+      { rank: 2, ref: "lifestyle-02:black", badge: "moved", movedFrom: 1, replaced: false },
+      { rank: 3, ref: "flat-lay-01:ivory", badge: "moved", movedFrom: 2, replaced: false },
     ]);
     expect(images?.before).toEqual([
-      { rank: 1, ref: "lifestyle-02:black", url: "https://etsy.cdn/1.jpg", badge: null },
-      { rank: 2, ref: "flat-lay-01:ivory", url: "https://etsy.cdn/2.jpg", badge: null },
-      { rank: 3, ref: "closeup-01:black", url: "https://etsy.cdn/3.jpg", badge: "removed" },
+      {
+        rank: 1,
+        ref: "lifestyle-02:black",
+        url: "https://etsy.cdn/1.jpg",
+        badge: null,
+        replaced: false,
+      },
+      {
+        rank: 2,
+        ref: "flat-lay-01:ivory",
+        url: "https://etsy.cdn/2.jpg",
+        badge: null,
+        replaced: false,
+      },
+      {
+        rank: 3,
+        ref: "closeup-01:black",
+        url: "https://etsy.cdn/3.jpg",
+        badge: "removed",
+        replaced: false,
+      },
     ]);
     expect(images?.changed).toBe(true);
+  });
+
+  it("marks a re-rendered image replaced on both sides, even when it also moved", () => {
+    const black = "lifestyle-02:black";
+    const ivory = "flat-lay-01:ivory";
+    const rerendered = plan([
+      stage({ stage: "render", will_run: true, reason: "design or template changed" }),
+      stage({
+        stage: "etsy_media",
+        will_run: true,
+        reason: "the media manifest changed",
+        snapshot: {
+          // Etsy ranks its images from 0 here, so the re-rendered one also
+          // reads as moved -- the replacement must not depend on rank.
+          live: [
+            { rank: 0, ref: black, image_id: 1, url: "https://etsy.cdn/1.jpg" },
+            { rank: 2, ref: ivory, image_id: 2, url: "https://etsy.cdn/2.jpg" },
+          ],
+          desired: [
+            { rank: 1, ref: black, file: ".cache/renders/x/lifestyle-02/black.png" },
+            { rank: 2, ref: ivory, file: ".cache/renders/x/flat-lay-01/ivory.png" },
+          ],
+        },
+        changes: [{ kind: "media", rank: 1, before: black, after: black }],
+      }),
+    ]);
+
+    const { images, impacts } = buildComparison(rerendered);
+
+    expect(images?.after.map((t) => t.replaced)).toEqual([true, false]);
+    expect(images?.before.map((t) => t.replaced)).toEqual([true, false]);
+    expect(images?.after[0]?.badge).toBe("moved");
+    expect(images?.changed).toBe(true);
+    expect(impacts).toContain("Images");
   });
 });
 

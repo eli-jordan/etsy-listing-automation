@@ -292,7 +292,13 @@ deployment plan runs call `preview_listing()` after planning and write
 full-size, content-addressed previews. Apply copies a matching preview into
 render outputs instead of rendering again, retaining the preview for
 reattachment (ADR-0040). Those deployment previews are distinct from the
-calibrator's HTTP previews.
+calibrator's HTTP previews. While planning, the render stage declares the
+outputs it will rewrite (`rewrites()`, carried to later stages as
+`RunContext.rewrites`), so `etsy_media` hashes the preview — or reports the
+image pending — instead of the render about to be replaced. A plan run plans
+each previewed listing again once its previews exist; that later plan is the
+one reviewed, and it reports a re-rendered image as changed only when its
+bytes differ.
 
 "Real renderer" is structural rather than a claim maintained by hand. Both
 paths ask `Workspace.scene_photo()` which photo a scene composites over and

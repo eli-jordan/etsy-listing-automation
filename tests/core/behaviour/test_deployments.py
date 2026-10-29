@@ -189,6 +189,31 @@ def test_a_workspace_apply_differing_from_the_reviewed_set_is_refused(
     assert idle.runs(scope="workspace") == [reviewed], "a refusal queues nothing"
 
 
+def test_a_listing_planned_again_after_its_previews_is_reviewed_at_its_later_fingerprint(
+    idle: Deployments,
+) -> None:
+    replanned = "sha256:" + "2" * 64
+    run = _run(idle.submit(WorkspacePlan(("a", "b"))))
+    run.transition_plan("planning")
+    for name, fingerprint in (("a", FINGERPRINT), ("b", FINGERPRINT), ("a", replanned)):
+        plan = PlanDTO(listing=name, is_live=False, etsy_listing_id=None, stage_plans=())
+        run.append(
+            lambda i, name=name, plan=plan, fingerprint=fingerprint: ListingPlannedEvent(
+                id=i, listing=name, plan=plan, fingerprint=fingerprint
+            )
+        )
+    run.transition_plan("planned")
+    run.transition_plan("ready")
+
+    with pytest.raises(ReviewedPlanRefused, match="apply fingerprints must exactly match"):
+        idle.submit(WorkspaceApply(("a", "b"), {"a": FINGERPRINT, "b": FINGERPRINT}, run.id))
+    applied = _run(
+        idle.submit(WorkspaceApply(("a", "b"), {"a": replanned, "b": FINGERPRINT}, run.id))
+    )
+
+    assert applied.reviewed_run_id == run.id
+
+
 def test_a_workspace_apply_needs_a_ready_review(idle: Deployments) -> None:
     queued = _run(idle.submit(WorkspacePlan(("a",))))
 
