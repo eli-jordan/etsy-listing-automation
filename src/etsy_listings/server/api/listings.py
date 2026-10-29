@@ -68,6 +68,7 @@ from etsy_listings.core.application.refusals import (
     ListingNameTaken,
     PublishedListingDeletion,
 )
+from etsy_listings.core.application.scene_warming import SceneWarmer
 from etsy_listings.core.batches import BatchStore
 from etsy_listings.core.clients.etsy.tokens import EtsyAuthError
 from etsy_listings.core.clients.etsy.transport import EtsyApiError
@@ -128,6 +129,13 @@ def _batch_store(request: Request) -> BatchStore:
 def _ai_runs(request: Request) -> AiRunRegistry:
     runs: AiRunRegistry = request.app.state.ai.registry
     return runs
+
+
+def _warm_scenes(request: Request, name: str) -> None:
+    """Compose ``name``'s gallery scenes in the background, so the Listing
+    Images tab finds them cached (:mod:`~etsy_listings.core.application.scene_warming`)."""
+    warmer: SceneWarmer = request.app.state.scene_warmer
+    warmer.request(name)
 
 
 def _etsy_states(workspace: Workspace) -> EtsyStates:
@@ -284,6 +292,8 @@ def patch_listing(target: Existing, body: dict[str, Any], request: Request) -> L
         refused = edit_listing(workspace, name, body, batches=_batch_store(request))
     except ListingMissing as exc:
         raise _not_found(exc) from exc
+    if refused is None:
+        _warm_scenes(request, name)
     return _detail(workspace, name, field_errors=refused.field_errors if refused else None)
 
 
@@ -331,6 +341,7 @@ def create_listing(request: Request, body: CreateListingRequest) -> ListingDetai
         raise _conflict(exc) from exc
     if refused is not None:
         return _describe_draft(workspace, body.document)
+    _warm_scenes(request, body.name)
     return _detail(workspace, body.name)
 
 

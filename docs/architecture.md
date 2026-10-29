@@ -1035,6 +1035,17 @@ unchanged; preview responses carry the identity as their ETag. One composition
 runs per identity: a second request waits and reads the first one's entry. At
 most four Marigold compositions run at once, across previews and apply.
 
+The `ui` server fills the cache ahead of the Listing Images tab:
+`application.scene_warming.SceneWarmer` takes every listing an accepted create
+or PATCH leaves saved, and composes each template entry in its `media:` through
+`saved_scene` at full size, the scene-preview endpoint's own path, so it stores
+under the identity the endpoint looks up. One worker thread composes one scene
+at a time, so warming holds at most one of the four Marigold slots and the
+seller's own previews keep the rest; a listing saved again mid-pass stops after the scene in hand and
+requeues, so the next pass reads the listing as saved. A scene the endpoint
+would refuse is skipped. Warming is a head start, not a record: shutdown
+abandons the queue, and the CLI never warms.
+
 ## Native operational validation
 
 The [integrated native report](features/marigold-20261001/quality-validation.md)
