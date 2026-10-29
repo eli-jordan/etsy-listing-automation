@@ -3,6 +3,7 @@ import { useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as calibrator from "../api/calibrator";
 import * as preparation from "../api/preparation";
+import { PREVIEW_DEBOUNCE_MS } from "../hooks/usePreview";
 import { BOX, MARIGOLD, READY, SINGLE } from "../test/marigold";
 import { must } from "../test/helpers";
 import type { Renderer, TemplateConfigState } from "../types";
@@ -17,7 +18,10 @@ beforeEach(() => {
   });
   vi.spyOn(calibrator, "renderPreview").mockResolvedValue("blob:full");
 });
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.useRealTimers();
+});
 function setup(
   config: TemplateConfigState = SINGLE,
   ready: preparation.Preparation = READY,
@@ -281,7 +285,8 @@ describe("MarigoldEditor", () => {
     expect(screen.getByRole("button", { name: "Re-render" })).toBeDisabled();
     expect(view.edits()).toHaveLength(1);
   });
-  it("does not infer or render when Preview opens with missing maps", async () => {
+  it("blocks full-quality Preview with missing maps while allowing transient editor frames", async () => {
+    vi.useFakeTimers();
     setup(SINGLE, {
       ...READY,
       maps: {
@@ -292,8 +297,11 @@ describe("MarigoldEditor", () => {
       },
     });
     fireEvent.click(screen.getByRole("tab", { name: "Preview" }));
-    await act(async () => {});
-    expect(calibrator.renderPreview).not.toHaveBeenCalled();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(PREVIEW_DEBOUNCE_MS);
+    });
+    expect(calibrator.renderPreview).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(calibrator.renderPreview).mock.calls[0]?.[3]).toBe("editor");
     expect(screen.getByText("Prepare the template first.")).toBeInTheDocument();
   });
   it("shows a persisted stroke checkpoint immediately when Undo is drafted", async () => {
