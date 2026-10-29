@@ -269,6 +269,45 @@ describe("DeployPage: reattaching", () => {
     expect(runsApi.markRunSeen).toHaveBeenCalledWith("run-4");
   });
 
+  it("opens the listing on Etsy by the id re-read after apply", async () => {
+    // A first deploy: the listing had no Etsy id when planned, and has one
+    // only once apply has created the draft.
+    vi.spyOn(listingsApi, "getListing").mockResolvedValue(detail({ etsy_listing_id: null }));
+    vi.spyOn(listingsApi, "tryGetListing").mockResolvedValue(
+      detail({ etsy_listing_id: 4412093857 }),
+    );
+    const fullPlan = plan([stage({ stage: "render", will_run: true, reason: "x" })]);
+    vi.spyOn(runsApi, "currentRun").mockResolvedValue(
+      runSummary({ id: "run-new", kind: "apply", phase: "applied" }),
+    );
+    vi.spyOn(runsApi, "getRun").mockResolvedValue(
+      runDetail({
+        id: "run-new",
+        kind: "apply",
+        phase: "applied",
+        events: [
+          {
+            type: "listing_planned",
+            id: 1,
+            listing: "take-a-hike",
+            plan: fullPlan,
+            fingerprint: "fp-new",
+          },
+          { type: "phase", id: 2, phase: "applied" },
+        ],
+      }),
+    );
+    vi.spyOn(runsApi, "markRunSeen").mockResolvedValue(undefined);
+    stubStream();
+
+    renderPage();
+
+    expect(await screen.findByRole("link", { name: /Open on Etsy/ })).toHaveAttribute(
+      "href",
+      "https://www.etsy.com/your/shops/me/listing-editor/edit/4412093857",
+    );
+  });
+
   it("keeps a just-finished apply unseen when Back is clicked immediately", async () => {
     const clock = controlledClock();
     vi.spyOn(listingsApi, "getListing").mockResolvedValue(detail());

@@ -380,6 +380,7 @@ export function DeployPage() {
           appliedStepCount={appliedStepCount}
           backLabel={deletedAfterApply ? "← Back to listings" : "← Back to editor"}
           onBack={() => void handleBack()}
+          etsyListingId={deletedAfterApply ? null : (detail?.etsy_listing_id ?? null)}
         />
       </div>
     </div>

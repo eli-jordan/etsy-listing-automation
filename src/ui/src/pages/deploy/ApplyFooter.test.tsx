@@ -125,6 +125,46 @@ describe("ApplyFooter: applied", () => {
     expect(onBack).toHaveBeenCalledOnce();
   });
 
+  it("leads with Open on Etsy once the listing has an Etsy id, Back stepping down", () => {
+    render(
+      <ApplyFooter
+        controlPhase="applied"
+        previewsTotal={0}
+        previewsDone={0}
+        onApply={() => {}}
+        appliedStepCount={6}
+        backLabel="← Back to editor"
+        onBack={() => {}}
+        etsyListingId={4412093857}
+      />,
+    );
+    const open = screen.getByRole("link", { name: /Open on Etsy/ });
+    expect(open).toHaveAttribute(
+      "href",
+      "https://www.etsy.com/your/shops/me/listing-editor/edit/4412093857",
+    );
+    expect(open).toHaveAttribute("target", "_blank");
+    expect(open).toHaveClass("btn-primary");
+    expect(screen.getByRole("button", { name: "← Back to editor" })).toHaveClass("btn-secondary");
+  });
+
+  it("keeps Back as the only, primary action when there is no Etsy listing", () => {
+    render(
+      <ApplyFooter
+        controlPhase="applied"
+        previewsTotal={0}
+        previewsDone={0}
+        onApply={() => {}}
+        appliedStepCount={1}
+        backLabel="← Back to listings"
+        onBack={() => {}}
+        etsyListingId={null}
+      />,
+    );
+    expect(screen.queryByRole("link", { name: /Open on Etsy/ })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "← Back to listings" })).toHaveClass("btn-primary");
+  });
+
   it("uses singular step wording for exactly one step", () => {
     render(
       <ApplyFooter
