@@ -244,3 +244,18 @@ def test_an_empty_value_gains_one_in_place() -> None:
 
 def test_emptying_a_mapping_writes_an_empty_flow_mapping() -> None:
     assert edit_yaml("a:\n  b: 1  # gone\nc: 2\n", {"a": {}, "c": 2}) == "a: {}\nc: 2\n"
+
+
+def test_replacing_every_key_of_a_nested_mapping_keeps_the_new_ones_nested() -> None:
+    source = "renderer:\n  type: marigold\n  config:\n    inference:\n      steps: 10\n"
+
+    edited = edit_yaml(
+        source, {"renderer": {"type": "photo-warp", "config": {"warp": {"opacity": 0.6}}}}
+    )
+
+    assert edited == "renderer:\n  type: photo-warp\n  config:\n    warp:\n      opacity: 0.6\n"
+
+
+def test_replacing_every_item_of_a_sequence_keeps_its_indent() -> None:
+    assert edit_yaml("a:\n  - x\n  - y\n", {"a": ["z"]}) == "a:\n  - z\n"
+    assert edit_yaml("a:\n  - x\n  - y\n", {"a": ["p", "q", "r"]}) == "a:\n  - p\n  - q\n  - r\n"

@@ -373,6 +373,13 @@ class _Editor:
             self._splice(position, position, body + "\n")
 
     def _insert_lines_before(self, position: int, lines: list[str], column: int) -> None:
+        """Before the first entry: as whole lines when it starts its line, so
+        the insert sits outside that entry's span if it is being removed;
+        otherwise (``- key:``, never removed in place) right at it."""
+        if self._starts_its_line(position):
+            start = self._line_start(position)
+            self._splice(start, start, "".join(" " * column + line + "\n" for line in lines))
+            return
         indent = "\n" + " " * column
         self._splice(position, position, indent.join(lines) + indent)
 
