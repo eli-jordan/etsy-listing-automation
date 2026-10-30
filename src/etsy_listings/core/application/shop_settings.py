@@ -7,7 +7,8 @@ Admin plan, PR 3, *Shop*. Three operations, each a caller's whole job:
   candidate document is validated as a whole ``Defaults`` before anything is
   written; an edit that changes nothing leaves the file byte-identical
   (``workspace.revisions``, ADR-0055). A save adopts the new defaults in the
-  running ``Workspace`` so the next plan or deploy reads them.
+  running ``Workspace`` so the next plan or deploy reads them;
+  a run already under way keeps the ``Workspace.snapshot`` it took.
 - :func:`shop_connections` -- the configured Etsy and Printify shops, and
   whether a live lookup agrees, without ever erasing a configured identity
   because a service could not be reached.
