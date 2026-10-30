@@ -24,7 +24,7 @@ from fastapi.testclient import TestClient
 from etsy_listings.core.ai.proposals import ProposalStore
 from etsy_listings.core.application.ai.batch_queue import BatchQueue
 from etsy_listings.core.application.ai.registry import AiRun, AiRunRegistry
-from etsy_listings.core.application.ai.runner import AiRunner
+from etsy_listings.core.application.ai.runner import RUN_LIMIT_SECONDS, TIMEOUT_MESSAGE, AiRunner
 from etsy_listings.core.batches import (
     Batch,
     BatchRow,
@@ -368,12 +368,12 @@ def test_a_run_that_outlives_the_limit_becomes_a_failed_row(q: Queue) -> None:
     q.queue.start()
     wait_for(lambda: q.provider.started["brief"].is_set())
 
-    q.clock.now = 180.0
+    q.clock.now = RUN_LIMIT_SECONDS
 
     wait_for(lambda: q.states(batch)[0] == "failed")
     row = q.row(batch, 0)
     assert row.ai_error is not None
-    assert "3 minutes" in row.ai_error
+    assert TIMEOUT_MESSAGE in row.ai_error
 
 
 # ---------------------------------------------------- cancel and resume
