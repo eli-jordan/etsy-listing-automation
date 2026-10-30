@@ -1365,6 +1365,92 @@
         "title": "CommonCopySummary",
         "type": "object"
       },
+      "ConnectionRowBody": {
+        "properties": {
+          "commands": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Commands",
+            "type": "array"
+          },
+          "problem": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Problem"
+          },
+          "sales_channel": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sales Channel"
+          },
+          "shop_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Shop Id"
+          },
+          "shop_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Shop Name"
+          },
+          "signed_in_user_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Signed In User Id"
+          },
+          "state": {
+            "enum": [
+              "connected",
+              "not_connected",
+              "lookup_failed"
+            ],
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "state",
+          "shop_name",
+          "shop_id",
+          "commands",
+          "problem",
+          "signed_in_user_id",
+          "sales_channel"
+        ],
+        "title": "ConnectionRowBody",
+        "type": "object"
+      },
       "CreateAiRunRequest": {
         "properties": {
           "draft_brief": {
@@ -1516,6 +1602,24 @@
           "request_id"
         ],
         "title": "CreatePreparationRequest",
+        "type": "object"
+      },
+      "CurrencyOption": {
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "name"
+        ],
+        "title": "CurrencyOption",
         "type": "object"
       },
       "DescriptionConfig": {
@@ -1937,6 +2041,55 @@
           "outcome"
         ],
         "title": "EtsyListingStagePlanDTO",
+        "type": "object"
+      },
+      "EtsyLookupsBody": {
+        "properties": {
+          "available": {
+            "title": "Available",
+            "type": "boolean"
+          },
+          "problem": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Problem"
+          },
+          "production_partners": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Production Partners",
+            "type": "array"
+          },
+          "return_policies": {
+            "items": {
+              "$ref": "#/components/schemas/ReturnPolicyChoiceBody"
+            },
+            "title": "Return Policies",
+            "type": "array"
+          },
+          "shipping_profiles": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Shipping Profiles",
+            "type": "array"
+          }
+        },
+        "required": [
+          "available",
+          "problem",
+          "production_partners",
+          "shipping_profiles",
+          "return_policies"
+        ],
+        "title": "EtsyLookupsBody",
         "type": "object"
       },
       "EtsyMediaSnapshot": {
@@ -4897,6 +5050,39 @@
         "title": "PricingPlanSummary",
         "type": "object"
       },
+      "PrintifyLookupsBody": {
+        "properties": {
+          "available": {
+            "title": "Available",
+            "type": "boolean"
+          },
+          "print_providers": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Print Providers",
+            "type": "array"
+          },
+          "problem": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Problem"
+          }
+        },
+        "required": [
+          "available",
+          "problem",
+          "print_providers"
+        ],
+        "title": "PrintifyLookupsBody",
+        "type": "object"
+      },
       "ProductSnapshot": {
         "description": "Domain facts for the before/after review: every variant on each\nside, unchanged ones included -- a ``Plan`` carries only what changed, and\nthe comparison needs the whole matrix to draw a price table from.",
         "properties": {
@@ -5571,6 +5757,53 @@
         "title": "RetractStagePlanDTO",
         "type": "object"
       },
+      "ReturnPolicyChoiceBody": {
+        "properties": {
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "terms": {
+            "$ref": "#/components/schemas/ReturnPolicyTermsBody"
+          }
+        },
+        "required": [
+          "terms",
+          "label"
+        ],
+        "title": "ReturnPolicyChoiceBody",
+        "type": "object"
+      },
+      "ReturnPolicyTermsBody": {
+        "description": "``etsy.listing_defaults.return_policy``: a policy by its terms.",
+        "properties": {
+          "accepts_exchanges": {
+            "title": "Accepts Exchanges",
+            "type": "boolean"
+          },
+          "accepts_returns": {
+            "title": "Accepts Returns",
+            "type": "boolean"
+          },
+          "within_days": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Within Days"
+          }
+        },
+        "required": [
+          "accepts_returns",
+          "accepts_exchanges"
+        ],
+        "title": "ReturnPolicyTermsBody",
+        "type": "object"
+      },
       "ReviewedRequest": {
         "properties": {
           "reviewed": {
@@ -5929,6 +6162,296 @@
           }
         },
         "title": "ShadeConfig",
+        "type": "object"
+      },
+      "ShopChanges": {
+        "additionalProperties": false,
+        "description": "Only the keys sent are changed; ``null`` removes an optional one.\nValues are loosely typed on purpose: the whole candidate document is\nvalidated by ``Defaults``, which names each refused field.",
+        "properties": {
+          "currency": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Currency"
+          },
+          "is_supply": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Supply"
+          },
+          "preferred_print_provider": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Preferred Print Provider"
+          },
+          "production_partner": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Production Partner"
+          },
+          "renewal": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Renewal"
+          },
+          "return_policy": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReturnPolicyTermsBody"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "shipping_profile": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Shipping Profile"
+          },
+          "when_made": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "When Made"
+          },
+          "who_made": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Who Made"
+          }
+        },
+        "title": "ShopChanges",
+        "type": "object"
+      },
+      "ShopConnectionsResponse": {
+        "properties": {
+          "etsy": {
+            "$ref": "#/components/schemas/ConnectionRowBody"
+          },
+          "printify": {
+            "$ref": "#/components/schemas/ConnectionRowBody"
+          }
+        },
+        "required": [
+          "etsy",
+          "printify"
+        ],
+        "title": "ShopConnectionsResponse",
+        "type": "object"
+      },
+      "ShopListingDefaults": {
+        "properties": {
+          "is_supply": {
+            "title": "Is Supply",
+            "type": "boolean"
+          },
+          "production_partner": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Production Partner"
+          },
+          "renewal": {
+            "title": "Renewal",
+            "type": "string"
+          },
+          "return_policy": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReturnPolicyTermsBody"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "shipping_profile": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Shipping Profile"
+          },
+          "when_made": {
+            "title": "When Made",
+            "type": "string"
+          },
+          "who_made": {
+            "title": "Who Made",
+            "type": "string"
+          }
+        },
+        "required": [
+          "who_made",
+          "when_made",
+          "is_supply",
+          "production_partner",
+          "shipping_profile",
+          "return_policy",
+          "renewal"
+        ],
+        "title": "ShopListingDefaults",
+        "type": "object"
+      },
+      "ShopLookupsResponse": {
+        "properties": {
+          "etsy": {
+            "$ref": "#/components/schemas/EtsyLookupsBody"
+          },
+          "printify": {
+            "$ref": "#/components/schemas/PrintifyLookupsBody"
+          }
+        },
+        "required": [
+          "etsy",
+          "printify"
+        ],
+        "title": "ShopLookupsResponse",
+        "type": "object"
+      },
+      "ShopPatchRequest": {
+        "properties": {
+          "changes": {
+            "$ref": "#/components/schemas/ShopChanges"
+          },
+          "revision": {
+            "title": "Revision",
+            "type": "string"
+          }
+        },
+        "required": [
+          "revision",
+          "changes"
+        ],
+        "title": "ShopPatchRequest",
+        "type": "object"
+      },
+      "ShopSaveRefusal": {
+        "description": "A 409 (``conflict``: reload, then edit again) or a 422 (``invalid``:\neach refused dotted shop.yaml key to its reason). Nothing was written.",
+        "properties": {
+          "field_errors": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Field Errors",
+            "type": "object"
+          },
+          "kind": {
+            "enum": [
+              "conflict",
+              "invalid"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "message"
+        ],
+        "title": "ShopSaveRefusal",
+        "type": "object"
+      },
+      "ShopSettingsResponse": {
+        "properties": {
+          "currency": {
+            "title": "Currency",
+            "type": "string"
+          },
+          "listing_defaults": {
+            "$ref": "#/components/schemas/ShopListingDefaults"
+          },
+          "preferred_print_provider": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Preferred Print Provider"
+          },
+          "revision": {
+            "title": "Revision",
+            "type": "string"
+          },
+          "supported_currencies": {
+            "items": {
+              "$ref": "#/components/schemas/CurrencyOption"
+            },
+            "title": "Supported Currencies",
+            "type": "array"
+          }
+        },
+        "required": [
+          "revision",
+          "currency",
+          "supported_currencies",
+          "listing_defaults",
+          "preferred_print_provider"
+        ],
+        "title": "ShopSettingsResponse",
         "type": "object"
       },
       "SinglePreviewRequest": {
@@ -7080,6 +7603,119 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/api/admin/shop": {
+      "get": {
+        "operationId": "read_shop_api_admin_shop_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ShopSettingsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Read Shop",
+        "tags": [
+          "admin"
+        ]
+      },
+      "patch": {
+        "operationId": "edit_shop_api_admin_shop_patch",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ShopPatchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ShopSettingsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ShopSaveRefusal"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ShopSaveRefusal"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          }
+        },
+        "summary": "Edit Shop",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/api/admin/shop/connections": {
+      "get": {
+        "operationId": "read_connections_api_admin_shop_connections_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ShopConnectionsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Read Connections",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/api/admin/shop/lookups": {
+      "get": {
+        "description": "Fresh on every call: the page asks again when its window regains\nfocus or the seller retries (ADR-0033 forbids a disk cache for Etsy's).",
+        "operationId": "read_lookups_api_admin_shop_lookups_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ShopLookupsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Read Lookups",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
     "/api/ai/runs": {
       "get": {
         "description": "The listing's running or most recent run -- what the editor\nreattaches to after a reload.",
