@@ -17,7 +17,7 @@ from fastapi.responses import JSONResponse
 from etsy_listings.core import connections
 from etsy_listings.core.application import shop_settings
 from etsy_listings.core.application.refusals import InvalidShopEdit, ShopRevisionConflict
-from etsy_listings.core.config.currencies import ETSY_PAYMENTS_CURRENCIES
+from etsy_listings.core.config.currencies import OFFERED_CURRENCIES
 from etsy_listings.core.config.errors import ConfigLoadError
 from etsy_listings.core.workspace.workspace import Workspace
 from etsy_listings.server.api.schemas import (
@@ -57,7 +57,7 @@ def _response(view: shop_settings.ShopView) -> ShopSettingsResponse:
         revision=view.revision,
         currency=etsy.currency,
         supported_currencies=[
-            CurrencyOption(code=code, name=name) for code, name in ETSY_PAYMENTS_CURRENCIES.items()
+            CurrencyOption(code=code, name=name) for code, name in OFFERED_CURRENCIES.items()
         ],
         listing_defaults=ShopListingDefaults(
             who_made=defaults.who_made,
