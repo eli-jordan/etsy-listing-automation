@@ -9,6 +9,7 @@ import {
 import { App } from "./App";
 import "./index.css";
 import { AppShell } from "./shell/AppShell";
+import { AdminPage } from "./pages/admin/AdminPage";
 import { BatchDeployPage } from "./pages/BatchDeployPage";
 import { BatchSummaryPage } from "./pages/BatchSummaryPage";
 import { DashboardPage } from "./pages/DashboardPage";
@@ -58,6 +59,8 @@ const router = createBrowserRouter(
       <Route path="/batches/new" element={<NewBatchPage />} />
       <Route path="/batches/staging/:id" element={<StagingPage />} />
       <Route path="/batches/:id" element={<BatchSummaryPage />} />
+      {/* Admin plan, PR 3: shop.yaml's Shop tab; the section is page state. */}
+      <Route path="/admin" element={<AdminPage />} />
       {/* The calibrator, unmounted -- mounted here unchanged. */}
       <Route path="/templates" element={<App />} />
     </Route>,
