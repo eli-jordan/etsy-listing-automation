@@ -28,6 +28,9 @@ dependencies = [
     # PyAV. Unlike OpenCV/Pillow it never produces bytes that get hashed, so a
     # floor pin is enough; its wheels bundle FFmpeg on every CI platform.
     "av>=15",
+    # ADR-0055: writers edit seller YAML in place. ruamel's composer gives the
+    # source spans those edits splice; PyYAML stays the reader.
+    "ruamel.yaml>=0.19,<0.20",
 ]
 
 [project.scripts]
