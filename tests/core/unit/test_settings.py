@@ -152,8 +152,8 @@ def test_a_file_that_is_not_a_mapping_names_the_file(workspace: Workspace, text:
 
 class TestBatchAi:
     """``batch_ai.concurrency``: how many batch rows draft at once, across
-    every batch (spec, *Batch AI queue*; ADR-0048). No settings UI in the first
-    version, so the file is the only way to change it."""
+    every batch (spec, *Batch AI queue*; ADR-0048), from 1 to 8 (Admin plan,
+    *Settings*: the Admin page's slider covers the whole range)."""
 
     def test_the_default_is_one_at_a_time(self, workspace: Workspace) -> None:
         assert workspace.load_settings().batch_ai.concurrency == 1
@@ -167,13 +167,19 @@ class TestBatchAi:
         _write(workspace, "batch_ai:\n  concurrency: 3\n")
         assert workspace.load_settings().batch_ai.concurrency == 3
 
+    def test_eight_is_the_highest_limit(self, workspace: Workspace) -> None:
+        _write(workspace, "batch_ai:\n  concurrency: 8\n")
+        assert workspace.load_settings().batch_ai.concurrency == 8
+
     @pytest.mark.parametrize(
         ("text", "key"),
         [
             ("batch_ai:\n  concurrency: 0\n", "batch_ai.concurrency"),
+            ("batch_ai:\n  concurrency: 9\n", "batch_ai.concurrency"),
+            ("batch_ai:\n  concurrency: 2.5\n", "batch_ai.concurrency"),
             ("batch_ai:\n  concurency: 2\n", "batch_ai.concurency"),
         ],
-        ids=["zero", "misspelt"],
+        ids=["zero", "above-eight", "fractional", "misspelt"],
     )
     def test_an_invalid_limit_names_the_key(
         self, workspace: Workspace, text: str, key: str

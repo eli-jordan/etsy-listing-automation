@@ -32,6 +32,12 @@ from etsy_listings.core.config.errors import ConfigLoadError, format_validation_
 from etsy_listings.core.config.market_weights import MarketWeights
 
 
+MAX_BATCH_CONCURRENCY = 8
+"""Admin plan, *Settings*: Batch AI is a whole-number slider from 1 to 8.
+Enforced here, not only by the slider, so a hand edit cannot set a limit
+the page could not show."""
+
+
 def _absent_is_empty(value: Any) -> Any:  # noqa: ANN401 - pre-validation YAML
     """A key written with nothing under it (``market_seo:``) is YAML's
     ``null``; it means "nothing tuned here", the same as leaving it out."""
@@ -49,11 +55,12 @@ class MarketSeoSettings(BaseModel):
 class BatchAiSettings(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    concurrency: int = Field(1, ge=1)
+    concurrency: int = Field(1, ge=1, le=MAX_BATCH_CONCURRENCY)
     """How many batch rows draft at once, across every batch. Manual
     editor runs do not count against it. One by default: a seller's
     provider CLI is usually on a plan with a rate limit, and a queue that
-    ran every row at once would spend it on the first batch."""
+    ran every row at once would spend it on the first batch. At most
+    :data:`MAX_BATCH_CONCURRENCY`, the Admin page slider's top."""
 
 
 class Settings(BaseModel):
