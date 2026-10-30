@@ -52,6 +52,15 @@ import names the module it depends on. Public interfaces:
     ``find_etsy_shop`` -> ``FoundShop``, ``lookup_etsy_shop`` ->
     ``ShopLookup``, ``return_policy_options`` -> ``ReturnPolicyOptions``,
     ``policy_terms``, ``currency_default``.
+``shop_settings``
+    The Admin page's Shop tab: ``read_shop`` -> ``ShopView`` (``shop.yaml``'s
+    defaults and a revision of its exact bytes); ``edit_shop`` applies dotted
+    ``EDITABLE_KEYS`` changes (``PRINT_ON_DEMAND`` for the derived preset)
+    against an expected revision, validated as a whole ``Defaults``, refusing
+    with ``ShopRevisionConflict`` / ``InvalidShopEdit`` and writing nothing
+    for a no-op; ``shop_connections`` -> ``ShopConnections`` of
+    ``ConnectionRow``; ``shop_lookups`` -> ``ShopLookups`` (``EtsyLookups``,
+    ``PrintifyLookups``, ``ReturnPolicyChoice``), each failing on its own.
 ``mockup_templates``
     The calibrator: ``list_templates`` -> ``TemplateOverview``,
     ``colour_report``, ``assign_kind``, ``read_config`` / ``save_config``,
@@ -100,7 +109,8 @@ import names the module it depends on. Public interfaces:
     ``NothingToRetry``, ``BatchRowNotReviewable``, ``AiDraftingBlocked``;
     ``AiRunRefused`` -- ``ListingDeploying``, ``ListingDraftingInBatch``,
     ``AiNotReady``; ``ProposalMissing``, ``ProposalReplaced``;
-    ``ReviewedPlanRefused``.
+    ``ReviewedPlanRefused``; the Shop tab's ``ShopRevisionConflict`` and
+    ``InvalidShopEdit``.
 ``workspace_locks``
     ``WorkspaceLocks``: the per-listing-template write locks every
     template check-then-write holds, one instance per application runtime;

@@ -92,6 +92,18 @@ class EtsyShopCatalog:
             self._production_partners = self._client.production_partners(self._shop_id)
         return self._production_partners
 
+    # ------------------------------------------------- the lists, as offered
+
+    def shipping_profiles(self) -> list[ShippingProfile]:
+        """Every profile a name may resolve to: deleted ones are not."""
+        return list(self._all_shipping_profiles())
+
+    def return_policies(self) -> list[ReturnPolicy]:
+        return list(self._all_return_policies())
+
+    def production_partners(self) -> list[ProductionPartner]:
+        return list(self._all_production_partners())
+
     # -------------------------------------------------------------- section
 
     def shop_section(self, name: str) -> ShopSection:
