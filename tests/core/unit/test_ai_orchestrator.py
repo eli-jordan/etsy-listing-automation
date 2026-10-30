@@ -1,5 +1,5 @@
 """``ai/orchestrator.py``: the Codex-then-Claude chain, one same-provider
-repair attempt, and the shared 60-second deadline (AI SEO implementation
+repair attempt, and the shared request deadline (AI SEO implementation
 plan, PR4, item 3).
 
 Exercised entirely against `FakeAiProvider` (PR3) -- never a real Codex or
@@ -176,6 +176,31 @@ def test_deadline_exceeded_before_any_provider_is_tried() -> None:
         orchestrator.generate_proposal(_request(), _PROMPT, [codex], deadline=already_expired)
 
     assert codex.tasks == []
+
+
+def test_default_budget_allows_a_slow_response_and_shares_remaining_time_with_repair(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    now = 1_000.0
+    monkeypatch.setattr(time, "monotonic", lambda: now)
+    codex = FakeAiProvider(name="codex", responses=["not json", _valid_payload()])
+    original_generate = codex.generate
+    remaining: list[float] = []
+
+    def generate(task, deadline, *, repair=None, cancel_event=None):  # noqa: ANN001, ANN202
+        nonlocal now
+        remaining.append(deadline.remaining_seconds())
+        now += 61.0
+        if deadline.expired:
+            raise SeoDeadlineExceededError("The provider exhausted its deadline")
+        return original_generate(task, deadline, repair=repair, cancel_event=cancel_event)
+
+    monkeypatch.setattr(codex, "generate", generate)
+
+    proposal = orchestrator.generate_proposal(_request(), _PROMPT, [codex])
+
+    assert proposal.titles[0] == "a" * 10
+    assert remaining == [300.0, 239.0]
 
 
 def test_deadline_exceeded_skips_repair_and_surfaces_try_again() -> None:

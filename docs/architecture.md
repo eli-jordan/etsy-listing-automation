@@ -437,7 +437,8 @@ proposals and batch records persist on disk. There is no run-history recorder.
 The AI runner optionally drafts an empty brief, extracts three buyer queries,
 researches comparable Etsy listings, then generates and validates a proposal.
 The default provider order is Codex, Claude, Grok, with availability fallback,
-one same-provider repair for invalid output and a shared deadline. Readiness
+one same-provider repair for invalid output and a five-minute deadline shared
+by the attempts for each task. The whole run has a twenty-minute cap. Readiness
 (`application/ai/readiness.py`) decides whether a run may start. Market
 search/stat caches live for seven days; the latest per-listing evidence
 snapshot is separate. Research is read-only and supplies wording evidence

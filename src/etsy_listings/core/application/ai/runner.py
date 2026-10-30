@@ -75,11 +75,11 @@ from etsy_listings.core.workspace.workspace import Workspace
 
 logger = logging.getLogger(__name__)
 
-RUN_LIMIT_SECONDS = 180.0
+RUN_LIMIT_SECONDS = 1_200.0
 """The whole run's cap (features/market-seo-20260924/spec.md, *Failures*). Each provider call keeps
-its own 60 seconds; market search has no limit of its own."""
+its own five minutes; market search has no limit of its own."""
 
-TIMEOUT_MESSAGE = "The AI run took longer than 3 minutes, so it was stopped. Try again."
+TIMEOUT_MESSAGE = "The AI run took longer than 20 minutes, so it was stopped. Try again."
 KEPT_BRIEF = "You wrote the brief, so it was kept"
 KEPT_OWN_BRIEF = "You wrote the brief meanwhile, so yours was kept"
 NO_COMPARABLES = "No comparable listings found, even with filters relaxed"

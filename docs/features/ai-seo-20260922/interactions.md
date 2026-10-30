@@ -167,8 +167,8 @@ The backend tries Codex first. Only recognised provider-unavailable,
 authentication/quota, or rate-limit failures fall through to Claude Code; a
 malformed response receives one repair attempt from the same provider. Every
 other error exposes **Try again**. Each provider call (brief, market queries,
-proposal), including its repair and allowed fallback, has one 60-second
-deadline. The whole AI run is capped at 3 minutes.
+proposal), including its repair and allowed fallback, has one 5-minute
+deadline. The whole AI run is capped at 20 minutes.
 
 A short fixed delay is not a product requirement; the implementation reveals
 results when the real request completes.

@@ -1,5 +1,5 @@
 """The Codex-then-Claude chain, one same-provider output repair, and the
-shared 60-second request deadline (AI SEO implementation plan, PR4, item 3;
+shared five-minute request deadline (AI SEO implementation plan, PR4, item 3;
 the "Timeout and retries" and "Provider adapters" decisions).
 
 This is the "orchestration service" the runtime design diagram and
@@ -76,7 +76,7 @@ from etsy_listings.core.ai.prompt import build_seo_task
 from etsy_listings.core.ai.providers import AiProvider
 from etsy_listings.core.ai.validation import ProposalValidationError, validate_proposal
 
-_DEFAULT_SECONDS = 60.0
+_DEFAULT_SECONDS = 300.0
 """The settled whole-request budget: provider call, one same-provider
 repair, and the permitted Codex-to-Claude fallback all share this one
 `Deadline` (implementation plan, "Timeout and retries")."""
@@ -262,7 +262,7 @@ def generate_brief(
     """One drafted listing brief for ``request``, using the seller's own
     ``prompts/brief.md`` text.
 
-    Shares every rule above, including the 60-second budget -- a brief is a
+    Shares every rule above, including the five-minute budget -- a brief is a
     much smaller ask than a proposal, but it is the same kind of ask, and
     giving it its own timeout would mean two numbers to keep in agreement for
     no behaviour anyone wanted.
@@ -290,7 +290,7 @@ def generate_market_queries(
     ``prompts/market-queries.md`` text (features/market-seo-20260924/spec.md, *Query extraction*).
 
     The third task over the same chain: Codex, then Claude, then Grok on a
-    recognised unavailable failure, one same-provider repair, and its own 60 seconds
+    recognised unavailable failure, one same-provider repair, and its own five minutes
     (ADR-0003's deadline applies to each provider call of an AI run on its own).
     Never cached -- a second request is free to try different queries.
     """

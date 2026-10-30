@@ -58,7 +58,7 @@ class SeoTryAgainError(SeoGenerationError):
 
 
 class SeoDeadlineExceededError(SeoTryAgainError):
-    """The shared 60-second request deadline expired before a validated
+    """The shared request deadline expired before a validated
     proposal was produced."""
 
 
