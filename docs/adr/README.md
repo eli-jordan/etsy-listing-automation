@@ -72,3 +72,6 @@ so the trade-off remains visible.
 | 0052 | [Separate core from transport adapters](0052-separate-core-from-transport-adapters.md) | 2026-09-30 |
 | 0053 | [Resolve artwork once per listing](0053-resolve-artwork-once-per-listing.md) | 2026-09-28 |
 | 0054 | [Prepare durable mockup maps before rendering](0054-prepare-durable-mockup-maps-before-rendering.md) | 2026-10-01 |
+| 0055 | [Preserve YAML source when editing](0055-preserve-yaml-source-when-editing.md) | 2026-10-30 |
+| 0056 | [Configure AI providers per workspace](0056-configure-ai-providers-per-workspace.md) | 2026-10-30 |
+| 0057 | [Bound AI attempts and runs](0057-bound-ai-attempts-and-runs.md) | 2026-10-30 |

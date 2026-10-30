@@ -38,6 +38,7 @@ identify the start of the work, not its release date.
 | Module structure and shared operations | [Spec](features/module-structure-20260930/spec.md) | — | [Plan](features/module-structure-20260930/plan.md) |
 | Marigold mockup rendering | [Spec](features/marigold-20261001/spec.md) | [Interactions](features/marigold-20261001/interactions.md) | [Plan](features/marigold-20261001/plan.md) |
 | Test suite quality | [Spec](features/test-suite-quality-20261003/spec.md) | [Preserved interactions](features/test-suite-quality-20261003/interactions.md) | [Plan](features/test-suite-quality-20261003/plan.md) |
+| Admin page | Agreed requirements in plan | [Interactions and screenshots](features/admin-page-20261030/interactions.md) | [Plan](features/admin-page-20261030/plan.md) |
 
 Test suite quality also keeps an [audit-to-delivery map](features/test-suite-quality-20261003/coverage-map.md)
 and an [execution record](features/test-suite-quality-20261003/execution.md)
