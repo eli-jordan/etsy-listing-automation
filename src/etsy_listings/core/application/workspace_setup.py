@@ -1,8 +1,9 @@
 """Configuring a workspace: what ``setup`` writes, and the rules it writes by.
 
 The directories a workspace needs, the packaged prompts it is seeded with,
-and ``shop.yaml`` -- read raw, merged with what ``setup`` asked, rendered with
-a comment per field, and saved after the token that goes with it. Finding
+and ``shop.yaml`` -- read raw, merged with what ``setup`` asked, and saved
+after the token that goes with it: rendered with a comment per field when
+new, edited in place when the seller already has one (ADR-0055). Finding
 the shops those answers name is :mod:`shop_discovery`'s; asking the questions
 is the CLI's (``cli/setup.py``), the one part no test can drive cheaply.
 
@@ -31,6 +32,7 @@ from etsy_listings.core.ai.prompt import (
 )
 from etsy_listings.core.config.secrets import PRINTIFY_TOKEN_VAR
 from etsy_listings.core.workspace import layout, scaffold
+from etsy_listings.core.workspace.atomic import write_yaml_atomic
 
 WORKSPACE_DIRS: tuple[str, ...] = (
     layout.DESIGNS_DIR,
@@ -212,8 +214,8 @@ def shop_yaml_document(answers: SetupAnswers, existing: dict[str, Any] | None) -
 SHOP_YAML_HEADER = """\
 # This workspace's shop-wide configuration, written by `etsy-listings setup`.
 #
-# Safe to edit by hand -- but a later `setup` run rewrites the file, so these
-# comments are regenerated and any of your own will not survive.
+# Safe to edit by hand, comments included -- a later `setup` run changes
+# only the values it asks about and leaves the rest of the file as you wrote it.
 #
 # No credentials live here. Tokens and API keys are in .env, and the Etsy
 # OAuth tokens in .auth/, both gitignored and both written by
@@ -262,7 +264,8 @@ A comment costs a line and saves a trip to the documentation."""
 
 
 def render_shop_yaml(document: dict[str, Any]) -> str:
-    """The file as written: header, then the document with a comment per field.
+    """A new file as written: header, then the document with a comment per
+    field. An existing ``shop.yaml`` is never re-rendered (:func:`save_setup`).
 
     Comments are woven into `safe_dump`'s output rather than templated around
     it, because the document's shape is not fixed -- optional keys come and go
@@ -374,8 +377,14 @@ def save_setup(
     behind by a cancelled run is a workspace that looks configured and is not.
     ``shop.yaml`` goes last because it is the file that makes a directory a
     workspace, so writing it means "this worked".
+
+    An existing ``shop.yaml`` is edited in place: the answers that changed
+    are spliced into the seller's text and their comments, order and line
+    endings stay; with nothing changed it is not replaced (ADR-0055). Keys
+    it gains have no field comment, since only a new file is rendered.
     """
     scaffold.write_env_value(root, PRINTIFY_TOKEN_VAR, printify_token)
     path = root / layout.SHOP_FILE
-    path.write_text(render_shop_yaml(shop_yaml_document(answers, existing)), encoding="utf-8")
+    document = shop_yaml_document(answers, existing)
+    write_yaml_atomic(path, document, new=lambda: render_shop_yaml(document))
     return path
