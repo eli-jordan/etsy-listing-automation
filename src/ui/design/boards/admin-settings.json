@@ -1,0 +1,80 @@
+{
+  "version": 1,
+  "name": "admin-settings",
+  "auto": false,
+  "layout": {
+    "rows": [
+      [
+        "admin-settings"
+      ]
+    ],
+    "scenes": {
+      "admin-settings": {
+        "rows": [
+          [
+            "settings/a-rail",
+            "settings/b-cards",
+            "settings/c-split"
+          ],
+          [
+            "shop/a-rail",
+            "shop/b-cards",
+            "shop/c-split"
+          ]
+        ]
+      }
+    }
+  },
+  "nodes": [
+    {
+      "key": "n_ljpsi2o3p71k",
+      "frame": "admin-settings/settings/a-rail",
+      "x": 2,
+      "y": 77,
+      "w": 1280,
+      "h": 800
+    },
+    {
+      "key": "n_7t2481tqqj8a",
+      "frame": "admin-settings/settings/b-cards",
+      "x": 1434,
+      "y": 0,
+      "w": 1280,
+      "h": 800
+    },
+    {
+      "key": "n_1cscw3011negni",
+      "frame": "admin-settings/settings/c-split",
+      "x": 2867,
+      "y": 0,
+      "w": 1280,
+      "h": 800
+    },
+    {
+      "key": "n_6eh2iz10gsy95",
+      "frame": "admin-settings/shop/a-rail",
+      "x": 0,
+      "y": 960,
+      "w": 1280,
+      "h": 800
+    },
+    {
+      "key": "n_1jr2i551237ttn",
+      "frame": "admin-settings/shop/b-cards",
+      "x": 1433,
+      "y": 1034,
+      "w": 1280,
+      "h": 800
+    },
+    {
+      "key": "n_1ugqtzhyq6b73",
+      "frame": "admin-settings/shop/c-split",
+      "x": 2867,
+      "y": 960,
+      "w": 1280,
+      "h": 800
+    }
+  ],
+  "title": "Admin page (settings + shop)",
+  "description": "Three directions for the Admin page: Shop and Settings sections, blur-save, AI provider chain, batch concurrency, market weights."
+}

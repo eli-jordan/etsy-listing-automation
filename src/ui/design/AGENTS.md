@@ -1,4 +1,4 @@
-<!-- marver:managed 54f2ded6d3a76c17abaeb2a2991a552ef284e23e0a005d8c1615f5979f49afed - edit freely: init preserves your edits and stages upstream updates at design/.local/latest/ for you to merge. Delete this line to detach this file from updates entirely. -->
+<!-- marver:managed 62eb8445d17462ce9d9f86c8b84196d978371cc8f991d582b632c51024a526d0 - edit freely: init preserves your edits and stages upstream updates at design/.local/latest/ for you to merge. Delete this line to detach this file from updates entirely. -->
 
 # Design canvas - agent contract
 
