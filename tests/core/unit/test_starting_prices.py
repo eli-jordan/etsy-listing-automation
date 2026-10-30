@@ -28,6 +28,8 @@ from etsy_listings.core.clients.printify.models import (
 from etsy_listings.core.config.money import Money
 from etsy_listings.core.workspace.workspace import Workspace
 
+from tests.support.source_files import identity
+
 SMALL_FRONT = (PrintAreaPlaceholder(position="front", width=3461, height=3955),)
 LARGE_FRONT = (PrintAreaPlaceholder(position="front", width=4500, height=5400),)
 """Placeholders hang off each *variant*, and differ by garment size -- which is
@@ -77,12 +79,20 @@ def test_write_pricing_plan_sets_profile_from_the_chosen_garment_profile(
     assert "a note" in path.read_text(encoding="utf-8")
 
 
+HAND_TUNED = b"# tuned by hand\r\nprices: {S: 120 NOK}\r\n"
+
+
 def test_write_pricing_plan_refuses_to_overwrite(workspace_root: Path) -> None:
     workspace = Workspace.discover(root_override=workspace_root)
     prices = {"S": Money.parse("100 NOK")}
-    write_pricing_plan(workspace, "dup", "comfort-colors-1717", prices, [])
+    path = write_pricing_plan(workspace, "dup", "comfort-colors-1717", prices, [])
+    path.write_bytes(HAND_TUNED)
+    before = identity(path)
+
     with pytest.raises(FileExistsError):
         write_pricing_plan(workspace, "dup", "comfort-colors-1717", prices, [])
+    assert identity(path) == before
+    assert path.read_bytes() == HAND_TUNED
 
 
 def _shipping_rates(*, small_cents: int, medium_cents: int) -> ShippingRates:

@@ -32,6 +32,7 @@ from etsy_listings.core.render.config import (
 )
 from etsy_listings.core.workspace.atomic import write_bytes_atomic, write_json_atomic
 from etsy_listings.core.workspace.file_version import file_version
+from etsy_listings.core.workspace.yaml_source import edit_yaml_bytes
 
 if TYPE_CHECKING:
     from etsy_listings.core.workspace import Workspace
@@ -219,9 +220,9 @@ class CalibrationStore:
                 name,
                 {
                     **files,
-                    self.workspace.template_config_file(name): yaml.safe_dump(
-                        dump_template_config(config), sort_keys=False
-                    ).encode("utf-8"),
+                    self.workspace.template_config_file(name): self.config_bytes(
+                        name, config, before=current.config
+                    ),
                     receipt_path: json_bytes(receipt),
                 },
             )
@@ -493,19 +494,30 @@ class CalibrationStore:
             path = self.workspace.template_renderer_settings_file(name)
             settings = json.loads(path.read_bytes()) if path.is_file() else {}
             config_path = self.workspace.template_config_file(name)
-            if config_path.is_file():
-                old = self.workspace.load_template_config(name)
+            old = self.workspace.load_template_config(name) if config_path.is_file() else None
+            if old is not None:
                 settings[old.renderer.type] = old.renderer.config.model_dump(mode="json")
             settings[config.renderer.type] = config.renderer.config.model_dump(mode="json")
             self.commit(
                 name,
                 {
-                    config_path: yaml.safe_dump(
-                        dump_template_config(config), sort_keys=False
-                    ).encode("utf-8"),
+                    config_path: self.config_bytes(name, config, before=old),
                     path: json_bytes(settings),
                 },
             )
+
+    def config_bytes(self, name: str, config: AnyTemplate, *, before: AnyTemplate | None) -> bytes:
+        """``template.yaml`` as it should be once ``config`` is saved.
+
+        A new file is the full dump. An existing one keeps the seller's text
+        and gains only what differs between ``before``, the config it holds,
+        and ``config`` (ADR-0055); when nothing does, the bytes are the
+        current ones, and commit recovery's checksum leaves the file alone."""
+        path = self.workspace.template_config_file(name)
+        dumped = dump_template_config(config)
+        if before is None or not path.is_file():
+            return yaml.safe_dump(dumped, sort_keys=False).encode("utf-8")
+        return edit_yaml_bytes(path.read_bytes(), dumped, before=dump_template_config(before))
 
     def write_durable(self, path: Path, data: bytes) -> None:
         write_bytes_atomic(path, data, durable=True)

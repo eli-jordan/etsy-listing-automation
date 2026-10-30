@@ -5,9 +5,11 @@ from pathlib import Path
 import pytest
 from PIL import Image
 
-from etsy_listings.core.render.config import load_template_config
+from etsy_listings.core.render.config import AnyTemplate, dump_template_config, load_template_config
 from etsy_listings.core.workspace import Workspace
 from etsy_listings.core.workspace.calibration import CalibrationStore
+
+from tests.support.source_files import crlf, identity
 
 BOX = [{"x": 0, "y": 0}, {"x": 32, "y": 0}, {"x": 32, "y": 32}, {"x": 0, "y": 32}]
 
@@ -646,3 +648,62 @@ def test_repeated_photo_identity_tracks_replaced_pixels(workspace_root) -> None:
     second = store.photo_identity("example", config)
     assert second["pixels"] != first["pixels"]
     assert store.photo_identity("example", config) == second
+
+
+HAND_CALIBRATED = """\
+# Front-on flat lay, calibrated by hand.
+kind: single
+bounding_box:   # corners, clockwise
+  - {x: 0, y: 0}
+  - {x: 32, y: 0}
+  - {x: 32, y: 32}
+  - {x: 0, y: 32}
+renderer:
+  type: marigold
+  config:
+    appearance:
+      fabric_texture: 0.25   # subtle
+"""
+
+
+def _hand_calibrated(root: Path) -> tuple[CalibrationStore, Path]:
+    store = make_store(root)
+    path = store.workspace.template_config_file("example")
+    path.write_bytes(crlf(HAND_CALIBRATED).encode("utf-8"))
+    return store, path
+
+
+def _with_texture(store: CalibrationStore, texture: float) -> AnyTemplate:
+    dumped = dump_template_config(store.read("example").config)
+    dumped["renderer"]["config"]["appearance"]["fabric_texture"] = texture  # type: ignore[index]
+    return load_template_config(dumped)
+
+
+@pytest.mark.parametrize("writer", ["save", "write_config"])
+def test_a_save_edits_only_the_changed_value_in_template_yaml(
+    workspace_root: Path, writer: str
+) -> None:
+    """ADR-0055: a model dump carries every default and reads `0` as `0.0`,
+    but the file changes only where the calibration did."""
+    store, path = _hand_calibrated(workspace_root)
+    updated = _with_texture(store, 0.5)
+
+    if writer == "save":
+        saved = store.read("example")
+        store.save("example", updated, expected_revision=saved.revision, request_id="texture")
+    else:
+        store.workspace.save_template_config("example", updated)
+
+    expected = HAND_CALIBRATED.replace("fabric_texture: 0.25", "fabric_texture: 0.5")
+    assert path.read_bytes() == crlf(expected).encode("utf-8")
+    assert store.read("example").config == updated
+
+
+def test_an_unchanged_save_leaves_template_yaml_alone(workspace_root: Path) -> None:
+    store, path = _hand_calibrated(workspace_root)
+    saved = store.read("example")
+    before = identity(path)
+
+    store.save("example", saved.config, expected_revision=saved.revision, request_id="same")
+
+    assert identity(path) == before
