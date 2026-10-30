@@ -1052,6 +1052,8 @@ class ConnectionRowBody(BaseModel):
     problem: str | None
     signed_in_user_id: int | None
     sales_channel: str | None
+    shop_currency: str | None
+    """The live Etsy shop's own currency, when a lookup read it."""
 
 
 class ShopConnectionsResponse(BaseModel):

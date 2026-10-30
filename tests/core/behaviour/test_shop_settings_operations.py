@@ -362,7 +362,9 @@ def sign_in(root: Path, *, user_id: int = 81120455) -> None:
     )
 
 
-ETSY_SHOP = EtsyShop(shop_id=51007712, shop_name="TakeAHikeTees", user_id=81120455)
+ETSY_SHOP = EtsyShop(
+    shop_id=51007712, shop_name="TakeAHikeTees", user_id=81120455, currency_code="NOK"
+)
 PRINTIFY_SHOP = PrintifyShop(id=28819281, title="TakeAHikeTees", sales_channel="etsy")
 
 
@@ -408,6 +410,7 @@ def test_connected_shops_show_their_configured_identity(workspace_root: Path) ->
         51007712,
     )
     assert rows.etsy.signed_in_user_id == 81120455
+    assert rows.etsy.shop_currency == "NOK"
     assert rows.printify.state == "connected"
     assert rows.printify.shop_id == 28819281
     assert rows.printify.sales_channel == "etsy"

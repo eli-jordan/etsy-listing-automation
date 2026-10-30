@@ -2314,6 +2314,8 @@ export interface components {
       problem: string | null;
       /** Sales Channel */
       sales_channel: string | null;
+      /** Shop Currency */
+      shop_currency: string | null;
       /** Shop Id */
       shop_id: number | null;
       /** Shop Name */

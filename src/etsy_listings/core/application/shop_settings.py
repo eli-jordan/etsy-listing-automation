@@ -25,7 +25,7 @@ from __future__ import annotations
 
 import copy
 from collections.abc import Iterable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any, Literal
 
 import httpx
@@ -186,6 +186,9 @@ class ConnectionRow:
     """Etsy only: whose consent the tokens carry."""
     sales_channel: str | None = None
     """Printify only: where the shop publishes, as Printify reports it."""
+    shop_currency: str | None = None
+    """Etsy only: the currency the live shop sells in, so the page can warn
+    when ``etsy.currency`` is changed away from it."""
 
 
 @dataclass(frozen=True)
@@ -232,7 +235,7 @@ def _etsy_row(workspace: Workspace, client: EtsyShopClient) -> ConnectionRow:
     if owned is None or owned.shop_id != configured.shop_id:
         owner = f"shop #{owned.shop_id} ({owned.shop_name})" if owned else "no shop"
         return _failed(row, f"The signed-in Etsy account owns {owner}, not #{configured.shop_id}.")
-    return row
+    return replace(row, shop_currency=owned.currency_code)
 
 
 def _printify_row(workspace: Workspace, client: PrintifyClient) -> ConnectionRow:
