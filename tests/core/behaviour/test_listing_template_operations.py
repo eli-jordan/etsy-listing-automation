@@ -45,9 +45,21 @@ from etsy_listings.core.workspace.workspace import InvalidNameError, Workspace
 from tests.support.batches import png, small_print_area, uploads
 from tests.support.builders import FIXTURE_LISTING, edit_listing
 from tests.support.gates import LockGate, workers
+from tests.support.source_files import crlf, identity
 
 NAME = "heavyweight-tee"
 BLACK = {"template": "flat-lay-01", "colour": "black"}
+HAND_EDITED_TEMPLATE = """# Heavyweight tee, black only for now.
+garment_profile: comfort-colors-1717
+colors: [black]  # more soon
+prices:
+  S: 349 NOK    # same as the shop
+  M: "349 NOK"
+etsy:
+  renewal: 'manual'
+media:
+  - {template: flat-lay-01, colour: black}
+"""
 
 
 @pytest.fixture
@@ -310,6 +322,38 @@ class TestEdit:
         assert outcome.saved and outcome.template is not None
         assert outcome.template.template.colors == ["black"]
         assert workspace.load_listing_template(NAME).colors == ["black"]
+
+    def test_an_edit_changes_only_the_edited_value_in_the_seller_s_text(
+        self, workspace: Workspace, locks: WorkspaceLocks
+    ) -> None:
+        """ADR-0055: the document posted carries every default, but the file
+        gains only what the seller changed."""
+        _create(workspace)
+        path = workspace.listing_template_file(NAME)
+        path.write_bytes(crlf(HAND_EDITED_TEMPLATE).encode("utf-8"))
+
+        outcome = edit_listing_template(
+            workspace, NAME, {**_document(workspace), "colors": ["black", "moss"]}, locks=locks
+        )
+
+        assert outcome.saved
+        expected = HAND_EDITED_TEMPLATE.replace(
+            "[black]  # more soon", "[black, moss]  # more soon"
+        )
+        assert path.read_bytes() == crlf(expected).encode("utf-8")
+
+    def test_saving_the_document_unchanged_leaves_the_file_alone(
+        self, workspace: Workspace, locks: WorkspaceLocks
+    ) -> None:
+        _create(workspace)
+        path = workspace.listing_template_file(NAME)
+        path.write_bytes(crlf(HAND_EDITED_TEMPLATE).encode("utf-8"))
+        before = identity(path)
+
+        outcome = edit_listing_template(workspace, NAME, _document(workspace), locks=locks)
+
+        assert outcome.saved
+        assert identity(path) == before
 
     def test_a_missing_template_is_refused(
         self, workspace: Workspace, locks: WorkspaceLocks
