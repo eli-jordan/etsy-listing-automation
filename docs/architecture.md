@@ -477,6 +477,18 @@ Before a browser plan or apply begins, `Deployments` yields its listings to the
 `AiCoordinator`, which cancels their queued batch AI, stops and awaits active
 AI, and holds those names against new AI until deployment ends (ADR-0050).
 
+Admin's Settings tab reads and patches `settings.yaml` through
+`core/application/workspace_settings.py`. Its exact-byte revision is independent
+of `shop.yaml`. The shared workspace revision lock covers the read, revision
+comparison, whole-document validation and atomic replacement; source editing
+preserves untouched bytes and no-op saves do not replace the file (ADR-0055).
+An absent file uses defaults without creating it; invalid files refuse to load
+or dispatch batch work. The page serializes saves and adopts returned revisions;
+a conflict requires reload and never reapplies an old patch automatically.
+Batch concurrency is 1–8, read at the next dispatch, and lowering it leaves
+active runs alone (ADR-0048). Market shares normalize only for display until an
+edit saves whole percentages. The server returns the model's Reset defaults.
+
 ### Process-local limitations
 
 These are preserved deliberately; the restructure moved them into core without

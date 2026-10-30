@@ -2,6 +2,7 @@ import { act, fireEvent, render, screen, waitFor, within } from "@testing-librar
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, type MockInstance, vi } from "vitest";
 import * as shopApi from "../../api/shop";
+import * as settingsApi from "../../api/workspaceSettings";
 import type { SaveOutcome, ShopConnections, ShopLookups, ShopSettings } from "../../api/shop";
 import { AdminPage } from "./AdminPage";
 
@@ -108,6 +109,20 @@ function saved(next: ShopSettings): SaveOutcome {
 }
 
 beforeEach(() => {
+  const weights = {
+    reviews: 30,
+    favourites_per_day: 30,
+    search_rank: 20,
+    views_per_day: 10,
+    shop_sales: 5,
+    shop_rating: 5,
+  };
+  vi.spyOn(settingsApi, "getSettings").mockResolvedValue({
+    revision: "s1",
+    concurrency: 1,
+    weights,
+    default_weights: weights,
+  });
   vi.spyOn(shopApi, "getShop").mockResolvedValue(shop());
   vi.spyOn(shopApi, "getShopConnections").mockResolvedValue(CONNECTED);
   getLookups = vi.spyOn(shopApi, "getShopLookups").mockResolvedValue(lookups());
@@ -135,12 +150,18 @@ async function openDefaults() {
 }
 
 describe("Admin page shell", () => {
-  it("opens on Connected shops and keeps Settings visibly unavailable", async () => {
+  it("opens on Connected shops and preserves pending Settings edits across navigation", async () => {
     render(<AdminPage />);
     expect(await screen.findByRole("heading", { name: "Connected shops" })).toBeVisible();
-    const settings = screen.getByText("Settings").closest("[aria-disabled]");
-    expect(settings).toHaveAttribute("aria-disabled", "true");
     expect(screen.queryByRole("slider")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("link", { name: /Settings/ }));
+    const slider = await screen.findByRole("slider");
+    fireEvent.change(slider, { target: { value: "4" } });
+    fireEvent.click(screen.getByRole("link", { name: /Shop shop.yaml/ }));
+    expect(screen.queryByRole("slider")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("link", { name: /Settings/ }));
+    expect(screen.getByRole("slider")).toHaveValue("4");
+    expect(settingsApi.getSettings).toHaveBeenCalledTimes(1);
   });
 });
 
