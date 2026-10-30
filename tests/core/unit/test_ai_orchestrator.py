@@ -209,7 +209,7 @@ def test_deadline_exceeded_skips_repair_and_surfaces_try_again() -> None:
     class _ExpiringDeadline:
         """A deadline that reports not-expired for the first check (letting
         the initial `generate` call happen) and expired from then on -- the
-        shape a real 60-second budget takes once the first call alone
+        shape a real request budget takes once the first call alone
         consumed it."""
 
         def __init__(self) -> None:

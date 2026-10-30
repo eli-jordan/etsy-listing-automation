@@ -37,7 +37,7 @@ from etsy_listings.core.ai.models import Deadline
 
 _DEFAULT_POLL_INTERVAL = 0.05
 """How often the polling loop below wakes up to check the deadline and the
-cancellation event. Small enough that a 60-second deadline is honoured to
+cancellation event. Small enough that the request deadline is honoured to
 within a fraction of a second; large enough not to spin the CPU."""
 
 _REAP_TIMEOUT = 5.0

@@ -585,9 +585,9 @@ description preview and every deployment desired-document (Printify, Etsy)
 compose the final description through the same one shared function, so what
 you see in the preview is exactly what ships.
 
-**Provider limits.** Each provider operation has a 60-second deadline,
+**Provider limits.** Each provider operation has a five-minute deadline,
 including its repair and availability fallback; the complete AI run is capped
-at three minutes. A malformed response gets one same-provider repair. Only a
+at twenty minutes. A malformed response gets one same-provider repair. Only a
 recognised unavailable first attempt advances to the next provider. Cancel
 stops the run and its subprocess; leaving the tab or losing the connection
 allows the server-side run to continue and the browser to reattach.
