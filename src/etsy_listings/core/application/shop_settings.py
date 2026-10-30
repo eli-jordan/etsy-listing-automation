@@ -120,7 +120,8 @@ def edit_shop(
     currency = changes.get("etsy.currency")
     if "etsy.currency" in changes and currency not in OFFERED_CURRENCIES:
         refused["etsy.currency"] = (
-            f"{currency!r} is not a currency this workspace can be set to: Etsy Payments must support it and prices must have two decimals (ADR-0019)"
+            f"{currency!r} is not a currency this workspace can be set to: Etsy Payments "
+            "must support it and its prices must have two decimals (ADR-0019)"
         )
     if refused:
         raise InvalidShopEdit(refused)
