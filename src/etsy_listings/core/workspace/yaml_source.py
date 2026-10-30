@@ -170,8 +170,6 @@ class _Editor:
             self.root: Node | None = composer.compose(source)
         except Exception as exc:  # the reader already accepted it; ruamel must too
             raise UneditableYaml(str(exc)) from exc
-        self.constructor = YAML(typ="safe", pure=True)
-        self.constructor.version = _YAML_VERSION
         self.edits: list[tuple[int, int, int, str]] = []
         self.mapping_indent = 2
         self.sequence_offset = 0
@@ -222,10 +220,18 @@ class _Editor:
         else:
             replace(self._styled(node, new))
 
+    def _key(self, node: Node) -> Any:  # noqa: ANN401 -- any YAML scalar
+        """A key as the reader reads it. Read by PyYAML from its own text,
+        not constructed by ruamel, whose YAML 1.1 rules make a plain ``y``
+        -- a bounding-box point's -- the boolean ``True``."""
+        if not isinstance(node, ScalarNode):
+            raise UneditableYaml("a mapping key that is not a scalar")
+        return yaml.safe_load(self.source[node.start_mark.index : node.end_mark.index])
+
     def _entries(self, node: MappingNode, old: dict[Any, Any]) -> list[tuple[Any, Node, Node]]:
         entries = []
         for key_node, value_node in node.value:
-            key = self.constructor.constructor.construct_object(key_node, deep=True)
+            key = self._key(key_node)
             if key not in old:
                 raise UneditableYaml(f"key {key!r} does not read as written (a merge key?)")
             entries.append((key, key_node, value_node))

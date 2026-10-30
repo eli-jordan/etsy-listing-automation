@@ -259,3 +259,13 @@ def test_replacing_every_key_of_a_nested_mapping_keeps_the_new_ones_nested() -> 
 def test_replacing_every_item_of_a_sequence_keeps_its_indent() -> None:
     assert edit_yaml("a:\n  - x\n  - y\n", {"a": ["z"]}) == "a:\n  - z\n"
     assert edit_yaml("a:\n  - x\n  - y\n", {"a": ["p", "q", "r"]}) == "a:\n  - p\n  - q\n  - r\n"
+
+
+def test_keys_read_as_the_workspace_reader_reads_them() -> None:
+    """PyYAML reads a plain `y` key as the string ``"y"``; ruamel's YAML 1.1
+    rules would make it ``True``."""
+    source = "points:\n- {x: 0, y: 0}\n- x: 1\n  y: 1\n"
+
+    edited = edit_yaml(source, {"points": [{"x": 0, "y": 5}, {"x": 1, "y": 2}]})
+
+    assert edited == "points:\n- {x: 0, y: 5}\n- x: 1\n  y: 2\n"
