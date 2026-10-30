@@ -14,6 +14,12 @@ would close for an editor that ignores it.
 
 This module decides nothing about a file's contents: the caller's ``change``
 validates and edits bytes, and returning them unchanged writes nothing.
+
+An optional file (``settings.yaml``: Admin plan, *Settings*, "missing files
+keep defaults") is read with ``absent_ok``: it reads as no bytes at
+:data:`ABSENT_REVISION`, and a save against that revision creates it. Absent
+is not the empty file's hash, so a file that appears meanwhile, even an empty
+one, is an external edit like any other.
 """
 
 from __future__ import annotations
@@ -28,6 +34,7 @@ from etsy_listings.core.errors import UserFacingError
 from etsy_listings.core.workspace.atomic import read_bytes_retrying, write_bytes_atomic
 
 __all__ = [
+    "ABSENT_REVISION",
     "RevisionConflict",
     "Revised",
     "content_revision",
@@ -56,6 +63,10 @@ def content_revision(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
+ABSENT_REVISION = "absent"
+"""An ``absent_ok`` file's revision while it does not exist. Never a sha256."""
+
+
 _locks: dict[Path, threading.Lock] = {}
 _locks_guard = threading.Lock()
 
@@ -66,28 +77,42 @@ def _lock_for(path: Path) -> threading.Lock:
         return _locks.setdefault(key, threading.Lock())
 
 
-def read_revisioned(path: Path) -> tuple[bytes, str]:
+def read_revisioned(path: Path, *, absent_ok: bool = False) -> tuple[bytes, str]:
     """The file's bytes and their revision, read under the save lock so a read
     never pairs one save's bytes with another's hash."""
     with _lock_for(path):
-        data = read_bytes_retrying(path)
-    return data, content_revision(data)
+        return _read(path, absent_ok=absent_ok)
 
 
 def replace_if_unchanged(
-    path: Path, expected_revision: str, change: Callable[[bytes], bytes]
+    path: Path,
+    expected_revision: str,
+    change: Callable[[bytes], bytes],
+    *,
+    absent_ok: bool = False,
 ) -> Revised:
     """Apply ``change`` to the file if it is still at ``expected_revision``.
 
     ``change`` runs inside the lock and may raise to refuse; nothing is written
-    then. A result identical to the current bytes leaves the file untouched.
+    then. A result identical to the current bytes leaves the file untouched,
+    and an absent file absent.
     """
     with _lock_for(path):
-        current = read_bytes_retrying(path)
-        if content_revision(current) != expected_revision:
+        current, revision = _read(path, absent_ok=absent_ok)
+        if revision != expected_revision:
             raise RevisionConflict(path)
         edited = change(current)
         if edited == current:
             return Revised(expected_revision, written=False)
         write_bytes_atomic(path, edited)
         return Revised(content_revision(edited), written=True)
+
+
+def _read(path: Path, *, absent_ok: bool) -> tuple[bytes, str]:
+    try:
+        data = read_bytes_retrying(path)
+    except FileNotFoundError:
+        if not absent_ok:
+            raise
+        return b"", ABSENT_REVISION
+    return data, content_revision(data)

@@ -13,6 +13,8 @@ from pathlib import Path
 import pytest
 
 from etsy_listings.core.workspace.revisions import (
+    ABSENT_REVISION,
+    Revised,
     RevisionConflict,
     content_revision,
     read_revisioned,
@@ -122,3 +124,58 @@ def test_two_saves_from_one_revision_cannot_both_win(tmp_path: Path) -> None:
 
     assert sorted(outcomes) == ["conflict", "first"]
     assert path.read_bytes() == b"n: 1\n"
+
+
+# ----------------------------------------------------------- an absent file
+#
+# settings.yaml is optional (Admin plan, *Settings*: a missing file keeps the
+# defaults), so its first save creates it. Absent is its own revision: a file
+# that appears in the meantime, even an empty one, is an external edit.
+
+
+def test_an_absent_file_reads_as_empty_with_its_own_revision(tmp_path: Path) -> None:
+    data, revision = read_revisioned(tmp_path / "settings.yaml", absent_ok=True)
+
+    assert data == b""
+    assert revision == ABSENT_REVISION
+    assert revision != content_revision(b"")
+
+
+def test_a_save_against_the_absent_revision_creates_the_file(tmp_path: Path) -> None:
+    path = tmp_path / "settings.yaml"
+
+    saved = replace_if_unchanged(
+        path, ABSENT_REVISION, lambda data: data + b"a: 1\n", absent_ok=True
+    )
+
+    assert path.read_bytes() == b"a: 1\n"
+    assert saved == Revised(content_revision(b"a: 1\n"), written=True)
+
+
+def test_an_unchanged_result_for_an_absent_file_creates_nothing(tmp_path: Path) -> None:
+    path = tmp_path / "settings.yaml"
+
+    saved = replace_if_unchanged(path, ABSENT_REVISION, lambda data: data, absent_ok=True)
+
+    assert saved == Revised(ABSENT_REVISION, written=False)
+    assert not path.exists()
+
+
+def test_a_file_created_since_the_absent_read_is_a_conflict(tmp_path: Path) -> None:
+    path = tmp_path / "settings.yaml"
+    path.write_bytes(b"")
+
+    with pytest.raises(RevisionConflict):
+        replace_if_unchanged(path, ABSENT_REVISION, lambda data: b"a: 1\n", absent_ok=True)
+    assert path.read_bytes() == b""
+
+
+def test_a_file_deleted_since_its_read_is_a_conflict(tmp_path: Path) -> None:
+    path = tmp_path / "settings.yaml"
+    path.write_bytes(b"a: 1\n")
+    _, revision = read_revisioned(path, absent_ok=True)
+    path.unlink()
+
+    with pytest.raises(RevisionConflict):
+        replace_if_unchanged(path, revision, lambda data: b"a: 2\n", absent_ok=True)
+    assert not path.exists()
