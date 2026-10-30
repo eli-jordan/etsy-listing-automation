@@ -1,7 +1,7 @@
 import { CheckIcon } from "@phosphor-icons/react/dist/csr/Check";
 import { WarningOctagonIcon } from "@phosphor-icons/react/dist/csr/WarningOctagon";
 import { XIcon } from "@phosphor-icons/react/dist/csr/X";
-import { type KeyboardEvent, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { ShopSettings } from "../../api/shop";
 
 /**
@@ -43,23 +43,28 @@ export function CurrencyDialog({
       if (event.key === "Escape") {
         event.preventDefault();
         onCancel();
+        return;
       }
+      if (event.key !== "Tab" || !dialog.current) return;
+      const focusable = [
+        ...dialog.current.querySelectorAll<HTMLElement>("button, select, input, a[href]"),
+      ].filter((el) => !el.hasAttribute("disabled"));
+      if (focusable.length === 0) return;
+      const at = focusable.indexOf(document.activeElement as HTMLElement);
+      const next =
+        at < 0
+          ? event.shiftKey
+            ? focusable.length - 1
+            : 0
+          : (at + (event.shiftKey ? -1 : 1) + focusable.length) % focusable.length;
+      event.preventDefault();
+      focusable[next]?.focus();
     };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    // Clicking non-focusable modal content can leave focus on body. Capture
+    // Tab on window so the next key still stays inside the dialog.
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
   }, [onCancel]);
-
-  const trapTab = (event: KeyboardEvent) => {
-    if (event.key !== "Tab" || !dialog.current) return;
-    const focusable = [
-      ...dialog.current.querySelectorAll<HTMLElement>("button, select, input, a[href]"),
-    ].filter((el) => !el.hasAttribute("disabled"));
-    if (focusable.length === 0) return;
-    const at = focusable.indexOf(document.activeElement as HTMLElement);
-    const step = event.shiftKey ? -1 : 1;
-    event.preventDefault();
-    focusable[(at + step + focusable.length) % focusable.length]?.focus();
-  };
 
   const confirm = async () => {
     setBusy(true);
@@ -80,7 +85,6 @@ export function CurrencyDialog({
         role="dialog"
         aria-modal="true"
         aria-labelledby="sp-cur-title"
-        onKeyDown={trapTab}
       >
         <div className="sp-modal__alarm">
           <WarningOctagonIcon size={40} weight="fill" />
