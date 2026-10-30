@@ -287,13 +287,28 @@ describe("Currency", () => {
     expect(screen.getByRole("dialog")).toBeInTheDocument();
   });
 
-  it("keeps clicks inside the dialog from dismissing it, and Tab inside it", async () => {
-    const dialog = await openDialog();
-    await userEvent.click(within(dialog).getByText(/Read this before/));
-    expect(screen.getByRole("dialog")).toBeInTheDocument();
-    for (let i = 0; i < 8; i++) await userEvent.tab();
-    expect(dialog.contains(document.activeElement)).toBe(true);
-  });
+  it.each(["title", "warning copy"])(
+    "keeps every forward and backward Tab inside after clicking the %s",
+    async (target) => {
+      const dialog = await openDialog();
+      const content =
+        target === "title"
+          ? within(dialog).getByRole("heading", { name: /converts nothing/ })
+          : within(dialog).getByText(/Read this before/);
+      for (const shift of [false, true]) {
+        await userEvent.click(content);
+        expect(screen.getByRole("dialog")).toBeInTheDocument();
+        for (let i = 0; i < 10; i++) {
+          await userEvent.tab({ shift });
+          expect(dialog.contains(document.activeElement)).toBe(true);
+        }
+      }
+      await userEvent.keyboard("{Escape}");
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Change currency…" })).toHaveFocus();
+      expect(save).not.toHaveBeenCalled();
+    },
+  );
 });
 
 describe("How your items are made", () => {
