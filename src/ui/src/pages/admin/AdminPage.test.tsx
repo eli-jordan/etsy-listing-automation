@@ -432,7 +432,7 @@ describe("Lookups", () => {
     expect(creates.map((a) => a.getAttribute("href"))).toEqual([
       "https://www.etsy.com/your/shops/me/production-partners",
       "https://www.etsy.com/your/shops/me/tools/shipping-profiles",
-      "https://www.etsy.com/your/shops/me/policies",
+      "https://www.etsy.com/your/shops/me/shop-policies",
     ]);
     for (const create of creates) {
       expect(create).toHaveAttribute("target", "_blank");
