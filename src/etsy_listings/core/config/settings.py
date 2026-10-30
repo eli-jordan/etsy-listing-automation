@@ -31,7 +31,6 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_valida
 from etsy_listings.core.config.errors import ConfigLoadError, format_validation_error, parse_yaml
 from etsy_listings.core.config.market_weights import MarketWeights
 
-
 MAX_BATCH_CONCURRENCY = 8
 """Admin plan, *Settings*: Batch AI is a whole-number slider from 1 to 8.
 Enforced here, not only by the slider, so a hand edit cannot set a limit
@@ -78,7 +77,17 @@ class Settings(BaseModel):
         are :class:`ConfigLoadError`, naming the file and the dotted key."""
         if not path.is_file():
             return cls()
-        raw = parse_yaml(path, path.read_text(encoding="utf-8"))
+        return cls.from_text(path, path.read_text(encoding="utf-8"))
+
+    @classmethod
+    def from_text(cls, path: Path, text: str) -> Settings:
+        """``text``, read from ``path``, under :meth:`load`'s rules."""
+        return cls.from_document(path, parse_yaml(path, text))
+
+    @classmethod
+    def from_document(cls, path: Path, raw: object) -> Settings:
+        """A parsed document under :meth:`load`'s rules: an empty one is every
+        default; anything else must be a mapping of known keys."""
         if raw is None:
             return cls()
         if not isinstance(raw, dict):

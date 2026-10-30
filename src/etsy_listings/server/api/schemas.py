@@ -1043,6 +1043,32 @@ class ShopSaveRefusal(BaseModel):
     field_errors: dict[str, str] = Field(default_factory=dict)
 
 
+class WorkspaceSettingsResponse(BaseModel):
+    revision: str
+    concurrency: int
+    weights: dict[str, float]
+    """Relative weights, normalized only for display by the page."""
+    default_weights: dict[str, int]
+
+
+class WorkspaceSettingsChanges(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    concurrency: int | float | None = None
+    weights: dict[str, int | float] | None = None
+
+
+class WorkspaceSettingsPatch(BaseModel):
+    revision: str
+    changes: WorkspaceSettingsChanges
+
+
+class SettingsSaveRefusal(BaseModel):
+    kind: Literal["conflict", "invalid"]
+    message: str
+    field_errors: dict[str, str] = Field(default_factory=dict)
+
+
 class ConnectionRowBody(BaseModel):
     state: Literal["connected", "not_connected", "lookup_failed"]
     shop_name: str | None
