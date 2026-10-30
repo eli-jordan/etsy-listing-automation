@@ -153,6 +153,12 @@
       },
       [
         "marigold-v7"
+      ],
+      {
+        "space": 4
+      },
+      [
+        "admin-shop-v1"
       ]
     ],
     "scenes": {
@@ -501,6 +507,18 @@
             "06-one-slot-used",
             "07-unclassified",
             "08-back-to-one"
+          ]
+        ]
+      },
+      "admin-shop-v1": {
+        "rows": [
+          [
+            "connected/d-revised",
+            "currency/d-revised",
+            "defaults/d-revised",
+            "defaults-custom/d-revised",
+            "settings/d-revised",
+            "settings-market/d-revised"
           ]
         ]
       }
@@ -1128,6 +1146,24 @@
     {
       "key": "marigold_v7_realism-help",
       "frame": "marigold-v7/realism-help"
+    },
+    {
+      "frame": "admin-shop-v1/connected/d-revised"
+    },
+    {
+      "frame": "admin-shop-v1/currency/d-revised"
+    },
+    {
+      "frame": "admin-shop-v1/defaults/d-revised"
+    },
+    {
+      "frame": "admin-shop-v1/defaults-custom/d-revised"
+    },
+    {
+      "frame": "admin-shop-v1/settings/d-revised"
+    },
+    {
+      "frame": "admin-shop-v1/settings-market/d-revised"
     }
   ]
 }

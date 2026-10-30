@@ -1,4 +1,4 @@
-<!-- marver:managed 0d31b8a2bf7c4184183b0c3e7df92c3710741811f8db9eaf1d4d26cc5ced16f8 - edit freely: init preserves your edits and stages upstream updates at design/.local/latest/ for you to merge. Delete this line to detach this file from updates entirely. -->
+<!-- marver:managed 6c1bdf745a4b1afa5e7c61f89cc8866f7a27c4470a4f40bab3123559d88203a7 - edit freely: init preserves your edits and stages upstream updates at design/.local/latest/ for you to merge. Delete this line to detach this file from updates entirely. -->
 
 # Slides - decks that argue, on frames that move
 

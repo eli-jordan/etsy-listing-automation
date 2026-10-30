@@ -70,12 +70,40 @@
       "description": "Retired directions, grouped by feature - history, not options."
     },
     {
+      "name": "admin-settings",
+      "title": "Admin page (settings + shop)",
+      "description": "Three directions for the Admin page: Shop and Settings sections, blur-save, AI provider chain, batch concurrency, market weights."
+    },
+    {
+      "name": "admin-shop",
+      "title": "Admin · Shop and Settings",
+      "description": "Clickable Admin prototype with Shop, Settings, coupled AI time limits, discovery, disconnected shops and save recovery states."
+    },
+    {
       "name": "deploy-open-etsy",
       "title": "Open on Etsy after deploy",
       "description": "Three directions for opening a just-deployed listing on Etsy; A (footer Open on Etsy button) won and is built in ApplyFooter."
     }
   ],
   "scenes": [
+    {
+      "name": "admin-settings",
+      "frames": 6,
+      "brief": "design/scenes/admin-settings/_brief.md",
+      "description": "Initial Admin explorations. Direction B's sidebar and Settings layout were selected; the approved, revised Shop and Settings flow lives on the admin-shop board."
+    },
+    {
+      "name": "admin-shop",
+      "frames": 13,
+      "brief": "design/scenes/admin-shop/_brief.md",
+      "description": "Approved Admin prototype, reviewed 2026-10-30. Thirteen frames share one clickable Shop and Settings page with different starting states."
+    },
+    {
+      "name": "admin-shop-v1",
+      "frames": 6,
+      "brief": "design/scenes/admin-shop-v1/_brief.md",
+      "description": "Archived Admin prototype before the time-limit and recovery-state round. Six frames preserve the prior clickable Shop and Settings flow; the approved current version is admin-shop."
+    },
     {
       "name": "archive",
       "frames": 7,
@@ -145,7 +173,7 @@
     },
     {
       "name": "batch-deploy-lofi-v4",
-      "frames": 3,
+      "frames": 2,
       "brief": "design/scenes/batch-deploy-lofi-v4/_brief.md",
       "title": "Batch Deployment — App-styled Prototype · v4",
       "description": "Batch deployment hi-fi — the agreed all-listings review path rendered with the app's real visual system and components."
@@ -342,6 +370,243 @@
     }
   ],
   "frames": [
+    {
+      "id": "admin-settings/settings/a-rail",
+      "file": "design/scenes/admin-settings/settings/a-rail.tsx",
+      "kind": "tsx",
+      "scene": "admin-settings",
+      "title": "A · Ledger rows — Settings",
+      "viewport": "laptop",
+      "description": "Direction A: a plain text section rail and label-left, control-right rows; providers as a compact ordered table.",
+      "variantGroup": "admin-settings/settings",
+      "variant": "a"
+    },
+    {
+      "id": "admin-settings/settings/b-cards",
+      "file": "design/scenes/admin-settings/settings/b-cards.tsx",
+      "kind": "tsx",
+      "scene": "admin-settings",
+      "title": "B · Panels — Settings",
+      "viewport": "laptop",
+      "description": "Direction B: described section list, one surface panel per group; providers drawn as a numbered fallback chain; concurrency stepper shows its out-of-range error.",
+      "variantGroup": "admin-settings/settings",
+      "variant": "b"
+    },
+    {
+      "id": "admin-settings/settings/c-split",
+      "file": "design/scenes/admin-settings/settings/c-split.tsx",
+      "kind": "tsx",
+      "scene": "admin-settings",
+      "title": "C · Form + explanation — Settings",
+      "viewport": "laptop",
+      "description": "Direction C: compact icon list, a form column, and a right column that says in plain words what the next AI run and market scoring will do.",
+      "variantGroup": "admin-settings/settings",
+      "variant": "c"
+    },
+    {
+      "id": "admin-settings/shop/a-rail",
+      "file": "design/scenes/admin-settings/shop/a-rail.tsx",
+      "kind": "tsx",
+      "scene": "admin-settings",
+      "title": "A · Ledger rows — Shop",
+      "viewport": "laptop",
+      "description": "Direction A, Shop: label-left rows; shop ids and currency are locked rows with a Change… button that starts the check-and-confirm step.",
+      "variantGroup": "admin-settings/shop",
+      "variant": "a"
+    },
+    {
+      "id": "admin-settings/shop/b-cards",
+      "file": "design/scenes/admin-settings/shop/b-cards.tsx",
+      "kind": "tsx",
+      "scene": "admin-settings",
+      "title": "B · Panels — Shop",
+      "viewport": "laptop",
+      "description": "Direction B, Shop: Etsy and Printify panels; changing the Printify shop opens an inline check-and-confirm block inside the panel.",
+      "variantGroup": "admin-settings/shop",
+      "variant": "b"
+    },
+    {
+      "id": "admin-settings/shop/c-split",
+      "file": "design/scenes/admin-settings/shop/c-split.tsx",
+      "kind": "tsx",
+      "scene": "admin-settings",
+      "title": "C · Form + explanation — Shop",
+      "viewport": "laptop",
+      "description": "Direction C, Shop: guarded values as compact rows with Change…; the right column summarises a new listing; shown with the currency confirm dialog open.",
+      "variantGroup": "admin-settings/shop",
+      "variant": "c"
+    },
+    {
+      "id": "admin-shop-v1/connected/d-revised",
+      "file": "design/scenes/admin-shop-v1/connected/d-revised.tsx",
+      "kind": "tsx",
+      "scene": "admin-shop-v1",
+      "title": "Shop tab prototype — Connected shops · v1",
+      "viewport": "laptop",
+      "description": "Clickable. Starts on Connected shops: read-only Etsy and Printify shops, currency as the only danger-zone change."
+    },
+    {
+      "id": "admin-shop-v1/currency/d-revised",
+      "file": "design/scenes/admin-shop-v1/currency/d-revised.tsx",
+      "kind": "tsx",
+      "scene": "admin-shop-v1",
+      "title": "Shop tab prototype — Change currency · v1",
+      "viewport": "laptop",
+      "description": "Clickable. Starts with the currency warning open; Change stays disabled until the warning is acknowledged."
+    },
+    {
+      "id": "admin-shop-v1/defaults-custom/d-revised",
+      "file": "design/scenes/admin-shop-v1/defaults-custom/d-revised.tsx",
+      "kind": "tsx",
+      "scene": "admin-shop-v1",
+      "title": "Shop tab prototype — Listing defaults, Custom · v1",
+      "viewport": "laptop",
+      "description": "Clickable. Starts on Listing defaults with Custom: the three fields as selectors; Fulfilment and policies below."
+    },
+    {
+      "id": "admin-shop-v1/defaults/d-revised",
+      "file": "design/scenes/admin-shop-v1/defaults/d-revised.tsx",
+      "kind": "tsx",
+      "scene": "admin-shop-v1",
+      "title": "Shop tab prototype — Listing defaults, Print on demand · v1",
+      "viewport": "laptop",
+      "description": "Clickable. Starts on Listing defaults with Print on demand: the three fields it sets shown as values."
+    },
+    {
+      "id": "admin-shop-v1/settings-market/d-revised",
+      "file": "design/scenes/admin-shop-v1/settings-market/d-revised.tsx",
+      "kind": "tsx",
+      "scene": "admin-shop-v1",
+      "title": "Admin prototype — Settings, market scoring · v1",
+      "viewport": "laptop",
+      "description": "Clickable. Same Settings tab scrolled to Market SEO scoring: drag the dividers in the bar to share out 100%."
+    },
+    {
+      "id": "admin-shop-v1/settings/d-revised",
+      "file": "design/scenes/admin-shop-v1/settings/d-revised.tsx",
+      "kind": "tsx",
+      "scene": "admin-shop-v1",
+      "title": "Admin prototype — Settings · v1",
+      "viewport": "laptop",
+      "description": "Clickable. Starts on Settings: drag providers to reorder, switch them, pick model and reasoning, step batch size, drag the market weight dividers."
+    },
+    {
+      "id": "admin-shop/connected-missing/d-revised",
+      "file": "design/scenes/admin-shop/connected-missing/d-revised.tsx",
+      "kind": "tsx",
+      "scene": "admin-shop",
+      "title": "Shops not connected",
+      "viewport": "laptop",
+      "description": "Clickable Admin prototype: shops not connected with recovery actions."
+    },
+    {
+      "id": "admin-shop/connected/d-revised",
+      "file": "design/scenes/admin-shop/connected/d-revised.tsx",
+      "kind": "tsx",
+      "scene": "admin-shop",
+      "title": "Shop tab prototype — Connected shops",
+      "viewport": "laptop",
+      "description": "Clickable. Starts on Connected shops: read-only Etsy and Printify shops, currency as the only danger-zone change."
+    },
+    {
+      "id": "admin-shop/currency/d-revised",
+      "file": "design/scenes/admin-shop/currency/d-revised.tsx",
+      "kind": "tsx",
+      "scene": "admin-shop",
+      "title": "Shop tab prototype — Change currency",
+      "viewport": "laptop",
+      "description": "Clickable. Starts with the currency warning open; Change stays disabled until the warning is acknowledged."
+    },
+    {
+      "id": "admin-shop/defaults-custom/d-revised",
+      "file": "design/scenes/admin-shop/defaults-custom/d-revised.tsx",
+      "kind": "tsx",
+      "scene": "admin-shop",
+      "title": "Shop tab prototype — Listing defaults, Custom",
+      "viewport": "laptop",
+      "description": "Clickable. Starts on Listing defaults with Custom: the three fields as selectors; Fulfilment and policies below."
+    },
+    {
+      "id": "admin-shop/defaults-offline/d-revised",
+      "file": "design/scenes/admin-shop/defaults-offline/d-revised.tsx",
+      "kind": "tsx",
+      "scene": "admin-shop",
+      "title": "Lookup unavailable",
+      "viewport": "laptop",
+      "description": "Clickable Admin prototype: lookup unavailable with recovery actions."
+    },
+    {
+      "id": "admin-shop/defaults/d-revised",
+      "file": "design/scenes/admin-shop/defaults/d-revised.tsx",
+      "kind": "tsx",
+      "scene": "admin-shop",
+      "title": "Shop tab prototype — Listing defaults, Print on demand",
+      "viewport": "laptop",
+      "description": "Clickable. Starts on Listing defaults with Print on demand: the three fields it sets shown as values."
+    },
+    {
+      "id": "admin-shop/settings-conflict/d-revised",
+      "file": "design/scenes/admin-shop/settings-conflict/d-revised.tsx",
+      "kind": "tsx",
+      "scene": "admin-shop",
+      "title": "Settings changed on disk",
+      "viewport": "laptop",
+      "description": "Clickable Admin prototype: settings changed on disk with recovery actions."
+    },
+    {
+      "id": "admin-shop/settings-discovery/d-revised",
+      "file": "design/scenes/admin-shop/settings-discovery/d-revised.tsx",
+      "kind": "tsx",
+      "scene": "admin-shop",
+      "title": "Model discovery unavailable",
+      "viewport": "laptop",
+      "description": "Clickable Admin prototype: model discovery unavailable with recovery actions."
+    },
+    {
+      "id": "admin-shop/settings-invalid/d-revised",
+      "file": "design/scenes/admin-shop/settings-invalid/d-revised.tsx",
+      "kind": "tsx",
+      "scene": "admin-shop",
+      "title": "Invalid settings file",
+      "viewport": "laptop",
+      "description": "Clickable Admin prototype: invalid settings file with recovery actions."
+    },
+    {
+      "id": "admin-shop/settings-limits/d-revised",
+      "file": "design/scenes/admin-shop/settings-limits/d-revised.tsx",
+      "kind": "tsx",
+      "scene": "admin-shop",
+      "title": "AI time limits",
+      "viewport": "laptop",
+      "description": "Clickable Admin prototype: ai time limits with recovery actions."
+    },
+    {
+      "id": "admin-shop/settings-market/d-revised",
+      "file": "design/scenes/admin-shop/settings-market/d-revised.tsx",
+      "kind": "tsx",
+      "scene": "admin-shop",
+      "title": "Admin prototype — Settings, market scoring",
+      "viewport": "laptop",
+      "description": "Clickable. Same Settings tab scrolled to Market SEO scoring: drag the dividers in the bar to share out 100%."
+    },
+    {
+      "id": "admin-shop/settings-raised/d-revised",
+      "file": "design/scenes/admin-shop/settings-raised/d-revised.tsx",
+      "kind": "tsx",
+      "scene": "admin-shop",
+      "title": "Run limit raised automatically",
+      "viewport": "laptop",
+      "description": "Clickable Admin prototype: run limit raised automatically with recovery actions."
+    },
+    {
+      "id": "admin-shop/settings/d-revised",
+      "file": "design/scenes/admin-shop/settings/d-revised.tsx",
+      "kind": "tsx",
+      "scene": "admin-shop",
+      "title": "Admin prototype — Settings",
+      "viewport": "laptop",
+      "description": "Clickable Settings: provider order, model and effort, list refresh, coupled time limits, batch slider and market weight dividers."
+    },
     {
       "id": "archive/batch-deploy-result",
       "file": "design/scenes/archive/batch-deploy-result.tsx",
@@ -955,12 +1220,6 @@
       "title": "Batch deployment — review · v3",
       "viewport": "laptop",
       "description": "Clickable batch flow: slow-plan loading state, compact overall stage strip with live counts, and the individual stage comparison in a bottom drawer."
-    },
-    {
-      "id": "batch-deploy-lofi-v4/_snapshot/ComparisonView",
-      "file": "design/scenes/batch-deploy-lofi-v4/_snapshot/ComparisonView.tsx",
-      "kind": "tsx",
-      "scene": "batch-deploy-lofi-v4"
     },
     {
       "id": "batch-deploy-lofi-v4/listings",

@@ -1,0 +1,147 @@
+{
+  "version": 1,
+  "name": "admin-shop",
+  "auto": false,
+  "layout": {
+    "rows": [
+      [
+        "admin-shop"
+      ]
+    ],
+    "scenes": {
+      "admin-shop": {
+        "rows": [
+          [
+            "connected/d-revised",
+            "currency/d-revised",
+            "defaults/d-revised",
+            "defaults-custom/d-revised"
+          ],
+          [
+            "settings/d-revised",
+            "settings-market/d-revised"
+          ],
+          [
+            "settings-limits/d-revised",
+            "settings-raised/d-revised",
+            "settings-discovery/d-revised"
+          ],
+          [
+            "settings-conflict/d-revised",
+            "settings-invalid/d-revised",
+            "connected-missing/d-revised",
+            "defaults-offline/d-revised"
+          ]
+        ]
+      }
+    }
+  },
+  "nodes": [
+    {
+      "key": "n_febr3tlhmhy3",
+      "frame": "admin-shop/connected/d-revised",
+      "x": 0,
+      "y": 0,
+      "w": 1280,
+      "h": 800
+    },
+    {
+      "key": "n_1myvfnlskc3mr",
+      "frame": "admin-shop/currency/d-revised",
+      "x": 1434,
+      "y": 0,
+      "w": 1280,
+      "h": 800
+    },
+    {
+      "key": "n_13bmtpa1dwn58c",
+      "frame": "admin-shop/defaults/d-revised",
+      "x": 2867,
+      "y": 0,
+      "w": 1280,
+      "h": 800
+    },
+    {
+      "key": "n_1r0c340niuhlu",
+      "frame": "admin-shop/defaults-custom/d-revised",
+      "x": 4301,
+      "y": 0,
+      "w": 1280,
+      "h": 800
+    },
+    {
+      "key": "n_15anb9fo1s2w1",
+      "frame": "admin-shop/settings/d-revised",
+      "x": 0,
+      "y": 960,
+      "w": 1280,
+      "h": 800
+    },
+    {
+      "key": "n_ntu40a1gjg8tk",
+      "frame": "admin-shop/settings-market/d-revised",
+      "x": 1434,
+      "y": 960,
+      "w": 1280,
+      "h": 800
+    },
+    {
+      "key": "n_1vx05yg1ofgg7e",
+      "frame": "admin-shop/settings-limits/d-revised",
+      "x": 0,
+      "y": 1928,
+      "w": 1280,
+      "h": 800
+    },
+    {
+      "key": "n_1ds093a19rf8bo",
+      "frame": "admin-shop/settings-raised/d-revised",
+      "x": 530,
+      "y": 1928,
+      "w": 1280,
+      "h": 800
+    },
+    {
+      "key": "n_12te76sctj552",
+      "frame": "admin-shop/settings-discovery/d-revised",
+      "x": 1060,
+      "y": 1928,
+      "w": 1280,
+      "h": 800
+    },
+    {
+      "key": "n_1n9n884p6iey",
+      "frame": "admin-shop/settings-conflict/d-revised",
+      "x": 1590,
+      "y": 1928,
+      "w": 1280,
+      "h": 800
+    },
+    {
+      "key": "n_1mxab5r11oh9el",
+      "frame": "admin-shop/settings-invalid/d-revised",
+      "x": 2120,
+      "y": 1928,
+      "w": 1280,
+      "h": 800
+    },
+    {
+      "key": "n_f41ej422xc1e",
+      "frame": "admin-shop/connected-missing/d-revised",
+      "x": 2650,
+      "y": 1928,
+      "w": 1280,
+      "h": 800
+    },
+    {
+      "key": "n_1echotut5xxzk",
+      "frame": "admin-shop/defaults-offline/d-revised",
+      "x": 3180,
+      "y": 1928,
+      "w": 1280,
+      "h": 800
+    }
+  ],
+  "title": "Admin · Shop and Settings",
+  "description": "Clickable Admin prototype with Shop, Settings, coupled AI time limits, discovery, disconnected shops and save recovery states."
+}
