@@ -180,6 +180,18 @@ def test_a_currency_etsy_payments_does_not_support_is_refused(workspace: Workspa
     assert set(refused.value.field_errors) == {"etsy.currency"}
 
 
+def test_a_currency_minor_units_cannot_carry_is_refused(workspace: Workspace) -> None:
+    """VND has no minor unit, and ADR-0019's minor units assume two."""
+    revision = shop_settings.read_shop(workspace).revision
+
+    with pytest.raises(InvalidShopEdit) as refused:
+        shop_settings.edit_shop(
+            workspace, expected_revision=revision, changes={"etsy.currency": "VND"}
+        )
+
+    assert set(refused.value.field_errors) == {"etsy.currency"}
+
+
 def test_a_key_the_page_does_not_edit_is_refused(workspace: Workspace) -> None:
     revision = shop_settings.read_shop(workspace).revision
 
