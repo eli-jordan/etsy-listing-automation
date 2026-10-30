@@ -16,6 +16,7 @@ from __future__ import annotations
 from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from fastapi.testclient import TestClient
@@ -33,6 +34,7 @@ from etsy_listings.core.batches import (
     stage_pngs,
 )
 from etsy_listings.core.clients.etsy.fakes import FakeEtsyMarketClient
+from etsy_listings.core.config.errors import ConfigLoadError
 from etsy_listings.core.workspace.workspace import Workspace
 from etsy_listings.server.api.app import create_app
 
@@ -194,6 +196,18 @@ def test_concurrency_two_drafts_two_rows_at_once(q: Queue) -> None:
     q.settle(batch, "done", "done", "done")
 
 
+def test_invalid_settings_refuse_dispatch_instead_of_using_a_default(q: Queue) -> None:
+    """Admin config-validation rule: a broken file is never a default limit."""
+    q.workspace.settings_file().write_text("batch_ai:\n  concurency: 2\n", encoding="utf-8")
+    batch = q.confirm(*_designs("night-hike-club"))
+    with pytest.raises(ConfigLoadError, match="batch_ai.concurency"):
+        q.queue.concurrency()
+    q.queue.start()
+    q.idle()
+    assert q.batch_runs() == []
+    assert q.states(batch) == ["queued"]
+
+
 def test_two_batches_are_served_round_robin_oldest_first(q: Queue) -> None:
     started: list[str] = []
     q.provider.during["brief"] = lambda: started.extend(q.batch_runs())
@@ -205,6 +219,43 @@ def test_two_batches_are_served_round_robin_oldest_first(q: Queue) -> None:
     q.settle(first, "done", "done")
     q.settle(second, "done", "done")
     assert started == ["a-one", "b-one", "a-two", "b-two"]
+
+
+def test_admin_limit_changes_apply_to_the_next_dispatch_without_stopping_active_runs(
+    q: Queue,
+) -> None:
+    """Admin PR 4 and ADR-0048: raising starts another row; lowering leaves
+    those runs alone, and a later row waits for the smaller allowance."""
+    gate = q.provider.gate("brief")
+    batch = q.confirm(*_designs("night-hike-club", "cedar-trail", "lake-loop"))
+    app = create_app(q.workspace)
+    # Use the same coordinator queue the server normally wakes after a save.
+    app.state.ai = SimpleNamespace(queue=q.queue)
+    client = TestClient(app)
+    q.queue.start()
+    q.idle()
+    assert q.states(batch) == ["running", "queued", "queued"]
+    revision = client.get("/api/admin/settings").json()["revision"]
+    raised = client.patch(
+        "/api/admin/settings", json={"revision": revision, "changes": {"concurrency": 2}}
+    )
+    assert raised.status_code == 200
+    q.idle()
+    assert q.states(batch) == ["running", "running", "queued"]
+    active = q.batch_runs()
+    lowered = client.patch(
+        "/api/admin/settings",
+        json={"revision": raised.json()["revision"], "changes": {"concurrency": 1}},
+    )
+    assert lowered.status_code == 200
+    q.idle()
+    assert q.batch_runs() == active
+    assert q.states(batch) == ["running", "running", "queued"]
+    alongside: list[int] = []
+    q.provider.during["brief"] = lambda: alongside.append(len(q.batch_runs()))
+    gate.set()
+    q.settle(batch, "done", "done", "done")
+    assert alongside[-1] == 1
 
 
 def test_a_manual_run_does_not_count_against_the_limit_and_its_listing_waits(
