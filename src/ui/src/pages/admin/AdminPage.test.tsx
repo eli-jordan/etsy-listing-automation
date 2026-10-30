@@ -472,6 +472,34 @@ describe("Lookups", () => {
     expect(screen.getByLabelText("Shipping profile")).toHaveValue("Printify US standard");
     expect(screen.getByLabelText("Shipping profile")).toBeDisabled();
     expect(screen.getByLabelText("Renewal")).toBeEnabled();
+  });
+
+  it("says briefly why lookups failed and keeps the full reason behind Details", async () => {
+    const long =
+      "Could not reach Printify: PRINTIFY_API_TOKEN is not set, and is required to read " +
+      "Printify's catalog. Put it in C:\\ws\\.env as `PRINTIFY_API_TOKEN=...`.";
+    getLookups.mockResolvedValueOnce({
+      ...OFFLINE,
+      printify: { ...OFFLINE.printify, problem: long },
+    });
+    await openDefaults();
+
+    const notice = await screen.findByRole("alert");
+    expect(notice).toHaveTextContent("Your defaults have not changed.");
+    const details = within(notice).getByText("Details").closest("details");
+    expect(details).not.toBeNull();
+    expect(details).not.toHaveAttribute("open");
+    expect(within(details as HTMLElement).getByText(long)).toBeInTheDocument();
+    // Nothing but the disclosure carries the long text.
+    const outside = notice.cloneNode(true) as HTMLElement;
+    outside.querySelector("details")?.remove();
+    expect(outside.textContent).not.toContain("PRINTIFY_API_TOKEN");
+  });
+
+  it("retries lookups without saving", async () => {
+    getLookups.mockResolvedValueOnce(OFFLINE);
+    await openDefaults();
+    await screen.findByText(/Could not reach Etsy or Printify/);
 
     await userEvent.click(screen.getByRole("button", { name: "Retry lookups" }));
     await waitFor(() => expect(screen.getByLabelText("Shipping profile")).toBeEnabled());
