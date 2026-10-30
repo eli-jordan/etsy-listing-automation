@@ -12,6 +12,7 @@ from __future__ import annotations
 import re
 from collections.abc import Collection, Sequence
 from dataclasses import dataclass
+from difflib import get_close_matches
 
 from etsy_listings.core.clients.printify.models import Blueprint, PrintProvider, VariantSet
 from etsy_listings.core.config.slug import ColourExceptions, slug_map
@@ -19,6 +20,8 @@ from etsy_listings.core.errors import UserFacingError
 
 _TRADEMARK = re.compile(r"[®™©]")
 _WHITESPACE = re.compile(r"\s+")
+_BLUEPRINT_BRAND_ALIASES = {"comfort colors print on demand": "comfort colors"}
+"""Known catalog renames only; never match unrelated brands by similarity (ADR-0005)."""
 
 
 def normalise(value: str) -> str:
@@ -38,8 +41,14 @@ class CatalogResolutionError(UserFacingError, ValueError):
         self.kind = kind
         self.name = name
         self.valid_names = valid_names
-        options = ", ".join(sorted(valid_names)) or "(none available)"
-        super().__init__(f"no {kind} named {name!r}. Valid names: {options}")
+        if len(valid_names) > 8:
+            closest = get_close_matches(name, sorted(valid_names), n=5, cutoff=0.0)
+            options = ", ".join(closest)
+            suggestions = f"Closest names: {options} (and {len(valid_names) - len(closest)} more)"
+        else:
+            options = ", ".join(sorted(valid_names)) or "(none available)"
+            suggestions = f"Valid names: {options}"
+        super().__init__(f"no {kind} named {name!r}. {suggestions}")
 
 
 class AmbiguousBlueprintError(UserFacingError, ValueError):
@@ -59,6 +68,11 @@ class AmbiguousBlueprintError(UserFacingError, ValueError):
         )
 
 
+def _blueprint_brand(brand: str) -> str:
+    normalised = normalise(brand)
+    return _BLUEPRINT_BRAND_ALIASES.get(normalised, normalised)
+
+
 def resolve_blueprint(brand: str, model: str, blueprints: list[Blueprint]) -> Blueprint:
     """The blueprint sold as ``brand`` ``model``.
 
@@ -67,8 +81,8 @@ def resolve_blueprint(brand: str, model: str, blueprints: list[Blueprint]) -> Bl
     stray capital in a hand-written profile decides whether a garment
     resolves.
     """
-    wanted = (normalise(brand), normalise(model))
-    matches = [b for b in blueprints if (normalise(b.brand), normalise(b.model)) == wanted]
+    wanted = (_blueprint_brand(brand), normalise(model))
+    matches = [b for b in blueprints if (_blueprint_brand(b.brand), normalise(b.model)) == wanted]
 
     if len(matches) == 1:
         return matches[0]
