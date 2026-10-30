@@ -39,9 +39,10 @@ from ruamel.yaml.scalarstring import (
 
 from etsy_listings.core.errors import UserFacingError
 
-__all__ = ["UneditableYaml", "edit_yaml", "edit_yaml_bytes"]
+__all__ = ["UNSET", "UneditableYaml", "edit_yaml", "edit_yaml_bytes"]
 
-_UNSET: Any = object()
+UNSET: Any = object()
+"""``before`` not given: the edit is two-way, against what the source reads as."""
 _YAML_VERSION = (1, 1)
 """PyYAML's rules, which every reader of a workspace file applies."""
 
@@ -54,7 +55,7 @@ class UneditableYaml(UserFacingError, ValueError):
         super().__init__(f"cannot edit this YAML file in place: {detail}")
 
 
-def edit_yaml_bytes(source: bytes, after: object, *, before: object = _UNSET) -> bytes:
+def edit_yaml_bytes(source: bytes, after: object, *, before: object = UNSET) -> bytes:
     """:func:`edit_yaml` over UTF-8 file bytes, keeping a byte-order mark.
     Returns ``source`` itself when nothing changes."""
     bom = codecs.BOM_UTF8 if source.startswith(codecs.BOM_UTF8) else b""
@@ -63,7 +64,7 @@ def edit_yaml_bytes(source: bytes, after: object, *, before: object = _UNSET) ->
     return source if edited is text else bom + edited.encode("utf-8")
 
 
-def edit_yaml(source: str, after: object, *, before: object = _UNSET) -> str:
+def edit_yaml(source: str, after: object, *, before: object = UNSET) -> str:
     """``source`` changed so that it reads as ``after``, or ``source`` itself
     when it already does (key order is not a change).
 
@@ -75,7 +76,7 @@ def edit_yaml(source: str, after: object, *, before: object = _UNSET) -> str:
     """
     current = yaml.safe_load(source)
     wanted = _plain(after)
-    target = wanted if before is _UNSET else _merge(current, _plain(before), wanted)
+    target = wanted if before is UNSET else _merge(current, _plain(before), wanted)
     if _same(current, target):
         return source
     edited = _Editor(source).edit(current, target)

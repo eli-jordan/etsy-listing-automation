@@ -1,7 +1,8 @@
 """Replace a file without a window where a reader sees it half-written.
 
-The atomic replacement rule shared by cache records and listing YAML writes.
-JSON and YAML serializers use the same unique temporary and bounded retry.
+The atomic replacement rule shared by cache records and workspace YAML writes.
+JSON and YAML serializers use the same unique temporary and bounded retry. A
+YAML file that already exists is edited in place, never re-dumped (ADR-0055).
 """
 
 from __future__ import annotations
@@ -10,11 +11,11 @@ import json
 import os
 import tempfile
 import time
-from collections.abc import Mapping
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-import yaml
+from etsy_listings.core.workspace.yaml_source import UNSET, edit_yaml_bytes
 
 
 def write_bytes_atomic(path: Path, data: bytes, *, durable: bool = False) -> None:
@@ -80,7 +81,31 @@ def write_json_atomic(path: Path, document: object) -> None:
     write_bytes_atomic(path, (text + "\n").encode("utf-8"))
 
 
-def write_yaml_atomic(path: Path, document: Mapping[str, Any]) -> None:
-    """Write a YAML document through the shared atomic replacement rule."""
-    text = yaml.safe_dump(dict(document), sort_keys=False)
-    write_bytes_atomic(path, text.encode("utf-8"))
+def write_yaml_atomic(
+    path: Path,
+    document: object,
+    *,
+    new: Callable[[], str],
+    before: Any = UNSET,  # noqa: ANN401 -- any YAML value
+    durable: bool = False,
+) -> bool:
+    """Make the YAML file at ``path`` read as ``document``; whether it was
+    replaced.
+
+    An existing file is edited in place, keeping every byte the change does
+    not touch, and one that already reads as ``document`` is left alone,
+    not even replaced (ADR-0055). ``before`` makes the edit three-way, as
+    :func:`~etsy_listings.core.workspace.yaml_source.edit_yaml` describes.
+    A missing file is written as ``new()``, the owner's documented layout
+    for a fresh one. The caller holds whatever lock guards ``path``.
+    """
+    try:
+        source = read_bytes_retrying(path)
+    except FileNotFoundError:
+        write_bytes_atomic(path, new().encode("utf-8"), durable=durable)
+        return True
+    edited = edit_yaml_bytes(source, document, before=before)
+    if edited is source:
+        return False
+    write_bytes_atomic(path, edited, durable=durable)
+    return True

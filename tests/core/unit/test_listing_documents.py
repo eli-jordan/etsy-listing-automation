@@ -24,6 +24,7 @@ from etsy_listings.core.workspace.workspace import InvalidNameError, Workspace
 
 from tests.support.builders import FIXTURE_LISTING as NAME
 from tests.support.refusals import refuse_reads
+from tests.support.source_files import crlf, identity
 
 
 @pytest.fixture
@@ -251,3 +252,72 @@ class TestLock:
     def test_refuses_a_name_that_is_not_a_path_segment(self, documents: ListingDocuments) -> None:
         with pytest.raises(InvalidNameError), documents.lock("../escape"):
             pass
+
+
+HAND_EDITED = """\
+# Hiking tee -- kept apart from the batch ones.
+garment_profile: comfort-colors-1717
+design: designs/take-a-hike.png   # the bare form, from before ADR-0053
+colors: [black, ivory]
+brief: >
+  Retro 70s sunset mountain scene.
+  Text reads "TAKE A HIKE".
+prices:
+  S: 349 NOK   # matches the shop
+  M: 349 NOK
+etsy:
+  title: 'Take A Hike'
+  tags: []
+media:
+  - { template: flat-lay-01, colour: black }
+"""
+
+
+class TestSourcePreservation:
+    """ADR-0055: an edit changes the edited value and no other byte."""
+
+    @pytest.fixture
+    def hand_edited(self, workspace: Workspace) -> Path:
+        path = workspace.listing_file(NAME)
+        path.write_bytes(crlf(HAND_EDITED).encode("utf-8"))
+        return path
+
+    def test_an_edit_keeps_comments_quotes_flow_style_and_crlf(
+        self, documents: ListingDocuments, hand_edited: Path
+    ) -> None:
+        documents.edit(NAME, lambda raw: {**raw, "etsy": {**raw["etsy"], "title": "Hike Tee"}})
+
+        expected = HAND_EDITED.replace("'Take A Hike'", "'Hike Tee'").replace(
+            "design: designs/take-a-hike.png   # the bare form, from before ADR-0053\n",
+            "design:\n  default: designs/take-a-hike.png   # the bare form, from before ADR-0053\n",
+        )
+        assert hand_edited.read_bytes() == crlf(expected).encode("utf-8")
+
+    def test_an_edit_that_changes_nothing_leaves_the_file_alone(
+        self, documents: ListingDocuments, hand_edited: Path
+    ) -> None:
+        before = identity(hand_edited)
+
+        documents.edit(NAME, lambda raw: {**raw, "colors": ["black", "ivory"]})
+
+        assert identity(hand_edited) == before
+        assert hand_edited.read_bytes() == crlf(HAND_EDITED).encode("utf-8")
+
+    def test_writing_over_an_existing_document_edits_it_in_place(
+        self, documents: ListingDocuments, hand_edited: Path
+    ) -> None:
+        document = yaml.safe_load(HAND_EDITED)
+        document["design"] = {"default": "designs/take-a-hike.png"}
+        document["media"].append({"template": "flat-lay-01", "colour": "ivory"})
+
+        documents.write(NAME, document)
+
+        expected = HAND_EDITED.replace(
+            "design: designs/take-a-hike.png   #",
+            "design:\n  default: designs/take-a-hike.png   #",
+        ).replace(
+            "  - { template: flat-lay-01, colour: black }\n",
+            "  - { template: flat-lay-01, colour: black }\n"
+            "  - template: flat-lay-01\n    colour: ivory\n",
+        )
+        assert hand_edited.read_bytes() == crlf(expected).encode("utf-8")

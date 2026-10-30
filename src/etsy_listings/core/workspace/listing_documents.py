@@ -9,7 +9,9 @@ without a trace. Every writer therefore comes here. This module holds the
 listing's lock around the whole sequence and re-checks the document once the
 lock is held, because a rename or delete that held it first may have moved
 it. It reads through the retrying reader and replaces the file atomically,
-so a reader sees either the old document or the new one.
+so a reader sees either the old document or the new one. A write edits the
+seller's text in place rather than re-dumping it, and an edit that changes
+nothing leaves the file alone (ADR-0055).
 
 The lock is also the lock for everything else keyed by the listing's name:
 its proposal record (``ai/proposals.py``), its market snapshot write and its
@@ -41,7 +43,7 @@ import yaml
 
 from etsy_listings.core.config.listing import Listing, canonical_document
 from etsy_listings.core.errors import UserFacingError
-from etsy_listings.core.workspace.atomic import read_bytes_retrying, write_bytes_atomic
+from etsy_listings.core.workspace.atomic import read_bytes_retrying, write_yaml_atomic
 from etsy_listings.core.workspace.workspace import Workspace
 
 Document = dict[str, Any]
@@ -133,8 +135,11 @@ class ListingDocuments:
         must still apply to a document a seller has broken by hand.
         """
         with self.lock(name):
-            changed = change(self.read(name))
-            if changed is not None:
+            current = self.read(name)
+            changed = change(current)
+            # Unchanged is a semantic no-op even when `design:` is in its old
+            # form: canonicalising alone is not a reason to touch the file.
+            if changed is not None and changed != current:
                 self._write(name, changed)
             return changed
 
@@ -174,6 +179,10 @@ class ListingDocuments:
         # Every write normalises `design:` to its map form (ADR-0053): a bare
         # string or `null` written by hand converges on the one written form
         # the next time anything saves.
-        text = yaml.safe_dump(canonical_document(document), sort_keys=False, allow_unicode=True)
-        write_bytes_atomic(path, text.encode("utf-8"))
+        canonical = canonical_document(document)
+        write_yaml_atomic(
+            path,
+            canonical,
+            new=lambda: yaml.safe_dump(canonical, sort_keys=False, allow_unicode=True),
+        )
         return path
