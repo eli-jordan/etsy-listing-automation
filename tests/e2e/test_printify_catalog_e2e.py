@@ -251,13 +251,11 @@ class TestTheDocumentedExampleProfileResolves:
     def test_the_brand_and_model_the_docs_tell_users_to_write_resolve(
         self, blueprints: list[Blueprint], garment: Blueprint
     ) -> None:
-        """Without the trademark sign: the catalog's brand is "Comfort
-        Colors®", the docs tell users to write "Comfort Colors", and that has
-        to be enough."""
+        """The documented alias resolves to the shop's live garment even
+        when Printify changes its display branding (ADR-0005)."""
         assert "®" not in self.DOCUMENTED_BRAND
-        assert garment.brand == f"{self.DOCUMENTED_BRAND}®"
         resolved = resolve_blueprint(self.DOCUMENTED_BRAND, self.DOCUMENTED_MODEL, blueprints)
-        assert resolved.id == garment.id
+        assert resolved == garment
 
     def test_an_unknown_garment_lists_brand_model_pairs_to_choose_from(
         self, blueprints: list[Blueprint]
@@ -266,5 +264,14 @@ class TestTheDocumentedExampleProfileResolves:
             resolve_blueprint("Not A Real Brand", "0000", blueprints)
         message = str(caught.value)
         assert "Not A Real Brand 0000" in message
+        options = message.split("Closest names: ", 1)[1]
+        names, remainder = options.rsplit(" (and ", 1)
+        suggested = names.split(", ")
+        assert len(suggested) == 5
         # Pairs, not titles: what it lists must be pasteable into a profile.
-        assert f"{self.DOCUMENTED_BRAND}® {self.DOCUMENTED_MODEL}" in message
+        catalog_pairs = {f"{b.brand} {b.model}".strip(): b for b in blueprints}
+        for name in suggested:
+            assert name in catalog_pairs
+            blueprint = catalog_pairs[name]
+            assert resolve_blueprint(blueprint.brand, blueprint.model, blueprints) == blueprint
+        assert remainder == f"{len(catalog_pairs) - len(suggested)} more)"
