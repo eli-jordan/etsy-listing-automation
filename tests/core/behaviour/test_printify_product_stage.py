@@ -109,6 +109,29 @@ def test_the_first_plan_says_it_will_create_a_product(root, catalog, printify) -
     assert "create" in (stage_plan.reason or "").lower()
 
 
+@pytest.mark.parametrize("already_created", [False, True])
+def test_a_catalog_brand_rename_keeps_the_same_garment_and_product_plan(
+    root: Path,
+    catalog: FakeCatalogClient,
+    printify: FakePrintifyClient,
+    monkeypatch: pytest.MonkeyPatch,
+    already_created: bool,
+) -> None:
+    ctx = _ctx(root, catalog, printify)
+    lock = _apply(ctx, a_lock()) if already_created else a_lock()
+    renamed = [
+        blueprint.model_copy(update={"brand": "Comfort Colors® Print on Demand"})
+        for blueprint in catalog.blueprints()
+    ]
+    monkeypatch.setattr(catalog, "blueprints", lambda: renamed)
+
+    stage_plan = _stage_plan(ctx, lock)
+
+    assert not stage_plan.blocked
+    assert stage_plan.will_run is not already_created
+    assert len(printify.created) == int(already_created)
+
+
 def test_planning_touches_no_remote_state(root, catalog, printify) -> None:
     """`plan` is read-only, and with no product id there is nothing even to
     read -- so it must not ask, or a fresh workspace needs a token to run a

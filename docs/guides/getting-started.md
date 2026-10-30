@@ -406,7 +406,9 @@ number, and is ignored when resolving: Printify's titles are generic ("Unisex
 Garment-Dyed T-shirt" is sold by several brands) and get rewritten, so one is
 not an identifier (ADR-0005). Case, surrounding spaces and the ® Printify puts
 in brand names are all normalised away, so `Comfort Colors` matches its
-`Comfort Colors®`.
+`Comfort Colors®`. The catalog's newer `Comfort Colors® Print on Demand`
+spelling also matches existing Comfort Colors profiles; the model number must
+still match, and ambiguous catalog entries stop with an error.
 
 ```yaml
 # listings/take-a-hike/listing.yaml
@@ -583,9 +585,9 @@ description preview and every deployment desired-document (Printify, Etsy)
 compose the final description through the same one shared function, so what
 you see in the preview is exactly what ships.
 
-**Provider limits.** Each provider operation has a 60-second deadline,
+**Provider limits.** Each provider operation has a five-minute deadline,
 including its repair and availability fallback; the complete AI run is capped
-at three minutes. A malformed response gets one same-provider repair. Only a
+at twenty minutes. A malformed response gets one same-provider repair. Only a
 recognised unavailable first attempt advances to the next provider. Cancel
 stops the run and its subprocess; leaving the tab or losing the connection
 allows the server-side run to continue and the browser to reattach.

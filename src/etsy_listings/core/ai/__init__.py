@@ -7,7 +7,7 @@ Two features, one machine. **SEO generation** produces a proposal a seller
 reviews suggestion by suggestion; **brief drafting** produces the one input
 that generation needs, from the design image alone. They differ only in the
 prompt, the schema and the validation -- the provider adapters, the
-Codex-then-Claude-then-Grok fallback, the one same-provider repair and the 60-second
+Codex-then-Claude-then-Grok fallback, the one same-provider repair and the five-minute
 deadline are shared, which is what `ProviderTask` exists to make possible.
 
 - ``models`` -- ``ProviderTask``, ``SeoRequest``, ``SeoProposal``,

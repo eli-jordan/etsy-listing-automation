@@ -167,6 +167,12 @@ companion and reviewed mockups are now present. The seller explicitly
 waived the implement-stack skill's separate product-spec requirement; do not
 create a redundant spec to satisfy that template.
 
+Execution started on 2026-10-30 from stack-base commit `5bbcd7df`.
+
+| PR | Branch | Link |
+|---|---|---|
+| 1 | `feat/admin-1-local-fixes` | To be recorded |
+
 ### PR 1: carry the local timeout and catalog fixes
 
 Bring in both changes from the main checkout as one PR. The 2026-10-30 inventory
@@ -186,6 +192,11 @@ Exit when the complete inventoried diff is included, the existing added
 orchestrator, runner, catalog and product-stage tests pass, and the shared gates
 pass. Record the source diff or commit so this uncommitted work cannot be lost
 or mistaken for a dependency already on main.
+
+Source: the main checkout's uncommitted `git diff --binary` captured on
+2026-10-30 (sha256 `afd2c98efa12743fc231d1cb62383ddaf94fddd691354591873ad262d47e05e1`;
+15 files, +148/-27), plus local-only commit `e970d3ef` amending ADR-0005.
+Both are carried unchanged.
 
 ### PR 2: preserve every YAML document during edits
 

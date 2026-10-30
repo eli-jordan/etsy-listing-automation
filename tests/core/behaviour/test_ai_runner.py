@@ -549,7 +549,7 @@ def test_cancelling_during_market_search_stops_research(
 # ------------------------------------------------------------------ watchdog
 
 
-def test_the_watchdog_fails_a_run_that_outlives_three_minutes(chain: Chain) -> None:
+def test_the_watchdog_fails_a_run_that_outlives_twenty_minutes(chain: Chain) -> None:
     chain.provider.gate("seo")
     run = chain.start(draft_brief=False)
     wait_for(lambda: chain.provider.started["seo"].is_set())
@@ -559,7 +559,7 @@ def test_the_watchdog_fails_a_run_that_outlives_three_minutes(chain: Chain) -> N
     chain.clock.now = RUN_LIMIT_SECONDS
     wait_until_finished(run)
 
-    assert RUN_LIMIT_SECONDS == 180
+    assert RUN_LIMIT_SECONDS == 1_200
     assert run.phase == "failed"
     assert run.events[-1].model_dump()["message"] == TIMEOUT_MESSAGE
     assert _state(run) == {"brief": "skipped", "market": "done", "seo": "failed"}

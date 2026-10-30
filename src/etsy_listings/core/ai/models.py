@@ -13,7 +13,7 @@ validates against directly.
 
 `Deadline` is the one shared clock this feature uses. The settled plan gives
 the whole request -- provider call, one same-provider repair, and the
-permitted Codex-to-Claude fallback -- a single 60-second budget; a `Deadline`
+permitted Codex-to-Claude fallback -- a single request budget; a `Deadline`
 is what lets that budget be threaded through the orchestration service and
 both provider adapters (PR4) as one value instead of each layer computing its
 own remaining time from a start timestamp it has to be separately handed.
@@ -214,7 +214,7 @@ class Deadline:
     """A fixed point in time, expressed as a remaining budget.
 
     Wraps `time.monotonic()` rather than `time.time()` -- a wall-clock
-    adjustment mid-request must never shorten or extend the 60-second budget
+    adjustment mid-request must never shorten or extend the request budget
     the settled plan promises. Construct with :meth:`starting_now`; the bare
     constructor exists for tests that want to pin `deadline_at` directly (see
     `field(compare=False)` below -- irrelevant here since there is only one

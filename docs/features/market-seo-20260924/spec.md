@@ -258,10 +258,13 @@ so the seller can tell an Etsy problem from a model problem.
 Query extraction failures follow the existing AI Mode rules (fallback, repair,
 *Try again*).
 
-ADR-0003's 60-second deadline applies to each provider call (brief, query
-extraction, proposal) on its own. Market search has no limit of its own. The
-whole run is capped at **3 minutes**; when the cap is reached, the run is
-cancelled and fails with a timeout message.
+Each AI task (brief, query extraction, proposal) has a **5-minute** deadline,
+shared by its provider attempts and repair. Market search has no limit of its
+own. The whole run is capped at **20 minutes**; when the cap is reached, the
+run is cancelled and fails with a timeout message. These limits were increased
+on 2026-10-29 from 60 seconds per task and 3 minutes overall because local AI
+generation was timing out. The overall cap leaves room for all three tasks
+and market search, while cancellation still stops work immediately.
 
 ## AI runs
 
