@@ -81,7 +81,7 @@ class Chain:
         self.runner = AiRunner(
             workspace=self.workspace,
             registry=self.registry,
-            providers=lambda _workspace: [provider],
+            providers=lambda _workspace, _ai: [provider],
             market_client=lambda _workspace: market,
             proposals=self.proposals,
             now=lambda: TODAY,
@@ -748,11 +748,52 @@ def test_an_edit_during_generation_is_judged_against_the_prepared_inputs(chain: 
     assert cached.snapshot.brief == original
 
 
+def test_limits_and_providers_are_captured_from_one_read_of_settings_yaml(
+    chain: Chain, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """ADR-0057: "capture limits and provider configuration together". A save
+    landing during capture must not pair one revision's limits with
+    another's providers."""
+    settings = chain.workspace.settings_file()
+    settings.write_text(
+        "ai:\n  providers: [{name: codex}]\n  step_limit_minutes: 2\n  run_limit_minutes: 7\n",
+        encoding="utf-8",
+    )
+    load = chain.workspace.load_settings
+    loads: list[object] = []
+
+    def load_then_save():  # noqa: ANN202
+        loaded = load()
+        loads.append(loaded)
+        # The seller's next save lands right after this read.
+        settings.write_text(
+            "ai:\n  providers: [{name: claude}, {name: grok}]\n"
+            "  step_limit_minutes: 3\n  run_limit_minutes: 9\n",
+            encoding="utf-8",
+        )
+        return loaded
+
+    monkeypatch.setattr(chain.workspace, "load_settings", load_then_save)
+    adapters = []
+
+    def factory(workspace, ai):  # noqa: ANN001, ANN202
+        adapters.append([type(p).__name__ for p in default_ai_providers(workspace, ai)])
+        return [chain.provider]
+
+    chain.runner.providers = factory
+
+    run = chain.run(draft_brief=False)
+
+    assert run.phase == "done"
+    assert adapters == [["CodexProvider"]]
+    assert chain.provider.remaining[0] == ("queries", 120.0)
+
+
 def test_provider_configuration_is_captured_before_the_run_thread_starts(chain: Chain) -> None:
     edit_listing(chain.workspace.root, LISTING, brief="")
     factory_threads = []
 
-    def factory(workspace):
+    def factory(workspace, ai):
         factory_threads.append(threading.current_thread())
         return [chain.provider]
 

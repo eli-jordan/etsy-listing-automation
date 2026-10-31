@@ -49,7 +49,7 @@ def app_options(workspace_root: Path) -> dict[str, Any]:
     provider = ChainProvider()
     market = seeded_market()
     return {
-        "seo_provider_factory": lambda _workspace: [provider],
+        "seo_provider_factory": lambda _workspace, _ai: [provider],
         "market_client_factory": lambda _workspace: market,
     }
 

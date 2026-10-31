@@ -25,6 +25,7 @@ from etsy_listings.core.ai.proposals import ProposalStore
 from etsy_listings.core.application.ai.batch_queue import BatchQueue
 from etsy_listings.core.application.ai.readiness import (
     ProviderFactory,
+    current_providers,
     default_ai_providers,
     unready_reason,
 )
@@ -151,7 +152,7 @@ class AiCoordinator:
         return unready_reason(
             self._workspace,
             self._workspace.load_listing(listing),
-            self._runner.providers(self._workspace),
+            current_providers(self._runner.providers, self._workspace),
             draft_brief=draft_brief,
         )
 

@@ -73,7 +73,7 @@ class Queue:
         self.runner = AiRunner(
             workspace=self.workspace,
             registry=self.registry,
-            providers=lambda _workspace: [provider],
+            providers=lambda _workspace, _ai: [provider],
             market_client=lambda _workspace: market,
             proposals=self.proposals,
             now=lambda: TODAY,
@@ -428,7 +428,7 @@ def test_a_row_running_when_the_server_stops_reruns_after_a_restart(
         return TestClient(
             create_app(
                 workspace,
-                seo_provider_factory=lambda _workspace: [provider],
+                seo_provider_factory=lambda _workspace, _ai: [provider],
                 market_client_factory=lambda _workspace: market,
             )
         )

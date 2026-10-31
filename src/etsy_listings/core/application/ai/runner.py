@@ -128,8 +128,10 @@ class AiRunner:
         # ADR-0056/0057: capture before scheduling, not after the thread gets
         # CPU. Every task, repair and fallback keeps these adapters and limits.
         try:
-            limits = AiLimits.of(self.workspace.load_settings().ai)
-            providers = tuple(self.providers(self.workspace))
+            # One read: limits and providers from the same revision (ADR-0057).
+            ai = self.workspace.load_settings().ai
+            limits = AiLimits.of(ai)
+            providers = tuple(self.providers(self.workspace, ai))
         except UserFacingError as exc:
             self._end_failed(run, str(exc))
             return

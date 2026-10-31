@@ -27,6 +27,7 @@ from etsy_listings.core.application.ai.readiness import default_ai_providers
 from etsy_listings.core.clients.etsy import EtsyAuthError, HttpEtsyListingClient
 from etsy_listings.core.clients.printify import HttpCatalogClient, PrintifyClient, Transport
 from etsy_listings.core.config.secrets import PRINTIFY_TOKEN_VAR, MissingCredentialError, Secrets
+from etsy_listings.core.config.settings import AiSettings
 from etsy_listings.core.workspace.userpath import to_native_path
 from etsy_listings.core.workspace.workspace import Workspace, layout
 
@@ -59,7 +60,7 @@ def etsy_market_workspace(prerequisite_missing) -> Workspace:
 
 
 @pytest.fixture
-def ai_providers() -> Callable[[Workspace], Sequence[AiProvider]]:
+def ai_providers() -> Callable[[Workspace, AiSettings], Sequence[AiProvider]]:
     """Fake AI in CI and by default; E2E_REAL_AI=1 uses signed-in Codex/Claude locally.
 
     Both choices enter through create_app's public provider factory. The fake
@@ -69,7 +70,7 @@ def ai_providers() -> Callable[[Workspace], Sequence[AiProvider]]:
     if os.environ.get("E2E_REAL_AI") == "1":
         return default_ai_providers
 
-    def fake(_workspace: Workspace) -> Sequence[AiProvider]:
+    def fake(_workspace: Workspace, _ai: AiSettings) -> Sequence[AiProvider]:
         return [
             FakeAiProvider(
                 name="codex",

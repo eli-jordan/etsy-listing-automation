@@ -33,7 +33,11 @@ from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
 
 from etsy_listings.core.application.ai.events import AiPhaseEvent
-from etsy_listings.core.application.ai.readiness import AiReadinessBlock, batch_blocked
+from etsy_listings.core.application.ai.readiness import (
+    AiReadinessBlock,
+    batch_blocked,
+    current_providers,
+)
 from etsy_listings.core.application.ai.registry import AiRun, AiRunRegistry
 from etsy_listings.core.application.ai.runner import AiRunner
 from etsy_listings.core.batches import RETRYABLE, AiState, AiStep, Batch, BatchRow, BatchStore
@@ -333,7 +337,7 @@ class BatchQueue:
         workspace = self._workspace
         return batch_blocked(
             workspace,
-            self._runner.providers(workspace),
+            current_providers(self._runner.providers, workspace),
         )
 
     # -------------------------------------------------------------- helpers
