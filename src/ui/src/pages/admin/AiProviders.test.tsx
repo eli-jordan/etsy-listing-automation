@@ -115,3 +115,24 @@ it("only drags from the handle, retains disabled choices, and avoids no-op reord
   fireEvent.click(screen.getByRole("button", { name: "Grok is off. Turn it on" }));
   expect(screen.getByRole("combobox", { name: "Grok model" })).toHaveValue("saved");
 });
+
+it("reports a failure of every CLI once and never calls an unchecked saved choice stale", async () => {
+  const failed = { models: [], efforts: [], problem: "CLI did not answer." };
+  vi.mocked(api.getModelCatalogs).mockResolvedValueOnce({
+    cache_seconds: 1800,
+    providers: { codex: failed, claude: failed, grok: failed },
+  });
+  render(
+    <AiProviders
+      initial={[{ name: "codex", enabled: true, model: "saved", effort: "high" }]}
+      onSave={vi.fn()}
+      locked={false}
+    />,
+  );
+  expect(await screen.findByRole("alert")).toHaveTextContent(
+    "Could not read the model lists. You can keep a saved choice or use Account default. Refresh to try again.",
+  );
+  expect(screen.queryByText(/CLI did not answer/)).not.toBeInTheDocument();
+  expect(screen.queryByText(/not offered/)).not.toBeInTheDocument();
+  expect(screen.getByRole("option", { name: "saved" })).toBeInTheDocument();
+});

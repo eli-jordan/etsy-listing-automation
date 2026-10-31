@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { DotsSixVerticalIcon } from "@phosphor-icons/react";
+import { WarningIcon } from "@phosphor-icons/react/dist/csr/Warning";
 import {
   getModelCatalogs,
   type ModelCatalogs,
@@ -8,6 +9,11 @@ import {
 
 const names = ["codex", "claude", "grok"] as const;
 const labels = { codex: "Codex", claude: "Claude", grok: "Grok" };
+const sources = {
+  codex: "from codex debug models",
+  claude: "curated list",
+  grok: "from grok models",
+};
 const complete = (initial: ProviderPreference[]): ProviderPreference[] => [
   ...initial,
   ...names
@@ -32,7 +38,7 @@ export function AiProviders({
   const [blocked, setBlocked] = useState(false);
   const [catalogs, setCatalogs] = useState<ModelCatalogs | null>(null);
   const [busy, setBusy] = useState(true);
-  const [problem, setProblem] = useState<string | null>(null);
+  const [problem, setProblem] = useState(false);
   const alive = useRef(false);
   const refreshing = useRef(false);
   const drag = useRef<string | null>(null);
@@ -47,9 +53,9 @@ export function AiProviders({
           setBusy(false);
         }
       },
-      (error: unknown) => {
+      () => {
         if (active) {
-          setProblem(String(error));
+          setProblem(true);
           setBusy(false);
         }
       },
@@ -68,10 +74,10 @@ export function AiProviders({
       const loaded = await getModelCatalogs(true);
       if (alive.current) {
         setCatalogs(loaded);
-        setProblem(null);
+        setProblem(false);
       }
     } catch {
-      if (alive.current) setProblem("Could not read the model lists. Saved choices are kept.");
+      if (alive.current) setProblem(true);
     } finally {
       refreshing.current = false;
       if (alive.current) setBusy(false);
@@ -105,6 +111,8 @@ export function AiProviders({
   };
   const count = rows.filter((p) => p.enabled !== false).length;
   const failed = problem || Object.values(catalogs?.providers ?? {}).some((p) => p?.problem);
+  // One notice when nothing could be read; per-row problems only when some CLIs answered.
+  const allFailed = problem || (!!catalogs && names.every((n) => catalogs.providers?.[n]?.problem));
   let number = 0;
   return (
     <section className="b-panel" aria-labelledby="settings-providers">
@@ -137,9 +145,13 @@ export function AiProviders({
           {busy ? "Refreshing…" : "Refresh lists"}
         </button>
       </div>
-      {problem && (
+      {allFailed && (
         <p className="adm-warn" role="alert">
-          {problem}
+          <WarningIcon size={16} />
+          <span>
+            Could not read the model lists. You can keep a saved choice or use Account default.
+            Refresh to try again.
+          </span>
         </p>
       )}
       {blocked && (
@@ -224,20 +236,23 @@ export function AiProviders({
                     <DotsSixVerticalIcon size={18} />
                   </button>
                   <span className="b-step__name">{label}</span>
-                  {!enabled && <span className="b-step__off-note">Off · runs skip it</span>}
+                  <span className="b-step__spacer" />
+                  {!enabled && <span className="b-step__off-note">Off — runs skip it</span>}
                 </div>
-                {catalog?.problem && (
+                {catalog?.problem && !allFailed && (
                   <p className="adm-warn">
-                    {catalog.problem} Keep a saved choice or use Account default.
+                    <WarningIcon size={16} />
+                    <span>{catalog.problem} Keep a saved choice or use Account default.</span>
                   </p>
                 )}
                 {enabled && (
                   <div className="b-step__fields">
                     <div>
-                      <label htmlFor={`model-${p.name}`}>{label} model</label>
+                      <label htmlFor={`model-${p.name}`}>Model · {sources[p.name]}</label>
                       <select
                         id={`model-${p.name}`}
-                        className="adm-select"
+                        aria-label={`${label} model`}
+                        className={staleModel ? "adm-select adm-select--invalid" : "adm-select"}
                         value={p.model ?? ""}
                         onChange={(event) =>
                           update(p.name, { model: event.target.value || null }, false)
@@ -246,7 +261,9 @@ export function AiProviders({
                       >
                         <option value="">Account default</option>
                         {p.model && !selectedModel && (
-                          <option value={p.model}>{p.model} (saved)</option>
+                          <option value={p.model}>
+                            {staleModel ? `${p.model} (not offered)` : p.model}
+                          </option>
                         )}
                         {models.map((model) => (
                           <option key={model.id} value={model.id}>
@@ -256,10 +273,11 @@ export function AiProviders({
                       </select>
                     </div>
                     <div>
-                      <label htmlFor={`effort-${p.name}`}>{label} reasoning</label>
+                      <label htmlFor={`effort-${p.name}`}>Reasoning</label>
                       <select
                         id={`effort-${p.name}`}
-                        className="adm-select"
+                        aria-label={`${label} reasoning`}
+                        className={staleEffort ? "adm-select adm-select--invalid" : "adm-select"}
                         value={p.effort ?? ""}
                         onChange={(event) =>
                           update(p.name, { effort: event.target.value || null }, false)
@@ -268,7 +286,9 @@ export function AiProviders({
                       >
                         <option value="">Account default</option>
                         {p.effort && !efforts.includes(p.effort) && (
-                          <option value={p.effort}>{p.effort} (saved)</option>
+                          <option value={p.effort}>
+                            {staleEffort ? `${p.effort} (not offered)` : p.effort}
+                          </option>
                         )}
                         {efforts.map((effort) => (
                           <option key={effort} value={effort}>
@@ -281,14 +301,20 @@ export function AiProviders({
                 )}
                 {staleModel && (
                   <p className="adm-warn" role="status">
-                    {p.model} is no longer offered by {label}. Runs still pass it; a rejection moves
-                    to the next provider.
+                    <WarningIcon size={15} />
+                    <span>
+                      {p.model} is no longer offered by the {label} CLI. Runs still pass it; if{" "}
+                      {label} refuses it, the chain moves on.
+                    </span>
                   </p>
                 )}
                 {staleEffort && (
                   <p className="adm-warn" role="status">
-                    {p.effort} is no longer offered for this model. Runs still pass it; a rejection
-                    moves to the next provider.
+                    <WarningIcon size={15} />
+                    <span>
+                      {p.effort} is no longer offered for this model. Runs still pass it; if {label}{" "}
+                      refuses it, the chain moves on.
+                    </span>
                   </p>
                 )}
               </div>

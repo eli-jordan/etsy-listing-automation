@@ -7,7 +7,8 @@ Admin plan, PR 3, *Shop*. Three operations, each a caller's whole job:
   candidate document is validated as a whole ``Defaults`` before anything is
   written; an edit that changes nothing leaves the file byte-identical
   (``workspace.revisions``, ADR-0055). A save adopts the new defaults in the
-  running ``Workspace`` so the next plan or deploy reads them.
+  running ``Workspace`` so the next plan or deploy reads them;
+  a run already under way keeps the ``Workspace.snapshot`` it took.
 - :func:`shop_connections` -- the configured Etsy and Printify shops, and
   whether a live lookup agrees, without ever erasing a configured identity
   because a service could not be reached.
@@ -43,7 +44,7 @@ from etsy_listings.core.clients.etsy.listings import EtsyListingClient
 from etsy_listings.core.clients.etsy.shopcatalog import EtsyShopCatalog
 from etsy_listings.core.clients.etsy.shops import EtsyShopClient
 from etsy_listings.core.clients.printify.protocol import CatalogClient, PrintifyClient
-from etsy_listings.core.config.currencies import ETSY_PAYMENTS_CURRENCIES
+from etsy_listings.core.config.currencies import OFFERED_CURRENCIES
 from etsy_listings.core.config.defaults import Defaults
 from etsy_listings.core.config.errors import ConfigLoadError, parse_yaml
 from etsy_listings.core.config.secrets import Secrets
@@ -118,8 +119,11 @@ def edit_shop(
         key: "not editable from the Admin page" for key in changes if key not in EDITABLE_KEYS
     }
     currency = changes.get("etsy.currency")
-    if "etsy.currency" in changes and currency not in ETSY_PAYMENTS_CURRENCIES:
-        refused["etsy.currency"] = f"{currency!r} is not a currency Etsy Payments supports"
+    if "etsy.currency" in changes and currency not in OFFERED_CURRENCIES:
+        refused["etsy.currency"] = (
+            f"{currency!r} is not a currency this workspace can be set to: Etsy Payments "
+            "must support it and its prices must have two decimals (ADR-0019)"
+        )
     if refused:
         raise InvalidShopEdit(refused)
 
