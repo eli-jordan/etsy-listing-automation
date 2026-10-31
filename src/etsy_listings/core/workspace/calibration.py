@@ -308,7 +308,9 @@ class CalibrationStore:
                 for source in ("automatic", "edited", "metadata")
             }
             if not all(path.is_file() for path in paths.values()):
-                raise MaskUnavailableError("Prepare the template first to create its automatic mask")
+                raise MaskUnavailableError(
+                    "Prepare the template first to create its automatic mask"
+                )
             automatic, edited = paths["automatic"].read_bytes(), paths["edited"].read_bytes()
             try:
                 metadata = json.loads(paths["metadata"].read_bytes())
@@ -381,7 +383,9 @@ class CalibrationStore:
         with self.lock(name):
             current = self.read(name)
             if current.revision != expected_revision:
-                raise CalibrationConflictError("Calibration changed before automatic mask publication")
+                raise CalibrationConflictError(
+                    "Calibration changed before automatic mask publication"
+                )
             if placement_id not in self.placement_ids(current.config):
                 raise MaskUnavailableError("Mask placement does not belong to this template kind")
             photo = self.photo_identity(name, current.config)
@@ -589,6 +593,8 @@ class CalibrationStore:
                 if not target.is_file() or digest(target.read_bytes()) != checksum:
                     self.write_durable(target, data)
                 if digest(target.read_bytes()) != checksum:
-                    raise CalibrationRepairRequiredError("Calibration transaction verification failed")
+                    raise CalibrationRepairRequiredError(
+                        "Calibration transaction verification failed"
+                    )
             self.write_durable_json(manifest_path, {**manifest, "complete": True})
             remove_tree(transaction)

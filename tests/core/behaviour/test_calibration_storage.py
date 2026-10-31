@@ -237,7 +237,10 @@ def test_main_photo_change_refuses_mask_reuse_until_explicit_reset(workspace_roo
 
     import pytest
 
-    from etsy_listings.core.workspace.calibration import MaskPhotoMismatchError, MaskUnavailableError
+    from etsy_listings.core.workspace.calibration import (
+        MaskPhotoMismatchError,
+        MaskUnavailableError,
+    )
 
     store = make_store(workspace_root)
     png = BytesIO()
@@ -445,7 +448,12 @@ def test_damaged_brush_history_is_discarded_without_losing_mask(workspace_root: 
     import json
     from io import BytesIO
 
-    from etsy_listings.core.workspace.calibration import MaskEdit, MaskUnavailableError, Stroke, Undo
+    from etsy_listings.core.workspace.calibration import (
+        MaskEdit,
+        MaskUnavailableError,
+        Stroke,
+        Undo,
+    )
 
     store = make_store(workspace_root)
     png = BytesIO()
@@ -538,7 +546,11 @@ def test_switching_back_restores_last_saved_renderer_settings(workspace_root: Pa
 def test_missing_automatic_baseline_does_not_overwrite_saved_edits(workspace_root: Path) -> None:
     from io import BytesIO
 
-    from etsy_listings.core.workspace.calibration import CalibrationRepairRequiredError, MaskEdit, Stroke
+    from etsy_listings.core.workspace.calibration import (
+        CalibrationRepairRequiredError,
+        MaskEdit,
+        Stroke,
+    )
 
     store = make_store(workspace_root)
     png = BytesIO()
@@ -625,7 +637,10 @@ def test_template_alias_cannot_escape_workspace(workspace_root: Path, tmp_path: 
 def test_unavailable_mask_is_not_a_main_photo_mismatch(
     workspace_root: Path, placement_id: str | None
 ) -> None:
-    from etsy_listings.core.workspace.calibration import MaskPhotoMismatchError, MaskUnavailableError
+    from etsy_listings.core.workspace.calibration import (
+        MaskPhotoMismatchError,
+        MaskUnavailableError,
+    )
 
     store = make_store(workspace_root)
     with pytest.raises(MaskUnavailableError) as refusal:

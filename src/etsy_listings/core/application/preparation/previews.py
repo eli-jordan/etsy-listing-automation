@@ -95,7 +95,9 @@ def editor_preview(
                 not isinstance(saved.config.renderer, MarigoldRenderer)
                 or config.renderer.config.inference != saved.config.renderer.config.inference
             ):
-                raise PreparationRequiredError("Prepare changed inference settings before previewing")
+                raise PreparationRequiredError(
+                    "Prepare changed inference settings before previewing"
+                )
             original = Artifacts(workspace).saved_inputs(name)
             boxes = (
                 [(p.id, p.bounding_box) for p in config.placements]

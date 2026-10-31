@@ -33,7 +33,9 @@ def check_reviewed_apply(reviewed: Run | None, command: WorkspaceApply) -> None:
         if isinstance(event, ListingPlannedEvent):
             fingerprints[event.listing] = event.fingerprint
     if list(command.listings) != list(fingerprints):
-        raise ReviewedPlanRefusedError("apply listings must exactly match the reviewed workspace plan")
+        raise ReviewedPlanRefusedError(
+            "apply listings must exactly match the reviewed workspace plan"
+        )
     if dict(command.expect) != fingerprints:
         raise ReviewedPlanRefusedError(
             "apply fingerprints must exactly match the reviewed workspace plan"

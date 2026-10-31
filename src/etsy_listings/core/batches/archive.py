@@ -64,7 +64,9 @@ def receive(chunks: Iterable[bytes], path: Path) -> None:
         for chunk in chunks:
             size += len(chunk)
             if size > MAX_ARCHIVE_BYTES:
-                raise ArchiveRefusedError(f"It is larger than {MAX_ARCHIVE_BYTES // 2**20} MiB.", _SPLIT)
+                raise ArchiveRefusedError(
+                    f"It is larger than {MAX_ARCHIVE_BYTES // 2**20} MiB.", _SPLIT
+                )
             out.write(chunk)
 
 
@@ -159,7 +161,9 @@ def _check_sizes(pngs: list[zipfile.ZipInfo]) -> None:
             )
         total += info.file_size
     if total > MAX_EXPANDED_BYTES:
-        raise ArchiveRefusedError(f"It unpacks to more than {MAX_EXPANDED_BYTES // 2**20} MiB.", _SPLIT)
+        raise ArchiveRefusedError(
+            f"It unpacks to more than {MAX_EXPANDED_BYTES // 2**20} MiB.", _SPLIT
+        )
 
 
 def _survey(archive: zipfile.ZipFile) -> Archive:
@@ -174,7 +178,9 @@ def _survey(archive: zipfile.ZipFile) -> Archive:
             with archive.open(info) as entry:
                 head = entry.read(len(PNG_MAGIC))
         except _UNREADABLE as exc:
-            raise ArchiveRefusedError(f"{info.filename} inside it cannot be read.", _REEXPORT) from exc
+            raise ArchiveRefusedError(
+                f"{info.filename} inside it cannot be read.", _REEXPORT
+            ) from exc
         if head == PNG_MAGIC:
             pngs[info.filename] = info
         else:

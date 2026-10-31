@@ -202,7 +202,9 @@ class TestAssignKind:
 
     def test_a_scene_kind_refuses_a_set_of_photos(self, workspace: Workspace) -> None:
         _folder(workspace, "fresh", "a.png", "b.png")
-        with pytest.raises(TemplateKindRefusedError, match="single kind expects one photo, found 2"):
+        with pytest.raises(
+            TemplateKindRefusedError, match="single kind expects one photo, found 2"
+        ):
             assign_kind(workspace, "fresh", "single")
 
     def test_an_empty_folder_is_refused(self, workspace: Workspace) -> None:
@@ -277,7 +279,9 @@ class TestConfig:
 class TestPreviewScene:
     def test_unsaved_geometry_must_be_the_template_s_own_kind(self, workspace: Workspace) -> None:
         geometry = PreviewGeometry(kind="colour-matrix", colour="black", boxes=(BOX,))
-        with pytest.raises(TemplatePreviewKindMismatchError, match="expected a multiple preview body"):
+        with pytest.raises(
+            TemplatePreviewKindMismatchError, match="expected a multiple preview body"
+        ):
             unsaved_preview(workspace, "colour-chart-01", geometry, design=_design(workspace))
 
     def test_unsaved_geometry_becomes_one_layer_per_box(self, workspace: Workspace) -> None:
@@ -416,7 +420,9 @@ class TestPhotosAndSwatch:
         assert template_photo(workspace, "colour-chart-01", None).name == "scene.png"
 
     def test_no_photo_is_refused_naming_what_was_asked_for(self, workspace: Workspace) -> None:
-        with pytest.raises(TemplatePhotoMissingError, match="no photo for 'flat-lay-01' colour 'nope'"):
+        with pytest.raises(
+            TemplatePhotoMissingError, match="no photo for 'flat-lay-01' colour 'nope'"
+        ):
             template_photo(workspace, "flat-lay-01", "nope")
         _folder(workspace, "empty")
         with pytest.raises(TemplatePhotoMissingError, match="no photo for 'empty'$"):
@@ -437,5 +443,7 @@ class TestPhotosAndSwatch:
     def test_only_a_colour_matrix_has_a_swatch(self, workspace: Workspace) -> None:
         with pytest.raises(TemplatePhotoMissingError, match="is not a colour-matrix template"):
             template_swatch(workspace, "colour-chart-01", "black", photo=load_template_base)
-        with pytest.raises(TemplatePhotoMissingError, match="no photo for 'flat-lay-01' colour 'nope'"):
+        with pytest.raises(
+            TemplatePhotoMissingError, match="no photo for 'flat-lay-01' colour 'nope'"
+        ):
             template_swatch(workspace, "flat-lay-01", "nope", photo=load_template_base)

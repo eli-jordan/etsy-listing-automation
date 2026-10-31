@@ -34,7 +34,11 @@ from etsy_listings.core.render.config import (
 from etsy_listings.core.render.material import MaterialMaps
 from etsy_listings.core.workspace import Workspace
 from etsy_listings.core.workspace.atomic import write_bytes_atomic
-from etsy_listings.core.workspace.calibration import CalibrationStore, MaskPhotoMismatchError, json_bytes
+from etsy_listings.core.workspace.calibration import (
+    CalibrationStore,
+    MaskPhotoMismatchError,
+    json_bytes,
+)
 from etsy_listings.core.workspace.file_version import file_version
 
 SCHEMA = 2
@@ -484,7 +488,9 @@ class Artifacts:
         }:
             raise ArtifactError("Invalid current map pointer")
         if type(value["schema_version"]) is not int or value["schema_version"] not in (1, SCHEMA):
-            raise UnsupportedSchemaError("Unsupported map schema; migrate or prepare the template again")
+            raise UnsupportedSchemaError(
+                "Unsupported map schema; migrate or prepare the template again"
+            )
         if not isinstance(value["generation_id"], str) or not isinstance(
             value["manifest_checksum"], str
         ):
@@ -504,7 +510,9 @@ class Artifacts:
         if type(document.get("schema_version")) is not int or document.get(
             "schema_version"
         ) not in (1, SCHEMA):
-            raise UnsupportedSchemaError("Unsupported map schema; migrate or prepare the template again")
+            raise UnsupportedSchemaError(
+                "Unsupported map schema; migrate or prepare the template again"
+            )
         manifest = Manifest.model_validate(document)
         if manifest.generation_id != generation or manifest.semantics != SEMANTICS:
             raise UnsupportedSchemaError("Unsupported map coordinate semantics")
@@ -561,7 +569,9 @@ class Artifacts:
         manifest: Manifest, inputs: PreparationInputs, target_size: tuple[int, int] | None
     ) -> None:
         if manifest.preparation_inputs.identity() != inputs.identity():
-            raise StalePreparationError("Prepared maps are out of date; rebuild or prepare the template")
+            raise StalePreparationError(
+                "Prepared maps are out of date; rebuild or prepare the template"
+            )
         if target_size is not None and target_size != (inputs.photo.width, inputs.photo.height):
             raise IncompatibleDimensionsError(
                 "Shared colour photo dimensions differ from the main photo"

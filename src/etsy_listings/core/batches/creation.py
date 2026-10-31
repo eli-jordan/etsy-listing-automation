@@ -56,7 +56,9 @@ def _revalidate(frozen: FrozenListingTemplate, name: str) -> None:
     issues = frozen.issues(facts=WorkspaceFacts.gather(frozen.workspace))
     blocking = [issue.message for issue in issues if issue.severity == "block"]
     if blocking:
-        raise ConfirmRefusedError(f"{name} as staged can no longer make listings: {' '.join(blocking)}")
+        raise ConfirmRefusedError(
+            f"{name} as staged can no longer make listings: {' '.join(blocking)}"
+        )
 
 
 def confirm(

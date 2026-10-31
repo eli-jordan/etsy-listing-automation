@@ -27,8 +27,12 @@ from etsy_listings.core.errors import UserFacingError
 
 # The listing document module raises these two itself, and the listing operations
 # let them through, so they are defined there and listed here with the rest.
-from etsy_listings.core.workspace.listing_documents import ListingMissingError as ListingMissingError
-from etsy_listings.core.workspace.listing_documents import ListingNameTakenError as ListingNameTakenError
+from etsy_listings.core.workspace.listing_documents import (
+    ListingMissingError as ListingMissingError,
+)
+from etsy_listings.core.workspace.listing_documents import (
+    ListingNameTakenError as ListingNameTakenError,
+)
 
 
 class PublishedListingDeletionError(UserFacingError, ValueError):

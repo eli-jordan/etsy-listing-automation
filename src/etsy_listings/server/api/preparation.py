@@ -10,7 +10,10 @@ from fastapi.responses import Response
 from starlette.concurrency import run_in_threadpool
 from starlette.responses import StreamingResponse
 
-from etsy_listings.core.application.preparation.coordinator import PreparationRefusedError, Preparations
+from etsy_listings.core.application.preparation.coordinator import (
+    PreparationRefusedError,
+    Preparations,
+)
 from etsy_listings.core.application.preparation.models import TERMINAL, Event, Job
 from etsy_listings.core.application.preparation_views import preparation_view, read_mask
 from etsy_listings.core.application.refusals import TemplateMissingError
