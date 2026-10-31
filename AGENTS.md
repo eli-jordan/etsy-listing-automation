@@ -37,7 +37,7 @@ tests/ core/ server/ cli/ by owner, then layer (unit, golden, behaviour, contrac
   doubles in tests/support/; project-wide build/CI tests (packaging, CI selection, OpenAPI export, import contracts,
   protected test imports) directly in tests/
 docs/ guides/, features/<topic>-YYYYMMDD/, adr/, reference/, research/, history/, architecture.md
-scripts/ agent_lint.py (per-edit hook), frontend_gate.py, sloc.py, generate_test_assets.py
+scripts/ agent_lint.py (per-edit hook), frontend_gate.py, setup_worktree.py (T3 worktree setup), sloc.py, generate_test_assets.py
 ```
 
 Every package's `__init__.py` states what it exports and deliberately withholds. Read that before reaching into a submodule.
