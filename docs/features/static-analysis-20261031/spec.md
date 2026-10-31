@@ -117,8 +117,10 @@ The hook calls tools from the project `.venv` and `node_modules` directly
 rather than through `uv run` or `npx`, so it stays within one to two seconds
 of a warm run. When either is missing it falls back to `uv run` or `npx`
 rather than skipping a check. New T3 worktrees get both from
-`setup_worktree.sh`, which `t3.json` runs on worktree creation and which must
-work when T3 launches it. Whole-program checks (Vulture, jscpd, Import Linter) run in
+`scripts/setup_worktree.py`, which `t3.json` runs on worktree creation. It is
+Python because T3 types the command into Windows PowerShell, which hands a
+`.sh` to its file association and reports success before the script has run;
+`setup_worktree.sh` remains the cygwin entry point to the same script. Whole-program checks (Vulture, jscpd, Import Linter) run in
 `poe check` and CI only.
 
 Grok's PostToolUse feedback path is undocumented. Implementation verifies
@@ -128,7 +130,12 @@ still covered by `poe check` and CI, and this specification records the gap.
 ### S07 — Suppressions carry a reason
 
 A new `# noqa: <codes>`, `# type: ignore[<code>]` or Vulture suppression must
-end with ` -- <reason>`. The hook rejects one without a reason. `PGH` forbids
+end with ` -- <reason>`. mypy rejects any text after `# type: ignore[<code>]`,
+so there the reason is a comment of its own:
+`# type: ignore[<code>]  # -- <reason>`. ESLint's own description syntax is
+the same: `// eslint-disable-next-line <rule> -- <reason>`. The hook rejects a
+new suppression without a reason; suppressions already committed are left to
+the rollout PRs. `PGH` forbids
 blanket suppressions and `RUF100` removes stale ones. AGENTS.md states the
 policy.
 
