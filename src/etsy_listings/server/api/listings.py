@@ -167,9 +167,6 @@ def target(request: Request, name: str) -> Target:
     return Target(workspace=workspace, name=name)
 
 
-Existing = Annotated[Target, Depends(target)]
-
-
 def _not_found(exc: ListingMissingError) -> HTTPException:
     return HTTPException(status_code=404, detail=str(exc))
 
@@ -278,12 +275,14 @@ def list_listings(request: Request) -> list[ListingSummary]:
 
 
 @router.get("/{name}", response_model=ListingDetail)
-def get_listing(target: Existing) -> ListingDetail:
+def get_listing(target: Annotated[Target, Depends(target)]) -> ListingDetail:
     return _detail(target.workspace, target.name)
 
 
 @router.patch("/{name}", response_model=ListingDetail)
-def patch_listing(target: Existing, body: dict[str, Any], request: Request) -> ListingDetail:
+def patch_listing(
+    target: Annotated[Target, Depends(target)], body: dict[str, Any], request: Request
+) -> ListingDetail:
     """Merge the editor's slice into ``listing.yaml``. A merged document
     that will not validate writes nothing and answers 200 with
     ``field_errors`` beside the listing as it still is."""
@@ -298,7 +297,9 @@ def patch_listing(target: Existing, body: dict[str, Any], request: Request) -> L
 
 
 @router.delete("/{name}", response_model=None)
-def delete_listing(target: Existing, request: Request) -> ListingSummary | Response:
+def delete_listing(
+    target: Annotated[Target, Depends(target)], request: Request
+) -> ListingSummary | Response:
     """Delete from the listings table.
 
     No remotes: wiped, 204. Remotes: marked ``lifecycle: deleted``, answering
@@ -346,7 +347,9 @@ def create_listing(request: Request, body: CreateListingRequest) -> ListingDetai
 
 
 @router.post("/{name}/rename", response_model=ListingDetail)
-def rename_listing(target: Existing, body: RenameListingRequest, request: Request) -> ListingDetail:
+def rename_listing(
+    target: Annotated[Target, Depends(target)], body: RenameListingRequest, request: Request
+) -> ListingDetail:
     """Move a listing, whole, to a new name -- with everything keyed by it
     (:func:`~etsy_listings.core.application.listing_identity.rename_listing`).
 
@@ -405,7 +408,10 @@ def _png(path: Path) -> Response:
 
 @router.get("/{name}/previews/{template}")
 def listing_preview(
-    target: Existing, template: str, request: Request, hash: str | None = None
+    target: Annotated[Target, Depends(target)],
+    template: str,
+    request: Request,
+    hash: str | None = None,
 ) -> Response:
     """A ``multiple``/``single``-kind scene: no per-colour photo, so no
     colour segment (ADR-0014's rule, mirrored from ``render_file``)."""
@@ -414,7 +420,11 @@ def listing_preview(
 
 @router.get("/{name}/previews/{template}/{colour}")
 def listing_preview_coloured(
-    target: Existing, template: str, colour: str, request: Request, hash: str | None = None
+    target: Annotated[Target, Depends(target)],
+    template: str,
+    colour: str,
+    request: Request,
+    hash: str | None = None,
 ) -> Response:
     """A ``colour-matrix``-kind scene: one preview per colour."""
     return _preview_response(request, target, template, colour, hash)
@@ -422,7 +432,7 @@ def listing_preview_coloured(
 
 @router.get("/{name}/scene-preview")
 def scene_preview(
-    target: Existing,
+    target: Annotated[Target, Depends(target)],
     template: str,
     request: Request,
     colour: str | None = None,

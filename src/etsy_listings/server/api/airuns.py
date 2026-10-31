@@ -80,9 +80,6 @@ def _run(request: Request, run_id: str) -> AiRun:
     return run
 
 
-Existing = Annotated[AiRun, Depends(_run)]
-
-
 def _summary(run: AiRun) -> AiRunSummary:
     return AiRunSummary(
         id=run.id,
@@ -135,13 +132,13 @@ def find_ai_run(request: Request, listing: str) -> AiRunSummary:
 
 
 @router.get("/{run_id}", response_model=AiRunDetail, responses={404: {}})
-def get_ai_run(run: Existing) -> AiRunDetail:
+def get_ai_run(run: Annotated[AiRun, Depends(_run)]) -> AiRunDetail:
     with run.condition:
         return AiRunDetail(**_summary(run).model_dump(), events=list(run.events))
 
 
 @router.delete("/{run_id}", response_model=AiRunSummary, responses={404: {}, 409: {}})
-def cancel_ai_run(run: Existing) -> AiRunSummary:
+def cancel_ai_run(run: Annotated[AiRun, Depends(_run)]) -> AiRunSummary:
     """Cancel: the run's provider subprocess tree is killed and research
     starts no new call. The run ends ``cancelled`` on its own thread
     shortly after; a brief or snapshot already written stays."""
@@ -175,7 +172,9 @@ async def sse_events(request: Request, run: AiRun, after_seq: int) -> AsyncItera
 
 
 @router.get("/{run_id}/events", responses={404: {}})
-def stream_ai_run_events(run: Existing, request: Request) -> StreamingResponse:
+def stream_ai_run_events(
+    run: Annotated[AiRun, Depends(_run)], request: Request
+) -> StreamingResponse:
     return StreamingResponse(
         sse_events(request, run, last_event_id(request)),
         media_type="text/event-stream",

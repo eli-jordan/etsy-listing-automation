@@ -97,9 +97,6 @@ def target(request: Request, run_id: str) -> Target:
     return Target(deployments=deployments, run=run)
 
 
-Existing = Annotated[Target, Depends(target)]
-
-
 def _summary(run: Run) -> RunSummary:
     if run.kind == "plan":
         return PlanRunSummary(
@@ -169,12 +166,12 @@ def list_runs(
 
 
 @router.get("/{run_id}", response_model=RunDetail)
-def get_run(target: Existing) -> RunDetail:
+def get_run(target: Annotated[Target, Depends(target)]) -> RunDetail:
     return _detail(target.run)
 
 
 @router.delete("/{run_id}", response_model=RunSummary)
-def cancel_run(target: Existing) -> RunSummary:
+def cancel_run(target: Annotated[Target, Depends(target)]) -> RunSummary:
     """Cancel a queued or running **plan**. An ``apply`` is refused
     unconditionally (decision 8: Back leaves, it never cancels one), and so is
     a run that has already finished."""
@@ -185,7 +182,7 @@ def cancel_run(target: Existing) -> RunSummary:
 
 
 @router.post("/{run_id}/seen", response_model=RunSummary)
-def mark_seen(target: Existing) -> RunSummary:
+def mark_seen(target: Annotated[Target, Depends(target)]) -> RunSummary:
     target.run.mark_seen()
     return _summary(target.run)
 
@@ -226,7 +223,9 @@ async def _sse_events(request: Request, run: Run, after_id: int) -> AsyncIterato
 
 
 @router.get("/{run_id}/events")
-def stream_events(target: Existing, request: Request) -> StreamingResponse:
+def stream_events(
+    target: Annotated[Target, Depends(target)], request: Request
+) -> StreamingResponse:
     """``text/event-stream`` over this run's own event buffer -- every event
     already recorded past ``Last-Event-ID``, then whatever the worker thread
     appends next, until the run reaches a terminal phase."""

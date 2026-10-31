@@ -115,9 +115,6 @@ def target(request: Request, name: str) -> Target:
     return Target(workspace=workspace, name=name)
 
 
-Existing = Annotated[Target, Depends(target)]
-
-
 def _not_found(exc: Exception) -> HTTPException:
     return HTTPException(status_code=404, detail=str(exc))
 
@@ -159,7 +156,7 @@ def list_templates(request: Request) -> list[TemplateSummary]:
 
 
 @router.get("/{name}/colour-report", response_model=list[ColourReportRow])
-def colour_report(template: Existing) -> list[ColourReportRow]:
+def colour_report(template: Annotated[Target, Depends(target)]) -> list[ColourReportRow]:
     """What each photo will be taken as if this becomes a colour-matrix set,
     shown in the kind picker before committing. ``clean: false`` is a file
     assigning the kind will rename (ADR-0004)."""
@@ -171,7 +168,9 @@ def colour_report(template: Existing) -> list[ColourReportRow]:
 
 
 @router.post("/{name}/kind", response_model=TemplateConfig)
-def assign_kind(template: Existing, body: AssignKindRequest) -> AnyTemplate:
+def assign_kind(
+    template: Annotated[Target, Depends(target)], body: AssignKindRequest
+) -> AnyTemplate:
     """The first calibration step: say what this template is, and get the
     starting ``template.yaml`` for that shape. Refused for a template that
     already has one -- changing kind would discard its calibration."""
@@ -191,7 +190,7 @@ def _photo(template: Target, colour: str | None) -> Path:
 
 
 @router.get("/{name}/thumbnail")
-def thumbnail(template: Existing, colour: str | None = None) -> Response:
+def thumbnail(template: Annotated[Target, Depends(target)], colour: str | None = None) -> Response:
     """The template's own photo, downscaled, for the rail -- not a render,
     which once per row would make opening the calibrator cost as much as
     calibrating. ``colour`` narrows it to one photo of a colour-matrix set,
@@ -202,7 +201,7 @@ def thumbnail(template: Existing, colour: str | None = None) -> Response:
 
 
 @router.get("/{name}/photo")
-def photo(template: Existing, colour: str | None = None) -> Response:
+def photo(template: Annotated[Target, Depends(target)], colour: str | None = None) -> Response:
     """The same photo at its own resolution, for the listing editors' large
     preview stage when no design is picked yet."""
     source = _photo(template, colour)
@@ -212,7 +211,7 @@ def photo(template: Existing, colour: str | None = None) -> Response:
 
 
 @router.get("/{name}/config", response_model=TemplateConfig)
-def get_config(template: Existing, response: Response) -> AnyTemplate:
+def get_config(template: Annotated[Target, Depends(target)], response: Response) -> AnyTemplate:
     try:
         saved = read_config(template.workspace, template.name)
     except TemplateConfigMissingError as exc:
@@ -225,7 +224,7 @@ def get_config(template: Existing, response: Response) -> AnyTemplate:
 
 @router.put("/{name}/config", response_model=TemplateConfig)
 def put_config(
-    template: Existing,
+    template: Annotated[Target, Depends(target)],
     body: CalibrationSaveRequest,
     response: Response,
     if_match: Annotated[str, Header()],
@@ -380,7 +379,9 @@ def render_preview_response(
 
 
 @router.post("/{name}/preview")
-def preview(template: Existing, body: PreviewRequest, scale: PreviewScale = "full") -> Response:
+def preview(
+    template: Annotated[Target, Depends(target)], body: PreviewRequest, scale: PreviewScale = "full"
+) -> Response:
     """The calibrator's preview of the geometry under the cursor, against a
     design from its own test-design library."""
     workspace = template.workspace
@@ -440,7 +441,7 @@ def preview(template: Existing, body: PreviewRequest, scale: PreviewScale = "ful
 
 @router.get("/{name}/design-preview")
 def design_preview(
-    template: Existing,
+    template: Annotated[Target, Depends(target)],
     request: Request,
     design: str | None = None,
     test_design: str | None = None,
@@ -487,7 +488,7 @@ def design_preview(
 
 
 @router.get("/{name}/swatch", response_model=SwatchResponse)
-def swatch(template: Existing, colour: str) -> SwatchResponse:
+def swatch(template: Annotated[Target, Depends(target)], colour: str) -> SwatchResponse:
     """This colour's real garment shade, for a quick-glance dot next to its
     name -- sampled off the colour's own photo, decoded through the preview
     memo. Any kind but colour-matrix 404s, as a photo-less colour does."""
