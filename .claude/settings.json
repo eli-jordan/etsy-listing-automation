@@ -1,0 +1,38 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv run --no-project python \"$(git rev-parse --show-toplevel)/scripts/agent_lint.py\" session-start",
+            "timeout": 15
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv run --no-project python \"$(git rev-parse --show-toplevel)/scripts/agent_lint.py\" edit",
+            "timeout": 60
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv run --no-project python \"$(git rev-parse --show-toplevel)/scripts/agent_lint.py\" session-end",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}

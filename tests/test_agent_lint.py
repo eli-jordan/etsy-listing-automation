@@ -220,3 +220,35 @@ def test_a_codex_patch_has_every_file_it_touches_checked(scratch: Path) -> None:
     assert result.returncode == 2
     assert "first.py:1:" in result.stderr
     assert "second.py:1:" in result.stderr
+
+
+@pytest.mark.parametrize(
+    ("config", "edit_tools"),
+    [
+        (".claude/settings.json", {"Edit", "Write"}),
+        (".codex/hooks.json", {"apply_patch", "Edit", "Write"}),
+    ],
+)
+def test_each_agent_runs_the_hook_on_edits_and_owns_the_daemon(
+    config: str, edit_tools: set[str]
+) -> None:
+    hooks = json.loads((ROOT / config).read_text())["hooks"]
+
+    def commands(event: str) -> list[str]:
+        return [
+            command
+            for group in hooks[event]
+            for hook in group["hooks"]
+            for command in (hook["command"], hook.get("commandWindows", hook["command"]))
+        ]
+
+    (edit_group,) = hooks["PostToolUse"]
+    assert set(edit_group["matcher"].split("|")) == edit_tools
+    for event, subcommand in [
+        ("PostToolUse", "edit"),
+        ("SessionStart", "session-start"),
+        ("SessionEnd", "session-end"),
+    ]:
+        for command in commands(event):
+            assert "scripts/agent_lint.py" in command
+            assert command.endswith(f" {subcommand}")

@@ -1,0 +1,43 @@
+{
+  "description": "Per-edit lint feedback and the dmypy daemon's lifecycle (docs/features/static-analysis-20261031/spec.md, S06 and S08). The Windows commands assume the session starts at the repository root.",
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv run --no-project python \"$(git rev-parse --show-toplevel)/scripts/agent_lint.py\" session-start",
+            "commandWindows": "uv run --no-project python scripts/agent_lint.py session-start",
+            "timeout": 15
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "apply_patch|Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv run --no-project python \"$(git rev-parse --show-toplevel)/scripts/agent_lint.py\" edit",
+            "commandWindows": "uv run --no-project python scripts/agent_lint.py edit",
+            "statusMessage": "Linting the edited files",
+            "timeout": 60
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv run --no-project python \"$(git rev-parse --show-toplevel)/scripts/agent_lint.py\" session-end",
+            "commandWindows": "uv run --no-project python scripts/agent_lint.py session-end",
+            "timeout": 3
+          }
+        ]
+      }
+    ]
+  }
+}
