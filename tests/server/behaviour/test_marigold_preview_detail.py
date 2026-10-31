@@ -16,7 +16,7 @@ from tests.support.marigold import PreparationRuntime, marigold_template
 
 
 @pytest.mark.parametrize(
-    "photo_size,expected_size", [((2048, 2048), (1024, 1024)), ((2304, 2048), (1024, 910))]
+    ("photo_size", "expected_size"), [((2048, 2048), (1024, 1024)), ((2304, 2048), (1024, 910))]
 )
 def test_editor_resolves_fine_artwork_at_1024_without_changing_full_preview(
     workspace_root, photo_size, expected_size

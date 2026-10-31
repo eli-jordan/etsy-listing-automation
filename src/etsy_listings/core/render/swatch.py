@@ -26,12 +26,12 @@ def sample_swatch(base: RGB, box: BoundingBox) -> tuple[int, int, int]:
     xs = [point.x for point in box]
     ys = [point.y for point in box]
 
-    x0 = max(0, min(width - 1, int(math.floor(min(xs)))))
-    x1 = max(x0 + 1, min(width, int(math.ceil(max(xs)))))
-    y0 = max(0, min(height - 1, int(math.floor(min(ys)))))
-    y1 = max(y0 + 1, min(height, int(math.ceil(max(ys)))))
+    x0 = max(0, min(width - 1, math.floor(min(xs))))
+    x1 = max(x0 + 1, min(width, math.ceil(max(xs))))
+    y0 = max(0, min(height - 1, math.floor(min(ys))))
+    y1 = max(y0 + 1, min(height, math.ceil(max(ys))))
 
     region = base[y0:y1, x0:x1].reshape(-1, 3)
     median = np.median(region, axis=0)
-    red, green, blue = (int(round(float(channel))) for channel in median)
+    red, green, blue = (round(float(channel)) for channel in median)
     return red, green, blue

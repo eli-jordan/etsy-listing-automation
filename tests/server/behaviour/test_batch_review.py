@@ -193,7 +193,7 @@ def test_deleting_a_listing_cancels_its_run_and_leaves_a_deleted_row(
 ) -> None:
     gate = provider.gate("brief")
     batch_id = _batch(client, "night-hike-club", "cedar-trail")
-    wait_for(lambda: provider.started["brief"].is_set())
+    wait_for(provider.started["brief"].is_set)
 
     # The queued row first: deleted while the other still holds the one
     # slot, so the queue never starts it. The running one is stopped.
@@ -269,7 +269,7 @@ def test_deleting_a_batch_record_cancels_its_work_first(
 ) -> None:
     provider.gate("brief")
     batch_id = _batch(client, "night-hike-club", "cedar-trail")
-    wait_for(lambda: provider.started["brief"].is_set())
+    wait_for(provider.started["brief"].is_set)
 
     assert client.delete(f"/api/batches/{batch_id}").status_code == 204
 

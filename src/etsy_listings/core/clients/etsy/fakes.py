@@ -402,11 +402,11 @@ class FakeEtsyListingClient:
         measured; a refused attempt is not counted against the budget."""
         attached = self._videos.get(listing_id, [])
         if sum(a.state == "active" for a in attached) >= VIDEO_SLOTS:
-            raise VideoSlotsFullError()
+            raise VideoSlotsFullError
         now = self._clock()
         recent = [t for t in self._associations.get(listing_id, []) if now - t < DAY_SECONDS]
         if len(recent) >= DAILY_VIDEO_ASSOCIATIONS:
-            raise VideoBudgetExhaustedError()
+            raise VideoBudgetExhaustedError
         self._associations[listing_id] = [*recent, now]
 
     def _attach(self, listing_id: int, video_id: int) -> ListingVideo:

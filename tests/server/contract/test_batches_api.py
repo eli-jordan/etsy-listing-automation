@@ -342,7 +342,7 @@ class TestQueue:
         with TestClient(_app(workspace, provider)) as client:
             staged = _staged(client, ("a.png", png(1)))
             batch_id = client.post(f"/api/staging/{staged['id']}/confirm").json()["id"]
-            wait_for(lambda: provider.started["brief"].is_set())
+            wait_for(provider.started["brief"].is_set)
 
             live = client.get(f"/api/batches/{batch_id}").json()["rows"][0]
             gate.set()

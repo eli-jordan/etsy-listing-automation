@@ -222,7 +222,7 @@ def test_new_takes_no_design_and_offers_a_picker(workspace_root: Path, monkeypat
 
     def fake_choose(message: str, rows, **kwargs: object) -> str:
         asked.append((message, list(rows)))
-        return list(rows)[0]
+        return next(iter(rows))
 
     monkeypatch.setattr(prompts, "choose", fake_choose)
     (workspace_root / "designs" / "brand-new.png").write_bytes(b"")

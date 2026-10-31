@@ -205,7 +205,7 @@ def test_stop_cancels_active_runs_and_starts_nothing_more(
     # time to answer the wake its ending sent, before the stop returns.
     ai.registry.subscribe(lambda _run: ai.queue.wait_idle(timeout=0.5))
     ai.start()
-    wait_for(lambda: provider.started["brief"].is_set())
+    wait_for(provider.started["brief"].is_set)
 
     ai.stop()
 
@@ -225,7 +225,7 @@ def test_a_deploy_stops_the_listing_s_run_and_refuses_new_ones_until_it_ends(
     listing; while the deploy holds it, a new run is refused."""
     provider.gate("queries")
     run = _started(ai.start_run(LISTING, draft_brief=False))
-    wait_for(lambda: provider.started["queries"].is_set())
+    wait_for(provider.started["queries"].is_set)
 
     with ai.yield_to_deploy([LISTING]):
         assert run.phase == "cancelled"

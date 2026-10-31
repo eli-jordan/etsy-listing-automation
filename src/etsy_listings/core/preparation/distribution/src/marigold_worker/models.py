@@ -94,7 +94,7 @@ class Models:
         import psutil
         import torch
 
-        checkpoint, pipeline_class, revision = MODELS[role]
+        checkpoint, _pipeline_class, revision = MODELS[role]
         started = time.perf_counter()
         reused = self.role == role
         if not reused:

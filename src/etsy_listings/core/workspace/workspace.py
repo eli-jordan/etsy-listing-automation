@@ -192,7 +192,7 @@ def _looks_like_windows_absolute(ref: str) -> bool:
     test.
     """
     p = PureWindowsPath(ref)
-    return p.drive != "" or ref.startswith("\\\\") or ref.startswith("//")
+    return p.drive != "" or ref.startswith(("\\\\", "//"))
 
 
 _SCENE_STEM = "scene"

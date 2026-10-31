@@ -289,7 +289,7 @@ def test_malicious_array_headers_are_rejected_before_numpy_can_allocate(
 
 
 @pytest.mark.parametrize(
-    "field,value",
+    ("field", "value"),
     [
         ("material", np.nan),
         ("visibility", 1.1),
@@ -502,7 +502,7 @@ def test_explicit_photo_reset_capture_only_bypasses_photo_mismatch(workspace_roo
     assert {p: p.read_bytes() for p in paths if p.exists()} == before
 
 
-@pytest.mark.parametrize("height, accepted", [(4681, True), (4682, False)])
+@pytest.mark.parametrize(("height", "accepted"), [(4681, True), (4682, False)])
 def test_validate_inputs_enforces_last_accepted_aggregate_height_without_allocating(
     workspace_root, monkeypatch, height, accepted
 ) -> None:

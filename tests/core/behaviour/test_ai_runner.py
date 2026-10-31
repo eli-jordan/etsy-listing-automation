@@ -224,7 +224,7 @@ def test_a_stop_while_the_proposal_waits_for_the_lock_caches_nothing(chain: Chai
     after the cleanup."""
     gate = chain.provider.gate("seo")
     run = chain.start(draft_brief=False)
-    wait_for(lambda: chain.provider.started["seo"].is_set())
+    wait_for(chain.provider.started["seo"].is_set)
 
     with chain.documents.lock(LISTING):
         gate.set()
@@ -437,7 +437,7 @@ def test_the_brief_write_waits_for_a_patch_holding_the_lock(chain: Chain) -> Non
     lock.__enter__()
     try:
         run = chain.start(draft_brief=True)
-        wait_for(lambda: chain.provider.started["brief"].is_set())
+        wait_for(chain.provider.started["brief"].is_set)
         assert not _becomes(run, lambda: "brief" in _types(run), timeout=0.3)
         # The PATCH that held the lock writes the seller's brief.
         edit_listing(chain.workspace.root, brief=SELLER_BRIEF)
@@ -509,7 +509,7 @@ def test_cancelling_during_a_provider_call_kills_it_and_emits_no_proposal(
     edit_listing(chain.workspace.root, brief="")
     chain.provider.gate(step)  # type: ignore[arg-type]
     run = chain.start(draft_brief=True)
-    wait_for(lambda: chain.provider.started[step].is_set())  # type: ignore[index]
+    wait_for(chain.provider.started[step].is_set)  # type: ignore[index]
 
     assert run.request_stop("cancelled")
     wait_until_finished(run)
@@ -552,7 +552,7 @@ def test_cancelling_during_market_search_stops_research(
 def test_the_watchdog_fails_a_run_that_outlives_three_minutes(chain: Chain) -> None:
     chain.provider.gate("seo")
     run = chain.start(draft_brief=False)
-    wait_for(lambda: chain.provider.started["seo"].is_set())
+    wait_for(chain.provider.started["seo"].is_set)
 
     chain.clock.now = RUN_LIMIT_SECONDS - 1
     assert not _becomes(run, lambda: run.finished, timeout=0.1)
@@ -573,7 +573,7 @@ def test_the_watchdog_fails_a_run_that_outlives_three_minutes(chain: Chain) -> N
 def test_each_run_has_its_own_daemon_thread_and_shutdown_cancels_it(chain: Chain) -> None:
     chain.provider.gate("queries")
     run = chain.start(draft_brief=False)
-    wait_for(lambda: chain.provider.started["queries"].is_set())
+    wait_for(chain.provider.started["queries"].is_set)
     threads = [t for t in threading.enumerate() if t.name.startswith("ai-run-")]
     assert threads
     assert all(thread.daemon for thread in threads)

@@ -3,7 +3,7 @@
 import time
 from collections.abc import AsyncIterator
 from dataclasses import asdict
-from typing import Literal
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import Response
@@ -56,7 +56,7 @@ def job_response(preparations: Preparations, job: Job) -> PreparationJobResponse
     )
 
 
-@router.get("/templates/{name}/preparation", response_model=PreparationResponse)
+@router.get("/templates/{name}/preparation")
 def status(request: Request, name: str, response: Response) -> PreparationResponse:
     response.headers["Cache-Control"] = "no-store"
     preparations = coordinator(request)
@@ -79,12 +79,12 @@ def status(request: Request, name: str, response: Response) -> PreparationRespon
     )
 
 
-@router.get("/preparation/jobs", response_model=list[PreparationJobResponse])
+@router.get("/preparation/jobs")
 def jobs(
     request: Request,
     template: str | None = None,
-    offset: int = Query(0, ge=0),
-    limit: int = Query(100, ge=1, le=1000),
+    offset: Annotated[int, Query(ge=0)] = 0,
+    limit: Annotated[int, Query(ge=1, le=1000)] = 100,
 ) -> list[PreparationJobResponse]:
     preparations = coordinator(request)
     if template is not None:
@@ -148,15 +148,13 @@ def history_response(request: Request, name: str, placement_id: str | None) -> M
     )
 
 
-@router.get("/templates/{name}/mask-history", response_model=MaskHistoryResponse)
+@router.get("/templates/{name}/mask-history")
 def mask_history(request: Request, name: str, response: Response) -> MaskHistoryResponse:
     response.headers["Cache-Control"] = "no-store"
     return history_response(request, name, None)
 
 
-@router.get(
-    "/templates/{name}/placements/{placement_id}/mask-history", response_model=MaskHistoryResponse
-)
+@router.get("/templates/{name}/placements/{placement_id}/mask-history")
 def placement_history(
     request: Request, name: str, placement_id: str, response: Response
 ) -> MaskHistoryResponse:
@@ -164,7 +162,7 @@ def placement_history(
     return history_response(request, name, placement_id)
 
 
-@router.get("/marigold/runtime", response_model=MarigoldRuntimeResponse)
+@router.get("/marigold/runtime")
 def runtime_status(request: Request) -> MarigoldRuntimeResponse:
     capability = coordinator(request).runtime.inspect()
     return MarigoldRuntimeResponse(
@@ -180,7 +178,7 @@ def runtime_status(request: Request) -> MarigoldRuntimeResponse:
     )
 
 
-@router.post("/preparation/jobs", response_model=PreparationJobResponse, status_code=202)
+@router.post("/preparation/jobs", status_code=202)
 def submit(request: Request, body: CreatePreparationRequest) -> PreparationJobResponse:
     preparations = coordinator(request)
     try:
@@ -216,13 +214,13 @@ def existing_job(preparations: Preparations, identity: str) -> Job:
         raise HTTPException(status_code=404, detail="Preparation job not found") from exc
 
 
-@router.get("/preparation/jobs/{identity}", response_model=PreparationJobResponse)
+@router.get("/preparation/jobs/{identity}")
 def job_status(request: Request, identity: str) -> PreparationJobResponse:
     preparations = coordinator(request)
     return job_response(preparations, existing_job(preparations, identity))
 
 
-@router.delete("/preparation/jobs/{identity}", response_model=PreparationJobResponse)
+@router.delete("/preparation/jobs/{identity}")
 def cancel(request: Request, identity: str) -> PreparationJobResponse:
     preparations = coordinator(request)
     existing_job(preparations, identity)

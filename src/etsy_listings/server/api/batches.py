@@ -26,6 +26,7 @@ the same name wait for each other on the listing's document lock
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from typing import Annotated
 
 from fastapi import APIRouter, Form, HTTPException, Request, UploadFile
 from fastapi.responses import Response
@@ -206,7 +207,9 @@ def _batch_detail(request: Request, batch: Batch) -> BatchDetail:
     responses={422: {"model": StagingRefusal}},
 )
 def create_staging(
-    request: Request, listing_template: str = Form(...), files: list[UploadFile] | None = None
+    request: Request,
+    listing_template: Annotated[str, Form()],
+    files: list[UploadFile] | None = None,
 ) -> StagingDetail:
     """Stage one ZIP or loose PNGs (spec, *Accepted input*). Starlette has
     already spooled the parts to temporary files; each is handed on as a

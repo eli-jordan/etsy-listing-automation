@@ -284,7 +284,7 @@ def test_get_by_listing_reattaches_to_the_current_run(
 ) -> None:
     gate = provider.gate("seo")
     run = _start(client)
-    wait_for(lambda: provider.started["seo"].is_set())
+    wait_for(provider.started["seo"].is_set)
 
     found = client.get("/api/ai/runs", params={"listing": LISTING})
 
@@ -389,7 +389,7 @@ def test_closing_the_stream_does_not_cancel_the_run(
         run = client.app.state.ai.registry.get(run_id)  # type: ignore[attr-defined]
         assert isinstance(run, AiRun)
 
-        wait_for(lambda: provider.started["seo"].is_set())
+        wait_for(provider.started["seo"].is_set)
 
         class Leaving:
             """Connected for the first poll, gone from the second."""
@@ -423,7 +423,7 @@ def test_closing_the_stream_does_not_cancel_the_run(
 def test_delete_cancels_a_running_run(client: TestClient, provider: ChainProvider) -> None:
     provider.gate("queries")
     run = _start(client)
-    wait_for(lambda: provider.started["queries"].is_set())
+    wait_for(provider.started["queries"].is_set)
 
     response = client.delete(f"/api/ai/runs/{run['id']}")
 
@@ -454,7 +454,7 @@ def test_a_plan_run_finishes_while_another_listing_s_ai_run_is_in_flight(
     copy_listing(workspace_root, "second")
     gate = provider.gate("seo")
     ai_run = _start(client)
-    wait_for(lambda: provider.started["seo"].is_set())
+    wait_for(provider.started["seo"].is_set)
 
     plan = client.post(
         "/api/runs", json={"kind": "plan", "scope": "listings", "listings": ["second"]}
@@ -475,7 +475,7 @@ def test_leaving_the_app_cancels_active_runs(workspace_root: Path, provider: Cha
     provider.gate("queries")
     with _client(workspace_root, provider) as client:
         run_id = _start(client)["id"]
-        wait_for(lambda: provider.started["queries"].is_set())
+        wait_for(provider.started["queries"].is_set)
         run = client.app.state.ai.registry.get(run_id)  # type: ignore[attr-defined]
 
     assert run.phase == "cancelled"

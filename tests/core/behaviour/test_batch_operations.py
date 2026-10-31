@@ -590,7 +590,7 @@ class TestSteerAndKeep:
                 _stage(workspace, staging, ("a.png", png(1))).id,
                 ai.queue,
             )
-            wait_for(lambda: provider.started["brief"].is_set())
+            wait_for(provider.started["brief"].is_set)
             run = ai.registry.latest("a")
             assert run is not None
 

@@ -186,7 +186,7 @@ def test_save_without_covered_evidence_waits_for_explicit_prepare(workspace_root
 
 
 def test_startup_closes_gap_between_calibration_commit_and_cpu_job(workspace_root):
-    workspace, runtime, coordinator, first = prepare_template(workspace_root)
+    workspace, runtime, coordinator, _first = prepare_template(workspace_root)
     coordinator.close()
     move_box(workspace, 1)
     restarted = Preparations(workspace, runtime=runtime)
@@ -563,7 +563,7 @@ def test_edits_during_model_work_stop_remaining_calls_without_new_inference_auth
 
 
 def test_queued_cpu_rebuilds_coalesce_to_latest_saved_geometry(workspace_root):
-    workspace, runtime, coordinator, first = prepare_template(workspace_root)
+    workspace, runtime, coordinator, _first = prepare_template(workspace_root)
     coordinator.close()
     queued = Preparations(workspace, runtime=runtime)
     move_box(workspace, 1)
@@ -582,7 +582,7 @@ def test_queued_cpu_rebuilds_coalesce_to_latest_saved_geometry(workspace_root):
 def test_new_photo_refuses_old_masks_without_reinterpreting_corrections(workspace_root):
     from etsy_listings.core.workspace.calibration import MaskUnavailable
 
-    workspace, runtime, coordinator, first = prepare_template(workspace_root)
+    workspace, runtime, coordinator, _first = prepare_template(workspace_root)
     before = workspace.template_mask_file("shirt").read_bytes()
     Image.new("RGB", (64, 64), "red").save(workspace.template_scene_image("shirt"))
     with pytest.raises(MaskUnavailable):
@@ -595,7 +595,7 @@ def test_new_photo_refuses_old_masks_without_reinterpreting_corrections(workspac
 def test_inference_setting_change_requires_prepare_and_missing_runtime_is_actionable(
     workspace_root,
 ):
-    workspace, runtime, coordinator, first = prepare_template(workspace_root)
+    workspace, runtime, coordinator, _first = prepare_template(workspace_root)
     current = CalibrationStore(workspace).read("shirt")
     document = current.config.model_dump(mode="json")
     document["renderer"]["config"]["inference"]["ensemble_size"] = 2
@@ -668,7 +668,7 @@ def test_other_jobs_remain_responsive_while_save_verifies_maps(workspace_root):
 
     from etsy_listings.core.preparation.artifacts import Artifacts
 
-    workspace, runtime, initial, first = prepare_template(workspace_root)
+    workspace, runtime, initial, _first = prepare_template(workspace_root)
     initial.close()
     template(workspace_root, "second")
     move_box(workspace, 1)
@@ -705,7 +705,7 @@ def test_cleanup_cannot_remove_an_active_prediction_replacement(workspace_root):
     import json
     import threading
 
-    workspace, runtime, coordinator, first = prepare_template(workspace_root)
+    workspace, runtime, coordinator, _first = prepare_template(workspace_root)
     coordinator.close()
     before = json.loads(workspace.preparation_prediction_current("shirt").read_bytes())["id"]
     staged = threading.Event()
@@ -743,7 +743,7 @@ def test_later_complete_replacement_retires_historical_cancelled_and_failed_pred
 ):
     import json
 
-    workspace, runtime, coordinator, first = prepare_template(workspace_root)
+    workspace, runtime, coordinator, _first = prepare_template(workspace_root)
     worker = runtime.workers[0]
     previous = json.loads(workspace.preparation_prediction_current("shirt").read_bytes())["id"]
     worker.entered.clear()
@@ -870,7 +870,7 @@ def test_restart_revalidates_corrupted_partial_prediction_and_only_restarts_that
 def test_geometry_save_during_cpu_phase_refuses_old_publication_and_rebuilds_latest(workspace_root):
     import threading
 
-    workspace, runtime, initial, first = prepare_template(workspace_root)
+    workspace, runtime, initial, _first = prepare_template(workspace_root)
     initial.close()
     entered = threading.Event()
     release = threading.Event()
@@ -902,7 +902,7 @@ def test_geometry_save_during_cpu_phase_refuses_old_publication_and_rebuilds_lat
 def test_cpu_cancel_stops_at_phase_boundary_and_is_persisted(workspace_root):
     import threading
 
-    workspace, runtime, initial, first = prepare_template(workspace_root)
+    workspace, runtime, initial, _first = prepare_template(workspace_root)
     initial.close()
     entered = threading.Event()
     release = threading.Event()
@@ -951,7 +951,7 @@ def test_request_receipts_do_not_emit_duplicate_step_events(workspace_root):
 def test_prepare_again_refreshes_models_even_with_matching_active_cpu_rebuild(workspace_root):
     import threading
 
-    workspace, runtime, initial, first = prepare_template(workspace_root)
+    workspace, runtime, initial, _first = prepare_template(workspace_root)
     initial.close()
     entered = threading.Event()
     release = threading.Event()
@@ -988,7 +988,7 @@ def test_invalid_current_map_pointer_does_not_prevent_explicit_preparation_repai
 
     from etsy_listings.core.preparation.artifacts import Artifacts
 
-    workspace, runtime, initial, first = prepare_template(workspace_root)
+    workspace, runtime, initial, _first = prepare_template(workspace_root)
     initial.close()
     pointer = json.loads(workspace.template_map_current("shirt").read_bytes())
     pointer["schema_version"] = 2
@@ -1018,7 +1018,7 @@ def test_explicit_photo_reset_is_durable_and_cancellation_preserves_old_masks(
     from etsy_listings.core.preparation.artifacts import Artifacts
     from etsy_listings.core.workspace.calibration import MaskPhotoMismatch
 
-    workspace, runtime, coordinator, first = prepare_template(workspace_root)
+    workspace, runtime, coordinator, _first = prepare_template(workspace_root)
     coordinator.close()
     before = workspace.template_mask_file("shirt").read_bytes()
     Image.new("RGB", (64, 64), "red").save(workspace.template_scene_image("shirt"))
@@ -1145,7 +1145,7 @@ def test_photo_reset_partial_multiple_install_recovers_only_exact_inputs(workspa
 def test_photo_reset_intent_preserves_same_photo_manual_mask(workspace_root):
     from etsy_listings.core.workspace.calibration import MaskEdit, Stroke
 
-    workspace, runtime, coordinator, first = prepare_template(workspace_root)
+    workspace, _runtime, coordinator, _first = prepare_template(workspace_root)
     store = CalibrationStore(workspace)
     current = store.read("shirt")
     saved = store.save(
@@ -1238,7 +1238,7 @@ def test_budget_preflight_refuses_before_runtime_or_prediction_allocation(
 def test_saved_reconcile_preflights_before_loading_retained_maps(workspace_root, monkeypatch):
     import etsy_listings.core.preparation.artifacts as policy
 
-    workspace, runtime, coordinator, first = prepare_template(workspace_root)
+    workspace, runtime, coordinator, _first = prepare_template(workspace_root)
     move_box(workspace, 1)
     monkeypatch.setattr(policy, "MAX_ARCHIVE_BYTES", 1)
     with pytest.raises(ValueError, match="allocation budget"):

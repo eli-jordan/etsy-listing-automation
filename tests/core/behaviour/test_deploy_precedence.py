@@ -159,7 +159,7 @@ def test_an_apply_waits_for_the_running_row_to_stop_and_resume_leaves_it(
 ) -> None:
     gate = provider.gate("brief")
     batch_id = host.batch("night-hike-club")
-    wait_for(lambda: provider.started["brief"].is_set())
+    wait_for(provider.started["brief"].is_set)
     run = host.ai.registry.latest("night-hike-club")
     assert run is not None
     seen: list[str] = []
@@ -184,7 +184,7 @@ def test_an_apply_cancels_a_queued_row_and_no_proposal_follows_the_deploy(
 ) -> None:
     gate = provider.gate("brief")
     batch_id = host.batch("night-hike-club", "cedar-trail")
-    wait_for(lambda: provider.started["brief"].is_set())
+    wait_for(provider.started["brief"].is_set)
     assert host.states(batch_id) == ["running", "queued"]
 
     assert _finished(host.deploy("apply", "cedar-trail")) == "applied"
@@ -208,7 +208,7 @@ def test_deploy_ownership_wins_when_stop_already_requested(
     Resume must not requeue active work once deploy has claimed it."""
     provider.gate("brief")
     batch_id = host.batch("night-hike-club")
-    wait_for(lambda: provider.started["brief"].is_set())
+    wait_for(provider.started["brief"].is_set)
     run = host.ai.registry.latest("night-hike-club")
     assert run is not None
 
@@ -232,7 +232,7 @@ def test_deploy_ownership_wins_when_stop_already_requested(
 def test_retry_queues_a_row_the_deploy_cancelled(host: Host, provider: ChainProvider) -> None:
     gate = provider.gate("brief")
     batch_id = host.batch("night-hike-club", "cedar-trail")
-    wait_for(lambda: provider.started["brief"].is_set())
+    wait_for(provider.started["brief"].is_set)
     _finished(host.deploy("plan", "cedar-trail"))
     gate.set()
     cedar = batch_workflow.read_batch(host.workspace, host.batches, batch_id).rows[1]
@@ -258,7 +258,7 @@ def test_a_manual_run_is_stopped_and_a_new_one_refused_while_the_deploy_holds_th
     provider.gate("queries")
     started = host.ai.start_run(FIXTURE_LISTING, draft_brief=False)
     assert isinstance(started, AiRun)
-    wait_for(lambda: provider.started["queries"].is_set())
+    wait_for(provider.started["queries"].is_set)
     deploys.hold = threading.Event()
 
     deploy = host.deploy("plan", FIXTURE_LISTING)

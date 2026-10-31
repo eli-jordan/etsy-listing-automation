@@ -89,7 +89,7 @@ def test_prediction_resize_and_padding_preserve_half_pixel_photo_centres() -> No
 def test_folded_normals_and_depth_fit_a_nonplanar_material_field() -> None:
     from etsy_listings.core.preparation.numerics import Evidence, prepare
 
-    yy, xx = np.mgrid[:64, :64].astype(np.float32)
+    _yy, xx = np.mgrid[:64, :64].astype(np.float32)
     slope = 0.6 * np.cos(xx / 64 * 2 * np.pi)
     normals = np.stack([-slope, np.zeros_like(slope), np.ones_like(slope)], -1)
     normals /= np.linalg.norm(normals, axis=-1, keepdims=True)
@@ -147,7 +147,7 @@ def test_cpu_cancellation_stops_at_the_requested_phase_without_baking() -> None:
 
 
 @pytest.mark.parametrize(
-    "box,size",
+    ("box", "size"),
     [
         (np.zeros((4, 2), np.float32), (50, 50)),
         (np.full((4, 2), np.nan, np.float32), (50, 50)),

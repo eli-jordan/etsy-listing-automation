@@ -20,6 +20,7 @@ first apply only ever leaves an Etsy draft (non-goal 1).
 
 from __future__ import annotations
 
+import itertools
 import shutil
 import socket
 import threading
@@ -241,7 +242,7 @@ def test_batch_apply_leaves_reattaches_and_continues_after_stale_listing(
     assert all(sample["dialogScrollTop"] == 0 for sample in animation_samples), animation_samples
     assert all(
         later["top"] <= earlier["top"] + 1
-        for earlier, later in zip(animation_samples, animation_samples[1:], strict=False)
+        for earlier, later in itertools.pairwise(animation_samples)
     ), animation_samples
 
     handle = drawer.get_by_role("button", name="Expand drawer")

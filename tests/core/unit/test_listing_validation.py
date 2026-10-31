@@ -578,7 +578,7 @@ class TestLifecycleVerb:
     ) -> None:
         issues = check_lifecycle_verb("retired", published=False)
         assert len(issues) == 1
-        first, *rest = issues[0].message.splitlines()
+        first, *_rest = issues[0].message.splitlines()
         assert "never been for sale" in first
         assert "nothing to pause" in first
         assert issues[0].severity == "block"

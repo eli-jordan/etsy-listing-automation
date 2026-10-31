@@ -112,7 +112,7 @@ def backends(etsy: FakeEtsy, printify: FakePrintifyClient, **overrides: Any) -> 
         "printify_client": lambda _token: printify,
         "etsy_transport": etsy.transport,
         "oauth_client": etsy.oauth_client,
-        "wait_for_redirect": lambda: etsy.redirect(),
+        "wait_for_redirect": etsy.redirect,
         "open_browser": etsy.open_browser,
         "now": lambda: T0,
     }

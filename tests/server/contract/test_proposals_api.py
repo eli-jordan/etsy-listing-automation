@@ -241,7 +241,7 @@ def test_deleting_the_listing_cancels_its_run_before_it_writes_a_proposal(
     ).write(workspace.lock_file(LISTING))
     provider.gate("seo")
     run = client.post("/api/ai/runs", json={"listing": LISTING}).json()
-    wait_for(lambda: provider.started["seo"].is_set())
+    wait_for(provider.started["seo"].is_set)
 
     assert client.delete(f"/api/listings/{LISTING}").status_code == 200
 

@@ -106,7 +106,7 @@ class TestOverview:
         assert flat.kind == "colour-matrix"
         assert flat.calibrated and flat.status_reason is None
         assert flat.colours == ["black", "blue-jean", "ivory", "moss"]
-        assert [(p.colour, p.file) for p in flat.photos][0] == (
+        assert next((p.colour, p.file) for p in flat.photos) == (
             "black",
             "mockup-templates/flat-lay-01/black.png",
         )
@@ -401,7 +401,7 @@ class TestPreviewScene:
         assert asked == []
         painted = np.asarray(image.convert("RGB"), dtype=np.int16)
         changed = np.abs(painted - half.astype(np.int16)).sum(axis=2) > 24
-        rows, cols = np.nonzero(changed)
+        _rows, cols = np.nonzero(changed)
         # The first placement starts at x=134 on the 960px photo: 67 at half.
         assert cols.min() >= 60
 

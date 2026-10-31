@@ -31,7 +31,7 @@ def test_missing_maps_have_the_same_listing_and_engine_refusal(workspace_root):
 def test_prepared_listing_renders_and_repeat_apply_is_idle(workspace_root):
     from etsy_listings.core.engine import execute
 
-    workspace, listing = listing_with_marigold(workspace_root, prepare=True)
+    workspace, _listing = listing_with_marigold(workspace_root, prepare=True)
     ctx = a_context(workspace_root)
     stage = RenderStage()
     planned = build_plan(ctx, FIXTURE_LISTING, a_lock(), (stage,))
@@ -93,7 +93,7 @@ def test_matching_preview_promotes_exact_bytes_without_composition(workspace_roo
 def test_stale_geometry_blocks_every_required_scene_with_shared_refusal(workspace_root):
     from etsy_listings.core.render import Point
 
-    workspace, listing = listing_with_marigold(workspace_root, prepare=True)
+    workspace, _listing = listing_with_marigold(workspace_root, prepare=True)
     config = workspace.load_template_config("shirt")
     config = config.model_copy(
         update={"bounding_box": (Point(x=13, y=12), *config.bounding_box[1:])}
