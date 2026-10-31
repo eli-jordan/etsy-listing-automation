@@ -131,6 +131,8 @@ def test_relative_zero_shares_are_display_only_until_a_completed_pointer_edit(
     expect(page.get_by_role("heading", name="Market SEO scoring")).to_be_visible()
     assert path.read_bytes() == source
     capture(page, theme, "zero")
+    # AI providers sit above this panel; a pointer only reaches what is on screen.
+    page.locator(".sp-weights").scroll_into_view_if_needed()
     bar = page.locator(".sp-weights").bounding_box()
     assert bar is not None
     x = bar["x"] + bar["width"] * 0.3
@@ -243,7 +245,7 @@ def test_rapid_actions_use_the_revision_returned_by_the_previous_save(
 
     page.route("**/api/admin/settings", hold_first)
     slider.press("ArrowRight")
-    expect(page.get_by_role("status")).to_contain_text("Saving")
+    expect(page.locator(".settings-save")).to_contain_text("Saving")
     slider.press("ArrowRight")
     assert len(revisions) == 1
     first = held[0].fetch()
