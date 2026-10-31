@@ -6,7 +6,6 @@ import os
 from pathlib import Path
 
 import pytest
-from playwright.sync_api import expect
 
 from etsy_listings.core import connections
 from etsy_listings.core.clients.etsy.fakes import FakeEtsyListingClient, FakeEtsyShopClient
@@ -15,6 +14,13 @@ from etsy_listings.core.config.settings import Settings
 from etsy_listings.core.workspace.workspace import Workspace
 
 pytestmark = pytest.mark.browser
+
+
+@pytest.fixture
+def expect(browser_type):  # noqa: ANN001, ANN201 - optional Playwright after prerequisite check
+    from playwright.sync_api import expect as playwright_expect
+
+    return playwright_expect
 
 
 @pytest.fixture(autouse=True)
@@ -50,8 +56,32 @@ def is_save(response) -> bool:  # noqa: ANN001
     return response.url.endswith("/api/admin/settings") and response.request.method == "PATCH"
 
 
+def test_reviewed_market_values_load_without_rewriting_relative_weights(
+    page,
+    expect,
+    calibrator_server: str,
+    workspace_root: Path,
+    theme: str,  # noqa: ANN001
+) -> None:
+    path = Workspace.discover(root_override=workspace_root).settings_file()
+    source = (
+        b"batch_ai:\n  concurrency: 2\nmarket_seo:\n  weights:\n"
+        b"    reviews: 0.3\n    favourites_per_day: 0.35\n    search_rank: 0.2\n"
+        b"    views_per_day: 0.1\n    shop_sales: 0.05\n    shop_rating: 0\n"
+    )
+    path.write_bytes(source)
+    open_settings(page, calibrator_server, theme)
+    expect(page.get_by_role("slider")).to_have_value("2")
+    expect(page.locator(".sp-legend__pct")).to_have_text(
+        ["30%", "35%", "20%", "10%", "5%", "Not counted"]
+    )
+    assert path.read_bytes() == source
+    capture(page, theme, "market")
+
+
 def test_keyboard_edits_and_reset_persist_only_completed_changes(
     page,
+    expect,
     calibrator_server: str,
     workspace_root: Path,
     theme: str,  # noqa: ANN001
@@ -83,6 +113,7 @@ def test_keyboard_edits_and_reset_persist_only_completed_changes(
 
 def test_relative_zero_shares_are_display_only_until_a_completed_pointer_edit(
     page,
+    expect,
     calibrator_server: str,
     workspace_root: Path,
     theme: str,  # noqa: ANN001
@@ -117,6 +148,7 @@ def test_relative_zero_shares_are_display_only_until_a_completed_pointer_edit(
 
 def test_conflict_keeps_the_external_file_and_reload_discards_the_refused_edit(
     page,
+    expect,
     calibrator_server: str,
     workspace_root: Path,
     theme: str,  # noqa: ANN001
@@ -145,6 +177,7 @@ def test_conflict_keeps_the_external_file_and_reload_discards_the_refused_edit(
 
 def test_invalid_file_rechecks_and_failed_saves_keep_the_edit_for_retry(
     page,
+    expect,
     calibrator_server: str,
     workspace_root: Path,
     theme: str,  # noqa: ANN001
@@ -185,6 +218,7 @@ def test_invalid_file_rechecks_and_failed_saves_keep_the_edit_for_retry(
 
 def test_rapid_actions_use_the_revision_returned_by_the_previous_save(
     page,
+    expect,
     calibrator_server: str,
     workspace_root: Path,
     theme: str,  # noqa: ANN001
@@ -207,7 +241,7 @@ def test_rapid_actions_use_the_revision_returned_by_the_previous_save(
 
     page.route("**/api/admin/settings", hold_first)
     slider.press("ArrowRight")
-    expect(page.get_by_text("Saving…", exact=True)).to_be_visible()
+    expect(page.get_by_role("status")).to_contain_text("Saving")
     slider.press("ArrowRight")
     assert len(revisions) == 1
     first = held[0].fetch()

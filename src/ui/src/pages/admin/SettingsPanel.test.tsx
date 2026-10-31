@@ -209,6 +209,7 @@ it("keeps invalid file errors visible through failed rechecks, without default c
   );
   render(<SettingsPanel />);
   expect(await screen.findByRole("alert")).toHaveTextContent("settings.yaml: batch_ai.concurrency");
+  expect(screen.getByRole("heading", { name: "Settings could not be loaded" })).toBeVisible();
   expect(screen.queryByRole("slider")).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "Check file again" }));
   await waitFor(() => expect(api.getSettings).toHaveBeenCalledTimes(2));
