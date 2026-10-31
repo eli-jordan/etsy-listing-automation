@@ -4,6 +4,24 @@
  */
 
 export interface paths {
+  "/api/admin/settings": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Read Settings */
+    get: operations["read_settings_api_admin_settings_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    /** Edit Settings */
+    patch: operations["edit_settings_api_admin_settings_patch"];
+    trace?: never;
+  };
   "/api/admin/shop": {
     parameters: {
       query?: never;
@@ -4262,6 +4280,20 @@ export interface components {
       /** Message */
       message: string;
     };
+    /** SettingsSaveRefusal */
+    SettingsSaveRefusal: {
+      /** Field Errors */
+      field_errors?: {
+        [key: string]: string;
+      };
+      /**
+       * Kind
+       * @enum {string}
+       */
+      kind: "conflict" | "invalid";
+      /** Message */
+      message: string;
+    };
     /**
      * ShadeConfig
      * @description Blends the base mockup photo's own greyscale lighting over the printed
@@ -4829,6 +4861,36 @@ export interface components {
        */
       scope: "workspace";
     };
+    /** WorkspaceSettingsChanges */
+    WorkspaceSettingsChanges: {
+      /** Concurrency */
+      concurrency?: number | null;
+      /** Weights */
+      weights?: {
+        [key: string]: number;
+      } | null;
+    };
+    /** WorkspaceSettingsPatch */
+    WorkspaceSettingsPatch: {
+      changes: components["schemas"]["WorkspaceSettingsChanges"];
+      /** Revision */
+      revision: string;
+    };
+    /** WorkspaceSettingsResponse */
+    WorkspaceSettingsResponse: {
+      /** Concurrency */
+      concurrency: number;
+      /** Default Weights */
+      default_weights: {
+        [key: string]: number;
+      };
+      /** Revision */
+      revision: string;
+      /** Weights */
+      weights: {
+        [key: string]: number;
+      };
+    };
     /**
      * WorkspaceSummary
      * @description Which workspace the UI is pointed at. One workspace is one shop, so the
@@ -4850,6 +4912,68 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+  read_settings_api_admin_settings_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["WorkspaceSettingsResponse"];
+        };
+      };
+    };
+  };
+  edit_settings_api_admin_settings_patch: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["WorkspaceSettingsPatch"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["WorkspaceSettingsResponse"];
+        };
+      };
+      /** @description Conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["SettingsSaveRefusal"];
+        };
+      };
+      /** @description Unprocessable Entity */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["SettingsSaveRefusal"];
+        };
+      };
+    };
+  };
   read_shop_api_admin_shop_get: {
     parameters: {
       query?: never;

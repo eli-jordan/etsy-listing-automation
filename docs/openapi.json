@@ -6148,6 +6148,35 @@
         "title": "SeoWarningEntry",
         "type": "object"
       },
+      "SettingsSaveRefusal": {
+        "properties": {
+          "field_errors": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Field Errors",
+            "type": "object"
+          },
+          "kind": {
+            "enum": [
+              "conflict",
+              "invalid"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "message"
+        ],
+        "title": "SettingsSaveRefusal",
+        "type": "object"
+      },
       "ShadeConfig": {
         "additionalProperties": false,
         "description": "Blends the base mockup photo's own greyscale lighting over the printed\ndesign, so a flat design picks up the garment's real fold shadows and\nlight falloff instead of looking pasted on as a flat rectangle -- this is\nwhy a plain flat-lay PNG is enough to mock up, with no purchased\nPhotoshop lighting map needed. On by default: almost every mockup needs\nit. ``multiply`` crushes prints on dark garments, so ``soft-light`` or a\nmid-grey pivot is used for those instead.",
@@ -7581,6 +7610,99 @@
         "title": "WorkspacePlanRequest",
         "type": "object"
       },
+      "WorkspaceSettingsChanges": {
+        "additionalProperties": false,
+        "properties": {
+          "concurrency": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Concurrency"
+          },
+          "weights": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "anyOf": [
+                    {
+                      "type": "integer"
+                    },
+                    {
+                      "type": "number"
+                    }
+                  ]
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Weights"
+          }
+        },
+        "title": "WorkspaceSettingsChanges",
+        "type": "object"
+      },
+      "WorkspaceSettingsPatch": {
+        "properties": {
+          "changes": {
+            "$ref": "#/components/schemas/WorkspaceSettingsChanges"
+          },
+          "revision": {
+            "title": "Revision",
+            "type": "string"
+          }
+        },
+        "required": [
+          "revision",
+          "changes"
+        ],
+        "title": "WorkspaceSettingsPatch",
+        "type": "object"
+      },
+      "WorkspaceSettingsResponse": {
+        "properties": {
+          "concurrency": {
+            "title": "Concurrency",
+            "type": "integer"
+          },
+          "default_weights": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Default Weights",
+            "type": "object"
+          },
+          "revision": {
+            "title": "Revision",
+            "type": "string"
+          },
+          "weights": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "title": "Weights",
+            "type": "object"
+          }
+        },
+        "required": [
+          "revision",
+          "concurrency",
+          "weights",
+          "default_weights"
+        ],
+        "title": "WorkspaceSettingsResponse",
+        "type": "object"
+      },
       "WorkspaceSummary": {
         "description": "Which workspace the UI is pointed at. One workspace is one shop, so the\nsidebar names it -- the difference between a test shop and the real one is\nworth seeing before an edit, not after an apply.",
         "properties": {
@@ -7615,6 +7737,76 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/api/admin/settings": {
+      "get": {
+        "operationId": "read_settings_api_admin_settings_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkspaceSettingsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Read Settings",
+        "tags": [
+          "admin"
+        ]
+      },
+      "patch": {
+        "operationId": "edit_settings_api_admin_settings_patch",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkspaceSettingsPatch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkspaceSettingsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SettingsSaveRefusal"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SettingsSaveRefusal"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          }
+        },
+        "summary": "Edit Settings",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
     "/api/admin/shop": {
       "get": {
         "operationId": "read_shop_api_admin_shop_get",

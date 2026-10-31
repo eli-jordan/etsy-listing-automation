@@ -73,7 +73,18 @@ Open **Admin** in the sidebar of `etsy-listings ui` to inspect connected shops
 and edit the workspace's listing defaults. Selectors save on blur. Failed
 lookups retain saved choices; use **Retry lookups** or return to the window
 after creating a profile, policy or partner on Etsy to refresh the lists.
-Settings is unavailable until that tab is implemented.
+Under **Settings**, Batch AI ranges from 1 to 8 drafts at once. A completed
+slider action saves the limit for the next dispatch; active drafts finish and
+editor runs do not use batch slots. Market SEO scoring uses draggable dividers,
+or Left/Right arrows with Shift for five-point steps. Shares total 100%; zero
+means Not counted. Loading relative weights does not rewrite them. **Reset to
+defaults** restores only the market weights.
+
+Settings saves use `settings.yaml`'s own revision. On a conflict, reload before
+making the change again. An invalid file shows its rejected key and stays
+unchanged; fix it in your editor, then choose **Check file again**. A failed save
+keeps the edit available for **Retry save**. AI providers and time limits are
+not editable in this version of Settings.
 
 Currency changes require acknowledgement and convert no prices. Existing
 listing files and remote listings stay unchanged; a saved price in the old

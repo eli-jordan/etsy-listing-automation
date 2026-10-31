@@ -45,6 +45,7 @@ from etsy_listings.server.api.runs import router as runs_router
 from etsy_listings.server.api.seo import router as seo_router
 from etsy_listings.server.api.shop import router as shop_router
 from etsy_listings.server.api.templates import router as templates_router
+from etsy_listings.server.api.workspace_settings import router as workspace_settings_router
 
 
 def _frontend_dist() -> Path:
@@ -177,6 +178,7 @@ def create_app(
     app.include_router(ai_runs_router)
     app.include_router(seo_router)
     app.include_router(shop_router)
+    app.include_router(workspace_settings_router)
 
     @app.get("/api/health")
     def health() -> dict[str, str]:

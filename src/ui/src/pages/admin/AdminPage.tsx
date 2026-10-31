@@ -9,18 +9,18 @@ import { ConnectedShops } from "./ConnectedShops";
 import { CurrencyDialog } from "./CurrencyDialog";
 import type { InfoState } from "./Info";
 import { ListingDefaults } from "./ListingDefaults";
+import { SettingsPanel } from "./SettingsPanel";
 import { useShopLookups } from "./useShopLookups";
 import { type SaveStatus, useShopSettings } from "./useShopSettings";
 import "./admin.css";
 
-type Section = "connected" | "defaults";
+type Section = "connected" | "defaults" | "settings";
 
 /**
  * `/admin` (Admin plan, PR 3): the Shop tab's Connected shops and Listing
  * defaults, from the approved `admin-shop` prototype. The section is page
  * state, not a URL parameter, and both panels stay mounted so switching
- * never discards a pending edit. Settings arrives in a later PR and is shown
- * as unavailable rather than as controls that do nothing.
+ * never discards a pending edit. Settings owns a separate file/save queue.
  */
 export function AdminPage() {
   const [section, setSection] = useState<Section>("connected");
@@ -80,10 +80,10 @@ export function AdminPage() {
         <h1 className="page-head__title">Admin</h1>
         <span className="page-head__meta">Changes save when you leave a field</span>
         <div className="page-head__actions">
-          <SaveIndicator status={settings.status} />
+          {section !== "settings" && <SaveIndicator status={settings.status} />}
         </div>
       </div>
-      {settings.status.kind === "conflict" && (
+      {section !== "settings" && settings.status.kind === "conflict" && (
         <div className="adm-warn sp-conflict" role="alert">
           <WarningIcon size={18} />
           <span>
@@ -102,7 +102,7 @@ export function AdminPage() {
       <div className="adm-body">
         <Nav section={section} onPick={setSection} />
         <div>
-          {settings.loadError !== null && (
+          {section !== "settings" && settings.loadError !== null && (
             <div className="adm-warn" role="alert">
               <WarningIcon size={18} />
               <span>{settings.loadError}</span>
@@ -137,6 +137,9 @@ export function AdminPage() {
                 info={info}
               />
             )}
+          </div>
+          <div hidden={section !== "settings"}>
+            <SettingsPanel />
           </div>
         </div>
       </div>
@@ -184,7 +187,7 @@ function Nav({ section, onPick }: { section: Section; onPick: (s: Section) => vo
     <nav className="adm-sections adm-sections--described" aria-label="Admin sections">
       <a
         href="#shop"
-        className="adm-sections__item adm-sections__item--active"
+        className={`adm-sections__item${section !== "settings" ? " adm-sections__item--active" : ""}`}
         onClick={(e) => {
           e.preventDefault();
           onPick("connected");
@@ -214,15 +217,23 @@ function Nav({ section, onPick }: { section: Section; onPick: (s: Section) => vo
           </a>
         ))}
       </div>
-      <div className="adm-sections__item adm-sections__item--unavailable" aria-disabled="true">
+      <a
+        href="#settings"
+        aria-current={section === "settings" ? "page" : undefined}
+        className={`adm-sections__item${section === "settings" ? " adm-sections__item--active" : ""}`}
+        onClick={(event) => {
+          event.preventDefault();
+          onPick("settings");
+        }}
+      >
         <span className="adm-sections__icon">
           <SlidersHorizontalIcon size={18} />
         </span>
         <span className="adm-sections__text">
           <span className="adm-sections__label">Settings</span>
-          <span className="adm-sections__hint">settings.yaml · not editable here yet</span>
+          <span className="adm-sections__hint">settings.yaml</span>
         </span>
-      </div>
+      </a>
     </nav>
   );
 }

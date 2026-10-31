@@ -317,8 +317,10 @@ Only rows whose listing was created enter the AI queue.
 ### Scheduling
 
 Confirmed batches share one workspace-wide **batch** AI queue. Its concurrency
-is `batch_ai.concurrency` in `settings.yaml`, defaults to `1`, and has no settings
-UI in the first version. The limit applies across all active batches, not once
+is `batch_ai.concurrency` in `settings.yaml`, an integer from `1` to `8` with
+default `1`, editable under Admin → Settings. A completed slider action saves
+the limit for the next dispatch. Lowering it lets active drafts finish. Invalid
+settings refuse dispatch rather than substituting a default. The limit applies across all active batches, not once
 per batch. When several batches have work, the scheduler serves them round-robin
 so a large batch cannot monopolise the queue.
 
@@ -515,7 +517,6 @@ The first version does not include:
 - a hard deployment gate based on disposable Reviewed state;
 - proposal history or automatic proposal expiry;
 - individual row cancellation;
-- a settings UI for batch concurrency;
 - live-linked or explicitly versioned listing templates;
 - a batch filter on the listings table; or
 - CLI `apply` cancelling or awaiting AI work.

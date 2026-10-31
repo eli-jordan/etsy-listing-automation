@@ -37,7 +37,6 @@ from etsy_listings.core.application.ai.readiness import AiReadinessBlock, batch_
 from etsy_listings.core.application.ai.registry import AiRun, AiRunRegistry
 from etsy_listings.core.application.ai.runner import AiRunner
 from etsy_listings.core.batches import RETRYABLE, AiState, AiStep, Batch, BatchRow, BatchStore
-from etsy_listings.core.config.errors import ConfigLoadError
 from etsy_listings.core.workspace.workspace import Workspace
 
 logger = logging.getLogger(__name__)
@@ -147,11 +146,10 @@ class BatchQueue:
     # ------------------------------------------------------------- dispatch
 
     def _limit(self) -> int:
-        try:
-            return self._workspace.load_settings().batch_ai.concurrency
-        except ConfigLoadError as exc:
-            logger.warning("settings.yaml is unreadable, so batch AI runs one at a time: %s", exc)
-            return 1
+        # Invalid hand edits refuse dispatch; only an absent file uses the
+        # model defaults (Admin plan, config-validation rule). The dispatcher
+        # reports the failure and leaves queued rows and active runs alone.
+        return self._workspace.load_settings().batch_ai.concurrency
 
     def _running(self) -> int:
         return sum(1 for run in self._registry.active() if run.origin == "batch")

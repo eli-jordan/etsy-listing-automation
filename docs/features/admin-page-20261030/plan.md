@@ -179,6 +179,7 @@ Execution started on 2026-10-30 from stack-base commit `5bbcd7df`.
 |---|---|---|
 | 1 | `feat/admin-1-local-fixes` | To be recorded |
 | 3 | `feat/admin-3-shop` | [PR #146](https://github.com/eli-jordan/etsy-listing-automation/pull/146) |
+| 4 | `feat/admin-4-settings` | [PR #147](https://github.com/eli-jordan/etsy-listing-automation/pull/147) |
 
 ### PR 1: carry the local timeout and catalog fixes
 

@@ -150,6 +150,12 @@ market_seo:
 Weights are relative, so they don't need to sum to 100. A missing file or key
 falls back to the defaults above.
 
+Admin's Settings tab displays these relative weights as nonnegative whole
+percentages totaling 100, without writing during load. Completed divider edits
+save those percentages; Reset restores the defaults above. A zero share remains
+reachable by pointer and keyboard. Later research uses the saved weights;
+retained proposals are unchanged. See the [Admin interactions](../admin-page-20261030/interactions.md#batch-ai-and-market-scoring).
+
 The UI shows a listing's score as a whole number out of 100: the weighted
 percentile sum divided by the total weight, times 100. A listing is marked as
 **your shop** when its `shop_id` matches `shop.yaml`'s `etsy.shop_id`.
