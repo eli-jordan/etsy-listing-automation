@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 export type SaveStatus =
   | { kind: "idle" }
@@ -31,6 +31,10 @@ type Changes = Record<string, unknown>;
  *   the failed keys. A newer save of a key supersedes its failure.
  * - A conflict stops the queue. Nothing is retried with a new revision and an
  *   old patch; editing stays off until `reset` adopts a reloaded file.
+ * - `pending` holds each key's newest unanswered value, whether a field save
+ *   or Retry sent it: what the file will hold once the queue drains, so a
+ *   control compares a newer choice with that rather than the last answer.
+ *   A key leaves `pending` in the same update as `onSaved` adopts its answer.
  *
  * `save` resolves with the outcome, `null` when a conflict skipped it, and
  * rejects when the request itself failed.
@@ -39,8 +43,11 @@ export function useSaveQueue<C extends Changes, O extends SaveOutcome>({
   send,
   clears,
   fallback,
+  onSaved,
 }: {
   send: (revision: string, changes: C) => Promise<O>;
+  /** Adopts a successful answer's values, whichever save sent it. */
+  onSaved?: (outcome: Extract<O, { kind: "saved" }>) => void;
   /** Whether a successful save of `changes` answers the field error at `key`. */
   clears: (key: string, changes: C) => boolean;
   /** The status message for a failure that brought none. */
@@ -48,6 +55,11 @@ export function useSaveQueue<C extends Changes, O extends SaveOutcome>({
 }) {
   const [status, setStatus] = useState<SaveStatus>({ kind: "idle" });
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
+  const [pending, setPending] = useState<Partial<C>>({});
+  const adopt = useRef(onSaved);
+  useEffect(() => {
+    adopt.current = onSaved;
+  });
   const revision = useRef<string | null>(null);
   const queue = useRef<Promise<unknown>>(Promise.resolve());
   const waiting = useRef(0);
@@ -63,6 +75,7 @@ export function useSaveQueue<C extends Changes, O extends SaveOutcome>({
     conflicted.current = false;
     latest.current = new Map();
     failed.current = new Map();
+    setPending({});
     setFieldErrors({});
     setStatus({ kind: "idle" });
   }, []);
@@ -77,6 +90,16 @@ export function useSaveQueue<C extends Changes, O extends SaveOutcome>({
         latest.current.set(key, mine);
         failed.current.delete(key);
       }
+      setPending((held) => ({ ...held, ...changes }));
+      const answered = () => {
+        const keys = Object.keys(changes).filter((key) => latest.current.get(key) === mine);
+        setPending(
+          (held) =>
+            Object.fromEntries(
+              Object.entries(held).filter(([key]) => !keys.includes(key)),
+            ) as Partial<C>,
+        );
+      };
       const fail = (message: string) => {
         for (const [key, value] of Object.entries(changes))
           if (latest.current.get(key) === mine) failed.current.set(key, { value, message });
@@ -91,6 +114,7 @@ export function useSaveQueue<C extends Changes, O extends SaveOutcome>({
           const outcome = await send(revision.current, changes);
           if (outcome.kind === "saved") {
             revision.current = outcome.revision;
+            adopt.current?.(outcome as Extract<O, { kind: "saved" }>);
             setFieldErrors((errors) =>
               Object.fromEntries(Object.entries(errors).filter(([key]) => !clears(key, changes))),
             );
@@ -111,6 +135,7 @@ export function useSaveQueue<C extends Changes, O extends SaveOutcome>({
           fail(error instanceof Error ? error.message : fallback);
           throw error;
         } finally {
+          answered();
           waiting.current -= 1;
         }
       };
@@ -132,6 +157,7 @@ export function useSaveQueue<C extends Changes, O extends SaveOutcome>({
   return {
     status,
     fieldErrors,
+    pending,
     save,
     retry,
     reset,

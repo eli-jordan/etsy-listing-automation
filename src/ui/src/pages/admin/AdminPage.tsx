@@ -133,6 +133,7 @@ export function AdminPage() {
               <ListingDefaults
                 key={settings.loadedVersion}
                 shop={shop}
+                pending={settings.pending}
                 save={save}
                 fieldErrors={settings.fieldErrors}
                 locked={settings.locked}

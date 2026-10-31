@@ -68,6 +68,9 @@ Settings already retained failed patches. The two hooks now share one owner,
 - an unrelated success never reports Saved while a key is failed; the status
   keeps that failure's message;
 - Retry save sends exactly the failed keys;
+- each key's newest unanswered value, whether a field save or Retry sent it,
+  is `pending` until its answer arrives, and the answer's values are adopted
+  in the same update that clears it;
 - a conflict stops the queue until the seller reloads.
 
 Each panel keeps its own editing rules. Settings' controls still keep newer
@@ -75,17 +78,24 @@ local values and reset only on `loadedVersion`; coupled provider and run-limit
 saves and rapid serialization are unchanged.
 
 `BlurSelect` identifies each save by the edit it was made from. Only that
-save's answer drops the draft, and only if nothing was chosen since. A blur
-sends the draft when it differs from what the file will hold once the field's
-sent saves land, so choosing back the old value while a save is in flight
-still sends it. A failed save keeps the draft and the next blur resends it; a
+save's answer drops the draft, and only if nothing was chosen since. Listing
+defaults show the saved Shop with the queue's pending values over it: what the
+file will hold once sent saves land. A blur sends the draft when it differs
+from that, so choosing back the old value while any save of the field is in
+flight, a Retry included, still sends it, and choosing the value already on
+its way sends nothing more. A failed save keeps the draft and the next blur resends it; a
 refused value stays shown with its error and is not resent until changed.
 Reloading remounts the listing defaults for the new file.
 
 A successful Retry save adopts the returned Shop values as well as the
 revision. Otherwise a later choice back to the original value could be
 mistaken for a no-op. Repeated retry failures stay in the queue's error
-status without an unhandled promise rejection from the button.
+status without an unhandled promise rejection from the button. An independent
+review then found the same gap while Retry was still pending: the select did
+not know Retry was carrying auto, compared manual with the saved manual and
+sent nothing, leaving auto on disk under Saved. Field saves and Retry now share
+the queue's per-key pending identity above, rather than each control
+remembering only its own saves.
 
 | Regression | Proves |
 |---|---|
@@ -93,10 +103,12 @@ status without an unhandled promise rejection from the button.
 | `keeps a newer queued choice while the older save is answered` | The queued newer choice is never replaced and ends on disk. |
 | `keeps a failed field unsaved through a sibling's success until it is retried` | Renewal fails, Who made it succeeds: no Saved, the error stays, the server keeps manual; Retry save sends `{renewal: auto}` only. |
 | `adopts a retried save before changing back to the original value` | After Retry writes auto, choosing manual sends a new request and persists it. Failed before the follow-up correction with only two requests. |
+| `saves a choice made while a retry is pending, after the retry lands` | Retry of auto held; choosing manual meanwhile queues `{renewal: manual}` against the retry's revision; disk and control end on manual under Saved. Failed before with two requests. |
+| `sends nothing more for a choice that matches the pending retry` | Choosing auto while Retry carries auto sends no duplicate write. Failed before with a third request. |
 | `keeps a failed retry visible and lets another retry succeed` | A failed retry retains the error and failed value, then the next retry succeeds. |
 | `retries a failed unchanged value when its field is left again` | Blurring the unchanged failed value resends it. |
 | `keeps a failed save failed through an unrelated success and retries only that patch` (Settings) | The shared contract on Settings: provider failure survives a concurrency success; Retry sends only `providers` against the newer revision. |
-| `test_admin_shop_browser.py` | Built SPA, real API, fixture `shop.yaml`, both color preferences: the queued choice ends on disk; the failed field survives a sibling write and Retry save writes it. |
+| `test_admin_shop_browser.py` | Built SPA, real API, fixture `shop.yaml`, both color preferences: the queued choice ends on disk; the failed field survives a sibling write and Retry save writes it; a choice made while Retry is held reaches the file after it (timed out waiting for that request against the previous build). |
 
 ### UI decision
 

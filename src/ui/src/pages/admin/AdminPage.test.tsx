@@ -538,6 +538,54 @@ describe("Listing defaults", () => {
     expect(screen.queryByRole("button", { name: "Retry save" })).not.toBeInTheDocument();
   });
 
+  it("saves a choice made while a retry is pending, after the retry lands", async () => {
+    const server = fileServer();
+    server.failNext("network down");
+    await openDefaults();
+    const renewal = screen.getByLabelText("Renewal");
+    fireEvent.change(renewal, { target: { value: "auto" } });
+    fireEvent.blur(renewal);
+    expect(await screen.findByText("network down")).toBeInTheDocument();
+
+    const answerRetry = server.hold();
+    await userEvent.click(screen.getByRole("button", { name: "Retry save" }));
+    await waitFor(() => expect(save).toHaveBeenCalledTimes(2));
+    renewal.focus();
+    fireEvent.change(renewal, { target: { value: "manual" } });
+    fireEvent.blur(renewal);
+    await answerRetry();
+
+    await waitFor(() => expect(save).toHaveBeenCalledTimes(3));
+    // The failed request wrote nothing, so the retry's answer is r2.
+    expect(save.mock.calls[2]).toEqual(["r2", { renewal: "manual" }]);
+    expect(await screen.findByText("Saved")).toBeInTheDocument();
+    expect(server.file().listing_defaults.renewal).toBe("manual");
+    expect(renewal).toHaveValue("manual");
+  });
+
+  it("sends nothing more for a choice that matches the pending retry", async () => {
+    const server = fileServer();
+    server.failNext("network down");
+    await openDefaults();
+    const renewal = screen.getByLabelText("Renewal");
+    fireEvent.change(renewal, { target: { value: "auto" } });
+    fireEvent.blur(renewal);
+    expect(await screen.findByText("network down")).toBeInTheDocument();
+
+    const answerRetry = server.hold();
+    await userEvent.click(screen.getByRole("button", { name: "Retry save" }));
+    await waitFor(() => expect(save).toHaveBeenCalledTimes(2));
+    fireEvent.change(renewal, { target: { value: "manual" } });
+    fireEvent.change(renewal, { target: { value: "auto" } });
+    fireEvent.blur(renewal);
+    await answerRetry();
+
+    expect(await screen.findByText("Saved")).toBeInTheDocument();
+    expect(save).toHaveBeenCalledTimes(2);
+    expect(server.file().listing_defaults.renewal).toBe("auto");
+    expect(renewal).toHaveValue("auto");
+  });
+
   it("adopts a retried save before changing back to the original value", async () => {
     const server = fileServer();
     server.failNext("network down");

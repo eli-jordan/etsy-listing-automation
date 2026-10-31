@@ -548,8 +548,11 @@ Shop and Settings share one client save queue, `pages/admin/useSaveQueue.ts`:
 revision progression, per-key acknowledgement, failure retention, Retry and
 conflict stopping. A key stays failed until a later save of that key succeeds,
 so an unrelated success never reports Saved over it, and Retry sends only the
-failed keys. Responses never replace a newer local edit: Shop's blur selects
-drop a draft only on the answer to the save made from it, and both panels
+failed keys. Each key's newest unanswered value, from a field save or Retry,
+is `pending`; Shop's listing defaults show it over the saved file, so a newer
+choice is compared with what the file will hold. Responses never replace a
+newer local edit: Shop's blur selects drop a draft only on the answer to the
+save made from it, and both panels
 discard local state only when a (re)load bumps `loadedVersion`.
 Batch concurrency is 1–8, read at the next dispatch, and lowering it leaves
 active runs alone (ADR-0048). Market shares normalize only for display until an

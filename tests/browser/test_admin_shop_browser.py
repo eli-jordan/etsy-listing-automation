@@ -151,3 +151,48 @@ def test_a_failed_field_stays_unsaved_through_a_sibling_success_until_retried(
     assert on_disk(workspace_root).etsy.listing_defaults.renewal == "auto"
     assert on_disk(workspace_root).etsy.listing_defaults.who_made == "collective"
     capture(page, theme, "retried")
+
+
+def test_a_choice_made_while_retry_is_pending_reaches_the_file(
+    page,
+    expect,
+    calibrator_server: str,
+    workspace_root: Path,
+    theme: str,  # noqa: ANN001
+) -> None:
+    """The retry carries auto; choosing manual meanwhile is a change from
+    what the file will hold, so it is saved after the retry lands."""
+    open_defaults(page, calibrator_server, theme)
+    renewal = page.get_by_role("combobox", name="Renewal")
+    expect(renewal).to_have_value("manual")
+    attempts: list[dict[str, object]] = []
+    held = []
+
+    def fail_then_hold(route) -> None:  # noqa: ANN001
+        if route.request.method != "PATCH":
+            route.continue_()
+            return
+        attempts.append(route.request.post_data_json["changes"])
+        if len(attempts) == 1:
+            route.fulfill(
+                status=503, content_type="application/json", body='{"detail":"disk unavailable"}'
+            )
+        elif len(attempts) == 2:
+            held.append(route)
+        else:
+            route.continue_()
+
+    page.route("**/api/admin/shop", fail_then_hold)
+    choose(renewal, "auto")
+    retry = page.get_by_role("button", name="Retry save")
+    expect(retry).to_be_visible()
+    retry.click()
+    expect(page.locator(".page-head__actions [role=status]")).to_contain_text("Saving")
+    choose(renewal, "manual")
+    assert len(attempts) == 2
+    with page.expect_response(lambda r: is_save(r) and len(attempts) == 3):
+        held[0].continue_()
+    expect(page.get_by_text("Saved", exact=True)).to_be_visible()
+    assert attempts == [{"renewal": "auto"}, {"renewal": "auto"}, {"renewal": "manual"}]
+    assert on_disk(workspace_root).etsy.listing_defaults.renewal == "manual"
+    expect(renewal).to_have_value("manual")

@@ -36,9 +36,12 @@ type Commit = (changes: ShopChanges) => Promise<Answer>;
  * nothing by itself. Every selector saves on blur, once, and only a change.
  * Lists come from live lookups; a saved choice they lack stays visible.
  * Mounted afresh for each loaded file, so a reload drops local drafts.
+ * Shows `shop` with the queue's pending values over it: what the file will
+ * hold once sent saves land, which a newer choice is compared against.
  */
 export function ListingDefaults({
-  shop,
+  shop: saved,
+  pending,
   save,
   fieldErrors,
   locked,
@@ -46,12 +49,14 @@ export function ListingDefaults({
   info,
 }: {
   shop: ShopSettings;
+  pending: ShopChanges;
   save: Save;
   fieldErrors: FieldErrors;
   locked: boolean;
   lookups: Lookups;
   info: InfoState;
 }) {
+  const shop = held(saved, pending);
   const defaults = shop.listing_defaults;
   const [customChosen, setCustomChosen] = useState(false);
   const tier = customChosen || !isPrintOnDemand(defaults) ? "custom" : "pod";
@@ -274,6 +279,22 @@ export function ListingDefaults({
   );
 }
 
+function held(shop: ShopSettings, pending: ShopChanges): ShopSettings {
+  const { currency, preferred_print_provider, ...defaults } = pending;
+  return {
+    ...shop,
+    currency: currency ?? shop.currency,
+    preferred_print_provider:
+      "preferred_print_provider" in pending
+        ? (preferred_print_provider ?? null)
+        : shop.preferred_print_provider,
+    listing_defaults: {
+      ...shop.listing_defaults,
+      ...(defaults as Partial<ShopSettings["listing_defaults"]>),
+    },
+  };
+}
+
 function unreachable(lookups: Lookups): string {
   if (lookups.lookups === null || (!lookups.etsyAvailable && !lookups.printifyAvailable))
     return "Etsy or Printify";
@@ -441,8 +462,7 @@ function BlurSelect({
         setDraft(e.target.value);
       }}
       onBlur={() => {
-        if (draft === null || draft === refused.current) return;
-        if (draft === (sent.current?.value ?? saved)) return;
+        if (draft === null || draft === refused.current || draft === saved) return;
         const mine = { value: draft, edit: edits.current };
         sent.current = mine;
         void onCommit(draft).then((answer) => {
