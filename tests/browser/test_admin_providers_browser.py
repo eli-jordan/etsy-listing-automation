@@ -159,3 +159,35 @@ def test_discovery_failure_keeps_saved_choices_until_refresh_reads_the_lists(
     assert ["refresh=true" in url for url in requests] == [False, True]
     assert path.read_text(encoding="utf-8") == SOURCE
     capture(page, theme, "refreshed")
+
+
+def test_startup_discovery_status_keeps_saved_preferences_and_allows_refresh(
+    page,
+    expect,
+    calibrator_server: str,
+    workspace_root: Path,
+    theme: str,
+) -> None:
+    path = Workspace.discover(root_override=workspace_root).settings_file()
+    path.write_text(SOURCE, encoding="utf-8")
+    pending = {
+        "cache_seconds": 1800,
+        "providers": {
+            **LOADED["providers"],
+            "codex": {
+                **LOADED["providers"]["codex"],
+                "problem": "Model discovery is in progress. Refresh to check again.",
+            },
+        },
+    }
+    serve_models(page, pending, LOADED)
+    open_settings(page, calibrator_server, theme)
+    expect(
+        page.get_by_text("Model discovery is in progress. Refresh to check again.")
+    ).to_be_visible()
+    expect(page.get_by_role("combobox", name="Codex model")).to_have_value("gpt-6.1-sol")
+    expect(page.get_by_role("combobox", name="Codex reasoning")).to_have_value("")
+    capture(page, theme, "discovery-pending")
+    page.get_by_role("button", name="Refresh lists").click()
+    expect(page.get_by_text("Model lists loaded. Cached for 30 minutes.")).to_be_visible()
+    assert path.read_text(encoding="utf-8") == SOURCE

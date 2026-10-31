@@ -41,6 +41,7 @@ from etsy_listings.core.application.ai.readiness import (
 from etsy_listings.core.application.ai.registry import AiRun, AiRunRegistry
 from etsy_listings.core.application.ai.runner import AiRunner
 from etsy_listings.core.batches import RETRYABLE, AiState, AiStep, Batch, BatchRow, BatchStore
+from etsy_listings.core.config.errors import ConfigLoadError
 from etsy_listings.core.workspace.workspace import Workspace
 
 logger = logging.getLogger(__name__)
@@ -335,10 +336,14 @@ class BatchQueue:
         """Why a batch could not draft its briefs: the brief prompt or a
         ready provider is missing (spec, *Design validation*)."""
         workspace = self._workspace
-        return batch_blocked(
-            workspace,
-            current_providers(self._runner.providers, workspace),
-        )
+        try:
+            providers = current_providers(self._runner.providers, workspace)
+        except ConfigLoadError as exc:
+            return AiReadinessBlock(
+                message=str(exc),
+                remedy="Correct the named key in settings.yaml, then retry. Your staging is kept.",
+            )
+        return batch_blocked(workspace, providers)
 
     # -------------------------------------------------------------- helpers
 

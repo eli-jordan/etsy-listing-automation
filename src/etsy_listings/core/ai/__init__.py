@@ -35,7 +35,9 @@ step and run budgets (ADR-0057) are shared, which is what `ProviderTask` exists 
   reads a prompt file or knows which feature it is serving. The chain tries
   the workspace order, defaulting to Codex, Claude, Grok (ADR-0056).
 - ``discovery`` -- ``ModelDiscovery`` and its advisory ``ModelCatalogs``,
-  ``ProviderCatalog`` and ``ModelChoice``. Imported directly, not re-exported.
+  ``ProviderCatalog`` and ``ModelChoice``. Construction starts nothing;
+  ``start``/``stop`` own startup discovery, and ``read(refresh=True)`` retries
+  within one shared probe budget. Imported directly, not re-exported.
 - ``orchestrator`` -- `run_task`, and the three entry points over it,
   `generate_proposal`, `generate_brief` and `generate_market_queries`.
 - ``listing_inputs`` -- saved-listing AI facts, paired request/snapshot

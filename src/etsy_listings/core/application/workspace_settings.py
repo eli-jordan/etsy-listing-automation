@@ -45,7 +45,7 @@ from etsy_listings.core.workspace.revisions import (
     replace_if_unchanged,
 )
 from etsy_listings.core.workspace.workspace import Workspace
-from etsy_listings.core.workspace.yaml_source import edit_yaml_bytes
+from etsy_listings.core.workspace.yaml_source import UneditableYaml, edit_yaml_bytes
 
 CONCURRENCY = "batch_ai.concurrency"
 WEIGHTS = "market_seo.weights"
@@ -127,7 +127,12 @@ def edit_settings(
             raise InvalidSettingsEdit(field_errors_of(exc)) from exc
         if PROVIDERS in changes:
             _retain_provider_source(raw, candidate, original, validated)
-        return edit_yaml_bytes(source, candidate, sequence_keys={("ai", "providers"): "name"})
+        try:
+            return edit_yaml_bytes(source, candidate, sequence_keys={("ai", "providers"): "name"})
+        except UneditableYaml as exc:
+            raise InvalidSettingsEdit(
+                {"__root__": f"{path}: {exc}. Edit this value in the file, then reload Settings."}
+            ) from exc
 
     try:
         revised = replace_if_unchanged(path, expected_revision, change, absent_ok=True)

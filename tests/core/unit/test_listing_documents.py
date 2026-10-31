@@ -303,6 +303,43 @@ class TestSourcePreservation:
         assert identity(hand_edited) == before
         assert hand_edited.read_bytes() == crlf(HAND_EDITED).encode("utf-8")
 
+    @pytest.mark.parametrize("nested", [False, True], ids=["brief", "nested-title"])
+    def test_in_place_callback_changes_are_persisted(
+        self, documents: ListingDocuments, hand_edited: Path, nested: bool
+    ) -> None:
+        def change(raw: Document) -> Document:
+            if nested:
+                raw["etsy"]["title"] = "Hike Tee"
+            else:
+                raw["brief"] = "A sunset hike."
+            return raw
+
+        returned = documents.edit(NAME, change)
+
+        saved = documents.read(NAME)
+        assert saved["etsy"]["title"] == ("Hike Tee" if nested else "Take A Hike")
+        if not nested:
+            assert saved["brief"] == "A sunset hike."
+        assert saved["design"] == {"default": "designs/take-a-hike.png"}
+        assert returned == saved
+        assert b"# Hiking tee" in hand_edited.read_bytes()
+
+    def test_in_place_noop_does_not_replace_or_canonicalize(
+        self, documents: ListingDocuments, hand_edited: Path
+    ) -> None:
+        before = identity(hand_edited)
+
+        def change(raw: Document) -> Document:
+            raw["etsy"]["tags"].append("temporary")
+            raw["etsy"]["tags"].clear()
+            return raw
+
+        returned = documents.edit(NAME, change)
+
+        assert returned == documents.read(NAME)
+        assert identity(hand_edited) == before
+        assert hand_edited.read_bytes() == crlf(HAND_EDITED).encode("utf-8")
+
     def test_writing_over_an_existing_document_edits_it_in_place(
         self, documents: ListingDocuments, hand_edited: Path
     ) -> None:
