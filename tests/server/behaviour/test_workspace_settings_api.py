@@ -8,6 +8,8 @@ from fastapi.testclient import TestClient
 from etsy_listings.core.workspace.workspace import Workspace
 from etsy_listings.server.api.app import create_app
 
+from tests.support.source_files import identity
+
 
 @pytest.fixture
 def client(workspace_root: Path) -> TestClient:
@@ -95,26 +97,38 @@ def test_provider_rows_include_omitted_providers_and_save_preferences(client: Te
 
 
 @pytest.mark.parametrize("newline", [b"\n", b"\r\n"])
-def test_http_provider_reorder_without_final_newline(
-    client: TestClient, workspace_root: Path, newline: bytes
+@pytest.mark.parametrize("ending", [b"", b"\n"], ids=["bare-eof", "final-newline"])
+@pytest.mark.parametrize("insert", [False, True], ids=["reorder", "insert-after-eof-row"])
+def test_http_provider_rows_at_eof_can_move_or_gain_a_sibling(
+    client: TestClient, workspace_root: Path, newline: bytes, ending: bytes, insert: bool
 ) -> None:
     path = Workspace.discover(root_override=workspace_root).settings_file()
-    path.write_bytes(
-        b"# preferences\nai:\n  providers:\n  - name: codex\n  - name: grok".replace(b"\n", newline)
-    )
+    source = b"# preferences\nai:\n  providers:\n  - name: codex\n  - name: grok" + ending
+    path.write_bytes(source.replace(b"\n", newline))
     initial = client.get("/api/admin/settings").json()
+    names = ["codex", "grok", "claude"] if insert else ["grok", "codex"]
+    changes = {"providers": [{"name": name} for name in names]}
     saved = client.patch(
         "/api/admin/settings",
         json={
             "revision": initial["revision"],
-            "changes": {"providers": [{"name": "grok"}, {"name": "claude"}, {"name": "codex"}]},
+            "changes": changes,
         },
     )
     assert saved.status_code == 200
     assert client.get("/api/admin/settings").json() == saved.json()
-    assert path.read_bytes() == (
-        b"# preferences\nai:\n  providers:\n  - name: grok\n  - name: claude\n  - name: codex"
-    ).replace(b"\n", newline)
+    expected = (
+        b"# preferences\nai:\n  providers:\n  - name: codex\n  - name: grok\n  - name: claude"
+        if insert
+        else b"# preferences\nai:\n  providers:\n  - name: grok\n  - name: codex"
+    )
+    assert path.read_bytes() == (expected + ending).replace(b"\n", newline)
+    before = identity(path)
+    repeated = client.patch(
+        "/api/admin/settings", json={"revision": saved.json()["revision"], "changes": changes}
+    )
+    assert repeated.json() == saved.json()
+    assert identity(path) == before
 
 
 @pytest.mark.parametrize(

@@ -48,7 +48,17 @@ Options:
 _AUTH_STATUS_JSON = json.dumps({"loggedIn": True})
 
 
-@pytest.mark.parametrize("stream", ["stdout", "stderr", "error-envelope", "structured-error"])
+@pytest.mark.parametrize(
+    "stream",
+    [
+        "stdout",
+        "stderr",
+        "error-envelope",
+        "structured-error",
+        "structured-code",
+        "effort-envelope",
+    ],
+)
 def test_rejected_saved_claude_model_falls_back_through_the_process_contract(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, stream: str
 ) -> None:
@@ -62,13 +72,39 @@ def test_rejected_saved_claude_model_falls_back_through_the_process_contract(
         stderr = sentence
     elif stream == "error-envelope":
         stdout, code = json.dumps({"type": "result", "is_error": True, "result": sentence}), 0
-    else:
+    elif stream == "structured-error":
         stdout, code = (
             json.dumps({"type": "result", "is_error": True, "error": {"type": "model_not_found"}}),
             0,
         )
+    elif stream == "structured-code":
+        stdout, code = (
+            json.dumps(
+                {
+                    "type": "result",
+                    "is_error": True,
+                    "error": {
+                        "code": "model_not_found",
+                        "message": "The selected model cannot be used.",
+                    },
+                }
+            ),
+            0,
+        )
+    else:
+        stdout, code = (
+            json.dumps(
+                {
+                    "type": "result",
+                    "is_error": True,
+                    "result": "error: invalid value 'extreme' for '--effort <LEVEL>'",
+                }
+            ),
+            0,
+        )
     _patch_run_managed(monkeypatch, ProcessResult(code, stdout, stderr, False, False))
-    provider = claude.ClaudeProvider(tmp_path, model="retired-model")
+    effort = "extreme" if stream == "effort-envelope" else None
+    provider = claude.ClaudeProvider(tmp_path, model="retired-model", effort=effort)
     fallback = FakeAiProvider("grok", responses=["valid"])
 
     result = run_task(
@@ -78,6 +114,7 @@ def test_rejected_saved_claude_model_falls_back_through_the_process_contract(
     assert result == "valid"
     assert len(fallback.tasks) == 1
     assert provider.model == "retired-model"
+    assert provider.effort == effort
 
 
 @pytest.mark.parametrize(
