@@ -23,6 +23,8 @@ const initial = (weights = DEFAULTS): WorkspaceSettings => ({
   ],
   weights,
   default_weights: DEFAULTS,
+  step_limit_minutes: 5,
+  run_limit_minutes: 20,
 });
 const saved = (changes: Partial<WorkspaceSettings> = {}): SettingsOutcome => ({
   kind: "saved",

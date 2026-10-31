@@ -1051,6 +1051,10 @@ class WorkspaceSettingsResponse(BaseModel):
     """Relative weights, normalized only for display by the page."""
     default_weights: dict[str, int]
     providers: list[AiProviderSettings]
+    step_limit_minutes: int
+    run_limit_minutes: int
+    """At least ``max(5, enabled providers x step_limit_minutes)`` (ADR-0057);
+    the page computes that floor from ``providers`` as the seller edits."""
 
 
 class WorkspaceSettingsChanges(BaseModel):
@@ -1059,6 +1063,8 @@ class WorkspaceSettingsChanges(BaseModel):
     concurrency: int | float | None = None
     weights: dict[str, int | float] | None = None
     providers: list[dict[str, Any]] | None = None
+    step_limit_minutes: int | float | None = None
+    run_limit_minutes: int | float | None = None
 
 
 class WorkspaceSettingsPatch(BaseModel):

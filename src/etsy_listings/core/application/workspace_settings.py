@@ -12,13 +12,14 @@ key. A file that does not load is refused naming the file and the dotted
 key; nothing here repairs it or falls back to defaults.
 
 ``ai.providers`` captures order and per-provider preferences for future runs
-(ADR-0056). ``batch_ai.concurrency`` is read afresh by the
-batch queue's next dispatch (ADR-0048), so a host wakes the queue after a
-save. ``market_seo.weights`` arrives as the page shows it: whole
-percentages for all six metrics totalling exactly 100. The file may still
-hold relative weights written by hand; the page normalises those for
-display only, and they are rewritten as percentages when the seller next
-edits a share.
+(ADR-0056); ``ai.step_limit_minutes`` and ``ai.run_limit_minutes`` bound them
+(ADR-0057). A running AI job keeps the configuration it captured at start.
+``batch_ai.concurrency`` is read afresh by the batch queue's next dispatch
+(ADR-0048), so a host wakes the queue after a save. ``market_seo.weights``
+arrives as the page shows it: whole percentages for all six metrics
+totalling exactly 100. The file may still hold relative weights written by
+hand; the page normalises those for display only, and they are rewritten as
+percentages when the seller next edits a share.
 """
 
 from __future__ import annotations
@@ -49,10 +50,13 @@ from etsy_listings.core.workspace.yaml_source import edit_yaml_bytes
 CONCURRENCY = "batch_ai.concurrency"
 WEIGHTS = "market_seo.weights"
 PROVIDERS = "ai.providers"
+STEP_LIMIT = "ai.step_limit_minutes"
+RUN_LIMIT = "ai.run_limit_minutes"
 
-EDITABLE_KEYS: tuple[str, ...] = (CONCURRENCY, WEIGHTS, PROVIDERS)
-"""Provider changes share the full-candidate save, so PR6 can couple an
-enable with a run-limit increase in the same transaction (ADR-0057)."""
+EDITABLE_KEYS: tuple[str, ...] = (CONCURRENCY, WEIGHTS, PROVIDERS, STEP_LIMIT, RUN_LIMIT)
+"""One save may carry several keys. The page couples a provider enable or a
+larger step limit with the run-limit increase it needs, so no written file
+breaks ADR-0057's floor; nothing here raises the run limit on its own."""
 
 
 @dataclass(frozen=True)

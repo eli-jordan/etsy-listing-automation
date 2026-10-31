@@ -123,6 +123,8 @@ beforeEach(() => {
     providers: [{ name: "codex", enabled: true }],
     weights,
     default_weights: weights,
+    step_limit_minutes: 5,
+    run_limit_minutes: 20,
   });
   vi.spyOn(settingsApi, "getModelCatalogs").mockResolvedValue({
     cache_seconds: 1800,

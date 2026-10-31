@@ -223,3 +223,69 @@ def test_ai_refusals_name_file_and_dotted_key(workspace: Workspace, yaml: str, k
         workspace.load_settings()
     assert str(path) in str(caught.value)
     assert key + ":" in str(caught.value)
+
+
+class TestAiTimeLimits:
+    """``ai.step_limit_minutes`` and ``ai.run_limit_minutes`` (ADR-0057)."""
+
+    def test_the_defaults_are_five_and_twenty_minutes(self, workspace: Workspace) -> None:
+        ai = workspace.load_settings().ai
+        assert (ai.step_limit_minutes, ai.run_limit_minutes) == (5, 20)
+
+    @pytest.mark.parametrize(
+        ("step", "run"),
+        [(1, 5), (15, 60), (1, 60)],
+    )
+    def test_both_range_boundaries_load(self, workspace: Workspace, step: int, run: int) -> None:
+        _write(
+            workspace,
+            "ai:\n  providers: [{name: codex}]\n"
+            f"  step_limit_minutes: {step}\n  run_limit_minutes: {run}\n",
+        )
+        ai = workspace.load_settings().ai
+        assert (ai.step_limit_minutes, ai.run_limit_minutes) == (step, run)
+
+    def test_three_providers_at_fifteen_minutes_fit_at_forty_five(
+        self, workspace: Workspace
+    ) -> None:
+        _write(workspace, "ai:\n  step_limit_minutes: 15\n  run_limit_minutes: 45\n")
+        assert workspace.load_settings().ai.run_limit_minutes == 45
+
+    def test_disabled_providers_do_not_count_towards_the_floor(self, workspace: Workspace) -> None:
+        _write(
+            workspace,
+            "ai:\n  providers: [{name: codex}, {name: claude, enabled: false}]\n"
+            "  step_limit_minutes: 10\n  run_limit_minutes: 10\n",
+        )
+        assert workspace.load_settings().ai.run_limit_minutes == 10
+
+    @pytest.mark.parametrize(
+        ("yaml", "key"),
+        [
+            ("step_limit_minutes: 0", "ai.step_limit_minutes"),
+            ("step_limit_minutes: 16", "ai.step_limit_minutes"),
+            ("step_limit_minutes: 2.5", "ai.step_limit_minutes"),
+            ("run_limit_minutes: 4", "ai.run_limit_minutes"),
+            ("run_limit_minutes: 61", "ai.run_limit_minutes"),
+            ("run_limit_minutes: 20.5", "ai.run_limit_minutes"),
+            # The default chain is three providers: 3 x 10 > 20.
+            ("step_limit_minutes: 10", "ai.run_limit_minutes"),
+            ("step_limit_minutes: 7\n  run_limit_minutes: 20", "ai.run_limit_minutes"),
+        ],
+    )
+    def test_out_of_range_or_below_the_floor_refuses_to_load(
+        self, workspace: Workspace, yaml: str, key: str
+    ) -> None:
+        path = _write(workspace, "ai:\n  " + yaml + "\n")
+        with pytest.raises(ConfigLoadError) as caught:
+            workspace.load_settings()
+        assert str(path) in str(caught.value)
+        assert key + ":" in str(caught.value)
+
+    def test_the_floor_refusal_says_what_the_run_limit_must_reach(
+        self, workspace: Workspace
+    ) -> None:
+        _write(workspace, "ai:\n  step_limit_minutes: 10\n  run_limit_minutes: 20\n")
+        with pytest.raises(ConfigLoadError) as caught:
+            workspace.load_settings()
+        assert "at least 30" in str(caught.value)

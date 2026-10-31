@@ -129,3 +129,31 @@ def test_startup_attempts_discovery_without_changing_preferences(workspace_root:
     with TestClient(create_app(workspace, model_discovery=discovery)):
         assert discovery.attempted
     assert not workspace.settings_file().exists()
+
+
+def test_time_limits_read_save_together_and_refuse_a_run_below_the_floor(
+    client: TestClient, workspace_root: Path
+) -> None:
+    """ADR-0057 over HTTP: defaults, the coupled save, and the floor refusal."""
+    path = Workspace.discover(root_override=workspace_root).settings_file()
+    initial = client.get("/api/admin/settings").json()
+    assert (initial["step_limit_minutes"], initial["run_limit_minutes"]) == (5, 20)
+
+    refused = client.patch(
+        "/api/admin/settings",
+        json={"revision": initial["revision"], "changes": {"step_limit_minutes": 10}},
+    )
+    assert refused.status_code == 422
+    assert "at least 30" in refused.json()["field_errors"]["ai.run_limit_minutes"]
+    assert not path.exists()
+
+    saved = client.patch(
+        "/api/admin/settings",
+        json={
+            "revision": initial["revision"],
+            "changes": {"step_limit_minutes": 10, "run_limit_minutes": 30},
+        },
+    )
+    assert saved.status_code == 200
+    assert (saved.json()["step_limit_minutes"], saved.json()["run_limit_minutes"]) == (10, 30)
+    assert path.read_text() == "ai:\n  step_limit_minutes: 10\n  run_limit_minutes: 30\n"
