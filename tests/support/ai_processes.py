@@ -1,11 +1,13 @@
 """Managed CLI process substitutes, without installed or signed-in providers."""
 
 import json
+import shlex
 import subprocess
 import sys
 import threading
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 from etsy_listings.core.ai.models import Deadline
@@ -52,14 +54,16 @@ class ModelCli:
         )
 
 
-def redirect_local_cli(monkeypatch: Any, name: str, script: str) -> None:
-    """Replace only this external executable with real local Python children.
-
-    taskkill and all other subprocesses still use the operating system.
-    """
-    real_popen = subprocess.Popen
-
-    def launch(argv: list[str], **kwargs: Any) -> subprocess.Popen[str]:
-        return real_popen([sys.executable, "-c", script] if argv[0] == name else argv, **kwargs)
-
-    monkeypatch.setattr(subprocess, "Popen", launch)
+def local_cli(root: Path, script: str) -> Path:
+    """An actual synthetic executable for the real process-owner boundary."""
+    source = root / "cli.py"
+    source.write_text(script, encoding="utf-8")
+    arguments = [sys.executable, str(source)]
+    if sys.platform == "win32":
+        command = root / "cli.cmd"
+        command.write_text("@" + subprocess.list2cmdline(arguments) + "\r\n", encoding="utf-8")
+    else:
+        command = root / "cli"
+        command.write_text("#!/bin/sh\nexec " + shlex.join(arguments) + "\n", encoding="utf-8")
+        command.chmod(0o755)
+    return command

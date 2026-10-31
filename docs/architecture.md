@@ -466,6 +466,17 @@ seconds for cleanup. The cache lock covers state publication, never a process
 wait. Concurrent catalog reads retain successful choices with an in-progress
 status instead of queuing behind the probe. Failed discovery retains earlier
 catalog values and reports the failure. It never validates or rewrites preferences.
+The shared process owner ends remaining descendants on launcher completion,
+timeout or cancellation and drains its pipe readers before returning. On
+Windows 10 or later, process creation atomically assigns an unnamed,
+non-inherited kill-on-close Job Object through `PROC_THREAD_ATTRIBUTE_JOB_LIST`;
+the job retains descendants after their launcher exits. Cleanup checks the
+job's active-process count within the same five-second allowance. POSIX uses
+a new session and observes exit with `waitid(WNOWAIT)`, retaining the unreaped
+leader until group termination so its PID/PGID cannot be reused. Children must
+remain in that process group on POSIX. Platform details stay inside the
+process owner; discovery and generation use the same public runner
+(ADR-0056, ADR-0057).
 Admin retains stale saved model/effort choices and warns without blocking runs.
 Omitted preferences pass no model/effort flags, preserving CLI account defaults.
 Invalid saved settings become the coordinator's `AiNotReady` refusal before a

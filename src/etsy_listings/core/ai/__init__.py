@@ -46,7 +46,9 @@ step and run budgets (ADR-0057) are shared, which is what `ProviderTask` exists 
 - ``errors`` -- the exception hierarchy `orchestrator` and all adapters
   raise, and `classify_process_failure`, the availability classifier.
 - ``process`` -- `run_managed`: cross-platform subprocess-tree launch and
-  cleanup for timeouts, cancellation, and request disconnects (PR4).
+  cleanup for completion, timeouts, cancellation, and request disconnects.
+  Private ``_windows_process``/``_posix_process`` implement ownership; callers
+  never select a platform mechanism or manage child identities.
 
 `core/application/ai/` coordinates this package into runs, readiness and
 proposal operations; `server/api/airuns.py` and `server/api/seo.py` serve
