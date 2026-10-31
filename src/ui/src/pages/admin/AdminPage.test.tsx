@@ -422,6 +422,138 @@ describe("Listing defaults", () => {
     expect(screen.getByText("Not saved")).toBeInTheDocument();
   });
 
+  /** shop.yaml behind the mocked endpoint: each save applies its changes
+   * and returns the next revision, or waits/fails when a test says so. */
+  function fileServer() {
+    let file = shop();
+    let n = 1;
+    const answers: ((apply: () => SaveOutcome) => Promise<SaveOutcome>)[] = [];
+    save.mockImplementation((revision, changes) => {
+      const apply = () => {
+        expect(revision).toBe(file.revision);
+        n += 1;
+        const defaults = Object.fromEntries(
+          Object.entries(changes).filter(([key]) => key !== "currency"),
+        );
+        file = {
+          ...file,
+          revision: `r${n}`,
+          listing_defaults: {
+            ...file.listing_defaults,
+            ...defaults,
+          } as ShopSettings["listing_defaults"],
+        };
+        return saved(file);
+      };
+      const answer = answers.shift();
+      return answer ? answer(apply) : Promise.resolve(apply());
+    });
+    return {
+      file: () => file,
+      /** The next save waits until the returned function answers it. */
+      hold() {
+        let release: (() => void) | undefined;
+        answers.push(
+          (apply) =>
+            new Promise((resolve) => {
+              release = () => resolve(apply());
+            }),
+        );
+        return async () => {
+          await waitFor(() => expect(release).toBeDefined());
+          await act(async () => release?.());
+        };
+      },
+      failNext(message: string) {
+        answers.push(() => Promise.reject(new Error(message)));
+      },
+    };
+  }
+
+  it("keeps a newer focused choice when an older save is answered", async () => {
+    const server = fileServer();
+    const answerAuto = server.hold();
+    await openDefaults();
+    const renewal = screen.getByLabelText("Renewal");
+    renewal.focus();
+    fireEvent.change(renewal, { target: { value: "auto" } });
+    fireEvent.blur(renewal);
+    renewal.focus();
+    fireEvent.change(renewal, { target: { value: "manual" } });
+
+    await answerAuto();
+    expect(renewal).toHaveValue("manual");
+    expect(renewal).toHaveFocus();
+    fireEvent.blur(renewal);
+
+    await waitFor(() => expect(save).toHaveBeenCalledTimes(2));
+    expect(save.mock.calls[1]).toEqual(["r2", { renewal: "manual" }]);
+    expect(await screen.findByText("Saved")).toBeInTheDocument();
+    expect(server.file().listing_defaults.renewal).toBe("manual");
+    expect(renewal).toHaveValue("manual");
+  });
+
+  it("keeps a newer queued choice while the older save is answered", async () => {
+    const server = fileServer();
+    const answerAuto = server.hold();
+    await openDefaults();
+    const renewal = screen.getByLabelText("Renewal");
+    fireEvent.change(renewal, { target: { value: "auto" } });
+    fireEvent.blur(renewal);
+    fireEvent.change(renewal, { target: { value: "manual" } });
+    fireEvent.blur(renewal);
+
+    await answerAuto();
+    expect(renewal).toHaveValue("manual");
+    await waitFor(() => expect(save).toHaveBeenCalledTimes(2));
+    expect(await screen.findByText("Saved")).toBeInTheDocument();
+    expect(server.file().listing_defaults.renewal).toBe("manual");
+    expect(renewal).toHaveValue("manual");
+  });
+
+  it("keeps a failed field unsaved through a sibling's success until it is retried", async () => {
+    const server = fileServer();
+    server.failNext("network down");
+    vi.spyOn(shopApi, "getShop").mockResolvedValue(shop({ who_made: "i_did" }));
+    await openDefaults();
+    const renewal = screen.getByLabelText("Renewal");
+    fireEvent.change(renewal, { target: { value: "auto" } });
+    fireEvent.blur(renewal);
+    expect(await screen.findByText("network down")).toBeInTheDocument();
+
+    const who = screen.getByLabelText("Who made it");
+    fireEvent.change(who, { target: { value: "someone_else" } });
+    fireEvent.blur(who);
+    await waitFor(() => expect(server.file().listing_defaults.who_made).toBe("someone_else"));
+    expect(screen.queryByText("Saved")).not.toBeInTheDocument();
+    expect(screen.getByText("network down")).toBeInTheDocument();
+    expect(renewal).toHaveValue("auto");
+    expect(server.file().listing_defaults.renewal).toBe("manual");
+
+    await userEvent.click(screen.getByRole("button", { name: "Retry save" }));
+    expect(await screen.findByText("Saved")).toBeInTheDocument();
+    expect(save.mock.lastCall?.[1]).toEqual({ renewal: "auto" });
+    expect(server.file().listing_defaults.renewal).toBe("auto");
+    expect(renewal).toHaveValue("auto");
+    expect(screen.queryByRole("button", { name: "Retry save" })).not.toBeInTheDocument();
+  });
+
+  it("retries a failed unchanged value when its field is left again", async () => {
+    const server = fileServer();
+    server.failNext("network down");
+    await openDefaults();
+    const renewal = screen.getByLabelText("Renewal");
+    fireEvent.change(renewal, { target: { value: "auto" } });
+    fireEvent.blur(renewal);
+    expect(await screen.findByText("network down")).toBeInTheDocument();
+
+    renewal.focus();
+    fireEvent.blur(renewal);
+    expect(await screen.findByText("Saved")).toBeInTheDocument();
+    expect(save).toHaveBeenCalledTimes(2);
+    expect(server.file().listing_defaults.renewal).toBe("auto");
+  });
+
   it("asks for a reload after a conflict and edits nothing until then", async () => {
     save.mockResolvedValueOnce({ kind: "conflict", message: "shop.yaml changed on disk" });
     await openDefaults();

@@ -303,3 +303,29 @@ it("serializes provider saves with other settings and keeps newer choices during
   ]);
   expect(screen.getByRole("button", { name: "Grok is off. Turn it on" })).toBeInTheDocument();
 });
+
+it("keeps a failed save failed through an unrelated success and retries only that patch", async () => {
+  vi.mocked(api.saveSettings)
+    .mockRejectedValueOnce(new Error("network down"))
+    .mockResolvedValueOnce(saved({ concurrency: 3 }))
+    .mockResolvedValueOnce(saved({ revision: "s3", concurrency: 3, weights: DEFAULTS }));
+  render(<SettingsPanel />);
+  fireEvent.click(await screen.findByRole("button", { name: "Claude is step 2. Turn it off" }));
+  expect(await screen.findByText("network down")).toBeInTheDocument();
+
+  const slider = screen.getByRole("slider", { name: "Listings drafted at once" });
+  fireEvent.change(slider, { target: { value: "3" } });
+  fireEvent.pointerUp(slider);
+  await waitFor(() => expect(api.saveSettings).toHaveBeenCalledTimes(2));
+  await act(async () => {});
+  expect(screen.queryByText("Saved")).not.toBeInTheDocument();
+  expect(screen.getByText("network down")).toBeInTheDocument();
+  expect(slider).toHaveValue("3");
+
+  fireEvent.click(screen.getByRole("button", { name: "Retry save" }));
+  expect(await screen.findByText("Saved")).toBeInTheDocument();
+  const retried = vi.mocked(api.saveSettings).mock.calls[2];
+  expect(retried?.[0]).toBe("s2");
+  expect(Object.keys(retried?.[1] ?? {})).toEqual(["providers"]);
+  expect(slider).toHaveValue("3");
+});

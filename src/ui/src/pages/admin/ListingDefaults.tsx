@@ -2,7 +2,7 @@ import { ArrowSquareOutIcon } from "@phosphor-icons/react/dist/csr/ArrowSquareOu
 import { SparkleIcon } from "@phosphor-icons/react/dist/csr/Sparkle";
 import { WarningIcon } from "@phosphor-icons/react/dist/csr/Warning";
 import { WarningOctagonIcon } from "@phosphor-icons/react/dist/csr/WarningOctagon";
-import { type ReactNode, useState } from "react";
+import { type ReactNode, useRef, useState } from "react";
 import type { SaveOutcome, ShopChanges, ShopSettings } from "../../api/shop";
 import { Info, type InfoState } from "./Info";
 import {
@@ -24,6 +24,10 @@ import type { FieldErrors } from "./useShopSettings";
 
 type Lookups = ReturnType<typeof useShopLookups>;
 type Save = (changes: ShopChanges) => Promise<SaveOutcome | null>;
+/** How a field's save was answered: written, refused by validation, or
+ * not known to have reached the file (a network failure or a conflict). */
+type Answer = "saved" | "refused" | "failed";
+type Commit = (changes: ShopChanges) => Promise<Answer>;
 
 /**
  * Listing defaults (interactions, *Listing defaults, info cards and
@@ -31,6 +35,7 @@ type Save = (changes: ShopChanges) => Promise<SaveOutcome | null>;
  * writes all three in one save; Custom shows their selectors and changes
  * nothing by itself. Every selector saves on blur, once, and only a change.
  * Lists come from live lookups; a saved choice they lack stays visible.
+ * Mounted afresh for each loaded file, so a reload drops local drafts.
  */
 export function ListingDefaults({
   shop,
@@ -50,17 +55,22 @@ export function ListingDefaults({
   const defaults = shop.listing_defaults;
   const [customChosen, setCustomChosen] = useState(false);
   const tier = customChosen || !isPrintOnDemand(defaults) ? "custom" : "pod";
-  const commit = (changes: ShopChanges) => void save(changes).catch(() => undefined);
+  const commit: Commit = (changes) =>
+    save(changes).then(
+      (outcome): Answer =>
+        outcome?.kind === "saved" ? "saved" : outcome?.kind === "invalid" ? "refused" : "failed",
+      (): Answer => "failed",
+    );
 
   const choosePod = () => {
     setCustomChosen(false);
-    if (!isPrintOnDemand(defaults)) commit(PRINT_ON_DEMAND);
+    if (!isPrintOnDemand(defaults)) void commit(PRINT_ON_DEMAND);
   };
   const customCommit = (changes: ShopChanges) => {
     // Editing one of the three keeps Custom open even if the values come
     // to match Print on demand; reopening the page derives it again.
     setCustomChosen(true);
-    commit(changes);
+    return commit(changes);
   };
 
   const policies = lookups.lookups?.etsy.return_policies ?? [];
@@ -338,7 +348,7 @@ function ListField({
   info: InfoState;
   locked: boolean;
   fieldErrors: FieldErrors;
-  save: (changes: ShopChanges) => void;
+  save: Commit;
   toChange: (value: string) => ShopChanges;
 }) {
   const found = lookups.found[field];
@@ -360,7 +370,7 @@ function ListField({
         disabled={locked || !available}
         onCommit={(value) => {
           if (found?.value === value) lookups.dismiss(field);
-          save(toChange(value));
+          return save(toChange(value));
         }}
       />
       {available && missing && (
@@ -378,7 +388,7 @@ function ListField({
             disabled={locked}
             onClick={() => {
               lookups.dismiss(field);
-              save(toChange(found.value));
+              void save(toChange(found.value));
             }}
           >
             Use it
@@ -391,8 +401,14 @@ function ListField({
 
 /**
  * A select that saves on blur: changing it only changes what it shows, and
- * leaving it saves the shown value once, if it differs from the saved one.
- * A refused value stays shown until the seller picks another or reloads.
+ * leaving it saves the shown value once, if it differs from what the file
+ * will hold once this field's sent saves land.
+ *
+ * Each save carries the edit it was made from, and only its own answer drops
+ * the draft, and only if nothing was chosen since: an older answer never
+ * replaces a newer choice, focused or already queued. A failed save keeps
+ * the draft, and leaving the field sends it again. A refused value stays
+ * shown with its error until the seller picks another or reloads.
  */
 function BlurSelect({
   label,
@@ -405,17 +421,12 @@ function BlurSelect({
   saved: string;
   options: Option[];
   disabled: boolean;
-  onCommit: (value: string) => void;
+  onCommit: (value: string) => Promise<Answer>;
 }) {
   const [draft, setDraft] = useState<string | null>(null);
-  const [committed, setCommitted] = useState<string | null>(null);
-  // A save that lands (or a reload) makes the saved value the shown one.
-  const [seen, setSeen] = useState(saved);
-  if (seen !== saved) {
-    setSeen(saved);
-    setDraft(null);
-    setCommitted(null);
-  }
+  const edits = useRef(0);
+  const sent = useRef<{ value: string; edit: number } | null>(null);
+  const refused = useRef<string | null>(null);
 
   const shown = draft ?? saved;
   return (
@@ -425,13 +436,21 @@ function BlurSelect({
       disabled={disabled}
       value={shown}
       onChange={(e) => {
+        edits.current += 1;
+        refused.current = null;
         setDraft(e.target.value);
-        setCommitted(null);
       }}
       onBlur={() => {
-        if (draft === null || draft === saved || committed === draft) return;
-        setCommitted(draft);
-        onCommit(draft);
+        if (draft === null || draft === refused.current) return;
+        if (draft === (sent.current?.value ?? saved)) return;
+        const mine = { value: draft, edit: edits.current };
+        sent.current = mine;
+        void onCommit(draft).then((answer) => {
+          if (sent.current !== mine) return;
+          sent.current = null;
+          if (answer === "refused") refused.current = mine.value;
+          else if (answer === "saved" && edits.current === mine.edit) setDraft(null);
+        });
       }}
     >
       {options.map((o) => (
