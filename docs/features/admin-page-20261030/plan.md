@@ -177,10 +177,12 @@ Execution started on 2026-10-30 from stack-base commit `5bbcd7df`.
 
 | PR | Branch | Link |
 |---|---|---|
-| 1 | `feat/admin-1-local-fixes` | To be recorded |
+| 1 | `feat/admin-1-local-fixes` | [PR #144](https://github.com/eli-jordan/etsy-listing-automation/pull/144) |
+| 2 | `feat/admin-2-yaml-roundtrip` | [PR #145](https://github.com/eli-jordan/etsy-listing-automation/pull/145) |
 | 3 | `feat/admin-3-shop` | [PR #146](https://github.com/eli-jordan/etsy-listing-automation/pull/146) |
 | 4 | `feat/admin-4-settings` | [PR #147](https://github.com/eli-jordan/etsy-listing-automation/pull/147) |
 | 5 | `feat/admin-5-ai-providers` | [PR #148](https://github.com/eli-jordan/etsy-listing-automation/pull/148) |
+| 6 | `feat/admin-6-ai-time-limits` | [PR #149](https://github.com/eli-jordan/etsy-listing-automation/pull/149) |
 
 ### PR 1: carry the local timeout and catalog fixes
 
