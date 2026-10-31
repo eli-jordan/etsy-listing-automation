@@ -1,6 +1,7 @@
 # Finish brief
 
-The message that continues PR n's agent once its build report is accepted.
+The message, sent with `t3_thread_send`, that continues PR n's delegate once
+its build report is accepted.
 It already has the context, so this carries only what changed and what "done"
 means.
 
@@ -43,5 +44,6 @@ force-push**.
    Etsy token is stale, stop and report.
 
 Report: the PR URL, final tip and size, CI and e2e results with URLs, the
-commits added in this pass, and anything still red.
+commits added in this pass, and anything still red. End with the line
+`PR <full URL>, head <SHA>, checks and reviews <state>`.
 ````

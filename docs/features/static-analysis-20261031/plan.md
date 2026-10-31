@@ -27,15 +27,15 @@ The planning commit contains `spec.md`, this plan and the
 **stack base**; record it in `execution.md` before launching PR 1. The
 measurements below were taken on `00e1e371` (main, 2026-10-31).
 
-| PR | Conventional title | Spec | Depends on |
-|---|---|---|---|
-| 1 | `build: add poe task runner, agent lint hook and quality CI job` | S06–S10, S12 | Stack base |
-| 2 | `style: enable mechanical ruff families and rename exceptions` | S01 | 1 |
-| 3 | `refactor: enable judgment ruff families and argument limits` | S01, S02 (arguments) | 2 |
-| 4 | `refactor: remove dead code and duplication` | S04, S05 | 3 |
-| 5 | `refactor(ui): enable sonarjs recommended rules` | S02 (frontend), S03 | 4 |
-| 6 | `refactor: reduce complexity in application and preparation` | S02 | 5 |
-| 7 | `refactor: reduce complexity in engine and remaining packages; enable gates` | S02 | 6 |
+| PR | Conventional title | Spec | Depends on | Difficulty |
+|---|---|---|---|---|
+| 1 | `build: add poe task runner, agent lint hook and quality CI job` | S06–S10, S12 | Stack base | hard |
+| 2 | `style: enable mechanical ruff families and rename exceptions` | S01 | 1 | mechanical |
+| 3 | `refactor: enable judgment ruff families and argument limits` | S01, S02 (arguments) | 2 | standard |
+| 4 | `refactor: remove dead code and duplication` | S04, S05 | 3 | standard |
+| 5 | `refactor(ui): enable sonarjs recommended rules` | S02 (frontend), S03 | 4 | standard |
+| 6 | `refactor: reduce complexity in application and preparation` | S02 | 5 | hard |
+| 7 | `refactor: reduce complexity in engine and remaining packages; enable gates` | S02 | 6 | hard |
 
 Each PR enables its rules in the same change that removes their last
 violation, so every layer is green and no temporary suppression is added.
