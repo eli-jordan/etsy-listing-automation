@@ -77,6 +77,8 @@ def test_reviewed_market_values_load_without_rewriting_relative_weights(
     )
     assert path.read_bytes() == source
     capture(page, theme, "market")
+    page.get_by_role("heading", name="Batch AI").scroll_into_view_if_needed()
+    capture(page, theme, "batch")
 
 
 def test_keyboard_edits_and_reset_persist_only_completed_changes(
