@@ -313,6 +313,9 @@
   margin-bottom: 5px;
   color: color-mix(in srgb, var(--color-text) 70%, transparent);
 }
+.adm-select--invalid {
+  border-color: var(--color-warning);
+}
 .b-step__off-note {
   font-size: 13px;
   color: color-mix(in srgb, var(--color-text) 60%, transparent);
