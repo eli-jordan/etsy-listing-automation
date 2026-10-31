@@ -127,7 +127,7 @@ def calibrator_server(
 DEFAULT_TIMEOUT_MS = 60_000
 """Headroom over Playwright's 30s default, because every wait in this layer
 sits behind the *real* render pipeline running in-process -- and under
-`pytest --cov`, which is how `scripts/check.sh` runs it, that is meaningfully
+`pytest --cov`, which is how `poe check` runs it, that is meaningfully
 slower than a normal browser interaction.
 
 It buys margin; it is not a fix for anything. A wait here that actually

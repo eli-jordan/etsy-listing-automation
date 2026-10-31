@@ -10,9 +10,9 @@
 # `gh workflow run e2e` re-runs it without also re-running lint, both test
 # matrices and the browser layer.
 #
-# The gates mirror scripts/check.sh rather than calling it: that script is bash
-# and reformats in place (`ruff format .`), neither of which suits a Windows
-# runner. Change one, change the other.
+# The Python steps call the check-only poe tasks in pyproject.toml, the same
+# definitions `uv run poe check` runs locally (spec S09, S10), so the two
+# cannot drift. Lint runs once, in `quality`; the two-OS matrix only tests.
 name: CI
 
 on:
@@ -30,6 +30,26 @@ permissions:
   contents: read
 
 jobs:
+  quality:
+    # Format check, ruff, mypy and Import Linter (`poe lint`). Their verdicts do
+    # not depend on the OS, so they run once, on ubuntu.
+    name: quality
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      # Pinned exactly: setup-uv publishes no moving major tag past v7.
+      - uses: astral-sh/setup-uv@v10.0.1
+        with:
+          enable-cache: true
+
+      # Without npm the editable build skips the SPA, which no lint step reads.
+      - name: install (locked)
+        run: uv sync --frozen
+
+      - name: lint
+        run: uv run poe lint
+
   python:
     # Both platforms, deliberately. Development happens on Windows and the
     # render goldens were generated there; the exact OpenCV/Pillow pins exist so
@@ -64,25 +84,12 @@ jobs:
       - name: install (locked)
         run: uv sync --frozen
 
-      - name: ruff format
-        run: uv run ruff format --check .
-
-      - name: ruff check
-        run: uv run ruff check .
-
-      - name: mypy
-        run: uv run mypy src
-
-      # Core/server/CLI dependency direction (ADR-0052), contracts in pyproject.toml.
-      - name: import-linter
-        run: uv run lint-imports
-
-      # An explicit -m replaces addopts: exclude both browser and e2e here.
-      # This leaves unit, golden, behaviour and contract. The 85% branch floor comes from
-      # `fail_under` in pyproject.toml, so this gate and a local `check.sh` can
-      # never disagree about the number.
+      # `poe test-ci`: unit, golden, behaviour and contract; browser and e2e
+      # excluded. The 85% branch floor comes from `fail_under` in
+      # pyproject.toml, so this gate and a local `poe check` can never disagree
+      # about the number.
       - name: pytest + coverage (branch, fail under 85%)
-        run: uv run pytest -m "not browser and not e2e" --cov --cov-report=term-missing
+        run: uv run poe test-ci
 
   frontend:
     name: frontend
@@ -120,9 +127,9 @@ jobs:
         run: npm run test:design
 
   browser:
-    # Every trigger runs browsers after the Python and frontend gates.
+    # Every trigger runs browsers after the lint, Python and frontend gates.
     name: browser
-    needs: [python, frontend]
+    needs: [quality, python, frontend]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -155,8 +162,8 @@ jobs:
       # ETSY_LISTINGS_REQUIRE_EVERY_LAYER makes that a failure naming the
       # prerequisite, so this job cannot pass without doing its job.
       # The opt-in `capture` screenshots stay out unless -m names them
-      # (tests/conftest.py); check.sh's default selection agrees.
-      - name: pytest -m browser
+      # (tests/conftest.py); `poe check`'s default selection agrees.
+      - name: pytest -m browser (poe test-browser)
         env:
           ETSY_LISTINGS_REQUIRE_EVERY_LAYER: "1"
-        run: uv run pytest -m browser
+        run: uv run poe test-browser

@@ -37,7 +37,7 @@ tests/ core/ server/ cli/ by owner, then layer (unit, golden, behaviour, contrac
   doubles in tests/support/; project-wide build/CI tests (packaging, CI selection, OpenAPI export, import contracts,
   protected test imports) directly in tests/
 docs/ guides/, features/<topic>-YYYYMMDD/, adr/, reference/, research/, history/, architecture.md
-scripts/ check.sh, sloc.py, generate_test_assets.py
+scripts/ agent_lint.py (per-edit hook), frontend_gate.py, sloc.py, generate_test_assets.py
 ```
 
 Every package's `__init__.py` states what it exports and deliberately withholds. Read that before reaching into a submodule.
@@ -50,7 +50,8 @@ Run all of these in cygwin zsh from the repo root (see Environment).
 
 ```
 uv sync # install deps + create .venv
-./scripts/check.sh # format + lint + typecheck + test + coverage gate, Python and frontend
+uv run poe check # fix + format, then lint + typecheck + import contracts + test + coverage gate, Python and frontend
+uv run poe lint # report-only lint (CI's quality job); `uv run poe` lists every task
 uv run pytest # full suite (excludes -m e2e by default)
 uv run pytest tests/core/unit/test_money.py # one file
 uv run pytest tests/core/unit/test_money.py::test_parses_amount_and_currency # one test
@@ -160,12 +161,22 @@ Run it locally before merging rather than iterating through CI. `gh workflow run
 
 <important if="you are adding code that changes test coverage, or a coverage gate fails">
 
-`./scripts/check.sh` fails under 85% **branch** coverage (`fail_under` in `pyproject.toml`); the frontend has the same floor via `npm run test:coverage`. Write the test — never lower the threshold or add `# pragma: no cover` (only genuinely unreachable code like `__main__` guards, already configured). `check.sh` runs `npm run format` (writes); CI runs `format:check`. `check.sh` skips the frontend gate when `npm` is absent.
+`uv run poe check` fails under 85% **branch** coverage (`fail_under` in `pyproject.toml`); the frontend has the same floor via `npm run test:coverage`. Write the test — never lower the threshold or add `# pragma: no cover` (only genuinely unreachable code like `__main__` guards, already configured). `poe check` runs `npm run format` (writes); CI runs `format:check`. `poe check` skips the frontend gate when `npm` is absent.
 </important>
 
-<important if="you are changing CI workflows or scripts/check.sh">
+<important if="you are editing code, or the lint hook reports findings after an edit">
 
-[ci.yml](.github/workflows/ci.yml): PRs, pushes to `main` and manual runs run format-check, ruff, mypy, `lint-imports` and `pytest -m "not browser and not e2e"` under the coverage floor on ubuntu and windows, plus the frontend gate. A separate `pytest -m browser` job runs after those gates on all three triggers; the opt-in `capture` screenshots are deselected unless `-m` names them (`tests/conftest.py`), so neither CI nor `check.sh` runs them. These jobs use no real shop APIs. [e2e.yml](.github/workflows/e2e.yml): `pytest -m e2e`, on push to `main` or manually. Windows is in the matrix because goldens were generated there; ubuntu proves the OpenCV/Pillow pins produce the same bytes. CI mirrors `check.sh` rather than calling it — change one, change the other.
+[`scripts/agent_lint.py`](scripts/agent_lint.py) runs after every edit you make in Claude, Grok or Codex ([static analysis spec](docs/features/static-analysis-20261031/spec.md), S06). It applies safe fixes to the file, then reports what is left (ruff, mypy through a warm dmypy daemon, ESLint); exit 2 means its stderr lists findings you must deal with before moving on. mypy findings appear only once the daemon has finished its first check, about 30s into a session.
+
+- Fix the finding. Do not suppress it to make the hook pass.
+- A suppression you add must say why: `# noqa: E501 -- <reason>`, `// eslint-disable-next-line <rule> -- <reason>`, and for mypy, which rejects text after the code, `# type: ignore[code]  # -- <reason>` (S07). The hook rejects one without a reason.
+- Never loosen a threshold or rule configuration to pass a check (S02).
+- `uv run poe check` and CI run the whole-program checks the hook does not.
+</important>
+
+<important if="you are changing CI workflows or the poe tasks in pyproject.toml">
+
+[ci.yml](.github/workflows/ci.yml): PRs, pushes to `main` and manual runs run `poe lint` (format-check, ruff, mypy, `lint-imports`) once in the `quality` job, `poe test-ci` (`pytest -m "not browser and not e2e"` under the coverage floor) on ubuntu and windows, plus the frontend gate. A separate `pytest -m browser` job runs after those gates on all three triggers; the opt-in `capture` screenshots are deselected unless `-m` names them (`tests/conftest.py`), so neither CI nor `poe check` runs them. These jobs use no real shop APIs. [e2e.yml](.github/workflows/e2e.yml): `pytest -m e2e`, on push to `main` or manually. Windows is in the matrix because goldens were generated there; ubuntu proves the OpenCV/Pillow pins produce the same bytes. CI calls the poe tasks defined in `pyproject.toml` rather than listing commands, so a check is changed in one place; the frontend job, which has no Python, runs the npm scripts `poe frontend` runs (`tests/test_ci_selection.py` compares them).
 </important>
 
 <important if="you are measuring or reducing code size">

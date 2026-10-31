@@ -3,19 +3,39 @@
 import shlex
 import subprocess
 import sys
+import tomllib
 from pathlib import Path
 
 import yaml
 
+ROOT = Path(__file__).resolve().parents[1]
+
+
+def _poe_command(task: str) -> str:
+    """The command line a poe task in pyproject.toml runs (S09)."""
+    tasks = tomllib.loads((ROOT / "pyproject.toml").read_text())["tool"]["poe"]["tasks"]
+    definition = tasks[task]
+    return definition if isinstance(definition, str) else definition["cmd"]
+
+
+def _ci_poe_command(job: str, prefix: str) -> str:
+    """The command behind the poe task a CI job runs, where its name starts with prefix.
+
+    CI calls poe tasks rather than listing commands (S10), so a selection is
+    read from the task the workflow names.
+    """
+    workflow = yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text())
+    task = next(
+        step["run"].split()[3]
+        for step in workflow["jobs"][job]["steps"]
+        if step.get("run", "").startswith(f"uv run poe {prefix}")
+    )
+    return _poe_command(task)
+
 
 def test_python_ci_collects_only_hermetic_layers(tmp_path: Path) -> None:
-    root = Path(__file__).resolve().parents[1]
-    workflow = yaml.safe_load((root / ".github/workflows/ci.yml").read_text())
-    command = next(
-        step["run"]
-        for step in workflow["jobs"]["python"]["steps"]
-        if step.get("run", "").startswith("uv run pytest")
-    )
+    root = ROOT
+    command = _ci_poe_command("python", "test")
     args = shlex.split(command)
     selection = args[args.index("-m") + 1]
     result = subprocess.run(
@@ -49,23 +69,22 @@ def _npm_scripts(command: str) -> list[str]:
     ]
 
 
-def test_frontend_gate_runs_production_and_prototype_tests_in_ci_and_check_sh() -> None:
-    # CI mirrors check.sh rather than calling it, so the frontend test scripts
-    # each one runs are compared here: dropping the required prototype command
-    # from either side, or folding it into coverage, fails.
-    root = Path(__file__).resolve().parents[1]
-    workflow = yaml.safe_load((root / ".github/workflows/ci.yml").read_text())
+def test_frontend_gate_runs_production_and_prototype_tests_in_ci_and_poe_check() -> None:
+    # The frontend CI job runs npm directly (it has no Python), so the test
+    # scripts it runs are compared with those `poe check` runs: dropping the
+    # required prototype command from either side, or folding it into
+    # coverage, fails.
+    workflow = yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text())
     ci = [
         script
         for step in workflow["jobs"]["frontend"]["steps"]
         for script in _npm_scripts(step.get("run", ""))
         if script.startswith("test")
     ]
+    gate = shlex.split(_poe_command("frontend"))
     check = [
         script
-        for line in (root / "scripts/check.sh").read_text().splitlines()
-        if not line.lstrip().startswith("#")
-        for script in _npm_scripts(line)
+        for script in gate[gate.index("scripts/frontend_gate.py") + 1 :]
         if script.startswith("test")
     ]
     assert ci == check == ["test:coverage", "test:design"]
@@ -100,16 +119,12 @@ def _names(ids: set[str]) -> set[str]:
 
 
 def test_required_browser_selection_excludes_only_the_opt_in_captures(tmp_path: Path) -> None:
-    root = Path(__file__).resolve().parents[1]
-    workflow = yaml.safe_load((root / ".github/workflows/ci.yml").read_text())
-    command = next(
-        step["run"]
-        for step in workflow["jobs"]["browser"]["steps"]
-        if step.get("run", "").startswith("uv run pytest")
-    )
-    args = shlex.split(command)
+    root = ROOT
+    args = shlex.split(_ci_poe_command("browser", "test"))
     required = _collected(root, tmp_path, *args[args.index("-m") :])
-    # check.sh runs the default selection, which must agree.
+    # `poe check` runs the default selection, which must agree.
+    check = shlex.split(_poe_command("test"))
+    assert "-m" not in check
     default = _collected(root, tmp_path)
     everything = _collected(root, tmp_path, "-m", "browser or capture")
     assert required == default
@@ -121,5 +136,19 @@ def test_required_browser_selection_excludes_only_the_opt_in_captures(tmp_path: 
 
 
 def test_the_capture_marker_selects_exactly_the_six_scenes(tmp_path: Path) -> None:
-    root = Path(__file__).resolve().parents[1]
+    root = ROOT
     assert _names(_collected(root, tmp_path, "-m", "capture")) == CAPTURE_SCENES
+
+
+def test_lint_runs_once_in_the_quality_job_and_the_test_matrix_only_tests() -> None:
+    # S10: format check, ruff, mypy and Import Linter run once, on ubuntu,
+    # through the same poe task a developer can run; the two-OS matrix exists
+    # for the render goldens and runs tests alone.
+    workflow = yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text())
+    quality = [step.get("run", "") for step in workflow["jobs"]["quality"]["steps"]]
+    assert "uv run poe lint" in quality
+    tasks = tomllib.loads((ROOT / "pyproject.toml").read_text())["tool"]["poe"]["tasks"]
+    lint = [_poe_command(name) for name in tasks["lint"]]
+    assert lint == ["ruff format --check .", "ruff check .", "mypy src", "lint-imports"]
+    python = [step.get("run", "") for step in workflow["jobs"]["python"]["steps"]]
+    assert not [run for run in python if any(tool in run for tool in ("ruff", "mypy", "lint"))]

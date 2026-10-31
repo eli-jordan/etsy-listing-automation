@@ -55,7 +55,53 @@ dev = [
     "types-pyyaml",
     "playwright>=1.49,<2",
     "import-linter>=2.15,<3",
+    "poethepoet>=0.37,<1",
 ]
+
+# Every check is defined once, here (spec S09). `uv run poe check` is what you
+# run before committing: it fixes and formats in place, then runs every gate.
+# CI calls the check-only tasks (`lint`, `test-ci`, `test-browser`).
+[tool.poe]
+# A developer who works on a real workspace exports ETSY_LISTINGS_ROOT, and
+# `Workspace.discover()` consults it before walking up from cwd. The workspace
+# tests would then discover *that* workspace instead of their fixture copy,
+# and fail for a reason unrelated to the change being checked. The checks
+# should not depend on any workspace, so every task clears it: poe cannot
+# unset a variable, and both `discover()` and Typer's envvar treat an empty
+# value as absent. Tests that want it set it themselves; the only layer that
+# reads it from the environment is `-m e2e`, which no task here runs.
+env = { ETSY_LISTINGS_ROOT = "" }
+
+[tool.poe.tasks]
+format = "ruff format ."
+format-check = "ruff format --check ."
+# Applies what it can and never fails; `ruff` afterwards reports the rest.
+fix = "ruff check --fix --exit-zero --quiet ."
+ruff = "ruff check ."
+mypy = "mypy src"
+# Core/server/CLI dependency direction and protected application modules
+# (ADR-0052); contracts below.
+imports = "lint-imports"
+# The `quality` CI job: report only, change nothing.
+lint = ["format-check", "ruff", "mypy", "imports"]
+# Coverage is measured over the whole default selection, browser layer
+# included. Those tests skip themselves when chromium or src/ui/dist is
+# missing, which costs about a point; the 85% floor (`fail_under`, below) has
+# the headroom to pass either way. The opt-in `capture` screenshots are
+# deselected by tests/conftest.py, as in CI's browser job.
+test = "pytest --cov --cov-report=term-missing --cov-report=html"
+# The CI matrix: an explicit -m replaces addopts, excluding browser and e2e.
+# That leaves unit, golden, behaviour and contract, under the same floor.
+test-ci = "pytest -m 'not browser and not e2e' --cov --cov-report=term-missing"
+test-browser = "pytest -m browser"
+# `npm run format` writes, as `ruff format .` does; CI's frontend job runs
+# `format:check`. `test:design` runs the marver prototype frames' tests:
+# required, but a separate Vitest project outside production coverage.
+# Skipped, not failed, when npm is not on PATH.
+frontend = "python scripts/frontend_gate.py format lint typecheck test:coverage test:design"
+# Fix, then format (so a fix's output is formatted and E501 is judged on
+# formatted lines), then report what is left.
+check = ["fix", "format", "ruff", "mypy", "imports", "test", "frontend"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -151,7 +197,7 @@ warn_required_dynamic_aliases = true
 # temporary exclusion cannot outlive the code it excuses. Every temporary
 # exclusion names the PR of docs/features/module-structure-20260930/plan.md
 # that removes it; none may survive PR 11. `uv run lint-imports` runs in
-# scripts/check.sh and CI; tests/test_import_contracts.py proves these
+# `poe check` and CI's `quality` job; tests/test_import_contracts.py proves these
 # contracts reject representative violations.
 #
 # Wizard sequencing, prompts and terminal output are all under etsy_listings.cli

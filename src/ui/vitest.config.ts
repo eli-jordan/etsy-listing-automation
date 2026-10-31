@@ -18,7 +18,7 @@ import react from "@vitejs/plugin-react";
 //   dom    -- everything else under src/: components, hooks, storage and the
 //             transport modules (fetch/Blob/EventSource are browser APIs the
 //             app runs against), with jsdom and setup.ts.
-//   design -- the marver prototype frames' own tests. Required (check.sh and
+//   design -- the marver prototype frames' own tests. Required (`poe check` and
 //             CI run `test:design`), but kept out of `test:coverage`: the
 //             frames import production components, and exercising those from
 //             a prototype is not production coverage.

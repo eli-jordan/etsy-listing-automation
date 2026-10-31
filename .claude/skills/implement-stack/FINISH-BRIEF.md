@@ -12,7 +12,7 @@ force-push**.
 
 1. **Fixes from review**, each a new commit with a test:
    <the orchestrator's decisions on the report's undone/uncertain items>
-2. **Full gates.** `./scripts/check.sh` and `uv run pytest -m browser`. A
+2. **Full gates.** `uv run poe check` and `uv run pytest -m browser`. A
    failure not in the baseline (<baseline ids>) is yours to fix.
 3. **Every success condition** in the plan's PR <n> section and every shared
    gate it lists, checked one by one. Anything you cannot meet goes in the
