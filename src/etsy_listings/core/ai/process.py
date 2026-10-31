@@ -28,6 +28,7 @@ import signal
 import subprocess
 import sys
 import threading
+import time
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -151,11 +152,13 @@ def _kill_process_tree(proc: subprocess.Popen[str]) -> None:
     `Popen` itself as reaped.
     """
     if sys.platform == "win32":
-        subprocess.run(
-            ["taskkill", "/T", "/F", "/PID", str(proc.pid)],
-            capture_output=True,
-            check=False,
-        )
+        with contextlib.suppress(OSError, subprocess.TimeoutExpired):
+            subprocess.run(
+                ["taskkill", "/T", "/F", "/PID", str(proc.pid)],
+                capture_output=True,
+                check=False,
+                timeout=_REAP_TIMEOUT,
+            )
     else:
         descendants = _posix_descendant_pids(proc.pid)
         with contextlib.suppress(ProcessLookupError):
@@ -227,8 +230,9 @@ def run_managed(
         worker.join(timeout=poll_interval)
 
     if timed_out or cancelled:
+        reap_at = time.monotonic() + _REAP_TIMEOUT
         _kill_process_tree(proc)
-        worker.join(timeout=_REAP_TIMEOUT)
+        worker.join(timeout=max(0.0, reap_at - time.monotonic()))
 
     return ProcessResult(
         returncode=proc.poll(),

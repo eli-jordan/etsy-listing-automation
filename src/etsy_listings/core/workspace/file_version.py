@@ -1,8 +1,9 @@
 """Content-change tokens for in-process caches, never deployment input hashes.
 
 Windows may give consecutive same-size writes identical timestamps. NTFS USNs
-identify completed writes independently of that clock. Unsupported Windows
-filesystems use a content hash; POSIX change time cannot be restored by utime.
+identify writes after the last writable handle closes. While another writer
+is open, or on unsupported Windows filesystems, use a content hash. POSIX
+change time cannot be restored by utime.
 """
 
 from __future__ import annotations
@@ -45,10 +46,14 @@ def _kernel_api() -> ctypes.CDLL:
 
 
 def _windows_usn(path: Path) -> int | None:
-    # FILE_READ_ATTRIBUTES, share read/write/delete, OPEN_EXISTING. No locks,
-    # writes, journal enumeration or administrator privileges are requested.
+    # FILE_READ_DATA | FILE_READ_ATTRIBUTES, share read/delete, OPEN_EXISTING.
+    # Attribute-only handles bypass Windows sharing checks. USN reasons
+    # coalesce while another writable handle remains open, so a USN alone
+    # cannot detect every overwrite then. Denying write sharing for this short
+    # metadata read proves quiescence; if another writer is open, fall back to
+    # the content hash instead. Atomic replacement is still shared/allowed.
     api = _kernel_api()
-    handle = api.CreateFileW(str(path), 0x80, 7, None, 3, 0, None)
+    handle = api.CreateFileW(str(path), 0x81, 5, None, 3, 0, None)
     if handle in (None, ctypes.c_void_p(-1).value):
         return None
     try:

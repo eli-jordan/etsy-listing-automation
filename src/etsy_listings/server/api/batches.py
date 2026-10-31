@@ -163,6 +163,10 @@ def _steps(request: Request, row: BatchRow) -> list[WorkflowStep]:
 
 def _batch_detail(request: Request, batch: Batch) -> BatchDetail:
     queue = _queue(request)
+    try:
+        concurrency = queue.concurrency()
+    except ConfigLoadError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     positions = {slot: place for place, slot in enumerate(queue.order(), start=1)}
     workspace = _workspace(request)
     facts = WorkspaceFacts.gather(workspace)
@@ -195,7 +199,7 @@ def _batch_detail(request: Request, batch: Batch) -> BatchDetail:
         listing_template=batch.listing_template,
         created_at=batch.created_at,
         rows=rows,
-        concurrency=queue.concurrency(),
+        concurrency=concurrency,
         status=standing(batch.rows).status,
     )
 
