@@ -43,6 +43,7 @@ from etsy_listings.server.api.media_files import router as media_files_router
 from etsy_listings.server.api.preparation import router as preparation_router
 from etsy_listings.server.api.runs import router as runs_router
 from etsy_listings.server.api.seo import router as seo_router
+from etsy_listings.server.api.shop import router as shop_router
 from etsy_listings.server.api.templates import router as templates_router
 
 
@@ -175,6 +176,7 @@ def create_app(
     app.include_router(runs_router)
     app.include_router(ai_runs_router)
     app.include_router(seo_router)
+    app.include_router(shop_router)
 
     @app.get("/api/health")
     def health() -> dict[str, str]:

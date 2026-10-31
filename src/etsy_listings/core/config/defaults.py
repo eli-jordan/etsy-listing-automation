@@ -171,12 +171,18 @@ class Defaults(BaseModel):
         if not path.is_file():
             raise ConfigLoadError(path, "file not found")
         raw = parse_yaml(path, path.read_text(encoding="utf-8")) or {}
-        if isinstance(raw, dict):
-            _refuse_moved_keys(path, raw)
         try:
-            return cls.model_validate(raw)
+            return cls.from_document(path, raw)
         except ValidationError as exc:
             raise format_validation_error(path, exc) from exc
+
+    @classmethod
+    def from_document(cls, path: Path, raw: object) -> Defaults:
+        """``raw`` read as ``path`` would be, raising pydantic's own error so
+        an editor can name each refused field (the Admin page's Shop saves)."""
+        if isinstance(raw, dict):
+            _refuse_moved_keys(path, raw)
+        return cls.model_validate(raw)
 
 
 def _refuse_moved_keys(path: Path, raw: dict[str, object]) -> None:

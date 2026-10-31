@@ -1,7 +1,8 @@
 # Admin page implementation plan
 
 Written 2026-10-30 from the agreed Shop and Settings mockups and planning
-interview. Status: agreed implementation sequence and design, not implemented.
+interview. Status: PRs 1–3 implemented on stacked branches; Settings and AI
+configuration remain later deliveries.
 The remaining mockup states were approved on 2026-10-30 and are recorded in
 the [interaction companion](interactions.md), with prototype source references
 and screenshots. There is deliberately no separate `spec.md`.
@@ -53,6 +54,11 @@ explicit currency remains unchanged and may require a seller edit before the
 next deployment validates. The prototype uses
 [Etsy's supported list](https://help.etsy.com/hc/en-us/articles/360000337767-Currencies-Supported-for-Etsy-Payments),
 checked 2026-10-30; verify it again during implementation.
+
+The PR 3 review narrowed the picker and PATCH boundary to currencies with ISO
+4217 minor-unit exponent 2. Etsy lists 22 currencies; 21 are offered. VND is
+excluded because ADR-0019's current `Money.minor_units` assumes two decimals.
+Its arithmetic and the broader Defaults model are unchanged.
 
 Derive Print on demand from `who_made: someone_else`,
 `when_made: made_to_order` and `is_supply: false`. There is no stored preset key.
@@ -172,6 +178,7 @@ Execution started on 2026-10-30 from stack-base commit `5bbcd7df`.
 | PR | Branch | Link |
 |---|---|---|
 | 1 | `feat/admin-1-local-fixes` | To be recorded |
+| 3 | `feat/admin-3-shop` | [PR #146](https://github.com/eli-jordan/etsy-listing-automation/pull/146) |
 
 ### PR 1: carry the local timeout and catalog fixes
 
@@ -292,7 +299,7 @@ batch semantics. Shared gates pass.
 | G3 | Run `npm run test:design` separately from `src/ui`. For UI PRs, build the SPA and run the relevant `pytest -m browser` cases. Frames stay fixture-driven. |
 | G4 | Regenerate `docs/openapi.json` and the typed client after API shape changes. Keep core free of server/CLI imports and pass Import Linter. |
 | G5 | Compare UI behaviour with the reviewed mockups and interaction companion. Validate keyboard controls, focus, save/error/conflict states and both themes. |
-| G6 | Run the existing real-shop e2e suite locally before merge, using the established workspace/credentials and serializing access to the real shop. Record evidence or the exact missing prerequisite. |
+| G6 | Local e2e waived by the seller on 2026-10-30; the try-workspace was removed. Run the existing GitHub e2e workflow serially after green CI and record its URL. Never use the seller's real local workspace. |
 | G7 | Update affected current requirements, architecture, guides and ADR citations in the owning PR. Record its URL and any agreed deviation here. |
 
 ## Approved design reference
@@ -305,4 +312,4 @@ Start with `settings-limits/d-revised` and
 `settings-raised/d-revised` on the `admin-shop` board. The prior prototype is
 preserved as `admin-shop-v1` on the archive board. Screenshots are checked in
 beside the interaction document; the prototype stays fixture-driven during
-implementation. Production implementation has not started.
+implementation. The Shop implementation preserves these fixture-driven frames.

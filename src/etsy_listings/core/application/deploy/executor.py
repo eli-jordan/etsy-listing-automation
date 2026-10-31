@@ -228,7 +228,8 @@ class RunExecutor:
 
     def _run_plan(self, run: Run) -> None:
         run.transition_plan("planning")
-        ctx = self.context_factory(self.workspace, None)
+        # One shop.yaml for the whole run, whatever the Admin page saves meanwhile.
+        ctx = self.context_factory(self.workspace.snapshot(), None)
 
         def emit(event: EngineRunEvent) -> None:
             self._append_engine_event(run, event)
@@ -278,7 +279,7 @@ class RunExecutor:
         def emit(event: EngineRunEvent) -> None:
             self._append_engine_event(run, event)
 
-        ctx = self.context_factory(self.workspace, None)
+        ctx = self.context_factory(self.workspace.snapshot(), None)
         report = apply_listings(
             ctx,
             run.listings,

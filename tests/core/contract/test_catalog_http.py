@@ -235,3 +235,28 @@ def test_shipping_decodes_profiles_and_ignores_unknown_fields() -> None:
     assert rates.first_item_cost_cents(1) == 500
     assert rates.first_item_cost_cents(2) == 500
     assert rates.first_item_cost_cents(999) is None
+
+
+def test_every_print_provider_comes_from_the_catalog_wide_list() -> None:
+    """The Admin page's preferred provider offers the whole catalog, not one
+    blueprint's providers (Admin plan, *Shop*). Printify's own documented
+    shape; `location` is extra detail the model ignores."""
+    seen: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request.url.path)
+        return httpx.Response(
+            200,
+            json=[
+                {"id": 29, "title": "Monster Digital", "location": {"country": "US"}},
+                {"id": 99, "title": "Printify Choice"},
+            ],
+        )
+
+    providers = _client(handler).all_print_providers()
+
+    assert seen == ["/v1/catalog/print_providers.json"]
+    assert [(p.id, p.title) for p in providers] == [
+        (29, "Monster Digital"),
+        (99, "Printify Choice"),
+    ]

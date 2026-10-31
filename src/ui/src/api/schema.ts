@@ -4,6 +4,62 @@
  */
 
 export interface paths {
+  "/api/admin/shop": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Read Shop */
+    get: operations["read_shop_api_admin_shop_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    /** Edit Shop */
+    patch: operations["edit_shop_api_admin_shop_patch"];
+    trace?: never;
+  };
+  "/api/admin/shop/connections": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Read Connections */
+    get: operations["read_connections_api_admin_shop_connections_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/admin/shop/lookups": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Read Lookups
+     * @description Fresh on every call: the page asks again when its window regains
+     *     focus or the seller retries (ADR-0033 forbids a disk cache for Etsy's).
+     */
+    get: operations["read_lookups_api_admin_shop_lookups_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/ai/runs": {
     parameters: {
       query?: never;
@@ -2250,6 +2306,28 @@ export interface components {
       /** Title */
       title: string;
     };
+    /** ConnectionRowBody */
+    ConnectionRowBody: {
+      /** Commands */
+      commands: string[];
+      /** Problem */
+      problem: string | null;
+      /** Sales Channel */
+      sales_channel: string | null;
+      /** Shop Currency */
+      shop_currency: string | null;
+      /** Shop Id */
+      shop_id: number | null;
+      /** Shop Name */
+      shop_name: string | null;
+      /** Signed In User Id */
+      signed_in_user_id: number | null;
+      /**
+       * State
+       * @enum {string}
+       */
+      state: "connected" | "not_connected" | "lookup_failed";
+    };
     /** CreateAiRunRequest */
     CreateAiRunRequest: {
       /**
@@ -2323,6 +2401,13 @@ export interface components {
       reset_masks_for_photo: boolean;
       /** Template */
       template: string;
+    };
+    /** CurrencyOption */
+    CurrencyOption: {
+      /** Code */
+      code: string;
+      /** Name */
+      name: string;
     };
     /** DescriptionConfig */
     DescriptionConfig: {
@@ -2509,6 +2594,19 @@ export interface components {
        * @enum {string}
        */
       stage: "etsy_listing";
+    };
+    /** EtsyLookupsBody */
+    EtsyLookupsBody: {
+      /** Available */
+      available: boolean;
+      /** Problem */
+      problem: string | null;
+      /** Production Partners */
+      production_partners: string[];
+      /** Return Policies */
+      return_policies: components["schemas"]["ReturnPolicyChoiceBody"][];
+      /** Shipping Profiles */
+      shipping_profiles: string[];
     };
     /**
      * EtsyMediaSnapshot
@@ -3720,6 +3818,15 @@ export interface components {
       /** Ref */
       ref: string;
     };
+    /** PrintifyLookupsBody */
+    PrintifyLookupsBody: {
+      /** Available */
+      available: boolean;
+      /** Print Providers */
+      print_providers: string[];
+      /** Problem */
+      problem: string | null;
+    };
     /**
      * ProductSnapshot
      * @description Domain facts for the before/after review: every variant on each
@@ -4000,6 +4107,24 @@ export interface components {
        */
       stage: "retract";
     };
+    /** ReturnPolicyChoiceBody */
+    ReturnPolicyChoiceBody: {
+      /** Label */
+      label: string;
+      terms: components["schemas"]["ReturnPolicyTermsBody"];
+    };
+    /**
+     * ReturnPolicyTermsBody
+     * @description ``etsy.listing_defaults.return_policy``: a policy by its terms.
+     */
+    ReturnPolicyTermsBody: {
+      /** Accepts Exchanges */
+      accepts_exchanges: boolean;
+      /** Accepts Returns */
+      accepts_returns: boolean;
+      /** Within Days */
+      within_days?: number | null;
+    };
     /** ReviewedRequest */
     ReviewedRequest: {
       /** Reviewed */
@@ -4164,6 +4289,93 @@ export interface components {
        * @default 0.6
        */
       opacity: number;
+    };
+    /**
+     * ShopChanges
+     * @description Only the keys sent are changed; ``null`` removes an optional one.
+     *     Values are loosely typed on purpose: the whole candidate document is
+     *     validated by ``Defaults``, which names each refused field.
+     */
+    ShopChanges: {
+      /** Currency */
+      currency?: string | null;
+      /** Is Supply */
+      is_supply?: boolean | null;
+      /** Preferred Print Provider */
+      preferred_print_provider?: string | null;
+      /** Production Partner */
+      production_partner?: string | null;
+      /** Renewal */
+      renewal?: string | null;
+      return_policy?: components["schemas"]["ReturnPolicyTermsBody"] | null;
+      /** Shipping Profile */
+      shipping_profile?: string | null;
+      /** When Made */
+      when_made?: string | null;
+      /** Who Made */
+      who_made?: string | null;
+    };
+    /** ShopConnectionsResponse */
+    ShopConnectionsResponse: {
+      etsy: components["schemas"]["ConnectionRowBody"];
+      printify: components["schemas"]["ConnectionRowBody"];
+    };
+    /** ShopListingDefaults */
+    ShopListingDefaults: {
+      /** Is Supply */
+      is_supply: boolean;
+      /** Production Partner */
+      production_partner: string | null;
+      /** Renewal */
+      renewal: string;
+      return_policy: components["schemas"]["ReturnPolicyTermsBody"] | null;
+      /** Shipping Profile */
+      shipping_profile: string | null;
+      /** When Made */
+      when_made: string;
+      /** Who Made */
+      who_made: string;
+    };
+    /** ShopLookupsResponse */
+    ShopLookupsResponse: {
+      etsy: components["schemas"]["EtsyLookupsBody"];
+      printify: components["schemas"]["PrintifyLookupsBody"];
+    };
+    /** ShopPatchRequest */
+    ShopPatchRequest: {
+      changes: components["schemas"]["ShopChanges"];
+      /** Revision */
+      revision: string;
+    };
+    /**
+     * ShopSaveRefusal
+     * @description A 409 (``conflict``: reload, then edit again) or a 422 (``invalid``:
+     *     each refused dotted shop.yaml key to its reason). Nothing was written.
+     */
+    ShopSaveRefusal: {
+      /** Field Errors */
+      field_errors?: {
+        [key: string]: string;
+      };
+      /**
+       * Kind
+       * @enum {string}
+       */
+      kind: "conflict" | "invalid";
+      /** Message */
+      message: string;
+    };
+    /** ShopSettingsResponse */
+    ShopSettingsResponse: {
+      /** Currency */
+      currency: string;
+      listing_defaults: components["schemas"]["ShopListingDefaults"];
+      /** Preferred Print Provider */
+      preferred_print_provider: string | null;
+      /** Revision */
+      revision: string;
+      /** Supported Currencies */
+      supported_currencies: components["schemas"]["CurrencyOption"][];
     };
     /** SinglePreviewRequest */
     SinglePreviewRequest: {
@@ -4638,6 +4850,108 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+  read_shop_api_admin_shop_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ShopSettingsResponse"];
+        };
+      };
+    };
+  };
+  edit_shop_api_admin_shop_patch: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["ShopPatchRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ShopSettingsResponse"];
+        };
+      };
+      /** @description Conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ShopSaveRefusal"];
+        };
+      };
+      /** @description Unprocessable Entity */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ShopSaveRefusal"];
+        };
+      };
+    };
+  };
+  read_connections_api_admin_shop_connections_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ShopConnectionsResponse"];
+        };
+      };
+    };
+  };
+  read_lookups_api_admin_shop_lookups_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ShopLookupsResponse"];
+        };
+      };
+    };
+  };
   find_ai_run_api_ai_runs_get: {
     parameters: {
       query: {

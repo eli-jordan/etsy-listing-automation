@@ -107,6 +107,11 @@ class CachedCatalogClient(CatalogClient):
             lambda: self._inner.print_providers(blueprint_id),
         )
 
+    def all_print_providers(self) -> list[PrintProvider]:
+        # Disk-cached like the rest of the catalog: ADR-0033's no-TTL rule is
+        # for the Etsy shop's own lists, and no seller creates a provider.
+        return self._cached("providers.json", _PROVIDERS, self._inner.all_print_providers)
+
     def variants(self, blueprint_id: int, provider_id: int) -> VariantSet:
         return self._cached(
             f"{blueprint_id}-{provider_id}.json",
