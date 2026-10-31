@@ -18,9 +18,11 @@ from datetime import datetime
 from etsy_listings.core.ai.listing_inputs import ListingAiInputs
 from etsy_listings.core.ai.proposals import (
     ListingProposal,
-    ProposalReplacedError,
     ProposalStore,
     Resolution,
+)
+from etsy_listings.core.ai.proposals import (
+    ProposalReplacedError as CachedProposalReplacedError,
 )
 from etsy_listings.core.application.refusals import (
     ListingMissingError,
@@ -70,7 +72,7 @@ def resolve_proposal(
             record = proposals.resolve(
                 name, generated_at=generated_at, title=title, tags=tags, lead=lead
             )
-        except ProposalReplacedError as exc:
+        except CachedProposalReplacedError as exc:
             raise ProposalReplacedError(name) from exc
     if record is None:
         raise ProposalMissingError(name)
