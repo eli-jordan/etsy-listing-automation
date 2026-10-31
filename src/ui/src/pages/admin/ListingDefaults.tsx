@@ -184,8 +184,15 @@ export function ListingDefaults({
           <span>
             Your defaults have not changed. Retry to load available choices. You can still edit
             renewal and how your items are made.
+            {/* The server's reasons can name files and setup steps; they are
+                for whoever wants them, not the sentence everyone reads. */}
             {lookups.problems.length > 0 && (
-              <span className="sp-problems"> {lookups.problems.join(" ")}</span>
+              <details className="sp-problems">
+                <summary>Details</summary>
+                {lookups.problems.map((problem) => (
+                  <p key={problem}>{problem}</p>
+                ))}
+              </details>
             )}
           </span>
         </div>

@@ -45,6 +45,7 @@ def test_the_shop_read_carries_its_revision_values_and_currencies(
     assert body["listing_defaults"]["who_made"] == "i_did"
     assert body["preferred_print_provider"] == "Monster Digital"
     assert {"code": "NOK", "name": "Norwegian krone"} in body["supported_currencies"]
+    assert "VND" not in {c["code"] for c in body["supported_currencies"]}
 
 
 def test_a_save_returns_the_new_revision_for_the_next_one(

@@ -489,6 +489,33 @@ Before a browser plan or apply begins, `Deployments` yields its listings to the
 `AiCoordinator`, which cancels their queued batch AI, stops and awaits active
 AI, and holds those names against new AI until deployment ends (ADR-0050).
 
+### Shop administration
+
+The SPA's `/admin` route owns Shop navigation and serializes blur saves against
+`GET` and `PATCH /api/admin/shop`. Separate `/connections` and `/lookups` reads
+use the existing client factories. `core/application/shop_settings.py` owns
+whole-document validation, configured-identity retention and the editable key
+set. `core/workspace/revisions.py` owns exact-byte hashes and a per-path process
+lock around read, revision comparison, validation and atomic replace. A stale
+revision refuses with 409; invalid values refuse with field errors and 422.
+Semantic no-ops leave the source bytes and file untouched, per ADR-0055.
+
+A successful save replaces the server workspace's defaults. Deployment plan
+and apply jobs capture `Workspace.snapshot()` when execution starts, and batch
+creation captures it before creating rows. Active work therefore keeps its
+starting defaults while subsequent work sees edits. Saves never rewrite listing
+files, lockfiles or remote state. Etsy reference names and return-policy terms
+still resolve at deployment. Etsy lists are fetched on focus or explicit retry,
+without a disk TTL cache, per ADR-0033.
+
+Currency edits are restricted at the application boundary to the 21 Etsy
+Payments currencies with ISO 4217 exponent 2. VND is excluded because
+`Money.minor_units` multiplies by 100, per ADR-0019. The Defaults model retains
+its existing currency and string-field compatibility; saved explicit prices
+remain subject to ADR-0006 validation.
+
+### Settings administration
+
 Admin's Settings tab reads and patches `settings.yaml` through
 `core/application/workspace_settings.py`. Its exact-byte revision is independent
 of `shop.yaml`. The shared workspace revision lock covers the read, revision

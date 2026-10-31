@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import { WarningIcon } from "@phosphor-icons/react/dist/csr/Warning";
 import { useWorkspaceSettings } from "./useWorkspaceSettings";
 import { MarketWeights } from "./MarketWeights";
 import { AiProviders } from "./AiProviders";
@@ -9,18 +10,27 @@ export function SettingsPanel() {
   const { settings, status } = state;
   if (state.loadError)
     return (
-      <div className="adm-warn" role="alert">
-        <span>{state.loadError}</span>
-        <button className="btn btn-secondary" onClick={() => void state.reload()}>
+      <section className="b-panel settings-load-error" aria-labelledby="settings-invalid">
+        <h2 className="b-panel__title" id="settings-invalid">
+          Settings could not be loaded
+        </h2>
+        <div className="adm-warn settings-notice" role="alert">
+          <WarningIcon size={20} />
+          <span>{state.loadError}</span>
+        </div>
+        <p className="b-panel__lede">
+          Correct that key in settings.yaml, then check again. Your file has not been changed.
+        </p>
+        <button className="btn btn-primary settings-recheck" onClick={() => void state.reload()}>
           Check file again
         </button>
-      </div>
+      </section>
     );
   if (!settings) return <p role="status">Loading settings…</p>;
   return (
     <div className="settings-panels">
       {state.locked && (
-        <div className="adm-warn" role="alert">
+        <div className="adm-warn settings-notice" role="alert">
           <span>
             Settings changed on disk. Nothing was overwritten. Reload, then make your change again.
           </span>
