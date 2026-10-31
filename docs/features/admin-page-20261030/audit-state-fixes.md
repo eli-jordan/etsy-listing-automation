@@ -82,11 +82,18 @@ still sends it. A failed save keeps the draft and the next blur resends it; a
 refused value stays shown with its error and is not resent until changed.
 Reloading remounts the listing defaults for the new file.
 
+A successful Retry save adopts the returned Shop values as well as the
+revision. Otherwise a later choice back to the original value could be
+mistaken for a no-op. Repeated retry failures stay in the queue's error
+status without an unhandled promise rejection from the button.
+
 | Regression | Proves |
 |---|---|
 | `keeps a newer focused choice when an older save is answered` | Deferred response: the focused newer choice stays, keeps focus, and its blur saves it. |
 | `keeps a newer queued choice while the older save is answered` | The queued newer choice is never replaced and ends on disk. |
 | `keeps a failed field unsaved through a sibling's success until it is retried` | Renewal fails, Who made it succeeds: no Saved, the error stays, the server keeps manual; Retry save sends `{renewal: auto}` only. |
+| `adopts a retried save before changing back to the original value` | After Retry writes auto, choosing manual sends a new request and persists it. Failed before the follow-up correction with only two requests. |
+| `keeps a failed retry visible and lets another retry succeed` | A failed retry retains the error and failed value, then the next retry succeeds. |
 | `retries a failed unchanged value when its field is left again` | Blurring the unchanged failed value resends it. |
 | `keeps a failed save failed through an unrelated success and retries only that patch` (Settings) | The shared contract on Settings: provider failure survives a concurrency success; Retry sends only `providers` against the newer revision. |
 | `test_admin_shop_browser.py` | Built SPA, real API, fixture `shop.yaml`, both color preferences: the queued choice ends on disk; the failed field survives a sibling write and Retry save writes it. |

@@ -538,6 +538,44 @@ describe("Listing defaults", () => {
     expect(screen.queryByRole("button", { name: "Retry save" })).not.toBeInTheDocument();
   });
 
+  it("adopts a retried save before changing back to the original value", async () => {
+    const server = fileServer();
+    server.failNext("network down");
+    await openDefaults();
+    const renewal = screen.getByLabelText("Renewal");
+    fireEvent.change(renewal, { target: { value: "auto" } });
+    fireEvent.blur(renewal);
+    expect(await screen.findByText("network down")).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "Retry save" }));
+    expect(await screen.findByText("Saved")).toBeInTheDocument();
+    expect(server.file().listing_defaults.renewal).toBe("auto");
+
+    fireEvent.change(renewal, { target: { value: "manual" } });
+    fireEvent.blur(renewal);
+    await waitFor(() => expect(save).toHaveBeenCalledTimes(3));
+    expect(await screen.findByText("Saved")).toBeInTheDocument();
+    expect(server.file().listing_defaults.renewal).toBe("manual");
+  });
+
+  it("keeps a failed retry visible and lets another retry succeed", async () => {
+    const server = fileServer();
+    server.failNext("network down");
+    await openDefaults();
+    const renewal = screen.getByLabelText("Renewal");
+    fireEvent.change(renewal, { target: { value: "auto" } });
+    fireEvent.blur(renewal);
+    expect(await screen.findByText("network down")).toBeInTheDocument();
+
+    server.failNext("still offline");
+    await userEvent.click(screen.getByRole("button", { name: "Retry save" }));
+    expect(await screen.findByText("still offline")).toBeInTheDocument();
+    expect(server.file().listing_defaults.renewal).toBe("manual");
+    await userEvent.click(screen.getByRole("button", { name: "Retry save" }));
+    expect(await screen.findByText("Saved")).toBeInTheDocument();
+    expect(server.file().listing_defaults.renewal).toBe("auto");
+  });
+
   it("retries a failed unchanged value when its field is left again", async () => {
     const server = fileServer();
     server.failNext("network down");

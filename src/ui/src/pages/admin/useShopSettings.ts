@@ -57,7 +57,7 @@ export function useShopSettings() {
     getShop().then(adopt, refuse);
   }, [adopt, refuse]);
 
-  const { save: enqueue } = queue;
+  const { save: enqueue, retry: resend } = queue;
   const save = useCallback(
     async (changes: ShopChanges): Promise<SaveOutcome | null> => {
       const outcome = await enqueue(changes);
@@ -66,6 +66,15 @@ export function useShopSettings() {
     },
     [enqueue],
   );
+  const retry = useCallback(() => {
+    // Retry acknowledges saved values just like a field save. The queue
+    // owns failure status, so an event handler need not catch its rejection.
+    void resend()
+      .then((outcome) => {
+        if (outcome?.kind === "saved") setShop(outcome.shop);
+      })
+      .catch(() => undefined);
+  }, [resend]);
 
   return {
     shop,
@@ -74,7 +83,7 @@ export function useShopSettings() {
     status: queue.status,
     fieldErrors: queue.fieldErrors as FieldErrors,
     save,
-    retry: queue.retry,
+    retry,
     reload,
     locked: queue.locked,
   };
