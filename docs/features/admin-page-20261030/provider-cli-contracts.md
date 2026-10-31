@@ -31,6 +31,7 @@ The UI always retains saved model and effort choices plus Account default.
 
 Provider enable, disable and order changes use the existing full-candidate,
 revision-checked settings transaction. The UI's `AiProviders.onSave` supplies
-the complete provider list to that queue. PR6 can include a raised run limit
-in the same changes object. PR5 retains the fixed five-minute task and
-twenty-minute run defaults.
+the complete provider list to that queue. PR6 adds a raised run limit to
+the same changes object when an enable needs it, and replaces the fixed
+five-minute task and twenty-minute run constants with the captured limits
+(ADR-0057).

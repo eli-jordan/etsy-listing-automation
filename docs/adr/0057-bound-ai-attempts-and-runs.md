@@ -1,6 +1,6 @@
 # ADR-0057: Bound AI attempts and runs
 
-Status: accepted, implementation planned in the
+Status: accepted, implemented by PR 6 of the
 [Admin page plan](../features/admin-page-20261030/plan.md).
 
 Configure two integer minute limits in `settings.yaml`: `ai.step_limit_minutes`
@@ -33,3 +33,11 @@ change raises a shared task budget to five minutes and the run cap to twenty
 minutes; fresh fallback allowances arrive with the configurable-limit PR.
 
 First recorded 2026-10-30 during Admin page planning.
+
+## Implementation note 2026-10-31
+
+A provider that runs out its step still ends the task as **Try again**: only a
+recognised availability failure or a rejected saved preference falls back, as
+the AI SEO plan settled. A fresh fallback step matters when a provider fails
+that way late. An unloadable `settings.yaml` refuses a run when it starts,
+since the limits are captured then.

@@ -595,9 +595,14 @@ otherwise cached for 30 minutes. Saved choices stay visible and are still
 passed to the CLI when a catalog no longer offers them. A model/effort rejection
 permits fallback; discovery never rewrites a preference.
 
-**Provider limits.** Each AI task has a five-minute deadline,
-including its repair and availability fallback; the complete AI run is capped
-at twenty minutes. A malformed response gets one same-provider repair. A
+**Provider limits.** Admin → Settings → AI time limits sets two whole-minute
+limits in `settings.yaml` (ADR-0057). *Per step* (`ai.step_limit_minutes`,
+1-15, default 5) bounds one provider attempt and its repair; a fallback
+provider gets a fresh step. *Whole run* (`ai.run_limit_minutes`, 5-60,
+default 20) bounds the whole run, market research included. The run limit must
+be at least enabled providers × step: the page raises it in the same save when
+you raise the step or turn a provider on, and a hand-edited file below that
+refuses to load, naming the key. Changes apply to the next run. A malformed response gets one same-provider repair. A
 recognized unavailable failure or rejected preference advances to the next provider. Cancel
 stops the run and its subprocess; leaving the tab or losing the connection
 allows the server-side run to continue and the browser to reattach.
