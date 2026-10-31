@@ -111,9 +111,9 @@ def test_the_settings_revision_is_its_own_not_shop_yaml_s(workspace: Workspace) 
         ("batch_ai:\n  concurency: 2\n", "batch_ai.concurency"),
         ("market_seo:\n  weights:\n    review: 30\n", "market_seo.weights.review"),
         ("batch_ai:\n  concurrency: 9\n", "batch_ai.concurrency"),
-        ("ai:\n  providers: []\n", "ai"),
+        ("ai:\n  providers: []\n", "ai.providers"),
     ],
-    ids=["misspelt-key", "unknown-metric", "too-high", "unknown-section"],
+    ids=["misspelt-key", "unknown-metric", "too-high", "empty-chain"],
 )
 def test_a_file_that_does_not_load_is_refused_naming_file_and_key(
     workspace: Workspace, text: str, key: str
@@ -326,3 +326,83 @@ def test_an_edit_to_a_file_that_does_not_load_is_refused(workspace: Workspace, s
 
     assert any(key.startswith("batch_ai") for key in caught.value.field_errors)
     assert settings_path(workspace).read_bytes() == before
+
+
+def test_provider_save_keeps_unrelated_source_and_refuses_last_disabled(
+    workspace: Workspace,
+) -> None:
+    written(workspace, SETTINGS_YAML)
+    view = workspace_settings.read_settings(workspace)
+    providers = [
+        {"name": "grok", "model": "retired", "effort": "high"},
+        {"name": "codex", "enabled": False},
+    ]
+    saved = workspace_settings.edit_settings(
+        workspace, expected_revision=view.revision, changes={"ai.providers": providers}
+    )
+    assert (
+        settings_path(workspace)
+        .read_bytes()
+        .startswith(SETTINGS_YAML.replace("\n", "\r\n").encode())
+    )
+    assert [(p.name, p.enabled) for p in saved.settings.ai.providers] == [
+        ("grok", True),
+        ("codex", False),
+    ]
+    before = settings_path(workspace).read_bytes()
+    with pytest.raises(InvalidSettingsEdit, match="at least one"):
+        workspace_settings.edit_settings(
+            workspace,
+            expected_revision=saved.revision,
+            changes={"ai.providers": [{"name": "grok", "enabled": False}]},
+        )
+    assert settings_path(workspace).read_bytes() == before
+    noop = workspace_settings.edit_settings(
+        workspace, expected_revision=saved.revision, changes={"ai.providers": providers}
+    )
+    assert noop.revision == saved.revision
+
+
+def test_reordering_providers_moves_their_comments_and_original_spelling(
+    workspace: Workspace,
+) -> None:
+    source = (
+        "# preferences\nai:\n  providers:\n"
+        '    - name: codex # first choice\n      model: "sol"\n'
+        "    - name: claude # fallback\n      effort: high\n"
+        "batch_ai: {concurrency: 2} # keep this\n"
+    )
+    written(workspace, source)
+    view = workspace_settings.read_settings(workspace)
+    workspace_settings.edit_settings(
+        workspace,
+        expected_revision=view.revision,
+        changes={
+            "ai.providers": [
+                {"name": "claude", "effort": "high"},
+                {"name": "codex", "model": "sol"},
+            ]
+        },
+    )
+    expected = (
+        "# preferences\nai:\n  providers:\n"
+        "    - name: claude # fallback\n      effort: high\n"
+        '    - name: codex # first choice\n      model: "sol"\n'
+        "batch_ai: {concurrency: 2} # keep this\n"
+    )
+    assert settings_path(workspace).read_bytes() == expected.replace("\n", "\r\n").encode()
+
+
+def test_provider_reorder_does_not_materialize_untouched_optional_defaults(
+    workspace: Workspace,
+) -> None:
+    source = "ai:\n  providers:\n    - name: codex # account defaults\n    - name: claude\n"
+    written(workspace, source)
+    view = workspace_settings.read_settings(workspace)
+    rows = [p.model_dump() for p in reversed(view.settings.ai.providers)]
+    workspace_settings.edit_settings(
+        workspace, expected_revision=view.revision, changes={"ai.providers": rows}
+    )
+    assert settings_path(workspace).read_bytes() == (
+        b"ai:\r\n  providers:\r\n    - name: claude\r\n    - name: codex # account defaults\r\n"
+    )

@@ -30,8 +30,8 @@ transcript. In particular:
   provider output; ``is_error`` is checked before trusting it.
 - No ``--add-dir`` is passed: the child's cwd is already ``workspace_root``,
   which is what a non-interactive `-p` session reads from by default.
-- No ``--model`` is passed -- the settled "default configured CLI model"
-  decision means the account's own configured model is used as-is.
+- ADR-0056: explicit preferences use ``--model`` and ``--effort``; omitted
+  preferences leave the account defaults in effect.
 - Claude has no documented direct "attach an image" flag the way Codex's
   ``-i/--image`` is. The design image's absolute path is named in the prompt
   text instead, asking the model to open it with the (still available)
@@ -110,6 +110,8 @@ class ClaudeProvider:
 
     workspace_root: Path
     binary: str = "claude"
+    model: str | None = None
+    effort: str | None = None
 
     def _resolved_binary(self) -> str:
         """The executable path `shutil.which` resolved, not the bare
@@ -229,6 +231,11 @@ class ClaudeProvider:
             "--json-schema",
             json.dumps(dict(task.response_schema)),
         ]
+
+        if self.model is not None:
+            argv += ["--model", self.model]
+        if self.effort is not None:
+            argv += ["--effort", self.effort]
 
         result = run_managed(
             argv,

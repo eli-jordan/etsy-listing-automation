@@ -1,4 +1,4 @@
-"""The Codex-then-Claude chain, one same-provider output repair, and the
+"""The captured provider chain (ADR-0056), one same-provider output repair, and the
 shared five-minute request deadline (AI SEO implementation plan, PR4, item 3;
 the "Timeout and retries" and "Provider adapters" decisions).
 
@@ -174,7 +174,7 @@ def run_task[Result](
     seconds: float = _DEFAULT_SECONDS,
     cancel_event: threading.Event | None = None,
 ) -> Result:
-    """Try ``providers`` in order -- Codex, then Claude, then Grok -- against
+    """Try captured ``providers`` in their workspace order (ADR-0056) against
     ``task``, within one shared ``deadline`` (a fresh ``seconds``-second one
     is started if none is given).
 
@@ -289,7 +289,7 @@ def generate_market_queries(
     """Three buyer search queries for ``request``, using the seller's own
     ``prompts/market-queries.md`` text (features/market-seo-20260924/spec.md, *Query extraction*).
 
-    The third task over the same chain: Codex, then Claude, then Grok on a
+    The third task over the same captured chain (ADR-0056) on a
     recognised unavailable failure, one same-provider repair, and its own five minutes
     (ADR-0003's deadline applies to each provider call of an AI run on its own).
     Never cached -- a second request is free to try different queries.

@@ -184,6 +184,55 @@
         "title": "AiProposalEvent",
         "type": "object"
       },
+      "AiProviderSettings": {
+        "additionalProperties": false,
+        "description": "One provider's preferences for every task (ADR-0056).\n\nDiscovery is advisory, so model and effort are intentionally not enums.\nA retired value stays usable until the seller replaces it.",
+        "properties": {
+          "effort": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effort"
+          },
+          "enabled": {
+            "default": true,
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "name": {
+            "enum": [
+              "codex",
+              "claude",
+              "grok"
+            ],
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "AiProviderSettings",
+        "type": "object"
+      },
       "AiQueriesEvent": {
         "description": "The three buyer searches extraction chose.",
         "properties": {
@@ -4128,6 +4177,57 @@
         "title": "MediaFileSummary",
         "type": "object"
       },
+      "ModelCatalogs": {
+        "properties": {
+          "cache_seconds": {
+            "default": 1800,
+            "title": "Cache Seconds",
+            "type": "integer"
+          },
+          "providers": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/ProviderCatalog"
+            },
+            "propertyNames": {
+              "enum": [
+                "codex",
+                "claude",
+                "grok"
+              ]
+            },
+            "title": "Providers",
+            "type": "object"
+          }
+        },
+        "title": "ModelCatalogs",
+        "type": "object"
+      },
+      "ModelChoice": {
+        "properties": {
+          "efforts": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Efforts",
+            "type": "array"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "label"
+        ],
+        "title": "ModelChoice",
+        "type": "object"
+      },
       "MultiplePreviewRequest": {
         "additionalProperties": false,
         "properties": {
@@ -5443,6 +5543,39 @@
           "reasons"
         ],
         "title": "ProposalStaleness",
+        "type": "object"
+      },
+      "ProviderCatalog": {
+        "properties": {
+          "efforts": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Efforts",
+            "type": "array"
+          },
+          "models": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/ModelChoice"
+            },
+            "title": "Models",
+            "type": "array"
+          },
+          "problem": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Problem"
+          }
+        },
+        "title": "ProviderCatalog",
         "type": "object"
       },
       "PublishSnapshot": {
@@ -7627,6 +7760,21 @@
             ],
             "title": "Concurrency"
           },
+          "providers": {
+            "anyOf": [
+              {
+                "items": {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Providers"
+          },
           "weights": {
             "anyOf": [
               {
@@ -7682,6 +7830,13 @@
             "title": "Default Weights",
             "type": "object"
           },
+          "providers": {
+            "items": {
+              "$ref": "#/components/schemas/AiProviderSettings"
+            },
+            "title": "Providers",
+            "type": "array"
+          },
           "revision": {
             "title": "Revision",
             "type": "string"
@@ -7698,7 +7853,8 @@
           "revision",
           "concurrency",
           "weights",
-          "default_weights"
+          "default_weights",
+          "providers"
         ],
         "title": "WorkspaceSettingsResponse",
         "type": "object"
@@ -7802,6 +7958,49 @@
           }
         },
         "summary": "Edit Settings",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/api/admin/settings/models": {
+      "get": {
+        "operationId": "model_catalogs_api_admin_settings_models_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "refresh",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Refresh",
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelCatalogs"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Model Catalogs",
         "tags": [
           "admin"
         ]

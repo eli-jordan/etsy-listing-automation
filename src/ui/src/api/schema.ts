@@ -22,6 +22,23 @@ export interface paths {
     patch: operations["edit_settings_api_admin_settings_patch"];
     trace?: never;
   };
+  "/api/admin/settings/models": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Model Catalogs */
+    get: operations["model_catalogs_api_admin_settings_models_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/admin/shop": {
     parameters: {
       query?: never;
@@ -1803,6 +1820,29 @@ export interface components {
       type: "proposal";
     };
     /**
+     * AiProviderSettings
+     * @description One provider's preferences for every task (ADR-0056).
+     *
+     *     Discovery is advisory, so model and effort are intentionally not enums.
+     *     A retired value stays usable until the seller replaces it.
+     */
+    AiProviderSettings: {
+      /** Effort */
+      effort?: string | null;
+      /**
+       * Enabled
+       * @default true
+       */
+      enabled: boolean;
+      /** Model */
+      model?: string | null;
+      /**
+       * Name
+       * @enum {string}
+       */
+      name: "codex" | "claude" | "grok";
+    };
+    /**
      * AiQueriesEvent
      * @description The three buyer searches extraction chose.
      */
@@ -3462,6 +3502,30 @@ export interface components {
       /** Ref */
       ref: string;
     };
+    /** ModelCatalogs */
+    ModelCatalogs: {
+      /**
+       * Cache Seconds
+       * @default 1800
+       */
+      cache_seconds: number;
+      /** Providers */
+      providers?: {
+        [key: string]: components["schemas"]["ProviderCatalog"];
+      };
+    };
+    /** ModelChoice */
+    ModelChoice: {
+      /**
+       * Efforts
+       * @default []
+       */
+      efforts: string[];
+      /** Id */
+      id: string;
+      /** Label */
+      label: string;
+    };
     /** MultiplePreviewRequest */
     MultiplePreviewRequest: {
       /** Calibration Revision */
@@ -3988,6 +4052,21 @@ export interface components {
       is_stale: boolean;
       /** Reasons */
       reasons: string[];
+    };
+    /** ProviderCatalog */
+    ProviderCatalog: {
+      /**
+       * Efforts
+       * @default []
+       */
+      efforts: string[];
+      /**
+       * Models
+       * @default []
+       */
+      models: components["schemas"]["ModelChoice"][];
+      /** Problem */
+      problem?: string | null;
     };
     /**
      * PublishSnapshot
@@ -4865,6 +4944,12 @@ export interface components {
     WorkspaceSettingsChanges: {
       /** Concurrency */
       concurrency?: number | null;
+      /** Providers */
+      providers?:
+        | {
+            [key: string]: unknown;
+          }[]
+        | null;
       /** Weights */
       weights?: {
         [key: string]: number;
@@ -4884,6 +4969,8 @@ export interface components {
       default_weights: {
         [key: string]: number;
       };
+      /** Providers */
+      providers: components["schemas"]["AiProviderSettings"][];
       /** Revision */
       revision: string;
       /** Weights */
@@ -4970,6 +5057,37 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["SettingsSaveRefusal"];
+        };
+      };
+    };
+  };
+  model_catalogs_api_admin_settings_models_get: {
+    parameters: {
+      query?: {
+        refresh?: boolean;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ModelCatalogs"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
         };
       };
     };

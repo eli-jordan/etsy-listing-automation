@@ -24,8 +24,8 @@ transcript. In particular:
   live) rather than as a trailing argv element, so an unusually long prompt
   (seller text plus delimited JSON context and schema) never risks a
   platform argv-length limit.
-- No ``-m/--model`` is passed -- the settled "default configured CLI model"
-  decision means the account's own configured model is used as-is.
+- ADR-0056: explicit model and effort use ``--model`` and
+  ``-c model_reasoning_effort=...``. Omitted preferences pass no flags.
 """
 
 from __future__ import annotations
@@ -97,6 +97,8 @@ class CodexProvider:
 
     workspace_root: Path
     binary: str = "codex"
+    model: str | None = None
+    effort: str | None = None
 
     def _resolved_binary(self) -> str:
         """The executable path `shutil.which` resolved, not the bare
@@ -222,6 +224,11 @@ class CodexProvider:
                 "never",
                 "-",
             ]
+
+            if self.model is not None:
+                argv += ["--model", self.model]
+            if self.effort is not None:
+                argv += ["-c", f"model_reasoning_effort={json.dumps(self.effort)}"]
 
             result = run_managed(
                 argv,

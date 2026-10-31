@@ -7,7 +7,7 @@ Two features, one machine. **SEO generation** produces a proposal a seller
 reviews suggestion by suggestion; **brief drafting** produces the one input
 that generation needs, from the design image alone. They differ only in the
 prompt, the schema and the validation -- the provider adapters, the
-Codex-then-Claude-then-Grok fallback, the one same-provider repair and the five-minute
+workspace-configured fallback (ADR-0056), the one same-provider repair and the five-minute
 deadline are shared, which is what `ProviderTask` exists to make possible.
 
 - ``models`` -- ``ProviderTask``, ``SeoRequest``, ``SeoProposal``,
@@ -32,7 +32,9 @@ deadline are shared, which is what `ProviderTask` exists to make possible.
 - ``grok``/``codex``/``claude`` -- the real CLI adapters: a non-interactive,
   read-only invocation each, behind the same `AiProvider` protocol. None
   reads a prompt file or knows which feature it is serving. The chain tries
-  Codex first, then Claude, then Grok.
+  the workspace order, defaulting to Codex, Claude, Grok (ADR-0056).
+- ``discovery`` -- ``ModelDiscovery`` and its advisory ``ModelCatalogs``,
+  ``ProviderCatalog`` and ``ModelChoice``. Imported directly, not re-exported.
 - ``orchestrator`` -- `run_task`, and the three entry points over it,
   `generate_proposal`, `generate_brief` and `generate_market_queries`.
 - ``listing_inputs`` -- saved-listing AI facts, paired request/snapshot

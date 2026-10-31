@@ -21,9 +21,13 @@ from pathlib import Path
 import pytest
 import yaml
 
+from etsy_listings.core.ai import codex
 from etsy_listings.core.ai.errors import SeoTryAgainError
+from etsy_listings.core.ai.models import ProviderTask
+from etsy_listings.core.ai.process import ProcessResult
 from etsy_listings.core.ai.proposals import ProposalStore
 from etsy_listings.core.application.ai.events import AiStepEvent, StepId
+from etsy_listings.core.application.ai.readiness import default_ai_providers
 from etsy_listings.core.application.ai.registry import AiRun, AiRunRegistry
 from etsy_listings.core.application.ai.runner import RUN_LIMIT_SECONDS, TIMEOUT_MESSAGE, AiRunner
 from etsy_listings.core.clients.etsy.fakes import FakeEtsyMarketClient, server_error
@@ -651,3 +655,67 @@ def test_an_edit_during_generation_is_judged_against_the_prepared_inputs(chain: 
     cached = chain.proposals.load(LISTING)
     assert cached is not None
     assert cached.snapshot.brief == original
+
+
+def test_provider_configuration_is_captured_before_the_run_thread_starts(chain: Chain) -> None:
+    edit_listing(chain.workspace.root, LISTING, brief="")
+    factory_threads = []
+
+    def factory(workspace):
+        factory_threads.append(threading.current_thread())
+        return [chain.provider]
+
+    chain.runner.providers = factory
+    run = chain.start(draft_brief=True)
+    wait_until_finished(run)
+    assert factory_threads == [threading.current_thread()]
+    assert set(chain.provider.calls) == {"brief", "queries", "seo"}
+
+
+@pytest.mark.parametrize("origin", ["manual", "batch"])
+def test_run_tasks_and_repairs_keep_preferences_and_the_next_run_sees_edits(
+    chain: Chain, monkeypatch: pytest.MonkeyPatch, origin
+) -> None:
+    edit_listing(chain.workspace.root, LISTING, brief="")
+    settings = chain.workspace.settings_file()
+    settings.write_text("ai:\n  providers: [{name: codex, model: old, effort: high}]\n")
+    chain.runner.providers = default_ai_providers
+    chain.provider.answers["brief"] = ["{}", json.dumps({"brief": DRAFTED_BRIEF})]
+    models = []
+
+    def execute(argv, **kwargs):
+        models.append(argv[argv.index("--model") + 1])
+        assert argv[argv.index("-c") + 1] == 'model_reasoning_effort="high"'
+        if len(models) == 1:
+            settings.write_text("ai:\n  providers: [{name: codex, model: new, effort: high}]\n")
+        task = ProviderTask(
+            prompt_text=kwargs["input_text"],
+            response_schema=json.loads(Path(argv[argv.index("--output-schema") + 1]).read_text()),
+            design_image=Path(argv[argv.index("-i") + 1]),
+        )
+        raw = chain.provider.generate(task, kwargs["deadline"])
+        return ProcessResult(0, raw.raw_output, "", False, False)
+
+    monkeypatch.setattr(codex.shutil, "which", lambda name: name)
+    monkeypatch.setattr(codex, "run_managed", execute)
+    run = chain.registry.create(LISTING, draft_brief=True, origin=origin)
+    assert isinstance(run, AiRun)
+    chain.runner.start(run)
+    wait_until_finished(run)
+    assert run.phase == "done"
+    assert models == ["old"] * (2 if origin == "batch" else 4)
+    assert chain.provider.calls[:2] == ["brief", "brief"], "one repair keeps its captured model"
+    models.clear()
+    second = chain.run(draft_brief=False)
+    assert second.phase == "done"
+    assert models == ["new", "new"], "query extraction and SEO use the next run's preferences"
+
+
+def test_a_failed_provider_capture_finishes_the_run_instead_of_stranding_it(chain: Chain) -> None:
+    def unavailable(workspace):
+        raise RuntimeError("factory broke")
+
+    chain.runner.providers = unavailable
+    run = chain.start(draft_brief=False)
+    assert wait_until_finished(run).phase == "failed"
+    assert run.events[-1].model_dump()["message"] == INTERNAL_ERROR_MESSAGE

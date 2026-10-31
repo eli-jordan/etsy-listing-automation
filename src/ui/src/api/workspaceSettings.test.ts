@@ -1,10 +1,28 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { api } from "./client";
-import { getSettings, saveSettings } from "./workspaceSettings";
+import { getModelCatalogs, getSettings, saveSettings } from "./workspaceSettings";
 
 const answer = (status: number, data?: unknown, error?: unknown) =>
   ({ data, error, response: new Response(null, { status }) }) as never;
 afterEach(() => vi.restoreAllMocks());
+
+it("reads cached model lists or explicitly refreshes them without a settings patch", async () => {
+  const get = vi
+    .spyOn(api, "GET")
+    .mockResolvedValue(answer(200, { providers: {}, cache_seconds: 1800 }));
+  const patch = vi.spyOn(api, "PATCH");
+  await getModelCatalogs();
+  expect(get).toHaveBeenLastCalledWith("/api/admin/settings/models", {
+    params: { query: { refresh: false } },
+  });
+  await getModelCatalogs(true);
+  expect(get).toHaveBeenLastCalledWith("/api/admin/settings/models", {
+    params: { query: { refresh: true } },
+  });
+  expect(patch).not.toHaveBeenCalled();
+  get.mockResolvedValue(answer(500));
+  await expect(getModelCatalogs()).rejects.toThrow("Saved choices are kept");
+});
 
 it("reads settings and retains the invalid file's explanation", async () => {
   vi.spyOn(api, "GET").mockResolvedValueOnce(answer(200, { revision: "s1" }));

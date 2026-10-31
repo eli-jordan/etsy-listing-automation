@@ -32,7 +32,8 @@ class SeoGenerationError(RuntimeError):
 class ProviderUnavailableError(SeoGenerationError):
     """A recognised provider-unavailable, authentication, quota, or
     rate-limit failure -- the one category the settled plan permits to fall
-    through to the next provider in the Codex-then-Claude chain."""
+    through to the next captured provider (ADR-0056). Rejected saved model
+    or effort choices belong to this same category."""
 
     def __init__(self, provider: str, reason: str) -> None:
         self.provider = provider
@@ -145,6 +146,16 @@ structured ``api_error_status`` on a CLI envelope is the other place a bare
 status is trusted -- it is a field, not a number floating in prose."""
 
 _HTTP_STATUS_PATTERN = re.compile(r"\bhttp\D{0,5}(401|403|429)\b", re.IGNORECASE)
+_PREFERENCE_REJECTION = re.compile(
+    r"\b(?:unknown|unsupported|invalid) (?:reasoning )?effort\b"
+    r"|\b(?:unknown|unsupported|invalid) model\b(?!\s+(?:output|response)\b)"
+    r"|\bmodel\b[^\n]{0,120}\b(?:does not exist|not found|not supported)\b"
+    r"|\binvalid value\b[^\n]{0,120}--(?:model|effort|reasoning-effort)\b"
+    r"|\bunknown variant\b[^\n]{0,120}\bmodel_reasoning_effort\b",
+    re.IGNORECASE,
+)
+"""ADR-0056: a rejected saved preference permits fallback. Merely mentioning
+a model or effort in a generation failure does not."""
 _ERROR_PREFIX = re.compile(r"^error:\s*", re.IGNORECASE)
 """An explicit "HTTP 401"/"HTTP/1.1 403"/"http status 429"-shaped status
 line. A bare status number in prose is not trusted; this pattern is, because
@@ -311,6 +322,8 @@ def _is_unavailable(shown: str, status: int | None) -> bool:
         return True
     folded = shown.casefold()
     if any(marker in folded for marker in _AVAILABILITY_MARKERS):
+        return True
+    if _PREFERENCE_REJECTION.search(shown):
         return True
     return _HTTP_STATUS_PATTERN.search(shown) is not None
 

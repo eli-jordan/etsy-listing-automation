@@ -90,3 +90,16 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
     if len(kept) != len(items):
         config.hook.pytest_deselected(items=[i for i in items if i not in kept])
         items[:] = kept
+
+
+@pytest.fixture(autouse=True)
+def advisory_models_in_host_tests(
+    request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Host tests replace the discovery service; its CLI contracts have their
+    own unit tests. A server/browser test must never probe signed-in CLIs."""
+    if not {"server", "browser"}.intersection(request.path.parts):
+        return
+    from etsy_listings.core.ai.discovery import ModelCatalogs, ModelDiscovery
+
+    monkeypatch.setattr(ModelDiscovery, "read", lambda self, **kwargs: ModelCatalogs())

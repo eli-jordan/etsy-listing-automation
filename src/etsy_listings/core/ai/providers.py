@@ -43,8 +43,8 @@ from etsy_listings.core.ai.models import (
 class AiProvider(Protocol):
     """One provider's readiness check and its generation call.
 
-    The orchestration service owns retry classification, the Codex-then-
-    Claude fallback order, the shared request deadline, and turning raw
+    The orchestration service owns retry classification, the captured
+    fallback order (ADR-0056), the shared request deadline, and turning raw
     output into a validated result -- none of that belongs to an adapter,
     which is why this protocol is this small.
     """
