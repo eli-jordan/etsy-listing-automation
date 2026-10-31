@@ -8,22 +8,29 @@ lookups fail as an answer rather than a 500. Etsy and Printify are fakes.
 from __future__ import annotations
 
 import hashlib
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+import httpx
 import pytest
 from fastapi.testclient import TestClient
 
 from etsy_listings.core import connections
 from etsy_listings.core.clients.etsy.fakes import FakeEtsyListingClient, FakeEtsyShopClient
 from etsy_listings.core.clients.etsy.models import ShippingProfile
+from etsy_listings.core.clients.etsy.oauth import TOKEN_URL
+from etsy_listings.core.clients.etsy.tokens import StoredTokens
 from etsy_listings.core.clients.etsy.transport import EtsyApiError
 from etsy_listings.core.clients.printify import FakeCatalogClient, PrintProvider
 from etsy_listings.core.clients.printify.fakes import FakePrintifyClient
+from etsy_listings.core.config.secrets import ETSY_KEYSTRING_VAR, ETSY_SHARED_SECRET_VAR
 from etsy_listings.core.workspace import layout
 from etsy_listings.core.workspace.workspace import Workspace
 from etsy_listings.server.api.app import create_app
 
 from tests.support.builders import set_etsy_shop_id
+from tests.support.etsy_grants import USER_ID, RotatingGrant
+from tests.support.gates import STAYS_OUT, Gate, workers
 
 
 @pytest.fixture
@@ -188,3 +195,91 @@ def test_connections_say_what_to_run_when_nothing_is_set_up(
     assert body["etsy"]["shop_name"] == "TakeAHikeTees"
     assert body["etsy"]["commands"] == ["etsy-listings auth etsy", "etsy-listings setup"]
     assert body["printify"]["commands"] == ["etsy-listings auth printify", "etsy-listings setup"]
+
+
+SHOP_ID = 51007712
+
+
+def scripted_etsy(grant: RotatingGrant, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Etsy at the network boundary, so each route keeps building its own
+    clients and token store exactly as it does in production."""
+
+    def handle(_: httpx.HTTPTransport, request: httpx.Request) -> httpx.Response:
+        if str(request.url) == TOKEN_URL:
+            return grant.answer(request)
+        expected = f"Bearer {USER_ID}.access-{grant.rotations}"
+        if request.headers.get("authorization") != expected:
+            return httpx.Response(401, json={"error": "invalid_token"})
+        if request.url.path == f"/v3/application/users/{USER_ID}/shops":
+            shop = {"shop_id": SHOP_ID, "shop_name": "TakeAHikeTees", "currency_code": "NOK"}
+            return httpx.Response(200, json=shop)
+        return httpx.Response(200, json={"count": 0, "results": []})
+
+    monkeypatch.setattr(httpx.HTTPTransport, "handle_request", handle)
+    monkeypatch.setattr(connections, "printify_client", lambda workspace: FakePrintifyClient())
+    monkeypatch.setattr(
+        connections, "catalog_client", lambda workspace: FakeCatalogClient([], {}, {})
+    )
+
+
+def expired_sign_in(root: Path) -> None:
+    set_etsy_shop_id(root, SHOP_ID)
+    (root / layout.ENV_FILE).write_text(
+        f"{ETSY_KEYSTRING_VAR}=key\n{ETSY_SHARED_SECRET_VAR}=secret\n", encoding="utf-8"
+    )
+    now = datetime.now(UTC)
+    connections.etsy_token_store(root).save(
+        StoredTokens(
+            access_token=f"{USER_ID}.access-0",
+            refresh_token=f"{USER_ID}.refresh-0",
+            expires_at=now - timedelta(minutes=1),
+            refresh_expires_at=now + timedelta(days=30),
+            scope="shops_r",
+            user_id=USER_ID,
+        )
+    )
+
+
+def test_simultaneous_admin_reads_share_one_rotation_of_an_expired_sign_in(
+    workspace_root: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Admin audit I1. The page asks for connections and lookups at once;
+    with an expired access token each route's store must not spend the same
+    refresh token, or the slower one reports a withdrawn consent."""
+    expired_sign_in(workspace_root)
+    held = Gate("the connections request's rotation")
+    grant = RotatingGrant(f"{USER_ID}.refresh-0", hold=held)
+    scripted_etsy(grant, monkeypatch)
+    client = TestClient(create_app(Workspace.discover(root_override=workspace_root)))
+
+    with workers(held) as start:
+        rows = start("connections", lambda: client.get("/api/admin/shop/connections"))
+        held.wait_entered()
+        lists = start("lookups", lambda: client.get("/api/admin/shop/lookups"))
+        lists.thread.join(STAYS_OUT)
+        held.release()
+        etsy_row = rows.result().json()["etsy"]
+        etsy_lists = lists.result().json()["etsy"]
+
+    assert (etsy_row["state"], etsy_row["problem"]) == ("connected", None)
+    assert (etsy_lists["available"], etsy_lists["problem"]) == (True, None)
+    assert (grant.rotations, grant.refused) == (1, 0)
+
+
+def test_a_revoked_sign_in_is_still_reported_to_both_admin_reads(
+    workspace_root: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    expired_sign_in(workspace_root)
+    grant = RotatingGrant(f"{USER_ID}.refresh-0")
+    grant.revoke()
+    scripted_etsy(grant, monkeypatch)
+    client = TestClient(create_app(Workspace.discover(root_override=workspace_root)))
+
+    etsy_row = client.get("/api/admin/shop/connections").json()["etsy"]
+    etsy_lists = client.get("/api/admin/shop/lookups").json()["etsy"]
+
+    assert etsy_row["state"] == "lookup_failed"
+    assert "consent was withdrawn" in etsy_row["problem"]
+    assert not etsy_lists["available"]
+    assert "consent was withdrawn" in etsy_lists["problem"]
+    assert grant.rotations == 0
