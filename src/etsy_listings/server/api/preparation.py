@@ -10,13 +10,13 @@ from fastapi.responses import Response
 from starlette.concurrency import run_in_threadpool
 from starlette.responses import StreamingResponse
 
-from etsy_listings.core.application.preparation.coordinator import PreparationRefused, Preparations
+from etsy_listings.core.application.preparation.coordinator import PreparationRefusedError, Preparations
 from etsy_listings.core.application.preparation.models import TERMINAL, Event, Job
 from etsy_listings.core.application.preparation_views import preparation_view, read_mask
-from etsy_listings.core.application.refusals import TemplateMissing
+from etsy_listings.core.application.refusals import TemplateMissingError
 from etsy_listings.core.config.errors import ConfigLoadError
 from etsy_listings.core.errors import UserFacingError
-from etsy_listings.core.workspace.calibration import CalibrationConflict, CalibrationStore
+from etsy_listings.core.workspace.calibration import CalibrationConflictError, CalibrationStore
 from etsy_listings.server.api.schemas import (
     CreatePreparationRequest,
     MapReadinessResponse,
@@ -62,7 +62,7 @@ def status(request: Request, name: str, response: Response) -> PreparationRespon
     preparations = coordinator(request)
     try:
         view = preparation_view(preparations, name)
-    except (TemplateMissing, ConfigLoadError) as exc:
+    except (TemplateMissingError, ConfigLoadError) as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except UserFacingError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
@@ -100,7 +100,7 @@ def mask_response(
 ) -> Response:
     try:
         mask = read_mask(coordinator(request).workspace, name, placement_id)
-    except TemplateMissing as exc:
+    except TemplateMissingError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -133,7 +133,7 @@ def placement_mask(
 def history_response(request: Request, name: str, placement_id: str | None) -> MaskHistoryResponse:
     try:
         mask = read_mask(coordinator(request).workspace, name, placement_id)
-    except TemplateMissing as exc:
+    except TemplateMissingError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -190,12 +190,12 @@ def submit(request: Request, body: CreatePreparationRequest) -> PreparationJobRe
             previous_job=body.previous_job,
             reset_masks_for_photo=body.reset_masks_for_photo,
         )
-    except CalibrationConflict as exc:
+    except CalibrationConflictError as exc:
         raise HTTPException(status_code=412, detail=str(exc)) from exc
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except ValueError as exc:
-        if isinstance(exc, PreparationRefused):
+        if isinstance(exc, PreparationRefusedError):
             raise HTTPException(
                 status_code=409, detail={"reason": "preparation_refused", "message": str(exc)}
             ) from exc

@@ -17,8 +17,8 @@ from pydantic import ValidationError
 from etsy_listings.core.workspace.listing_documents import (
     Document,
     ListingDocuments,
-    ListingMissing,
-    ListingNameTaken,
+    ListingMissingError,
+    ListingNameTakenError,
 )
 from etsy_listings.core.workspace.workspace import InvalidNameError, Workspace
 
@@ -84,7 +84,7 @@ class TestRead:
         assert documents.read(NAME) == _on_disk(workspace)
 
     def test_a_missing_listing_is_refused(self, documents: ListingDocuments) -> None:
-        with pytest.raises(ListingMissing):
+        with pytest.raises(ListingMissingError):
             documents.read("never-made")
 
     def test_waits_out_a_replace_in_progress(
@@ -131,7 +131,7 @@ class TestEdit:
     def test_a_missing_listing_is_refused_and_not_recreated(
         self, workspace: Workspace, documents: ListingDocuments
     ) -> None:
-        with pytest.raises(ListingMissing):
+        with pytest.raises(ListingMissingError):
             documents.edit("never-made", lambda raw: raw)
         assert not workspace.listing_dir("never-made").exists()
 
@@ -183,7 +183,7 @@ class TestCreate:
     ) -> None:
         before = workspace.listing_file(NAME).read_bytes()
 
-        with pytest.raises(ListingNameTaken):
+        with pytest.raises(ListingNameTakenError):
             documents.create(NAME, a_document(prices={"S": 349}))
         assert workspace.listing_file(NAME).read_bytes() == before
 

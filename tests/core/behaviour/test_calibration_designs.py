@@ -19,8 +19,8 @@ from etsy_listings.core.application.calibration_designs import (
     uploaded_design,
 )
 from etsy_listings.core.application.refusals import (
-    CalibrationDesignMissing,
-    DesignUploadRefused,
+    CalibrationDesignMissingError,
+    DesignUploadRefusedError,
 )
 from etsy_listings.core.workspace.workspace import Workspace
 
@@ -48,7 +48,7 @@ def test_an_upload_lands_in_the_workspace_library_under_its_stem(workspace: Work
 def test_a_name_that_is_not_a_plain_filename_is_refused_and_nothing_written(
     workspace: Workspace, filename: str
 ) -> None:
-    with pytest.raises(DesignUploadRefused):
+    with pytest.raises(DesignUploadRefusedError):
         save_uploaded_design(workspace, filename, _png())
 
     assert workspace.test_design_names() == []
@@ -57,12 +57,12 @@ def test_a_name_that_is_not_a_plain_filename_is_refused_and_nothing_written(
 def test_bytes_that_are_not_an_image_are_refused_before_anything_is_written(
     workspace: Workspace,
 ) -> None:
-    with pytest.raises(DesignUploadRefused, match="not a readable image"):
+    with pytest.raises(DesignUploadRefusedError, match="not a readable image"):
         save_uploaded_design(workspace, "notes.png", b"not a png")
 
     assert workspace.test_design_names() == []
 
 
 def test_an_unknown_upload_is_refused_by_name(workspace: Workspace) -> None:
-    with pytest.raises(CalibrationDesignMissing, match="no-such-design"):
+    with pytest.raises(CalibrationDesignMissingError, match="no-such-design"):
         uploaded_design(workspace, "no-such-design")

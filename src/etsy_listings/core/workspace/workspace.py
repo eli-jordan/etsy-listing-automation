@@ -1260,10 +1260,10 @@ class Workspace:
         of a layout that the layout accessors above exist to prevent, so it
         lives here with ``load_listing`` and ``load_garment_profile``.
         """
-        from etsy_listings.core.workspace.calibration import CalibrationRepairRequired
+        from etsy_listings.core.workspace.calibration import CalibrationRepairRequiredError
 
         if self.template_calibration_transaction(template).exists():
-            raise CalibrationRepairRequired(
+            raise CalibrationRepairRequiredError(
                 "Active calibration transaction; retry after server recovery"
             )
         path = self.template_config_file(template)

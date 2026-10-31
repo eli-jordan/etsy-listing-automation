@@ -11,7 +11,7 @@ import pytest
 from PIL import Image
 
 from etsy_listings.core.preparation import scenes
-from etsy_listings.core.preparation.artifacts import Artifacts, StalePreparation
+from etsy_listings.core.preparation.artifacts import Artifacts, StalePreparationError
 from etsy_listings.core.preparation.scenes import PreparedLayer, lease_scene
 from etsy_listings.core.render import MarigoldAppearance, Point, load_template_base
 
@@ -56,7 +56,7 @@ def test_inputs_changed_since_they_were_read_refuse_as_stale(workspace_root) -> 
     )
 
     with (
-        pytest.raises(StalePreparation, match="out of date"),
+        pytest.raises(StalePreparationError, match="out of date"),
         lease_scene(
             workspace,
             "shirt",

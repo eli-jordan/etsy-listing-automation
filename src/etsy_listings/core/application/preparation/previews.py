@@ -22,7 +22,7 @@ from etsy_listings.core.render import (
     MaterialLayer,
     MaterialMaps,
     MultipleTemplate,
-    PreparationRequired,
+    PreparationRequiredError,
     render_marigold_scene,
 )
 from etsy_listings.core.render.types import RGB, RGBA, FloatMap
@@ -86,16 +86,16 @@ def editor_preview(
         with store.lock(name):
             saved = store.read(name)
             if saved.revision != revision:
-                raise PreparationRequired("Calibration changed; refresh the editor preview")
+                raise PreparationRequiredError("Calibration changed; refresh the editor preview")
             if config.kind != saved.config.kind or not isinstance(
                 config.renderer, MarigoldRenderer
             ):
-                raise PreparationRequired("Save the renderer selection before previewing")
+                raise PreparationRequiredError("Save the renderer selection before previewing")
             if (
                 not isinstance(saved.config.renderer, MarigoldRenderer)
                 or config.renderer.config.inference != saved.config.renderer.config.inference
             ):
-                raise PreparationRequired("Prepare changed inference settings before previewing")
+                raise PreparationRequiredError("Prepare changed inference settings before previewing")
             original = Artifacts(workspace).saved_inputs(name)
             boxes = (
                 [(p.id, p.bounding_box) for p in config.placements]
@@ -123,7 +123,7 @@ def editor_preview(
             Artifacts(workspace).validate_inputs(inputs)
             selected = evidence_store.select(inputs, evidence_store.current(name))
             if len(selected) != len(boxes):
-                raise PreparationRequired("Prepare the template to cover this placement")
+                raise PreparationRequiredError("Prepare the template to cover this placement")
             files, _ = store.apply_masks(name, config, mask_edits)
             photo = original.photo.model_dump()
             mask_bytes = {
@@ -151,7 +151,7 @@ def editor_preview(
                 else image
             )
             if target.shape != image.shape:
-                raise PreparationRequired("Colour photos must match the main photo dimensions")
+                raise PreparationRequiredError("Colour photos must match the main photo dimensions")
             design, packed = artwork()
         layers = []
         for key, box in boxes:
@@ -181,5 +181,5 @@ def editor_preview(
         result = render_marigold_scene(small, layers, appearance=config.renderer.config.appearance)
         with store.lock(name):
             if store.read(name).revision != revision:
-                raise PreparationRequired("Calibration changed during the editor preview")
+                raise PreparationRequiredError("Calibration changed during the editor preview")
         return result

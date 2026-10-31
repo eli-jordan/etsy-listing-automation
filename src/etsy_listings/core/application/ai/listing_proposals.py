@@ -23,9 +23,9 @@ from etsy_listings.core.ai.proposals import (
     Resolution,
 )
 from etsy_listings.core.application.refusals import (
-    ListingMissing,
-    ProposalMissing,
-    ProposalReplaced,
+    ListingMissingError,
+    ProposalMissingError,
+    ProposalReplacedError,
 )
 from etsy_listings.core.workspace.listing_documents import ListingDocuments
 from etsy_listings.core.workspace.workspace import Workspace
@@ -33,12 +33,12 @@ from etsy_listings.core.workspace.workspace import Workspace
 
 def read_proposal(workspace: Workspace, proposals: ProposalStore, name: str) -> ListingProposal:
     """Listing ``name``'s proposal, judged stale or not against the listing
-    as saved now. :class:`ListingMissing`, or :class:`ProposalMissing` when
+    as saved now. :class:`ListingMissingError`, or :class:`ProposalMissingError` when
     none is cached."""
     _require(workspace, name)
     record = proposals.load(name)
     if record is None:
-        raise ProposalMissing(name)
+        raise ProposalMissingError(name)
     return ListingAiInputs.read(workspace, name).judge(record)
 
 
@@ -59,8 +59,8 @@ def resolve_proposal(
     Under the listing's write lock, re-checking the listing inside it, so a
     delete or rename cannot land between the read and the write and leave a
     record behind for a listing that is gone. Refusals, with nothing
-    recorded: :class:`ListingMissing` (also after waiting for the lock),
-    :class:`ProposalMissing`, and :class:`ProposalReplaced` when the proposal
+    recorded: :class:`ListingMissingError` (also after waiting for the lock),
+    :class:`ProposalMissingError`, and :class:`ProposalReplacedError` when the proposal
     has been regenerated since.
     """
     _require(workspace, name)
@@ -71,12 +71,12 @@ def resolve_proposal(
                 name, generated_at=generated_at, title=title, tags=tags, lead=lead
             )
         except ProposalReplacedError as exc:
-            raise ProposalReplaced(name) from exc
+            raise ProposalReplacedError(name) from exc
     if record is None:
-        raise ProposalMissing(name)
+        raise ProposalMissingError(name)
     return ListingAiInputs.read(workspace, name).judge(record)
 
 
 def _require(workspace: Workspace, name: str) -> None:
     if not ListingDocuments(workspace).exists(name):
-        raise ListingMissing(name)
+        raise ListingMissingError(name)

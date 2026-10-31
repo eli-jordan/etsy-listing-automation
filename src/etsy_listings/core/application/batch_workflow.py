@@ -27,20 +27,20 @@ from etsy_listings.core.ai.listing_inputs import ListingAiInputs
 from etsy_listings.core.ai.proposals import ProposalStore
 from etsy_listings.core.application.ai.batch_queue import BatchQueue
 from etsy_listings.core.application.refusals import (
-    AiDraftingBlocked,
-    BatchMissing,
-    BatchRowMissing,
-    BatchRowNotReviewable,
-    BatchRowUploadMissing,
-    NothingToRetry,
-    StagingMissing,
+    AiDraftingBlockedError,
+    BatchMissingError,
+    BatchRowMissingError,
+    BatchRowNotReviewableError,
+    BatchRowUploadMissingError,
+    NothingToRetryError,
+    StagingMissingError,
 )
 from etsy_listings.core.batches import (
     RETRYABLE,
     Batch,
     BatchRow,
     BatchStore,
-    NotReviewable,
+    NotReviewableError,
     StagingStore,
     Standing,
     confirm,
@@ -73,19 +73,19 @@ def confirm_batch(
 
     Only a *new* batch asks whether the queue could draft: one that exists
     already has listings half made, and is finished whatever AI's state.
-    Refusals, with nothing created: :class:`AiDraftingBlocked`,
-    ``batches.ConfirmRefused`` (names to fix, nothing creatable, a shared ref
-    broken since staging), :class:`StagingMissing`, ``InvalidNameError``.
+    Refusals, with nothing created: :class:`AiDraftingBlockedError`,
+    ``batches.ConfirmRefusedError`` (names to fix, nothing creatable, a shared ref
+    broken since staging), :class:`StagingMissingError`, ``InvalidNameError``.
     """
     workspace.staging_dir(session_id)
     if batches.load(session_id) is None:
         blocked = queue.blocked()
         if blocked is not None:
-            raise AiDraftingBlocked(blocked.message)
+            raise AiDraftingBlockedError(blocked.message)
     try:
         batch = confirm(workspace, staging, batches, session_id)
     except KeyError as exc:
-        raise StagingMissing(session_id) from exc
+        raise StagingMissingError(session_id) from exc
     queue.wake()
     return batch
 
@@ -104,7 +104,7 @@ def retry_batch_row(
 ) -> Batch:
     """Retry one row (UI doc §7): its creation, if that failed -- which
     queues it once it exists -- else its AI, keeping the saved brief.
-    :class:`NothingToRetry` for a row whose AI is not failed, stopped or
+    :class:`NothingToRetryError` for a row whose AI is not failed, stopped or
     cancelled, or whose listing was deleted."""
     batch = read_batch(workspace, batches, batch_id)
     target = _row(batch, row_id)
@@ -113,7 +113,7 @@ def retry_batch_row(
     elif target.ai in RETRYABLE and not target.deleted:
         queue.retry(batch_id, row_id)
     else:
-        raise NothingToRetry(target.name)
+        raise NothingToRetryError(target.name)
     return read_batch(workspace, batches, batch_id)
 
 
@@ -200,15 +200,15 @@ def mark_reviewed(
     workspace: Workspace, batches: BatchStore, batch_id: str, row_id: str, *, reviewed: bool
 ) -> Batch:
     """Mark reviewed / Mark needs review (spec, *Review workflow*).
-    :class:`BatchRowNotReviewable` for a row still queued or drafting,
+    :class:`BatchRowNotReviewableError` for a row still queued or drafting,
     deleted, or never created."""
     read_batch(workspace, batches, batch_id)
     try:
         return batches.review(batch_id, row_id, reviewed=reviewed)
     except KeyError as exc:
-        raise BatchRowMissing(row_id) from exc
-    except NotReviewable as exc:
-        raise BatchRowNotReviewable(exc.args[0]) from exc
+        raise BatchRowMissingError(row_id) from exc
+    except NotReviewableError as exc:
+        raise BatchRowNotReviewableError(exc.args[0]) from exc
 
 
 # ------------------------------------------------------------------ reads
@@ -216,11 +216,11 @@ def mark_reviewed(
 
 def read_batch(workspace: Workspace, batches: BatchStore, batch_id: str) -> Batch:
     """``InvalidNameError`` for an id that is not a path segment;
-    :class:`BatchMissing` for one nobody holds."""
+    :class:`BatchMissingError` for one nobody holds."""
     workspace.batch_file(batch_id)
     batch = batches.load(batch_id)
     if batch is None:
-        raise BatchMissing(batch_id)
+        raise BatchMissingError(batch_id)
     return batch
 
 
@@ -232,9 +232,9 @@ def batch_row_upload(workspace: Workspace, batches: BatchStore, batch_id: str, r
     try:
         path = row_upload(workspace, batch, row_id)
     except KeyError as exc:
-        raise BatchRowMissing(row_id) from exc
+        raise BatchRowMissingError(row_id) from exc
     if not path.is_file():
-        raise BatchRowUploadMissing(row_id)
+        raise BatchRowUploadMissingError(row_id)
     return path
 
 
@@ -343,5 +343,5 @@ def row_proposal(
 def _row(batch: Batch, row_id: str) -> BatchRow:
     row = next((r for r in batch.rows if r.id == row_id), None)
     if row is None:
-        raise BatchRowMissing(row_id)
+        raise BatchRowMissingError(row_id)
     return row

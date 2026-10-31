@@ -26,11 +26,11 @@ from etsy_listings.core.ai.proposals import ProposalStore
 from etsy_listings.core.application.ai.coordinator import AiCoordinator
 from etsy_listings.core.application.ai.listing_proposals import read_proposal, resolve_proposal
 from etsy_listings.core.application.refusals import (
-    ListingDeploying,
-    ListingDraftingInBatch,
-    ListingMissing,
-    ProposalMissing,
-    ProposalReplaced,
+    ListingDeployingError,
+    ListingDraftingInBatchError,
+    ListingMissingError,
+    ProposalMissingError,
+    ProposalReplacedError,
 )
 from etsy_listings.core.market import snapshot as market_snapshot
 from etsy_listings.core.market.snapshot import MarketSnapshot
@@ -64,8 +64,8 @@ def get_seo_readiness(target: Existing, request: Request) -> SeoReadinessRespons
     return SeoReadinessResponse(
         ready=False,
         reason=str(refused),
-        deploying=isinstance(refused, ListingDeploying),
-        batch_pending=isinstance(refused, ListingDraftingInBatch),
+        deploying=isinstance(refused, ListingDeployingError),
+        batch_pending=isinstance(refused, ListingDraftingInBatchError),
     )
 
 
@@ -98,7 +98,7 @@ def get_listing_proposal(target: Existing, request: Request) -> ListingProposal:
     reload, a server restart or a batch run all find it here."""
     try:
         return read_proposal(target.workspace, _proposals(request), target.name)
-    except (ListingMissing, ProposalMissing) as exc:
+    except (ListingMissingError, ProposalMissingError) as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
@@ -129,7 +129,7 @@ def resolve_listing_proposal(
             tags=body.tags,
             lead=body.lead,
         )
-    except (ListingMissing, ProposalMissing) as exc:
+    except (ListingMissingError, ProposalMissingError) as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
-    except ProposalReplaced as exc:
+    except ProposalReplacedError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc

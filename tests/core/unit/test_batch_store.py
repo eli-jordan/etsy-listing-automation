@@ -16,7 +16,7 @@ from typing import Any
 
 import pytest
 
-from etsy_listings.core.batches import Batch, BatchRow, BatchStore, NotReviewable
+from etsy_listings.core.batches import Batch, BatchRow, BatchStore, NotReviewableError
 from etsy_listings.core.workspace.workspace import Workspace
 
 from tests.support.refusals import refuse_reads
@@ -165,7 +165,7 @@ def test_review_refuses_a_row_with_no_listing_to_look_at(store: BatchStore) -> N
     _save(store, "b1", _row("queued", ai="queued"), _row("gone", deleted=True))
 
     for row in ("row-queued", "row-gone"):
-        with pytest.raises(NotReviewable):
+        with pytest.raises(NotReviewableError):
             store.review("b1", row, reviewed=True)
     assert [r.reviewed for r in _rows(store, "b1")] == [False, False]
 

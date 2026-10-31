@@ -15,7 +15,7 @@ from etsy_listings.core.errors import UserFacingError
 from etsy_listings.core.preparation.artifacts import (
     ArtifactError,
     Artifacts,
-    IncompatibleDimensions,
+    IncompatibleDimensionsError,
     Readiness,
     ReadinessReason,
 )
@@ -25,7 +25,7 @@ from etsy_listings.core.render.config import (
     MultipleTemplate,
     PhotoWarpRenderer,
 )
-from etsy_listings.core.workspace.calibration import CalibrationStore, MaskPhotoMismatch
+from etsy_listings.core.workspace.calibration import CalibrationStore, MaskPhotoMismatchError
 from etsy_listings.core.workspace.workspace import Workspace
 
 __all__ = [
@@ -94,7 +94,7 @@ def saved_preparation_facts(workspace: Workspace, name: str) -> SavedPreparation
                             return SavedPreparationFacts(
                                 Readiness(
                                     "out_of_date",
-                                    IncompatibleDimensions.reason,
+                                    IncompatibleDimensionsError.reason,
                                     "Shared colour photo dimensions differ from the main photo. "
                                     "Use matching photos or separate templates.",
                                 )
@@ -104,6 +104,6 @@ def saved_preparation_facts(workspace: Workspace, name: str) -> SavedPreparation
             reason: ReadinessReason = ArtifactError.reason
             if isinstance(exc, ArtifactError):
                 reason = exc.reason
-            elif isinstance(exc, MaskPhotoMismatch):
+            elif isinstance(exc, MaskPhotoMismatchError):
                 reason = "photo_changed"
             return SavedPreparationFacts(Readiness("out_of_date", reason, str(exc)))

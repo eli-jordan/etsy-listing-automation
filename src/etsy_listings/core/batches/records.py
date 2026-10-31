@@ -174,7 +174,7 @@ def reviewable(row: BatchRow) -> bool:
     return has_listing(row) and row.ai not in DRAFTING
 
 
-class NotReviewable(ValueError):
+class NotReviewableError(ValueError):
     """Mark reviewed on a row :func:`reviewable` refuses."""
 
 
@@ -286,7 +286,7 @@ class BatchStore(_Store[Batch]):
     def review(self, batch_id: str, row_id: str, *, reviewed: bool) -> Batch:
         """Mark reviewed / Mark needs review (spec, *Review workflow*).
         :class:`KeyError` for a batch or row nobody holds,
-        :class:`NotReviewable` for a row with no listing to look at yet."""
+        :class:`NotReviewableError` for a row with no listing to look at yet."""
         with self.lock(batch_id):
             batch = self.load(batch_id)
             rows = batch.rows if batch is not None else []
@@ -294,7 +294,7 @@ class BatchStore(_Store[Batch]):
             if batch is None or index is None:
                 raise KeyError(row_id)
             if not reviewable(rows[index]):
-                raise NotReviewable(rows[index].name)
+                raise NotReviewableError(rows[index].name)
             rows[index] = rows[index].model_copy(update={"reviewed": reviewed})
             self.save(batch)
             return batch

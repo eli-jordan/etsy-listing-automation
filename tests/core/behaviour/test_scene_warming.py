@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from etsy_listings.core.application.refusals import TemplateMissing
+from etsy_listings.core.application.refusals import TemplateMissingError
 from etsy_listings.core.application.scene_warming import Scene, SceneWarmer
 from etsy_listings.core.workspace.workspace import Workspace
 
@@ -83,7 +83,7 @@ def test_a_listing_that_does_not_load_warms_nothing(workspace: Workspace) -> Non
 def test_a_scene_that_cannot_compose_is_skipped(workspace: Workspace) -> None:
     def warm(workspace: Workspace, name: str, template: str, colour: str | None) -> None:
         if template == "gone":
-            raise TemplateMissing(template)
+            raise TemplateMissingError(template)
         recorder(workspace, name, template, colour)
 
     recorder = Recorder()

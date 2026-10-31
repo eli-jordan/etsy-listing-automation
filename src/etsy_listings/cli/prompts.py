@@ -83,7 +83,7 @@ def prompt_toolkit_works() -> bool:
 FZF_PROBE_TIMEOUT_SECONDS = 5
 
 
-class _FzfFailed(Exception):
+class _FzfFailedError(Exception):
     """fzf could not run at all -- which is not "the user picked nothing"."""
 
 
@@ -161,7 +161,7 @@ def choose(message: str, rows: Sequence[str], *, marker_hint: str = "") -> str |
     if command is not None:
         try:
             return _choose_with_fzf(command, message, listed)
-        except _FzfFailed as exc:
+        except _FzfFailedError as exc:
             # An fzf that is present but cannot run -- no terminal to draw on,
             # most likely -- must not read as a cancelled prompt, or `new`
             # would exit silently with nothing on screen to explain it.
@@ -305,11 +305,11 @@ def _choose_with_fzf(command: list[str], message: str, rows: list[str]) -> str |
             check=False,
         )
     except (OSError, subprocess.SubprocessError) as exc:
-        raise _FzfFailed(f"could not run fzf ({exc})") from exc
+        raise _FzfFailedError(f"could not run fzf ({exc})") from exc
     if result.returncode in {1, 130}:  # 1 = no match, 130 = cancelled
         return None
     if result.returncode != 0:  # 2 = error, and anything else is one too
-        raise _FzfFailed(f"fzf exited with status {result.returncode}")
+        raise _FzfFailedError(f"fzf exited with status {result.returncode}")
     picked = result.stdout.strip("\n")
     return picked or None
 

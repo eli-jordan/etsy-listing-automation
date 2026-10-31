@@ -17,7 +17,7 @@ from pathlib import Path
 import pytest
 
 from etsy_listings.core import batches
-from etsy_listings.core.batches import StagingRefused, StagingStore, review, stage_pngs
+from etsy_listings.core.batches import StagingRefusedError, StagingStore, review, stage_pngs
 from etsy_listings.core.workspace.workspace import Workspace
 
 from tests.support.batches import a_listing_template, png, uploads
@@ -78,7 +78,7 @@ class TestValidation:
     def test_a_file_that_is_not_a_png_refuses_the_upload(
         self, workspace: Workspace, store: StagingStore
     ) -> None:
-        with pytest.raises(StagingRefused, match=r"readme\.txt is not a PNG"):
+        with pytest.raises(StagingRefusedError, match=r"readme\.txt is not a PNG"):
             _stage(workspace, store, ("a.png", png(1)), ("readme.txt", b"hello"))
 
         assert _staging_left(workspace) == []
@@ -90,7 +90,7 @@ class TestLimits:
     ) -> None:
         files = [(f"design-{n}.png", png(n)) for n in range(26)]
 
-        with pytest.raises(StagingRefused) as refused:
+        with pytest.raises(StagingRefusedError) as refused:
             _stage(workspace, store, *files)
 
         assert "26 different PNG designs" in str(refused.value)
@@ -116,7 +116,7 @@ class TestLimits:
     ) -> None:
         monkeypatch.setattr(batches.staging, "MAX_PNG_BYTES", 100)
 
-        with pytest.raises(StagingRefused, match=r"big\.png is larger than"):
+        with pytest.raises(StagingRefusedError, match=r"big\.png is larger than"):
             _stage(workspace, store, ("big.png", png(1)))
 
         assert _staging_left(workspace) == []
@@ -126,7 +126,7 @@ class TestLimits:
     ) -> None:
         monkeypatch.setattr(batches.staging, "MAX_UPLOAD_BYTES", len(png(1)) + 10)
 
-        with pytest.raises(StagingRefused, match="together"):
+        with pytest.raises(StagingRefusedError, match="together"):
             _stage(workspace, store, ("a.png", png(1)), ("b.png", png(2)))
 
         assert _staging_left(workspace) == []

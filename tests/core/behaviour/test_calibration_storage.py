@@ -43,7 +43,7 @@ def test_interrupted_save_rolls_forward_and_cli_refuses_mixed_state(
 
     import pytest
 
-    from etsy_listings.core.workspace.calibration import CalibrationRepairRequired
+    from etsy_listings.core.workspace.calibration import CalibrationRepairRequiredError
 
     store = make_store(workspace_root)
     saved = store.read("example")
@@ -63,7 +63,7 @@ def test_interrupted_save_rolls_forward_and_cli_refuses_mixed_state(
             store.save(
                 "example", updated, expected_revision=saved.revision, request_id="interrupted"
             )
-    with pytest.raises(CalibrationRepairRequired, match="transaction"):
+    with pytest.raises(CalibrationRepairRequiredError, match="transaction"):
         store.workspace.load_template_config("example")
     restarted = CalibrationStore(store.workspace)
     assert restarted.read("example").config == updated
@@ -83,7 +83,7 @@ def test_mask_strokes_undo_restart_and_reset_after_cache_deletion(workspace_root
 
     from etsy_listings.core.workspace.calibration import (
         MaskEdit,
-        MaskUnavailable,
+        MaskUnavailableError,
         Reset,
         Stroke,
         Undo,
@@ -128,7 +128,7 @@ def test_mask_strokes_undo_restart_and_reset_after_cache_deletion(workspace_root
     )
     shutil.rmtree(store.workspace.cache("preparation"))
     assert restarted.mask("example").undo_count == 0
-    with pytest.raises(MaskUnavailable, match="Undo"):
+    with pytest.raises(MaskUnavailableError, match="Undo"):
         restarted.save(
             "example",
             painted.config,
@@ -151,7 +151,7 @@ def test_duplicate_save_returns_exact_response_and_conflicts_cannot_overwrite(
 ) -> None:
     import pytest
 
-    from etsy_listings.core.workspace.calibration import CalibrationConflict
+    from etsy_listings.core.workspace.calibration import CalibrationConflictError
 
     store = make_store(workspace_root)
     before = store.read("example")
@@ -166,9 +166,9 @@ def test_duplicate_save_returns_exact_response_and_conflicts_cannot_overwrite(
         {**before.config.model_dump(mode="json"), "renderer": {"type": "photo-warp", "config": {}}}
     )
     after = store.save("example", updated, expected_revision=result.revision, request_id="new")
-    with pytest.raises(CalibrationConflict):
+    with pytest.raises(CalibrationConflictError):
         store.save("example", before.config, expected_revision=before.revision, request_id="same")
-    with pytest.raises(CalibrationConflict):
+    with pytest.raises(CalibrationConflictError):
         store.save("example", before.config, expected_revision=before.revision, request_id="new")
     assert store.read("example") == after
 
@@ -237,7 +237,7 @@ def test_main_photo_change_refuses_mask_reuse_until_explicit_reset(workspace_roo
 
     import pytest
 
-    from etsy_listings.core.workspace.calibration import MaskPhotoMismatch, MaskUnavailable
+    from etsy_listings.core.workspace.calibration import MaskPhotoMismatchError, MaskUnavailableError
 
     store = make_store(workspace_root)
     png = BytesIO()
@@ -251,9 +251,9 @@ def test_main_photo_change_refuses_mask_reuse_until_explicit_reset(workspace_roo
     Image.new("RGB", (32, 32), "black").save(store.workspace.template_main_photo("example"))
     changed = store.read("example")
     assert changed.revision != saved.revision
-    with pytest.raises(MaskPhotoMismatch, match="Main photo changed"):
+    with pytest.raises(MaskPhotoMismatchError, match="Main photo changed"):
         store.mask("example")
-    with pytest.raises(MaskUnavailable):
+    with pytest.raises(MaskUnavailableError):
         store.install_automatic(
             "example", png.getvalue(), algorithm_version="v1", expected_revision=changed.revision
         )
@@ -272,7 +272,7 @@ def test_multiple_masks_follow_stable_ids_through_reorder(workspace_root: Path) 
 
     import pytest
 
-    from etsy_listings.core.workspace.calibration import MaskUnavailable
+    from etsy_listings.core.workspace.calibration import MaskUnavailableError
 
     store = make_store(workspace_root)
     config = load_template_config(
@@ -305,7 +305,7 @@ def test_multiple_masks_follow_stable_ids_through_reorder(workspace_root: Path) 
     )
     store.save("example", config, expected_revision=saved.revision, request_id="reorder")
     assert Image.open(BytesIO(store.mask("example", "left-shirt").edited)).getpixel((16, 16)) == 100
-    with pytest.raises(MaskUnavailable):
+    with pytest.raises(MaskUnavailableError):
         store.mask("example")
 
 
@@ -412,7 +412,7 @@ def test_damaged_recovery_data_blocks_without_accepting_mixed_calibration(
     import json
     import os
 
-    from etsy_listings.core.workspace.calibration import CalibrationRepairRequired
+    from etsy_listings.core.workspace.calibration import CalibrationRepairRequiredError
 
     store = make_store(workspace_root)
     before = store.read("example")
@@ -437,7 +437,7 @@ def test_damaged_recovery_data_blocks_without_accepting_mixed_calibration(
         (transaction / payload).write_bytes(b"corrupted")
     else:
         manifest.write_bytes(b"corrupted")
-    with pytest.raises(CalibrationRepairRequired, match="repair"):
+    with pytest.raises(CalibrationRepairRequiredError, match="repair"):
         CalibrationStore(store.workspace).read("example")
 
 
@@ -445,7 +445,7 @@ def test_damaged_brush_history_is_discarded_without_losing_mask(workspace_root: 
     import json
     from io import BytesIO
 
-    from etsy_listings.core.workspace.calibration import MaskEdit, MaskUnavailable, Stroke, Undo
+    from etsy_listings.core.workspace.calibration import MaskEdit, MaskUnavailableError, Stroke, Undo
 
     store = make_store(workspace_root)
     png = BytesIO()
@@ -472,7 +472,7 @@ def test_damaged_brush_history_is_discarded_without_losing_mask(workspace_root: 
         json.dumps({"checksum": painted.checksum, "strokes": [{}]}), encoding="utf-8"
     )
     assert store.mask("example").undo_count == 0
-    with pytest.raises(MaskUnavailable, match="Undo"):
+    with pytest.raises(MaskUnavailableError, match="Undo"):
         store.save(
             "example",
             saved.config,
@@ -488,7 +488,7 @@ def test_concurrent_saves_share_one_template_lock_and_one_revision_wins(
 ) -> None:
     from concurrent.futures import ThreadPoolExecutor
 
-    from etsy_listings.core.workspace.calibration import CalibrationConflict
+    from etsy_listings.core.workspace.calibration import CalibrationConflictError
 
     store = make_store(workspace_root)
     before = store.read("example")
@@ -505,7 +505,7 @@ def test_concurrent_saves_share_one_template_lock_and_one_revision_wins(
             return other.save(
                 "example", config, expected_revision=before.revision, request_id=f"save-{opacity}"
             ).revision
-        except CalibrationConflict:
+        except CalibrationConflictError:
             return "conflict"
 
     with ThreadPoolExecutor(max_workers=2) as executor:
@@ -538,7 +538,7 @@ def test_switching_back_restores_last_saved_renderer_settings(workspace_root: Pa
 def test_missing_automatic_baseline_does_not_overwrite_saved_edits(workspace_root: Path) -> None:
     from io import BytesIO
 
-    from etsy_listings.core.workspace.calibration import CalibrationRepairRequired, MaskEdit, Stroke
+    from etsy_listings.core.workspace.calibration import CalibrationRepairRequiredError, MaskEdit, Stroke
 
     store = make_store(workspace_root)
     png = BytesIO()
@@ -562,7 +562,7 @@ def test_missing_automatic_baseline_does_not_overwrite_saved_edits(workspace_roo
     )
     edited = store.mask("example").edited
     store.workspace.template_mask_file("example", source="automatic").unlink()
-    with pytest.raises(CalibrationRepairRequired, match="baseline"):
+    with pytest.raises(CalibrationRepairRequiredError, match="baseline"):
         store.install_automatic(
             "example",
             png.getvalue(),
@@ -576,7 +576,7 @@ def test_template_alias_saves_share_canonical_directory_lock(workspace_root: Pat
     from concurrent.futures import ThreadPoolExecutor
     from threading import Event
 
-    from etsy_listings.core.workspace.calibration import CalibrationConflict
+    from etsy_listings.core.workspace.calibration import CalibrationConflictError
 
     store = make_store(workspace_root)
     alias = store.workspace.template_dir("alias")
@@ -592,7 +592,7 @@ def test_template_alias_saves_share_canonical_directory_lock(workspace_root: Pat
         try:
             store.save("alias", config, expected_revision=before.revision, request_id="alias-save")
             return "saved"
-        except CalibrationConflict:
+        except CalibrationConflictError:
             return "conflict"
         finally:
             finished.set()
@@ -625,13 +625,13 @@ def test_template_alias_cannot_escape_workspace(workspace_root: Path, tmp_path: 
 def test_unavailable_mask_is_not_a_main_photo_mismatch(
     workspace_root: Path, placement_id: str | None
 ) -> None:
-    from etsy_listings.core.workspace.calibration import MaskPhotoMismatch, MaskUnavailable
+    from etsy_listings.core.workspace.calibration import MaskPhotoMismatchError, MaskUnavailableError
 
     store = make_store(workspace_root)
-    with pytest.raises(MaskUnavailable) as refusal:
+    with pytest.raises(MaskUnavailableError) as refusal:
         store.mask("example", placement_id)
-    assert type(refusal.value) is MaskUnavailable
-    assert not isinstance(refusal.value, MaskPhotoMismatch)
+    assert type(refusal.value) is MaskUnavailableError
+    assert not isinstance(refusal.value, MaskPhotoMismatchError)
 
 
 def test_repeated_photo_identity_tracks_replaced_pixels(workspace_root) -> None:

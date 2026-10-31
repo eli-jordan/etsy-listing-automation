@@ -14,7 +14,7 @@ here for compatibility; settings loading never imports market.
 
 - ``research`` -- :func:`research`, the whole search, filter, stats and
   score pipeline; :class:`MarketResearchError` (the *Etsy market search
-  failed* message) and :class:`ResearchCancelled`.
+  failed* message) and :class:`ResearchCancelledError`.
 - ``models`` -- :class:`MarketResult`, :class:`ScoredListing`,
   :class:`PhraseScore` and :class:`MarketWeights`.
 - ``block`` -- :func:`market_block`, the delimited text the proposal
@@ -29,7 +29,7 @@ from __future__ import annotations
 
 from etsy_listings.core.market.block import MARKET_BEGIN, MARKET_END, lead, market_block
 from etsy_listings.core.market.models import MarketResult, MarketWeights, PhraseScore, ScoredListing
-from etsy_listings.core.market.research import MarketResearchError, ResearchCancelled, research
+from etsy_listings.core.market.research import MarketResearchError, ResearchCancelledError, research
 
 __all__ = [
     "MARKET_BEGIN",
@@ -38,7 +38,7 @@ __all__ = [
     "MarketResult",
     "MarketWeights",
     "PhraseScore",
-    "ResearchCancelled",
+    "ResearchCancelledError",
     "ScoredListing",
     "lead",
     "market_block",

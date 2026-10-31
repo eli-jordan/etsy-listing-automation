@@ -38,7 +38,7 @@ from etsy_listings.core.application.ai.registry import AiRun
 from etsy_listings.core.application.deploy.deployments import Deployments
 from etsy_listings.core.application.deploy.events import TERMINAL_PHASES
 from etsy_listings.core.application.deploy.registry import ListingApply, ListingPlan, Run
-from etsy_listings.core.application.refusals import ListingDeploying
+from etsy_listings.core.application.refusals import ListingDeployingError
 from etsy_listings.core.application.workspace_locks import WorkspaceLocks
 from etsy_listings.core.batches import BatchStore, StagingStore
 from etsy_listings.core.clients.printify.fakes import FakeCatalogClient
@@ -263,12 +263,12 @@ def test_a_manual_run_is_stopped_and_a_new_one_refused_while_the_deploy_holds_th
 
     deploy = host.deploy("plan", FIXTURE_LISTING)
     assert deploys.started.wait(15)
-    with pytest.raises(ListingDeploying):
+    with pytest.raises(ListingDeployingError):
         host.ai.start_run(FIXTURE_LISTING, draft_brief=False)
     blocked = host.ai.blocked(FIXTURE_LISTING)
     deploys.hold.set()
 
-    assert isinstance(blocked, ListingDeploying)
+    assert isinstance(blocked, ListingDeployingError)
     assert (started.phase, provider.cancelled) == ("cancelled", ["queries"])
     assert _finished(deploy) == "ready"
     assert isinstance(host.ai.start_run(FIXTURE_LISTING, draft_brief=False), AiRun)

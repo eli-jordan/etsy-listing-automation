@@ -28,7 +28,7 @@ from pathlib import Path, PurePosixPath
 from typing import BinaryIO, Literal
 
 from etsy_listings.core.batches import archive as archive_file
-from etsy_listings.core.batches.archive import PNG_MAGIC, ArchiveRefused
+from etsy_listings.core.batches.archive import PNG_MAGIC, ArchiveRefusedError
 from etsy_listings.core.batches.naming import allocate
 from etsy_listings.core.batches.records import StagingRow, StagingSession, StagingStore
 from etsy_listings.core.config.errors import ConfigLoadError
@@ -50,7 +50,7 @@ _CHUNK = 1024 * 1024
 _UNDO = "Nothing was uploaded or changed."
 
 
-class StagingRefused(UserFacingError, ValueError):
+class StagingRefusedError(UserFacingError, ValueError):
     """The upload as a whole cannot be staged. ``message`` says why, the page
     heading it *... was not staged*; ``remedy`` says how to fix it and always
     ends by saying nothing was kept (UI doc §4)."""
@@ -93,12 +93,12 @@ class _Received:
                 size += len(chunk)
                 self._total += len(chunk)
                 if size > MAX_PNG_BYTES:
-                    raise StagingRefused(
+                    raise StagingRefusedError(
                         f"{name} is larger than {MAX_PNG_BYTES // 2**20} MiB.",
                         f"Export it smaller, or leave it out. {_UNDO}",
                     )
                 if self._total_limit is not None and self._total > self._total_limit:
-                    raise StagingRefused(
+                    raise StagingRefusedError(
                         f"These files are larger than {self._total_limit // 2**20} MiB together.",
                         f"Stage fewer at a time. {_UNDO}",
                     )
@@ -149,12 +149,12 @@ def _receive(workspace: Workspace, session: str, uploads: Iterable[Upload]) -> _
     heads = [(upload, upload.stream.read(len(PNG_MAGIC))) for upload in uploads]
     zips = [upload for upload, head in heads if _is_zip(upload, head)]
     if len(zips) > 1:
-        raise StagingRefused(
+        raise StagingRefusedError(
             f"These are {len(zips)} ZIPs, and a batch takes one.",
             f"Start a batch for each ZIP. {_UNDO}",
         )
     if zips and len(heads) > 1:
-        raise StagingRefused(
+        raise StagingRefusedError(
             "These are a ZIP and loose files together, and a batch takes one or the other.",
             f"Put the PNGs in the ZIP, or drop them without it. {_UNDO}",
         )
@@ -167,12 +167,12 @@ def _receive(workspace: Workspace, session: str, uploads: Iterable[Upload]) -> _
     received = _Received(workspace, session, total_limit=MAX_UPLOAD_BYTES)
     for upload, head in heads:
         if head != PNG_MAGIC:
-            raise StagingRefused(
+            raise StagingRefusedError(
                 f"{upload.filename} is not a PNG.", f"Drop only PNG design files. {_UNDO}"
             )
         received.add(upload.filename, _chunks(head, upload.stream))
     if not received.rows:
-        raise StagingRefused("No files were dropped.", "Choose at least one PNG.")
+        raise StagingRefusedError("No files were dropped.", "Choose at least one PNG.")
     _limit(received, "They hold", "Split them into {} batches.")
     return _Receipt(list(received.rows.values()), [], None)
 
@@ -186,7 +186,7 @@ def _limit(received: _Received, subject: str, remedy: str) -> None:
     count = len(received.rows)
     if count > MAX_DESIGNS:
         parts = -(-count // MAX_DESIGNS)
-        raise StagingRefused(
+        raise StagingRefusedError(
             f"{subject} {count} different PNG designs, and a batch takes at most {MAX_DESIGNS}.",
             f"{remedy.format(_SPLITS.get(parts, str(parts)))} {_UNDO}",
         )
@@ -205,8 +205,8 @@ def _receive_zip(
             for name in archive.pngs:
                 received.add(name, archive.read(name))
             return archive.ignored
-    except ArchiveRefused as exc:
-        raise StagingRefused(exc.message, f"{exc.remedy} {_UNDO}") from exc
+    except ArchiveRefusedError as exc:
+        raise StagingRefusedError(exc.message, f"{exc.remedy} {_UNDO}") from exc
     finally:
         path.unlink(missing_ok=True)
 
@@ -230,7 +230,7 @@ def stage_pngs(
     template_lock: TemplateLock = lambda _: nullcontext(),
 ) -> StagingSession:
     """Stage ``uploads`` against ``listing_template``, or raise
-    :class:`StagingRefused` with nothing left on disk.
+    :class:`StagingRefusedError` with nothing left on disk.
 
     Each row is checked with the existing design rules against the frozen
     template's garment profile (spec, *Design validation*); a design that
@@ -246,7 +246,7 @@ def stage_pngs(
         try:
             profile = workspace.load_garment_profile(template.garment_profile)
         except ConfigLoadError as exc:
-            raise StagingRefused(f"{listing_template} cannot be used: {exc}", _UNDO) from exc
+            raise StagingRefusedError(f"{listing_template} cannot be used: {exc}", _UNDO) from exc
         receipt = _receive(workspace, session, uploads)
         rows, ignored = receipt.rows, receipt.ignored
         for row in rows:

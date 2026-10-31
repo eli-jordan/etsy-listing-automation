@@ -82,7 +82,7 @@ repair, and the permitted Codex-to-Claude fallback all share this one
 `Deadline` (implementation plan, "Timeout and retries")."""
 
 
-class _Malformed(Exception):
+class _MalformedError(Exception):
     """Internal-only: a provider's raw output could not become the result
     its task asked for, for any reason -- not valid JSON, not a JSON object,
     or a hard-validation failure. Never escapes this module; every case it
@@ -100,9 +100,9 @@ def _decoded(raw_output: str) -> Mapping[str, object]:
     try:
         parsed = json.loads(raw_output)
     except json.JSONDecodeError as exc:
-        raise _Malformed((f"response was not valid JSON: {exc}",)) from exc
+        raise _MalformedError((f"response was not valid JSON: {exc}",)) from exc
     if not isinstance(parsed, Mapping):
-        raise _Malformed(("response: expected a JSON object",)) from None
+        raise _MalformedError(("response: expected a JSON object",)) from None
     return parsed
 
 
@@ -110,21 +110,21 @@ def _seo_decoder(raw_output: str) -> SeoProposal:
     try:
         return validate_proposal(_decoded(raw_output))
     except ProposalValidationError as exc:
-        raise _Malformed(exc.reasons) from exc
+        raise _MalformedError(exc.reasons) from exc
 
 
 def _brief_decoder(raw_output: str) -> DesignBrief:
     try:
         return validate_brief(dict(_decoded(raw_output)))
     except BriefValidationError as exc:
-        raise _Malformed(exc.reasons) from exc
+        raise _MalformedError(exc.reasons) from exc
 
 
 def _market_queries_decoder(raw_output: str) -> MarketQueries:
     try:
         return validate_market_queries(dict(_decoded(raw_output)))
     except MarketQueriesValidationError as exc:
-        raise _Malformed(exc.reasons) from exc
+        raise _MalformedError(exc.reasons) from exc
 
 
 def _resolve[Result](
@@ -138,7 +138,7 @@ def _resolve[Result](
 ) -> Result:
     try:
         return decode(raw_output)
-    except _Malformed as first_error:
+    except _MalformedError as first_error:
         if deadline.expired:
             raise SeoDeadlineExceededError(
                 f"{provider_name}: the shared deadline expired before a same-provider "
@@ -159,7 +159,7 @@ def _resolve[Result](
 
         try:
             return decode(repaired.raw_output)
-        except _Malformed as second_error:
+        except _MalformedError as second_error:
             raise SeoTryAgainError(
                 f"{provider_name}: the repaired response was still invalid: {second_error}"
             ) from second_error
@@ -179,7 +179,7 @@ def run_task[Result](
     is started if none is given).
 
     ``decode`` takes raw provider text and returns a validated result,
-    raising `_Malformed` for anything in between -- the only thing this
+    raising `_MalformedError` for anything in between -- the only thing this
     function needs to know about a task beyond how to run it, and the reason
     the whole classification rule this module documents applies to both AI
     features without either one restating it. `generate_proposal` and

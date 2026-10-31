@@ -54,20 +54,20 @@ from etsy_listings.core.application.prepared_previews import (
     saved_scene,
 )
 from etsy_listings.core.application.refusals import (
-    TemplateAlreadyCalibrated,
-    TemplateConfigMissing,
-    TemplateKindRefused,
-    TemplateMissing,
-    TemplatePhotoMissing,
-    TemplatePreviewKindMismatch,
+    TemplateAlreadyCalibratedError,
+    TemplateConfigMissingError,
+    TemplateKindRefusedError,
+    TemplateMissingError,
+    TemplatePhotoMissingError,
+    TemplatePreviewKindMismatchError,
 )
 from etsy_listings.core.config.slug import SlugCollisionError
 from etsy_listings.core.errors import UserFacingError
 from etsy_listings.core.preparation.readiness import catalog_readiness
 from etsy_listings.core.render import MarigoldRenderer, load_template_config
-from etsy_listings.core.render.config import AnyTemplate, PreparationRequired, TemplateConfig
+from etsy_listings.core.render.config import AnyTemplate, PreparationRequiredError, TemplateConfig
 from etsy_listings.core.render.io import encode_png
-from etsy_listings.core.workspace.calibration import CalibrationConflict
+from etsy_listings.core.workspace.calibration import CalibrationConflictError
 from etsy_listings.core.workspace.workspace import Workspace
 from etsy_listings.server.api.designs import resolve_design
 from etsy_listings.server.api.imagecache import (
@@ -110,7 +110,7 @@ def target(request: Request, name: str) -> Target:
     workspace = _workspace(request)
     try:
         require_template(workspace, name)
-    except TemplateMissing as exc:
+    except TemplateMissingError as exc:
         raise _not_found(exc) from exc
     return Target(workspace=workspace, name=name)
 
@@ -177,16 +177,16 @@ def assign_kind(template: Existing, body: AssignKindRequest) -> AnyTemplate:
     already has one -- changing kind would discard its calibration."""
     try:
         return calibration.assign_kind(template.workspace, template.name, body.kind)
-    except TemplateAlreadyCalibrated as exc:
+    except TemplateAlreadyCalibratedError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
-    except (TemplateKindRefused, SlugCollisionError) as exc:
+    except (TemplateKindRefusedError, SlugCollisionError) as exc:
         raise _bad_request(exc) from exc
 
 
 def _photo(template: Target, colour: str | None) -> Path:
     try:
         return template_photo(template.workspace, template.name, colour)
-    except TemplatePhotoMissing as exc:
+    except TemplatePhotoMissingError as exc:
         raise _not_found(exc) from exc
 
 
@@ -215,7 +215,7 @@ def photo(template: Existing, colour: str | None = None) -> Response:
 def get_config(template: Existing, response: Response) -> AnyTemplate:
     try:
         saved = read_config(template.workspace, template.name)
-    except TemplateConfigMissing as exc:
+    except TemplateConfigMissingError as exc:
         raise _not_found(exc) from exc
     response.headers["ETag"] = f'"{saved.revision}"'
     response.headers["Last-Modified"] = format_datetime(saved.modified_at, usegmt=True)
@@ -240,11 +240,11 @@ def put_config(
             request_id=body.request_id,
             mask_edits=body.mask_edits,
         )
-    except CalibrationConflict as exc:
+    except CalibrationConflictError as exc:
         raise HTTPException(
             status_code=409 if "request ID" in str(exc) else 412, detail=str(exc)
         ) from exc
-    except TemplateKindRefused as exc:
+    except TemplateKindRefusedError as exc:
         raise _bad_request(exc) from exc
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
@@ -405,7 +405,7 @@ def preview(template: Existing, body: PreviewRequest, scale: PreviewScale = "ful
                         resolve_design(workspace, body.design), max_edge=EDITOR_ARTWORK_EDGE
                     ),
                 )
-            except (PreparationRequired, ValueError, OSError) as exc:
+            except (PreparationRequiredError, ValueError, OSError) as exc:
                 raise HTTPException(status_code=409, detail=str(exc)) from exc
             response = _encode_preview(image, "editor")
             response.headers["Cache-Control"] = "no-store"
@@ -429,11 +429,11 @@ def preview(template: Existing, body: PreviewRequest, scale: PreviewScale = "ful
             _geometry(body),
             design=lambda: resolve_design(workspace, body.design),
         )
-    except (TemplateConfigMissing, TemplatePhotoMissing) as exc:
+    except (TemplateConfigMissingError, TemplatePhotoMissingError) as exc:
         raise _not_found(exc) from exc
-    except PreparationRequired as exc:
+    except PreparationRequiredError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
-    except TemplatePreviewKindMismatch as exc:
+    except TemplatePreviewKindMismatchError as exc:
         raise _bad_request(exc) from exc
     return render_preview_response(scene, scale, workspace=workspace)
 
@@ -498,7 +498,7 @@ def swatch(template: Existing, colour: str) -> SwatchResponse:
             colour,
             photo=lambda path: PREVIEW_IMAGES.base(path).image,
         )
-    except (TemplateConfigMissing, TemplatePhotoMissing) as exc:
+    except (TemplateConfigMissingError, TemplatePhotoMissingError) as exc:
         raise _not_found(exc) from exc
     return SwatchResponse(hex=hex_colour)
 
@@ -508,9 +508,9 @@ def preview_refusals() -> Iterator[None]:
     """A saved or prepared preview's refusals, as every preview route reports them."""
     try:
         yield
-    except PreparationRequired as exc:
+    except PreparationRequiredError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
-    except TemplatePreviewKindMismatch as exc:
+    except TemplatePreviewKindMismatchError as exc:
         raise _bad_request(exc) from exc
-    except (TemplateMissing, TemplateConfigMissing, TemplatePhotoMissing) as exc:
+    except (TemplateMissingError, TemplateConfigMissingError, TemplatePhotoMissingError) as exc:
         raise _not_found(exc) from exc

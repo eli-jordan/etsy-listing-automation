@@ -47,7 +47,7 @@ corrupt deflate data, a truncated entry, a compression method it lacks, or a
 password it was not given."""
 
 
-class ArchiveRefused(ValueError):
+class ArchiveRefusedError(ValueError):
     """The ZIP cannot be staged. ``message`` is about the archive (*It
     ...*, under a heading naming it); ``remedy`` says what to do instead."""
 
@@ -64,7 +64,7 @@ def receive(chunks: Iterable[bytes], path: Path) -> None:
         for chunk in chunks:
             size += len(chunk)
             if size > MAX_ARCHIVE_BYTES:
-                raise ArchiveRefused(f"It is larger than {MAX_ARCHIVE_BYTES // 2**20} MiB.", _SPLIT)
+                raise ArchiveRefusedError(f"It is larger than {MAX_ARCHIVE_BYTES // 2**20} MiB.", _SPLIT)
             out.write(chunk)
 
 
@@ -89,7 +89,7 @@ class Archive:
                 while chunk := entry.read(_CHUNK):
                     yield chunk
         except _UNREADABLE as exc:
-            raise ArchiveRefused(f"{name} inside it cannot be read.", _REEXPORT) from exc
+            raise ArchiveRefusedError(f"{name} inside it cannot be read.", _REEXPORT) from exc
 
 
 def _unsafe_name(name: str) -> str | None:
@@ -123,7 +123,7 @@ def _unsafe_type(info: zipfile.ZipInfo) -> str | None:
 def _check(infos: list[zipfile.ZipInfo]) -> None:
     """Every entry, before any is read: ADR-0051's per-entry refusals."""
     if len(infos) > MAX_ENTRIES:
-        raise ArchiveRefused(
+        raise ArchiveRefusedError(
             f"It holds {len(infos)} entries, and a ZIP can hold at most {MAX_ENTRIES}.",
             "Unzip it and drop the PNGs, or split it into smaller ZIPs.",
         )
@@ -132,15 +132,15 @@ def _check(infos: list[zipfile.ZipInfo]) -> None:
         name = info.filename
         problem = _unsafe_name(name) or _unsafe_type(info)
         if problem:
-            raise ArchiveRefused(f"{name} inside it {problem}.", _REEXPORT)
+            raise ArchiveRefusedError(f"{name} inside it {problem}.", _REEXPORT)
         if info.flag_bits & _ENCRYPTED:
-            raise ArchiveRefused(
+            raise ArchiveRefusedError(
                 f"{name} inside it is encrypted.",
                 "Export it again without a password, or unzip it and drop the PNGs themselves.",
             )
         normalised = _normalised(name)
         if normalised in seen:
-            raise ArchiveRefused(f"{name} appears in it twice.", _REEXPORT)
+            raise ArchiveRefusedError(f"{name} appears in it twice.", _REEXPORT)
         seen.add(normalised)
 
 
@@ -152,14 +152,14 @@ def _check_sizes(pngs: list[zipfile.ZipInfo]) -> None:
     total = 0
     for info in pngs:
         if info.file_size > MAX_RATIO * max(info.compress_size, 1):
-            raise ArchiveRefused(
+            raise ArchiveRefusedError(
                 f"{info.filename} inside it unpacks to more than {MAX_RATIO} times its "
                 "packed size.",
                 _REEXPORT,
             )
         total += info.file_size
     if total > MAX_EXPANDED_BYTES:
-        raise ArchiveRefused(f"It unpacks to more than {MAX_EXPANDED_BYTES // 2**20} MiB.", _SPLIT)
+        raise ArchiveRefusedError(f"It unpacks to more than {MAX_EXPANDED_BYTES // 2**20} MiB.", _SPLIT)
 
 
 def _survey(archive: zipfile.ZipFile) -> Archive:
@@ -174,23 +174,23 @@ def _survey(archive: zipfile.ZipFile) -> Archive:
             with archive.open(info) as entry:
                 head = entry.read(len(PNG_MAGIC))
         except _UNREADABLE as exc:
-            raise ArchiveRefused(f"{info.filename} inside it cannot be read.", _REEXPORT) from exc
+            raise ArchiveRefusedError(f"{info.filename} inside it cannot be read.", _REEXPORT) from exc
         if head == PNG_MAGIC:
             pngs[info.filename] = info
         else:
             ignored.append(info.filename)
     if not pngs:
-        raise ArchiveRefused("It holds no PNG files.", "Check it is the export you meant.")
+        raise ArchiveRefusedError("It holds no PNG files.", "Check it is the export you meant.")
     _check_sizes(list(pngs.values()))
     return Archive(archive, pngs, ignored)
 
 
 @contextmanager
 def open_archive(path: Path) -> Iterator[Archive]:
-    """The ZIP at ``path``, checked, or :class:`ArchiveRefused`."""
+    """The ZIP at ``path``, checked, or :class:`ArchiveRefusedError`."""
     try:
         archive = zipfile.ZipFile(path)
     except _UNREADABLE as exc:
-        raise ArchiveRefused("It is not a ZIP that can be read.", _REEXPORT) from exc
+        raise ArchiveRefusedError("It is not a ZIP that can be read.", _REEXPORT) from exc
     with archive:
         yield _survey(archive)

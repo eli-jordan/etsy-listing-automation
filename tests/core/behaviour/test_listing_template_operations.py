@@ -32,10 +32,10 @@ from etsy_listings.core.application.listing_template_library import (
     rename_listing_template,
 )
 from etsy_listings.core.application.refusals import (
-    ListingMissing,
-    ListingTemplateMissing,
-    ListingTemplateSourceRefused,
-    ReservedListingTemplateName,
+    ListingMissingError,
+    ListingTemplateMissingError,
+    ListingTemplateSourceRefusedError,
+    ReservedListingTemplateNameError,
 )
 from etsy_listings.core.application.workspace_locks import WorkspaceLocks
 from etsy_listings.core.batches import Batch, BatchStore, StagingStore, stage_pngs
@@ -132,20 +132,20 @@ class TestCreate:
     def test_an_unreadable_local_file_refuses_naming_the_ref(self, workspace: Workspace) -> None:
         edit_listing(workspace.root, media=[BLACK, "./shots/gone.png"])
 
-        with pytest.raises(ListingTemplateSourceRefused, match=r"\./shots/gone\.png"):
+        with pytest.raises(ListingTemplateSourceRefusedError, match=r"\./shots/gone\.png"):
             _create(workspace)
         assert not workspace.listing_templates_dir().exists()
 
     def test_a_source_must_exist(self, workspace: Workspace) -> None:
-        with pytest.raises(ListingMissing):
+        with pytest.raises(ListingMissingError):
             _create(workspace, from_listing="no-such-listing")
-        with pytest.raises(ListingTemplateMissing, match="no listing template 'no-such'"):
+        with pytest.raises(ListingTemplateMissingError, match="no listing template 'no-such'"):
             _create(workspace, from_template="no-such")
 
     def test_exactly_one_source(self, workspace: Workspace) -> None:
-        with pytest.raises(ListingTemplateSourceRefused, match="exactly one"):
+        with pytest.raises(ListingTemplateSourceRefusedError, match="exactly one"):
             _create(workspace, from_listing=FIXTURE_LISTING, from_template=NAME)
-        with pytest.raises(ListingTemplateSourceRefused, match="exactly one"):
+        with pytest.raises(ListingTemplateSourceRefusedError, match="exactly one"):
             create_listing_template(
                 workspace, NAME, from_listing=None, from_template=None, locks=WorkspaceLocks()
             )
@@ -155,7 +155,7 @@ class TestCreate:
     ) -> None:
         with pytest.raises(InvalidNameError):
             _create(workspace, "../escape", from_listing="no-such-listing")
-        with pytest.raises(ReservedListingTemplateName, match="'draft' is reserved"):
+        with pytest.raises(ReservedListingTemplateNameError, match="'draft' is reserved"):
             _create(workspace, "draft", from_listing="no-such-listing")
         assert not workspace.listing_templates_dir().exists()
 
@@ -177,7 +177,7 @@ class TestCreate:
             workspace, document={**document, "colors": [], "media": ["common-media/size-guide.png"]}
         )
         malformed = _create(workspace, document={**document, "brief": "no"})
-        with pytest.raises(ListingTemplateSourceRefused, match=r"\./assets/elsewhere\.png"):
+        with pytest.raises(ListingTemplateSourceRefusedError, match=r"\./assets/elsewhere\.png"):
             _create(workspace, document={**document, "media": [BLACK, "./assets/elsewhere.png"]})
 
         assert not incomplete.saved
@@ -237,7 +237,7 @@ class TestDraftAndRead:
         assert view.garment_profile.materials == ["cotton"]
         assert view.description_composed == "Cotton."
         assert view.pricing_plan_name is None
-        with pytest.raises(ListingTemplateMissing):
+        with pytest.raises(ListingTemplateMissingError):
             read_listing_template(workspace, "nothing-here")
 
     def test_the_index_has_what_a_card_shows_and_counts_batches_made_from_it(
@@ -321,7 +321,7 @@ class TestEdit:
     def test_a_missing_template_is_refused(
         self, workspace: Workspace, locks: WorkspaceLocks
     ) -> None:
-        with pytest.raises(ListingTemplateMissing):
+        with pytest.raises(ListingTemplateMissingError):
             edit_listing_template(workspace, "gone", {}, locks=locks)
         assert not workspace.listing_template_dir("gone").exists()
 
@@ -391,9 +391,9 @@ class TestRenameAndDelete:
         _create(workspace)
         with pytest.raises(InvalidNameError):
             _rename(workspace, NAME, "../escape", locks)
-        with pytest.raises(ReservedListingTemplateName):
+        with pytest.raises(ReservedListingTemplateNameError):
             _rename(workspace, NAME, "draft", locks)
-        with pytest.raises(ListingTemplateMissing):
+        with pytest.raises(ListingTemplateMissingError):
             _rename(workspace, "gone", "x", locks)
 
     def test_delete_removes_the_template_whatever_was_made_from_it(
@@ -405,7 +405,7 @@ class TestRenameAndDelete:
         delete_listing_template(workspace, NAME, locks=locks)
 
         assert not workspace.listing_template_dir(NAME).exists()
-        with pytest.raises(ListingTemplateMissing):
+        with pytest.raises(ListingTemplateMissingError):
             delete_listing_template(workspace, NAME, locks=locks)
 
 
@@ -440,7 +440,7 @@ def _contend(
         def outcome() -> object:
             try:
                 return call()
-            except (ListingTemplateMissing, ListingTemplateExistsError) as exc:
+            except (ListingTemplateMissingError, ListingTemplateExistsError) as exc:
                 return exc
 
         return outcome
@@ -470,7 +470,7 @@ class TestCompetingWrites:
         )
 
         assert rename is None
-        assert isinstance(edit, ListingTemplateMissing)
+        assert isinstance(edit, ListingTemplateMissingError)
         assert workspace.listing_template_names() == ["everyday-tee"]
         assert len(workspace.load_listing_template("everyday-tee").colors) == 4
 
@@ -487,7 +487,7 @@ class TestCompetingWrites:
         )
 
         assert rename is None
-        assert isinstance(create, ListingTemplateMissing | ListingTemplateExistsError)
+        assert isinstance(create, ListingTemplateMissingError | ListingTemplateExistsError)
         assert workspace.listing_template_names() == ["everyday-tee"]
 
     def test_two_creates_of_one_name_write_it_once(

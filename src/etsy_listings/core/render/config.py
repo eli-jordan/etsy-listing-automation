@@ -131,13 +131,13 @@ AnyRenderer = PhotoWarpRenderer | MarigoldRenderer
 Renderer = Annotated[AnyRenderer, Field(discriminator="type")]
 
 
-class PreparationRequired(ValueError):
+class PreparationRequiredError(ValueError):
     """ADR-0054 forbids rendering Marigold through Photo warp."""
 
 
 def photo_warp_config(renderer: AnyRenderer, box: BoundingBox) -> RenderConfig:
     if not isinstance(renderer, PhotoWarpRenderer):
-        raise PreparationRequired("Prepare the template first: Marigold maps are required")
+        raise PreparationRequiredError("Prepare the template first: Marigold maps are required")
     return RenderConfig(bounding_box=box, **renderer.config.model_dump())
 
 

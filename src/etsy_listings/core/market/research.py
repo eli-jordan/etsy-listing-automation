@@ -60,12 +60,12 @@ class MarketResearchError(UserFacingError):
         super().__init__(f"Etsy market search failed: {reason}")
 
 
-class ResearchCancelled(Exception):
+class ResearchCancelledError(Exception):
     """The run's cancel event was set. Raised at the next boundary between
     calls; calls already in flight finish, and nothing new starts."""
 
 
-class _Aborted(Exception):
+class _AbortedError(Exception):
     """A sibling call failed first; this one never started."""
 
 
@@ -92,7 +92,7 @@ def research(
     excluded. ``cancel_event`` is checked before every call.
 
     Raises :class:`MarketResearchError` when an Etsy call fails, and
-    :class:`ResearchCancelled` when ``cancel_event`` is set.
+    :class:`ResearchCancelledError` when ``cancel_event`` is set.
     """
     calls = _Calls(cancel_event or threading.Event())
     weights = weights or MarketWeights()
@@ -173,7 +173,7 @@ class _Calls:
             ]
         errors = [error for f in futures if (error := f.exception()) is not None]
         self._check_cancel()
-        real = [error for error in errors if not isinstance(error, _Aborted)]
+        real = [error for error in errors if not isinstance(error, _AbortedError)]
         if real:
             raise real[0]
         return [future.result() for future in futures]
@@ -181,7 +181,7 @@ class _Calls:
     def _guarded[T](self, call: Callable[[], T]) -> T:
         self._check_cancel()
         if self._abort.is_set():
-            raise _Aborted
+            raise _AbortedError
         try:
             return call()
         except UserFacingError as exc:
@@ -193,7 +193,7 @@ class _Calls:
 
     def _check_cancel(self) -> None:
         if self._cancel.is_set():
-            raise ResearchCancelled
+            raise ResearchCancelledError
 
 
 # -------------------------------------------------------------- the pipeline

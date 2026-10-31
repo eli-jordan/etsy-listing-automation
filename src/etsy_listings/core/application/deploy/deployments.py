@@ -75,7 +75,7 @@ class Deployments:
         holding one of its listings (or the workspace), to reattach to.
 
         A workspace apply must name exactly the ready workspace plan it was
-        reviewed from, or :class:`~etsy_listings.core.application.refusals.ReviewedPlanRefused`
+        reviewed from, or :class:`~etsy_listings.core.application.refusals.ReviewedPlanRefusedError`
         is raised and nothing is queued (ADR-0042)."""
         if isinstance(command, WorkspaceApply):
             check_reviewed_apply(self._registry.get(command.reviewed_run_id), command)

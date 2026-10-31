@@ -63,10 +63,10 @@ from etsy_listings.core.application.pricing_plans import (
     pricing_plan_ref,
 )
 from etsy_listings.core.application.refusals import (
-    ListingDesignUploadRefused,
-    ListingMissing,
-    ListingNameTaken,
-    PublishedListingDeletion,
+    ListingDesignUploadRefusedError,
+    ListingMissingError,
+    ListingNameTakenError,
+    PublishedListingDeletionError,
 )
 from etsy_listings.core.application.scene_warming import SceneWarmer
 from etsy_listings.core.batches import BatchStore
@@ -156,7 +156,7 @@ class Target:
 
 def _require_listing(workspace: Workspace, name: str) -> None:
     if not ListingDocuments(workspace).exists(name):
-        raise _not_found(ListingMissing(name))
+        raise _not_found(ListingMissingError(name))
 
 
 def target(request: Request, name: str) -> Target:
@@ -170,11 +170,11 @@ def target(request: Request, name: str) -> Target:
 Existing = Annotated[Target, Depends(target)]
 
 
-def _not_found(exc: ListingMissing) -> HTTPException:
+def _not_found(exc: ListingMissingError) -> HTTPException:
     return HTTPException(status_code=404, detail=str(exc))
 
 
-def _conflict(exc: ListingNameTaken | PublishedListingDeletion) -> HTTPException:
+def _conflict(exc: ListingNameTakenError | PublishedListingDeletionError) -> HTTPException:
     return HTTPException(status_code=409, detail=str(exc))
 
 
@@ -255,7 +255,7 @@ def _detail(
 ) -> ListingDetail:
     try:
         view = read_listing(workspace, name, etsy_states=_etsy_states(workspace))
-    except ListingMissing as exc:
+    except ListingMissingError as exc:
         raise _not_found(exc) from exc
     if field_errors:
         view = dataclasses.replace(view, field_errors=field_errors)
@@ -290,7 +290,7 @@ def patch_listing(target: Existing, body: dict[str, Any], request: Request) -> L
     workspace, name = target.workspace, target.name
     try:
         refused = edit_listing(workspace, name, body, batches=_batch_store(request))
-    except ListingMissing as exc:
+    except ListingMissingError as exc:
         raise _not_found(exc) from exc
     if refused is None:
         _warm_scenes(request, name)
@@ -315,9 +315,9 @@ def delete_listing(target: Existing, request: Request) -> ListingSummary | Respo
             ai_runs=_ai_runs(request),
             etsy_states=_etsy_states(workspace),
         )
-    except ListingMissing as exc:
+    except ListingMissingError as exc:
         raise _not_found(exc) from exc
-    except PublishedListingDeletion as exc:
+    except PublishedListingDeletionError as exc:
         raise _conflict(exc) from exc
     if deletion.wiped:
         return Response(status_code=204)
@@ -337,7 +337,7 @@ def create_listing(request: Request, body: CreateListingRequest) -> ListingDetai
     workspace = _workspace(request)
     try:
         refused = create(workspace, body.name, body.document)
-    except ListingNameTaken as exc:
+    except ListingNameTakenError as exc:
         raise _conflict(exc) from exc
     if refused is not None:
         return _describe_draft(workspace, body.document)
@@ -362,9 +362,9 @@ def rename_listing(target: Existing, body: RenameListingRequest, request: Reques
             batches=_batch_store(request),
             ai_runs=_ai_runs(request),
         )
-    except ListingMissing as exc:
+    except ListingMissingError as exc:
         raise _not_found(exc) from exc
-    except ListingNameTaken as exc:
+    except ListingNameTakenError as exc:
         raise _conflict(exc) from exc
     return _detail(target.workspace, body.new_name)
 
@@ -445,7 +445,7 @@ def scene_preview(
     workspace = target.workspace
     try:
         artwork = scene_artwork(workspace, target.name)
-    except ListingMissing as exc:
+    except ListingMissingError as exc:
         raise _not_found(exc) from exc
     except ConfigLoadError as exc:
         raise HTTPException(
@@ -634,7 +634,7 @@ async def upload_listing_design(request: Request, file: UploadFile) -> ListingDe
     payload = await file.read()
     try:
         name = save_listing_design(_workspace(request), file.filename or "", payload)
-    except ListingDesignUploadRefused as exc:
+    except ListingDesignUploadRefusedError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return ListingDesignSummary(name=name, file=f"designs/{name}.png")
 

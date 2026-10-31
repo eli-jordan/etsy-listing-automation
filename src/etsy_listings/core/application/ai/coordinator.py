@@ -35,11 +35,11 @@ from etsy_listings.core.application.dependencies import (
     default_market_client,
 )
 from etsy_listings.core.application.refusals import (
-    AiNotReady,
-    AiRunRefused,
-    ListingDeploying,
-    ListingDraftingInBatch,
-    ListingMissing,
+    AiNotReadyError,
+    AiRunRefusedError,
+    ListingDeployingError,
+    ListingDraftingInBatchError,
+    ListingMissingError,
 )
 from etsy_listings.core.batches import BatchStore
 from etsy_listings.core.workspace.listing_documents import ListingDocuments
@@ -103,13 +103,13 @@ class AiCoordinator:
         """Start a manual run for saved ``listing`` on its own thread, or
         answer the active run already holding it, to reattach to.
 
-        Refusals, with nothing started: :class:`ListingMissing`, then
-        :class:`ListingDeploying` (ADR-0050 wins over everything below),
-        :class:`ListingDraftingInBatch`, and -- after the active-run check --
-        :class:`AiNotReady` with the readiness rule that failed.
+        Refusals, with nothing started: :class:`ListingMissingError`, then
+        :class:`ListingDeployingError` (ADR-0050 wins over everything below),
+        :class:`ListingDraftingInBatchError`, and -- after the active-run check --
+        :class:`AiNotReadyError` with the readiness rule that failed.
         """
         if not ListingDocuments(self._workspace).exists(listing):
-            raise ListingMissing(listing)
+            raise ListingMissingError(listing)
         refused = self._claimed(listing)
         if refused is not None:
             raise refused
@@ -118,18 +118,18 @@ class AiCoordinator:
             return Conflict(active_run=active.id)
         reason = self._unready(listing, draft_brief=draft_brief)
         if reason is not None:
-            raise AiNotReady(listing, reason)
+            raise AiNotReadyError(listing, reason)
         # The registry refuses a held listing again here, which is what
         # closes the race with a deploy taking it since the check above.
         run = self._registry.create(listing, draft_brief=draft_brief)
         if isinstance(run, Deploying):
-            raise ListingDeploying(listing)
+            raise ListingDeployingError(listing)
         if isinstance(run, Conflict):
             return run
         self._runner.start(run)
         return run
 
-    def blocked(self, listing: str) -> AiRunRefused | None:
+    def blocked(self, listing: str) -> AiRunRefusedError | None:
         """What :meth:`start_run` would refuse saved ``listing`` with for
         the **AI Mode** button's run -- one that drafts an empty brief -- or
         ``None`` when it would start. An active run is not a refusal: the
@@ -138,13 +138,13 @@ class AiCoordinator:
         if refused is not None:
             return refused
         reason = self._unready(listing, draft_brief=True)
-        return AiNotReady(listing, reason) if reason is not None else None
+        return AiNotReadyError(listing, reason) if reason is not None else None
 
-    def _claimed(self, listing: str) -> AiRunRefused | None:
+    def _claimed(self, listing: str) -> AiRunRefusedError | None:
         if self._registry.deploying(listing):
-            return ListingDeploying(listing)
+            return ListingDeployingError(listing)
         if self._queue.pending(listing):
-            return ListingDraftingInBatch(listing)
+            return ListingDraftingInBatchError(listing)
         return None
 
     def _unready(self, listing: str, *, draft_brief: bool) -> str | None:

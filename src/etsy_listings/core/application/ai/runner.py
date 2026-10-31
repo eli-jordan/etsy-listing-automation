@@ -63,13 +63,13 @@ from etsy_listings.core.application.ai.readiness import ProviderFactory
 from etsy_listings.core.application.ai.registry import AiRun, AiRunRegistry
 from etsy_listings.core.application.dependencies import MarketClientFactory
 from etsy_listings.core.errors import INTERNAL_ERROR_MESSAGE, UserFacingError
-from etsy_listings.core.market import MarketResearchError, ResearchCancelled, research
+from etsy_listings.core.market import MarketResearchError, ResearchCancelledError, research
 from etsy_listings.core.market import snapshot as market_snapshot
 from etsy_listings.core.market.cache import CachedEtsyMarketClient
 from etsy_listings.core.workspace.listing_documents import (
     Document,
     ListingDocuments,
-    ListingMissing,
+    ListingMissingError,
 )
 from etsy_listings.core.workspace.workspace import Workspace
 
@@ -88,7 +88,7 @@ CANCELLED = "Cancelled"
 NO_ETSY_KEY = "no Etsy API key is configured; run `etsy-listings setup`"
 
 
-class _Stopped(Exception):
+class _StoppedError(Exception):
     """The run's cancel event was seen between steps."""
 
 
@@ -154,7 +154,7 @@ class AiRunner:
     def _execute(self, run: AiRun) -> None:
         try:
             self._chain(run)
-        except (_Stopped, ProviderCancelledError, ResearchCancelled):
+        except (_StoppedError, ProviderCancelledError, ResearchCancelledError):
             self._end_stopped(run)
         except Exception as exc:
             if run.cancel_event.is_set():
@@ -195,7 +195,7 @@ class AiRunner:
 
     def _check(self, run: AiRun) -> None:
         if run.cancel_event.is_set():
-            raise _Stopped
+            raise _StoppedError
 
     def _load(self, run: AiRun, *, market_block: str = "") -> PreparedSeo:
         return ListingAiInputs.read(self.workspace, run.listing).prepare(market_block=market_block)
@@ -339,7 +339,7 @@ class AiRunner:
 
         try:
             return ListingDocuments(self.workspace).edit(name, fill) is not None
-        except ListingMissing:
+        except ListingMissingError:
             return False
 
 

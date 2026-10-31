@@ -28,7 +28,7 @@ from etsy_listings.core.clients.etsy.models import MarketCandidate, MarketListin
 from etsy_listings.core.market import (
     MarketResearchError,
     MarketWeights,
-    ResearchCancelled,
+    ResearchCancelledError,
     research,
 )
 
@@ -354,14 +354,14 @@ def test_a_cancel_before_research_starts_makes_no_calls() -> None:
     fake = FakeEtsyMarketClient()
     cancel = threading.Event()
     cancel.set()
-    with pytest.raises(ResearchCancelled):
+    with pytest.raises(ResearchCancelledError):
         _run(fake, cancel_event=cancel)
     assert fake.calls == []
 
 
 def test_a_cancel_during_the_searches_stops_before_the_batch() -> None:
     fake = _graded_cancelling("search_active")
-    with pytest.raises(ResearchCancelled):
+    with pytest.raises(ResearchCancelledError):
         _run(fake, cancel_event=fake.cancel)
     assert fake.count("listings_by_ids") == 0
     assert fake.count("review_count") == 0
@@ -369,14 +369,14 @@ def test_a_cancel_during_the_searches_stops_before_the_batch() -> None:
 
 def test_a_cancel_during_the_batch_stops_before_any_review_count() -> None:
     fake = _graded_cancelling("listings_by_ids")
-    with pytest.raises(ResearchCancelled):
+    with pytest.raises(ResearchCancelledError):
         _run(fake, cancel_event=fake.cancel)
     assert fake.count("review_count") == 0
 
 
 def test_a_cancel_during_the_review_counts_starts_no_new_call() -> None:
     fake = _graded_cancelling("review_count")
-    with pytest.raises(ResearchCancelled):
+    with pytest.raises(ResearchCancelledError):
         _run(fake, cancel_event=fake.cancel)
     # Only the calls already in flight when the first one cancelled.
     assert 1 <= fake.count("review_count") <= 5

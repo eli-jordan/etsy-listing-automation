@@ -15,7 +15,7 @@ from etsy_listings.core.application.preparation.evidence import EvidenceStore
 from etsy_listings.core.application.preparation.models import Job, Prediction, placement_key
 from etsy_listings.core.preparation.artifacts import (
     PreparationInputs,
-    StalePreparation,
+    StalePreparationError,
     file_checksum,
 )
 from etsy_listings.core.preparation.numerics import prepare, propose_mask
@@ -27,7 +27,7 @@ if TYPE_CHECKING:
     from etsy_listings.core.application.preparation.coordinator import Preparations
 
 
-class Stopped(Exception):
+class StoppedError(Exception):
     def __init__(self, phase: str) -> None:
         self.phase = phase
 
@@ -78,12 +78,12 @@ class Execution:
                 job.template, reset_masks_for_photo=job.reset_masks_for_photo
             )
             if self.geometry(current) != self.geometry(job.snapshot):
-                raise Stopped("superseded")
+                raise StoppedError("superseded")
             job = self.owner.status(identity)
             if job.cancel_intent:
-                raise Stopped("cancelled")
+                raise StoppedError("cancelled")
             if self.owner._closing:
-                raise Stopped("queued")
+                raise StoppedError("queued")
         job = self.write(identity, step=step)
         self.owner.checkpoint(identity, step)
         return job
@@ -110,9 +110,9 @@ class Execution:
                 self.write(identity, step="cpu_queued")
             else:
                 self.build(identity)
-        except Stopped as exc:
+        except StoppedError as exc:
             self.write(identity, phase=exc.phase)
-        except StalePreparation:
+        except StalePreparationError:
             self.write(identity, phase="superseded")
         except Exception as exc:
             latest = self.owner.status(identity)
@@ -204,7 +204,7 @@ class Execution:
                     with self.owner.store.condition:
                         latest = self.owner.store.read(identity)
                         if latest.cancel_intent:
-                            raise Stopped("cancelled")
+                            raise StoppedError("cancelled")
                         self.owner._call = (identity, request)
                     try:
                         result = worker.infer(
@@ -273,11 +273,11 @@ class Execution:
             with self.owner.store.condition:
                 latest = self.owner.store.read(identity)
                 if latest.cancel_intent:
-                    raise Stopped("cancelled")
+                    raise StoppedError("cancelled")
                 if self.owner._closing:
-                    raise Stopped("queued")
+                    raise StoppedError("queued")
                 if self.geometry(current) != self.geometry(latest.snapshot):
-                    raise Stopped("superseded")
+                    raise StoppedError("superseded")
                 yield
 
     def worker(self, job: Job) -> InferenceWorker:
@@ -319,7 +319,7 @@ class Execution:
                     original.mask,
                     job.planned_masks.get(placement_key(placement.id)),
                 }:
-                    raise Stopped("superseded")
+                    raise StoppedError("superseded")
                 reconciled.append(placement.model_copy(update={"evidence": original.evidence}))
             candidate = current.model_copy(update={"placements": tuple(reconciled)})
             stripped_current = candidate.model_copy(
@@ -337,7 +337,7 @@ class Execution:
                 }
             )
             if stripped_current.identity() != stripped_allowed.identity():
-                raise Stopped("superseded")
+                raise StoppedError("superseded")
             self.write(
                 identity,
                 snapshot=candidate,
@@ -430,9 +430,9 @@ class Execution:
 
                     def check_cancelled() -> None:
                         if self.owner.status(identity).cancel_intent:
-                            raise Stopped("cancelled")
+                            raise StoppedError("cancelled")
                         if self.owner._closing:
-                            raise Stopped("queued")
+                            raise StoppedError("queued")
 
                     def cooperate() -> None:
                         yield_to_interactive(self.owner.workspace, check_cancelled)
@@ -481,7 +481,7 @@ class Execution:
             def current_inputs() -> PreparationInputs:
                 latest = self.owner.status(identity)
                 if latest.cancel_intent:
-                    raise Stopped("cancelled")
+                    raise StoppedError("cancelled")
                 return self.owner.artifacts.saved_inputs(
                     job.template, evidence=semantic, reset_masks_for_photo=job.reset_masks_for_photo
                 )

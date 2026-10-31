@@ -22,10 +22,10 @@ from etsy_listings.core.ai.proposals import ProposalStore
 from etsy_listings.core.application.ai.coordinator import AiCoordinator
 from etsy_listings.core.application.ai.registry import AiRun, Conflict
 from etsy_listings.core.application.refusals import (
-    AiNotReady,
-    ListingDeploying,
-    ListingDraftingInBatch,
-    ListingMissing,
+    AiNotReadyError,
+    ListingDeployingError,
+    ListingDraftingInBatchError,
+    ListingMissingError,
 )
 from etsy_listings.core.batches import Batch, BatchStore, StagingStore, confirm, stage_pngs
 from etsy_listings.core.workspace.workspace import Workspace
@@ -139,7 +139,7 @@ def test_a_second_run_for_an_active_listing_names_the_first(
 
 
 def test_an_unsaved_listing_is_refused(ai: AiCoordinator) -> None:
-    with pytest.raises(ListingMissing):
+    with pytest.raises(ListingMissingError):
         ai.start_run("never-saved", draft_brief=False)
 
 
@@ -148,7 +148,7 @@ def test_an_unready_listing_is_refused_with_the_rule_that_failed(
 ) -> None:
     edit_listing(workspace_root, brief="")
 
-    with pytest.raises(AiNotReady) as refused:
+    with pytest.raises(AiNotReadyError) as refused:
         ai.start_run(LISTING, draft_brief=False)
 
     assert str(refused.value) == "the listing brief is empty"
@@ -166,10 +166,10 @@ def test_a_pending_batch_row_owns_its_listing_s_ai(
     has started the row's run."""
     _batch(workspace, batches, "night-hike-club")
 
-    with pytest.raises(ListingDraftingInBatch):
+    with pytest.raises(ListingDraftingInBatchError):
         ai.start_run("night-hike-club", draft_brief=True)
 
-    assert isinstance(ai.blocked("night-hike-club"), ListingDraftingInBatch)
+    assert isinstance(ai.blocked("night-hike-club"), ListingDraftingInBatchError)
     assert ai.blocked(LISTING) is None
 
 
@@ -230,9 +230,9 @@ def test_a_deploy_stops_the_listing_s_run_and_refuses_new_ones_until_it_ends(
     with ai.yield_to_deploy([LISTING]):
         assert run.phase == "cancelled"
         assert provider.cancelled == ["queries"]
-        with pytest.raises(ListingDeploying):
+        with pytest.raises(ListingDeployingError):
             ai.start_run(LISTING, draft_brief=False)
-        assert isinstance(ai.blocked(LISTING), ListingDeploying)
+        assert isinstance(ai.blocked(LISTING), ListingDeployingError)
 
     assert ai.blocked(LISTING) is None
     assert _started(ai.start_run(LISTING, draft_brief=False)).id != run.id

@@ -20,7 +20,7 @@ import yaml
 from etsy_listings.core.batches import (
     Batch,
     BatchStore,
-    ConfirmRefused,
+    ConfirmRefusedError,
     StagingStore,
     Upload,
     confirm,
@@ -112,7 +112,7 @@ class TestConfirm:
     ) -> None:
         id_ = _stage(workspace, staging, DESIGNS[0], ("★★★.png", png(8)))
 
-        with pytest.raises(ConfirmRefused, match="Fix 1 name to"):
+        with pytest.raises(ConfirmRefusedError, match="Fix 1 name to"):
             _confirm(workspace, staging, batches, id_)
 
         assert _created(workspace) == []
@@ -123,7 +123,7 @@ class TestConfirm:
     ) -> None:
         id_ = _stage(workspace, staging, ("★★★.png", png(8)), ("☆☆☆.png", png(9)))
 
-        with pytest.raises(ConfirmRefused, match="Fix 2 names to create the listings."):
+        with pytest.raises(ConfirmRefusedError, match="Fix 2 names to create the listings."):
             _confirm(workspace, staging, batches, id_)
 
     def test_a_name_claimed_between_staging_and_confirm_gets_a_fresh_suffix(
@@ -393,7 +393,7 @@ class TestFrozenTemplate:
         id_ = _stage(workspace, staging, DESIGNS[0])
         (workspace.root / "garment-profiles" / "comfort-colors-1717.yaml").unlink()
 
-        with pytest.raises(ConfirmRefused, match="can no longer make listings"):
+        with pytest.raises(ConfirmRefusedError, match="can no longer make listings"):
             _confirm(workspace, staging, batches, id_)
 
         assert _created(workspace) == []

@@ -580,12 +580,12 @@ def test_queued_cpu_rebuilds_coalesce_to_latest_saved_geometry(workspace_root):
 
 
 def test_new_photo_refuses_old_masks_without_reinterpreting_corrections(workspace_root):
-    from etsy_listings.core.workspace.calibration import MaskUnavailable
+    from etsy_listings.core.workspace.calibration import MaskUnavailableError
 
     workspace, runtime, coordinator, _first = prepare_template(workspace_root)
     before = workspace.template_mask_file("shirt").read_bytes()
     Image.new("RGB", (64, 64), "red").save(workspace.template_scene_image("shirt"))
-    with pytest.raises(MaskUnavailable):
+    with pytest.raises(MaskUnavailableError):
         coordinator.reconcile_saved("shirt")
     assert workspace.template_mask_file("shirt").read_bytes() == before
     assert len(runtime.workers[0].calls) == 3
@@ -1016,7 +1016,7 @@ def test_explicit_photo_reset_is_durable_and_cancellation_preserves_old_masks(
     workspace_root, cancel
 ):
     from etsy_listings.core.preparation.artifacts import Artifacts
-    from etsy_listings.core.workspace.calibration import MaskPhotoMismatch
+    from etsy_listings.core.workspace.calibration import MaskPhotoMismatchError
 
     workspace, runtime, coordinator, _first = prepare_template(workspace_root)
     coordinator.close()
@@ -1024,7 +1024,7 @@ def test_explicit_photo_reset_is_durable_and_cancellation_preserves_old_masks(
     Image.new("RGB", (64, 64), "red").save(workspace.template_scene_image("shirt"))
     coordinator = Preparations(workspace, runtime=runtime)
     revision = CalibrationStore(workspace).read("shirt").revision
-    with pytest.raises(MaskPhotoMismatch):
+    with pytest.raises(MaskPhotoMismatchError):
         coordinator.submit("shirt", config_revision=revision, request_id="ordinary")
     with pytest.raises(ValueError, match="Prepare again"):
         coordinator.submit(

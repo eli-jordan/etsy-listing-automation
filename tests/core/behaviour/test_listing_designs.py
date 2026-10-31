@@ -14,7 +14,7 @@ import pytest
 from PIL import Image
 
 from etsy_listings.core.application.listing_designs import save_listing_design
-from etsy_listings.core.application.refusals import ListingDesignUploadRefused
+from etsy_listings.core.application.refusals import ListingDesignUploadRefusedError
 from etsy_listings.core.workspace.workspace import Workspace
 
 
@@ -71,20 +71,20 @@ def test_a_name_that_cannot_be_saved_under_is_refused_and_nothing_written(
     workspace: Workspace, filename: str
 ) -> None:
     before = _designs(workspace)
-    with pytest.raises(ListingDesignUploadRefused):
+    with pytest.raises(ListingDesignUploadRefusedError):
         save_listing_design(workspace, filename, _image(RED))
     assert _designs(workspace) == before
 
 
 def test_bytes_that_are_not_an_image_are_refused(workspace: Workspace) -> None:
     before = _designs(workspace)
-    with pytest.raises(ListingDesignUploadRefused, match="not a readable image"):
+    with pytest.raises(ListingDesignUploadRefusedError, match="not a readable image"):
         save_listing_design(workspace, "notes.png", b"not a png")
     assert _designs(workspace) == before
 
 
 def test_an_image_that_is_not_a_png_is_refused(workspace: Workspace) -> None:
     before = _designs(workspace)
-    with pytest.raises(ListingDesignUploadRefused, match="must be PNG files"):
+    with pytest.raises(ListingDesignUploadRefusedError, match="must be PNG files"):
         save_listing_design(workspace, "photo.jpg", _image(RED, format="JPEG"))
     assert _designs(workspace) == before

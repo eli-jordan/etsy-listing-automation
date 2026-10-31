@@ -47,7 +47,7 @@ from etsy_listings.core.workspace.listing_documents import ListingDocuments
 from etsy_listings.core.workspace.workspace import Workspace
 
 
-class ConfirmRefused(UserFacingError, ValueError):
+class ConfirmRefusedError(UserFacingError, ValueError):
     """The session cannot become a batch yet, and nothing was written."""
 
 
@@ -56,7 +56,7 @@ def _revalidate(frozen: FrozenListingTemplate, name: str) -> None:
     issues = frozen.issues(facts=WorkspaceFacts.gather(frozen.workspace))
     blocking = [issue.message for issue in issues if issue.severity == "block"]
     if blocking:
-        raise ConfirmRefused(f"{name} as staged can no longer make listings: {' '.join(blocking)}")
+        raise ConfirmRefusedError(f"{name} as staged can no longer make listings: {' '.join(blocking)}")
 
 
 def confirm(
@@ -69,7 +69,7 @@ def confirm(
 ) -> Batch:
     """Create the batch for ``session_id`` and its listings, or finish the
     one a previous confirm began. Raises :class:`KeyError` for a session that
-    does not exist and :class:`ConfirmRefused` for one that cannot be
+    does not exist and :class:`ConfirmRefusedError` for one that cannot be
     confirmed yet."""
     with staging.lock(session_id), batches.lock(session_id):
         batch = batches.load(session_id)
@@ -91,11 +91,11 @@ def _start(
     reviewed = review(workspace, session)
     if reviewed.name_problems:
         count = reviewed.name_problems
-        raise ConfirmRefused(
+        raise ConfirmRefusedError(
             f"Fix {count} {'name' if count == 1 else 'names'} to create the listings."
         )
     if not reviewed.creatable:
-        raise ConfirmRefused("There is no design here that can become a listing.")
+        raise ConfirmRefusedError("There is no design here that can become a listing.")
     frozen = FrozenListingTemplate.restore(
         workspace,
         session.template,

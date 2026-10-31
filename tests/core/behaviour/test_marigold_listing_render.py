@@ -229,7 +229,7 @@ def test_listing_preview_uses_the_same_missing_map_explanation(workspace_root):
     import pytest
 
     from etsy_listings.core.application.prepared_previews import prepared_preview
-    from etsy_listings.core.render import PreparationRequired
+    from etsy_listings.core.render import PreparationRequiredError
 
     workspace, _ = listing_with_marigold(workspace_root)
     refusal = (
@@ -237,7 +237,7 @@ def test_listing_preview_uses_the_same_missing_map_explanation(workspace_root):
         .plan.stage_plans[0]
         .blocked
     )
-    with pytest.raises(PreparationRequired) as error:
+    with pytest.raises(PreparationRequiredError) as error:
         prepared_preview(
             workspace,
             "shirt",

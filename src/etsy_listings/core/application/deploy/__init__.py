@@ -35,5 +35,5 @@ Implementation-only, importable by ``deployments`` alone (Import Linter's
 ``review``
     ``check_reviewed_apply`` -- a workspace apply names exactly its review
     (ADR-0042); callers see it as ``Deployments.submit`` refusing with
-    ``refusals.ReviewedPlanRefused``.
+    ``refusals.ReviewedPlanRefusedError``.
 """

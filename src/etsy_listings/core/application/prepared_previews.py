@@ -25,8 +25,8 @@ from etsy_listings.core.application.mockup_templates import (
     saved_preview,
 )
 from etsy_listings.core.application.refusals import (
-    TemplatePhotoMissing,
-    TemplatePreviewKindMismatch,
+    TemplatePhotoMissingError,
+    TemplatePreviewKindMismatchError,
 )
 from etsy_listings.core.preparation.artifacts import ArtifactError, Artifacts, PreparationInputs
 from etsy_listings.core.preparation.readiness import template_readiness
@@ -38,7 +38,7 @@ from etsy_listings.core.render import (
     MarigoldAppearance,
     MarigoldRenderer,
     MultipleTemplate,
-    PreparationRequired,
+    PreparationRequiredError,
     encode_png,
     scene_colours,
 )
@@ -69,8 +69,8 @@ def saved_scene(
     :func:`~etsy_listings.core.application.mockup_templates.saved_preview`
     asks it. Photo warp returns the scene for the host to composite from its
     image memo; Marigold returns the composed image. Refusals:
-    :class:`TemplateMissing`, :class:`TemplateConfigMissing`,
-    :class:`TemplatePhotoMissing`, :class:`PreparationRequired`."""
+    :class:`TemplateMissingError`, :class:`TemplateConfigMissingError`,
+    :class:`TemplatePhotoMissingError`, :class:`PreparationRequiredError`."""
     if isinstance(read_config(workspace, name).config.renderer, MarigoldRenderer):
         return prepared_preview(workspace, name, config=None, colour=colour, design=design)
     return saved_preview(workspace, name, colour=colour, design=design)
@@ -156,14 +156,14 @@ def prepared_preview(
         saved = store.read(name)
         requested = config if config is not None else saved.config
         if requested.kind != saved.config.kind:
-            raise TemplatePreviewKindMismatch(saved.config.kind)
+            raise TemplatePreviewKindMismatchError(saved.config.kind)
         if not isinstance(requested.renderer, MarigoldRenderer) or not isinstance(
             saved.config.renderer, MarigoldRenderer
         ):
-            raise PreparationRequired("Save the Marigold renderer selection before rendering")
+            raise PreparationRequiredError("Save the Marigold renderer selection before rendering")
         readiness = template_readiness(workspace, name, saved.config)
         if not readiness.can_render:
-            raise PreparationRequired(readiness.message or "Prepare the template first")
+            raise PreparationRequiredError(readiness.message or "Prepare the template first")
         inputs = artifacts.saved_inputs(name)
         boxes = (
             {p.id: p.bounding_box for p in requested.placements}
@@ -174,20 +174,20 @@ def prepared_preview(
         if {
             key: tuple((p.x, p.y) for p in box) for key, box in boxes.items()
         } != expected or requested.renderer.config.inference != inputs.inference:
-            raise PreparationRequired(
+            raise PreparationRequiredError(
                 "Save geometry and inference settings, then rebuild or prepare the template"
             )
         depicted = colour if isinstance(requested, ColourMatrixTemplate) else None
         path = workspace.scene_photo(name, depicted).path
         if not path.is_file():
-            raise TemplatePhotoMissing("Selected target photo is missing")
+            raise TemplatePhotoMissingError("Selected target photo is missing")
         sources = _layer_sources(requested, depicted, design)
         appearance = requested.renderer.config.appearance
         cache = SceneCache(workspace)
         try:
             cached = _cached(workspace, name, inputs, cache, path, sources, appearance)
         except ArtifactError as exc:
-            raise PreparationRequired(str(exc)) from exc
+            raise PreparationRequiredError(str(exc)) from exc
         if cached is not None:
             png, identity, generation_id = cached
             return PreparedPreview(png, identity, generation_id, saved.revision)
@@ -201,7 +201,7 @@ def prepared_preview(
                 scene.encoded(cache), scene.identity, scene.manifest.generation_id, saved.revision
             )
     except ArtifactError as exc:
-        raise PreparationRequired(str(exc)) from exc
+        raise PreparationRequiredError(str(exc)) from exc
 
 
 def _cached(

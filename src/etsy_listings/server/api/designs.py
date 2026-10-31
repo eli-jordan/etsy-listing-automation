@@ -21,8 +21,8 @@ from etsy_listings.core.application.calibration_designs import (
     uploaded_design,
 )
 from etsy_listings.core.application.refusals import (
-    CalibrationDesignMissing,
-    DesignUploadRefused,
+    CalibrationDesignMissingError,
+    DesignUploadRefusedError,
 )
 from etsy_listings.core.workspace.workspace import Workspace
 from etsy_listings.server.api.schemas import DesignSummary
@@ -64,7 +64,7 @@ def resolve_design(workspace: Workspace, design: str) -> Path:
         return bundled
     try:
         return uploaded_design(workspace, design)
-    except CalibrationDesignMissing as exc:
+    except CalibrationDesignMissingError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
@@ -94,7 +94,7 @@ async def upload_design(request: Request, file: UploadFile) -> DesignSummary:
     payload = await file.read()
     try:
         design = save_uploaded_design(_workspace(request), file.filename or "", payload)
-    except DesignUploadRefused as exc:
+    except DesignUploadRefusedError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return DesignSummary(id=design, label=design, source="upload")
 

@@ -118,7 +118,7 @@ def test_old_generation_is_retained_by_alias_readers_and_durable_job_references(
 def test_stale_publication_and_crash_before_pointer_preserve_the_current_generation(
     workspace_root,
 ) -> None:
-    from etsy_listings.core.preparation.artifacts import StalePreparation
+    from etsy_listings.core.preparation.artifacts import StalePreparationError
 
     store = Artifacts(Workspace.discover(root_override=workspace_root))
     inputs = preparation_inputs()
@@ -126,7 +126,7 @@ def test_stale_publication_and_crash_before_pointer_preserve_the_current_generat
     changed = inputs.model_copy(
         update={"photo": inputs.photo.model_copy(update={"pixels": "d" * 64})}
     )
-    with pytest.raises(StalePreparation):
+    with pytest.raises(StalePreparationError):
         store.publish("shirt", inputs, {None: material_maps()}, current_inputs=lambda: changed)
 
     def crash(phase):
@@ -448,7 +448,7 @@ def test_explicit_photo_reset_capture_only_bypasses_photo_mismatch(workspace_roo
 
     from etsy_listings.core.errors import UserFacingError
     from etsy_listings.core.render import load_template_config
-    from etsy_listings.core.workspace.calibration import MaskPhotoMismatch
+    from etsy_listings.core.workspace.calibration import MaskPhotoMismatchError
 
     workspace = Workspace.discover(root_override=workspace_root)
     workspace.template_dir("shirt").mkdir()
@@ -487,7 +487,7 @@ def test_explicit_photo_reset_capture_only_bypasses_photo_mismatch(workspace_roo
     ]
     before = {p: p.read_bytes() for p in paths if p.exists()}
     if damage == "photo":
-        with pytest.raises(MaskPhotoMismatch):
+        with pytest.raises(MaskPhotoMismatchError):
             store.saved_inputs("shirt")
         assert (
             store.saved_inputs("shirt", reset_masks_for_photo=True).placements[0].mask == "0" * 64

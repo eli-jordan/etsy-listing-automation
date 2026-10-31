@@ -33,13 +33,13 @@ from etsy_listings.core.preparation.runtime import Runtime
 from etsy_listings.core.render.config import MarigoldRenderer
 from etsy_listings.core.workspace import Workspace
 from etsy_listings.core.workspace.calibration import (
-    CalibrationConflict,
+    CalibrationConflictError,
     CalibrationStore,
     json_bytes,
 )
 
 
-class PreparationRefused(ValueError):
+class PreparationRefusedError(ValueError):
     """Actionable refusal without any inference or installation side effect."""
 
 
@@ -122,11 +122,11 @@ class Preparations:
             or not request_id
             or len(request_id) > 256
         ):
-            raise PreparationRefused("Invalid preparation action or request ID")
+            raise PreparationRefusedError("Invalid preparation action or request ID")
         if (action == "retry") != (previous_job is not None):
-            raise PreparationRefused("Retry requires a previous job")
+            raise PreparationRefusedError("Retry requires a previous job")
         if reset_masks_for_photo and action != "prepare_again":
-            raise PreparationRefused("Photo mask reset requires explicit Prepare again")
+            raise PreparationRefusedError("Photo mask reset requires explicit Prepare again")
         if previous_job is not None:
             reset_masks_for_photo = self.status(previous_job).reset_masks_for_photo
         digest = hashlib.sha256(
@@ -145,15 +145,15 @@ class Preparations:
                 receipt = job.receipts.get(request_id)
                 if receipt:
                     if receipt != digest:
-                        raise PreparationRefused(
+                        raise PreparationRefusedError(
                             "Preparation request ID reused with different content"
                         )
                     return job
             calibration = self.calibration.read(template)
             if calibration.revision != config_revision:
-                raise CalibrationConflict("Calibration changed before preparation submission")
+                raise CalibrationConflictError("Calibration changed before preparation submission")
             if not isinstance(calibration.config.renderer, MarigoldRenderer):
-                raise PreparationRefused("Select Marigold before preparing this template")
+                raise PreparationRefusedError("Select Marigold before preparing this template")
             snapshot = self.artifacts.saved_inputs(
                 template, reset_masks_for_photo=reset_masks_for_photo
             )
@@ -165,7 +165,7 @@ class Preparations:
                     "cancelled",
                     "superseded",
                 }:
-                    raise PreparationRefused(
+                    raise PreparationRefusedError(
                         "Retry requires a failed or cancelled job for this template"
                     )
             for job in self.store.jobs():
@@ -187,13 +187,13 @@ class Preparations:
             for existing in self.store.jobs():
                 if request_id in existing.receipts:
                     if existing.receipts[request_id] != digest:
-                        raise PreparationRefused(
+                        raise PreparationRefusedError(
                             "Preparation request ID reused with different content"
                         )
                     return existing
             calibration = self.calibration.read(template)
             if calibration.revision != config_revision:
-                raise CalibrationConflict("Calibration changed during runtime inspection")
+                raise CalibrationConflictError("Calibration changed during runtime inspection")
             snapshot = self.artifacts.saved_inputs(
                 template, reset_masks_for_photo=reset_masks_for_photo
             )
@@ -218,14 +218,14 @@ class Preparations:
                 or not selected.engine_version
                 or not selected.installation_id
             ):
-                raise PreparationRefused(
+                raise PreparationRefusedError(
                     selected.problem or "Run etsy-listings marigold setup first"
                 )
             if (
                 snapshot.inference.num_inference_steps > selected.max_num_inference_steps
                 or snapshot.inference.ensemble_size > selected.max_ensemble_size
             ):
-                raise PreparationRefused(
+                raise PreparationRefusedError(
                     "Inference settings exceed the installed worker capability"
                 )
             now = time.time()
@@ -351,12 +351,12 @@ class Preparations:
                 self.execution.safe(job.id, "recovery")
                 self.execution.write(job.id, phase="queued")
             except Exception as exc:
-                from etsy_listings.core.application.preparation.execution import Stopped
+                from etsy_listings.core.application.preparation.execution import StoppedError
 
                 self.execution.write(
                     job.id,
-                    phase="superseded" if isinstance(exc, Stopped) else "failed",
-                    error=None if isinstance(exc, Stopped) else str(exc),
+                    phase="superseded" if isinstance(exc, StoppedError) else "failed",
+                    error=None if isinstance(exc, StoppedError) else str(exc),
                 )
         for name in self.workspace.template_names(include_uncalibrated=True):
             # A damaged or changed-photo template remains an actionable reader

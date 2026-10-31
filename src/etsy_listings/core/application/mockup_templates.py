@@ -4,7 +4,7 @@ a preview composites (module-structure plan, PR 7).
 
 Nothing here creates a template. A template is a folder of photos the
 seller puts in the workspace, so every operation names one that exists and
-refuses with :class:`~etsy_listings.core.application.refusals.TemplateMissing`
+refuses with :class:`~etsy_listings.core.application.refusals.TemplateMissingError`
 otherwise. Every path comes from ``Workspace``: template names arrive from
 URLs, and its accessors are where "stays inside the root" is enforced
 (ADR-0013, ADR-0046) -- an unusable name is its ``InvalidNameError``.
@@ -34,12 +34,12 @@ from typing import Literal
 from PIL import Image
 
 from etsy_listings.core.application.refusals import (
-    TemplateAlreadyCalibrated,
-    TemplateConfigMissing,
-    TemplateKindRefused,
-    TemplateMissing,
-    TemplatePhotoMissing,
-    TemplatePreviewKindMismatch,
+    TemplateAlreadyCalibratedError,
+    TemplateConfigMissingError,
+    TemplateKindRefusedError,
+    TemplateMissingError,
+    TemplatePhotoMissingError,
+    TemplatePreviewKindMismatchError,
 )
 from etsy_listings.core.config.errors import ConfigLoadError
 from etsy_listings.core.config.slug import slug_map
@@ -52,7 +52,7 @@ from etsy_listings.core.render.config import (
     MultipleTemplate,
     PhotoWarpRenderer,
     Point,
-    PreparationRequired,
+    PreparationRequiredError,
     RenderConfig,
     ShadeConfig,
     SingleTemplate,
@@ -107,9 +107,9 @@ class TemplateOverview:
 
 
 def require_template(workspace: Workspace, name: str) -> None:
-    """Refuse a template that is not there: :class:`TemplateMissing`."""
+    """Refuse a template that is not there: :class:`TemplateMissingError`."""
     if not workspace.has_template(name):
-        raise TemplateMissing(name)
+        raise TemplateMissingError(name)
 
 
 def list_templates(workspace: Workspace) -> list[TemplateOverview]:
@@ -207,7 +207,7 @@ def _photos(workspace: Workspace, name: str, config: AnyTemplate) -> list[Templa
 
 def template_photo(workspace: Workspace, name: str, colour: str | None) -> Path:
     """The template's own photo: ``colour``'s in a colour-matrix set, else
-    whichever stands for the template. :class:`TemplatePhotoMissing` when
+    whichever stands for the template. :class:`TemplatePhotoMissingError` when
     there is none, or the colour's suffix is ambiguous -- the case
     ``template_base_image`` refuses to guess at."""
     require_template(workspace, name)
@@ -224,7 +224,7 @@ def template_photo(workspace: Workspace, name: str, colour: str | None) -> Path:
             source = None
     if source is None or not source.is_file():
         wanted = f"{name!r}" if colour is None else f"{name!r} colour {colour!r}"
-        raise TemplatePhotoMissing(f"no photo for {wanted}")
+        raise TemplatePhotoMissingError(f"no photo for {wanted}")
     return source
 
 
@@ -260,16 +260,16 @@ def assign_kind(workspace: Workspace, name: str, kind: TemplateKind) -> AnyTempl
 
     ``colour-matrix`` renames each photo to the slug its name means, as the
     colour report said it would; a fixed-scene kind makes its one photo
-    ``scene.png`` (ADR-0014). Refusals, nothing written: :class:`TemplateMissing`,
-    :class:`TemplateAlreadyCalibrated`, :class:`TemplateKindRefused` (no
+    ``scene.png`` (ADR-0014). Refusals, nothing written: :class:`TemplateMissingError`,
+    :class:`TemplateAlreadyCalibratedError`, :class:`TemplateKindRefusedError` (no
     photos, or a set for a fixed scene) and ``SlugCollisionError``.
     """
     require_template(workspace, name)
     if workspace.template_config_file(name).is_file():
-        raise TemplateAlreadyCalibrated(name)
+        raise TemplateAlreadyCalibratedError(name)
     photos = workspace.template_photos(name)
     if not photos:
-        raise TemplateKindRefused(f"no photos in {name!r}")
+        raise TemplateKindRefusedError(f"no photos in {name!r}")
 
     config: AnyTemplate
     if kind == "colour-matrix":
@@ -285,7 +285,7 @@ def assign_kind(workspace: Workspace, name: str, kind: TemplateKind) -> AnyTempl
         )
     else:
         if len(photos) != 1:
-            raise TemplateKindRefused(f"{kind} kind expects one photo, found {len(photos)}")
+            raise TemplateKindRefusedError(f"{kind} kind expects one photo, found {len(photos)}")
         scene = workspace.template_scene_image(name)
         photos[0].replace(scene)
         with Image.open(scene) as img:
@@ -355,7 +355,7 @@ class SavedConfig:
 
 def read_config(workspace: Workspace, name: str) -> SavedConfig:
     """The template's ``template.yaml`` and when it was last written.
-    :class:`TemplateConfigMissing` for one with no config yet -- loaded
+    :class:`TemplateConfigMissingError` for one with no config yet -- loaded
     before its file is stat()ed, so that is a refusal, not an ``OSError``."""
     require_template(workspace, name)
     store = CalibrationStore(workspace)
@@ -363,7 +363,7 @@ def read_config(workspace: Workspace, name: str) -> SavedConfig:
         try:
             saved = store.read(name)
         except ConfigLoadError as exc:
-            raise TemplateConfigMissing(name) from exc
+            raise TemplateConfigMissingError(name) from exc
         modified_at = datetime.fromtimestamp(
             workspace.template_config_file(name).stat().st_mtime, tz=UTC
         )
@@ -391,7 +391,7 @@ def save_calibration(
     store = CalibrationStore(workspace)
     with store.lock(name):
         if store.read(name).config.kind != config.kind:
-            raise TemplateKindRefused("Template kind cannot be changed after calibration")
+            raise TemplateKindRefusedError("Template kind cannot be changed after calibration")
         return store.save(
             name,
             config,
@@ -406,7 +406,7 @@ def _load_config(workspace: Workspace, name: str) -> AnyTemplate:
     try:
         return CalibrationStore(workspace).config(name)
     except ConfigLoadError as exc:
-        raise TemplateConfigMissing(name) from exc
+        raise TemplateConfigMissingError(name) from exc
 
 
 # ---------------------------------------------------------------- previews
@@ -453,22 +453,22 @@ def unsaved_preview(
     workspace: Workspace, name: str, geometry: PreviewGeometry, *, design: Callable[[], Path]
 ) -> PreviewScene:
     """The calibrator's live preview. Geometry shaped for another kind than
-    the template is refuses with :class:`TemplatePreviewKindMismatch`.
+    the template is refuses with :class:`TemplatePreviewKindMismatchError`.
 
     ``design`` resolves the one file every layer composites -- a calibrator
     test design, whose library is the caller's -- and may refuse; it is asked
     after the kind check and before the photo is looked for.
-    Refusals: :class:`TemplateMissing`, :class:`TemplateConfigMissing`,
-    :class:`TemplatePhotoMissing`."""
+    Refusals: :class:`TemplateMissingError`, :class:`TemplateConfigMissingError`,
+    :class:`TemplatePhotoMissingError`."""
     config = _load_config(workspace, name)
     # Authoring previews use the explicit draft renderer before autosave.
     # An omitted renderer still follows the saved template, so a Marigold
     # template cannot accidentally fall through to the Photo warp pipeline.
     if not isinstance(geometry.renderer or config.renderer, PhotoWarpRenderer):
-        raise PreparationRequired("Prepare the template first: Marigold maps are required")
+        raise PreparationRequiredError("Prepare the template first: Marigold maps are required")
     kind = config.kind
     if geometry.kind != kind:
-        raise TemplatePreviewKindMismatch(kind)
+        raise TemplatePreviewKindMismatchError(kind)
     settings = (
         geometry.renderer.config if isinstance(geometry.renderer, PhotoWarpRenderer) else None
     )
@@ -514,7 +514,7 @@ def _scene(
     photo = workspace.scene_photo(name, colour)
     if not photo.path.is_file():
         missing = f"colour {colour!r}" if colour is not None else f"{name!r}"
-        raise TemplatePhotoMissing(f"no mockup photo for {missing}")
+        raise TemplatePhotoMissingError(f"no mockup photo for {missing}")
     return PreviewScene(
         photo=photo,
         derived_dir=workspace.template_derived_dir(name),
@@ -579,12 +579,12 @@ def template_swatch(
     """A colour-matrix colour's real garment shade, ``#rrggbb``: the median
     pixel inside the saved box of the colour's own photo, which ``photo``
     decodes. Only a colour-matrix template has a photo per colour to sample
-    (:class:`TemplatePhotoMissing` otherwise, as for a colour with none)."""
+    (:class:`TemplatePhotoMissingError` otherwise, as for a colour with none)."""
     config = _load_config(workspace, name)
     if not isinstance(config, ColourMatrixTemplate):
-        raise TemplatePhotoMissing(f"{name!r} is not a colour-matrix template")
+        raise TemplatePhotoMissingError(f"{name!r} is not a colour-matrix template")
     scene = workspace.scene_photo(name, colour)
     if not scene.path.is_file():
-        raise TemplatePhotoMissing(f"no photo for {name!r} colour {colour!r}")
+        raise TemplatePhotoMissingError(f"no photo for {name!r} colour {colour!r}")
     red, green, blue = sample_swatch(photo(scene.path), config.bounding_box)
     return f"#{red:02x}{green:02x}{blue:02x}"

@@ -91,16 +91,16 @@ import names the module it depends on. Public interfaces:
     ``listing_batch`` -> ``ListingMembership``, ``recent_batches`` ->
     ``RecentBatch``, ``row_proposal``.
 ``refusals``
-    ``ListingMissing``, ``ListingNameTaken``, ``PublishedListingDeletion``,
+    ``ListingMissingError``, ``ListingNameTakenError``, ``PublishedListingDeletionError``,
     ``InvalidListing``, ``field_errors_of``; the calibrator's ``Template*``
-    refusals, ``DesignUploadRefused``, ``CalibrationDesignMissing``;
-    ``ListingTemplateMissing``, ``ReservedListingTemplateName``,
-    ``ListingTemplateSourceRefused``; ``StagingMissing``, ``StagedRowMissing``,
-    ``BatchMissing``, ``BatchRowMissing``, ``BatchRowUploadMissing``,
-    ``NothingToRetry``, ``BatchRowNotReviewable``, ``AiDraftingBlocked``;
-    ``AiRunRefused`` -- ``ListingDeploying``, ``ListingDraftingInBatch``,
-    ``AiNotReady``; ``ProposalMissing``, ``ProposalReplaced``;
-    ``ReviewedPlanRefused``.
+    refusals, ``DesignUploadRefusedError``, ``CalibrationDesignMissingError``;
+    ``ListingTemplateMissingError``, ``ReservedListingTemplateNameError``,
+    ``ListingTemplateSourceRefusedError``; ``StagingMissingError``, ``StagedRowMissingError``,
+    ``BatchMissingError``, ``BatchRowMissingError``, ``BatchRowUploadMissingError``,
+    ``NothingToRetryError``, ``BatchRowNotReviewableError``, ``AiDraftingBlockedError``;
+    ``AiRunRefusedError`` -- ``ListingDeployingError``, ``ListingDraftingInBatchError``,
+    ``AiNotReadyError``; ``ProposalMissingError``, ``ProposalReplacedError``;
+    ``ReviewedPlanRefusedError``.
 ``workspace_locks``
     ``WorkspaceLocks``: the per-listing-template write locks every
     template check-then-write holds, one instance per application runtime;

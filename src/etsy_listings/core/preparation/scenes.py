@@ -17,7 +17,7 @@ from etsy_listings.core.preparation.artifacts import (
     Artifacts,
     Manifest,
     PreparationInputs,
-    StalePreparation,
+    StalePreparationError,
 )
 from etsy_listings.core.preparation.scene_cache import SceneCache, photo_digest
 from etsy_listings.core.render.config import MarigoldAppearance
@@ -96,7 +96,7 @@ def lease_scene(
     template lock, then the lock is released while the lease keeps the
     generation alive for composition. ``expected`` is inputs read earlier (a
     plan, or a preview before it decoded its images); saved inputs that have
-    since changed refuse with :class:`StalePreparation`. Every refusal is an
+    since changed refuse with :class:`StalePreparationError`. Every refusal is an
     :class:`~etsy_listings.core.preparation.artifacts.ArtifactError`.
     """
     artifacts = Artifacts(workspace)
@@ -104,7 +104,7 @@ def lease_scene(
         with artifacts.calibration.lock(template):
             inputs = artifacts.saved_inputs(template)
             if expected is not None and inputs.identity() != expected.identity():
-                raise StalePreparation("Prepared maps are out of date; save and prepare again")
+                raise StalePreparationError("Prepared maps are out of date; save and prepare again")
             acquired = lease.enter_context(
                 artifacts.acquire(template, inputs, target_size=(base.shape[1], base.shape[0]))
             )

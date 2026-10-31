@@ -71,19 +71,19 @@ def _validate_mask(data: bytes, width: int, height: int) -> None:
         image.load()
 
 
-class CalibrationRepairRequired(UserFacingError):
+class CalibrationRepairRequiredError(UserFacingError):
     """A calibration transaction is active or its recovery payload is damaged."""
 
 
-class CalibrationConflict(UserFacingError):
+class CalibrationConflictError(UserFacingError):
     """The supplied revision or save request ID cannot be accepted."""
 
 
-class MaskUnavailable(UserFacingError):
+class MaskUnavailableError(UserFacingError):
     """Mask editing or Undo has no usable saved baseline/history."""
 
 
-class MaskPhotoMismatch(MaskUnavailable):
+class MaskPhotoMismatchError(MaskUnavailableError):
     """Saved masks belong to another main photo and require an explicit reset."""
 
 
@@ -189,7 +189,7 @@ class CalibrationStore:
                 receipt = json.loads(receipt_path.read_bytes())
                 if receipt["request_id"] == request_id:
                     if receipt["digest"] != request_digest:
-                        raise CalibrationConflict(
+                        raise CalibrationConflictError(
                             "Save request ID was reused with different content"
                         )
                     return Calibration(
@@ -198,7 +198,7 @@ class CalibrationStore:
                         receipt["main_photo"],
                     )
             if current.revision != expected_revision:
-                raise CalibrationConflict("Calibration changed; reload before saving")
+                raise CalibrationConflictError("Calibration changed; reload before saving")
             files, histories = self.apply_masks(name, config, mask_edits or [])
             revision = self.revision(name, config, files)
             settings_path = self.workspace.template_renderer_settings_file(name)
@@ -302,20 +302,20 @@ class CalibrationStore:
         with self.lock(name):
             calibration = self.read(name)
             if placement_id not in self.placement_ids(calibration.config):
-                raise MaskUnavailable("Mask placement does not belong to this template kind")
+                raise MaskUnavailableError("Mask placement does not belong to this template kind")
             paths = {
                 source: self.workspace.template_mask_file(name, placement_id, source=source)
                 for source in ("automatic", "edited", "metadata")
             }
             if not all(path.is_file() for path in paths.values()):
-                raise MaskUnavailable("Prepare the template first to create its automatic mask")
+                raise MaskUnavailableError("Prepare the template first to create its automatic mask")
             automatic, edited = paths["automatic"].read_bytes(), paths["edited"].read_bytes()
             try:
                 metadata = json.loads(paths["metadata"].read_bytes())
                 if metadata["schema_version"] != 1:
                     raise ValueError("unsupported mask metadata schema")
                 if metadata["photo"] != self.photo_identity(name, calibration.config):
-                    raise MaskPhotoMismatch(
+                    raise MaskPhotoMismatchError(
                         "Main photo changed; explicitly reset masks for this photo"
                     )
                 if metadata["automatic_checksum"] != digest(automatic) or metadata[
@@ -325,7 +325,7 @@ class CalibrationStore:
                 self.validate_mask(automatic, metadata["photo"])
                 self.validate_mask(edited, metadata["photo"])
             except (OSError, ValueError, KeyError, TypeError) as exc:
-                raise CalibrationRepairRequired(
+                raise CalibrationRepairRequiredError(
                     "Saved mask is damaged; repair or explicitly reset its baseline"
                 ) from exc
             history = self.history(name, placement_id, digest(edited))
@@ -381,9 +381,9 @@ class CalibrationStore:
         with self.lock(name):
             current = self.read(name)
             if current.revision != expected_revision:
-                raise CalibrationConflict("Calibration changed before automatic mask publication")
+                raise CalibrationConflictError("Calibration changed before automatic mask publication")
             if placement_id not in self.placement_ids(current.config):
-                raise MaskUnavailable("Mask placement does not belong to this template kind")
+                raise MaskUnavailableError("Mask placement does not belong to this template kind")
             photo = self.photo_identity(name, current.config)
             self.decode_mask(data, photo)
             automatic_path = self.workspace.template_mask_file(
@@ -393,7 +393,7 @@ class CalibrationStore:
                 self.workspace.template_mask_file(name, placement_id, source=source).exists()
                 for source in ("edited", "metadata")
             ):
-                raise CalibrationRepairRequired(
+                raise CalibrationRepairRequiredError(
                     "Automatic baseline is missing; repair it before rebuilding masks"
                 )
             if automatic_path.is_file():
@@ -401,7 +401,7 @@ class CalibrationStore:
                     saved_mask = self.mask(name, placement_id)
                     if not fresh or saved_mask.automatic != saved_mask.edited:
                         return current
-                except MaskUnavailable:
+                except MaskUnavailableError:
                     if not reset_for_photo:
                         raise
             metadata = {
@@ -436,7 +436,7 @@ class CalibrationStore:
             raise ValueError("Only one mask edit entry per placement is allowed")
         for edit in edits:
             if edit.placement_id not in self.placement_ids(config):
-                raise MaskUnavailable("Mask placement does not belong to saved template")
+                raise MaskUnavailableError("Mask placement does not belong to saved template")
             mask = self.mask(name, edit.placement_id)
             history = self.history(name, edit.placement_id, mask.checksum)
             metadata_path = self.workspace.template_mask_file(
@@ -449,7 +449,7 @@ class CalibrationStore:
                     data, history = mask.automatic, []
                 elif isinstance(operation, Undo):
                     if not history:
-                        raise MaskUnavailable(
+                        raise MaskUnavailableError(
                             "Undo brush stroke unavailable; cached history was lost"
                         )
                     data = base64.b64decode(history.pop()["before"], validate=True)
@@ -581,7 +581,7 @@ class CalibrationStore:
                         raise ValueError("transaction checksum mismatch")
                     payloads.append((target, data, entry["checksum"]))
             except (OSError, ValueError, KeyError, TypeError) as exc:
-                raise CalibrationRepairRequired(
+                raise CalibrationRepairRequiredError(
                     "Damaged calibration transaction; repair saved recovery payloads"
                 ) from exc
             # Validate the whole set before replacing even one destination.
@@ -589,6 +589,6 @@ class CalibrationStore:
                 if not target.is_file() or digest(target.read_bytes()) != checksum:
                     self.write_durable(target, data)
                 if digest(target.read_bytes()) != checksum:
-                    raise CalibrationRepairRequired("Calibration transaction verification failed")
+                    raise CalibrationRepairRequiredError("Calibration transaction verification failed")
             self.write_durable_json(manifest_path, {**manifest, "complete": True})
             remove_tree(transaction)

@@ -28,7 +28,7 @@ from typing import Any, Protocol
 from pydantic import ValidationError
 
 from etsy_listings.core.application.dependencies import EtsyStates
-from etsy_listings.core.application.refusals import ListingMissing, field_errors_of
+from etsy_listings.core.application.refusals import ListingMissingError, field_errors_of
 from etsy_listings.core.config.artwork import Resolved, resolve
 from etsy_listings.core.config.errors import ConfigLoadError
 from etsy_listings.core.config.garment_profile import GarmentProfile
@@ -118,10 +118,10 @@ class ListingRow:
 
 
 def read_listing(workspace: Workspace, name: str, *, etsy_states: EtsyStates) -> ListingView:
-    """Listing ``name`` as the editor reads it. Raises :class:`ListingMissing`
+    """Listing ``name`` as the editor reads it. Raises :class:`ListingMissingError`
     when it has no ``listing.yaml``."""
     if not ListingDocuments(workspace).exists(name):
-        raise ListingMissing(name)
+        raise ListingMissingError(name)
     listing = workspace.load_listing(name)
     etsy_listing_id, printify_product_id = remote_ids(workspace, name)
     etsy_state = _etsy_state(etsy_states, etsy_listing_id)
@@ -155,11 +155,11 @@ def scene_artwork(workspace: Workspace, name: str) -> Callable[[str | None], Pat
     The answer is ``None`` -- the layer is left bare rather than failing the
     picture -- for an empty slot, an unclassified colour, a ref outside its
     root or a file since deleted: the issues banner already says why, and the
-    rest of the scene is still worth judging. Raises :class:`ListingMissing`
+    rest of the scene is still worth judging. Raises :class:`ListingMissingError`
     without a ``listing.yaml``, and ``ConfigLoadError`` when it does not load.
     """
     if not ListingDocuments(workspace).exists(name):
-        raise ListingMissing(name)
+        raise ListingMissingError(name)
     listing = workspace.load_listing(name)
     profile = WorkspaceFacts.for_files(workspace).garment_profile(listing.garment_profile)
     tones = profile.colors if profile is not None else {}

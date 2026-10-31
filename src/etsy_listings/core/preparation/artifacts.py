@@ -34,7 +34,7 @@ from etsy_listings.core.render.config import (
 from etsy_listings.core.render.material import MaterialMaps
 from etsy_listings.core.workspace import Workspace
 from etsy_listings.core.workspace.atomic import write_bytes_atomic
-from etsy_listings.core.workspace.calibration import CalibrationStore, MaskPhotoMismatch, json_bytes
+from etsy_listings.core.workspace.calibration import CalibrationStore, MaskPhotoMismatchError, json_bytes
 from etsy_listings.core.workspace.file_version import file_version
 
 SCHEMA = 2
@@ -82,19 +82,19 @@ class ArtifactError(ValueError):
     reason: ClassVar[ReadinessReason] = "invalid_artifact"
 
 
-class StalePreparation(ArtifactError):
+class StalePreparationError(ArtifactError):
     """Current geometry, masks or evidence changed before publication."""
 
     reason: ClassVar[ReadinessReason] = "placement_changed"
 
 
-class UnsupportedSchema(ArtifactError):
+class UnsupportedSchemaError(ArtifactError):
     """A map pointer or manifest this version cannot read."""
 
     reason: ClassVar[ReadinessReason] = "unsupported_schema"
 
 
-class IncompatibleDimensions(ArtifactError):
+class IncompatibleDimensionsError(ArtifactError):
     """A target photo whose size differs from the prepared main photo."""
 
     reason: ClassVar[ReadinessReason] = "incompatible_dimensions"
@@ -210,7 +210,7 @@ def validate_maps(maps: MaterialMaps, size: tuple[int, int]) -> None:
         raise ArtifactError("Prepared map extent does not match main photo")
     width, height = right - left, bottom - top
     if min(size) < 1 or max(size) > 8192 or width * height > MAX_PIXELS:
-        raise UnsupportedSchema("Unsupported prepared-map dimensions")
+        raise UnsupportedSchemaError("Unsupported prepared-map dimensions")
     arrays = arrays_of(maps)
     for name, (low, high, channels) in BOUNDS.items():
         if name == "patch_ids" and name not in arrays:
@@ -342,7 +342,7 @@ def read_maps(
                             stream
                         )
                     else:
-                        raise UnsupportedSchema("Unsupported prepared NPY format")
+                        raise UnsupportedSchemaError("Unsupported prepared NPY format")
                     header_size = stream.tell()
                 if (
                     actual_shape != shape
@@ -484,7 +484,7 @@ class Artifacts:
         }:
             raise ArtifactError("Invalid current map pointer")
         if type(value["schema_version"]) is not int or value["schema_version"] not in (1, SCHEMA):
-            raise UnsupportedSchema("Unsupported map schema; migrate or prepare the template again")
+            raise UnsupportedSchemaError("Unsupported map schema; migrate or prepare the template again")
         if not isinstance(value["generation_id"], str) or not isinstance(
             value["manifest_checksum"], str
         ):
@@ -504,10 +504,10 @@ class Artifacts:
         if type(document.get("schema_version")) is not int or document.get(
             "schema_version"
         ) not in (1, SCHEMA):
-            raise UnsupportedSchema("Unsupported map schema; migrate or prepare the template again")
+            raise UnsupportedSchemaError("Unsupported map schema; migrate or prepare the template again")
         manifest = Manifest.model_validate(document)
         if manifest.generation_id != generation or manifest.semantics != SEMANTICS:
-            raise UnsupportedSchema("Unsupported map coordinate semantics")
+            raise UnsupportedSchemaError("Unsupported map coordinate semantics")
         ids = [p.id for p in manifest.placements]
         if len(ids) != len(set(ids)) or set(ids) != set(manifest.preparation_inputs.ids):
             raise ArtifactError("Prepared generation does not contain the exact placement set")
@@ -561,9 +561,9 @@ class Artifacts:
         manifest: Manifest, inputs: PreparationInputs, target_size: tuple[int, int] | None
     ) -> None:
         if manifest.preparation_inputs.identity() != inputs.identity():
-            raise StalePreparation("Prepared maps are out of date; rebuild or prepare the template")
+            raise StalePreparationError("Prepared maps are out of date; rebuild or prepare the template")
         if target_size is not None and target_size != (inputs.photo.width, inputs.photo.height):
-            raise IncompatibleDimensions(
+            raise IncompatibleDimensionsError(
                 "Shared colour photo dimensions differ from the main photo"
             )
 
@@ -673,7 +673,7 @@ class Artifacts:
                 if has_mask:
                     try:
                         checksum = self.calibration.mask(name, placement_id).checksum
-                    except MaskPhotoMismatch:
+                    except MaskPhotoMismatchError:
                         if not reset_masks_for_photo:
                             raise
                 placements.append(
@@ -792,7 +792,7 @@ class Artifacts:
         checkpoint("validated")
         with self.calibration.lock(name):
             if current_inputs().identity() != inputs.identity():
-                raise StalePreparation("Calibration changed; obsolete maps were not published")
+                raise StalePreparationError("Calibration changed; obsolete maps were not published")
             final = self.workspace.template_map_generation_dir(name, generation)
             final.parent.mkdir(parents=True, exist_ok=True)
             staging.rename(final)
@@ -890,7 +890,7 @@ class Artifacts:
         try:
             manifest = self.inspect(name, inputs, target_size=target_size)
             return Readiness("ready", content_digest=manifest.content_digest)
-        except StalePreparation as exc:
+        except StalePreparationError as exc:
             # The accepted inputs are immutable, so explain the first relevant change.
             reason: ReadinessReason = exc.reason
             try:

@@ -33,7 +33,7 @@ def create_listing(
 
     * :class:`~etsy_listings.core.workspace.workspace.InvalidNameError`:
       ``name`` is not a single path segment (ADR-0013). Nothing is locked.
-    * :class:`ListingNameTaken`: the **directory** exists, not just
+    * :class:`ListingNameTakenError`: the **directory** exists, not just
       ``listing.yaml``. A ``listings/{name}/`` left with a lockfile and no
       document would hand the new listing another listing's remote ids.
     * :class:`InvalidListing`, returned rather than raised: ``document`` does

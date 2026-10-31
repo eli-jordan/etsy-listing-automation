@@ -32,12 +32,12 @@ from etsy_listings.core.application.mockup_templates import (
     unsaved_preview,
 )
 from etsy_listings.core.application.refusals import (
-    TemplateAlreadyCalibrated,
-    TemplateConfigMissing,
-    TemplateKindRefused,
-    TemplateMissing,
-    TemplatePhotoMissing,
-    TemplatePreviewKindMismatch,
+    TemplateAlreadyCalibratedError,
+    TemplateConfigMissingError,
+    TemplateKindRefusedError,
+    TemplateMissingError,
+    TemplatePhotoMissingError,
+    TemplatePreviewKindMismatchError,
 )
 from etsy_listings.core.config.slug import SlugCollisionError
 from etsy_listings.core.render.config import (
@@ -71,12 +71,12 @@ def _folder(
 
 
 def test_unsaved_preview_without_an_explicit_renderer_keeps_marigold_refusal(workspace_root):
-    from etsy_listings.core.render.config import PreparationRequired
+    from etsy_listings.core.render.config import PreparationRequiredError
 
     from tests.support.marigold import marigold_template
 
     workspace = marigold_template(workspace_root)
-    with pytest.raises(PreparationRequired, match="Marigold maps are required"):
+    with pytest.raises(PreparationRequiredError, match="Marigold maps are required"):
         unsaved_preview(
             workspace,
             "shirt",
@@ -202,24 +202,24 @@ class TestAssignKind:
 
     def test_a_scene_kind_refuses_a_set_of_photos(self, workspace: Workspace) -> None:
         _folder(workspace, "fresh", "a.png", "b.png")
-        with pytest.raises(TemplateKindRefused, match="single kind expects one photo, found 2"):
+        with pytest.raises(TemplateKindRefusedError, match="single kind expects one photo, found 2"):
             assign_kind(workspace, "fresh", "single")
 
     def test_an_empty_folder_is_refused(self, workspace: Workspace) -> None:
         _folder(workspace, "empty")
-        with pytest.raises(TemplateKindRefused, match="no photos in 'empty'"):
+        with pytest.raises(TemplateKindRefusedError, match="no photos in 'empty'"):
             assign_kind(workspace, "empty", "single")
 
     def test_a_configured_template_keeps_its_kind(self, workspace: Workspace) -> None:
         before = workspace.template_config_file("flat-lay-01").read_bytes()
-        with pytest.raises(TemplateAlreadyCalibrated, match="delete it to change kind"):
+        with pytest.raises(TemplateAlreadyCalibratedError, match="delete it to change kind"):
             assign_kind(workspace, "flat-lay-01", "single")
         assert workspace.template_config_file("flat-lay-01").read_bytes() == before
 
     def test_an_unknown_template_and_an_unusable_name_are_refused(
         self, workspace: Workspace
     ) -> None:
-        with pytest.raises(TemplateMissing, match="no template 'nope'"):
+        with pytest.raises(TemplateMissingError, match="no template 'nope'"):
             assign_kind(workspace, "nope", "single")
         with pytest.raises(InvalidNameError):
             assign_kind(workspace, "bad:name", "single")
@@ -263,11 +263,11 @@ class TestConfig:
 
     def test_a_folder_with_no_config_is_absent_not_broken(self, workspace: Workspace) -> None:
         _folder(workspace, "fresh", "black.png")
-        with pytest.raises(TemplateConfigMissing, match="no template.yaml for 'fresh'"):
+        with pytest.raises(TemplateConfigMissingError, match="no template.yaml for 'fresh'"):
             read_config(workspace, "fresh")
 
     def test_saving_needs_a_template_to_save_into(self, workspace: Workspace) -> None:
-        with pytest.raises(TemplateMissing):
+        with pytest.raises(TemplateMissingError):
             save_config(
                 workspace, "nope", SingleTemplate(renderer={"type": "photo-warp"}, bounding_box=BOX)
             )
@@ -277,7 +277,7 @@ class TestConfig:
 class TestPreviewScene:
     def test_unsaved_geometry_must_be_the_template_s_own_kind(self, workspace: Workspace) -> None:
         geometry = PreviewGeometry(kind="colour-matrix", colour="black", boxes=(BOX,))
-        with pytest.raises(TemplatePreviewKindMismatch, match="expected a multiple preview body"):
+        with pytest.raises(TemplatePreviewKindMismatchError, match="expected a multiple preview body"):
             unsaved_preview(workspace, "colour-chart-01", geometry, design=_design(workspace))
 
     def test_unsaved_geometry_becomes_one_layer_per_box(self, workspace: Workspace) -> None:
@@ -292,7 +292,7 @@ class TestPreviewScene:
         assert scene.photo.path == workspace.template_scene_image("colour-chart-01")
 
     def test_a_colour_with_no_photo_is_refused(self, workspace: Workspace) -> None:
-        with pytest.raises(TemplatePhotoMissing, match="no mockup photo for colour 'nope'"):
+        with pytest.raises(TemplatePhotoMissingError, match="no mockup photo for colour 'nope'"):
             unsaved_preview(
                 workspace,
                 "flat-lay-01",
@@ -310,7 +310,7 @@ class TestPreviewScene:
             asked.append("design")
             raise LookupError("unknown test design")
 
-        with pytest.raises(TemplatePreviewKindMismatch):
+        with pytest.raises(TemplatePreviewKindMismatchError):
             unsaved_preview(
                 workspace,
                 "colour-chart-01",
@@ -361,7 +361,7 @@ class TestPreviewScene:
 
     def test_saved_geometry_needs_a_config(self, workspace: Workspace) -> None:
         _folder(workspace, "fresh", "black.png")
-        with pytest.raises(TemplateConfigMissing):
+        with pytest.raises(TemplateConfigMissingError):
             saved_preview(workspace, "fresh", colour=None, design=_every_layer(workspace))
 
     def test_scaling_moves_the_box_and_the_displacement_with_the_canvas(self) -> None:
@@ -416,10 +416,10 @@ class TestPhotosAndSwatch:
         assert template_photo(workspace, "colour-chart-01", None).name == "scene.png"
 
     def test_no_photo_is_refused_naming_what_was_asked_for(self, workspace: Workspace) -> None:
-        with pytest.raises(TemplatePhotoMissing, match="no photo for 'flat-lay-01' colour 'nope'"):
+        with pytest.raises(TemplatePhotoMissingError, match="no photo for 'flat-lay-01' colour 'nope'"):
             template_photo(workspace, "flat-lay-01", "nope")
         _folder(workspace, "empty")
-        with pytest.raises(TemplatePhotoMissing, match="no photo for 'empty'$"):
+        with pytest.raises(TemplatePhotoMissingError, match="no photo for 'empty'$"):
             template_photo(workspace, "empty", None)
 
     def test_a_swatch_is_the_median_shade_inside_the_saved_box(self, workspace: Workspace) -> None:
@@ -435,7 +435,7 @@ class TestPhotosAndSwatch:
         assert [p.name for p in read] == ["black.png"]
 
     def test_only_a_colour_matrix_has_a_swatch(self, workspace: Workspace) -> None:
-        with pytest.raises(TemplatePhotoMissing, match="is not a colour-matrix template"):
+        with pytest.raises(TemplatePhotoMissingError, match="is not a colour-matrix template"):
             template_swatch(workspace, "colour-chart-01", "black", photo=load_template_base)
-        with pytest.raises(TemplatePhotoMissing, match="no photo for 'flat-lay-01' colour 'nope'"):
+        with pytest.raises(TemplatePhotoMissingError, match="no photo for 'flat-lay-01' colour 'nope'"):
             template_swatch(workspace, "flat-lay-01", "nope", photo=load_template_base)
