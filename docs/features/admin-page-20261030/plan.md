@@ -192,7 +192,8 @@ Execution started on 2026-10-30 from stack-base commit `5bbcd7df`.
 | 6 | `feat/admin-6-ai-time-limits` | [PR #149](https://github.com/eli-jordan/etsy-listing-automation/pull/149) |
 
 The follow-up [Runtime audit fixes](audit-runtime-fixes.md) record R2, S1, S2,
-S3, M1 and M2, their regression evidence and delivery PR.
+S3, M1 and M2, their regression evidence and delivery PR. The
+[State audit fixes](audit-state-fixes.md) record R1, Q1, Q2 and I1 the same way.
 
 ### PR 1: carry the local timeout and catalog fixes
 
