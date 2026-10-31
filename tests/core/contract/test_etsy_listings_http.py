@@ -50,7 +50,7 @@ LISTING_PAYLOAD = {
 }
 
 
-def _client(handler) -> HttpEtsyListingClient:  # noqa: ANN001 - a test handler
+def _client(handler) -> HttpEtsyListingClient:
     return HttpEtsyListingClient(etsy_transport(handler))
 
 
@@ -761,7 +761,7 @@ def test_a_video_is_deleted_from_the_shop_scoped_path() -> None:
     assert result is None
 
 
-def _refusing(status: int, error: str, calls: list[httpx.Request]):  # noqa: ANN202 - a handler
+def _refusing(status: int, error: str, calls: list[httpx.Request]):
     def handler(request: httpx.Request) -> httpx.Response:
         calls.append(request)
         return httpx.Response(status, json={"error": error})
@@ -778,7 +778,7 @@ def _attach(client: HttpEtsyListingClient) -> None:
 
 
 @pytest.mark.parametrize("send", [_upload, _attach], ids=["upload", "attach"])
-def test_the_daily_budget_400_is_reworded_into_what_it_is(send) -> None:  # noqa: ANN001
+def test_the_daily_budget_400_is_reworded_into_what_it_is(send) -> None:
     """Measured on a listing holding **no** videos: the eleventh association
     within 24 h, upload or re-attach alike, answers `400` with the same text
     a full listing gets. Shown verbatim it would send the seller looking for
@@ -802,7 +802,7 @@ def test_the_daily_budget_400_is_reworded_into_what_it_is(send) -> None:  # noqa
 
 
 @pytest.mark.parametrize("send", [_upload, _attach], ids=["upload", "attach"])
-def test_a_full_listing_409_is_its_own_error(send) -> None:  # noqa: ANN001
+def test_a_full_listing_409_is_its_own_error(send) -> None:
     """Measured: a third upload with `is_multi_video=true` against two active
     videos answers `409`, after the bytes had been sent."""
     from etsy_listings.core.clients.etsy.listings import (

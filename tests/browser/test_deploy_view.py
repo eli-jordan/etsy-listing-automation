@@ -58,7 +58,7 @@ def _free_port() -> int:
 
 
 @pytest.fixture
-def deploy_server(workspace_root: Path, prerequisite_missing) -> Iterator[str]:  # noqa: ANN001
+def deploy_server(workspace_root: Path, prerequisite_missing) -> Iterator[str]:
     """The real app, over `create_app(context_factory=fakes)` (this PR's own
     "done when"), against a throwaway copy of the fixture workspace -- so a
     run's writes (rendered PNGs, `state.lock.json`) land where this test can
@@ -95,7 +95,7 @@ DEFAULT_TIMEOUT_MS = 60_000
 
 
 @pytest.fixture
-def page(browser_type, deploy_server: str):  # noqa: ANN001, ANN201
+def page(browser_type, deploy_server: str):
     context = browser_type.new_context(viewport={"width": 1280, "height": 960})
     context.set_default_timeout(DEFAULT_TIMEOUT_MS)
     context.set_default_navigation_timeout(DEFAULT_TIMEOUT_MS)
@@ -106,7 +106,7 @@ def page(browser_type, deploy_server: str):  # noqa: ANN001, ANN201
 
 
 def test_deploy_plan_preview_apply_back_reattach_and_pill(
-    page,  # noqa: ANN001
+    page,
     workspace_root: Path,
 ) -> None:
     # -- Edit view: the new control, and nothing else about the page changed --
@@ -189,7 +189,7 @@ def test_deploy_plan_preview_apply_back_reattach_and_pill(
 
 
 def test_batch_apply_leaves_reattaches_and_continues_after_stale_listing(
-    page,  # noqa: ANN001
+    page,
     workspace_root: Path,
 ) -> None:
     """The workspace route preserves review while one listing goes stale.

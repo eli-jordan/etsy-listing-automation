@@ -53,7 +53,7 @@ def _headers(remaining: int | str | None) -> dict[str, str]:
     return headers
 
 
-def _transport(time: FakeTime, handler) -> Transport:  # noqa: ANN001 - a test handler
+def _transport(time: FakeTime, handler) -> Transport:
     return Transport(
         EtsyAppKey("k", "s"),
         client=httpx.Client(transport=httpx.MockTransport(handler), base_url=BASE_URL),
@@ -62,7 +62,7 @@ def _transport(time: FakeTime, handler) -> Transport:  # noqa: ANN001 - a test h
     )
 
 
-def _answering(time: FakeTime, *remaining: int | str | None):  # noqa: ANN202
+def _answering(time: FakeTime, *remaining: int | str | None):
     """A handler answering each request with the next header value (the last
     one repeats), recording the fake time every request was *sent* at."""
     queue = list(remaining)

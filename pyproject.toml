@@ -155,14 +155,39 @@ select = [
     "ANN",              # annotations
     "C4",               # comprehensions
     "SIM",              # simplify
+    # S01 mechanical families. Judgment families (PLR, PLC, C90, ARG, FBT,
+    # SLF) and the rejected families stay off until their own PRs.
+    "RET", "PIE", "RSE",
+    "PERF", "FURB",
+    "PTH",
+    "RUF",
+    "PGH",
+    "BLE",
+    "ERA",
+    "A",
+    "DTZ",
+    "T20",
+    "FAST",
+    "PT",
+    "TRY",
+    "PLE", "PLW",
+    "N",
 ]
 ignore = [
     "ANN401",           # Any is sometimes the honest type at a boundary
     "B008",             # typer/fastapi require call-as-default (typer.Option(...))
+    "RUF001",           # S01: the code uses × and – on purpose
+    "RUF002",
+    "RUF003",
+    "TRY003",           # S01: exception message style has no quality gain
 ]
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["ANN"]
+# S01: print is the interface of the CLI and of scripts/. Production code
+# elsewhere logs, or renders through the CLI.
+"src/etsy_listings/cli/**" = ["T20"]
+"scripts/**" = ["T20"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["etsy_listings"]

@@ -36,8 +36,8 @@ def _plan(**stage_plan_overrides: object) -> Plan:
             PriceChange(
                 size="M",
                 color="black",
-                before=Money(Decimal("349"), "NOK"),
-                after=Money(Decimal("399"), "NOK"),
+                before=Money(Decimal(349), "NOK"),
+                after=Money(Decimal(399), "NOK"),
             ),
             ListChange(path="colors", added=("navy",), removed=()),
         ),

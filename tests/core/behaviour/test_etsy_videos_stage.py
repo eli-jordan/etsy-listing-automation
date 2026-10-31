@@ -117,7 +117,7 @@ def _gallery(etsy: FakeEtsyListingClient, lock: Lockfile) -> list[str]:
     ]
 
 
-def _changes(stage_plan) -> list[tuple[str, object, object]]:  # noqa: ANN001
+def _changes(stage_plan) -> list[tuple[str, object, object]]:
     return [(c.path, c.before, c.after) for c in stage_plan.changes]
 
 

@@ -319,7 +319,7 @@ class PublishStage:
         shop_id = _shop_id(ctx)
         product_id = lock.remote.get(PRODUCT_ID_KEY)
         if not product_id:
-            raise PublishWithoutProductError()
+            raise PublishWithoutProductError
 
         ctx.emit(f"publishing product {product_id}")
         client.publish(shop_id, str(product_id), desired.sync_flags)

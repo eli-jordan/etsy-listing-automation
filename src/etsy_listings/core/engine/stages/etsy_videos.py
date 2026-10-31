@@ -201,7 +201,7 @@ class EtsyVideosStage:
             if media_kind(entry) == "image":
                 images_before += 1
                 continue
-            assert isinstance(entry, str)  # noqa: S101 - a template entry is always an image
+            assert isinstance(entry, str)
             source = workspace.resolve_ref(entry, listing_dir=listing_dir)
             videos.append(
                 DesiredVideo(

@@ -60,7 +60,7 @@ SHIPPING = ShippingRates(
         ),
     )
 )
-RATE = FxRate(rate=Decimal("10"), source="test", fetched_at=datetime(2026, 3, 1, tzinfo=UTC))
+RATE = FxRate(rate=Decimal(10), source="test", fetched_at=datetime(2026, 3, 1, tzinfo=UTC))
 
 
 def _catalog() -> FakeCatalogClient:

@@ -496,7 +496,7 @@ class BlockingSearch(FakeEtsyMarketClient):
         self.cancel = cancel
         self.searching = threading.Event()
 
-    def search_active(self, query: str, *, limit: int = 25):  # noqa: ANN201 - the fake's own
+    def search_active(self, query: str, *, limit: int = 25):
         self.searching.set()
         self.cancel.wait(10)
         return super().search_active(query, limit=limit)

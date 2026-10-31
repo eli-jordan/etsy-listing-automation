@@ -46,7 +46,7 @@ def _a_classified_listing_template(root: Path) -> None:
     edit_garment_profile(root, GARMENT_PROFILE, colors=dict.fromkeys(COLOURS, "dark"))
 
 
-def _saved(page, name: str = LISTING_TEMPLATE) -> None:  # noqa: ANN001
+def _saved(page, name: str = LISTING_TEMPLATE) -> None:
     """Wait for the head to say this template's file is saved: the auto-save
     chip, whose card names the file (UI doc, *The editor head*)."""
     chip = page.get_by_role("button", name=re.compile("^Saved "))
@@ -56,13 +56,13 @@ def _saved(page, name: str = LISTING_TEMPLATE) -> None:  # noqa: ANN001
     page.keyboard.press("Escape")
 
 
-def _open(page, name: str = LISTING_TEMPLATE) -> None:  # noqa: ANN001
+def _open(page, name: str = LISTING_TEMPLATE) -> None:
     base = page.url.rsplit("/", 1)[0]
     page.goto(f"{base}/listing-templates/{name}")
     _saved(page, name)
 
 
-def _switch_every_colour_off(page) -> None:  # noqa: ANN001
+def _switch_every_colour_off(page) -> None:
     for colour in COLOURS:
         switch = page.get_by_role("switch", name=colour)
         switch.click()
@@ -82,7 +82,7 @@ def _wait_for_colours(root: Path, colours: list[str], timeout: float = 10.0) -> 
         time.sleep(0.05)
 
 
-def test_an_incomplete_listing_template_is_kept_off_disk_until_it_is_complete(  # noqa: ANN001
+def test_an_incomplete_listing_template_is_kept_off_disk_until_it_is_complete(
     page, workspace_root: Path
 ) -> None:
     _a_classified_listing_template(workspace_root)
@@ -113,7 +113,7 @@ def test_an_incomplete_listing_template_is_kept_off_disk_until_it_is_complete(  
     assert _colours(workspace_root) == ["black"]
 
 
-def test_leaving_with_an_unsaved_edit_asks_first(page, workspace_root: Path) -> None:  # noqa: ANN001
+def test_leaving_with_an_unsaved_edit_asks_first(page, workspace_root: Path) -> None:
     _a_classified_listing_template(workspace_root)
     _open(page)
     _switch_every_colour_off(page)
@@ -137,9 +137,7 @@ def test_leaving_with_an_unsaved_edit_asks_first(page, workspace_root: Path) -> 
     assert _colours(workspace_root) == last_complete_colours
 
 
-def test_clone_and_name_makes_two_independent_listing_templates(  # noqa: ANN001
-    page, workspace_root: Path
-) -> None:
+def test_clone_and_name_makes_two_independent_listing_templates(page, workspace_root: Path) -> None:
     _a_classified_listing_template(workspace_root)
     base = page.url.rsplit("/", 1)[0]
     page.goto(f"{base}/listing-templates")
@@ -165,7 +163,7 @@ def test_clone_and_name_makes_two_independent_listing_templates(  # noqa: ANN001
         assert own.is_file()
 
 
-def _eventually(page, condition) -> None:  # noqa: ANN001
+def _eventually(page, condition) -> None:
     """Wait out the autosave debounce for a file the browser writes."""
     for _ in range(100):
         if condition():

@@ -105,7 +105,7 @@ def fake_popen(monkeypatch: pytest.MonkeyPatch) -> Launches:
 
 
 @contextmanager
-def finishing(launches: Launches, **outcome: Any) -> Iterator[None]:  # noqa: ANN401
+def finishing(launches: Launches, **outcome: Any) -> Iterator[None]:
     """Finish the child with ``outcome`` once `run_managed` has created it,
     from a helper joined on the way out; a child left running is finished so
     `run_managed` cannot outlive a failed test."""
@@ -339,7 +339,7 @@ def test_kill_process_tree_on_posix_survives_a_process_that_already_exited(
     monkeypatch.setattr(process.sys, "platform", "linux")
 
     def _raise(pid: int) -> int:
-        raise ProcessLookupError()
+        raise ProcessLookupError
 
     def _unexpected_killpg(pgid: int, sig: int) -> None:
         raise AssertionError("killpg must not be called once getpgid raises")

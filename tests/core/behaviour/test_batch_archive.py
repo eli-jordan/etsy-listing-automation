@@ -53,7 +53,7 @@ def a_zip(*entries: tuple[str | zipfile.ZipInfo, bytes]) -> bytes:
     return buffer.getvalue()
 
 
-def _stage(workspace: Workspace, store: StagingStore, *files: tuple[str, bytes]):  # noqa: ANN202
+def _stage(workspace: Workspace, store: StagingStore, *files: tuple[str, bytes]):
     return stage_pngs(workspace, store, "heavyweight-tee", uploads(*files), now=NOW)
 
 

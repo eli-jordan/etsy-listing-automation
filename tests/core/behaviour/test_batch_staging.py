@@ -37,7 +37,7 @@ def store(workspace: Workspace) -> StagingStore:
     return StagingStore(workspace)
 
 
-def _stage(workspace: Workspace, store: StagingStore, *files: tuple[str, bytes]):  # noqa: ANN202
+def _stage(workspace: Workspace, store: StagingStore, *files: tuple[str, bytes]):
     return stage_pngs(workspace, store, "heavyweight-tee", uploads(*files), now=NOW)
 
 

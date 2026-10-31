@@ -28,7 +28,7 @@ SHOP = {
 }
 
 
-def _client(handler) -> HttpEtsyShopClient:  # noqa: ANN001 - a test handler
+def _client(handler) -> HttpEtsyShopClient:
     return HttpEtsyShopClient(etsy_transport(handler))
 
 

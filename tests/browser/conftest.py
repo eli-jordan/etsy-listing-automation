@@ -41,11 +41,11 @@ class _SingleProcessChromium:
     works, never builds one of these.
     """
 
-    def __init__(self, chromium) -> None:  # noqa: ANN001
+    def __init__(self, chromium) -> None:
         self._chromium = chromium
         self._browser = chromium.launch(args=["--single-process"])
 
-    def new_context(self, **kwargs):  # noqa: ANN003, ANN201
+    def new_context(self, **kwargs):
         # A fresh browser per context: one that has closed a context before is
         # not reliably able to open another in this mode.
         self.close()
@@ -57,7 +57,7 @@ class _SingleProcessChromium:
             self._browser.close()
 
 
-def _launch(chromium):  # noqa: ANN001, ANN202 - playwright's types, as above
+def _launch(chromium):
     try:
         return chromium.launch()
     except Exception:  # pragma: no cover - environment-dependent
@@ -65,7 +65,7 @@ def _launch(chromium):  # noqa: ANN001, ANN202 - playwright's types, as above
 
 
 @pytest.fixture(scope="session")
-def browser_type(prerequisite_missing):  # noqa: ANN201 - playwright's type isn't worth importing at module scope
+def browser_type(prerequisite_missing):
     try:
         from playwright import sync_api as playwright
     except ImportError:
@@ -137,7 +137,7 @@ at all."""
 
 
 @pytest.fixture
-def page(browser_type, calibrator_server: str):  # noqa: ANN001, ANN201
+def page(browser_type, calibrator_server: str):
     context = browser_type.new_context(viewport={"width": 1280, "height": 900})
     context.set_default_timeout(DEFAULT_TIMEOUT_MS)
     context.set_default_navigation_timeout(DEFAULT_TIMEOUT_MS)

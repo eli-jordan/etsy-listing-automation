@@ -175,7 +175,7 @@ class ColourMatrixTemplate(BaseModel):
         return photo_warp_config(self.renderer, self.bounding_box)
 
 
-def _reject_template_artwork(value: Any) -> Any:  # noqa: ANN401 - pydantic validator boundary
+def _reject_template_artwork(value: Any) -> Any:
     """A template no longer chooses artwork (ADR-0053): a colour resolves to the
     same file in every mockup scene and on Printify, and a mockup showing a
     different print from the delivered shirt is not a useful exception. The
@@ -207,7 +207,7 @@ class Placement(BaseModel):
 
     @model_validator(mode="before")
     @classmethod
-    def _no_artwork(cls, value: Any) -> Any:  # noqa: ANN401 - pydantic validator boundary
+    def _no_artwork(cls, value: Any) -> Any:
         return _reject_template_artwork(value)
 
 
@@ -258,7 +258,7 @@ class SingleTemplate(BaseModel):
 
     @model_validator(mode="before")
     @classmethod
-    def _no_artwork(cls, value: Any) -> Any:  # noqa: ANN401 - pydantic validator boundary
+    def _no_artwork(cls, value: Any) -> Any:
         return _reject_template_artwork(value)
 
     def render_config(self) -> RenderConfig:

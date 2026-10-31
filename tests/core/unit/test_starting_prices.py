@@ -106,7 +106,7 @@ def test_compute_starting_prices_applies_margin_and_converts_currency() -> None:
     # variants 1 (Black/S) and 3 (Blue Jean/S) both cost 1000c mfg + 500c shipping.
     variant_costs = {1: 1000, 2: 1500, 3: 1000, 4: 1500}
     shipping = _shipping_rates(small_cents=500, medium_cents=600)
-    rate = FxRate(rate=Decimal("10"), source="test", fetched_at=datetime.now(UTC))
+    rate = FxRate(rate=Decimal(10), source="test", fetched_at=datetime.now(UTC))
 
     prices, notes = compute_starting_prices(
         sizes=["S", "M"],
@@ -128,7 +128,7 @@ def test_compute_starting_prices_uses_the_max_when_colours_disagree() -> None:
     # Both size-S variants (1 and 3) get different manufacturing costs.
     variant_costs = {1: 1000, 3: 2000}
     shipping = _shipping_rates(small_cents=0, medium_cents=0)
-    rate = FxRate(rate=Decimal("1"), source="test", fetched_at=datetime.now(UTC))
+    rate = FxRate(rate=Decimal(1), source="test", fetched_at=datetime.now(UTC))
 
     prices, notes = compute_starting_prices(
         sizes=["S"],
@@ -152,7 +152,7 @@ def test_compute_starting_prices_is_fail_soft_with_no_cost_data() -> None:
         variant_set=VARIANT_SET,
         variant_costs={},  # the undocumented endpoint returned nothing
         shipping=shipping,
-        fx_rate=FxRate(rate=Decimal("10"), source="test", fetched_at=datetime.now(UTC)),
+        fx_rate=FxRate(rate=Decimal(10), source="test", fetched_at=datetime.now(UTC)),
         target_currency="NOK",
     )
 

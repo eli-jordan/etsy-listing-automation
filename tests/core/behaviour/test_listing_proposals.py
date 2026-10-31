@@ -51,7 +51,7 @@ def _generated(workspace: Workspace, proposals: ProposalStore) -> ProposalRecord
     return save_proposal(workspace, LISTING)
 
 
-def _resolve(workspace: Workspace, proposals: ProposalStore, **sections: object):  # noqa: ANN202
+def _resolve(workspace: Workspace, proposals: ProposalStore, **sections: object):
     return resolve_proposal(
         workspace,
         proposals,

@@ -248,7 +248,7 @@ auth_app = typer.Typer(
 app.add_typer(auth_app, name="auth")
 
 
-def _check_option() -> Any:  # noqa: ANN401 - typer.Option is typed Any at this boundary
+def _check_option() -> Any:
     return typer.Option(
         False,
         "--check",
@@ -256,7 +256,7 @@ def _check_option() -> Any:  # noqa: ANN401 - typer.Option is typed Any at this 
     )
 
 
-def _auth_root_option() -> Any:  # noqa: ANN401 - typer.Option is typed Any at this boundary
+def _auth_root_option() -> Any:
     """``--root`` as `auth` needs it: no shop.yaml required.
 
     `auth` and `setup` are the two commands that run *before* a workspace

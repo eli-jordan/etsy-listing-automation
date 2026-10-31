@@ -41,7 +41,7 @@ def _aspect(box: list[dict]) -> float:
     return width / height
 
 
-def _template_config(workspace_root: Path, template: str) -> dict:  # noqa: ANN401
+def _template_config(workspace_root: Path, template: str) -> dict:
     return yaml.safe_load(
         (workspace_root / "mockup-templates" / template / "template.yaml").read_text(
             encoding="utf-8"
@@ -49,7 +49,7 @@ def _template_config(workspace_root: Path, template: str) -> dict:  # noqa: ANN4
     )
 
 
-def _rail_row(page, name: str):  # noqa: ANN001, ANN201
+def _rail_row(page, name: str):
     """Wireframe 2a replaced the template dropdown with the rail, so picking a
     template is a click on its row. `data-template` is the hook rather than a
     presentational class: the row's look is still being worked on, and a test
@@ -57,13 +57,13 @@ def _rail_row(page, name: str):  # noqa: ANN001, ANN201
     return page.locator(f".template-rail__item[data-template='{name}']")
 
 
-def _select_template(page, name: str) -> None:  # noqa: ANN001
+def _select_template(page, name: str) -> None:
     row = _rail_row(page, name)
     row.wait_for()
     row.click()
 
 
-def _selected_template(page) -> str | None:  # noqa: ANN001
+def _selected_template(page) -> str | None:
     page.wait_for_selector(".template-rail__item--active")
     return page.locator(".template-rail__item--active").first.get_attribute("data-template")
 
@@ -83,7 +83,7 @@ class TrafficLog:
     Responses carry their request, so a payload assertion still works.
     """
 
-    def __init__(self, page, needle: str) -> None:  # noqa: ANN001
+    def __init__(self, page, needle: str) -> None:
         self.page = page
         self.entries: list[object] = []
         page.on(
@@ -91,7 +91,7 @@ class TrafficLog:
             lambda response: self.entries.append(response) if needle in response.url else None,
         )
 
-    def wait_for(self, predicate, timeout_ms: int = 60_000):  # noqa: ANN001, ANN201
+    def wait_for(self, predicate, timeout_ms: int = 60_000):
         for _ in range(timeout_ms // 100):
             for response in list(self.entries):
                 if predicate(response):
@@ -100,19 +100,19 @@ class TrafficLog:
         raise AssertionError(f"no matching response in {timeout_ms}ms ({len(self.entries)} seen)")
 
 
-def _sent(response) -> dict:  # noqa: ANN001, ANN401
+def _sent(response) -> dict:
     """The JSON body of the request that produced this response."""
     return json.loads(response.request.post_data or "{}")
 
 
-def _method(response) -> str:  # noqa: ANN001
+def _method(response) -> str:
     return str(response.request.method)
 
 
 COLOUR_SELECT = ".app__bar-field select"
 
 
-def _wait_for_colours(page, count: int) -> None:  # noqa: ANN001
+def _wait_for_colours(page, count: int) -> None:
     """Wait for the colour dropdown to be *fully* populated.
 
     `wait_for_selector` returns as soon as the select exists, but its colours
@@ -125,11 +125,11 @@ def _wait_for_colours(page, count: int) -> None:  # noqa: ANN001
     )
 
 
-def _colours(page) -> list[str]:  # noqa: ANN001
+def _colours(page) -> list[str]:
     return page.locator(f"{COLOUR_SELECT} option").all_inner_texts()
 
 
-def _image_natural_size(page) -> list[int]:  # noqa: ANN001
+def _image_natural_size(page) -> list[int]:
     page.wait_for_function(
         "() => document.querySelector('img.quad-editor__image')?.naturalWidth > 0"
     )
@@ -139,7 +139,7 @@ def _image_natural_size(page) -> list[int]:  # noqa: ANN001
     )
 
 
-def _overlay_space(page) -> list[int]:  # noqa: ANN001
+def _overlay_space(page) -> list[int]:
     """The coordinate space the box overlay is working in.
 
     This, not the image's own size, is what a dragged box is saved in. The
@@ -152,7 +152,7 @@ def _overlay_space(page) -> list[int]:  # noqa: ANN001
     return [int(float(n)) for n in box.split()[2:]]
 
 
-def test_calibrator_loads_the_workspace_templates(page) -> None:  # noqa: ANN001
+def test_calibrator_loads_the_workspace_templates(page) -> None:
     page.wait_for_selector(PREVIEW_IMAGE)
     assert page.locator("h1").inner_text() == "Mockup Templates"
     listed = page.locator(".template-rail__item").evaluate_all(
@@ -162,7 +162,7 @@ def test_calibrator_loads_the_workspace_templates(page) -> None:  # noqa: ANN001
     assert MULTIPLE_TEMPLATE in listed
 
 
-def test_no_console_errors_on_load(page) -> None:  # noqa: ANN001
+def test_no_console_errors_on_load(page) -> None:
     errors: list[str] = []
     page.on("console", lambda msg: errors.append(msg.text) if msg.type == "error" else None)
     page.reload()
@@ -179,9 +179,7 @@ class TestTemplateRail:
     images the browser can actually decode (a broken <img> still has a DOM
     node), and that picking a row loads that template."""
 
-    def test_rail_lists_the_workspace_and_groups_by_state(  # noqa: ANN001
-        self, page, workspace_root: Path
-    ) -> None:
+    def test_rail_lists_the_workspace_and_groups_by_state(self, page, workspace_root: Path) -> None:
         (workspace_root / "mockup-templates" / "needs-a-kind").mkdir()
         page.reload()
         page.wait_for_selector(".template-rail__item")
@@ -192,7 +190,7 @@ class TestTemplateRail:
         assert "needs calibration · 1" in headings
         assert "calibrated · 2" in headings
 
-    def test_the_banner_offers_the_next_uncalibrated_template(  # noqa: ANN001
+    def test_the_banner_offers_the_next_uncalibrated_template(
         self, page, workspace_root: Path
     ) -> None:
         (workspace_root / "mockup-templates" / "needs-a-kind").mkdir()
@@ -203,7 +201,7 @@ class TestTemplateRail:
         page.get_by_role("button", name="Calibrate next →").click()
         assert _selected_template(page) == "needs-a-kind"
 
-    def test_rail_thumbnails_decode_as_real_images(self, page) -> None:  # noqa: ANN001
+    def test_rail_thumbnails_decode_as_real_images(self, page) -> None:
         """Served by /thumbnail off the template's own photo -- if the endpoint
         404s or returns something that isn't a PNG, naturalWidth stays 0."""
         # `img.` explicitly: a template with no photo renders a <span> tile
@@ -218,7 +216,7 @@ class TestTemplateRail:
         )
         assert widths and all(0 < w <= 160 for w in widths)
 
-    def test_searching_narrows_the_rail(self, page) -> None:  # noqa: ANN001
+    def test_searching_narrows_the_rail(self, page) -> None:
         page.wait_for_selector(".template-rail__item")
         page.get_by_label("Search templates").fill("chart")
         listed = page.locator(".template-rail__item").evaluate_all(
@@ -226,7 +224,7 @@ class TestTemplateRail:
         )
         assert listed == [MULTIPLE_TEMPLATE]
 
-    def test_picking_a_row_loads_that_template(self, page) -> None:  # noqa: ANN001
+    def test_picking_a_row_loads_that_template(self, page) -> None:
         _select_template(page, COLOUR_MATRIX_TEMPLATE)
         page.wait_for_selector(COLOUR_SELECT)
         assert _selected_template(page) == COLOUR_MATRIX_TEMPLATE
@@ -234,7 +232,7 @@ class TestTemplateRail:
 
 
 class TestColourMatrixKind:
-    def test_the_colour_dropdown_lists_every_colour_in_the_set(self, page) -> None:  # noqa: ANN001
+    def test_the_colour_dropdown_lists_every_colour_in_the_set(self, page) -> None:
         """A row of pills used to sit between the tabs and the photo, pushing
         the thing being calibrated down the page and wrapping onto two lines
         for a real garment's colour range. It is a choice of one from a list."""
@@ -242,9 +240,7 @@ class TestColourMatrixKind:
         _wait_for_colours(page, 4)
         assert _colours(page) == ["black", "blue-jean", "ivory", "moss"]
 
-    def test_the_editor_previews_through_the_real_renderer_at_editor_scale(  # noqa: ANN001
-        self, page
-    ) -> None:
+    def test_the_editor_previews_through_the_real_renderer_at_editor_scale(self, page) -> None:
         """The preview must be a real server render, not a client-side
         stand-in -- the proof is that the browser *decoded* an image the
         server produced, sized by the pipeline rather than by the page.
@@ -264,13 +260,13 @@ class TestColourMatrixKind:
         assert response_info.value.headers["content-type"] == "image/webp"
         assert list(_image_natural_size(page)) == list(COLOUR_MATRIX_SIZE)
 
-    def test_the_overlay_works_in_the_template_true_pixel_space(self, page) -> None:  # noqa: ANN001
+    def test_the_overlay_works_in_the_template_true_pixel_space(self, page) -> None:
         """Told by the API, not measured off the image. The two agree for this
         set, and the chart below is where they part company."""
         _select_template(page, COLOUR_MATRIX_TEMPLATE)
         assert _overlay_space(page) == list(COLOUR_MATRIX_SIZE)
 
-    def test_selecting_a_colour_rerenders_that_colour(self, page) -> None:  # noqa: ANN001
+    def test_selecting_a_colour_rerenders_that_colour(self, page) -> None:
         _select_template(page, COLOUR_MATRIX_TEMPLATE)
         _wait_for_colours(page, 4)
         log = TrafficLog(page, "/preview")
@@ -278,7 +274,7 @@ class TestColourMatrixKind:
         log.wait_for(lambda r: _sent(r).get("colour") == "moss" and r.status == 200)
         assert page.locator(COLOUR_SELECT).input_value() == "moss"
 
-    def test_the_preview_tab_renders_the_set_at_full_size(self, page) -> None:  # noqa: ANN001
+    def test_the_preview_tab_renders_the_set_at_full_size(self, page) -> None:
         """The other half of the split: the canvas renders small so dragging is
         instant, and this tab renders the real thing.
 
@@ -304,7 +300,7 @@ class TestColourMatrixKind:
         )
         page.wait_for_selector("text=4 / 4")
 
-    def test_moving_a_box_reddens_re_render_instead_of_re_running(self, page) -> None:  # noqa: ANN001
+    def test_moving_a_box_reddens_re_render_instead_of_re_running(self, page) -> None:
         """A view you approve from must never quietly be a picture of an older
         box than the one on screen. It does not re-run either: a full-size set
         is minutes of work, and a nudge is not a request for it."""
@@ -335,7 +331,7 @@ class TestColourMatrixKind:
         assert page.locator(".preview-grid__tile img").count() == 4
         assert log.entries == []
 
-    def test_a_tile_opens_at_full_size_for_checking(self, page) -> None:  # noqa: ANN001
+    def test_a_tile_opens_at_full_size_for_checking(self, page) -> None:
         """A 140px tile cannot answer the questions calibration is about, so
         the point of rendering full-size is being able to look at it that way."""
         _select_template(page, COLOUR_MATRIX_TEMPLATE)
@@ -355,7 +351,7 @@ class TestColourMatrixKind:
         page.keyboard.press("Escape")
         assert dialog.count() == 0
 
-    def test_approving_from_the_preview_tab_writes_the_config(  # noqa: ANN001
+    def test_approving_from_the_preview_tab_writes_the_config(
         self, page, workspace_root: Path
     ) -> None:
         """ "Approve & mark calibrated" is a save. There is no separate stored
@@ -369,7 +365,7 @@ class TestColourMatrixKind:
         save_log.wait_for(lambda r: _method(r) == "PUT" and r.status == 200)
         assert _template_config(workspace_root, COLOUR_MATRIX_TEMPLATE)["kind"] == "colour-matrix"
 
-    def test_hiding_the_placement_outline_leaves_a_clean_render(self, page) -> None:  # noqa: ANN001
+    def test_hiding_the_placement_outline_leaves_a_clean_render(self, page) -> None:
         """A colour set has one box and it is always selected, so "clean" here
         means no chrome at all -- unlike a chart, where the toggle only hides
         the boxes you are not working on."""
@@ -379,7 +375,7 @@ class TestColourMatrixKind:
         page.wait_for_function("() => document.querySelectorAll('.quad-editor__box').length === 0")
         assert page.locator(HANDLE).count() == 0
 
-    def test_dragging_a_handle_moves_it_and_rerenders(self, page) -> None:  # noqa: ANN001
+    def test_dragging_a_handle_moves_it_and_rerenders(self, page) -> None:
         _select_template(page, COLOUR_MATRIX_TEMPLATE)
         page.wait_for_selector(HANDLE)
         handle = page.locator(HANDLE).first
@@ -396,9 +392,7 @@ class TestColourMatrixKind:
         assert after is not None
         assert (after["x"], after["y"]) != (before["x"], before["y"])
 
-    def test_toggling_the_wrinkle_pass_rerenders_with_the_new_setting(  # noqa: ANN001
-        self, page
-    ) -> None:
+    def test_toggling_the_wrinkle_pass_rerenders_with_the_new_setting(self, page) -> None:
         """The control is named for what it does to the photograph now, but it
         still writes `renderer.config.displace` -- this is the test that the rename stayed a
         rename and did not quietly repoint the toggle."""
@@ -413,7 +407,7 @@ class TestColourMatrixKind:
             )
         )
 
-    def test_the_shading_presets_write_a_blend_mode(self, page) -> None:  # noqa: ANN001
+    def test_the_shading_presets_write_a_blend_mode(self, page) -> None:
         _select_template(page, COLOUR_MATRIX_TEMPLATE)
         page.wait_for_selector(PREVIEW_IMAGE)
         log = TrafficLog(page, "/preview")
@@ -425,14 +419,14 @@ class TestColourMatrixKind:
             )
         )
 
-    def test_choosing_a_test_design_rerenders_against_it(self, page) -> None:  # noqa: ANN001
+    def test_choosing_a_test_design_rerenders_against_it(self, page) -> None:
         _select_template(page, COLOUR_MATRIX_TEMPLATE)
         page.wait_for_selector(PREVIEW_IMAGE)
         log = TrafficLog(page, "/preview")
         page.get_by_label("Test design").select_option("bundled-on-dark")
         log.wait_for(lambda r: _sent(r).get("design") == "bundled-on-dark")
 
-    def test_saving_writes_the_dragged_box_to_template_yaml(  # noqa: ANN001
+    def test_saving_writes_the_dragged_box_to_template_yaml(
         self, page, workspace_root: Path
     ) -> None:
         """The full loop the calibrator exists for: drag, save, and the
@@ -468,15 +462,13 @@ class TestMultipleKind:
     bounding-box panel. Everything the panel offered was already on the canvas
     except assigning a colour, and that is a caption on the box itself."""
 
-    def test_every_placement_is_a_box_with_its_colour_written_on_it(self, page) -> None:  # noqa: ANN001
+    def test_every_placement_is_a_box_with_its_colour_written_on_it(self, page) -> None:
         _select_template(page, MULTIPLE_TEMPLATE)
         page.wait_for_selector(".quad-editor__box")
         assert page.locator(".quad-editor__box").count() == 2
         assert page.locator(".quad-editor__label").count() == 2
 
-    def test_the_canvas_draws_a_downscale_over_the_true_coordinate_space(  # noqa: ANN001
-        self, page
-    ) -> None:
+    def test_the_canvas_draws_a_downscale_over_the_true_coordinate_space(self, page) -> None:
         """The chart is 960px wide, past the 900px editor cap, so this is where
         the image on screen and the space its boxes live in genuinely differ.
 
@@ -495,7 +487,7 @@ class TestMultipleKind:
         assert _overlay_space(page) == list(CHART_SIZE)
         assert _image_natural_size(page)[0] < CHART_SIZE[0]
 
-    def test_shift_dragging_a_corner_resizes_the_box_without_reshaping_it(  # noqa: ANN001
+    def test_shift_dragging_a_corner_resizes_the_box_without_reshaping_it(
         self, page, workspace_root: Path
     ) -> None:
         """The gesture every kind gains: a print placed right and simply too
@@ -530,7 +522,7 @@ class TestMultipleKind:
         assert _extent(after)[0] > _extent(before)[0]
         assert _aspect(after) == pytest.approx(_aspect(before), rel=0.02)
 
-    def test_clicking_a_dimmed_box_selects_it(self, page) -> None:  # noqa: ANN001
+    def test_clicking_a_dimmed_box_selects_it(self, page) -> None:
         _select_template(page, MULTIPLE_TEMPLATE)
         page.wait_for_selector(".quad-editor__box")
         boxes = page.locator(".quad-editor__box")
@@ -542,14 +534,14 @@ class TestMultipleKind:
         assert boxes.nth(1).locator(HANDLE).count() == 4
         assert boxes.nth(0).locator(HANDLE).count() == 0
 
-    def test_duplicate_from_the_box_menu_adds_a_third(self, page) -> None:  # noqa: ANN001
+    def test_duplicate_from_the_box_menu_adds_a_third(self, page) -> None:
         _select_template(page, MULTIPLE_TEMPLATE)
         page.wait_for_selector(".quad-editor__box")
         page.locator(".quad-editor__polygon").first.click(button="right")
         page.get_by_role("menuitem", name="Duplicate").click()
         page.wait_for_function("() => document.querySelectorAll('.quad-editor__box').length === 3")
 
-    def test_adding_a_box_from_the_canvas_selects_it(self, page) -> None:  # noqa: ANN001
+    def test_adding_a_box_from_the_canvas_selects_it(self, page) -> None:
         """2a puts Add box *on* the photo: a new box lands selected and
         draggable, with no drawing mode to enter first."""
         _select_template(page, MULTIPLE_TEMPLATE)
@@ -562,14 +554,14 @@ class TestMultipleKind:
         # to work out which row of a list it was.
         assert page.locator(".quad-editor__label--empty").count() == 1
 
-    def test_the_delete_key_removes_the_selected_box(self, page) -> None:  # noqa: ANN001
+    def test_the_delete_key_removes_the_selected_box(self, page) -> None:
         _select_template(page, MULTIPLE_TEMPLATE)
         page.wait_for_selector(".quad-editor__box")
         page.locator(".quad-editor").click(position={"x": 5, "y": 5})
         page.keyboard.press("Delete")
         page.wait_for_function("() => document.querySelectorAll('.quad-editor__box').length === 1")
 
-    def test_right_clicking_a_box_opens_its_menu(self, page) -> None:  # noqa: ANN001
+    def test_right_clicking_a_box_opens_its_menu(self, page) -> None:
         _select_template(page, MULTIPLE_TEMPLATE)
         page.wait_for_selector(".quad-editor__box")
         page.locator(".quad-editor__polygon").first.click(button="right")
@@ -577,7 +569,7 @@ class TestMultipleKind:
         items = page.locator(".quad-editor__menu button").all_inner_texts()
         assert items == ["Duplicate", "Bring to front", "Delete ⌫"]
 
-    def test_hiding_the_outlines_leaves_only_the_selected_box(self, page) -> None:  # noqa: ANN001
+    def test_hiding_the_outlines_leaves_only_the_selected_box(self, page) -> None:
         _select_template(page, MULTIPLE_TEMPLATE)
         page.wait_for_selector(".quad-editor__box")
         assert page.locator(".quad-editor__box").count() == 2
@@ -589,7 +581,7 @@ class TestMultipleKind:
         # The captions are chrome too, so they go with the outlines.
         assert page.locator(".quad-editor__label").count() == 1
 
-    def test_a_colour_typed_on_the_box_reaches_template_yaml(  # noqa: ANN001
+    def test_a_colour_typed_on_the_box_reaches_template_yaml(
         self, page, workspace_root: Path
     ) -> None:
         """The one thing the panel could do that the canvas could not. The
@@ -620,7 +612,7 @@ class TestMovingABox:
     by eye. Both gestures work in every editor, so one is proven on a colour
     set and the other on a chart."""
 
-    def test_dragging_a_box_moves_every_corner_by_the_same_delta(  # noqa: ANN001
+    def test_dragging_a_box_moves_every_corner_by_the_same_delta(
         self, page, workspace_root: Path
     ) -> None:
         original = _template_config(workspace_root, COLOUR_MATRIX_TEMPLATE)["bounding_box"]
@@ -650,9 +642,7 @@ class TestMovingABox:
         assert len(moved) == 1
         assert moved != {(0, 0)}
 
-    def test_arrow_keys_nudge_the_selected_box(  # noqa: ANN001
-        self, page, workspace_root: Path
-    ) -> None:
+    def test_arrow_keys_nudge_the_selected_box(self, page, workspace_root: Path) -> None:
         original = _template_config(workspace_root, MULTIPLE_TEMPLATE)["placements"][0]
         _select_template(page, MULTIPLE_TEMPLATE)
         page.wait_for_selector(HANDLE)
@@ -673,7 +663,7 @@ class TestMovingABox:
         # Two single-pixel steps right, one fast step down.
         assert deltas == {(2, 8)}
 
-    def test_a_drag_on_a_downscaled_canvas_moves_the_box_in_photo_pixels(  # noqa: ANN001
+    def test_a_drag_on_a_downscaled_canvas_moves_the_box_in_photo_pixels(
         self, page, workspace_root: Path
     ) -> None:
         """The non-identity witness for the screen-to-image projection. The
@@ -708,7 +698,7 @@ class TestMovingABox:
             assert after["x"] - before["x"] == pytest.approx(60 * scale, abs=scale)
             assert after["y"] - before["y"] == pytest.approx(40 * scale, abs=scale)
 
-    def test_the_box_menu_stays_inside_the_clipping_pane(self, page) -> None:  # noqa: ANN001
+    def test_the_box_menu_stays_inside_the_clipping_pane(self, page) -> None:
         """Real layout, not a patched rectangle: opened on the bottom-right
         corner of the rightmost box, the menu would overflow the clipping
         preview pane, so it must be pulled back inside it."""
@@ -750,7 +740,7 @@ class TestKindPickerCreatesEachKind:
     where the calibrator starts: the kind picker taking over the workspace.
     """
 
-    def _open_picker(self, page, workspace_root: Path, name: str, files: dict[str, Path]) -> None:  # noqa: ANN001
+    def _open_picker(self, page, workspace_root: Path, name: str, files: dict[str, Path]) -> None:
         folder = workspace_root / "mockup-templates" / name
         folder.mkdir()
         for filename, source in files.items():
@@ -765,9 +755,7 @@ class TestKindPickerCreatesEachKind:
         assert source.is_file()
         return source
 
-    def test_one_photo_becomes_a_single_kind_template(  # noqa: ANN001
-        self, page, workspace_root: Path
-    ) -> None:
+    def test_one_photo_becomes_a_single_kind_template(self, page, workspace_root: Path) -> None:
         self._open_picker(
             page, workspace_root, "lifestyle-01", {"black.png": self._source(workspace_root)}
         )
@@ -788,7 +776,7 @@ class TestKindPickerCreatesEachKind:
         assert (workspace_root / "mockup-templates" / "lifestyle-01" / "scene.png").is_file()
         assert not (workspace_root / "mockup-templates" / "lifestyle-01" / "black.png").exists()
 
-    def test_a_single_kind_template_can_hide_its_placement_outline(  # noqa: ANN001
+    def test_a_single_kind_template_can_hide_its_placement_outline(
         self, page, workspace_root: Path
     ) -> None:
         """One box, always selected: without the toggle there was no way to
@@ -803,9 +791,7 @@ class TestKindPickerCreatesEachKind:
         page.wait_for_function("() => document.querySelectorAll('.quad-editor__box').length === 0")
         assert page.locator(HANDLE).count() == 0
 
-    def test_two_photos_become_a_colour_matrix_template(  # noqa: ANN001
-        self, page, workspace_root: Path
-    ) -> None:
+    def test_two_photos_become_a_colour_matrix_template(self, page, workspace_root: Path) -> None:
         self._open_picker(
             page,
             workspace_root,
@@ -829,7 +815,7 @@ class TestKindPickerCreatesEachKind:
         _wait_for_colours(page, 2)
         assert sorted(_colours(page)) == ["black", "ivory"]
 
-    def test_the_picker_warns_about_a_filename_that_is_not_a_slug(  # noqa: ANN001
+    def test_the_picker_warns_about_a_filename_that_is_not_a_slug(
         self, page, workspace_root: Path
     ) -> None:
         """A photo called `Heather Grey.png` yields the colour `heather-grey`,
@@ -849,9 +835,7 @@ class TestKindPickerCreatesEachKind:
         page.wait_for_selector(".kind-picker__warn")
         assert "not a colour slug" in page.locator(".kind-picker__warn").inner_text()
 
-    def test_a_single_photo_cannot_be_a_colour_matrix(  # noqa: ANN001
-        self, page, workspace_root: Path
-    ) -> None:
+    def test_a_single_photo_cannot_be_a_colour_matrix(self, page, workspace_root: Path) -> None:
         """One photo per colour, over one photo, is a matrix of one -- which is
         what `single` already is. Worse, it names the colour after the
         filename, so `photo.png` became a garment colour called "photo"."""

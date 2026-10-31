@@ -46,7 +46,7 @@ def _seed(fake: FakeEtsyMarketClient, listing_id: int, *, reviews: int = 0, **fi
     fake.seed_listing(market_listing(listing_id, **fields), reviews=reviews)
 
 
-def _run(fake: FakeEtsyMarketClient, **kwargs: Any):  # noqa: ANN202 - MarketResult
+def _run(fake: FakeEtsyMarketClient, **kwargs: Any):
     kwargs.setdefault("today", TODAY)
     return research(QUERIES, fake, **kwargs)
 

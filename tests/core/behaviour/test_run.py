@@ -118,7 +118,7 @@ def test_a_clean_batch_reports_no_failure(workspace_root: Path) -> None:
     assert report.outcomes[0].planned is not None
 
 
-def _blocked(report) -> dict[str, str]:  # noqa: ANN001
+def _blocked(report) -> dict[str, str]:
     planned = report.outcomes[0].planned
     assert planned is not None
     return {sp.stage: sp.blocked for sp in planned.plan.stage_plans if sp.blocked}

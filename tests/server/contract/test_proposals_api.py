@@ -81,12 +81,12 @@ def _generate(client: TestClient, listing: str = LISTING) -> dict[str, Any]:
     return body
 
 
-def _saved(workspace: Workspace, **over: Any) -> str:  # noqa: ANN401
+def _saved(workspace: Workspace, **over: Any) -> str:
     """Saves a valid proposal for the fixture listing; its ``generated_at``."""
     return save_proposal(workspace, LISTING, **over).generated_at.isoformat()
 
 
-def _resolve(client: TestClient, generated_at: str, **sections: str) -> Any:  # noqa: ANN401
+def _resolve(client: TestClient, generated_at: str, **sections: str) -> Any:
     return client.patch(RESOLUTION, json={"generated_at": generated_at, **sections})
 
 

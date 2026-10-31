@@ -146,6 +146,6 @@ def with_retries(
         sleep(wait_for(policy, attempt, response, random=random))
 
     if response is None:
-        assert last_error is not None  # noqa: S101 - unreachable without one
+        assert last_error is not None
         raise last_error
     return response

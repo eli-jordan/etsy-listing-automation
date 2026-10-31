@@ -105,10 +105,10 @@ def test_unavailable_first_provider_falls_through_to_the_second() -> None:
     assert claude.tasks == [_seo_task()]
 
 
-def _raise_unavailable(provider: str):  # noqa: ANN201 - test helper
+def _raise_unavailable(provider: str):
     from etsy_listings.core.ai.errors import ProviderUnavailableError
 
-    def _generate(request, deadline, *, repair=None, cancel_event=None):  # noqa: ANN001, ANN202
+    def _generate(request, deadline, *, repair=None, cancel_event=None):
         raise ProviderUnavailableError(provider, "not authenticated")
 
     return _generate
@@ -207,7 +207,7 @@ def test_deadline_exceeded_skips_repair_and_surfaces_try_again() -> None:
 def test_cancelled_error_propagates_without_becoming_try_again() -> None:
     codex = FakeAiProvider(name="codex")
 
-    def _generate(request, deadline, *, repair=None, cancel_event=None):  # noqa: ANN001, ANN202
+    def _generate(request, deadline, *, repair=None, cancel_event=None):
         raise ProviderCancelledError("codex")
 
     codex.generate = _generate  # type: ignore[method-assign]
@@ -267,7 +267,7 @@ def test_provider_becoming_unavailable_during_repair_surfaces_as_try_again() -> 
     calls = {"count": 0}
     original_generate = codex.generate
 
-    def _generate(request, deadline, *, repair=None, cancel_event=None):  # noqa: ANN001, ANN202
+    def _generate(request, deadline, *, repair=None, cancel_event=None):
         calls["count"] += 1
         if repair is not None:
             raise ProviderUnavailableError("codex", "quota exhausted mid-repair")
@@ -332,7 +332,7 @@ def test_brief_drafting_falls_through_to_the_second_provider_too() -> None:
         responses=[],
     )
 
-    def _unavailable(task, deadline, *, repair=None, cancel_event=None):  # noqa: ANN001, ANN202
+    def _unavailable(task, deadline, *, repair=None, cancel_event=None):
         from etsy_listings.core.ai.errors import ProviderUnavailableError
 
         raise ProviderUnavailableError("codex", "not signed in")

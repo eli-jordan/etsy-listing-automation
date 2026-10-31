@@ -14,7 +14,7 @@ from typing import Any
 from etsy_listings.core.batches import BatchRow, reviewable, standing
 
 
-def _row(n: int, **fields: Any) -> BatchRow:  # noqa: ANN401
+def _row(n: int, **fields: Any) -> BatchRow:
     values: dict[str, Any] = {"creation": "created", "ai": "done"} | fields
     return BatchRow(
         id=f"r{n}",

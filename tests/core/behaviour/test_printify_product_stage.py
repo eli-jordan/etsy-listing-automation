@@ -592,7 +592,7 @@ def test_a_discontinued_cell_is_reported_rather_than_fatal(root, catalog, printi
             if not (v.options.color == "Moss" and v.options.size == "XXXL")
         )
     )
-    catalog._variants_by_key[(706, 29)] = dropped  # noqa: SLF001 - fixture surgery
+    catalog._variants_by_key[(706, 29)] = dropped
 
     stage_plan = _stage_plan(_ctx(root, catalog, printify), a_lock())
 

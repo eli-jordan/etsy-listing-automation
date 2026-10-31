@@ -366,7 +366,7 @@ def render_preview_response(
         if if_none_match == headers["ETag"]:
             return Response(status_code=304, headers=headers)
         return Response(composed.png, media_type="image/png", headers=headers)
-    assert isinstance(scene, PreviewScene)  # noqa: S101 - every composed scene returned above
+    assert isinstance(scene, PreviewScene)
     base = PREVIEW_IMAGES.base(scene.photo.path, EDITOR_MAX_EDGE if scale == "editor" else None)
     image = compose_preview(
         scene,
@@ -469,7 +469,7 @@ def design_preview(
     def design_path() -> Path:
         if test_design is not None:
             return resolve_design(workspace, test_design)
-        assert design is not None  # noqa: S101 - exactly one, checked above
+        assert design is not None
         path = workspace.design_file(design)
         if not path.is_file():
             raise HTTPException(status_code=404, detail=f"no design {design!r}")

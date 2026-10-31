@@ -17,7 +17,7 @@ from etsy_listings.cli.options import open_workspace, root_option
 def ui(
     root: str | None = root_option(),
     host: str = typer.Option(
-        "0.0.0.0",  # noqa: S104 -- see the option help
+        "0.0.0.0",
         "--host",
         help="Interface to bind the server to. The default reaches the workspace "
         "from another machine on the LAN; pass 127.0.0.1 for loopback only.",

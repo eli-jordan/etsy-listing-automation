@@ -40,7 +40,7 @@ SEARCH_ROW = {
 }
 
 
-def _client(handler) -> HttpEtsyMarketClient:  # noqa: ANN001 - a test handler
+def _client(handler) -> HttpEtsyMarketClient:
     return HttpEtsyMarketClient(etsy_transport(handler, bearer=None))
 
 

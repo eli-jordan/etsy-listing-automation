@@ -32,13 +32,13 @@ def _write_pricing_plan(workspace_root: Path) -> None:
     )
 
 
-def _listing_yaml(workspace_root: Path, name: str) -> dict:  # noqa: ANN401
+def _listing_yaml(workspace_root: Path, name: str) -> dict:
     return yaml.safe_load(
         (workspace_root / "listings" / name / "listing.yaml").read_text(encoding="utf-8")
     )
 
 
-def _wait_for_listing(page, workspace_root: Path, name: str, **fields: object) -> dict:  # noqa: ANN001,ANN401
+def _wait_for_listing(page, workspace_root: Path, name: str, **fields: object) -> dict:
     """Poll `listing.yaml` until the UI has written *fields* into it.
 
     The page cannot be waited on for this: "Autosaved" is the *settled* caption,
@@ -54,7 +54,7 @@ def _wait_for_listing(page, workspace_root: Path, name: str, **fields: object) -
     raise AssertionError(f"{name}/listing.yaml never reached {fields}: {written}")
 
 
-def test_create_name_and_autosave_a_listing(page, workspace_root: Path) -> None:  # noqa: ANN001
+def test_create_name_and_autosave_a_listing(page, workspace_root: Path) -> None:
     """`+ New listing` opens the editor on nothing, and the listing appears on
     disk the moment it has a name.
 
@@ -113,7 +113,7 @@ def test_create_name_and_autosave_a_listing(page, workspace_root: Path) -> None:
 
 
 def test_renaming_a_listing_moves_its_directory_and_render_cache(
-    page,  # noqa: ANN001
+    page,
     workspace_root: Path,
 ) -> None:
     cached = workspace_root / ".cache" / "renders" / "take-a-hike" / "flat-lay-01"
@@ -137,7 +137,7 @@ def test_renaming_a_listing_moves_its_directory_and_render_cache(
 
 
 def test_a_taken_name_is_refused_without_losing_the_draft(
-    page,  # noqa: ANN001
+    page,
     workspace_root: Path,
 ) -> None:
     _write_pricing_plan(workspace_root)
@@ -155,7 +155,7 @@ def test_a_taken_name_is_refused_without_losing_the_draft(
     assert page.get_by_label("Garment profile").input_value() == "comfort-colors-1717"
 
 
-def test_switching_a_colour_off_stays_off(page, workspace_root: Path) -> None:  # noqa: ANN001
+def test_switching_a_colour_off_stays_off(page, workspace_root: Path) -> None:
     """The bug this covers: the switch snapped straight back on.
 
     `colors:` alone failed `listing.yaml`'s own validator server-side, which
@@ -189,7 +189,7 @@ def test_switching_a_colour_off_stays_off(page, workspace_root: Path) -> None:  
     # actually wrong.
 
 
-def test_the_shade_buttons_need_a_profile_that_classifies_its_colours(  # noqa: ANN001
+def test_the_shade_buttons_need_a_profile_that_classifies_its_colours(
     page, workspace_root: Path
 ) -> None:
     """Dark/Light are driven by the garment profile's light/dark map, and a

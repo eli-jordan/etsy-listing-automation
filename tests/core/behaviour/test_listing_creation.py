@@ -35,7 +35,7 @@ def workspace(workspace_root: Path) -> Workspace:
     return Workspace.discover(root_override=workspace_root)
 
 
-def a_document(**over: Any) -> dict[str, Any]:  # noqa: ANN401
+def a_document(**over: Any) -> dict[str, Any]:
     document: dict[str, Any] = {
         "garment_profile": "comfort-colors-1717",
         "design": {"default": "designs/take-a-hike.png"},

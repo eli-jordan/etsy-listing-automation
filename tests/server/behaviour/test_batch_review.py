@@ -97,7 +97,7 @@ def _status(client: TestClient, batch_id: str) -> str:
     return status
 
 
-def _review(client: TestClient, batch_id: str, row: str, *, reviewed: bool = True) -> Any:  # noqa: ANN401
+def _review(client: TestClient, batch_id: str, row: str, *, reviewed: bool = True) -> Any:
     return client.put(f"/api/batches/{batch_id}/rows/{row}/reviewed", json={"reviewed": reviewed})
 
 

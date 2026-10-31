@@ -73,7 +73,7 @@ class Drift:
 Change = FieldChange | ListChange | PriceChange | MediaChange
 
 
-def scalar(path: str, desired: Any, applied: Any) -> FieldChange | None:  # noqa: ANN401
+def scalar(path: str, desired: Any, applied: Any) -> FieldChange | None:
     """Compare two scalar values (or equal-shaped pydantic models); ``None`` if unchanged."""
     if desired == applied:
         return None
@@ -92,8 +92,8 @@ def sequence(path: str, desired: list[Any], applied: list[Any]) -> ListChange | 
 
 def drift(
     path: str,
-    applied: Any,  # noqa: ANN401
-    live: Any,  # noqa: ANN401
+    applied: Any,
+    live: Any,
     *,
     last_applied_label: str | None = None,
     live_label: str | None = None,

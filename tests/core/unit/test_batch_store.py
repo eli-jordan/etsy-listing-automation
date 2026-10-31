@@ -24,7 +24,7 @@ from tests.support.refusals import refuse_reads
 CREATED = datetime(2026, 9, 27, 11, 42, tzinfo=UTC)
 
 
-def _row(name: str, **fields: Any) -> BatchRow:  # noqa: ANN401
+def _row(name: str, **fields: Any) -> BatchRow:
     values: dict[str, Any] = {"creation": "created", "ai": "done", "design": name} | fields
     return BatchRow(
         id=f"row-{name}",

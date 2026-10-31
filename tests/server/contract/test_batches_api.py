@@ -58,7 +58,7 @@ def client(workspace: Workspace, provider: ChainProvider) -> TestClient:
     return TestClient(_app(workspace, provider))
 
 
-def _stage(client: TestClient, *files: tuple[str, bytes], template: str = LISTING_TEMPLATE) -> Any:  # noqa: ANN401
+def _stage(client: TestClient, *files: tuple[str, bytes], template: str = LISTING_TEMPLATE) -> Any:
     return client.post(
         "/api/staging",
         data={"listing_template": template},

@@ -85,16 +85,16 @@ def test_unsaved_preview_without_an_explicit_renderer_keeps_marigold_refusal(wor
         )
 
 
-def _design(workspace: Workspace):  # noqa: ANN202
+def _design(workspace: Workspace):
     return lambda: workspace.design_file("take-a-hike")
 
 
-def _every_layer(workspace: Workspace):  # noqa: ANN202
+def _every_layer(workspace: Workspace):
     """A saved scene's ``design``: the one file, whatever colour a layer depicts."""
     return lambda _colour: workspace.design_file("take-a-hike")
 
 
-def _overview(workspace: Workspace, name: str):  # noqa: ANN202
+def _overview(workspace: Workspace, name: str):
     return {t.name: t for t in list_templates(workspace)}[name]
 
 
@@ -379,8 +379,8 @@ class TestPreviewScene:
         half = np.ascontiguousarray(base[::2, ::2])
         asked: list[str] = []
 
-        def never(kind: str):  # noqa: ANN202
-            def load():  # noqa: ANN202
+        def never(kind: str):
+            def load():
                 asked.append(kind)
                 raise AssertionError(kind)
 
@@ -423,7 +423,7 @@ class TestPhotosAndSwatch:
     def test_a_swatch_is_the_median_shade_inside_the_saved_box(self, workspace: Workspace) -> None:
         read: list[Path] = []
 
-        def photo(path: Path):  # noqa: ANN202
+        def photo(path: Path):
             read.append(path)
             return load_template_base(path)
 

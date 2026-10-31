@@ -36,7 +36,7 @@ def documents(workspace: Workspace) -> ListingDocuments:
     return ListingDocuments(workspace)
 
 
-def a_document(**over: Any) -> dict[str, Any]:  # noqa: ANN401
+def a_document(**over: Any) -> dict[str, Any]:
     document: dict[str, Any] = {
         "garment_profile": "comfort-colors-1717",
         "design": {"default": "designs/take-a-hike.png"},

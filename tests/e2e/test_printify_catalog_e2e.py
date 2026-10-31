@@ -77,7 +77,7 @@ def variant_payload(
 ) -> dict[str, Any]:
     """The raw variants response. The *shape* is what several tests below are
     about, so they read the payload rather than the decoded model."""
-    response = catalog._transport.get(  # noqa: SLF001 - the wire shape is the thing under test
+    response = catalog._transport.get(
         f"/v1/catalog/blueprints/{garment.id}/print_providers/{provider.id}/variants.json"
     )
     payload: dict[str, Any] = response.json()
@@ -122,9 +122,7 @@ class TestAuthenticatedCatalogEndpoints:
             assert blueprint.title
 
     def test_print_providers_accept_the_configured_token(self, catalog: HttpCatalogClient) -> None:
-        response = catalog._transport.get(  # noqa: SLF001 - validates the real wire contract
-            "/v1/catalog/blueprints/706/print_providers.json"
-        )
+        response = catalog._transport.get("/v1/catalog/blueprints/706/print_providers.json")
         assert response.status_code == 200
         payload = response.json()
         assert isinstance(payload, list) and payload
@@ -201,7 +199,7 @@ class TestTheOfflineTranscriptsStillMatchReality:
         self, catalog: HttpCatalogClient, contract_fixtures: dict[str, Any]
     ) -> None:
         transcribed = set(contract_fixtures["blueprints"][0])
-        live = catalog._transport.get("/v1/catalog/blueprints.json").json()[0]  # noqa: SLF001
+        live = catalog._transport.get("/v1/catalog/blueprints.json").json()[0]
         assert transcribed <= set(live), (
             f"the transcript claims blueprint keys Printify no longer returns: "
             f"{sorted(transcribed - set(live))}"
@@ -214,7 +212,7 @@ class TestTheOfflineTranscriptsStillMatchReality:
         contract_fixtures: dict[str, Any],
     ) -> None:
         transcribed = set(contract_fixtures["providers"][0])
-        live = catalog._transport.get(  # noqa: SLF001
+        live = catalog._transport.get(
             f"/v1/catalog/blueprints/{garment.id}/print_providers.json"
         ).json()[0]
         assert transcribed <= set(live), (

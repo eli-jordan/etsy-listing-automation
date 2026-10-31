@@ -67,7 +67,7 @@ def wait_for_redirect(
     result: dict[str, Callback | OAuthError] = {}
 
     class Handler(BaseHTTPRequestHandler):
-        def do_GET(self) -> None:  # noqa: N802 - BaseHTTPRequestHandler's spelling
+        def do_GET(self) -> None:
             request = urlsplit(self.path)
             if request.path != path:
                 self._respond(404, "Not here", "This is not the callback address.")

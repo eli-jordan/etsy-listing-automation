@@ -581,7 +581,7 @@ def run(
                     if row["template"] == name and row["edit"] == kind
                 ), "Contention mode did not overlap a rebuild for " + name + "/" + kind
     warm = [r for r in rows if r["cache"] == "warm"]
-    measured = warm if warm else rows
+    measured = warm or rows
     assert max(r["service_seconds"] for r in measured) < threshold, (
         "Edit-to-display target exceeded"
     )

@@ -70,8 +70,8 @@ def test_price_change_renders_money_as_its_display_string() -> None:
             PriceChange(
                 size="M",
                 color="black",
-                before=Money(Decimal("349"), "NOK"),
-                after=Money(Decimal("399"), "NOK"),
+                before=Money(Decimal(349), "NOK"),
+                after=Money(Decimal(399), "NOK"),
             ),
         ),
     )
@@ -144,7 +144,7 @@ def test_snapshot_keeps_the_model_declared_by_its_stage() -> None:
 
 def test_a_snapshot_from_the_wrong_stage_is_rejected() -> None:
     sp = StagePlan.no_work(
-        "publish", snapshot=_WrongSnapshot(note="no", price=Money(Decimal("10"), "NOK"))
+        "publish", snapshot=_WrongSnapshot(note="no", price=Money(Decimal(10), "NOK"))
     )
 
     with pytest.raises(TypeError, match="PublishSnapshot"):

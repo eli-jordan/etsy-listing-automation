@@ -344,7 +344,7 @@ def test_restart_at_cpu_mask_and_publication_checkpoints_finishes_coherently(wor
     def crash(identity, checkpoint):
         if checkpoint == step:
             exited.set()
-            raise ProcessExit()
+            raise ProcessExit
 
     coordinator = Preparations(workspace, runtime=runtime, checkpoint=crash)
     job = coordinator.submit(
@@ -397,7 +397,7 @@ def test_multiple_first_mask_crash_never_exposes_partial_maps_and_preserves_new_
     def crash(identity, step):
         if step == "mask_committed":
             exited.set()
-            raise ProcessExit()
+            raise ProcessExit
 
     coordinator = Preparations(workspace, runtime=runtime, checkpoint=crash)
     job = coordinator.submit(
@@ -840,7 +840,7 @@ def test_restart_revalidates_corrupted_partial_prediction_and_only_restarts_that
     def crash(identity, step):
         if step == "normals_saved":
             entered.set()
-            raise ProcessExit()
+            raise ProcessExit
 
     coordinator = Preparations(workspace, runtime=runtime, checkpoint=crash)
     job = coordinator.submit(
@@ -1094,7 +1094,7 @@ def test_photo_reset_partial_multiple_install_recovers_only_exact_inputs(workspa
     def crash(identity, step):
         if step == "mask_committed":
             exited.set()
-            raise ProcessExit()
+            raise ProcessExit
 
     coordinator = Preparations(workspace, runtime=runtime, checkpoint=crash)
     job = coordinator.submit(
