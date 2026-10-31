@@ -174,6 +174,7 @@ Run it locally before merging rather than iterating through CI. `gh workflow run
 - A suppression you add must say why: `# noqa: E501 -- <reason>`, `// eslint-disable-next-line <rule> -- <reason>`, and for mypy, which rejects text after the code, `# type: ignore[code]  # -- <reason>` (S07). The hook rejects one without a reason.
 - Never loosen a threshold or rule configuration to pass a check (S02).
 - `uv run poe check` and CI run the whole-program checks the hook does not.
+- Codex runs the hook only after its definitions are trusted in `/hooks` (spec S06). Changing `.codex/hooks.json` makes them untrusted again.
 </important>
 
 <important if="you are changing CI workflows or the poe tasks in pyproject.toml">
