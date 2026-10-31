@@ -1,0 +1,48 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"C:\\\\Users\\\\Admin\\\\.t3\\\\worktrees\\\\etsy-listing-automation\\\\t3-00f25d38\\\\src\\\\ui\\\\node_modules\\\\.bin\\\\marver\" jam hook codex start --root \"C:\\\\Users\\\\Admin\\\\.t3\\\\worktrees\\\\etsy-listing-automation\\\\t3-00f25d38\\\\src\\\\ui\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"C:\\\\Users\\\\Admin\\\\.t3\\\\worktrees\\\\etsy-listing-automation\\\\t3-00f25d38\\\\src\\\\ui\\\\node_modules\\\\.bin\\\\marver\" jam hook codex prompt --root \"C:\\\\Users\\\\Admin\\\\.t3\\\\worktrees\\\\etsy-listing-automation\\\\t3-00f25d38\\\\src\\\\ui\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"C:\\\\Users\\\\Admin\\\\.t3\\\\worktrees\\\\etsy-listing-automation\\\\t3-00f25d38\\\\src\\\\ui\\\\node_modules\\\\.bin\\\\marver\" jam hook codex stop --root \"C:\\\\Users\\\\Admin\\\\.t3\\\\worktrees\\\\etsy-listing-automation\\\\t3-00f25d38\\\\src\\\\ui\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"C:\\\\Users\\\\Admin\\\\.t3\\\\worktrees\\\\etsy-listing-automation\\\\t3-00f25d38\\\\src\\\\ui\\\\node_modules\\\\.bin\\\\marver\" jam hook codex end --root \"C:\\\\Users\\\\Admin\\\\.t3\\\\worktrees\\\\etsy-listing-automation\\\\t3-00f25d38\\\\src\\\\ui\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}
