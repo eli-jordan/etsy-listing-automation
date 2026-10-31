@@ -55,12 +55,12 @@ class ProviderCancelledError(SeoGenerationError):
 class SeoTryAgainError(SeoGenerationError):
     """Every failure the settled plan says surfaces as **Try again**: a
     validation failure that survived the one same-provider repair, an
-    unrecognised process error, or the shared deadline expiring."""
+    unrecognised process error, or a step or run limit running out."""
 
 
 class SeoDeadlineExceededError(SeoTryAgainError):
-    """The shared request deadline expired before a validated
-    proposal was produced."""
+    """A step or run limit (ADR-0057) ran out before a validated result
+    was produced. The message names the configured limit."""
 
 
 class SeoAllProvidersUnavailableError(SeoTryAgainError):
@@ -74,13 +74,13 @@ class SeoAllProvidersUnavailableError(SeoTryAgainError):
 
 
 class ProviderTimeoutError(SeoTryAgainError):
-    """A provider's subprocess did not finish before the shared deadline
+    """A provider's subprocess did not finish before its step deadline
     expired -- distinct from :class:`SeoDeadlineExceededError`, which is the
     orchestrator refusing to start another call once time is already up."""
 
     def __init__(self, provider: str) -> None:
         self.provider = provider
-        super().__init__(f"{provider}: timed out before the shared deadline")
+        super().__init__(f"{provider}: timed out before its step deadline")
 
 
 class ProviderGenerationError(SeoTryAgainError):

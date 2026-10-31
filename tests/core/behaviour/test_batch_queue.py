@@ -363,17 +363,24 @@ def test_brief_drafting_leaves_an_existing_proposal_intact(q: Queue) -> None:
 
 
 def test_a_run_that_outlives_the_limit_becomes_a_failed_row(q: Queue) -> None:
+    """A batch brief run captures the configured limits like any other run
+    (ADR-0057), and its row reports the limit it ran out."""
+    q.workspace.settings_file().write_text(
+        "ai:\n  providers: [{name: codex}]\n  step_limit_minutes: 1\n  run_limit_minutes: 5\n",
+        encoding="utf-8",
+    )
     q.provider.gate("brief")
     batch = q.confirm(*_designs("night-hike-club", "cedar-trail"))
     q.queue.start()
     wait_for(lambda: q.provider.started["brief"].is_set())
 
-    q.clock.now = 180.0
+    q.clock.now = 5 * 60.0
 
     wait_for(lambda: q.states(batch)[0] == "failed")
     row = q.row(batch, 0)
-    assert row.ai_error is not None
-    assert "3 minutes" in row.ai_error
+    assert row.ai_error == "The AI run took longer than 5 minutes, so it was stopped. Try again."
+    assert q.provider.remaining[0] == ("brief", 60.0)
+    assert q.proposals.load("night-hike-club") is None
 
 
 # ---------------------------------------------------- cancel and resume

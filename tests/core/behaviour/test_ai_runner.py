@@ -29,7 +29,7 @@ from etsy_listings.core.ai.proposals import ProposalStore
 from etsy_listings.core.application.ai.events import AiStepEvent, StepId
 from etsy_listings.core.application.ai.readiness import default_ai_providers
 from etsy_listings.core.application.ai.registry import AiRun, AiRunRegistry
-from etsy_listings.core.application.ai.runner import RUN_LIMIT_SECONDS, TIMEOUT_MESSAGE, AiRunner
+from etsy_listings.core.application.ai.runner import AiRunner
 from etsy_listings.core.clients.etsy.fakes import FakeEtsyMarketClient, server_error
 from etsy_listings.core.errors import INTERNAL_ERROR_MESSAGE
 from etsy_listings.core.listing_artifacts import remove_listing
@@ -558,17 +558,102 @@ def test_the_watchdog_fails_a_run_that_outlives_twenty_minutes(chain: Chain) -> 
     run = chain.start(draft_brief=False)
     wait_for(lambda: chain.provider.started["seo"].is_set())
 
-    chain.clock.now = RUN_LIMIT_SECONDS - 1
+    chain.clock.now = 20 * 60 - 1
     assert not _becomes(run, lambda: run.finished, timeout=0.1)
-    chain.clock.now = RUN_LIMIT_SECONDS
+    chain.clock.now = 20 * 60
     wait_until_finished(run)
 
-    assert RUN_LIMIT_SECONDS == 1_200
+    message = "The AI run took longer than 20 minutes, so it was stopped. Try again."
     assert run.phase == "failed"
-    assert run.events[-1].model_dump()["message"] == TIMEOUT_MESSAGE
+    assert run.events[-1].model_dump()["message"] == message
     assert _state(run) == {"brief": "skipped", "market": "done", "seo": "failed"}
-    assert _detail(run, "seo") == TIMEOUT_MESSAGE
+    assert _detail(run, "seo") == message
     assert chain.provider.cancelled == ["seo"]
+
+
+# ------------------------------------------------------ captured limits (ADR-0057)
+
+
+def _limits(chain: Chain, *, step: int, run: int) -> None:
+    chain.workspace.settings_file().write_text(
+        f"ai:\n  providers: [{{name: codex}}]\n"
+        f"  step_limit_minutes: {step}\n  run_limit_minutes: {run}\n",
+        encoding="utf-8",
+    )
+
+
+def test_the_watchdog_stops_the_run_at_its_configured_limit_and_says_so(chain: Chain) -> None:
+    _limits(chain, step=2, run=7)
+    chain.provider.gate("seo")
+    run = chain.start(draft_brief=False)
+    wait_for(lambda: chain.provider.started["seo"].is_set())
+
+    chain.clock.now = 7 * 60 - 1
+    assert not _becomes(run, lambda: run.finished, timeout=0.1)
+    chain.clock.now = 7 * 60
+    wait_until_finished(run)
+
+    message = "The AI run took longer than 7 minutes, so it was stopped. Try again."
+    assert run.phase == "failed"
+    assert run.events[-1].model_dump()["message"] == message
+    assert _detail(run, "seo") == message
+    assert chain.provider.cancelled == ["seo"]
+
+
+def test_every_task_gets_the_configured_step_within_what_the_run_has_left(
+    chain: Chain,
+) -> None:
+    """Brief drafting, query extraction and the proposal each start a fresh
+    step, clipped to the run deadline that research also spends."""
+    _limits(chain, step=3, run=6)
+    edit_listing(chain.workspace.root, brief="")
+    chain.provider.during["queries"] = lambda: setattr(chain.clock, "now", 4 * 60)
+
+    run = chain.run(draft_brief=True)
+
+    assert run.phase == "done"
+    assert chain.provider.remaining == [("brief", 180.0), ("queries", 180.0), ("seo", 120.0)]
+
+
+def test_a_task_the_run_limit_cuts_short_fails_naming_the_run_limit(chain: Chain) -> None:
+    _limits(chain, step=3, run=6)
+    chain.provider.during["queries"] = lambda: setattr(chain.clock, "now", 6 * 60)
+    chain.runner.watch_interval = 60.0  # the deadline, not the watchdog, ends it here
+
+    run = chain.run(draft_brief=False)
+    run.cancel_event.set()  # release the idle watchdog's long wait
+
+    assert run.phase == "failed"
+    detail = _detail(run, "seo")
+    assert detail is not None
+    assert "6-minute run limit" in detail
+    assert "seo" not in chain.provider.calls
+
+
+def test_a_running_job_keeps_its_limits_and_the_next_run_reads_the_edit(chain: Chain) -> None:
+    _limits(chain, step=3, run=6)
+    chain.provider.during["queries"] = lambda: _limits(chain, step=4, run=12)
+
+    first = chain.run(draft_brief=False)
+    chain.clock.now = 0.0
+    second = chain.run(draft_brief=False)
+
+    assert (first.phase, second.phase) == ("done", "done")
+    assert [r for _, r in chain.provider.remaining] == [180.0, 180.0, 240.0, 240.0]
+
+
+def test_an_invalid_limit_relationship_refuses_the_run_naming_the_key(chain: Chain) -> None:
+    chain.workspace.settings_file().write_text(
+        "ai:\n  step_limit_minutes: 10\n  run_limit_minutes: 20\n", encoding="utf-8"
+    )
+
+    run = chain.run(draft_brief=False)
+
+    assert run.phase == "failed"
+    message = run.events[-1].model_dump()["message"]
+    assert "settings.yaml" in message
+    assert "ai.run_limit_minutes" in message
+    assert chain.provider.calls == []
 
 
 # ------------------------------------------------------------------ threads
@@ -604,7 +689,11 @@ def test_listings_from_the_sellers_own_shop_are_marked(chain: Chain) -> None:
     assert {listing.listing_id for listing in saved.listings if listing.own_shop} == {2}
 
 
-def test_each_run_reads_the_weights_from_settings_yaml(chain: Chain) -> None:
+def test_an_unloadable_settings_yaml_fails_the_run_before_any_provider_call(
+    chain: Chain,
+) -> None:
+    """The run captures its limits from ``settings.yaml`` at start (ADR-0057),
+    so a file that does not load refuses the run there, naming the key."""
     settings = chain.workspace.settings_file()
     settings.write_text(
         "market_seo:\n  weights:\n"
@@ -624,10 +713,12 @@ def test_each_run_reads_the_weights_from_settings_yaml(chain: Chain) -> None:
 
     run = chain.run(draft_brief=False)
 
-    assert _state(run) == {"brief": "skipped", "market": "failed", "seo": "pending"}
-    detail = _detail(run, "market")
-    assert detail is not None
-    assert "at least one market_seo weight must be above zero" in detail
+    assert run.phase == "failed"
+    assert (
+        "at least one market_seo weight must be above zero"
+        in (run.events[-1].model_dump()["message"])
+    )
+    assert chain.provider.calls == []
 
 
 def test_an_invalid_design_ref_fails_with_the_sellers_actionable_reason(chain: Chain) -> None:

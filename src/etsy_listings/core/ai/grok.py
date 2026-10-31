@@ -75,7 +75,7 @@ _REQUIRED_HELP_FLAGS: tuple[str, ...] = (
 
 _MAX_TURNS = "8"
 """Enough to open the design image and answer. An unbounded turn count is
-how a read-only call wanders until the shared deadline kills it."""
+how a read-only call wanders until its step deadline kills it."""
 
 
 def auth_file() -> Path:

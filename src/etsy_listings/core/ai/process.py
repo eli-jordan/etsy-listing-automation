@@ -10,7 +10,7 @@ only reaps the direct child on a timeout -- any grandchild is left running.
 unit ( :func:`_kill_process_tree`), and races that kill against three
 independent stop conditions rather than one:
 
-- the shared request `Deadline` expiring (a timeout),
+- the provider's step `Deadline` expiring (a timeout, ADR-0057),
 - an external `threading.Event` being set (cancellation -- the editor was
   left, or a browser disconnect PR5's API layer detected), and
 - the child simply finishing on its own.

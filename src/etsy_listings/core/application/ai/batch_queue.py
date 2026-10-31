@@ -284,7 +284,7 @@ class BatchQueue:
 
         The runs are waited for without a limit of their own: a stop kills
         a provider's process tree and research starts no new call, and the
-        runner's watchdog bounds any run to ``runner.RUN_LIMIT_SECONDS``.
+        runner's watchdog bounds any run to its captured run limit (ADR-0057).
         """
         names = list(listings)
         # Holding first means every run the dispatcher could still start
