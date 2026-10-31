@@ -16,7 +16,7 @@ const complete = (initial: ProviderPreference[]): ProviderPreference[] => [
 ];
 
 /** A whole ordered-list edit shares settings.yaml's existing save queue.
- * PR6 can couple an enable and its run floor in this onSave callback.
+ * AiSettingsSections couples an enable with its run floor (ADR-0057).
  */
 export function AiProviders({
   initial,

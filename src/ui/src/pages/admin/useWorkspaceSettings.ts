@@ -75,6 +75,8 @@ export function useWorkspaceSettings() {
                 ([key]) =>
                   !(key.startsWith("batch_ai") && "concurrency" in changes) &&
                   !(key.startsWith("ai.providers") && "providers" in changes) &&
+                  !(key === "ai.step_limit_minutes" && "step_limit_minutes" in changes) &&
+                  !(key === "ai.run_limit_minutes" && "run_limit_minutes" in changes) &&
                   !(key.startsWith("market_seo") && "weights" in changes),
               ),
             ),

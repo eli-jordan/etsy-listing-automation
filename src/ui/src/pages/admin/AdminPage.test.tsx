@@ -160,14 +160,18 @@ describe("Admin page shell", () => {
   it("opens on Connected shops and preserves pending Settings edits across navigation", async () => {
     render(<AdminPage />);
     expect(await screen.findByRole("heading", { name: "Connected shops" })).toBeVisible();
-    expect(screen.queryByRole("slider")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("slider", { name: "Listings drafted at once" }),
+    ).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("link", { name: /Settings/ }));
-    const slider = await screen.findByRole("slider");
+    const slider = await screen.findByRole("slider", { name: "Listings drafted at once" });
     fireEvent.change(slider, { target: { value: "4" } });
     fireEvent.click(screen.getByRole("link", { name: /Shop shop.yaml/ }));
-    expect(screen.queryByRole("slider")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("slider", { name: "Listings drafted at once" }),
+    ).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("link", { name: /Settings/ }));
-    expect(screen.getByRole("slider")).toHaveValue("4");
+    expect(screen.getByRole("slider", { name: "Listings drafted at once" })).toHaveValue("4");
     expect(settingsApi.getSettings).toHaveBeenCalledTimes(1);
   });
 });

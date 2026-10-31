@@ -176,7 +176,7 @@ it("serializes rapid saves with returned revisions and retains newer local value
       }),
   );
   render(<SettingsPanel />);
-  const slider = await screen.findByRole("slider");
+  const slider = await screen.findByRole("slider", { name: "Listings drafted at once" });
   fireEvent.change(slider, { target: { value: "2" } });
   fireEvent.keyUp(slider);
   await waitFor(() => expect(api.saveSettings).toHaveBeenCalledTimes(1));
@@ -191,7 +191,7 @@ it("serializes rapid saves with returned revisions and retains newer local value
 it("stops queued saves after conflict until explicit reload discards stale edits", async () => {
   vi.mocked(api.saveSettings).mockResolvedValue({ kind: "conflict", message: "external edit" });
   render(<SettingsPanel />);
-  const slider = await screen.findByRole("slider");
+  const slider = await screen.findByRole("slider", { name: "Listings drafted at once" });
   fireEvent.change(slider, { target: { value: "2" } });
   fireEvent.keyUp(slider);
   fireEvent.change(slider, { target: { value: "4" } });
@@ -206,8 +206,10 @@ it("stops queued saves after conflict until explicit reload discards stale edits
     concurrency: 3,
   });
   fireEvent.click(screen.getByRole("button", { name: "Reload settings" }));
-  await waitFor(() => expect(screen.getByRole("slider")).toHaveValue("3"));
-  expect(screen.getByRole("slider")).toBeEnabled();
+  await waitFor(() =>
+    expect(screen.getByRole("slider", { name: "Listings drafted at once" })).toHaveValue("3"),
+  );
+  expect(screen.getByRole("slider", { name: "Listings drafted at once" })).toBeEnabled();
   expect(api.saveSettings).toHaveBeenCalledTimes(1);
 });
 
@@ -217,7 +219,9 @@ it("keeps invalid file errors visible through failed rechecks, without default c
   );
   render(<SettingsPanel />);
   expect(await screen.findByRole("alert")).toHaveTextContent("settings.yaml: batch_ai.concurrency");
-  expect(screen.queryByRole("slider")).not.toBeInTheDocument();
+  expect(
+    screen.queryByRole("slider", { name: "Listings drafted at once" }),
+  ).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "Check file again" }));
   await waitFor(() => expect(api.getSettings).toHaveBeenCalledTimes(2));
   expect(screen.getByRole("alert")).toHaveTextContent("settings.yaml");
@@ -226,11 +230,13 @@ it("keeps invalid file errors visible through failed rechecks, without default c
 it("reload discards a refused edit even when the external file returned to its original revision", async () => {
   vi.mocked(api.saveSettings).mockResolvedValue({ kind: "conflict", message: "changed" });
   render(<SettingsPanel />);
-  const slider = await screen.findByRole("slider");
+  const slider = await screen.findByRole("slider", { name: "Listings drafted at once" });
   fireEvent.change(slider, { target: { value: "4" } });
   fireEvent.keyUp(slider);
   fireEvent.click(await screen.findByRole("button", { name: "Reload settings" }));
-  await waitFor(() => expect(screen.getByRole("slider")).toHaveValue("1"));
+  await waitFor(() =>
+    expect(screen.getByRole("slider", { name: "Listings drafted at once" })).toHaveValue("1"),
+  );
 });
 
 it("ignores an abandoned initial read when StrictMode starts a fresh read", async () => {
@@ -246,10 +252,10 @@ it("ignores an abandoned initial read when StrictMode starts a fresh read", asyn
       <SettingsPanel />
     </StrictMode>,
   );
-  const slider = await screen.findByRole("slider");
+  const slider = await screen.findByRole("slider", { name: "Listings drafted at once" });
   fireEvent.change(slider, { target: { value: "4" } });
   await act(async () => resolve(initial()));
-  expect(screen.getByRole("slider")).toHaveValue("4");
+  expect(screen.getByRole("slider", { name: "Listings drafted at once" })).toHaveValue("4");
 });
 
 it("retains refused field edits, keeps other controls usable, and retries network failures", async () => {
@@ -259,7 +265,7 @@ it("retains refused field edits, keeps other controls usable, and retries networ
     fieldErrors: { "batch_ai.concurrency": "Choose 1–8" },
   });
   render(<SettingsPanel />);
-  const slider = await screen.findByRole("slider");
+  const slider = await screen.findByRole("slider", { name: "Listings drafted at once" });
   fireEvent.change(slider, { target: { value: "3" } });
   fireEvent.blur(slider);
   expect(await screen.findByRole("alert")).toHaveTextContent("Choose 1–8");
