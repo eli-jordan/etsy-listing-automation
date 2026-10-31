@@ -504,7 +504,11 @@ lock around read, revision comparison, validation and atomic replace. A stale
 revision refuses with 409; invalid values refuse with field errors and 422.
 Semantic no-ops leave the source bytes and file untouched, per ADR-0055.
 
-A successful save replaces the server workspace's defaults. Deployment plan
+A successful save replaces the server workspace's defaults inside the same
+revision lock, after the replace succeeds (`replace_if_unchanged(adopt=...)`),
+so saves publish in the order they reached the file: a save made against
+another save's revision always publishes after it, and a refused or failed
+write publishes nothing. Deployment plan
 and apply jobs capture `Workspace.snapshot()` when execution starts, and batch
 creation captures it before creating rows. Active work therefore keeps its
 starting defaults while subsequent work sees edits. Saves never rewrite listing
@@ -528,6 +532,14 @@ preserves untouched bytes and no-op saves do not replace the file (ADR-0055).
 An absent file uses defaults without creating it; invalid files refuse to load
 or dispatch batch work. The page serializes saves and adopts returned revisions;
 a conflict requires reload and never reapplies an old patch automatically.
+
+Shop and Settings share one client save queue, `pages/admin/useSaveQueue.ts`:
+revision progression, per-key acknowledgement, failure retention, Retry and
+conflict stopping. A key stays failed until a later save of that key succeeds,
+so an unrelated success never reports Saved over it, and Retry sends only the
+failed keys. Responses never replace a newer local edit: Shop's blur selects
+drop a draft only on the answer to the save made from it, and both panels
+discard local state only when a (re)load bumps `loadedVersion`.
 Batch concurrency is 1–8, read at the next dispatch, and lowering it leaves
 active runs alone (ADR-0048). Market shares normalize only for display until an
 edit saves whole percentages. The server returns the model's Reset defaults.
@@ -538,7 +550,10 @@ These are preserved deliberately; the restructure moved them into core without
 changing them. The listing document locks (`ListingDocuments.lock`) serialize
 every `listing.yaml` edit, proposal record write and listing rename or removal,
 including the engine's, and `WorkspaceLocks` serializes listing-template writes,
-inside one process only. Deployment and AI registries hold runs in
+inside one process only. Etsy token rotation is serialized per resolved token
+file across every `TokenStore` in the process, so concurrent Admin requests
+rotate an expired grant once; across processes only the `invalid_grant`
+re-read protects it. Deployment and AI registries hold runs in
 memory. There is no cross-process lock protecting concurrent CLI and server
 writes, no shared registry across multiple ASGI workers or servers on one
 workspace, and CLI `apply` neither consults nor joins the server's queue.
