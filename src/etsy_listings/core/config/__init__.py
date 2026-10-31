@@ -11,6 +11,10 @@ types they are built from.
 
 A *mockup* template's ``template.yaml`` is deliberately not here: it is render
 geometry, so its models live in:mod:`etsy_listings.core.render`.
+
+``settings.Settings``, ``AiSettings`` and ``AiProviderSettings`` describe
+workspace tuning and ADR-0056's provider preferences. Import them directly
+from ``settings``; this initializer deliberately does not re-export them.
 """
 
 from etsy_listings.core.config.defaults import Defaults

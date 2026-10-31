@@ -3,9 +3,11 @@
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse
 
+from etsy_listings.core.ai.discovery import ModelCatalogs, ModelDiscovery
 from etsy_listings.core.application import workspace_settings
 from etsy_listings.core.application.refusals import InvalidSettingsEdit, SettingsRevisionConflict
 from etsy_listings.core.config.errors import ConfigLoadError
+from etsy_listings.core.config.settings import PROVIDER_NAMES, AiProviderSettings
 from etsy_listings.server.api.schemas import (
     SettingsSaveRefusal,
     WorkspaceSettingsPatch,
@@ -15,12 +17,24 @@ from etsy_listings.server.api.schemas import (
 router = APIRouter(prefix="/api/admin/settings", tags=["admin"])
 
 
+@router.get("/models", response_model=ModelCatalogs)
+def model_catalogs(request: Request, refresh: bool = False) -> ModelCatalogs:
+    discovery: ModelDiscovery = request.app.state.model_discovery
+    return discovery.read(refresh=refresh)
+
+
 def _response(view: workspace_settings.SettingsView) -> WorkspaceSettingsResponse:
     return WorkspaceSettingsResponse(
         revision=view.revision,
         concurrency=view.settings.batch_ai.concurrency,
         weights=view.settings.market_seo.weights.model_dump(),
         default_weights=workspace_settings.default_weights(),
+        providers=list(view.settings.ai.providers)
+        + [
+            AiProviderSettings(name=name, enabled=False)
+            for name in PROVIDER_NAMES
+            if name not in {p.name for p in view.settings.ai.providers}
+        ],
     )
 
 
@@ -40,7 +54,11 @@ def read_settings(request: Request) -> WorkspaceSettingsResponse:
 def edit_settings(
     request: Request, body: WorkspaceSettingsPatch
 ) -> WorkspaceSettingsResponse | JSONResponse:
-    keys = {"concurrency": workspace_settings.CONCURRENCY, "weights": workspace_settings.WEIGHTS}
+    keys = {
+        "concurrency": workspace_settings.CONCURRENCY,
+        "weights": workspace_settings.WEIGHTS,
+        "providers": workspace_settings.PROVIDERS,
+    }
     changes = {
         keys[key]: value for key, value in body.changes.model_dump(exclude_unset=True).items()
     }

@@ -177,9 +177,12 @@ Execution started on 2026-10-30 from stack-base commit `5bbcd7df`.
 
 | PR | Branch | Link |
 |---|---|---|
-| 1 | `feat/admin-1-local-fixes` | To be recorded |
+| 1 | `feat/admin-1-local-fixes` | [PR #144](https://github.com/eli-jordan/etsy-listing-automation/pull/144) |
+| 2 | `feat/admin-2-yaml-roundtrip` | [PR #145](https://github.com/eli-jordan/etsy-listing-automation/pull/145) |
 | 3 | `feat/admin-3-shop` | [PR #146](https://github.com/eli-jordan/etsy-listing-automation/pull/146) |
 | 4 | `feat/admin-4-settings` | [PR #147](https://github.com/eli-jordan/etsy-listing-automation/pull/147) |
+| 5 | `feat/admin-5-ai-providers` | [PR #148](https://github.com/eli-jordan/etsy-listing-automation/pull/148) |
+| 6 | `feat/admin-6-ai-time-limits` | [PR #149](https://github.com/eli-jordan/etsy-listing-automation/pull/149) |
 
 ### PR 1: carry the local timeout and catalog fixes
 
@@ -262,6 +265,16 @@ keyboard/pointer actions. Queue tests prove the next dispatch uses the new limit
 and lowering it leaves active runs alone. Shared gates pass.
 
 ### PR 5: configure AI providers, models and effort
+
+The local BUILD implementation records verified installed formats and flags
+in [Provider CLI contracts](provider-cli-contracts.md). PR6 owns configurable
+limits and fresh fallback budgets; PR5 keeps the inherited fixed defaults.
+
+Agreed deviations from the reviewed frames: rows show no sign-in dot,
+because no workspace-level provider sign-in state exists yet. A saved value
+is called no longer offered only when its provider's list was read. During a
+total discovery failure it is shown plainly, per ADR-0056's
+keep-but-do-not-judge rule.
 
 Add the ordered list model and wire it into the existing ProviderFactory for
 readiness and every AI caller. Pass model/effort flags in each adapter while

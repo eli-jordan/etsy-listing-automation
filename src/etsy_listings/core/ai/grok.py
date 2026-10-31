@@ -21,7 +21,8 @@ for the shared orchestrator to validate. Flags below were confirmed against
   ``--session-id``, so it does not continue a previous conversation. Grok
   still writes a new session under its own home directory; that is the CLI's
   behaviour, not a session this adapter reads back.
-- No ``--model``. The account's configured model is used as-is.
+- ADR-0056: preferences use ``--model`` and ``--reasoning-effort``.
+  Account defaults omit those flags.
 - The design image has no attach flag. Its path is named in the prompt and
   the model opens it with ``read_file``.
 """
@@ -89,6 +90,8 @@ class GrokProvider:
 
     workspace_root: Path
     binary: str = "grok"
+    model: str | None = None
+    effort: str | None = None
 
     def _resolved_binary(self) -> str:
         """See `CodexProvider._resolved_binary`: on Windows the bare name is
@@ -183,6 +186,10 @@ class GrokProvider:
             "--cwd",
             str(self.workspace_root),
         ]
+        if self.model is not None:
+            argv += ["--model", self.model]
+        if self.effort is not None:
+            argv += ["--reasoning-effort", self.effort]
         try:
             result = run_managed(
                 argv,

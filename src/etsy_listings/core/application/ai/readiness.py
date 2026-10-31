@@ -36,20 +36,22 @@ calls (the CLI signed out mid-session, for instance)."""
 
 
 def default_ai_providers(workspace: Workspace) -> Sequence[AiProvider]:
-    """Codex, then Claude, then Grok. A recognised unavailable failure
-    falls through, so a usage limit on the first two still reaches Grok.
-    Freshly constructed per call: readiness is re-checked every time, and
-    there is no warm connection to hold onto.
+    """Capture the enabled workspace chain and all task preferences (ADR-0056).
 
-    No prompt file is handed over: which prose a request is built from is
-    the request's business, not the CLI's (``ai/models.py.ProviderTask``),
-    so "a missing prompt file means not ready" lives only here, where the
-    answer can name *which* file.
+    Newly constructed adapters never reread settings during repair or fallback.
+    Missing AI settings preserve Codex, Claude, Grok and account defaults.
     """
-    return (
-        CodexProvider(workspace_root=workspace.root),
-        ClaudeProvider(workspace_root=workspace.root),
-        GrokProvider(workspace_root=workspace.root),
+    adapters: dict[str, type[CodexProvider] | type[ClaudeProvider] | type[GrokProvider]] = {
+        "codex": CodexProvider,
+        "claude": ClaudeProvider,
+        "grok": GrokProvider,
+    }
+    return tuple(
+        adapters[provider.name](
+            workspace_root=workspace.root, model=provider.model, effort=provider.effort
+        )
+        for provider in workspace.load_settings().ai.providers
+        if provider.enabled
     )
 
 

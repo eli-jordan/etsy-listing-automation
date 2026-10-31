@@ -39,6 +39,7 @@ from etsy_listings.core.batches import AiState
 from etsy_listings.core.config.listing import Listing
 from etsy_listings.core.config.listing_template import ListingTemplate
 from etsy_listings.core.config.media import MediaEntry, MediaKind
+from etsy_listings.core.config.settings import AiProviderSettings
 
 # ``draft``/``deployed``/``live``/``dirty``, imported rather than restated:
 # the lifecycle rule is the engine's (the UI's badge and Phase 6's `status`
@@ -1049,6 +1050,7 @@ class WorkspaceSettingsResponse(BaseModel):
     weights: dict[str, float]
     """Relative weights, normalized only for display by the page."""
     default_weights: dict[str, int]
+    providers: list[AiProviderSettings]
 
 
 class WorkspaceSettingsChanges(BaseModel):
@@ -1056,6 +1058,7 @@ class WorkspaceSettingsChanges(BaseModel):
 
     concurrency: int | float | None = None
     weights: dict[str, int | float] | None = None
+    providers: list[dict[str, Any]] | None = None
 
 
 class WorkspaceSettingsPatch(BaseModel):

@@ -16,6 +16,11 @@ const DEFAULTS = {
 const initial = (weights = DEFAULTS): WorkspaceSettings => ({
   revision: "s1",
   concurrency: 1,
+  providers: [
+    { name: "codex", enabled: true },
+    { name: "claude", enabled: true },
+    { name: "grok", enabled: true },
+  ],
   weights,
   default_weights: DEFAULTS,
 });
@@ -25,6 +30,7 @@ const saved = (changes: Partial<WorkspaceSettings> = {}): SettingsOutcome => ({
 });
 
 beforeEach(() => {
+  vi.spyOn(api, "getModelCatalogs").mockResolvedValue({ cache_seconds: 1800, providers: {} });
   vi.spyOn(api, "getSettings").mockResolvedValue(initial());
   vi.spyOn(api, "saveSettings").mockResolvedValue(saved());
 });
@@ -266,4 +272,28 @@ it("retains refused field edits, keeps other controls usable, and retries networ
   fireEvent.click(screen.getByRole("button", { name: "Retry save" }));
   expect(await screen.findByText("Saved")).toBeInTheDocument();
   expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+});
+
+it("serializes provider saves with other settings and keeps newer choices during responses", async () => {
+  let resolve!: (value: SettingsOutcome) => void;
+  vi.mocked(api.saveSettings).mockImplementationOnce(
+    () =>
+      new Promise((done) => {
+        resolve = done;
+      }),
+  );
+  render(<SettingsPanel />);
+  fireEvent.click(await screen.findByRole("button", { name: "Codex is step 1. Turn it off" }));
+  await waitFor(() => expect(api.saveSettings).toHaveBeenCalledTimes(1));
+  fireEvent.click(screen.getByRole("button", { name: "Grok is step 2. Turn it off" }));
+  expect(api.saveSettings).toHaveBeenCalledTimes(1);
+  await act(async () => resolve(saved()));
+  await waitFor(() => expect(api.saveSettings).toHaveBeenCalledTimes(2));
+  expect(vi.mocked(api.saveSettings).mock.calls[1]?.[0]).toBe("s2");
+  expect(vi.mocked(api.saveSettings).mock.calls[1]?.[1].providers).toEqual([
+    { name: "codex", enabled: false },
+    { name: "claude", enabled: true },
+    { name: "grok", enabled: false },
+  ]);
+  expect(screen.getByRole("button", { name: "Grok is off. Turn it on" })).toBeInTheDocument();
 });

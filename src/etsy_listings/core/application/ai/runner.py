@@ -37,7 +37,7 @@ from __future__ import annotations
 import logging
 import threading
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
@@ -52,6 +52,7 @@ from etsy_listings.core.ai.orchestrator import (
     generate_proposal,
 )
 from etsy_listings.core.ai.proposals import ProposalChoices, ProposalStore
+from etsy_listings.core.ai.providers import AiProvider
 from etsy_listings.core.application.ai.events import (
     STEP_IDS,
     AiBriefEvent,
@@ -118,8 +119,19 @@ class AiRunner:
     def start(self, run: AiRun) -> None:
         """Run the chain on a new daemon thread, with its watchdog."""
         started = self.monotonic()
+        # ADR-0056: capture before scheduling, not after the thread gets CPU.
+        # Every task, repair and fallback keeps these adapters for this run.
+        try:
+            providers = tuple(self.providers(self.workspace))
+        except UserFacingError as exc:
+            self._end_failed(run, str(exc))
+            return
+        except Exception:
+            logger.exception("AI run %s could not capture its providers", run.id)
+            self._end_failed(run, INTERNAL_ERROR_MESSAGE)
+            return
         threads = [
-            threading.Thread(target=self._execute, args=(run,), name=f"ai-run-{run.id}"),
+            threading.Thread(target=self._execute, args=(run, providers), name=f"ai-run-{run.id}"),
             threading.Thread(
                 target=self._watch, args=(run, started), name=f"ai-run-watchdog-{run.id}"
             ),
@@ -151,9 +163,9 @@ class AiRunner:
                 run.request_stop("timeout")
                 return
 
-    def _execute(self, run: AiRun) -> None:
+    def _execute(self, run: AiRun, providers: Sequence[AiProvider]) -> None:
         try:
-            self._chain(run)
+            self._chain(run, providers)
         except (_Stopped, ProviderCancelledError, ResearchCancelled):
             self._end_stopped(run)
         except Exception as exc:
@@ -200,14 +212,13 @@ class AiRunner:
     def _load(self, run: AiRun, *, market_block: str = "") -> PreparedSeo:
         return ListingAiInputs.read(self.workspace, run.listing).prepare(market_block=market_block)
 
-    def _chain(self, run: AiRun) -> None:
+    def _chain(self, run: AiRun, providers: Sequence[AiProvider]) -> None:
         # A batch run can be asked to stop before its thread starts (Cancel
         # batch landing just after the queue claimed the row, ADR-0048).
         self._check(run)
         workspace = self.workspace
         documents = ListingDocuments(workspace)
         inputs = self._load(run)
-        providers = self.providers(workspace)
         design = inputs.request.design_image
         drafting = run.draft_brief and not inputs.request.brief.strip()
 

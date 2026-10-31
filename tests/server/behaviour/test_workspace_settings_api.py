@@ -73,3 +73,59 @@ def test_invalid_file_names_its_key_instead_of_returning_defaults(
     assert refused.status_code == 422
     assert "settings.yaml" in refused.json()["detail"]
     assert "batch_ai.concurency" in refused.json()["detail"]
+
+
+def test_provider_rows_include_omitted_providers_and_save_preferences(client: TestClient) -> None:
+    initial = client.get("/api/admin/settings").json()
+    assert [p["name"] for p in initial["providers"]] == ["codex", "claude", "grok"]
+    saved = client.patch(
+        "/api/admin/settings",
+        json={
+            "revision": initial["revision"],
+            "changes": {"providers": [{"name": "grok", "model": "old", "effort": "high"}]},
+        },
+    )
+    assert saved.status_code == 200
+    assert [(p["name"], p["enabled"]) for p in saved.json()["providers"]] == [
+        ("grok", True),
+        ("codex", False),
+        ("claude", False),
+    ]
+    assert saved.json()["providers"][0]["model"] == "old"
+
+
+def test_model_discovery_reads_and_refreshes_without_changing_settings(client: TestClient) -> None:
+    from etsy_listings.core.ai.discovery import ModelCatalogs
+
+    class Discovery:
+        def __init__(self):
+            self.refreshes = []
+
+        def read(self, *, refresh=False):
+            self.refreshes.append(refresh)
+            return ModelCatalogs()
+
+    discovery = Discovery()
+    client.app.state.model_discovery = discovery
+    before = client.get("/api/admin/settings").json()
+    assert client.get("/api/admin/settings/models").status_code == 200
+    assert client.get("/api/admin/settings/models?refresh=true").status_code == 200
+    assert discovery.refreshes == [False, True]
+    assert client.get("/api/admin/settings").json() == before
+
+
+def test_startup_attempts_discovery_without_changing_preferences(workspace_root: Path) -> None:
+    from etsy_listings.core.ai.discovery import ModelCatalogs, ModelDiscovery
+
+    class Discovery(ModelDiscovery):
+        attempted = False
+
+        def read(self, *, refresh=False):
+            self.attempted = True
+            return ModelCatalogs()
+
+    discovery = Discovery()
+    workspace = Workspace.discover(root_override=workspace_root)
+    with TestClient(create_app(workspace, model_discovery=discovery)):
+        assert discovery.attempted
+    assert not workspace.settings_file().exists()

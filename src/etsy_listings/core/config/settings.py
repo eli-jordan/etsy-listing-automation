@@ -1,7 +1,8 @@
 """``settings.yaml``: the workspace's tunable settings, next to ``shop.yaml``.
 
-It holds two blocks: the market scoring weights (features/market-seo-20260924/spec.md,
-*Scoring*) and the batch AI queue's limit (spec, *Batch AI queue*; ADR-0048)::
+It holds market scoring weights (features/market-seo-20260924/spec.md,
+*Scoring*), the batch AI queue's limit (ADR-0048), and the ordered AI provider
+preferences (ADR-0056)::
 
     market_seo:
       weights:
@@ -24,7 +25,7 @@ largely written by ``setup``; these are the seller's own knobs.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 
@@ -62,14 +63,55 @@ class BatchAiSettings(BaseModel):
     :data:`MAX_BATCH_CONCURRENCY`, the Admin page slider's top."""
 
 
+ProviderName = Literal["codex", "claude", "grok"]
+PROVIDER_NAMES: tuple[ProviderName, ...] = ("codex", "claude", "grok")
+
+
+class AiProviderSettings(BaseModel):
+    """One provider's preferences for every task (ADR-0056).
+
+    Discovery is advisory, so model and effort are intentionally not enums.
+    A retired value stays usable until the seller replaces it.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    name: ProviderName
+    enabled: bool = True
+    model: str | None = Field(None, min_length=1)
+    effort: str | None = Field(None, min_length=1)
+
+
+class AiSettings(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    providers: tuple[AiProviderSettings, ...] = Field(
+        default_factory=lambda: tuple(AiProviderSettings(name=name) for name in PROVIDER_NAMES)
+    )
+
+    @field_validator("providers")
+    @classmethod
+    def valid_chain(
+        cls, providers: tuple[AiProviderSettings, ...]
+    ) -> tuple[AiProviderSettings, ...]:
+        names = [provider.name for provider in providers]
+        if len(names) != len(set(names)):
+            raise ValueError("duplicate provider names are not allowed")
+        if not any(provider.enabled for provider in providers):
+            raise ValueError("at least one provider must be enabled")
+        return providers
+
+
 class Settings(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     market_seo: MarketSeoSettings = Field(default_factory=MarketSeoSettings)
     batch_ai: BatchAiSettings = Field(default_factory=BatchAiSettings)
+    ai: AiSettings = Field(default_factory=AiSettings)
 
     _market_seo_absent = field_validator("market_seo", mode="before")(_absent_is_empty)
     _batch_ai_absent = field_validator("batch_ai", mode="before")(_absent_is_empty)
+    _ai_absent = field_validator("ai", mode="before")(_absent_is_empty)
 
     @classmethod
     def load(cls, path: Path) -> Settings:

@@ -436,7 +436,12 @@ proposals and batch records persist on disk. There is no run-history recorder.
 
 The AI runner optionally drafts an empty brief, extracts three buyer queries,
 researches comparable Etsy listings, then generates and validates a proposal.
-The default provider order is Codex, Claude, Grok, with availability fallback,
+`settings.yaml`'s ordered `ai.providers` configures enabled providers and each
+provider's model and effort for all tasks (ADR-0056). Missing AI settings use
+Codex, Claude, Grok and account defaults; omitted providers are off. The factory
+captures adapters before scheduling a run, so edits affect subsequent runs and
+readiness checks, while repairs and fallback keep their captured preferences.
+Availability or rejected saved model/effort permits fallback. There is
 one same-provider repair for invalid output and a five-minute deadline shared
 by the attempts for each task. The whole run has a twenty-minute cap. Readiness
 (`application/ai/readiness.py`) decides whether a run may start. Market
@@ -445,6 +450,13 @@ snapshot is separate. Research is read-only and supplies wording evidence
 rather than new garment facts (ADR-0044). The runner may save an automatically
 drafted brief after rechecking that it is still empty; SEO suggestions enter
 the listing through the seller's acceptance workflow (ADR-0003).
+
+The server owns one advisory `ai/discovery.ModelDiscovery` instance. Startup,
+30-minute cache expiry and explicit Refresh read the installed Codex/Grok model
+catalogs; Claude uses pinned ids. Failed discovery retains earlier catalog
+values and reports the failure. It never validates or rewrites preferences.
+Admin retains stale saved model/effort choices and warns without blocking runs.
+Omitted preferences pass no model/effort flags, preserving CLI account defaults.
 
 `ProposalStore` retains one latest proposal with its input snapshot,
 generation time, origin and per-section resolutions. Staleness is judged on

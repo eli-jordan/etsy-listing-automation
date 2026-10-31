@@ -120,8 +120,13 @@ beforeEach(() => {
   vi.spyOn(settingsApi, "getSettings").mockResolvedValue({
     revision: "s1",
     concurrency: 1,
+    providers: [{ name: "codex", enabled: true }],
     weights,
     default_weights: weights,
+  });
+  vi.spyOn(settingsApi, "getModelCatalogs").mockResolvedValue({
+    cache_seconds: 1800,
+    providers: {},
   });
   vi.spyOn(shopApi, "getShop").mockResolvedValue(shop());
   vi.spyOn(shopApi, "getShopConnections").mockResolvedValue(CONNECTED);

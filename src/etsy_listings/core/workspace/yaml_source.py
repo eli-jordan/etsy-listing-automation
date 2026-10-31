@@ -55,31 +55,46 @@ class UneditableYaml(UserFacingError, ValueError):
         super().__init__(f"cannot edit this YAML file in place: {detail}")
 
 
-def edit_yaml_bytes(source: bytes, after: object, *, before: object = UNSET) -> bytes:
+def edit_yaml_bytes(
+    source: bytes,
+    after: object,
+    *,
+    before: object = UNSET,
+    sequence_keys: Mapping[tuple[str, ...], str] | None = None,
+) -> bytes:
     """:func:`edit_yaml` over UTF-8 file bytes, keeping a byte-order mark.
     Returns ``source`` itself when nothing changes."""
     bom = codecs.BOM_UTF8 if source.startswith(codecs.BOM_UTF8) else b""
     text = source[len(bom) :].decode("utf-8")
-    edited = edit_yaml(text, after, before=before)
+    edited = edit_yaml(text, after, before=before, sequence_keys=sequence_keys)
     return source if edited is text else bom + edited.encode("utf-8")
 
 
-def edit_yaml(source: str, after: object, *, before: object = UNSET) -> str:
+def edit_yaml(
+    source: str,
+    after: object,
+    *,
+    before: object = UNSET,
+    sequence_keys: Mapping[tuple[str, ...], str] | None = None,
+) -> str:
     """``source`` changed so that it reads as ``after``, or ``source`` itself
     when it already does (key order is not a change).
 
     With ``before``, the edit is three-way: only the values that differ
-    between ``before`` and ``after`` are applied to what ``source`` holds. An
-    owner that writes a model dump passes the dump of the model it read, so
+    between ``before`` and ``after`` are applied to what ``source`` holds.
+    An owner that writes a model dump passes the dump of the model it read, so
     defaults the seller never wrote stay unwritten and a ``25`` the model
     reads as ``"25.00"`` stays ``25``.
+
+    ``sequence_keys`` declares stable identities for ordered mapping rows.
+    Reordering those rows moves their original source, including comments.
     """
     current = yaml.safe_load(source)
     wanted = _plain(after)
     target = wanted if before is UNSET else _merge(current, _plain(before), wanted)
     if _same(current, target):
         return source
-    edited = _Editor(source).edit(current, target)
+    edited = _Editor(source, sequence_keys=sequence_keys).edit(current, target)
     if not _same(yaml.safe_load(edited), target):
         raise UneditableYaml("the edited text would not read back as the intended document")
     return edited
@@ -161,7 +176,9 @@ Replace = Callable[[Any], None]
 
 
 class _Editor:
-    def __init__(self, source: str) -> None:
+    def __init__(
+        self, source: str, *, sequence_keys: Mapping[tuple[str, ...], str] | None = None
+    ) -> None:
         self.source = source
         self.newline = "\r\n" if "\r\n" in source else "\n"
         composer = YAML(typ="rt", pure=True)
@@ -173,8 +190,22 @@ class _Editor:
         self.edits: list[tuple[int, int, int, str]] = []
         self.mapping_indent = 2
         self.sequence_offset = 0
+        self.sequence_keys: dict[int, str] = {}
         if self.root is not None:
             self._detect_indentation(self.root)
+            for path, key in (sequence_keys or {}).items():
+                node = self.root
+                for part in path:
+                    if not isinstance(node, MappingNode):
+                        break
+                    child = next(
+                        (value for name, value in node.value if self._key(name) == part), None
+                    )
+                    if child is None:
+                        break
+                    node = child
+                else:
+                    self.sequence_keys[id(node)] = key
 
     def edit(self, current: Any, target: Any) -> str:
         if self.root is None:
@@ -290,6 +321,10 @@ class _Editor:
             raise _InPlaceRefused
         dashes = [self._dash(item) for item in items]
         column = dashes[0] - self._line_start(dashes[0])
+        key = self.sequence_keys.get(id(node))
+        if key is not None:
+            self._edit_named_sequence(items, dashes, column, old, new, key)
+            return
         prefix = 0
         while prefix < min(len(old), len(new)) and _same(old[prefix], new[prefix]):
             prefix += 1
@@ -318,6 +353,40 @@ class _Editor:
                 self._insert_lines_after(self._content_end(items[last_kept]), lines, column)
             else:
                 self._insert_lines_before(dashes[0], lines, column)
+
+    def _edit_named_sequence(
+        self,
+        items: list[Node],
+        dashes: list[int],
+        column: int,
+        old: list[Any],
+        new: list[Any],
+        key: str,
+    ) -> None:
+        """ADR-0056 providers have a stable name. An index is not their
+        identity: changing names in place would attach comments to another CLI.
+        Only owners declaring that identity opt into moving source rows.
+        """
+        names = [row[key] for row in old]
+        if len(set(names)) != len(names):
+            raise UneditableYaml("duplicate identities in an ordered sequence")
+        starts = [self._line_start(dash) for dash in dashes]
+        end = self._line_after(self._content_end(items[-1]))
+        ends = [*starts[1:], end]
+        fragments = {
+            name: (row, self.source[start:stop])
+            for name, row, start, stop in zip(names, old, starts, ends, strict=True)
+        }
+        replacement = ""
+        for row in new:
+            if row[key] in fragments:
+                original, source = fragments[row[key]]
+                replacement += edit_yaml(source, [row], before=[original])
+            else:
+                rendered = self._lines(self._render_item(row), indent=column)
+                replacement += " " * column + rendered.replace("\n", self.newline) + self.newline
+        # Existing fragments already carry their exact line endings.
+        self.edits.append((starts[0], end, len(self.edits), replacement))
 
     # -- replacing one node
 

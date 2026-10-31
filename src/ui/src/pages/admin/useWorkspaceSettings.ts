@@ -74,6 +74,7 @@ export function useWorkspaceSettings() {
               Object.entries(errors).filter(
                 ([key]) =>
                   !(key.startsWith("batch_ai") && "concurrency" in changes) &&
+                  !(key.startsWith("ai.providers") && "providers" in changes) &&
                   !(key.startsWith("market_seo") && "weights" in changes),
               ),
             ),

@@ -190,3 +190,36 @@ class TestBatchAi:
             workspace.load_settings()
 
         assert f"{key}:" in str(caught.value)
+
+
+def test_ai_defaults_and_ordered_preferences(workspace: Workspace) -> None:
+    assert [p.name for p in workspace.load_settings().ai.providers] == ["codex", "claude", "grok"]
+    _write(
+        workspace,
+        "ai:\n  providers:\n    - name: grok\n      model: retired-model\n"
+        "      effort: retired-effort\n    - name: codex\n      enabled: false\n",
+    )
+    providers = workspace.load_settings().ai.providers
+    assert [(p.name, p.enabled, p.model, p.effort) for p in providers] == [
+        ("grok", True, "retired-model", "retired-effort"),
+        ("codex", False, None, None),
+    ]
+
+
+@pytest.mark.parametrize(
+    ("yaml", "key"),
+    [
+        ("providers: []", "ai.providers"),
+        ("providers: [{name: codex, enabled: false}]", "ai.providers"),
+        ("providers: [{name: codex}, {name: codex}]", "ai.providers"),
+        ("providers: [{name: unknown}]", "ai.providers.0.name"),
+        ("providers: [{name: codex, tier: fast}]", "ai.providers.0.tier"),
+        ("provider: []", "ai.provider"),
+    ],
+)
+def test_ai_refusals_name_file_and_dotted_key(workspace: Workspace, yaml: str, key: str) -> None:
+    path = _write(workspace, "ai:\n  " + yaml + "\n")
+    with pytest.raises(ConfigLoadError) as caught:
+        workspace.load_settings()
+    assert str(path) in str(caught.value)
+    assert key + ":" in str(caught.value)
