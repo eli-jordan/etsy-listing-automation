@@ -37,7 +37,10 @@ type Changes = Record<string, unknown>;
  *   A key leaves `pending` in the same update as `onSaved` adopts its answer.
  *
  * `save` resolves with the outcome, `null` when a conflict skipped it, and
- * rejects when the request itself failed.
+ * rejects when the request itself failed. A caller that reports its own
+ * failure and retries through its own acknowledged action, like the currency
+ * dialog, saves with `retain: false`: its failure is neither kept for Retry
+ * nor allowed to hold Saved back once the seller abandons it.
  */
 export function useSaveQueue<C extends Changes, O extends SaveOutcome>({
   send,
@@ -83,7 +86,7 @@ export function useSaveQueue<C extends Changes, O extends SaveOutcome>({
   const afterSaves = useCallback(<T>(next: () => Promise<T>) => queue.current.then(next), []);
 
   const save = useCallback(
-    (changes: C): Promise<O | null> => {
+    (changes: C, { retain = true }: { retain?: boolean } = {}): Promise<O | null> => {
       if (conflicted.current) return Promise.resolve(null);
       const mine = ++sequence.current;
       for (const key of Object.keys(changes)) {
@@ -101,6 +104,14 @@ export function useSaveQueue<C extends Changes, O extends SaveOutcome>({
         );
       };
       const fail = (message: string) => {
+        if (!retain) {
+          // The caller reports this failure itself and owns its retry; the
+          // page goes back to what the retained failures and queue say.
+          const outstanding = [...failed.current.values()].pop();
+          if (outstanding) setStatus({ kind: "error", message: outstanding.message });
+          else setStatus(waiting.current > 1 ? { kind: "saving" } : { kind: "idle" });
+          return;
+        }
         for (const [key, value] of Object.entries(changes))
           if (latest.current.get(key) === mine) failed.current.set(key, { value, message });
         setStatus({ kind: "error", message });
@@ -127,7 +138,7 @@ export function useSaveQueue<C extends Changes, O extends SaveOutcome>({
             conflicted.current = true;
             setStatus({ kind: "conflict", message: outcome.message });
           } else {
-            setFieldErrors((errors) => ({ ...errors, ...outcome.fieldErrors }));
+            if (retain) setFieldErrors((errors) => ({ ...errors, ...outcome.fieldErrors }));
             fail("Not saved");
           }
           return outcome;

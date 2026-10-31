@@ -15,9 +15,12 @@ import pytest
 
 from etsy_listings.core import connections
 from etsy_listings.core.clients.etsy.fakes import FakeEtsyListingClient, FakeEtsyShopClient
+from etsy_listings.core.clients.etsy.models import ShippingProfile
 from etsy_listings.core.clients.printify.fakes import FakeCatalogClient, FakePrintifyClient
 from etsy_listings.core.config.defaults import Defaults
 from etsy_listings.core.workspace import layout
+
+from tests.support.builders import set_etsy_shop_id
 
 pytestmark = pytest.mark.browser
 
@@ -196,3 +199,69 @@ def test_a_choice_made_while_retry_is_pending_reaches_the_file(
     assert attempts == [{"renewal": "auto"}, {"renewal": "auto"}, {"renewal": "manual"}]
     assert on_disk(workspace_root).etsy.listing_defaults.renewal == "manual"
     expect(renewal).to_have_value("manual")
+
+
+@pytest.fixture
+def etsy_shop(workspace_root: Path) -> None:
+    """Opts the fixture into Etsy lookups. A test requests it before ``page``,
+    whose server reads ``shop.yaml`` once at startup."""
+    set_etsy_shop_id(workspace_root, 51007712)
+
+
+def test_use_it_replaces_a_failed_draft_with_what_it_wrote(
+    etsy_shop: None,
+    page,
+    expect,
+    calibrator_server: str,
+    workspace_root: Path,
+    theme: str,  # noqa: ANN001
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    titles = ["Printify US standard", "Printify EU standard"]
+    monkeypatch.setattr(
+        connections,
+        "etsy_listing_client",
+        lambda root: FakeEtsyListingClient(
+            shipping_profiles=[
+                ShippingProfile(shipping_profile_id=n, title=t) for n, t in enumerate(titles)
+            ]
+        ),
+    )
+    open_defaults(page, calibrator_server, theme)
+    shipping = page.get_by_role("combobox", name="Shipping profile")
+    expect(shipping).to_be_enabled()
+    attempts: list[dict[str, object]] = []
+
+    def fail_first(route) -> None:  # noqa: ANN001
+        if route.request.method != "PATCH":
+            route.continue_()
+            return
+        attempts.append(route.request.post_data_json["changes"])
+        if len(attempts) == 1:
+            route.fulfill(
+                status=503, content_type="application/json", body='{"detail":"disk unavailable"}'
+            )
+        else:
+            route.continue_()
+
+    page.route("**/api/admin/shop", fail_first)
+    choose(shipping, "Printify EU standard")
+    expect(page.get_by_role("button", name="Retry save")).to_be_visible()
+
+    titles.append("Printify UK standard")
+    page.evaluate("window.dispatchEvent(new Event('focus'))")
+    with page.expect_response(is_save):
+        page.get_by_role("button", name="Use it").click()
+    expect(page.get_by_text("Saved", exact=True)).to_be_visible()
+    expect(shipping).to_have_value("Printify UK standard")
+    assert on_disk(workspace_root).etsy.listing_defaults.shipping_profile == "Printify UK standard"
+
+    shipping.focus()
+    shipping.blur()
+    page.get_by_role("combobox", name="Renewal").focus()
+    expect(page.get_by_role("button", name="Retry save")).to_have_count(0)
+    assert attempts == [
+        {"shipping_profile": "Printify EU standard"},
+        {"shipping_profile": "Printify UK standard"},
+    ]
+    assert on_disk(workspace_root).etsy.listing_defaults.shipping_profile == "Printify UK standard"

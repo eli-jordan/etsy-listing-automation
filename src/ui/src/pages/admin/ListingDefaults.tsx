@@ -382,18 +382,16 @@ function ListField({
   if (missing) options.push({ value: saved, label: savedLabel });
   if (saved === "") options.unshift({ value: "", label: empty });
   const where = CREATE_LINKS[field].where;
+  // Use it is a choice in this field like any other: it goes through the
+  // field's draft, so it supersedes an older draft and a newer one survives
+  // its answer.
+  const draft = useDraft(saved, (value) => {
+    if (found?.value === value) lookups.dismiss(field);
+    return save(toChange(value));
+  });
   return (
     <Field label={label} field={field} info={info} error={fieldErrors[field]} create={field}>
-      <BlurSelect
-        label={label}
-        saved={saved}
-        options={options}
-        disabled={locked || !available}
-        onCommit={(value) => {
-          if (found?.value === value) lookups.dismiss(field);
-          return save(toChange(value));
-        }}
-      />
+      <DraftSelect label={label} options={options} disabled={locked || !available} draft={draft} />
       {available && missing && (
         <span className="sp-missing">
           <WarningIcon size={12} weight="bold" /> {savedLabel} is not in the list {where} returned.
@@ -407,10 +405,7 @@ function ListField({
             type="button"
             className="sp-use"
             disabled={locked}
-            onClick={() => {
-              lookups.dismiss(field);
-              void save(toChange(found.value));
-            }}
+            onClick={() => draft.choose(found.value)}
           >
             Use it
           </button>
@@ -420,17 +415,68 @@ function ListField({
   );
 }
 
+type Draft = {
+  shown: string;
+  /** The seller changed the select; nothing is sent yet. */
+  change: (value: string) => void;
+  /** The seller left the select: send its draft if it changes the file. */
+  leave: () => void;
+  /** A choice made and sent at once, such as Use it. */
+  choose: (value: string) => void;
+};
+
 /**
- * A select that saves on blur: changing it only changes what it shows, and
- * leaving it saves the shown value once, if it differs from what the file
- * will hold once this field's sent saves land.
+ * One field's local edit and the identity of the saves made from it.
  *
- * Each save carries the edit it was made from, and only its own answer drops
- * the draft, and only if nothing was chosen since: an older answer never
- * replaces a newer choice, focused or already queued. A failed save keeps
- * the draft, and leaving the field sends it again. A refused value stays
- * shown with its error until the seller picks another or reloads.
+ * `saved` is what the file will hold once sent saves land, so a draft is
+ * sent only when it differs from that. Each save carries the edit it was
+ * made from, and only its own answer drops the draft, and only if nothing
+ * was chosen since: an older answer never replaces a newer choice, focused
+ * or already queued. A failed save keeps the draft to be sent again on the
+ * next leave; a refused one stays shown with its error until the seller
+ * picks another or reloads. Every writer of the field (the select and
+ * Use it) goes through here, so a newer choice from either supersedes an
+ * older draft.
  */
+function useDraft(saved: string, onCommit: (value: string) => Promise<Answer>): Draft {
+  const [draft, setDraft] = useState<string | null>(null);
+  const edits = useRef(0);
+  const sent = useRef<{ value: string; edit: number } | null>(null);
+  const refused = useRef<string | null>(null);
+
+  const edit = (value: string) => {
+    edits.current += 1;
+    refused.current = null;
+    setDraft(value);
+  };
+  const send = (value: string) => {
+    if (value === refused.current || value === saved) return;
+    const mine = { value, edit: edits.current };
+    sent.current = mine;
+    void onCommit(value).then((answer) => {
+      if (sent.current !== mine) return;
+      sent.current = null;
+      if (answer === "refused") refused.current = mine.value;
+      else if (answer === "saved" && edits.current === mine.edit) setDraft(null);
+    });
+  };
+  return {
+    shown: draft ?? saved,
+    change: edit,
+    leave: () => {
+      if (draft !== null) send(draft);
+    },
+    choose: (value) => {
+      edit(value);
+      // A choice of what the file already holds needs no save; it still
+      // replaces whatever older draft was shown.
+      if (value === saved) setDraft(null);
+      else send(value);
+    },
+  };
+}
+
+/** A select that saves on blur, for a field with no other writer. */
 function BlurSelect({
   label,
   saved,
@@ -444,34 +490,30 @@ function BlurSelect({
   disabled: boolean;
   onCommit: (value: string) => Promise<Answer>;
 }) {
-  const [draft, setDraft] = useState<string | null>(null);
-  const edits = useRef(0);
-  const sent = useRef<{ value: string; edit: number } | null>(null);
-  const refused = useRef<string | null>(null);
+  const draft = useDraft(saved, onCommit);
+  return <DraftSelect label={label} options={options} disabled={disabled} draft={draft} />;
+}
 
-  const shown = draft ?? saved;
+/** Changing the select only changes what it shows; leaving it saves. */
+function DraftSelect({
+  label,
+  options,
+  disabled,
+  draft,
+}: {
+  label: string;
+  options: Option[];
+  disabled: boolean;
+  draft: Draft;
+}) {
   return (
     <select
       className="adm-select"
       aria-label={label}
       disabled={disabled}
-      value={shown}
-      onChange={(e) => {
-        edits.current += 1;
-        refused.current = null;
-        setDraft(e.target.value);
-      }}
-      onBlur={() => {
-        if (draft === null || draft === refused.current || draft === saved) return;
-        const mine = { value: draft, edit: edits.current };
-        sent.current = mine;
-        void onCommit(draft).then((answer) => {
-          if (sent.current !== mine) return;
-          sent.current = null;
-          if (answer === "refused") refused.current = mine.value;
-          else if (answer === "saved" && edits.current === mine.edit) setDraft(null);
-        });
-      }}
+      value={draft.shown}
+      onChange={(e) => draft.change(e.target.value)}
+      onBlur={draft.leave}
     >
       {options.map((o) => (
         <option key={o.value} value={o.value}>

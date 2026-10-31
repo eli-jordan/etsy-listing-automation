@@ -551,8 +551,10 @@ so an unrelated success never reports Saved over it, and Retry sends only the
 failed keys. Each key's newest unanswered value, from a field save or Retry,
 is `pending`; Shop's listing defaults show it over the saved file, so a newer
 choice is compared with what the file will hold. Responses never replace a
-newer local edit: Shop's blur selects drop a draft only on the answer to the
-save made from it, and both panels
+newer local edit: each Shop field has one draft owner that its select and Use
+it both go through, which drops a draft only on the answer to the save made
+from it. A save whose caller reports and retries its own failure, the currency
+dialog's, passes `retain: false` so Retry never resends it. Both panels
 discard local state only when a (re)load bumps `loadedVersion`.
 Batch concurrency is 1–8, read at the next dispatch, and lowering it leaves
 active runs alone (ADR-0048). Market shares normalize only for display until an

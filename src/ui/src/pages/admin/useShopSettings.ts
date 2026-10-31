@@ -74,7 +74,10 @@ export function useShopSettings() {
     status: queue.status,
     fieldErrors: queue.fieldErrors as FieldErrors,
     pending: queue.pending,
-    save: save as (changes: ShopChanges) => Promise<SaveOutcome | null>,
+    save: save as (
+      changes: ShopChanges,
+      options?: { retain?: boolean },
+    ) => Promise<SaveOutcome | null>,
     retry,
     reload,
     locked: queue.locked,

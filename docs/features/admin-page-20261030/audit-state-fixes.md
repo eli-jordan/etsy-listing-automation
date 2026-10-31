@@ -97,6 +97,26 @@ sent nothing, leaving auto on disk under Saved. Field saves and Retry now share
 the queue's per-key pending identity above, rather than each control
 remembering only its own saves.
 
+A specification review found two more interactions:
+
+- **A cancelled currency change was retried.** A failed Change in the currency
+  dialog left `currency: EUR` among the queue's failed keys. After Keep, close,
+  Escape or the backdrop, a sibling success still could not show Saved, and the
+  page's Retry save would send EUR without the dialog's acknowledgement. The
+  dialog shows its own failure and retries only through its acknowledged
+  Change, so it now saves with `retain: false`: that failure is not kept for
+  Retry, adds no page field error, and leaves the page status to the retained
+  failures. Sibling failures and their errors are untouched, and revision
+  checks are unchanged. This concerns a failed request; cancelling never undoes
+  a write the server already made.
+- **Use it bypassed the field's draft.** Use it saved directly, so a draft
+  chosen back to the saved value, or a failed draft, stayed shown over what Use
+  it wrote, and leaving the select then wrote the old draft back. Each list
+  field now has one draft owner (`useDraft`) that both the select and Use it go
+  through: Use it is a choice that replaces an older draft and is sent at once,
+  and a choice made while its request is pending survives the answer and is
+  saved after it.
+
 | Regression | Proves |
 |---|---|
 | `keeps a newer focused choice when an older save is answered` | Deferred response: the focused newer choice stays, keeps focus, and its blur saves it. |
@@ -108,7 +128,13 @@ remembering only its own saves.
 | `keeps a failed retry visible and lets another retry succeed` | A failed retry retains the error and failed value, then the next retry succeeds. |
 | `retries a failed unchanged value when its field is left again` | Blurring the unchanged failed value resends it. |
 | `keeps a failed save failed through an unrelated success and retries only that patch` (Settings) | The shared contract on Settings: provider failure survives a concurrency success; Retry sends only `providers` against the newer revision. |
-| `test_admin_shop_browser.py` | Built SPA, real API, fixture `shop.yaml`, both color preferences: the queued choice ends on disk; the failed field survives a sibling write and Retry save writes it; a choice made while Retry is held reaches the file after it (timed out waiting for that request against the previous build). |
+| `never retries a currency change cancelled with Keep/close/Escape/backdrop after it failed` | After a failed EUR Change and each cancel, a Renewal success shows Saved with no Retry, and currency was sent once. Failed before: no Saved. |
+| `retries a sibling's failure but not a cancelled currency change` | A failed Renewal keeps its error through a failed, cancelled currency change; Retry sends only `{renewal: auto}`. Failed before: the status showed the currency failure. |
+| `reports Saved when a newer save supersedes a failed one` | Control: an older failed Renewal save superseded by a newer successful one leaves Saved and no Retry. |
+| `shows what Use it wrote over a draft chosen back to the saved value` | EU then US with no write; Use it writes UK; the select shows UK and leaving it writes nothing. Failed before: the select still showed US. |
+| `shows what Use it wrote over a failed draft` | A failed EU draft; Use it writes UK; the select shows UK, no Retry, and leaving writes nothing. Failed before: the select still showed EU. |
+| `keeps a choice made while Use it is pending and saves it after` | Control: with Use it held, choosing EU survives its answer and is saved against its revision. |
+| `test_admin_shop_browser.py` | Built SPA, real API, fixture `shop.yaml`, both color preferences: the queued choice ends on disk; the failed field survives a sibling write and Retry save writes it; a choice made while Retry is held reaches the file after it (timed out waiting for that request against the previous build); Use it over a failed draft leaves `shop.yaml` and the select on UK with no further write (the select kept EU against the previous build). |
 
 ### UI decision
 

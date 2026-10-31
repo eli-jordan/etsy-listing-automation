@@ -67,7 +67,9 @@ export function AdminPage() {
 
   const { shop, save } = settings;
   const changeCurrency = async (code: string) => {
-    const outcome = await save({ currency: code });
+    // The dialog shows its own failure and retries only through its
+    // acknowledged Change, so a cancelled change is never resent by Retry.
+    const outcome = await save({ currency: code }, { retain: false });
     if (outcome?.kind === "saved") closeCurrency();
     else if (outcome?.kind === "invalid")
       throw new Error(outcome.fieldErrors.currency ?? outcome.message);
