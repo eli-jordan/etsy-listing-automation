@@ -15,6 +15,7 @@ a real pipe, is ``tests/core/behaviour/test_ai_process_tree.py``'s (T13).
 
 from __future__ import annotations
 
+import subprocess
 import threading
 import time
 from collections.abc import Iterator
@@ -27,6 +28,7 @@ import pytest
 from etsy_listings.core.ai import process
 from etsy_listings.core.ai.models import Deadline
 
+from tests.support.doubles import FakeRun
 from tests.support.gates import GATE_TIMEOUT, workers
 
 
@@ -135,6 +137,25 @@ def test_run_managed_returns_completed_output(fake_popen: Launches) -> None:
     assert result.timed_out is False
     assert result.cancelled is False
     assert fake_popen[0].stdin_received == "prompt text"
+
+
+@pytest.mark.parametrize(
+    "error", [OSError("taskkill unavailable"), subprocess.TimeoutExpired("taskkill", 5)]
+)
+def test_managed_timeout_still_reaps_the_child_if_windows_tree_cleanup_fails(
+    fake_popen: Launches, monkeypatch: pytest.MonkeyPatch, error: Exception
+) -> None:
+    monkeypatch.setattr(process.sys, "platform", "win32")
+    taskkill = FakeRun(error=error)
+    monkeypatch.setattr(process.subprocess, "run", taskkill)
+
+    result = process.run_managed(
+        ["codex", "debug", "models"], cwd=Path.cwd(), input_text="", deadline=Deadline()
+    )
+
+    assert result.timed_out
+    assert result.returncode == -9
+    assert taskkill.calls[0][1]["timeout"] <= 5
 
 
 def test_run_managed_passes_cwd_and_argv(fake_popen: Launches) -> None:

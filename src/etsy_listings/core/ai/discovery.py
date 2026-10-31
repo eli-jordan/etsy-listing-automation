@@ -9,17 +9,20 @@ from __future__ import annotations
 import json
 import re
 import shutil
-import subprocess
 import threading
 import time
 from collections.abc import Callable
+from pathlib import Path
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from etsy_listings.core.ai.models import Deadline
+from etsy_listings.core.ai.process import CliProcessError, run_managed
 from etsy_listings.core.config.settings import ProviderName
 
 CACHE_SECONDS = 30 * 60
+REFRESH_SECONDS = 15
 CLAUDE_MODELS = ("claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5")
 CLAUDE_EFFORTS = ("low", "medium", "high", "xhigh", "max")
 GROK_EFFORTS = ("low", "medium", "high")
@@ -57,19 +60,50 @@ class ModelDiscovery:
         self._expires = 0.0
         self._cached: ModelCatalogs | None = None
         self._lock = threading.Lock()
+        self._cancel = threading.Event()
+        self._refreshing = False
+        self._worker: threading.Thread | None = None
+
+    def start(self) -> None:
+        """Attempt discovery off the host's startup path. Construction does
+        no work. Repeated starts share the active attempt."""
+        with self._lock:
+            if self._worker is not None and self._worker.is_alive():
+                return
+            self._cancel.clear()
+            self._worker = threading.Thread(
+                target=self.read, name="ai-model-discovery", daemon=True
+            )
+            self._worker.start()
+
+    def stop(self, *, timeout: float = 6.0) -> None:
+        """Cancel the probe's managed process tree and wait a bounded time.
+        A stopped owner starts no new probes until ``start`` is called."""
+        self._cancel.set()
+        with self._lock:
+            worker = self._worker
+        if worker is not None:
+            worker.join(timeout=timeout)
 
     def read(self, *, refresh: bool = False) -> ModelCatalogs:
         with self._lock:
+            if self._cancel.is_set():
+                return self._snapshot("Model discovery stopped. Restart the server to retry.")
+            if self._refreshing:
+                return self._snapshot("Model discovery is in progress. Refresh to check again.")
             if not refresh and self._cached is not None and self._monotonic() < self._expires:
                 return self._cached.model_copy(deep=True)
             previous = self._cached.providers if self._cached is not None else {}
+            self._refreshing = True
+        try:
             catalogs: dict[ProviderName, ProviderCatalog] = {}
+            deadline = Deadline.starting_now(seconds=REFRESH_SECONDS, clock=self._monotonic)
             for name in ("codex", "grok"):
                 try:
-                    catalogs[name] = _discover(name)
+                    catalogs[name] = _discover(name, deadline, self._cancel)
                 except (
                     OSError,
-                    subprocess.SubprocessError,
+                    CliProcessError,
                     ValueError,
                     KeyError,
                     TypeError,
@@ -82,22 +116,47 @@ class ModelDiscovery:
                             "Refresh to try again."
                         }
                     )
-            catalogs["claude"] = ProviderCatalog(
-                models=tuple(ModelChoice(id=id, label=id) for id in CLAUDE_MODELS),
-                efforts=CLAUDE_EFFORTS,
+            catalogs["claude"] = _claude()
+            with self._lock:
+                self._cached = ModelCatalogs(providers=catalogs)
+                self._expires = self._monotonic() + CACHE_SECONDS
+                return self._cached.model_copy(deep=True)
+        finally:
+            with self._lock:
+                self._refreshing = False
+
+    def _snapshot(self, problem: str) -> ModelCatalogs:
+        """Read under the state lock, never under a process/pipe wait."""
+        cached = (
+            self._cached.model_copy(deep=True)
+            if self._cached
+            else ModelCatalogs(providers={"claude": _claude()})
+        )
+        for name in ("codex", "grok"):
+            cached.providers[name] = cached.providers.get(name, ProviderCatalog()).model_copy(
+                update={"problem": problem}
             )
-            self._cached = ModelCatalogs(providers=catalogs)
-            self._expires = self._monotonic() + CACHE_SECONDS
-            return self._cached.model_copy(deep=True)
+        return cached
 
 
-def _discover(name: str) -> ProviderCatalog:
+def _claude() -> ProviderCatalog:
+    return ProviderCatalog(
+        models=tuple(ModelChoice(id=id, label=id) for id in CLAUDE_MODELS),
+        efforts=CLAUDE_EFFORTS,
+    )
+
+
+def _discover(name: str, deadline: Deadline, cancel: threading.Event) -> ProviderCatalog:
+    if deadline.expired or cancel.is_set():
+        raise ValueError("discovery budget exhausted or discovery stopped")
     binary = shutil.which(name)
     if binary is None:
         raise OSError(f"{name} was not found")
     argv = [binary, "debug", "models"] if name == "codex" else [binary, "models"]
-    result = subprocess.run(argv, capture_output=True, text=True, encoding="utf-8", timeout=15)
-    if result.returncode:
+    result = run_managed(
+        argv, cwd=Path.cwd(), input_text="", deadline=deadline, cancel_event=cancel
+    )
+    if result.timed_out or result.cancelled or result.returncode != 0:
         raise ValueError("discovery failed")
     if name == "codex":
         return _codex(json.loads(result.stdout))

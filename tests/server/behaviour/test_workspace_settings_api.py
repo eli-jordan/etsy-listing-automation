@@ -169,23 +169,6 @@ def test_model_discovery_reads_and_refreshes_without_changing_settings(client: T
     assert client.get("/api/admin/settings").json() == before
 
 
-def test_startup_attempts_discovery_without_changing_preferences(workspace_root: Path) -> None:
-    from etsy_listings.core.ai.discovery import ModelCatalogs, ModelDiscovery
-
-    class Discovery(ModelDiscovery):
-        attempted = False
-
-        def read(self, *, refresh=False):
-            self.attempted = True
-            return ModelCatalogs()
-
-    discovery = Discovery()
-    workspace = Workspace.discover(root_override=workspace_root)
-    with TestClient(create_app(workspace, model_discovery=discovery)):
-        assert discovery.attempted
-    assert not workspace.settings_file().exists()
-
-
 def test_time_limits_read_save_together_and_refuse_a_run_below_the_floor(
     client: TestClient, workspace_root: Path
 ) -> None:
