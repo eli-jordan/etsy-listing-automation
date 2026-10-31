@@ -30,8 +30,10 @@ from etsy_listings.core.ai.models import (
     RepairContext,
     SeoRequest,
 )
+from etsy_listings.core.ai.orchestrator import run_task
 from etsy_listings.core.ai.process import ProcessResult
 from etsy_listings.core.ai.prompt import RESPONSE_SCHEMA, build_seo_task
+from etsy_listings.core.ai.providers import FakeAiProvider
 
 _HELP_TEXT = """
 Options:
@@ -44,6 +46,65 @@ Options:
 """
 
 _AUTH_STATUS_JSON = json.dumps({"loggedIn": True})
+
+
+@pytest.mark.parametrize("stream", ["stdout", "stderr", "error-envelope", "structured-error"])
+def test_rejected_saved_claude_model_falls_back_through_the_process_contract(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, stream: str
+) -> None:
+    # Observed vendor wording, Anthropic claude-code issue #103174, recorded
+    # in the Admin audit. No installed CLI or live generation is needed.
+    sentence = "There's an issue with the selected model (retired-model). It may not exist."
+    stdout, stderr, code = "", "", 1
+    if stream == "stdout":
+        stdout = sentence
+    elif stream == "stderr":
+        stderr = sentence
+    elif stream == "error-envelope":
+        stdout, code = json.dumps({"type": "result", "is_error": True, "result": sentence}), 0
+    else:
+        stdout, code = (
+            json.dumps({"type": "result", "is_error": True, "error": {"type": "model_not_found"}}),
+            0,
+        )
+    _patch_run_managed(monkeypatch, ProcessResult(code, stdout, stderr, False, False))
+    provider = claude.ClaudeProvider(tmp_path, model="retired-model")
+    fallback = FakeAiProvider("grok", responses=["valid"])
+
+    result = run_task(
+        ProviderTask("test", {}, tmp_path / "unused.png"), lambda raw: raw, [provider, fallback]
+    )
+
+    assert result == "valid"
+    assert len(fallback.tasks) == 1
+    assert provider.model == "retired-model"
+
+
+@pytest.mark.parametrize(
+    "envelope",
+    [
+        {"is_error": True, "result": "The generated model output may not exist on disk."},
+        {
+            "is_error": True,
+            "result": "There's an issue with the selected model output: malformed JSON.",
+        },
+        {"is_error": True, "result": "The response mentioned model_not_found."},
+        {"is_error": True, "result": "generation failed", "telemetry": {"code": "model_not_found"}},
+        {"is_error": True, "error": {"type": "generation_error", "message": "generation failed"}},
+    ],
+)
+def test_generation_failures_do_not_fall_back_for_an_incidental_model_mention(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, envelope: dict[str, Any]
+) -> None:
+    _patch_run_managed(monkeypatch, ProcessResult(0, json.dumps(envelope), "", False, False))
+    fallback = FakeAiProvider("grok", responses=["valid"])
+    with pytest.raises(ProviderGenerationError):
+        run_task(
+            ProviderTask("test", {}, tmp_path / "unused.png"),
+            lambda raw: raw,
+            [claude.ClaudeProvider(tmp_path), fallback],
+        )
+    assert fallback.tasks == []
 
 
 def _request(tmp_path: Path) -> SeoRequest:
