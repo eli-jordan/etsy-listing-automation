@@ -455,12 +455,23 @@ rather than new garment facts (ADR-0044). The runner may save an automatically
 drafted brief after rechecking that it is still empty; SEO suggestions enter
 the listing through the seller's acceptance workflow (ADR-0003).
 
-The server owns one advisory `ai/discovery.ModelDiscovery` instance. Startup,
-30-minute cache expiry and explicit Refresh read the installed Codex/Grok model
-catalogs; Claude uses pinned ids. Failed discovery retains earlier catalog
-values and reports the failure. It never validates or rewrites preferences.
+The server owns one advisory `ai/discovery.ModelDiscovery` instance. Construction
+starts no thread. The lifespan starts a background discovery attempt and cancels
+it on shutdown, waiting at most six seconds. Startup can serve the dashboard
+while that attempt is running. Startup, 30-minute cache expiry and explicit
+Refresh read the installed Codex/Grok model catalogs; Claude uses pinned ids.
+One refresh shares a 15-second monotonic probe budget across both CLIs and uses
+the generation adapters' managed process-tree runner, with at most five further
+seconds for cleanup. The cache lock covers state publication, never a process
+wait. Concurrent catalog reads retain successful choices with an in-progress
+status instead of queuing behind the probe. Failed discovery retains earlier
+catalog values and reports the failure. It never validates or rewrites preferences.
 Admin retains stale saved model/effort choices and warns without blocking runs.
 Omitted preferences pass no model/effort flags, preserving CLI account defaults.
+Invalid saved settings become the coordinator's `AiNotReady` refusal before a
+run is registered. Listing readiness and run start report the same file/key
+detail; batch readiness carries that detail and a correction remedy while
+keeping staging. Only configuration-loading failures are adapted this way.
 
 `ProposalStore` retains one latest proposal with its input snapshot,
 generation time, origin and per-section resolutions. Staleness is judged on
@@ -1097,7 +1108,11 @@ written under an identity computed from the very arrays composed, so apply and
 previews share entries without trusting anything but that identity. A preview
 reaches the identity without decoding through `PIXEL_DIGESTS`, which keeps each
 photo's and design's pixel digest only while its `file_version` stamp is
-unchanged; preview responses carry the identity as their ETag. One composition
+unchanged; preview responses carry the identity as their ETag. On Windows,
+USNs are trusted only while a short read-data metadata handle excludes other
+writers. An open writer can coalesce USN reasons, so a sharing conflict uses
+the existing content-hash fallback. Atomic replacement remains shared.
+One composition
 runs per identity: a second request waits and reads the first one's entry. At
 most four Marigold compositions run at once, across previews and apply.
 

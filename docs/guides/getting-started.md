@@ -593,7 +593,11 @@ Claude and Grok are enabled in that order. Omitted providers appear as off rows.
 At least one must stay enabled. Refresh lists retries advisory CLI discovery,
 otherwise cached for 30 minutes. Saved choices stay visible and are still
 passed to the CLI when a catalog no longer offers them. A model/effort rejection
-permits fallback; discovery never rewrites a preference.
+permits fallback; discovery never rewrites a preference. Discovery starts in the
+background when the server starts. An in-progress catalog keeps existing choices;
+use Refresh to check again. Each refresh has a shared 15-second probe budget,
+plus at most five seconds for process cleanup. A failed refresh keeps the last
+successful choices and explains the failure.
 
 **Provider limits.** Admin → Settings → AI time limits sets two whole-minute
 limits in `settings.yaml` (ADR-0057). *Per step* (`ai.step_limit_minutes`,
@@ -602,7 +606,11 @@ provider gets a fresh step. *Whole run* (`ai.run_limit_minutes`, 5-60,
 default 20) bounds the whole run, market research included. The run limit must
 be at least enabled providers × step: the page raises it in the same save when
 you raise the step or turn a provider on, and a hand-edited file below that
-refuses to load, naming the key. Changes apply to the next run. A malformed response gets one same-provider repair. A
+refuses to load, naming the key. Changes apply to the next run. Invalid settings
+disable AI readiness and refuse new runs with the file and key to correct.
+Staging stays available and explains the same correction before confirmation.
+Correct the named value in `settings.yaml`, then retry.
+A malformed response gets one same-provider repair. A
 recognized unavailable failure or rejected preference advances to the next provider. Cancel
 stops the run and its subprocess; leaving the tab or losing the connection
 allows the server-side run to continue and the browser to reattach.
