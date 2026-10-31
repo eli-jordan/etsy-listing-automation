@@ -72,5 +72,6 @@ the saved selectors remain visible. The app keeps its agreed single palette.
 
 GitHub e2e dispatch belongs to the parent under its serial lock and remains
 pending with independent review and CI. This lane never runs local real-shop
-e2e, changes credentials or invokes live model generation. The delivery PR
-link is added when publication returns its URL.
+e2e, changes credentials or invokes live model generation.
+
+Delivery: [PR #150](https://github.com/eli-jordan/etsy-listing-automation/pull/150).
