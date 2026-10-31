@@ -255,6 +255,10 @@ and lowering it leaves active runs alone. Shared gates pass.
 
 ### PR 5: configure AI providers, models and effort
 
+The local BUILD implementation records verified installed formats and flags
+in [Provider CLI contracts](provider-cli-contracts.md). PR6 owns configurable
+limits and fresh fallback budgets; PR5 keeps the inherited fixed defaults.
+
 Add the ordered list model and wire it into the existing ProviderFactory for
 readiness and every AI caller. Pass model/effort flags in each adapter while
 preserving read-only tools, cancellation and process-tree cleanup. Build the

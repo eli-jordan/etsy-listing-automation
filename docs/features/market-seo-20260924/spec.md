@@ -48,9 +48,11 @@ from step 1 stays written either way.
 
 The call has its own seller-editable prompt, `prompts/market-queries.md`,
 seeded by `setup` like `seo.md` and `brief.md`. It goes through the same
-provider chain as every other AI Mode request: Codex, then Claude, then Grok
-Code on a recognised unavailable failure, and one same-provider repair for
-malformed output.
+provider chain as every other AI Mode request. ADR-0056 configures the ordered
+enabled providers and their model/effort in workspace settings, captured once
+for every task in a run. Missing AI settings use Codex, Claude, Grok and account
+defaults. Recognized unavailable or model/effort rejection permits fallback;
+malformed output gets one same-provider repair. Discovery remains advisory.
 
 - **Input:** the brief, the design image, and the garment profile's display
   title (for example *Unisex Heavy Cotton Tee*).

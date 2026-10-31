@@ -163,8 +163,10 @@ editing other fields while generation runs.
 | Failure | Remove the loading state. **Try again** takes the timer's place under the brief, with no error sentence beside it. The reason pops in as a toast at the upper right, dismissible, and leaves when the next run starts. The top-listings column is not shown for a failure the editor watched. Do not change listing fields. | A model or validation failure must never look like an empty successful result, and the reason must not cover the brief or the market column. |
 | Cancelled | Remove the loading state and retain no proposal. A brief or market snapshot the run already wrote stays. | Pressing **Cancel** must not leave a result from an abandoned request. Leaving the editor or losing the connection is not cancelling: the run continues, and the editor reattaches to it. |
 
-The backend tries Codex first. Only recognised provider-unavailable,
-authentication/quota, or rate-limit failures fall through to Claude Code; a
+The backend captures the workspace's enabled provider order, model and effort
+at run start (ADR-0056). Missing AI settings use Codex, Claude, Grok and account
+defaults. Recognized provider-unavailable, authentication/quota, rate-limit or
+saved model/effort rejection permits fallback to the next configured provider; a
 malformed response receives one repair attempt from the same provider. Every
 other error exposes **Try again**. Each provider call (brief, market queries,
 proposal), including its repair and allowed fallback, has one 5-minute
@@ -286,7 +288,7 @@ This includes the title limit, tag count and length, uniqueness, and agreed
 affiliation/content checks. Trademark findings are warnings, not a hard refusal.
 
 If the first model response is invalid, repair it once with the same provider
-without changing any listing field. If repair fails, use Claude only for a
+without changing any listing field. If repair fails, use the next captured provider only for a
 recognised fall-through condition; otherwise show an inline failure and offer
 **Try again**. Do not reveal a partial proposal as though it were safe to use.
 

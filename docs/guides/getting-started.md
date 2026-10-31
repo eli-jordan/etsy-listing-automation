@@ -585,10 +585,20 @@ description preview and every deployment desired-document (Printify, Etsy)
 compose the final description through the same one shared function, so what
 you see in the preview is exactly what ships.
 
-**Provider limits.** Each provider operation has a 60-second deadline,
+**Provider choices.** Admin → Settings edits the fallback order, enabled rows,
+model and reasoning effort in `settings.yaml` (ADR-0056). Each provider's choice
+applies to every task in the next run; active runs keep their captured choices.
+Account default omits the corresponding flag. With no AI settings, Codex,
+Claude and Grok are enabled in that order. Omitted providers appear as off rows.
+At least one must stay enabled. Refresh lists retries advisory CLI discovery,
+otherwise cached for 30 minutes. Saved choices stay visible and are still
+passed to the CLI when a catalog no longer offers them. A model/effort rejection
+permits fallback; discovery never rewrites a preference.
+
+**Provider limits.** Each AI task has a five-minute deadline,
 including its repair and availability fallback; the complete AI run is capped
-at three minutes. A malformed response gets one same-provider repair. Only a
-recognised unavailable first attempt advances to the next provider. Cancel
+at twenty minutes. A malformed response gets one same-provider repair. A
+recognized unavailable failure or rejected preference advances to the next provider. Cancel
 stops the run and its subprocess; leaving the tab or losing the connection
 allows the server-side run to continue and the browser to reattach.
 
