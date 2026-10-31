@@ -5,6 +5,7 @@ import os
 import shutil
 import subprocess
 import sys
+import time
 import uuid
 from collections.abc import Iterator
 from pathlib import Path
@@ -252,3 +253,110 @@ def test_each_agent_runs_the_hook_on_edits_and_owns_the_daemon(
         for command in commands(event):
             assert "scripts/agent_lint.py" in command
             assert command.endswith(f" {subcommand}")
+
+
+# Stand-ins for `uv` and `npx`, reached through the hook's fallback when the
+# venv or node_modules is missing. `uv run dmypy` behaves like a daemon whose
+# predecessor died; `uv run ruff` forwards to the real ruff.
+FAKE_TOOLS = """\
+import json, os, subprocess, sys
+from pathlib import Path
+
+tool, args = sys.argv[1], sys.argv[2:]
+with open(os.environ["FAKE_LOG"], "a") as log:
+    log.write(json.dumps([tool, args]) + "\\n")
+if tool == "uv":
+    name, rest = args[2], args[3:]  # uv run --quiet <name> ...
+    if name == "ruff":
+        sys.exit(subprocess.run([os.environ["REAL_RUFF"], *rest]).returncode)
+    status, command = Path(rest[1]), rest[2]  # dmypy --status-file <path> <command>
+    alive = status.is_file() and json.loads(status.read_text())["pid"] == 4242
+    if command == "status":
+        sys.exit(0 if alive else 2)
+    if command == "run":
+        if status.is_file() and not alive:
+            sys.exit(2)  # as real dmypy: a dead daemon's status file blocks a new one
+        status.write_text(json.dumps({"pid": 4242, "connection_name": "fake"}))
+    sys.exit(0)
+if tool == "npx":
+    name, rest = args[1], args[2:]  # npx --yes <name> ...
+    if name == "eslint":
+        message = {"line": 1, "column": 1, "ruleId": "fake/rule", "severity": 2,
+                   "message": "from the npx fallback"}
+        print(json.dumps([{"filePath": rest[-1], "messages": [message]}]))
+"""
+
+
+@pytest.fixture
+def fake_tools(tmp_path: Path) -> tuple[dict[str, str], Path]:
+    """Env that puts the fakes first on PATH, and the log of their calls."""
+    bin_dir = tmp_path / "fake-bin"
+    bin_dir.mkdir()
+    script = tmp_path / "fake_tools.py"
+    script.write_text(FAKE_TOOLS)
+    for tool in ("uv", "npx"):
+        if os.name == "nt":
+            (bin_dir / f"{tool}.cmd").write_text(
+                f'@"{sys.executable}" "{script}" {tool} %*\r\n@exit /b %ERRORLEVEL%\r\n'
+            )
+        else:
+            launcher = bin_dir / tool
+            launcher.write_text(f'#!/bin/sh\nexec "{sys.executable}" "{script}" {tool} "$@"\n')
+            launcher.chmod(0o755)
+    log = tmp_path / "calls.jsonl"
+    real_ruff = Path(sys.executable).parent / ("ruff.exe" if os.name == "nt" else "ruff")
+    env = {
+        "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}",
+        "FAKE_LOG": str(log),
+        "REAL_RUFF": str(real_ruff),
+    }
+    return env, log
+
+
+def calls(log: Path) -> list[list[object]]:
+    return [json.loads(line) for line in log.read_text().splitlines()] if log.exists() else []
+
+
+def test_a_daemon_that_died_is_replaced_despite_its_stale_status_file(
+    fake_tools: tuple[dict[str, str], Path], tmp_path: Path
+) -> None:
+    env, _ = fake_tools
+    state = tmp_path / "state"
+    state.mkdir()
+    # What a killed daemon leaves: its status file, and the warm marker
+    # naming its pid.
+    (state / "dmypy.json").write_text(json.dumps({"pid": 999999, "connection_name": "gone"}))
+    warm = state / "agent-lint-dmypy.warm"
+    warm.write_text("999999")
+    source = ROOT / "src" / "etsy_listings" / "__init__.py"
+
+    result = run_hook(
+        edited(source),
+        **env,
+        AGENT_LINT_VENV=str(tmp_path / "no-venv"),
+        AGENT_LINT_STATE_DIR=str(state),
+    )
+
+    # mypy is skipped, not waited for, while the replacement warms up.
+    assert result.returncode == 0, result.stderr
+    deadline = time.monotonic() + 60
+    while not warm.is_file() and time.monotonic() < deadline:
+        time.sleep(0.2)
+    assert warm.read_text() == "4242"
+
+
+def test_missing_node_modules_falls_back_to_npx_instead_of_skipping(
+    fake_tools: tuple[dict[str, str], Path], ui_scratch: Path, tmp_path: Path
+) -> None:
+    env, log = fake_tools
+    source = ui_scratch / "widget.ts"
+    source.write_text("export const widget = 1;\n")
+
+    result = run_hook(edited(source), **env, AGENT_LINT_NODE_BIN=str(tmp_path / "no-modules"))
+
+    assert result.returncode == 2
+    assert "widget.ts:1:1: fake/rule from the npx fallback" in result.stderr
+    assert [args[:2] for tool, args in calls(log) if tool == "npx"] == [
+        ["--yes", "prettier"],
+        ["--yes", "eslint"],
+    ]

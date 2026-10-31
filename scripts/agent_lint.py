@@ -76,7 +76,10 @@ def _venv_tool(name: str) -> list[str]:
     binary = venv / "Scripts" / f"{name}.exe" if os.name == "nt" else venv / "bin" / name
     # Direct, because `uv run` costs a second per call (S06). Without a
     # synced venv, slower beats skipping the check.
-    return [str(binary)] if binary.is_file() else ["uv", "run", "--quiet", name]
+    if binary.is_file():
+        return [str(binary)]
+    # `which`, because on Windows a bare "uv" finds only uv.exe on PATH.
+    return [shutil.which("uv") or "uv", "run", "--quiet", name]
 
 
 def _node_tool(name: str) -> list[str]:
@@ -162,12 +165,14 @@ def _complexity_findings(relative: Path) -> list[str]:
 #
 # A cold `mypy src` takes about 34s and a warm daemon recheck under a second,
 # so the edit hook only ever asks a daemon that has finished its first check.
-# Everything lives in the gitignored .mypy_cache, one daemon per worktree.
-DMYPY_STATUS = ROOT / ".mypy_cache" / "dmypy.json"
+# Everything lives in the gitignored .mypy_cache, one daemon per worktree
+# (AGENT_LINT_STATE_DIR moves it, so tests never touch a real daemon's state).
+STATE = Path(os.environ.get("AGENT_LINT_STATE_DIR", ROOT / ".mypy_cache"))
+DMYPY_STATUS = STATE / "dmypy.json"
 # Holds the pid of the daemon whose first full check has finished.
-DMYPY_WARM = ROOT / ".mypy_cache" / "agent-lint-dmypy.warm"
+DMYPY_WARM = STATE / "agent-lint-dmypy.warm"
 # Present while a warm-up runs, so concurrent edits do not start a second one.
-DMYPY_WARMING = ROOT / ".mypy_cache" / "agent-lint-dmypy.warming"
+DMYPY_WARMING = STATE / "agent-lint-dmypy.warming"
 WARMING_STALE_AFTER_S = 300
 DMYPY_IDLE_TIMEOUT_S = 1800
 DMYPY_CHECK_TIMEOUT_S = 20
