@@ -51,7 +51,7 @@ The provider browser tests cover both color preferences at 1280 by 800,
 including the in-progress status and explicit Refresh. No frontend layout or
 mockup changed. OpenAPI and typed-client regeneration produces no schema diff.
 
-Final code at `2280384abd5bd3c9f2ebbe0636efed168dd95fc8` passes `./scripts/check.sh`
+The initial delivery at `2280384abd5bd3c9f2ebbe0636efed168dd95fc8` passes `./scripts/check.sh`
 in Cygwin zsh. Python reports 3,767 passed, seven skipped and 55 deselected,
 with 95.65% branch-enabled combined coverage and 90.44% of branches covered.
 The frontend reports 1,283 passed across 97 files and 90.17% branch coverage.
@@ -75,3 +75,74 @@ pending with independent review and CI. This lane never runs local real-shop
 e2e, changes credentials or invokes live model generation.
 
 Delivery: [PR #150](https://github.com/eli-jordan/etsy-listing-automation/pull/150).
+
+## S1 follow-up: launcher exits before pipe EOF
+
+The independent Standards review reproduced a residual lifecycle defect after
+the initial delivery: a synthetic launcher exited successfully while its child
+kept captured pipes open. `taskkill /T` could no longer find the exited launcher,
+so discovery exhausted its cleanup allowance with the child and reader still
+alive. The expected-correct public `ModelDiscovery.read` regression first
+failed before implementation in 6.03 seconds. With the final launcher handshake,
+it also fails against the published `19b39821` owner in 6.41 seconds with
+“the descendant survived managed cleanup”; its `finally` cleanup stops the
+synthetic process. That confirmation loaded the old owner from Git into the
+current public discovery test without changing the checkout.
+
+The shared process owner now attaches an unnamed, non-inherited Windows Job
+Object atomically during `CreateProcessW`, before the child can execute. The
+job disallows breakaway and has kill-on-close protection. It remains the owner
+after launcher exit, so neither a descendant snapshot nor a helper process is
+needed. Explicit handle inheritance is limited to stdin, stdout and stderr.
+Cleanup terminates the job, drains and joins the readers, checks that the job
+has no active processes, and waits for the pinned launcher handle within one
+five-second allowance. Successful and failed launcher exits also end leftover
+descendants without waiting for the generation/discovery deadline.
+
+This uses the Windows 10+ `PROC_THREAD_ATTRIBUTE_JOB_LIST` contract documented
+by Microsoft in
+[process attributes](https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-updateprocthreadattribute)
+and [Job Objects](https://learn.microsoft.com/en-us/windows/win32/procthread/job-objects).
+POSIX retains a new session's unreaped leader with `waitid(WNOWAIT)` until
+group termination, reserving its PID/PGID even after exit. The raw descendant
+PID scan is removed. POSIX children must remain in their inherited group;
+Windows job ownership also contains nested jobs and outlives the launcher.
+The macOS Python 3.12 fallback uses libc's waitid contract and the constants in
+Apple's [wait.h](https://github.com/apple-oss-distributions/xnu/blob/main/bsd/sys/wait.h).
+Discovery and adapters contain no platform-specific cleanup code. ADR-0056's
+advisory cache/lifecycle and ADR-0057's generation/fallback budgets are unchanged.
+
+The real-process fixture holds the launcher behind an acknowledgment until the
+test pins launcher and descendant identities. On Windows it uses the base
+interpreter so a venv redirector cannot be mistaken for the CMD launcher.
+It waits on that pinned launcher before triggering timeout or cancellation.
+Assertions cover child
+liveness, a stopped heartbeat, and joined reader threads. Early success and
+error exits run with inherited and redirected pipes. The original still-running
+launcher/descendant test remains and uses an actual synthetic executable.
+Obsolete taskkill/private-helper wiring tests
+are replaced by real public I/O tests for argument quoting, cwd, UTF-8 input,
+failure output, simultaneous large streams and launch refusal. A red/green
+argument control also preserves Popen's embedded-NUL refusal: native Windows
+launch must reject that input instead of silently truncating the command.
+
+Focused validation passes all 29 process, discovery and host-lifecycle cases.
+The final `./scripts/check.sh` run passes in Cygwin zsh: 3,763 Python tests pass,
+seven skip and 55 are deselected. Branch-enabled combined coverage is 95.47%;
+3,832 of 4,250 branches are covered (90.16%). The frontend passes 1,283 tests
+across 97 files with 90.15% branch coverage. Ruff formatting/lint, strict typing
+and all eleven Import Linter contracts pass. Separate `npm run test:design`
+passes four tests, and `npm run build` passes. The separate
+`ETSY_LISTINGS_REQUIRE_EVERY_LAYER=1 uv run pytest -m browser` run passes all
+152 cases without skips. The final full gate repeats its browser and design
+layers successfully. Linux and macOS process-owner typing also passes; actual
+local process execution is Windows evidence.
+
+This follow-up adds 275 production Python SLOC and 54 test SLOC, measured with
+`scripts/sloc.py`. The full PR adds 370 production Python SLOC and 594 test SLOC.
+There are no UI, generated-schema, dependency-pin or file-mode changes in this
+follow-up. The ignored UI hooks remain untracked. Shared mechanism documentation
+changes are confined to `docs/architecture.md` and `core/ai/__init__.py`.
+
+Linux execution, independent review of this new Runtime head and serial GitHub
+e2e remain CI/parent work. No live provider or real-shop e2e ran here.

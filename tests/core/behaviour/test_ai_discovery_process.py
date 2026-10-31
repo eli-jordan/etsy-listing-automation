@@ -5,7 +5,7 @@ from pathlib import Path
 
 from etsy_listings.core.ai.discovery import ModelDiscovery
 
-from tests.support.ai_processes import redirect_local_cli
+from tests.support.ai_processes import local_cli
 
 
 def test_discovery_kills_descendants_and_returns_within_its_budget(
@@ -25,10 +25,10 @@ def test_discovery_kills_descendants_and_returns_within_its_budget(
         f"subprocess.Popen([sys.executable,'-c',{descendant!r},{str(marker)!r}])\n"
         "time.sleep(10)\n"
     )
-    redirect_local_cli(monkeypatch, "audit-codex", parent)
+    command = local_cli(tmp_path, parent)
     monkeypatch.setattr(
         "etsy_listings.core.ai.discovery.shutil.which",
-        lambda name: "audit-codex" if name == "codex" else None,
+        lambda name: str(command) if name == "codex" else None,
     )
     started = time.monotonic()
 

@@ -2,12 +2,9 @@
 
 These launch genuine `sys.executable` child *and grandchild* processes (never
 `codex`/`claude` -- no provider CLI, no cost, no network) and assert they are
-actually dead afterwards, by checking OS-visible liveness rather than a
-double's call log. The wiring itself -- which flags, which kill call, on which
-platform -- is ``tests/core/unit/test_ai_process.py``'s, against a fake
-`Popen`; a double recording "I was asked to kill pid 4321" never proves pid
-4321, or anything it spawned, is gone. That is this subject's job, along with
-UTF-8 crossing a real pipe whatever the locale.
+actually dead afterwards, by checking OS-visible liveness. Exited launchers
+and reader shutdown have separate real-process regressions; the public I/O
+contract also uses local Python children instead of provider binaries.
 """
 
 from __future__ import annotations
@@ -122,10 +119,7 @@ def test_run_managed_actually_kills_a_real_process_and_its_grandchild_on_timeout
     _wait_for_file_to_appear(child_marker, timeout=5.0)
     _wait_for_file_to_appear(grandchild_marker, timeout=5.0)
 
-    # And neither file grows any further once `run_managed` has returned --
-    # proof the whole tree (not just the direct child `_kill_process_tree`
-    # was handed) is actually dead, not merely that a mock was asked to kill
-    # it.
+    # Both heartbeats must stop when the managed tree has been cleaned up.
     _assert_stopped_growing(child_marker, settle=0.5)
     _assert_stopped_growing(grandchild_marker, settle=0.5)
 
