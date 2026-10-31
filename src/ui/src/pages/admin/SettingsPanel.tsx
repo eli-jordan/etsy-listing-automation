@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 import { useWorkspaceSettings } from "./useWorkspaceSettings";
 import { MarketWeights } from "./MarketWeights";
+import { AiProviders } from "./AiProviders";
 import "./settings.css";
 
 export function SettingsPanel() {
@@ -43,6 +44,19 @@ export function SettingsPanel() {
         </button>
       )}
       <fieldset disabled={state.locked} className="settings-fields">
+        <AiProviders
+          key={`providers-${state.loadedVersion}`}
+          initial={settings.providers}
+          locked={state.locked}
+          onSave={(providers) => state.save({ providers })}
+        />
+        {Object.entries(state.fieldErrors)
+          .filter(([key]) => key.startsWith("ai"))
+          .map(([key, message]) => (
+            <p role="alert" key={key}>
+              {key}: {message}
+            </p>
+          ))}
         <Batch
           key={state.loadedVersion}
           initial={settings.concurrency}
