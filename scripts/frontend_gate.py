@@ -43,7 +43,7 @@ def main(scripts: list[str]) -> int:
         return 0
     for script in scripts:
         print(f"== frontend: npm run {script} ==", flush=True)
-        code = subprocess.run([*npm, "run", script], cwd=UI).returncode
+        code = subprocess.run([*npm, "run", script], cwd=UI, check=False).returncode
         if code:
             return code
     return 0

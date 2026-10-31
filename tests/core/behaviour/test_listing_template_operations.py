@@ -95,7 +95,8 @@ class TestCreate:
     ) -> None:
         outcome = _create(workspace)
 
-        assert outcome.saved and outcome.template is not None
+        assert outcome.saved
+        assert outcome.template is not None
         assert outcome.template.name == NAME
         assert outcome.template.template.colors == ["black", "blue-jean", "ivory", "moss"]
         assert outcome.template.modified_at is not None
@@ -120,7 +121,8 @@ class TestCreate:
 
         outcome = _create(workspace)
 
-        assert not outcome.saved and outcome.template is None
+        assert not outcome.saved
+        assert outcome.template is None
         assert (outcome.issues[0].severity, outcome.issues[0].where) == (
             "block",
             "Variants › Colours",
@@ -179,7 +181,8 @@ class TestCreate:
             _create(workspace, document={**document, "media": [BLACK, "./assets/elsewhere.png"]})
 
         assert not incomplete.saved
-        assert not malformed.saved and "brief" in malformed.field_errors
+        assert not malformed.saved
+        assert "brief" in malformed.field_errors
         assert not workspace.listing_templates_dir().exists()
 
     def test_a_clone_is_created_from_another_template(self, workspace: Workspace) -> None:
@@ -200,7 +203,8 @@ class TestDraftAndRead:
 
         draft = draft_listing_template(workspace, from_listing=FIXTURE_LISTING, from_template=None)
 
-        assert draft.name == "" and draft.modified_at is None
+        assert draft.name == ""
+        assert draft.modified_at is None
         assert draft.source is not None
         assert (draft.source.kind, draft.source.name) == ("listing", FIXTURE_LISTING)
         assert draft.template.media[1] == "./assets/shots/back.png"
@@ -281,7 +285,8 @@ class TestEdit:
             locks=locks,
         )
 
-        assert not outcome.saved and outcome.issues[0].where == "Variants › Colours"
+        assert not outcome.saved
+        assert outcome.issues[0].where == "Variants › Colours"
         assert workspace.listing_template_file(NAME).read_bytes() == before
 
     def test_a_malformed_document_is_not_saved(
@@ -294,7 +299,8 @@ class TestEdit:
             workspace, NAME, {**_document(workspace), "brief": "no"}, locks=locks
         )
 
-        assert not outcome.saved and "brief" in outcome.field_errors
+        assert not outcome.saved
+        assert "brief" in outcome.field_errors
         assert workspace.listing_template_file(NAME).read_bytes() == before
 
     def test_a_complete_document_is_written_and_answered(
@@ -307,7 +313,8 @@ class TestEdit:
             {**_document(workspace), "colors": ["black"], "media": [BLACK]},
             locks=locks,
         )
-        assert outcome.saved and outcome.template is not None
+        assert outcome.saved
+        assert outcome.template is not None
         assert outcome.template.template.colors == ["black"]
         assert workspace.load_listing_template(NAME).colors == ["black"]
 
@@ -358,7 +365,8 @@ class TestRenameAndDelete:
         assert record.listing_template == "everyday-tee"
         assert record.template == {"frozen": True}
         staged = staging.load(session.id)
-        assert staged is not None and staged.listing_template == "everyday-tee"
+        assert staged is not None
+        assert staged.listing_template == "everyday-tee"
 
     def test_a_taken_name_is_refused_and_nothing_moves(
         self, workspace: Workspace, locks: WorkspaceLocks
@@ -493,7 +501,8 @@ class TestCompetingWrites:
             lambda: _create(workspace, locks=locks),
         )
 
-        assert isinstance(first, TemplateSave) and first.saved
+        assert isinstance(first, TemplateSave)
+        assert first.saved
         assert isinstance(second, ListingTemplateExistsError)
         assert workspace.listing_template_names() == [NAME]
 

@@ -294,7 +294,8 @@ def test_visible_is_kept_as_a_tripwire() -> None:
         SHOP_ID, PRODUCT_ID
     )
 
-    assert product is not None and product.visible is False
+    assert product is not None
+    assert product.visible is False
 
 
 def test_external_is_absent_rather_than_null_before_a_publish() -> None:
@@ -302,7 +303,8 @@ def test_external_is_absent_rather_than_null_before_a_publish() -> None:
         SHOP_ID, PRODUCT_ID
     )
 
-    assert product is not None and product.external is None
+    assert product is not None
+    assert product.external is None
 
 
 # ----------------------------------------------------------------- the update

@@ -33,6 +33,7 @@ def run_hook(payload: dict[str, object], **env: str) -> subprocess.CompletedProc
         text=True,
         env={**os.environ, **env},
         timeout=120,
+        check=False,
     )
 
 

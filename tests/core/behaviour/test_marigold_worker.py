@@ -149,7 +149,9 @@ def test_idle_exit_restarts_on_next_call_without_failed_attempt(tmp_path):
             == "second.npz"
         )
         starts = worker_pids(tmp_path)
-        assert len(starts) == 2 and starts[0] == first and starts[1] != first
+        assert len(starts) == 2
+        assert starts[0] == first
+        assert starts[1] != first
 
 
 def test_worker_protocol_rejects_unsafe_paths_and_malformed_requests(tmp_path):
@@ -177,6 +179,7 @@ def test_worker_protocol_rejects_unsafe_paths_and_malformed_requests(tmp_path):
         capture_output=True,
         text=True,
         timeout=5,
+        check=False,
     )
     messages = [json.loads(line) for line in result.stdout.splitlines()]
     assert any(
@@ -331,7 +334,8 @@ def test_warm_startup_cancellation_is_rechecked_before_dispatch(tmp_path):
             finally:
                 (tmp_path / "startup-release").touch()
             error = starting.outcome()
-        assert isinstance(error, WorkerError) and "during startup" in str(error)
+        assert isinstance(error, WorkerError)
+        assert "during startup" in str(error)
         assert not (tmp_path / "refused.npz").exists()
         assert (
             worker.infer(

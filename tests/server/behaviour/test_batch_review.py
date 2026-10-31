@@ -138,7 +138,8 @@ def test_a_later_edit_or_a_regenerated_proposal_leaves_reviewed_alone(
     _generate_proposal(client, "night-hike-club")
 
     after = ProposalStore(workspace).load("night-hike-club")
-    assert before is not None and after is not None
+    assert before is not None
+    assert after is not None
     assert after.generated_at != before.generated_at or after.snapshot != before.snapshot
     assert _summary(client, batch_id)["rows"][0]["reviewed"] is True
     assert _status(client, batch_id) == "complete"

@@ -249,7 +249,8 @@ def test_material_artwork_reuses_exact_read_only_samples_and_invalidates(tmp_pat
     images = PreviewImages()
     pixels, packed = images.material_design(path, max_edge=32)
     again, same_packed = images.material_design(path, max_edge=32)
-    assert again is pixels and same_packed is packed
+    assert again is pixels
+    assert same_packed is packed
     assert pixels.shape == packed.shape == (16, 32, 4)
     assert packed.dtype == np.float32
     assert not packed.flags.writeable
@@ -317,4 +318,5 @@ def test_material_artwork_larger_than_the_budget_is_served_without_retention(tmp
     _, second = images.material_design(path, max_edge=32)
     assert first is not second
     assert images.held_bytes == pixels.nbytes
-    assert not first.flags.writeable and not second.flags.writeable
+    assert not first.flags.writeable
+    assert not second.flags.writeable

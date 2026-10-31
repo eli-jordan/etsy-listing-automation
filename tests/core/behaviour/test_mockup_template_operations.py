@@ -104,7 +104,8 @@ class TestOverview:
     ) -> None:
         flat = _overview(workspace, "flat-lay-01")
         assert flat.kind == "colour-matrix"
-        assert flat.calibrated and flat.status_reason is None
+        assert flat.calibrated
+        assert flat.status_reason is None
         assert flat.colours == ["black", "blue-jean", "ivory", "moss"]
         assert next((p.colour, p.file) for p in flat.photos) == (
             "black",
@@ -196,7 +197,8 @@ class TestAssignKind:
     def test_multiple_starts_with_no_boxes(self, workspace: Workspace) -> None:
         _folder(workspace, "fresh", "chart.png")
         config = assign_kind(workspace, "fresh", "multiple")
-        assert isinstance(config, MultipleTemplate) and config.placements == []
+        assert isinstance(config, MultipleTemplate)
+        assert config.placements == []
 
     def test_a_scene_kind_refuses_a_set_of_photos(self, workspace: Workspace) -> None:
         _folder(workspace, "fresh", "a.png", "b.png")
@@ -428,7 +430,8 @@ class TestPhotosAndSwatch:
             return load_template_base(path)
 
         hex_colour = template_swatch(workspace, "flat-lay-01", "black", photo=photo)
-        assert hex_colour.startswith("#") and len(hex_colour) == 7
+        assert hex_colour.startswith("#")
+        assert len(hex_colour) == 7
         assert [p.name for p in read] == ["black.png"]
 
     def test_only_a_colour_matrix_has_a_swatch(self, workspace: Workspace) -> None:

@@ -46,6 +46,7 @@ def run_setup(bin_dir: Path, **env: str) -> tuple[subprocess.CompletedProcess[st
         text=True,
         env={**os.environ, "PATH": str(bin_dir), "FAKE_LOG": str(log), **env},
         timeout=60,
+        check=False,
     )
     calls = [json.loads(line) for line in log.read_text().splitlines()] if log.exists() else []
     return result, calls

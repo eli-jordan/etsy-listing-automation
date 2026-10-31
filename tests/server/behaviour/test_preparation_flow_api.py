@@ -279,7 +279,9 @@ def test_interactive_colour_selection_changes_only_the_target_photo(workspace_ro
             outputs[colour] = Image.open(BytesIO(response.content)).convert("RGB")
         navy = outputs["navy"].getpixel((9, 32))
         ivory = outputs["ivory"].getpixel((9, 32))
-        assert navy[0] < 40 and navy[1] < 40 and navy[2] > 90, navy
+        assert navy[0] < 40, navy
+        assert navy[1] < 40, navy
+        assert navy[2] > 90, navy
         assert min(ivory) > 200, ivory
         after = client.get(status_url).json()
         assert after["main_photo"] == ready["main_photo"]

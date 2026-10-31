@@ -44,4 +44,5 @@ def test_an_unknown_extension_is_refused_by_name(ref: str) -> None:
         media_kind(ref)
     message = str(exc_info.value)
     assert ref in message
-    assert ".png" in message and ".mp4" in message
+    assert ".png" in message
+    assert ".mp4" in message

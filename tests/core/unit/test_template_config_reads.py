@@ -34,7 +34,8 @@ def test_same_size_same_mtime_external_edit_is_read_and_invalidity_keeps_its_pat
     initial = workspace.load_template_config("shirt")
     stamp = path.stat()
     changed = original.replace("fabric_texture: 0.25", "fabric_texture: 0.75")
-    assert changed != original and len(changed) == len(original)
+    assert changed != original
+    assert len(changed) == len(original)
     path.write_text(changed, encoding="utf-8")
     os.utime(path, ns=(stamp.st_atime_ns, stamp.st_mtime_ns))
     current = workspace.load_template_config("shirt")

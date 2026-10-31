@@ -935,7 +935,8 @@ class RenderStage:
     def _render_prepared(
         workspace: Workspace, work: SceneWork, target: Path, *, preview: Path | None = None
     ) -> None:
-        assert work.preparation is not None and work.appearance is not None
+        assert work.preparation is not None
+        assert work.appearance is not None
         try:
             with lease_scene(
                 workspace,

@@ -100,7 +100,8 @@ def test_a_colour_with_no_variants_at_all_is_fatal() -> None:
 
     message = str(exc_info.value)
     assert "blak" in message
-    assert "black" in message and "blue-jean" in message
+    assert "black" in message
+    assert "blue-jean" in message
 
 
 def test_a_size_no_colour_offers_is_fatal() -> None:
@@ -111,7 +112,8 @@ def test_a_size_no_colour_offers_is_fatal() -> None:
 
     message = str(exc_info.value)
     assert "XXXXL" in message
-    assert "S" in message and "L" in message
+    assert "S" in message
+    assert "L" in message
 
 
 def test_slug_exceptions_are_honoured() -> None:

@@ -131,6 +131,7 @@ class GrokProvider:
                 capture_output=True,
                 text=True,
                 timeout=_READINESS_TIMEOUT_SECONDS,
+                check=False,
             )
         except (OSError, subprocess.SubprocessError) as exc:
             return ProviderReadiness(

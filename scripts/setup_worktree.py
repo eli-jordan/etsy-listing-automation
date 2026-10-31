@@ -30,7 +30,7 @@ def main() -> int:
         print("setup_worktree: uv is not on PATH", file=sys.stderr)
         return 1
     print("== uv sync ==", flush=True)
-    code = subprocess.run([uv, "sync"], cwd=ROOT).returncode
+    code = subprocess.run([uv, "sync"], cwd=ROOT, check=False).returncode
     if code:
         return code
     npm = npm_command()
@@ -39,7 +39,7 @@ def main() -> int:
         print("setup_worktree: npm is not on PATH; src/ui is not installed", file=sys.stderr)
         return 1
     print("== npm install (src/ui) ==", flush=True)
-    return subprocess.run([*npm, "install"], cwd=UI).returncode
+    return subprocess.run([*npm, "install"], cwd=UI, check=False).returncode
 
 
 if __name__ == "__main__":

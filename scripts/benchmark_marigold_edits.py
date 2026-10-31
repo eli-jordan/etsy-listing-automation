@@ -93,7 +93,8 @@ def visible_ink_point(
         height, round((area["y"] + area["height"] * 0.92 - bounds["y"]) / bounds["height"] * height)
     )
     region = difference[y0:y1, x0:x1]
-    assert region.size and region.max() > 30, "Real artwork must have visible ink to mask"
+    assert region.size, "Real artwork must have visible ink to mask"
+    assert region.max() > 30, "Real artwork must have visible ink to mask"
     y, x = np.unravel_index(region.argmax(), region.shape)
     return {
         "x": bounds["x"] + (x0 + int(x) + 0.5) * bounds["width"] / width,

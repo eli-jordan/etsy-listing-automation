@@ -404,7 +404,8 @@ def test_the_snapshot_names_every_live_image_with_its_url_and_ref(
     assert len(snapshot.live) == 1
     row = snapshot.live[0]
     assert row.ref == f"{TEMPLATE}:black"
-    assert row.url is not None and row.url.startswith("https://fake-etsy.test/")
+    assert row.url is not None
+    assert row.url.startswith("https://fake-etsy.test/")
     assert row.image_id == lock.remote["etsy_image_ids"][f"{TEMPLATE}:black"]
 
 

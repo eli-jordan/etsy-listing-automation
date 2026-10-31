@@ -1410,7 +1410,8 @@ def test_a_saved_search_shows_beside_the_fields_and_after_a_reload(
 
         fields = page.get_by_role("group", name="Listing details").bounding_box()
         beside = panel.bounding_box()
-        assert fields is not None and beside is not None
+        assert fields is not None
+        assert beside is not None
         assert beside["x"] >= fields["x"] + fields["width"]
 
         page.reload()
@@ -1421,7 +1422,8 @@ def test_a_saved_search_shows_beside_the_fields_and_after_a_reload(
         page.set_viewport_size({"width": 1000, "height": 1000})
         fields = page.get_by_role("group", name="Listing details").bounding_box()
         below = panel.bounding_box()
-        assert fields is not None and below is not None
+        assert fields is not None
+        assert below is not None
         assert below["y"] >= fields["y"] + fields["height"]
 
 

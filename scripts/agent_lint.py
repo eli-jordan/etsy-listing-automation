@@ -95,6 +95,7 @@ def _run(command: list[str], *args: str, cwd: Path = ROOT) -> subprocess.Complet
         text=True,
         encoding="utf-8",
         errors="replace",
+        check=False,
     )
 
 
@@ -182,6 +183,7 @@ def _dmypy(*args: str, timeout: float | None = None) -> subprocess.CompletedProc
         encoding="utf-8",
         errors="replace",
         timeout=timeout,
+        check=False,
     )
 
 
@@ -289,6 +291,7 @@ def _added_lines(relative: Path) -> list[tuple[int, str]]:
         ["git", "ls-files", "--error-unmatch", relative.as_posix()],
         cwd=ROOT,
         capture_output=True,
+        check=False,
     )
     text = (ROOT / relative).read_text(encoding="utf-8", errors="replace")
     if tracked.returncode != 0:
@@ -312,6 +315,7 @@ def _added_lines(relative: Path) -> list[tuple[int, str]]:
         text=True,
         encoding="utf-8",
         errors="replace",
+        check=False,
     ).stdout
     added: list[tuple[int, str]] = []
     number = 0

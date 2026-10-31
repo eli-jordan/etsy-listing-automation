@@ -214,7 +214,8 @@ class TestTemplateRail:
         widths = page.locator("img.template-rail__thumb").evaluate_all(
             "imgs => imgs.map(i => i.naturalWidth)"
         )
-        assert widths and all(0 < w <= 160 for w in widths)
+        assert widths
+        assert all(0 < w <= 160 for w in widths)
 
     def test_searching_narrows_the_rail(self, page) -> None:
         page.wait_for_selector(".template-rail__item")

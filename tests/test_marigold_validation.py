@@ -11,7 +11,8 @@ def test_diagnostic_artwork_covers_opaque_and_transparent_print(tmp_path):
     spec = importlib.util.spec_from_file_location(
         "validation", Path(__file__).parents[1] / "scripts/validate_marigold.py"
     )
-    assert spec and spec.loader
+    assert spec
+    assert spec.loader
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     design = tmp_path / "real.png"
@@ -33,7 +34,8 @@ def test_validation_refuses_output_inside_read_only_input(tmp_path):
     spec = importlib.util.spec_from_file_location(
         "validation", Path(__file__).parents[1] / "scripts/validate_marigold.py"
     )
-    assert spec and spec.loader
+    assert spec
+    assert spec.loader
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     source = tmp_path / "read-only-source"
@@ -48,7 +50,8 @@ def test_watchdog_identifies_only_its_native_worker_despite_blank_wmic_rows(tmp_
     spec = importlib.util.spec_from_file_location(
         "watchdog", Path(__file__).parents[1] / "scripts/validate_marigold_watchdog.py"
     )
-    assert spec and spec.loader
+    assert spec
+    assert spec.loader
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     cache = tmp_path / "unique-cache"
@@ -66,7 +69,8 @@ def test_watchdog_selects_backend_child_of_its_verified_venv_launcher(tmp_path, 
     spec = importlib.util.spec_from_file_location(
         "watchdog", Path(__file__).parents[1] / "scripts/validate_marigold_watchdog.py"
     )
-    assert spec and spec.loader
+    assert spec
+    assert spec.loader
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     cache = tmp_path / "unique-cache"

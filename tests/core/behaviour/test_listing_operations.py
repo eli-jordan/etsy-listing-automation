@@ -408,7 +408,8 @@ class TestDeleteListing:
 
         _delete(workspace, ai_runs=runs)
 
-        assert run.stop_reason == "cancelled" and run.cancel_event.is_set()
+        assert run.stop_reason == "cancelled"
+        assert run.cancel_event.is_set()
         assert [(row.name, row.deleted) for row in batch_rows(store, "b1")] == [
             (NAME, True),
             ("someone-else", False),

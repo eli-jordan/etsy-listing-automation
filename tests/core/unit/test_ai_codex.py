@@ -288,11 +288,14 @@ def test_generate_builds_the_expected_argv(monkeypatch: pytest.MonkeyPatch, tmp_
     assert argv[0] == "/resolved/codex"  # the shutil.which-resolved path, not the bare name
     assert argv[1] == "exec"
     assert argv[-1] == "-", "the prompt is piped via stdin, not passed as an argv value"
-    assert "-s" in argv and argv[argv.index("-s") + 1] == "read-only"
+    assert "-s" in argv
+    assert argv[argv.index("-s") + 1] == "read-only"
     assert "--ephemeral" in argv
     assert "--skip-git-repo-check" in argv
-    assert "-C" in argv and argv[argv.index("-C") + 1] == str(tmp_path)
-    assert "-i" in argv and argv[argv.index("-i") + 1] == str(request.design_image)
+    assert "-C" in argv
+    assert argv[argv.index("-C") + 1] == str(tmp_path)
+    assert "-i" in argv
+    assert argv[argv.index("-i") + 1] == str(request.design_image)
     assert "--output-schema" in argv
     assert "-o" in argv
     assert call["cwd"] == tmp_path

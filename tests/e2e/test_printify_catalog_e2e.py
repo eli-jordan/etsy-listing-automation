@@ -125,7 +125,8 @@ class TestAuthenticatedCatalogEndpoints:
         response = catalog._transport.get("/v1/catalog/blueprints/706/print_providers.json")
         assert response.status_code == 200
         payload = response.json()
-        assert isinstance(payload, list) and payload
+        assert isinstance(payload, list)
+        assert payload
         for item in payload:
             decoded = PrintProvider.model_validate(item)
             assert decoded.id > 0

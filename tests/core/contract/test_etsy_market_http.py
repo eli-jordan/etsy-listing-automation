@@ -276,7 +276,8 @@ def test_more_than_a_hundred_ids_are_asked_for_in_chunks_of_a_hundred() -> None:
     listings = _client(handler).listings_by_ids(list(range(1, 251)))
 
     assert [len(chunk) for chunk in chunks] == [100, 100, 50]
-    assert chunks[0][0] == 1 and chunks[2][-1] == 250
+    assert chunks[0][0] == 1
+    assert chunks[2][-1] == 250
     assert [listing.listing_id for listing in listings] == list(range(1, 251))
 
 

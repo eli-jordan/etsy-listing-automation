@@ -104,7 +104,8 @@ class TestEdit:
     ) -> None:
         written = documents.edit(NAME, lambda raw: {**raw, "brief": "A sunset hike."})
 
-        assert written is not None and written["brief"] == "A sunset hike."
+        assert written is not None
+        assert written["brief"] == "A sunset hike."
         assert _on_disk(workspace)["brief"] == "A sunset hike."
 
     def test_a_declined_change_writes_nothing(

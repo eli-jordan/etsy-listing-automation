@@ -286,12 +286,14 @@ def test_renderer_switch_keeps_the_same_centered_canvas_size(page):
     page.wait_for_function("() => document.querySelector('.quad-editor__image')?.naturalWidth > 0")
     before = page.locator(".app").bounding_box()
     photo_before = photo.bounding_box()
-    assert before is not None and photo_before is not None
+    assert before is not None
+    assert photo_before is not None
     page.get_by_label("Renderer", exact=True).select_option("marigold")
     page.get_by_role("button", name="Prepare template", exact=True).wait_for()
     after = page.locator(".app").bounding_box()
     photo_after = photo.bounding_box()
-    assert after is not None and photo_after is not None
+    assert after is not None
+    assert photo_after is not None
     assert after["width"] == pytest.approx(before["width"], abs=1)
     assert after["x"] == pytest.approx(before["x"], abs=1)
     assert photo_after["width"] == pytest.approx(photo_before["width"], abs=1)

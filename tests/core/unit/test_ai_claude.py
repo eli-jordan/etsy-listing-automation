@@ -300,7 +300,8 @@ def test_generate_builds_the_expected_argv(monkeypatch: pytest.MonkeyPatch, tmp_
     argv = call["argv"]
     assert argv[0] == "/resolved/claude"  # the shutil.which-resolved path, not the bare name
     assert "-p" in argv
-    assert "--output-format" in argv and argv[argv.index("--output-format") + 1] == "json"
+    assert "--output-format" in argv
+    assert argv[argv.index("--output-format") + 1] == "json"
     assert "--no-session-persistence" in argv
     assert "--tools" in argv
     assert "--json-schema" in argv

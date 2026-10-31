@@ -308,7 +308,8 @@ def test_runs_execute_one_at_a_time_in_the_order_queued_after_yielding_ai_work(
         deployments.stop()
 
     assert held == [(True, False), (False, True)]
-    assert not ai.registry.deploying(LISTING) and not ai.registry.deploying("second")
+    assert not ai.registry.deploying(LISTING)
+    assert not ai.registry.deploying("second")
     assert (first.phase, second.phase) == ("applied", "ready")
 
 

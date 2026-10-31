@@ -107,7 +107,8 @@ def run(output: Path) -> None:
                 name,
                 Path(__file__).with_name("validate_marigold_" + name + ".py"),
             )
-            assert spec and spec.loader
+            assert spec
+            assert spec.loader
             module = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(module)
             modules[name] = module

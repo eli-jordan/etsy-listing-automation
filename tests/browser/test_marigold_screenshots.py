@@ -86,7 +86,9 @@ def test_the_marigold_toolbar_fits_its_bar_at_desktop_widths(page):
         bar = page.locator(".app__preview-bar").bounding_box()
         tabs = page.get_by_role("tablist").bounding_box()
         picker = page.get_by_label("Test design", exact=True).bounding_box()
-        assert bar is not None and tabs is not None and picker is not None
+        assert bar is not None
+        assert tabs is not None
+        assert picker is not None
         if width == 1440:
             assert abs(tabs["y"] - picker["y"]) < 8
         else:

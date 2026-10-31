@@ -111,7 +111,8 @@ def run(source: Path, output: Path) -> None:
     spec = importlib.util.spec_from_file_location(
         "validation", Path(__file__).with_name("validate_marigold.py")
     )
-    assert spec and spec.loader
+    assert spec
+    assert spec.loader
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     designs = module.artwork_cases(source / "designs/coding-x-music-master-of-packets.png")

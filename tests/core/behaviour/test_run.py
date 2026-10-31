@@ -84,7 +84,8 @@ def test_local_render_refusals_preserve_the_rest_of_the_batch(
 
     assert report.outcomes[0].planned is not None
     plans = report.outcomes[0].planned.plan.stage_plans
-    assert plans[0].stage == "render" and plans[0].blocked
+    assert plans[0].stage == "render"
+    assert plans[0].blocked
     assert len(plans) == len(STAGES)
     assert report.outcomes[1].ok
 

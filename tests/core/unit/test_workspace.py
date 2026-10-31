@@ -877,5 +877,6 @@ def test_design_content_hash_tolerates_an_empty_slot(workspace_root: Path) -> No
         {"on-light": None, "on-dark": None}, listing_dir=listing_dir
     )
 
-    assert partial is not None and empty_pair is not None
+    assert partial is not None
+    assert empty_pair is not None
     assert len({partial, without, empty_pair}) == 3

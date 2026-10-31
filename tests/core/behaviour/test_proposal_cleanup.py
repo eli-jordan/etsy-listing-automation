@@ -183,7 +183,8 @@ def test_an_ok_apply_that_leaves_the_incomplete_marker_keeps_the_proposal(
 
     assert retried.ok, retried.error
     lock = Lockfile.read(a_context(workspace_root).workspace.lock_file(LISTING))
-    assert lock is not None and lock.incomplete is not None
+    assert lock is not None
+    assert lock.incomplete is not None
     assert has_proposal(workspace_root)
 
 

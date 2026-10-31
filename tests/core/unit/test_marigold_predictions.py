@@ -66,6 +66,7 @@ def test_prediction_loading_imports_no_model_runtime(tmp_path):
         ],
         capture_output=True,
         text=True,
+        check=False,
     )
     assert result.returncode == 0, result.stderr
 

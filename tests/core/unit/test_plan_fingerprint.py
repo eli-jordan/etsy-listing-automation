@@ -128,4 +128,5 @@ def test_money_renders_as_the_string_a_listing_would_recognise() -> None:
     string form."""
     plan = plan_fingerprint(_plan())
 
-    assert isinstance(plan, str) and plan.startswith("sha256:")
+    assert isinstance(plan, str)
+    assert plan.startswith("sha256:")

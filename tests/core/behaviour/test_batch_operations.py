@@ -366,7 +366,8 @@ class TestConfirm:
 
         assert str(refused.value) == "AI drafting can't run yet. prompts/brief.md is missing."
         assert isinstance(refused.value, ConfirmRefused)
-        assert workspace.batch_ids() == [] and workspace.listing_names() == ["take-a-hike"]
+        assert workspace.batch_ids() == []
+        assert workspace.listing_names() == ["take-a-hike"]
         assert read_staging(workspace, staging, session.id) == session
         assert not _woken(queue)
 
@@ -413,7 +414,8 @@ class TestConfirm:
         session = _stage(workspace, staging, ("★★★.png", png(1)))
         with pytest.raises(ConfirmRefused, match="Fix 1 name to create the listings."):
             _confirm(workspace, staging, batches, session.id, queue)
-        assert workspace.listing_names() == ["take-a-hike"] and not _woken(queue)
+        assert workspace.listing_names() == ["take-a-hike"]
+        assert not _woken(queue)
 
     def test_an_unknown_session_is_refused(
         self,
@@ -485,7 +487,8 @@ class TestRetry:
 
         with pytest.raises(NothingToRetry, match="a has nothing to retry"):
             retry_batch_row(workspace, staging, batches, batch.id, batch.rows[0].id, queue=queue)
-        assert _ai(batches, batch) == [ai] and not _woken(queue)
+        assert _ai(batches, batch) == [ai]
+        assert not _woken(queue)
 
     def test_unknown_batches_and_rows_are_refused(
         self,
@@ -560,9 +563,11 @@ class TestSteerAndKeep:
 
         delete_batch(workspace, batches, batch.id, queue=queue)
 
-        assert workspace.batch_ids() == [] and queue.order() == []
+        assert workspace.batch_ids() == []
+        assert queue.order() == []
         assert _woken(queue)
-        assert workspace.listing_file("a").is_file() and workspace.design_file("a").is_file()
+        assert workspace.listing_file("a").is_file()
+        assert workspace.design_file("a").is_file()
         with pytest.raises(BatchMissing):
             delete_batch(workspace, batches, batch.id, queue=queue)
 
@@ -691,8 +696,10 @@ class TestReads:
             ("staging", waiting.id),
             ("batch", confirmed.id),
         ]
-        assert recent[0].standing is None and recent[0].expires_at == waiting.expires_at
-        assert recent[1].standing is not None and recent[1].standing.listings == 1
+        assert recent[0].standing is None
+        assert recent[0].expires_at == waiting.expires_at
+        assert recent[1].standing is not None
+        assert recent[1].standing.listings == 1
         assert stale.id not in workspace.staging_ids()
 
     def test_a_session_kept_for_a_failed_row_is_listed_once_as_its_batch(
