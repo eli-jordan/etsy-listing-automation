@@ -1,0 +1,44 @@
+{
+  "app_commit": "6b6a675b3511ebf6a7fc4bb1624683318d41643d",
+  "viewport": [
+    1280,
+    800
+  ],
+  "records": [
+    {
+      "theme": "light",
+      "state": "market",
+      "comparison": "compare-market-light.png"
+    },
+    {
+      "theme": "light",
+      "state": "conflict",
+      "comparison": "compare-conflict-light.png"
+    },
+    {
+      "theme": "light",
+      "state": "invalid",
+      "comparison": "compare-invalid-light.png"
+    },
+    {
+      "theme": "dark",
+      "state": "market",
+      "comparison": "compare-market-dark.png"
+    },
+    {
+      "theme": "dark",
+      "state": "conflict",
+      "comparison": "compare-conflict-dark.png"
+    },
+    {
+      "theme": "dark",
+      "state": "invalid",
+      "comparison": "compare-invalid-dark.png"
+    }
+  ],
+  "notes": [
+    "Both configured theme modes use the existing shared palette.",
+    "Providers and time limits are intentionally absent until PRs 5 and 6.",
+    "Screenshots use fixture workspaces, fake clients, and real Settings API saves."
+  ]
+}
