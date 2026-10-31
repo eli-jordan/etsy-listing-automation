@@ -33,6 +33,7 @@ inherit another listing's remote ids.
 
 from __future__ import annotations
 
+import copy
 import threading
 from collections.abc import Callable, Iterator, Mapping
 from contextlib import ExitStack, contextmanager
@@ -136,10 +137,13 @@ class ListingDocuments:
         """
         with self.lock(name):
             current = self.read(name)
-            changed = change(current)
+            # Callbacks may mutate nested values. Compare against the saved
+            # document, not the same object the callback was allowed to edit.
+            changed = change(copy.deepcopy(current))
             # Unchanged is a semantic no-op even when `design:` is in its old
             # form: canonicalising alone is not a reason to touch the file.
             if changed is not None and changed != current:
+                changed = canonical_document(changed)
                 self._write(name, changed)
             return changed
 
