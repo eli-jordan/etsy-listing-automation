@@ -24,6 +24,8 @@ from etsy_listings.core.workspace import layout
 from etsy_listings.core.workspace.revisions import content_revision
 from etsy_listings.core.workspace.workspace import Workspace
 
+from tests.support.source_files import identity
+
 SETTINGS_YAML = """\
 # Tuned after the October research run.
 market_seo:
@@ -406,6 +408,42 @@ def test_provider_reorder_does_not_materialize_untouched_optional_defaults(
     assert settings_path(workspace).read_bytes() == (
         b"ai:\r\n  providers:\r\n    - name: claude\r\n    - name: codex # account defaults\r\n"
     )
+
+
+@pytest.mark.parametrize("newline", ["\n", "\r\n"], ids=["lf", "crlf"])
+@pytest.mark.parametrize("insert", [False, True], ids=["reorder", "insert-after-eof-row"])
+def test_provider_rows_without_a_final_newline_can_move_or_gain_a_sibling(
+    workspace: Workspace, newline: str, insert: bool
+) -> None:
+    header = "# Keep preferences\nbatch_ai: {concurrency: 2} # untouched\nai:\n  providers:\n"
+    codex = "  - name: codex # account default\n"
+    grok = '  - name: grok\n    model: "old" # saved choice'
+    source = (header + codex + grok).replace("\n", newline).encode()
+    path = settings_path(workspace)
+    path.write_bytes(source)
+    view = workspace_settings.read_settings(workspace)
+    rows = [{"name": "grok", "model": "old"}, {"name": "claude"}, {"name": "codex"}]
+    if insert:
+        rows = [{"name": "codex"}, *rows[:2]]
+    else:
+        rows.pop(1)
+
+    saved = workspace_settings.edit_settings(
+        workspace, expected_revision=view.revision, changes={"ai.providers": rows}
+    )
+
+    expected = header + (
+        codex + grok + "\n  - name: claude" if insert else grok + "\n" + codex.rstrip("\n")
+    )
+    assert path.read_bytes() == expected.replace("\n", newline).encode()
+    assert [p.name for p in saved.settings.ai.providers] == [row["name"] for row in rows]
+    assert workspace.load_settings() == saved.settings
+    before = identity(path)
+    again = workspace_settings.edit_settings(
+        workspace, expected_revision=saved.revision, changes={"ai.providers": rows}
+    )
+    assert again == saved
+    assert identity(path) == before
 
 
 # ------------------------------------------------------ AI time limits (ADR-0057)
