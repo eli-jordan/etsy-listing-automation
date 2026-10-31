@@ -92,3 +92,29 @@ def test_invalid_settings_keep_staging_and_explain_batch_readiness(configured) -
     assert client.get(f"/api/staging/{body['id']}").status_code == 200
     assert not workspace.batch_ids()
     assert provider.calls == []
+
+
+def test_invalid_settings_explain_existing_batch_reads_and_controls(configured) -> None:
+    workspace, provider, client = configured
+    a_listing_template(workspace)
+    staged = client.post(
+        "/api/staging",
+        data={"listing_template": LISTING_TEMPLATE},
+        files=[("files", ("audit-design.png", png(1), "image/png"))],
+    ).json()
+    created = client.post(f"/api/staging/{staged['id']}/confirm")
+    assert created.status_code == 200
+    batch_id = created.json()["id"]
+    workspace.settings_file().write_bytes(b"ai:\n  step_limit_minutes: 99\n")
+
+    responses = [
+        client.get(f"/api/batches/{batch_id}"),
+        client.post(f"/api/batches/{batch_id}/cancel"),
+        client.post(f"/api/batches/{batch_id}/resume"),
+        client.patch(f"/api/batches/{batch_id}", json={"label": "Still kept"}),
+    ]
+    for response in responses:
+        assert response.status_code == 422
+        assert "settings.yaml" in response.json()["detail"]
+        assert "ai.step_limit_minutes" in response.json()["detail"]
+    assert provider.calls == []
