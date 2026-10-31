@@ -266,13 +266,16 @@ so the seller can tell an Etsy problem from a model problem.
 Query extraction failures follow the existing AI Mode rules (fallback, repair,
 *Try again*).
 
-Each AI task (brief, query extraction, proposal) has a **5-minute** deadline,
-shared by its provider attempts and repair. Market search has no limit of its
-own. The whole run is capped at **20 minutes**; when the cap is reached, the
-run is cancelled and fails with a timeout message. These limits were increased
-on 2026-10-29 from 60 seconds per task and 3 minutes overall because local AI
-generation was timing out. The overall cap leaves room for all three tasks
-and market search, while cancellation still stops work immediately.
+Each provider tried for an AI task (brief, query extraction, proposal) gets
+the configured **step limit**, shared by its attempt and its one repair; a
+fallback provider gets a fresh step, clipped to what the run has left. Market
+search has no limit of its own. The whole run, research included, is capped
+at the configured **run limit**; when it is reached, the run is cancelled and
+fails with a timeout message naming that limit. Both come from `settings.yaml`
+(`ai.step_limit_minutes`, 1-15, default 5; `ai.run_limit_minutes`, 5-60,
+default 20, at least enabled providers × step) and are captured when the run
+starts (ADR-0057). The defaults were raised on 2026-10-29 from 60 seconds per
+task and 3 minutes overall because local AI generation was timing out.
 
 ## AI runs
 

@@ -7,12 +7,13 @@ Two features, one machine. **SEO generation** produces a proposal a seller
 reviews suggestion by suggestion; **brief drafting** produces the one input
 that generation needs, from the design image alone. They differ only in the
 prompt, the schema and the validation -- the provider adapters, the
-workspace-configured fallback (ADR-0056), the one same-provider repair and the five-minute
-deadline are shared, which is what `ProviderTask` exists to make possible.
+workspace-configured fallback (ADR-0056), the one same-provider repair and the run's
+step and run budgets (ADR-0057) are shared, which is what `ProviderTask` exists to make possible.
 
 - ``models`` -- ``ProviderTask``, ``SeoRequest``, ``SeoProposal``,
   ``PhraseRationale``, ``ProposalWarning``, ``ProviderReadiness``,
-  ``RawProviderResult``, ``RepairContext``, ``Deadline``.
+  ``RawProviderResult``, ``RepairContext``, ``Deadline``, ``AiLimits``,
+  ``RunBudget``.
 - ``prompt`` -- the packaged default ``seo.md``, ``seed_prompt`` and
   ``sync_prompt`` (setup's seed, check and ``--replace-prompts`` operations,
   for any prompt file), ``build_task_prompt`` (the shared
@@ -89,6 +90,7 @@ from etsy_listings.core.ai.market_queries import (
     validate_market_queries,
 )
 from etsy_listings.core.ai.models import (
+    AiLimits,
     Deadline,
     GarmentContext,
     PhraseRationale,
@@ -97,6 +99,7 @@ from etsy_listings.core.ai.models import (
     ProviderTask,
     RawProviderResult,
     RepairContext,
+    RunBudget,
     SeoProposal,
     SeoRequest,
 )
@@ -125,6 +128,7 @@ __all__ = [
     "PreparedSeo",
     "BRIEF_RESPONSE_SCHEMA",
     "MARKET_QUERIES_RESPONSE_SCHEMA",
+    "AiLimits",
     "AiProvider",
     "BriefRequest",
     "BriefValidationError",
@@ -132,6 +136,7 @@ __all__ = [
     "CliProcessError",
     "CodexProvider",
     "Deadline",
+    "RunBudget",
     "DesignBrief",
     "FakeAiProvider",
     "GarmentContext",

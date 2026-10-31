@@ -71,7 +71,7 @@ def test_reviewed_market_values_load_without_rewriting_relative_weights(
     )
     path.write_bytes(source)
     open_settings(page, calibrator_server, theme)
-    expect(page.get_by_role("slider")).to_have_value("2")
+    expect(page.get_by_role("slider", name="Listings drafted at once")).to_have_value("2")
     expect(page.locator(".sp-legend__pct")).to_have_text(
         ["30%", "35%", "20%", "10%", "5%", "Not counted"]
     )
@@ -265,3 +265,38 @@ def test_rapid_actions_use_the_revision_returned_by_the_previous_save(
         == 3
     )
     capture(page, theme, "rapid")
+
+
+def test_raising_the_step_raises_the_run_limit_in_the_same_save(
+    page,
+    expect,
+    calibrator_server: str,
+    workspace_root: Path,
+    theme: str,  # noqa: ANN001
+) -> None:
+    """ADR-0057 through the built page: the floor, the raise and one write."""
+    path = Workspace.discover(root_override=workspace_root).settings_file()
+    open_settings(page, calibrator_server, theme)
+    section = page.get_by_role("region", name="AI time limits")
+    step = section.get_by_role("slider", name="Per step")
+    run = section.get_by_role("slider", name="Whole run")
+    expect(step).to_have_value("5")
+    expect(run).to_have_value("20")
+    expect(run).to_have_attribute("min", "15")
+    section.evaluate("node => node.scrollIntoView({block: 'start'})")
+    capture(page, theme, "limits")
+
+    with page.expect_response(is_save) as saved:
+        step.fill("10")
+        step.blur()
+    assert saved.value.ok
+
+    expect(run).to_have_value("30")
+    expect(run).to_have_attribute("min", "30")
+    expect(section.get_by_role("status")).to_contain_text(
+        "Run limit increased from 20 to 30 minutes to allow 3 providers × 10 minutes."
+    )
+    limits = Settings.load(path).ai
+    assert (limits.step_limit_minutes, limits.run_limit_minutes) == (10, 30)
+    section.evaluate("node => node.scrollIntoView({block: 'start'})")
+    capture(page, theme, "raised")

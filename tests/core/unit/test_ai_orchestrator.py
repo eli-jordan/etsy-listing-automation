@@ -21,15 +21,19 @@ from etsy_listings.core.ai import orchestrator
 from etsy_listings.core.ai.brief import BriefRequest, build_brief_task
 from etsy_listings.core.ai.errors import (
     ProviderCancelledError,
+    ProviderTimeoutError,
+    ProviderUnavailableError,
     SeoAllProvidersUnavailableError,
     SeoDeadlineExceededError,
     SeoTryAgainError,
 )
 from etsy_listings.core.ai.models import (
+    AiLimits,
     Deadline,
     GarmentContext,
     ProviderReadiness,
     ProviderTask,
+    RunBudget,
     SeoRequest,
 )
 from etsy_listings.core.ai.prompt import build_seo_task
@@ -170,10 +174,10 @@ def test_valid_first_response_never_requests_a_repair() -> None:
 
 def test_deadline_exceeded_before_any_provider_is_tried() -> None:
     codex = FakeAiProvider(name="codex", responses=[_valid_payload()])
-    already_expired = Deadline(deadline_at=time.monotonic() - 1)
+    already_expired = RunBudget(AiLimits(), Deadline(deadline_at=time.monotonic() - 1))
 
     with pytest.raises(SeoDeadlineExceededError):
-        orchestrator.generate_proposal(_request(), _PROMPT, [codex], deadline=already_expired)
+        orchestrator.generate_proposal(_request(), _PROMPT, [codex], budget=already_expired)
 
     assert codex.tasks == []
 
@@ -201,32 +205,6 @@ def test_default_budget_allows_a_slow_response_and_shares_remaining_time_with_re
 
     assert proposal.titles[0] == "a" * 10
     assert remaining == [300.0, 239.0]
-
-
-def test_deadline_exceeded_skips_repair_and_surfaces_try_again() -> None:
-    codex = FakeAiProvider(name="codex", responses=["not json"])
-
-    class _ExpiringDeadline:
-        """A deadline that reports not-expired for the first check (letting
-        the initial `generate` call happen) and expired from then on -- the
-        shape a real 60-second budget takes once the first call alone
-        consumed it."""
-
-        def __init__(self) -> None:
-            self.calls = 0
-
-        @property
-        def expired(self) -> bool:
-            self.calls += 1
-            return self.calls > 1
-
-        def remaining_seconds(self) -> float:
-            return 0.0 if self.expired else 60.0
-
-    with pytest.raises(SeoDeadlineExceededError):
-        orchestrator.generate_proposal(_request(), _PROMPT, [codex], deadline=_ExpiringDeadline())  # type: ignore[arg-type]
-
-    assert len(codex.tasks) == 1  # the repair call never happened
 
 
 def test_cancelled_error_propagates_without_becoming_try_again() -> None:
@@ -368,3 +346,153 @@ def test_brief_drafting_falls_through_to_the_second_provider_too() -> None:
     drafted = orchestrator.generate_brief(_brief_request(), "Describe it.", [codex, claude])
 
     assert drafted.brief == "From Claude."
+
+
+# ------------------------------------------------- ADR-0057 attempt budgets
+#
+# A `RunBudget` carries the run's captured limits and its whole-run deadline.
+# Every test here pins the clock, so "four minutes pass" is exact.
+
+
+class _Clock:
+    def __init__(self) -> None:
+        self.now = 1_000.0
+
+    def __call__(self) -> float:
+        return self.now
+
+
+class _Timed(FakeAiProvider):
+    """A provider whose calls take scripted time, then answer or raise.
+
+    ``script`` holds ``(minutes, outcome)`` per call; an outcome is a raw
+    response or an exception to raise. ``remaining`` records the step
+    deadline's remaining seconds when each call began."""
+
+    def __init__(self, name: str, clock: _Clock, script: list[tuple[float, object]]) -> None:
+        super().__init__(name=name)
+        self.clock = clock
+        self.script = script
+        self.remaining: list[float] = []
+
+    def generate(self, task, deadline, *, repair=None, cancel_event=None):  # noqa: ANN001, ANN201
+        self.remaining.append(deadline.remaining_seconds())
+        minutes, outcome = self.script.pop(0)
+        self.clock.now += minutes * 60
+        if isinstance(outcome, BaseException):
+            raise outcome
+        self.responses.append(str(outcome))
+        return super().generate(task, deadline, repair=repair, cancel_event=cancel_event)
+
+
+def _unavailable(name: str) -> ProviderUnavailableError:
+    return ProviderUnavailableError(name, "usage limit reached")
+
+
+def _budget(clock: _Clock, step: int = 5, run: int = 20) -> RunBudget:
+    return RunBudget.starting_now(AiLimits(step_minutes=step, run_minutes=run), clock=clock)
+
+
+def test_without_a_budget_a_task_gets_the_default_five_minute_step() -> None:
+    clock = _Clock()
+    codex = _Timed("codex", clock, [(0, _valid_payload())])
+
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(time, "monotonic", clock)
+        orchestrator.generate_proposal(_request(), _PROMPT, [codex])
+
+    assert codex.remaining == [300.0]
+
+
+def test_each_fallback_provider_gets_a_fresh_step_budget() -> None:
+    clock = _Clock()
+    codex = _Timed("codex", clock, [(4, _unavailable("codex"))])
+    claude = _Timed("claude", clock, [(4, _unavailable("claude"))])
+    grok = _Timed("grok", clock, [(1, _valid_payload())])
+
+    orchestrator.generate_proposal(
+        _request(), _PROMPT, [codex, claude, grok], budget=_budget(clock, step=5, run=20)
+    )
+
+    assert (codex.remaining, claude.remaining, grok.remaining) == ([300.0], [300.0], [300.0])
+
+
+def test_a_repair_shares_its_attempts_step_budget() -> None:
+    clock = _Clock()
+    codex = _Timed("codex", clock, [(3, "not json"), (1, _valid_payload())])
+
+    orchestrator.generate_proposal(_request(), _PROMPT, [codex], budget=_budget(clock, step=5))
+
+    assert codex.remaining == [300.0, 120.0]
+
+
+def test_a_fallback_budget_is_clipped_to_what_is_left_of_the_run() -> None:
+    clock = _Clock()
+    codex = _Timed("codex", clock, [(4, _unavailable("codex"))])
+    claude = _Timed("claude", clock, [(1, _valid_payload())])
+
+    orchestrator.generate_proposal(
+        _request(), _PROMPT, [codex, claude], budget=_budget(clock, step=5, run=7)
+    )
+
+    assert claude.remaining == [180.0]
+
+
+def test_a_later_task_in_the_same_run_starts_with_what_the_run_has_left() -> None:
+    clock = _Clock()
+    budget = _budget(clock, step=5, run=6)
+    codex = _Timed("codex", clock, [(4, '{"brief": "Drafted."}'), (0, _valid_payload())])
+
+    orchestrator.generate_brief(_brief_request(), "Describe it.", [codex], budget=budget)
+    orchestrator.generate_proposal(_request(), _PROMPT, [codex], budget=budget)
+
+    assert codex.remaining == [300.0, 120.0]
+
+
+def test_no_provider_starts_once_the_run_limit_is_reached_and_the_error_names_it() -> None:
+    clock = _Clock()
+    codex = _Timed("codex", clock, [(7, _unavailable("codex"))])
+    claude = _Timed("claude", clock, [])
+
+    with pytest.raises(SeoDeadlineExceededError, match="7-minute run limit"):
+        orchestrator.generate_proposal(
+            _request(), _PROMPT, [codex, claude], budget=_budget(clock, step=5, run=7)
+        )
+
+    assert claude.remaining == []
+
+
+def test_a_provider_that_runs_out_its_step_is_reported_with_the_configured_limit() -> None:
+    clock = _Clock()
+    codex = _Timed("codex", clock, [(3, ProviderTimeoutError("codex"))])
+    claude = _Timed("claude", clock, [])
+
+    with pytest.raises(SeoDeadlineExceededError, match="codex: .*3-minute step limit"):
+        orchestrator.generate_proposal(
+            _request(), _PROMPT, [codex, claude], budget=_budget(clock, step=3, run=20)
+        )
+
+    assert claude.remaining == []  # a timeout is not an availability failure
+
+
+def test_an_attempt_that_spends_its_step_gets_no_repair_and_names_the_limit() -> None:
+    clock = _Clock()
+    codex = _Timed("codex", clock, [(2, "not json")])
+
+    with pytest.raises(SeoDeadlineExceededError, match="2-minute step limit"):
+        orchestrator.generate_proposal(
+            _request(), _PROMPT, [codex], budget=_budget(clock, step=2, run=20)
+        )
+
+    assert codex.remaining == [120.0]
+
+
+def test_a_step_cut_short_by_the_run_limit_names_the_run_limit() -> None:
+    clock = _Clock()
+    codex = _Timed("codex", clock, [(4, _unavailable("codex"))])
+    claude = _Timed("claude", clock, [(1, ProviderTimeoutError("claude"))])
+
+    with pytest.raises(SeoDeadlineExceededError, match="5-minute run limit"):
+        orchestrator.generate_proposal(
+            _request(), _PROMPT, [codex, claude], budget=_budget(clock, step=5, run=5)
+        )

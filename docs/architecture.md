@@ -442,8 +442,12 @@ Codex, Claude, Grok and account defaults; omitted providers are off. The factory
 captures adapters before scheduling a run, so edits affect subsequent runs and
 readiness checks, while repairs and fallback keep their captured preferences.
 Availability or rejected saved model/effort permits fallback. There is
-one same-provider repair for invalid output and a five-minute deadline shared
-by the attempts for each task. The whole run has a twenty-minute cap. Readiness
+one same-provider repair for invalid output. Time limits come from
+`settings.yaml` and are captured with the providers (ADR-0057): each provider
+tried gets a fresh step (`ai.step_limit_minutes`, default 5) that its repair
+shares, clipped to the whole run (`ai.run_limit_minutes`, default 20). One
+`RunBudget` covers a run's tasks, fallbacks and market research; the runner's
+watchdog reads the same deadline and stops the process tree. Readiness
 (`application/ai/readiness.py`) decides whether a run may start. Market
 search/stat caches live for seven days; the latest per-listing evidence
 snapshot is separate. Research is read-only and supplies wording evidence

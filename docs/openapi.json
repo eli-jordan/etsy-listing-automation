@@ -7775,6 +7775,34 @@
             ],
             "title": "Providers"
           },
+          "run_limit_minutes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Run Limit Minutes"
+          },
+          "step_limit_minutes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Step Limit Minutes"
+          },
           "weights": {
             "anyOf": [
               {
@@ -7841,6 +7869,14 @@
             "title": "Revision",
             "type": "string"
           },
+          "run_limit_minutes": {
+            "title": "Run Limit Minutes",
+            "type": "integer"
+          },
+          "step_limit_minutes": {
+            "title": "Step Limit Minutes",
+            "type": "integer"
+          },
           "weights": {
             "additionalProperties": {
               "type": "number"
@@ -7854,7 +7890,9 @@
           "concurrency",
           "weights",
           "default_weights",
-          "providers"
+          "providers",
+          "step_limit_minutes",
+          "run_limit_minutes"
         ],
         "title": "WorkspaceSettingsResponse",
         "type": "object"

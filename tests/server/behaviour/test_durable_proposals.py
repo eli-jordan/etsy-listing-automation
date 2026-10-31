@@ -32,7 +32,7 @@ def _server(root: Path, provider: ChainProvider) -> Iterator[TestClient]:
     market = seeded_market()
     app = create_app(
         Workspace.discover(root_override=root),
-        seo_provider_factory=lambda _workspace: [provider],
+        seo_provider_factory=lambda _workspace, _ai: [provider],
         market_client_factory=lambda _workspace: market,
     )
     with TestClient(app) as client:

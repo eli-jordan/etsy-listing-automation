@@ -51,7 +51,7 @@ def client(workspace: Workspace, provider: ChainProvider) -> Iterator[TestClient
     market = seeded_market()
     app = create_app(
         workspace,
-        seo_provider_factory=lambda _workspace: [provider],
+        seo_provider_factory=lambda _workspace, _ai: [provider],
         market_client_factory=lambda _workspace: market,
     )
     with TestClient(app) as client:

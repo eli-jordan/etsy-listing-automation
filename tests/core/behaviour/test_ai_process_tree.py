@@ -19,7 +19,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from etsy_listings.core.ai import process
-from etsy_listings.core.ai.models import Deadline
+from etsy_listings.core.ai.models import AiLimits, Deadline, RunBudget
 
 from tests.support.gates import workers
 
@@ -186,3 +186,40 @@ def test_run_managed_speaks_utf8_to_a_real_process_whatever_the_locale(tmp_path:
 
     assert result.returncode == 0
     assert result.stdout == text
+
+
+def test_a_spent_step_budget_kills_the_real_process_tree(tmp_path: Path) -> None:
+    """ADR-0057: the step deadline a `RunBudget` hands a provider is what
+    ``run_managed`` races. Its clock jumps a whole step once the tree is up,
+    so the kill is the configured limit's, not a test-only deadline's."""
+    grandchild_marker = tmp_path / "grandchild_alive.txt"
+    child_marker = tmp_path / "child_alive.txt"
+    safety_at = time.monotonic() + 30.0
+
+    def clock() -> float:
+        up = all(m.is_file() and m.stat().st_size > 0 for m in (child_marker, grandchild_marker))
+        return time.monotonic() + (60.0 if up or time.monotonic() > safety_at else 0.0)
+
+    budget = RunBudget.starting_now(AiLimits(step_minutes=1, run_minutes=5), clock=clock)
+
+    result = process.run_managed(
+        [
+            sys.executable,
+            "-c",
+            _CHILD_SCRIPT,
+            _GRANDCHILD_SCRIPT,
+            str(grandchild_marker),
+            str(child_marker),
+        ],
+        cwd=tmp_path,
+        input_text="",
+        deadline=budget.step(),
+        poll_interval=0.02,
+    )
+
+    assert result.timed_out is True
+    assert not budget.deadline.expired  # the step ran out, not the run
+    _wait_for_file_to_appear(child_marker, timeout=5.0)
+    _wait_for_file_to_appear(grandchild_marker, timeout=5.0)
+    _assert_stopped_growing(child_marker, settle=0.5)
+    _assert_stopped_growing(grandchild_marker, settle=0.5)

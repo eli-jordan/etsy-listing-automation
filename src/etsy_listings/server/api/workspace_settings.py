@@ -35,6 +35,8 @@ def _response(view: workspace_settings.SettingsView) -> WorkspaceSettingsRespons
             for name in PROVIDER_NAMES
             if name not in {p.name for p in view.settings.ai.providers}
         ],
+        step_limit_minutes=view.settings.ai.step_limit_minutes,
+        run_limit_minutes=view.settings.ai.run_limit_minutes,
     )
 
 
@@ -58,6 +60,8 @@ def edit_settings(
         "concurrency": workspace_settings.CONCURRENCY,
         "weights": workspace_settings.WEIGHTS,
         "providers": workspace_settings.PROVIDERS,
+        "step_limit_minutes": workspace_settings.STEP_LIMIT,
+        "run_limit_minutes": workspace_settings.RUN_LIMIT,
     }
     changes = {
         keys[key]: value for key, value in body.changes.model_dump(exclude_unset=True).items()

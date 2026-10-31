@@ -33,7 +33,11 @@ from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
 
 from etsy_listings.core.application.ai.events import AiPhaseEvent
-from etsy_listings.core.application.ai.readiness import AiReadinessBlock, batch_blocked
+from etsy_listings.core.application.ai.readiness import (
+    AiReadinessBlock,
+    batch_blocked,
+    current_providers,
+)
 from etsy_listings.core.application.ai.registry import AiRun, AiRunRegistry
 from etsy_listings.core.application.ai.runner import AiRunner
 from etsy_listings.core.batches import RETRYABLE, AiState, AiStep, Batch, BatchRow, BatchStore
@@ -284,7 +288,7 @@ class BatchQueue:
 
         The runs are waited for without a limit of their own: a stop kills
         a provider's process tree and research starts no new call, and the
-        runner's watchdog bounds any run to ``runner.RUN_LIMIT_SECONDS``.
+        runner's watchdog bounds any run to its captured run limit (ADR-0057).
         """
         names = list(listings)
         # Holding first means every run the dispatcher could still start
@@ -333,7 +337,7 @@ class BatchQueue:
         workspace = self._workspace
         return batch_blocked(
             workspace,
-            self._runner.providers(workspace),
+            current_providers(self._runner.providers, workspace),
         )
 
     # -------------------------------------------------------------- helpers

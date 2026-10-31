@@ -4950,6 +4950,10 @@ export interface components {
             [key: string]: unknown;
           }[]
         | null;
+      /** Run Limit Minutes */
+      run_limit_minutes?: number | null;
+      /** Step Limit Minutes */
+      step_limit_minutes?: number | null;
       /** Weights */
       weights?: {
         [key: string]: number;
@@ -4973,6 +4977,10 @@ export interface components {
       providers: components["schemas"]["AiProviderSettings"][];
       /** Revision */
       revision: string;
+      /** Run Limit Minutes */
+      run_limit_minutes: number;
+      /** Step Limit Minutes */
+      step_limit_minutes: number;
       /** Weights */
       weights: {
         [key: string]: number;

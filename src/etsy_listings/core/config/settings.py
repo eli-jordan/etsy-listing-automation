@@ -1,8 +1,8 @@
 """``settings.yaml``: the workspace's tunable settings, next to ``shop.yaml``.
 
 It holds market scoring weights (features/market-seo-20260924/spec.md,
-*Scoring*), the batch AI queue's limit (ADR-0048), and the ordered AI provider
-preferences (ADR-0056)::
+*Scoring*), the batch AI queue's limit (ADR-0048), the ordered AI provider
+preferences (ADR-0056) and the AI time limits (ADR-0057)::
 
     market_seo:
       weights:
@@ -10,6 +10,10 @@ preferences (ADR-0056)::
 ...
     batch_ai:
       concurrency: 1
+    ai:
+      providers: [{name: codex}, {name: claude}, {name: grok}]
+      step_limit_minutes: 5
+      run_limit_minutes: 20
 
 Everything is optional. A missing file, section or key falls back to the
 spec's defaults -- :class:`~etsy_listings.core.market.models.MarketWeights` owns
@@ -27,7 +31,14 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    ValidationError,
+    ValidationInfo,
+    field_validator,
+)
 
 from etsy_listings.core.config.errors import ConfigLoadError, format_validation_error, parse_yaml
 from etsy_listings.core.config.market_weights import MarketWeights
@@ -63,6 +74,16 @@ class BatchAiSettings(BaseModel):
     :data:`MAX_BATCH_CONCURRENCY`, the Admin page slider's top."""
 
 
+MIN_STEP_LIMIT_MINUTES = 1
+MAX_STEP_LIMIT_MINUTES = 15
+DEFAULT_STEP_LIMIT_MINUTES = 5
+MIN_RUN_LIMIT_MINUTES = 5
+MAX_RUN_LIMIT_MINUTES = 60
+DEFAULT_RUN_LIMIT_MINUTES = 20
+"""ADR-0057's ranges and defaults, in whole minutes. Three providers at the
+15-minute maximum need 45, within the 60-minute maximum."""
+
+
 ProviderName = Literal["codex", "claude", "grok"]
 PROVIDER_NAMES: tuple[ProviderName, ...] = ("codex", "claude", "grok")
 
@@ -89,6 +110,21 @@ class AiSettings(BaseModel):
         default_factory=lambda: tuple(AiProviderSettings(name=name) for name in PROVIDER_NAMES)
     )
 
+    step_limit_minutes: int = Field(
+        DEFAULT_STEP_LIMIT_MINUTES, ge=MIN_STEP_LIMIT_MINUTES, le=MAX_STEP_LIMIT_MINUTES
+    )
+    """One provider attempt and its one repair (ADR-0057). Each fallback
+    provider gets a fresh allowance, clipped to what is left of the run."""
+    run_limit_minutes: int = Field(
+        DEFAULT_RUN_LIMIT_MINUTES,
+        ge=MIN_RUN_LIMIT_MINUTES,
+        le=MAX_RUN_LIMIT_MINUTES,
+        # A raised step limit must be checked against the default run limit too.
+        validate_default=True,
+    )
+    """The whole run: every task, its fallbacks and market research. At least
+    :meth:`run_floor_minutes`, so each enabled provider has a full step."""
+
     @field_validator("providers")
     @classmethod
     def valid_chain(
@@ -100,6 +136,35 @@ class AiSettings(BaseModel):
         if not any(provider.enabled for provider in providers):
             raise ValueError("at least one provider must be enabled")
         return providers
+
+    @field_validator("run_limit_minutes")
+    @classmethod
+    def covers_every_step(cls, run: int, info: ValidationInfo) -> int:
+        """ADR-0057: refused, never raised on load. Fields validate in
+        declaration order, so a bad provider list or step limit is already
+        reported and missing from ``info.data``; that is not a second error."""
+        providers = info.data.get("providers")
+        step = info.data.get("step_limit_minutes")
+        if providers is None or step is None:
+            return run
+        floor = run_floor_minutes(providers, step)
+        if run < floor:
+            enabled = sum(provider.enabled for provider in providers)
+            raise ValueError(
+                f"must be at least {floor} ({enabled} enabled provider"
+                f"{'' if enabled == 1 else 's'} x {step}-minute step limit)"
+            )
+        return run
+
+    def run_floor_minutes(self) -> int:
+        """The lowest run limit this chain and step limit allow."""
+        return run_floor_minutes(self.providers, self.step_limit_minutes)
+
+
+def run_floor_minutes(providers: tuple[AiProviderSettings, ...], step_minutes: int) -> int:
+    """``max(5, enabled providers x step)`` (ADR-0057)."""
+    enabled = sum(provider.enabled for provider in providers)
+    return max(MIN_RUN_LIMIT_MINUTES, enabled * step_minutes)
 
 
 class Settings(BaseModel):
