@@ -40,7 +40,7 @@ from etsy_listings.core.clients.etsy.models import (
     ShopSection,
     VariationImageLink,
 )
-from etsy_listings.core.clients.etsy.shops import EtsyShopClient
+from etsy_listings.core.clients.etsy.shops import EtsyShopClient, ShopMetadataClient
 from etsy_listings.core.clients.etsy.transport import EtsyApiError
 from etsy_listings.core.config.media import MAX_IMAGES
 
@@ -69,7 +69,24 @@ class _Attached:
 DAY_SECONDS = 24 * 60 * 60
 
 
-class FakeEtsyShopClient(EtsyShopClient):
+class _FakeShopMetadata(ShopMetadataClient):
+    _sections: list[ShopSection]
+    _policies: list[ReturnPolicy]
+    section_calls: int
+    return_policy_calls: int
+
+    @override
+    def shop_sections(self, shop_id: int) -> list[ShopSection]:
+        self.section_calls += 1
+        return list(self._sections)
+
+    @override
+    def return_policies(self, shop_id: int) -> list[ReturnPolicy]:
+        self.return_policy_calls += 1
+        return list(self._policies)
+
+
+class FakeEtsyShopClient(_FakeShopMetadata, EtsyShopClient):
     """Every read `setup` makes, answered from a dict.
 
     `find_shops` matches case-insensitively on the whole name rather than as a
@@ -104,18 +121,8 @@ class FakeEtsyShopClient(EtsyShopClient):
         self.owner_lookups.append(user_id)
         return self._owned
 
-    @override
-    def shop_sections(self, shop_id: int) -> list[ShopSection]:
-        self.section_calls += 1
-        return list(self._sections)
 
-    @override
-    def return_policies(self, shop_id: int) -> list[ReturnPolicy]:
-        self.return_policy_calls += 1
-        return list(self._policies)
-
-
-class FakeEtsyListingClient(EtsyListingClient):
+class FakeEtsyListingClient(_FakeShopMetadata, EtsyListingClient):
     """Models the measured API quirks a tidy fake would hide: `image_ids`
     as a full-replacement set that detaches whatever it omits, and
     `overwrite: true` replacing an image in place -- a new id at the same
@@ -279,16 +286,6 @@ class FakeEtsyListingClient(EtsyListingClient):
     def production_partners(self, shop_id: int) -> list[ProductionPartner]:
         self.production_partner_calls += 1
         return list(self._production_partners)
-
-    @override
-    def shop_sections(self, shop_id: int) -> list[ShopSection]:
-        self.section_calls += 1
-        return list(self._sections)
-
-    @override
-    def return_policies(self, shop_id: int) -> list[ReturnPolicy]:
-        self.return_policy_calls += 1
-        return list(self._policies)
 
     # ------------------------------------------------------------- writes
 
