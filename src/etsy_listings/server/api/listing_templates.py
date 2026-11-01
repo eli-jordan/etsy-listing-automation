@@ -183,7 +183,7 @@ def listing_template_draft(
     workspace = _workspace(request)
     try:
         view = library.draft_listing_template(
-            workspace, from_listing=from_listing, from_template=from_template
+            workspace, library.DraftOrigin(listing=from_listing, template=from_template)
         )
     except _REFUSALS as exc:
         raise _refused(exc) from exc
@@ -201,8 +201,7 @@ def create_listing_template(
         outcome = library.create_listing_template(
             workspace,
             body.name,
-            from_listing=body.from_listing,
-            from_template=body.from_template,
+            library.DraftOrigin(listing=body.from_listing, template=body.from_template),
             document=body.document,
             locks=_locks(request),
         )

@@ -38,7 +38,7 @@ from etsy_listings.core.application.garment_profiles import (
     resolve_colour_slugs,
 )
 from etsy_listings.core.application.listing_creation import (
-    build_listing_stub,
+    ListingStub,
     build_media_entries,
     load_template_kind,
     validate_listing_stub,
@@ -280,14 +280,14 @@ def run_new(
     colours = listing_colours(saved.profile, colour_slugs)
     media = build_media_entries(template=mockup_template, kind=template_kind, colours=colours)
     _report_media_choice(mockup_template, template_kind, colours, media)
-    listing_data = build_listing_stub(
+    listing_data = ListingStub(
         garment_profile_slug=slug,
         design_ref=workspace.design_file(design_name).relative_to(workspace.root).as_posix(),
         colours=colours,
         pricing_plan_ref=plan_ref,
         brief="",
         media=media,
-    )
+    ).document()
     validate_listing_stub(listing_data, currency=workspace.defaults.etsy.currency)
     path = ListingDocuments(workspace).create(design_name, listing_data)
     typer.echo(f"wrote {path}")

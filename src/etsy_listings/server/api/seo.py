@@ -26,7 +26,11 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 
 from etsy_listings.core.ai.proposals import ProposalStore
 from etsy_listings.core.application.ai.coordinator import AiCoordinator
-from etsy_listings.core.application.ai.listing_proposals import read_proposal, resolve_proposal
+from etsy_listings.core.application.ai.listing_proposals import (
+    ProposalResolution,
+    read_proposal,
+    resolve_proposal,
+)
 from etsy_listings.core.application.refusals import (
     ListingDeployingError,
     ListingDraftingInBatchError,
@@ -133,10 +137,9 @@ def resolve_listing_proposal(
             target.workspace,
             _proposals(request),
             target.name,
-            generated_at=body.generated_at,
-            title=body.title,
-            tags=body.tags,
-            lead=body.lead,
+            ProposalResolution(
+                generated_at=body.generated_at, title=body.title, tags=body.tags, lead=body.lead
+            ),
         )
     except (ListingMissingError, ProposalMissingError) as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc

@@ -13,6 +13,7 @@ clearing the cache does.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import datetime
 
 from etsy_listings.core.ai.listing_inputs import ListingAiInputs
@@ -44,19 +45,25 @@ def read_proposal(workspace: Workspace, proposals: ProposalStore, name: str) -> 
     return ListingAiInputs.read(workspace, name).judge(record)
 
 
+@dataclass(frozen=True)
+class ProposalResolution:
+    """Sections to record on the proposal generated at ``generated_at``:
+    each resolved, reopened (``pending``), or ``None`` to leave it as it is."""
+
+    generated_at: datetime
+    title: Resolution | None = None
+    tags: Resolution | None = None
+    lead: Resolution | None = None
+
+
 def resolve_proposal(
     workspace: Workspace,
     proposals: ProposalStore,
     name: str,
-    *,
-    generated_at: datetime,
-    title: Resolution | None = None,
-    tags: Resolution | None = None,
-    lead: Resolution | None = None,
+    resolution: ProposalResolution,
 ) -> ListingProposal:
-    """Record the given sections as resolved (or reopened, ``pending``) on
-    the proposal generated at ``generated_at``, and answer it as
-    :func:`read_proposal` would.
+    """Record ``resolution``'s sections on the proposal it names, and answer
+    it as :func:`read_proposal` would.
 
     Under the listing's write lock, re-checking the listing inside it, so a
     delete or rename cannot land between the read and the write and leave a
@@ -70,7 +77,11 @@ def resolve_proposal(
         _require(workspace, name)
         try:
             record = proposals.resolve(
-                name, generated_at=generated_at, title=title, tags=tags, lead=lead
+                name,
+                generated_at=resolution.generated_at,
+                title=resolution.title,
+                tags=resolution.tags,
+                lead=resolution.lead,
             )
         except CachedProposalReplacedError as exc:
             raise ProposalReplacedError(name) from exc

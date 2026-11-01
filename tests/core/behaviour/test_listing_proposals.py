@@ -20,7 +20,11 @@ from pathlib import Path
 import pytest
 
 from etsy_listings.core.ai.proposals import ProposalRecord, ProposalStore
-from etsy_listings.core.application.ai.listing_proposals import read_proposal, resolve_proposal
+from etsy_listings.core.application.ai.listing_proposals import (
+    ProposalResolution,
+    read_proposal,
+    resolve_proposal,
+)
 from etsy_listings.core.application.refusals import (
     ListingMissingError,
     ProposalMissingError,
@@ -56,8 +60,10 @@ def _resolve(workspace: Workspace, proposals: ProposalStore, **sections: object)
         workspace,
         proposals,
         LISTING,
-        generated_at=sections.pop("generated_at", TODAY),
-        **sections,  # type: ignore[arg-type]
+        ProposalResolution(
+            generated_at=sections.pop("generated_at", TODAY),
+            **sections,  # type: ignore[arg-type]
+        ),
     )
 
 
@@ -158,8 +164,7 @@ def test_resolving_refuses_a_missing_listing_or_proposal(
             workspace,
             proposals,
             "never-saved",
-            generated_at=TODAY,
-            title="accepted",
+            ProposalResolution(generated_at=TODAY, title="accepted"),
         )
 
 
@@ -175,7 +180,9 @@ def test_a_listing_deleted_while_resolving_waits_is_refused_and_leaves_no_record
 
     def resolve() -> None:
         try:
-            resolve_proposal(workspace, proposals, LISTING, generated_at=TODAY, title="accepted")
+            resolve_proposal(
+                workspace, proposals, LISTING, ProposalResolution(TODAY, title="accepted")
+            )
         except ListingMissingError as exc:
             refused.append(exc)
 

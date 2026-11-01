@@ -367,15 +367,17 @@ def test_shared_colour_scenes_use_each_target_photo_without_inference(workspace_
 
 
 def test_unprepared_reference_can_be_saved_as_reusable_listing_template(workspace_root):
-    from etsy_listings.core.application.listing_template_library import create_listing_template
+    from etsy_listings.core.application.listing_template_library import (
+        DraftOrigin,
+        create_listing_template,
+    )
     from etsy_listings.core.application.workspace_locks import WorkspaceLocks
 
     workspace, _ = listing_with_marigold(workspace_root)
     result = create_listing_template(
         workspace,
         "ready-for-artwork",
-        from_listing=FIXTURE_LISTING,
-        from_template=None,
+        DraftOrigin(listing=FIXTURE_LISTING),
         locks=WorkspaceLocks(),
     )
     assert result.saved
