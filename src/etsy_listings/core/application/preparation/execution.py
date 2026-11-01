@@ -4,13 +4,18 @@ from __future__ import annotations
 
 from collections.abc import Iterator, Mapping
 from contextlib import AbstractContextManager, contextmanager, nullcontext, suppress
+from dataclasses import dataclass
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
 from PIL import Image
 
 from etsy_listings.core.application.preparation.activity import yield_to_interactive
-from etsy_listings.core.application.preparation.dependencies import InferenceWorker
+from etsy_listings.core.application.preparation.dependencies import (
+    InferenceWorker,
+    PreparationRuntime,
+)
 from etsy_listings.core.application.preparation.evidence import EvidenceStore
 from etsy_listings.core.application.preparation.models import Job, Prediction, placement_key
 from etsy_listings.core.preparation.artifacts import (
@@ -30,6 +35,41 @@ if TYPE_CHECKING:
 class StoppedError(Exception):
     def __init__(self, phase: str) -> None:
         self.phase = phase
+
+
+@dataclass
+class WorkerSlot:
+    """The one warm inference worker, shared by the coordinator and its execution.
+
+    Execution selects the worker and records the request in flight; the
+    coordinator cancels that request and closes the worker. ``call`` is read
+    and written under the store's condition.
+    """
+
+    worker: InferenceWorker | None = None
+    selection: tuple[str, str] | None = None
+    call: tuple[str, str] | None = None
+
+    def select(
+        self,
+        runtime: PreparationRuntime,
+        engine_version: str,
+        installation_id: str,
+        *,
+        cache_root: Path,
+    ) -> InferenceWorker:
+        """The worker for this engine and installation, replacing any other."""
+        selection = (engine_version, installation_id)
+        if self.selection != selection:
+            if self.worker:
+                self.worker.close()
+            report = runtime.selection(engine_version, installation_id=installation_id)
+            if not report.available:
+                raise ValueError(report.problem or "Run etsy-listings marigold setup first")
+            self.worker = runtime.worker(report, cache_root=cache_root)
+            self.selection = selection
+        assert self.worker is not None
+        return self.worker
 
 
 class Execution:
@@ -82,7 +122,7 @@ class Execution:
             job = self.owner.status(identity)
             if job.cancel_intent:
                 raise StoppedError("cancelled")
-            if self.owner._closing:
+            if self.owner.closing:
                 raise StoppedError("queued")
         job = self.write(identity, step=step)
         self.owner.checkpoint(identity, step)
@@ -209,7 +249,7 @@ class Execution:
                         latest = self.owner.store.read(identity)
                         if latest.cancel_intent:
                             raise StoppedError("cancelled")
-                        self.owner._call = (identity, request)
+                        self.owner.worker_slot.call = (identity, request)
                     try:
                         result = worker.infer(
                             request_id=request,
@@ -223,7 +263,7 @@ class Execution:
                         )
                     finally:
                         with self.owner.store.condition:
-                            self.owner._call = None
+                            self.owner.worker_slot.call = None
                     checksum = result.checksum
                     read_prediction(output, role=role, checksum=checksum, size=selected.size)
                     prediction = Prediction(
@@ -280,7 +320,7 @@ class Execution:
                 latest = self.owner.store.read(identity)
                 if latest.cancel_intent:
                     raise StoppedError("cancelled")
-                if self.owner._closing:
+                if self.owner.closing:
                     raise StoppedError("queued")
                 if self.geometry(current) != self.geometry(latest.snapshot):
                     raise StoppedError("superseded")
@@ -289,19 +329,12 @@ class Execution:
     def worker(self, job: Job) -> InferenceWorker:
         if not job.engine_version or not job.installation_id:
             raise ValueError("Saved worker selection is missing; retry explicit preparation")
-        selection = (job.engine_version, job.installation_id)
-        if self.owner._worker_selection != selection:
-            if self.owner._worker:
-                self.owner._worker.close()
-            report = self.owner.runtime.selection(
-                job.engine_version, installation_id=job.installation_id
-            )
-            if not report.available:
-                raise ValueError(report.problem or "Run etsy-listings marigold setup first")
-            self.owner._worker = self.owner.runtime.worker(report, cache_root=self.evidence.root)
-            self.owner._worker_selection = selection
-        assert self.owner._worker is not None
-        return self.owner._worker
+        return self.owner.worker_slot.select(
+            self.owner.runtime,
+            job.engine_version,
+            job.installation_id,
+            cache_root=self.evidence.root,
+        )
 
     def recover_masks(self, identity: str) -> None:
         job = self.owner.status(identity)
@@ -437,7 +470,7 @@ class Execution:
                     def check_cancelled() -> None:
                         if self.owner.status(identity).cancel_intent:
                             raise StoppedError("cancelled")
-                        if self.owner._closing:
+                        if self.owner.closing:
                             raise StoppedError("queued")
 
                     def cooperate() -> None:

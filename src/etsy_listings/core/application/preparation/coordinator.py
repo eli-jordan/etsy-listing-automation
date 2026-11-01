@@ -15,10 +15,9 @@ from typing import Any
 from uuid import uuid4
 
 from etsy_listings.core.application.preparation.dependencies import (
-    InferenceWorker,
     PreparationRuntime,
 )
-from etsy_listings.core.application.preparation.execution import Execution
+from etsy_listings.core.application.preparation.execution import Execution, WorkerSlot
 from etsy_listings.core.application.preparation.models import (
     TERMINAL,
     Action,
@@ -71,13 +70,16 @@ class Preparations:
         self._started = False
         self._closing = False
         self._active: set[str] = set()
-        self._worker: InferenceWorker | None = None
-        self._worker_selection: tuple[str | None, str | None] | None = None
-        self._call: tuple[str, str] | None = None
+        self.worker_slot = WorkerSlot()
         self._futures: list[Future[Any]] = []
         self._gpu_busy = False
         self._cpu_busy = False
         self.execution = Execution(self)
+
+    @property
+    def closing(self) -> bool:
+        """Whether :meth:`close` has begun: running phases stop at their next check."""
+        return self._closing
 
     def status(self, identity: str) -> Job:
         with self.store.condition:
@@ -261,8 +263,9 @@ class Preparations:
                 cancel_intent=True,
                 phase="cancelling" if identity in self._active else "cancelled",
             )
-            call = self._call if self._call and self._call[0] == identity else None
-            worker = self._worker
+            slot = self.worker_slot
+            call = slot.call if slot.call and slot.call[0] == identity else None
+            worker = slot.worker
         if call and worker:
             with suppress(RuntimeError, OSError):
                 worker.cancel(call[1])
@@ -382,8 +385,8 @@ class Preparations:
             for future in futures:
                 future.result()
         finally:
-            if self._worker:
-                self._worker.close()
+            if self.worker_slot.worker:
+                self.worker_slot.worker.close()
             if self.owns_gpu:
                 self.gpu.shutdown(wait=True)
             if self.owns_cpu:

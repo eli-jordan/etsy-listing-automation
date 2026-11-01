@@ -175,6 +175,7 @@ select = [
     # arrive with the complexity work.
     "FBT",
     "ARG",
+    "SLF",
 ]
 ignore = [
     "ANN401",           # Any is sometimes the honest type at a boundary
