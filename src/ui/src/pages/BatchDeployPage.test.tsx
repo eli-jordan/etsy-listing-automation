@@ -1,6 +1,6 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
+import { MemoryRouter, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as listingsApi from "../api/listings";
 import * as runsApi from "../api/runs";
@@ -552,5 +552,69 @@ describe("BatchDeployPage", () => {
     await clock.advance(MARK_SEEN_GRACE_MS);
 
     expect(runsApi.markRunSeen).not.toHaveBeenCalledWith("apply-fast");
+  });
+
+  it("drops an apply run left while its reviewed plan was still loading", async () => {
+    let releaseReview: (run: RunDetail) => void = () => {};
+    const staleReview = new Promise<RunDetail>((resolve) => {
+      releaseReview = resolve;
+    });
+    const apply = runDetail({
+      id: "apply-1",
+      kind: "apply",
+      phase: "applying",
+      reviewed_run_id: "plan-1",
+      events: [{ type: "phase", id: 1, phase: "applying" }],
+    });
+    const next = runDetail({
+      id: "batch-2",
+      phase: "ready",
+      events: [
+        { type: "phase", id: 1, phase: "queued" },
+        {
+          type: "listing_planned",
+          id: 2,
+          listing: "take-a-hike",
+          plan: plan(),
+          fingerprint: "fp-1",
+        },
+        { type: "phase", id: 3, phase: "ready" },
+      ],
+    });
+    vi.spyOn(runsApi, "getRun").mockImplementation(async (id) => {
+      if (id === "apply-1") return apply;
+      if (id === "plan-1") return staleReview;
+      return next;
+    });
+    vi.spyOn(listingsApi, "listListings").mockResolvedValue([summary("take-a-hike")]);
+    const opened = vi.spyOn(runStreamModule, "openRunStream").mockReturnValue({ close: vi.fn() });
+
+    function GoToNextRun() {
+      const navigate = useNavigate();
+      return (
+        <button type="button" onClick={() => navigate("/listings/deploy/batch-2")}>
+          next run
+        </button>
+      );
+    }
+    render(
+      <MemoryRouter initialEntries={["/listings/deploy/apply-1"]}>
+        <GoToNextRun />
+        <Routes>
+          <Route path="/listings/deploy/:runId" element={<BatchDeployPage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => expect(runsApi.getRun).toHaveBeenCalledWith("plan-1"));
+    await userEvent.click(screen.getByRole("button", { name: "next run" }));
+    expect(await screen.findByRole("heading", { name: "Review all changes" })).toBeInTheDocument();
+
+    releaseReview(runDetail({ id: "plan-1", phase: "ready", events: [] }));
+    await staleReview;
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(screen.getByRole("heading", { name: "Review all changes" })).toBeInTheDocument();
+    expect(opened).not.toHaveBeenCalledWith("apply-1", expect.anything());
   });
 });
