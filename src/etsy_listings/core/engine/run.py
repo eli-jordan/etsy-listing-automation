@@ -161,11 +161,11 @@ def plan_fingerprint(plan: Plan) -> str:
     user never saw reverted.
     """
     canonical = _canonical(plan)
-    assert isinstance(canonical, dict)
+    assert isinstance(canonical, dict)  # `Plan` is a dataclass; see `_canonical`
     return canonical_hash(canonical)
 
 
-def _canonical(value: Any) -> Any:
+def _canonical(value: Any) -> Any:  # a generic tree walk, by construction
     """``value``, rendered into the ``dict``/``list``/scalar tree
     :func:`~etsy_listings.core.engine.lock.canonical_hash` can hash.
 

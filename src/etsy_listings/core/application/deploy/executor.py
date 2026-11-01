@@ -217,7 +217,7 @@ class RunExecutor:
         elif isinstance(event, EngineStageApplied):
             run.append(lambda i: StageAppliedEvent(id=i, listing=event.listing, stage=event.stage))
         else:
-            assert isinstance(event, EngineStageFailed)
+            assert isinstance(event, EngineStageFailed)  # closed union
             run.append(
                 lambda i: StageFailedEvent(
                     id=i,
