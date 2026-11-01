@@ -110,18 +110,19 @@ export function IssuesBanner({
               )}
             </span>
           </span>
-          {onJumpTo !== undefined && (issue.tab === activeTab ? (
-            <span className="issue__fix issue__fix--here">Below</span>
-          ) : (
-            <button
-              type="button"
-              className="issue__fix"
-              aria-label={`Fix: ${issue.message}`}
-              onClick={() => onJumpTo(issue.tab)}
-            >
-              Fix &rarr;
-            </button>
-          ))}
+          {onJumpTo !== undefined &&
+            (issue.tab === activeTab ? (
+              <span className="issue__fix issue__fix--here">Below</span>
+            ) : (
+              <button
+                type="button"
+                className="issue__fix"
+                aria-label={`Fix: ${issue.message}`}
+                onClick={() => onJumpTo(issue.tab)}
+              >
+                Fix &rarr;
+              </button>
+            ))}
         </div>
       ))}
     </div>

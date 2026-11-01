@@ -188,11 +188,7 @@ export function VariantsTab({
     const lost = mediaLostBy(detail, next);
     onUpdate(selectColours(detail, next));
     const mediaKind = lost === 1 ? "image" : "images";
-    setStatus(
-      lost === 0
-        ? ""
-        : `Removed ${lost} listing ${mediaKind} for colours no longer sold.`,
-    );
+    setStatus(lost === 0 ? "" : `Removed ${lost} listing ${mediaKind} for colours no longer sold.`);
   }
 
   /** A colour's own design: written straight into `design`, then previewed,
@@ -216,11 +212,7 @@ export function VariantsTab({
     const lost = mediaLostBy(detail, colours);
     onUpdate(selectGarmentProfile(detail, name, colours));
     const mediaKind = lost === 1 ? "image" : "images";
-    setStatus(
-      lost === 0
-        ? ""
-        : `Removed ${lost} listing ${mediaKind} for colours no longer sold.`,
-    );
+    setStatus(lost === 0 ? "" : `Removed ${lost} listing ${mediaKind} for colours no longer sold.`);
   }
 
   /** Every colour the garment profile classifies as ``shade``, and nothing

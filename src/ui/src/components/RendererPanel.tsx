@@ -63,11 +63,7 @@ export function RendererPanel({
         <>
           <div className="mg-row">
             <strong>Template maps</strong>
-            <span
-              className={`tag mg-status${mapStatusClass(label)}`}
-            >
-              {label}
-            </span>
+            <span className={`tag mg-status${mapStatusClass(label)}`}>{label}</span>
           </div>
           {!job && preparation?.maps.state === "out_of_date" && preparation.maps.reason && (
             <p className="mg-help">{preparation.maps.message}</p>

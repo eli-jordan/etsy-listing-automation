@@ -12,11 +12,15 @@ export function activePreparationStep(step: string): number {
 
 export function preparationAction(preparation: Preparation | null) {
   if (preparation?.latest_job?.phase === "failed") return "retry";
-  if (preparation?.maps.reason === "photo_changed" || marigoldMapsReady(preparation?.maps)) return "prepare_again";
+  if (preparation?.maps.reason === "photo_changed" || marigoldMapsReady(preparation?.maps))
+    return "prepare_again";
   return "prepare";
 }
 
-export function prepareButtonLabel(action: ReturnType<typeof preparationAction>, recovery: boolean): string {
+export function prepareButtonLabel(
+  action: ReturnType<typeof preparationAction>,
+  recovery: boolean,
+): string {
   if (action === "retry") return "Retry preparation";
   if (recovery) return "Reset masks and prepare";
   return action === "prepare_again" ? "Prepare again" : "Prepare template";

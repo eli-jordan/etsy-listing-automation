@@ -323,8 +323,12 @@ export function BatchSummaryPage() {
   const concurrency = batch?.concurrency ?? 1;
   // How drafting runs is news only while it runs: once nothing is queued or
   // running, the line says where the batch got to instead (UI doc §7).
-  const draftingPace = concurrency === 1 ? "Drafting one listing at a time." : `Drafting up to ${concurrency} listings at a time.`;
-  const settledPace = count("stopped") > 0 ? "Drafting stopped. Resume queues the rest." : "Drafting finished.";
+  const draftingPace =
+    concurrency === 1
+      ? "Drafting one listing at a time."
+      : `Drafting up to ${concurrency} listings at a time.`;
+  const settledPace =
+    count("stopped") > 0 ? "Drafting stopped. Resume queues the rest." : "Drafting finished.";
   const pace = busy ? `${draftingPace} Work carries on if you close this tab.` : settledPace;
 
   return (

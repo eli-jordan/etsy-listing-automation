@@ -40,14 +40,12 @@ export function PreparationProgress({ job }: { job: PreparationJob }) {
         {["Surface direction", "Garment lighting", "Depth", "Build maps"].map((label, i) => {
           const settledClass = i < active ? "mg-step--done" : "";
           return (
-          <li
-            key={label}
-            className={i === active ? "mg-step--active" : settledClass}
-          >
-            {i < active ? <CheckCircleIcon /> : <ClockIcon />}
-            {label}
-          </li>
-        ); })}
+            <li key={label} className={i === active ? "mg-step--active" : settledClass}>
+              {i < active ? <CheckCircleIcon /> : <ClockIcon />}
+              {label}
+            </li>
+          );
+        })}
       </ol>
     </>
   );

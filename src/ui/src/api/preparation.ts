@@ -33,7 +33,13 @@ export async function prepareTemplate(
     const detail: unknown = error?.detail;
     let message = "Preparation could not start. Try again.";
     if (typeof detail === "string") message = detail;
-    else if (detail && typeof detail === "object" && "message" in detail && typeof detail.message === "string") message = detail.message;
+    else if (
+      detail &&
+      typeof detail === "object" &&
+      "message" in detail &&
+      typeof detail.message === "string"
+    )
+      message = detail.message;
     throw new Error(message);
   }
   return data;

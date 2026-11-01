@@ -45,6 +45,13 @@ function dragged(transfer: DataTransfer): { count: number; allPngs: boolean; zip
   };
 }
 
+/** How the drop overlay names what a drag carries. */
+function carryingLabel(carrying: ReturnType<typeof dragged>): string {
+  if (carrying.zip) return "a ZIP";
+  if (carrying.allPngs) return plural(carrying.count, "PNG", "PNGs");
+  return plural(carrying.count, "file", "files");
+}
+
 function TemplateCard({
   template,
   onDelete,
@@ -82,12 +89,7 @@ function TemplateCard({
     if (files.length > 0) onDropFiles(files);
   }
 
-  let what = "";
-  if (over !== null) {
-    what = plural(over.count, "file", "files");
-    if (over.allPngs) what = plural(over.count, "PNG", "PNGs");
-    if (over.zip) what = "a ZIP";
-  }
+  const what = over === null ? "" : carryingLabel(over);
 
   return (
     <article
