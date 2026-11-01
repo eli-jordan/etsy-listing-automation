@@ -31,6 +31,8 @@ import yaml
 from PIL import Image, ImageDraw
 
 REPO_ROOT = Path(__file__).parent.parent
+# The calibrator serves its bundled test designs from here.
+BUNDLED_DIR = REPO_ROOT / "src" / "etsy_listings" / "server" / "api" / "static"
 DESIGN_SIZE = (360, 432)  # matches the fixture garment profile's 5:6 print-area aspect
 TEMPLATE_SIZE = (480, 576)
 CHART_SIZE = (960, 576)  # two garments side by side
@@ -151,7 +153,7 @@ def main() -> None:
         DESIGN_SIZE, line_rgb=(245, 245, 245)
     )  # light ink, for dark garments
 
-    bundled_dir = REPO_ROOT / "src" / "etsy_listings" / "ui" / "api" / "static"
+    bundled_dir = BUNDLED_DIR
     bundled_dir.mkdir(parents=True, exist_ok=True)
     grid.save(
         bundled_dir / "bundled-test-design.png", format="PNG", optimize=False, compress_level=6
