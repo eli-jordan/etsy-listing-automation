@@ -6,7 +6,8 @@ This plan delivers the [specification](spec.md) through the repository's
 [implement-stack skill](../../../.claude/skills/implement-stack/SKILL.md).
 The [interaction companion](interactions.md), [mockup references](mockups.md)
 and [complete audit map](coverage-map.md) are execution inputs. The source
-[audit](../../../reports/test-suite-audit.html) has 22 ranked groups; its
+audit (`reports/test-suite-audit.html`, removed from the tree; it is in commit
+`f1113bef`) has 22 ranked groups; its
 deletion table and supporting notes contribute additional assigned work.
 
 The result is a suite with stronger independent oracles, smaller setup,

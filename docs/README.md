@@ -59,7 +59,6 @@ does not imply a missing implementation.
 | [API findings](research/api-findings.md) | Measured requests, responses and integration surprises |
 | [Architecture audit, 2026-09-30](research/architecture-audit-20260930.html) | Current module/dependency inventory, invariant violations, reproductions and proposed repairs |
 | [Marigold experiments, 2026-10-01](research/marigold-20261001/README.md) | Native Windows model trials, rendering comparisons, performance data and prototypes |
-| [Test suite audit, 2026-10-03](../reports/test-suite-audit.html) | Prioritized test-quality findings, measured costs, deletion decisions and retained validation |
 
 Research records evidence from the investigation date. Consult the current
 feature requirements and client code for application behaviour; a measurement
