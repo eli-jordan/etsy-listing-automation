@@ -32,21 +32,6 @@ _CLIPPED_GAIN = 1.7  # shading over exposure above which a gain counts as clippe
 Pixels = NDArray[np.uint8]
 
 
-def sample(field: Float, xy: Float, border: int = cv2.BORDER_REPLICATE) -> Float:
-    xy = np.asarray(xy, np.float32)
-    return cast(
-        Float,
-        cv2.remap(
-            field,
-            xy[..., 0],
-            xy[..., 1],
-            interpolation=cv2.INTER_LINEAR,
-            borderMode=border,
-            borderValue=(0,),
-        ).astype(np.float32),
-    )
-
-
 def placement_grid(box: Float, mesh: int) -> Float:
     yy, xx = np.mgrid[:mesh, :mesh].astype(np.float32) / (mesh - 1)
     matrix = cv2.getPerspectiveTransform(

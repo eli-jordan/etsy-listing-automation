@@ -26,6 +26,7 @@ import numpy as np
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from etsy_listings.core.render.config import (
+    BoundingBox,
     MarigoldInference,
     MarigoldRenderer,
     MultipleTemplate,
@@ -132,6 +133,22 @@ class PlacementInput(Record):
     quad: tuple[tuple[float, float], tuple[float, float], tuple[float, float], tuple[float, float]]
     mask: str = Field(pattern=r"^[0-9a-f]{64}$")
     evidence: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+    @classmethod
+    def from_box(
+        cls, placement_id: PlacementId | None, box: BoundingBox, *, mask: str, evidence: str
+    ) -> PlacementInput:
+        return cls(
+            id=placement_id,
+            quad=(
+                (box[0].x, box[0].y),
+                (box[1].x, box[1].y),
+                (box[2].x, box[2].y),
+                (box[3].x, box[3].y),
+            ),
+            mask=mask,
+            evidence=evidence,
+        )
 
     @model_validator(mode="after")
     def finite(self) -> PlacementInput:
@@ -724,14 +741,9 @@ class Artifacts:
                         if not reset_masks_for_photo:
                             raise
                 placements.append(
-                    PlacementInput(
-                        id=placement_id,
-                        quad=(
-                            (box[0].x, box[0].y),
-                            (box[1].x, box[1].y),
-                            (box[2].x, box[2].y),
-                            (box[3].x, box[3].y),
-                        ),
+                    PlacementInput.from_box(
+                        placement_id,
+                        box,
                         mask=checksum,
                         evidence=(evidence if evidence is not None else accepted).get(
                             placement_id, "0" * 64

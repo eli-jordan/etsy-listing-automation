@@ -145,7 +145,7 @@ class Evidence:
 
     def sample(self, array: FloatMap, xy: FloatMap) -> FloatMap:
         sx, sy, ox, oy = self.crop.photo_to_prediction
-        return geometry.sample(
+        return material_math.sample(
             array, xy * np.array([sx, sy], np.float32) + np.array([ox, oy], np.float32)
         )
 
@@ -214,7 +214,7 @@ def prepare(
     placement_width = float((np.linalg.norm(box[1] - box[0]) + np.linalg.norm(box[2] - box[3])) / 2)
     normals = evidence.sample(evidence.normals, grid)
     normals /= np.maximum(np.linalg.norm(normals, axis=-1, keepdims=True), 1e-8)
-    confidence = geometry.sample(mask, grid)
+    confidence = material_math.sample(mask, grid)
     grid_ids = np.ones((mesh, mesh), np.int32)
     checkpoint("fitting")
     surface, diagnostics = geometry.integrate(
@@ -256,7 +256,7 @@ def prepare(
     material, valid = material_math.bake(
         neutral, box, (right - left, bottom - top), origin=(left, top)
     )
-    material += geometry.sample(uv - neutral, material * (mesh - 1))
+    material += material_math.sample(uv - neutral, material * (mesh - 1))
     valid *= mask[region]
     labels = (valid > 0).astype(np.int32)
     checkpoint("lighting")

@@ -127,14 +127,9 @@ def editor_preview(
             inputs = original.model_copy(
                 update={
                     "placements": tuple(
-                        PlacementInput(
-                            id=key,
-                            quad=(
-                                (box[0].x, box[0].y),
-                                (box[1].x, box[1].y),
-                                (box[2].x, box[2].y),
-                                (box[3].x, box[3].y),
-                            ),
+                        PlacementInput.from_box(
+                            key,
+                            box,
                             mask="0" * 64,
                             evidence="0" * 64,
                         )

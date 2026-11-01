@@ -83,21 +83,6 @@ Float = FloatMap
 Pixels = RGBA
 
 
-def sample(field: Float, xy: Float, border: int = cv2.BORDER_REPLICATE) -> Float:
-    xy = np.asarray(xy, np.float32)
-    return cast(
-        Float,
-        cv2.remap(
-            field,
-            xy[..., 0],
-            xy[..., 1],
-            interpolation=cv2.INTER_LINEAR,
-            borderMode=border,
-            borderValue=(0,),
-        ).astype(np.float32),
-    )
-
-
 def patch_derivative(material: Float, labels: NDArray[np.int32], axis: int) -> Float:
     """Centred differences inside a patch; one-sided at its boundary."""
     forward = np.roll(material, -1, axis=axis) - material
@@ -114,6 +99,17 @@ def patch_derivative(material: Float, labels: NDArray[np.int32], axis: int) -> F
         Float,
         (forward * valid_forward[..., None] + backward * valid_backward[..., None])
         / np.maximum(count[..., None], 1),
+    )
+
+
+def _half_size(packed: Float) -> Float:
+    return cast(
+        Float,
+        cv2.resize(
+            packed,
+            (max(1, packed.shape[1] // 2), max(1, packed.shape[0] // 2)),
+            interpolation=cv2.INTER_AREA,
+        ),
     )
 
 
@@ -142,28 +138,14 @@ def filtered_sample(
     # weights. Do not allocate their full-photo weight arrays or smaller mips.
     for level in range(last + 1):
         if level < first:
-            packed = cast(
-                Float,
-                cv2.resize(
-                    packed,
-                    (max(1, packed.shape[1] // 2), max(1, packed.shape[0] // 2)),
-                    interpolation=cv2.INTER_AREA,
-                ),
-            )
+            packed = _half_size(packed)
             continue
         weight = np.where(low == level, 1 - fraction, 0) + np.where(low + 1 == level, fraction, 0)
         if np.any(weight > 0):
             xy = material * np.array([packed.shape[1] - 1, packed.shape[0] - 1], np.float32)
-            result += sample(packed, xy, cv2.BORDER_CONSTANT) * weight[..., None]
+            result += material_math.sample(packed, xy, cv2.BORDER_CONSTANT) * weight[..., None]
         if level < last:
-            packed = cast(
-                Float,
-                cv2.resize(
-                    packed,
-                    (max(1, packed.shape[1] // 2), max(1, packed.shape[0] // 2)),
-                    interpolation=cv2.INTER_AREA,
-                ),
-            )
+            packed = _half_size(packed)
     return result
 
 
