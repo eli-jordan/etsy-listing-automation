@@ -55,7 +55,7 @@ MAX_TAG_LENGTH = 20
 MAX_TITLE_LENGTH = 140
 
 
-def _coerce_design(raw: Any) -> Any:
+def _coerce_design(raw: Any) -> Any:  # pydantic validator boundary
     """The written forms a ``design:`` has had, read as the one map.
 
     A bare path is the single-artwork shorthand written before the map

@@ -56,7 +56,7 @@ class CachedCatalogClient(CatalogClient):
         cache_dir: Path,
         *,
         ttl: timedelta = DEFAULT_TTL,
-        clock: Any = time.time,
+        clock: Any = time.time,  # injected for deterministic tests
     ) -> None:
         self._inner = inner
         self._cache_dir = cache_dir
