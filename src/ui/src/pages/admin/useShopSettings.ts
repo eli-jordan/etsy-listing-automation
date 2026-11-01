@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import {
   getShop,
   saveShop,
@@ -7,12 +7,15 @@ import {
   type ShopField,
   type ShopSettings,
 } from "../../api/shop";
+import { useQueuedFile } from "./useQueuedFile";
 import { useSaveQueue } from "./useSaveQueue";
 
 export type { SaveStatus } from "./useSaveQueue";
 
 export type FieldErrors = Partial<Record<ShopField, string>>;
 
+// Resolved at call time, so a reload reads whatever `getShop` is then.
+const loadShop = () => getShop();
 const send = (revision: string, changes: ShopChanges) =>
   saveShop(revision, changes).then((outcome) =>
     outcome.kind === "saved" ? { ...outcome, revision: outcome.shop.revision } : outcome,
@@ -31,8 +34,6 @@ const clears = (field: string, changes: ShopChanges) => field in changes;
  */
 export function useShopSettings() {
   const [shop, setShop] = useState<ShopSettings | null>(null);
-  const [loadedVersion, setLoadedVersion] = useState(0);
-  const [loadError, setLoadError] = useState<string | null>(null);
   const queue = useSaveQueue({
     send,
     clears,
@@ -40,39 +41,12 @@ export function useShopSettings() {
     // Every successful answer, a field save's or Retry's, is adopted here.
     onSaved: (outcome) => setShop(outcome.shop),
   });
-  const { reset, afterSaves } = queue;
-
-  const adopt = useCallback(
-    (loaded: ShopSettings) => {
-      reset(loaded.revision);
-      setShop(loaded);
-      setLoadedVersion((version) => version + 1);
-      setLoadError(null);
-    },
-    [reset],
-  );
-  const refuse = useCallback((error: unknown) => {
-    setLoadError(error instanceof Error ? error.message : "could not read shop.yaml");
-  }, []);
-  const reload = useCallback(
-    () => afterSaves(() => getShop()).then(adopt, refuse),
-    [afterSaves, adopt, refuse],
-  );
-
-  useEffect(() => {
-    let active = true;
-    getShop().then(
-      (loaded) => {
-        if (active) adopt(loaded);
-      },
-      (error: unknown) => {
-        if (active) refuse(error);
-      },
-    );
-    return () => {
-      active = false;
-    };
-  }, [adopt, refuse]);
+  const { loadedVersion, loadError, reload } = useQueuedFile({
+    load: loadShop,
+    queue,
+    onLoaded: setShop,
+    fallback: "could not read shop.yaml",
+  });
 
   const { save, retry: resend } = queue;
   // The queue owns failure status, so an event handler need not catch.

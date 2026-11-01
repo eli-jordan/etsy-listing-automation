@@ -96,7 +96,7 @@ export function ConnectedShops({
             <div>
               <p className="sa-danger__name sp-danger-name">
                 <CurrencyCircleDollarIcon size={16} /> Currency:{" "}
-                {shop ? `${shop.currency}${currencyName ? ` · ${currencyName}` : ""}` : "…"}
+                {currencyLabel(shop?.currency, currencyName)}
                 <Info field="currency" info={info} />
               </p>
               <p className="sa-danger__desc">
@@ -146,39 +146,59 @@ function Row({
         {label} <Info field={field} info={info} />
       </span>
       <span className="sa-row__value">
-        {row === null ? (
-          <span className="s-muted">Checking…</span>
-        ) : row.state === "not_connected" ? (
-          <>
-            <strong>Not connected</strong>
-            <span className="sd-sub sp-connect-command">
-              {row.commands.includes("etsy-listings setup") && row.commands.length > 1
-                ? missing
-                : row.commands.includes("etsy-listings setup")
-                  ? "Configure this workspace."
-                  : "Sign in again to use this shop."}
-              {row.commands.map((command) => (
-                <code key={command}>{command}</code>
-              ))}
-            </span>
-          </>
-        ) : (
-          <>
-            <strong>{row.shop_name ?? "Unnamed shop"}</strong>{" "}
-            {row.shop_id !== null && <span className="s-muted s-mono">#{row.shop_id}</span>}
-            {row.state === "lookup_failed" ? (
-              <span className="sd-sub sp-lookup-problem">
-                <WarningIcon size={12} weight="bold" /> {row.problem}
-              </span>
-            ) : (
-              <span className="sd-sub">{connected(row)}</span>
-            )}
-          </>
-        )}
+        <RowValue row={row} connected={connected} missing={missing} />
       </span>
       <span className="sd-readonly">
         <LockSimpleIcon size={12} /> Read-only
       </span>
     </div>
+  );
+}
+
+function currencyLabel(currency: string | undefined, name: string | undefined | null): string {
+  if (currency === undefined) return "…";
+  return name ? `${currency} · ${name}` : currency;
+}
+
+/** What a seller runs next for a shop that is not connected. */
+function notConnectedHint(commands: string[], missing: string): string {
+  if (!commands.includes("etsy-listings setup")) return "Sign in again to use this shop.";
+  return commands.length > 1 ? missing : "Configure this workspace.";
+}
+
+function RowValue({
+  row,
+  connected,
+  missing,
+}: {
+  row: ConnectionRow | null;
+  connected: (row: ConnectionRow) => ReactNode;
+  missing: string;
+}) {
+  if (row === null) return <span className="s-muted">Checking…</span>;
+  if (row.state === "not_connected")
+    return (
+      <>
+        <strong>Not connected</strong>
+        <span className="sd-sub sp-connect-command">
+          {notConnectedHint(row.commands, missing)}
+          {row.commands.map((command) => (
+            <code key={command}>{command}</code>
+          ))}
+        </span>
+      </>
+    );
+  return (
+    <>
+      <strong>{row.shop_name ?? "Unnamed shop"}</strong>{" "}
+      {row.shop_id !== null && <span className="s-muted s-mono">#{row.shop_id}</span>}
+      {row.state === "lookup_failed" ? (
+        <span className="sd-sub sp-lookup-problem">
+          <WarningIcon size={12} weight="bold" /> {row.problem}
+        </span>
+      ) : (
+        <span className="sd-sub">{connected(row)}</span>
+      )}
+    </>
   );
 }

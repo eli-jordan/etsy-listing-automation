@@ -51,12 +51,7 @@ export function CurrencyDialog({
       ].filter((el) => !el.hasAttribute("disabled"));
       if (focusable.length === 0) return;
       const at = focusable.indexOf(document.activeElement as HTMLElement);
-      const next =
-        at < 0
-          ? event.shiftKey
-            ? focusable.length - 1
-            : 0
-          : (at + (event.shiftKey ? -1 : 1) + focusable.length) % focusable.length;
+      const next = nextFocus(at, focusable.length, event.shiftKey);
       event.preventDefault();
       focusable[next]?.focus();
     };
@@ -159,4 +154,10 @@ export function CurrencyDialog({
       </div>
     </div>
   );
+}
+
+/** Where Tab moves focus inside the dialog, wrapping at both ends. */
+function nextFocus(at: number, count: number, backwards: boolean): number {
+  if (at < 0) return backwards ? count - 1 : 0;
+  return (at + (backwards ? -1 : 1) + count) % count;
 }

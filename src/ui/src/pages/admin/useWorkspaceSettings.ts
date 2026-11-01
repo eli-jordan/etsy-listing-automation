@@ -1,12 +1,15 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import {
   getSettings,
   saveSettings,
   type SettingsChanges,
   type WorkspaceSettings,
 } from "../../api/workspaceSettings";
+import { useQueuedFile } from "./useQueuedFile";
 import { useSaveQueue } from "./useSaveQueue";
 
+// Resolved at call time, so a reload reads whatever `getSettings` is then.
+const loadSettings = () => getSettings();
 const send = (revision: string, changes: SettingsChanges) =>
   saveSettings(revision, changes).then((outcome) =>
     outcome.kind === "saved" ? { ...outcome, revision: outcome.settings.revision } : outcome,
@@ -28,42 +31,16 @@ const clears = (key: string, changes: SettingsChanges) =>
  */
 export function useWorkspaceSettings() {
   const [settings, setSettings] = useState<WorkspaceSettings | null>(null);
-  const [loadedVersion, setLoadedVersion] = useState(0);
-  const [loadError, setLoadError] = useState<string | null>(null);
   const queue = useSaveQueue({ send, clears, fallback: "Could not save settings.yaml" });
-  const { reset, afterSaves, save: enqueue, retry: resend } = queue;
-
-  const adopt = useCallback(
-    (loaded: WorkspaceSettings) => {
-      reset(loaded.revision);
-      setSettings(loaded);
-      setLoadedVersion((version) => version + 1);
-      setLoadError(null);
-    },
-    [reset],
-  );
-  const refuse = useCallback((error: unknown) => {
-    setSettings(null);
-    setLoadError(error instanceof Error ? error.message : "Could not read settings.yaml");
-  }, []);
-  const reload = useCallback(
-    () => afterSaves(() => getSettings()).then(adopt, refuse),
-    [afterSaves, adopt, refuse],
-  );
-  useEffect(() => {
-    let active = true;
-    getSettings().then(
-      (loaded) => {
-        if (active) adopt(loaded);
-      },
-      (error: unknown) => {
-        if (active) refuse(error);
-      },
-    );
-    return () => {
-      active = false;
-    };
-  }, [adopt, refuse]);
+  const { save: enqueue, retry: resend } = queue;
+  const clear = useCallback(() => setSettings(null), []);
+  const { loadedVersion, loadError, reload } = useQueuedFile({
+    load: loadSettings,
+    queue,
+    onLoaded: setSettings,
+    onRefused: clear,
+    fallback: "Could not read settings.yaml",
+  });
 
   // The status line reports failures; a caller has nothing to await.
   const save = useCallback(

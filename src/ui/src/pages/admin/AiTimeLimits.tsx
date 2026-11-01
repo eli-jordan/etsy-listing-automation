@@ -58,13 +58,7 @@ export function AiSettingsSections({
     const floor = runFloor(enabled, step);
     const saved = committed.current.run;
     if (step !== live.step)
-      setNotice(
-        floor > saved
-          ? `Run limit increased from ${saved} to ${floor} minutes to allow ${enabled} ${
-              enabled === 1 ? "provider" : "providers"
-            } × ${step} minutes.`
-          : "",
-      );
+      setNotice(floor > saved ? raisedNotice(saved, floor, enabled, step) : "");
     setLive({ step, run: Math.max(run, floor) });
   };
 
@@ -222,4 +216,9 @@ function TimeLimits({
       <Errors errors={errors} prefix="ai.run_limit_minutes" />
     </section>
   );
+}
+
+function raisedNotice(saved: number, floor: number, enabled: number, step: number): string {
+  const providers = enabled === 1 ? "provider" : "providers";
+  return `Run limit increased from ${saved} to ${floor} minutes to allow ${enabled} ${providers} × ${step} minutes.`;
 }

@@ -73,11 +73,7 @@ export function ListingDefaults({
       discard(changes);
       return Promise.resolve("unchanged");
     }
-    return save(changes).then(
-      (outcome): Answer =>
-        outcome?.kind === "saved" ? "saved" : outcome?.kind === "invalid" ? "refused" : "failed",
-      (): Answer => "failed",
-    );
+    return save(changes).then(answerFor, (): Answer => "failed");
   };
 
   const choosePod = () => {
@@ -204,20 +200,14 @@ export function ListingDefaults({
 
       <h3 className="sa-subhead">Fulfilment and policies</h3>
       <div className="sp-discovery">
-        <span role="status">
-          {lookups.pending
-            ? "Refreshing Etsy and Printify lists…"
-            : lookups.failed
-              ? `Could not reach ${unreachable(lookups)}. Saved choices are shown.`
-              : "Lists refresh when you return to this window."}
-        </span>
+        <span role="status">{lookupStatus(lookups)}</span>
         <button
           type="button"
           className="btn btn-ghost"
           disabled={lookups.pending}
           onClick={() => void lookups.refresh()}
         >
-          {lookups.pending ? "Refreshing…" : lookups.failed ? "Retry lookups" : "Refresh lists"}
+          {lookupAction(lookups)}
         </button>
       </div>
       {lookups.failed && !lookups.pending && (
@@ -328,6 +318,22 @@ function held(shop: ShopSettings, pending: ShopChanges): ShopSettings {
   };
 }
 
+function answerFor(outcome: SaveOutcome | null): Answer {
+  if (outcome?.kind === "saved") return "saved";
+  return outcome?.kind === "invalid" ? "refused" : "failed";
+}
+
+function lookupStatus(lookups: Lookups): string {
+  if (lookups.pending) return "Refreshing Etsy and Printify lists…";
+  if (lookups.failed) return `Could not reach ${unreachable(lookups)}. Saved choices are shown.`;
+  return "Lists refresh when you return to this window.";
+}
+
+function lookupAction(lookups: Lookups): string {
+  if (lookups.pending) return "Refreshing…";
+  return lookups.failed ? "Retry lookups" : "Refresh lists";
+}
+
 function unreachable(lookups: Lookups): string {
   if (lookups.lookups === null || (!lookups.etsyAvailable && !lookups.printifyAvailable))
     return "Etsy or Printify";
@@ -349,7 +355,7 @@ function Field({
   label: string;
   field: string;
   info: InfoState;
-  error?: string | undefined;
+  error: string | undefined;
   create?: Creatable;
   children: ReactNode;
 }) {
