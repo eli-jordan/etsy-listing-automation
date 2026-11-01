@@ -277,7 +277,7 @@ def test_a_codex_patch_has_every_file_it_touches_checked(scratch: Path) -> None:
 @pytest.mark.parametrize(
     ("config", "tools", "gate"),
     [
-        (".claude/settings.json", {"Bash", "Edit", "Write"}, "scripts/agent_lint_gate.sh"),
+        (".claude/settings.json", {"Bash", "Edit", "Write"}, "scripts/agent_lint_launch.sh"),
         (".codex/hooks.json", {"Bash", "apply_patch", "Edit", "Write"}, "agent_lint_gate.py"),
     ],
 )
@@ -311,7 +311,7 @@ def test_each_agent_gates_edits_and_shell_commands_and_owns_the_daemon(
 
 GATE = ROOT / "scripts" / "agent_lint_gate.py"
 
-# (command, whether the gates skip it). A skip must be safe, since it delays
+# (command, whether the gate skips it). A skip must be safe, since it delays
 # that command's feedback; a lint only costs the snapshot check.
 GATE_CASES = [
     ("git status --short", True),
@@ -340,9 +340,7 @@ def shell_command(command: str) -> dict[str, object]:
 
 
 @pytest.mark.parametrize(("command", "read_only"), GATE_CASES)
-def test_the_codex_gate_skips_only_commands_that_cannot_write(
-    command: str, *, read_only: bool
-) -> None:
+def test_the_gate_skips_only_commands_that_cannot_write(command: str, *, read_only: bool) -> None:
     sys.path.insert(0, str(GATE.parent))
     try:
         import agent_lint_gate
@@ -352,7 +350,7 @@ def test_the_codex_gate_skips_only_commands_that_cannot_write(
     assert agent_lint_gate.is_read_only(command) is read_only
 
 
-def test_the_codex_gate_reads_the_command_as_text_and_refuses_escapes_it_cannot_decode() -> None:
+def test_the_gate_reads_the_command_as_text_and_refuses_escapes_it_cannot_decode() -> None:
     sys.path.insert(0, str(GATE.parent))
     try:
         import agent_lint_gate
@@ -378,22 +376,32 @@ def git_bash() -> str | None:
     return shutil.which("bash")
 
 
-@pytest.mark.parametrize(("command", "read_only"), GATE_CASES)
-def test_the_bash_gate_decides_as_the_codex_gate_does(command: str, *, read_only: bool) -> None:
+def test_the_claude_launcher_hands_each_payload_to_the_gate(
+    scratch: Path, state: dict[str, str]
+) -> None:
     bash = git_bash()
     if bash is None:
-        pytest.skip("no bash to run the Claude Code gate")
-    result = subprocess.run(
-        [bash, "-c", '. "$CLAUDE_PROJECT_DIR/scripts/agent_lint_gate.sh" edit'],
-        input=json.dumps(shell_command(command)),
-        capture_output=True,
-        text=True,
-        env={**os.environ, "CLAUDE_PROJECT_DIR": str(ROOT), "AGENT_LINT_GATE_DECIDE": "1"},
-        timeout=30,
-        check=False,
-    )
+        pytest.skip("no bash to source the Claude Code launcher")
+    source = scratch / "launched.py"
+    source.write_text("print(missing)\n")
 
-    assert result.stdout.strip() == ("skip" if read_only else "lint"), result.stderr
+    def launch(payload: dict[str, object]) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            [bash, "-c", '. "$CLAUDE_PROJECT_DIR/scripts/agent_lint_launch.sh" edit'],
+            input=json.dumps(payload),
+            capture_output=True,
+            text=True,
+            env={**os.environ, "CLAUDE_PROJECT_DIR": str(ROOT), **state},
+            timeout=120,
+            check=False,
+        )
+
+    skipped = launch(shell_command("git status"))
+    checked = launch(edited(source))
+
+    assert skipped.returncode == 0, skipped.stderr
+    assert checked.returncode == 2
+    assert "launched.py:1:" in checked.stderr
 
 
 @pytest.fixture

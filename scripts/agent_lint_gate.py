@@ -1,15 +1,13 @@
 """Skip the agent lint hook after shell commands that cannot have written a file (spec S06).
 
-Codex runs every hook through `cmd /C`, which cannot read the JSON payload,
-so its gate is Python started with `-S`. To decide fast it imports nothing
-but `os`, `re` and `sys` and reads the payload as text, the way the bash gate
-does: `json` alone would cost more than the rest of the decision. A command
-that may have written anything continues in this same process with the full
-hook (`agent_lint.py`), so falling through costs no second start.
-
-Claude Code and Grok use scripts/agent_lint_gate.sh, which makes the same
-decision with bash builtins from the same rules file
-(scripts/agent_lint_rules.txt).
+Every agent's hook starts here: Claude Code and Grok through
+scripts/agent_lint_launch.sh, Codex directly from `cmd /C`. It runs as
+`python -S` and, to decide fast, imports nothing but `os`, `re` and `sys` and
+reads the payload as text: `json` alone would cost more than the rest of the
+decision. The rules are scripts/agent_lint_rules.txt. A command that may have
+written anything, an edit, or a session event continues in this same process
+with the full hook (`agent_lint.py`), so falling through costs no second
+start.
 """
 
 from __future__ import annotations
@@ -62,7 +60,7 @@ def is_read_only(command: str) -> bool:
 
 
 def shell_command(payload: str) -> str | None:
-    """The command of a shell-tool payload, read as text as the bash gate reads it.
+    """The command of a shell-tool payload, read as text without the json module.
 
     None for anything else, and for a command whose JSON escapes this does
     not decode (`\\uXXXX` could spell a `>`): those go to the full check.

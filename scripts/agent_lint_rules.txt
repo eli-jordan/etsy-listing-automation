@@ -1,14 +1,12 @@
 # Which shell commands cannot have changed a source file (spec S06).
 #
-# After every shell command the agent hook first asks this: a command that only
-# reads is skipped at once, before any process starts. Anything else falls
-# through to the snapshot check, which finds what changed by content, so a
-# command misjudged as read-only only delays its feedback to the next command
-# that falls through (or to the pre-commit hook); nothing is lost.
-#
-# Both gates read this file: scripts/agent_lint_gate.sh (Claude Code, Grok) and
-# scripts/agent_lint_gate.py (Codex). Patterns are written in the subset that
-# bash's =~ and Python's re agree on: no \s, \b or [[:class:]].
+# After every shell command the agent hook first asks this
+# (scripts/agent_lint_gate.py): a command that only reads is skipped at once,
+# before the hook loads. Anything else falls through to the snapshot check,
+# which finds what changed by content, so a command misjudged as read-only
+# only delays its feedback to the next command that falls through (or to the
+# pre-commit hook); nothing is lost. Patterns are Python regular expressions,
+# searched with re.search.
 #
 #   strip <text>     literal text removed from the command before any rule
 #                    runs: redirections that write no file

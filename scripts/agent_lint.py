@@ -3,8 +3,8 @@
 Claude Code and Grok (`.claude/settings.json`) and Codex (`.codex/hooks.json`)
 run this after every edit and every shell command, with the hook payload on
 stdin, behind a gate that ends the hook at once after a shell command that
-cannot have written a file (scripts/agent_lint_gate.sh, and
-scripts/agent_lint_gate.py for Codex). For each changed source file it
+cannot have written a file (scripts/agent_lint_gate.py, which Claude Code and
+Grok start through scripts/agent_lint_launch.sh). For each changed source file it
 applies safe fixes, then reports what is left on stderr with exit 2, which
 every agent feeds back to the model. Exit 0 means clean, or nothing to check.
 

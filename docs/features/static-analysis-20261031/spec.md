@@ -101,25 +101,28 @@ more tokens. Tests are excluded, because arrange blocks repeat legitimately.
 `scripts/agent_lint.py` is the only hook implementation. It runs after every
 edit **and every shell command**, because an agent that edits through `sed`, a
 script or a formatter writes files no edit tool reports. Two configs call it,
-each through a gate:
+both through the same gate, `scripts/agent_lint_gate.py`, run as `python -S`:
 
 - `.claude/settings.json`: Claude Code `PostToolUse` matching
   `Edit|Write|Bash`. Grok Build reads this file too and maps Claude's tool
-  names. The command sources `scripts/agent_lint_gate.sh` into the hook's own
-  bash, so the gate starts no second shell.
+  names. The command sources `scripts/agent_lint_launch.sh` into the hook's
+  own bash (no second shell), which only picks `.venv`'s Python, or `uv run`
+  without one, and starts the gate.
 - `.codex/hooks.json`: Codex `PostToolUse` matching
   `Bash|apply_patch|Edit|Write`. Codex runs `commandWindows` through
-  `%COMSPEC% /C` (cmd.exe), which cannot read the JSON payload, so its gate is
-  `scripts/agent_lint_gate.py` started as `python -S`.
+  `%COMSPEC% /C` (cmd.exe), which starts the gate directly.
 
-**The gate.** After a shell command, both gates decide from
+**The gate.** After a shell command, the gate decides from
 `scripts/agent_lint_rules.txt` whether the command could have written a file:
 every segment between `&&`, `||`, `;` and `|` must match a read-only `allow`
 rule, and no `deny` rule (`>`, `tee`, `-i`, `--fix`, `--write`, `-u`,
-`-delete`, …) may match. A read-only command ends the hook at once. The bash
-gate uses builtins only; the Python gate imports only `os`, `re` and `sys` and
-reads the payload as text, as the bash gate does. A command that may have
-written falls through to the full hook in the same process.
+`-delete`, …) may match. A read-only command ends the hook at once. The gate
+imports only `os`, `re` and `sys` and reads the payload as text, since `json`
+alone would cost more than the rest of the decision. A command that may have
+written, an edit or a session event falls through to the full hook in the
+same process. A second gate in bash builtins, sourced by Claude's hook, was
+tried and measured about 0.05s faster for Claude and Grok; one implementation of the
+rules was judged worth more.
 
 **What changed.** An edit names its files. A shell command does not, so the
 hook keeps a snapshot of the working tree's dirty source files by content hash
@@ -151,7 +154,7 @@ repeated runs as each agent launches the hook):
 
 | After | Claude Code / Grok | Codex |
 |---|---|---|
-| a read-only shell command | 0.11s (bash alone: 0.09s) | 0.16s (cmd alone: 0.07s) |
+| a read-only shell command | 0.15-0.18s (bash alone: 0.09s) | 0.12-0.16s (cmd alone: 0.07s) |
 | a shell command that changed no source | 0.36s | 0.39s |
 | an edit, or a shell command that changed a file | 0.7-0.9s | 0.7-0.8s |
 
