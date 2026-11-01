@@ -303,74 +303,79 @@ export function useAutosave(
     [applyRefusal, applyResponse, candidate, onNamed, transport],
   );
 
-  const flush = useCallback(async (): Promise<void> => {
-    clearTimer();
-    if (naming.current) return;
-
-    if (savedName.current !== null) {
-      if (patching.current) {
-        // A PATCH is already in flight. Sending a second one now would race
-        // it -- whichever *resolves* last would win, not whichever holds the
-        // newer edit. Defer instead: the loop below re-checks `pending` once
-        // the in-flight one settles, rather than firing a concurrent request.
-        patchAgain.current = true;
-        return;
-      }
-      // A loop, not recursion, so a deferred continuation (below) can pick up
-      // whatever landed in `pending` while the previous PATCH was in flight,
-      // one request at a time, without the function calling itself. The React
-      // compiler cannot memoize a `useCallback` that calls itself.
-      for (;;) {
-        const patch = pending.current;
-        const currentName = savedName.current;
-        if (patch === null || currentName === null) return;
-        // Cleared only once the PATCH actually lands -- a rejection (dropped
-        // connection, a 5xx) must leave the edit right where the next flush
-        // (the next debounce, or the next `update()`, which merges onto
-        // whatever is still here) will find and retry it. Losing it here
-        // would silently discard whatever was pending, structured
-        // `description` triples included (AI SEO implementation plan, PR6).
-        pending.current = null;
-        patching.current = true;
-        setSave({ kind: "saving" });
-        const sentWith = adopted.current;
-        // The whole document as well as the delta, for a transport that
-        // writes all of it (a listing template's `PUT`). The delta is out of
-        // `pending` already, so it is merged back in.
-        const whole = mergePatch(candidate(), patch);
-        try {
-          const outcome = await transport.save(currentName, patch, whole);
-          if (outcome.saved) {
-            applyResponse(outcome.detail, sentWith);
-            // A newer edit may already be waiting. Marking this one saved
-            // would hide it until the next iteration starts.
-            if (pending.current === null) setSave(saved());
-          } else {
-            // Not written: the values stay on screen and the edit stays
-            // pending, so the next edit sends it again -- which is the
-            // retry. Dropping it let that next edit save alone, and its
-            // response put the unwritten values back to the file's.
-            pending.current = mergePatch(patch, pending.current ?? {});
-            applyRefusal(outcome);
-          }
-        } catch {
-          // Swallowed, not rethrown: nothing that calls `flush()` (the
-          // debounce timer, `onBlur`, unmount) is set up to catch it, and a
-          // failed autosave is reported through `save` -- the same channel
-          // every other outcome here uses -- rather than an exception a
-          // caller would have to remember to handle.
+  /** One PATCH of `patch` to the listing on disk as `name`. */
+  const sendPatch = useCallback(
+    async (name: string, patch: Patch): Promise<void> => {
+      // Cleared only once the PATCH actually lands -- a rejection (dropped
+      // connection, a 5xx) must leave the edit right where the next flush
+      // (the next debounce, or the next `update()`, which merges onto
+      // whatever is still here) will find and retry it. Losing it here
+      // would silently discard whatever was pending, structured
+      // `description` triples included (AI SEO implementation plan, PR6).
+      pending.current = null;
+      patching.current = true;
+      setSave({ kind: "saving" });
+      const sentWith = adopted.current;
+      // The whole document as well as the delta, for a transport that
+      // writes all of it (a listing template's `PUT`). The delta is out of
+      // `pending` already, so it is merged back in.
+      const whole = mergePatch(candidate(), patch);
+      try {
+        const outcome = await transport.save(name, patch, whole);
+        if (outcome.saved) {
+          applyResponse(outcome.detail, sentWith);
+          // A newer edit may already be waiting. Marking this one saved
+          // would hide it until the next iteration starts.
+          if (pending.current === null) setSave(saved());
+        } else {
+          // Not written: the values stay on screen and the edit stays
+          // pending, so the next edit sends it again -- which is the
+          // retry. Dropping it let that next edit save alone, and its
+          // response put the unwritten values back to the file's.
           pending.current = mergePatch(patch, pending.current ?? {});
-          setSave({ kind: "save-failed" });
-        } finally {
-          patching.current = false;
+          applyRefusal(outcome);
         }
-        if (!patchAgain.current) return;
-        patchAgain.current = false;
+      } catch {
+        // Swallowed, not rethrown: nothing that calls `flush()` (the
+        // debounce timer, `onBlur`, unmount) is set up to catch it, and a
+        // failed autosave is reported through `save` -- the same channel
+        // every other outcome here uses -- rather than an exception a
+        // caller would have to remember to handle.
+        pending.current = mergePatch(patch, pending.current ?? {});
+        setSave({ kind: "save-failed" });
+      } finally {
+        patching.current = false;
       }
+    },
+    [applyRefusal, applyResponse, candidate, transport],
+  );
+
+  /** Sends what is pending for a listing already on disk. */
+  const patchNamed = useCallback(async (): Promise<void> => {
+    if (patching.current) {
+      // A PATCH is already in flight. Sending a second one now would race
+      // it -- whichever *resolves* last would win, not whichever holds the
+      // newer edit. Defer instead: the loop below re-checks `pending` once
+      // the in-flight one settles, rather than firing a concurrent request.
+      patchAgain.current = true;
+      return;
     }
+    // A loop, not recursion, so a deferred continuation (below) can pick up
+    // whatever landed in `pending` while the previous PATCH was in flight,
+    // one request at a time, without the function calling itself. The React
+    // compiler cannot memoize a `useCallback` that calls itself.
+    for (;;) {
+      const patch = pending.current;
+      const currentName = savedName.current;
+      if (patch === null || currentName === null) return;
+      await sendPatch(currentName, patch);
+      if (!patchAgain.current) return;
+      patchAgain.current = false;
+    }
+  }, [sendPatch]);
 
-    if (pending.current === null) return;
-
+  /** What is pending for a listing not on disk yet. */
+  const describeOrCreate = useCallback(async (): Promise<void> => {
     // Named, but refused once already: every edit is another attempt at the
     // document the server would not write, so it retries rather than settling
     // for a description of it.
@@ -393,7 +398,15 @@ export function useAutosave(
     const sentWith = adopted.current;
     const fresh = await transport.describe(candidate());
     applyResponse(fresh, sentWith);
-  }, [applyRefusal, applyResponse, candidate, clearTimer, create, transport]);
+  }, [applyResponse, candidate, create, transport]);
+
+  const flush = useCallback(async (): Promise<void> => {
+    clearTimer();
+    if (naming.current) return;
+    if (savedName.current !== null) return patchNamed();
+    if (pending.current === null) return;
+    return describeOrCreate();
+  }, [clearTimer, describeOrCreate, patchNamed]);
 
   const update = useCallback(
     (patch: Patch) => {

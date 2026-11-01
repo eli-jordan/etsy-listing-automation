@@ -48,6 +48,30 @@ function parseFrame<Event>(block: string): Event | null {
   return JSON.parse(data) as Event;
 }
 
+/** Reads the stream to its end, handing each complete frame's event over as
+ * it arrives. */
+async function readFrames<Event>(
+  reader: ReadableStreamDefaultReader<Uint8Array>,
+  onEvent: (event: Event) => void,
+): Promise<void> {
+  const decoder = new TextDecoder();
+  let buffer = "";
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) return;
+    buffer += decoder.decode(value, { stream: true });
+    const frames = buffer.split("\n\n");
+    // The last element is either "" (the buffer ended exactly on a frame
+    // boundary) or a partial frame still waiting on more bytes -- either
+    // way it is not parsed yet, only kept for the next chunk.
+    buffer = frames.pop() ?? "";
+    for (const block of frames) {
+      const event = parseFrame<Event>(block);
+      if (event !== null) onEvent(event);
+    }
+  }
+}
+
 export function openEventStream<Event>(
   url: string,
   options: EventStreamOptions<Event>,
@@ -70,24 +94,8 @@ export function openEventStream<Event>(
       return;
     }
 
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = "";
     try {
-      for (;;) {
-        const { value, done } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        const frames = buffer.split("\n\n");
-        // The last element is either "" (the buffer ended exactly on a frame
-        // boundary) or a partial frame still waiting on more bytes -- either
-        // way it is not parsed yet, only kept for the next chunk.
-        buffer = frames.pop() ?? "";
-        for (const block of frames) {
-          const event = parseFrame<Event>(block);
-          if (event !== null) options.onEvent(event);
-        }
-      }
+      await readFrames(response.body.getReader(), options.onEvent);
       options.onDone?.();
     } catch (error) {
       if (!controller.signal.aborted) options.onError?.(error);

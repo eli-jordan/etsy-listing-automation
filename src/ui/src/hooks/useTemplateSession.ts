@@ -132,6 +132,13 @@ interface Connections {
 const IDLE: TemplateSaveState = { kind: "idle" };
 const NO_EDITS: MaskEdit[] = [];
 
+/** What a failed save says: a conflict asks for a reload, anything else is
+ * a plain failure. */
+function saveFailure(e: unknown): TemplateSaveState {
+  if (e instanceof TemplateConflictError) return { kind: "conflict", message: e.message };
+  return { kind: "failed", message: e instanceof Error ? e.message : "Save failed" };
+}
+
 function isDirty(doc: Doc): boolean {
   return (
     doc.draft !== null &&
@@ -407,10 +414,7 @@ class Session {
       // flushed one finishing late must not pull the rail back to it.
       this.connections.onCatalogChanged?.(current ? doc.name : undefined);
     } catch (e) {
-      doc.save =
-        e instanceof TemplateConflictError
-          ? { kind: "conflict", message: e.message }
-          : { kind: "failed", message: e instanceof Error ? e.message : "Save failed" };
+      doc.save = saveFailure(e);
       this.emit();
       throw e;
     }
