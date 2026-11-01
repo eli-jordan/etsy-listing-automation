@@ -115,6 +115,7 @@ def test_a_catalog_brand_rename_keeps_the_same_garment_and_product_plan(
     catalog: FakeCatalogClient,
     printify: FakePrintifyClient,
     monkeypatch: pytest.MonkeyPatch,
+    *,
     already_created: bool,
 ) -> None:
     ctx = _ctx(root, catalog, printify)

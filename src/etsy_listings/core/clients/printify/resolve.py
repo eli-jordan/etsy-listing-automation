@@ -20,6 +20,9 @@ from etsy_listings.core.errors import UserFacingError
 
 _TRADEMARK = re.compile(r"[®™©]")
 _WHITESPACE = re.compile(r"\s+")
+# With more valid names than this, a refusal lists only the closest few.
+_LIST_EVERY_NAME_UP_TO = 8
+_CLOSEST_NAMES = 5
 _BLUEPRINT_BRAND_ALIASES = {"comfort colors print on demand": "comfort colors"}
 """Known catalog renames only; never match unrelated brands by similarity (ADR-0005)."""
 
@@ -41,8 +44,8 @@ class CatalogResolutionError(UserFacingError, ValueError):
         self.kind = kind
         self.name = name
         self.valid_names = valid_names
-        if len(valid_names) > 8:
-            closest = get_close_matches(name, sorted(valid_names), n=5, cutoff=0.0)
+        if len(valid_names) > _LIST_EVERY_NAME_UP_TO:
+            closest = get_close_matches(name, sorted(valid_names), n=_CLOSEST_NAMES, cutoff=0.0)
             options = ", ".join(closest)
             suggestions = f"Closest names: {options} (and {len(valid_names) - len(closest)} more)"
         else:
