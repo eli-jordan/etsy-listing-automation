@@ -1,3 +1,4 @@
+import { ColourPicker } from "./ColourPicker";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   getMaskHistory,
@@ -235,16 +236,7 @@ export function MarigoldEditor({
           <ViewTabs value={tab} onChange={setTab} />
           <TestDesignPicker compact value={design} onChange={onDesignChange} />
           {tab === "calibrate" && config.kind === "colour-matrix" && colours.length > 1 && (
-            <label className="app__bar-field">
-              <span>Colour</span>
-              <select value={colour} onChange={(e) => setSelectedColour(e.target.value)}>
-                {colours.map((c) => (
-                  <option key={c} value={c}>
-                    {c}
-                  </option>
-                ))}
-              </select>
-            </label>
+            <ColourPicker colour={colour} colours={colours} onChange={setSelectedColour} />
           )}
           {tab === "calibrate" && (
             <div className="app__outline-toggle">
