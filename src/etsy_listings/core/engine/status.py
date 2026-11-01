@@ -162,7 +162,14 @@ class StatusInputs:
 def listing_status(inputs: StatusInputs) -> ListingStatus:
     """The badge. Pure -- see the module docstring for what each combination
     means and why, and :class:`StatusInputs` for the facts."""
-    lifecycle, etsy_state = inputs.lifecycle, inputs.etsy_state
+    return (
+        _lifecycle_status(inputs) or _etsy_state_status(inputs.etsy_state) or _deploy_status(inputs)
+    )
+
+
+def _lifecycle_status(inputs: StatusInputs) -> ListingStatus | None:
+    """What the workspace's lifecycle intent decides, whatever Etsy says."""
+    lifecycle = inputs.lifecycle
     if lifecycle == "deleted":
         return "pending-delete"
     if lifecycle == "renew" or (lifecycle is None and inputs.last_applied_lifecycle == "retired"):
@@ -171,13 +178,19 @@ def listing_status(inputs: StatusInputs) -> ListingStatus:
         # badge is ours.
         return "draft"
     if lifecycle == "retired":
-        if etsy_state == "active":
-            return "pending-retire"
-        return "inactive"
+        return "pending-retire" if inputs.etsy_state == "active" else "inactive"
+    return None
+
+
+def _etsy_state_status(etsy_state: str | None) -> ListingStatus | None:
     if etsy_state == "expired":
         return "expired"
     if etsy_state in {"inactive", "removed"}:
         return "inactive"
+    return None
+
+
+def _deploy_status(inputs: StatusInputs) -> ListingStatus:
     dirty = inputs.edited or inputs.incomplete
     if inputs.live:
         return "dirty" if dirty else "live"
