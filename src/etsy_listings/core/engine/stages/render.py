@@ -54,16 +54,18 @@ from __future__ import annotations
 import os
 import shutil
 import tempfile
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
 from dataclasses import dataclass, field, replace
+from functools import partial
 from pathlib import Path
 from typing import Literal, override
 
 from pydantic import BaseModel, ConfigDict
 
 from etsy_listings.core.config.errors import ConfigLoadError
-from etsy_listings.core.config.listing import TemplateMediaEntry
+from etsy_listings.core.config.garment_profile import GarmentProfile
+from etsy_listings.core.config.listing import Listing, TemplateMediaEntry
 from etsy_listings.core.engine.change import Action, Verdict
 from etsy_listings.core.engine.context import RunContext, Swatch
 from etsy_listings.core.engine.lock import (
@@ -559,6 +561,207 @@ def _resolve_scene(
     )
 
 
+def _referenced_scenes(listing_cfg: Listing) -> list[tuple[str, str | None]]:
+    """Each ``(template, colour)`` the listing's media references, once, in
+    first-reference order."""
+    referenced: dict[tuple[str, str | None], None] = {}
+    for entry in listing_cfg.media:
+        if isinstance(entry, TemplateMediaEntry):
+            referenced.setdefault((entry.template, entry.colour), None)
+    return list(referenced)
+
+
+@dataclass(frozen=True)
+class _Templates:
+    """The referenced templates' configs, and the hash of each config file."""
+
+    configs: dict[str, AnyTemplate]
+    hashes: dict[str, str]
+
+
+def _load_template(workspace: Workspace, template_name: str) -> tuple[AnyTemplate, str] | Blocked:
+    config_path = workspace.template_config_file(template_name)
+    blocked = check_render_template(template_name, config_path)
+    if blocked is not None:
+        return blocked
+    # The file's own bytes, not the re-serialised model: hashing a
+    # normalised dump would miss an edit that pydantic round-trips
+    # away, and the question here is "did the file change?".
+    digest = hash_file(config_path)
+    try:
+        config = workspace.load_template_config(template_name)
+    except ConfigLoadError as exc:
+        return Blocked(str(exc))
+    maps = template_readiness(workspace, template_name, config)
+    blocked = check_prepared_maps(template_name, None if maps.can_render else maps.message)
+    if blocked is not None:
+        return blocked
+    return config, digest
+
+
+def _load_templates(
+    workspace: Workspace, referenced: list[tuple[str, str | None]]
+) -> _Templates | Blocked:
+    templates = _Templates(configs={}, hashes={})
+    for template_name, _ in referenced:
+        if template_name in templates.configs:
+            continue
+        loaded = _load_template(workspace, template_name)
+        if isinstance(loaded, Blocked):
+            return loaded
+        templates.configs[template_name], templates.hashes[template_name] = loaded
+    return templates
+
+
+class _DesignFiles:
+    """The :data:`DesignFor` of one listing: the design file a colour prints in
+    a template, with its content hash, read once per file."""
+
+    def __init__(
+        self, workspace: Workspace, listing_cfg: Listing, profile: GarmentProfile, listing_dir: Path
+    ) -> None:
+        self._workspace = workspace
+        self._listing_cfg = listing_cfg
+        self._profile = profile
+        self._listing_dir = listing_dir
+        self._files: dict[str, tuple[Path, str]] = {}
+
+    def __call__(self, colour: str | None, template: str) -> tuple[Path, str] | Blocked:
+        ref = resolved_design(
+            self._listing_cfg.design, colour, self._profile.colors, where=f"template {template!r}"
+        )
+        if isinstance(ref, Blocked):
+            return ref
+        if ref not in self._files:
+            path = self._workspace.resolve_ref(ref, listing_dir=self._listing_dir)
+            if not path.is_file():
+                # Refused, not raised: a missing file is this listing's
+                # problem, and an OSError would end a `--all` batch.
+                return Blocked(f"design file not found: {ref}")
+            self._files[ref] = (path, hash_file(path))
+        return self._files[ref]
+
+
+def _resolve_scenes(
+    workspace: Workspace,
+    listing: str,
+    design_for: DesignFor,
+    templates: _Templates,
+    referenced: list[tuple[str, str | None]],
+) -> tuple[list[SceneWork], dict[str, str]] | Blocked:
+    """Each referenced scene's work, and the hash of each scene's photo."""
+    base_hash: dict[str, str] = {}
+    works: list[SceneWork] = []
+    for template_name, colour in referenced:
+        work = _resolve_scene(
+            workspace=workspace,
+            listing=listing,
+            design_for=design_for,
+            ref=_SceneRef(template_name, templates.configs[template_name], colour),
+        )
+        if isinstance(work, Blocked):
+            return work
+        works.append(work)
+
+        # Per scene, not per template. A colour-matrix set has one photo
+        # per colour, and hashing only the first one (which is what
+        # `setdefault` over the template name used to do) meant replacing
+        # any *other* colour's photo changed no hash at all -- so `plan`
+        # reported "No changes." and the stale render stayed in the cache.
+        base_hash[work.key] = hash_file(work.base_image)
+    return works, base_hash
+
+
+PreviewRenderer = Callable[[Workspace, SceneWork, Path], None]
+
+
+class _PreviewSubmitter:
+    """Feeds pending preview jobs to a pool, one at a time, until they run out
+    or ``should_stop`` says to start no more."""
+
+    def __init__(
+        self,
+        pool: ThreadPoolExecutor,
+        jobs: Iterator[tuple[SceneWork, Path]],
+        should_stop: Callable[[], bool],
+        render: Callable[[SceneWork, Path], None],
+    ) -> None:
+        self._pool = pool
+        self._jobs = jobs
+        self._should_stop = should_stop
+        self._render = render
+        self.futures: dict[Future[None], SceneWork] = {}
+
+    def submit(self, count: int) -> None:
+        """Submit up to ``count`` more jobs."""
+        for _ in range(count):
+            if not self._submit_one():
+                return
+
+    def _submit_one(self) -> bool:
+        if self._should_stop():
+            return False
+        try:
+            work, target = next(self._jobs)
+        except StopIteration:
+            return False
+        self.futures[self._pool.submit(self._render, work, target)] = work
+        return True
+
+
+@dataclass
+class _PreviewBatch:
+    """One :meth:`RenderStage.preview` call: the scenes that end it with a
+    ready preview, reported to ``on_ready`` as each becomes available."""
+
+    workspace: Workspace
+    desired: RenderDesired
+    should_stop: Callable[[], bool]
+    on_ready: Callable[[SceneWork], None] | None
+    ready: list[SceneWork] = field(default_factory=list)
+
+    def _mark_ready(self, work: SceneWork) -> None:
+        self.ready.append(work)
+        if self.on_ready is not None:
+            self.on_ready(work)
+
+    def collect(self, needed: set[str]) -> list[tuple[SceneWork, Path]]:
+        """Mark the needed scenes whose preview already exists ready, and
+        return the rest with the file each should be rendered to."""
+        pending: list[tuple[SceneWork, Path]] = []
+        for work in self.desired.works:
+            if work.key not in needed:
+                continue
+            if self.should_stop():
+                break
+            target = self.workspace.preview_file(
+                self.desired.listing,
+                work.template,
+                work.colour,
+                _hash_token(scene_hash(self.desired, work)),
+            )
+            if target.is_file():
+                self._mark_ready(work)
+            else:
+                pending.append((work, target))
+        return pending
+
+    def render(self, pending: list[tuple[SceneWork, Path]], renderer: PreviewRenderer) -> None:
+        workers = min(PREVIEW_WORKERS, len(pending))
+        with ThreadPoolExecutor(max_workers=workers, thread_name_prefix="render-preview") as pool:
+            submitter = _PreviewSubmitter(
+                pool, iter(pending), self.should_stop, partial(renderer, self.workspace)
+            )
+            submitter.submit(workers)
+            while submitter.futures:
+                finished, _ = wait(submitter.futures, return_when=FIRST_COMPLETED)
+                for future in finished:
+                    work = submitter.futures.pop(future)
+                    future.result()
+                    self._mark_ready(work)
+                submitter.submit(len(finished))
+
+
 class RenderStage(Stage[RenderDesired, RenderApplied, RenderLive]):
     name = "render"
     local = True
@@ -580,32 +783,10 @@ class RenderStage(Stage[RenderDesired, RenderApplied, RenderLive]):
             return blocked
         profile = workspace.load_garment_profile(listing_cfg.garment_profile)
 
-        referenced: dict[tuple[str, str | None], None] = {}
-        for entry in listing_cfg.media:
-            if isinstance(entry, TemplateMediaEntry):
-                referenced.setdefault((entry.template, entry.colour), None)
-
-        template_configs: dict[str, AnyTemplate] = {}
-        template_hash: dict[str, str] = {}
-        for template_name, _ in referenced:
-            if template_name in template_configs:
-                continue
-            config_path = workspace.template_config_file(template_name)
-            blocked = check_render_template(template_name, config_path)
-            if blocked is not None:
-                return blocked
-            # The file's own bytes, not the re-serialised model: hashing a
-            # normalised dump would miss an edit that pydantic round-trips
-            # away, and the question here is "did the file change?".
-            template_hash[template_name] = hash_file(config_path)
-            try:
-                template_configs[template_name] = workspace.load_template_config(template_name)
-            except ConfigLoadError as exc:
-                return Blocked(str(exc))
-            maps = template_readiness(workspace, template_name, template_configs[template_name])
-            blocked = check_prepared_maps(template_name, None if maps.can_render else maps.message)
-            if blocked is not None:
-                return blocked
+        referenced = _referenced_scenes(listing_cfg)
+        templates = _load_templates(workspace, referenced)
+        if isinstance(templates, Blocked):
+            return templates
 
         # ADR-0053: every depicted colour must resolve before anything is hashed,
         # and a failure is this stage refusing, never a raise.
@@ -614,55 +795,23 @@ class RenderStage(Stage[RenderDesired, RenderApplied, RenderLive]):
             profile,
             {
                 name: template_info(workspace, name, config)
-                for name, config in template_configs.items()
+                for name, config in templates.configs.items()
             },
         )
         if blocked is not None:
             return blocked
 
-        listing_dir = workspace.listing_dir(listing)
-        files: dict[str, tuple[Path, str]] = {}
-
-        def design_for(colour: str | None, template: str) -> tuple[Path, str] | Blocked:
-            ref = resolved_design(
-                listing_cfg.design, colour, profile.colors, where=f"template {template!r}"
-            )
-            if isinstance(ref, Blocked):
-                return ref
-            if ref not in files:
-                path = workspace.resolve_ref(ref, listing_dir=listing_dir)
-                if not path.is_file():
-                    # Refused, not raised: a missing file is this listing's
-                    # problem, and an OSError would end a `--all` batch.
-                    return Blocked(f"design file not found: {ref}")
-                files[ref] = (path, hash_file(path))
-            return files[ref]
-
-        base_hash: dict[str, str] = {}
-        works: list[SceneWork] = []
-        for template_name, colour in referenced:
-            work = _resolve_scene(
-                workspace=workspace,
-                listing=listing,
-                design_for=design_for,
-                ref=_SceneRef(template_name, template_configs[template_name], colour),
-            )
-            if isinstance(work, Blocked):
-                return work
-            works.append(work)
-
-            # Per scene, not per template. A colour-matrix set has one photo
-            # per colour, and hashing only the first one (which is what
-            # `setdefault` over the template name used to do) meant replacing
-            # any *other* colour's photo changed no hash at all -- so `plan`
-            # reported "No changes." and the stale render stayed in the cache.
-            base_hash[work.key] = hash_file(work.base_image)
+        design_for = _DesignFiles(workspace, listing_cfg, profile, workspace.listing_dir(listing))
+        scenes = _resolve_scenes(workspace, listing, design_for, templates, referenced)
+        if isinstance(scenes, Blocked):
+            return scenes
+        works, base_hash = scenes
 
         desired = RenderDesired(
             listing=listing,
             root=workspace.root,
             works=tuple(works),
-            template_hash=template_hash,
+            template_hash=templates.hashes,
             base_hash=base_hash,
         )
         # ADR-0040: has a preview already been rendered for each scene's *current*
@@ -846,60 +995,12 @@ class RenderStage(Stage[RenderDesired, RenderApplied, RenderLive]):
         workspace = ctx.workspace
         snapshot = self.snapshot(desired, live)
         needed = {s.scene for s in snapshot.scenes if s.state in ("stale", "missing")}
-
-        ready: list[SceneWork] = []
-        pending: list[tuple[SceneWork, Path]] = []
-
-        for work in desired.works:
-            if work.key not in needed:
-                continue
-            if should_stop():
-                break
-            target = workspace.preview_file(
-                desired.listing, work.template, work.colour, _hash_token(scene_hash(desired, work))
-            )
-            if target.is_file():
-                ready.append(work)
-                if on_ready is not None:
-                    on_ready(work)
-            else:
-                pending.append((work, target))
-
+        batch = _PreviewBatch(workspace, desired, should_stop, on_ready)
+        pending = batch.collect(needed)
         if pending:
-            workers = min(PREVIEW_WORKERS, len(pending))
-            jobs = iter(pending)
-            futures: dict[Future[None], SceneWork] = {}
-
-            def submit_one(pool: ThreadPoolExecutor) -> bool:
-                if should_stop():
-                    return False
-                try:
-                    work, target = next(jobs)
-                except StopIteration:
-                    return False
-                futures[pool.submit(self._render_preview, workspace, work, target)] = work
-                return True
-
-            with ThreadPoolExecutor(
-                max_workers=workers, thread_name_prefix="render-preview"
-            ) as pool:
-                for _ in range(workers):
-                    if not submit_one(pool):
-                        break
-                while futures:
-                    finished, _ = wait(futures, return_when=FIRST_COMPLETED)
-                    for future in finished:
-                        work = futures.pop(future)
-                        future.result()
-                        ready.append(work)
-                        if on_ready is not None:
-                            on_ready(work)
-                    for _ in finished:
-                        if not submit_one(pool):
-                            break
-
+            batch.render(pending, self._render_preview)
         self._prune_previews(workspace, desired)
-        return tuple(ready)
+        return tuple(batch.ready)
 
     @staticmethod
     def _render_preview(workspace: Workspace, work: SceneWork, target: Path) -> None:
