@@ -20,7 +20,11 @@ from etsy_listings.core.application.preparation_views import preparation_view, r
 from etsy_listings.core.application.refusals import TemplateMissingError
 from etsy_listings.core.config.errors import ConfigLoadError
 from etsy_listings.core.errors import UserFacingError
-from etsy_listings.core.workspace.calibration import CalibrationConflictError, CalibrationStore
+from etsy_listings.core.workspace.calibration import (
+    CalibrationConflictError,
+    CalibrationStore,
+    SavedMask,
+)
 from etsy_listings.server.api.schemas import (
     CreatePreparationRequest,
     MapReadinessResponse,
@@ -99,17 +103,21 @@ def jobs(
     ]
 
 
-def mask_response(
-    request: Request, name: str, placement_id: str | None, source: Literal["edited", "automatic"]
-) -> Response:
+def _read_mask(request: Request, name: str, placement_id: str | None) -> SavedMask:
     try:
-        mask = read_mask(coordinator(request).workspace, name, placement_id)
+        return read_mask(coordinator(request).workspace, name, placement_id)
     except TemplateMissingError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except UserFacingError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+def mask_response(
+    request: Request, name: str, placement_id: str | None, source: Literal["edited", "automatic"]
+) -> Response:
+    mask = _read_mask(request, name, placement_id)
     return Response(
         mask.edited if source == "edited" else mask.automatic,
         media_type="image/png",
@@ -135,14 +143,7 @@ def placement_mask(
 
 
 def history_response(request: Request, name: str, placement_id: str | None) -> MaskHistoryResponse:
-    try:
-        mask = read_mask(coordinator(request).workspace, name, placement_id)
-    except TemplateMissingError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    except UserFacingError as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    mask = _read_mask(request, name, placement_id)
     store = CalibrationStore(coordinator(request).workspace)
     strokes = store.history(name, placement_id, mask.checksum)
     return MaskHistoryResponse(
