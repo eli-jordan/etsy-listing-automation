@@ -35,13 +35,7 @@ def _frames(body: str) -> list[dict[str, object]]:
     return frames
 
 
-def test_full_ai_run_drafts_brief_researches_market_and_proposes_seo(
-    workspace_root: Path,
-    etsy_market_workspace: Workspace,
-    ai_providers: Callable[[Workspace], Sequence[AiProvider]],
-) -> None:
-    edit_listing(workspace_root, brief="")
-    workspace = Workspace.discover(root_override=workspace_root)
+def _write_default_prompts(workspace: Workspace) -> None:
     for path, content in (
         (workspace.brief_prompt_file(), default_brief_prompt_text()),
         (workspace.market_queries_prompt_file(), default_market_queries_prompt_text()),
@@ -49,6 +43,37 @@ def test_full_ai_run_drafts_brief_researches_market_and_proposes_seo(
     ):
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(content, encoding="utf-8")
+
+
+def _step_transitions(events: list[dict]) -> list[tuple[str, str]]:
+    """Each step's state changes, in order. A step may re-announce its state
+    with a new `detail` as it progresses (spec: "on every step change"), so
+    repeats are collapsed rather than counted -- how many progress messages a
+    phase sends is not the contract."""
+    transitions = [(event["id"], event["state"]) for event in events if event["type"] == "step"]
+    return [t for i, t in enumerate(transitions) if i == 0 or t != transitions[i - 1]]
+
+
+def _assert_market_and_proposal(workspace: Workspace, events: list[dict]) -> None:
+    snapshot = load_market_snapshot(workspace, FIXTURE_LISTING)
+    assert snapshot is not None
+    market_event = next(event for event in events if event["type"] == "market")
+    assert market_event["snapshot"] == snapshot.model_dump(mode="json")
+    assert 1 <= snapshot.scored <= 20
+    proposal = next(event for event in events if event["type"] == "proposal")
+    validated = ListingProposal.model_validate(proposal)
+    assert len(validated.proposal.titles) == 3
+    assert len(validated.proposal.tags) >= 1
+
+
+def test_full_ai_run_drafts_brief_researches_market_and_proposes_seo(
+    workspace_root: Path,
+    etsy_market_workspace: Workspace,
+    ai_providers: Callable[[Workspace], Sequence[AiProvider]],
+) -> None:
+    edit_listing(workspace_root, brief="")
+    workspace = Workspace.discover(root_override=workspace_root)
+    _write_default_prompts(workspace)
     app = create_app(
         workspace,
         seo_provider_factory=ai_providers,
@@ -70,12 +95,8 @@ def test_full_ai_run_drafts_brief_researches_market_and_proposes_seo(
         detail = client.get(f"/api/ai/runs/{run_id}").json()
 
     assert [event["seq"] for event in events] == list(range(1, len(events) + 1))
-    # The required milestones, in order. A step may re-announce its state
-    # with a new `detail` as it progresses (spec: "on every step change"), so
-    # repeats are collapsed rather than counted -- how many progress
-    # messages a phase sends is not the contract.
-    transitions = [(event["id"], event["state"]) for event in events if event["type"] == "step"]
-    assert [t for i, t in enumerate(transitions) if i == 0 or t != transitions[i - 1]] == [
+    # The required milestones, in order.
+    assert _step_transitions(events) == [
         ("brief", "pending"),
         ("market", "pending"),
         ("seo", "pending"),
@@ -94,12 +115,4 @@ def test_full_ai_run_drafts_brief_researches_market_and_proposes_seo(
     assert workspace.load_listing(FIXTURE_LISTING).brief.strip()
     assert next(event for event in events if event["type"] == "brief")["written"] is True
 
-    snapshot = load_market_snapshot(workspace, FIXTURE_LISTING)
-    assert snapshot is not None
-    market_event = next(event for event in events if event["type"] == "market")
-    assert market_event["snapshot"] == snapshot.model_dump(mode="json")
-    assert 1 <= snapshot.scored <= 20
-    proposal = next(event for event in events if event["type"] == "proposal")
-    validated = ListingProposal.model_validate(proposal)
-    assert len(validated.proposal.titles) == 3
-    assert len(validated.proposal.tags) >= 1
+    _assert_market_and_proposal(workspace, events)
