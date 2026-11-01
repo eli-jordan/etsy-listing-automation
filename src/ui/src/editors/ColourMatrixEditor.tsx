@@ -80,6 +80,7 @@ function PhotoWarpColourMatrixEditor(props: Props) {
   return (
     <EditorShell
       {...props}
+      rendererControls={props.rendererControls || null}
       previewUrl={previewUrl}
       jobs={jobs}
       onApprove={onApprove}

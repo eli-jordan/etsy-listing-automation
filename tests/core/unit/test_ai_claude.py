@@ -264,7 +264,7 @@ def _completed(payload: dict[str, Any]) -> str:
 def _patch_run_managed(
     monkeypatch: pytest.MonkeyPatch, result: ProcessResult
 ) -> list[dict[str, Any]]:
-    # See `CodexProvider._resolved_binary`'s docstring / this project's
+    # See `LocalCliProvider._resolved_binary` and this project's
     # test_ai_codex.py: `generate()` resolves the binary through
     # `shutil.which` rather than trusting the bare name is launchable, so
     # this needs patching deterministically too, independent of whatever

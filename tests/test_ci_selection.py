@@ -150,7 +150,7 @@ def test_the_capture_marker_selects_exactly_the_six_scenes(tmp_path: Path) -> No
 
 
 def test_lint_runs_once_in_the_quality_job_and_the_test_matrix_only_tests() -> None:
-    # S10: format check, ruff, mypy and Import Linter run once, on ubuntu,
+    # S04/S05/S10: whole-program checks run once alongside lint on ubuntu,
     # through the same poe task a developer can run; the two-OS matrix exists
     # for the render goldens and runs tests alone.
     workflow = yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text())
@@ -158,6 +158,22 @@ def test_lint_runs_once_in_the_quality_job_and_the_test_matrix_only_tests() -> N
     assert "uv run poe lint" in quality
     tasks = tomllib.loads((ROOT / "pyproject.toml").read_text())["tool"]["poe"]["tasks"]
     lint = [_poe_command(name) for name in tasks["lint"]]
-    assert lint == ["ruff format --check .", "ruff check .", "mypy src", "lint-imports"]
+    assert lint == [
+        "ruff format --check .",
+        "ruff check .",
+        "mypy src",
+        "lint-imports",
+        "vulture src/etsy_listings --min-confidence 90",
+        "node src/ui/node_modules/jscpd/bin/jscpd "
+        "src/etsy_listings src/ui/src --config .jscpd.json",
+    ]
+    assert "lint" in tasks["check"]
+    assert "npm ci" in quality
+    node = next(
+        step
+        for step in workflow["jobs"]["quality"]["steps"]
+        if step.get("uses", "").startswith("actions/setup-node@")
+    )
+    assert node["with"]["cache-dependency-path"] == "src/ui/package-lock.json"
     python = [step.get("run", "") for step in workflow["jobs"]["python"]["steps"]]
     assert not [run for run in python if any(tool in run for tool in ("ruff", "mypy", "lint"))]

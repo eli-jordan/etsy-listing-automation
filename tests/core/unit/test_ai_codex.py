@@ -2,7 +2,7 @@
 implementation plan, PR4, items 1-4).
 
 Nothing here launches a real `codex` process. Readiness tests replace
-`etsy_listings.core.ai.subprocess.run` (the same double-and-monkeypatch
+`subprocess.run` (the same double-and-monkeypatch
 pattern `tests/support/doubles.py.FakeRun` already established for
 `cli/prompts.py`'s fzf lookup); generate/argv tests replace
 `etsy_listings.core.ai.codex.run_managed` so they can assert on exactly what argv,
@@ -244,7 +244,7 @@ def _patch_run_managed(
 ) -> list[dict[str, Any]]:
     # `generate()` resolves the binary through `shutil.which` (a Windows
     # npm-installed CLI is a `.CMD` shim that bare-name `subprocess.run`
-    # cannot launch without `shell=True` -- see `CodexProvider._resolved_binary`),
+    # cannot launch without `shell=True` -- see `LocalCliProvider._resolved_binary`),
     # so it must be patched here too, deterministically, rather than left to
     # whatever happens to be on the machine actually running this test suite.
     monkeypatch.setattr(shutil, "which", lambda name: f"/resolved/{name}")

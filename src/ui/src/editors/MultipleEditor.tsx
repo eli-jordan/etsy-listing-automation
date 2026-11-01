@@ -194,6 +194,7 @@ function PhotoWarpMultipleEditor(props: Props) {
   return (
     <EditorShell
       {...props}
+      rendererControls={props.rendererControls || null}
       previewUrl={previewUrl}
       jobs={jobs}
       outlineLabel="Show all design boxes"

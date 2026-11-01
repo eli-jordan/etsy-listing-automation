@@ -48,6 +48,7 @@ function PhotoWarpSingleEditor(props: Props) {
   return (
     <EditorShell
       {...props}
+      rendererControls={props.rendererControls || null}
       previewUrl={previewUrl}
       jobs={jobs}
       canvas={(ctx) => <OneBoxCanvas {...ctx} box={config.bounding_box} onChange={setBox} />}
