@@ -37,7 +37,7 @@ tests/ core/ server/ cli/ by owner, then layer (unit, golden, behaviour, contrac
   doubles in tests/support/; project-wide build/CI tests (packaging, CI selection, OpenAPI export, import contracts,
   protected test imports) directly in tests/
 docs/ guides/, features/<topic>-YYYYMMDD/, adr/, reference/, research/, history/, architecture.md
-scripts/ agent_lint.py (per-edit hook), frontend_gate.py, setup_worktree.py (T3 worktree setup), sloc.py, generate_test_assets.py
+scripts/ agent_lint.py (per-edit hook), frontend_gate.py, setup_worktree.py (T3 worktree setup), generate_test_assets.py
 ```
 
 Every package's `__init__.py` states what it exports and deliberately withholds. Read that before reaching into a submodule.
@@ -67,7 +67,6 @@ uv run pytest --update-goldens # regenerate render goldens
 uv run mypy src # strict type check
 uv run lint-imports # Import Linter contracts in pyproject.toml (ADR-0052)
 uv run ruff check . / ruff format . # lint / format
-uv run python scripts/sloc.py --summary # code size, prose excluded
 ```
 
 Frontend (`src/ui/`): `npm run dev|build|typecheck|lint|format|format:check|test|test:coverage|test:design|gen:api`. Vitest has three projects (`vitest.config.ts`): `node` for pure subjects, `dom` (jsdom + setup) for everything else under `src/`, `design` for prototype frames; `test:coverage` measures only node + dom, `test:design` is required separately. After changing a FastAPI endpoint's shape, regenerate the typed client (`ADR-0011`, never hand-written): `uv run python scripts/export_openapi.py`, then `npm run gen:api`.
@@ -182,7 +181,7 @@ Run it locally before merging rather than iterating through CI. `gh workflow run
 
 <important if="you are measuring or reducing code size">
 
-Use `scripts/sloc.py`, not physical line count: it strips blanks, comments and docstrings, because this codebase is deliberately heavy on rationale. Extracting a shared abstraction is usually LOC-neutral (the props type or protocol costs what the duplication did); judge by whether there is now one place to change the thing.
+Physical line count overstates code here, because this codebase is deliberately heavy on rationale in comments and docstrings. Extracting a shared abstraction is usually LOC-neutral (the props type or protocol costs what the duplication did); judge by whether there is now one place to change the thing.
 </important>
 
 <important if="you are editing docs/history/prd.md, docs/history/implementation-plan.md or other docs">
