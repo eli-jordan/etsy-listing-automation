@@ -26,6 +26,7 @@ import random as _random
 import threading
 import time
 from collections.abc import Callable
+from dataclasses import dataclass
 from typing import Any
 
 import httpx
@@ -162,6 +163,16 @@ class RateGate:
             self._resume_at = max(self._resume_at, self._clock() + 1.0)
 
 
+@dataclass(frozen=True)
+class Timing:
+    """The transport's sense of time: how it waits, the jitter its retries
+    draw, and the clock its rate gate reads. Tests replace all three."""
+
+    sleep: Callable[[float], None] = time.sleep
+    random: Callable[[], float] = _random.random
+    clock: Callable[[], float] = time.monotonic
+
+
 class Transport:
     """Send a request to Etsy and hand back a response worth reading."""
 
@@ -172,17 +183,15 @@ class Transport:
         bearer: BearerSource | None = None,
         client: httpx.Client | None = None,
         policy: RetryPolicy = DEFAULT_POLICY,
-        sleep: Callable[[float], None] = time.sleep,
-        random: Callable[[], float] = _random.random,
-        clock: Callable[[], float] = time.monotonic,
+        timing: Timing = Timing(),
     ) -> None:
         self._app_key = app_key
         self._bearer = bearer
         self._client = client or httpx.Client(base_url=BASE_URL, timeout=DEFAULT_TIMEOUT_SECONDS)
         self._policy = policy
-        self._sleep = sleep
-        self._random = random
-        self._gate = RateGate(clock=clock, sleep=sleep)
+        self._sleep = timing.sleep
+        self._random = timing.random
+        self._gate = RateGate(clock=timing.clock, sleep=timing.sleep)
 
     def request(self, method: str, path: str, **kwargs: Any) -> httpx.Response:
         app_key = self._app_key() if callable(self._app_key) else self._app_key

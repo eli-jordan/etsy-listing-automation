@@ -406,7 +406,9 @@ number, and is ignored when resolving: Printify's titles are generic ("Unisex
 Garment-Dyed T-shirt" is sold by several brands) and get rewritten, so one is
 not an identifier (ADR-0005). Case, surrounding spaces and the ® Printify puts
 in brand names are all normalised away, so `Comfort Colors` matches its
-`Comfort Colors®`.
+`Comfort Colors®`. The catalog's newer `Comfort Colors® Print on Demand`
+spelling also matches existing Comfort Colors profiles; the model number must
+still match, and ambiguous catalog entries stop with an error.
 
 ```yaml
 # listings/take-a-hike/listing.yaml
@@ -446,9 +448,8 @@ A few things worth knowing about `listing.yaml`:
 - **Every path is written from the workspace root** — `designs/x.png`,
   `common-media/size-guide.png`, `pricing-plans/launch.yaml` — or from the
   listing's own directory with a `./` prefix (`./close-up.png`). `..` is
-  refused (ADR-0046). A workspace written before that rule still spells its
-  refs `../../designs/x.png`; `uv run python scripts/migrate_workspace_refs.py
-  <workspace>` prints the rewrite, and `--write` applies it.
+  refused (ADR-0046). A workspace written before that rule spells its refs
+  `../../designs/x.png`; rewrite them from the workspace root.
 - **`design` can be a map**, not just a bare path, when you need separate
   light-ink/dark-ink artwork — `{on-light:..., on-dark:...}` — with an
   optional per-colour `artwork:` override on the listing. Full resolution

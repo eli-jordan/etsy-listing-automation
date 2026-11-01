@@ -55,7 +55,60 @@ dev = [
     "types-pyyaml",
     "playwright>=1.49,<2",
     "import-linter>=2.15,<3",
+    "poethepoet>=0.37,<1",
+    "vulture>=2.14,<3",
+    "complexipy>=8.0,<9",
 ]
+
+# Every check is defined once, here (spec S09). `uv run poe check` is what you
+# run before committing: it fixes and formats in place, then runs every gate.
+# CI calls the check-only tasks (`lint`, `test-ci`, `test-browser`).
+[tool.poe]
+# A developer who works on a real workspace exports ETSY_LISTINGS_ROOT, and
+# `Workspace.discover()` consults it before walking up from cwd. The workspace
+# tests would then discover *that* workspace instead of their fixture copy,
+# and fail for a reason unrelated to the change being checked. The checks
+# should not depend on any workspace, so every task clears it: poe cannot
+# unset a variable, and both `discover()` and Typer's envvar treat an empty
+# value as absent. Tests that want it set it themselves; the only layer that
+# reads it from the environment is `-m e2e`, which no task here runs.
+env = { ETSY_LISTINGS_ROOT = "" }
+
+[tool.poe.tasks]
+format = "ruff format ."
+format-check = "ruff format --check ."
+# Applies what it can and never fails; `ruff` afterwards reports the rest.
+fix = "ruff check --fix --exit-zero --quiet ."
+ruff = "ruff check ."
+mypy = "mypy src"
+# Core/server/CLI dependency direction and protected application modules
+# (ADR-0052); contracts below.
+imports = "lint-imports"
+# S04/S05: whole-program checks use application source only.
+dead-code = "vulture src/etsy_listings --min-confidence 90"
+duplicates = "node src/ui/node_modules/jscpd/bin/jscpd src/etsy_listings src/ui/src --config .jscpd.json"
+# S02: cognitive complexity per function; paths and limit in [tool.complexipy].
+complexity = "complexipy --failed --plain"
+# The `quality` CI job: report only, change nothing.
+lint = ["format-check", "ruff", "mypy", "imports", "complexity", "dead-code", "duplicates"]
+# Coverage is measured over the whole default selection, browser layer
+# included. Those tests skip themselves when chromium or src/ui/dist is
+# missing, which costs about a point; the 85% floor (`fail_under`, below) has
+# the headroom to pass either way. The opt-in `capture` screenshots are
+# deselected by tests/conftest.py, as in CI's browser job.
+test = "pytest --cov --cov-report=term-missing --cov-report=html"
+# The CI matrix: an explicit -m replaces addopts, excluding browser and e2e.
+# That leaves unit, golden, behaviour and contract, under the same floor.
+test-ci = "pytest -m 'not browser and not e2e' --cov --cov-report=term-missing"
+test-browser = "pytest -m browser"
+# `npm run format` writes, as `ruff format .` does; CI's frontend job runs
+# `format:check`. `test:design` runs the marver prototype frames' tests:
+# required, but a separate Vitest project outside production coverage.
+# Skipped, not failed, when npm is not on PATH.
+frontend = "python scripts/frontend_gate.py format lint typecheck test:coverage test:design"
+# Fix, then format (so a fix's output is formatted and E501 is judged on
+# formatted lines), then report what is left.
+check = ["fix", "format", "lint", "test", "frontend"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -109,14 +162,74 @@ select = [
     "ANN",              # annotations
     "C4",               # comprehensions
     "SIM",              # simplify
+    # S01 mechanical families.
+    "RET", "PIE", "RSE",
+    "PERF", "FURB",
+    "PTH",
+    "RUF",
+    "PGH",
+    "BLE",
+    "ERA",
+    "A",
+    "DTZ",
+    "T20",
+    "FAST",
+    "PT",
+    "TRY",
+    "PLE", "PLW",
+    "N",
+    # S01 judgment families.
+    "FBT",
+    "ARG",
+    "SLF",
+    "PLC0415",
+    "PLR2004",
+    "PLR0913", "PLR0917",
+    # S02 complexity and size limits, tests included.
+    "C90",
+    "PLR0911", "PLR0912", "PLR0915",
 ]
 ignore = [
     "ANN401",           # Any is sometimes the honest type at a boundary
     "B008",             # typer/fastapi require call-as-default (typer.Option(...))
+    "RUF001",           # S01: the code uses × and – on purpose
+    "RUF002",
+    "RUF003",
+    "TRY003",           # S01: exception message style has no quality gain
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**" = ["ANN"]
+# S01: tests compare against literal expectations, stub interfaces with unused
+# parameters, inspect the subject's internals, pass booleans to helpers, import
+# lazily, print diagnostics and build fixtures with many parameters.
+"tests/**" = ["ANN", "PLR2004", "ARG", "SLF001", "FBT003", "PLC0415", "T20", "PLR0913"]
+# S01: print is the interface of the CLI and of scripts/. Production code
+# elsewhere logs, or renders through the CLI.
+"src/etsy_listings/cli/**" = ["T20"]
+"scripts/**" = ["T20"]
+# S06: the Codex gate decides on every shell command; os.path and open() spare
+# the 10ms pathlib import, about 6% of its skip path.
+"scripts/agent_lint_gate.py" = ["T20", "PTH"]
+
+[tool.ruff.lint.pylint]
+# S02: never loosened to make a check pass.
+max-args = 5
+max-positional-args = 5
+max-returns = 6
+max-branches = 12
+max-statements = 50
+
+[tool.ruff.lint.mccabe]
+# S02: cyclomatic complexity, never loosened to make a check pass.
+max-complexity = 8
+
+[tool.complexipy]
+# S02: cognitive complexity over all first-party Python. `poe complexity`
+# and the edit hook (scripts/agent_lint.py) both read this.
+paths = ["src", "tests", "scripts"]
+max-complexity-allowed = 10
+# Vendored packages' own scripts, not ours to judge.
+exclude = ["**/node_modules/**"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["etsy_listings"]
@@ -151,7 +264,7 @@ warn_required_dynamic_aliases = true
 # temporary exclusion cannot outlive the code it excuses. Every temporary
 # exclusion names the PR of docs/features/module-structure-20260930/plan.md
 # that removes it; none may survive PR 11. `uv run lint-imports` runs in
-# scripts/check.sh and CI; tests/test_import_contracts.py proves these
+# `poe check` and CI's `quality` job; tests/test_import_contracts.py proves these
 # contracts reject representative violations.
 #
 # Wizard sequencing, prompts and terminal output are all under etsy_listings.cli

@@ -124,7 +124,7 @@ def cleanup_product(workspace: Workspace, printify_client: PrintifyClient) -> It
             printify_client.delete_product(shop_id, str(product_id))
 
 
-def _ok(response: Any, status: int = 200) -> Any:  # noqa: ANN401 - httpx response, JSON body
+def _ok(response: Any, status: int = 200) -> Any:  # httpx response, JSON body
     assert response.status_code == status, response.text
     return response.json()
 
@@ -210,7 +210,10 @@ def test_a_batch_created_listing_deploys_and_its_proposal_goes(
     # Plan, then apply what was reviewed -- the deploy view's two runs.
     plan = _run(client, {"kind": "plan", "scope": "listings", "listings": [DESIGN]})
     assert plan["phase"] == "ready", plan
-    planned = next(e for e in plan["events"] if e["type"] == "listing_planned")
+    # Preview rendering is followed by a new plan with concrete media bytes.
+    # Review the latest event, as the deploy view does, rather than the
+    # superseded plan whose media still said "pending render" (ADR-0040).
+    planned = next(e for e in reversed(plan["events"]) if e["type"] == "listing_planned")
     blocked = [
         (sp["stage"], sp["outcome"]["message"])
         for sp in planned["plan"]["stage_plans"]

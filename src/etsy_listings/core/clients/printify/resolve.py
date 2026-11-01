@@ -10,15 +10,21 @@ on brand + model, the pair anyone buying blanks quotes.
 from __future__ import annotations
 
 import re
-from collections.abc import Collection, Sequence
+from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass
+from difflib import get_close_matches
 
-from etsy_listings.core.clients.printify.models import Blueprint, PrintProvider, VariantSet
+from etsy_listings.core.clients.printify.models import Blueprint, PrintProvider, Variant, VariantSet
 from etsy_listings.core.config.slug import ColourExceptions, slug_map
 from etsy_listings.core.errors import UserFacingError
 
 _TRADEMARK = re.compile(r"[®™©]")
 _WHITESPACE = re.compile(r"\s+")
+# With more valid names than this, a refusal lists only the closest few.
+_LIST_EVERY_NAME_UP_TO = 8
+_CLOSEST_NAMES = 5
+_BLUEPRINT_BRAND_ALIASES = {"comfort colors print on demand": "comfort colors"}
+"""Known catalog renames only; never match unrelated brands by similarity (ADR-0005)."""
 
 
 def normalise(value: str) -> str:
@@ -38,8 +44,14 @@ class CatalogResolutionError(UserFacingError, ValueError):
         self.kind = kind
         self.name = name
         self.valid_names = valid_names
-        options = ", ".join(sorted(valid_names)) or "(none available)"
-        super().__init__(f"no {kind} named {name!r}. Valid names: {options}")
+        if len(valid_names) > _LIST_EVERY_NAME_UP_TO:
+            closest = get_close_matches(name, sorted(valid_names), n=_CLOSEST_NAMES, cutoff=0.0)
+            options = ", ".join(closest)
+            suggestions = f"Closest names: {options} (and {len(valid_names) - len(closest)} more)"
+        else:
+            options = ", ".join(sorted(valid_names)) or "(none available)"
+            suggestions = f"Valid names: {options}"
+        super().__init__(f"no {kind} named {name!r}. {suggestions}")
 
 
 class AmbiguousBlueprintError(UserFacingError, ValueError):
@@ -59,6 +71,11 @@ class AmbiguousBlueprintError(UserFacingError, ValueError):
         )
 
 
+def _blueprint_brand(brand: str) -> str:
+    normalised = normalise(brand)
+    return _BLUEPRINT_BRAND_ALIASES.get(normalised, normalised)
+
+
 def resolve_blueprint(brand: str, model: str, blueprints: list[Blueprint]) -> Blueprint:
     """The blueprint sold as ``brand`` ``model``.
 
@@ -67,8 +84,8 @@ def resolve_blueprint(brand: str, model: str, blueprints: list[Blueprint]) -> Bl
     stray capital in a hand-written profile decides whether a garment
     resolves.
     """
-    wanted = (normalise(brand), normalise(model))
-    matches = [b for b in blueprints if (normalise(b.brand), normalise(b.model)) == wanted]
+    wanted = (_blueprint_brand(brand), normalise(model))
+    matches = [b for b in blueprints if (_blueprint_brand(b.brand), normalise(b.model)) == wanted]
 
     if len(matches) == 1:
         return matches[0]
@@ -163,24 +180,31 @@ def resolve_variants(
     if unknown:
         raise CatalogResolutionError("colour", unknown[0], sorted(by_slug))
 
+    _check_sizes(variant_set, sizes)
+    by_cell = {(v.options.color, v.options.size): v for v in variant_set.variants}
+    return _resolve_cells(
+        [(slug, by_slug[slug], size) for slug in colour_slugs for size in sizes], by_cell
+    )
+
+
+def _check_sizes(variant_set: VariantSet, sizes: Sequence[str]) -> None:
     offered_sizes = {v.options.size for v in variant_set.variants}
     for size in sizes:
         if size not in offered_sizes:
             raise UnknownSizeError(size, sorted(offered_sizes))
 
-    by_cell = {(v.options.color, v.options.size): v for v in variant_set.variants}
 
+def _resolve_cells(
+    cells: list[tuple[str, str, str]], by_cell: Mapping[tuple[str, str], Variant]
+) -> VariantResolution:
+    """Each ``(slug, colour, size)`` cell's variant, or the cell as missing
+    when the catalog has dropped it."""
     resolved: list[ResolvedVariant] = []
     missing: list[tuple[str, str]] = []
-    for slug in colour_slugs:
-        colour = by_slug[slug]
-        for size in sizes:
-            variant = by_cell.get((colour, size))
-            if variant is None:
-                missing.append((slug, size))
-                continue
-            resolved.append(
-                ResolvedVariant(id=variant.id, colour=colour, colour_slug=slug, size=size)
-            )
-
+    for slug, colour, size in cells:
+        variant = by_cell.get((colour, size))
+        if variant is None:
+            missing.append((slug, size))
+            continue
+        resolved.append(ResolvedVariant(id=variant.id, colour=colour, colour_slug=slug, size=size))
     return VariantResolution(variants=tuple(resolved), missing=tuple(missing))

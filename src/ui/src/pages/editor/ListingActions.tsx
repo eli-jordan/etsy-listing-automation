@@ -77,6 +77,12 @@ const GESTURES: Record<Exclude<Gesture, "delete">, { label: string; icon: ReactN
  * The other gestures are ordinary edits to `lifecycle`, sent at once through
  * the editor's own autosave, whose response carries the new status.
  */
+/** Mark reviewed's tooltip: how to undo it, or why it is not available yet. */
+function reviewTitle(member: ListingBatch): string | undefined {
+  if (member.reviewed) return "Mark needs review";
+  return member.reviewable ? undefined : "Available once the batch has drafted this listing";
+}
+
 export function ListingActions({
   detail,
   member,
@@ -154,13 +160,7 @@ export function ListingActions({
           }
           {...(member.reviewed ? { tone: "done" as const } : {})}
           aria-pressed={member.reviewed}
-          title={
-            member.reviewed
-              ? "Mark needs review"
-              : member.reviewable
-                ? undefined
-                : "Available once the batch has drafted this listing"
-          }
+          title={reviewTitle(member)}
           disabled={!member.reviewable}
           onClick={() => review(!member.reviewed)}
         >

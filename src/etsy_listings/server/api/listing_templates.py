@@ -34,17 +34,17 @@ from etsy_listings.core.application.listing_template_library import (
     TemplateSave,
 )
 from etsy_listings.core.application.refusals import (
-    ListingMissing,
-    ListingTemplateMissing,
-    ListingTemplateSourceRefused,
-    ReservedListingTemplateName,
+    ListingMissingError,
+    ListingTemplateMissingError,
+    ListingTemplateSourceRefusedError,
+    ReservedListingTemplateNameError,
 )
 from etsy_listings.core.application.workspace_locks import WorkspaceLocks
-from etsy_listings.core.batches import BatchStore, StagingStore
+from etsy_listings.core.batches import BatchRecords, BatchStore, StagingStore
 from etsy_listings.core.config.listing_validation import Issue as ValidationIssue
 from etsy_listings.core.listing_templates import ListingTemplateExistsError
 from etsy_listings.core.workspace.workspace import Workspace
-from etsy_listings.server.api.listings import wire_prices
+from etsy_listings.server.api.editor_projections import garment_fields, wire_prices
 from etsy_listings.server.api.schemas import (
     CreateListingTemplateRequest,
     Issue,
@@ -82,21 +82,21 @@ def _staging_store(request: Request) -> StagingStore:
 
 def _refused(exc: Exception) -> HTTPException:
     """A refusal of a name or a source, as its status code."""
-    if isinstance(exc, ListingMissing | ListingTemplateMissing):
+    if isinstance(exc, ListingMissingError | ListingTemplateMissingError):
         return HTTPException(status_code=404, detail=str(exc))
     if isinstance(exc, ListingTemplateExistsError):
         return HTTPException(status_code=409, detail=str(exc))
-    if isinstance(exc, ReservedListingTemplateName):
+    if isinstance(exc, ReservedListingTemplateNameError):
         return HTTPException(status_code=400, detail=str(exc))
     return HTTPException(status_code=422, detail=str(exc))
 
 
 _REFUSALS = (
-    ListingMissing,
-    ListingTemplateMissing,
+    ListingMissingError,
+    ListingTemplateMissingError,
     ListingTemplateExistsError,
-    ReservedListingTemplateName,
-    ListingTemplateSourceRefused,
+    ReservedListingTemplateNameError,
+    ListingTemplateSourceRefusedError,
 )
 
 
@@ -113,12 +113,7 @@ def _detail(workspace: Workspace, view: ListingTemplateView) -> ListingTemplateD
             "garment": view.garment,
             "pricing_plan_name": view.pricing_plan_name,
             "resolved_prices": [p.model_dump() for p in wire_prices(view.resolved_prices)],
-            "garment_materials": profile.materials if profile is not None else [],
-            "garment_product_type": profile.blueprint.display_title
-            if profile is not None
-            else None,
-            "garment_brand": profile.blueprint.brand if profile is not None else None,
-            "garment_model": profile.blueprint.model if profile is not None else None,
+            **garment_fields(profile),
             "description_composed": view.description_composed,
             "name": view.name,
             "modified_at": view.modified_at,
@@ -183,7 +178,7 @@ def listing_template_draft(
     workspace = _workspace(request)
     try:
         view = library.draft_listing_template(
-            workspace, from_listing=from_listing, from_template=from_template
+            workspace, library.DraftOrigin(listing=from_listing, template=from_template)
         )
     except _REFUSALS as exc:
         raise _refused(exc) from exc
@@ -201,8 +196,7 @@ def create_listing_template(
         outcome = library.create_listing_template(
             workspace,
             body.name,
-            from_listing=body.from_listing,
-            from_template=body.from_template,
+            library.DraftOrigin(listing=body.from_listing, template=body.from_template),
             document=body.document,
             locks=_locks(request),
         )
@@ -216,7 +210,7 @@ def get_listing_template(request: Request, name: str) -> ListingTemplateDetail:
     workspace = _workspace(request)
     try:
         view = library.read_listing_template(workspace, name)
-    except ListingTemplateMissing as exc:
+    except ListingTemplateMissingError as exc:
         raise _refused(exc) from exc
     return _detail(workspace, view)
 
@@ -232,7 +226,7 @@ def put_listing_template(
     workspace = _workspace(request)
     try:
         outcome = library.edit_listing_template(workspace, name, body, locks=_locks(request))
-    except ListingTemplateMissing as exc:
+    except ListingTemplateMissingError as exc:
         raise _refused(exc) from exc
     return _save_result(workspace, outcome)
 
@@ -253,8 +247,7 @@ def rename_listing_template(
             name,
             body.new_name,
             locks=_locks(request),
-            staging=_staging_store(request),
-            batches=_batch_store(request),
+            records=BatchRecords(_staging_store(request), _batch_store(request)),
         )
         view = library.read_listing_template(workspace, body.new_name)
     except _REFUSALS as exc:
@@ -268,6 +261,6 @@ def delete_listing_template(request: Request, name: str) -> Response:
     and a listing never had a link to it (spec, *Completeness and editing*)."""
     try:
         library.delete_listing_template(_workspace(request), name, locks=_locks(request))
-    except ListingTemplateMissing as exc:
+    except ListingTemplateMissingError as exc:
         raise _refused(exc) from exc
     return Response(status_code=204)

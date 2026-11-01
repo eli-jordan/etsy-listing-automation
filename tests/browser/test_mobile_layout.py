@@ -19,7 +19,7 @@ VIDEOS = Path(__file__).parent.parent / "fixtures" / "video"
 MOBILE_VIEWPORT = {"width": 390, "height": 844}
 
 
-def _assert_mobile_page_fits(page) -> None:  # noqa: ANN001
+def _assert_mobile_page_fits(page) -> None:
     dimensions = page.evaluate(
         """() => ({
             innerWidth: window.innerWidth,
@@ -49,7 +49,7 @@ def _assert_mobile_page_fits(page) -> None:  # noqa: ANN001
 
 
 def test_mobile_shell_keeps_listing_workflows_usable_without_page_overflow(
-    page,  # noqa: ANN001
+    page,
     workspace_root: Path,
 ) -> None:
     common_media = workspace_root / "common-media"

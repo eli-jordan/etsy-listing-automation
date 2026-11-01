@@ -35,7 +35,7 @@ def client(workspace: Workspace) -> TestClient:
     return TestClient(create_app(workspace))
 
 
-def _create(client: TestClient, name: str = NAME, **source: str) -> Any:  # noqa: ANN401
+def _create(client: TestClient, name: str = NAME, **source: str) -> Any:
     return client.post(
         "/api/listing-templates",
         json={"name": name, **(source or {"from_listing": FIXTURE_LISTING})},
@@ -132,7 +132,7 @@ class TestCreate:
     ) -> None:
         draft = client.get(f"/api/listing-templates/draft?from_listing={FIXTURE_LISTING}").json()
 
-        def create(document: dict[str, Any]) -> Any:  # noqa: ANN401
+        def create(document: dict[str, Any]) -> Any:
             return client.post(
                 "/api/listing-templates",
                 json={"name": NAME, "from_listing": FIXTURE_LISTING, "document": document},

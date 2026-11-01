@@ -3,7 +3,7 @@
   "scripts": [
     {
       "name": "Setup Worktree",
-      "command": "./setup_worktree.sh",
+      "command": "uv run --no-project python scripts/setup_worktree.py",
       "icon": "configure",
       "runOnWorktreeCreate": true
     }

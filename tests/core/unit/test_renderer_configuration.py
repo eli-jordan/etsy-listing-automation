@@ -66,7 +66,8 @@ def test_ids_reject_windows_device_names(identifier: str) -> None:
 
 
 @pytest.mark.parametrize(
-    "field,value", [("num_inference_steps", 0), ("ensemble_size", 1.5), ("ensemble_size", True)]
+    ("field", "value"),
+    [("num_inference_steps", 0), ("ensemble_size", 1.5), ("ensemble_size", True)],
 )
 def test_inference_values_are_positive_strict_integers(field: str, value: object) -> None:
     with pytest.raises(ValidationError):

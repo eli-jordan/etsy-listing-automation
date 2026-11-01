@@ -17,6 +17,8 @@ import numpy as np
 
 from etsy_listings.core.render.types import RGB, FloatMap
 
+_FLAT_RANGE = 1e-6  # a map whose values span less than this is flat: mid-grey
+
 
 def luminance_map(base_rgb: RGB) -> FloatMap:
     """Desaturate -> normalise levels. Derived from the blank mockup's own
@@ -25,7 +27,7 @@ def luminance_map(base_rgb: RGB) -> FloatMap:
     gray = np.asarray(cv2.cvtColor(base_rgb, cv2.COLOR_RGB2GRAY), dtype=np.uint8)
     normalized = gray.astype(np.float32) / 255.0
     lo, hi = float(normalized.min()), float(normalized.max())
-    if hi - lo < 1e-6:
+    if hi - lo < _FLAT_RANGE:
         return np.full_like(normalized, 0.5)
     return (normalized - lo) / (hi - lo)
 
@@ -40,7 +42,7 @@ def height_map(base_rgb: RGB, blur_ksize: int = 15) -> FloatMap:
         dtype=np.float32,
     )
     lo, hi = float(blurred.min()), float(blurred.max())
-    if hi - lo < 1e-6:
+    if hi - lo < _FLAT_RANGE:
         return np.full_like(blurred, 0.5)
     return (blurred - lo) / (hi - lo)
 

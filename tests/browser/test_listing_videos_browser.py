@@ -37,7 +37,7 @@ def _listing_on_disk(workspace_root: Path) -> dict[str, object]:
     return document
 
 
-def _wait_for_media(page, workspace_root: Path, expected: list[object]) -> None:  # noqa: ANN001
+def _wait_for_media(page, workspace_root: Path, expected: list[object]) -> None:
     """Poll the file, not the page: "Autosaved" already reads true during the
     debounce before the save is sent (see `test_listings_browser.py`).
 
@@ -57,7 +57,7 @@ def _wait_for_media(page, workspace_root: Path, expected: list[object]) -> None:
 
 
 def test_add_two_videos_drag_the_second_and_autosave_the_gallery(
-    page,  # noqa: ANN001
+    page,
     workspace_root: Path,
 ) -> None:
     (workspace_root / "common-media").mkdir()
@@ -97,7 +97,7 @@ def test_add_two_videos_drag_the_second_and_autosave_the_gallery(
 
 
 def test_remove_featured_video_promotes_the_second(
-    page,  # noqa: ANN001
+    page,
     workspace_root: Path,
 ) -> None:
     before = _listing_on_disk(workspace_root)

@@ -222,14 +222,15 @@ def test_new_takes_no_design_and_offers_a_picker(workspace_root: Path, monkeypat
 
     def fake_choose(message: str, rows, **kwargs: object) -> str:
         asked.append((message, list(rows)))
-        return list(rows)[0]
+        return next(iter(rows))
 
     monkeypatch.setattr(prompts, "choose", fake_choose)
     (workspace_root / "designs" / "brand-new.png").write_bytes(b"")
 
     result = runner.invoke(app, ["new", "--root", str(workspace_root)])
 
-    assert asked and asked[0][0] == "Design"
+    assert asked
+    assert asked[0][0] == "Design"
     assert any(row.endswith("brand-new") for row in asked[0][1])
     # Stopped at the catalog, i.e. the design question was answered without one.
     assert "PRINTIFY_API_TOKEN" in result.output

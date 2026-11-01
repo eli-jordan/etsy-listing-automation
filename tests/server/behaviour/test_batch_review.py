@@ -24,7 +24,8 @@ from etsy_listings.core.clients.printify.fakes import FakePrintifyClient
 from etsy_listings.core.engine.lock import Lockfile
 from etsy_listings.core.engine.run import plan_listings
 from etsy_listings.core.engine.stages import STAGES
-from etsy_listings.core.workspace.workspace import Workspace, remove_tree
+from etsy_listings.core.workspace.trees import remove_tree
+from etsy_listings.core.workspace.workspace import Workspace
 from etsy_listings.server.api.app import create_app
 
 from tests.support.ai_runs import ChainProvider, seed_prompts, seeded_market, wait_for
@@ -97,7 +98,7 @@ def _status(client: TestClient, batch_id: str) -> str:
     return status
 
 
-def _review(client: TestClient, batch_id: str, row: str, *, reviewed: bool = True) -> Any:  # noqa: ANN401
+def _review(client: TestClient, batch_id: str, row: str, *, reviewed: bool = True) -> Any:
     return client.put(f"/api/batches/{batch_id}/rows/{row}/reviewed", json={"reviewed": reviewed})
 
 
@@ -138,7 +139,8 @@ def test_a_later_edit_or_a_regenerated_proposal_leaves_reviewed_alone(
     _generate_proposal(client, "night-hike-club")
 
     after = ProposalStore(workspace).load("night-hike-club")
-    assert before is not None and after is not None
+    assert before is not None
+    assert after is not None
     assert after.generated_at != before.generated_at or after.snapshot != before.snapshot
     assert _summary(client, batch_id)["rows"][0]["reviewed"] is True
     assert _status(client, batch_id) == "complete"
@@ -193,7 +195,7 @@ def test_deleting_a_listing_cancels_its_run_and_leaves_a_deleted_row(
 ) -> None:
     gate = provider.gate("brief")
     batch_id = _batch(client, "night-hike-club", "cedar-trail")
-    wait_for(lambda: provider.started["brief"].is_set())
+    wait_for(provider.started["brief"].is_set)
 
     # The queued row first: deleted while the other still holds the one
     # slot, so the queue never starts it. The running one is stopped.
@@ -269,7 +271,7 @@ def test_deleting_a_batch_record_cancels_its_work_first(
 ) -> None:
     provider.gate("brief")
     batch_id = _batch(client, "night-hike-club", "cedar-trail")
-    wait_for(lambda: provider.started["brief"].is_set())
+    wait_for(provider.started["brief"].is_set)
 
     assert client.delete(f"/api/batches/{batch_id}").status_code == 204
 

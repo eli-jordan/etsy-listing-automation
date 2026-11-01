@@ -87,27 +87,34 @@ export function DeployPage() {
   const openStream = useCallback((id: string, lastEventId?: number) => {
     streamRef.current?.close();
     streamRef.current = openRunStream(id, {
-      lastEventId,
+      ...(lastEventId === undefined ? {} : { lastEventId }),
       onEvent: (event) => setState((s) => applyRunEvent(s, event)),
     });
   }, []);
+
+  const reattachRun = useCallback(
+    async (id: string) => {
+      const detail = await getRun(id);
+      setRunId(detail.id);
+      setState(deployState(detail.events));
+      const last = detail.events.at(-1);
+      openStream(detail.id, last?.id);
+    },
+    [openStream],
+  );
 
   const startFreshPlan = useCallback(async () => {
     leavingRef.current = false;
     setApplyRequested(false);
     const result = await createRun({ kind: "plan", scope: "listings", listings: [name] });
     if (result.kind === "conflict") {
-      const detail = await getRun(result.activeRun);
-      setRunId(detail.id);
-      setState(deployState(detail.events));
-      const last = detail.events.at(-1);
-      openStream(detail.id, last?.id);
+      await reattachRun(result.activeRun);
       return;
     }
     setState(initialDeployState);
     setRunId(result.run.id);
     openStream(result.run.id);
-  }, [name, openStream]);
+  }, [name, openStream, reattachRun]);
 
   // Reattach or start (decision 9).
   useEffect(() => {
@@ -224,11 +231,7 @@ export function DeployPage() {
       expect: { [name]: state.fingerprint },
     });
     if (result.kind === "conflict") {
-      const detail = await getRun(result.activeRun);
-      setRunId(detail.id);
-      setState(deployState(detail.events));
-      const last = detail.events.at(-1);
-      openStream(detail.id, last?.id);
+      await reattachRun(result.activeRun);
       return;
     }
     // Keep the reviewed plan on screen while the apply run performs its

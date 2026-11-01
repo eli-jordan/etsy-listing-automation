@@ -2,7 +2,8 @@
 
 Status: planned; implementation has not started.
 
-The [test-suite audit](../../../reports/test-suite-audit.html) identifies tests
+The test-suite audit (`reports/test-suite-audit.html`, removed from the tree; it
+is in commit `f1113bef`) identifies tests
 that give weak assurance, repeat setup unnecessarily, or bind to incidental
 implementation details. This work improves those tests while preserving the
 application's existing behavior. The [plan](plan.md) divides delivery into a

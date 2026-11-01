@@ -7,6 +7,8 @@ No experimental anchors or overlap controls are exposed.
 from __future__ import annotations
 
 from collections.abc import Callable
+from dataclasses import dataclass
+from functools import partial
 from typing import Any, cast
 
 import cv2
@@ -16,22 +18,19 @@ from numpy.typing import NDArray
 from etsy_listings.core.render import _material_math as surface_math
 
 Float = NDArray[np.float32]
+
+# Thresholds of the evaluated prototype (ADR-0054). Named, not tuned here.
+_MIN_FACING_Z = 0.22  # a normal's camera-facing component below this is grazing
+_CG_BREAKDOWN = 1e-25  # conjugate-gradient curvature at which the solve stops
+_CONFIDENT = 0.15  # normals confidence above which a pixel is trusted
+_MIN_DEPTH_SAMPLES = 30  # confident depth pixels needed to fit depth to height
+_MIN_DEPTH_SPREAD = 1e-5  # depth standard deviation below which the fit is skipped
+_FOLDED_AREA = 1e-9  # a mesh triangle at or below this signed area has folded
+_FLATTEN_CONVERGED = 1e-6  # largest vertex move at which flattening has converged
+_CLOTH_COVERAGE = 0.95  # cloth mask value of a pixel inside the garment
+_LIGHTING_CONFIDENCE = 0.35  # confidence above which a pixel informs lighting
+_CLIPPED_GAIN = 1.7  # shading over exposure above which a gain counts as clipped
 Pixels = NDArray[np.uint8]
-
-
-def sample(field: Float, xy: Float, border: int = cv2.BORDER_REPLICATE) -> Float:
-    xy = np.asarray(xy, np.float32)
-    return cast(
-        Float,
-        cv2.remap(
-            field,
-            xy[..., 0],
-            xy[..., 1],
-            interpolation=cv2.INTER_LINEAR,
-            borderMode=border,
-            borderValue=(0,),
-        ).astype(np.float32),
-    )
 
 
 def placement_grid(box: Float, mesh: int) -> Float:
@@ -45,8 +44,8 @@ def placement_grid(box: Float, mesh: int) -> Float:
 def slopes(normals: Float) -> tuple[Float, Float]:
     normal = normals / np.maximum(np.linalg.norm(normals, axis=-1, keepdims=True), 1e-8)
     # One camera -> image axis conversion: dz/dx=-Nx/Nz, dz/drow=+Ny/Nz.
-    valid = normal[..., 2] > 0.22
-    denominator = np.maximum(normal[..., 2], 0.22)
+    valid = normal[..., 2] > _MIN_FACING_Z
+    denominator = np.maximum(normal[..., 2], _MIN_FACING_Z)
     gradient = np.stack([-normal[..., 0] / denominator, normal[..., 1] / denominator], -1)
     return gradient.astype(np.float32), valid.astype(np.float32)
 
@@ -81,7 +80,7 @@ def cg(
             return value
         product = multiply(direction)
         denominator = float(direction @ product)
-        if denominator <= 1e-25:
+        if denominator <= _CG_BREAKDOWN:
             break
         step = dot / denominator
         value += step * direction
@@ -97,100 +96,111 @@ def cg(
     return value
 
 
+@dataclass(frozen=True)
+class SurfaceEvidence:
+    """What :func:`integrate` fits a height field to, sampled on its grid:
+    unit normals and their confidence, and an optional affine-invariant
+    depth prior with its own confidence."""
+
+    normals: Float
+    confidence: Float
+    depth: Float | None = None
+    depth_confidence: Float | None = None
+
+
+@dataclass(frozen=True)
+class _HeightSystem:
+    """The sparse system :func:`integrate` solves for vertex heights: weighted
+    slope targets along mesh edges, a weak prior, and same-patch smoothing.
+    ``prior`` is a mutable array the depth fit raises in place."""
+
+    a: NDArray[Any]
+    b: NDArray[Any]
+    target: NDArray[Any]
+    smoothing: NDArray[Any]
+    smooth_degree: NDArray[Any]
+    prior: NDArray[Any]
+    cooperate: Callable[[], None]
+    smooth_strength: float = 0.003
+
+    def apply(self, edge_weight: NDArray[Any], value: NDArray[Any]) -> NDArray[Any]:
+        a, b, smoothing = self.a, self.b, self.smoothing
+        return np.asarray(
+            weighted_laplace(value, a, b, edge_weight)
+            + self.prior * value
+            + self.smooth_strength
+            * weighted_laplace(weighted_laplace(value, a, b, smoothing), a, b, smoothing)
+        )
+
+    def equations(self, edge_weight: NDArray[Any]) -> _Equations:
+        a, b, n = self.a, self.b, len(self.prior)
+        degree = np.bincount(a, weights=edge_weight, minlength=n) + np.bincount(
+            b, weights=edge_weight, minlength=n
+        )
+        rhs = np.bincount(b, weights=edge_weight * self.target, minlength=n) - np.bincount(
+            a, weights=edge_weight * self.target, minlength=n
+        )
+        diagonal = (
+            degree
+            + self.prior
+            + self.smooth_strength * (self.smooth_degree**2 + self.smooth_degree)
+        )
+        return _Equations(edge_weight, rhs, diagonal)
+
+    def solve(self, equations: _Equations, initial: NDArray[Any]) -> NDArray[Any]:
+        return cg(
+            equations.rhs,
+            partial(self.apply, equations.edge_weight),
+            equations.diagonal,
+            initial,
+            cooperate=self.cooperate,
+        )
+
+
+@dataclass(frozen=True)
+class _Equations:
+    """One height solve's edge weights, right-hand side and preconditioner
+    diagonal. The depth fit adds to ``rhs`` and ``diagonal`` in place."""
+
+    edge_weight: NDArray[Any]
+    rhs: NDArray[Any]
+    diagonal: NDArray[Any]
+
+
 def integrate(
     xy: Float,
-    normals: Float,
-    confidence: Float,
+    evidence: SurfaceEvidence,
     patch_ids: NDArray[Any],
-    depth: Float | None = None,
-    depth_confidence: Float | None = None,
     *,
     cooperate: Callable[[], None] = lambda: None,
 ) -> tuple[Float, dict[str, Any]]:
     mesh = xy.shape[0]
     a, b, _ = surface_math.graph(mesh)
     p = xy.reshape(-1, 2).astype(np.float64)
-    gradient, usable = slopes(normals)
-    conf = (confidence * usable).ravel().astype(np.float64)
+    gradient, usable = slopes(evidence.normals)
+    conf = (evidence.confidence * usable).ravel().astype(np.float64)
     same_patch = (patch_ids.ravel()[a] == patch_ids.ravel()[b]) & (patch_ids.ravel()[a] > 0)
-    edge_weight = np.sqrt(conf[a] * conf[b]) * same_patch
+    original_weight = np.sqrt(conf[a] * conf[b]) * same_patch
     g = gradient.reshape(-1, 2)
-    target = np.sum((g[a] + g[b]) * 0.5 * (p[b] - p[a]), axis=1)
     smoothing = same_patch.astype(np.float64)
-    degree = np.bincount(a, weights=edge_weight, minlength=len(p)) + np.bincount(
-        b, weights=edge_weight, minlength=len(p)
+    system = _HeightSystem(
+        a=a,
+        b=b,
+        target=np.sum((g[a] + g[b]) * 0.5 * (p[b] - p[a]), axis=1),
+        smoothing=smoothing,
+        smooth_degree=np.bincount(a, weights=smoothing, minlength=len(p))
+        + np.bincount(b, weights=smoothing, minlength=len(p)),
+        prior=np.full(len(p), 1e-5),
+        cooperate=cooperate,
     )
-    smooth_degree = np.bincount(a, weights=smoothing, minlength=len(p)) + np.bincount(
-        b, weights=smoothing, minlength=len(p)
-    )
-    prior = np.full(len(p), 1e-5)
-    rhs = np.bincount(b, weights=edge_weight * target, minlength=len(p)) - np.bincount(
-        a, weights=edge_weight * target, minlength=len(p)
-    )
-    smooth_strength = 0.003
-
-    def operator(value: NDArray[Any]) -> NDArray[Any]:
-        return np.asarray(
-            weighted_laplace(value, a, b, edge_weight)
-            + prior * value
-            + smooth_strength
-            * weighted_laplace(weighted_laplace(value, a, b, smoothing), a, b, smoothing)
-        )
-
-    diagonal = degree + prior + smooth_strength * (smooth_degree**2 + smooth_degree)
-    z = cg(rhs, operator, diagonal, np.zeros(len(p)), cooperate=cooperate)
-    original_weight = edge_weight.copy()
+    equations = system.equations(original_weight)
+    z = system.solve(equations, np.zeros(len(p)))
     for _ in range(3):
-        residual = z[b] - z[a] - target
-        selected = original_weight > 0
-        threshold = (
-            max(0.002, 2.5 * 1.4826 * float(np.median(np.abs(residual[selected]))))
-            if selected.any()
-            else 0.002
-        )
-        edge_weight = original_weight * np.minimum(
-            1, threshold / np.maximum(np.abs(residual), 1e-8)
-        )
-        degree = np.bincount(a, weights=edge_weight, minlength=len(p)) + np.bincount(
-            b, weights=edge_weight, minlength=len(p)
-        )
-        rhs = np.bincount(b, weights=edge_weight * target, minlength=len(p)) - np.bincount(
-            a, weights=edge_weight * target, minlength=len(p)
-        )
-        diagonal = degree + prior + smooth_strength * (smooth_degree**2 + smooth_degree)
-        z = cg(rhs, operator, diagonal, z, cooperate=cooperate)
-    depth_metrics: dict[str, Any] = {"used": False}
-    if depth is not None:
-        # Affine invariant depth increases AWAY from the viewer. Fit into the
-        # same physical height frame; never add an independent arbitrary field.
-        d = -depth.ravel().astype(np.float64)
-        dc = np.ones_like(d) if depth_confidence is None else depth_confidence.ravel()
-        dc = dc * conf
-        selected = dc > 0.15
-        if selected.sum() > 30 and np.std(d[selected]) > 1e-5:
-            design = np.stack([d, np.ones_like(d)], axis=-1)
-            weight = np.sqrt(dc[selected])
-            scale, offset = np.linalg.lstsq(
-                design[selected] * weight[:, None], z[selected] * weight, rcond=None
-            )[0]
-            # A negative fitted scale contradicts the near/far convention.
-            if scale > 0:
-                fitted = scale * d + offset
-                prior += 0.015 * dc
-                rhs += 0.015 * dc * fitted
-                diagonal += 0.015 * dc
-                z = cg(rhs, operator, diagonal, z, cooperate=cooperate)
-                depth_metrics = {
-                    "used": True,
-                    "scale": float(scale),
-                    "offset": float(offset),
-                    "fit_rms": float(np.sqrt(np.mean((z[selected] - fitted[selected]) ** 2))),
-                }
-            else:
-                depth_metrics["fallback"] = "depth scale disagrees with the normals/camera frame"
-        else:
-            depth_metrics["fallback"] = "insufficient confident, varying depth"
-    error = z[b] - z[a] - target
+        equations = system.equations(_downweighted(system, z, original_weight))
+        z = system.solve(equations, z)
+    z, depth_metrics = _fit_depth(system, equations, z, evidence, conf)
+    edge_weight = equations.edge_weight
+    error = z[b] - z[a] - system.target
     rms = np.sqrt(np.sum(edge_weight * error**2) / max(edge_weight.sum(), 1e-8))
     return np.concatenate([p, z[:, None]], axis=-1).reshape(mesh, mesh, 3).astype(np.float32), {
         "edge_slope_residual_rms": float(rms),
@@ -198,11 +208,134 @@ def integrate(
             ((edge_weight < original_weight * 0.95) & (original_weight > 0)).mean()
         ),
         "grazing_fraction": float(1 - usable.mean()),
-        "uncertain_fraction": float((conf < 0.15).mean()),
+        "uncertain_fraction": float((conf < _CONFIDENT).mean()),
         "depth": depth_metrics,
         "camera": "orthographic visible height patches",
         "boundary_height": "free",
     }
+
+
+def _downweighted(
+    system: _HeightSystem, z: NDArray[Any], original_weight: NDArray[Any]
+) -> NDArray[Any]:
+    """Edge weights with robust outliers of the slope residual reduced."""
+    residual = z[system.b] - z[system.a] - system.target
+    selected = original_weight > 0
+    threshold = (
+        max(0.002, 2.5 * 1.4826 * float(np.median(np.abs(residual[selected]))))
+        if selected.any()
+        else 0.002
+    )
+    weight: NDArray[Any] = original_weight * np.minimum(
+        1, threshold / np.maximum(np.abs(residual), 1e-8)
+    )
+    return weight
+
+
+def _fit_depth(
+    system: _HeightSystem,
+    equations: _Equations,
+    z: NDArray[Any],
+    evidence: SurfaceEvidence,
+    conf: NDArray[Any],
+) -> tuple[NDArray[Any], dict[str, Any]]:
+    """Heights refined toward the depth prior, when it is usable, and how."""
+    if evidence.depth is None:
+        return z, {"used": False}
+    # Affine invariant depth increases AWAY from the viewer. Fit into the
+    # same physical height frame; never add an independent arbitrary field.
+    d = -evidence.depth.ravel().astype(np.float64)
+    dc = np.ones_like(d) if evidence.depth_confidence is None else evidence.depth_confidence.ravel()
+    dc = dc * conf
+    selected = dc > _CONFIDENT
+    if not (selected.sum() > _MIN_DEPTH_SAMPLES and np.std(d[selected]) > _MIN_DEPTH_SPREAD):
+        return z, {"used": False, "fallback": "insufficient confident, varying depth"}
+    design = np.stack([d, np.ones_like(d)], axis=-1)
+    weight = np.sqrt(dc[selected])
+    scale, offset = np.linalg.lstsq(
+        design[selected] * weight[:, None], z[selected] * weight, rcond=None
+    )[0]
+    # A negative fitted scale contradicts the near/far convention.
+    if not scale > 0:
+        return z, {"used": False, "fallback": "depth scale disagrees with the normals/camera frame"}
+    fitted = scale * d + offset
+    prior, rhs, diagonal = system.prior, equations.rhs, equations.diagonal
+    prior += 0.015 * dc
+    rhs += 0.015 * dc * fitted
+    diagonal += 0.015 * dc
+    z = system.solve(equations, z)
+    return z, {
+        "used": True,
+        "scale": float(scale),
+        "offset": float(offset),
+        "fit_rms": float(np.sqrt(np.mean((z[selected] - fitted[selected]) ** 2))),
+    }
+
+
+@dataclass(frozen=True)
+class _Flattening:
+    """The sparse system :func:`flatten` solves for each 2D vertex axis: rest
+    edge lengths within patches plus a weak pull toward the neutral grid."""
+
+    a: NDArray[Any]
+    b: NDArray[Any]
+    edge_weight: NDArray[Any]
+    degree: NDArray[Any]
+    rest: NDArray[Any]
+    prior: NDArray[Any]
+    target_prior: NDArray[Any]
+
+    def apply(self, vector: NDArray[Any]) -> NDArray[Any]:
+        return np.asarray(
+            weighted_laplace(vector, self.a, self.b, self.edge_weight) + self.prior * vector
+        )
+
+    def proposal(self, value: NDArray[Any], cooperate: Callable[[], None]) -> NDArray[Any]:
+        """Every vertex moved toward restoring its edges to their rest lengths."""
+        a, b, edge_weight, n = self.a, self.b, self.edge_weight, len(self.prior)
+        edge = value[b] - value[a]
+        target = edge * (self.rest / np.maximum(np.linalg.norm(edge, axis=1), 1e-8))[:, None]
+        proposal = value.copy()
+        for axis in range(2):
+            rhs = (
+                np.bincount(b, weights=edge_weight * target[:, axis], minlength=n)
+                - np.bincount(a, weights=edge_weight * target[:, axis], minlength=n)
+                + self.prior * self.target_prior[:, axis]
+            )
+            proposal[:, axis] = cg(
+                rhs, self.apply, self.degree + self.prior, value[:, axis], cooperate=cooperate
+            )
+        return proposal
+
+
+def _valid_triangles(ids: NDArray[Any]) -> NDArray[Any]:
+    """Which mesh triangles lie inside one patch, in the order signed_areas uses."""
+    triangles_valid = np.stack(
+        [
+            (ids[:-1, :-1] == ids[:-1, 1:]) & (ids[:-1, :-1] == ids[1:, :-1]) & (ids[:-1, :-1] > 0),
+            (ids[1:, 1:] == ids[:-1, 1:]) & (ids[1:, 1:] == ids[1:, :-1]) & (ids[1:, 1:] > 0),
+        ],
+        axis=-1,
+    )
+    # Existing signed_areas stacks two triangle fields, rather than interleaving them.
+    return np.concatenate([triangles_valid[..., 0].ravel(), triangles_valid[..., 1].ravel()])
+
+
+def _unfolded_step(
+    value: NDArray[Any], proposal: NDArray[Any], mesh: int, selected_triangles: NDArray[Any]
+) -> tuple[NDArray[Any] | None, int]:
+    """The longest halved step toward ``proposal`` that folds no triangle, and
+    the number of halvings taken; None once the step has become too small."""
+    step = 1.0
+    halvings = 0
+    while step > 1 / 1024:
+        candidate = value + step * (proposal - value)
+        areas = surface_math.signed_areas(candidate.reshape(mesh, mesh, 2).astype(np.float32))
+        if not np.any(areas.ravel()[selected_triangles] <= _FOLDED_AREA):
+            return candidate, halvings
+        step /= 2
+        halvings += 1
+    return None, halvings
 
 
 def flatten(
@@ -222,55 +355,28 @@ def flatten(
     height = float(np.mean(np.linalg.norm(np.diff(surface[..., :2], axis=0), axis=-1).sum(axis=0)))
     yy, xx = np.mgrid[:mesh, :mesh].astype(np.float64) / (mesh - 1)
     neutral = np.stack([xx * width, yy * height], -1).reshape(-1, 2)
+    system = _Flattening(
+        a=a,
+        b=b,
+        edge_weight=edge_weight,
+        degree=np.bincount(a, weights=edge_weight, minlength=len(p))
+        + np.bincount(b, weights=edge_weight, minlength=len(p)),
+        rest=rest,
+        prior=np.full(len(p), 0.004),
+        target_prior=neutral.copy(),
+    )
+    selected_triangles = _valid_triangles(patch_ids)
     value = neutral.copy()
-    prior = np.full(len(p), 0.004)
-    target_prior = neutral.copy()
-    degree = np.bincount(a, weights=edge_weight, minlength=len(p)) + np.bincount(
-        b, weights=edge_weight, minlength=len(p)
-    )
-
-    def operator(vector: NDArray[Any]) -> NDArray[Any]:
-        return np.asarray(weighted_laplace(vector, a, b, edge_weight) + prior * vector)
-
-    ids = patch_ids
-    triangles_valid = np.stack(
-        [
-            (ids[:-1, :-1] == ids[:-1, 1:]) & (ids[:-1, :-1] == ids[1:, :-1]) & (ids[:-1, :-1] > 0),
-            (ids[1:, 1:] == ids[:-1, 1:]) & (ids[1:, 1:] == ids[1:, :-1]) & (ids[1:, 1:] > 0),
-        ],
-        axis=-1,
-    )
-    # Existing signed_areas stacks two triangle fields, rather than interleaving them.
-    selected_triangles = np.concatenate(
-        [triangles_valid[..., 0].ravel(), triangles_valid[..., 1].ravel()]
-    )
     barriers = 0
     for _ in range(40):
-        edge = value[b] - value[a]
-        target = edge * (rest / np.maximum(np.linalg.norm(edge, axis=1), 1e-8))[:, None]
-        proposal = value.copy()
-        for axis in range(2):
-            rhs = (
-                np.bincount(b, weights=edge_weight * target[:, axis], minlength=len(p))
-                - np.bincount(a, weights=edge_weight * target[:, axis], minlength=len(p))
-                + prior * target_prior[:, axis]
-            )
-            proposal[:, axis] = cg(
-                rhs, operator, degree + prior, value[:, axis], cooperate=cooperate
-            )
-        step = 1.0
-        while step > 1 / 1024:
-            candidate = value + step * (proposal - value)
-            areas = surface_math.signed_areas(candidate.reshape(mesh, mesh, 2).astype(np.float32))
-            if not np.any(areas.ravel()[selected_triangles] <= 1e-9):
-                break
-            step /= 2
-            barriers += 1
-        if step <= 1 / 1024:
+        proposal = system.proposal(value, cooperate)
+        candidate, halvings = _unfolded_step(value, proposal, mesh, selected_triangles)
+        barriers += halvings
+        if candidate is None:
             break
         delta = float(np.max(np.abs(candidate - value)))
         value = candidate
-        if delta < 1e-6:
+        if delta < _FLATTEN_CONVERGED:
             break
     # Placement establishes a material coordinate FRAME, not physical patch
     # boundaries. One global affine frame for all patches; never normalize
@@ -283,8 +389,6 @@ def flatten(
         .reshape(mesh, mesh, 2)
         .astype(np.float32)
     )
-    anchor_error = 0.0
-    anchor_fraction = 1.0
     strain = (np.linalg.norm(value[b] - value[a], axis=1) / rest - 1)[edge_weight > 0]
     final_value = uv.reshape(-1, 2) * [width, height]
     final_strain = (np.linalg.norm(final_value[b] - final_value[a], axis=1) / rest - 1)[
@@ -302,8 +406,8 @@ def flatten(
         "max_uv_shift": float(np.max(np.linalg.norm(uv - np.stack([xx, yy], -1), axis=-1))),
         "placement_prior": 0.004,
         "material_frame_affine": frame.tolist(),
-        "anchor_applied_fraction": anchor_fraction,
-        "anchor_max_error": anchor_error,
+        "anchor_applied_fraction": 1.0,
+        "anchor_max_error": 0.0,
         "mesh": mesh,
     }
 
@@ -314,17 +418,26 @@ def polygon_mask(size: tuple[int, int], points: list[list[float]]) -> Float:
     return mask.astype(np.float32)
 
 
+@dataclass(frozen=True)
+class Intrinsics:
+    """A photo region's intrinsic decomposition: shading, albedo and the
+    residual neither explains."""
+
+    shading: Float
+    albedo: Float
+    residual: Float
+
+
 def lighting_fields(
     base: Pixels,
-    shading: Float,
-    albedo: Float,
-    residual: Float,
+    intrinsics: Intrinsics,
     cloth: Float,
     confidence: Float,
     *,
     minimum_samples: int = 100,
 ) -> tuple[dict[str, Float], dict[str, Any]]:
-    selected = (cloth > 0.95) & (confidence > 0.35)
+    shading, albedo, residual = intrinsics.shading, intrinsics.albedo, intrinsics.residual
+    selected = (cloth > _CLOTH_COVERAGE) & (confidence > _LIGHTING_CONFIDENCE)
     if selected.sum() < minimum_samples:
         raise ValueError("Not enough confident visible cloth to normalize lighting")
     luminance = np.sum(shading * np.array([0.2126, 0.7152, 0.0722]), -1)
@@ -355,7 +468,7 @@ def lighting_fields(
         "normalization": "70th percentile linear shading luminance on confident visible cloth",
         "blank_reconstruction_mae_linear": reconstruction_error,
         "clipped_gain_fraction": float(
-            ((shading / exposure > 1.7).any(-1) & selected).sum() / selected.sum()
+            ((shading / exposure > _CLIPPED_GAIN).any(-1) & selected).sum() / selected.sum()
         ),
         "texture_range": [0.9, 1.1],
         "residual_range": [0, 0.035],

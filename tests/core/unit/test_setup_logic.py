@@ -76,8 +76,8 @@ def test_the_cache_directory_is_not_part_of_the_skeleton() -> None:
 # ------------------------------------------------------------ shop selection
 
 
-def _shop(id: int, title: str = "s") -> Shop:
-    return Shop(id=id, title=title, sales_channel="disconnected")
+def _shop(shop_id: int, title: str = "s") -> Shop:
+    return Shop(id=shop_id, title=title, sales_channel="disconnected")
 
 
 def test_a_single_shop_needs_no_question() -> None:

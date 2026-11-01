@@ -131,7 +131,7 @@ class Worker:
     def _run(self) -> None:
         try:
             self._value = self._call()
-        except BaseException as exc:  # handed back to the test thread
+        except BaseException as exc:  # noqa: BLE001 -- the helper thread hands every exception back to the test
             self._error = exc
 
     def join(self, timeout: float = GATE_TIMEOUT) -> None:

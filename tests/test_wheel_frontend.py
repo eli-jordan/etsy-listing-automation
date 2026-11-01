@@ -78,6 +78,7 @@ def _uv_build(source: Path, out_dir: Path, *flags: str) -> subprocess.CompletedP
         [uv, "build", "--offline", *flags, "--out-dir", str(out_dir), str(source)],
         capture_output=True,
         text=True,
+        check=False,
     )
 
 
@@ -204,6 +205,7 @@ def test_installed_wheel_serves_the_spa_without_node_or_the_checkout(
         ],
         capture_output=True,
         text=True,
+        check=False,
     )
     assert installed.returncode == 0, installed.stderr
     # The fixture already deleted the project and its build output: nothing
@@ -223,6 +225,7 @@ def test_installed_wheel_serves_the_spa_without_node_or_the_checkout(
         env=env,
         capture_output=True,
         text=True,
+        check=False,
     )
     assert served.returncode == 0, served.stderr
     assert served.stdout.strip() == "served"

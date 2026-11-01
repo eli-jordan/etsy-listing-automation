@@ -2,7 +2,7 @@
 implementation plan, PR4, items 1-4).
 
 Nothing here launches a real `codex` process. Readiness tests replace
-`etsy_listings.core.ai.codex.subprocess.run` (the same double-and-monkeypatch
+`subprocess.run` (the same double-and-monkeypatch
 pattern `tests/support/doubles.py.FakeRun` already established for
 `cli/prompts.py`'s fzf lookup); generate/argv tests replace
 `etsy_listings.core.ai.codex.run_managed` so they can assert on exactly what argv,
@@ -13,6 +13,7 @@ cwd, and stdin the adapter builds without exercising `ai/process.py`'s own
 from __future__ import annotations
 
 import json
+import shutil
 import subprocess
 from pathlib import Path
 from typing import Any
@@ -110,7 +111,7 @@ def _ok(stdout: str = "") -> subprocess.CompletedProcess[str]:
 def test_readiness_fails_when_executable_is_missing(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    monkeypatch.setattr(codex.shutil, "which", lambda name: None)
+    monkeypatch.setattr(shutil, "which", lambda name: None)
     provider = _provider(tmp_path)
 
     readiness = provider.readiness()
@@ -121,9 +122,9 @@ def test_readiness_fails_when_executable_is_missing(
 def test_readiness_fails_when_not_authenticated(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    monkeypatch.setattr(codex.shutil, "which", lambda name: "/usr/bin/codex")
+    monkeypatch.setattr(shutil, "which", lambda name: "/usr/bin/codex")
     fake = _FakeRun({("login", "status"): subprocess.CompletedProcess([], 1, stdout="", stderr="")})
-    monkeypatch.setattr(codex.subprocess, "run", fake)
+    monkeypatch.setattr(subprocess, "run", fake)
     provider = _provider(tmp_path)
 
     readiness = provider.readiness()
@@ -136,12 +137,12 @@ def test_readiness_fails_when_not_authenticated(
 def test_readiness_fails_when_login_status_cannot_be_run(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    monkeypatch.setattr(codex.shutil, "which", lambda name: "/usr/bin/codex")
+    monkeypatch.setattr(shutil, "which", lambda name: "/usr/bin/codex")
 
     def _raise(argv: list[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:
         raise OSError("boom")
 
-    monkeypatch.setattr(codex.subprocess, "run", _raise)
+    monkeypatch.setattr(subprocess, "run", _raise)
     provider = _provider(tmp_path)
 
     readiness = provider.readiness()
@@ -153,14 +154,14 @@ def test_readiness_fails_when_login_status_cannot_be_run(
 def test_readiness_fails_when_exec_help_is_missing_required_flags(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    monkeypatch.setattr(codex.shutil, "which", lambda name: "/usr/bin/codex")
+    monkeypatch.setattr(shutil, "which", lambda name: "/usr/bin/codex")
     fake = _FakeRun(
         {
             ("login", "status"): _ok(),
             ("exec", "--help"): _ok(stdout="Usage: codex exec [OPTIONS] [PROMPT]\n"),
         }
     )
-    monkeypatch.setattr(codex.subprocess, "run", fake)
+    monkeypatch.setattr(subprocess, "run", fake)
     provider = _provider(tmp_path)
 
     readiness = provider.readiness()
@@ -172,14 +173,14 @@ def test_readiness_fails_when_exec_help_is_missing_required_flags(
 def test_readiness_fails_when_exec_help_check_raises(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    monkeypatch.setattr(codex.shutil, "which", lambda name: "/usr/bin/codex")
+    monkeypatch.setattr(shutil, "which", lambda name: "/usr/bin/codex")
 
     def _run(argv: list[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:
         if tuple(argv[1:3]) == ("login", "status"):
             return _ok()
         raise OSError("boom")
 
-    monkeypatch.setattr(codex.subprocess, "run", _run)
+    monkeypatch.setattr(subprocess, "run", _run)
     provider = _provider(tmp_path)
 
     readiness = provider.readiness()
@@ -191,14 +192,14 @@ def test_readiness_fails_when_exec_help_check_raises(
 def test_readiness_fails_when_exec_help_exits_nonzero(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    monkeypatch.setattr(codex.shutil, "which", lambda name: "/usr/bin/codex")
+    monkeypatch.setattr(shutil, "which", lambda name: "/usr/bin/codex")
 
     def _run(argv: list[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:
         if tuple(argv[1:3]) == ("login", "status"):
             return _ok()
         return subprocess.CompletedProcess(argv, 1, stdout="", stderr="")
 
-    monkeypatch.setattr(codex.subprocess, "run", _run)
+    monkeypatch.setattr(subprocess, "run", _run)
     provider = _provider(tmp_path)
 
     readiness = provider.readiness()
@@ -215,9 +216,9 @@ def test_readiness_says_nothing_about_a_prompt_file(
     exists -- is the request's business; answering it here said "codex is
     not ready" about a file that has nothing to do with codex, and said it
     twice, since `server/api/seo.py` checked the same thing itself."""
-    monkeypatch.setattr(codex.shutil, "which", lambda name: "/usr/bin/codex")
+    monkeypatch.setattr(shutil, "which", lambda name: "/usr/bin/codex")
     fake = _FakeRun({("login", "status"): _ok(), ("exec", "--help"): _ok(stdout=_EXEC_HELP)})
-    monkeypatch.setattr(codex.subprocess, "run", fake)
+    monkeypatch.setattr(subprocess, "run", fake)
 
     readiness = codex.CodexProvider(workspace_root=tmp_path).readiness()
 
@@ -227,9 +228,9 @@ def test_readiness_says_nothing_about_a_prompt_file(
 def test_readiness_is_ready_when_every_check_passes(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    monkeypatch.setattr(codex.shutil, "which", lambda name: "/usr/bin/codex")
+    monkeypatch.setattr(shutil, "which", lambda name: "/usr/bin/codex")
     fake = _FakeRun({("login", "status"): _ok(), ("exec", "--help"): _ok(stdout=_EXEC_HELP)})
-    monkeypatch.setattr(codex.subprocess, "run", fake)
+    monkeypatch.setattr(subprocess, "run", fake)
     provider = _provider(tmp_path)
 
     assert provider.readiness() == ProviderReadiness(ready=True)
@@ -243,10 +244,10 @@ def _patch_run_managed(
 ) -> list[dict[str, Any]]:
     # `generate()` resolves the binary through `shutil.which` (a Windows
     # npm-installed CLI is a `.CMD` shim that bare-name `subprocess.run`
-    # cannot launch without `shell=True` -- see `CodexProvider._resolved_binary`),
+    # cannot launch without `shell=True` -- see `LocalCliProvider._resolved_binary`),
     # so it must be patched here too, deterministically, rather than left to
     # whatever happens to be on the machine actually running this test suite.
-    monkeypatch.setattr(codex.shutil, "which", lambda name: f"/resolved/{name}")
+    monkeypatch.setattr(shutil, "which", lambda name: f"/resolved/{name}")
     calls: list[dict[str, Any]] = []
 
     def fake_run_managed(argv: list[str], **kwargs: Any) -> ProcessResult:
@@ -288,11 +289,14 @@ def test_generate_builds_the_expected_argv(monkeypatch: pytest.MonkeyPatch, tmp_
     assert argv[0] == "/resolved/codex"  # the shutil.which-resolved path, not the bare name
     assert argv[1] == "exec"
     assert argv[-1] == "-", "the prompt is piped via stdin, not passed as an argv value"
-    assert "-s" in argv and argv[argv.index("-s") + 1] == "read-only"
+    assert "-s" in argv
+    assert argv[argv.index("-s") + 1] == "read-only"
     assert "--ephemeral" in argv
     assert "--skip-git-repo-check" in argv
-    assert "-C" in argv and argv[argv.index("-C") + 1] == str(tmp_path)
-    assert "-i" in argv and argv[argv.index("-i") + 1] == str(request.design_image)
+    assert "-C" in argv
+    assert argv[argv.index("-C") + 1] == str(tmp_path)
+    assert "-i" in argv
+    assert argv[argv.index("-i") + 1] == str(request.design_image)
     assert "--output-schema" in argv
     assert "-o" in argv
     assert call["cwd"] == tmp_path
@@ -403,7 +407,7 @@ def test_generate_with_no_binary_on_path_is_unavailable_so_the_next_provider_run
     # A machine with only one of the two CLIs installed. Launching the bare
     # name fails with WinError 2, which is not an availability failure the
     # orchestrator falls through on -- it used to end the whole run.
-    monkeypatch.setattr(codex.shutil, "which", lambda name: None)
+    monkeypatch.setattr(shutil, "which", lambda name: None)
 
     def never_launched(argv: list[str], **kwargs: Any) -> ProcessResult:
         raise AssertionError("a missing binary must not be launched")

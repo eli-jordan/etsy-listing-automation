@@ -162,8 +162,9 @@ def _template_info_map(workspace: Workspace) -> dict[str, TemplateInfo]:
         except ConfigLoadError:
             continue
         info = template_info(workspace, name, config)
-        # Local import avoids the workspace package's construction cycle.
-        from etsy_listings.core.preparation.readiness import template_readiness
+        from etsy_listings.core.preparation.readiness import (  # noqa: PLC0415 -- cycle: readiness imports core.workspace
+            template_readiness,
+        )
 
         maps = template_readiness(workspace, name, config)
         if not maps.can_render:

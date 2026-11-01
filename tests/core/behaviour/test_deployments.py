@@ -32,7 +32,7 @@ from etsy_listings.core.application.deploy.registry import (
     WorkspaceApply,
     WorkspacePlan,
 )
-from etsy_listings.core.application.refusals import ReviewedPlanRefused
+from etsy_listings.core.application.refusals import ReviewedPlanRefusedError
 from etsy_listings.core.batches import BatchStore
 from etsy_listings.core.clients.printify.fakes import FakeCatalogClient
 from etsy_listings.core.engine.context import EventSink, RunContext
@@ -183,7 +183,7 @@ def test_a_workspace_apply_differing_from_the_reviewed_set_is_refused(
 ) -> None:
     reviewed = _reviewed_workspace_plan(idle, "a", "b")
 
-    with pytest.raises(ReviewedPlanRefused, match=message):
+    with pytest.raises(ReviewedPlanRefusedError, match=message):
         idle.submit(WorkspaceApply(listings, expect, reviewed.id))
 
     assert idle.runs(scope="workspace") == [reviewed], "a refusal queues nothing"
@@ -205,7 +205,7 @@ def test_a_listing_planned_again_after_its_previews_is_reviewed_at_its_later_fin
     run.transition_plan("planned")
     run.transition_plan("ready")
 
-    with pytest.raises(ReviewedPlanRefused, match="apply fingerprints must exactly match"):
+    with pytest.raises(ReviewedPlanRefusedError, match="apply fingerprints must exactly match"):
         idle.submit(WorkspaceApply(("a", "b"), {"a": FINGERPRINT, "b": FINGERPRINT}, run.id))
     applied = _run(
         idle.submit(WorkspaceApply(("a", "b"), {"a": replanned, "b": FINGERPRINT}, run.id))
@@ -217,7 +217,7 @@ def test_a_listing_planned_again_after_its_previews_is_reviewed_at_its_later_fin
 def test_a_workspace_apply_needs_a_ready_review(idle: Deployments) -> None:
     queued = _run(idle.submit(WorkspacePlan(("a",))))
 
-    with pytest.raises(ReviewedPlanRefused, match="reviewed workspace plan is not ready"):
+    with pytest.raises(ReviewedPlanRefusedError, match="reviewed workspace plan is not ready"):
         idle.submit(WorkspaceApply((), {}, queued.id))
 
 
@@ -232,7 +232,7 @@ def test_a_workspace_apply_needs_a_workspace_plan_as_its_review(
     else:
         reviewed_id = _run(idle.submit(ListingApply(("a",), {"a": FINGERPRINT}))).id
 
-    with pytest.raises(ReviewedPlanRefused, match="reviewed_run_id is not a workspace plan"):
+    with pytest.raises(ReviewedPlanRefusedError, match="reviewed_run_id is not a workspace plan"):
         idle.submit(WorkspaceApply((), {}, reviewed_id))
 
 
@@ -308,7 +308,8 @@ def test_runs_execute_one_at_a_time_in_the_order_queued_after_yielding_ai_work(
         deployments.stop()
 
     assert held == [(True, False), (False, True)]
-    assert not ai.registry.deploying(LISTING) and not ai.registry.deploying("second")
+    assert not ai.registry.deploying(LISTING)
+    assert not ai.registry.deploying("second")
     assert (first.phase, second.phase) == ("applied", "ready")
 
 

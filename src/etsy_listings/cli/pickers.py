@@ -146,12 +146,13 @@ def build_design_choices(paths: list[Path], listing_names: set[str]) -> list[Cho
         ((path, path.stat().st_mtime) for path in paths),
         key=lambda entry: (-entry[1], entry[0].stem.lower()),
     )
+    local_tz = datetime.now().astimezone().tzinfo
     return [
         Choice(
             value=path,
             marked=path.stem in listing_names,
             label=(
-                f"{datetime.fromtimestamp(modified):%Y-%m-%d %H:%M}  {path.stem}"
+                f"{datetime.fromtimestamp(modified, tz=local_tz):%Y-%m-%d %H:%M}  {path.stem}"
                 f"{'  (listing exists)' if path.stem in listing_names else ''}"
             ),
         )

@@ -58,7 +58,7 @@ def client(workspace: Workspace, provider: ChainProvider) -> TestClient:
     return TestClient(_app(workspace, provider))
 
 
-def _stage(client: TestClient, *files: tuple[str, bytes], template: str = LISTING_TEMPLATE) -> Any:  # noqa: ANN401
+def _stage(client: TestClient, *files: tuple[str, bytes], template: str = LISTING_TEMPLATE) -> Any:
     return client.post(
         "/api/staging",
         data={"listing_template": template},
@@ -342,7 +342,7 @@ class TestQueue:
         with TestClient(_app(workspace, provider)) as client:
             staged = _staged(client, ("a.png", png(1)))
             batch_id = client.post(f"/api/staging/{staged['id']}/confirm").json()["id"]
-            wait_for(lambda: provider.started["brief"].is_set())
+            wait_for(provider.started["brief"].is_set)
 
             live = client.get(f"/api/batches/{batch_id}").json()["rows"][0]
             gate.set()
@@ -400,15 +400,12 @@ def test_the_listing_template_card_carries_the_design_size_it_needs(client: Test
 def test_an_expired_session_is_swept_when_the_server_starts(workspace: Workspace) -> None:
     week_ago = datetime.now(UTC) - timedelta(days=7, minutes=1)
     stale = stage_pngs(
-        workspace,
         StagingStore(workspace),
         LISTING_TEMPLATE,
         uploads(("a.png", png(1))),
         now=week_ago,
     )
-    fresh = stage_pngs(
-        workspace, StagingStore(workspace), LISTING_TEMPLATE, uploads(("b.png", png(2)))
-    )
+    fresh = stage_pngs(StagingStore(workspace), LISTING_TEMPLATE, uploads(("b.png", png(2))))
 
     with TestClient(create_app(workspace)) as client:
         assert client.get(f"/api/staging/{stale.id}").status_code == 404

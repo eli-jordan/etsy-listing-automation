@@ -18,10 +18,18 @@ import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
+import pytest
+
 from etsy_listings.core.ai import process
 from etsy_listings.core.ai.models import Deadline
 
 from tests.support.gates import workers
+
+
+@pytest.fixture(autouse=True)
+def fast_polling(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(process, "POLL_INTERVAL", 0.02)
+
 
 _GRANDCHILD_SCRIPT = (
     "import sys, time\n"
@@ -111,7 +119,6 @@ def test_run_managed_actually_kills_a_real_process_and_its_grandchild_on_timeout
         cwd=tmp_path,
         input_text="",
         deadline=_ExpiresOnceWritten(markers=(child_marker, grandchild_marker)),
-        poll_interval=0.02,
     )
 
     assert result.timed_out is True
@@ -159,7 +166,6 @@ def test_run_managed_actually_kills_a_real_process_tree_on_cancellation(
             input_text="",
             deadline=Deadline.starting_now(seconds=60),
             cancel_event=cancel_event,
-            poll_interval=0.02,
         )
         canceller.result()  # the grandchild was up before the cancel
 
@@ -181,7 +187,6 @@ def test_run_managed_speaks_utf8_to_a_real_process_whatever_the_locale(tmp_path:
         cwd=tmp_path,
         input_text=text,
         deadline=Deadline.starting_now(seconds=30),
-        poll_interval=0.02,
     )
 
     assert result.returncode == 0

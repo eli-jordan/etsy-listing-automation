@@ -38,7 +38,7 @@ def test_save_refuses_wrong_kind_and_brush_outside_photo(workspace_root: Path) -
 
     from PIL import Image
 
-    from etsy_listings.core.workspace.calibration import CalibrationStore
+    from etsy_listings.core.workspace.calibration import AutomaticMask, CalibrationStore
 
     from tests.support.marigold import marigold_template
 
@@ -48,7 +48,9 @@ def test_save_refuses_wrong_kind_and_brush_outside_photo(workspace_root: Path) -
     mask = BytesIO()
     Image.new("L", (64, 64), 255).save(mask, format="PNG")
     store.install_automatic(
-        "shirt", mask.getvalue(), algorithm_version="test", expected_revision=current.revision
+        "shirt",
+        AutomaticMask(mask.getvalue(), algorithm_version="test"),
+        expected_revision=current.revision,
     )
     client = TestClient(create_app(workspace))
     url = "/api/templates/shirt/config"

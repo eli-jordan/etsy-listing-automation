@@ -1,6 +1,8 @@
 # Static analysis specification
 
-Status: planned; implementation has not started.
+Status: delivered by the seven PRs listed in the [plan](plan.md#delivery).
+Delivered in [#152](https://github.com/eli-jordan/etsy-listing-automation/pull/152) to [#158](https://github.com/eli-jordan/etsy-listing-automation/pull/158), stacked on
+`main` and merged bottom-up.
 
 Coding agents (Claude, Codex and Grok, run through T3 Code) write most of the
 code in this repository. Today they see lint results only when they run
@@ -94,41 +96,110 @@ jscpd runs over `src` (Python and TypeScript, excluding generated files such as
 `src/ui/src/api/schema.ts` and build output) and fails on any clone of 50 or
 more tokens. Tests are excluded, because arrange blocks repeat legitimately.
 
-### S06 — Per-edit agent hook
+### S06 — Agent lint hook
 
-`scripts/agent_lint.py` is the only hook implementation. Two configs call it:
+`scripts/agent_lint.py` is the only hook implementation. It runs after every
+edit **and every shell command**, because an agent that edits through `sed`, a
+script or a formatter writes files no edit tool reports. Two configs call it,
+both through the same gate, `scripts/agent_lint_gate.py`, run as `python -S`:
 
-- `.claude/settings.json`: Claude Code `PostToolUse` matching `Edit|Write`.
-  Grok Build reads this file too and maps Claude's tool names.
-- `.codex/hooks.json`: Codex `PostToolUse` matching `apply_patch|Edit|Write`.
-  Project hooks load only once the project is trusted in Codex.
+- `.claude/settings.json`: Claude Code `PostToolUse` matching
+  `Edit|Write|Bash`. Grok Build reads this file too and maps Claude's tool
+  names. The command sources `scripts/agent_lint_launch.sh` into the hook's
+  own bash (no second shell), which only picks `.venv`'s Python, or `uv run`
+  without one, and starts the gate.
+- `.codex/hooks.json`: Codex `PostToolUse` matching
+  `Bash|apply_patch|Edit|Write`. Codex runs hook commands through the
+  session's shell, which on Windows is always PowerShell (started with
+  `-NoProfile`; Codex offers no setting for it). So `commandWindows` is a bare
+  call, `./.venv/Scripts/python.exe -S scripts/agent_lint_gate.py <mode>;
+  exit $LASTEXITCODE`, that PowerShell, zsh and bash all parse: no `cmd`
+  syntax, no backslashes, and an explicit exit code, because PowerShell
+  `-Command` otherwise reports any failing program as exit 1 and Codex feeds
+  findings back only on exit 2.
 
-For the edited file only, the hook:
+**The gate.** After a shell command, the gate decides from
+`scripts/agent_lint_rules.txt` whether the command could have written a file:
+every segment between `&&`, `||`, `;` and `|` must match a read-only `allow`
+rule, and no `deny` rule (`>`, `tee`, `-i`, `--fix`, `--write`, `-u`,
+`-delete`, …) may match. A read-only command ends the hook at once. The gate
+imports only `os`, `re` and `sys` and reads the payload as text, since `json`
+alone would cost more than the rest of the decision. A command that may have
+written, an edit or a session event falls through to the full hook in the
+same process. A second gate in bash builtins, sourced by Claude's hook, was
+tried and measured about 0.05s faster for Claude and Grok; one implementation of the
+rules was judged worth more.
 
-1. Applies safe fixes. For Python, `ruff format` and `ruff check --fix`. For
-   TS/TSX, `eslint --fix` and `prettier --write`.
-2. Checks what remains. For Python, ruff, complexipy and mypy (through dmypy,
-   S08). For TS/TSX, ESLint including sonarjs.
+**What changed.** An edit names its files. A shell command does not, so the
+hook keeps a snapshot of the working tree's dirty source files by content hash
+(`.mypy_cache/agent-lint-snapshot.json`), taken at `SessionStart` and updated
+after every check. After a shell command, it checks each file whose content
+differs from the snapshot. A command the gate wrongly judged read-only only
+delays its feedback: the next command that falls through still finds the
+change, and the pre-commit hook and CI after that.
+
+For each changed file, the hook:
+
+1. Applies safe fixes. For Python, `ruff check --fix` and `ruff format`. For
+   TS/TSX, `prettier --write` and `eslint --fix`.
+2. Checks what remains. For Python: ruff, complexipy and mypy (through dmypy,
+   S08), run side by side over all the changed files. For TS/TSX: ESLint,
+   including sonarjs.
 3. Rejects any newly added suppression that has no reason (S07).
 4. Exits 0 when clean. Otherwise it exits 2 with the remaining findings on
    stderr, capped at 20 lines with a count of what was omitted.
 
-The hook calls tools from the project `.venv` and `node_modules` directly
-rather than through `uv run` or `npx`, so it stays within one to two seconds
-of a warm run. When either is missing it falls back to `uv run` or `npx`
-rather than skipping a check. New T3 worktrees get both from
-`setup_worktree.sh`, which `t3.json` runs on worktree creation and which must
-work when T3 launches it. Whole-program checks (Vulture, jscpd, Import Linter) run in
-`poe check` and CI only.
+**Commit backstop.** `.githooks/pre-commit` runs the same checks, except mypy,
+over the staged files without fixing anything, and refuses the commit on a
+finding. `scripts/setup_worktree.py` points `core.hooksPath` at `.githooks`.
+It covers whatever no agent hook saw: a human's edit, an agent whose hooks are
+not trusted, or a skipped command.
 
-Grok's PostToolUse feedback path is undocumented. Implementation verifies
-whether Grok returns the hook's stderr to the model. If it does not, Grok is
-still covered by `poe check` and CI, and this specification records the gap.
+**Speed.** Measured on 2026-11-01 (Windows, warm mypy daemon, median of
+repeated runs as each agent launches the hook):
+
+| After | Claude Code / Grok | Codex |
+|---|---|---|
+| a read-only shell command | 0.15-0.18s (bash alone: 0.09s) | 0.29-0.37s (PowerShell alone: 0.31s) |
+| a shell command that changed no source | 0.36s | 0.37s |
+| an edit, or a shell command that changed a file | 0.7-0.9s | about 1.0s |
+
+The per-edit hook it replaces took 1.4-1.8s for an edit. The hook calls tools
+from the project `.venv` and `node_modules` directly rather than through
+`uv run` or `npx`, talks to the mypy daemon in-process instead of through two
+`dmypy` client processes, checks the daemon's pid rather than asking
+`dmypy status`, and imports the modules only the checks need when it has
+something to check. When `.venv` or `node_modules` is missing it falls back to
+`uv run` or `npx` rather than skipping a check. New T3 worktrees get both from
+`scripts/setup_worktree.py`, which `t3.json` runs on worktree creation. It is
+Python because T3 types the command into Windows PowerShell, which hands a
+`.sh` to its file association and reports success before the script has run;
+`setup_worktree.sh` remains the cygwin entry point to the same script.
+Whole-program checks (Vulture, jscpd, Import Linter) run in `poe check` and CI
+only.
+
+**Agents.** Verified on 2026-11-01: Claude and Grok both return the hook's
+findings to the model, after edits and after shell commands. Codex
+(codex-cli 0.166.0) runs a non-managed hook only once its exact definition has
+been trusted in the interactive CLI's `/hooks` browser, and records that trust
+against the definition's hash. Until then it skips the hook without a message.
+The repository cannot grant that trust: someone runs `codex` in the repo, opens
+`/hooks` and trusts its hooks, and again whenever `.codex/hooks.json` changes.
+Since codex-cli's PR #21969, a linked worktree loads its hooks, and their trust,
+from the **root checkout's** `.codex/hooks.json`, so every T3 worktree runs
+whatever that one file says (verified with `codex exec`, 2026-11-01). The
+root checkout's copy is the one to keep current and trust.
+Until then, Codex is covered by the pre-commit hook, `poe check` and CI.
 
 ### S07 — Suppressions carry a reason
 
 A new `# noqa: <codes>`, `# type: ignore[<code>]` or Vulture suppression must
-end with ` -- <reason>`. The hook rejects one without a reason. `PGH` forbids
+end with ` -- <reason>`. mypy rejects any text after `# type: ignore[<code>]`,
+so there the reason is a comment of its own:
+`# type: ignore[<code>]  # -- <reason>`. ESLint's own description syntax is
+the same: `// eslint-disable-next-line <rule> -- <reason>`. The hook rejects a
+new suppression without a reason; suppressions already committed are left to
+the rollout PRs. `PGH` forbids
 blanket suppressions and `RUF100` removes stale ones. AGENTS.md states the
 policy.
 
@@ -136,7 +207,7 @@ policy.
 
 - A `SessionStart` hook starts `dmypy` in the background for the worktree,
   with `--timeout 1800`, so an orphaned daemon exits after 30 idle minutes.
-- The edit hook restarts the daemon if it has died. Until the daemon is warm
+- The hook restarts the daemon if its pid has died. Until the daemon is warm
   it skips the mypy step rather than block on a cold start (about 34s; Grok's
   default hook timeout is 5s).
 - A `SessionEnd` hook runs `dmypy stop`.

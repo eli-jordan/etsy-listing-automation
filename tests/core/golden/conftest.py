@@ -19,7 +19,7 @@ GoldenComparator = Callable[[Image.Image, Path], None]
 
 
 @pytest.fixture
-def assert_matches_golden(update_goldens: bool) -> GoldenComparator:
+def assert_matches_golden(*, update_goldens: bool) -> GoldenComparator:
     def _compare(actual: Image.Image, golden_path: Path, *, tolerance: int = 3) -> None:
         if update_goldens or not golden_path.is_file():
             golden_path.parent.mkdir(parents=True, exist_ok=True)

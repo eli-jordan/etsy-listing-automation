@@ -14,6 +14,7 @@ from pathlib import Path
 import pytest
 
 from etsy_listings.core.engine.status import (
+    StatusInputs,
     edited_since_apply,
     is_live_etsy_state,
     listing_gestures,
@@ -23,29 +24,29 @@ from etsy_listings.core.engine.status import (
 
 class TestTheTransitionTable:
     def test_never_applied_is_a_draft(self) -> None:
-        assert listing_status(applied=False, edited=False, live=False) == "draft"
+        assert listing_status(StatusInputs(applied=False, edited=False, live=False)) == "draft"
 
     def test_applied_and_untouched_is_deployed(self) -> None:
-        assert listing_status(applied=True, edited=False, live=False) == "deployed"
+        assert listing_status(StatusInputs(applied=True, edited=False, live=False)) == "deployed"
 
     def test_published_on_etsy_is_live(self) -> None:
-        assert listing_status(applied=True, edited=False, live=True) == "live"
+        assert listing_status(StatusInputs(applied=True, edited=False, live=True)) == "live"
 
     def test_editing_something_never_published_goes_back_to_draft(self) -> None:
         """Nobody is looking at the stale copy, so there is nothing to
         distinguish it from work that has never been applied at all."""
-        assert listing_status(applied=True, edited=True, live=False) == "draft"
+        assert listing_status(StatusInputs(applied=True, edited=True, live=False)) == "draft"
 
     def test_editing_something_published_is_dirty(self) -> None:
         """The asymmetry with the case above: a buyer *is* looking at the
         stale copy, which is the gap `dirty` exists to name."""
-        assert listing_status(applied=True, edited=True, live=True) == "dirty"
+        assert listing_status(StatusInputs(applied=True, edited=True, live=True)) == "dirty"
 
     def test_live_wins_over_never_applied(self) -> None:
         """Contradictory facts -- Etsy has it, the lockfile does not -- resolve
         towards what a shop visitor can see, which is the half a user cannot
         fix by re-running anything."""
-        assert listing_status(applied=False, edited=False, live=True) == "live"
+        assert listing_status(StatusInputs(applied=False, edited=False, live=True)) == "live"
 
 
 class TestTheIncompleteMarker:
@@ -55,28 +56,39 @@ class TestTheIncompleteMarker:
     clean. A set marker must read exactly like an edit would."""
 
     def test_a_marked_live_listing_reads_dirty_even_though_nothing_looks_edited(self) -> None:
-        assert listing_status(applied=True, edited=False, live=True, incomplete=True) == "dirty"
+        assert (
+            listing_status(StatusInputs(applied=True, edited=False, live=True, incomplete=True))
+            == "dirty"
+        )
 
     def test_an_unmarked_live_listing_still_reads_live(self) -> None:
-        assert listing_status(applied=True, edited=False, live=True, incomplete=False) == "live"
+        assert (
+            listing_status(StatusInputs(applied=True, edited=False, live=True, incomplete=False))
+            == "live"
+        )
 
     def test_the_marker_does_not_invent_a_new_status_for_a_never_applied_listing(self) -> None:
         """Never live and never fully applied is `draft` regardless -- the
         marker piggybacks on the existing `edited` branch rather than adding
         a state of its own."""
-        assert listing_status(applied=False, edited=False, live=False, incomplete=True) == "draft"
+        assert (
+            listing_status(StatusInputs(applied=False, edited=False, live=False, incomplete=True))
+            == "draft"
+        )
 
     def test_delete_retire_still_win_over_a_marked_listing(self) -> None:
         """ADR-0035, ADR-0036's lifecycle badges take precedence over live/dirty
         already; the marker must not change that ordering."""
         assert (
             listing_status(
-                applied=True,
-                edited=False,
-                live=True,
-                lifecycle="retired",
-                etsy_state="active",
-                incomplete=True,
+                StatusInputs(
+                    applied=True,
+                    edited=False,
+                    live=True,
+                    lifecycle="retired",
+                    etsy_state="active",
+                    incomplete=True,
+                )
             )
             == "pending-retire"
         )
@@ -89,18 +101,22 @@ class TestDeleteAndRetireBadges:
 
     def test_lifecycle_deleted_is_pending_delete(self) -> None:
         assert (
-            listing_status(applied=True, edited=False, live=False, lifecycle="deleted")
+            listing_status(
+                StatusInputs(applied=True, edited=False, live=False, lifecycle="deleted")
+            )
             == "pending-delete"
         )
 
     def test_retired_while_etsy_is_still_active_is_pending_retire(self) -> None:
         assert (
             listing_status(
-                applied=True,
-                edited=False,
-                live=True,
-                lifecycle="retired",
-                etsy_state="active",
+                StatusInputs(
+                    applied=True,
+                    edited=False,
+                    live=True,
+                    lifecycle="retired",
+                    etsy_state="active",
+                )
             )
             == "pending-retire"
         )
@@ -108,12 +124,14 @@ class TestDeleteAndRetireBadges:
     def test_retired_applied_and_etsy_inactive_is_inactive(self) -> None:
         assert (
             listing_status(
-                applied=True,
-                edited=False,
-                live=True,
-                lifecycle="retired",
-                etsy_state="inactive",
-                last_applied_lifecycle="retired",
+                StatusInputs(
+                    applied=True,
+                    edited=False,
+                    live=True,
+                    lifecycle="retired",
+                    etsy_state="inactive",
+                    last_applied_lifecycle="retired",
+                )
             )
             == "inactive"
         )
@@ -123,47 +141,61 @@ class TestDeleteAndRetireBadges:
         gesture, not a side-effect of saving the yaml."""
         assert (
             listing_status(
-                applied=True,
-                edited=True,
-                live=True,
-                lifecycle="retired",
-                etsy_state="inactive",
-                last_applied_lifecycle="retired",
+                StatusInputs(
+                    applied=True,
+                    edited=True,
+                    live=True,
+                    lifecycle="retired",
+                    etsy_state="inactive",
+                    last_applied_lifecycle="retired",
+                )
             )
             == "inactive"
         )
 
     def test_etsy_paused_us_is_inactive_until_we_renew(self) -> None:
         assert (
-            listing_status(applied=True, edited=False, live=True, etsy_state="inactive")
+            listing_status(
+                StatusInputs(applied=True, edited=False, live=True, etsy_state="inactive")
+            )
             == "inactive"
         )
 
     def test_etsy_removed_us_is_inactive_until_we_renew(self) -> None:
         assert (
-            listing_status(applied=True, edited=False, live=True, etsy_state="removed")
+            listing_status(
+                StatusInputs(applied=True, edited=False, live=True, etsy_state="removed")
+            )
             == "inactive"
         )
 
     def test_etsy_expired_is_named_because_money(self) -> None:
         assert (
-            listing_status(applied=True, edited=False, live=True, etsy_state="expired") == "expired"
+            listing_status(
+                StatusInputs(applied=True, edited=False, live=True, etsy_state="expired")
+            )
+            == "expired"
         )
 
     def test_sold_out_stays_live(self) -> None:
         """Inventory, not a pause — apply does not treat it as retirement."""
         assert (
-            listing_status(applied=True, edited=False, live=True, etsy_state="sold_out") == "live"
+            listing_status(
+                StatusInputs(applied=True, edited=False, live=True, etsy_state="sold_out")
+            )
+            == "live"
         )
 
     def test_un_retire_is_draft_because_we_want_it_on_sale(self) -> None:
         assert (
             listing_status(
-                applied=True,
-                edited=False,
-                live=True,
-                etsy_state="inactive",
-                last_applied_lifecycle="retired",
+                StatusInputs(
+                    applied=True,
+                    edited=False,
+                    live=True,
+                    etsy_state="inactive",
+                    last_applied_lifecycle="retired",
+                )
             )
             == "draft"
         )
@@ -171,11 +203,13 @@ class TestDeleteAndRetireBadges:
     def test_pending_renew_is_draft(self) -> None:
         assert (
             listing_status(
-                applied=True,
-                edited=False,
-                live=True,
-                lifecycle="renew",
-                etsy_state="expired",
+                StatusInputs(
+                    applied=True,
+                    edited=False,
+                    live=True,
+                    lifecycle="renew",
+                    etsy_state="expired",
+                )
             )
             == "draft"
         )
@@ -185,11 +219,13 @@ class TestDeleteAndRetireBadges:
         not still active, so calling it pending-retire would lie."""
         assert (
             listing_status(
-                applied=True,
-                edited=False,
-                live=True,
-                lifecycle="retired",
-                etsy_state="inactive",
+                StatusInputs(
+                    applied=True,
+                    edited=False,
+                    live=True,
+                    lifecycle="retired",
+                    etsy_state="inactive",
+                )
             )
             == "inactive"
         )

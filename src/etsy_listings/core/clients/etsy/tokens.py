@@ -24,7 +24,6 @@ from __future__ import annotations
 
 import contextlib
 import json
-import os
 import threading
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -194,8 +193,8 @@ class TokenStore:
         temp = self._path.with_name(self._path.name + ".tmp")
         temp.write_text(json.dumps(tokens.to_document(), indent=2) + "\n", encoding="utf-8")
         with contextlib.suppress(OSError):
-            os.chmod(temp, 0o600)
-        os.replace(temp, self._path)
+            temp.chmod(0o600)
+        temp.replace(self._path)
 
     def record(self, response: TokenResponse) -> StoredTokens:
         """Store the result of a fresh authorization-code grant."""

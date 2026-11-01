@@ -85,9 +85,11 @@ def unowned_imports(
     found = []
     for path in sorted(tests.rglob("*.py")):
         relative = path.relative_to(root).as_posix()
-        for module in imported_modules(path.read_text(encoding="utf-8")):
-            if module in protected and relative not in owners.get(module, frozenset()):
-                found.append(f"{relative} imports {module}")
+        found.extend(
+            f"{relative} imports {module}"
+            for module in imported_modules(path.read_text(encoding="utf-8"))
+            if module in protected and relative not in owners.get(module, frozenset())
+        )
     return found
 
 

@@ -129,7 +129,7 @@ class TestMemo:
         assert small.shape != full.shape
 
     def test_a_missing_file_is_the_caller_s_error_not_a_stale_hit(self, tmp_path: Path) -> None:
-        with pytest.raises(OSError):
+        with pytest.raises(OSError, match=r"gone.png"):
             PreviewImages().base(tmp_path / "gone.png", 200)
 
 
@@ -139,7 +139,7 @@ class TestBudget:
         one -- and a future accident should fail here rather than corrupt what
         the next request is served."""
         base = PreviewImages().base(photo, 200)
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match="read-only"):
             base.image[0, 0, 0] = 1
 
     def test_the_least_recently_used_entry_goes_first(self, tmp_path: Path) -> None:
@@ -249,7 +249,8 @@ def test_material_artwork_reuses_exact_read_only_samples_and_invalidates(tmp_pat
     images = PreviewImages()
     pixels, packed = images.material_design(path, max_edge=32)
     again, same_packed = images.material_design(path, max_edge=32)
-    assert again is pixels and same_packed is packed
+    assert again is pixels
+    assert same_packed is packed
     assert pixels.shape == packed.shape == (16, 32, 4)
     assert packed.dtype == np.float32
     assert not packed.flags.writeable
@@ -317,4 +318,5 @@ def test_material_artwork_larger_than_the_budget_is_served_without_retention(tmp
     _, second = images.material_design(path, max_edge=32)
     assert first is not second
     assert images.held_bytes == pixels.nbytes
-    assert not first.flags.writeable and not second.flags.writeable
+    assert not first.flags.writeable
+    assert not second.flags.writeable

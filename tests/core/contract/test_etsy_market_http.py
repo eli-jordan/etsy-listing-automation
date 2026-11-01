@@ -17,7 +17,7 @@ import pytest
 
 from etsy_listings.core.clients.etsy.market import HttpEtsyMarketClient
 from etsy_listings.core.clients.etsy.transport import BASE_URL as ETSY_BASE_URL
-from etsy_listings.core.clients.etsy.transport import EtsyApiError
+from etsy_listings.core.clients.etsy.transport import EtsyApiError, Timing
 from etsy_listings.core.clients.etsy.transport import Transport as EtsyTransport
 from etsy_listings.core.config.secrets import EtsyAppKey
 
@@ -40,7 +40,7 @@ SEARCH_ROW = {
 }
 
 
-def _client(handler) -> HttpEtsyMarketClient:  # noqa: ANN001 - a test handler
+def _client(handler) -> HttpEtsyMarketClient:
     return HttpEtsyMarketClient(etsy_transport(handler, bearer=None))
 
 
@@ -276,7 +276,8 @@ def test_more_than_a_hundred_ids_are_asked_for_in_chunks_of_a_hundred() -> None:
     listings = _client(handler).listings_by_ids(list(range(1, 251)))
 
     assert [len(chunk) for chunk in chunks] == [100, 100, 50]
-    assert chunks[0][0] == 1 and chunks[2][-1] == 250
+    assert chunks[0][0] == 1
+    assert chunks[2][-1] == 250
     assert [listing.listing_id for listing in listings] == list(range(1, 251))
 
 
@@ -404,8 +405,7 @@ class _Recorder:
                 client=httpx.Client(
                     transport=httpx.MockTransport(self.handler), base_url=ETSY_BASE_URL
                 ),
-                sleep=self.slept.append,
-                random=lambda: 0.5,
+                timing=Timing(sleep=self.slept.append, random=lambda: 0.5),
             )
         )
 

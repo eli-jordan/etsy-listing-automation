@@ -20,11 +20,15 @@ from pathlib import Path
 import pytest
 
 from etsy_listings.core.ai.proposals import ProposalRecord, ProposalStore
-from etsy_listings.core.application.ai.listing_proposals import read_proposal, resolve_proposal
+from etsy_listings.core.application.ai.listing_proposals import (
+    ProposalResolution,
+    read_proposal,
+    resolve_proposal,
+)
 from etsy_listings.core.application.refusals import (
-    ListingMissing,
-    ProposalMissing,
-    ProposalReplaced,
+    ListingMissingError,
+    ProposalMissingError,
+    ProposalReplacedError,
 )
 from etsy_listings.core.listing_artifacts import remove_listing
 from etsy_listings.core.workspace.listing_documents import ListingDocuments
@@ -51,13 +55,15 @@ def _generated(workspace: Workspace, proposals: ProposalStore) -> ProposalRecord
     return save_proposal(workspace, LISTING)
 
 
-def _resolve(workspace: Workspace, proposals: ProposalStore, **sections: object):  # noqa: ANN202
+def _resolve(workspace: Workspace, proposals: ProposalStore, **sections: object):
     return resolve_proposal(
         workspace,
         proposals,
         LISTING,
-        generated_at=sections.pop("generated_at", TODAY),
-        **sections,  # type: ignore[arg-type]
+        ProposalResolution(
+            generated_at=sections.pop("generated_at", TODAY),
+            **sections,  # type: ignore[arg-type]  # -- sections arrive as object through **kwargs
+        ),
     )
 
 
@@ -96,9 +102,9 @@ def test_an_edit_since_generation_reads_stale_and_still_usable(
 def test_reading_refuses_a_missing_listing_or_proposal(
     workspace: Workspace, proposals: ProposalStore
 ) -> None:
-    with pytest.raises(ProposalMissing, match="no proposal for 'take-a-hike'"):
+    with pytest.raises(ProposalMissingError, match="no proposal for 'take-a-hike'"):
         read_proposal(workspace, proposals, LISTING)
-    with pytest.raises(ListingMissing):
+    with pytest.raises(ListingMissingError):
         read_proposal(workspace, proposals, "never-saved")
 
 
@@ -142,7 +148,7 @@ def test_a_resolution_for_a_replaced_proposal_is_refused_and_changes_nothing(
 ) -> None:
     _generated(workspace, proposals)
 
-    with pytest.raises(ProposalReplaced):
+    with pytest.raises(ProposalReplacedError):
         _resolve(workspace, proposals, generated_at=TODAY - timedelta(minutes=5), title="accepted")
 
     assert read_proposal(workspace, proposals, LISTING).resolution.title == "pending"
@@ -151,15 +157,14 @@ def test_a_resolution_for_a_replaced_proposal_is_refused_and_changes_nothing(
 def test_resolving_refuses_a_missing_listing_or_proposal(
     workspace: Workspace, proposals: ProposalStore
 ) -> None:
-    with pytest.raises(ProposalMissing):
+    with pytest.raises(ProposalMissingError):
         _resolve(workspace, proposals, title="accepted")
-    with pytest.raises(ListingMissing):
+    with pytest.raises(ListingMissingError):
         resolve_proposal(
             workspace,
             proposals,
             "never-saved",
-            generated_at=TODAY,
-            title="accepted",
+            ProposalResolution(generated_at=TODAY, title="accepted"),
         )
 
 
@@ -175,8 +180,10 @@ def test_a_listing_deleted_while_resolving_waits_is_refused_and_leaves_no_record
 
     def resolve() -> None:
         try:
-            resolve_proposal(workspace, proposals, LISTING, generated_at=TODAY, title="accepted")
-        except ListingMissing as exc:
+            resolve_proposal(
+                workspace, proposals, LISTING, ProposalResolution(TODAY, title="accepted")
+            )
+        except ListingMissingError as exc:
             refused.append(exc)
 
     with documents.lock(LISTING):

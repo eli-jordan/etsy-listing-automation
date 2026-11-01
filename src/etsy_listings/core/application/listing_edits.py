@@ -31,7 +31,7 @@ def edit_listing(
     """Merge ``patch`` into listing ``name`` and write it. Returns ``None``
     once written.
 
-    Raises :class:`ListingMissing` when there is no listing to edit, whether
+    Raises :class:`ListingMissingError` when there is no listing to edit, whether
     before or after waiting for its lock. Returns :class:`InvalidListing`,
     writing nothing, when the merged document does not validate
     structurally. An incomplete one is written (ADR-0043).

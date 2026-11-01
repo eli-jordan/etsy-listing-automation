@@ -20,7 +20,7 @@ import yaml
 from etsy_listings.core.batches import (
     Batch,
     BatchStore,
-    ConfirmRefused,
+    ConfirmRefusedError,
     StagingStore,
     Upload,
     confirm,
@@ -55,7 +55,7 @@ def batches(workspace: Workspace) -> BatchStore:
 
 
 def _stage(workspace: Workspace, staging: StagingStore, *files: tuple[str, bytes]) -> str:
-    return stage_pngs(workspace, staging, "heavyweight-tee", uploads(*files), now=NOW).id
+    return stage_pngs(staging, "heavyweight-tee", uploads(*files), now=NOW).id
 
 
 def _confirm(workspace: Workspace, staging: StagingStore, batches: BatchStore, id_: str) -> Batch:
@@ -112,7 +112,7 @@ class TestConfirm:
     ) -> None:
         id_ = _stage(workspace, staging, DESIGNS[0], ("★★★.png", png(8)))
 
-        with pytest.raises(ConfirmRefused, match="Fix 1 name to"):
+        with pytest.raises(ConfirmRefusedError, match="Fix 1 name to"):
             _confirm(workspace, staging, batches, id_)
 
         assert _created(workspace) == []
@@ -123,7 +123,7 @@ class TestConfirm:
     ) -> None:
         id_ = _stage(workspace, staging, ("★★★.png", png(8)), ("☆☆☆.png", png(9)))
 
-        with pytest.raises(ConfirmRefused, match="Fix 2 names to create the listings."):
+        with pytest.raises(ConfirmRefusedError, match=r"Fix 2 names to create the listings."):
             _confirm(workspace, staging, batches, id_)
 
     def test_a_name_claimed_between_staging_and_confirm_gets_a_fresh_suffix(
@@ -293,7 +293,6 @@ class TestFrozenTemplate:
                 return super().read(size)
 
         session = stage_pngs(
-            workspace,
             staging,
             "heavyweight-tee",
             [Upload(DESIGNS[0][0], UploadOutsideLock(DESIGNS[0][1]))],
@@ -341,7 +340,6 @@ class TestFrozenTemplate:
                 return super().read(size)
 
         session = stage_pngs(
-            workspace,
             staging,
             "heavyweight-tee",
             [Upload(filename=DESIGNS[0][0], stream=ChangingUpload(DESIGNS[0][1]))],
@@ -393,7 +391,7 @@ class TestFrozenTemplate:
         id_ = _stage(workspace, staging, DESIGNS[0])
         (workspace.root / "garment-profiles" / "comfort-colors-1717.yaml").unlink()
 
-        with pytest.raises(ConfirmRefused, match="can no longer make listings"):
+        with pytest.raises(ConfirmRefusedError, match="can no longer make listings"):
             _confirm(workspace, staging, batches, id_)
 
         assert _created(workspace) == []

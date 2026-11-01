@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import asdict
+from typing import Annotated
 
 import typer
 
@@ -31,7 +32,10 @@ def _show(report: Capability, *, as_json: bool) -> None:
 
 @app.command()
 def status(
-    json_output: bool = typer.Option(False, "--json", help="Return the capability report as JSON."),
+    *,
+    json_output: Annotated[
+        bool, typer.Option("--json", help="Return the capability report as JSON.")
+    ] = False,
 ) -> None:
     """Inspect installation, pinned weights and CUDA. Never download or install.
 
@@ -55,12 +59,12 @@ def _install(*, update: bool, as_json: bool) -> None:
 
 
 @app.command()
-def setup(json_output: bool = typer.Option(False, "--json")) -> None:
+def setup(*, json_output: Annotated[bool, typer.Option("--json")] = False) -> None:
     """Explicitly install locked dependencies and verified weights, then run smoke inference."""
     _install(update=False, as_json=json_output)
 
 
 @app.command()
-def update(json_output: bool = typer.Option(False, "--json")) -> None:
+def update(*, json_output: Annotated[bool, typer.Option("--json")] = False) -> None:
     """Verify and select the required engine, retaining previously installed versions."""
     _install(update=True, as_json=json_output)

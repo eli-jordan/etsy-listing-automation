@@ -29,9 +29,11 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, ValidationError, ValidationInfo, model_validator
+from pydantic import BaseModel, ConfigDict, ValidationInfo, model_validator
 
-from etsy_listings.core.config.errors import ConfigLoadError, format_validation_error, parse_yaml
+from etsy_listings.core.config.errors import (
+    load_model,
+)
 from etsy_listings.core.config.listing import MediaEntry, check_production_fields, resolve_price
 from etsy_listings.core.config.money import Money, PriceField
 from etsy_listings.core.config.pricing_plan import PricingPlan
@@ -105,10 +107,10 @@ class ListingTemplate(BaseModel):
         """``read`` is how the file's bytes are fetched: the workspace passes
         its retrying reader, which ``config`` cannot import without a
         cycle through the workspace package."""
-        if not path.is_file():
-            raise ConfigLoadError(path, "listing template file not found")
-        raw = parse_yaml(path, read(path).decode("utf-8")) or {}
-        try:
-            return cls.model_validate(raw, context={"currency": currency})
-        except ValidationError as exc:
-            raise format_validation_error(path, exc) from exc
+        return load_model(
+            cls,
+            path,
+            context={"currency": currency},
+            read=read,
+            missing="listing template file not found",
+        )

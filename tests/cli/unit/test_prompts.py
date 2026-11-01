@@ -25,7 +25,7 @@ from tests.support.doubles import FakeRun, replies
 
 
 @pytest.fixture
-def fzf(monkeypatch: pytest.MonkeyPatch):  # noqa: ANN201 - returns a local installer
+def fzf(monkeypatch: pytest.MonkeyPatch):
     """This machine has fzf, and ``subprocess.run`` answers as the test says."""
     monkeypatch.setattr(prompts, "fzf_command", lambda: ["/usr/bin/fzf"])
 
@@ -38,7 +38,7 @@ def fzf(monkeypatch: pytest.MonkeyPatch):  # noqa: ANN201 - returns a local inst
 
 
 @pytest.fixture
-def plain(monkeypatch: pytest.MonkeyPatch):  # noqa: ANN201 - returns a local installer
+def plain(monkeypatch: pytest.MonkeyPatch):
     """Neither fzf nor prompt_toolkit: the numbered selector over ``input()``.
 
     The last resort, and the one a cygwin pty without fzf actually gets, which

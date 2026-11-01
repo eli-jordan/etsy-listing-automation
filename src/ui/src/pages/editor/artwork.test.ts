@@ -105,9 +105,9 @@ describe("reading the map", () => {
   it("names the file a slot card shows", () => {
     expect(slotFile({ default: A }, { kind: "one" })).toBe(A);
     expect(slotFile({ default: A }, { kind: "slot", tone: "dark" })).toBe(A);
-    expect(slotFile({ "on-light": null, "on-dark": B }, { kind: "slot", tone: "light" })).toBe(
-      null,
-    );
+    expect(
+      slotFile({ "on-light": null, "on-dark": B }, { kind: "slot", tone: "light" }),
+    ).toBeNull();
   });
 
   it("resolves a colour the way config/artwork.py does", () => {
@@ -139,7 +139,7 @@ describe("reading the map", () => {
     expect(representative({ default: A })).toBe(A);
     expect(representative({ "on-light": null, "on-dark": B })).toBe(B);
     expect(representative({ "on-light": A, "on-dark": B })).toBe(A);
-    expect(representative({ moss: MOSS })).toBe(null);
+    expect(representative({ moss: MOSS })).toBeNull();
   });
 
   it("lists names the way the banner does", () => {

@@ -49,7 +49,7 @@ class Event:
 EventSink = Callable[[Event], None]
 
 
-def _noop_sink(event: Event) -> None:
+def _noop_sink(_event: Event) -> None:
     return None
 
 

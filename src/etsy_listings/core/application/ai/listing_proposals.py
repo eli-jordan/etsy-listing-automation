@@ -13,19 +13,22 @@ clearing the cache does.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import datetime
 
 from etsy_listings.core.ai.listing_inputs import ListingAiInputs
 from etsy_listings.core.ai.proposals import (
     ListingProposal,
-    ProposalReplacedError,
     ProposalStore,
     Resolution,
 )
+from etsy_listings.core.ai.proposals import (
+    ProposalReplacedError as CachedProposalReplacedError,
+)
 from etsy_listings.core.application.refusals import (
-    ListingMissing,
-    ProposalMissing,
-    ProposalReplaced,
+    ListingMissingError,
+    ProposalMissingError,
+    ProposalReplacedError,
 )
 from etsy_listings.core.workspace.listing_documents import ListingDocuments
 from etsy_listings.core.workspace.workspace import Workspace
@@ -33,34 +36,40 @@ from etsy_listings.core.workspace.workspace import Workspace
 
 def read_proposal(workspace: Workspace, proposals: ProposalStore, name: str) -> ListingProposal:
     """Listing ``name``'s proposal, judged stale or not against the listing
-    as saved now. :class:`ListingMissing`, or :class:`ProposalMissing` when
+    as saved now. :class:`ListingMissingError`, or :class:`ProposalMissingError` when
     none is cached."""
     _require(workspace, name)
     record = proposals.load(name)
     if record is None:
-        raise ProposalMissing(name)
+        raise ProposalMissingError(name)
     return ListingAiInputs.read(workspace, name).judge(record)
+
+
+@dataclass(frozen=True)
+class ProposalResolution:
+    """Sections to record on the proposal generated at ``generated_at``:
+    each resolved, reopened (``pending``), or ``None`` to leave it as it is."""
+
+    generated_at: datetime
+    title: Resolution | None = None
+    tags: Resolution | None = None
+    lead: Resolution | None = None
 
 
 def resolve_proposal(
     workspace: Workspace,
     proposals: ProposalStore,
     name: str,
-    *,
-    generated_at: datetime,
-    title: Resolution | None = None,
-    tags: Resolution | None = None,
-    lead: Resolution | None = None,
+    resolution: ProposalResolution,
 ) -> ListingProposal:
-    """Record the given sections as resolved (or reopened, ``pending``) on
-    the proposal generated at ``generated_at``, and answer it as
-    :func:`read_proposal` would.
+    """Record ``resolution``'s sections on the proposal it names, and answer
+    it as :func:`read_proposal` would.
 
     Under the listing's write lock, re-checking the listing inside it, so a
     delete or rename cannot land between the read and the write and leave a
     record behind for a listing that is gone. Refusals, with nothing
-    recorded: :class:`ListingMissing` (also after waiting for the lock),
-    :class:`ProposalMissing`, and :class:`ProposalReplaced` when the proposal
+    recorded: :class:`ListingMissingError` (also after waiting for the lock),
+    :class:`ProposalMissingError`, and :class:`ProposalReplacedError` when the proposal
     has been regenerated since.
     """
     _require(workspace, name)
@@ -68,15 +77,19 @@ def resolve_proposal(
         _require(workspace, name)
         try:
             record = proposals.resolve(
-                name, generated_at=generated_at, title=title, tags=tags, lead=lead
+                name,
+                generated_at=resolution.generated_at,
+                title=resolution.title,
+                tags=resolution.tags,
+                lead=resolution.lead,
             )
-        except ProposalReplacedError as exc:
-            raise ProposalReplaced(name) from exc
+        except CachedProposalReplacedError as exc:
+            raise ProposalReplacedError(name) from exc
     if record is None:
-        raise ProposalMissing(name)
+        raise ProposalMissingError(name)
     return ListingAiInputs.read(workspace, name).judge(record)
 
 
 def _require(workspace: Workspace, name: str) -> None:
     if not ListingDocuments(workspace).exists(name):
-        raise ListingMissing(name)
+        raise ListingMissingError(name)

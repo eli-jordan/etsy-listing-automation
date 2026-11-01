@@ -42,6 +42,7 @@ deadline are shared, which is what `ProviderTask` exists to make possible.
   raise, and `classify_process_failure`, the availability classifier.
 - ``process`` -- `run_managed`: cross-platform subprocess-tree launch and
   cleanup for timeouts, cancellation, and request disconnects (PR4).
+- ``cli_support`` -- the shared local CLI provider contract, readiness probes and outcome decoding.
 
 `core/application/ai/` coordinates this package into runs, readiness and
 proposal operations; `server/api/airuns.py` and `server/api/seo.py` serve
@@ -119,8 +120,6 @@ from etsy_listings.core.ai.providers import AiProvider, FakeAiProvider
 from etsy_listings.core.ai.validation import ProposalValidationError, validate_proposal
 
 __all__ = [
-    "ListingAiInputs",
-    "PreparedSeo",
     "BRIEF_RESPONSE_SCHEMA",
     "MARKET_QUERIES_RESPONSE_SCHEMA",
     "AiProvider",
@@ -134,13 +133,15 @@ __all__ = [
     "FakeAiProvider",
     "GarmentContext",
     "GrokProvider",
+    "ListingAiInputs",
     "MarketQueries",
     "MarketQueriesRequest",
     "MarketQueriesValidationError",
     "PhraseRationale",
+    "PreparedSeo",
     "ProcessResult",
-    "ProposalValidationError",
     "ProposalStore",
+    "ProposalValidationError",
     "ProposalWarning",
     "ProviderCancelledError",
     "ProviderGenerationError",

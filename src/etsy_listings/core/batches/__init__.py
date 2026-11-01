@@ -9,7 +9,7 @@ server keeps one of each. Nothing here deploys, and nothing here calls a
 provider.
 
 * :func:`stage_pngs` -- the upload, one ZIP or loose PNGs, validated and
-  frozen, or a :class:`StagingRefused` with nothing on disk. The ZIP's own
+  frozen, or a :class:`StagingRefusedError` with nothing on disk. The ZIP's own
   checks are ``archive``'s, reached only through it.
 * :func:`review` -- the names, checks and notes the staging page shows,
   worked out afresh on every read.
@@ -24,7 +24,7 @@ AI.
 """
 
 from etsy_listings.core.batches.creation import (
-    ConfirmRefused,
+    ConfirmRefusedError,
     confirm,
     retry_row,
     row_upload,
@@ -35,9 +35,10 @@ from etsy_listings.core.batches.records import (
     AiState,
     AiStep,
     Batch,
+    BatchRecords,
     BatchRow,
     BatchStore,
-    NotReviewable,
+    NotReviewableError,
     StagingRow,
     StagingSession,
     StagingStore,
@@ -46,7 +47,7 @@ from etsy_listings.core.batches.records import (
 )
 from etsy_listings.core.batches.staging import (
     RowReview,
-    StagingRefused,
+    StagingRefusedError,
     StagingReview,
     Upload,
     review,
@@ -55,7 +56,7 @@ from etsy_listings.core.batches.staging import (
 )
 from etsy_listings.core.batches.status import BatchStatus, Standing, standing
 
-__all__ = [
+__all__ = [  # noqa: RUF022 -- grouped by topic, not alphabetically
     # Records and their stores.
     "StagingSession",
     "StagingRow",
@@ -66,10 +67,11 @@ __all__ = [
     "AiStep",
     "RETRYABLE",
     "BatchStore",
+    "BatchRecords",
     # Staging and its review.
     "Upload",
     "stage_pngs",
-    "StagingRefused",
+    "StagingRefusedError",
     "review",
     "StagingReview",
     "RowReview",
@@ -79,12 +81,12 @@ __all__ = [
     "confirm",
     "retry_row",
     "row_upload",
-    "ConfirmRefused",
+    "ConfirmRefusedError",
     # Where a batch stands (UI doc §2), and who may be reviewed (§7).
     "standing",
     "Standing",
     "BatchStatus",
     "reviewable",
     "has_listing",
-    "NotReviewable",
+    "NotReviewableError",
 ]

@@ -1,10 +1,12 @@
 """Persisted job and event contract under ADR-0054."""
 
+import hashlib
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from etsy_listings.core.preparation.artifacts import PreparationInputs
+from etsy_listings.core.workspace.calibration import json_bytes
 
 Phase = Literal["queued", "running", "cancelling", "cancelled", "superseded", "failed", "completed"]
 Action = Literal["prepare", "prepare_again", "retry"]
@@ -40,9 +42,6 @@ class CropEvidence(Record):
     predictions: tuple[Prediction, ...] = ()
 
     def semantic_digest(self) -> str:
-        import hashlib
-
-        from etsy_listings.core.workspace.calibration import json_bytes
 
         return hashlib.sha256(
             json_bytes({"rectangle": self.rectangle, "size": self.size, "identity": self.identity})

@@ -152,6 +152,7 @@ it is anchored to the word "http". A structured ``api_error_status`` is
 trusted separately, in :func:`_api_status`."""
 
 _AUTH_OR_LIMIT_STATUS = frozenset({401, 403, 429})
+_MIN_JSONL_LINES = 2  # one line is a single object, which _parse_object already tried
 """HTTP statuses that mean sign-in, permission, or a rate/usage limit when a
 CLI reports them as ``api_error_status``. 500 and 529 stay "Try again": they
 are the service failing, not this account being blocked."""
@@ -253,7 +254,7 @@ def _envelope(text: str) -> dict[str, Any] | None:
     if whole is not None:
         return whole
     lines = [line.strip() for line in text.splitlines() if line.strip()]
-    if len(lines) < 2:
+    if len(lines) < _MIN_JSONL_LINES:
         return None
     objects: list[dict[str, Any]] = []
     for line in lines:

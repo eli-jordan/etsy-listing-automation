@@ -12,6 +12,7 @@ from pathlib import Path
 import pytest
 
 from etsy_listings.core.application.pricing_plans import (
+    LiveCosts,
     compute_starting_prices,
     write_pricing_plan,
 )
@@ -106,14 +107,12 @@ def test_compute_starting_prices_applies_margin_and_converts_currency() -> None:
     # variants 1 (Black/S) and 3 (Blue Jean/S) both cost 1000c mfg + 500c shipping.
     variant_costs = {1: 1000, 2: 1500, 3: 1000, 4: 1500}
     shipping = _shipping_rates(small_cents=500, medium_cents=600)
-    rate = FxRate(rate=Decimal("10"), source="test", fetched_at=datetime.now(UTC))
+    rate = FxRate(rate=Decimal(10), source="test", fetched_at=datetime.now(UTC))
 
     prices, notes = compute_starting_prices(
         sizes=["S", "M"],
         variant_set=VARIANT_SET,
-        variant_costs=variant_costs,
-        shipping=shipping,
-        fx_rate=rate,
+        costs=LiveCosts(variant_costs, shipping, rate),
         target_currency="NOK",
     )
 
@@ -128,14 +127,12 @@ def test_compute_starting_prices_uses_the_max_when_colours_disagree() -> None:
     # Both size-S variants (1 and 3) get different manufacturing costs.
     variant_costs = {1: 1000, 3: 2000}
     shipping = _shipping_rates(small_cents=0, medium_cents=0)
-    rate = FxRate(rate=Decimal("1"), source="test", fetched_at=datetime.now(UTC))
+    rate = FxRate(rate=Decimal(1), source="test", fetched_at=datetime.now(UTC))
 
     prices, notes = compute_starting_prices(
         sizes=["S"],
         variant_set=VARIANT_SET,
-        variant_costs=variant_costs,
-        shipping=shipping,
-        fx_rate=rate,
+        costs=LiveCosts(variant_costs, shipping, rate),
         target_currency="USD",
     )
 
@@ -150,9 +147,11 @@ def test_compute_starting_prices_is_fail_soft_with_no_cost_data() -> None:
     prices, notes = compute_starting_prices(
         sizes=["S"],
         variant_set=VARIANT_SET,
-        variant_costs={},  # the undocumented endpoint returned nothing
-        shipping=shipping,
-        fx_rate=FxRate(rate=Decimal("10"), source="test", fetched_at=datetime.now(UTC)),
+        costs=LiveCosts(
+            variant_costs={},  # the undocumented endpoint returned nothing
+            shipping=shipping,
+            fx_rate=FxRate(rate=Decimal(10), source="test", fetched_at=datetime.now(UTC)),
+        ),
         target_currency="NOK",
     )
 
@@ -167,9 +166,7 @@ def test_compute_starting_prices_is_fail_soft_with_no_fx_rate() -> None:
     prices, notes = compute_starting_prices(
         sizes=["S"],
         variant_set=VARIANT_SET,
-        variant_costs=variant_costs,
-        shipping=shipping,
-        fx_rate=None,  # the FX fetch failed
+        costs=LiveCosts(variant_costs, shipping, fx_rate=None),  # the FX fetch failed
         target_currency="NOK",
     )
 

@@ -82,7 +82,7 @@ def test_the_first_thirteen_tags_are_best_13_by_position() -> None:
     assert proposal.tags[:13] == tuple(f"tag {i:02d}" for i in range(13))
 
 
-# --------------------------------------------------------------- normalization ("repairable")
+# -------------------------------------------------------------- normalization, the repairable cases
 
 
 def test_normalization_trims_whitespace_and_strips_wrapping_quotes() -> None:

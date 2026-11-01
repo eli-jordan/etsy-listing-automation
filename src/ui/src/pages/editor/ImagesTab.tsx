@@ -56,6 +56,20 @@ interface Props {
   owner?: MediaOwner | null;
 }
 
+/** Whose `./` files the tab shows: the given owner, else the listing --
+ * none for a draft, which has no name yet. */
+function mediaOwner(owner: MediaOwner | null | undefined, name: string): MediaOwner | null {
+  if (owner !== undefined) return owner;
+  return name ? { kind: "listing", name } : null;
+}
+
+/** The directory to list the owner's own files from. A draft has no
+ * directory, and neither does an unsaved listing template (one with
+ * `copies`), so neither has anything of its own to list. */
+function ownDirectory(owner: MediaOwner | null): MediaOwner | null {
+  return owner === null || owner.copies !== undefined ? null : owner;
+}
+
 export function ImagesTab({ detail, onUpdate, artwork, owner }: Props) {
   const [templates, setTemplates] = useState<TemplateSummary[]>([]);
   const [shared, setShared] = useState<MediaFileSummary[]>([]);
@@ -74,10 +88,8 @@ export function ImagesTab({ detail, onUpdate, artwork, owner }: Props) {
       .catch(() => setStatus("failed to load shared files"));
   }, []);
 
-  // A draft has no directory, so nothing of its own to list.
-  const listing: MediaOwner | null =
-    owner === undefined ? (detail.name ? { kind: "listing", name: detail.name } : null) : owner;
-  const directory = listing === null || listing.copies !== undefined ? null : listing;
+  const listing = mediaOwner(owner, detail.name);
+  const directory = ownDirectory(listing);
   const directoryKind = directory?.kind ?? null;
   const directoryName = directory?.name ?? null;
   useEffect(() => {

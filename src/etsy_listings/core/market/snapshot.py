@@ -15,7 +15,6 @@ next research.
 from __future__ import annotations
 
 import contextlib
-import os
 import uuid
 from datetime import datetime
 
@@ -70,7 +69,7 @@ def save(workspace: Workspace, name: str, snapshot: MarketSnapshot) -> None:
     temporary = path.with_name(f"{path.name}.{uuid.uuid4().hex}.tmp")
     try:
         temporary.write_text(snapshot.model_dump_json(indent=2), encoding="utf-8")
-        os.replace(temporary, path)
+        temporary.replace(path)
     finally:
         with contextlib.suppress(FileNotFoundError):
             temporary.unlink()

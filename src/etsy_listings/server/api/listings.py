@@ -33,7 +33,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, UploadFile
 from fastapi.responses import Response
 
 from etsy_listings.core import connections
@@ -47,7 +47,6 @@ from etsy_listings.core.application.listing_identity import rename_listing as re
 from etsy_listings.core.application.listing_reads import (
     ListingRow,
     ListingView,
-    PricedSize,
     describe_draft,
     listing_row,
     read_listing,
@@ -63,10 +62,10 @@ from etsy_listings.core.application.pricing_plans import (
     pricing_plan_ref,
 )
 from etsy_listings.core.application.refusals import (
-    ListingDesignUploadRefused,
-    ListingMissing,
-    ListingNameTaken,
-    PublishedListingDeletion,
+    ListingDesignUploadRefusedError,
+    ListingMissingError,
+    ListingNameTakenError,
+    PublishedListingDeletionError,
 )
 from etsy_listings.core.application.scene_warming import SceneWarmer
 from etsy_listings.core.batches import BatchStore
@@ -83,6 +82,7 @@ from etsy_listings.core.workspace.common_copy import CommonCopyError
 from etsy_listings.core.workspace.facts import WorkspaceFacts
 from etsy_listings.core.workspace.listing_documents import ListingDocuments
 from etsy_listings.core.workspace.workspace import Workspace
+from etsy_listings.server.api.editor_projections import garment_fields, wire_prices
 from etsy_listings.server.api.etsystate import etsy_states
 from etsy_listings.server.api.schemas import (
     CommonCopySummary,
@@ -98,11 +98,10 @@ from etsy_listings.server.api.schemas import (
     ListingSummary,
     PricingPlanSummary,
     RenameListingRequest,
-    ResolvedPrice,
     WorkspaceSummary,
 )
 from etsy_listings.server.api.templates import (
-    PreviewScale,
+    ScenePreviewQuery,
     preview_refusals,
     render_preview_response,
 )
@@ -156,7 +155,7 @@ class Target:
 
 def _require_listing(workspace: Workspace, name: str) -> None:
     if not ListingDocuments(workspace).exists(name):
-        raise _not_found(ListingMissing(name))
+        raise _not_found(ListingMissingError(name))
 
 
 def target(request: Request, name: str) -> Target:
@@ -167,21 +166,12 @@ def target(request: Request, name: str) -> Target:
     return Target(workspace=workspace, name=name)
 
 
-Existing = Annotated[Target, Depends(target)]
-
-
-def _not_found(exc: ListingMissing) -> HTTPException:
+def _not_found(exc: ListingMissingError) -> HTTPException:
     return HTTPException(status_code=404, detail=str(exc))
 
 
-def _conflict(exc: ListingNameTaken | PublishedListingDeletion) -> HTTPException:
+def _conflict(exc: ListingNameTakenError | PublishedListingDeletionError) -> HTTPException:
     return HTTPException(status_code=409, detail=str(exc))
-
-
-def wire_prices(prices: Sequence[PricedSize]) -> list[ResolvedPrice]:
-    """Resolved prices as the editor shows them, ``Money`` formatted as it
-    prints itself (e.g. ``"249 NOK"``). Shared with listing templates."""
-    return [ResolvedPrice(size=price.size, amount=str(price.amount)) for price in prices]
 
 
 def _wire_issues(issues: Sequence[ValidationIssue]) -> list[dict[str, str]]:
@@ -237,12 +227,7 @@ def _project(workspace: Workspace, view: ListingView) -> ListingDetail:
             "printify_product_id": view.printify_product_id,
             "pricing_plan_name": view.pricing_plan_name,
             "resolved_prices": [p.model_dump() for p in wire_prices(view.resolved_prices)],
-            "garment_materials": profile.materials if profile is not None else [],
-            "garment_product_type": profile.blueprint.display_title
-            if profile is not None
-            else None,
-            "garment_brand": profile.blueprint.brand if profile is not None else None,
-            "garment_model": profile.blueprint.model if profile is not None else None,
+            **garment_fields(profile),
             "description_composed": view.description_composed,
             "design_content_hash": view.design_content_hash,
         },
@@ -255,7 +240,7 @@ def _detail(
 ) -> ListingDetail:
     try:
         view = read_listing(workspace, name, etsy_states=_etsy_states(workspace))
-    except ListingMissing as exc:
+    except ListingMissingError as exc:
         raise _not_found(exc) from exc
     if field_errors:
         view = dataclasses.replace(view, field_errors=field_errors)
@@ -278,19 +263,21 @@ def list_listings(request: Request) -> list[ListingSummary]:
 
 
 @router.get("/{name}", response_model=ListingDetail)
-def get_listing(target: Existing) -> ListingDetail:
+def get_listing(target: Annotated[Target, Depends(target)]) -> ListingDetail:
     return _detail(target.workspace, target.name)
 
 
 @router.patch("/{name}", response_model=ListingDetail)
-def patch_listing(target: Existing, body: dict[str, Any], request: Request) -> ListingDetail:
+def patch_listing(
+    target: Annotated[Target, Depends(target)], body: dict[str, Any], request: Request
+) -> ListingDetail:
     """Merge the editor's slice into ``listing.yaml``. A merged document
     that will not validate writes nothing and answers 200 with
     ``field_errors`` beside the listing as it still is."""
     workspace, name = target.workspace, target.name
     try:
         refused = edit_listing(workspace, name, body, batches=_batch_store(request))
-    except ListingMissing as exc:
+    except ListingMissingError as exc:
         raise _not_found(exc) from exc
     if refused is None:
         _warm_scenes(request, name)
@@ -298,7 +285,9 @@ def patch_listing(target: Existing, body: dict[str, Any], request: Request) -> L
 
 
 @router.delete("/{name}", response_model=None)
-def delete_listing(target: Existing, request: Request) -> ListingSummary | Response:
+def delete_listing(
+    target: Annotated[Target, Depends(target)], request: Request
+) -> ListingSummary | Response:
     """Delete from the listings table.
 
     No remotes: wiped, 204. Remotes: marked ``lifecycle: deleted``, answering
@@ -315,9 +304,9 @@ def delete_listing(target: Existing, request: Request) -> ListingSummary | Respo
             ai_runs=_ai_runs(request),
             etsy_states=_etsy_states(workspace),
         )
-    except ListingMissing as exc:
+    except ListingMissingError as exc:
         raise _not_found(exc) from exc
-    except PublishedListingDeletion as exc:
+    except PublishedListingDeletionError as exc:
         raise _conflict(exc) from exc
     if deletion.wiped:
         return Response(status_code=204)
@@ -337,7 +326,7 @@ def create_listing(request: Request, body: CreateListingRequest) -> ListingDetai
     workspace = _workspace(request)
     try:
         refused = create(workspace, body.name, body.document)
-    except ListingNameTaken as exc:
+    except ListingNameTakenError as exc:
         raise _conflict(exc) from exc
     if refused is not None:
         return _describe_draft(workspace, body.document)
@@ -346,7 +335,9 @@ def create_listing(request: Request, body: CreateListingRequest) -> ListingDetai
 
 
 @router.post("/{name}/rename", response_model=ListingDetail)
-def rename_listing(target: Existing, body: RenameListingRequest, request: Request) -> ListingDetail:
+def rename_listing(
+    target: Annotated[Target, Depends(target)], body: RenameListingRequest, request: Request
+) -> ListingDetail:
     """Move a listing, whole, to a new name -- with everything keyed by it
     (:func:`~etsy_listings.core.application.listing_identity.rename_listing`).
 
@@ -362,9 +353,9 @@ def rename_listing(target: Existing, body: RenameListingRequest, request: Reques
             batches=_batch_store(request),
             ai_runs=_ai_runs(request),
         )
-    except ListingMissing as exc:
+    except ListingMissingError as exc:
         raise _not_found(exc) from exc
-    except ListingNameTaken as exc:
+    except ListingNameTakenError as exc:
         raise _conflict(exc) from exc
     return _detail(target.workspace, body.new_name)
 
@@ -405,29 +396,34 @@ def _png(path: Path) -> Response:
 
 @router.get("/{name}/previews/{template}")
 def listing_preview(
-    target: Existing, template: str, request: Request, hash: str | None = None
+    target: Annotated[Target, Depends(target)],
+    template: str,
+    request: Request,
+    content_hash: Annotated[str | None, Query(alias="hash")] = None,
 ) -> Response:
     """A ``multiple``/``single``-kind scene: no per-colour photo, so no
     colour segment (ADR-0014's rule, mirrored from ``render_file``)."""
-    return _preview_response(request, target, template, None, hash)
+    return _preview_response(request, target, template, None, content_hash)
 
 
 @router.get("/{name}/previews/{template}/{colour}")
 def listing_preview_coloured(
-    target: Existing, template: str, colour: str, request: Request, hash: str | None = None
+    target: Annotated[Target, Depends(target)],
+    template: str,
+    colour: str,
+    request: Request,
+    content_hash: Annotated[str | None, Query(alias="hash")] = None,
 ) -> Response:
     """A ``colour-matrix``-kind scene: one preview per colour."""
-    return _preview_response(request, target, template, colour, hash)
+    return _preview_response(request, target, template, colour, content_hash)
 
 
 @router.get("/{name}/scene-preview")
 def scene_preview(
-    target: Existing,
+    target: Annotated[Target, Depends(target)],
     template: str,
     request: Request,
-    colour: str | None = None,
-    scale: PreviewScale = "full",
-    v: str | None = None,
+    query: Annotated[ScenePreviewQuery, Depends()],
 ) -> Response:
     """One of this listing's scenes, each layer printing the file its depicted
     colour resolves to in the *saved* listing (A35) -- the Variants stage and
@@ -441,11 +437,10 @@ def scene_preview(
     ``v`` is ignored; the editor sends a signature of the saved design so a
     landed save is a new URL and the browser fetches it again.
     """
-    del v
-    workspace = target.workspace
+    workspace, colour, scale = target.workspace, query.colour, query.scale
     try:
         artwork = scene_artwork(workspace, target.name)
-    except ListingMissing as exc:
+    except ListingMissingError as exc:
         raise _not_found(exc) from exc
     except ConfigLoadError as exc:
         raise HTTPException(
@@ -634,7 +629,7 @@ async def upload_listing_design(request: Request, file: UploadFile) -> ListingDe
     payload = await file.read()
     try:
         name = save_listing_design(_workspace(request), file.filename or "", payload)
-    except ListingDesignUploadRefused as exc:
+    except ListingDesignUploadRefusedError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return ListingDesignSummary(name=name, file=f"designs/{name}.png")
 

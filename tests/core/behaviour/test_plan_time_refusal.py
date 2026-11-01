@@ -44,16 +44,16 @@ class _RefusingStage:
     group: str | None = None
     applied_model = _Empty
 
-    def desired(self, ctx, listing, applied):  # noqa: ANN001, ANN201, ARG002
+    def desired(self, ctx, listing, applied):
         return "wanted"
 
-    def read_live(self, ctx, listing, lock, applied):  # noqa: ANN001, ANN201, ARG002
+    def read_live(self, ctx, listing, lock, applied):
         return "live"
 
-    def plan(self, desired, applied, live):  # noqa: ANN001, ANN201, ARG002
+    def plan(self, desired, applied, live):
         return Verdict.refused(REFUSAL)
 
-    def apply(self, ctx, desired, applied, live, lock):  # noqa: ANN001, ANN201, ARG002
+    def apply(self, ctx, desired, applied, live, lock):
         raise AssertionError("a refused stage must never be executed")
 
 

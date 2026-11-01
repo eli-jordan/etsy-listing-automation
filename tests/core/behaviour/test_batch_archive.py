@@ -20,7 +20,7 @@ from pathlib import Path
 import pytest
 from PIL import Image
 
-from etsy_listings.core.batches import StagingRefused, StagingStore, review, stage_pngs
+from etsy_listings.core.batches import StagingRefusedError, StagingStore, review, stage_pngs
 from etsy_listings.core.batches import archive as archive_module
 from etsy_listings.core.workspace.workspace import Workspace
 
@@ -53,8 +53,8 @@ def a_zip(*entries: tuple[str | zipfile.ZipInfo, bytes]) -> bytes:
     return buffer.getvalue()
 
 
-def _stage(workspace: Workspace, store: StagingStore, *files: tuple[str, bytes]):  # noqa: ANN202
-    return stage_pngs(workspace, store, "heavyweight-tee", uploads(*files), now=NOW)
+def _stage(workspace: Workspace, store: StagingStore, *files: tuple[str, bytes]):
+    return stage_pngs(store, "heavyweight-tee", uploads(*files), now=NOW)
 
 
 def _staging_left(workspace: Workspace) -> list[Path]:
@@ -156,7 +156,7 @@ class TestInputMode:
     def test_two_zips_are_refused_with_nothing_on_disk(
         self, workspace: Workspace, store: StagingStore
     ) -> None:
-        with pytest.raises(StagingRefused) as refused:
+        with pytest.raises(StagingRefusedError) as refused:
             _stage(
                 workspace,
                 store,
@@ -173,7 +173,7 @@ class TestInputMode:
     def test_a_zip_with_loose_pngs_is_refused_with_nothing_on_disk(
         self, workspace: Workspace, store: StagingStore
     ) -> None:
-        with pytest.raises(StagingRefused) as refused:
+        with pytest.raises(StagingRefusedError) as refused:
             _stage(
                 workspace,
                 store,
@@ -192,14 +192,14 @@ class TestInputMode:
     def test_a_file_that_is_not_a_zip_inside_is_refused(
         self, workspace: Workspace, store: StagingStore
     ) -> None:
-        with pytest.raises(StagingRefused) as refused:
+        with pytest.raises(StagingRefusedError) as refused:
             _stage(workspace, store, ("kittl-export.zip", b"PK\x03\x04 not really"))
 
         assert refused.value.message == "It is not a ZIP that can be read."
         assert _staging_left(workspace) == []
 
     def test_a_zip_with_no_pngs_is_refused(self, workspace: Workspace, store: StagingStore) -> None:
-        with pytest.raises(StagingRefused) as refused:
+        with pytest.raises(StagingRefusedError) as refused:
             _stage(workspace, store, ("kittl-export.zip", a_zip(("readme.txt", b"hi"))))
 
         assert refused.value.message == "It holds no PNG files."
@@ -210,7 +210,7 @@ class TestInputMode:
     ) -> None:
         archive = a_zip(*[(f"d{n}.png", png(n)) for n in range(26)])
 
-        with pytest.raises(StagingRefused) as refused:
+        with pytest.raises(StagingRefusedError) as refused:
             _stage(workspace, store, ("kittl-export-autumn.zip", archive))
 
         # The staging-refused frame's own wording (UI doc §4).
@@ -269,7 +269,7 @@ class TestUnsafeArchives:
         info = _info(entry)
         archive = a_zip(("good.png", png(1)), (info, png(2)))
 
-        with pytest.raises(StagingRefused) as refused:
+        with pytest.raises(StagingRefusedError) as refused:
             _stage(workspace, store, ("kittl-export.zip", archive))
 
         # The name as `zipfile` reports it, which on Windows has its
@@ -282,7 +282,7 @@ class TestUnsafeArchives:
         link = _info("exports/link.png", create_system=3, external_attr=0o120777 << 16)
         archive = a_zip(("good.png", png(1)), (link, b"/etc/passwd"))
 
-        with pytest.raises(StagingRefused) as refused:
+        with pytest.raises(StagingRefusedError) as refused:
             _stage(workspace, store, ("kittl-export.zip", archive))
 
         assert refused.value.message == "exports/link.png inside it is a symbolic link."
@@ -294,7 +294,7 @@ class TestUnsafeArchives:
         fifo = _info("exports/pipe", create_system=3, external_attr=0o010644 << 16)
         archive = a_zip(("good.png", png(1)), (fifo, b""))
 
-        with pytest.raises(StagingRefused) as refused:
+        with pytest.raises(StagingRefusedError) as refused:
             _stage(workspace, store, ("kittl-export.zip", archive))
 
         assert refused.value.message == "exports/pipe inside it is not a plain file."
@@ -310,7 +310,7 @@ class TestUnsafeArchives:
         assert [row.sources for row in session.rows] == [["lake-loop.png"]]
 
     def test_an_encrypted_entry_is_refused(self, workspace: Workspace, store: StagingStore) -> None:
-        with pytest.raises(StagingRefused) as refused:
+        with pytest.raises(StagingRefusedError) as refused:
             _stage(workspace, store, ("kittl-export.zip", _encrypted("secret.png", png(1))))
 
         assert refused.value.message == "secret.png inside it is encrypted."
@@ -328,7 +328,7 @@ class TestUnsafeArchives:
     ) -> None:
         archive = a_zip(("exports/lake-loop.png", png(1)), (_info(twin), png(2)))
 
-        with pytest.raises(StagingRefused) as refused:
+        with pytest.raises(StagingRefusedError) as refused:
             _stage(workspace, store, ("kittl-export.zip", archive))
 
         assert refused.value.message == f"{twin} appears in it twice."
@@ -339,7 +339,7 @@ class TestUnsafeArchives:
     ) -> None:
         archive = a_zip(("good.png", png(1)), *[(f"notes/{n}.txt", b"") for n in range(2000)])
 
-        with pytest.raises(StagingRefused) as refused:
+        with pytest.raises(StagingRefusedError) as refused:
             _stage(workspace, store, ("kittl-export.zip", archive))
 
         assert refused.value.message == "It holds 2001 entries, and a ZIP can hold at most 2000."
@@ -353,7 +353,7 @@ class TestUnsafeArchives:
         bomb = PNG_SIGNATURE + bytes(8 * 2**20)
         archive = a_zip(("good.png", png(1)), ("bomb.png", bomb))
 
-        with pytest.raises(StagingRefused) as refused:
+        with pytest.raises(StagingRefusedError) as refused:
             _stage(workspace, store, ("kittl-export.zip", archive))
 
         assert refused.value.message == (
@@ -367,7 +367,7 @@ class TestUnsafeArchives:
         monkeypatch.setattr(archive_module, "MAX_EXPANDED_BYTES", len(png(1)) + 10)
         archive = a_zip(("a.png", png(1)), ("b.png", png(2)))
 
-        with pytest.raises(StagingRefused) as refused:
+        with pytest.raises(StagingRefusedError) as refused:
             _stage(workspace, store, ("kittl-export.zip", archive))
 
         assert refused.value.message.startswith("It unpacks to more than ")
@@ -379,7 +379,7 @@ class TestUnsafeArchives:
         monkeypatch.setattr(archive_module, "MAX_ARCHIVE_BYTES", 100)
         archive = a_zip(("a.png", png(1)))
 
-        with pytest.raises(StagingRefused) as refused:
+        with pytest.raises(StagingRefusedError) as refused:
             _stage(workspace, store, ("kittl-export.zip", archive))
 
         assert refused.value.message.startswith("It is larger than ")
@@ -403,7 +403,7 @@ class TestDamagedArchives:
         data = bytearray(buffer.getvalue())
         data[data.rindex(b"IEND") - 100] ^= 0xFF
 
-        with pytest.raises(StagingRefused) as refused:
+        with pytest.raises(StagingRefusedError) as refused:
             _stage(workspace, store, ("kittl-export.zip", bytes(data)))
 
         assert refused.value.message == "damaged.png inside it cannot be read."
@@ -418,7 +418,7 @@ class TestDamagedArchives:
         data = bytearray(buffer.getvalue())
         data[data.index(b"IEND") + 5] ^= 0xFF
 
-        with pytest.raises(StagingRefused) as refused:
+        with pytest.raises(StagingRefusedError) as refused:
             _stage(workspace, store, ("kittl-export.zip", bytes(data)))
 
         assert refused.value.message == "damaged.png inside it cannot be read."
@@ -431,7 +431,7 @@ class TestDamagedArchives:
         with zipfile.ZipFile(buffer, "w") as archive:
             archive.writestr("odd.png", png(1))
             archive.filelist[-1].compress_type = 99
-        with pytest.raises(StagingRefused) as refused:
+        with pytest.raises(StagingRefusedError) as refused:
             _stage(workspace, store, ("kittl-export.zip", buffer.getvalue()))
 
         assert refused.value.message == "odd.png inside it cannot be read."

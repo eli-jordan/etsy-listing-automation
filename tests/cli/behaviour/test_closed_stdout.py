@@ -17,7 +17,8 @@ def test_a_closed_stdout_pipe_ends_the_command_without_a_traceback() -> None:
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
     )
-    assert process.stdout is not None and process.stderr is not None
+    assert process.stdout is not None
+    assert process.stderr is not None
     # The reader goes away before the command has printed anything, as
     # `head` does once it has its lines; every write after this fails.
     process.stdout.close()

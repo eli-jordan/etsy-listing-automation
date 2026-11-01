@@ -7,13 +7,11 @@ import threading
 import uuid
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import TYPE_CHECKING, Protocol
+from typing import Protocol
 
+from etsy_listings.core.preparation.worker_client import WarmWorker
 from etsy_listings.core.workspace.atomic import write_json_atomic
-from etsy_listings.core.workspace.workspace import remove_tree
-
-if TYPE_CHECKING:
-    from etsy_listings.core.preparation.worker_client import WarmWorker
+from etsy_listings.core.workspace.trees import remove_tree
 
 ENGINE_VERSION = "1.0.0"
 _LOCK = threading.Lock()
@@ -21,6 +19,11 @@ _LOCK = threading.Lock()
 
 class SetupError(RuntimeError):
     """Installation failed without switching the last verified runtime."""
+
+
+def _setup_failed(message: str) -> None:
+    """Raised from a helper so a caller's ``try`` can record it (S01 TRY301)."""
+    raise SetupError(message)
 
 
 def _segment(value: str) -> None:
@@ -60,6 +63,15 @@ class Installer(Protocol):
     def verify(self, target: Path, weights: Path, version: str) -> Capability: ...
 
 
+def _discard_staging(staging: Path, failure: BaseException) -> None:
+    if not staging.exists():
+        return
+    try:
+        remove_tree(staging)
+    except OSError as cleanup:
+        failure.add_note(f"Unactivated staging remains for cleanup: {staging}: {cleanup}")
+
+
 class Runtime:
     def __init__(
         self,
@@ -72,7 +84,9 @@ class Runtime:
         self.root = (home or Path.home()) / ".etsy-listings" / "marigold"
         self.engine_version = engine_version
         if installer is None:
-            from etsy_listings.core.preparation.installation import NativeInstaller
+            from etsy_listings.core.preparation.installation import (  # noqa: PLC0415 -- cycle: installation imports this module's Capability
+                NativeInstaller,
+            )
 
             installer = NativeInstaller()
         self.installer = installer
@@ -83,7 +97,7 @@ class Runtime:
         try:
             current = json.loads((self.root / "current.json").read_text(encoding="utf-8"))
             if not isinstance(current, dict) or current.get("schema_version") != 1:
-                raise SetupError("Unsupported installation pointer schema")
+                _setup_failed("Unsupported installation pointer schema")
             return self.selection(
                 current["engine_version"],
                 installation_id=current["installation_id"],
@@ -91,14 +105,14 @@ class Runtime:
             )
         except FileNotFoundError:
             return Capability(
-                False,
-                "Run etsy-listings marigold setup to install the native worker.",
+                available=False,
+                problem="Run etsy-listings marigold setup to install the native worker.",
                 required_engine=self.engine_version,
             )
         except (ValueError, KeyError, TypeError, OSError, SetupError) as exc:
             return Capability(
-                False,
-                f"Invalid Marigold installation: {exc}. Run etsy-listings marigold update.",
+                available=False,
+                problem=f"Invalid Marigold installation: {exc}. Run etsy-listings marigold update.",
                 required_engine=self.engine_version,
             )
 
@@ -126,8 +140,9 @@ class Runtime:
 
     def worker(self, selected: Capability, *, cache_root: Path) -> WarmWorker:
         """Construct a lazy warm adapter for a retained, verified engine selection."""
-        from etsy_listings.core.preparation.installation import worker_command
-        from etsy_listings.core.preparation.worker_client import WarmWorker
+        from etsy_listings.core.preparation.installation import (  # noqa: PLC0415 -- cycle: installation imports this module's Capability
+            worker_command,
+        )
 
         if not selected.engine_version or not selected.installation_id:
             raise SetupError(selected.problem or "Run etsy-listings marigold setup first.")
@@ -151,45 +166,52 @@ class Runtime:
     def update(self) -> Capability:
         """Stage, validate, then switch. Keep failed and in-use installations immutable."""
         with _LOCK:
-            try:
-                existing = self.selection(self.engine_version, verify=True)
-                if existing.available:
-                    write_json_atomic(
-                        self.root / "current.json", self._pointer(existing.installation_id)
-                    )
-                    return existing
-            except (OSError, ValueError, KeyError, SetupError):
-                pass
+            existing = self._reselect_current()
+            if existing is not None:
+                return existing
             installation_id = uuid.uuid4().hex
             engine = self.root / "runtimes" / self.engine_version
-            staging = engine / (".staging-" + installation_id)
-            target = engine / installation_id
-            staging.mkdir(parents=True)
-            try:
-                report = self.installer.install(staging, self.root / "weights", self.engine_version)
-                if not report.available or report.engine_version != self.engine_version:
-                    raise SetupError(report.problem or "Worker capability mismatch")
-                staging.rename(target)
-                report = self.selection(
-                    self.engine_version, installation_id=installation_id, verify=True
-                )
-                if not report.available:
-                    raise SetupError(report.problem or "Relocated worker is unavailable")
-            except BaseException as exc:
-                if staging.exists():
-                    try:
-                        remove_tree(staging)
-                    except OSError as cleanup:
-                        exc.add_note(
-                            f"Unactivated staging remains for cleanup: {staging}: {cleanup}"
-                        )
-                # A failed relocated installation is unreferenced. Retain it for
-                # diagnostics; the next explicit retry gets a new immutable ID.
-                raise
+            report = self._install(engine, installation_id)
             pointer = self._pointer(installation_id)
             write_json_atomic(engine / "current.json", pointer)
             write_json_atomic(self.root / "current.json", pointer)
             return report
+
+    def _reselect_current(self) -> Capability | None:
+        """Point back at a fully verified installation of the required engine,
+        if one exists; None when a new one must be installed."""
+        try:
+            existing = self.selection(self.engine_version, verify=True)
+            if existing.available:
+                write_json_atomic(
+                    self.root / "current.json", self._pointer(existing.installation_id)
+                )
+                return existing
+        except (OSError, ValueError, KeyError, SetupError):
+            pass
+        return None
+
+    def _install(self, engine: Path, installation_id: str) -> Capability:
+        """Install into staging, relocate it to its immutable directory and
+        verify it there. Staging is removed on any failure."""
+        staging = engine / (".staging-" + installation_id)
+        staging.mkdir(parents=True)
+        try:
+            report = self.installer.install(staging, self.root / "weights", self.engine_version)
+            if not report.available or report.engine_version != self.engine_version:
+                _setup_failed(report.problem or "Worker capability mismatch")
+            staging.rename(engine / installation_id)
+            report = self.selection(
+                self.engine_version, installation_id=installation_id, verify=True
+            )
+            if not report.available:
+                _setup_failed(report.problem or "Relocated worker is unavailable")
+        except BaseException as exc:
+            _discard_staging(staging, exc)
+            # A failed relocated installation is unreferenced. Retain it for
+            # diagnostics; the next explicit retry gets a new immutable ID.
+            raise
+        return report
 
     def _pointer(self, installation_id: str | None) -> dict[str, object]:
         return {

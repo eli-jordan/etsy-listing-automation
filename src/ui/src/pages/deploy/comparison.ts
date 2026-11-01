@@ -229,28 +229,16 @@ function buildDescription(
   };
 }
 
-function buildTags(stagePlan: StagePlanFor<"etsy_listing"> | undefined): TagsBlock | null {
-  const snapshot = stagePlan?.snapshot;
-  if (!snapshot) return null;
-  const change = findChange(stagePlan, (c) => c.kind === "list" && c.path === "tags");
-  return {
-    before: snapshot.live?.tags ?? [],
-    after: snapshot.desired.tags,
-    added: change && change.kind === "list" ? asStrings(change.added) : [],
-    removed: change && change.kind === "list" ? asStrings(change.removed) : [],
-    changed: change !== undefined,
-  };
-}
-
-function buildMaterials(
+function buildStringList(
   stagePlan: StagePlanFor<"etsy_listing"> | undefined,
-): MaterialsBlock | null {
+  field: "tags" | "materials",
+): TagsBlock | null {
   const snapshot = stagePlan?.snapshot;
   if (!snapshot) return null;
-  const change = findChange(stagePlan, (c) => c.kind === "list" && c.path === "materials");
+  const change = findChange(stagePlan, (c) => c.kind === "list" && c.path === field);
   return {
-    before: snapshot.live?.materials ?? [],
-    after: snapshot.desired.materials,
+    before: snapshot.live?.[field] ?? [],
+    after: snapshot.desired[field],
     added: change && change.kind === "list" ? asStrings(change.added) : [],
     removed: change && change.kind === "list" ? asStrings(change.removed) : [],
     changed: change !== undefined,
@@ -438,8 +426,8 @@ export function buildComparison(plan: PlanDTO): Comparison {
 
   const title = buildTitle(etsyListingPlan);
   const description = buildDescription(etsyListingPlan);
-  const tags = buildTags(etsyListingPlan);
-  const materials = buildMaterials(etsyListingPlan);
+  const tags = buildStringList(etsyListingPlan, "tags");
+  const materials = buildStringList(etsyListingPlan, "materials");
   const colours = buildColours(productPlan);
   const price = buildPrice(productPlan);
   const images = buildImages(etsyMediaPlan);

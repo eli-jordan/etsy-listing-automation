@@ -11,7 +11,7 @@ from pathlib import Path
 import pytest
 
 from etsy_listings.core.application.listing_creation import (
-    build_listing_stub,
+    ListingStub,
     build_media_entries,
     load_template_kind,
     validate_listing_stub,
@@ -22,7 +22,7 @@ from etsy_listings.core.workspace.workspace import Workspace
 
 
 def test_build_listing_stub_references_a_pricing_plan_and_leaves_prices_empty() -> None:
-    data = build_listing_stub(
+    data = ListingStub(
         garment_profile_slug="unisex-garment-dyed-heavy-weight-tee",
         design_ref="designs/take-a-hike.png",
         colours=["black", "blue-jean"],
@@ -31,7 +31,7 @@ def test_build_listing_stub_references_a_pricing_plan_and_leaves_prices_empty() 
         media=build_media_entries(
             template="flat-lay-01", kind="colour-matrix", colours=["black", "blue-jean"]
         ),
-    )
+    ).document()
     assert data["pricing_plan"] == "pricing-plans/launch-low.yaml"
     assert data["prices"] == {}
     assert data["media"] == [
@@ -44,14 +44,14 @@ def test_build_listing_stub_references_a_pricing_plan_and_leaves_prices_empty() 
 
 
 def test_validate_listing_stub_accepts_a_pricing_plan_reference_with_no_prices() -> None:
-    data = build_listing_stub(
+    data = ListingStub(
         garment_profile_slug="p",
         design_ref="designs/x.png",
         colours=["black"],
         pricing_plan_ref="pricing-plans/x.yaml",
         brief="",
         media=[{"template": "flat-lay-01", "colour": "black"}],
-    )
+    ).document()
     listing = validate_listing_stub(data, currency="NOK")
     assert listing.pricing_plan == "pricing-plans/x.yaml"
     assert listing.prices == {}
@@ -81,14 +81,14 @@ def test_a_truncated_stub_still_validates_and_still_sells_every_colour() -> None
     """The cap belongs to `media`, not to `colors`: colours decide which
     Printify variants sell, photos are a separate axis."""
     colours = [f"colour-{n:02d}" for n in range(33)]
-    data = build_listing_stub(
+    data = ListingStub(
         garment_profile_slug="p",
         design_ref="designs/x.png",
         colours=colours,
         pricing_plan_ref="pricing-plans/x.yaml",
         brief="",
         media=build_media_entries(template="flat-lay-01", kind="colour-matrix", colours=colours),
-    )
+    ).document()
 
     listing = validate_listing_stub(data, currency="NOK")
     assert len(listing.colors) == 33

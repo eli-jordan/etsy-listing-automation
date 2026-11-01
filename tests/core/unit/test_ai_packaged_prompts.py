@@ -18,7 +18,7 @@ from etsy_listings.core.market import MARKET_BEGIN
 
 def _section(text: str, heading: str) -> str:
     """The body of one ``# heading`` section, up to the next top-level one."""
-    match = re.search(rf"^# {re.escape(heading)}\n(.*?)(?=^# |\Z)", text, re.M | re.S)
+    match = re.search(rf"^# {re.escape(heading)}\n(.*?)(?=^# |\Z)", text, re.MULTILINE | re.DOTALL)
     assert match, f"no '# {heading}' section"
     return " ".join(match.group(1).split())
 

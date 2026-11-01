@@ -38,7 +38,7 @@ class Waiting:
     def _run(self, timeout: float) -> None:
         try:
             self.result = wait_for_redirect(redirect_uri=self.uri, timeout=timeout)
-        except BaseException as exc:  # noqa: BLE001 - re-raised on the test's thread
+        except BaseException as exc:  # noqa: BLE001 -- the helper thread hands the redirect error back to the test
             self.error = exc
 
     def get(self, query: str) -> httpx.Response:

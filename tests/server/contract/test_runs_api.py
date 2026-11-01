@@ -37,8 +37,9 @@ from etsy_listings.server.api import runs as runs_api
 from etsy_listings.server.api.app import create_app
 
 from tests.support.builders import FIXTURE_LISTING as LISTING
-from tests.support.builders import copy_listing
+from tests.support.builders import a_context, copy_listing
 from tests.support.gates import Gate
+from tests.support.pipeline import a_deployable_context
 
 
 def _context_factory(workspace: Workspace, on_event: EventSink | None) -> RunContext:
@@ -215,6 +216,63 @@ def test_workspace_apply_reuses_exact_reviewed_targets_and_retains_the_plan(
     assert client.get(f"/api/runs/{reviewed['id']}").json()["phase"] == "ready"
 
     _wait_until_terminal(client, body["id"])
+
+
+def test_a_listing_apply_requires_the_post_preview_fingerprint(workspace_root: Path) -> None:
+    """The initial plan's pending media is superseded before review is ready.
+    Using that first event caused the batch deploy e2e to submit a stale plan.
+    """
+    seeded = a_deployable_context(workspace_root)
+
+    def context(workspace: Workspace, on_event: EventSink | None) -> RunContext:
+        return a_context(
+            workspace.root,
+            catalog=seeded.catalog,
+            printify=seeded.printify,
+            etsy=seeded.etsy,
+            on_event=on_event,
+        )
+
+    with TestClient(create_app(seeded.workspace, context_factory=context)) as client:
+        reviewed = client.post(
+            "/api/runs", json={"kind": "plan", "scope": "listings", "listings": [LISTING]}
+        ).json()
+        detail = _wait_until_terminal(client, reviewed["id"])
+        assert detail["phase"] == "ready"
+        initial, latest = [e for e in detail["events"] if e["type"] == "listing_planned"]
+        assert initial["fingerprint"] != latest["fingerprint"]
+        initial_media = _stage_plan(initial, "etsy_media")
+        latest_media = _stage_plan(latest, "etsy_media")
+        assert initial_media["outcome"]["reason"] == "4 images (pending render for 4 images)"
+        assert latest_media["outcome"]["reason"] == "4 images, never uploaded"
+        assert all(sp["outcome"]["type"] != "blocked" for sp in latest["plan"]["stage_plans"])
+
+        stale = _apply_expecting(client, initial["fingerprint"])
+        assert stale["phase"] == "stale", stale
+        failure = next(e for e in stale["events"] if e["type"] == "listing_failed")
+        assert failure["stale_plan"] == latest["plan"]
+        assert not any(e["type"] == "stage_applying" for e in stale["events"])
+
+        applied = _apply_expecting(client, latest["fingerprint"])
+        assert applied["phase"] == "applied", applied
+
+
+def _stage_plan(planned: dict, stage: str) -> dict:
+    return next(sp for sp in planned["plan"]["stage_plans"] if sp["stage"] == stage)
+
+
+def _apply_expecting(client: TestClient, fingerprint: str) -> dict:
+    """Apply the fixture listing, expecting it still plans to ``fingerprint``."""
+    created = client.post(
+        "/api/runs",
+        json={
+            "kind": "apply",
+            "scope": "listings",
+            "listings": [LISTING],
+            "expect": {LISTING: fingerprint},
+        },
+    ).json()
+    return _wait_until_terminal(client, created["id"])
 
 
 def test_a_workspace_apply_differing_from_its_review_is_409_with_the_refusal(

@@ -66,25 +66,29 @@ def crop_of(value: CropEvidence, inputs: PreparationInputs) -> Crop:
 _EVIDENCE_BUDGET = 384 * 1024 * 1024
 _EVIDENCE_LOCK = threading.Lock()
 _EVIDENCE: OrderedDict[tuple[Any, ...], tuple[Evidence, int]] = OrderedDict()
-_EVIDENCE_BYTES = 0
+
+
+class _EvidenceBudget:
+    """Bytes retained by ``_EVIDENCE``. A holder, so the cache can update it without ``global``."""
+
+    used = 0
 
 
 def _retain_evidence(key: tuple[Any, ...], value: Evidence) -> None:
-    global _EVIDENCE_BYTES
     size = sum(
         a.nbytes for a in (value.normals, value.shading, value.albedo, value.residual, value.depth)
     )
     with _EVIDENCE_LOCK:
         old = _EVIDENCE.pop(key, None)
         if old is not None:
-            _EVIDENCE_BYTES -= old[1]
+            _EvidenceBudget.used -= old[1]
         if size > _EVIDENCE_BUDGET:
             return
-        while _EVIDENCE and _EVIDENCE_BYTES + size > _EVIDENCE_BUDGET:
+        while _EVIDENCE and _EvidenceBudget.used + size > _EVIDENCE_BUDGET:
             _, (_, removed) = _EVIDENCE.popitem(last=False)
-            _EVIDENCE_BYTES -= removed
+            _EvidenceBudget.used -= removed
         _EVIDENCE[key] = value, size
-        _EVIDENCE_BYTES += size
+        _EvidenceBudget.used += size
 
 
 class EvidenceReader:

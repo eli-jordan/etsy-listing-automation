@@ -77,7 +77,7 @@ def variant_payload(
 ) -> dict[str, Any]:
     """The raw variants response. The *shape* is what several tests below are
     about, so they read the payload rather than the decoded model."""
-    response = catalog._transport.get(  # noqa: SLF001 - the wire shape is the thing under test
+    response = catalog._transport.get(
         f"/v1/catalog/blueprints/{garment.id}/print_providers/{provider.id}/variants.json"
     )
     payload: dict[str, Any] = response.json()
@@ -122,12 +122,11 @@ class TestAuthenticatedCatalogEndpoints:
             assert blueprint.title
 
     def test_print_providers_accept_the_configured_token(self, catalog: HttpCatalogClient) -> None:
-        response = catalog._transport.get(  # noqa: SLF001 - validates the real wire contract
-            "/v1/catalog/blueprints/706/print_providers.json"
-        )
+        response = catalog._transport.get("/v1/catalog/blueprints/706/print_providers.json")
         assert response.status_code == 200
         payload = response.json()
-        assert isinstance(payload, list) and payload
+        assert isinstance(payload, list)
+        assert payload
         for item in payload:
             decoded = PrintProvider.model_validate(item)
             assert decoded.id > 0
@@ -201,7 +200,7 @@ class TestTheOfflineTranscriptsStillMatchReality:
         self, catalog: HttpCatalogClient, contract_fixtures: dict[str, Any]
     ) -> None:
         transcribed = set(contract_fixtures["blueprints"][0])
-        live = catalog._transport.get("/v1/catalog/blueprints.json").json()[0]  # noqa: SLF001
+        live = catalog._transport.get("/v1/catalog/blueprints.json").json()[0]
         assert transcribed <= set(live), (
             f"the transcript claims blueprint keys Printify no longer returns: "
             f"{sorted(transcribed - set(live))}"
@@ -214,7 +213,7 @@ class TestTheOfflineTranscriptsStillMatchReality:
         contract_fixtures: dict[str, Any],
     ) -> None:
         transcribed = set(contract_fixtures["providers"][0])
-        live = catalog._transport.get(  # noqa: SLF001
+        live = catalog._transport.get(
             f"/v1/catalog/blueprints/{garment.id}/print_providers.json"
         ).json()[0]
         assert transcribed <= set(live), (
@@ -251,13 +250,11 @@ class TestTheDocumentedExampleProfileResolves:
     def test_the_brand_and_model_the_docs_tell_users_to_write_resolve(
         self, blueprints: list[Blueprint], garment: Blueprint
     ) -> None:
-        """Without the trademark sign: the catalog's brand is "Comfort
-        Colors®", the docs tell users to write "Comfort Colors", and that has
-        to be enough."""
+        """The documented alias resolves to the shop's live garment even
+        when Printify changes its display branding (ADR-0005)."""
         assert "®" not in self.DOCUMENTED_BRAND
-        assert garment.brand == f"{self.DOCUMENTED_BRAND}®"
         resolved = resolve_blueprint(self.DOCUMENTED_BRAND, self.DOCUMENTED_MODEL, blueprints)
-        assert resolved.id == garment.id
+        assert resolved == garment
 
     def test_an_unknown_garment_lists_brand_model_pairs_to_choose_from(
         self, blueprints: list[Blueprint]
@@ -266,5 +263,14 @@ class TestTheDocumentedExampleProfileResolves:
             resolve_blueprint("Not A Real Brand", "0000", blueprints)
         message = str(caught.value)
         assert "Not A Real Brand 0000" in message
+        options = message.split("Closest names: ", 1)[1]
+        names, remainder = options.rsplit(" (and ", 1)
+        suggested = names.split(", ")
+        assert len(suggested) == 5
         # Pairs, not titles: what it lists must be pasteable into a profile.
-        assert f"{self.DOCUMENTED_BRAND}® {self.DOCUMENTED_MODEL}" in message
+        catalog_pairs = {f"{b.brand} {b.model}".strip(): b for b in blueprints}
+        for name in suggested:
+            assert name in catalog_pairs
+            blueprint = catalog_pairs[name]
+            assert resolve_blueprint(blueprint.brand, blueprint.model, blueprints) == blueprint
+        assert remainder == f"{len(catalog_pairs) - len(suggested)} more)"

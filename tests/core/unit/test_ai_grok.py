@@ -7,6 +7,7 @@ for the help check, `run_managed` for generate. No real `grok` process runs.
 from __future__ import annotations
 
 import json
+import shutil
 import subprocess
 from pathlib import Path
 from typing import Any
@@ -74,18 +75,18 @@ def _patch_ready(
     auth = tmp_path / "auth.json"
     auth.write_text('{"token":"x"}', encoding="utf-8")
     monkeypatch.setattr(grok, "auth_file", lambda: auth)
-    monkeypatch.setattr(grok.shutil, "which", lambda name: f"/resolved/{name}")
+    monkeypatch.setattr(shutil, "which", lambda name: f"/resolved/{name}")
 
     def _run(argv: list[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:
         return _ok(stdout=help_text)
 
-    monkeypatch.setattr(grok.subprocess, "run", _run)
+    monkeypatch.setattr(subprocess, "run", _run)
 
 
 def test_readiness_fails_when_the_binary_is_missing(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    monkeypatch.setattr(grok.shutil, "which", lambda name: None)
+    monkeypatch.setattr(shutil, "which", lambda name: None)
     readiness = _provider(tmp_path).readiness()
     assert readiness.ready is False
     assert "not found" in (readiness.reason or "")
@@ -95,7 +96,7 @@ def test_readiness_fails_when_there_is_no_credential_file(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     monkeypatch.setattr(grok, "auth_file", lambda: tmp_path / "missing.json")
-    monkeypatch.setattr(grok.shutil, "which", lambda name: "/resolved/grok")
+    monkeypatch.setattr(shutil, "which", lambda name: "/resolved/grok")
     readiness = _provider(tmp_path).readiness()
     assert readiness.ready is False
     assert "not authenticated" in (readiness.reason or "")
@@ -120,7 +121,7 @@ def test_readiness_is_ready_when_the_credential_and_flags_are_present(
 def _patch_generate(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, result: ProcessResult
 ) -> list[dict[str, Any]]:
-    monkeypatch.setattr(grok.shutil, "which", lambda name: f"/resolved/{name}")
+    monkeypatch.setattr(shutil, "which", lambda name: f"/resolved/{name}")
     calls: list[dict[str, Any]] = []
 
     def fake_run_managed(argv: list[str], **kwargs: Any) -> ProcessResult:
@@ -267,7 +268,7 @@ def test_generate_raises_timeout_and_cancelled(
 def test_generate_with_no_binary_is_unavailable(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    monkeypatch.setattr(grok.shutil, "which", lambda name: None)
+    monkeypatch.setattr(shutil, "which", lambda name: None)
 
     def never_launched(argv: list[str], **kwargs: Any) -> ProcessResult:
         raise AssertionError("a missing binary must not be launched")

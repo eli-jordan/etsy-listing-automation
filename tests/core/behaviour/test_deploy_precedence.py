@@ -38,9 +38,9 @@ from etsy_listings.core.application.ai.registry import AiRun
 from etsy_listings.core.application.deploy.deployments import Deployments
 from etsy_listings.core.application.deploy.events import TERMINAL_PHASES
 from etsy_listings.core.application.deploy.registry import ListingApply, ListingPlan, Run
-from etsy_listings.core.application.refusals import ListingDeploying
+from etsy_listings.core.application.refusals import ListingDeployingError
 from etsy_listings.core.application.workspace_locks import WorkspaceLocks
-from etsy_listings.core.batches import BatchStore, StagingStore
+from etsy_listings.core.batches import BatchRecords, BatchStore, StagingStore
 from etsy_listings.core.clients.printify.fakes import FakeCatalogClient
 from etsy_listings.core.engine.context import EventSink, RunContext
 from etsy_listings.core.workspace.workspace import Workspace
@@ -92,12 +92,11 @@ class Host:
     def batch(self, *names: str) -> str:
         files = [(f"{name}.png", png(i + 1)) for i, name in enumerate(names)]
         session = batch_staging.stage_upload(
-            self.workspace, self.staging, LISTING_TEMPLATE, uploads(*files), locks=self.locks
+            self.staging, LISTING_TEMPLATE, uploads(*files), locks=self.locks
         )
         batch = batch_workflow.confirm_batch(
             self.workspace,
-            self.staging,
-            self.batches,
+            BatchRecords(self.staging, self.batches),
             session.id,
             queue=self.ai.queue,
         )
@@ -159,7 +158,7 @@ def test_an_apply_waits_for_the_running_row_to_stop_and_resume_leaves_it(
 ) -> None:
     gate = provider.gate("brief")
     batch_id = host.batch("night-hike-club")
-    wait_for(lambda: provider.started["brief"].is_set())
+    wait_for(provider.started["brief"].is_set)
     run = host.ai.registry.latest("night-hike-club")
     assert run is not None
     seen: list[str] = []
@@ -184,7 +183,7 @@ def test_an_apply_cancels_a_queued_row_and_no_proposal_follows_the_deploy(
 ) -> None:
     gate = provider.gate("brief")
     batch_id = host.batch("night-hike-club", "cedar-trail")
-    wait_for(lambda: provider.started["brief"].is_set())
+    wait_for(provider.started["brief"].is_set)
     assert host.states(batch_id) == ["running", "queued"]
 
     assert _finished(host.deploy("apply", "cedar-trail")) == "applied"
@@ -208,7 +207,7 @@ def test_deploy_ownership_wins_when_stop_already_requested(
     Resume must not requeue active work once deploy has claimed it."""
     provider.gate("brief")
     batch_id = host.batch("night-hike-club")
-    wait_for(lambda: provider.started["brief"].is_set())
+    wait_for(provider.started["brief"].is_set)
     run = host.ai.registry.latest("night-hike-club")
     assert run is not None
 
@@ -232,15 +231,14 @@ def test_deploy_ownership_wins_when_stop_already_requested(
 def test_retry_queues_a_row_the_deploy_cancelled(host: Host, provider: ChainProvider) -> None:
     gate = provider.gate("brief")
     batch_id = host.batch("night-hike-club", "cedar-trail")
-    wait_for(lambda: provider.started["brief"].is_set())
+    wait_for(provider.started["brief"].is_set)
     _finished(host.deploy("plan", "cedar-trail"))
     gate.set()
     cedar = batch_workflow.read_batch(host.workspace, host.batches, batch_id).rows[1]
 
     batch_workflow.retry_batch_row(
         host.workspace,
-        host.staging,
-        host.batches,
+        BatchRecords(host.staging, host.batches),
         batch_id,
         cedar.id,
         queue=host.ai.queue,
@@ -258,17 +256,17 @@ def test_a_manual_run_is_stopped_and_a_new_one_refused_while_the_deploy_holds_th
     provider.gate("queries")
     started = host.ai.start_run(FIXTURE_LISTING, draft_brief=False)
     assert isinstance(started, AiRun)
-    wait_for(lambda: provider.started["queries"].is_set())
+    wait_for(provider.started["queries"].is_set)
     deploys.hold = threading.Event()
 
     deploy = host.deploy("plan", FIXTURE_LISTING)
     assert deploys.started.wait(15)
-    with pytest.raises(ListingDeploying):
+    with pytest.raises(ListingDeployingError):
         host.ai.start_run(FIXTURE_LISTING, draft_brief=False)
     blocked = host.ai.blocked(FIXTURE_LISTING)
     deploys.hold.set()
 
-    assert isinstance(blocked, ListingDeploying)
+    assert isinstance(blocked, ListingDeployingError)
     assert (started.phase, provider.cancelled) == ("cancelled", ["queries"])
     assert _finished(deploy) == "ready"
     assert isinstance(host.ai.start_run(FIXTURE_LISTING, draft_brief=False), AiRun)

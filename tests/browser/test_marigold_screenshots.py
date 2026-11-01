@@ -13,7 +13,7 @@ from PIL import Image
 
 from etsy_listings.core.render import load_template_config
 from etsy_listings.core.workspace import Workspace
-from etsy_listings.core.workspace.workspace import remove_tree
+from etsy_listings.core.workspace.trees import remove_tree
 
 from tests.support.marigold import PreparationRuntime, PreparationWorker, marigold_template
 
@@ -26,6 +26,27 @@ def preparation_runtime():
     return PreparationRuntime()
 
 
+def replace_photos(folder, kind):
+    """The template's photos replaced by real card photography: two fence
+    colours, or two folded shirts side by side. Returns each placement's box."""
+    for photo in folder.glob("*.png"):
+        photo.unlink()
+    if kind == "colour-matrix":
+        for colour in ["bay", "berry"]:
+            Image.open(ASSETS / f"fence-{colour}.jpg").save(folder / f"{colour}.png")
+        return [[(177, 142), (305, 142), (305, 304), (177, 304)]]
+    first = Image.open(ASSETS / "folded-ivory.jpg").convert("RGB")
+    second = Image.open(ASSETS / "folded-yam.jpg").convert("RGB")
+    pair = Image.new("RGB", (first.width * 2, first.height))
+    pair.paste(first)
+    pair.paste(second, (first.width, 0))
+    pair.save(folder / "scene.png")
+    return [
+        [(132, 188), (335, 188), (335, 382), (132, 382)],
+        [(588, 188), (791, 188), (791, 382), (588, 382)],
+    ]
+
+
 @pytest.fixture
 def app_options(workspace_root: Path, preparation_runtime):
     workspace = Workspace.discover(root_override=workspace_root)
@@ -34,24 +55,7 @@ def app_options(workspace_root: Path, preparation_runtime):
     for name, kind in [("hanging-on-fence", "colour-matrix"), ("two-shirt-scene", "multiple")]:
         marigold_template(workspace_root, kind, name=name)
         config = workspace.load_template_config(name).model_dump(mode="json")
-        folder = workspace.template_dir(name)
-        for photo in folder.glob("*.png"):
-            photo.unlink()
-        if kind == "colour-matrix":
-            for colour in ["bay", "berry"]:
-                Image.open(ASSETS / f"fence-{colour}.jpg").save(folder / f"{colour}.png")
-            boxes = [[(177, 142), (305, 142), (305, 304), (177, 304)]]
-        else:
-            first = Image.open(ASSETS / "folded-ivory.jpg").convert("RGB")
-            second = Image.open(ASSETS / "folded-yam.jpg").convert("RGB")
-            pair = Image.new("RGB", (first.width * 2, first.height))
-            pair.paste(first)
-            pair.paste(second, (first.width, 0))
-            pair.save(folder / "scene.png")
-            boxes = [
-                [(132, 188), (335, 188), (335, 382), (132, 382)],
-                [(588, 188), (791, 188), (791, 382), (588, 382)],
-            ]
+        boxes = replace_photos(workspace.template_dir(name), kind)
         targets = config["placements"] if kind == "multiple" else [config]
         for target, box in zip(targets, boxes, strict=True):
             target["bounding_box"] = [{"x": x, "y": y} for x, y in box]
@@ -86,7 +90,9 @@ def test_the_marigold_toolbar_fits_its_bar_at_desktop_widths(page):
         bar = page.locator(".app__preview-bar").bounding_box()
         tabs = page.get_by_role("tablist").bounding_box()
         picker = page.get_by_label("Test design", exact=True).bounding_box()
-        assert bar is not None and tabs is not None and picker is not None
+        assert bar is not None
+        assert tabs is not None
+        assert picker is not None
         if width == 1440:
             assert abs(tabs["y"] - picker["y"]) < 8
         else:
@@ -104,18 +110,19 @@ def test_the_marigold_toolbar_fits_its_bar_at_desktop_widths(page):
         assert page.locator(".app__header").bounding_box()["height"] < 65
 
 
-@pytest.mark.capture
-def test_capture_approved_marigold_states(page, tmp_path: Path, preparation_runtime):
-    page.set_viewport_size({"width": 1280, "height": 800})
-    destination = Path(os.environ.get("MARIGOLD_SCREENSHOT_DIR", str(tmp_path / "screenshots")))
-    destination.mkdir(parents=True, exist_ok=True)
+def blocked_worker(root):
+    worker = PreparationWorker(root)
+    worker.release.clear()
+    return worker
 
-    def shot(state):
-        page.screenshot(path=str(destination / f"app-{state}.png"), animations="disabled")
-        assert Image.open(destination / f"app-{state}.png").size == (1280, 800)
 
-    select(page, "hanging-on-fence")
-    page.get_by_role("button", name="Prepare template", exact=True).wait_for()
+def failed_worker(root):
+    worker = PreparationWorker(root)
+    worker.failure = RuntimeError("Preparation stopped. Check the runtime, then retry.")
+    return worker
+
+
+def shoot_editing_dialogs(page, shot):
     shot("edit")
     page.get_by_role("button", name="About Light & shadow strength", exact=True).click()
     shot("realism-help")
@@ -125,16 +132,8 @@ def test_capture_approved_marigold_states(page, tmp_path: Path, preparation_runt
     shot("inference-settings")
     page.keyboard.press("Escape")
 
-    def blocked_worker(root):
-        worker = PreparationWorker(root)
-        worker.release.clear()
-        return worker
 
-    def failed_worker(root):
-        worker = PreparationWorker(root)
-        worker.failure = RuntimeError("Preparation stopped. Check the runtime, then retry.")
-        return worker
-
+def shoot_failed_then_preparing(page, preparation_runtime, shot):
     preparation_runtime.factory = failed_worker
     page.get_by_role("button", name="Prepare template", exact=True).click()
     page.get_by_role("button", name="Retry preparation", exact=True).wait_for()
@@ -160,6 +159,9 @@ def test_capture_approved_marigold_states(page, tmp_path: Path, preparation_runt
         worker.release.set()
     preparation_runtime.factory = PreparationWorker
     ready(page)
+
+
+def shoot_mask_and_previews(page, shot):
     page.get_by_role("button", name="Edit mask", exact=True).click()
     area = page.get_by_label("Mask drawing area").bounding_box()
     assert area is not None
@@ -184,6 +186,8 @@ def test_capture_approved_marigold_states(page, tmp_path: Path, preparation_runt
     page.locator(".preview-grid__actions .btn-danger").wait_for()
     shot("outdated")
 
+
+def shoot_multiple(page, preparation_runtime, shot):
     select(page, "two-shirt-scene")
     for worker in preparation_runtime.workers:
         worker.release.clear()
@@ -195,4 +199,22 @@ def test_capture_approved_marigold_states(page, tmp_path: Path, preparation_runt
     for worker in preparation_runtime.workers:
         worker.release.set()
     ready(page)
+
+
+@pytest.mark.capture
+def test_capture_approved_marigold_states(page, tmp_path: Path, preparation_runtime):
+    page.set_viewport_size({"width": 1280, "height": 800})
+    destination = Path(os.environ.get("MARIGOLD_SCREENSHOT_DIR", str(tmp_path / "screenshots")))
+    destination.mkdir(parents=True, exist_ok=True)
+
+    def shot(state):
+        page.screenshot(path=str(destination / f"app-{state}.png"), animations="disabled")
+        assert Image.open(destination / f"app-{state}.png").size == (1280, 800)
+
+    select(page, "hanging-on-fence")
+    page.get_by_role("button", name="Prepare template", exact=True).wait_for()
+    shoot_editing_dialogs(page, shot)
+    shoot_failed_then_preparing(page, preparation_runtime, shot)
+    shoot_mask_and_previews(page, shot)
+    shoot_multiple(page, preparation_runtime, shot)
     assert len(list(destination.glob("app-*.png"))) == 9

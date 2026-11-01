@@ -180,20 +180,23 @@ def test_a_changed_blueprint_is_refused() -> None:
     favourites to save retyping a short file."""
     message = _refusal(check_garment_unchanged(APPLIED, blueprint_id=6, print_provider_id=29))
 
-    assert "706" in message and "6" in message
+    assert "706" in message
+    assert "6" in message
     assert "new listing" in message
 
 
 def test_a_changed_print_provider_is_refused() -> None:
     message = _refusal(check_garment_unchanged(APPLIED, blueprint_id=706, print_provider_id=99))
 
-    assert "29" in message and "99" in message
+    assert "29" in message
+    assert "99" in message
 
 
 def test_both_changing_at_once_names_both() -> None:
     message = _refusal(check_garment_unchanged(APPLIED, blueprint_id=6, print_provider_id=99))
 
-    assert "blueprint" in message and "print provider" in message
+    assert "blueprint" in message
+    assert "print provider" in message
 
 
 # ------------------------------------------------------------ priced cells

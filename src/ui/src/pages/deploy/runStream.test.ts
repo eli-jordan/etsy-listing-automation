@@ -108,7 +108,6 @@ describe("openRunStream", () => {
   });
 
   it("close() aborts the underlying request without calling onError", async () => {
-    const body = sseBody([]);
     fetchMock.mockImplementation((_url: string, init: RequestInit) => {
       return new Promise((_resolve, reject) => {
         init.signal?.addEventListener("abort", () =>
@@ -130,6 +129,5 @@ describe("openRunStream", () => {
     // Give the rejected promise's microtask a turn.
     await new Promise((r) => setTimeout(r, 0));
     expect(errored).toBe(false);
-    void body;
   });
 });
