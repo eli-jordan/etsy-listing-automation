@@ -24,7 +24,7 @@ from datetime import datetime
 import httpx
 
 from etsy_listings.core.clients.etsy.market import EtsyMarketClient
-from etsy_listings.core.clients.etsy.models import MarketCandidate, MarketListing
+from etsy_listings.core.clients.etsy.models import MarketCandidate, MarketListing, ShopStats
 from etsy_listings.core.config.market_weights import MarketWeights, Metric
 from etsy_listings.core.errors import UserFacingError
 from etsy_listings.core.market.block import lead
@@ -110,26 +110,13 @@ def research(
     found = _merge(searches)
 
     now = today.timestamp()
-    old_enough = [
-        candidate
-        for candidate in found
-        if (age := _age_days(candidate[0], now)) is not None and age >= MIN_AGE_DAYS
-    ]
+    old_enough = _old_enough(found, now)
     # Relaxing (features/market-seo-20260924/spec.md, *Filters*): the age filter is the only one
     # research applies itself, so dropping it is a second pass over what was
     # already found -- a new search would return the same listings.
     relaxed = not old_enough
     survivors = old_enough or found
-    if not survivors:
-        return _empty(queries, len(found), relaxed=relaxed)
-
-    ranks = {candidate.listing_id: rank for candidate, rank in survivors}
-    stats = calls.one(lambda: client.listings_by_ids([c.listing_id for c, _ in survivors]))
-    candidates = [
-        _Candidate(listing, ranks[listing.listing_id])
-        for listing in stats
-        if listing.listing_id in ranks
-    ]
+    candidates = _with_stats(calls, client, survivors) if survivors else []
     if not candidates:
         return _empty(queries, len(found), relaxed=relaxed)
 
@@ -235,6 +222,30 @@ def _per_day(count: int, listing: MarketCandidate, now: float) -> float | None:
     return None if age is None else count / max(age, 1.0)
 
 
+def _old_enough(
+    found: list[tuple[MarketCandidate, int]], now: float
+) -> list[tuple[MarketCandidate, int]]:
+    return [
+        candidate
+        for candidate in found
+        if (age := _age_days(candidate[0], now)) is not None and age >= MIN_AGE_DAYS
+    ]
+
+
+def _with_stats(
+    calls: _Calls, client: EtsyMarketClient, survivors: Sequence[tuple[MarketCandidate, int]]
+) -> list[_Candidate]:
+    """Each survivor's batch fields with its search rank, for those Etsy
+    still returns."""
+    ranks = {candidate.listing_id: rank for candidate, rank in survivors}
+    stats = calls.one(lambda: client.listings_by_ids([c.listing_id for c, _ in survivors]))
+    return [
+        _Candidate(listing, ranks[listing.listing_id])
+        for listing in stats
+        if listing.listing_id in ranks
+    ]
+
+
 def _order(
     candidates: Sequence[_Candidate],
     weights: dict[Metric, float],
@@ -245,8 +256,18 @@ def _order(
     """The candidates with their 0-1 scores, best first. A tie keeps the
     better search position -- Etsy's own relevance is the fairest tie-break
     -- and then the lower id, so the order never depends on thread timing."""
+    scores = weighted(_metrics(candidates, now, reviews), weights)
+    paired = list(zip(candidates, scores, strict=True))
+    paired.sort(key=lambda pair: (-pair[1], pair[0].search_rank, pair[0].listing.listing_id))
+    return paired
+
+
+def _metrics(
+    candidates: Sequence[_Candidate], now: float, reviews: Sequence[int] | None
+) -> dict[Metric, Sequence[float | None]]:
+    """Each signal's raw value per candidate, in candidate order."""
     shops = [candidate.listing.shop for candidate in candidates]
-    metrics: dict[Metric, Sequence[float | None]] = {
+    return {
         "reviews": list(reviews) if reviews is not None else [0.0] * len(candidates),
         "favourites_per_day": [
             _per_day(c.listing.num_favorers, c.listing, now) for c in candidates
@@ -254,13 +275,13 @@ def _order(
         # Inverted: 1st is best, and percentiles rank a higher value higher.
         "search_rank": [-c.search_rank for c in candidates],
         "views_per_day": [_per_day(c.listing.views, c.listing, now) for c in candidates],
-        "shop_sales": [shop.transaction_sold_count if shop else 0 for shop in shops],
+        "shop_sales": [_shop_sales(shop) for shop in shops],
         "shop_rating": [shop.review_average if shop else None for shop in shops],
     }
-    scores = weighted(metrics, weights)
-    paired = list(zip(candidates, scores, strict=True))
-    paired.sort(key=lambda pair: (-pair[1], pair[0].search_rank, pair[0].listing.listing_id))
-    return paired
+
+
+def _shop_sales(shop: ShopStats | None) -> int:
+    return shop.transaction_sold_count if shop else 0
 
 
 @dataclass(frozen=True)

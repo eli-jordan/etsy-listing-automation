@@ -150,7 +150,7 @@ def test_the_capture_marker_selects_exactly_the_six_scenes(tmp_path: Path) -> No
 
 
 def test_lint_runs_once_in_the_quality_job_and_the_test_matrix_only_tests() -> None:
-    # S04/S05/S10: whole-program checks run once alongside lint on ubuntu,
+    # S02/S04/S05/S10: complexity and whole-program checks run once alongside lint on ubuntu,
     # through the same poe task a developer can run; the two-OS matrix exists
     # for the render goldens and runs tests alone.
     workflow = yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text())
@@ -163,6 +163,7 @@ def test_lint_runs_once_in_the_quality_job_and_the_test_matrix_only_tests() -> N
         "ruff check .",
         "mypy src",
         "lint-imports",
+        "complexipy --failed --plain",
         "vulture src/etsy_listings --min-confidence 90",
         "node src/ui/node_modules/jscpd/bin/jscpd "
         "src/etsy_listings src/ui/src --config .jscpd.json",

@@ -108,6 +108,14 @@ class CachedEtsyMarketClient:
         is gone (deactivated since the search) and is remembered as gone for
         the same seven days, so a repeat run does not ask about it again."""
         wanted = list(dict.fromkeys(ids))
+        known = self._cached_listings(wanted)
+        missing = [listing_id for listing_id in wanted if listing_id not in known]
+        if missing:
+            known |= self._fetch_listings(missing)
+        return [listing for listing_id in ids if (listing := known.get(listing_id)) is not None]
+
+    def _cached_listings(self, wanted: list[int]) -> dict[int, MarketListing | None]:
+        """The live entries among ``wanted``: a listing, or ``None`` for gone."""
         known: dict[int, MarketListing | None] = {}
         with _IO_LOCK:
             for listing_id in wanted:
@@ -115,19 +123,20 @@ class CachedEtsyMarketClient:
                 if isinstance(entry, dict) and self._live(entry):
                     with contextlib.suppress(ValidationError):
                         known[listing_id] = _decoded_listing(entry.get("data"))
-        missing = [listing_id for listing_id in wanted if listing_id not in known]
-        if missing:
-            fetched = {
-                listing.listing_id: listing for listing in self._inner.listings_by_ids(missing)
-            }
-            now = self._clock()
-            with _IO_LOCK:
-                for listing_id in missing:
-                    listing = fetched.get(listing_id)
-                    data = None if listing is None else listing.model_dump(mode="json")
-                    self._update_stats(listing_id, "listing", {"fetched_at": now, "data": data})
-                    known[listing_id] = listing
-        return [listing for listing_id in ids if (listing := known.get(listing_id)) is not None]
+        return known
+
+    def _fetch_listings(self, missing: list[int]) -> dict[int, MarketListing | None]:
+        """Ask Etsy for ``missing`` and remember each answer, gone ones too."""
+        fetched = {listing.listing_id: listing for listing in self._inner.listings_by_ids(missing)}
+        now = self._clock()
+        known: dict[int, MarketListing | None] = {}
+        with _IO_LOCK:
+            for listing_id in missing:
+                listing = fetched.get(listing_id)
+                data = None if listing is None else listing.model_dump(mode="json")
+                self._update_stats(listing_id, "listing", {"fetched_at": now, "data": data})
+                known[listing_id] = listing
+        return known
 
     def review_count(self, listing_id: int) -> int:
         with _IO_LOCK:

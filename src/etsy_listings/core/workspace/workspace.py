@@ -75,10 +75,6 @@ def _parsed_template_config(text: str) -> AnyTemplate:
     return parse_template_config(yaml.safe_load(text))
 
 
-MIGRATION_SCRIPT = "scripts/migrate_workspace_refs.py"
-"""ADR-0046's one-off rewrite, named by every refusal of the form it replaces."""
-
-
 class InvalidRefError(ConfigLoadError):
     """A path in ``listing.yaml`` that is not a two-root ref.
 
@@ -319,7 +315,7 @@ class Workspace:
         if ref.startswith("../"):
             raise refused(
                 "'..' refs are the old listing-relative form; write it from the workspace "
-                f"root instead (run {MIGRATION_SCRIPT} to rewrite a whole workspace)"
+                "root instead"
             )
         if ".." in ref.split("/"):
             raise refused("'..' is not allowed in a ref")
@@ -1129,15 +1125,8 @@ class Workspace:
         if not root.is_dir():
             return
         for directory in root.iterdir():
-            if not directory.is_dir():
-                continue
-            keep = valid.get(directory.name)
-            if keep is None:
-                remove_tree(directory)
-                continue
-            for file in directory.glob("*.png"):
-                if file.name not in keep:
-                    file.unlink()
+            if directory.is_dir():
+                _prune_template_previews(directory, valid.get(directory.name))
 
     def preview_file(
         self, listing: str, template: str, colour: str | None, scene_hash: str
@@ -1234,3 +1223,14 @@ class Workspace:
         path and the serialisation belong here, beside the read."""
 
         CalibrationStore(self).write_config(template, config)
+
+
+def _prune_template_previews(directory: Path, keep: set[str] | None) -> None:
+    """One template's previews: all of them for a template no scene uses any
+    more, else every file not in ``keep``."""
+    if keep is None:
+        remove_tree(directory)
+        return
+    for file in directory.glob("*.png"):
+        if file.name not in keep:
+            file.unlink()

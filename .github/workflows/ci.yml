@@ -31,8 +31,8 @@ permissions:
 
 jobs:
   quality:
-    # Format, ruff, mypy, imports, Vulture and jscpd (`poe lint`). Their verdicts do
-    # not depend on the OS, so they run once, on ubuntu.
+    # Format, ruff, mypy, imports, complexipy, Vulture and jscpd (`poe lint`).
+    # Their verdicts do not depend on the OS, so they run once, on ubuntu.
     name: quality
     runs-on: ubuntu-latest
     steps:

@@ -32,7 +32,7 @@ from __future__ import annotations
 import queue
 import threading
 import uuid
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
@@ -259,22 +259,9 @@ class RunRegistry:
         holder already busy with one of them, unmodified, for the caller to
         report as a ``409`` naming a run to reattach to instead."""
         with self._lock:
-            if isinstance(command, WorkspacePlan | WorkspaceApply):
-                workspace_holder = self._runs.get(self._workspace_holder or "")
-                if workspace_holder is not None and workspace_holder.phase not in TERMINAL_PHASES:
-                    return Conflict(active_run=workspace_holder.id)
-                for holder_id in self._holder.values():
-                    holder = self._runs.get(holder_id)
-                    if holder is not None and holder.phase not in TERMINAL_PHASES:
-                        return Conflict(active_run=holder.id)
-            else:
-                workspace_holder = self._runs.get(self._workspace_holder or "")
-                if workspace_holder is not None and workspace_holder.phase not in TERMINAL_PHASES:
-                    return Conflict(active_run=workspace_holder.id)
-                for name in command.listings:
-                    holder = self._runs.get(self._holder.get(name, ""))
-                    if holder is not None and holder.phase not in TERMINAL_PHASES:
-                        return Conflict(active_run=holder.id)
+            blocking = self._blocking_run(command)
+            if blocking is not None:
+                return Conflict(active_run=blocking.id)
             run = Run(id=self._id_source(), command=command)
             self._runs[run.id] = run
             if run.scope == "workspace":
@@ -284,6 +271,24 @@ class RunRegistry:
                     self._holder[name] = run.id
             self._queue.put(run.id)
             return run
+
+    def _blocking_run(self, command: RunCommand) -> Run | None:
+        """Under ``_lock``: the active run ``command`` would collide with. An
+        active workspace run blocks everything; a workspace command is also
+        blocked by any active listing run, a listing command only by one
+        holding one of its listings."""
+        blocking = self._active(self._workspace_holder or "")
+        if blocking is not None:
+            return blocking
+        if isinstance(command, WorkspacePlan | WorkspaceApply):
+            holder_ids: Iterable[str] = self._holder.values()
+        else:
+            holder_ids = (self._holder.get(name, "") for name in command.listings)
+        return next((run for run in map(self._active, holder_ids) if run is not None), None)
+
+    def _active(self, run_id: str) -> Run | None:
+        run = self._runs.get(run_id)
+        return run if run is not None and run.phase not in TERMINAL_PHASES else None
 
     def get(self, run_id: str) -> Run | None:
         with self._lock:

@@ -37,7 +37,7 @@ from __future__ import annotations
 import logging
 import threading
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
@@ -52,6 +52,7 @@ from etsy_listings.core.ai.orchestrator import (
     generate_proposal,
 )
 from etsy_listings.core.ai.proposals import ProposalChoices, ProposalStore
+from etsy_listings.core.ai.providers import AiProvider
 from etsy_listings.core.application.ai.events import (
     STEP_IDS,
     AiBriefEvent,
@@ -65,6 +66,7 @@ from etsy_listings.core.application.dependencies import MarketClientFactory
 from etsy_listings.core.errors import INTERNAL_ERROR_MESSAGE, UserFacingError
 from etsy_listings.core.market import (
     MarketResearchError,
+    MarketResult,
     ResearchCancelledError,
     ResearchSettings,
     research,
@@ -209,40 +211,15 @@ class AiRunner:
         # A batch run can be asked to stop before its thread starts (Cancel
         # batch landing just after the queue claimed the row, ADR-0048).
         self._check(run)
-        workspace = self.workspace
-        documents = ListingDocuments(workspace)
         inputs = self._load(run)
-        providers = self.providers(workspace)
-        design = inputs.request.design_image
+        providers = self.providers(self.workspace)
         drafting = run.draft_brief and not inputs.request.brief.strip()
 
-        run.step("brief", "pending" if drafting else "skipped", None if drafting else KEPT_BRIEF)
         brief_only = run.origin == "batch"
-        for step in ("market", "seo"):
-            run.step(
-                step,
-                "skipped" if brief_only else "pending",
-                "Start AI Mode after reviewing the brief" if brief_only else None,
-            )
+        _plan_steps(run, drafting=drafting, brief_only=brief_only)
 
         if drafting:
-            run.step("brief", "active", f"Reading {design.name}")
-            drafted = generate_brief(
-                BriefRequest(design_image=design),
-                _read_prompt(workspace.brief_prompt_file()),
-                providers,
-                cancel_event=run.cancel_event,
-            )
-            self._check(run)
-            written = self._write_brief(run.listing, drafted.brief)
-            run.emit(lambda seq: AiBriefEvent(seq=seq, text=drafted.brief, written=written))
-            run.step(
-                "brief",
-                "done",
-                f"Drafted from {design.name}"
-                if written
-                else "You wrote the brief, so yours was kept",
-            )
+            self._draft_brief(run, inputs.request.design_image, providers)
 
         if brief_only:
             self._check(run)
@@ -251,7 +228,33 @@ class AiRunner:
 
         if drafting:
             inputs = self._load(run)
+        result, snapshot = self._research_market(run, inputs, providers)
+        self._propose(run, result, snapshot, providers)
+        run.finish("done")
 
+    def _draft_brief(self, run: AiRun, design: Path, providers: Sequence[AiProvider]) -> None:
+        run.step("brief", "active", f"Reading {design.name}")
+        drafted = generate_brief(
+            BriefRequest(design_image=design),
+            _read_prompt(self.workspace.brief_prompt_file()),
+            providers,
+            cancel_event=run.cancel_event,
+        )
+        self._check(run)
+        written = self._write_brief(run.listing, drafted.brief)
+        run.emit(lambda seq: AiBriefEvent(seq=seq, text=drafted.brief, written=written))
+        run.step(
+            "brief",
+            "done",
+            f"Drafted from {design.name}" if written else "You wrote the brief, so yours was kept",
+        )
+
+    def _research_market(
+        self, run: AiRun, inputs: PreparedSeo, providers: Sequence[AiProvider]
+    ) -> tuple[MarketResult, market_snapshot.MarketSnapshot]:
+        """Choose searches from the brief, score Etsy's comparables and save
+        the snapshot with the listing."""
+        workspace = self.workspace
         run.step("market", "active", "Choosing Etsy searches from the brief")
         if not inputs.request.brief.strip():
             raise UserFacingError("the listing brief is empty")
@@ -284,6 +287,7 @@ class AiRunner:
         )
         self._check(run)
         snapshot = market_snapshot.MarketSnapshot.of(result, searched_at=self.now())
+        documents = ListingDocuments(workspace)
         with documents.lock(run.listing):
             if documents.exists(run.listing):
                 market_snapshot.save(workspace, run.listing, snapshot)
@@ -294,7 +298,17 @@ class AiRunner:
             run.step(
                 "market", "done", f"{result.scored} listings scored, from {result.found} found"
             )
+        return result, snapshot
 
+    def _propose(
+        self,
+        run: AiRun,
+        result: MarketResult,
+        snapshot: market_snapshot.MarketSnapshot,
+        providers: Sequence[AiProvider],
+    ) -> None:
+        """Generate the SEO proposal from the market data and cache it."""
+        workspace = self.workspace
         run.step(
             "seo",
             "active",
@@ -314,6 +328,7 @@ class AiRunner:
         # read it back -- and so it outlives this run and this server.
         # A delete asks the run to stop before it takes the lock, so a stop
         # seen here is one the delete's own cleanup will not come back for.
+        documents = ListingDocuments(workspace)
         with documents.lock(run.listing):
             self._check(run)
             if not documents.exists(run.listing):
@@ -333,7 +348,6 @@ class AiRunner:
             f"{len(proposal.titles)} titles, {len(proposal.tags)} tags, "
             f"{len(proposal.description_leads)} leads to review",
         )
-        run.finish("done")
 
     def _write_brief(self, name: str, text: str) -> bool:
         """Write ``text`` as the listing's brief if the saved one is still
@@ -348,6 +362,17 @@ class AiRunner:
             return ListingDocuments(self.workspace).edit(name, fill) is not None
         except ListingMissingError:
             return False
+
+
+def _plan_steps(run: AiRun, *, drafting: bool, brief_only: bool) -> None:
+    """Announce which steps this run will take before it takes any."""
+    run.step("brief", "pending" if drafting else "skipped", None if drafting else KEPT_BRIEF)
+    for step in ("market", "seo"):
+        run.step(
+            step,
+            "skipped" if brief_only else "pending",
+            "Start AI Mode after reviewing the brief" if brief_only else None,
+        )
 
 
 def _is_pending(run: AiRun, step: str) -> bool:

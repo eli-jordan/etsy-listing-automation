@@ -57,6 +57,7 @@ dev = [
     "import-linter>=2.15,<3",
     "poethepoet>=0.37,<1",
     "vulture>=2.14,<3",
+    "complexipy>=8.0,<9",
 ]
 
 # Every check is defined once, here (spec S09). `uv run poe check` is what you
@@ -86,8 +87,10 @@ imports = "lint-imports"
 # S04/S05: whole-program checks use application source only.
 dead-code = "vulture src/etsy_listings --min-confidence 90"
 duplicates = "node src/ui/node_modules/jscpd/bin/jscpd src/etsy_listings src/ui/src --config .jscpd.json"
+# S02: cognitive complexity per function; paths and limit in [tool.complexipy].
+complexity = "complexipy --failed --plain"
 # The `quality` CI job: report only, change nothing.
-lint = ["format-check", "ruff", "mypy", "imports", "dead-code", "duplicates"]
+lint = ["format-check", "ruff", "mypy", "imports", "complexity", "dead-code", "duplicates"]
 # Coverage is measured over the whole default selection, browser layer
 # included. Those tests skip themselves when chromium or src/ui/dist is
 # missing, which costs about a point; the 85% floor (`fail_under`, below) has
@@ -175,14 +178,16 @@ select = [
     "TRY",
     "PLE", "PLW",
     "N",
-    # S01 judgment families. The rest of PLR (PLR0911/0912/0915) and C90
-    # arrive with the complexity work.
+    # S01 judgment families.
     "FBT",
     "ARG",
     "SLF",
     "PLC0415",
     "PLR2004",
     "PLR0913", "PLR0917",
+    # S02 complexity and size limits, tests included.
+    "C90",
+    "PLR0911", "PLR0912", "PLR0915",
 ]
 ignore = [
     "ANN401",           # Any is sometimes the honest type at a boundary
@@ -202,11 +207,29 @@ ignore = [
 # elsewhere logs, or renders through the CLI.
 "src/etsy_listings/cli/**" = ["T20"]
 "scripts/**" = ["T20"]
+# S06: the Codex gate decides on every shell command; os.path and open() spare
+# the 10ms pathlib import, about 6% of its skip path.
+"scripts/agent_lint_gate.py" = ["T20", "PTH"]
 
 [tool.ruff.lint.pylint]
 # S02: never loosened to make a check pass.
 max-args = 5
 max-positional-args = 5
+max-returns = 6
+max-branches = 12
+max-statements = 50
+
+[tool.ruff.lint.mccabe]
+# S02: cyclomatic complexity, never loosened to make a check pass.
+max-complexity = 8
+
+[tool.complexipy]
+# S02: cognitive complexity over all first-party Python. `poe complexity`
+# and the edit hook (scripts/agent_lint.py) both read this.
+paths = ["src", "tests", "scripts"]
+max-complexity-allowed = 10
+# Vendored packages' own scripts, not ours to judge.
+exclude = ["**/node_modules/**"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["etsy_listings"]

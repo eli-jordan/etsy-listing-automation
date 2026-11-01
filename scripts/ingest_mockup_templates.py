@@ -98,7 +98,8 @@ def find_pngs(root: Path) -> list[Path]:
     )
 
 
-def collect_pairs(root: Path) -> list[Pair]:
+def _bucket_files(root: Path) -> tuple[dict[str, Path], dict[str, Path]]:
+    """Base photos and their Text overlays, each keyed by the shared stem."""
     base_files: dict[str, Path] = {}
     text_files: dict[str, Path] = {}
 
@@ -115,24 +116,39 @@ def collect_pairs(root: Path) -> list[Pair]:
         if core in bucket:
             raise SystemExit(f"Duplicate file for '{core}': '{bucket[core]}' and '{path}'")
         bucket[core] = path
+    return base_files, text_files
 
+
+def _unmatched(base_files: dict[str, Path], text_files: dict[str, Path]) -> list[str]:
     errors: list[str] = []
     for core in sorted(set(base_files) | set(text_files)):
         if core in base_files and core not in text_files:
             errors.append(f"'{base_files[core].name}' has no matching Text overlay")
         elif core in text_files and core not in base_files:
             errors.append(f"'{text_files[core].name}' has no matching base photo")
+    return errors
+
+
+def _size_mismatch(base_path: Path, text_path: Path) -> str | None:
+    with Image.open(base_path) as base_img, Image.open(text_path) as text_img:
+        if base_img.size != text_img.size:
+            return (
+                f"'{base_path.name}' is {base_img.size} but '{text_path.name}' is {text_img.size}"
+            )
+    return None
+
+
+def collect_pairs(root: Path) -> list[Pair]:
+    base_files, text_files = _bucket_files(root)
+    errors = _unmatched(base_files, text_files)
 
     pairs = []
     for core in sorted(set(base_files) & set(text_files)):
         base_path, text_path = base_files[core], text_files[core]
-        with Image.open(base_path) as base_img, Image.open(text_path) as text_img:
-            if base_img.size != text_img.size:
-                errors.append(
-                    f"'{base_path.name}' is {base_img.size} but "
-                    f"'{text_path.name}' is {text_img.size}"
-                )
-                continue
+        mismatch = _size_mismatch(base_path, text_path)
+        if mismatch is not None:
+            errors.append(mismatch)
+            continue
         pairs.append(Pair(color=split_color(core), base_path=base_path, text_path=text_path))
 
     if errors:

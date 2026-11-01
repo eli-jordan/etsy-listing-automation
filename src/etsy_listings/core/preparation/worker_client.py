@@ -165,27 +165,42 @@ class Worker:
     ) -> Reply:
         deadline = time.monotonic() + timeout
         while True:
-            try:
-                message = self._messages.get(timeout=max(0, deadline - time.monotonic()))
-            except queue.Empty as exc:
-                self.close(force=True)
-                raise WorkerError(
-                    "Worker watchdog expired; retry preparation with unchanged settings."
-                ) from exc
-            if isinstance(message, BaseException):
-                raise WorkerError(str(message)) from message
-            if message.request_id in self._controls:
-                self._controls.discard(message.request_id)
-                continue
-            if message.request_id != request_id:
-                raise WorkerError("Worker reply request ID does not match the active call")
-            if isinstance(message, Failure):
-                raise WorkerError(message.message)
-            if isinstance(message, Progress):
-                if progress:
-                    progress(message)
-                continue
-            return message
+            reply = self._answer(self._next_message(deadline), request_id, progress)
+            if reply is not None:
+                return reply
+
+    def _next_message(self, deadline: float) -> Reply:
+        try:
+            message = self._messages.get(timeout=max(0, deadline - time.monotonic()))
+        except queue.Empty as exc:
+            self.close(force=True)
+            raise WorkerError(
+                "Worker watchdog expired; retry preparation with unchanged settings."
+            ) from exc
+        if isinstance(message, BaseException):
+            raise WorkerError(str(message)) from message
+        return message
+
+    def _answer(
+        self,
+        message: Reply,
+        request_id: str,
+        progress: Callable[[Progress], None] | None,
+    ) -> Reply | None:
+        """The active call's reply, or None for a control acknowledgement or
+        progress, which ``_receive`` reads past."""
+        if message.request_id in self._controls:
+            self._controls.discard(message.request_id)
+            return None
+        if message.request_id != request_id:
+            raise WorkerError("Worker reply request ID does not match the active call")
+        if isinstance(message, Failure):
+            raise WorkerError(message.message)
+        if isinstance(message, Progress):
+            if progress:
+                progress(message)
+            return None
+        return message
 
     def infer(
         self,
@@ -234,27 +249,32 @@ class Worker:
         self._send(control)
 
     def close(self, *, force: bool = False) -> None:
-        if self._process.poll() is None:
-            if not force:
-                try:
-                    self._send(ShutdownRequest(request_id=uuid.uuid4().hex))
-                    self._process.wait(timeout=SHUTDOWN_TIMEOUT)
-                except (WorkerError, subprocess.TimeoutExpired):
-                    force = True
-            if force:
-                if os.name == "nt":
-                    subprocess.run(
-                        ["taskkill", "/PID", str(self._process.pid), "/T", "/F"],
-                        stdout=subprocess.DEVNULL,
-                        stderr=subprocess.DEVNULL,
-                        timeout=SHUTDOWN_TIMEOUT,
-                        check=False,
-                    )
-                self._process.kill()
-                self._process.wait(timeout=SHUTDOWN_TIMEOUT)
+        if self._process.poll() is None and (force or not self._shut_down()):
+            self._kill()
         for stream in (self._process.stdin, self._process.stdout, self._process.stderr):
             if stream:
                 stream.close()
+
+    def _shut_down(self) -> bool:
+        """Ask the worker to exit after any active call; False if it does not."""
+        try:
+            self._send(ShutdownRequest(request_id=uuid.uuid4().hex))
+            self._process.wait(timeout=SHUTDOWN_TIMEOUT)
+        except (WorkerError, subprocess.TimeoutExpired):
+            return False
+        return True
+
+    def _kill(self) -> None:
+        if os.name == "nt":
+            subprocess.run(
+                ["taskkill", "/PID", str(self._process.pid), "/T", "/F"],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                timeout=SHUTDOWN_TIMEOUT,
+                check=False,
+            )
+        self._process.kill()
+        self._process.wait(timeout=SHUTDOWN_TIMEOUT)
 
     def __enter__(self) -> Self:
         return self

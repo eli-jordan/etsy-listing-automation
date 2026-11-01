@@ -1,6 +1,7 @@
 """Supervise native release scripts, killing the owned process tree on timeout.
 
-Run from the repository root with native Python. Pass source and new external
+Run from the repository root with native Python. The stage scripts are
+resolved next to this file. Pass source and new external
 output directory. A failed stage stops the run and preserves prior measurements.
 No installation, remote shop calls or input workspace changes occur.
 """
@@ -12,15 +13,18 @@ import sys
 from pathlib import Path
 
 
+HERE = Path(__file__).parent
+
+
 def run(source: Path, output: Path) -> None:
     commands = [
-        ["scripts/validate_marigold.py", str(source), str(output)],
-        ["scripts/validate_marigold_watchdog.py", str(output)],
-        ["scripts/validate_marigold_shutdown.py", str(output)],
-        ["scripts/validate_marigold_lifecycle.py", str(output)],
-        ["scripts/validate_marigold_multiple.py", str(output)],
-        ["scripts/validate_marigold_scenes.py", str(source), str(output)],
-        ["scripts/review_marigold_validation.py", str(output)],
+        [str(HERE / "validate_marigold.py"), str(source), str(output)],
+        [str(HERE / "validate_marigold_watchdog.py"), str(output)],
+        [str(HERE / "validate_marigold_shutdown.py"), str(output)],
+        [str(HERE / "validate_marigold_lifecycle.py"), str(output)],
+        [str(HERE / "validate_marigold_multiple.py"), str(output)],
+        [str(HERE / "validate_marigold_scenes.py"), str(source), str(output)],
+        [str(HERE / "review_marigold_validation.py"), str(output)],
     ]
     for command in commands:
         process = subprocess.Popen([sys.executable, *command])

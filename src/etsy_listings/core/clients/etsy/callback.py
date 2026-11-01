@@ -13,7 +13,7 @@ from __future__ import annotations
 import time
 from dataclasses import dataclass
 from http.server import BaseHTTPRequestHandler, HTTPServer
-from typing import Any
+from typing import Any, ClassVar
 from urllib.parse import parse_qs, urlsplit
 
 from etsy_listings.core.clients.etsy.oauth import REDIRECT_URI, OAuthError
@@ -66,38 +66,9 @@ def wait_for_redirect(
 
     result: dict[str, Callback | OAuthError] = {}
 
-    class Handler(BaseHTTPRequestHandler):
-        def do_GET(self) -> None:
-            request = urlsplit(self.path)
-            if request.path != path:
-                self._respond(404, "Not here", "This is not the callback address.")
-                return
-            params = parse_qs(request.query)
-            error = _first(params, "error")
-            if error is not None:
-                result["value"] = OAuthError(error, _first(params, "error_description"))
-                self._respond(
-                    400, "Sign-in refused", "You can close this tab and return to the terminal."
-                )
-                return
-            code = _first(params, "code")
-            if code is None:
-                self._respond(400, "Nothing to do", "That redirect carried no authorization code.")
-                return
-            result["value"] = Callback(code=code, state=_first(params, "state"))
-            self._respond(200, "Signed in", "You can close this tab and return to the terminal.")
-
-        def _respond(self, status: int, title: str, message: str) -> None:
-            body = _PAGE.format(title=title, message=message).encode("utf-8")
-            self.send_response(status)
-            self.send_header("Content-Type", "text/html; charset=utf-8")
-            self.send_header("Content-Length", str(len(body)))
-            self.end_headers()
-            self.wfile.write(body)
-
-        def log_message(self, *_args: object) -> None:
-            """Silence. The default writes a request line to stderr, which in
-            the middle of a wizard reads like an error."""
+    class Handler(_CallbackHandler):
+        callback_path = path
+        outcomes = result
 
     deadline = monotonic() + timeout
     with _serve(port, Handler) as server:
@@ -115,6 +86,46 @@ def wait_for_redirect(
     if isinstance(outcome, OAuthError):
         raise outcome
     return outcome
+
+
+class _CallbackHandler(BaseHTTPRequestHandler):
+    """Answers requests to ``callback_path``, recording what Etsy's redirect
+    carried in ``outcomes["value"]``; every other path is a 404."""
+
+    callback_path: ClassVar[str]
+    outcomes: ClassVar[dict[str, Callback | OAuthError]]
+
+    def do_GET(self) -> None:
+        request = urlsplit(self.path)
+        if request.path != self.callback_path:
+            self._respond(404, "Not here", "This is not the callback address.")
+            return
+        params = parse_qs(request.query)
+        error = _first(params, "error")
+        if error is not None:
+            self.outcomes["value"] = OAuthError(error, _first(params, "error_description"))
+            self._respond(
+                400, "Sign-in refused", "You can close this tab and return to the terminal."
+            )
+            return
+        code = _first(params, "code")
+        if code is None:
+            self._respond(400, "Nothing to do", "That redirect carried no authorization code.")
+            return
+        self.outcomes["value"] = Callback(code=code, state=_first(params, "state"))
+        self._respond(200, "Signed in", "You can close this tab and return to the terminal.")
+
+    def _respond(self, status: int, title: str, message: str) -> None:
+        body = _PAGE.format(title=title, message=message).encode("utf-8")
+        self.send_response(status)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def log_message(self, *_args: object) -> None:
+        """Silence. The default writes a request line to stderr, which in
+        the middle of a wizard reads like an error."""
 
 
 def _serve(port: int, handler: type[BaseHTTPRequestHandler]) -> HTTPServer:
