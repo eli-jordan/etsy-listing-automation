@@ -1,6 +1,6 @@
 """Repeat native release measurements on copied photos; outputs stay outside Git.
 
-Run with uv run python scripts/validate_marigold.py SOURCE OUTPUT. SOURCE is a
+Run with uv run python docs/features/marigold-20261001/scripts/validate_marigold.py SOURCE OUTPUT. SOURCE is a
 read-only user workspace. OUTPUT must be a new external directory. Production
 Runtime, coordinator, artifact reader and renderer are the validation targets.
 """
@@ -67,7 +67,7 @@ TEMPLATES = [
 def _isolated_workspace(source: Path, output: Path) -> Workspace:
     if output.resolve().is_relative_to(source.resolve()):
         raise ValueError("Output must be outside the read-only source workspace")
-    if output.exists() or output.resolve().is_relative_to(Path(__file__).resolve().parents[1]):
+    if output.exists() or output.resolve().is_relative_to(Path(__file__).resolve().parents[4]):
         raise ValueError("Output must be a new external directory")
     output.mkdir(parents=True)
     root = output / "workspace"

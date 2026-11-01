@@ -75,10 +75,6 @@ def _parsed_template_config(text: str) -> AnyTemplate:
     return parse_template_config(yaml.safe_load(text))
 
 
-MIGRATION_SCRIPT = "scripts/migrate_workspace_refs.py"
-"""ADR-0046's one-off rewrite, named by every refusal of the form it replaces."""
-
-
 class InvalidRefError(ConfigLoadError):
     """A path in ``listing.yaml`` that is not a two-root ref.
 
@@ -319,7 +315,7 @@ class Workspace:
         if ref.startswith("../"):
             raise refused(
                 "'..' refs are the old listing-relative form; write it from the workspace "
-                f"root instead (run {MIGRATION_SCRIPT} to rewrite a whole workspace)"
+                "root instead"
             )
         if ".." in ref.split("/"):
             raise refused("'..' is not allowed in a ref")
