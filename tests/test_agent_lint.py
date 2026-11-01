@@ -122,7 +122,13 @@ def test_a_suppression_with_a_reason_is_accepted(scratch: Path) -> None:
 
 def test_output_is_capped_at_twenty_findings_with_a_count_of_the_rest(scratch: Path) -> None:
     source = scratch / "noisy.py"
-    source.write_text("".join(f"print(undefined_{n})\n" for n in range(30)))
+    # One undefined name per line. A `print` would also be T201 now that S01
+    # enables T20, and the omitted count would no longer be the line count.
+    source.write_text(
+        "def keep(value: object) -> object:\n"
+        "    return value\n"
+        "\n" + "".join(f"keep(undefined_{n})\n" for n in range(30))
+    )
 
     result = run_hook(edited(source))
 
@@ -139,14 +145,22 @@ def test_only_suppressions_the_edit_adds_need_a_reason() -> None:
     tracked = ROOT / "scripts" / "generate_test_assets.py"
     original = tracked.read_bytes()
     lines = original.decode().splitlines()
+    # A module assignment is not F841, and a short E501 suppression is unused:
+    # RUF100's safe fix removes it before the reason check. A local binding
+    # still needs the suppression. The marker is split so this file's own
+    # added lines are not suppressions.
+    marker = b"def unused_binding() -> None:\n    local = 1  # " + b"noqa: F841\n"
+    body = original if original.endswith(b"\n") else original + b"\n"
     try:
-        tracked.write_bytes(original + b"UNUSED = 1  # noqa: E501\n")
+        tracked.write_bytes(body + marker)
         result = run_hook(edited(tracked))
     finally:
         tracked.write_bytes(original)
 
     assert result.returncode == 2
-    assert f"generate_test_assets.py:{len(lines) + 1}: suppression" in result.stderr
+    # Format inserts the two blank lines a new top-level function needs,
+    # so the silenced binding lands four lines past the old end.
+    assert f"generate_test_assets.py:{len(lines) + 4}: suppression" in result.stderr
     assert ":275:" not in result.stderr
 
 
@@ -154,12 +168,16 @@ def test_a_rewrite_with_windows_line_endings_adds_only_its_new_lines() -> None:
     tracked = ROOT / "scripts" / "generate_test_assets.py"
     original = tracked.read_bytes()
     try:
-        tracked.write_bytes((original + b"UNUSED = 1  # noqa: E501\n").replace(b"\n", b"\r\n"))
+        marker = b"def unused_binding() -> None:\n    local = 1  # " + b"noqa: F841\n"
+        body = original if original.endswith(b"\n") else original + b"\n"
+        tracked.write_bytes((body + marker).replace(b"\n", b"\r\n"))
         result = run_hook(edited(tracked))
     finally:
         tracked.write_bytes(original)
 
+    assert result.returncode == 2
     assert ":275:" not in result.stderr
+    assert "suppression without a reason" in result.stderr
 
 
 def test_a_missing_virtualenv_falls_back_to_uv_run_instead_of_skipping(
