@@ -409,6 +409,61 @@ def render_preview_response(
     return _encode_preview(image, scale)
 
 
+def _marigold_preview(template: Target, body: PreviewRequest, scale: PreviewScale) -> Response:
+    workspace = template.workspace
+    document = body.model_dump(
+        mode="json", exclude={"design", "calibration_revision", "mask_edits"}
+    )
+    colour = body.colour if isinstance(body, ColourMatrixPreviewRequest) else None
+    if isinstance(body, ColourMatrixPreviewRequest):
+        document.pop("colour")
+    config = load_template_config(document)
+    if scale == "editor":
+        return _editor_preview(
+            template,
+            body,
+            EditorDraft(
+                config=config,
+                revision=body.calibration_revision or "",
+                mask_edits=body.mask_edits,
+                colour=colour,
+            ),
+        )
+    if body.mask_edits:
+        raise HTTPException(status_code=409, detail="Save draft mask edits before full preview")
+    with preview_refusals():
+        prepared = prepared_preview(
+            workspace,
+            template.name,
+            config=config,
+            colour=colour,
+            design=lambda _colour: resolve_design(workspace, body.design),
+        )
+    return render_preview_response(prepared, scale, workspace=workspace)
+
+
+def _editor_preview(template: Target, body: PreviewRequest, draft: EditorDraft) -> Response:
+    """The interactive composite of an unsaved draft: never cached, and
+    refused rather than prepared when its maps are not ready."""
+    workspace = template.workspace
+    try:
+        image = editor_preview(
+            workspace,
+            template.name,
+            draft,
+            base=lambda path: PREVIEW_IMAGES.base(path).image,
+            artwork=lambda: PREVIEW_IMAGES.material_design(
+                resolve_design(workspace, body.design), max_edge=EDITOR_ARTWORK_EDGE
+            ),
+        )
+    except (PreparationRequiredError, ValueError, OSError) as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    response = _encode_preview(image, "editor")
+    response.headers["Cache-Control"] = "no-store"
+    response.headers["X-Preview-Quality"] = "interactive"
+    return response
+
+
 @router.post("/{name}/preview")
 def preview(
     template: Annotated[Target, Depends(target)], body: PreviewRequest, scale: PreviewScale = "full"
@@ -417,47 +472,7 @@ def preview(
     design from its own test-design library."""
     workspace = template.workspace
     if isinstance(body.renderer, MarigoldRenderer):
-        document = body.model_dump(
-            mode="json", exclude={"design", "calibration_revision", "mask_edits"}
-        )
-        if isinstance(body, ColourMatrixPreviewRequest):
-            document.pop("colour")
-        config = load_template_config(document)
-        if scale == "editor":
-            try:
-                image = editor_preview(
-                    workspace,
-                    template.name,
-                    EditorDraft(
-                        config=config,
-                        revision=body.calibration_revision or "",
-                        mask_edits=body.mask_edits,
-                        colour=body.colour
-                        if isinstance(body, ColourMatrixPreviewRequest)
-                        else None,
-                    ),
-                    base=lambda path: PREVIEW_IMAGES.base(path).image,
-                    artwork=lambda: PREVIEW_IMAGES.material_design(
-                        resolve_design(workspace, body.design), max_edge=EDITOR_ARTWORK_EDGE
-                    ),
-                )
-            except (PreparationRequiredError, ValueError, OSError) as exc:
-                raise HTTPException(status_code=409, detail=str(exc)) from exc
-            response = _encode_preview(image, "editor")
-            response.headers["Cache-Control"] = "no-store"
-            response.headers["X-Preview-Quality"] = "interactive"
-            return response
-        if body.mask_edits:
-            raise HTTPException(status_code=409, detail="Save draft mask edits before full preview")
-        with preview_refusals():
-            prepared = prepared_preview(
-                workspace,
-                template.name,
-                config=config,
-                colour=body.colour if isinstance(body, ColourMatrixPreviewRequest) else None,
-                design=lambda _colour: resolve_design(workspace, body.design),
-            )
-        return render_preview_response(prepared, scale, workspace=workspace)
+        return _marigold_preview(template, body, scale)
     try:
         scene = unsaved_preview(
             workspace,

@@ -241,32 +241,38 @@ def test_a_listing_apply_requires_the_post_preview_fingerprint(workspace_root: P
         assert detail["phase"] == "ready"
         initial, latest = [e for e in detail["events"] if e["type"] == "listing_planned"]
         assert initial["fingerprint"] != latest["fingerprint"]
-        initial_media = next(
-            sp for sp in initial["plan"]["stage_plans"] if sp["stage"] == "etsy_media"
-        )
-        latest_media = next(
-            sp for sp in latest["plan"]["stage_plans"] if sp["stage"] == "etsy_media"
-        )
+        initial_media = _stage_plan(initial, "etsy_media")
+        latest_media = _stage_plan(latest, "etsy_media")
         assert initial_media["outcome"]["reason"] == "4 images (pending render for 4 images)"
         assert latest_media["outcome"]["reason"] == "4 images, never uploaded"
         assert all(sp["outcome"]["type"] != "blocked" for sp in latest["plan"]["stage_plans"])
 
-        for planned, phase in ((initial, "stale"), (latest, "applied")):
-            created = client.post(
-                "/api/runs",
-                json={
-                    "kind": "apply",
-                    "scope": "listings",
-                    "listings": [LISTING],
-                    "expect": {LISTING: planned["fingerprint"]},
-                },
-            ).json()
-            result = _wait_until_terminal(client, created["id"])
-            assert result["phase"] == phase, result
-            if phase == "stale":
-                failure = next(e for e in result["events"] if e["type"] == "listing_failed")
-                assert failure["stale_plan"] == latest["plan"]
-                assert not any(e["type"] == "stage_applying" for e in result["events"])
+        stale = _apply_expecting(client, initial["fingerprint"])
+        assert stale["phase"] == "stale", stale
+        failure = next(e for e in stale["events"] if e["type"] == "listing_failed")
+        assert failure["stale_plan"] == latest["plan"]
+        assert not any(e["type"] == "stage_applying" for e in stale["events"])
+
+        applied = _apply_expecting(client, latest["fingerprint"])
+        assert applied["phase"] == "applied", applied
+
+
+def _stage_plan(planned: dict, stage: str) -> dict:
+    return next(sp for sp in planned["plan"]["stage_plans"] if sp["stage"] == stage)
+
+
+def _apply_expecting(client: TestClient, fingerprint: str) -> dict:
+    """Apply the fixture listing, expecting it still plans to ``fingerprint``."""
+    created = client.post(
+        "/api/runs",
+        json={
+            "kind": "apply",
+            "scope": "listings",
+            "listings": [LISTING],
+            "expect": {LISTING: fingerprint},
+        },
+    ).json()
+    return _wait_until_terminal(client, created["id"])
 
 
 def test_a_workspace_apply_differing_from_its_review_is_409_with_the_refusal(

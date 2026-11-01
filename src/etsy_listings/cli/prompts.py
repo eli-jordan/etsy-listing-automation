@@ -343,26 +343,46 @@ def _choose_with_input(message: str, rows: list[str], marker_hint: str) -> str |
     hint = (
         "number to pick, n/p to page, blank to cancel"
         if paged
-        else ("number to pick, blank to cancel")
+        else "number to pick, blank to cancel"
     )
     page = 0
     while True:
         _print_page(rows, page, pages, marker_hint)
-        try:
-            typed = input(f"{message} ({hint}) ").strip().lower()
-        except (EOFError, KeyboardInterrupt):
-            return None
+        typed = _typed(f"{message} ({hint}) ")
         if not typed:
             return None
-        if typed.isdigit():
-            index = int(typed) - 1
-            if 0 <= index < len(rows):
-                return rows[index]
-            print(f"  no option {typed}; pick 1-{len(rows)}")
-        elif paged and typed in {"n", "p"}:
-            page = (page + (1 if typed == "n" else -1)) % pages
-        else:
-            print(f"  {typed!r} is not {'a number or n/p' if paged else 'a number'}")
+        if not typed.isdigit():
+            page = _turned(typed, page, pages)
+            continue
+        picked = _numbered(rows, typed)
+        if picked is not None:
+            return picked
+
+
+def _typed(prompt: str) -> str:
+    """One line from ``input()``, normalised; blank when the input ended or
+    was interrupted, which cancels like a blank line does."""
+    try:
+        return input(prompt).strip().lower()
+    except (EOFError, KeyboardInterrupt):
+        return ""
+
+
+def _turned(typed: str, page: int, pages: int) -> int:
+    """The page ``n``/``p`` moves to; anything else is refused in place."""
+    paged = pages > 1
+    if paged and typed in {"n", "p"}:
+        return (page + (1 if typed == "n" else -1)) % pages
+    print(f"  {typed!r} is not {'a number or n/p' if paged else 'a number'}")
+    return page
+
+
+def _numbered(rows: list[str], typed: str) -> str | None:
+    index = int(typed) - 1
+    if 0 <= index < len(rows):
+        return rows[index]
+    print(f"  no option {typed}; pick 1-{len(rows)}")
+    return None
 
 
 def _print_page(rows: list[str], page: int, pages: int, marker_hint: str) -> None:

@@ -325,20 +325,9 @@ class EtsyVideosStage(Stage[EtsyVideosDesired, AppliedEtsyVideos, EtsyVideosLive
         placer.sweep(keep=wanted)
 
         featured, *rest = desired.videos or (None,)
-        second = rest[0] if rest else None
-        moved = False
-        if featured is not None:
-            if placer.placed(featured, slot=0):
-                placer.keep(featured)
-            else:
-                placer.remove_all()
-                placer.attach(featured)
-                moved = True
-        if second is not None:
-            if not moved and placer.placed(second, slot=1):
-                placer.keep(second)
-            else:
-                placer.place_after_images(second, desired, lock)
+        moved = featured is not None and placer.place_featured(featured)
+        if rest:
+            placer.place_second(rest[0], desired, lock, moved=moved)
 
         return StageApplyResult(
             applied=AppliedEtsyVideos(
@@ -391,6 +380,26 @@ class _Placer:
             and self._applied[slot] == video.applied()
             and video_id in self._on_listing
         )
+
+    def place_featured(self, video: DesiredVideo) -> bool:
+        """Step 2: keep the featured video in place, or remove every video and
+        attach it first. True when it moved."""
+        if self.placed(video, slot=0):
+            self.keep(video)
+            return False
+        self.remove_all()
+        self.attach(video)
+        return True
+
+    def place_second(
+        self, video: DesiredVideo, desired: EtsyVideosDesired, lock: Lockfile, *, moved: bool
+    ) -> None:
+        """Keep the second video in place unless the featured one moved, which
+        removed it too; otherwise place it after its images."""
+        if not moved and self.placed(video, slot=1):
+            self.keep(video)
+        else:
+            self.place_after_images(video, desired, lock)
 
     def keep(self, video: DesiredVideo) -> None:
         self.ids[video.ref] = self._known[video.ref]
@@ -482,34 +491,43 @@ def _changes(
     before_videos = applied.videos if applied is not None else ()
     changes: list[FieldChange] = []
     for slot, path in enumerate(("videos.featured", "videos.second")):
-        after = wanted.videos[slot] if slot < len(wanted.videos) else None
-        before = before_videos[slot] if slot < len(before_videos) else None
+        after = _in_slot(wanted.videos, slot)
+        before = _in_slot(before_videos, slot)
         if after == before:
             continue
         if after is None or before is None or after.ref != before.ref:
-            changes.append(
-                FieldChange(
-                    path=path,
-                    before=before.ref if before is not None else None,
-                    after=after.ref if after is not None else None,
-                )
-            )
-            continue
-        if after.hash != before.hash:
-            changes.append(
-                FieldChange(
-                    path=f"{path}.contents", before=_digest(before.hash), after=_digest(after.hash)
-                )
-            )
-        if after.after_images != before.after_images:
-            changes.append(
-                FieldChange(
-                    path=f"{path}.after_images",
-                    before=before.after_images,
-                    after=after.after_images,
-                )
-            )
+            changes.append(FieldChange(path=path, before=_ref(before), after=_ref(after)))
+        else:
+            changes += _same_video_changes(path, before, after)
     return tuple(changes)
+
+
+def _in_slot(videos: tuple[AppliedVideo, ...], slot: int) -> AppliedVideo | None:
+    return videos[slot] if slot < len(videos) else None
+
+
+def _ref(video: AppliedVideo | None) -> str | None:
+    return video.ref if video is not None else None
+
+
+def _same_video_changes(path: str, before: AppliedVideo, after: AppliedVideo) -> list[FieldChange]:
+    """New bytes, or a new anchor among the images, for the same ref."""
+    changes: list[FieldChange] = []
+    if after.hash != before.hash:
+        changes.append(
+            FieldChange(
+                path=f"{path}.contents", before=_digest(before.hash), after=_digest(after.hash)
+            )
+        )
+    if after.after_images != before.after_images:
+        changes.append(
+            FieldChange(
+                path=f"{path}.after_images",
+                before=before.after_images,
+                after=after.after_images,
+            )
+        )
+    return changes
 
 
 def _digest(content_hash: str) -> str:

@@ -216,4 +216,4 @@ class TestVideos:
             .values()
         )
         assert isinstance(failure, ProbeFailure)
-        assert "migrate_workspace_refs" in failure.reason
+        assert "listing-relative form" in failure.reason

@@ -22,7 +22,7 @@ import re
 import uuid
 from collections.abc import Iterable, Iterator
 from contextlib import nullcontext
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path, PurePosixPath
 from typing import BinaryIO, Literal
@@ -165,6 +165,12 @@ def _receive(workspace: Workspace, session: str, uploads: Iterable[Upload]) -> _
         ignored = _receive_zip(workspace, session, upload, head, received)
         _limit(received, "It holds", "Split the export into {} ZIPs and start a batch for each.")
         return _Receipt(list(received.rows.values()), ignored, _archive_name(upload.filename))
+    return _receive_pngs(workspace, session, heads)
+
+
+def _receive_pngs(
+    workspace: Workspace, session: str, heads: list[tuple[Upload, bytes]]
+) -> _Receipt:
     received = _Received(workspace, session, total_limit=MAX_UPLOAD_BYTES)
     for upload, head in heads:
         if head != PNG_MAGIC:
@@ -365,6 +371,99 @@ def _typed_problem(name: str, holder: str | None) -> str | None:
     return None
 
 
+@dataclass(frozen=True)
+class _RowName:
+    """What name allocation decided for one valid row. ``note`` is added to
+    whatever the row's note already says."""
+
+    name: str
+    state: RowState = "ready"
+    message: str | None = None
+    suggestion: str | None = None
+    note: str | None = None
+
+
+def _with_note(note: str | None, addition: str) -> str:
+    return f"{note}; {addition}" if note else addition
+
+
+@dataclass
+class _NameAllocation:
+    """:func:`review`'s pass over the rows in upload order. Typed names are
+    claimed up front; ``allocated`` grows as each row takes its name."""
+
+    workspace_taken: dict[str, str]
+    typed: dict[str, str]
+    reused: dict[str, str]
+    allocated: set[str] = field(default_factory=set)
+
+    def review(self, row: StagingRow) -> RowReview:
+        note = (
+            f"{len(row.sources)} identical files, staged once: {', '.join(row.sources)}"
+            if len(row.sources) > 1
+            else None
+        )
+        if row.error is not None:
+            return _row_review(row, _RowName(row.base, "invalid", row.error), None, None)
+        reuse = self.reused.get(row.sha256)
+        if reuse is not None:
+            note = _with_note(
+                note, f"Same image as designs/{reuse}.png. The listing reuses that file"
+            )
+        taken = taken_for(self.workspace_taken, reuse)
+        claimed = taken | set(self.typed)
+        if row.typed:
+            named = self._typed(row, taken, claimed)
+        elif not row.base:
+            named = _RowName(
+                row.base,
+                "name",
+                "The file name has no letters or digits. Type a name for this listing.",
+            )
+        else:
+            named = self._generated(row, claimed)
+        if named.note is not None:
+            note = _with_note(note, named.note)
+        return _row_review(row, named, note, reuse)
+
+    def _typed(self, row: StagingRow, taken: set[str], claimed: set[str]) -> _RowName:
+        """A typed name is never changed: a taken one is flagged, with the
+        next free suffix as a suggestion."""
+        folded = row.base.casefold()
+        holder = (self.workspace_taken.get(folded) if folded in taken else None) or (
+            "row" if self.typed.get(folded) != row.id else None
+        )
+        message = _typed_problem(row.base, holder)
+        suggestion = None
+        if message and slugify(row.base):
+            suggestion = allocate(slugify(row.base), claimed | self.allocated)
+        self.allocated.add(folded)
+        return _RowName(row.base, "name" if message else "ready", message, suggestion)
+
+    def _generated(self, row: StagingRow, claimed: set[str]) -> _RowName:
+        name = allocate(row.base, claimed | self.allocated)
+        self.allocated.add(name.casefold())
+        if name == row.base:
+            return _RowName(name)
+        return _RowName(
+            name, note=f"{row.base} is taken, so {name.removeprefix(row.base)} was added"
+        )
+
+
+def _row_review(row: StagingRow, named: _RowName, note: str | None, reuse: str | None) -> RowReview:
+    return RowReview(
+        id=row.id,
+        sources=row.sources,
+        name=named.name,
+        typed=row.typed,
+        state=named.state,
+        message=named.message,
+        note=note,
+        suggestion=named.suggestion,
+        reuse=reuse,
+    )
+
+
 def review(workspace: Workspace, session: StagingSession) -> StagingReview:
     """Every row's name, state and note (name allocation; UI doc §5).
 
@@ -386,59 +485,8 @@ def review(workspace: Workspace, session: StagingSession) -> StagingReview:
             for row in valid
         },
     )
-    allocated: set[str] = set()
-    reviews: list[RowReview] = []
-    for row in session.rows:
-        note = (
-            f"{len(row.sources)} identical files, staged once: {', '.join(row.sources)}"
-            if len(row.sources) > 1
-            else None
-        )
-        name = row.base
-        state: RowState = "ready"
-        message: str | None = None
-        suggestion: str | None = None
-        reuse = reused.get(row.sha256) if row.error is None else None
-        if reuse is not None:
-            same = f"Same image as designs/{reuse}.png. The listing reuses that file"
-            note = f"{note}; {same}" if note else same
-        taken = taken_for(workspace_taken, reuse)
-        claimed = taken | set(typed)
-        if row.error is not None:
-            state, message, note = "invalid", row.error, None
-        elif row.typed:
-            folded = row.base.casefold()
-            holder = (workspace_taken.get(folded) if folded in taken else None) or (
-                "row" if typed.get(folded) != row.id else None
-            )
-            message = _typed_problem(row.base, holder)
-            if message:
-                state = "name"
-                if slugify(row.base):
-                    suggestion = allocate(slugify(row.base), claimed | allocated)
-            allocated.add(folded)
-        elif not row.base:
-            state = "name"
-            message = "The file name has no letters or digits. Type a name for this listing."
-        else:
-            name = allocate(row.base, claimed | allocated)
-            allocated.add(name.casefold())
-            if name != row.base:
-                suffixed = f"{row.base} is taken, so {name.removeprefix(row.base)} was added"
-                note = f"{note}; {suffixed}" if note else suffixed
-        reviews.append(
-            RowReview(
-                id=row.id,
-                sources=row.sources,
-                name=name,
-                typed=row.typed,
-                state=state,
-                message=message,
-                note=note,
-                suggestion=suggestion,
-                reuse=reuse,
-            )
-        )
+    names = _NameAllocation(workspace_taken, typed, reused)
+    reviews = [names.review(row) for row in session.rows]
     return StagingReview(session=session, rows=reviews)
 
 

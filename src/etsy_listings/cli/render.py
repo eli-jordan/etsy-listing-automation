@@ -11,7 +11,9 @@ output is shown as missing because the stage observed it missing.
 
 from __future__ import annotations
 
-from etsy_listings.core.engine.change import Drift, Plan, StagePlan
+from dataclasses import dataclass
+
+from etsy_listings.core.engine.change import Action, Change, Drift, Plan, StagePlan
 
 
 def format_plan(plan: Plan) -> str:
@@ -19,44 +21,63 @@ def format_plan(plan: Plan) -> str:
     the concrete actions it will take, with the files each reads and writes.
     Richer per-change rendering (price deltas, before/after text) arrives with
     the stages that emit those change types."""
-    lines = [_header(plan), ""]
+    sections = _Sections.of(plan)
+    lines = [_header(plan), "", *_body(plan, sections), ""]
+    lines.append(
+        f"  {len(sections.runs)} to run{_actions_suffix(sections.action_count)}, "
+        f"{len(sections.changes)} to change{_blocked_suffix(len(sections.blocked))}, "
+        f"{len(sections.drifts)} drift warning(s)"
+    )
+    return "\n".join(lines)
 
-    runs = [sp for sp in plan.stage_plans if sp.will_run]
-    blocked = [sp for sp in plan.stage_plans if sp.blocked]
-    changes = [(sp, change) for sp in plan.stage_plans for change in sp.changes]
-    drifts = [(sp, drift) for sp in plan.stage_plans for drift in sp.drift]
-    action_count = sum(len(sp.actions) for sp in plan.stage_plans)
 
+@dataclass(frozen=True)
+class _Sections:
+    """A plan's stages grouped the way ``plan`` prints them."""
+
+    runs: list[StagePlan]
+    blocked: list[StagePlan]
+    changes: list[tuple[StagePlan, Change]]
+    drifts: list[tuple[StagePlan, Drift]]
+    action_count: int
+
+    @classmethod
+    def of(cls, plan: Plan) -> _Sections:
+        return cls(
+            runs=[sp for sp in plan.stage_plans if sp.will_run],
+            blocked=[sp for sp in plan.stage_plans if sp.blocked],
+            changes=[(sp, change) for sp in plan.stage_plans for change in sp.changes],
+            drifts=[(sp, drift) for sp in plan.stage_plans for drift in sp.drift],
+            action_count=sum(len(sp.actions) for sp in plan.stage_plans),
+        )
+
+
+def _body(plan: Plan, sections: _Sections) -> list[str]:
     # Blocked stages lead. What a run will *not* do is the more surprising
     # half, and burying it under "No changes." is exactly how a listing goes
     # un-uploaded without anyone noticing.
-    for stage_plan in blocked:
-        lines.extend(format_blocked(stage_plan))
-
-    for stage_plan in runs:
-        reason = f" ({stage_plan.reason})" if stage_plan.reason else ""
-        lines.append(f"  + {_name(stage_plan)}{reason}")
-        lines.extend(_format_actions(stage_plan))
-    for stage_plan, change in changes:
-        lines.append(f"  ~ {_name(stage_plan)}: {change}")
-    for stage_plan, drift in drifts:
-        lines.append(
-            f"  ! drift  {_name(stage_plan)}.{drift.path} was edited outside this "
-            f"tool{_drift_detail(drift)}"
-        )
+    lines = [line for stage_plan in sections.blocked for line in format_blocked(stage_plan)]
+    lines.extend(line for stage_plan in sections.runs for line in _run_lines(stage_plan))
+    lines.extend(f"  ~ {_name(stage_plan)}: {change}" for stage_plan, change in sections.changes)
+    lines.extend(_drift_line(stage_plan, drift) for stage_plan, drift in sections.drifts)
 
     if not plan.stage_plans:
         lines.append("  (no stages configured)")
-    elif not (runs or changes or drifts):
+    elif not (sections.runs or sections.changes or sections.drifts):
         lines.append("  No changes.")
+    return lines
 
-    lines.append("")
-    lines.append(
-        f"  {len(runs)} to run{_actions_suffix(action_count)}, "
-        f"{len(changes)} to change{_blocked_suffix(len(blocked))}, "
-        f"{len(drifts)} drift warning(s)"
+
+def _run_lines(stage_plan: StagePlan) -> list[str]:
+    reason = f" ({stage_plan.reason})" if stage_plan.reason else ""
+    return [f"  + {_name(stage_plan)}{reason}", *_format_actions(stage_plan)]
+
+
+def _drift_line(stage_plan: StagePlan, drift: Drift) -> str:
+    return (
+        f"  ! drift  {_name(stage_plan)}.{drift.path} was edited outside this "
+        f"tool{_drift_detail(drift)}"
     )
-    return "\n".join(lines)
 
 
 def format_blocked(stage_plan: StagePlan) -> list[str]:
@@ -125,15 +146,17 @@ def _format_actions(stage_plan: StagePlan) -> list[str]:
     question -- over which scenes, from which files, onto which files -- to be
     answered by reading the config by hand.
     """
-    lines: list[str] = []
-    for action in stage_plan.actions:
-        lines.append(f"      {action.description}")
-        for index, path in enumerate(action.inputs):
-            label = "in  " if index == 0 else "    "
-            lines.append(f"        {label} {path}")
-        for path in action.outputs:
-            marker = "   (missing)" if path in action.missing_outputs else ""
-            lines.append(f"        out  {path}{marker}")
+    return [line for action in stage_plan.actions for line in _action_lines(action)]
+
+
+def _action_lines(action: Action) -> list[str]:
+    lines = [f"      {action.description}"]
+    for index, path in enumerate(action.inputs):
+        label = "in  " if index == 0 else "    "
+        lines.append(f"        {label} {path}")
+    for path in action.outputs:
+        marker = "   (missing)" if path in action.missing_outputs else ""
+        lines.append(f"        out  {path}{marker}")
     return lines
 
 

@@ -188,19 +188,26 @@ def _check_string_list(
         if not isinstance(item, str) or not item.strip():
             reasons.append(f"{name}[{i}]: must be a non-empty string")
             continue
-        if max_length is not None and len(item) > max_length:
-            reasons.append(
-                f"{name}[{i}]: {len(item)} characters, over Etsy's {max_length}-character limit"
-            )
+        reasons += _too_long(f"{name}[{i}]", item, max_length)
         if unique:
-            key = item.casefold()
-            if key in seen:
-                reasons.append(
-                    f"{name}: entries must be unique ignoring case ({item!r} repeats {seen[key]!r})"
-                )
-            else:
-                seen[key] = item
+            reasons += _repeat(name, item, seen)
     return reasons
+
+
+def _too_long(where: str, item: str, max_length: int | None) -> list[str]:
+    if max_length is not None and len(item) > max_length:
+        return [f"{where}: {len(item)} characters, over Etsy's {max_length}-character limit"]
+    return []
+
+
+def _repeat(name: str, item: str, seen: dict[str, str]) -> list[str]:
+    """``item`` against the entries ``seen`` so far, ignoring case; a first
+    sighting is added to ``seen``."""
+    key = item.casefold()
+    if key in seen:
+        return [f"{name}: entries must be unique ignoring case ({item!r} repeats {seen[key]!r})"]
+    seen[key] = item
+    return []
 
 
 def _check_rationale(value: Any) -> list[str]:
@@ -210,25 +217,26 @@ def _check_rationale(value: Any) -> list[str]:
     if len(value) != RATIONALE_ENTRIES:
         reasons.append(f"rationale: expected exactly {RATIONALE_ENTRIES} entries, got {len(value)}")
     for i, item in enumerate(value):
-        if not isinstance(item, Mapping):
-            reasons.append(f"rationale[{i}]: expected an object")
-            continue
-        phrase = item.get("phrase")
-        if not isinstance(phrase, str) or not phrase.strip():
-            reasons.append(f"rationale[{i}].phrase: must be a non-empty string")
-        reason_text = item.get("reason")
-        if not isinstance(reason_text, str) or not reason_text.strip():
-            reasons.append(f"rationale[{i}].reason: must be a non-empty string")
-        intent = item.get("intent")
-        if intent not in ALLOWED_INTENTS:
-            reasons.append(
-                f"rationale[{i}].intent: {intent!r} is not one of {sorted(ALLOWED_INTENTS)}"
-            )
-        used_in = item.get("used_in")
-        if not isinstance(used_in, list) or any(v not in ALLOWED_USED_IN for v in used_in):
-            reasons.append(
-                f"rationale[{i}].used_in: must be a list drawn from {sorted(ALLOWED_USED_IN)}"
-            )
+        reasons += _check_rationale_entry(i, item)
+    return reasons
+
+
+def _check_rationale_entry(i: int, item: Any) -> list[str]:
+    if not isinstance(item, Mapping):
+        return [f"rationale[{i}]: expected an object"]
+    reasons: list[str] = []
+    for key in ("phrase", "reason"):
+        text = item.get(key)
+        if not isinstance(text, str) or not text.strip():
+            reasons.append(f"rationale[{i}].{key}: must be a non-empty string")
+    intent = item.get("intent")
+    if intent not in ALLOWED_INTENTS:
+        reasons.append(f"rationale[{i}].intent: {intent!r} is not one of {sorted(ALLOWED_INTENTS)}")
+    used_in = item.get("used_in")
+    if not isinstance(used_in, list) or any(v not in ALLOWED_USED_IN for v in used_in):
+        reasons.append(
+            f"rationale[{i}].used_in: must be a list drawn from {sorted(ALLOWED_USED_IN)}"
+        )
     return reasons
 
 
@@ -260,29 +268,41 @@ def _check_affiliation(normalized: Mapping[str, Any]) -> list[str]:
     reasons: list[str] = []
     for field_name in ("titles", "description_leads"):
         values = normalized.get(field_name)
-        if not isinstance(values, list):
-            continue
-        for i, item in enumerate(values):
-            if not isinstance(item, str):
-                continue
-            hits = _words(item) & AFFILIATION_TERMS
-            if hits:
-                reasons.append(
-                    f"{field_name}[{i}]: claims affiliation/authenticity "
-                    f"({', '.join(sorted(hits))}) without it being supplied"
-                )
+        if isinstance(values, list):
+            reasons += _entry_affiliations(field_name, values)
     tags = normalized.get("tags")
     if isinstance(tags, list):
-        tag_hits: set[str] = set()
-        for item in tags:
-            if isinstance(item, str):
-                tag_hits |= _words(item) & AFFILIATION_TERMS
-        if tag_hits:
+        reasons += _tag_affiliations(tags)
+    return reasons
+
+
+def _entry_affiliations(field_name: str, values: list[Any]) -> list[str]:
+    """One reason per entry of a prose field that claims affiliation."""
+    reasons: list[str] = []
+    for i, item in enumerate(values):
+        if not isinstance(item, str):
+            continue
+        hits = _words(item) & AFFILIATION_TERMS
+        if hits:
             reasons.append(
-                f"tags: claims affiliation/authenticity ({', '.join(sorted(tag_hits))}) "
-                f"without it being supplied"
+                f"{field_name}[{i}]: claims affiliation/authenticity "
+                f"({', '.join(sorted(hits))}) without it being supplied"
             )
     return reasons
+
+
+def _tag_affiliations(tags: list[Any]) -> list[str]:
+    """One reason for every tag hit together: tags are words already."""
+    tag_hits: set[str] = set()
+    for item in tags:
+        if isinstance(item, str):
+            tag_hits |= _words(item) & AFFILIATION_TERMS
+    if not tag_hits:
+        return []
+    return [
+        f"tags: claims affiliation/authenticity ({', '.join(sorted(tag_hits))}) "
+        f"without it being supplied"
+    ]
 
 
 def _hard_validation_reasons(normalized: Mapping[str, Any]) -> list[str]:

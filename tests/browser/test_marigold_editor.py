@@ -41,11 +41,17 @@ def ready(page):
     )
 
 
-def test_edit_prepare_reconnect_mask_and_full_quality_preview(
-    page, workspace_root: Path, template_kind, preparation_runtime
-):
-    select_template(page)
-    origin = page.url.split("/templates")[0]
+def worker_calls(runtime):
+    return sum(len(worker.calls) for worker in runtime.workers)
+
+
+def mask_path(template_kind):
+    if template_kind == "multiple":
+        return "/api/templates/marigold-shirt/placements/left-shirt/mask"
+    return "/api/templates/marigold-shirt/mask"
+
+
+def prepare_explicitly(page):
     assert page.get_by_role("button", name="Edit mask", exact=True).is_disabled()
     with page.expect_response(
         lambda r: (
@@ -54,24 +60,19 @@ def test_edit_prepare_reconnect_mask_and_full_quality_preview(
     ):
         page.get_by_role("button", name="Prepare template", exact=True).click()
     ready(page)
-    calls = sum(len(worker.calls) for worker in preparation_runtime.workers)
-    assert calls == 3
+
+
+def assert_masks_prepared(page, origin, template_kind):
+    """Every placement has its automatic mask. Returns the prepared main photo."""
     state = page.request.get(origin + "/api/templates/marigold-shirt/preparation").json()
     assert all(p["mask_available"] for p in state["placements"])
-    if template_kind == "multiple":
-        assert [p["placement_id"] for p in state["placements"]] == ["left-shirt", "right-shirt"]
-    else:
-        assert [p["placement_id"] for p in state["placements"]] == [None]
-    main = state["main_photo"]
-    page.reload()
-    page.locator(".template-rail__item[data-template='marigold-shirt']").click()
-    ready(page)
-    assert len(page.request.get(origin + "/api/preparation/jobs").json()) == 1
-    assert sum(len(worker.calls) for worker in preparation_runtime.workers) == calls
-    assert (
-        page.request.get(origin + "/api/templates/marigold-shirt/preparation").json()["main_photo"]
-        == main
-    )
+    expected = ["left-shirt", "right-shirt"] if template_kind == "multiple" else [None]
+    assert [p["placement_id"] for p in state["placements"]] == expected
+    return state["main_photo"]
+
+
+def paint_mask_stroke(page):
+    """One stroke in the mask editor, saved through the config PUT on Done."""
     page.get_by_role("button", name="Edit mask", exact=True).click()
     page.get_by_text("Red = hidden print", exact=True).wait_for()
     area = page.get_by_label("Mask drawing area")
@@ -89,21 +90,20 @@ def test_edit_prepare_reconnect_mask_and_full_quality_preview(
         page.get_by_role("button", name="Done", exact=True).click()
     assert saved.value.request.post_data_json["mask_edits"][0]["operations"][0]["type"] == "stroke"
     assert not page.get_by_role("toolbar", name="Mask brushes").is_visible()
-    ready(page)
+
+
+def assert_escape_leaves_mask_editor(page):
     page.get_by_role("button", name="Edit mask", exact=True).click()
     page.evaluate("document.activeElement?.blur()")
     assert page.evaluate("document.activeElement === document.body")
     page.keyboard.press("Escape")
     page.get_by_role("button", name="Edit mask", exact=True).wait_for()
     assert not page.get_by_role("toolbar", name="Mask brushes").is_visible()
-    mask_url = (
-        "/api/templates/marigold-shirt/placements/left-shirt/mask"
-        if template_kind == "multiple"
-        else "/api/templates/marigold-shirt/mask"
-    )
-    raster = Image.open(BytesIO(page.request.get(origin + mask_url).body()))
-    assert raster.size == (64, 64)
-    assert raster.getpixel((30, 30)) == 0
+
+
+def assert_full_quality_previews(page, template_kind):
+    """Every scene previews at full size, and an appearance change marks
+    the previews stale rather than re-rendering them."""
     page.get_by_role("tab", name="Preview", exact=True).click()
     count = 2 if template_kind == "colour-matrix" else 1
     page.wait_for_function(
@@ -119,7 +119,34 @@ def test_edit_prepare_reconnect_mask_and_full_quality_preview(
         "() => document.querySelector('.preview-grid__actions .btn-danger') !== null"
     )
     assert page.locator(".preview-grid__tile img").count() == count
-    assert sum(len(worker.calls) for worker in preparation_runtime.workers) == calls
+
+
+def test_edit_prepare_reconnect_mask_and_full_quality_preview(
+    page, workspace_root: Path, template_kind, preparation_runtime
+):
+    select_template(page)
+    origin = page.url.split("/templates")[0]
+    prepare_explicitly(page)
+    calls = worker_calls(preparation_runtime)
+    assert calls == 3
+    main = assert_masks_prepared(page, origin, template_kind)
+    page.reload()
+    page.locator(".template-rail__item[data-template='marigold-shirt']").click()
+    ready(page)
+    assert len(page.request.get(origin + "/api/preparation/jobs").json()) == 1
+    assert worker_calls(preparation_runtime) == calls
+    assert (
+        page.request.get(origin + "/api/templates/marigold-shirt/preparation").json()["main_photo"]
+        == main
+    )
+    paint_mask_stroke(page)
+    ready(page)
+    assert_escape_leaves_mask_editor(page)
+    raster = Image.open(BytesIO(page.request.get(origin + mask_path(template_kind)).body()))
+    assert raster.size == (64, 64)
+    assert raster.getpixel((30, 30)) == 0
+    assert_full_quality_previews(page, template_kind)
+    assert worker_calls(preparation_runtime) == calls
 
 
 def test_cancel_survives_reconnect_and_requires_explicit_restart(page, preparation_runtime):
@@ -404,6 +431,32 @@ def test_colour_selection_changes_fallback_and_prepared_composite_without_saving
     )
 
 
+def assert_frame_shows_artwork(page, rendered):
+    """The decoded editor frame is full size and differs from the bare photo
+    where the artwork prints."""
+    from playwright.sync_api import expect
+
+    canvas = page.get_by_alt_text("Rendered preview")
+    expect(canvas).to_be_visible()
+    pixels = canvas.evaluate("""async image => {
+        await image.decode();
+        const c = document.createElement('canvas');
+        c.width = image.naturalWidth; c.height = image.naturalHeight;
+        c.getContext('2d').drawImage(image, 0, 0);
+        return c.toDataURL('image/png').split(',')[1];
+    }""")
+    image = Image.open(BytesIO(base64.b64decode(pixels)))
+    image.load()
+    assert image.size == (64, 64)
+    photo_url = page.url.split("/templates")[0] + "/api/templates/marigold-shirt/photo"
+    colour = rendered.request.post_data_json.get("colour")
+    source = Image.open(
+        BytesIO(page.request.get(photo_url, params={"colour": colour} if colour else {}).body())
+    ).convert("RGB")
+    artwork_difference = ImageChops.difference(image.convert("RGB"), source)
+    assert artwork_difference.point(lambda v: 255 if v > 30 else 0).getbbox() is not None
+
+
 def test_renderer_switch_renders_before_autosave_and_discards_inflight_frame(page):
     from playwright.sync_api import expect
 
@@ -445,25 +498,7 @@ def test_renderer_switch_renders_before_autosave_and_discards_inflight_frame(pag
         ) as rendered:
             page.get_by_label("Renderer", exact=True).select_option("photo-warp")
         assert rendered.value.status == 200
-        canvas = page.get_by_alt_text("Rendered preview")
-        expect(canvas).to_be_visible()
-        pixels = canvas.evaluate("""async image => {
-            await image.decode();
-            const c = document.createElement('canvas');
-            c.width = image.naturalWidth; c.height = image.naturalHeight;
-            c.getContext('2d').drawImage(image, 0, 0);
-            return c.toDataURL('image/png').split(',')[1];
-        }""")
-        image = Image.open(BytesIO(base64.b64decode(pixels)))
-        image.load()
-        assert image.size == (64, 64)
-        photo_url = page.url.split("/templates")[0] + "/api/templates/marigold-shirt/photo"
-        colour = rendered.value.request.post_data_json.get("colour")
-        source = Image.open(
-            BytesIO(page.request.get(photo_url, params={"colour": colour} if colour else {}).body())
-        ).convert("RGB")
-        artwork_difference = ImageChops.difference(image.convert("RGB"), source)
-        assert artwork_difference.point(lambda v: 255 if v > 30 else 0).getbbox() is not None
+        assert_frame_shows_artwork(page, rendered.value)
     origin = page.url.split("/templates")[0]
     page.wait_for_function(
         "() => document.querySelector('.app__status')?.textContent.includes('Saved')"
@@ -500,6 +535,73 @@ def test_renderer_switch_renders_before_autosave_and_discards_inflight_frame(pag
     )
 
 
+class BrushUi:
+    """The mask editor's brush controls on one page, and the saved mask they
+    edit."""
+
+    def __init__(self, page, mask_url):
+        self.page = page
+        self.mask_url = mask_url
+        self.area = page.get_by_label("Mask drawing area")
+        self.cursor = page.get_by_label("Brush footprint", exact=True)
+        self.dock = page.get_by_role("toolbar", name="Mask brushes")
+
+    def select(self, mode, diameter):
+        self.dock.get_by_role("button", name=mode, exact=True).click()
+        self.dock.get_by_role("slider", name="Brush size").fill(str(diameter))
+
+    def saving(self):
+        return self.page.expect_response(
+            lambda r: r.url.endswith("/config") and r.request.method == "PUT" and r.status == 200
+        )
+
+    def saved_mask(self):
+        return Image.open(BytesIO(self.page.request.get(self.mask_url).body())).convert("L")
+
+    def assert_stroke_matches_cursor(self, bounds, at, diameter):
+        """The cursor circle is the brush footprint in screen units on hover,
+        follows the stroke, keeps its size mid-stroke, and the saved pixels
+        cover the same footprint."""
+        from playwright.sync_api import expect
+
+        page, cursor, dock = self.page, self.cursor, self.dock
+        x, y = at
+        before_mask = self.saved_mask()
+        page.mouse.move(x, y)
+        expect(cursor).to_be_visible()
+        circle = cursor.locator("circle").last.bounding_box()
+        assert circle is not None
+        assert circle["width"] == pytest.approx(bounds["width"] * diameter / 64, abs=1.1)
+        assert circle["height"] == pytest.approx(bounds["height"] * diameter / 64, abs=1.1)
+        assert circle["x"] + circle["width"] / 2 == pytest.approx(x, abs=1)
+        assert circle["y"] + circle["height"] / 2 == pytest.approx(y, abs=1)
+        page.mouse.down()
+        page.mouse.move(x + 8, y + 6, steps=3)
+        painted = cursor.bounding_box()
+        assert painted is not None
+        assert painted["x"] + painted["width"] / 2 == pytest.approx(x + 8, abs=1)
+        assert painted["y"] + painted["height"] / 2 == pytest.approx(y + 6, abs=1)
+        dock.get_by_role("slider", name="Brush size").fill(str(diameter + 8))
+        active_circle = cursor.locator("circle").last.bounding_box()
+        assert active_circle is not None
+        assert active_circle["width"] == pytest.approx(circle["width"], abs=1)
+        with self.saving():
+            page.mouse.up()
+        changed = ImageChops.difference(before_mask, self.saved_mask()).getbbox()
+        assert changed is not None
+        # Compare the decoded raster footprint with the circle in screen
+        # units. Allow the mask rasterizer's pixel rounding at both edges.
+        assert (changed[2] - changed[0]) * bounds["width"] / 64 == pytest.approx(
+            circle["width"] + 8, abs=3 * bounds["width"] / 64
+        )
+        assert (changed[3] - changed[1]) * bounds["height"] / 64 == pytest.approx(
+            circle["height"] + 6, abs=3 * bounds["height"] / 64
+        )
+        expect(dock.get_by_role("button", name="Undo brush stroke")).to_be_enabled()
+        page.mouse.move(bounds["x"] - 10, bounds["y"] - 10)
+        expect(cursor).not_to_be_visible()
+
+
 @pytest.mark.parametrize("device_scale", [1, 2])
 def test_mask_cursor_matches_photo_brush_on_hover_paint_and_resize(
     browser_type, calibrator_server, device_scale, template_kind
@@ -516,81 +618,25 @@ def test_mask_cursor_matches_photo_brush_on_hover_paint_and_resize(
         cursor_page.get_by_role("button", name="Prepare template", exact=True).click()
         ready(cursor_page)
         cursor_page.get_by_role("button", name="Edit mask", exact=True).click()
-        area = cursor_page.get_by_label("Mask drawing area")
-        cursor = cursor_page.get_by_label("Brush footprint", exact=True)
-        dock = cursor_page.get_by_role("toolbar", name="Mask brushes")
+        brush = BrushUi(cursor_page, calibrator_server + mask_path(template_kind))
+        cursor, dock = brush.cursor, brush.dock
         expect(dock.get_by_role("button", name="Undo brush stroke")).to_be_disabled()
         expect(dock.get_by_role("button", name="Reset mask")).to_be_enabled()
-        mask_path = (
-            "/api/templates/marigold-shirt/placements/left-shirt/mask"
-            if template_kind == "multiple"
-            else "/api/templates/marigold-shirt/mask"
-        )
-
-        def saved_mask():
-            return Image.open(
-                BytesIO(cursor_page.request.get(calibrator_server + mask_path).body())
-            ).convert("L")
-
         for width, mode, diameter in [(1280, "Mask", 24), (1500, "Unmask", 40)]:
             cursor_page.set_viewport_size({"width": width, "height": 900})
-            dock.get_by_role("button", name=mode, exact=True).click()
-            dock.get_by_role("slider", name="Brush size").fill(str(diameter))
-            bounds = area.bounding_box()
+            brush.select(mode, diameter)
+            bounds = brush.area.bounding_box()
             assert bounds is not None
             x = bounds["x"] + bounds["width"] * 0.45
             y = bounds["y"] + bounds["height"] * 0.45
             if mode == "Unmask":
                 # Give Unmask a fully excluded region so its entire footprint
                 # becomes visible in saved pixels, independent of the prior stroke.
-                dock.get_by_role("button", name="Mask", exact=True).click()
-                dock.get_by_role("slider", name="Brush size").fill("80")
-                with cursor_page.expect_response(
-                    lambda r: (
-                        r.url.endswith("/config") and r.request.method == "PUT" and r.status == 200
-                    )
-                ):
+                brush.select("Mask", 80)
+                with brush.saving():
                     cursor_page.mouse.click(x, y)
-                dock.get_by_role("button", name=mode, exact=True).click()
-                dock.get_by_role("slider", name="Brush size").fill(str(diameter))
-            before_mask = saved_mask()
-            cursor_page.mouse.move(x, y)
-            expect(cursor).to_be_visible()
-            circle = cursor.locator("circle").last.bounding_box()
-            assert circle is not None
-            assert circle["width"] == pytest.approx(bounds["width"] * diameter / 64, abs=1.1)
-            assert circle["height"] == pytest.approx(bounds["height"] * diameter / 64, abs=1.1)
-            assert circle["x"] + circle["width"] / 2 == pytest.approx(x, abs=1)
-            assert circle["y"] + circle["height"] / 2 == pytest.approx(y, abs=1)
-            cursor_page.mouse.down()
-            cursor_page.mouse.move(x + 8, y + 6, steps=3)
-            painted = cursor.bounding_box()
-            assert painted is not None
-            assert painted["x"] + painted["width"] / 2 == pytest.approx(x + 8, abs=1)
-            assert painted["y"] + painted["height"] / 2 == pytest.approx(y + 6, abs=1)
-            dock.get_by_role("slider", name="Brush size").fill(str(diameter + 8))
-            active_circle = cursor.locator("circle").last.bounding_box()
-            assert active_circle is not None
-            assert active_circle["width"] == pytest.approx(circle["width"], abs=1)
-            with cursor_page.expect_response(
-                lambda r: (
-                    r.url.endswith("/config") and r.request.method == "PUT" and r.status == 200
-                )
-            ):
-                cursor_page.mouse.up()
-            changed = ImageChops.difference(before_mask, saved_mask()).getbbox()
-            assert changed is not None
-            # Compare the decoded raster footprint with the circle in screen
-            # units. Allow the mask rasterizer's pixel rounding at both edges.
-            assert (changed[2] - changed[0]) * bounds["width"] / 64 == pytest.approx(
-                circle["width"] + 8, abs=3 * bounds["width"] / 64
-            )
-            assert (changed[3] - changed[1]) * bounds["height"] / 64 == pytest.approx(
-                circle["height"] + 6, abs=3 * bounds["height"] / 64
-            )
-            expect(dock.get_by_role("button", name="Undo brush stroke")).to_be_enabled()
-            cursor_page.mouse.move(bounds["x"] - 10, bounds["y"] - 10)
-            expect(cursor).not_to_be_visible()
+                brush.select(mode, diameter)
+            brush.assert_stroke_matches_cursor(bounds, (x, y), diameter)
         cursor_page.get_by_role("button", name="Done", exact=True).click()
         expect(cursor).to_have_count(0)
         cursor_page.get_by_role("button", name="Edit mask", exact=True).click()
