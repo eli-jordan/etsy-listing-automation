@@ -136,6 +136,69 @@ class FixedRuntime(PreparationRuntime):
         return FixedWorker(cache_root)
 
 
+TEMPLATES = [("folded-bay", False), ("multiple-validation", True)]
+
+
+def _square(left: int, right: int) -> list[dict[str, int]]:
+    return [{"x": x, "y": y} for x, y in [(left, 560), (right, 560), (right, 1488), (left, 1488)]]
+
+
+def _template_config(*, multiple: bool) -> dict[str, Any]:
+    config: dict[str, Any] = {
+        "kind": "multiple" if multiple else "single",
+        "renderer": {"type": "marigold", "config": {}},
+    }
+    if multiple:
+        config["placements"] = [
+            {"id": key, "colour": "Navy", "bounding_box": _square(left, left + 700)}
+            for key, left in [("outer-white", 200), ("inner-magenta", 1148)]
+        ]
+    else:
+        config["bounding_box"] = _square(560, 1488)
+    return config
+
+
+def _photo() -> Image.Image:
+    yy, xx = np.mgrid[:2048, :2048]
+    noise = np.random.default_rng(2026).integers(0, 5, (2048, 2048))
+    shade = (70 + 12 * np.sin(xx / 87) + 10 * np.cos(yy / 103) + noise).astype(np.uint8)
+    return Image.fromarray(np.stack([shade, shade + 7, shade + 13], -1))
+
+
+def _write_template(
+    workspace: Workspace, store: CalibrationStore, name: str, photo: Image.Image, *, multiple: bool
+) -> None:
+    directory = workspace.template_dir(name)
+    directory.mkdir(parents=True)
+    photo.save(directory / "scene.png")
+    workspace.save_template_config(name, load_template_config(_template_config(multiple=multiple)))
+    for identity in store.placement_ids(store.config(name)):
+        store.install_automatic(
+            name,
+            AutomaticMask(
+                store.encode_mask(Image.new("L", (2048, 2048), 255)),
+                algorithm_version="fixed-all-visible-v1",
+                placement_id=identity,
+            ),
+            expected_revision=store.read(name).revision,
+        )
+
+
+def _prepare(coordinator: Preparations, store: CalibrationStore, name: str) -> None:
+    job = coordinator.submit(
+        name,
+        PreparationRequest(config_revision=store.read(name).revision, request_id="fixed-" + name),
+    )
+    deadline = time.monotonic() + 600
+    while (job := coordinator.status(job.id)).phase not in TERMINAL:
+        if time.monotonic() > deadline:
+            raise TimeoutError("Fixture preparation exceeded deadline")
+        time.sleep(0.05)
+    if job.phase != "completed":
+        raise RuntimeError(job.error or job.phase)
+    print(name + " fixed predictions prepared", flush=True)
+
+
 def create(root: Path) -> None:
     if root.exists():
         raise ValueError("Use a new external fixture directory")
@@ -143,49 +206,9 @@ def create(root: Path) -> None:
     (root / "shop.yaml").write_text("etsy: {currency: USD}", encoding="utf-8")
     workspace = Workspace.discover(root_override=root)
     store = CalibrationStore(workspace)
-    yy, xx = np.mgrid[:2048, :2048]
-    noise = np.random.default_rng(2026).integers(0, 5, (2048, 2048))
-    shade = (70 + 12 * np.sin(xx / 87) + 10 * np.cos(yy / 103) + noise).astype(np.uint8)
-    photo = Image.fromarray(np.stack([shade, shade + 7, shade + 13], -1))
-    for name, multiple in [("folded-bay", False), ("multiple-validation", True)]:
-        directory = workspace.template_dir(name)
-        directory.mkdir(parents=True)
-        photo.save(directory / "scene.png")
-        box = [{"x": x, "y": y} for x, y in [(560, 560), (1488, 560), (1488, 1488), (560, 1488)]]
-        config: dict[str, Any] = {
-            "kind": "multiple" if multiple else "single",
-            "renderer": {"type": "marigold", "config": {}},
-        }
-        if multiple:
-            config["placements"] = [
-                {
-                    "id": key,
-                    "colour": "Navy",
-                    "bounding_box": [
-                        {"x": x, "y": y}
-                        for x, y in [
-                            (left, 560),
-                            (left + 700, 560),
-                            (left + 700, 1488),
-                            (left, 1488),
-                        ]
-                    ],
-                }
-                for key, left in [("outer-white", 200), ("inner-magenta", 1148)]
-            ]
-        else:
-            config["bounding_box"] = box
-        workspace.save_template_config(name, load_template_config(config))
-        for identity in store.placement_ids(store.config(name)):
-            store.install_automatic(
-                name,
-                AutomaticMask(
-                    store.encode_mask(Image.new("L", (2048, 2048), 255)),
-                    algorithm_version="fixed-all-visible-v1",
-                    placement_id=identity,
-                ),
-                expected_revision=store.read(name).revision,
-            )
+    photo = _photo()
+    for name, multiple in TEMPLATES:
+        _write_template(workspace, store, name, photo, multiple=multiple)
     workspace.test_designs_dir().mkdir(parents=True)
     Image.new("RGBA", (512, 512), (255, 255, 255, 255)).save(
         workspace.test_design_file("benchmark-white")
@@ -193,21 +216,8 @@ def create(root: Path) -> None:
     coordinator = Preparations(workspace, runtime=FixedRuntime())
     coordinator.start()
     try:
-        for name in ["folded-bay", "multiple-validation"]:
-            job = coordinator.submit(
-                name,
-                PreparationRequest(
-                    config_revision=store.read(name).revision, request_id="fixed-" + name
-                ),
-            )
-            deadline = time.monotonic() + 600
-            while (job := coordinator.status(job.id)).phase not in TERMINAL:
-                if time.monotonic() > deadline:
-                    raise TimeoutError("Fixture preparation exceeded deadline")
-                time.sleep(0.05)
-            if job.phase != "completed":
-                raise RuntimeError(job.error or job.phase)
-            print(name + " fixed predictions prepared", flush=True)
+        for name, _ in TEMPLATES:
+            _prepare(coordinator, store, name)
     finally:
         coordinator.close()
 
