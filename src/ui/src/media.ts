@@ -208,19 +208,21 @@ function ownerOf(owner: MediaOwner | string | null): MediaOwner | null {
  * its file at either size: the thumbnail endpoint answers `415` for one,
  * because a muted `<video preload="metadata">` draws its own first frame.
  */
+/** One of `owner`'s own files, `name` relative to its directory. */
+function ownFilePicture(owner: MediaOwner, name: string, tile: boolean): string {
+  if (owner.kind === "listing-template") {
+    return tile
+      ? listingTemplateMediaThumbnailUrl(owner.name, name)
+      : listingTemplateMediaFileUrl(owner.name, name);
+  }
+  return tile ? listingMediaThumbnailUrl(owner.name, name) : listingMediaFileUrl(owner.name, name);
+}
+
 function filePicture(ref: string, size: PictureSize, owner: MediaOwner | null): string {
   const tile = size === "tile" && mediaKind(ref) === "image";
   if (isListingLocal(ref)) {
     if (owner === null) return "";
-    const name = (owner.copies?.[ref] ?? ref).slice(2);
-    if (owner.kind === "listing-template") {
-      return tile
-        ? listingTemplateMediaThumbnailUrl(owner.name, name)
-        : listingTemplateMediaFileUrl(owner.name, name);
-    }
-    return tile
-      ? listingMediaThumbnailUrl(owner.name, name)
-      : listingMediaFileUrl(owner.name, name);
+    return ownFilePicture(owner, (owner.copies?.[ref] ?? ref).slice(2), tile);
   }
   const name = sharedName(ref);
   return tile ? commonMediaThumbnailUrl(name) : commonMediaFileUrl(name);
