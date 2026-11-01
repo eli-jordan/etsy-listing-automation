@@ -4,6 +4,7 @@ import hashlib
 import threading
 from collections import OrderedDict
 from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
 from typing import cast
 
@@ -66,16 +67,25 @@ def _maps(key: tuple[str, ...], compute: Callable[[], MaterialMaps]) -> Material
     return value
 
 
+@dataclass(frozen=True)
+class EditorDraft:
+    """The calibrator's unsaved state: its geometry, the calibration
+    ``revision`` it was drawn against, mask strokes not yet saved, and the
+    colour-matrix photo it shows (``None`` for other kinds)."""
+
+    config: AnyTemplate
+    revision: str
+    mask_edits: list[MaskEdit]
+    colour: str | None = None
+
+
 def editor_preview(
     workspace: Workspace,
     name: str,
+    draft: EditorDraft,
     *,
-    config: AnyTemplate,
-    revision: str,
-    mask_edits: list[MaskEdit],
     base: Callable[[Path], RGB],
     artwork: Callable[[], tuple[RGBA, FloatMap]],
-    colour: str | None = None,
 ) -> Image.Image:
     """Fit original coordinates, rasterize a disposable 1024px editor image.
 
@@ -84,6 +94,12 @@ def editor_preview(
     the lock before fitting; the host/client must discard superseded responses.
     No generation pointer, history, PNG or approval identity is written.
     """
+    config, revision, mask_edits, colour = (
+        draft.config,
+        draft.revision,
+        draft.mask_edits,
+        draft.colour,
+    )
     with interactive(workspace):
         store = CalibrationStore(workspace)
         evidence_store = EvidenceReader(workspace)

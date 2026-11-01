@@ -85,7 +85,7 @@ from etsy_listings.core.engine.stages.gates import (
 from etsy_listings.core.preparation.artifacts import ArtifactError, PreparationInputs
 from etsy_listings.core.preparation.readiness import template_readiness
 from etsy_listings.core.preparation.scene_cache import SceneCache, photo_digest, write_atomic
-from etsy_listings.core.preparation.scenes import PreparedLayer, lease_scene
+from etsy_listings.core.preparation.scenes import Composition, PreparedLayer, lease_scene
 from etsy_listings.core.render.config import (
     AnyTemplate,
     MarigoldAppearance,
@@ -522,9 +522,11 @@ def _resolve_scene(
             with lease_scene(
                 workspace,
                 template_name,
-                base=load_template_base(photo.path),
-                layers=_prepared_layers(layers, load_design),
-                appearance=appearance,
+                Composition(
+                    base=load_template_base(photo.path),
+                    layers=_prepared_layers(layers, load_design),
+                    appearance=appearance,
+                ),
             ) as scene:
                 preparation = scene.inputs
                 map_content = scene.manifest.content_digest
@@ -949,9 +951,11 @@ class RenderStage(Stage[RenderDesired, RenderApplied, RenderLive]):
             with lease_scene(
                 workspace,
                 work.template,
-                base=load_template_base(work.base_image),
-                layers=_prepared_layers(work.layers, load_design),
-                appearance=work.appearance,
+                Composition(
+                    base=load_template_base(work.base_image),
+                    layers=_prepared_layers(work.layers, load_design),
+                    appearance=work.appearance,
+                ),
                 expected=work.preparation,
             ) as scene:
                 if scene.identity != work.render_identity:

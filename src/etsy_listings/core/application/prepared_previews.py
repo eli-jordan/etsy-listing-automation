@@ -18,6 +18,7 @@ from pathlib import Path
 
 from etsy_listings.core.application.mockup_templates import (
     LayerDesign,
+    LazyMaps,
     PreviewScene,
     compose_preview,
     read_config,
@@ -31,7 +32,7 @@ from etsy_listings.core.application.refusals import (
 from etsy_listings.core.preparation.artifacts import ArtifactError, Artifacts, PreparationInputs
 from etsy_listings.core.preparation.readiness import template_readiness
 from etsy_listings.core.preparation.scene_cache import PIXEL_DIGESTS, SceneCache
-from etsy_listings.core.preparation.scenes import PreparedLayer, lease_scene
+from etsy_listings.core.preparation.scenes import Composition, PreparedLayer, lease_scene
 from etsy_listings.core.render import (
     AnyTemplate,
     ColourMatrixTemplate,
@@ -127,8 +128,10 @@ def photo_warp_preview(
             base=photo,
             scale=1.0,
             design=lambda path: decoded[path][0],
-            height=lambda: maps.height(scene.photo.map_key, photo),
-            luminance=lambda: maps.luminance(scene.photo.map_key, photo),
+            maps=LazyMaps(
+                height=lambda: maps.height(scene.photo.map_key, photo),
+                luminance=lambda: maps.luminance(scene.photo.map_key, photo),
+            ),
         )
         return encode_png(image, compression=PHOTO_WARP_PNG_COMPRESSION)
 
@@ -185,7 +188,7 @@ def prepared_preview(
         appearance = requested.renderer.config.appearance
         cache = SceneCache(workspace)
         try:
-            cached = _cached(workspace, name, inputs, cache, path, sources, appearance)
+            cached = _cached(workspace, name, inputs, cache, _SceneFiles(path, sources, appearance))
         except ArtifactError as exc:
             raise PreparationRequiredError(str(exc)) from exc
         if cached is not None:
@@ -195,7 +198,7 @@ def prepared_preview(
         layers = _layers(sources)
     try:
         with lease_scene(
-            workspace, name, base=base, layers=layers, appearance=appearance, expected=inputs
+            workspace, name, Composition(base, layers, appearance), expected=inputs
         ) as scene:
             return PreparedPreview(
                 scene.encoded(cache), scene.identity, scene.manifest.generation_id, saved.revision
@@ -204,20 +207,29 @@ def prepared_preview(
         raise PreparationRequiredError(str(exc)) from exc
 
 
+@dataclass(frozen=True)
+class _SceneFiles:
+    """A composition named by its files, before any is decoded: the photo,
+    each layer's design and placement, and the appearance."""
+
+    photo: Path
+    sources: list[tuple[Path, str | None]]
+    appearance: MarigoldAppearance
+
+
 def _cached(
     workspace: Workspace,
     name: str,
     inputs: PreparationInputs,
     cache: SceneCache,
-    photo: Path,
-    sources: list[tuple[Path, str | None]],
-    appearance: MarigoldAppearance,
+    files: _SceneFiles,
 ) -> tuple[bytes, str, str] | None:
     """The cached scene, without decoding, when every file's pixel digest is
     still known: ``(png, identity, generation_id)``, else ``None``. The
     identity is the one :func:`lease_scene` would compute from the decoded
     pixels, so an entry found under it is exactly that composition."""
-    photo_pixels = PIXEL_DIGESTS.photo(photo)
+    sources = files.sources
+    photo_pixels = PIXEL_DIGESTS.photo(files.photo)
     artwork = [PIXEL_DIGESTS.design(path) for path, _ in sources]
     if photo_pixels is None or None in artwork:
         return None
@@ -227,7 +239,7 @@ def _cached(
         placement_ids=[placement for _, placement in sources],
         artwork_digests=[digest for digest in artwork if digest is not None],
         photo_pixels=photo_pixels,
-        appearance=appearance,
+        appearance=files.appearance,
     )
     png = cache.read(identity)
     return None if png is None else (png, identity, manifest.generation_id)

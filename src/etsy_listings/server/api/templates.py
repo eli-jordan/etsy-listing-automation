@@ -34,6 +34,8 @@ from PIL import Image
 
 from etsy_listings.core.application import mockup_templates as calibration
 from etsy_listings.core.application.mockup_templates import (
+    CalibrationSave,
+    LazyMaps,
     PreviewGeometry,
     PreviewScene,
     TemplateOverview,
@@ -45,7 +47,11 @@ from etsy_listings.core.application.mockup_templates import (
     template_swatch,
     unsaved_preview,
 )
-from etsy_listings.core.application.preparation.previews import EDITOR_ARTWORK_EDGE, editor_preview
+from etsy_listings.core.application.preparation.previews import (
+    EDITOR_ARTWORK_EDGE,
+    EditorDraft,
+    editor_preview,
+)
 from etsy_listings.core.application.prepared_previews import (
     PhotoWarpPreview,
     PreparedPreview,
@@ -234,10 +240,12 @@ def put_config(
         saved = save_calibration(
             template.workspace,
             template.name,
-            body.config,
-            expected_revision=if_match.strip('"'),
-            request_id=body.request_id,
-            mask_edits=body.mask_edits,
+            CalibrationSave(
+                config=body.config,
+                expected_revision=if_match.strip('"'),
+                request_id=body.request_id,
+                mask_edits=body.mask_edits,
+            ),
         )
     except CalibrationConflictError as exc:
         raise HTTPException(
@@ -372,8 +380,12 @@ def render_preview_response(
         base=base.image,
         scale=base.scale,
         design=PREVIEW_IMAGES.design,
-        height=lambda: PREVIEW_IMAGES.height(scene.derived_dir, scene.photo.map_key, base),
-        luminance=lambda: PREVIEW_IMAGES.luminance(scene.derived_dir, scene.photo.map_key, base),
+        maps=LazyMaps(
+            height=lambda: PREVIEW_IMAGES.height(scene.derived_dir, scene.photo.map_key, base),
+            luminance=lambda: PREVIEW_IMAGES.luminance(
+                scene.derived_dir, scene.photo.map_key, base
+            ),
+        ),
     )
     return _encode_preview(image, scale)
 
@@ -397,10 +409,14 @@ def preview(
                 image = editor_preview(
                     workspace,
                     template.name,
-                    config=config,
-                    revision=body.calibration_revision or "",
-                    mask_edits=body.mask_edits,
-                    colour=body.colour if isinstance(body, ColourMatrixPreviewRequest) else None,
+                    EditorDraft(
+                        config=config,
+                        revision=body.calibration_revision or "",
+                        mask_edits=body.mask_edits,
+                        colour=body.colour
+                        if isinstance(body, ColourMatrixPreviewRequest)
+                        else None,
+                    ),
                     base=lambda path: PREVIEW_IMAGES.base(path).image,
                     artwork=lambda: PREVIEW_IMAGES.material_design(
                         resolve_design(workspace, body.design), max_edge=EDITOR_ARTWORK_EDGE
