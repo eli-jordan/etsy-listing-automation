@@ -13,6 +13,9 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 HOOK = ROOT / "scripts" / "agent_lint.py"
+# A reasonless suppression of a real finding (RUF100's safe fix would delete a
+# stale one first), split so the hook does not read this file as carrying one.
+REASONLESS_SUPPRESSION = b"UNUSED = undefined  # " + b"noqa: F821\n"
 
 
 @pytest.fixture
@@ -122,7 +125,8 @@ def test_a_suppression_with_a_reason_is_accepted(scratch: Path) -> None:
 
 def test_output_is_capped_at_twenty_findings_with_a_count_of_the_rest(scratch: Path) -> None:
     source = scratch / "noisy.py"
-    source.write_text("".join(f"print(undefined_{n})\n" for n in range(30)))
+    # One finding a line: `print(...)` would add T201 to every F821.
+    source.write_text("".join(f"value_{n} = undefined_{n}\n" for n in range(30)))
 
     result = run_hook(edited(source))
 
@@ -140,7 +144,7 @@ def test_only_suppressions_the_edit_adds_need_a_reason() -> None:
     original = tracked.read_bytes()
     lines = original.decode().splitlines()
     try:
-        tracked.write_bytes(original + b"UNUSED = 1  # noqa: E501\n")
+        tracked.write_bytes(original + REASONLESS_SUPPRESSION)
         result = run_hook(edited(tracked))
     finally:
         tracked.write_bytes(original)
@@ -154,7 +158,7 @@ def test_a_rewrite_with_windows_line_endings_adds_only_its_new_lines() -> None:
     tracked = ROOT / "scripts" / "generate_test_assets.py"
     original = tracked.read_bytes()
     try:
-        tracked.write_bytes((original + b"UNUSED = 1  # noqa: E501\n").replace(b"\n", b"\r\n"))
+        tracked.write_bytes((original + REASONLESS_SUPPRESSION).replace(b"\n", b"\r\n"))
         result = run_hook(edited(tracked))
     finally:
         tracked.write_bytes(original)
