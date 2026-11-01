@@ -154,12 +154,13 @@ _PREFERENCE_REJECTION = re.compile(
     r"|\bunknown variant\b[^\n]{0,120}\bmodel_reasoning_effort\b",
     re.IGNORECASE,
 )
+"""ADR-0056: a rejected saved preference permits fallback. Merely mentioning
+a model or effort in a generation failure does not."""
 _CLAUDE_SELECTED_MODEL_REJECTION = re.compile(
     r"\bthere['’]s an issue with the selected model\b.{0,160}\bmay not exist\b",
     re.IGNORECASE,
 )
-"""ADR-0056: a rejected saved preference permits fallback. Merely mentioning
-a model or effort in a generation failure does not."""
+"""Claude's observed refusal of a saved model, fallback-eligible like the above."""
 _ERROR_PREFIX = re.compile(r"^error:\s*", re.IGNORECASE)
 """An explicit "HTTP 401"/"HTTP/1.1 403"/"http status 429"-shaped status
 line. A bare status number in prose is not trusted; this pattern is, because
