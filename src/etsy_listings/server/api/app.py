@@ -86,7 +86,7 @@ def create_app(
     scene_warmer = SceneWarmer(workspace)
 
     @asynccontextmanager
-    async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
         """Starts the deployment worker thread with the app, and waits
         for it on the way out -- "finish what's in flight, start nothing
         else" (decision 7), on the path every ASGI server already calls
@@ -152,7 +152,7 @@ def create_app(
     )
 
     @app.exception_handler(InvalidNameError)
-    async def invalid_name(request: Request, exc: Exception) -> Response:
+    async def invalid_name(_request: Request, exc: Exception) -> Response:
         """A template, colour or design id from a URL that is not a single
         path segment is the client's fault, so it is a 400 -- and it is one
         rule, so it is stated once here.
@@ -190,7 +190,7 @@ def create_app(
         # Out of the schema: it is not API, and the exported contract must
         # not depend on whether this checkout has a built SPA.
         @app.get("/{full_path:path}", include_in_schema=False)
-        def spa_fallback(full_path: str, request: Request) -> Response:
+        def spa_fallback(full_path: str) -> Response:
             if full_path.startswith("api/"):
                 return JSONResponse(status_code=404, content={"detail": "not found"})
             return FileResponse(FRONTEND_DIST / "index.html")

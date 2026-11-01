@@ -58,7 +58,7 @@ from collections.abc import Callable, Mapping, Sequence
 from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import Literal
+from typing import Literal, override
 
 from pydantic import BaseModel, ConfigDict
 
@@ -72,7 +72,7 @@ from etsy_listings.core.engine.lock import (
     hash_file,
     to_workspace_relative_posix,
 )
-from etsy_listings.core.engine.stage import Blocked, StageApplyResult, StageBlockedError
+from etsy_listings.core.engine.stage import Blocked, Stage, StageApplyResult, StageBlockedError
 from etsy_listings.core.engine.stages.gates import (
     check_artwork,
     check_garment_profile_chosen,
@@ -548,12 +548,13 @@ def _resolve_scene(
     )
 
 
-class RenderStage:
+class RenderStage(Stage[RenderDesired, RenderApplied, RenderLive]):
     name = "render"
     local = True
     group: str | None = None
     applied_model = RenderApplied
 
+    @override
     def desired(
         self, ctx: RunContext, listing: str, applied: RenderApplied | None
     ) -> RenderDesired | Blocked:
@@ -668,6 +669,7 @@ class RenderStage:
         }
         return replace(desired, preview_exists=preview_exists)
 
+    @override
     def read_live(
         self, ctx: RunContext, listing: str, lock: Lockfile, applied: RenderApplied | None
     ) -> RenderLive | None:
@@ -693,6 +695,7 @@ class RenderStage:
             scene_hashes=dict(applied.scene_hashes),
         )
 
+    @override
     def plan(
         self, desired: RenderDesired, applied: RenderApplied | None, live: RenderLive | None
     ) -> Verdict:
@@ -981,6 +984,7 @@ class RenderStage:
             valid.setdefault(work.template, set()).add(name)
         workspace.prune_previews(desired.listing, valid)
 
+    @override
     def apply(
         self,
         ctx: RunContext,

@@ -42,6 +42,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+from typing import override
 
 from pydantic import BaseModel, ConfigDict
 
@@ -51,7 +52,7 @@ from etsy_listings.core.config.media import MAX_IMAGES, media_kind
 from etsy_listings.core.engine.change import Action, Drift, MediaChange, Verdict
 from etsy_listings.core.engine.context import RunContext
 from etsy_listings.core.engine.lock import Lockfile, hash_file, to_workspace_relative_posix
-from etsy_listings.core.engine.stage import Blocked, StageApplyResult
+from etsy_listings.core.engine.stage import Blocked, Stage, StageApplyResult
 from etsy_listings.core.engine.stages.etsy_target import (
     check_etsy_shop,
     etsy_listing_id,
@@ -226,12 +227,13 @@ def _manifest_entry(
     )
 
 
-class EtsyMediaStage:
+class EtsyMediaStage(Stage[EtsyMediaDesired, AppliedEtsyMedia, EtsyMediaLive]):
     name = "etsy_media"
     local = False
     group: str | None = None
     applied_model = AppliedEtsyMedia
 
+    @override
     def desired(
         self, ctx: RunContext, listing: str, applied: AppliedEtsyMedia | None
     ) -> EtsyMediaDesired | Blocked:
@@ -265,6 +267,7 @@ class EtsyMediaStage:
             colours=tuple(config.colors),
         )
 
+    @override
     def read_live(
         self, ctx: RunContext, listing: str, lock: Lockfile, applied: AppliedEtsyMedia | None
     ) -> EtsyMediaLive | None:
@@ -294,6 +297,7 @@ class EtsyMediaStage:
         )
         return EtsyMediaLive(live_image_ids=live_ids, dangling_refs=dangling, images=images)
 
+    @override
     def plan(
         self,
         desired: EtsyMediaDesired,
@@ -352,6 +356,7 @@ class EtsyMediaStage:
             )
         return EtsyMediaSnapshot(desired=desired_rows, live=live_rows)
 
+    @override
     def apply(
         self,
         ctx: RunContext,

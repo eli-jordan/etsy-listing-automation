@@ -49,7 +49,8 @@ def json_bytes(value: object) -> bytes:
 
 
 @lru_cache(maxsize=128)
-def _photo_identity(path: Path, stamp: tuple[int | str, ...]) -> dict[str, Any]:
+def _photo_identity(path: Path, _stamp: tuple[int | str, ...]) -> dict[str, Any]:
+    # ``_stamp`` is read by lru_cache only: a changed photo is a new cache key.
     with Image.open(path) as image:
         pixels = image.convert("RGB")
         return {

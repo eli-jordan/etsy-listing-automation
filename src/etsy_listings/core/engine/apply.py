@@ -29,7 +29,7 @@ clean return. `apply_listings` is the caller that supplies one that writes
 default, which is every direct `execute` call that existed before ADR-0037."""
 
 
-def _ignore_record(lock: Lockfile) -> None:
+def _ignore_record(_lock: Lockfile) -> None:
     return None
 
 

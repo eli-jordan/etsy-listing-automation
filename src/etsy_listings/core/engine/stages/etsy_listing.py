@@ -23,7 +23,7 @@ Un-retire (last applied was retired, now omitted) and ``renew`` send
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Literal
+from typing import Literal, override
 
 from pydantic import BaseModel, ConfigDict
 
@@ -45,7 +45,7 @@ from etsy_listings.core.engine.change import (
 )
 from etsy_listings.core.engine.context import RunContext
 from etsy_listings.core.engine.lock import Lockfile
-from etsy_listings.core.engine.stage import Blocked, StageApplyResult
+from etsy_listings.core.engine.stage import Blocked, Stage, StageApplyResult
 from etsy_listings.core.engine.stages.etsy_target import (
     check_etsy_shop,
     etsy_listing_id,
@@ -200,12 +200,13 @@ class EtsyListingSnapshot(BaseModel):
     "Not on Etsy yet" column (decision 3), not an empty one."""
 
 
-class EtsyListingStage:
+class EtsyListingStage(Stage[EtsyListingDesired, AppliedEtsyListing, EtsyListing]):
     name = "etsy_listing"
     local = False
     group: str | None = None
     applied_model = AppliedEtsyListing
 
+    @override
     def desired(
         self, ctx: RunContext, listing: str, applied: AppliedEtsyListing | None
     ) -> EtsyListingDesired | Blocked:
@@ -288,6 +289,7 @@ class EtsyListingStage:
             catalog=catalog,
         )
 
+    @override
     def read_live(
         self, ctx: RunContext, listing: str, lock: Lockfile, applied: AppliedEtsyListing | None
     ) -> EtsyListing | None:
@@ -301,6 +303,7 @@ class EtsyListingStage:
             return None
         return ctx.require_etsy().get_listing(listing_id)
 
+    @override
     def plan(
         self,
         desired: EtsyListingDesired,
@@ -356,6 +359,7 @@ class EtsyListingStage:
             )
         return EtsyListingSnapshot(desired=desired_facts, live=live_facts)
 
+    @override
     def apply(
         self,
         ctx: RunContext,

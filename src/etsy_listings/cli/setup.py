@@ -119,7 +119,6 @@ def _verified_token(root: Path, factory: ClientFactory) -> tuple[str, list[Shop]
         root,
         credentials.PRINTIFY,
         verify=verify,
-        command="setup",
         reuse_message=f"Using the {PRINTIFY_TOKEN_VAR} this machine already has.",
     )
     return captured.values[0], captured.require_proof()

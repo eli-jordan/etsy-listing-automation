@@ -38,6 +38,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+from typing import override
 
 from pydantic import BaseModel, ConfigDict
 
@@ -46,7 +47,7 @@ from etsy_listings.core.config.media import media_kind
 from etsy_listings.core.engine.change import Action, Drift, FieldChange, Verdict
 from etsy_listings.core.engine.context import RunContext
 from etsy_listings.core.engine.lock import Lockfile, hash_file, to_workspace_relative_posix
-from etsy_listings.core.engine.stage import Blocked, StageApplyResult
+from etsy_listings.core.engine.stage import Blocked, Stage, StageApplyResult
 from etsy_listings.core.engine.stages.etsy_media import IMAGE_IDS_KEY
 from etsy_listings.core.engine.stages.etsy_target import (
     check_etsy_shop,
@@ -171,12 +172,13 @@ class EtsyVideosSnapshot(BaseModel):
     live: tuple[LiveVideoSnapshot, ...]
 
 
-class EtsyVideosStage:
+class EtsyVideosStage(Stage[EtsyVideosDesired, AppliedEtsyVideos, EtsyVideosLive]):
     name = "etsy_videos"
     local = False
     group: str | None = "etsy_media"
     applied_model = AppliedEtsyVideos
 
+    @override
     def desired(
         self, ctx: RunContext, listing: str, applied: AppliedEtsyVideos | None
     ) -> EtsyVideosDesired | Blocked:
@@ -221,6 +223,7 @@ class EtsyVideosStage:
             colours=tuple(config.colors),
         )
 
+    @override
     def read_live(
         self, ctx: RunContext, listing: str, lock: Lockfile, applied: AppliedEtsyVideos | None
     ) -> EtsyVideosLive | None:
@@ -250,6 +253,7 @@ class EtsyVideosStage:
             missing_refs=tuple(ref for ref, video_id in known.items() if video_id not in listed),
         )
 
+    @override
     def plan(
         self,
         desired: EtsyVideosDesired,
@@ -297,6 +301,7 @@ class EtsyVideosStage:
             ),
         )
 
+    @override
     def apply(
         self,
         ctx: RunContext,

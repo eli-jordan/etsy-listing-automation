@@ -174,6 +174,7 @@ select = [
     # S01 judgment families. The rest of PLR (PLR0911/0912/0915) and C90
     # arrive with the complexity work.
     "FBT",
+    "ARG",
 ]
 ignore = [
     "ANN401",           # Any is sometimes the honest type at a boundary

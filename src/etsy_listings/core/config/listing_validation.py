@@ -448,9 +448,7 @@ def check_render_photo(
     ]
 
 
-def _check_variation_images(
-    listing: Production, templates: Mapping[str, TemplateInfo]
-) -> list[Issue]:
+def _check_variation_images(listing: Production) -> list[Issue]:
     name = listing.etsy.variation_images
     if name is None:
         return []
@@ -783,7 +781,7 @@ def check_listing(
         issues += _check_design(design_paths, garment_profile)
         issues += _check_printify_variant_limit(listing, garment_profile)
     issues += _check_template_kind_colour_match(listing, templates)
-    issues += _check_variation_images(listing, templates)
+    issues += _check_variation_images(listing)
     for name in dict.fromkeys(
         entry.template for entry in listing.media if isinstance(entry, TemplateMediaEntry)
     ):
@@ -828,6 +826,6 @@ def check_listing_template(
         issues += _check_template_tones(template, garment_profile)
         issues += _check_printify_variant_limit(template, garment_profile)
     issues += _check_template_kind_colour_match(template, templates)
-    issues += _check_variation_images(template, templates)
+    issues += _check_variation_images(template)
     issues += check_videos(videos or {})
     return issues

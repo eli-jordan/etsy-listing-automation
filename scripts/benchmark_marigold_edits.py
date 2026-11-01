@@ -20,7 +20,7 @@ import threading
 import time
 from io import BytesIO
 from pathlib import Path
-from typing import Any
+from typing import Any, override
 
 import cv2
 import numpy as np
@@ -29,6 +29,7 @@ from PIL import Image
 from PIL import __version__ as pillow_version
 from playwright.sync_api import Page, Request, Response, sync_playwright
 
+from etsy_listings.core.application.preparation.dependencies import PreparationRuntime
 from etsy_listings.core.preparation.runtime import Capability
 from etsy_listings.core.workspace import Workspace
 from etsy_listings.server.api.app import create_app
@@ -102,13 +103,16 @@ def visible_ink_point(
     }
 
 
-class EvidenceOnlyRuntime:
+class EvidenceOnlyRuntime(PreparationRuntime):
+    @override
     def inspect(self) -> Capability:
         return Capability(available=False, problem="Benchmark forbids model inference")
 
+    @override
     def selection(self, version: str, *, installation_id: str | None = None) -> Capability:
         raise AssertionError("Benchmark must not select a model")
 
+    @override
     def worker(self, selected: Capability, *, cache_root: Path) -> Any:
         raise AssertionError("Benchmark must never run model inference")
 

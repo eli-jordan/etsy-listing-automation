@@ -159,7 +159,6 @@ def capture[T](
     prompt: CredentialPrompt,
     *,
     verify: Callable[[tuple[str, ...]], tuple[T, str]],
-    command: str,
     verify_reused: bool = True,
     reuse_message: str | None = None,
 ) -> Capture[T]:
@@ -178,8 +177,9 @@ def capture[T](
     says yes, because verifying the Printify token *is* asking which shops it
     reaches and it needs that answer either way.
 
-    A verification that raises is a refusal: ``command`` names what to re-run,
-    and nothing is written by this function in any case -- see :func:`store`.
+    A verification that refuses does so through :func:`refuse`, which names
+    the command to re-run; nothing is written by this function in any case --
+    see :func:`store`.
     """
     existing = credentials.stored_values(root, prompt.credential)
     if all(existing):

@@ -60,8 +60,9 @@ def validate_prediction(array: NDArray[np.float32], *, role: str, size: tuple[in
 
 @lru_cache(maxsize=128)
 def _validated_file(
-    path: Path, role: str, checksum: str, size: tuple[int, int], stamp: tuple[int | str, ...]
+    path: Path, role: str, checksum: str, size: tuple[int, int], _stamp: tuple[int | str, ...]
 ) -> None:
+    # ``_stamp`` is read by lru_cache only: a changed file is a new cache key.
     read_prediction(path, role=role, checksum=checksum, size=size)
 
 

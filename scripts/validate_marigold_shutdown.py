@@ -47,7 +47,7 @@ def run(output: Path) -> None:
     suspended = threading.Event()
     pid = None
 
-    def suspend(progress: dict) -> None:
+    def suspend(_progress: dict) -> None:
         nonlocal pid
         if pid is not None:
             return

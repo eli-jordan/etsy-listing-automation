@@ -36,6 +36,7 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
+from typing import override
 
 from pydantic import BaseModel, ConfigDict
 
@@ -56,7 +57,7 @@ from etsy_listings.core.config.money import Money
 from etsy_listings.core.engine.change import Verdict
 from etsy_listings.core.engine.context import RunContext
 from etsy_listings.core.engine.lock import Lockfile, hash_file
-from etsy_listings.core.engine.stage import Blocked, StageApplyResult
+from etsy_listings.core.engine.stage import Blocked, Stage, StageApplyResult
 from etsy_listings.core.engine.stages.gates import (
     check_artwork,
     check_copy_is_concrete,
@@ -122,12 +123,13 @@ that could exist.
 """
 
 
-class PrintifyProductStage:
+class PrintifyProductStage(Stage[PrintifyProductDesired, AppliedProduct, Product]):
     name = "printify_product"
     local = False
     group: str | None = None
     applied_model = AppliedProduct
 
+    @override
     def desired(
         self, ctx: RunContext, listing: str, applied: AppliedProduct | None
     ) -> PrintifyProductDesired | Blocked:
@@ -216,6 +218,7 @@ class PrintifyProductStage:
             currency=workspace.defaults.etsy.currency,
         )
 
+    @override
     def read_live(
         self, ctx: RunContext, listing: str, lock: Lockfile, applied: AppliedProduct | None
     ) -> Product | None:
@@ -232,6 +235,7 @@ class PrintifyProductStage:
             return None
         return ctx.require_printify().get_product(_shop_id(ctx), str(product_id))
 
+    @override
     def plan(
         self,
         desired: PrintifyProductDesired,
@@ -277,6 +281,7 @@ class PrintifyProductStage:
             )
         return ProductSnapshot(desired=desired_rows, live=live_rows)
 
+    @override
     def apply(
         self,
         ctx: RunContext,

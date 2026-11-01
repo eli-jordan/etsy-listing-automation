@@ -13,12 +13,16 @@ import time
 from collections.abc import Callable
 from contextlib import AbstractContextManager, nullcontext
 from pathlib import Path
-from typing import Any
+from typing import Any, override
 
 import numpy as np
 from PIL import Image
 
 from etsy_listings.core.application.preparation.coordinator import Preparations
+from etsy_listings.core.application.preparation.dependencies import (
+    InferenceWorker,
+    PreparationRuntime,
+)
 from etsy_listings.core.application.preparation.models import TERMINAL
 from etsy_listings.core.preparation.distribution.src.marigold_worker.protocol import (
     InferenceResult,
@@ -31,16 +35,17 @@ from etsy_listings.core.workspace import Workspace
 from etsy_listings.core.workspace.calibration import CalibrationStore
 
 
-class FixedWorker:
+class FixedWorker(InferenceWorker):
     def __init__(self, root: Path) -> None:
         self.root = root
 
+    @override
     def infer(
         self,
         *,
         request_id: str,
         role: Role,
-        input: str,  # noqa: A002 -- worker protocol field, also splatted from request dicts
+        input: str,
         output: str,
         size: tuple[int, int],
         num_inference_steps: int = 10,
@@ -107,14 +112,17 @@ class FixedWorker:
                 }
             )
 
+    @override
     def close(self) -> None:
         pass
 
+    @override
     def cancel(self, request_id: str) -> None:
         pass
 
 
-class FixedRuntime:
+class FixedRuntime(PreparationRuntime):
+    @override
     def inspect(self) -> Capability:
         return Capability(
             available=True,
@@ -123,9 +131,11 @@ class FixedRuntime:
             installation_id="fixed-numeric-fixture",
         )
 
+    @override
     def selection(self, version: str, *, installation_id: str | None = None) -> Capability:
         return self.inspect()
 
+    @override
     def worker(self, selected: Capability, *, cache_root: Path) -> FixedWorker:
         return FixedWorker(cache_root)
 
