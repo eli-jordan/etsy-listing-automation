@@ -24,10 +24,11 @@ import type { FieldErrors } from "./useShopSettings";
 
 type Lookups = ReturnType<typeof useShopLookups>;
 type Save = (changes: ShopChanges) => Promise<SaveOutcome | null>;
-/** How a field's save was answered: written, refused by validation, or
- * not known to have reached the file (a network failure or a conflict). */
-type Answer = "saved" | "refused" | "failed";
-type Commit = (changes: ShopChanges) => Promise<Answer>;
+/** How a field's intent was answered: written, already held by the file,
+ * refused by validation, or not known to have reached the file. */
+type Answer = "saved" | "unchanged" | "refused" | "failed";
+type CommitOptions = { unchanged?: boolean };
+type Commit = (changes: ShopChanges, options?: CommitOptions) => Promise<Answer>;
 
 /**
  * Listing defaults (interactions, *Listing defaults, info cards and
@@ -43,6 +44,7 @@ export function ListingDefaults({
   shop: saved,
   pending,
   save,
+  discard,
   fieldErrors,
   locked,
   lookups,
@@ -51,6 +53,7 @@ export function ListingDefaults({
   shop: ShopSettings;
   pending: ShopChanges;
   save: Save;
+  discard: (changes: ShopChanges) => void;
   fieldErrors: FieldErrors;
   locked: boolean;
   lookups: Lookups;
@@ -60,22 +63,27 @@ export function ListingDefaults({
   const defaults = shop.listing_defaults;
   const [customChosen, setCustomChosen] = useState(false);
   const tier = customChosen || !isPrintOnDemand(defaults) ? "custom" : "pod";
-  const commit: Commit = (changes) =>
-    save(changes).then(
+  const commit: Commit = (changes, { unchanged = false } = {}) => {
+    if (unchanged) {
+      discard(changes);
+      return Promise.resolve("unchanged");
+    }
+    return save(changes).then(
       (outcome): Answer =>
         outcome?.kind === "saved" ? "saved" : outcome?.kind === "invalid" ? "refused" : "failed",
       (): Answer => "failed",
     );
+  };
 
   const choosePod = () => {
     setCustomChosen(false);
     if (!isPrintOnDemand(defaults)) void commit(PRINT_ON_DEMAND);
   };
-  const customCommit = (changes: ShopChanges) => {
+  const customCommit: Commit = (changes, options) => {
     // Editing one of the three keeps Custom open even if the values come
     // to match Print on demand; reopening the page derives it again.
     setCustomChosen(true);
-    return commit(changes);
+    return commit(changes, options);
   };
 
   const policies = lookups.lookups?.etsy.return_policies ?? [];
@@ -146,7 +154,7 @@ export function ListingDefaults({
               saved={defaults.who_made}
               options={withSaved(WHO_MADE, defaults.who_made)}
               disabled={locked}
-              onCommit={(value) => customCommit({ who_made: value })}
+              onCommit={(value, options) => customCommit({ who_made: value }, options)}
             />
           </Field>
           <Field
@@ -160,7 +168,7 @@ export function ListingDefaults({
               saved={defaults.when_made}
               options={withSaved(WHEN_MADE, defaults.when_made)}
               disabled={locked}
-              onCommit={(value) => customCommit({ when_made: value })}
+              onCommit={(value, options) => customCommit({ when_made: value }, options)}
             />
           </Field>
           <Field label="What it is" field="is_supply" info={info} error={fieldErrors.is_supply}>
@@ -169,7 +177,7 @@ export function ListingDefaults({
               saved={String(defaults.is_supply)}
               options={IS_SUPPLY}
               disabled={locked}
-              onCommit={(value) => customCommit({ is_supply: value === "true" })}
+              onCommit={(value, options) => customCommit({ is_supply: value === "true" }, options)}
             />
           </Field>
         </div>
@@ -268,7 +276,7 @@ export function ListingDefaults({
             saved={defaults.renewal}
             options={withSaved(RENEWAL, defaults.renewal)}
             disabled={locked}
-            onCommit={(value) => commit({ renewal: value })}
+            onCommit={(value, options) => commit({ renewal: value }, options)}
           />
         </Field>
       </div>
@@ -385,9 +393,9 @@ function ListField({
   // Use it is a choice in this field like any other: it goes through the
   // field's draft, so it supersedes an older draft and a newer one survives
   // its answer.
-  const draft = useDraft(saved, (value) => {
+  const draft = useDraft(saved, (value, options) => {
     if (found?.value === value) lookups.dismiss(field);
-    return save(toChange(value));
+    return save(toChange(value), options);
   });
   return (
     <Field label={label} field={field} info={info} error={fieldErrors[field]} create={field}>
@@ -438,7 +446,10 @@ type Draft = {
  * Use it) goes through here, so a newer choice from either supersedes an
  * older draft.
  */
-function useDraft(saved: string, onCommit: (value: string) => Promise<Answer>): Draft {
+function useDraft(
+  saved: string,
+  onCommit: (value: string, options?: CommitOptions) => Promise<Answer>,
+): Draft {
   const [draft, setDraft] = useState<string | null>(null);
   const edits = useRef(0);
   const sent = useRef<{ value: string; edit: number } | null>(null);
@@ -450,14 +461,16 @@ function useDraft(saved: string, onCommit: (value: string) => Promise<Answer>): 
     setDraft(value);
   };
   const send = (value: string) => {
-    if (value === refused.current || value === saved) return;
+    if (value === refused.current) return;
     const mine = { value, edit: edits.current };
     sent.current = mine;
-    void onCommit(value).then((answer) => {
+    // An unchanged choice still abandons an older failed patch in the queue.
+    void onCommit(value, { unchanged: value === saved }).then((answer) => {
       if (sent.current !== mine) return;
       sent.current = null;
       if (answer === "refused") refused.current = mine.value;
-      else if (answer === "saved" && edits.current === mine.edit) setDraft(null);
+      else if ((answer === "saved" || answer === "unchanged") && edits.current === mine.edit)
+        setDraft(null);
     });
   };
   return {
@@ -468,10 +481,7 @@ function useDraft(saved: string, onCommit: (value: string) => Promise<Answer>): 
     },
     choose: (value) => {
       edit(value);
-      // A choice of what the file already holds needs no save; it still
-      // replaces whatever older draft was shown.
-      if (value === saved) setDraft(null);
-      else send(value);
+      send(value);
     },
   };
 }
@@ -488,7 +498,7 @@ function BlurSelect({
   saved: string;
   options: Option[];
   disabled: boolean;
-  onCommit: (value: string) => Promise<Answer>;
+  onCommit: (value: string, options?: CommitOptions) => Promise<Answer>;
 }) {
   const draft = useDraft(saved, onCommit);
   return <DraftSelect label={label} options={options} disabled={disabled} draft={draft} />;

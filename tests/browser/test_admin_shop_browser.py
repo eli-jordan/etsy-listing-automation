@@ -201,6 +201,52 @@ def test_a_choice_made_while_retry_is_pending_reaches_the_file(
     expect(renewal).to_have_value("manual")
 
 
+def test_an_abandoned_failure_is_not_restored_by_a_siblings_retry(
+    page,
+    expect,
+    calibrator_server: str,
+    workspace_root: Path,
+    theme: str,  # noqa: ANN001
+) -> None:
+    open_defaults(page, calibrator_server, theme)
+    renewal = page.get_by_role("combobox", name="Renewal")
+    attempts: list[dict[str, object]] = []
+
+    def fail_first_two(route) -> None:  # noqa: ANN001
+        if route.request.method != "PATCH":
+            route.continue_()
+            return
+        attempts.append(route.request.post_data_json["changes"])
+        if len(attempts) <= 2:
+            route.fulfill(
+                status=503, content_type="application/json", body='{"detail":"disk unavailable"}'
+            )
+        else:
+            route.continue_()
+
+    page.route("**/api/admin/shop", fail_first_two)
+    choose(renewal, "auto")
+    retry = page.get_by_role("button", name="Retry save")
+    expect(retry).to_be_visible()
+    choose(renewal, "manual")
+    expect(retry).to_have_count(0)
+    assert attempts == [{"renewal": "auto"}]
+
+    choose(page.get_by_role("combobox", name="Who made it"), "collective")
+    expect(retry).to_be_visible()
+    with page.expect_response(is_save):
+        retry.click()
+    expect(page.get_by_text("Saved", exact=True)).to_be_visible()
+    expect(renewal).to_have_value("manual")
+    assert attempts == [
+        {"renewal": "auto"},
+        {"who_made": "collective"},
+        {"who_made": "collective"},
+    ]
+    assert on_disk(workspace_root).etsy.listing_defaults.renewal == "manual"
+    assert on_disk(workspace_root).etsy.listing_defaults.who_made == "collective"
+
+
 @pytest.fixture
 def etsy_shop(workspace_root: Path) -> None:
     """Opts the fixture into Etsy lookups. A test requests it before ``page``,

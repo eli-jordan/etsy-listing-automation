@@ -137,6 +137,7 @@ export function AdminPage() {
                 shop={shop}
                 pending={settings.pending}
                 save={save}
+                discard={settings.discard}
                 fieldErrors={settings.fieldErrors}
                 locked={settings.locked}
                 lookups={lookups}

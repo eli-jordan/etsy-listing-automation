@@ -28,7 +28,8 @@ type Changes = Record<string, unknown>;
  * - Every change key is tracked until a response acknowledges it. A failed
  *   or refused key stays failed until a later save of that key succeeds: an
  *   unrelated success never reports Saved over it, and Retry sends exactly
- *   the failed keys. A newer save of a key supersedes its failure.
+ *   the failed keys. A newer save or an explicit unchanged choice supersedes
+ *   that key's failure; `discard` never cancels queued writes.
  * - A conflict stops the queue. Nothing is retried with a new revision and an
  *   old patch; editing stays off until `reset` adopts a reloaded file.
  * - `pending` holds each key's newest unanswered value, whether a field save
@@ -72,18 +73,48 @@ export function useSaveQueue<C extends Changes, O extends SaveOutcome>({
   const latest = useRef(new Map<string, number>());
   /** Keys whose newest save failed: the value it carried and why. */
   const failed = useRef(new Map<string, { value: unknown; message: string }>());
+  const acknowledged = useRef(false);
+
+  const settle = useCallback((remaining: number) => {
+    if (conflicted.current) return;
+    const outstanding = [...failed.current.values()].pop();
+    setStatus(
+      outstanding
+        ? { kind: "error", message: outstanding.message }
+        : remaining > 0
+          ? { kind: "saving" }
+          : acknowledged.current
+            ? { kind: "saved" }
+            : { kind: "idle" },
+    );
+  }, []);
 
   const reset = useCallback((loaded: string) => {
     revision.current = loaded;
     conflicted.current = false;
     latest.current = new Map();
     failed.current = new Map();
+    acknowledged.current = false;
     setPending({});
     setFieldErrors({});
     setStatus({ kind: "idle" });
   }, []);
 
   const afterSaves = useCallback(<T>(next: () => Promise<T>) => queue.current.then(next), []);
+
+  /** Choosing what the file will already hold abandons only that field's
+   * failed patch. It never cancels a queued write or acknowledges a save. */
+  const discard = useCallback(
+    (changes: C) => {
+      if (conflicted.current) return;
+      for (const key of Object.keys(changes)) failed.current.delete(key);
+      setFieldErrors((errors) =>
+        Object.fromEntries(Object.entries(errors).filter(([key]) => !clears(key, changes))),
+      );
+      settle(waiting.current);
+    },
+    [clears, settle],
+  );
 
   const save = useCallback(
     (changes: C, { retain = true }: { retain?: boolean } = {}): Promise<O | null> => {
@@ -107,13 +138,12 @@ export function useSaveQueue<C extends Changes, O extends SaveOutcome>({
         if (!retain) {
           // The caller reports this failure itself and owns its retry; the
           // page goes back to what the retained failures and queue say.
-          const outstanding = [...failed.current.values()].pop();
-          if (outstanding) setStatus({ kind: "error", message: outstanding.message });
-          else setStatus(waiting.current > 1 ? { kind: "saving" } : { kind: "idle" });
+          settle(waiting.current - 1);
           return;
         }
         for (const [key, value] of Object.entries(changes))
           if (latest.current.get(key) === mine) failed.current.set(key, { value, message });
+        acknowledged.current = false;
         setStatus({ kind: "error", message });
       };
       waiting.current += 1;
@@ -124,16 +154,13 @@ export function useSaveQueue<C extends Changes, O extends SaveOutcome>({
           if (conflicted.current || revision.current === null) return null;
           const outcome = await send(revision.current, changes);
           if (outcome.kind === "saved") {
+            acknowledged.current = true;
             revision.current = outcome.revision;
             adopt.current?.(outcome as Extract<O, { kind: "saved" }>);
             setFieldErrors((errors) =>
               Object.fromEntries(Object.entries(errors).filter(([key]) => !clears(key, changes))),
             );
-            const outstanding = [...failed.current.values()].pop();
-            if (waiting.current === 1)
-              setStatus(
-                outstanding ? { kind: "error", message: outstanding.message } : { kind: "saved" },
-              );
+            if (waiting.current === 1) settle(0);
           } else if (outcome.kind === "conflict") {
             conflicted.current = true;
             setStatus({ kind: "conflict", message: outcome.message });
@@ -154,7 +181,7 @@ export function useSaveQueue<C extends Changes, O extends SaveOutcome>({
       queue.current = next.catch(() => undefined);
       return next;
     },
-    [send, clears, fallback],
+    [send, clears, fallback, settle],
   );
 
   const retry = useCallback(() => {
@@ -170,6 +197,7 @@ export function useSaveQueue<C extends Changes, O extends SaveOutcome>({
     fieldErrors,
     pending,
     save,
+    discard,
     retry,
     reset,
     afterSaves,

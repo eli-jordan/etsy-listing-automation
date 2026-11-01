@@ -557,16 +557,22 @@ a conflict requires reload and never reapplies an old patch automatically.
 
 Shop and Settings share one client save queue, `pages/admin/useSaveQueue.ts`:
 revision progression, per-key acknowledgement, failure retention, Retry and
-conflict stopping. A key stays failed until a later save of that key succeeds,
-so an unrelated success never reports Saved over it, and Retry sends only the
-failed keys. Each key's newest unanswered value, from a field save or Retry,
+conflict stopping. A key stays failed until a later save of that key succeeds
+or the seller chooses what the file will already hold. That unchanged choice
+discards the field's failed patch and error without writing or cancelling a
+queued save. An unrelated success never reports Saved over a retained failure,
+and Retry sends only the failed keys. Each key's newest unanswered value, from a field save or Retry,
 is `pending`; Shop's listing defaults show it over the saved file, so a newer
 choice is compared with what the file will hold. Responses never replace a
 newer local edit: each Shop field has one draft owner that its select and Use
 it both go through, which drops a draft only on the answer to the save made
 from it. A save whose caller reports and retries its own failure, the currency
-dialog's, passes `retain: false` so Retry never resends it. Both panels
-discard local state only when a (re)load bumps `loadedVersion`.
+dialog's, passes `retain: false` so Retry never resends it. Such a failure keeps
+an earlier successful acknowledgement visible once the queue drains; loading
+a file or retaining a new failure clears that acknowledgement. Both panels
+discard local state only when a (re)load bumps `loadedVersion`. Initial Shop
+and Settings reads ignore answers and errors after their effect is cleaned up,
+so development StrictMode replay cannot reset a newer focused draft.
 Batch concurrency is 1–8, read at the next dispatch, and lowering it leaves
 active runs alone (ADR-0048). Market shares normalize only for display until an
 edit saves whole percentages. The server returns the model's Reset defaults.

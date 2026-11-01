@@ -1,5 +1,6 @@
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { StrictMode } from "react";
 import { afterEach, beforeEach, describe, expect, it, type MockInstance, vi } from "vitest";
 import * as shopApi from "../../api/shop";
 import * as settingsApi from "../../api/workspaceSettings";
@@ -469,6 +470,91 @@ describe("Listing defaults", () => {
       },
     };
   }
+
+  it.each(["network", "validation"])(
+    "abandons a failed choice returned to its saved value after a %s failure",
+    async (failure) => {
+      const server = fileServer();
+      if (failure === "network") server.failNext("renewal offline");
+      else
+        save.mockResolvedValueOnce({
+          kind: "invalid",
+          message: "invalid renewal",
+          fieldErrors: { renewal: "renewal refused" },
+        });
+      await openDefaults();
+      const renewal = screen.getByLabelText("Renewal");
+      fireEvent.change(renewal, { target: { value: "auto" } });
+      fireEvent.blur(renewal);
+      await screen.findByText(failure === "network" ? "renewal offline" : "renewal refused");
+      fireEvent.change(renewal, { target: { value: "manual" } });
+      fireEvent.blur(renewal);
+      await waitFor(() =>
+        expect(screen.queryByRole("button", { name: "Retry save" })).not.toBeInTheDocument(),
+      );
+      expect(screen.queryByText("renewal refused")).not.toBeInTheDocument();
+      expect(save).toHaveBeenCalledTimes(1);
+      server.failNext("shipping offline");
+      const shipping = screen.getByLabelText("Shipping profile");
+      fireEvent.change(shipping, { target: { value: "Printify EU standard" } });
+      fireEvent.blur(shipping);
+      await screen.findByText("shipping offline");
+      await userEvent.click(screen.getByRole("button", { name: "Retry save" }));
+      await screen.findByText("Saved");
+      expect(save.mock.calls[2]).toEqual(["r1", { shipping_profile: "Printify EU standard" }]);
+      expect(renewal).toHaveValue("manual");
+      expect(server.file().listing_defaults.renewal).toBe("manual");
+      expect(server.file().listing_defaults.shipping_profile).toBe("Printify EU standard");
+    },
+  );
+
+  it("ignores an abandoned initial Shop read under StrictMode", async () => {
+    let release!: (value: ShopSettings) => void;
+    vi.mocked(shopApi.getShop).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          release = resolve;
+        }),
+    );
+    render(
+      <StrictMode>
+        <AdminPage />
+      </StrictMode>,
+    );
+    await userEvent.click(await screen.findByRole("link", { name: "Listing defaults" }));
+    const renewal = await screen.findByLabelText("Renewal");
+    renewal.focus();
+    fireEvent.change(renewal, { target: { value: "auto" } });
+    await act(async () => release(shop()));
+    expect(screen.getByLabelText("Renewal")).toHaveValue("auto");
+    expect(screen.getByLabelText("Renewal")).toHaveFocus();
+    expect(save).not.toHaveBeenCalled();
+  });
+
+  it.each([false, true])(
+    "keeps a sibling's Saved after a cancelled currency failure, queued=%s",
+    async (queued) => {
+      const server = fileServer();
+      const answer = queued ? server.hold() : null;
+      await openDefaults();
+      fireEvent.change(screen.getByLabelText("Renewal"), { target: { value: "auto" } });
+      fireEvent.blur(screen.getByLabelText("Renewal"));
+      if (!queued) await screen.findByText("Saved");
+      await userEvent.click(screen.getByRole("link", { name: "Connected shops" }));
+      await userEvent.click(await screen.findByRole("button", { name: "Change currency…" }));
+      const dialog = screen.getByRole("dialog", { name: /converts nothing/ });
+      await userEvent.click(within(dialog).getByLabelText(/prices won't be converted/));
+      server.failNext("currency offline");
+      await userEvent.click(within(dialog).getByRole("button", { name: "Change to EUR" }));
+      if (answer) await answer();
+      expect(await within(dialog).findByRole("alert")).toHaveTextContent("currency offline");
+      await userEvent.click(within(dialog).getByRole("button", { name: "Keep USD" }));
+      expect(screen.getByText("Saved")).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Retry save" })).not.toBeInTheDocument();
+      expect(server.file().listing_defaults.renewal).toBe("auto");
+      expect(server.file().currency).toBe("USD");
+    },
+  );
 
   it("keeps a newer focused choice when an older save is answered", async () => {
     const server = fileServer();

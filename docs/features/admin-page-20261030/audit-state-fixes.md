@@ -64,7 +64,8 @@ Settings already retained failed patches. The two hooks now share one owner,
 
 - saves run one at a time, each naming the revision the previous one returned;
 - every change key is tracked until a save of that key succeeds, and a newer
-  save of the key supersedes its failure;
+  save of the key supersedes its failure; choosing what the file will already
+  hold abandons that field's failed patch and error without writing;
 - an unrelated success never reports Saved while a key is failed; the status
   keeps that failure's message;
 - Retry save sends exactly the failed keys;
@@ -136,6 +137,32 @@ A specification review found two more interactions:
 | `keeps a choice made while Use it is pending and saves it after` | Control: with Use it held, choosing EU survives its answer and is saved against its revision. |
 | `test_admin_shop_browser.py` | Built SPA, real API, fixture `shop.yaml`, both color preferences: the queued choice ends on disk; the failed field survives a sibling write and Retry save writes it; a choice made while Retry is held reaches the file after it (timed out waiting for that request against the previous build); Use it over a failed draft leaves `shop.yaml` and the select on UK with no further write (the select kept EU against the previous build). |
 
+### Final review follow-ups
+
+The final Standards recheck at `048cdc3f` found F3: a failed Auto choice could
+remain in Retry after the seller returned to persisted Manual. A later failed
+Shipping save kept Retry available, which then silently wrote Auto. The draft
+owner now reports an unchanged choice to the queue's `discard` operation.
+That operation removes only the named failed patches and field errors, never
+queued writes, and the unchanged choice makes no save request.
+
+The same review found F4: Shop's abandoned initial read could answer after
+StrictMode's second effect read, bump `loadedVersion`, and erase a focused
+draft. Shop now ignores initial-read answers and errors after effect cleanup,
+matching Settings' existing lifecycle guard.
+
+The final Spec recheck found F5: a failed currency change could hide Saved for
+a sibling that had already succeeded, including one answered while currency
+waited in the queue. The queue now remembers successful acknowledgements until
+a reset or retained failure. A dialog-only failure derives status from that
+acknowledgement, remaining saves and retained failures, so it cannot blank a
+completed sibling's Saved or manufacture Saved before any successful answer.
+
+Five public UI regression cases failed before these corrections: network and
+validation variants of F3, the focused StrictMode draft for F4, and already
+answered and queued sibling variants for F5. Final follow-up validation and
+fresh independent review are recorded separately from the earlier gates below.
+
 ### UI decision
 
 Shop gains the Retry save button Settings already had, beside the save status
@@ -149,25 +176,31 @@ preferences (the app has one palette), for default, saving, error, retried and c
 
 ## Exit evidence
 
-The combined code was validated at `eda9772a`, the ordinary merge of State's
-`82f0aef7` and Runtime's `498badde`. Later changes to this record are prose only.
+The full combined gate passed at `eda9772a`, the ordinary merge of State's
+`82f0aef7` and Runtime's `498badde`, followed by evidence commit `048cdc3f`.
+F3, F4 and F5 change frontend code and add regressions. Python production and generated
+schemas remain byte-identical to `048cdc3f`; their earlier local gate remains
+valid, and fresh CI rechecks the final head before State e2e. The frontend and
+browser checks below were rerun for the follow-up.
 
 | Check | Result |
 |---|---|
-| `./scripts/check.sh`, with required browser prerequisites | Passed. Python: 3,779 passed, seven platform skips, 55 deselected. Combined branch-enabled coverage: 95.50%; branches: 3,837 of 4,254, or 90.20%. Frontend: 1,301 passed across 97 files; 90.28% branch coverage. |
-| Format, lint, strict typing and Import Linter | Passed, all 11 contracts kept. Formatting left the checkout unchanged. |
-| Separate SPA build and `npm run test:design` | Passed; four design tests. The design suite also passed inside the full gate. |
-| Standalone `ETSY_LISTINGS_REQUIRE_EVERY_LAYER=1 uv run pytest -m browser` | Passed: 160 cases, zero skips. |
+| Unchanged backend's full local gate | Passed. Python: 3,779 passed, seven platform skips, 55 deselected. Combined branch-enabled coverage: 95.50%; branches: 3,837 of 4,254, or 90.20%. Backend format, lint, strict typing and all 11 import contracts passed. |
+| Full follow-up frontend coverage gate | Passed: 1,306 tests across 97 files; 90.28% branch coverage. Format check, lint and strict typing passed. |
+| Separate SPA build and `npm run test:design` | Passed; four design tests. |
+| Standalone `ETSY_LISTINGS_REQUIRE_EVERY_LAYER=1 uv run pytest -m browser` | Passed for the follow-up: 162 cases, zero skips. |
+| Red/green follow-up regressions | Five new public UI cases failed before the fixes; all 66 Shop/Settings cases pass after them. The new F3 browser case failed against the prior build under both color preferences, and both pass in the rebuilt SPA. |
 | Generated API | No wire shape changed. The OpenAPI export regression passed and the generated client has no diff. |
 
-The independent Standards/process recheck reported no actionable findings at
-the combined tip. Its 91 focused tests and external Windows process diagnostics
-closed the exited-launcher residual. State's final Spec recheck remains pending
-the Opus quota reset; the seller chose to wait for Opus 5.5 medium. The failed
-recheck is not counted as a passing review.
+The independent Runtime Standards/process recheck reported no actionable
+findings. Its 91 focused tests and external Windows process diagnostics closed
+the exited-launcher residual. State's resumed Standards and Spec reviews
+identified F3, F4 and F5 above; those findings are fixed, and fresh independent rechecks
+are pending on the follow-up. The old Spec review's S1-open remark concerned
+its earlier `82f0aef7` snapshot, which predates Runtime's merged correction.
 
-Against Runtime, `scripts/sloc.py` measures net additions of 22 backend and 132
-frontend production lines, plus 471 Python test and 351 frontend test lines.
+Against Runtime, `scripts/sloc.py` measures net additions of 22 backend and 179
+frontend production lines, plus 512 Python test and 434 frontend test lines.
 The shared queue replaces separate Shop and Settings save coordination.
 
 Runtime PR #150 passed all four CI checks and its parent-dispatched
