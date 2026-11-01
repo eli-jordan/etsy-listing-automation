@@ -37,6 +37,7 @@ import posixpath
 import sys
 import tempfile
 from dataclasses import dataclass
+from enum import Enum
 from pathlib import Path
 from typing import Any
 
@@ -91,22 +92,24 @@ def _ref_nodes(root: yaml.Node) -> list[tuple[str, yaml.ScalarNode]]:
     """Every scalar node holding a path, with where it sits in the document."""
     if not isinstance(root, yaml.MappingNode):
         return []
-    found: list[tuple[str, yaml.ScalarNode]] = []
-    for key, value in root.value:
-        name = key.value
-        if name in ("design", "pricing_plan") and isinstance(value, yaml.ScalarNode):
-            found.append((name, value))
-        elif name == "design" and isinstance(value, yaml.MappingNode):
-            found += [
-                (f"design.{k.value}", v) for k, v in value.value if isinstance(v, yaml.ScalarNode)
-            ]
-        elif name == "media" and isinstance(value, yaml.SequenceNode):
-            found += [
-                (f"media[{i}]", item)
-                for i, item in enumerate(value.value)
-                if isinstance(item, yaml.ScalarNode)
-            ]
-    return found
+    return [found for key, value in root.value for found in _refs_under(key.value, value)]
+
+
+def _refs_under(name: str, value: yaml.Node) -> list[tuple[str, yaml.ScalarNode]]:
+    if isinstance(value, yaml.ScalarNode):
+        return [(name, value)] if name in ("design", "pricing_plan") else []
+    return [
+        (where, node) for where, node in _children(name, value) if isinstance(node, yaml.ScalarNode)
+    ]
+
+
+def _children(name: str, value: yaml.Node) -> list[tuple[str, yaml.Node]]:
+    """A design map's values and the media list's items, with where they sit."""
+    if name == "design" and isinstance(value, yaml.MappingNode):
+        return [(f"design.{k.value}", v) for k, v in value.value]
+    if name == "media" and isinstance(value, yaml.SequenceNode):
+        return [(f"media[{i}]", item) for i, item in enumerate(value.value)]
+    return []
 
 
 def plan_rewrites(text: str, listing: str) -> list[Rewrite]:
@@ -149,20 +152,25 @@ def apply_rewrites(text: str, rewrites: list[Rewrite]) -> str:
 
 def _values(document: Any) -> dict[str, str]:
     """`where -> value` for every ref in a loaded document, for comparison."""
-    values: dict[str, str] = {}
     if not isinstance(document, dict):
-        return values
-    design = document.get("design")
-    if isinstance(design, str):
-        values["design"] = design
-    elif isinstance(design, dict):
-        values |= {f"design.{k}": v for k, v in design.items() if isinstance(v, str)}
+        return {}
+    values = _design_values(document.get("design"))
     if isinstance(document.get("pricing_plan"), str):
         values["pricing_plan"] = document["pricing_plan"]
-    for i, item in enumerate(document.get("media") or []):
-        if isinstance(item, str):
-            values[f"media[{i}]"] = item
+    values |= {
+        f"media[{i}]": item
+        for i, item in enumerate(document.get("media") or [])
+        if isinstance(item, str)
+    }
     return values
+
+
+def _design_values(design: Any) -> dict[str, str]:
+    if isinstance(design, str):
+        return {"design": design}
+    if isinstance(design, dict):
+        return {f"design.{k}": v for k, v in design.items() if isinstance(v, str)}
+    return {}
 
 
 def _problems(workspace: Workspace, document: Any) -> list[tuple[Any, str]]:
@@ -216,40 +224,54 @@ def _write_atomically(path: Path, text: str) -> None:
 
 def migrate(root: Path, *, write: bool) -> int:
     workspace = Workspace(root=root.resolve(), defaults=Defaults.load(root / layout.SHOP_FILE))
-    failed = 0
-    changed = 0
-    for listing in workspace.listing_names():
-        path = workspace.listing_file(listing)
-        if not path.is_file():
-            continue
-        shown = path.relative_to(workspace.root).as_posix()
-        with path.open(encoding="utf-8", newline="") as handle:
-            before = handle.read()
-        try:
-            rewrites = plan_rewrites(before, listing)
-            if not rewrites:
-                continue
-            after = apply_rewrites(before, rewrites)
-            already_invalid = verify(workspace, listing, before, after, rewrites)
-        except (MigrationError, yaml.YAMLError) as exc:
-            failed += 1
-            print(f"{shown}: NOT MIGRATED -- {exc}")
-            continue
-        changed += 1
-        print(shown)
-        for r in rewrites:
-            print(f"  {r.line}: {r.where}: {r.old} -> {r.new}")
-        for problem in already_invalid:
-            print(f"  note: already invalid before migrating, left as it is -- {problem}")
-        if write:
-            _write_atomically(path, after)
+    outcomes = [
+        _migrate_listing(workspace, listing, write=write) for listing in workspace.listing_names()
+    ]
+    failed = outcomes.count(_Outcome.FAILED)
+    changed = outcomes.count(_Outcome.CHANGED)
+    _print_summary(changed, failed, write=write)
+    return 1 if failed else 0
+
+
+class _Outcome(Enum):
+    UNCHANGED = "unchanged"
+    CHANGED = "changed"
+    FAILED = "failed"
+
+
+def _migrate_listing(workspace: Workspace, listing: str, *, write: bool) -> _Outcome:
+    path = workspace.listing_file(listing)
+    if not path.is_file():
+        return _Outcome.UNCHANGED
+    shown = path.relative_to(workspace.root).as_posix()
+    with path.open(encoding="utf-8", newline="") as handle:
+        before = handle.read()
+    try:
+        rewrites = plan_rewrites(before, listing)
+        if not rewrites:
+            return _Outcome.UNCHANGED
+        after = apply_rewrites(before, rewrites)
+        already_invalid = verify(workspace, listing, before, after, rewrites)
+    except (MigrationError, yaml.YAMLError) as exc:
+        print(f"{shown}: NOT MIGRATED -- {exc}")
+        return _Outcome.FAILED
+    print(shown)
+    for r in rewrites:
+        print(f"  {r.line}: {r.where}: {r.old} -> {r.new}")
+    for problem in already_invalid:
+        print(f"  note: already invalid before migrating, left as it is -- {problem}")
+    if write:
+        _write_atomically(path, after)
+    return _Outcome.CHANGED
+
+
+def _print_summary(changed: int, failed: int, *, write: bool) -> None:
     if changed == 0 and failed == 0:
         print("nothing to migrate")
     elif changed and not write:
         print(f"dry run: {changed} file(s) would change; pass --write to apply")
     elif changed:
         print(f"wrote {changed} file(s); lockfiles untouched")
-    return 1 if failed else 0
 
 
 def main(argv: list[str] | None = None) -> int:

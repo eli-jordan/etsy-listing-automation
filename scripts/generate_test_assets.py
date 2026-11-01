@@ -48,6 +48,18 @@ CORNER_COLOURS = {
 }
 
 
+GRID_STEP = 24
+
+
+def _grid_line(position: int, line_rgb: tuple[int, int, int] | None) -> tuple[tuple[int, ...], int]:
+    """Every fifth grid line is major: darker and twice as wide."""
+    major = (position % (GRID_STEP * 5)) == 0
+    width = 2 if major else 1
+    if line_rgb:
+        return (*line_rgb, 200), width
+    return ((60, 60, 60, 200) if major else (150, 150, 150, 120)), width
+
+
 def make_grid_target(
     size: tuple[int, int], *, line_rgb: tuple[int, int, int] | None = None
 ) -> Image.Image:
@@ -60,19 +72,12 @@ def make_grid_target(
     outline = (*line_rgb, 255) if line_rgb else (20, 20, 20, 255)
     draw.rectangle([0, 0, w - 1, h - 1], outline=outline, width=4)
 
-    step = 24
-    for x in range(step, w, step):
-        major = (x % (step * 5)) == 0
-        colour = (
-            (*line_rgb, 200) if line_rgb else ((60, 60, 60, 200) if major else (150, 150, 150, 120))
-        )
-        draw.line([(x, 0), (x, h)], fill=colour, width=2 if major else 1)
-    for y in range(step, h, step):
-        major = (y % (step * 5)) == 0
-        colour = (
-            (*line_rgb, 200) if line_rgb else ((60, 60, 60, 200) if major else (150, 150, 150, 120))
-        )
-        draw.line([(0, y), (w, y)], fill=colour, width=2 if major else 1)
+    for x in range(GRID_STEP, w, GRID_STEP):
+        colour, width = _grid_line(x, line_rgb)
+        draw.line([(x, 0), (x, h)], fill=colour, width=width)
+    for y in range(GRID_STEP, h, GRID_STEP):
+        colour, width = _grid_line(y, line_rgb)
+        draw.line([(0, y), (w, y)], fill=colour, width=width)
 
     marker = 28
     draw.rectangle([0, 0, marker, marker], fill=CORNER_COLOURS["top-left"])

@@ -47,6 +47,15 @@ def python_sloc(source: str) -> int:
     except SyntaxError:
         return sum(1 for line in source.splitlines() if line.strip())
 
+    prose = _docstring_lines(tree)
+    return sum(
+        1
+        for number, line in enumerate(source.splitlines(), start=1)
+        if line.strip() and not line.lstrip().startswith("#") and number not in prose
+    )
+
+
+def _docstring_lines(tree: ast.AST) -> set[int]:
     prose: set[int] = set()
     for node in ast.walk(tree):
         # A bare string expression statement: a module/class/function
@@ -59,12 +68,7 @@ def python_sloc(source: str) -> int:
             and node.end_lineno is not None
         ):
             prose.update(range(node.lineno, node.end_lineno + 1))
-
-    return sum(
-        1
-        for number, line in enumerate(source.splitlines(), start=1)
-        if line.strip() and not line.lstrip().startswith("#") and number not in prose
-    )
+    return prose
 
 
 def typescript_sloc(source: str) -> int:
@@ -79,18 +83,10 @@ def typescript_sloc(source: str) -> int:
     in_block = False
     for raw in source.splitlines():
         line = raw.strip()
-        if in_block:
-            if "*/" in line:
-                in_block = False
-            continue
-        if not line or line.startswith("//"):
-            continue
-        if line.startswith("/*"):
+        if in_block or line.startswith("/*"):
             in_block = "*/" not in line
-            continue
-        if line.startswith("*"):
-            continue
-        total += 1
+        elif line and not line.startswith(("//", "*")):
+            total += 1
     return total
 
 
@@ -104,14 +100,15 @@ def files(roots: list[Path]) -> Iterator[Path]:
         if root.is_file():
             yield root
             continue
-        for path in sorted(root.rglob("*")):
-            if path.suffix not in (".py", ".ts", ".tsx") or not path.is_file():
-                continue
-            if SKIP_PARTS & set(path.parts):
-                continue
-            if any(str(path).replace("\\", "/").endswith(g) for g in GENERATED):
-                continue
-            yield path
+        yield from (path for path in sorted(root.rglob("*")) if _counted(path))
+
+
+def _counted(path: Path) -> bool:
+    if path.suffix not in (".py", ".ts", ".tsx") or not path.is_file():
+        return False
+    if SKIP_PARTS & set(path.parts):
+        return False
+    return not any(str(path).replace("\\", "/").endswith(g) for g in GENERATED)
 
 
 BUCKETS = ("src", "tests", "frontend", "frontend tests")
@@ -143,20 +140,22 @@ def main() -> int:
         return 2
 
     rows = [(measure(path), path.relative_to(REPO)) for path in files(roots)]
-    totals: dict[str, int] = {}
-    for count, path in rows:
-        totals[bucket(path)] = totals.get(bucket(path), 0) + count
-
     if not args.summary:
         for count, path in sorted(rows, reverse=True):
             print(f"{count:6d}  {str(path).replace(chr(92), '/')}")
         print()
+    _print_totals(rows)
+    return 0
 
+
+def _print_totals(rows: list[tuple[int, Path]]) -> None:
+    totals: dict[str, int] = {}
+    for count, path in rows:
+        totals[bucket(path)] = totals.get(bucket(path), 0) + count
     for name in BUCKETS:
         if name in totals:
             print(f"{totals[name]:6d}  {name}")
     print(f"{sum(totals.values()):6d}  total")
-    return 0
 
 
 if __name__ == "__main__":
