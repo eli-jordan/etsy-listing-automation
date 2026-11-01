@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { listListings } from "../api/listings";
 import { cancelRun, createRun, getRun, markRunSeen } from "../api/runs";
-import { stageWillRun, type ListingSummary, type RunDetail } from "../types";
+import { stageWillRun, type ListingSummary, type PlanDTO, type RunDetail } from "../types";
 import { BatchAggregateStages } from "./batchDeploy/BatchAggregateStages";
 import { BatchListingDrawer } from "./batchDeploy/BatchListingDrawer";
 import { BatchListingGroups } from "./batchDeploy/BatchListingGroups";
@@ -15,6 +15,13 @@ import {
   type BatchListingState,
 } from "./batchDeploy/batchDeployState";
 import { batchResult, planGroup } from "./batchDeploy/batchDeployPresentation";
+import { BatchResultCallout, FooterAction, ReviewSummary } from "./batchDeploy/BatchDeployPanels";
+import {
+  BATCH_STAGE_TITLES,
+  batchFooterMessage,
+  batchStage,
+  type BatchStage,
+} from "./batchDeploy/batchDeployView";
 import { openRunStream, type RunStreamHandle } from "./deploy/runStream";
 import { MARK_SEEN_GRACE_MS, TERMINAL_PHASES } from "./deploy/runPhases";
 
@@ -71,8 +78,38 @@ function isTerminalApply(state: BatchDeployState): boolean {
   return state.applyStarted && TERMINAL_PHASES.has(state.phase);
 }
 
-function countLabel(count: number, singular: string, plural = `${singular}s`): string {
-  return `${count} ${count === 1 ? singular : plural}`;
+/** A plan with nothing left to do: ready, nothing failed, and no stage that
+ * would run. */
+function nothingToApply(state: BatchDeployState, plans: readonly PlanDTO[]): boolean {
+  if (state.phase !== "ready") return false;
+  const failed = Object.values(state.listings).some(
+    (listing) => listing.planFailure !== null || listing.failureMessage !== null,
+  );
+  return !failed && plans.every((plan) => plan.stage_plans.every((stage) => !stageWillRun(stage)));
+}
+
+const DRAWER_MODES: Record<BatchStage, "applying" | "applied" | "review"> = {
+  planning: "review",
+  applying: "applying",
+  applied: "applied",
+  review: "review",
+};
+
+/** A workspace run and the review it applies (the run itself, for a plan),
+ * or `null` when the run is not a workspace one. Throws when an apply has no
+ * ready workspace review. */
+async function loadWorkspaceRun(
+  id: string,
+): Promise<{ loaded: RunDetail; reviewed: RunDetail } | null> {
+  const loaded = await getRun(id);
+  if (loaded.scope !== "workspace") return null;
+  if (loaded.kind !== "apply") return { loaded, reviewed: loaded };
+  if (loaded.reviewed_run_id === null) throw new Error("apply run has no reviewed plan");
+  const reviewed = await getRun(loaded.reviewed_run_id);
+  if (reviewed.scope !== "workspace" || reviewed.kind !== "plan" || reviewed.phase !== "ready") {
+    throw new Error("apply run has no ready workspace review");
+  }
+  return { loaded, reviewed };
 }
 
 /** The stable workspace route. It owns only run attachment and page composition;
@@ -114,9 +151,9 @@ export function BatchDeployPage() {
   const attach = useCallback(
     async (id: string) => {
       try {
-        const loaded = await getRun(id);
+        const runs = await loadWorkspaceRun(id);
         if (activeRunRef.current !== id) return;
-        if (loaded.scope !== "workspace") {
+        if (runs === null) {
           streamRef.current?.close();
           setRun(null);
           setState(initialBatchDeployState);
@@ -124,18 +161,7 @@ export function BatchDeployPage() {
           setStatus("This URL is not a workspace planning run. Return to Listings.");
           return;
         }
-        let reviewed = loaded;
-        if (loaded.kind === "apply") {
-          if (loaded.reviewed_run_id === null) throw new Error("apply run has no reviewed plan");
-          reviewed = await getRun(loaded.reviewed_run_id);
-          if (
-            reviewed.scope !== "workspace" ||
-            reviewed.kind !== "plan" ||
-            reviewed.phase !== "ready"
-          ) {
-            throw new Error("apply run has no ready workspace review");
-          }
-        }
+        const { loaded, reviewed } = runs;
         setRun(loaded);
         setState(
           loaded.kind === "apply"
@@ -238,15 +264,12 @@ export function BatchDeployPage() {
   );
   const counts = useMemo(() => planCounts(listings), [listings]);
   const requiredPreviews = useMemo(() => requiredPreviewKeys(listings), [listings]);
-  const previewsReady = requiredPreviews.every((key) => visibleState.previewsRendered.has(key));
+  const readyPreviews = requiredPreviews.filter((key) =>
+    visibleState.previewsRendered.has(key),
+  ).length;
+  const previewsReady = readyPreviews === requiredPreviews.length;
   const runnableCount = plans.filter((plan) => plan.stage_plans.some(stageWillRun)).length;
-  const nothingToDo =
-    visibleState.phase === "ready" &&
-    !Object.values(visibleState.listings).some(
-      (listing) => listing.planFailure !== null || listing.failureMessage !== null,
-    ) &&
-    (plans.length === 0 ||
-      plans.every((plan) => plan.stage_plans.every((stage) => !stageWillRun(stage))));
+  const nothingToDo = nothingToApply(visibleState, plans);
   const summaryByName = useMemo(
     () => new Map(summaries.map((summary) => [summary.name, summary])),
     [summaries],
@@ -330,13 +353,7 @@ export function BatchDeployPage() {
 
   const phase = visibleState.phase;
   const planning = !visibleState.applyStarted && isPlanning(phase);
-  const headerTitle = planning
-    ? "Planning all listings…"
-    : applying
-      ? "Applying all changes…"
-      : terminalApply
-        ? "Batch result"
-        : "Review all changes";
+  const stage = batchStage({ planning, applying, terminalApply });
   const planTimestamp = formatGeneratedAt(visibleState.generatedAt);
   const showReview =
     planning ||
@@ -357,7 +374,7 @@ export function BatchDeployPage() {
           ← Back to listings
         </button>
         <span className="page-head__sep">/</span>
-        <h1 className="page-head__title">{headerTitle}</h1>
+        <h1 className="page-head__title">{BATCH_STAGE_TITLES[stage]}</h1>
         <span className="page-head__meta">{planTimestamp}</span>
       </div>
 
@@ -407,29 +424,7 @@ export function BatchDeployPage() {
         </div>
       )}
 
-      {terminalApply && (
-        <div
-          className={`dv-callout ${result.partial ? "dv-callout--drift" : result.failed.length || result.stale.length ? "dv-callout--blocked" : "dv-callout--ok"}`}
-          role={result.partial || result.failed.length || result.stale.length ? "alert" : "status"}
-        >
-          <strong>
-            {result.partial
-              ? "Batch partially applied."
-              : result.stale.length > 0
-                ? "Some listings became stale."
-                : result.failed.length > 0
-                  ? "Batch apply failed."
-                  : "All planned work finished."}
-          </strong>
-          <p>
-            {countLabel(result.succeeded.length, "listing")} succeeded
-            {result.failed.length > 0 && ` · ${countLabel(result.failed.length, "listing")} failed`}
-            {result.stale.length > 0 && ` · ${countLabel(result.stale.length, "listing")} stale`}
-            {result.blocked.length > 0 &&
-              ` · ${countLabel(result.blocked.length, "listing")} blocked`}
-          </p>
-        </div>
-      )}
+      {terminalApply && <BatchResultCallout result={result} />}
 
       {nothingToDo ? (
         <div className="dv-callout dv-callout--ok batch-deploy-empty" role="status">
@@ -441,20 +436,12 @@ export function BatchDeployPage() {
       ) : (
         <>
           {visibleState.phase === "ready" && !visibleState.applyStarted && (
-            <section className="batch-review-summary" aria-labelledby="batch-review-heading">
-              <div>
-                <span className="dv-eyebrow">Authoritative review</span>
-                <h2 id="batch-review-heading">{listings.length} affected listings</h2>
-                <p>
-                  {counts.add} to add · {counts.edit} to edit · {counts.remove} to remove
-                </p>
-              </div>
-              <span className="batch-review-summary__previews">
-                {requiredPreviews.length === 0
-                  ? "All required previews ready"
-                  : `${requiredPreviews.filter((key) => visibleState.previewsRendered.has(key)).length} of ${requiredPreviews.length} previews ready`}
-              </span>
-            </section>
+            <ReviewSummary
+              affected={listings.length}
+              counts={counts}
+              readyPreviews={readyPreviews}
+              requiredPreviews={requiredPreviews.length}
+            />
           )}
 
           {showReview && (
@@ -475,77 +462,39 @@ export function BatchDeployPage() {
 
       <div className="dv-foot batch-deploy-footer">
         <p>
-          {applying
-            ? "Apply runs exactly this plan, one listing at a time."
-            : terminalApply
-              ? result.partial || result.failed.length > 0 || result.stale.length > 0
-                ? "Review the affected listings, then plan again for the remaining work."
-                : "All planned work finished."
-              : phase === "ready" && runnableCount > 0
-                ? previewsReady
-                  ? "Apply runs exactly this plan, one listing at a time."
-                  : `Preview images before applying (${requiredPreviews.filter((key) => visibleState.previewsRendered.has(key)).length} of ${requiredPreviews.length})…`
-                : nothingToDo
-                  ? "No remote changes were found."
-                  : "Apply unlocks once the reviewed previews are ready."}
+          {batchFooterMessage({
+            stage,
+            result,
+            canApply: phase === "ready" && runnableCount > 0,
+            previewsReady,
+            readyPreviews,
+            requiredPreviews: requiredPreviews.length,
+            nothingToDo,
+          })}
         </p>
-        {applying ? (
-          <button type="button" className="btn btn-primary dv-big" disabled>
-            Applying…
-          </button>
-        ) : showPlanningFailure ? (
-          <button
-            type="button"
-            className="btn btn-primary dv-big"
-            onClick={() => void startWorkspacePlan()}
-          >
-            Try again
-          </button>
-        ) : nothingToDo ? (
-          <button
-            type="button"
-            className="btn btn-primary dv-big"
-            onClick={() => void startWorkspacePlan()}
-          >
-            Plan again
-          </button>
-        ) : terminalApply ? (
-          <button
-            type="button"
-            className="btn btn-primary dv-big"
-            onClick={() => void startWorkspacePlan()}
-          >
-            Plan again
-          </button>
-        ) : (
-          <button
-            type="button"
-            className="btn btn-primary dv-big"
-            disabled={
-              applyPending ||
-              phase !== "ready" ||
-              runnableCount === 0 ||
-              !previewsReady ||
-              nothingToDo
-            }
-            onClick={() => void handleApply()}
-            aria-label={`Apply ${runnableCount} listing${runnableCount === 1 ? "" : "s"}`}
-            title={
-              previewsReady
-                ? "Applying reviewed plans is the next step"
-                : "Preview images before applying"
-            }
-          >
-            Apply {runnableCount} listing{runnableCount === 1 ? "" : "s"}
-          </button>
-        )}
+        <FooterAction
+          stage={stage}
+          planningFailed={showPlanningFailure}
+          nothingToDo={nothingToDo}
+          applyDisabled={
+            applyPending ||
+            phase !== "ready" ||
+            runnableCount === 0 ||
+            !previewsReady ||
+            nothingToDo
+          }
+          runnableCount={runnableCount}
+          previewsReady={previewsReady}
+          onPlanAgain={() => void startWorkspacePlan()}
+          onApply={() => void handleApply()}
+        />
       </div>
 
       <BatchListingDrawer
         open={selected !== null}
         listing={selected}
         summary={selectedSummary}
-        mode={applying ? "applying" : terminalApply ? "applied" : "review"}
+        mode={DRAWER_MODES[stage]}
         previewsRendered={visibleState.previewsRendered}
         renderSnapshot={
           selectedPlan?.stage_plans.find((stage) => stage.stage === "render")?.snapshot ?? null
