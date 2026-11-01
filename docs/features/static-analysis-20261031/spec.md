@@ -1,6 +1,8 @@
 # Static analysis specification
 
 Status: delivered by the seven PRs listed in the [plan](plan.md#delivery).
+Delivered in [#152](https://github.com/eli-jordan/etsy-listing-automation/pull/152) to [#157](https://github.com/eli-jordan/etsy-listing-automation/pull/157) and PR 7, stacked on
+`main` and merged bottom-up.
 
 Coding agents (Claude, Codex and Grok, run through T3 Code) write most of the
 code in this repository. Today they see lint results only when they run
