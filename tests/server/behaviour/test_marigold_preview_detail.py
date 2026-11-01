@@ -9,7 +9,7 @@ from fastapi.testclient import TestClient
 from PIL import Image, ImageDraw, ImageFont
 
 from etsy_listings.core.render import load_template_config
-from etsy_listings.core.workspace.calibration import CalibrationStore
+from etsy_listings.core.workspace.calibration import AutomaticMask, CalibrationStore
 from etsy_listings.server.api.app import create_app
 
 from tests.support.marigold import PreparationRuntime, marigold_template
@@ -37,8 +37,10 @@ def test_editor_resolves_fine_artwork_at_1024_without_changing_full_preview(
     store = CalibrationStore(workspace)
     store.install_automatic(
         "shirt",
-        store.encode_mask(Image.new("L", photo_size, 255)),
-        algorithm_version="all-visible-detail-test",
+        AutomaticMask(
+            store.encode_mask(Image.new("L", photo_size, 255)),
+            algorithm_version="all-visible-detail-test",
+        ),
         expected_revision=store.read("shirt").revision,
     )
     artwork = Image.new("RGBA", (4200, 4800), "white")

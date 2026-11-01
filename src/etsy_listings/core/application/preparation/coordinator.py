@@ -10,8 +10,9 @@ import hashlib
 import json
 import time
 from collections.abc import Callable
-from concurrent.futures import Executor, Future, ThreadPoolExecutor
+from concurrent.futures import Future, ThreadPoolExecutor
 from contextlib import suppress
+from dataclasses import dataclass
 from typing import Any
 from uuid import uuid4
 
@@ -49,6 +50,21 @@ class PreparationRefusedError(ValueError):
     """Actionable refusal without any inference or installation side effect."""
 
 
+@dataclass(frozen=True)
+class PreparationRequest:
+    """One explicit Prepare, Prepare again or Retry, against the calibration
+    ``config_revision`` it was asked for. ``request_id`` makes a repeated
+    submission idempotent; ``previous_job`` names the job a Retry repeats, and
+    ``reset_masks_for_photo`` is Prepare again's choice to start the masks
+    over."""
+
+    config_revision: str
+    request_id: str
+    action: Action = "prepare"
+    previous_job: str | None = None
+    reset_masks_for_photo: bool = False
+
+
 class Preparations:
     def __init__(
         self,
@@ -56,8 +72,6 @@ class Preparations:
         *,
         runtime: PreparationRuntime | None = None,
         artifacts: Artifacts | None = None,
-        gpu_executor: Executor | None = None,
-        cpu_executor: Executor | None = None,
         checkpoint: Callable[[str, str], None] = lambda _job, _step: None,
     ) -> None:
         self.workspace = workspace
@@ -65,14 +79,8 @@ class Preparations:
         self.calibration = CalibrationStore(workspace)
         self.artifacts = artifacts if artifacts is not None else Artifacts(workspace)
         self.store = Store(workspace)
-        self.gpu = gpu_executor or ThreadPoolExecutor(
-            max_workers=1, thread_name_prefix="preparation-gpu"
-        )
-        self.cpu = cpu_executor or ThreadPoolExecutor(
-            max_workers=1, thread_name_prefix="preparation-cpu"
-        )
-        self.owns_gpu = gpu_executor is None
-        self.owns_cpu = cpu_executor is None
+        self.gpu = ThreadPoolExecutor(max_workers=1, thread_name_prefix="preparation-gpu")
+        self.cpu = ThreadPoolExecutor(max_workers=1, thread_name_prefix="preparation-cpu")
         self.checkpoint = checkpoint
         self._started = False
         self._closing = False
@@ -116,16 +124,10 @@ class Preparations:
                 job = self.store.read(identity)
             return tuple(e for e in job.events if e.sequence > after)
 
-    def submit(
-        self,
-        template: str,
-        *,
-        config_revision: str,
-        request_id: str,
-        action: Action = "prepare",
-        previous_job: str | None = None,
-        reset_masks_for_photo: bool = False,
-    ) -> Job:
+    def submit(self, template: str, request: PreparationRequest) -> Job:
+        config_revision, request_id = request.config_revision, request.request_id
+        action, previous_job = request.action, request.previous_job
+        reset_masks_for_photo = request.reset_masks_for_photo
         if (
             action not in ("prepare", "prepare_again", "retry")
             or not request_id
@@ -392,10 +394,8 @@ class Preparations:
         finally:
             if self.worker_slot.worker:
                 self.worker_slot.worker.close()
-            if self.owns_gpu:
-                self.gpu.shutdown(wait=True)
-            if self.owns_cpu:
-                self.cpu.shutdown(wait=True)
+            self.gpu.shutdown(wait=True)
+            self.cpu.shutdown(wait=True)
 
     def _schedule(self) -> None:
         with self.store.condition:

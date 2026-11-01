@@ -3,7 +3,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from etsy_listings.core.preparation.artifacts import Artifacts
+from etsy_listings.core.preparation.artifacts import Artifacts, PublishOptions
 from etsy_listings.core.workspace import Workspace
 
 from tests.support.marigold import material_maps, preparation_inputs
@@ -41,7 +41,7 @@ def test_cleanup_cannot_remove_a_generation_while_publication_is_validating(work
         inputs,
         {None: material_maps()},
         current_inputs=lambda: inputs,
-        checkpoint=checkpoint,
+        options=PublishOptions(checkpoint=checkpoint),
     )
     assert observed == []
     assert store.readiness("shirt", inputs).state == "ready"
@@ -81,14 +81,18 @@ def test_generation_identity_ignores_provenance_storage_names_and_placement_orde
     reverse_inputs = preparation_inputs(("right", "left"))
     maps = {"left": material_maps(), "right": material_maps()}
     first = store.publish(
-        "shirt", first_inputs, maps, current_inputs=lambda: first_inputs, provenance={"seconds": 1}
+        "shirt",
+        first_inputs,
+        maps,
+        current_inputs=lambda: first_inputs,
+        options=PublishOptions(provenance={"seconds": 1}),
     )
     second = store.publish(
         "shirt",
         reverse_inputs,
         maps,
         current_inputs=lambda: reverse_inputs,
-        provenance={"seconds": 99, "engine": "new"},
+        options=PublishOptions(provenance={"seconds": 99, "engine": "new"}),
     )
     assert first.generation_id != second.generation_id
     assert first.content_digest == second.content_digest
@@ -139,7 +143,7 @@ def test_stale_publication_and_crash_before_pointer_preserve_the_current_generat
             inputs,
             {None: material_maps()},
             current_inputs=lambda: inputs,
-            checkpoint=crash,
+            options=PublishOptions(checkpoint=crash),
         )
     with Artifacts(store.workspace).acquire("shirt", inputs) as acquired:
         assert acquired.manifest.generation_id == first.generation_id
@@ -377,7 +381,7 @@ def test_restart_at_each_publication_checkpoint_exposes_one_complete_generation(
             inputs,
             {None: material_maps()},
             current_inputs=lambda: inputs,
-            checkpoint=crash,
+            options=PublishOptions(checkpoint=crash),
         )
     restarted = Artifacts(store.workspace)
     with restarted.acquire("shirt", inputs) as acquired:
@@ -452,7 +456,7 @@ def test_explicit_photo_reset_capture_only_bypasses_photo_mismatch(workspace_roo
 
     from etsy_listings.core.errors import UserFacingError
     from etsy_listings.core.render import load_template_config
-    from etsy_listings.core.workspace.calibration import MaskPhotoMismatchError
+    from etsy_listings.core.workspace.calibration import AutomaticMask, MaskPhotoMismatchError
 
     workspace = Workspace.discover(root_override=workspace_root)
     workspace.template_dir("shirt").mkdir()
@@ -472,8 +476,9 @@ def test_explicit_photo_reset_capture_only_bypasses_photo_mismatch(workspace_roo
     calibration = store.calibration
     calibration.install_automatic(
         "shirt",
-        calibration.encode_mask(Image.new("L", (16, 16), 123)),
-        algorithm_version="test",
+        AutomaticMask(
+            calibration.encode_mask(Image.new("L", (16, 16), 123)), algorithm_version="test"
+        ),
         expected_revision=calibration.read("shirt").revision,
     )
     checksum = calibration.mask("shirt").checksum

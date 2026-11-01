@@ -135,6 +135,17 @@ class Calibration:
     main_photo: str = ""
 
 
+@dataclass(frozen=True)
+class AutomaticMask:
+    """A generated visibility mask: its PNG bytes, the algorithm version that
+    made it, and the placement it covers (``None`` for single-placement
+    kinds)."""
+
+    data: bytes
+    algorithm_version: str
+    placement_id: str | None = None
+
+
 class CalibrationStore:
     def __init__(self, workspace: Workspace) -> None:
         self.workspace = workspace
@@ -380,14 +391,13 @@ class CalibrationStore:
     def install_automatic(
         self,
         name: str,
-        data: bytes,
+        mask: AutomaticMask,
         *,
-        algorithm_version: str,
         expected_revision: str,
-        placement_id: str | None = None,
         reset_for_photo: bool = False,
         fresh: bool = False,
     ) -> Calibration:
+        data, algorithm_version, placement_id = mask.data, mask.algorithm_version, mask.placement_id
         with self.lock(name):
             current = self.read(name)
             if current.revision != expected_revision:

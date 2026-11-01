@@ -22,7 +22,7 @@ import numpy as np
 import yaml
 from PIL import Image
 
-from etsy_listings.core.application.preparation.coordinator import Preparations
+from etsy_listings.core.application.preparation.coordinator import PreparationRequest, Preparations
 from etsy_listings.core.application.preparation.models import TERMINAL
 from etsy_listings.core.preparation.artifacts import Artifacts
 from etsy_listings.core.preparation.numerics import EvidenceIdentity, evidence_covers, plan_crop
@@ -121,8 +121,10 @@ def run(output: Path) -> None:
         started = time.perf_counter()
         job = coordinator.submit(
             name,
-            config_revision=CalibrationStore(workspace).read(name).revision,
-            request_id="multiple-native-validation",
+            PreparationRequest(
+                config_revision=CalibrationStore(workspace).read(name).revision,
+                request_id="multiple-native-validation",
+            ),
         )
         deadline = time.monotonic() + 900
         normals_started = None
@@ -154,10 +156,12 @@ def run(output: Path) -> None:
             raise RuntimeError("Native cancellation did not retain active-call evidence")
         job = coordinator.submit(
             name,
-            config_revision=CalibrationStore(workspace).read(name).revision,
-            request_id="multiple-native-retry",
-            action="retry",
-            previous_job=job.id,
+            PreparationRequest(
+                config_revision=CalibrationStore(workspace).read(name).revision,
+                request_id="multiple-native-retry",
+                action="retry",
+                previous_job=job.id,
+            ),
         )
         deadline = time.monotonic() + 900
         while (job := coordinator.status(job.id)).phase not in TERMINAL:

@@ -3,7 +3,7 @@
 from etsy_listings.core.config.listing_validation import CheckInputs, check_listing
 from etsy_listings.core.engine import build_plan
 from etsy_listings.core.engine.stages.render import RenderStage
-from etsy_listings.core.preparation.artifacts import Artifacts
+from etsy_listings.core.preparation.artifacts import Artifacts, PublishOptions
 from etsy_listings.core.workspace import WorkspaceFacts
 from etsy_listings.core.workspace.listing_documents import ListingDocuments
 
@@ -123,7 +123,9 @@ def test_compatible_map_republication_and_cache_deletion_keep_render_identity(wo
         inputs,
         {None: material_maps((64, 64))},
         current_inputs=lambda: inputs,
-        provenance={"engine_version": "compatible-new", "timestamp": "tomorrow"},
+        options=PublishOptions(
+            provenance={"engine_version": "compatible-new", "timestamp": "tomorrow"}
+        ),
     )
     again = build_plan(ctx, FIXTURE_LISTING, first, (stage,))
     assert not again.plan.stage_plans[0].will_run

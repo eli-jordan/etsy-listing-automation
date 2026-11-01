@@ -438,6 +438,32 @@ def _remember_validation(signature: tuple[Any, ...]) -> None:
             _VALIDATED.popitem(last=False)
 
 
+def _no_checkpoint(_step: str) -> None:
+    return None
+
+
+@dataclass(frozen=True)
+class PublishOptions:
+    """How :meth:`Artifacts.publish` records and paces a generation.
+    ``provenance`` is stored in its manifest; ``checkpoint`` is told each
+    durable step and may raise to stop before the next. ``copy_maps=False``
+    transfers immutable array ownership to the bounded reader cache: the
+    coordinator uses it after freezing its private maps, and ordinary callers
+    keep the default independent input snapshot."""
+
+    provenance: dict[str, Any] | None = None
+    checkpoint: Callable[[str], None] = _no_checkpoint
+    copy_maps: bool = True
+
+
+@dataclass(frozen=True)
+class _Publication:
+    inputs: PreparationInputs
+    maps: Mapping[str | None, MaterialMaps]
+    current_inputs: Callable[[], PreparationInputs]
+    options: PublishOptions
+
+
 class Artifacts:
     """One complete set in, one leased immutable set out.
 
@@ -725,41 +751,22 @@ class Artifacts:
         maps: Mapping[str | None, MaterialMaps],
         *,
         current_inputs: Callable[[], PreparationInputs],
-        provenance: dict[str, Any] | None = None,
-        checkpoint: Callable[[str], None] = lambda _: None,
-        copy_maps: bool = True,
+        options: PublishOptions = PublishOptions(),
     ) -> Manifest:
-        """Publish a complete validated generation.
-
-        copy_maps=False transfers immutable array ownership to the bounded
-        reader cache. The coordinator uses it after freezing its private maps;
-        ordinary callers retain the default independent input snapshot.
-        """
+        """Publish a complete validated generation of ``maps``, prepared from
+        ``inputs``; ``current_inputs`` re-reads them before the switch."""
         generation = uuid4().hex
         with self._lease(name, generation):
             return self._publish(
-                name,
-                inputs,
-                maps,
-                current_inputs=current_inputs,
-                provenance=provenance,
-                checkpoint=checkpoint,
-                generation=generation,
-                copy_maps=copy_maps,
+                name, generation, _Publication(inputs, maps, current_inputs, options)
             )
 
-    def _publish(
-        self,
-        name: str,
-        inputs: PreparationInputs,
-        maps: Mapping[str | None, MaterialMaps],
-        *,
-        current_inputs: Callable[[], PreparationInputs],
-        provenance: dict[str, Any] | None = None,
-        checkpoint: Callable[[str], None] = lambda _: None,
-        generation: str,
-        copy_maps: bool,
-    ) -> Manifest:
+    def _publish(self, name: str, generation: str, publication: _Publication) -> Manifest:
+        inputs, maps = publication.inputs, publication.maps
+        current_inputs = publication.current_inputs
+        provenance = publication.options.provenance
+        checkpoint = publication.options.checkpoint
+        copy_maps = publication.options.copy_maps
         if set(maps) != set(inputs.ids):
             raise ArtifactError("Publish requires the exact configured placement set")
         size = (inputs.photo.width, inputs.photo.height)

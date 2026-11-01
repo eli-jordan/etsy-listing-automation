@@ -12,6 +12,7 @@ from starlette.responses import StreamingResponse
 
 from etsy_listings.core.application.preparation.coordinator import (
     PreparationRefusedError,
+    PreparationRequest,
     Preparations,
 )
 from etsy_listings.core.application.preparation.models import TERMINAL, Event, Job
@@ -187,11 +188,13 @@ def submit(request: Request, body: CreatePreparationRequest) -> PreparationJobRe
     try:
         job = preparations.submit(
             body.template,
-            config_revision=body.config_revision,
-            request_id=body.request_id,
-            action=body.action,
-            previous_job=body.previous_job,
-            reset_masks_for_photo=body.reset_masks_for_photo,
+            PreparationRequest(
+                config_revision=body.config_revision,
+                request_id=body.request_id,
+                action=body.action,
+                previous_job=body.previous_job,
+                reset_masks_for_photo=body.reset_masks_for_photo,
+            ),
         )
     except CalibrationConflictError as exc:
         raise HTTPException(status_code=412, detail=str(exc)) from exc

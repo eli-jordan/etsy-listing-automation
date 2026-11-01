@@ -17,7 +17,7 @@ import numpy as np
 import yaml
 from PIL import Image, ImageDraw
 
-from etsy_listings.core.application.preparation.coordinator import Preparations
+from etsy_listings.core.application.preparation.coordinator import PreparationRequest, Preparations
 from etsy_listings.core.application.preparation.models import TERMINAL
 from etsy_listings.core.preparation.artifacts import Artifacts
 from etsy_listings.core.preparation.runtime import Runtime
@@ -102,8 +102,10 @@ def run(source: Path, output: Path) -> None:
             started = time.perf_counter()
             record = coordinator.submit(
                 name,
-                config_revision=CalibrationStore(workspace).read(name).revision,
-                request_id="validation-" + name,
+                PreparationRequest(
+                    config_revision=CalibrationStore(workspace).read(name).revision,
+                    request_id="validation-" + name,
+                ),
             )
             deadline = time.monotonic() + 900
             seen = None

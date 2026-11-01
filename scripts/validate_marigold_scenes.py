@@ -20,7 +20,7 @@ import numpy as np
 import yaml
 from PIL import Image
 
-from etsy_listings.core.application.preparation.coordinator import Preparations
+from etsy_listings.core.application.preparation.coordinator import PreparationRequest, Preparations
 from etsy_listings.core.application.preparation.models import TERMINAL
 from etsy_listings.core.preparation.artifacts import Artifacts
 from etsy_listings.core.render import MaterialLayer, render_marigold_scene
@@ -69,8 +69,10 @@ def run(source: Path, output: Path) -> None:
             started = time.perf_counter()
             job = coordinator.submit(
                 name,
-                config_revision=CalibrationStore(workspace).read(name).revision,
-                request_id="native-" + name,
+                PreparationRequest(
+                    config_revision=CalibrationStore(workspace).read(name).revision,
+                    request_id="native-" + name,
+                ),
             )
             deadline = time.monotonic() + 900
             seen = None

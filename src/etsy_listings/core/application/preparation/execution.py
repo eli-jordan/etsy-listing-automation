@@ -23,6 +23,7 @@ from etsy_listings.core.application.preparation.models import Job, Prediction, p
 from etsy_listings.core.preparation.artifacts import (
     PlacementArtifact,
     PreparationInputs,
+    PublishOptions,
     StalePreparationError,
     arrays_of,
     descriptors,
@@ -38,6 +39,7 @@ from etsy_listings.core.preparation.numerics import (
 from etsy_listings.core.preparation.predictions import read_prediction
 from etsy_listings.core.render import FloatMap, MaterialMaps
 from etsy_listings.core.workspace.atomic import write_bytes_atomic
+from etsy_listings.core.workspace.calibration import AutomaticMask
 
 if TYPE_CHECKING:
     from etsy_listings.core.application.preparation.coordinator import Preparations
@@ -430,10 +432,12 @@ class Execution:
                         revision = self.owner.calibration.read(job.template).revision
                         self.owner.calibration.install_automatic(
                             job.template,
-                            data,
-                            algorithm_version=proposal.algorithm,
+                            AutomaticMask(
+                                data,
+                                algorithm_version=proposal.algorithm,
+                                placement_id=placement.id,
+                            ),
                             expected_revision=revision,
-                            placement_id=placement.id,
                             reset_for_photo=job.reset_masks_for_photo,
                         )
                         self.owner.checkpoint(identity, "mask_committed")
@@ -528,13 +532,15 @@ class Execution:
                 job.snapshot,
                 maps,
                 current_inputs=current_inputs,
-                copy_maps=False,
-                provenance={
-                    "job_id": job.id,
-                    "engine_version": job.engine_version,
-                    "installation_id": job.installation_id,
-                },
-                checkpoint=lambda step: self.owner.checkpoint(identity, step),
+                options=PublishOptions(
+                    provenance={
+                        "job_id": job.id,
+                        "engine_version": job.engine_version,
+                        "installation_id": job.installation_id,
+                    },
+                    checkpoint=lambda step: self.owner.checkpoint(identity, step),
+                    copy_maps=False,
+                ),
             )
             self.write(
                 identity,

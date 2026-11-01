@@ -18,7 +18,7 @@ from typing import Any, override
 import numpy as np
 from PIL import Image
 
-from etsy_listings.core.application.preparation.coordinator import Preparations
+from etsy_listings.core.application.preparation.coordinator import PreparationRequest, Preparations
 from etsy_listings.core.application.preparation.dependencies import (
     InferenceWorker,
     PreparationRuntime,
@@ -32,7 +32,7 @@ from etsy_listings.core.preparation.distribution.src.marigold_worker.protocol im
 from etsy_listings.core.preparation.runtime import Capability
 from etsy_listings.core.render import load_template_config
 from etsy_listings.core.workspace import Workspace
-from etsy_listings.core.workspace.calibration import CalibrationStore
+from etsy_listings.core.workspace.calibration import AutomaticMask, CalibrationStore
 
 
 class FixedWorker(InferenceWorker):
@@ -183,10 +183,12 @@ def create(root: Path) -> None:
         for identity in store.placement_ids(store.config(name)):
             store.install_automatic(
                 name,
-                store.encode_mask(Image.new("L", (2048, 2048), 255)),
-                algorithm_version="fixed-all-visible-v1",
+                AutomaticMask(
+                    store.encode_mask(Image.new("L", (2048, 2048), 255)),
+                    algorithm_version="fixed-all-visible-v1",
+                    placement_id=identity,
+                ),
                 expected_revision=store.read(name).revision,
-                placement_id=identity,
             )
     workspace.test_designs_dir().mkdir(parents=True)
     Image.new("RGBA", (512, 512), (255, 255, 255, 255)).save(
@@ -197,7 +199,10 @@ def create(root: Path) -> None:
     try:
         for name in ["folded-bay", "multiple-validation"]:
             job = coordinator.submit(
-                name, config_revision=store.read(name).revision, request_id="fixed-" + name
+                name,
+                PreparationRequest(
+                    config_revision=store.read(name).revision, request_id="fixed-" + name
+                ),
             )
             deadline = time.monotonic() + 600
             while (job := coordinator.status(job.id)).phase not in TERMINAL:
