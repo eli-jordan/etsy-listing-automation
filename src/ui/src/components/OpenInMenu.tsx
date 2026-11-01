@@ -1,6 +1,7 @@
+import { useMenuDismiss } from "../hooks/useMenuDismiss";
 import { ArrowSquareOutIcon } from "@phosphor-icons/react/dist/csr/ArrowSquareOut";
 import { CaretDownIcon } from "@phosphor-icons/react/dist/csr/CaretDown";
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { etsyListingUrl, printifyProductUrl } from "./openOn";
 
 /**
@@ -42,23 +43,7 @@ export function OpenInMenu({ etsyListingId, printifyProductId, variant = "row" }
   const rootRef = useRef<HTMLDivElement>(null);
   const action = variant === "action";
 
-  useEffect(() => {
-    if (!open) return;
-    function onPointerDown(event: MouseEvent) {
-      if (rootRef.current && !rootRef.current.contains(event.target as Node)) {
-        setOpen(false);
-      }
-    }
-    function onKey(event: KeyboardEvent) {
-      if (event.key === "Escape") setOpen(false);
-    }
-    document.addEventListener("mousedown", onPointerDown);
-    document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("mousedown", onPointerDown);
-      document.removeEventListener("keydown", onKey);
-    };
-  }, [open]);
+  useMenuDismiss(open, rootRef, setOpen);
 
   return (
     <div className="row-menu row-menu--inline" ref={rootRef}>
