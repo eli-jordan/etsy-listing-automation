@@ -18,7 +18,7 @@ import threading
 import httpx
 import pytest
 
-from etsy_listings.core.clients.etsy.transport import BASE_URL, RateGate, Transport
+from etsy_listings.core.clients.etsy.transport import BASE_URL, RateGate, Timing, Transport
 from etsy_listings.core.config.secrets import EtsyAppKey
 
 
@@ -57,8 +57,7 @@ def _transport(time: FakeTime, handler) -> Transport:
     return Transport(
         EtsyAppKey("k", "s"),
         client=httpx.Client(transport=httpx.MockTransport(handler), base_url=BASE_URL),
-        sleep=time.sleep,
-        clock=time.clock,
+        timing=Timing(sleep=time.sleep, clock=time.clock),
     )
 
 

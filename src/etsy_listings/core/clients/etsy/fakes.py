@@ -19,6 +19,7 @@ from etsy_listings.core.clients.etsy.listings import (
     DAILY_VIDEO_ASSOCIATIONS,
     VIDEO_SLOTS,
     EtsyListingClient,
+    ImageUpload,
     VideoBudgetExhaustedError,
     VideoSlotsFullError,
     video_content_type,
@@ -331,17 +332,11 @@ class FakeEtsyListingClient(EtsyListingClient):
 
     @override
     def upload_listing_image(
-        self,
-        shop_id: int,
-        listing_id: int,
-        *,
-        file_name: str,
-        contents: bytes,
-        rank: int,
-        alt_text: str = "",
-        overwrite: bool = False,
-        listing_image_id: int | None = None,
+        self, shop_id: int, listing_id: int, upload: ImageUpload
     ) -> ListingImage:
+        contents, rank = upload.contents, upload.rank
+        alt_text, overwrite = upload.alt_text, upload.overwrite
+        listing_image_id = upload.listing_image_id
         replacing = overwrite and listing_image_id is not None
         if not replacing and len(self._images.get(listing_id, [])) >= MAX_IMAGES:
             # Measured: a 21st upload is refused, nothing changed.

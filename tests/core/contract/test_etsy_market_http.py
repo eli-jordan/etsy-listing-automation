@@ -17,7 +17,7 @@ import pytest
 
 from etsy_listings.core.clients.etsy.market import HttpEtsyMarketClient
 from etsy_listings.core.clients.etsy.transport import BASE_URL as ETSY_BASE_URL
-from etsy_listings.core.clients.etsy.transport import EtsyApiError
+from etsy_listings.core.clients.etsy.transport import EtsyApiError, Timing
 from etsy_listings.core.clients.etsy.transport import Transport as EtsyTransport
 from etsy_listings.core.config.secrets import EtsyAppKey
 
@@ -405,8 +405,7 @@ class _Recorder:
                 client=httpx.Client(
                     transport=httpx.MockTransport(self.handler), base_url=ETSY_BASE_URL
                 ),
-                sleep=self.slept.append,
-                random=lambda: 0.5,
+                timing=Timing(sleep=self.slept.append, random=lambda: 0.5),
             )
         )
 

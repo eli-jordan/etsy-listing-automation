@@ -46,6 +46,7 @@ from typing import override
 
 from pydantic import BaseModel, ConfigDict
 
+from etsy_listings.core.clients.etsy.listings import ImageUpload
 from etsy_listings.core.config.listing import TemplateMediaEntry
 from etsy_listings.core.config.media import MAX_IMAGES, media_kind
 from etsy_listings.core.engine.change import Action, Drift, MediaChange, Verdict
@@ -413,10 +414,12 @@ class EtsyMediaStage(Stage[EtsyMediaDesired, AppliedEtsyMedia, EtsyMediaLive]):
             image = client.upload_listing_image(
                 shop_id,
                 listing_id,
-                file_name=entry.source.name,
-                contents=entry.source.read_bytes(),
-                rank=rank,
-                alt_text=entry.alt_text,
+                ImageUpload(
+                    file_name=entry.source.name,
+                    contents=entry.source.read_bytes(),
+                    rank=rank,
+                    alt_text=entry.alt_text,
+                ),
             )
             image_ids[entry.ref] = image.listing_image_id
             attached.append(image.listing_image_id)

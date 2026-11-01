@@ -14,7 +14,7 @@ from __future__ import annotations
 import httpx
 import pytest
 
-from etsy_listings.core.clients.etsy.listings import HttpEtsyListingClient
+from etsy_listings.core.clients.etsy.listings import HttpEtsyListingClient, ImageUpload
 from etsy_listings.core.clients.etsy.transport import EtsyApiError
 
 from tests.support.http import etsy_transport
@@ -296,10 +296,12 @@ def test_upload_posts_multipart_with_rank_and_alt_text() -> None:
     image = _client(handler).upload_listing_image(
         SHOP_ID,
         LISTING_ID,
-        file_name="flat-lay-black.png",
-        contents=b"\x89PNG-bytes",
-        rank=1,
-        alt_text="Black, flat lay",
+        ImageUpload(
+            file_name="flat-lay-black.png",
+            contents=b"\x89PNG-bytes",
+            rank=1,
+            alt_text="Black, flat lay",
+        ),
     )
 
     assert (seen["method"], seen["path"]) == (
@@ -323,11 +325,13 @@ def test_overwrite_replaces_in_place_at_an_occupied_rank() -> None:
     _client(handler).upload_listing_image(
         SHOP_ID,
         LISTING_ID,
-        file_name="flat-lay-black.png",
-        contents=b"\x89PNG-bytes",
-        rank=1,
-        overwrite=True,
-        listing_image_id=8503331196,
+        ImageUpload(
+            file_name="flat-lay-black.png",
+            contents=b"\x89PNG-bytes",
+            rank=1,
+            overwrite=True,
+            listing_image_id=8503331196,
+        ),
     )
 
     assert seen["form"]["overwrite"] == "true"
