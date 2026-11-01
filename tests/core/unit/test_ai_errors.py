@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import json
 
+import pytest
+
 from etsy_listings.core.ai.errors import (
     ProviderGenerationError,
     ProviderUnavailableError,
@@ -280,3 +282,36 @@ def test_an_unrecognised_dump_is_shortened_so_it_cannot_flood_the_editor() -> No
     assert len(text) < 600
     assert text.endswith("…)")
     assert "x" * 600 not in text
+
+
+@pytest.mark.parametrize(
+    "message",
+    [
+        "The model 'retired' does not exist or you do not have access to it.",
+        "Unknown model: retired",
+        "Model not found: retired",
+        "Unsupported model retired",
+        "Invalid reasoning effort: extreme",
+        "Unsupported effort: extreme",
+        "error: invalid value 'extreme' for '--effort <LEVEL>'",
+        "Error loading config: unknown variant `extreme` for model_reasoning_effort",
+    ],
+)
+def test_rejected_preferences_allow_fallback(message: str) -> None:
+    failure = classify_process_failure("codex", returncode=1, stdout="", stderr=message)
+    assert isinstance(failure, ProviderUnavailableError)
+
+
+@pytest.mark.parametrize(
+    "message",
+    [
+        "Invalid model output: not JSON",
+        "Invalid model response format",
+        "Unsupported model output format",
+    ],
+)
+def test_bad_model_output_does_not_masquerade_as_a_rejected_preference(message: str) -> None:
+    assert isinstance(
+        classify_process_failure("codex", returncode=1, stdout="", stderr=message),
+        ProviderGenerationError,
+    )

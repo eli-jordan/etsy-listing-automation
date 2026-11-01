@@ -90,3 +90,16 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
     if len(kept) != len(items):
         config.hook.pytest_deselected(items=[i for i in items if i not in kept])
         items[:] = kept
+
+
+@pytest.fixture(autouse=True)
+def advisory_models_in_host_tests(
+    request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Host tests replace external discovery processes, leaving the owner's
+    lifecycle real. A server/browser test must never probe signed-in CLIs."""
+    if not {"server", "browser"}.intersection(request.path.parts):
+        return
+    from tests.support.ai_processes import ModelCli
+
+    monkeypatch.setattr("etsy_listings.core.ai.discovery.run_managed", ModelCli())

@@ -24,6 +24,8 @@ from etsy_listings.core.workspace import layout
 from etsy_listings.core.workspace.revisions import content_revision
 from etsy_listings.core.workspace.workspace import Workspace
 
+from tests.support.source_files import identity
+
 SETTINGS_YAML = """\
 # Tuned after the October research run.
 market_seo:
@@ -111,9 +113,9 @@ def test_the_settings_revision_is_its_own_not_shop_yaml_s(workspace: Workspace) 
         ("batch_ai:\n  concurency: 2\n", "batch_ai.concurency"),
         ("market_seo:\n  weights:\n    review: 30\n", "market_seo.weights.review"),
         ("batch_ai:\n  concurrency: 9\n", "batch_ai.concurrency"),
-        ("ai:\n  providers: []\n", "ai"),
+        ("ai:\n  providers: []\n", "ai.providers"),
     ],
-    ids=["misspelt-key", "unknown-metric", "too-high", "unknown-section"],
+    ids=["misspelt-key", "unknown-metric", "too-high", "empty-chain"],
 )
 def test_a_file_that_does_not_load_is_refused_naming_file_and_key(
     workspace: Workspace, text: str, key: str
@@ -326,3 +328,207 @@ def test_an_edit_to_a_file_that_does_not_load_is_refused(workspace: Workspace, s
 
     assert any(key.startswith("batch_ai") for key in caught.value.field_errors)
     assert settings_path(workspace).read_bytes() == before
+
+
+def test_provider_save_keeps_unrelated_source_and_refuses_last_disabled(
+    workspace: Workspace,
+) -> None:
+    written(workspace, SETTINGS_YAML)
+    view = workspace_settings.read_settings(workspace)
+    providers = [
+        {"name": "grok", "model": "retired", "effort": "high"},
+        {"name": "codex", "enabled": False},
+    ]
+    saved = workspace_settings.edit_settings(
+        workspace, expected_revision=view.revision, changes={"ai.providers": providers}
+    )
+    assert (
+        settings_path(workspace)
+        .read_bytes()
+        .startswith(SETTINGS_YAML.replace("\n", "\r\n").encode())
+    )
+    assert [(p.name, p.enabled) for p in saved.settings.ai.providers] == [
+        ("grok", True),
+        ("codex", False),
+    ]
+    before = settings_path(workspace).read_bytes()
+    with pytest.raises(InvalidSettingsEdit, match="at least one"):
+        workspace_settings.edit_settings(
+            workspace,
+            expected_revision=saved.revision,
+            changes={"ai.providers": [{"name": "grok", "enabled": False}]},
+        )
+    assert settings_path(workspace).read_bytes() == before
+    noop = workspace_settings.edit_settings(
+        workspace, expected_revision=saved.revision, changes={"ai.providers": providers}
+    )
+    assert noop.revision == saved.revision
+
+
+def test_reordering_providers_moves_their_comments_and_original_spelling(
+    workspace: Workspace,
+) -> None:
+    source = (
+        "# preferences\nai:\n  providers:\n"
+        '    - name: codex # first choice\n      model: "sol"\n'
+        "    - name: claude # fallback\n      effort: high\n"
+        "batch_ai: {concurrency: 2} # keep this\n"
+    )
+    written(workspace, source)
+    view = workspace_settings.read_settings(workspace)
+    workspace_settings.edit_settings(
+        workspace,
+        expected_revision=view.revision,
+        changes={
+            "ai.providers": [
+                {"name": "claude", "effort": "high"},
+                {"name": "codex", "model": "sol"},
+            ]
+        },
+    )
+    expected = (
+        "# preferences\nai:\n  providers:\n"
+        "    - name: claude # fallback\n      effort: high\n"
+        '    - name: codex # first choice\n      model: "sol"\n'
+        "batch_ai: {concurrency: 2} # keep this\n"
+    )
+    assert settings_path(workspace).read_bytes() == expected.replace("\n", "\r\n").encode()
+
+
+def test_provider_reorder_does_not_materialize_untouched_optional_defaults(
+    workspace: Workspace,
+) -> None:
+    source = "ai:\n  providers:\n    - name: codex # account defaults\n    - name: claude\n"
+    written(workspace, source)
+    view = workspace_settings.read_settings(workspace)
+    rows = [p.model_dump() for p in reversed(view.settings.ai.providers)]
+    workspace_settings.edit_settings(
+        workspace, expected_revision=view.revision, changes={"ai.providers": rows}
+    )
+    assert settings_path(workspace).read_bytes() == (
+        b"ai:\r\n  providers:\r\n    - name: claude\r\n    - name: codex # account defaults\r\n"
+    )
+
+
+@pytest.mark.parametrize("newline", ["\n", "\r\n"], ids=["lf", "crlf"])
+@pytest.mark.parametrize("insert", [False, True], ids=["reorder", "insert-after-eof-row"])
+@pytest.mark.parametrize("ending", ["", "\n"], ids=["bare-eof", "final-newline"])
+def test_provider_rows_at_eof_can_move_or_gain_a_sibling(
+    workspace: Workspace, newline: str, insert: bool, ending: str
+) -> None:
+    header = "# Keep preferences\nbatch_ai: {concurrency: 2} # untouched\nai:\n  providers:\n"
+    codex = "  - name: codex # account default\n"
+    grok = '  - name: grok\n    model: "old" # saved choice'
+    source = (header + codex + grok + ending).replace("\n", newline).encode()
+    path = settings_path(workspace)
+    path.write_bytes(source)
+    view = workspace_settings.read_settings(workspace)
+    rows = [{"name": "grok", "model": "old"}, {"name": "claude"}, {"name": "codex"}]
+    if insert:
+        rows = [{"name": "codex"}, *rows[:2]]
+    else:
+        rows.pop(1)
+
+    saved = workspace_settings.edit_settings(
+        workspace, expected_revision=view.revision, changes={"ai.providers": rows}
+    )
+
+    expected = header + (
+        codex + grok + "\n  - name: claude" if insert else grok + "\n" + codex.rstrip("\n")
+    )
+    assert path.read_bytes() == (expected + ending).replace("\n", newline).encode()
+    assert [p.name for p in saved.settings.ai.providers] == [row["name"] for row in rows]
+    assert workspace.load_settings() == saved.settings
+    before = identity(path)
+    again = workspace_settings.edit_settings(
+        workspace, expected_revision=saved.revision, changes={"ai.providers": rows}
+    )
+    assert again == saved
+    assert identity(path) == before
+
+
+# ------------------------------------------------------ AI time limits (ADR-0057)
+
+
+def test_time_limits_read_as_their_defaults_on_a_missing_file(workspace: Workspace) -> None:
+    ai = workspace_settings.read_settings(workspace).settings.ai
+    assert (ai.step_limit_minutes, ai.run_limit_minutes) == (5, 20)
+
+
+def test_a_step_limit_raised_with_its_run_limit_saves_both_together(
+    workspace: Workspace,
+) -> None:
+    written(workspace, SETTINGS_YAML)
+    view = workspace_settings.read_settings(workspace)
+
+    saved = workspace_settings.edit_settings(
+        workspace,
+        expected_revision=view.revision,
+        changes={"ai.step_limit_minutes": 10, "ai.run_limit_minutes": 30},
+    )
+
+    ai = saved.settings.ai
+    assert (ai.step_limit_minutes, ai.run_limit_minutes) == (10, 30)
+    text = settings_path(workspace).read_bytes()
+    assert text.startswith(SETTINGS_YAML.replace("\n", "\r\n").encode())
+    assert b"step_limit_minutes: 10" in text
+    assert b"run_limit_minutes: 30" in text
+
+
+def test_enabling_a_provider_with_a_raised_run_limit_is_one_save(workspace: Workspace) -> None:
+    written(
+        workspace,
+        "ai:\n  providers: [{name: codex}, {name: claude, enabled: false}]\n"
+        "  step_limit_minutes: 15\n  run_limit_minutes: 15\n",
+    )
+    view = workspace_settings.read_settings(workspace)
+
+    saved = workspace_settings.edit_settings(
+        workspace,
+        expected_revision=view.revision,
+        changes={
+            "ai.providers": [{"name": "codex"}, {"name": "claude"}],
+            "ai.run_limit_minutes": 30,
+        },
+    )
+
+    assert saved.settings.ai.run_limit_minutes == 30
+
+
+@pytest.mark.parametrize(
+    ("changes", "key"),
+    [
+        ({"ai.step_limit_minutes": 0}, "ai.step_limit_minutes"),
+        ({"ai.step_limit_minutes": 16}, "ai.step_limit_minutes"),
+        ({"ai.run_limit_minutes": 4}, "ai.run_limit_minutes"),
+        ({"ai.run_limit_minutes": 61}, "ai.run_limit_minutes"),
+        # Three default providers at ten minutes need thirty.
+        ({"ai.step_limit_minutes": 10}, "ai.run_limit_minutes"),
+        ({"ai.run_limit_minutes": 14}, "ai.run_limit_minutes"),
+    ],
+)
+def test_a_limit_edit_outside_its_range_or_floor_writes_nothing(
+    workspace: Workspace, changes: dict[str, object], key: str
+) -> None:
+    written(workspace, SETTINGS_YAML)
+    view = workspace_settings.read_settings(workspace)
+    before = settings_path(workspace).read_bytes()
+
+    with pytest.raises(InvalidSettingsEdit) as caught:
+        workspace_settings.edit_settings(
+            workspace, expected_revision=view.revision, changes=changes
+        )
+
+    assert key in caught.value.field_errors
+    assert settings_path(workspace).read_bytes() == before
+
+
+def test_lowering_the_step_limit_keeps_the_sellers_run_limit(workspace: Workspace) -> None:
+    written(workspace, "ai:\n  step_limit_minutes: 10\n  run_limit_minutes: 40\n")
+    view = workspace_settings.read_settings(workspace)
+
+    saved = workspace_settings.edit_settings(
+        workspace, expected_revision=view.revision, changes={"ai.step_limit_minutes": 2}
+    )
+
+    assert (saved.settings.ai.step_limit_minutes, saved.settings.ai.run_limit_minutes) == (2, 40)

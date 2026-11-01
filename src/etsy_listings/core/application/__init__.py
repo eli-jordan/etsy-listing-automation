@@ -65,7 +65,8 @@ import names the module it depends on. Public interfaces:
     The Admin page's Settings tab: ``read_settings`` -> ``SettingsView``
     (``settings.yaml``'s ``Settings`` and its own revision, ``ABSENT_REVISION``
     while there is no file); ``edit_settings`` applies dotted ``EDITABLE_KEYS``
-    changes -- ``batch_ai.concurrency``, and ``market_seo.weights`` as six
+    changes -- ``ai.providers`` (ADR-0056), ``batch_ai.concurrency``, and
+    ``market_seo.weights`` as six
     whole percentages totalling 100 -- against an expected revision, validated
     as a whole ``Settings``, refusing with ``SettingsRevisionConflict`` /
     ``InvalidSettingsEdit``; ``default_weights`` is what Reset writes.

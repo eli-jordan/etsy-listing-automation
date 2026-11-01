@@ -90,12 +90,19 @@ def replace_if_unchanged(
     change: Callable[[bytes], bytes],
     *,
     absent_ok: bool = False,
+    adopt: Callable[[], None] | None = None,
 ) -> Revised:
     """Apply ``change`` to the file if it is still at ``expected_revision``.
 
     ``change`` runs inside the lock and may raise to refuse; nothing is written
     then. A result identical to the current bytes leaves the file untouched,
     and an absent file absent.
+
+    ``adopt`` publishes what the caller derived from the result, such as the
+    running workspace's defaults. It runs inside the same lock once the file
+    holds that result, so publications happen in the order the saves reached
+    the file and a save made against another's revision is always adopted
+    after it. A refusal or a failed write never reaches it.
     """
     with _lock_for(path):
         current, revision = _read(path, absent_ok=absent_ok)
@@ -103,9 +110,13 @@ def replace_if_unchanged(
             raise RevisionConflict(path)
         edited = change(current)
         if edited == current:
-            return Revised(expected_revision, written=False)
-        write_bytes_atomic(path, edited)
-        return Revised(content_revision(edited), written=True)
+            revised = Revised(expected_revision, written=False)
+        else:
+            write_bytes_atomic(path, edited)
+            revised = Revised(content_revision(edited), written=True)
+        if adopt is not None:
+            adopt()
+        return revised
 
 
 def _read(path: Path, *, absent_ok: bool) -> tuple[bytes, str]:

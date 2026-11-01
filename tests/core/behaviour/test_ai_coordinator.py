@@ -69,7 +69,7 @@ def ai(
         workspace,
         proposals=ProposalStore(workspace),
         batches=batches,
-        providers=lambda _workspace: [provider],
+        providers=lambda _workspace, _ai: [provider],
         market_client=lambda _workspace: market,
     )
     yield coordinator
@@ -108,7 +108,7 @@ def test_constructing_the_coordinator_starts_no_thread(
         workspace,
         proposals=ProposalStore(workspace),
         batches=batches,
-        providers=lambda _workspace: [provider],
+        providers=lambda _workspace, _ai: [provider],
         market_client=lambda _workspace: None,
     )
 

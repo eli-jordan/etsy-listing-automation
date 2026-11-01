@@ -47,7 +47,7 @@ def _app(workspace: Workspace, provider: ChainProvider, *, market: bool = True) 
     etsy = seeded_market() if market else None
     return create_app(
         workspace,
-        seo_provider_factory=lambda _workspace: [provider],
+        seo_provider_factory=lambda _workspace, _ai: [provider],
         market_client_factory=lambda _workspace: etsy,
     )
 

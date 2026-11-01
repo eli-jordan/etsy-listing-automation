@@ -106,11 +106,16 @@ per-model effort choices, excluding `ultra` and any service-tier control.
 Claude uses a curated list of pinned ids, excluding fable, with low, medium,
 high, xhigh and max effort. Grok models come from `grok models`, with low,
 medium and high effort. Verify the installed CLIs' discovery format and flags
-in the implementation PR. Attempt discovery at startup, cache for 30 minutes
+in the implementation PR. Attempt discovery in the background at startup, cache for 30 minutes
 and refresh on expiry or explicit Refresh. Discovery failure retains saved
 values and Account default. Keep saved, no-longer-offered values with a warning
 and still pass them to the CLI; a rejected model or effort allows fallback.
 See [ADR-0056](../../adr/0056-configure-ai-providers-per-workspace.md).
+
+Discovery is advisory even when a CLI stalls. One refresh shares a 15-second
+probe budget and at most five seconds for managed process-tree cleanup. Concurrent
+catalog reads keep prior choices with an in-progress status. Application startup
+does not wait for that work, and shutdown cancels it with a bounded wait.
 
 Time limits apply to every AI run, including editor AI Mode, standalone brief
 drafting, market-query extraction and batch brief runs. `ai.step_limit_minutes`
@@ -129,6 +134,8 @@ snapshot. See [ADR-0057](../../adr/0057-bound-ai-attempts-and-runs.md).
 
 Unknown keys or providers, duplicate providers, an empty enabled chain and
 invalid limit relationships refuse to load, naming the file and dotted key.
+Listing readiness, run start and staging readiness report that same configuration
+failure before any provider runs, keeping staged work available for correction.
 Never silently repair a hand-edited file or fall back to defaults after a
 validation failure. Missing files, sections and optional keys keep defaults.
 
@@ -177,9 +184,16 @@ Execution started on 2026-10-30 from stack-base commit `5bbcd7df`.
 
 | PR | Branch | Link |
 |---|---|---|
-| 1 | `feat/admin-1-local-fixes` | To be recorded |
+| 1 | `feat/admin-1-local-fixes` | [PR #144](https://github.com/eli-jordan/etsy-listing-automation/pull/144) |
+| 2 | `feat/admin-2-yaml-roundtrip` | [PR #145](https://github.com/eli-jordan/etsy-listing-automation/pull/145) |
 | 3 | `feat/admin-3-shop` | [PR #146](https://github.com/eli-jordan/etsy-listing-automation/pull/146) |
 | 4 | `feat/admin-4-settings` | [PR #147](https://github.com/eli-jordan/etsy-listing-automation/pull/147) |
+| 5 | `feat/admin-5-ai-providers` | [PR #148](https://github.com/eli-jordan/etsy-listing-automation/pull/148) |
+| 6 | `feat/admin-6-ai-time-limits` | [PR #149](https://github.com/eli-jordan/etsy-listing-automation/pull/149) |
+
+The follow-up [Runtime audit fixes](audit-runtime-fixes.md) record R2, S1, S2,
+S3, M1 and M2, their regression evidence and delivery PR. The
+[State audit fixes](audit-state-fixes.md) record R1, Q1, Q2 and I1 the same way.
 
 ### PR 1: carry the local timeout and catalog fixes
 
@@ -262,6 +276,16 @@ keyboard/pointer actions. Queue tests prove the next dispatch uses the new limit
 and lowering it leaves active runs alone. Shared gates pass.
 
 ### PR 5: configure AI providers, models and effort
+
+The local BUILD implementation records verified installed formats and flags
+in [Provider CLI contracts](provider-cli-contracts.md). PR6 owns configurable
+limits and fresh fallback budgets; PR5 keeps the inherited fixed defaults.
+
+Agreed deviations from the reviewed frames: rows show no sign-in dot,
+because no workspace-level provider sign-in state exists yet. A saved value
+is called no longer offered only when its provider's list was read. During a
+total discovery failure it is shown plainly, per ADR-0056's
+keep-but-do-not-judge rule.
 
 Add the ordered list model and wire it into the existing ProviderFactory for
 readiness and every AI caller. Pass model/effort flags in each adapter while

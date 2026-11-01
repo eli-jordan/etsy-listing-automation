@@ -11,13 +11,15 @@ leaves the file byte-identical (``workspace.revisions``, ADR-0055).
 key. A file that does not load is refused naming the file and the dotted
 key; nothing here repairs it or falls back to defaults.
 
-The page edits two keys. ``batch_ai.concurrency`` is read afresh by the
-batch queue's next dispatch (ADR-0048), so a host wakes the queue after a
-save. ``market_seo.weights`` arrives as the page shows it: whole
-percentages for all six metrics totalling exactly 100. The file may still
-hold relative weights written by hand; the page normalises those for
-display only, and they are rewritten as percentages when the seller next
-edits a share.
+``ai.providers`` captures order and per-provider preferences for future runs
+(ADR-0056); ``ai.step_limit_minutes`` and ``ai.run_limit_minutes`` bound them
+(ADR-0057). A running AI job keeps the configuration it captured at start.
+``batch_ai.concurrency`` is read afresh by the batch queue's next dispatch
+(ADR-0048), so a host wakes the queue after a save. ``market_seo.weights``
+arrives as the page shows it: whole percentages for all six metrics
+totalling exactly 100. The file may still hold relative weights written by
+hand; the page normalises those for display only, and they are rewritten as
+percentages when the seller next edits a share.
 """
 
 from __future__ import annotations
@@ -43,14 +45,18 @@ from etsy_listings.core.workspace.revisions import (
     replace_if_unchanged,
 )
 from etsy_listings.core.workspace.workspace import Workspace
-from etsy_listings.core.workspace.yaml_source import edit_yaml_bytes
+from etsy_listings.core.workspace.yaml_source import UneditableYaml, edit_yaml_bytes
 
 CONCURRENCY = "batch_ai.concurrency"
 WEIGHTS = "market_seo.weights"
+PROVIDERS = "ai.providers"
+STEP_LIMIT = "ai.step_limit_minutes"
+RUN_LIMIT = "ai.run_limit_minutes"
 
-EDITABLE_KEYS: tuple[str, ...] = (CONCURRENCY, WEIGHTS)
-"""What this PR's page edits. AI providers and time limits arrive with
-their own PRs (Admin plan, PRs 5 and 6)."""
+EDITABLE_KEYS: tuple[str, ...] = (CONCURRENCY, WEIGHTS, PROVIDERS, STEP_LIMIT, RUN_LIMIT)
+"""One save may carry several keys. The page couples a provider enable or a
+larger step limit with the run-limit increase it needs, so no written file
+breaks ADR-0057's floor; nothing here raises the run limit on its own."""
 
 
 @dataclass(frozen=True)
@@ -108,17 +114,25 @@ def edit_settings(
         # An invalid hand edit must be corrected in the file, never repaired
         # implicitly by a page patch (Admin plan, config-validation rule).
         try:
-            Settings.model_validate(raw)
+            original = Settings.model_validate(raw)
         except ValidationError as exc:
             raise InvalidSettingsEdit(field_errors_of(exc)) from exc
         candidate: dict[str, Any] = copy.deepcopy(raw)
         for key, value in changes.items():
             _assign(candidate, key.split("."), value)
         try:
-            adopted.append(Settings.model_validate(candidate))
+            validated = Settings.model_validate(candidate)
+            adopted.append(validated)
         except ValidationError as exc:
             raise InvalidSettingsEdit(field_errors_of(exc)) from exc
-        return edit_yaml_bytes(source, candidate)
+        if PROVIDERS in changes:
+            _retain_provider_source(raw, candidate, original, validated)
+        try:
+            return edit_yaml_bytes(source, candidate, sequence_keys={("ai", "providers"): "name"})
+        except UneditableYaml as exc:
+            raise InvalidSettingsEdit(
+                {"__root__": f"{path}: {exc}. Edit this value in the file, then reload Settings."}
+            ) from exc
 
     try:
         revised = replace_if_unchanged(path, expected_revision, change, absent_ok=True)
@@ -126,6 +140,30 @@ def edit_settings(
         raise SettingsRevisionConflict() from exc
     (settings,) = adopted
     return SettingsView(revised.revision, settings)
+
+
+def _retain_provider_source(
+    raw: dict[str, Any], candidate: dict[str, Any], original: Settings, validated: Settings
+) -> None:
+    """The API materializes defaults for display. Unchanged preferences
+    retain their original spelling and presence, even when rows move.
+    Identity is the provider name, never its old position (ADR-0055/0056).
+    """
+    old_ai = raw.get("ai")
+    if not isinstance(old_ai, dict) or not isinstance(old_ai.get("providers"), list):
+        return
+    source = {row["name"]: row for row in old_ai["providers"]}
+    models = {row.name: row for row in original.ai.providers}
+    for row, model in zip(candidate["ai"]["providers"], validated.ai.providers, strict=True):
+        if model.name not in source:
+            continue
+        for key in ("enabled", "model", "effort"):
+            if getattr(models[model.name], key) != getattr(model, key):
+                continue
+            if key in source[model.name]:
+                row[key] = source[model.name][key]
+            else:
+                row.pop(key, None)
 
 
 def _percentage_problem(weights: object) -> str | None:
@@ -151,4 +189,4 @@ def _assign(document: dict[str, Any], path: list[str], value: object) -> None:
             child = {}
             node[part] = child
         node = child
-    node[leaf] = dict(value) if isinstance(value, Mapping) else value
+    node[leaf] = copy.deepcopy(dict(value) if isinstance(value, Mapping) else value)

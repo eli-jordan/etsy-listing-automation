@@ -38,6 +38,7 @@ from etsy_listings.core.workspace import layout
 from etsy_listings.core.workspace.workspace import Workspace
 
 from tests.support.builders import set_etsy_shop_id, set_shop_id
+from tests.support.gates import STAYS_OUT, GatedWorkspace, workers
 
 SHOP_YAML = """\
 # The seller's own notes, kept by every edit.
@@ -218,6 +219,68 @@ def test_saving_the_value_already_there_leaves_the_file_byte_identical(
     assert path.read_bytes() == original
     assert path.stat().st_mtime_ns == stamp
     assert after.revision == revision
+
+
+def test_successive_saves_publish_defaults_in_the_order_they_were_written(
+    workspace_root: Path,
+) -> None:
+    """Audit R1. Save B is made against the revision save A wrote, so B is
+    the newer one; A pausing before it adopts its defaults must not let it
+    publish EUR over B's GBP. The file, the next read, the server's
+    workspace and the next run's snapshot agree, and a run already under
+    way keeps the shop it started with."""
+    (workspace_root / layout.SHOP_FILE).write_text(SHOP_YAML, encoding="utf-8")
+    workspace = GatedWorkspace.discover(root_override=workspace_root)
+    running = workspace.snapshot()
+    published = workspace.arm()
+    start_revision = shop_settings.read_shop(workspace).revision
+
+    def save_b() -> shop_settings.ShopView:
+        after_a = shop_settings.read_shop(workspace)
+        assert after_a.defaults.etsy.currency == "EUR"
+        return shop_settings.edit_shop(
+            workspace, expected_revision=after_a.revision, changes={"etsy.currency": "GBP"}
+        )
+
+    with workers(published) as start:
+        a = start(
+            "save A",
+            lambda: shop_settings.edit_shop(
+                workspace, expected_revision=start_revision, changes={"etsy.currency": "EUR"}
+            ),
+        )
+        published.wait_entered()
+        b = start("save B", save_b)
+        b.thread.join(STAYS_OUT)
+        published.release()
+        a.result()
+        b.result()
+
+    assert shop_settings.read_shop(workspace).defaults.etsy.currency == "GBP"
+    assert workspace.defaults.etsy.currency == "GBP"
+    assert workspace.snapshot().defaults.etsy.currency == "GBP"
+    assert running.defaults.etsy.currency == "NOK"
+
+
+def test_a_save_that_cannot_be_written_adopts_nothing(
+    workspace: Workspace, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    original = shop_bytes(workspace)
+    revision = shop_settings.read_shop(workspace).revision
+
+    def refuse(*_: object) -> None:
+        raise OSError("the disk is full")
+
+    monkeypatch.setattr("os.replace", refuse)
+    with pytest.raises(OSError, match="disk is full"):
+        shop_settings.edit_shop(
+            workspace, expected_revision=revision, changes={"etsy.currency": "EUR"}
+        )
+    monkeypatch.undo()
+
+    assert shop_bytes(workspace) == original
+    assert workspace.defaults.etsy.currency == "NOK"
+    assert shop_settings.read_shop(workspace).revision == revision
 
 
 def test_a_cleared_optional_default_is_removed(workspace: Workspace) -> None:

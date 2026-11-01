@@ -24,7 +24,7 @@ from fastapi.testclient import TestClient
 from etsy_listings.core.ai.proposals import ProposalStore
 from etsy_listings.core.application.ai.batch_queue import BatchQueue
 from etsy_listings.core.application.ai.registry import AiRun, AiRunRegistry
-from etsy_listings.core.application.ai.runner import RUN_LIMIT_SECONDS, TIMEOUT_MESSAGE, AiRunner
+from etsy_listings.core.application.ai.runner import AiRunner
 from etsy_listings.core.batches import (
     Batch,
     BatchRow,
@@ -73,7 +73,7 @@ class Queue:
         self.runner = AiRunner(
             workspace=self.workspace,
             registry=self.registry,
-            providers=lambda _workspace: [provider],
+            providers=lambda _workspace, _ai: [provider],
             market_client=lambda _workspace: market,
             proposals=self.proposals,
             now=lambda: TODAY,
@@ -363,17 +363,24 @@ def test_brief_drafting_leaves_an_existing_proposal_intact(q: Queue) -> None:
 
 
 def test_a_run_that_outlives_the_limit_becomes_a_failed_row(q: Queue) -> None:
+    """A batch brief run captures the configured limits like any other run
+    (ADR-0057), and its row reports the limit it ran out."""
+    q.workspace.settings_file().write_text(
+        "ai:\n  providers: [{name: codex}]\n  step_limit_minutes: 1\n  run_limit_minutes: 5\n",
+        encoding="utf-8",
+    )
     q.provider.gate("brief")
     batch = q.confirm(*_designs("night-hike-club", "cedar-trail"))
     q.queue.start()
     wait_for(lambda: q.provider.started["brief"].is_set())
 
-    q.clock.now = RUN_LIMIT_SECONDS
+    q.clock.now = 5 * 60.0
 
     wait_for(lambda: q.states(batch)[0] == "failed")
     row = q.row(batch, 0)
-    assert row.ai_error is not None
-    assert TIMEOUT_MESSAGE in row.ai_error
+    assert row.ai_error == "The AI run took longer than 5 minutes, so it was stopped. Try again."
+    assert q.provider.remaining[0] == ("brief", 60.0)
+    assert q.proposals.load("night-hike-club") is None
 
 
 # ---------------------------------------------------- cancel and resume
@@ -421,7 +428,7 @@ def test_a_row_running_when_the_server_stops_reruns_after_a_restart(
         return TestClient(
             create_app(
                 workspace,
-                seo_provider_factory=lambda _workspace: [provider],
+                seo_provider_factory=lambda _workspace, _ai: [provider],
                 market_client_factory=lambda _workspace: market,
             )
         )
