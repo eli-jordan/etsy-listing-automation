@@ -65,6 +65,34 @@ def test_a_lint_error_is_reported_back_with_exit_2(scratch: Path) -> None:
     assert "F821" in result.stderr
 
 
+# Five nested branches: cognitive complexity 1+2+3+4+5 = 15, over S02's 10,
+# while its cyclomatic complexity (6) stays under ruff's C901 limit of 8, so
+# only the complexipy step can report it.
+NESTED = """def deep(rows: list[list[int]]) -> int:
+    total = 0
+    for row in rows:
+        for value in row:
+            if value > 0:
+                bits = value
+                while bits:
+                    if bits & 1:
+                        total += 1
+                    bits >>= 1
+    return total
+"""
+
+
+def test_a_function_over_the_cognitive_complexity_limit_is_reported(scratch: Path) -> None:
+    source = scratch / "nested.py"
+    source.write_text(NESTED)
+
+    result = run_hook(edited(source))
+
+    assert result.returncode == 2, result.stderr
+    assert "deep has cognitive complexity 15 (limit 10)" in result.stderr
+    assert "C901" not in result.stderr
+
+
 def test_auto_fixable_problems_are_fixed_in_place(scratch: Path) -> None:
     source = scratch / "fixable.py"
     # An unsorted, unused-free import block (I001) and unformatted spacing:
