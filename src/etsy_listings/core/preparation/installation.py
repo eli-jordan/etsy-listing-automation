@@ -18,7 +18,7 @@ from etsy_listings.core.preparation.distribution.src.marigold_worker.protocol im
     Capabilities,
 )
 from etsy_listings.core.preparation.runtime import Capability, SetupError
-from etsy_listings.core.preparation.worker_client import Worker, WorkerError
+from etsy_listings.core.preparation.worker_client import InferenceCall, Worker, WorkerError
 from etsy_listings.core.workspace.atomic import write_json_atomic
 
 VERIFIED_FILE = "verified.json"
@@ -128,11 +128,13 @@ class NativeInstaller:
         ) as worker:
             for role in ROLES:
                 result = worker.infer(
-                    request_id="setup-" + role,
-                    role=role,
-                    input="crop.png",
-                    output=role + ".npz",
-                    size=(128, 128),
+                    InferenceCall(
+                        request_id="setup-" + role,
+                        role=role,
+                        input="crop.png",
+                        output=role + ".npz",
+                        size=(128, 128),
+                    )
                 )
                 smoke[role] = result.metadata.model_dump(mode="json")
         verified = {}

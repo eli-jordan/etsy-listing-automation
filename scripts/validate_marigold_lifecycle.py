@@ -16,7 +16,7 @@ from pathlib import Path
 from PIL import Image
 
 from etsy_listings.core.preparation.runtime import Runtime
-from etsy_listings.core.preparation.worker_client import WorkerError
+from etsy_listings.core.preparation.worker_client import InferenceCall, WorkerError
 
 # Past the worker's 300 s idle exit (marigold_worker.server.serve), so the
 # next call has to restart it.
@@ -54,11 +54,13 @@ def run(output: Path) -> None:
             started = time.perf_counter()
             try:
                 result = worker.infer(
-                    request_id=request,
-                    role=role,
-                    input=name + ".png",
-                    output=request + ".npz",
-                    size=size,
+                    InferenceCall(
+                        request_id=request,
+                        role=role,
+                        input=name + ".png",
+                        output=request + ".npz",
+                        size=size,
+                    )
                 )
                 report["calls"].append(
                     {
@@ -85,11 +87,13 @@ def run(output: Path) -> None:
             started = time.perf_counter()
             try:
                 cancellation["result"] = worker.infer(
-                    request_id="cancel-real",
-                    role="depth",
-                    input="real.png",
-                    output="cancel-real.npz",
-                    size=(2048, 2048),
+                    InferenceCall(
+                        request_id="cancel-real",
+                        role="depth",
+                        input="real.png",
+                        output="cancel-real.npz",
+                        size=(2048, 2048),
+                    )
                 )
             except Exception as exc:  # noqa: BLE001 -- measurement boundary; record any failure in the report
                 cancellation["error"] = str(exc)
@@ -125,33 +129,39 @@ def run(output: Path) -> None:
             time.sleep(5)
         restarted = time.perf_counter()
         report["after_default_idle"] = worker.infer(
-            request_id="after-idle",
-            role="depth",
-            input="real.png",
-            output="after-idle.npz",
-            size=(2048, 2048),
+            InferenceCall(
+                request_id="after-idle",
+                role="depth",
+                input="real.png",
+                output="after-idle.npz",
+                size=(2048, 2048),
+            )
         )
         report["idle_wait_seconds"] = restarted - idle_started
         report["idle_restart_call_seconds"] = time.perf_counter() - restarted
         report["minimum_settings"] = worker.infer(
-            request_id="minimum",
-            role="depth",
-            input="real.png",
-            output="minimum.npz",
-            size=(2048, 2048),
-            num_inference_steps=1,
-            ensemble_size=1,
+            InferenceCall(
+                request_id="minimum",
+                role="depth",
+                input="real.png",
+                output="minimum.npz",
+                size=(2048, 2048),
+                num_inference_steps=1,
+                ensemble_size=1,
+            )
         )
         for steps, ensemble in [(0, 3), (11, 3), (10, 0), (10, 4)]:
             try:
                 worker.infer(
-                    request_id=f"invalid-{steps}-{ensemble}",
-                    role="depth",
-                    input="real.png",
-                    output=f"invalid-{steps}-{ensemble}.npz",
-                    size=(2048, 2048),
-                    num_inference_steps=steps,
-                    ensemble_size=ensemble,
+                    InferenceCall(
+                        request_id=f"invalid-{steps}-{ensemble}",
+                        role="depth",
+                        input="real.png",
+                        output=f"invalid-{steps}-{ensemble}.npz",
+                        size=(2048, 2048),
+                        num_inference_steps=steps,
+                        ensemble_size=ensemble,
+                    )
                 )
                 report.setdefault("invalid_settings", []).append(
                     {"steps": steps, "ensemble": ensemble, "unexpected_success": True}

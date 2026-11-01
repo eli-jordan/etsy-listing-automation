@@ -20,7 +20,7 @@ from uuid import uuid4
 from PIL import Image
 
 from etsy_listings.core.preparation.runtime import Runtime
-from etsy_listings.core.preparation.worker_client import CALL_TIMEOUT, WorkerError
+from etsy_listings.core.preparation.worker_client import CALL_TIMEOUT, InferenceCall, WorkerError
 
 # OpenProcess access right and handle inheritance (Win32 processthreadsapi.h).
 PROCESS_SUSPEND_RESUME = 0x0800
@@ -101,11 +101,13 @@ def run(output: Path) -> None:
 
     try:
         worker.infer(
-            request_id="native-watchdog",
-            role="depth",
-            input="photo.png",
-            output="depth.npz",
-            size=(2048, 2048),
+            InferenceCall(
+                request_id="native-watchdog",
+                role="depth",
+                input="photo.png",
+                output="depth.npz",
+                size=(2048, 2048),
+            ),
             progress=suspend,
         )
         report["unexpected_success"] = True

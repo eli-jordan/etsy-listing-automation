@@ -655,11 +655,11 @@ def test_model_lighting_component_order_preserves_estimated_shading_gradient(wor
     from tests.support.marigold import PreparationRuntime, PreparationWorker
 
     class DistinctLighting(PreparationWorker):
-        def infer(self, **request):
-            result = super().infer(**request)
-            if request["role"] == "lighting":
-                path = self.root / request["output"]
-                width, height = request["size"]
+        def infer(self, call, **options):
+            result = super().infer(call, **options)
+            if call.role == "lighting":
+                path = self.root / call.output
+                width, height = call.size
                 prediction = np.zeros((3, height, width, 3), np.float32)
                 prediction[0] = 0.25  # Worker channel zero is albedo.
                 prediction[1] = np.linspace(0.2, 0.8, width, dtype=np.float32)[None, :, None]

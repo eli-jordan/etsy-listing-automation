@@ -225,25 +225,22 @@ class PreparationWorker:
         self.closed = False
         self.failure = None
 
-    def infer(
-        self,
-        *,
-        request_id,
-        role,
-        input,  # noqa: A002 -- worker protocol field, also splatted from request dicts
-        output,
-        size,
-        **settings,
-    ):
+    def infer(self, call, **options):
         from contextlib import nullcontext
 
         import numpy as np
 
+        request_id, role, output, size = call.request_id, call.role, call.output, call.size
         self.dispatch_entered.set()
         assert self.dispatch_release.wait(20)
-        guard = settings.pop("dispatch_guard", nullcontext)
+        guard = options.pop("dispatch_guard", nullcontext)
+        settings = {
+            "num_inference_steps": call.num_inference_steps,
+            "ensemble_size": call.ensemble_size,
+            **options,
+        }
         with guard():
-            self.calls.append((role, input, settings))
+            self.calls.append((role, call.input, settings))
             self.entered.set()
         assert self.release.wait(20)
         if self.failure:

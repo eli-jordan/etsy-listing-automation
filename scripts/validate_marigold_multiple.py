@@ -27,6 +27,7 @@ from etsy_listings.core.application.preparation.models import TERMINAL
 from etsy_listings.core.preparation.artifacts import Artifacts
 from etsy_listings.core.preparation.numerics import EvidenceIdentity, evidence_covers, plan_crop
 from etsy_listings.core.preparation.runtime import Runtime
+from etsy_listings.core.preparation.worker_client import InferenceCall
 from etsy_listings.core.render import MaterialLayer, render_marigold_scene
 from etsy_listings.core.workspace import Workspace
 from etsy_listings.core.workspace.calibration import CalibrationStore
@@ -210,11 +211,13 @@ def run(output: Path) -> None:
             started = time.perf_counter()
             try:
                 measurement["result"] = worker.infer(
-                    request_id="overlap",
-                    role="depth",
-                    input="photo.png",
-                    output="depth.npz",
-                    size=(2048, 2048),
+                    InferenceCall(
+                        request_id="overlap",
+                        role="depth",
+                        input="photo.png",
+                        output="depth.npz",
+                        size=(2048, 2048),
+                    )
                 )
             except Exception as exc:  # noqa: BLE001 -- measurement boundary; record any failure in the report
                 measurement["error"] = str(exc)

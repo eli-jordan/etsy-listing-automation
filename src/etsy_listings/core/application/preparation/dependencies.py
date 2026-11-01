@@ -8,22 +8,16 @@ from typing import Protocol
 from etsy_listings.core.preparation.distribution.src.marigold_worker.protocol import (
     InferenceResult,
     Progress,
-    Role,
 )
 from etsy_listings.core.preparation.runtime import Capability
+from etsy_listings.core.preparation.worker_client import InferenceCall
 
 
 class InferenceWorker(Protocol):
     def infer(
         self,
+        call: InferenceCall,
         *,
-        request_id: str,
-        role: Role,
-        input: str,  # noqa: A002 -- worker protocol field, also splatted from request dicts
-        output: str,
-        size: tuple[int, int],
-        num_inference_steps: int = 10,
-        ensemble_size: int = 3,
         progress: Callable[[Progress], None] | None = None,
         dispatch_guard: Callable[[], AbstractContextManager[None]] = nullcontext,
     ) -> InferenceResult: ...

@@ -27,9 +27,9 @@ from etsy_listings.core.application.preparation.models import TERMINAL
 from etsy_listings.core.preparation.distribution.src.marigold_worker.protocol import (
     InferenceResult,
     Progress,
-    Role,
 )
 from etsy_listings.core.preparation.runtime import Capability
+from etsy_listings.core.preparation.worker_client import InferenceCall
 from etsy_listings.core.render import load_template_config
 from etsy_listings.core.workspace import Workspace
 from etsy_listings.core.workspace.calibration import AutomaticMask, CalibrationStore
@@ -42,17 +42,13 @@ class FixedWorker(InferenceWorker):
     @override
     def infer(
         self,
+        call: InferenceCall,
         *,
-        request_id: str,
-        role: Role,
-        input: str,
-        output: str,
-        size: tuple[int, int],
-        num_inference_steps: int = 10,
-        ensemble_size: int = 3,
         progress: Callable[[Progress], None] | None = None,
         dispatch_guard: Callable[[], AbstractContextManager[None]] = nullcontext,
     ) -> InferenceResult:
+        request_id, role, output, size = call.request_id, call.role, call.output, call.size
+        num_inference_steps, ensemble_size = call.num_inference_steps, call.ensemble_size
         with dispatch_guard():
             width, height = size
             yy, xx = np.mgrid[:height, :width].astype(np.float32)

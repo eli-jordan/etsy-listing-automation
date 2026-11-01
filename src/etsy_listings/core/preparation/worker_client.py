@@ -16,6 +16,7 @@ import uuid
 from collections import deque
 from collections.abc import Callable, Sequence
 from contextlib import AbstractContextManager, nullcontext
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Self, cast
 
@@ -43,6 +44,22 @@ from etsy_listings.core.preparation.predictions import cache_path, read_predicti
 
 CALL_TIMEOUT = 900.0
 SHUTDOWN_TIMEOUT = 15.0
+
+
+@dataclass(frozen=True)
+class InferenceCall:
+    """One inference: which ``role`` to predict for the ``input`` crop, the
+    ``output`` artifact to write (both relative to the worker's cache root),
+    the crop's ``size`` the prediction must match, and the inference
+    settings. ``request_id`` names the call for progress and cancellation."""
+
+    request_id: str
+    role: Role
+    input: str
+    output: str
+    size: tuple[int, int]
+    num_inference_steps: int = 10
+    ensemble_size: int = 3
 
 
 class WorkerError(RuntimeError):
@@ -172,26 +189,21 @@ class Worker:
 
     def infer(
         self,
+        call: InferenceCall,
         *,
-        request_id: str,
-        role: Role,
-        input: str,  # noqa: A002 -- worker protocol field, also splatted from request dicts
-        output: str,
-        size: tuple[int, int],
-        num_inference_steps: int = 10,
-        ensemble_size: int = 3,
         progress: Callable[[Progress], None] | None = None,
         dispatch_guard: Callable[[], AbstractContextManager[None]] = nullcontext,
     ) -> InferenceResult:
-        cache_path(self.cache_root, input, suffix=".png")
+        request_id, role, output, size = call.request_id, call.role, call.output, call.size
+        cache_path(self.cache_root, call.input, suffix=".png")
         destination = cache_path(self.cache_root, output, suffix=".npz")
         request = InferRequest(
             request_id=request_id,
             role=role,
-            input=input,
+            input=call.input,
             output=output,
             settings=InferenceSettings(
-                num_inference_steps=num_inference_steps, ensemble_size=ensemble_size
+                num_inference_steps=call.num_inference_steps, ensemble_size=call.ensemble_size
             ),
         )
         if not self._call_lock.acquire(blocking=False):
@@ -275,14 +287,8 @@ class WarmWorker:
 
     def infer(
         self,
+        call: InferenceCall,
         *,
-        request_id: str,
-        role: Role,
-        input: str,  # noqa: A002 -- worker protocol field, also splatted from request dicts
-        output: str,
-        size: tuple[int, int],
-        num_inference_steps: int = 10,
-        ensemble_size: int = 3,
         progress: Callable[[Progress], None] | None = None,
         dispatch_guard: Callable[[], AbstractContextManager[None]] = nullcontext,
     ) -> InferenceResult:
@@ -298,17 +304,7 @@ class WarmWorker:
                     engine_version=self.engine_version,
                     timeout=self.timeout,
                 )
-            return self._worker.infer(
-                request_id=request_id,
-                role=role,
-                input=input,
-                output=output,
-                size=size,
-                num_inference_steps=num_inference_steps,
-                ensemble_size=ensemble_size,
-                progress=progress,
-                dispatch_guard=dispatch_guard,
-            )
+            return self._worker.infer(call, progress=progress, dispatch_guard=dispatch_guard)
         finally:
             self._lock.release()
 

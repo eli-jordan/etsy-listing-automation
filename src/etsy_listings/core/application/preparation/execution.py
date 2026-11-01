@@ -37,6 +37,7 @@ from etsy_listings.core.preparation.numerics import (
     propose_mask,
 )
 from etsy_listings.core.preparation.predictions import read_prediction
+from etsy_listings.core.preparation.worker_client import InferenceCall
 from etsy_listings.core.render import FloatMap, MaterialMaps
 from etsy_listings.core.workspace.atomic import write_bytes_atomic
 from etsy_listings.core.workspace.calibration import AutomaticMask
@@ -263,13 +264,15 @@ class Execution:
                         self.owner.worker_slot.call = (identity, request)
                     try:
                         result = worker.infer(
-                            request_id=request,
-                            role=role,
-                            input=crop_path.relative_to(self.evidence.root).as_posix(),
-                            output=output.relative_to(self.evidence.root).as_posix(),
-                            size=selected.size,
-                            num_inference_steps=job.snapshot.inference.num_inference_steps,
-                            ensemble_size=job.snapshot.inference.ensemble_size,
+                            InferenceCall(
+                                request_id=request,
+                                role=role,
+                                input=crop_path.relative_to(self.evidence.root).as_posix(),
+                                output=output.relative_to(self.evidence.root).as_posix(),
+                                size=selected.size,
+                                num_inference_steps=job.snapshot.inference.num_inference_steps,
+                                ensemble_size=job.snapshot.inference.ensemble_size,
+                            ),
                             dispatch_guard=lambda: self.dispatch(identity),
                         )
                     finally:
