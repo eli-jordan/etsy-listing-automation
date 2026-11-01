@@ -55,7 +55,7 @@ def batches(workspace: Workspace) -> BatchStore:
 
 
 def _stage(workspace: Workspace, staging: StagingStore, *files: tuple[str, bytes]) -> str:
-    return stage_pngs(workspace, staging, "heavyweight-tee", uploads(*files), now=NOW).id
+    return stage_pngs(staging, "heavyweight-tee", uploads(*files), now=NOW).id
 
 
 def _confirm(workspace: Workspace, staging: StagingStore, batches: BatchStore, id_: str) -> Batch:
@@ -293,7 +293,6 @@ class TestFrozenTemplate:
                 return super().read(size)
 
         session = stage_pngs(
-            workspace,
             staging,
             "heavyweight-tee",
             [Upload(DESIGNS[0][0], UploadOutsideLock(DESIGNS[0][1]))],
@@ -341,7 +340,6 @@ class TestFrozenTemplate:
                 return super().read(size)
 
         session = stage_pngs(
-            workspace,
             staging,
             "heavyweight-tee",
             [Upload(filename=DESIGNS[0][0], stream=ChangingUpload(DESIGNS[0][1]))],

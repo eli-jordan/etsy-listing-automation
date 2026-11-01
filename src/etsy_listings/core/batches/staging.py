@@ -222,7 +222,6 @@ def _default_label(listing_template: str, now: datetime, archive: str | None = N
 
 
 def stage_pngs(
-    workspace: Workspace,
     store: StagingStore,
     listing_template: str,
     uploads: Iterable[Upload],
@@ -236,6 +235,7 @@ def stage_pngs(
     Each row is checked with the existing design rules against the frozen
     template's garment profile (spec, *Design validation*); a design that
     fails is a row that will not be created, not a refusal of the upload."""
+    workspace = store.workspace
     now = now or datetime.now(UTC)
     session = uuid.uuid4().hex
     directory = workspace.staging_dir(session)

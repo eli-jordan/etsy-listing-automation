@@ -16,6 +16,7 @@ named in an edit must be there.
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping, Sequence
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -36,7 +37,6 @@ from etsy_listings.core.workspace.workspace import Workspace
 
 
 def stage_upload(
-    workspace: Workspace,
     staging: StagingStore,
     listing_template: str,
     uploads: Iterable[Upload],
@@ -52,10 +52,10 @@ def stage_upload(
     not load. The template is captured under its write lock, which is never
     held while the upload streams in (``FrozenListingTemplate.capture``).
     """
-    if not workspace.listing_template_file(listing_template).is_file():
+    if not staging.workspace.listing_template_file(listing_template).is_file():
         raise ListingTemplateMissingError(listing_template)
     return stage_pngs(
-        workspace, staging, listing_template, uploads, now=now, template_lock=locks.listing_template
+        staging, listing_template, uploads, now=now, template_lock=locks.listing_template
     )
 
 
@@ -70,14 +70,22 @@ def read_staging(workspace: Workspace, staging: StagingStore, session_id: str) -
     return session
 
 
+@dataclass(frozen=True)
+class StagingEdit:
+    """One edit of a staging session: a new label (``None`` keeps it), names
+    typed for rows, and rows to remove."""
+
+    label: str | None = None
+    names: Mapping[str, str] = field(default_factory=dict)
+    remove: Sequence[str] = ()
+
+
 def edit_staging(
     workspace: Workspace,
     staging: StagingStore,
     session_id: str,
+    edit: StagingEdit,
     *,
-    label: str | None,
-    names: Mapping[str, str],
-    remove: Sequence[str],
     now: datetime | None = None,
 ) -> StagingSession:
     """Relabel, type names, remove rows -- in that order, under the
@@ -88,11 +96,11 @@ def edit_staging(
     with staging.lock(session_id):
         session = read_staging(workspace, staging, session_id)
         try:
-            if label is not None:
-                session = session.relabelled(label.strip() or session.label, now=now)
-            for row, name in names.items():
+            if edit.label is not None:
+                session = session.relabelled(edit.label.strip() or session.label, now=now)
+            for row, name in edit.names.items():
                 session = session.renamed(row, name, now=now)
-            for row in remove:
+            for row in edit.remove:
                 session = session.removed(row, now=now)
         except KeyError as exc:
             raise StagedRowMissingError(exc.args[0]) from exc

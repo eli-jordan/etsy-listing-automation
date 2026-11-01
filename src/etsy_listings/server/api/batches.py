@@ -219,7 +219,6 @@ def create_staging(
     received = [Upload(filename=f.filename or "unnamed.png", stream=f.file) for f in files or []]
     try:
         session = batch_staging.stage_upload(
-            _workspace(request),
             _staging(request),
             listing_template,
             received,
@@ -254,9 +253,7 @@ def patch_staging(request: Request, session_id: str, body: StagingPatch) -> Stag
             _workspace(request),
             _staging(request),
             session_id,
-            label=body.label,
-            names=body.names,
-            remove=body.remove,
+            batch_staging.StagingEdit(label=body.label, names=body.names, remove=body.remove),
         )
     except _MISSING as exc:
         raise _not_found(exc) from exc

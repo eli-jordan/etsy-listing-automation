@@ -31,6 +31,7 @@ from etsy_listings.core.ai.proposals import ProposalStore
 from etsy_listings.core.application.ai.batch_queue import BatchQueue
 from etsy_listings.core.application.ai.coordinator import AiCoordinator
 from etsy_listings.core.application.batch_staging import (
+    StagingEdit,
     cancel_staging,
     edit_staging,
     read_staging,
@@ -151,9 +152,7 @@ def queue(workspace: Workspace, batches: BatchStore) -> BatchQueue:
 def _stage(
     workspace: Workspace, staging: StagingStore, *files: tuple[str, bytes]
 ) -> StagingSession:
-    return stage_upload(
-        workspace, staging, LISTING_TEMPLATE, uploads(*files), locks=WorkspaceLocks()
-    )
+    return stage_upload(staging, LISTING_TEMPLATE, uploads(*files), locks=WorkspaceLocks())
 
 
 def _confirm(
@@ -199,9 +198,7 @@ class TestStage:
         self, workspace: Workspace, staging: StagingStore
     ) -> None:
         with pytest.raises(ListingTemplateMissingError):
-            stage_upload(
-                workspace, staging, "nope", uploads(("a.png", png(1))), locks=WorkspaceLocks()
-            )
+            stage_upload(staging, "nope", uploads(("a.png", png(1))), locks=WorkspaceLocks())
         assert workspace.staging_ids() == []
 
     def test_the_design_and_size_limits_still_refuse_with_nothing_on_disk(
@@ -239,7 +236,6 @@ class TestStage:
             worker = threading.Thread(
                 target=lambda: staged.append(
                     stage_upload(
-                        workspace,
                         staging,
                         LISTING_TEMPLATE,
                         uploads(("a.png", png(1))),
@@ -272,9 +268,7 @@ class TestEditAndCancel:
             workspace,
             staging,
             session.id,
-            label="  Autumn drop ",
-            names={first: "take-a-hike"},
-            remove=[second],
+            StagingEdit(label="  Autumn drop ", names={first: "take-a-hike"}, remove=[second]),
             now=later - timedelta(days=7),
         )
 
@@ -289,7 +283,7 @@ class TestEditAndCancel:
         self, workspace: Workspace, staging: StagingStore
     ) -> None:
         session = _stage(workspace, staging, ("a.png", png(1)))
-        edited = edit_staging(workspace, staging, session.id, label="   ", names={}, remove=[])
+        edited = edit_staging(workspace, staging, session.id, StagingEdit(label="   "))
         assert edited.label == session.label
 
     def test_an_unknown_row_refuses_the_whole_edit(
@@ -297,7 +291,7 @@ class TestEditAndCancel:
     ) -> None:
         session = _stage(workspace, staging, ("a.png", png(1)))
         with pytest.raises(StagedRowMissingError, match="no staged row 'nope'"):
-            edit_staging(workspace, staging, session.id, label="New", names={}, remove=["nope"])
+            edit_staging(workspace, staging, session.id, StagingEdit(label="New", remove=["nope"]))
         assert read_staging(workspace, staging, session.id).label == session.label
 
     def test_cancel_removes_the_session_and_its_uploads(
@@ -689,7 +683,6 @@ class TestReads:
         )
         waiting = _stage(workspace, staging, ("c.png", png(3)))
         stale = stage_upload(
-            workspace,
             staging,
             LISTING_TEMPLATE,
             [Upload("d.png", BytesIO(png(4)))],

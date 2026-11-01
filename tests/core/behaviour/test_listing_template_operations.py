@@ -353,7 +353,7 @@ class TestRenameAndDelete:
         batches, staging = BatchStore(workspace), StagingStore(workspace)
         batches.save(_batch(NAME))
         small_print_area(workspace.root)
-        session = stage_pngs(workspace, staging, NAME, uploads(("night-hike.png", png(1))))
+        session = stage_pngs(staging, NAME, uploads(("night-hike.png", png(1))))
 
         rename_listing_template(
             workspace, NAME, "everyday-tee", locks=locks, records=BatchRecords(staging, batches)

@@ -44,6 +44,8 @@ from etsy_listings.core.application.listing_creation import (
     validate_listing_stub,
 )
 from etsy_listings.core.application.pricing_plans import (
+    GarmentOffer,
+    PriceSources,
     create_starting_pricing_plan,
     load_candidate_pricing_plans,
 )
@@ -189,18 +191,12 @@ def _warn_if_design_missing(workspace: Workspace, design_name: str) -> None:
 
 
 def _pick_or_create_pricing_plan(
-    workspace: Workspace,
-    catalog: CatalogClient,
-    garment_profile_slug: str,
-    blueprint: Blueprint,
-    provider: PrintProvider,
-    variant_set: VariantSet,
-    sizes: list[str],
+    workspace: Workspace, catalog: CatalogClient, offer: GarmentOffer
 ) -> Path:
     """Returns the chosen/generated plan's absolute path -- turning that into
     a ref is the caller's job (`pricing_plan_ref`, ADR-0046)."""
     candidates = load_candidate_pricing_plans(workspace)
-    choices = build_pricing_plan_choices(candidates, garment_profile_slug)
+    choices = build_pricing_plan_choices(candidates, offer.garment_profile_slug)
     rows = [c.label for c in choices] + [CREATE_NEW_PLAN_LABEL]
     by_label = {c.label: c for c in choices}
 
@@ -214,14 +210,7 @@ def _pick_or_create_pricing_plan(
     if answer == CREATE_NEW_PLAN_LABEL:
         name = prompts.ask_text("Pricing plan name:")
         created = create_starting_pricing_plan(
-            workspace,
-            catalog,
-            name=name,
-            garment_profile_slug=garment_profile_slug,
-            blueprint=blueprint,
-            provider=provider,
-            variant_set=variant_set,
-            sizes=sizes,
+            workspace, PriceSources(catalog), name=name, offer=offer
         )
         typer.echo(f"wrote {created.path}")
         if not created.complete:
@@ -282,7 +271,9 @@ def run_new(
     typer.echo(f"{'wrote' if saved.written else 'reusing existing'} garment-profiles/{slug}.yaml")
 
     plan_path = _pick_or_create_pricing_plan(
-        workspace, catalog, slug, blueprint, provider, variant_set, saved.profile.sizes
+        workspace,
+        catalog,
+        GarmentOffer(slug, blueprint, provider, variant_set, saved.profile.sizes),
     )
     plan_ref = make_pricing_plan_ref(plan_path, root=workspace.root)
 

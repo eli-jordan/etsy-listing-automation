@@ -92,7 +92,7 @@ class Host:
     def batch(self, *names: str) -> str:
         files = [(f"{name}.png", png(i + 1)) for i, name in enumerate(names)]
         session = batch_staging.stage_upload(
-            self.workspace, self.staging, LISTING_TEMPLATE, uploads(*files), locks=self.locks
+            self.staging, LISTING_TEMPLATE, uploads(*files), locks=self.locks
         )
         batch = batch_workflow.confirm_batch(
             self.workspace,

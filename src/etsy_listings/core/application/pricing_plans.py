@@ -93,15 +93,31 @@ PORTAL_VERIFICATION_NOTE = (
 )
 
 
+MARGIN_MULTIPLIER = Decimal("1.10")
+"""Applied to cost plus shipping; the generated file's header states it."""
+
+
+@dataclass(frozen=True)
+class LiveCosts:
+    """Today's figures a starting plan is priced from. Each is fail-soft:
+    an empty cost table or a missing rate prices the sizes it affects at 0."""
+
+    variant_costs: dict[int, int]
+    """Manufacturing cost in cents, by Printify variant id."""
+    shipping: ShippingRates
+    fx_rate: FxRate | None
+
+    @property
+    def complete(self) -> bool:
+        return bool(self.variant_costs) and self.fx_rate is not None
+
+
 def compute_starting_prices(
     *,
     sizes: list[str],
     variant_set: VariantSet,
-    variant_costs: dict[int, int],
-    shipping: ShippingRates,
-    fx_rate: FxRate | None,
+    costs: LiveCosts,
     target_currency: str,
-    margin_multiplier: Decimal = Decimal("1.10"),
 ) -> tuple[dict[str, Money], list[str]]:
     """size -> starting ``Money``, plus human-readable note lines for the
     generated file's comment block. Never raises -- every failure mode
@@ -114,6 +130,8 @@ def compute_starting_prices(
     and the disagreement is called out in the notes, so the generated file
     is honest about the simplification.
     """
+    variant_costs, shipping, fx_rate = costs.variant_costs, costs.shipping, costs.fx_rate
+    margin_multiplier = MARGIN_MULTIPLIER
     prices: dict[str, Money] = {}
     notes: list[str] = [PORTAL_VERIFICATION_NOTE, ""]
     for size in sizes:
@@ -211,18 +229,46 @@ class StartingPricingPlan:
     fell back to 0 -- the file's comment block says which."""
 
 
+@dataclass(frozen=True)
+class GarmentOffer:
+    """The garment a starting plan prices: its profile, the blueprint and
+    print provider behind it, their variants, and the sizes the plan lists."""
+
+    garment_profile_slug: str
+    blueprint: Blueprint
+    provider: PrintProvider
+    variant_set: VariantSet
+    sizes: list[str]
+
+
+@dataclass(frozen=True)
+class PriceSources:
+    """Where a starting plan's figures come from: shipping from the
+    documented catalog, manufacturing costs from Printify's undocumented
+    endpoint, and the rate from a one-off FX fetch. The two fetches default
+    to the live ones, looked up at call time."""
+
+    catalog: CatalogClient
+    fetch_costs: Callable[[int, int], dict[int, int]] | None = None
+    fetch_rate: Callable[[str], FxRate | None] | None = None
+
+    def fetch(self, offer: GarmentOffer, currency: str) -> LiveCosts:
+        costs_for = self.fetch_costs or unofficial_variant_costs.fetch_variant_costs
+        rate_for = self.fetch_rate or fx_rates.fetch_usd_to
+        blueprint_id, provider_id = offer.blueprint.id, offer.provider.id
+        return LiveCosts(
+            variant_costs=costs_for(blueprint_id, provider_id),
+            shipping=self.catalog.shipping(blueprint_id, provider_id),
+            fx_rate=rate_for(currency),
+        )
+
+
 def create_starting_pricing_plan(
     workspace: Workspace,
-    catalog: CatalogClient,
+    sources: PriceSources,
     *,
     name: str,
-    garment_profile_slug: str,
-    blueprint: Blueprint,
-    provider: PrintProvider,
-    variant_set: VariantSet,
-    sizes: list[str],
-    fetch_costs: Callable[[int, int], dict[int, int]] | None = None,
-    fetch_rate: Callable[[str], FxRate | None] | None = None,
+    offer: GarmentOffer,
 ) -> StartingPricingPlan:
     """Write ``pricing-plans/{slugify(name)}.yaml`` priced from today's costs.
 
@@ -230,22 +276,12 @@ def create_starting_pricing_plan(
     rate from a one-off FX fetch; both are fail-soft, so a plan is always
     written and :attr:`StartingPricingPlan.complete` says whether it is all
     real numbers. Shipping comes from the documented catalog. Refuses with
-    ``FileExistsError`` to overwrite a plan. The fetches default to the live
-    ones, looked up at call time.
+    ``FileExistsError`` to overwrite a plan.
     """
-    costs_for = fetch_costs or unofficial_variant_costs.fetch_variant_costs
-    rate_for = fetch_rate or fx_rates.fetch_usd_to
     currency = workspace.defaults.etsy.currency
-    costs = costs_for(blueprint.id, provider.id)
-    shipping = catalog.shipping(blueprint.id, provider.id)
-    rate = rate_for(currency)
+    costs = sources.fetch(offer, currency)
     prices, notes = compute_starting_prices(
-        sizes=sizes,
-        variant_set=variant_set,
-        variant_costs=costs,
-        shipping=shipping,
-        fx_rate=rate,
-        target_currency=currency,
+        sizes=offer.sizes, variant_set=offer.variant_set, costs=costs, target_currency=currency
     )
-    path = write_pricing_plan(workspace, name, garment_profile_slug, prices, notes)
-    return StartingPricingPlan(path=path, complete=bool(costs) and rate is not None)
+    path = write_pricing_plan(workspace, name, offer.garment_profile_slug, prices, notes)
+    return StartingPricingPlan(path=path, complete=costs.complete)

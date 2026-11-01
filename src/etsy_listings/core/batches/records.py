@@ -203,6 +203,11 @@ class _Store[R: _Record]:
         self._guard = threading.Lock()
         self._locks: dict[str, threading.Lock] = {}
 
+    @property
+    def workspace(self) -> Workspace:
+        """The workspace these records live in, and the only one they know."""
+        return self._workspace
+
     @contextmanager
     def lock(self, record: str) -> Iterator[None]:
         with self._guard:

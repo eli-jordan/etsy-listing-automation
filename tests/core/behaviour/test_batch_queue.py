@@ -88,9 +88,7 @@ class Queue:
         )
 
     def confirm(self, *designs: tuple[str, bytes], at: datetime = CREATED) -> Batch:
-        session = stage_pngs(
-            self.workspace, self.staging, LISTING_TEMPLATE, uploads(*designs), now=at
-        )
+        session = stage_pngs(self.staging, LISTING_TEMPLATE, uploads(*designs), now=at)
         batch = confirm(self.workspace, self.staging, self.batches, session.id, now=at)
         self.queue.wake()
         return batch
