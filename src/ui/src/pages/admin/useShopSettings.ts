@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   getShop,
   saveShop,
@@ -7,99 +7,92 @@ import {
   type ShopField,
   type ShopSettings,
 } from "../../api/shop";
+import { useSaveQueue } from "./useSaveQueue";
 
-export type SaveStatus =
-  | { kind: "idle" }
-  | { kind: "saving" }
-  | { kind: "saved" }
-  | { kind: "error"; message: string }
-  | { kind: "conflict"; message: string };
+export type { SaveStatus } from "./useSaveQueue";
 
 export type FieldErrors = Partial<Record<ShopField, string>>;
 
+const send = (revision: string, changes: ShopChanges) =>
+  saveShop(revision, changes).then((outcome) =>
+    outcome.kind === "saved" ? { ...outcome, revision: outcome.shop.revision } : outcome,
+  );
+const clears = (field: string, changes: ShopChanges) => field in changes;
+
 /**
- * `shop.yaml` as the page sees it, and its one save queue.
+ * `shop.yaml` as the page sees it, over the file's save queue
+ * (`useSaveQueue`): serialized revisioned saves, failures kept per field
+ * until that field succeeds or its failed choice is abandoned, and a conflict that stops editing
+ * until the seller reloads. Saved appears only after the server says so.
  *
- * Saves run one at a time, each naming the revision the previous one
- * returned, so the page never conflicts with its own writes (Admin plan,
- * *Settled requirements*). A conflict stops the queue: nothing is retried
- * with a new revision and an old patch, and editing stays off until the
- * seller reloads. Saved appears only after the server says so.
+ * `loadedVersion` changes only when a file is (re)loaded: the explicit
+ * signal for controls to drop local drafts. A save's response updates
+ * `shop` without it, so a newer local edit survives an older answer.
  */
 export function useShopSettings() {
   const [shop, setShop] = useState<ShopSettings | null>(null);
+  const [loadedVersion, setLoadedVersion] = useState(0);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [status, setStatus] = useState<SaveStatus>({ kind: "idle" });
-  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
-  const revision = useRef<string | null>(null);
-  const queue = useRef<Promise<unknown>>(Promise.resolve());
-  const waiting = useRef(0);
-  const conflicted = useRef(false);
+  const queue = useSaveQueue({
+    send,
+    clears,
+    fallback: "could not save shop.yaml",
+    // Every successful answer, a field save's or Retry's, is adopted here.
+    onSaved: (outcome) => setShop(outcome.shop),
+  });
+  const { reset, afterSaves } = queue;
 
-  const adopt = useCallback((loaded: ShopSettings) => {
-    revision.current = loaded.revision;
-    conflicted.current = false;
-    setShop(loaded);
-    setLoadError(null);
-    setFieldErrors({});
-    setStatus({ kind: "idle" });
-  }, []);
+  const adopt = useCallback(
+    (loaded: ShopSettings) => {
+      reset(loaded.revision);
+      setShop(loaded);
+      setLoadedVersion((version) => version + 1);
+      setLoadError(null);
+    },
+    [reset],
+  );
   const refuse = useCallback((error: unknown) => {
     setLoadError(error instanceof Error ? error.message : "could not read shop.yaml");
   }, []);
-  const load = useCallback(() => getShop().then(adopt, refuse), [adopt, refuse]);
+  const reload = useCallback(
+    () => afterSaves(() => getShop()).then(adopt, refuse),
+    [afterSaves, adopt, refuse],
+  );
 
   useEffect(() => {
-    getShop().then(adopt, refuse);
+    let active = true;
+    getShop().then(
+      (loaded) => {
+        if (active) adopt(loaded);
+      },
+      (error: unknown) => {
+        if (active) refuse(error);
+      },
+    );
+    return () => {
+      active = false;
+    };
   }, [adopt, refuse]);
 
-  const save = useCallback((changes: ShopChanges): Promise<SaveOutcome | null> => {
-    waiting.current += 1;
-    setStatus({ kind: "saving" });
-    const run = async (): Promise<SaveOutcome | null> => {
-      try {
-        if (conflicted.current || revision.current === null) return null;
-        const outcome = await saveShop(revision.current, changes);
-        if (outcome.kind === "saved") {
-          revision.current = outcome.shop.revision;
-          setShop(outcome.shop);
-          setFieldErrors(
-            (errors) =>
-              Object.fromEntries(
-                Object.entries(errors).filter(([field]) => !(field in changes)),
-              ) as FieldErrors,
-          );
-          if (waiting.current === 1) setStatus({ kind: "saved" });
-        } else if (outcome.kind === "conflict") {
-          conflicted.current = true;
-          setStatus({ kind: "conflict", message: outcome.message });
-        } else {
-          setFieldErrors((errors) => ({ ...errors, ...outcome.fieldErrors }));
-          setStatus({ kind: "error", message: "Not saved" });
-        }
-        return outcome;
-      } catch (error) {
-        setStatus({
-          kind: "error",
-          message: error instanceof Error ? error.message : "could not save shop.yaml",
-        });
-        throw error;
-      } finally {
-        waiting.current -= 1;
-      }
-    };
-    const next = queue.current.then(run, run);
-    queue.current = next.catch(() => undefined);
-    return next;
-  }, []);
+  const { save, retry: resend } = queue;
+  // The queue owns failure status, so an event handler need not catch.
+  const retry = useCallback(() => void resend().catch(() => undefined), [resend]);
 
   return {
     shop,
+    loadedVersion,
     loadError,
-    status,
-    fieldErrors,
-    save,
-    reload: load,
-    locked: status.kind === "conflict",
+    status: queue.status,
+    fieldErrors: queue.fieldErrors as FieldErrors,
+    pending: queue.pending,
+    discard: queue.discard,
+    refusal: queue.refusal,
+    save: save as (
+      changes: ShopChanges,
+      options?: { retain?: boolean },
+    ) => Promise<SaveOutcome | null>,
+    retry,
+    reload,
+    locked: queue.locked,
   };
 }

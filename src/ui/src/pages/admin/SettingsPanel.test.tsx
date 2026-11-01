@@ -280,6 +280,63 @@ it("retains refused field edits, keeps other controls usable, and retries networ
   expect(screen.queryByRole("alert")).not.toBeInTheDocument();
 });
 
+it("keeps the YAML-source refusal actionable until its failed patch succeeds", async () => {
+  // The public HTTP route returns this document-level error for a provider
+  // sequence containing a merge key. No individual control owns __root__.
+  const reason =
+    "C:/synthetic/workspace/settings.yaml: cannot edit this YAML file in place: " +
+    "YAML source could not be edited safely: could not determine a constructor " +
+    "for the tag 'tag:yaml.org,2002:merge'. " +
+    "Edit this value in the file, then reload Settings.";
+  const provider: WorkspaceSettings["providers"][number] = {
+    name: "codex",
+    enabled: true,
+    model: "old",
+  };
+  const providers: WorkspaceSettings["providers"] = [
+    provider,
+    { name: "claude", enabled: false },
+    { name: "grok", enabled: false },
+  ];
+  const changed = providers.map((row) => (row.name === "codex" ? { ...row, model: "new" } : row));
+  vi.mocked(api.getSettings).mockResolvedValue({ ...initial(), providers });
+  vi.mocked(api.getModelCatalogs).mockResolvedValue({
+    cache_seconds: 1800,
+    providers: { codex: { models: [{ id: "new", label: "New", efforts: [] }], efforts: [] } },
+  });
+  vi.mocked(api.saveSettings)
+    .mockResolvedValueOnce({
+      kind: "invalid",
+      message: `__root__: ${reason}`,
+      fieldErrors: { __root__: reason },
+    })
+    .mockResolvedValueOnce(saved({ concurrency: 3, providers }))
+    .mockResolvedValueOnce(saved({ revision: "s3", concurrency: 3, providers: changed }));
+  render(<SettingsPanel />);
+  const model = await screen.findByRole("combobox", { name: "Codex model" });
+  await screen.findByRole("option", { name: "New" });
+  fireEvent.change(model, { target: { value: "new" } });
+  fireEvent.blur(model);
+  await waitFor(() => expect(api.saveSettings).toHaveBeenCalledTimes(1));
+  await act(async () => {});
+  expect(screen.getByText(reason)).toBeVisible();
+  expect(model).toHaveValue("new");
+
+  const slider = screen.getByRole("slider", { name: "Listings drafted at once" });
+  fireEvent.change(slider, { target: { value: "3" } });
+  fireEvent.pointerUp(slider);
+  await waitFor(() => expect(api.saveSettings).toHaveBeenCalledTimes(2));
+  await act(async () => {});
+  expect(screen.getByText(reason)).toBeVisible();
+  expect(screen.queryByText("Saved")).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Retry save" }));
+  await screen.findByText("Saved");
+  expect(api.saveSettings).toHaveBeenLastCalledWith("s2", {
+    providers: changed,
+  });
+  expect(screen.queryByText(reason)).not.toBeInTheDocument();
+});
+
 it("serializes provider saves with other settings and keeps newer choices during responses", async () => {
   let resolve!: (value: SettingsOutcome) => void;
   vi.mocked(api.saveSettings).mockImplementationOnce(
@@ -302,4 +359,30 @@ it("serializes provider saves with other settings and keeps newer choices during
     { name: "grok", enabled: false },
   ]);
   expect(screen.getByRole("button", { name: "Grok is off. Turn it on" })).toBeInTheDocument();
+});
+
+it("keeps a failed save failed through an unrelated success and retries only that patch", async () => {
+  vi.mocked(api.saveSettings)
+    .mockRejectedValueOnce(new Error("network down"))
+    .mockResolvedValueOnce(saved({ concurrency: 3 }))
+    .mockResolvedValueOnce(saved({ revision: "s3", concurrency: 3, weights: DEFAULTS }));
+  render(<SettingsPanel />);
+  fireEvent.click(await screen.findByRole("button", { name: "Claude is step 2. Turn it off" }));
+  expect(await screen.findByText("network down")).toBeInTheDocument();
+
+  const slider = screen.getByRole("slider", { name: "Listings drafted at once" });
+  fireEvent.change(slider, { target: { value: "3" } });
+  fireEvent.pointerUp(slider);
+  await waitFor(() => expect(api.saveSettings).toHaveBeenCalledTimes(2));
+  await act(async () => {});
+  expect(screen.queryByText("Saved")).not.toBeInTheDocument();
+  expect(screen.getByText("network down")).toBeInTheDocument();
+  expect(slider).toHaveValue("3");
+
+  fireEvent.click(screen.getByRole("button", { name: "Retry save" }));
+  expect(await screen.findByText("Saved")).toBeInTheDocument();
+  const retried = vi.mocked(api.saveSettings).mock.calls[2];
+  expect(retried?.[0]).toBe("s2");
+  expect(Object.keys(retried?.[1] ?? {})).toEqual(["providers"]);
+  expect(slider).toHaveValue("3");
 });
