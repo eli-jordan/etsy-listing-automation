@@ -258,6 +258,66 @@ def preview_listing(
     )
 
 
+class _StopLatch:
+    """``should_stop`` for one listing's ``execute``, remembering whether it
+    ever answered True. `execute` breaks out of its loop the first time it
+    does, so remembering that answer is knowing it stopped."""
+
+    def __init__(self, stop: Callable[[], bool]) -> None:
+        self._stop = stop
+        self.halted = False
+
+    def __call__(self) -> bool:
+        self.halted = self.halted or self._stop()
+        return self.halted
+
+
+@dataclass(frozen=True)
+class _ApplyListing:
+    """:func:`apply_listings`'s work for one listing: plan, check the plan is
+    the one the caller saw, execute, then the listing-level follow-up."""
+
+    ctx: RunContext
+    stages: list[AnyStage]
+    hooks: RunHooks
+    expect: Mapping[str, str] | None
+
+    def __call__(self, listing: str) -> PlannedRun:
+        ctx, on_event = self.ctx, self.hooks.on_event
+        lock = _read_lock(ctx, listing)
+        planned = build_plan(ctx, listing, lock, self.stages, on_event=on_event)
+        self._check_expected(listing, planned)
+        on_event(EngineListingPlanned(listing, planned.plan))
+        lock_file = ctx.workspace.lock_file(listing)
+        stop_here = _StopLatch(self.hooks.should_stop)
+        applied = execute(
+            ctx,
+            planned,
+            lock,
+            hooks=RunHooks(on_event, stop_here),
+            record=lambda updated: updated.write(lock_file),
+        )
+        if stop_here.halted:
+            # ADR-0041's graceful stop skipped stages the plan meant to run, so
+            # the listing-level half of the apply did not happen either: a
+            # retract that never ran must not wipe the listing, and a renew
+            # never sent must stay marked. Nor is it a full
+            # success, so the proposal stays too.
+            return planned
+        after_apply(ctx, listing, planned)
+        if fully_applied(ListingOutcome(listing=listing, planned=planned), applied):
+            # ADR-0050: here, not in an entry point, so a CLI apply and a UI
+            # apply leave the same proposal state.
+            ProposalStore(ctx.workspace).remove(listing)
+        return planned
+
+    def _check_expected(self, listing: str, planned: PlannedRun) -> None:
+        if self.expect is not None and listing in self.expect:
+            fingerprint = plan_fingerprint(planned.plan)
+            if fingerprint != self.expect[listing]:
+                raise StalePlanError(listing, planned)
+
+
 def apply_listings(
     ctx: RunContext,
     listings: Sequence[str],
@@ -294,48 +354,8 @@ def apply_listings(
     : the proposal described copy that is now deployed or deliberately
         not taken, and every entry point must leave the same proposal state.
     """
-    on_event, stop = hooks.on_event, hooks.should_stop
-
-    def work(listing: str) -> PlannedRun:
-        lock = _read_lock(ctx, listing)
-        planned = build_plan(ctx, listing, lock, stages, on_event=on_event)
-        if expect is not None and listing in expect:
-            fingerprint = plan_fingerprint(planned.plan)
-            if fingerprint != expect[listing]:
-                raise StalePlanError(listing, planned)
-        on_event(EngineListingPlanned(listing, planned.plan))
-        lock_file = ctx.workspace.lock_file(listing)
-        halted = False
-
-        def stop_here() -> bool:
-            # `execute` breaks out of its loop the first time this answers
-            # True, so remembering that answer is knowing it stopped.
-            nonlocal halted
-            halted = halted or stop()
-            return halted
-
-        applied = execute(
-            ctx,
-            planned,
-            lock,
-            hooks=RunHooks(on_event, stop_here),
-            record=lambda updated: updated.write(lock_file),
-        )
-        if halted:
-            # ADR-0041's graceful stop skipped stages the plan meant to run, so
-            # the listing-level half of the apply did not happen either: a
-            # retract that never ran must not wipe the listing, and a renew
-            # never sent must stay marked. Nor is it a full
-            # success, so the proposal stays too.
-            return planned
-        after_apply(ctx, listing, planned)
-        if fully_applied(ListingOutcome(listing=listing, planned=planned), applied):
-            # ADR-0050: here, not in an entry point, so a CLI apply and a UI
-            # apply leave the same proposal state.
-            ProposalStore(ctx.workspace).remove(listing)
-        return planned
-
-    return _over(listings, work, on_event, should_stop=stop)
+    work = _ApplyListing(ctx, stages, hooks, expect)
+    return _over(listings, work, hooks.on_event, should_stop=hooks.should_stop)
 
 
 def _over(
