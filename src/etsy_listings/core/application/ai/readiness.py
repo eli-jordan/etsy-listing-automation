@@ -26,30 +26,41 @@ from etsy_listings.core.ai.grok import GrokProvider
 from etsy_listings.core.ai.providers import AiProvider
 from etsy_listings.core.config.artwork import representative
 from etsy_listings.core.config.listing import Listing
+from etsy_listings.core.config.settings import AiSettings
 from etsy_listings.core.workspace.facts import WorkspaceFacts
 from etsy_listings.core.workspace.workspace import Workspace
 
-ProviderFactory = Callable[[Workspace], Sequence[AiProvider]]
-"""The providers to ask, in order. Called afresh for every readiness check
-and every run, since a provider's own ``readiness()`` can change between
-calls (the CLI signed out mid-session, for instance)."""
+ProviderFactory = Callable[[Workspace, AiSettings], Sequence[AiProvider]]
+"""The providers to ask, in order, built from already-loaded AI settings.
+Called afresh for every readiness check and every run, since a provider's
+own ``readiness()`` can change between calls (the CLI signed out
+mid-session, for instance). A run passes the same load it takes its time
+limits from, so both come from one revision of ``settings.yaml`` (ADR-0057)."""
 
 
-def default_ai_providers(workspace: Workspace) -> Sequence[AiProvider]:
-    """Codex, then Claude, then Grok. A recognised unavailable failure
-    falls through, so a usage limit on the first two still reaches Grok.
-    Freshly constructed per call: readiness is re-checked every time, and
-    there is no warm connection to hold onto.
+def current_providers(factory: ProviderFactory, workspace: Workspace) -> Sequence[AiProvider]:
+    """``factory``'s providers for ``settings.yaml`` as it is now: for a
+    readiness check, which captures nothing."""
+    return factory(workspace, workspace.load_settings().ai)
 
-    No prompt file is handed over: which prose a request is built from is
-    the request's business, not the CLI's (``ai/models.py.ProviderTask``),
-    so "a missing prompt file means not ready" lives only here, where the
-    answer can name *which* file.
+
+def default_ai_providers(workspace: Workspace, ai: AiSettings) -> Sequence[AiProvider]:
+    """Capture the enabled chain and all task preferences from ``ai`` (ADR-0056).
+
+    Newly constructed adapters never reread settings during repair or fallback.
+    Missing AI settings preserve Codex, Claude, Grok and account defaults.
     """
-    return (
-        CodexProvider(workspace_root=workspace.root),
-        ClaudeProvider(workspace_root=workspace.root),
-        GrokProvider(workspace_root=workspace.root),
+    adapters: dict[str, type[CodexProvider] | type[ClaudeProvider] | type[GrokProvider]] = {
+        "codex": CodexProvider,
+        "claude": ClaudeProvider,
+        "grok": GrokProvider,
+    }
+    return tuple(
+        adapters[provider.name](
+            workspace_root=workspace.root, model=provider.model, effort=provider.effort
+        )
+        for provider in ai.providers
+        if provider.enabled
     )
 
 
