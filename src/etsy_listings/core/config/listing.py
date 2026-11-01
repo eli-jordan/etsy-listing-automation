@@ -10,7 +10,6 @@ from pydantic import (
     BaseModel,
     BeforeValidator,
     ConfigDict,
-    ValidationError,
     ValidationInfo,
     field_validator,
     model_validator,
@@ -18,7 +17,9 @@ from pydantic import (
 
 from etsy_listings.core.config.artwork import BASE_KEYS, DEFAULT, TONE_KEYS, is_light_dark
 from etsy_listings.core.config.description import DescriptionConfig
-from etsy_listings.core.config.errors import ConfigLoadError, format_validation_error, parse_yaml
+from etsy_listings.core.config.errors import (
+    load_model,
+)
 from etsy_listings.core.config.media import (
     MAX_IMAGES,
     MAX_VIDEOS,
@@ -342,13 +343,9 @@ class Listing(BaseModel):
     ) -> Listing:
         """``read`` fetches the file's bytes, as for ``ListingTemplate.load``:
         the workspace passes its retrying reader."""
-        if not path.is_file():
-            raise ConfigLoadError(path, "listing file not found")
-        raw = parse_yaml(path, read(path).decode("utf-8")) or {}
-        try:
-            return cls.model_validate(raw, context={"currency": currency})
-        except ValidationError as exc:
-            raise format_validation_error(path, exc) from exc
+        return load_model(
+            cls, path, context={"currency": currency}, read=read, missing="listing file not found"
+        )
 
     def resolved_price(
         self, color: str, size: str, *, pricing_plan: PricingPlan | None = None
