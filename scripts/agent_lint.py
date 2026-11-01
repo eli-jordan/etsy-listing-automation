@@ -41,6 +41,7 @@ MAX_FINDINGS = 20
 ESLINT_ERROR = 2  # ESLint's severity for an error; 1 is a warning
 COMPLEXIPY_FIELDS = 3  # a `--plain` finding line: path, function, complexity
 FINDINGS = 2  # the exit code every agent feeds back to the model
+NOT_FOUND = 127  # the shell's exit code for a command it cannot find
 REFUSED = 1  # the exit code that stops a commit
 
 # S07: a suppression ends with ` -- <reason>`. mypy rejects text after
@@ -123,15 +124,20 @@ def _node_tool(name: str) -> list[str]:
 
 
 def _run(command: list[str], *args: str, cwd: Path = ROOT) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(
-        [*command, *args],
-        cwd=cwd,
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-        check=False,
-    )
+    try:
+        return subprocess.run(
+            [*command, *args],
+            cwd=cwd,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            check=False,
+        )
+    except FileNotFoundError as missing:
+        # A hook's environment can lack a tool (Codex rebuilds it from a
+        # snapshot); that check is skipped rather than crashing the hook.
+        return subprocess.CompletedProcess([*command, *args], NOT_FOUND, "", str(missing))
 
 
 def _git(*args: str) -> str:
@@ -420,12 +426,7 @@ def _added_lines(relative: Path) -> list[tuple[int, str]]:
     Only new suppressions must carry a reason; the ones already committed are
     the rollout's business, not the agent's.
     """
-    tracked = subprocess.run(
-        ["git", "ls-files", "--error-unmatch", relative.as_posix()],
-        cwd=ROOT,
-        capture_output=True,
-        check=False,
-    )
+    tracked = _run(["git"], "ls-files", "--error-unmatch", relative.as_posix())
     text = (ROOT / relative).read_text(encoding="utf-8", errors="replace")
     if tracked.returncode != 0:
         return list(enumerate(text.splitlines(), start=1))

@@ -109,8 +109,14 @@ both through the same gate, `scripts/agent_lint_gate.py`, run as `python -S`:
   own bash (no second shell), which only picks `.venv`'s Python, or `uv run`
   without one, and starts the gate.
 - `.codex/hooks.json`: Codex `PostToolUse` matching
-  `Bash|apply_patch|Edit|Write`. Codex runs `commandWindows` through
-  `%COMSPEC% /C` (cmd.exe), which starts the gate directly.
+  `Bash|apply_patch|Edit|Write`. Codex runs hook commands through the
+  session's shell, which on Windows is always PowerShell (started with
+  `-NoProfile`; Codex offers no setting for it). So `commandWindows` is a bare
+  call, `./.venv/Scripts/python.exe -S scripts/agent_lint_gate.py <mode>;
+  exit $LASTEXITCODE`, that PowerShell, zsh and bash all parse: no `cmd`
+  syntax, no backslashes, and an explicit exit code, because PowerShell
+  `-Command` otherwise reports any failing program as exit 1 and Codex feeds
+  findings back only on exit 2.
 
 **The gate.** After a shell command, the gate decides from
 `scripts/agent_lint_rules.txt` whether the command could have written a file:
@@ -154,9 +160,9 @@ repeated runs as each agent launches the hook):
 
 | After | Claude Code / Grok | Codex |
 |---|---|---|
-| a read-only shell command | 0.15-0.18s (bash alone: 0.09s) | 0.12-0.16s (cmd alone: 0.07s) |
-| a shell command that changed no source | 0.36s | 0.39s |
-| an edit, or a shell command that changed a file | 0.7-0.9s | 0.7-0.8s |
+| a read-only shell command | 0.15-0.18s (bash alone: 0.09s) | 0.29-0.37s (PowerShell alone: 0.31s) |
+| a shell command that changed no source | 0.36s | 0.37s |
+| an edit, or a shell command that changed a file | 0.7-0.9s | about 1.0s |
 
 The per-edit hook it replaces took 1.4-1.8s for an edit. The hook calls tools
 from the project `.venv` and `node_modules` directly rather than through
@@ -179,6 +185,10 @@ been trusted in the interactive CLI's `/hooks` browser, and records that trust
 against the definition's hash. Until then it skips the hook without a message.
 The repository cannot grant that trust: someone runs `codex` in the repo, opens
 `/hooks` and trusts its hooks, and again whenever `.codex/hooks.json` changes.
+Since codex-cli's PR #21969, a linked worktree loads its hooks, and their trust,
+from the **root checkout's** `.codex/hooks.json`, so every T3 worktree runs
+whatever that one file says (verified with `codex exec`, 2026-11-01). The
+root checkout's copy is the one to keep current and trust.
 Until then, Codex is covered by the pre-commit hook, `poe check` and CI.
 
 ### S07 — Suppressions carry a reason

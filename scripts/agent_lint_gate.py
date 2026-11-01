@@ -1,7 +1,8 @@
 """Skip the agent lint hook after shell commands that cannot have written a file (spec S06).
 
 Every agent's hook starts here: Claude Code and Grok through
-scripts/agent_lint_launch.sh, Codex directly from `cmd /C`. It runs as
+scripts/agent_lint_launch.sh, Codex directly from its session shell
+(PowerShell on Windows). It runs as
 `python -S` and, to decide fast, imports nothing but `os`, `re` and `sys` and
 reads the payload as text: `json` alone would cost more than the rest of the
 decision. The rules are scripts/agent_lint_rules.txt. A command that may have

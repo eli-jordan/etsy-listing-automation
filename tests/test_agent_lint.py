@@ -303,8 +303,10 @@ def test_each_agent_gates_edits_and_shell_commands_and_owns_the_daemon(
     ]:
         for command in commands(event):
             assert gate in command.replace("\\", "/")
-            # Codex's Windows form ends inside cmd's `else (...)`.
-            assert command.rstrip(")").endswith(f" {subcommand}")
+            # Codex's Windows form hands PowerShell the program's exit code.
+            assert command.removesuffix("; exit $LASTEXITCODE").endswith(f" {subcommand}")
+            # Codex runs hooks through PowerShell on Windows, not cmd.
+            assert "if exist" not in command
 
 
 # --- the shell gate (S06) -------------------------------------------------------
@@ -374,6 +376,56 @@ def git_bash() -> str | None:
         candidate = Path(os.environ.get("PROGRAMFILES", r"C:\Program Files")) / "Git/bin/bash.exe"
         return str(candidate) if candidate.is_file() else None
     return shutil.which("bash")
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Codex's Windows hook command")
+def test_codex_windows_command_runs_through_powershell_as_codex_runs_it(
+    scratch: Path, state: dict[str, str]
+) -> None:
+    # Codex runs hooks through the session's shell, always PowerShell on
+    # Windows; a cmd-only command (`if exist ... (...)`) fails there silently.
+    hooks = json.loads((ROOT / ".codex" / "hooks.json").read_text())["hooks"]
+    command = hooks["PostToolUse"][0]["hooks"][0]["commandWindows"]
+    source = scratch / "codex.py"
+    source.write_text("print(missing)\n")
+
+    result = subprocess.run(
+        ["powershell.exe", "-NoProfile", "-Command", command],
+        input=json.dumps(edited(source)),
+        capture_output=True,
+        text=True,
+        cwd=ROOT,
+        env={**os.environ, **state},
+        timeout=120,
+        check=False,
+    )
+
+    assert result.returncode == 2, result.stderr
+    assert "codex.py:1:" in result.stderr
+
+
+def test_a_missing_git_skips_the_git_checks_instead_of_crashing(scratch: Path) -> None:
+    source = scratch / "no_git.py"
+    source.write_text("print(missing)\n")
+    # Only the Windows system directory on PATH: no git, as in a sparse hook
+    # environment. ruff still runs from the venv by its full path.
+    system = os.environ.get("SYSTEMROOT", r"C:\Windows")
+    env = {name: value for name, value in os.environ.items() if name.upper() != "PATH"}
+    env["PATH"] = str(Path(system) / "System32") if os.name == "nt" else "/nonexistent"
+
+    result = subprocess.run(
+        [sys.executable, str(HOOK), "edit"],
+        input=json.dumps(edited(source)),
+        capture_output=True,
+        text=True,
+        env=env,
+        timeout=120,
+        check=False,
+    )
+
+    assert "Traceback" not in result.stderr
+    assert result.returncode == 2
+    assert "F821" in result.stderr
 
 
 def test_the_claude_launcher_hands_each_payload_to_the_gate(
