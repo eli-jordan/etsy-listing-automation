@@ -286,6 +286,25 @@ def _geometry(body: PreviewRequest) -> PreviewGeometry:
 
 
 PreviewScale = Literal["editor", "full"]
+
+
+@dataclass(frozen=True)
+class PreviewQuery:
+    """The query parameters every saved-scene preview takes: the depicted
+    ``colour`` (colour-matrix scenes) and the raster ``scale``."""
+
+    colour: str | None = None
+    scale: PreviewScale = "full"
+
+
+@dataclass(frozen=True)
+class ScenePreviewQuery(PreviewQuery):
+    """A listing scene's preview query. ``v`` is a cache-buster the editor
+    sends -- a signature of the saved design -- and is otherwise ignored."""
+
+    v: str | None = None
+
+
 """How big a preview to render.
 
 Two named sizes, not a pixel count from the client. ``full`` is the photo's
@@ -459,10 +478,9 @@ def preview(
 def design_preview(
     template: Annotated[Target, Depends(target)],
     request: Request,
+    query: Annotated[PreviewQuery, Depends()],
     design: str | None = None,
     test_design: str | None = None,
-    colour: str | None = None,
-    scale: PreviewScale = "full",
 ) -> Response:
     """One design on every layer of this template's saved geometry -- the
     listing-template editor's preview (UI doc §3): a listing template has no
@@ -479,7 +497,7 @@ def design_preview(
     saved listing (A35), so its editor cannot show one file while Printify
     prints another.
     """
-    workspace = template.workspace
+    workspace, colour, scale = template.workspace, query.colour, query.scale
     if (design is None) == (test_design is None):
         raise HTTPException(status_code=422, detail="give exactly one of design, test_design")
 

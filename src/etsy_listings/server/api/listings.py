@@ -102,7 +102,7 @@ from etsy_listings.server.api.schemas import (
     WorkspaceSummary,
 )
 from etsy_listings.server.api.templates import (
-    PreviewScale,
+    ScenePreviewQuery,
     preview_refusals,
     render_preview_response,
 )
@@ -435,9 +435,7 @@ def scene_preview(
     target: Annotated[Target, Depends(target)],
     template: str,
     request: Request,
-    colour: str | None = None,
-    scale: PreviewScale = "full",
-    v: str | None = None,
+    query: Annotated[ScenePreviewQuery, Depends()],
 ) -> Response:
     """One of this listing's scenes, each layer printing the file its depicted
     colour resolves to in the *saved* listing (A35) -- the Variants stage and
@@ -451,8 +449,7 @@ def scene_preview(
     ``v`` is ignored; the editor sends a signature of the saved design so a
     landed save is a new URL and the browser fetches it again.
     """
-    del v
-    workspace = target.workspace
+    workspace, colour, scale = target.workspace, query.colour, query.scale
     try:
         artwork = scene_artwork(workspace, target.name)
     except ListingMissingError as exc:
