@@ -1,8 +1,16 @@
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { StrictMode } from "react";
 import { afterEach, beforeEach, describe, expect, it, type MockInstance, vi } from "vitest";
 import * as shopApi from "../../api/shop";
-import type { SaveOutcome, ShopConnections, ShopLookups, ShopSettings } from "../../api/shop";
+import * as settingsApi from "../../api/workspaceSettings";
+import type {
+  SaveOutcome,
+  ShopChanges,
+  ShopConnections,
+  ShopLookups,
+  ShopSettings,
+} from "../../api/shop";
 import { AdminPage } from "./AdminPage";
 
 /* Admin plan, PR 3: the Shop tab against a mocked HTTP surface. Each save
@@ -108,6 +116,27 @@ function saved(next: ShopSettings): SaveOutcome {
 }
 
 beforeEach(() => {
+  const weights = {
+    reviews: 30,
+    favourites_per_day: 30,
+    search_rank: 20,
+    views_per_day: 10,
+    shop_sales: 5,
+    shop_rating: 5,
+  };
+  vi.spyOn(settingsApi, "getSettings").mockResolvedValue({
+    revision: "s1",
+    concurrency: 1,
+    providers: [{ name: "codex", enabled: true }],
+    weights,
+    default_weights: weights,
+    step_limit_minutes: 5,
+    run_limit_minutes: 20,
+  });
+  vi.spyOn(settingsApi, "getModelCatalogs").mockResolvedValue({
+    cache_seconds: 1800,
+    providers: {},
+  });
   vi.spyOn(shopApi, "getShop").mockResolvedValue(shop());
   vi.spyOn(shopApi, "getShopConnections").mockResolvedValue(CONNECTED);
   getLookups = vi.spyOn(shopApi, "getShopLookups").mockResolvedValue(lookups());
@@ -135,12 +164,22 @@ async function openDefaults() {
 }
 
 describe("Admin page shell", () => {
-  it("opens on Connected shops and keeps Settings visibly unavailable", async () => {
+  it("opens on Connected shops and preserves pending Settings edits across navigation", async () => {
     render(<AdminPage />);
     expect(await screen.findByRole("heading", { name: "Connected shops" })).toBeVisible();
-    const settings = screen.getByText("Settings").closest("[aria-disabled]");
-    expect(settings).toHaveAttribute("aria-disabled", "true");
-    expect(screen.queryByRole("slider")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("slider", { name: "Listings drafted at once" }),
+    ).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("link", { name: /Settings/ }));
+    const slider = await screen.findByRole("slider", { name: "Listings drafted at once" });
+    fireEvent.change(slider, { target: { value: "4" } });
+    fireEvent.click(screen.getByRole("link", { name: /Shop shop.yaml/ }));
+    expect(
+      screen.queryByRole("slider", { name: "Listings drafted at once" }),
+    ).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("link", { name: /Settings/ }));
+    expect(screen.getByRole("slider", { name: "Listings drafted at once" })).toHaveValue("4");
+    expect(settingsApi.getSettings).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -388,6 +427,764 @@ describe("Listing defaults", () => {
     expect(await screen.findByText("Input should be 'manual' or 'auto'")).toBeInTheDocument();
     expect(renewal).toHaveValue("auto");
     expect(screen.getByText("Not saved")).toBeInTheDocument();
+  });
+
+  /** shop.yaml behind the mocked endpoint: each save applies its changes
+   * and returns the next revision, or waits/fails when a test says so. */
+  function fileServer() {
+    let file = shop();
+    let n = 1;
+    const answers: ((apply: () => SaveOutcome) => Promise<SaveOutcome>)[] = [];
+    save.mockImplementation((revision, changes) => {
+      const apply = () => {
+        expect(revision).toBe(file.revision);
+        n += 1;
+        const defaults = Object.fromEntries(
+          Object.entries(changes).filter(([key]) => key !== "currency"),
+        );
+        file = {
+          ...file,
+          revision: `r${n}`,
+          listing_defaults: {
+            ...file.listing_defaults,
+            ...defaults,
+          } as ShopSettings["listing_defaults"],
+        };
+        return saved(file);
+      };
+      const answer = answers.shift();
+      return answer ? answer(apply) : Promise.resolve(apply());
+    });
+    return {
+      file: () => file,
+      /** The next save waits until the returned function answers it. */
+      hold() {
+        let release: (() => void) | undefined;
+        answers.push(
+          (apply) =>
+            new Promise((resolve) => {
+              release = () => resolve(apply());
+            }),
+        );
+        return async () => {
+          await waitFor(() => expect(release).toBeDefined());
+          await act(async () => release?.());
+        };
+      },
+      failNext(message: string) {
+        answers.push(() => Promise.reject(new Error(message)));
+      },
+    };
+  }
+
+  it.each(["network", "validation"])(
+    "abandons a failed choice returned to its saved value after a %s failure",
+    async (failure) => {
+      const server = fileServer();
+      if (failure === "network") server.failNext("renewal offline");
+      else
+        save.mockResolvedValueOnce({
+          kind: "invalid",
+          message: "invalid renewal",
+          fieldErrors: { renewal: "renewal refused" },
+        });
+      await openDefaults();
+      const renewal = screen.getByLabelText("Renewal");
+      fireEvent.change(renewal, { target: { value: "auto" } });
+      fireEvent.blur(renewal);
+      await screen.findByText(failure === "network" ? "renewal offline" : "renewal refused");
+      fireEvent.change(renewal, { target: { value: "manual" } });
+      fireEvent.blur(renewal);
+      await waitFor(() =>
+        expect(screen.queryByRole("button", { name: "Retry save" })).not.toBeInTheDocument(),
+      );
+      expect(screen.queryByText("renewal refused")).not.toBeInTheDocument();
+      expect(save).toHaveBeenCalledTimes(1);
+      server.failNext("shipping offline");
+      const shipping = screen.getByLabelText("Shipping profile");
+      fireEvent.change(shipping, { target: { value: "Printify EU standard" } });
+      fireEvent.blur(shipping);
+      await screen.findByText("shipping offline");
+      await userEvent.click(screen.getByRole("button", { name: "Retry save" }));
+      await screen.findByText("Saved");
+      expect(save.mock.calls[2]).toEqual(["r1", { shipping_profile: "Printify EU standard" }]);
+      expect(renewal).toHaveValue("manual");
+      expect(server.file().listing_defaults.renewal).toBe("manual");
+      expect(server.file().listing_defaults.shipping_profile).toBe("Printify EU standard");
+    },
+  );
+
+  it("abandons failed Custom values when the unchanged POD preset is chosen", async () => {
+    const server = fileServer();
+    server.failNext("custom offline");
+    await openDefaults();
+    await userEvent.click(screen.getByRole("radio", { name: /Custom/ }));
+    fireEvent.change(screen.getByLabelText("Who made it"), { target: { value: "i_did" } });
+    fireEvent.blur(screen.getByLabelText("Who made it"));
+    await screen.findByText("custom offline");
+    await userEvent.click(screen.getByRole("radio", { name: /Print on demand/ }));
+    expect(screen.queryByRole("button", { name: "Retry save" })).not.toBeInTheDocument();
+    expect(save).toHaveBeenCalledTimes(1);
+    server.failNext("shipping offline");
+    fireEvent.change(screen.getByLabelText("Shipping profile"), {
+      target: { value: "Printify EU standard" },
+    });
+    fireEvent.blur(screen.getByLabelText("Shipping profile"));
+    await screen.findByText("shipping offline");
+    await userEvent.click(screen.getByRole("button", { name: "Retry save" }));
+    await screen.findByText("Saved");
+    expect(save.mock.calls[2]).toEqual(["r1", { shipping_profile: "Printify EU standard" }]);
+    expect(server.file().listing_defaults).toMatchObject({
+      who_made: "someone_else",
+      when_made: "made_to_order",
+      is_supply: false,
+    });
+  });
+
+  it.each(["network", "validation"])(
+    "retains a matching pending draft when a reblurred save has a %s failure",
+    async (failure) => {
+      const server = fileServer();
+      let answer!: (outcome: SaveOutcome) => void;
+      let reject!: (error: Error) => void;
+      save.mockImplementationOnce(
+        () =>
+          new Promise((resolve, refuse) => {
+            answer = resolve;
+            reject = refuse;
+          }),
+      );
+      await openDefaults();
+      const renewal = screen.getByLabelText("Renewal");
+      fireEvent.change(renewal, { target: { value: "auto" } });
+      fireEvent.blur(renewal);
+      await waitFor(() => expect(save).toHaveBeenCalledTimes(1));
+      renewal.focus();
+      fireEvent.blur(renewal);
+      await act(async () => {});
+      expect(save).toHaveBeenCalledTimes(1);
+      await act(async () => {
+        if (failure === "network") reject(new Error("renewal offline"));
+        else
+          answer({
+            kind: "invalid",
+            message: "invalid renewal",
+            fieldErrors: { renewal: "renewal refused" },
+          });
+      });
+      await screen.findByText(failure === "network" ? "renewal offline" : "renewal refused");
+      expect(renewal).toHaveValue("auto");
+      await userEvent.click(screen.getByRole("button", { name: "Retry save" }));
+      await screen.findByText("Saved");
+      expect(save.mock.calls[1]).toEqual(["r1", { renewal: "auto" }]);
+      expect(server.file().listing_defaults.renewal).toBe("auto");
+      expect(renewal).toHaveValue("auto");
+    },
+  );
+
+  it.each([
+    ["renewal", false],
+    ["renewal", true],
+    ["return_policy", false],
+    ["return_policy", true],
+  ] as const)(
+    "does not reblur a %s value refused by Retry, pending reblur=%s",
+    async (field, reblur) => {
+      const server = fileServer();
+      server.failNext("save offline");
+      await openDefaults();
+      const control = screen.getByLabelText(field === "renewal" ? "Renewal" : "Return policy");
+      const original = (control as HTMLSelectElement).value;
+      const value =
+        field === "renewal"
+          ? "auto"
+          : (
+              within(control).getByRole("option", {
+                name: "returns and exchanges within 14 days",
+              }) as HTMLOptionElement
+            ).value;
+      fireEvent.change(control, { target: { value } });
+      fireEvent.blur(control);
+      await screen.findByText("save offline");
+      let answer!: (outcome: SaveOutcome) => void;
+      save.mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            answer = resolve;
+          }),
+      );
+      await userEvent.click(screen.getByRole("button", { name: "Retry save" }));
+      await waitFor(() => expect(save).toHaveBeenCalledTimes(2));
+      if (reblur) {
+        control.focus();
+        fireEvent.blur(control);
+        await act(async () => {});
+      }
+      await act(async () =>
+        answer({
+          kind: "invalid",
+          message: "invalid edit",
+          fieldErrors: { [field]: "edit refused" },
+        }),
+      );
+      await screen.findByText("edit refused");
+      expect(control).toHaveValue(value);
+      control.focus();
+      fireEvent.blur(control);
+      await act(async () => {});
+      expect(save).toHaveBeenCalledTimes(2);
+      expect(server.file().listing_defaults[field]).toEqual(shop().listing_defaults[field]);
+
+      // A real new edit, including choosing back to the refused value, is
+      // allowed to try again. The old field error must not freeze it.
+      fireEvent.change(control, { target: { value: original } });
+      fireEvent.change(control, { target: { value } });
+      fireEvent.blur(control);
+      await screen.findByText("Saved");
+      const changes: ShopChanges =
+        field === "renewal"
+          ? { renewal: "auto" }
+          : {
+              return_policy: { accepts_returns: true, accepts_exchanges: true, within_days: 14 },
+            };
+      expect(save.mock.calls[2]).toEqual(["r1", changes]);
+      expect(server.file().listing_defaults[field]).toEqual(changes[field]);
+    },
+  );
+
+  it.each([false, true])(
+    "keeps unrelated failed fields blur-saveable after Retry's field-specific refusal, reblur=%s",
+    async (reblur) => {
+      const server = fileServer();
+      server.failNext("renewal offline");
+      await openDefaults();
+      const renewal = screen.getByLabelText("Renewal");
+      fireEvent.change(renewal, { target: { value: "auto" } });
+      fireEvent.blur(renewal);
+      await screen.findByText("renewal offline");
+      server.failNext("shipping offline");
+      const shipping = screen.getByLabelText("Shipping profile");
+      fireEvent.change(shipping, { target: { value: "Printify EU standard" } });
+      fireEvent.blur(shipping);
+      await screen.findByText("shipping offline");
+      let answer!: (outcome: SaveOutcome) => void;
+      save.mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            answer = resolve;
+          }),
+      );
+      await userEvent.click(screen.getByRole("button", { name: "Retry save" }));
+      await waitFor(() => expect(save).toHaveBeenCalledTimes(3));
+      expect(save.mock.calls[2]).toEqual([
+        "r1",
+        {
+          renewal: "auto",
+          shipping_profile: "Printify EU standard",
+        },
+      ]);
+      if (reblur) {
+        renewal.focus();
+        fireEvent.blur(renewal);
+        await act(async () => {});
+        expect(save).toHaveBeenCalledTimes(3);
+      }
+      await act(async () =>
+        answer({
+          kind: "invalid",
+          message: "invalid shipping",
+          fieldErrors: {
+            shipping_profile: "shipping refused",
+          },
+        }),
+      );
+      await screen.findByText("shipping refused");
+      renewal.focus();
+      fireEvent.blur(renewal);
+      await waitFor(() => expect(save).toHaveBeenCalledTimes(4));
+      expect(save.mock.calls[3]).toEqual(["r1", { renewal: "auto" }]);
+      expect(server.file().listing_defaults.renewal).toBe("auto");
+      expect(server.file().listing_defaults.shipping_profile).toBe("Printify US standard");
+      expect(screen.queryByText("Saved")).not.toBeInTheDocument();
+      expect(shipping).toHaveValue("Printify EU standard");
+      shipping.focus();
+      fireEvent.blur(shipping);
+      await act(async () => {});
+      expect(save).toHaveBeenCalledTimes(4);
+      await userEvent.click(screen.getByRole("button", { name: "Retry save" }));
+      await screen.findByText("Saved");
+      expect(save.mock.calls[4]).toEqual(["r2", { shipping_profile: "Printify EU standard" }]);
+    },
+  );
+
+  it.each(["shipping_profile", "return_policy"] as const)(
+    "keeps a refused %s choice visible when its lookup becomes unavailable",
+    async (field) => {
+      save.mockResolvedValueOnce({
+        kind: "invalid",
+        message: "invalid edit",
+        fieldErrors: {
+          [field]: "edit refused",
+        },
+      });
+      await openDefaults();
+      const control = screen.getByLabelText(
+        field === "shipping_profile" ? "Shipping profile" : "Return policy",
+      );
+      const label =
+        field === "shipping_profile"
+          ? "Printify EU standard"
+          : "returns and exchanges within 14 days";
+      const option = within(control).getByRole("option", { name: label }) as HTMLOptionElement;
+      const value = option.value;
+      fireEvent.change(control, { target: { value } });
+      fireEvent.blur(control);
+      await screen.findByText("edit refused");
+      expect(control).toHaveValue(value);
+      getLookups.mockResolvedValueOnce(OFFLINE);
+      await userEvent.click(screen.getByRole("button", { name: "Refresh lists" }));
+      await waitFor(() => expect(control).toBeDisabled());
+      expect(control).toHaveValue(value);
+      expect(control).toHaveDisplayValue(label);
+      expect(save).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it.each([
+    { accepts_returns: true, accepts_exchanges: true, within_days: 14 },
+    { accepts_returns: false, accepts_exchanges: false, within_days: null },
+  ])("retries captured return-policy terms after the lookup drops them: %j", async (terms) => {
+    const server = fileServer();
+    const label = terms.accepts_returns
+      ? "returns and exchanges within 14 days"
+      : "no returns or exchanges";
+    getLookups.mockResolvedValue({
+      ...lookups(),
+      etsy: { ...lookups().etsy, return_policies: [{ terms, label }] },
+    });
+    server.failNext("policy offline");
+    await openDefaults();
+    const control = screen.getByLabelText("Return policy");
+    const value = (within(control).getByRole("option", { name: label }) as HTMLOptionElement).value;
+    fireEvent.change(control, { target: { value } });
+    fireEvent.blur(control);
+    await screen.findByText("policy offline");
+    getLookups.mockResolvedValueOnce({
+      ...lookups(),
+      etsy: { ...lookups().etsy, return_policies: [] },
+    });
+    await act(async () => window.dispatchEvent(new Event("focus")));
+    expect(control).toBeEnabled();
+    control.focus();
+    fireEvent.blur(control);
+    await screen.findByText("Saved");
+    expect(save.mock.calls[1]).toEqual(["r1", { return_policy: terms }]);
+    expect(server.file().listing_defaults.return_policy).toEqual(terms);
+    expect(control).toHaveDisplayValue(label);
+  });
+
+  it("ignores an abandoned initial Shop read under StrictMode", async () => {
+    let release!: (value: ShopSettings) => void;
+    vi.mocked(shopApi.getShop).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          release = resolve;
+        }),
+    );
+    render(
+      <StrictMode>
+        <AdminPage />
+      </StrictMode>,
+    );
+    await userEvent.click(await screen.findByRole("link", { name: "Listing defaults" }));
+    const renewal = await screen.findByLabelText("Renewal");
+    renewal.focus();
+    fireEvent.change(renewal, { target: { value: "auto" } });
+    await act(async () => release(shop()));
+    expect(screen.getByLabelText("Renewal")).toHaveValue("auto");
+    expect(screen.getByLabelText("Renewal")).toHaveFocus();
+    expect(save).not.toHaveBeenCalled();
+  });
+
+  it.each([false, true])(
+    "keeps a sibling's Saved after a cancelled currency failure, queued=%s",
+    async (queued) => {
+      const server = fileServer();
+      const answer = queued ? server.hold() : null;
+      await openDefaults();
+      fireEvent.change(screen.getByLabelText("Renewal"), { target: { value: "auto" } });
+      fireEvent.blur(screen.getByLabelText("Renewal"));
+      if (!queued) await screen.findByText("Saved");
+      await userEvent.click(screen.getByRole("link", { name: "Connected shops" }));
+      await userEvent.click(await screen.findByRole("button", { name: "Change currency…" }));
+      const dialog = screen.getByRole("dialog", { name: /converts nothing/ });
+      await userEvent.click(within(dialog).getByLabelText(/prices won't be converted/));
+      server.failNext("currency offline");
+      await userEvent.click(within(dialog).getByRole("button", { name: "Change to EUR" }));
+      if (answer) await answer();
+      expect(await within(dialog).findByRole("alert")).toHaveTextContent("currency offline");
+      await userEvent.click(within(dialog).getByRole("button", { name: "Keep USD" }));
+      expect(screen.getByText("Saved")).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Retry save" })).not.toBeInTheDocument();
+      expect(server.file().listing_defaults.renewal).toBe("auto");
+      expect(server.file().currency).toBe("USD");
+    },
+  );
+
+  it("keeps a newer focused choice when an older save is answered", async () => {
+    const server = fileServer();
+    const answerAuto = server.hold();
+    await openDefaults();
+    const renewal = screen.getByLabelText("Renewal");
+    renewal.focus();
+    fireEvent.change(renewal, { target: { value: "auto" } });
+    fireEvent.blur(renewal);
+    renewal.focus();
+    fireEvent.change(renewal, { target: { value: "manual" } });
+
+    await answerAuto();
+    expect(renewal).toHaveValue("manual");
+    expect(renewal).toHaveFocus();
+    fireEvent.blur(renewal);
+
+    await waitFor(() => expect(save).toHaveBeenCalledTimes(2));
+    expect(save.mock.calls[1]).toEqual(["r2", { renewal: "manual" }]);
+    expect(await screen.findByText("Saved")).toBeInTheDocument();
+    expect(server.file().listing_defaults.renewal).toBe("manual");
+    expect(renewal).toHaveValue("manual");
+  });
+
+  it("keeps a newer queued choice while the older save is answered", async () => {
+    const server = fileServer();
+    const answerAuto = server.hold();
+    await openDefaults();
+    const renewal = screen.getByLabelText("Renewal");
+    fireEvent.change(renewal, { target: { value: "auto" } });
+    fireEvent.blur(renewal);
+    fireEvent.change(renewal, { target: { value: "manual" } });
+    fireEvent.blur(renewal);
+
+    await answerAuto();
+    expect(renewal).toHaveValue("manual");
+    await waitFor(() => expect(save).toHaveBeenCalledTimes(2));
+    expect(await screen.findByText("Saved")).toBeInTheDocument();
+    expect(server.file().listing_defaults.renewal).toBe("manual");
+    expect(renewal).toHaveValue("manual");
+  });
+
+  it("keeps a failed field unsaved through a sibling's success until it is retried", async () => {
+    const server = fileServer();
+    server.failNext("network down");
+    vi.spyOn(shopApi, "getShop").mockResolvedValue(shop({ who_made: "i_did" }));
+    await openDefaults();
+    const renewal = screen.getByLabelText("Renewal");
+    fireEvent.change(renewal, { target: { value: "auto" } });
+    fireEvent.blur(renewal);
+    expect(await screen.findByText("network down")).toBeInTheDocument();
+
+    const who = screen.getByLabelText("Who made it");
+    fireEvent.change(who, { target: { value: "someone_else" } });
+    fireEvent.blur(who);
+    await waitFor(() => expect(server.file().listing_defaults.who_made).toBe("someone_else"));
+    expect(screen.queryByText("Saved")).not.toBeInTheDocument();
+    expect(screen.getByText("network down")).toBeInTheDocument();
+    expect(renewal).toHaveValue("auto");
+    expect(server.file().listing_defaults.renewal).toBe("manual");
+
+    await userEvent.click(screen.getByRole("button", { name: "Retry save" }));
+    expect(await screen.findByText("Saved")).toBeInTheDocument();
+    expect(save.mock.lastCall?.[1]).toEqual({ renewal: "auto" });
+    expect(server.file().listing_defaults.renewal).toBe("auto");
+    expect(renewal).toHaveValue("auto");
+    expect(screen.queryByRole("button", { name: "Retry save" })).not.toBeInTheDocument();
+  });
+
+  it.each([
+    [
+      "Keep",
+      (d: HTMLElement) => userEvent.click(within(d).getByRole("button", { name: "Keep USD" })),
+    ],
+    [
+      "close",
+      (d: HTMLElement) => userEvent.click(within(d).getByRole("button", { name: "Cancel" })),
+    ],
+    ["Escape", () => userEvent.keyboard("{Escape}")],
+    ["backdrop", () => userEvent.click(scrim())],
+  ])("never retries a currency change cancelled with %s after it failed", async (_, cancel) => {
+    const server = fileServer();
+    server.failNext("network down");
+    render(<AdminPage />);
+    await userEvent.click(await screen.findByRole("button", { name: "Change currency…" }));
+    const dialog = screen.getByRole("dialog", { name: /converts nothing/ });
+    await userEvent.click(within(dialog).getByLabelText(/prices won't be converted/));
+    await userEvent.click(within(dialog).getByRole("button", { name: "Change to EUR" }));
+    expect(await within(dialog).findByRole("alert")).toHaveTextContent("network down");
+    await cancel(dialog);
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("link", { name: "Listing defaults" }));
+    const renewal = screen.getByLabelText("Renewal");
+    fireEvent.change(renewal, { target: { value: "auto" } });
+    fireEvent.blur(renewal);
+    expect(await screen.findByText("Saved")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Retry save" })).not.toBeInTheDocument();
+    expect(save.mock.calls.filter(([, changes]) => "currency" in changes)).toHaveLength(1);
+    expect(server.file().currency).toBe("USD");
+    expect(server.file().listing_defaults.renewal).toBe("auto");
+  });
+
+  it("retries a sibling's failure but not a cancelled currency change", async () => {
+    const server = fileServer();
+    server.failNext("network down");
+    await openDefaults();
+    const renewal = screen.getByLabelText("Renewal");
+    fireEvent.change(renewal, { target: { value: "auto" } });
+    fireEvent.blur(renewal);
+    expect(await screen.findByText("network down")).toBeInTheDocument();
+
+    server.failNext("still offline");
+    await userEvent.click(screen.getByRole("link", { name: "Connected shops" }));
+    await userEvent.click(screen.getByRole("button", { name: "Change currency…" }));
+    const dialog = screen.getByRole("dialog", { name: /converts nothing/ });
+    await userEvent.click(within(dialog).getByLabelText(/prices won't be converted/));
+    await userEvent.click(within(dialog).getByRole("button", { name: "Change to EUR" }));
+    expect(await within(dialog).findByRole("alert")).toHaveTextContent("still offline");
+    await userEvent.click(within(dialog).getByRole("button", { name: "Keep USD" }));
+
+    expect(screen.getByText("network down")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Retry save" }));
+    expect(await screen.findByText("Saved")).toBeInTheDocument();
+    expect(save.mock.lastCall?.[1]).toEqual({ renewal: "auto" });
+    expect(server.file().listing_defaults.renewal).toBe("auto");
+    expect(server.file().currency).toBe("USD");
+  });
+
+  it("reports Saved when a newer save supersedes a failed one", async () => {
+    let fail: ((error: Error) => void) | undefined;
+    const server = fileServer();
+    save.mockImplementationOnce(() => new Promise<SaveOutcome>((_, reject) => (fail = reject)));
+    await openDefaults();
+    const renewal = screen.getByLabelText("Renewal");
+    fireEvent.change(renewal, { target: { value: "auto" } });
+    fireEvent.blur(renewal);
+    fireEvent.change(renewal, { target: { value: "manual" } });
+    fireEvent.blur(renewal);
+    await waitFor(() => expect(fail).toBeDefined());
+    await act(async () => fail?.(new Error("network down")));
+
+    expect(await screen.findByText("Saved")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Retry save" })).not.toBeInTheDocument();
+    expect(server.file().listing_defaults.renewal).toBe("manual");
+    expect(renewal).toHaveValue("manual");
+  });
+
+  it("shows no error for a refusal a pending newer save supersedes", async () => {
+    let refuse: (() => void) | undefined;
+    const server = fileServer();
+    save.mockImplementationOnce(
+      () =>
+        new Promise<SaveOutcome>((resolve) => {
+          refuse = () =>
+            resolve({
+              kind: "invalid",
+              message: "invalid renewal",
+              fieldErrors: { renewal: "auto refused" },
+            });
+        }),
+    );
+    const release = server.hold();
+    await openDefaults();
+    const renewal = screen.getByLabelText("Renewal");
+    fireEvent.change(renewal, { target: { value: "auto" } });
+    fireEvent.blur(renewal);
+    fireEvent.change(renewal, { target: { value: "manual" } });
+    fireEvent.blur(renewal);
+    await waitFor(() => expect(refuse).toBeDefined());
+    await act(async () => refuse?.());
+    await waitFor(() => expect(save).toHaveBeenCalledTimes(2));
+
+    expect(screen.queryByText("auto refused")).not.toBeInTheDocument();
+    expect(screen.queryByText("Not saved")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Retry save" })).not.toBeInTheDocument();
+    expect(renewal).toHaveValue("manual");
+    await release();
+    expect(await screen.findByText("Saved")).toBeInTheDocument();
+    expect(server.file().listing_defaults.renewal).toBe("manual");
+  });
+
+  async function offerUk() {
+    getLookups.mockResolvedValueOnce(lookups({ shipping: ["Printify UK standard"] }));
+    await act(async () => {
+      window.dispatchEvent(new Event("focus"));
+    });
+    return screen.findByRole("button", { name: "Use it" });
+  }
+
+  it("shows what Use it wrote over a draft chosen back to the saved value", async () => {
+    const server = fileServer();
+    await openDefaults();
+    const shipping = screen.getByLabelText("Shipping profile");
+    shipping.focus();
+    fireEvent.change(shipping, { target: { value: "Printify EU standard" } });
+    fireEvent.change(shipping, { target: { value: "Printify US standard" } });
+    shipping.blur();
+    expect(save).not.toHaveBeenCalled();
+
+    await userEvent.click(await offerUk());
+    expect(await screen.findByText("Saved")).toBeInTheDocument();
+    expect(server.file().listing_defaults.shipping_profile).toBe("Printify UK standard");
+    expect(shipping).toHaveValue("Printify UK standard");
+
+    shipping.focus();
+    shipping.blur();
+    await act(async () => {});
+    expect(save).toHaveBeenCalledTimes(1);
+    expect(server.file().listing_defaults.shipping_profile).toBe("Printify UK standard");
+  });
+
+  it("shows what Use it wrote over a failed draft", async () => {
+    const server = fileServer();
+    server.failNext("network down");
+    await openDefaults();
+    const shipping = screen.getByLabelText("Shipping profile");
+    shipping.focus();
+    fireEvent.change(shipping, { target: { value: "Printify EU standard" } });
+    shipping.blur();
+    expect(await screen.findByText("network down")).toBeInTheDocument();
+
+    await userEvent.click(await offerUk());
+    expect(await screen.findByText("Saved")).toBeInTheDocument();
+    expect(server.file().listing_defaults.shipping_profile).toBe("Printify UK standard");
+    expect(shipping).toHaveValue("Printify UK standard");
+    expect(screen.queryByRole("button", { name: "Retry save" })).not.toBeInTheDocument();
+
+    shipping.focus();
+    shipping.blur();
+    await act(async () => {});
+    expect(save).toHaveBeenCalledTimes(2);
+    expect(server.file().listing_defaults.shipping_profile).toBe("Printify UK standard");
+  });
+
+  it("keeps a choice made while Use it is pending and saves it after", async () => {
+    const server = fileServer();
+    await openDefaults();
+    const shipping = screen.getByLabelText("Shipping profile");
+    const answerUseIt = server.hold();
+    await userEvent.click(await offerUk());
+    await waitFor(() => expect(save).toHaveBeenCalledTimes(1));
+    shipping.focus();
+    fireEvent.change(shipping, { target: { value: "Printify EU standard" } });
+    shipping.blur();
+    await answerUseIt();
+
+    expect(shipping).toHaveValue("Printify EU standard");
+    await waitFor(() => expect(save).toHaveBeenCalledTimes(2));
+    expect(save.mock.calls[1]).toEqual(["r2", { shipping_profile: "Printify EU standard" }]);
+    expect(await screen.findByText("Saved")).toBeInTheDocument();
+    expect(server.file().listing_defaults.shipping_profile).toBe("Printify EU standard");
+    expect(shipping).toHaveValue("Printify EU standard");
+  });
+
+  it("saves a choice made while a retry is pending, after the retry lands", async () => {
+    const server = fileServer();
+    server.failNext("network down");
+    await openDefaults();
+    const renewal = screen.getByLabelText("Renewal");
+    fireEvent.change(renewal, { target: { value: "auto" } });
+    fireEvent.blur(renewal);
+    expect(await screen.findByText("network down")).toBeInTheDocument();
+
+    const answerRetry = server.hold();
+    await userEvent.click(screen.getByRole("button", { name: "Retry save" }));
+    await waitFor(() => expect(save).toHaveBeenCalledTimes(2));
+    renewal.focus();
+    fireEvent.change(renewal, { target: { value: "manual" } });
+    fireEvent.blur(renewal);
+    await answerRetry();
+
+    await waitFor(() => expect(save).toHaveBeenCalledTimes(3));
+    // The failed request wrote nothing, so the retry's answer is r2.
+    expect(save.mock.calls[2]).toEqual(["r2", { renewal: "manual" }]);
+    expect(await screen.findByText("Saved")).toBeInTheDocument();
+    expect(server.file().listing_defaults.renewal).toBe("manual");
+    expect(renewal).toHaveValue("manual");
+  });
+
+  it("sends nothing more for a choice that matches the pending retry", async () => {
+    const server = fileServer();
+    server.failNext("network down");
+    await openDefaults();
+    const renewal = screen.getByLabelText("Renewal");
+    fireEvent.change(renewal, { target: { value: "auto" } });
+    fireEvent.blur(renewal);
+    expect(await screen.findByText("network down")).toBeInTheDocument();
+
+    const answerRetry = server.hold();
+    await userEvent.click(screen.getByRole("button", { name: "Retry save" }));
+    await waitFor(() => expect(save).toHaveBeenCalledTimes(2));
+    fireEvent.change(renewal, { target: { value: "manual" } });
+    fireEvent.change(renewal, { target: { value: "auto" } });
+    fireEvent.blur(renewal);
+    await answerRetry();
+
+    expect(await screen.findByText("Saved")).toBeInTheDocument();
+    expect(save).toHaveBeenCalledTimes(2);
+    expect(server.file().listing_defaults.renewal).toBe("auto");
+    expect(renewal).toHaveValue("auto");
+  });
+
+  it("adopts a retried save before changing back to the original value", async () => {
+    const server = fileServer();
+    server.failNext("network down");
+    await openDefaults();
+    const renewal = screen.getByLabelText("Renewal");
+    fireEvent.change(renewal, { target: { value: "auto" } });
+    fireEvent.blur(renewal);
+    expect(await screen.findByText("network down")).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "Retry save" }));
+    expect(await screen.findByText("Saved")).toBeInTheDocument();
+    expect(server.file().listing_defaults.renewal).toBe("auto");
+
+    fireEvent.change(renewal, { target: { value: "manual" } });
+    fireEvent.blur(renewal);
+    await waitFor(() => expect(save).toHaveBeenCalledTimes(3));
+    expect(await screen.findByText("Saved")).toBeInTheDocument();
+    expect(server.file().listing_defaults.renewal).toBe("manual");
+  });
+
+  it("keeps a failed retry visible and lets another retry succeed", async () => {
+    const server = fileServer();
+    server.failNext("network down");
+    await openDefaults();
+    const renewal = screen.getByLabelText("Renewal");
+    fireEvent.change(renewal, { target: { value: "auto" } });
+    fireEvent.blur(renewal);
+    expect(await screen.findByText("network down")).toBeInTheDocument();
+
+    server.failNext("still offline");
+    await userEvent.click(screen.getByRole("button", { name: "Retry save" }));
+    expect(await screen.findByText("still offline")).toBeInTheDocument();
+    expect(server.file().listing_defaults.renewal).toBe("manual");
+    await userEvent.click(screen.getByRole("button", { name: "Retry save" }));
+    expect(await screen.findByText("Saved")).toBeInTheDocument();
+    expect(server.file().listing_defaults.renewal).toBe("auto");
+  });
+
+  it("retries a failed unchanged value when its field is left again", async () => {
+    const server = fileServer();
+    server.failNext("network down");
+    await openDefaults();
+    const renewal = screen.getByLabelText("Renewal");
+    fireEvent.change(renewal, { target: { value: "auto" } });
+    fireEvent.blur(renewal);
+    expect(await screen.findByText("network down")).toBeInTheDocument();
+
+    renewal.focus();
+    fireEvent.blur(renewal);
+    expect(await screen.findByText("Saved")).toBeInTheDocument();
+    expect(save).toHaveBeenCalledTimes(2);
+    expect(server.file().listing_defaults.renewal).toBe("auto");
   });
 
   it("asks for a reload after a conflict and edits nothing until then", async () => {

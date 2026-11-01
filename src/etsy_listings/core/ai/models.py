@@ -22,10 +22,16 @@ own remaining time from a start timestamp it has to be separately handed.
 from __future__ import annotations
 
 import time
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Literal
+
+from etsy_listings.core.config.settings import (
+    DEFAULT_RUN_LIMIT_MINUTES,
+    DEFAULT_STEP_LIMIT_MINUTES,
+    AiSettings,
+)
 
 RationaleIntent = Literal["core_product", "bottom_of_funnel", "style"]
 RationaleField = Literal["title", "tags", "description_lead"]
@@ -213,27 +219,83 @@ class RepairContext:
 class Deadline:
     """A fixed point in time, expressed as a remaining budget.
 
-    Wraps `time.monotonic()` rather than `time.time()` -- a wall-clock
+    Wraps a monotonic clock rather than `time.time()` -- a wall-clock
     adjustment mid-request must never shorten or extend the request budget
     the settled plan promises. Construct with :meth:`starting_now`; the bare
-    constructor exists for tests that want to pin `deadline_at` directly (see
-    `field(compare=False)` below -- irrelevant here since there is only one
-    field, kept for symmetry with how other frozen dataclasses in this
-    codebase are written).
+    constructor exists for tests that want to pin `deadline_at` directly.
+    ``clock`` is `time.monotonic` unless a run injects its own, as the AI
+    runner does so its watchdog and every provider call read one clock.
     """
 
     deadline_at: float = field(default=0.0)
+    clock: Callable[[], float] | None = field(default=None, compare=False, repr=False)
 
     @classmethod
-    def starting_now(cls, *, seconds: float) -> Deadline:
-        return cls(deadline_at=time.monotonic() + seconds)
+    def starting_now(cls, *, seconds: float, clock: Callable[[], float] | None = None) -> Deadline:
+        return cls(deadline_at=(clock or time.monotonic)() + seconds, clock=clock)
+
+    def _now(self) -> float:
+        # Looked up per call, not bound at import, so a test can pin time.monotonic.
+        return (self.clock or time.monotonic)()
 
     def remaining_seconds(self) -> float:
         """Never negative -- callers pass this straight to a subprocess
         timeout, and a negative timeout is not "expire immediately" to every
         API, it is undefined behaviour."""
-        return max(0.0, self.deadline_at - time.monotonic())
+        return max(0.0, self.deadline_at - self._now())
 
     @property
     def expired(self) -> bool:
         return self.remaining_seconds() <= 0.0
+
+    def within(self, seconds: float) -> Deadline:
+        """A deadline ``seconds`` from now, but never later than this one."""
+        return Deadline(deadline_at=min(self._now() + seconds, self.deadline_at), clock=self.clock)
+
+
+@dataclass(frozen=True)
+class AiLimits:
+    """One run's captured time limits, in whole minutes (ADR-0057).
+
+    ``settings.yaml``'s ``ai.step_limit_minutes`` and ``ai.run_limit_minutes``,
+    read once when the run starts. A settings edit affects the next run only.
+    """
+
+    step_minutes: int = DEFAULT_STEP_LIMIT_MINUTES
+    run_minutes: int = DEFAULT_RUN_LIMIT_MINUTES
+
+    @classmethod
+    def of(cls, settings: AiSettings) -> AiLimits:
+        return cls(step_minutes=settings.step_limit_minutes, run_minutes=settings.run_limit_minutes)
+
+    @property
+    def step_seconds(self) -> float:
+        return self.step_minutes * 60.0
+
+    @property
+    def run_seconds(self) -> float:
+        return self.run_minutes * 60.0
+
+
+@dataclass(frozen=True)
+class RunBudget:
+    """ADR-0057's two budgets for one AI run.
+
+    ``deadline`` is the whole run's: every task, every fallback and market
+    research between them. :meth:`step` starts one provider's allowance,
+    shared by its attempt and its one repair; the next fallback provider
+    calls it again for a fresh one. A step never outlasts the run.
+    """
+
+    limits: AiLimits
+    deadline: Deadline
+
+    @classmethod
+    def starting_now(
+        cls, limits: AiLimits | None = None, *, clock: Callable[[], float] | None = None
+    ) -> RunBudget:
+        limits = limits or AiLimits()
+        return cls(limits, Deadline.starting_now(seconds=limits.run_seconds, clock=clock))
+
+    def step(self) -> Deadline:
+        return self.deadline.within(self.limits.step_seconds)

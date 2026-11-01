@@ -9,18 +9,18 @@ import { ConnectedShops } from "./ConnectedShops";
 import { CurrencyDialog } from "./CurrencyDialog";
 import type { InfoState } from "./Info";
 import { ListingDefaults } from "./ListingDefaults";
+import { SettingsPanel } from "./SettingsPanel";
 import { useShopLookups } from "./useShopLookups";
 import { type SaveStatus, useShopSettings } from "./useShopSettings";
 import "./admin.css";
 
-type Section = "connected" | "defaults";
+type Section = "connected" | "defaults" | "settings";
 
 /**
  * `/admin` (Admin plan, PR 3): the Shop tab's Connected shops and Listing
  * defaults, from the approved `admin-shop` prototype. The section is page
  * state, not a URL parameter, and both panels stay mounted so switching
- * never discards a pending edit. Settings arrives in a later PR and is shown
- * as unavailable rather than as controls that do nothing.
+ * never discards a pending edit. Settings owns a separate file/save queue.
  */
 export function AdminPage() {
   const [section, setSection] = useState<Section>("connected");
@@ -67,7 +67,9 @@ export function AdminPage() {
 
   const { shop, save } = settings;
   const changeCurrency = async (code: string) => {
-    const outcome = await save({ currency: code });
+    // The dialog shows its own failure and retries only through its
+    // acknowledged Change, so a cancelled change is never resent by Retry.
+    const outcome = await save({ currency: code }, { retain: false });
     if (outcome?.kind === "saved") closeCurrency();
     else if (outcome?.kind === "invalid")
       throw new Error(outcome.fieldErrors.currency ?? outcome.message);
@@ -80,10 +82,12 @@ export function AdminPage() {
         <h1 className="page-head__title">Admin</h1>
         <span className="page-head__meta">Changes save when you leave a field</span>
         <div className="page-head__actions">
-          <SaveIndicator status={settings.status} />
+          {section !== "settings" && (
+            <SaveIndicator status={settings.status} onRetry={() => void settings.retry()} />
+          )}
         </div>
       </div>
-      {settings.status.kind === "conflict" && (
+      {section !== "settings" && settings.status.kind === "conflict" && (
         <div className="adm-warn sp-conflict" role="alert">
           <WarningIcon size={18} />
           <span>
@@ -102,7 +106,7 @@ export function AdminPage() {
       <div className="adm-body">
         <Nav section={section} onPick={setSection} />
         <div>
-          {settings.loadError !== null && (
+          {section !== "settings" && settings.loadError !== null && (
             <div className="adm-warn" role="alert">
               <WarningIcon size={18} />
               <span>{settings.loadError}</span>
@@ -129,14 +133,21 @@ export function AdminPage() {
           <div hidden={section !== "defaults"}>
             {shop && (
               <ListingDefaults
+                key={settings.loadedVersion}
                 shop={shop}
+                pending={settings.pending}
                 save={save}
+                discard={settings.discard}
+                refusal={settings.refusal}
                 fieldErrors={settings.fieldErrors}
                 locked={settings.locked}
                 lookups={lookups}
                 info={info}
               />
             )}
+          </div>
+          <div hidden={section !== "settings"}>
+            <SettingsPanel />
           </div>
         </div>
       </div>
@@ -153,7 +164,7 @@ export function AdminPage() {
   );
 }
 
-function SaveIndicator({ status }: { status: SaveStatus }) {
+function SaveIndicator({ status, onRetry }: { status: SaveStatus; onRetry: () => void }) {
   if (status.kind === "saving")
     return (
       <span className="adm-save adm-save--saving" role="status">
@@ -168,9 +179,14 @@ function SaveIndicator({ status }: { status: SaveStatus }) {
     );
   if (status.kind === "error")
     return (
-      <span className="adm-save adm-save--error" role="status">
-        <WarningIcon size={14} /> {status.message}
-      </span>
+      <>
+        <span className="adm-save adm-save--error" role="status">
+          <WarningIcon size={14} /> {status.message}
+        </span>
+        <button type="button" className="btn btn-secondary" onClick={onRetry}>
+          Retry save
+        </button>
+      </>
     );
   return <span role="status" />;
 }
@@ -184,7 +200,7 @@ function Nav({ section, onPick }: { section: Section; onPick: (s: Section) => vo
     <nav className="adm-sections adm-sections--described" aria-label="Admin sections">
       <a
         href="#shop"
-        className="adm-sections__item adm-sections__item--active"
+        className={`adm-sections__item${section !== "settings" ? " adm-sections__item--active" : ""}`}
         onClick={(e) => {
           e.preventDefault();
           onPick("connected");
@@ -214,15 +230,23 @@ function Nav({ section, onPick }: { section: Section; onPick: (s: Section) => vo
           </a>
         ))}
       </div>
-      <div className="adm-sections__item adm-sections__item--unavailable" aria-disabled="true">
+      <a
+        href="#settings"
+        aria-current={section === "settings" ? "page" : undefined}
+        className={`adm-sections__item${section === "settings" ? " adm-sections__item--active" : ""}`}
+        onClick={(event) => {
+          event.preventDefault();
+          onPick("settings");
+        }}
+      >
         <span className="adm-sections__icon">
           <SlidersHorizontalIcon size={18} />
         </span>
         <span className="adm-sections__text">
           <span className="adm-sections__label">Settings</span>
-          <span className="adm-sections__hint">settings.yaml · not editable here yet</span>
+          <span className="adm-sections__hint">settings.yaml</span>
         </span>
-      </div>
+      </a>
     </nav>
   );
 }

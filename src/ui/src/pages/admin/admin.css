@@ -95,6 +95,8 @@
 
 .adm-save--error {
   color: var(--color-danger);
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .adm-select {

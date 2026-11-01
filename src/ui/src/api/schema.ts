@@ -4,6 +4,41 @@
  */
 
 export interface paths {
+  "/api/admin/settings": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Read Settings */
+    get: operations["read_settings_api_admin_settings_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    /** Edit Settings */
+    patch: operations["edit_settings_api_admin_settings_patch"];
+    trace?: never;
+  };
+  "/api/admin/settings/models": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Model Catalogs */
+    get: operations["model_catalogs_api_admin_settings_models_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/admin/shop": {
     parameters: {
       query?: never;
@@ -1785,6 +1820,29 @@ export interface components {
       type: "proposal";
     };
     /**
+     * AiProviderSettings
+     * @description One provider's preferences for every task (ADR-0056).
+     *
+     *     Discovery is advisory, so model and effort are intentionally not enums.
+     *     A retired value stays usable until the seller replaces it.
+     */
+    AiProviderSettings: {
+      /** Effort */
+      effort?: string | null;
+      /**
+       * Enabled
+       * @default true
+       */
+      enabled: boolean;
+      /** Model */
+      model?: string | null;
+      /**
+       * Name
+       * @enum {string}
+       */
+      name: "codex" | "claude" | "grok";
+    };
+    /**
      * AiQueriesEvent
      * @description The three buyer searches extraction chose.
      */
@@ -3444,6 +3502,30 @@ export interface components {
       /** Ref */
       ref: string;
     };
+    /** ModelCatalogs */
+    ModelCatalogs: {
+      /**
+       * Cache Seconds
+       * @default 1800
+       */
+      cache_seconds: number;
+      /** Providers */
+      providers?: {
+        [key: string]: components["schemas"]["ProviderCatalog"];
+      };
+    };
+    /** ModelChoice */
+    ModelChoice: {
+      /**
+       * Efforts
+       * @default []
+       */
+      efforts: string[];
+      /** Id */
+      id: string;
+      /** Label */
+      label: string;
+    };
     /** MultiplePreviewRequest */
     MultiplePreviewRequest: {
       /** Calibration Revision */
@@ -3971,6 +4053,21 @@ export interface components {
       /** Reasons */
       reasons: string[];
     };
+    /** ProviderCatalog */
+    ProviderCatalog: {
+      /**
+       * Efforts
+       * @default []
+       */
+      efforts: string[];
+      /**
+       * Models
+       * @default []
+       */
+      models: components["schemas"]["ModelChoice"][];
+      /** Problem */
+      problem?: string | null;
+    };
     /**
      * PublishSnapshot
      * @description Domain facts for the review: only the rows the stage's own
@@ -4259,6 +4356,20 @@ export interface components {
        * @enum {string}
        */
       kind: "general" | "trademark";
+      /** Message */
+      message: string;
+    };
+    /** SettingsSaveRefusal */
+    SettingsSaveRefusal: {
+      /** Field Errors */
+      field_errors?: {
+        [key: string]: string;
+      };
+      /**
+       * Kind
+       * @enum {string}
+       */
+      kind: "conflict" | "invalid";
       /** Message */
       message: string;
     };
@@ -4829,6 +4940,52 @@ export interface components {
        */
       scope: "workspace";
     };
+    /** WorkspaceSettingsChanges */
+    WorkspaceSettingsChanges: {
+      /** Concurrency */
+      concurrency?: number | null;
+      /** Providers */
+      providers?:
+        | {
+            [key: string]: unknown;
+          }[]
+        | null;
+      /** Run Limit Minutes */
+      run_limit_minutes?: number | null;
+      /** Step Limit Minutes */
+      step_limit_minutes?: number | null;
+      /** Weights */
+      weights?: {
+        [key: string]: number;
+      } | null;
+    };
+    /** WorkspaceSettingsPatch */
+    WorkspaceSettingsPatch: {
+      changes: components["schemas"]["WorkspaceSettingsChanges"];
+      /** Revision */
+      revision: string;
+    };
+    /** WorkspaceSettingsResponse */
+    WorkspaceSettingsResponse: {
+      /** Concurrency */
+      concurrency: number;
+      /** Default Weights */
+      default_weights: {
+        [key: string]: number;
+      };
+      /** Providers */
+      providers: components["schemas"]["AiProviderSettings"][];
+      /** Revision */
+      revision: string;
+      /** Run Limit Minutes */
+      run_limit_minutes: number;
+      /** Step Limit Minutes */
+      step_limit_minutes: number;
+      /** Weights */
+      weights: {
+        [key: string]: number;
+      };
+    };
     /**
      * WorkspaceSummary
      * @description Which workspace the UI is pointed at. One workspace is one shop, so the
@@ -4850,6 +5007,99 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+  read_settings_api_admin_settings_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["WorkspaceSettingsResponse"];
+        };
+      };
+    };
+  };
+  edit_settings_api_admin_settings_patch: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["WorkspaceSettingsPatch"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["WorkspaceSettingsResponse"];
+        };
+      };
+      /** @description Conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["SettingsSaveRefusal"];
+        };
+      };
+      /** @description Unprocessable Entity */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["SettingsSaveRefusal"];
+        };
+      };
+    };
+  };
+  model_catalogs_api_admin_settings_models_get: {
+    parameters: {
+      query?: {
+        refresh?: boolean;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ModelCatalogs"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
   read_shop_api_admin_shop_get: {
     parameters: {
       query?: never;

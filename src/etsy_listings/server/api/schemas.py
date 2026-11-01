@@ -39,6 +39,7 @@ from etsy_listings.core.batches import AiState
 from etsy_listings.core.config.listing import Listing
 from etsy_listings.core.config.listing_template import ListingTemplate
 from etsy_listings.core.config.media import MediaEntry, MediaKind
+from etsy_listings.core.config.settings import AiProviderSettings
 
 # ``draft``/``deployed``/``live``/``dirty``, imported rather than restated:
 # the lifecycle rule is the engine's (the UI's badge and Phase 6's `status`
@@ -1038,6 +1039,40 @@ class ShopSaveRefusal(BaseModel):
     """A 409 (``conflict``: reload, then edit again) or a 422 (``invalid``:
     each refused dotted shop.yaml key to its reason). Nothing was written."""
 
+    kind: Literal["conflict", "invalid"]
+    message: str
+    field_errors: dict[str, str] = Field(default_factory=dict)
+
+
+class WorkspaceSettingsResponse(BaseModel):
+    revision: str
+    concurrency: int
+    weights: dict[str, float]
+    """Relative weights, normalized only for display by the page."""
+    default_weights: dict[str, int]
+    providers: list[AiProviderSettings]
+    step_limit_minutes: int
+    run_limit_minutes: int
+    """At least ``max(5, enabled providers x step_limit_minutes)`` (ADR-0057);
+    the page computes that floor from ``providers`` as the seller edits."""
+
+
+class WorkspaceSettingsChanges(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    concurrency: int | float | None = None
+    weights: dict[str, int | float] | None = None
+    providers: list[dict[str, Any]] | None = None
+    step_limit_minutes: int | float | None = None
+    run_limit_minutes: int | float | None = None
+
+
+class WorkspaceSettingsPatch(BaseModel):
+    revision: str
+    changes: WorkspaceSettingsChanges
+
+
+class SettingsSaveRefusal(BaseModel):
     kind: Literal["conflict", "invalid"]
     message: str
     field_errors: dict[str, str] = Field(default_factory=dict)

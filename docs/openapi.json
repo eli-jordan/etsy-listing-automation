@@ -184,6 +184,55 @@
         "title": "AiProposalEvent",
         "type": "object"
       },
+      "AiProviderSettings": {
+        "additionalProperties": false,
+        "description": "One provider's preferences for every task (ADR-0056).\n\nDiscovery is advisory, so model and effort are intentionally not enums.\nA retired value stays usable until the seller replaces it.",
+        "properties": {
+          "effort": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effort"
+          },
+          "enabled": {
+            "default": true,
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "name": {
+            "enum": [
+              "codex",
+              "claude",
+              "grok"
+            ],
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "AiProviderSettings",
+        "type": "object"
+      },
       "AiQueriesEvent": {
         "description": "The three buyer searches extraction chose.",
         "properties": {
@@ -4128,6 +4177,57 @@
         "title": "MediaFileSummary",
         "type": "object"
       },
+      "ModelCatalogs": {
+        "properties": {
+          "cache_seconds": {
+            "default": 1800,
+            "title": "Cache Seconds",
+            "type": "integer"
+          },
+          "providers": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/ProviderCatalog"
+            },
+            "propertyNames": {
+              "enum": [
+                "codex",
+                "claude",
+                "grok"
+              ]
+            },
+            "title": "Providers",
+            "type": "object"
+          }
+        },
+        "title": "ModelCatalogs",
+        "type": "object"
+      },
+      "ModelChoice": {
+        "properties": {
+          "efforts": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Efforts",
+            "type": "array"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "label"
+        ],
+        "title": "ModelChoice",
+        "type": "object"
+      },
       "MultiplePreviewRequest": {
         "additionalProperties": false,
         "properties": {
@@ -5445,6 +5545,39 @@
         "title": "ProposalStaleness",
         "type": "object"
       },
+      "ProviderCatalog": {
+        "properties": {
+          "efforts": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Efforts",
+            "type": "array"
+          },
+          "models": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/ModelChoice"
+            },
+            "title": "Models",
+            "type": "array"
+          },
+          "problem": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Problem"
+          }
+        },
+        "title": "ProviderCatalog",
+        "type": "object"
+      },
       "PublishSnapshot": {
         "description": "Domain facts for the review: only the rows the stage's own\n``plan()`` would refuse over, so the price table's red marker is never a\nsecond copy of the below-cost rule.",
         "properties": {
@@ -6146,6 +6279,35 @@
           "message"
         ],
         "title": "SeoWarningEntry",
+        "type": "object"
+      },
+      "SettingsSaveRefusal": {
+        "properties": {
+          "field_errors": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Field Errors",
+            "type": "object"
+          },
+          "kind": {
+            "enum": [
+              "conflict",
+              "invalid"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "message"
+        ],
+        "title": "SettingsSaveRefusal",
         "type": "object"
       },
       "ShadeConfig": {
@@ -7581,6 +7743,160 @@
         "title": "WorkspacePlanRequest",
         "type": "object"
       },
+      "WorkspaceSettingsChanges": {
+        "additionalProperties": false,
+        "properties": {
+          "concurrency": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Concurrency"
+          },
+          "providers": {
+            "anyOf": [
+              {
+                "items": {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Providers"
+          },
+          "run_limit_minutes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Run Limit Minutes"
+          },
+          "step_limit_minutes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Step Limit Minutes"
+          },
+          "weights": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "anyOf": [
+                    {
+                      "type": "integer"
+                    },
+                    {
+                      "type": "number"
+                    }
+                  ]
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Weights"
+          }
+        },
+        "title": "WorkspaceSettingsChanges",
+        "type": "object"
+      },
+      "WorkspaceSettingsPatch": {
+        "properties": {
+          "changes": {
+            "$ref": "#/components/schemas/WorkspaceSettingsChanges"
+          },
+          "revision": {
+            "title": "Revision",
+            "type": "string"
+          }
+        },
+        "required": [
+          "revision",
+          "changes"
+        ],
+        "title": "WorkspaceSettingsPatch",
+        "type": "object"
+      },
+      "WorkspaceSettingsResponse": {
+        "properties": {
+          "concurrency": {
+            "title": "Concurrency",
+            "type": "integer"
+          },
+          "default_weights": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Default Weights",
+            "type": "object"
+          },
+          "providers": {
+            "items": {
+              "$ref": "#/components/schemas/AiProviderSettings"
+            },
+            "title": "Providers",
+            "type": "array"
+          },
+          "revision": {
+            "title": "Revision",
+            "type": "string"
+          },
+          "run_limit_minutes": {
+            "title": "Run Limit Minutes",
+            "type": "integer"
+          },
+          "step_limit_minutes": {
+            "title": "Step Limit Minutes",
+            "type": "integer"
+          },
+          "weights": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "title": "Weights",
+            "type": "object"
+          }
+        },
+        "required": [
+          "revision",
+          "concurrency",
+          "weights",
+          "default_weights",
+          "providers",
+          "step_limit_minutes",
+          "run_limit_minutes"
+        ],
+        "title": "WorkspaceSettingsResponse",
+        "type": "object"
+      },
       "WorkspaceSummary": {
         "description": "Which workspace the UI is pointed at. One workspace is one shop, so the\nsidebar names it -- the difference between a test shop and the real one is\nworth seeing before an edit, not after an apply.",
         "properties": {
@@ -7615,6 +7931,119 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/api/admin/settings": {
+      "get": {
+        "operationId": "read_settings_api_admin_settings_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkspaceSettingsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Read Settings",
+        "tags": [
+          "admin"
+        ]
+      },
+      "patch": {
+        "operationId": "edit_settings_api_admin_settings_patch",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkspaceSettingsPatch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkspaceSettingsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SettingsSaveRefusal"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SettingsSaveRefusal"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          }
+        },
+        "summary": "Edit Settings",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/api/admin/settings/models": {
+      "get": {
+        "operationId": "model_catalogs_api_admin_settings_models_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "refresh",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Refresh",
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelCatalogs"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Model Catalogs",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
     "/api/admin/shop": {
       "get": {
         "operationId": "read_shop_api_admin_shop_get",

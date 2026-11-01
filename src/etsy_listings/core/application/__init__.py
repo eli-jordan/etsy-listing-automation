@@ -61,6 +61,15 @@ import names the module it depends on. Public interfaces:
     for a no-op; ``shop_connections`` -> ``ShopConnections`` of
     ``ConnectionRow``; ``shop_lookups`` -> ``ShopLookups`` (``EtsyLookups``,
     ``PrintifyLookups``, ``ReturnPolicyChoice``), each failing on its own.
+``workspace_settings``
+    The Admin page's Settings tab: ``read_settings`` -> ``SettingsView``
+    (``settings.yaml``'s ``Settings`` and its own revision, ``ABSENT_REVISION``
+    while there is no file); ``edit_settings`` applies dotted ``EDITABLE_KEYS``
+    changes -- ``ai.providers`` (ADR-0056), ``batch_ai.concurrency``, and
+    ``market_seo.weights`` as six
+    whole percentages totalling 100 -- against an expected revision, validated
+    as a whole ``Settings``, refusing with ``SettingsRevisionConflict`` /
+    ``InvalidSettingsEdit``; ``default_weights`` is what Reset writes.
 ``mockup_templates``
     The calibrator: ``list_templates`` -> ``TemplateOverview``,
     ``colour_report``, ``assign_kind``, ``read_config`` / ``save_config``,
@@ -110,7 +119,8 @@ import names the module it depends on. Public interfaces:
     ``AiRunRefused`` -- ``ListingDeploying``, ``ListingDraftingInBatch``,
     ``AiNotReady``; ``ProposalMissing``, ``ProposalReplaced``;
     ``ReviewedPlanRefused``; the Shop tab's ``ShopRevisionConflict`` and
-    ``InvalidShopEdit``.
+    ``InvalidShopEdit``; the Settings tab's ``SettingsRevisionConflict`` and
+    ``InvalidSettingsEdit``.
 ``workspace_locks``
     ``WorkspaceLocks``: the per-listing-template write locks every
     template check-then-write holds, one instance per application runtime;

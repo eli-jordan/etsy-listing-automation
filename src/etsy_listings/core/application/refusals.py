@@ -321,3 +321,27 @@ class InvalidShopEdit(UserFacingError, ValueError):
     def __init__(self, field_errors: dict[str, str]) -> None:
         super().__init__("; ".join(f"{key}: {message}" for key, message in field_errors.items()))
         self.field_errors = field_errors
+
+
+# ----------------------------------------------------------------- settings
+#
+# The Admin page's Settings tab (Admin plan, PR 4): the same two refusals for
+# settings.yaml, which has its own revision.
+
+
+class SettingsRevisionConflict(UserFacingError, RuntimeError):
+    """``settings.yaml`` changed since the page read it; the seller reloads."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            "settings.yaml changed on disk since this page loaded it. Reload to continue."
+        )
+
+
+class InvalidSettingsEdit(UserFacingError, ValueError):
+    """The edited ``settings.yaml`` would not load: each refused dotted key
+    to the reason."""
+
+    def __init__(self, field_errors: dict[str, str]) -> None:
+        super().__init__("; ".join(f"{key}: {message}" for key, message in field_errors.items()))
+        self.field_errors = field_errors
