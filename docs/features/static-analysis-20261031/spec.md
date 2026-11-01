@@ -129,6 +129,18 @@ Grok's PostToolUse feedback path is undocumented. Implementation verifies
 whether Grok returns the hook's stderr to the model. If it does not, Grok is
 still covered by `poe check` and CI, and this specification records the gap.
 
+Verified on 2026-11-01: Claude and Grok both return the hook's findings to
+the model after an edit. Codex (codex-cli 0.166.0) does not run the hooks
+yet. Besides project trust, Codex runs a non-managed hook only once its exact
+definition has been trusted in the interactive CLI's `/hooks` browser, and it
+records that trust against the definition's hash. Until then it skips the
+hook without a message: `codex exec` in a T3 worktree of this repo created a
+file through `apply_patch` and returned `{}`, no `SessionStart` side effect
+appeared, and Codex logged nothing about hooks. The repository cannot grant
+that trust. Someone runs `codex` in the repo once, opens `/hooks` and trusts
+its three hooks, and again whenever `.codex/hooks.json` changes. Until then,
+Codex is covered by `poe check` and CI.
+
 ### S07 — Suppressions carry a reason
 
 A new `# noqa: <codes>`, `# type: ignore[<code>]` or Vulture suppression must

@@ -71,6 +71,8 @@ uv run ruff check . / ruff format . # lint / format
 
 Frontend (`src/ui/`): `npm run dev|build|typecheck|lint|format|format:check|test|test:coverage|test:design|gen:api`. Vitest has three projects (`vitest.config.ts`): `node` for pure subjects, `dom` (jsdom + setup) for everything else under `src/`, `design` for prototype frames; `test:coverage` measures only node + dom, `test:design` is required separately. After changing a FastAPI endpoint's shape, regenerate the typed client (`ADR-0011`, never hand-written): `uv run python scripts/export_openapi.py`, then `npm run gen:api`.
 
+A new T3 worktree runs `scripts/setup_worktree.py` (`uv sync`, then `npm install` in `src/ui`) from [t3.json](t3.json). T3 reads `t3.json` from the project root's checkout, not the new worktree, so a change to it takes effect only after it merges to `main`.
+
 Human-facing setup, calibrator usage and contributor docs live in [README.md](README.md); this file holds only what an agent needs to act correctly. Keep the two commands lists in step.
 
 CLI surface (`etsy-listings`). `setup`, `auth`, `new`, `plan`, `apply`, `unlock`, `marigold` and `ui` are registered in `cli/app.py` (`ui` lives in `cli/ui.py`); `render`, `generate`, `catalog refresh` and `status` remain unbuilt — do not assume a command exists because a historical plan lists it.
@@ -172,6 +174,7 @@ Run it locally before merging rather than iterating through CI. `gh workflow run
 - Never loosen a threshold or rule configuration to pass a check (S02).
 - Every Python function, tests included, stays under the complexity limits: cognitive complexity 10 (complexipy), cyclomatic 8 (`C901`), 12 branches, 50 statements, 6 returns. Over a limit, split the function: extract named helpers, use guard clauses or a dispatch table. Frontend functions have the same cognitive limit (sonarjs).
 - `uv run poe check` and CI run the whole-program checks the hook does not.
+- Codex runs the hook only after its definitions are trusted in `/hooks` (spec S06). Changing `.codex/hooks.json` makes them untrusted again.
 </important>
 
 <important if="you are changing CI workflows or the poe tasks in pyproject.toml">
