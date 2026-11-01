@@ -97,6 +97,28 @@ def _new_process_group_kwargs() -> dict[str, Any]:
     return {"start_new_session": True}
 
 
+def _posix_children(pids: list[str]) -> dict[int, list[int]]:
+    children_of: dict[int, list[int]] = {}
+    for entry in pids:
+        ppid = _posix_ppid(entry)
+        if ppid is not None:
+            children_of.setdefault(ppid, []).append(int(entry))
+    return children_of
+
+
+def _posix_ppid(pid: str) -> int | None:
+    """``pid``'s parent, or None once it has exited."""
+    try:
+        stat = Path("/proc", pid, "stat").read_text()
+    except OSError:
+        return None
+    # The 2nd field (`comm`) is parenthesised and may itself contain
+    # spaces/parens, so only the 3rd field onward is safe to split on
+    # whitespace; PPid is the first of those.
+    fields_after_comm = stat.rsplit(")", 1)[-1].split()
+    return int(fields_after_comm[1])
+
+
 def _posix_descendant_pids(pid: int) -> list[int]:
     """Every live descendant of ``pid``, found by walking `/proc`'s PPID
     links rather than trusting process-group signal delivery alone.
@@ -115,19 +137,7 @@ def _posix_descendant_pids(pid: int) -> list[int]:
         pids = [entry.name for entry in Path("/proc").iterdir() if entry.name.isdigit()]
     except OSError:
         return []
-    children_of: dict[int, list[int]] = {}
-    for entry in pids:
-        try:
-            stat = Path("/proc", entry, "stat").read_text()
-        except OSError:
-            continue
-        # The 2nd field (`comm`) is parenthesised and may itself contain
-        # spaces/parens, so only the 3rd field onward is safe to split on
-        # whitespace; PPid is the first of those.
-        fields_after_comm = stat.rsplit(")", 1)[-1].split()
-        ppid = int(fields_after_comm[1])
-        children_of.setdefault(ppid, []).append(int(entry))
-
+    children_of = _posix_children(pids)
     descendants: list[int] = []
     frontier = [pid]
     while frontier:

@@ -116,6 +116,14 @@ def validate_market_queries(parsed: object) -> MarketQueries:
         raise MarketQueriesValidationError("queries: expected an array of strings")
 
     queries = [" ".join(item.split()) for item in value]
+    reasons = _query_problems(queries)
+    if reasons:
+        raise MarketQueriesValidationError(*reasons)
+    first, second, third = queries
+    return MarketQueries((first, second, third))
+
+
+def _query_problems(queries: list[str]) -> list[str]:
     reasons: list[str] = []
     if len(queries) != QUERY_COUNT:
         reasons.append(f"queries: expected exactly {QUERY_COUNT}, got {len(queries)}")
@@ -124,7 +132,4 @@ def validate_market_queries(parsed: object) -> MarketQueries:
     folded = [query.casefold() for query in queries if query]
     if len(set(folded)) != len(folded):
         reasons.append("queries: must be unique, ignoring case")
-    if reasons:
-        raise MarketQueriesValidationError(*reasons)
-    first, second, third = queries
-    return MarketQueries((first, second, third))
+    return reasons
