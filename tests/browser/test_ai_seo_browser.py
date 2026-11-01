@@ -25,6 +25,7 @@ from __future__ import annotations
 import re
 import socket
 import threading
+import time
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
@@ -152,11 +153,18 @@ def _seed_prompt(workspace_root: Path) -> Path:
 def _listing_yaml(workspace_root: Path, name: str = LISTING) -> dict[str, Any]:
     path = workspace_root / "listings" / name / "listing.yaml"
     # A flush replaces the file. A read that lands on the empty moment
-    # between truncate and write is not the document; try once more.
-    for _ in range(2):
-        loaded = yaml.safe_load(path.read_text(encoding="utf-8"))
+    # between truncate and write is not the document, and on Windows one that
+    # lands while the atomic replace swaps the file in is refused with
+    # PermissionError (as in test_listing_videos_browser.py). Either way the
+    # write is in flight, so try again shortly.
+    for _ in range(20):
+        try:
+            loaded = yaml.safe_load(path.read_text(encoding="utf-8"))
+        except PermissionError:
+            loaded = None
         if isinstance(loaded, dict):
             return loaded
+        time.sleep(0.05)
     raise AssertionError(f"{path} did not contain a listing document")
 
 
