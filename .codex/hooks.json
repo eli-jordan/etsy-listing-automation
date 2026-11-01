@@ -1,13 +1,13 @@
 {
-  "description": "Per-edit lint feedback and the dmypy daemon's lifecycle (docs/features/static-analysis-20261031/spec.md, S06 and S08). The Windows commands assume the session starts at the repository root.",
+  "description": "Lint feedback after every edit and shell command, and the dmypy daemon's lifecycle (docs/features/static-analysis-20261031/spec.md, S06 and S08). Codex runs commandWindows through cmd /C, so the gate is Python started with -S rather than bash. The Windows commands assume the session starts at the repository root.",
   "hooks": {
     "SessionStart": [
       {
         "hooks": [
           {
             "type": "command",
-            "command": "uv run --no-project python \"$(git rev-parse --show-toplevel)/scripts/agent_lint.py\" session-start",
-            "commandWindows": "uv run --no-project python scripts/agent_lint.py session-start",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && if [ -x .venv/bin/python ]; then exec .venv/bin/python -S scripts/agent_lint_gate.py session-start; fi; exec uv run --no-project python scripts/agent_lint_gate.py session-start",
+            "commandWindows": "if exist .venv\\Scripts\\python.exe (.venv\\Scripts\\python.exe -S scripts\\agent_lint_gate.py session-start) else (uv run --no-project python scripts\\agent_lint_gate.py session-start)",
             "timeout": 15
           }
         ]
@@ -15,13 +15,13 @@
     ],
     "PostToolUse": [
       {
-        "matcher": "apply_patch|Edit|Write",
+        "matcher": "Bash|apply_patch|Edit|Write",
         "hooks": [
           {
             "type": "command",
-            "command": "uv run --no-project python \"$(git rev-parse --show-toplevel)/scripts/agent_lint.py\" edit",
-            "commandWindows": "uv run --no-project python scripts/agent_lint.py edit",
-            "statusMessage": "Linting the edited files",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && if [ -x .venv/bin/python ]; then exec .venv/bin/python -S scripts/agent_lint_gate.py edit; fi; exec uv run --no-project python scripts/agent_lint_gate.py edit",
+            "commandWindows": "if exist .venv\\Scripts\\python.exe (.venv\\Scripts\\python.exe -S scripts\\agent_lint_gate.py edit) else (uv run --no-project python scripts\\agent_lint_gate.py edit)",
+            "statusMessage": "Linting what changed",
             "timeout": 60
           }
         ]
@@ -32,8 +32,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "uv run --no-project python \"$(git rev-parse --show-toplevel)/scripts/agent_lint.py\" session-end",
-            "commandWindows": "uv run --no-project python scripts/agent_lint.py session-end",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && if [ -x .venv/bin/python ]; then exec .venv/bin/python -S scripts/agent_lint_gate.py session-end; fi; exec uv run --no-project python scripts/agent_lint_gate.py session-end",
+            "commandWindows": "if exist .venv\\Scripts\\python.exe (.venv\\Scripts\\python.exe -S scripts\\agent_lint_gate.py session-end) else (uv run --no-project python scripts\\agent_lint_gate.py session-end)",
             "timeout": 3
           }
         ]

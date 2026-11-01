@@ -1,0 +1,66 @@
+# Which shell commands cannot have changed a source file (spec S06).
+#
+# After every shell command the agent hook first asks this: a command that only
+# reads is skipped at once, before any process starts. Anything else falls
+# through to the snapshot check, which finds what changed by content, so a
+# command misjudged as read-only only delays its feedback to the next command
+# that falls through (or to the pre-commit hook); nothing is lost.
+#
+# Both gates read this file: scripts/agent_lint_gate.sh (Claude Code, Grok) and
+# scripts/agent_lint_gate.py (Codex). Patterns are written in the subset that
+# bash's =~ and Python's re agree on: no \s, \b or [[:class:]].
+#
+#   strip <text>     literal text removed from the command before any rule
+#                    runs: redirections that write no file
+#   unwrap <regex>   a shell wrapper; its last group is the command it runs
+#                    (a trailing quote left behind is dropped)
+#   deny <regex>     the command may write: lint
+#   allow <regex>    one read-only segment; every segment between &&, ||, ;
+#                    and | must match one of these
+
+strip 2>&1
+strip 1>&2
+strip >&2
+strip 2>/dev/null
+strip 2> /dev/null
+strip &>/dev/null
+strip >/dev/null
+strip > /dev/null
+strip 2>$null
+strip >$null
+
+unwrap ^(bash|sh) -l?c '(.*)'$
+unwrap ^(bash|sh) -l?c "(.*)"$
+unwrap ^[^ ]*(powershell|pwsh)(\.exe)? (-NoProfile )?-Command '?"?(.*)$
+
+deny >
+deny (^| )tee( |$)
+deny (^| )-i( |$)
+deny (^| )-u( |$)
+deny (^| )-o( |$)
+deny --in-place
+deny --fix
+deny --write
+deny --output
+deny --update
+deny --snapshot-update
+deny (^| )-delete
+deny (^| )-exec
+deny (^| )-ok( |$)
+deny (^| )-fprint
+deny (^| )(Set-Content|Add-Content|Out-File|New-Item|Remove-Item|Copy-Item|Move-Item|Rename-Item)( |$)
+
+allow ^cd( |$)
+allow ^(ls|dir|cat|head|tail|wc|grep|egrep|rg|find|echo|printf|pwd|which|type|date|sort|uniq|cut|tr|diff|cmp|stat|file|du|df|env|true|false|test|sleep|basename|dirname|realpath|readlink|jq|column|nl)( |$)
+allow ^command -v( |$)
+allow ^git (-C [^ ]+ )?(status|log|diff|show|rev-parse|ls-files|ls-tree|grep|blame|describe|shortlog|cat-file|merge-base|rev-list|fetch|reflog)( |$)
+allow ^git (-C [^ ]+ )?(worktree list|stash list|branch --show-current|remote -v|config --get)( |$)
+allow ^gh (pr (view|list|checks|diff|status)|run (list|view|watch)|issue (view|list)|repo view|label list|search|api)( |$)
+allow ^(uv run )?(python -m )?pytest( |$)
+allow ^uv run (mypy|lint-imports|complexipy|vulture)( |$)
+allow ^uv run ruff (check|format --check)( |$)
+allow ^uv run poe (lint|test|test-ci|test-browser|ruff|mypy|imports|complexity|dead-code|duplicates|format-check)( |$)
+allow ^npm (run )?(test|lint|typecheck|format:check|test:coverage|test:design)( |$)
+allow ^npx (vitest run|tsc|eslint|prettier --check)( |$)
+allow ^(node|uv|python|git|gh|npm) --version$
+allow ^(Get-ChildItem|Get-Content|Select-String|Get-Location|Test-Path|Get-Item|Write-Output|gci|gc|sls)( |$)
