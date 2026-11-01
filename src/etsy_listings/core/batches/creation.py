@@ -166,7 +166,10 @@ def create_rows(
     only: set[str] | None = None,
 ) -> Batch:
     """Create every row still to create, recording each outcome as it
-    lands, then drop the staging session if nothing needs it any more."""
+    lands, then drop the staging session if nothing needs it any more.
+    Every row is created against the shop.yaml read at the start, so an
+    Admin save mid-batch cannot fail the rows still to come."""
+    workspace = workspace.snapshot()
     with batches.lock(batch_id):
         batch = batches.load(batch_id)
         if batch is None:

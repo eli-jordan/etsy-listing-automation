@@ -268,6 +268,16 @@ class Workspace:
         self.root = root
         self.defaults = defaults
 
+    def snapshot(self) -> Workspace:
+        """This workspace with the ``shop.yaml`` it holds now, for one run.
+
+        The Admin page's save replaces ``defaults`` on the server's workspace
+        (``shop_settings.edit_shop``). A run that reads ``defaults`` from
+        the snapshot it took at its start keeps one shop throughout, and
+        the next run takes the edit. Everything else is the same root.
+        """
+        return Workspace(self.root, self.defaults)
+
     def browser_storage_id(self) -> str:
         """Stable workspace identity without exposing its absolute path to the UI.
 

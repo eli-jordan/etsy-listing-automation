@@ -335,3 +335,41 @@ def test_cached_shipping_refetches_after_ttl_expiry(tmp_path: Path) -> None:
     cached.shipping(6, 29)
     clock["t"] += 20
     assert cached.shipping(6, 29) == SHIPPING[(6, 29)]
+
+
+def test_the_fake_lists_every_provider_once_across_blueprints() -> None:
+    fake = FakeCatalogClient(
+        BLUEPRINTS,
+        {
+            6: [PrintProvider(id=29, title="Monster Digital")],
+            7: [
+                PrintProvider(id=29, title="Monster Digital"),
+                PrintProvider(id=3, title="SwiftPOD"),
+            ],
+        },
+        VARIANTS,
+    )
+    assert fake.all_print_providers() == [
+        PrintProvider(id=29, title="Monster Digital"),
+        PrintProvider(id=3, title="SwiftPOD"),
+    ]
+
+
+def test_the_fake_can_be_given_a_catalog_wide_list_of_its_own() -> None:
+    everyone = [PrintProvider(id=1, title="Dimona Tee")]
+    fake = FakeCatalogClient(BLUEPRINTS, PROVIDERS, VARIANTS, all_providers=everyone)
+    assert fake.all_print_providers() == everyone
+
+
+def test_the_catalog_wide_provider_list_is_cached_like_the_rest(tmp_path: Path) -> None:
+    calls: list[str] = []
+
+    class CountingCatalog(FakeCatalogClient):
+        def all_print_providers(self) -> list[PrintProvider]:
+            calls.append("all")
+            return super().all_print_providers()
+
+    cached = CachedCatalogClient(CountingCatalog(BLUEPRINTS, PROVIDERS, VARIANTS), tmp_path)
+
+    assert cached.all_print_providers() == cached.all_print_providers()
+    assert calls == ["all"]

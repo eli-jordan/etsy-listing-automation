@@ -24,9 +24,11 @@ from etsy_listings.core.batches import (
     StagingStore,
     Upload,
     confirm,
+    creation,
     retry_row,
     stage_pngs,
 )
+from etsy_listings.core.config.defaults import Defaults
 from etsy_listings.core.workspace.workspace import Workspace
 
 from tests.support.batches import LOCAL_PICTURE, a_listing_template, png, uploads
@@ -110,7 +112,7 @@ class TestConfirm:
     def test_a_name_problem_refuses_with_nothing_written(
         self, workspace: Workspace, staging: StagingStore, batches: BatchStore
     ) -> None:
-        id_ = _stage(workspace, staging, DESIGNS[0], ("★★★.png", png(8)))
+        id_ = _stage(workspace, staging, DESIGNS[0], ("â˜…â˜…â˜….png", png(8)))
 
         with pytest.raises(ConfirmRefused, match="Fix 1 name to"):
             _confirm(workspace, staging, batches, id_)
@@ -121,7 +123,7 @@ class TestConfirm:
     def test_two_name_problems_are_counted_in_the_plural(
         self, workspace: Workspace, staging: StagingStore, batches: BatchStore
     ) -> None:
-        id_ = _stage(workspace, staging, ("★★★.png", png(8)), ("☆☆☆.png", png(9)))
+        id_ = _stage(workspace, staging, ("â˜…â˜…â˜….png", png(8)), ("â˜†â˜†â˜†.png", png(9)))
 
         with pytest.raises(ConfirmRefused, match="Fix 2 names to create the listings."):
             _confirm(workspace, staging, batches, id_)
@@ -397,3 +399,36 @@ class TestFrozenTemplate:
             _confirm(workspace, staging, batches, id_)
 
         assert _created(workspace) == []
+
+
+def test_a_batch_creates_every_row_against_the_shop_it_started_with(
+    workspace_root: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The template's prices are NOK. Switching the shop to EUR halfway
+    through must not fail the rows still to create."""
+    live = Workspace.discover(root_override=workspace_root)
+    a_listing_template(live)
+    staging, batches = StagingStore(live), BatchStore(live)
+    designs = (("one.png", png(1)), ("two.png", png(2)), ("three.png", png(3)))
+    session = stage_pngs(live, staging, "heavyweight-tee", uploads(*designs)).id
+    real = creation._create
+    currencies: list[str] = []
+
+    def create(workspace: Workspace, *args: object, **kwargs: object) -> object:
+        currencies.append(workspace.defaults.etsy.currency)
+        row = real(workspace, *args, **kwargs)  # type: ignore[arg-type]
+        if len(currencies) == 1:
+            live.defaults = Defaults.model_validate(
+                {
+                    **live.defaults.model_dump(),
+                    "etsy": {**live.defaults.etsy.model_dump(), "currency": "EUR"},
+                }
+            )
+        return row
+
+    monkeypatch.setattr(creation, "_create", create)
+
+    batch = confirm(live, staging, batches, session)
+
+    assert currencies == ["NOK", "NOK", "NOK"]
+    assert [row.creation for row in batch.rows] == ["created"] * 3

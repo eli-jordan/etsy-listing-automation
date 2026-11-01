@@ -40,8 +40,11 @@ class FakeCatalogClient(CatalogClient):
         providers_by_blueprint: dict[int, list[PrintProvider]],
         variants_by_key: dict[tuple[int, int], VariantSet],
         shipping_by_key: dict[tuple[int, int], ShippingRates] | None = None,
+        *,
+        all_providers: list[PrintProvider] | None = None,
     ) -> None:
         self._blueprints = blueprints
+        self._all_providers = all_providers
         self._providers_by_blueprint = providers_by_blueprint
         self._variants_by_key = variants_by_key
         self._shipping_by_key = shipping_by_key or {}
@@ -51,6 +54,16 @@ class FakeCatalogClient(CatalogClient):
 
     def print_providers(self, blueprint_id: int) -> list[PrintProvider]:
         return list(self._providers_by_blueprint.get(blueprint_id, []))
+
+    def all_print_providers(self) -> list[PrintProvider]:
+        """The given catalog-wide list, else every blueprint's providers once."""
+        if self._all_providers is not None:
+            return list(self._all_providers)
+        seen: dict[int, PrintProvider] = {}
+        for providers in self._providers_by_blueprint.values():
+            for provider in providers:
+                seen.setdefault(provider.id, provider)
+        return list(seen.values())
 
     def variants(self, blueprint_id: int, provider_id: int) -> VariantSet:
         key = (blueprint_id, provider_id)

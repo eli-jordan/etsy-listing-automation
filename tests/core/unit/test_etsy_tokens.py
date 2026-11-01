@@ -14,13 +14,18 @@ from pathlib import Path
 
 import pytest
 
+from etsy_listings.core.clients.etsy import tokens
 from etsy_listings.core.clients.etsy.oauth import OAuthError, TokenResponse
 from etsy_listings.core.clients.etsy.tokens import (
     REFRESH_TOKEN_LIFETIME,
     EtsyAuthError,
+    EtsyRefreshBusy,
     StoredTokens,
     TokenStore,
 )
+
+from tests.support.etsy_grants import RotatingGrant
+from tests.support.gates import STAYS_OUT, Gate, workers
 
 T0 = datetime(2026, 3, 1, 12, 0, tzinfo=UTC)
 
@@ -217,6 +222,96 @@ def test_a_rotation_by_another_process_is_read_rather_than_reported(tmp_path: Pa
     clock.advance(timedelta(minutes=58))
 
     assert store.access_token() == "12345678.theirs"
+
+
+def expired_pair(path: Path, clock: Clock, refresh_token: str = "12345678.refresh") -> None:
+    TokenStore(path, refresh=_never, now=clock).record(response(refresh=refresh_token))
+    clock.advance(timedelta(minutes=58))
+
+
+def test_two_stores_for_one_file_rotate_its_grant_once(tmp_path: Path) -> None:
+    """Admin audit I1: the Admin page's connection and lookup requests each
+    build a store for the same token file. Holding the first rotation before
+    it is saved, the second store must wait and use the new pair rather than
+    spend the old refresh token again and report a withdrawn consent."""
+    clock = Clock()
+    path = tmp_path / "t.json"
+    expired_pair(path, clock)
+    held = Gate("the first rotation")
+    grant = RotatingGrant("12345678.refresh", hold=held)
+    first = TokenStore(path, refresh=grant.refresh, now=clock)
+    second = TokenStore(path, refresh=grant.refresh, now=clock)
+
+    with workers(held) as start:
+        winner = start("first store", first.access_token)
+        held.wait_entered()
+        loser = start("second store", second.access_token)
+        loser.thread.join(STAYS_OUT)
+        held.release()
+        tokens_used = {winner.outcome(), loser.outcome()}
+
+    assert tokens_used == {"12345678.access-1"}
+    assert (grant.rotations, grant.refused) == (1, 0)
+    assert TokenStore(path, refresh=_never).load().refresh_token == grant.current
+
+
+def test_a_revoked_grant_still_asks_every_store_to_sign_in(tmp_path: Path) -> None:
+    clock = Clock()
+    path = tmp_path / "t.json"
+    expired_pair(path, clock)
+    grant = RotatingGrant("12345678.refresh")
+    grant.revoke()
+
+    for store in (TokenStore(path, refresh=grant.refresh, now=clock) for _ in range(2)):
+        with pytest.raises(EtsyAuthError, match="consent was withdrawn"):
+            store.access_token()
+
+    assert grant.rotations == 0
+
+
+def test_a_rotation_for_another_token_file_does_not_wait(tmp_path: Path) -> None:
+    """Serialised per token file, not process-wide: one workspace's slow
+    refresh never holds up another's."""
+    clock = Clock()
+    held = Gate("the first workspace's rotation")
+    paths = [tmp_path / "a" / "t.json", tmp_path / "b" / "t.json"]
+    for path in paths:
+        expired_pair(path, clock)
+    slow = RotatingGrant("12345678.refresh", hold=held)
+    other = RotatingGrant("12345678.refresh")
+
+    with workers(held) as start:
+        start("first workspace", TokenStore(paths[0], refresh=slow.refresh, now=clock).access_token)
+        held.wait_entered()
+        assert TokenStore(paths[1], refresh=other.refresh, now=clock).access_token() == (
+            "12345678.access-1"
+        )
+        held.release()
+
+
+def test_a_rotation_held_past_the_wait_is_a_retryable_refusal(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A wedged refresh never hangs every other Etsy request: the waiter
+    gives up with an error that names no token and asks for no sign-in."""
+    monkeypatch.setattr(tokens, "ROTATION_WAIT_SECONDS", STAYS_OUT)
+    clock = Clock()
+    path = tmp_path / "t.json"
+    expired_pair(path, clock)
+    held = Gate("the wedged rotation")
+    grant = RotatingGrant("12345678.refresh", hold=held)
+
+    with workers(held) as start:
+        start("wedged store", TokenStore(path, refresh=grant.refresh, now=clock).access_token)
+        held.wait_entered()
+        with pytest.raises(EtsyRefreshBusy) as refused:
+            TokenStore(path, refresh=grant.refresh, now=clock).access_token()
+        held.release()
+
+    message = str(refused.value)
+    assert "still refreshing" in message
+    assert "12345678." not in message and "sign in" not in message
+    assert grant.rotations == 1
 
 
 # ------------------------------------------------------------------- saving
