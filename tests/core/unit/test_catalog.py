@@ -95,6 +95,59 @@ def test_resolve_blueprint_ignores_the_title_entirely() -> None:
     assert resolve_blueprint("Comfort Colors", "1717", retitled).id == 6
 
 
+@pytest.mark.parametrize(
+    ("profile_brand", "catalog_brand"),
+    [
+        ("Comfort Colors®", "Comfort Colors® Print on Demand"),
+        ("Comfort Colors® Print on Demand", "Comfort Colors"),
+    ],
+)
+def test_resolve_blueprint_survives_the_comfort_colors_catalog_brand_rename(
+    profile_brand: str, catalog_brand: str
+) -> None:
+    renamed = BLUEPRINTS[0].model_copy(update={"brand": catalog_brand})
+
+    assert resolve_blueprint(profile_brand, "1717", [renamed]).id == 6
+
+
+def test_catalog_resolution_error_does_not_dump_the_entire_catalog() -> None:
+    names = [f"Brand {index:04d} 1717" for index in range(2_000)]
+    error = CatalogResolutionError("blueprint", "Missing 1717", names)
+
+    assert len(str(error)) < 500
+    assert error.valid_names == names
+
+
+def test_catalog_resolution_error_suggests_a_nearby_name_instead_of_the_first_entries() -> None:
+    names = [f"Other Brand {index:04d}" for index in range(20)]
+    names.append("Comfort Colors Print on Demand 1717")
+
+    message = str(CatalogResolutionError("blueprint", "Comfort Colors 1717", names))
+
+    assert "Comfort Colors Print on Demand 1717" in message
+    assert "16 more" in message
+
+
+def test_comfort_colors_brand_alias_still_refuses_ambiguous_blueprints() -> None:
+    renamed = BLUEPRINTS[0].model_copy(
+        update={"id": 999, "brand": "Comfort Colors® Print on Demand"}
+    )
+
+    with pytest.raises(AmbiguousBlueprintError):
+        resolve_blueprint("Comfort Colors", "1717", [BLUEPRINTS[0], renamed])
+
+
+@pytest.mark.parametrize(
+    ("brand", "model"),
+    [("Other Brand", "1717"), ("Comfort Colors", "1717Y"), ("Comfort Colors Print", "1717")],
+)
+def test_brand_alias_does_not_guess_a_different_brand_or_model(brand: str, model: str) -> None:
+    renamed = BLUEPRINTS[0].model_copy(update={"brand": "Comfort Colors® Print on Demand"})
+
+    with pytest.raises(CatalogResolutionError):
+        resolve_blueprint(brand, model, [renamed])
+
+
 def test_resolve_blueprint_unknown_lists_the_brand_model_pairs() -> None:
     """Listed as pairs, not titles: a list of titles cannot be pasted into a
     `blueprint:` block."""
