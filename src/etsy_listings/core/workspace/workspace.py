@@ -1129,15 +1129,8 @@ class Workspace:
         if not root.is_dir():
             return
         for directory in root.iterdir():
-            if not directory.is_dir():
-                continue
-            keep = valid.get(directory.name)
-            if keep is None:
-                remove_tree(directory)
-                continue
-            for file in directory.glob("*.png"):
-                if file.name not in keep:
-                    file.unlink()
+            if directory.is_dir():
+                _prune_template_previews(directory, valid.get(directory.name))
 
     def preview_file(
         self, listing: str, template: str, colour: str | None, scene_hash: str
@@ -1234,3 +1227,14 @@ class Workspace:
         path and the serialisation belong here, beside the read."""
 
         CalibrationStore(self).write_config(template, config)
+
+
+def _prune_template_previews(directory: Path, keep: set[str] | None) -> None:
+    """One template's previews: all of them for a template no scene uses any
+    more, else every file not in ``keep``."""
+    if keep is None:
+        remove_tree(directory)
+        return
+    for file in directory.glob("*.png"):
+        if file.name not in keep:
+            file.unlink()
