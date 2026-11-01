@@ -38,6 +38,12 @@ retryable refusal that names no token, so a wedged refresh cannot hang every
 Etsy request. Credentials still resolve lazily, and a revoked grant still asks
 for `auth`.
 
+Optional listing-state and section reads treat refresh contention as unavailable.
+Section creation returns a retryable 503 carrying the busy explanation. The
+setup wizard keeps the existing Etsy values and asks for a later retry rather
+than suggesting sign-in. These callers catch the specific busy error alongside
+their existing error policy; no shared exception hierarchy was changed.
+
 This fixes the in-process race only. Across processes, a refresh between this
 process's refresh and its save still races it; the existing `invalid_grant`
 re-read is the only defence there, and no in-process lock can close it.
@@ -254,7 +260,25 @@ preferences (the app has one palette), for default, saving, error, retried and c
 
 ![Failed Renewal save with Retry save beside the status](screenshots/defaults-retry.png)
 
-## Exit evidence
+## Additional Opus review
+
+The later Opus review found a refusal arriving after a newer save of the same
+field had queued. Its old field error appeared under the newer choice and the
+page offered Retry with no retained patch. Commit `0fb7b6b9` drops errors that
+only concern superseded keys and derives status from remaining saves and
+failures when every key has a newer owner. The public regression failed before
+the correction; all 94 focused Admin UI cases passed afterward.
+
+The same review identified the missing refresh-busy callers described under
+I1. Four new caller regressions failed before the localized handler correction;
+the complete affected server/CLI suites then passed all 139 tests. Strict
+typing, all 11 import contracts and the SPA build passed. OpenAPI export and
+the generated client remain unchanged. Runtime's later cleanup and docstring
+fixes were merged additively before this follow-up. Fresh whole-suite gates,
+CI and serialized e2e results for the supplemental changes are recorded in
+[PR #151](https://github.com/eli-jordan/etsy-listing-automation/pull/151).
+
+## Pre-Opus exit evidence
 
 The full combined gate passed at `eda9772a`, the ordinary merge of State's
 `82f0aef7` and Runtime's `498badde`, followed by evidence commit `048cdc3f`.

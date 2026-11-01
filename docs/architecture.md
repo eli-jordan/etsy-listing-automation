@@ -562,7 +562,10 @@ or the seller chooses what the file will already hold. That unchanged choice
 discards the field's failed patch and error without writing or cancelling a
 queued save. An unrelated success never reports Saved over a retained failure,
 and Retry sends only the failed keys. An unchanged Print on demand choice
-uses the same discard path for all three preset keys. Each key's newest
+uses the same discard path for all three preset keys. An incoming refusal only
+adds field errors for keys that still belong to that save. If newer queued
+saves supersede every key, status follows those saves and retained failures
+rather than offering an empty Retry. Each key's newest
 unanswered value, from a field save or Retry,
 is `pending`; Shop's listing defaults show it over the saved file, so a newer
 choice is compared with what the file will hold. Responses never replace a
