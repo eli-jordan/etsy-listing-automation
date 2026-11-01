@@ -9,9 +9,11 @@ function countDescription(names: CandidateNames): string {
   return parts.join(", ");
 }
 
+const GROUP_VERBS: Record<string, string> = { Add: "to add", Remove: "to remove" };
+
 function CandidateGroup({ label, names }: { label: string; names: readonly string[] }) {
   if (names.length === 0) return null;
-  const verb = label === "Add" ? "to add" : label === "Remove" ? "to remove" : "to edit";
+  const verb = GROUP_VERBS[label] ?? "to edit";
   return (
     <div className="batch-candidate-popover__group">
       <strong>

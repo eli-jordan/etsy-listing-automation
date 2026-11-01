@@ -81,6 +81,13 @@ function saved(savedAt = Date.now()): SaveState {
   return { kind: "saved", savedAt };
 }
 
+/** Where a listing's save state starts: unnamed, or saved at its file's
+ * mtime (now, when the server has none). */
+function initialSave(name: string | null, modifiedAt: string | null): SaveState {
+  if (name === null) return { kind: "unnamed" };
+  return saved(modifiedAt === null ? Date.now() : Date.parse(modifiedAt));
+}
+
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -174,11 +181,7 @@ export function useAutosave(
   } = {},
 ): UseAutosave {
   const [detail, setDetail] = useState(initial);
-  const [save, setSave] = useState<SaveState>(() =>
-    name === null
-      ? { kind: "unnamed" }
-      : saved(initial.modified_at === null ? Date.now() : Date.parse(initial.modified_at)),
-  );
+  const [save, setSave] = useState<SaveState>(() => initialSave(name, initial.modified_at));
   const pending = useRef<Patch | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   /** The name this listing is on disk under, or `null` while it is not. */
