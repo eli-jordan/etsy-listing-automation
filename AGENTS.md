@@ -118,7 +118,7 @@ The repo is `/home/Admin/code/etsy-listing-automation` in cygwin, `C:\cygwin64\h
 - The cygwin pty is not a Windows console. prompt_toolkit cannot prompt (`NoConsoleScreenBufferError`), so all interactive prompts go through `cli/prompts.py`'s plain-`input()` fallback — never call questionary directly. `isatty()` is False and the encoding is cp1252; `terminal.adopt_declared_encoding()` trusts `LANG`, `FORCE_COLOR` opts colour back in.
 - A cygwin-only binary (e.g. `fzf`, a shebang script) is invisible to `shutil.which`. `cli/prompts.py` falls back to cygwin's `sh.exe`; any new external-command dependency needs the same two-step lookup.
 - `core.fileMode` is false in this repo. Leave it; do not commit mode-only changes. `LF → CRLF` warnings are noise.
-- Synced workspaces (Google Drive) mark directories read-only and Windows then refuses `os.rmdir`. Use `workspace.remove_tree`, not `shutil.rmtree`, for any tree this tool owns.
+- Synced workspaces (Google Drive) mark directories read-only and Windows then refuses `os.rmdir`. Use `remove_tree` (`core/workspace/trees.py`), not `shutil.rmtree`, for any tree this tool owns.
 </important>
 
 <important if="you are changing dependencies or versions in pyproject.toml">
