@@ -263,4 +263,4 @@ ruff's `C901` at 8 with `PLR0911`/`PLR0912`/`PLR0915` at 6/12/50.
 | 4 | [#155](https://github.com/eli-jordan/etsy-listing-automation/pull/155) |
 | 5 | [#156](https://github.com/eli-jordan/etsy-listing-automation/pull/156) |
 | 6 | [#157](https://github.com/eli-jordan/etsy-listing-automation/pull/157) |
-| 7 | TBD |
+| 7 | [#158](https://github.com/eli-jordan/etsy-listing-automation/pull/158) |
