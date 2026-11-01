@@ -21,7 +21,7 @@ def test_evidence_reuse_requires_exact_identity_and_the_full_clipped_margin() ->
     identity = EvidenceIdentity("photo-a", "checkpoints-a", "inference-a", "crop-v1")
     crop = plan_crop(box, (50, 50))
     assert evidence_covers(crop, identity, box, (50, 50), identity)
-    moved = box + [1, 0]
+    moved = box + [1, 0]  # noqa: RUF005 -- numpy broadcast add, not concatenation
     assert not evidence_covers(crop, identity, moved, (50, 50), identity)
     changed = EvidenceIdentity("photo-b", "checkpoints-a", "inference-a", "crop-v1")
     assert not evidence_covers(crop, identity, box, (50, 50), changed)
@@ -155,7 +155,10 @@ def test_cpu_cancellation_stops_at_the_requested_phase_without_baking() -> None:
     ],
 )
 def test_crop_refuses_degenerate_nonfinite_or_outside_placements(box, size) -> None:
-    with pytest.raises(ValueError):
+    with pytest.raises(
+        ValueError,
+        match=r"Invalid placement or photo dimensions|positive width and height|does not intersect",
+    ):
         plan_crop(box, size)
 
 

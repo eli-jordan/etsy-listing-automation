@@ -350,7 +350,7 @@ class Preparations:
                     continue
                 self.execution.safe(job.id, "recovery")
                 self.execution.write(job.id, phase="queued")
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001 -- one job's recovery failure must not stop the rest
                 from etsy_listings.core.application.preparation.execution import StoppedError
 
                 self.execution.write(

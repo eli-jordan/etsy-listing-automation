@@ -104,8 +104,17 @@ CAPTURE_SCENES = {
 
 def _collected(root: Path, tmp_path: Path, *selection: str) -> set[str]:
     result = subprocess.run(
-        [sys.executable, "-m", "pytest", "--collect-only", "-q", *selection]
-        + ["-o", f"cache_dir={tmp_path / 'cache'}", "tests/browser"],
+        [
+            sys.executable,
+            "-m",
+            "pytest",
+            "--collect-only",
+            "-q",
+            *selection,
+            "-o",
+            f"cache_dir={tmp_path / 'cache'}",
+            "tests/browser",
+        ],
         cwd=root,
         capture_output=True,
         text=True,

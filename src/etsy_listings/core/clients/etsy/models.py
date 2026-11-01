@@ -113,7 +113,7 @@ class ListingImage(BaseModel):
     listing_image_id: int
     rank: int | None = None
     alt_text: str | None = None
-    url_570xN: str | None = None
+    url_570xN: str | None = None  # noqa: N815 -- Etsy's ListingImage field name
     """A thumbnail up to 570px wide, variable height -- Etsy's own field name
     (the API's `ListingImage` schema). What the deploy review's "On Etsy now"
     column shows: the URL a draft or a hand-uploaded image already has,

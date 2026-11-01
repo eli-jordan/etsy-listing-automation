@@ -34,11 +34,15 @@ EDITOR_ARTWORK_EDGE = 3072
 _MAP_BUDGET = 64 * 1024 * 1024
 _MAP_LOCK = threading.Lock()
 _MAP_CACHE: OrderedDict[tuple[str, ...], tuple[MaterialMaps, int]] = OrderedDict()
-_MAP_BYTES = 0
+
+
+class _MapBudget:
+    """Bytes retained by ``_MAP_CACHE``. A holder, so the cache can update it without ``global``."""
+
+    used = 0
 
 
 def _maps(key: tuple[str, ...], compute: Callable[[], MaterialMaps]) -> MaterialMaps:
-    global _MAP_BYTES
     with _MAP_LOCK:
         cached = _MAP_CACHE.get(key)
         if cached is not None:
@@ -52,13 +56,13 @@ def _maps(key: tuple[str, ...], compute: Callable[[], MaterialMaps]) -> Material
     with _MAP_LOCK:
         old = _MAP_CACHE.pop(key, None)
         if old is not None:
-            _MAP_BYTES -= old[1]
-        while _MAP_CACHE and _MAP_BYTES + size > _MAP_BUDGET:
+            _MapBudget.used -= old[1]
+        while _MAP_CACHE and _MapBudget.used + size > _MAP_BUDGET:
             _, (_, removed) = _MAP_CACHE.popitem(last=False)
-            _MAP_BYTES -= removed
+            _MapBudget.used -= removed
         if size <= _MAP_BUDGET:
             _MAP_CACHE[key] = value, size
-            _MAP_BYTES += size
+            _MapBudget.used += size
     return value
 
 

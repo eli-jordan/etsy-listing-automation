@@ -89,6 +89,10 @@ class Execution:
         return job
 
     def run(self, identity: str, lane: str) -> None:
+        def invalid_photo() -> None:
+            # S01 TRY301: the job runner records this; the raise stays out of its try.
+            raise ValueError("Saved photo snapshot is invalid; retry preparation")
+
         try:
             self.owner.artifacts.validate_inputs(self.owner.status(identity).snapshot)
             self.recover_masks(identity)
@@ -104,7 +108,7 @@ class Execution:
                     pixels.size != (job.snapshot.photo.width, job.snapshot.photo.height)
                     or hashlib.sha256(pixels.tobytes()).hexdigest() != job.snapshot.photo.pixels
                 ):
-                    raise ValueError("Saved photo snapshot is invalid; retry preparation")
+                    invalid_photo()
             if lane == "gpu":
                 self.infer(identity)
                 self.write(identity, step="cpu_queued")
@@ -114,7 +118,7 @@ class Execution:
             self.write(identity, phase=exc.phase)
         except StalePreparationError:
             self.write(identity, phase="superseded")
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 -- a job failure is recorded; it must not kill the worker
             latest = self.owner.status(identity)
             self.write(
                 identity,
@@ -229,8 +233,10 @@ class Execution:
                     )
                     selected = selected.model_copy(
                         update={
-                            "predictions": tuple(p for p in selected.predictions if p.role != role)
-                            + (prediction,)
+                            "predictions": (
+                                *tuple(p for p in selected.predictions if p.role != role),
+                                prediction,
+                            )
                         }
                     )
                     values = [v for v in values if v.id != selected.id] + [selected]

@@ -75,7 +75,7 @@ def prompt_toolkit_works() -> bool:
         from prompt_toolkit.output.defaults import create_output
 
         create_output()
-    except Exception:
+    except Exception:  # noqa: BLE001 -- any failure means prompt_toolkit cannot drive this terminal
         return False
     return True
 
@@ -218,7 +218,7 @@ def confirm(message: str, *, default: bool = False) -> bool | None:
 # So cancellation is an exception, raised once, caught once in `cli/app.py`.
 
 
-class Cancelled(Exception):  # noqa: N818 - a decision, not an error condition
+class Cancelled(Exception):  # noqa: N818 -- a decision, not an error condition
     """The user declined to answer.
 
     Not a failure: ctrl-C out of a picker is an ordinary way to leave a

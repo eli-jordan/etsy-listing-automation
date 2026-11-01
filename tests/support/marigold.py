@@ -225,7 +225,16 @@ class PreparationWorker:
         self.closed = False
         self.failure = None
 
-    def infer(self, *, request_id, role, input, output, size, **settings):
+    def infer(
+        self,
+        *,
+        request_id,
+        role,
+        input,  # noqa: A002 -- worker protocol field, also splatted from request dicts
+        output,
+        size,
+        **settings,
+    ):
         from contextlib import nullcontext
 
         import numpy as np

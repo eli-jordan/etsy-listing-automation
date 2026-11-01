@@ -75,7 +75,7 @@ def run(output: Path) -> None:
                 progress=suspend,
             )
             report["unexpected_success"] = True
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 -- measurement boundary; record any failure in the report
             report["call_error"] = str(exc)
 
     thread = threading.Thread(target=active)

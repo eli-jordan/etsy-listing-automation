@@ -369,12 +369,12 @@ def test_what_decision_9_did_not_measure_is_refused_rather_than_guessed() -> Non
     probe.image("1")
     probe.video("A")
 
-    with pytest.raises(ValueError, match="unmeasured: attaching .* already active"):
+    with pytest.raises(ValueError, match=r"unmeasured: attaching .* already active"):
         probe.attach("A")
-    with pytest.raises(ValueError, match="unmeasured: attaching .* never had"):
+    with pytest.raises(ValueError, match=r"unmeasured: attaching .* never had"):
         probe.client.attach_listing_video(SHOP_ID, LISTING_ID, 1)
     probe.delete("A")
-    with pytest.raises(ValueError, match="unmeasured: deleting .* not on the listing"):
+    with pytest.raises(ValueError, match=r"unmeasured: deleting .* not on the listing"):
         probe.delete("A")
 
 

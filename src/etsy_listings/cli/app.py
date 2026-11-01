@@ -336,7 +336,7 @@ def auth_anthropic(
 @app.command(epilog=EPILOG)
 def plan(
     listing: str | None = typer.Argument(None, help="Listing name, e.g. take-a-hike"),
-    all: bool = typer.Option(False, "--all", help="Plan every listing in the workspace"),
+    all_: bool = typer.Option(False, "--all", help="Plan every listing in the workspace"),
     root: str | None = root_option(),
 ) -> None:
     """Three-way diff against live state; decides which stages need to run.
@@ -357,7 +357,7 @@ def plan(
     _exit_for(
         plan_listings(
             connections.run_context(workspace),
-            _target_listings(workspace, listing, all),
+            _target_listings(workspace, listing, all_),
             STAGES,
             on_event=show,
         )
@@ -367,7 +367,7 @@ def plan(
 @app.command(epilog=EPILOG)
 def apply(
     listing: str | None = typer.Argument(None, help="Listing name, e.g. take-a-hike"),
-    all: bool = typer.Option(False, "--all", help="Apply every listing in the workspace"),
+    all_: bool = typer.Option(False, "--all", help="Apply every listing in the workspace"),
     root: str | None = root_option(),
 ) -> None:
     """Execute every stage the plan identified: render, create or update the
@@ -392,7 +392,7 @@ def apply(
     _exit_for(
         apply_listings(
             connections.run_context(workspace, on_event=_echo_event),
-            _target_listings(workspace, listing, all),
+            _target_listings(workspace, listing, all_),
             STAGES,
             on_event=announce,
         )

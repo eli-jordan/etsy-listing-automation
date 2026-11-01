@@ -111,7 +111,7 @@ def _posix_descendant_pids(pid: int) -> list[int]:
     is the only path there.
     """
     try:
-        pids = [entry for entry in os.listdir("/proc") if entry.isdigit()]
+        pids = [entry.name for entry in Path("/proc").iterdir() if entry.name.isdigit()]
     except OSError:
         return []
     children_of: dict[int, list[int]] = {}

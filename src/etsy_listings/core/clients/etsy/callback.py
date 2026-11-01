@@ -95,7 +95,7 @@ def wait_for_redirect(
             self.end_headers()
             self.wfile.write(body)
 
-        def log_message(self, format: str, *args: Any) -> None:
+        def log_message(self, *_args: object) -> None:
             """Silence. The default writes a request line to stderr, which in
             the middle of a wizard reads like an error."""
 

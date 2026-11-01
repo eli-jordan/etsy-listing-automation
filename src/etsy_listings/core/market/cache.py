@@ -26,7 +26,6 @@ from __future__ import annotations
 import contextlib
 import hashlib
 import json
-import os
 import threading
 import time
 import uuid
@@ -196,4 +195,4 @@ def _write(path: Path, payload: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_name(f"{path.name}.{uuid.uuid4().hex}.tmp")
     temporary.write_text(json.dumps(payload), encoding="utf-8")
-    os.replace(temporary, path)
+    temporary.replace(path)

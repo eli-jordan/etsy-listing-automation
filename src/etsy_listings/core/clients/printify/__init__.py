@@ -66,7 +66,7 @@ from etsy_listings.core.clients.printify.transport import (
     Transport,
 )
 
-__all__ = [
+__all__ = [  # noqa: RUF022 -- grouped by topic, not alphabetically
     # The shared connection.
     "Transport",
     "BASE_URL",

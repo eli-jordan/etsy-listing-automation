@@ -213,7 +213,7 @@ class ScenePhoto:
 def _add_owner_write(path: Path) -> None:
     """Add the owner-write bit, leaving the rest of the mode alone. On Windows
     this is what clears ``FILE_ATTRIBUTE_READONLY``."""
-    os.chmod(path, os.stat(path).st_mode | stat.S_IWRITE)
+    path.chmod(path.stat().st_mode | stat.S_IWRITE)
 
 
 def remove_tree(path: Path) -> None:

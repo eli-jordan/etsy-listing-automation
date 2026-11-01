@@ -23,6 +23,11 @@ class SetupError(RuntimeError):
     """Installation failed without switching the last verified runtime."""
 
 
+def _setup_failed(message: str) -> None:
+    """Raised from a helper so a caller's ``try`` can record it (S01 TRY301)."""
+    raise SetupError(message)
+
+
 def _segment(value: str) -> None:
     if (
         not isinstance(value, str)
@@ -83,7 +88,7 @@ class Runtime:
         try:
             current = json.loads((self.root / "current.json").read_text(encoding="utf-8"))
             if not isinstance(current, dict) or current.get("schema_version") != 1:
-                raise SetupError("Unsupported installation pointer schema")
+                _setup_failed("Unsupported installation pointer schema")
             return self.selection(
                 current["engine_version"],
                 installation_id=current["installation_id"],
@@ -168,13 +173,13 @@ class Runtime:
             try:
                 report = self.installer.install(staging, self.root / "weights", self.engine_version)
                 if not report.available or report.engine_version != self.engine_version:
-                    raise SetupError(report.problem or "Worker capability mismatch")
+                    _setup_failed(report.problem or "Worker capability mismatch")
                 staging.rename(target)
                 report = self.selection(
                     self.engine_version, installation_id=installation_id, verify=True
                 )
                 if not report.available:
-                    raise SetupError(report.problem or "Relocated worker is unavailable")
+                    _setup_failed(report.problem or "Relocated worker is unavailable")
             except BaseException as exc:
                 if staging.exists():
                     try:

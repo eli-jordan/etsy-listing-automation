@@ -37,10 +37,10 @@ def test_every_resampling_cv2_call_has_explicit_interpolation_and_border_args() 
                         depth -= 1
                     end += 1
                 call_text = text[start:end]
-                for kwarg in required_kwargs:
-                    if kwarg not in call_text:
-                        violations.append(
-                            f"{path.relative_to(RENDER_SRC.parent.parent.parent)}: "
-                            f"{call}(...) is missing explicit {kwarg}="
-                        )
+                violations.extend(
+                    f"{path.relative_to(RENDER_SRC.parent.parent.parent)}: "
+                    f"{call}(...) is missing explicit {kwarg}="
+                    for kwarg in required_kwargs
+                    if kwarg not in call_text
+                )
     assert not violations, "\n".join(violations)

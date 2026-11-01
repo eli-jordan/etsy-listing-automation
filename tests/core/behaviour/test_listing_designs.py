@@ -23,11 +23,13 @@ def workspace(workspace_root: Path) -> Workspace:
     return Workspace.discover(root_override=workspace_root)
 
 
-def _image(colour: tuple[int, int, int, int], format: str = "PNG") -> bytes:
+def _image(colour: tuple[int, int, int, int], image_format: str = "PNG") -> bytes:
     buffer = BytesIO()
     Image.new(
-        "RGBA" if format == "PNG" else "RGB", (64, 64), colour[: 4 if format == "PNG" else 3]
-    ).save(buffer, format=format)
+        "RGBA" if image_format == "PNG" else "RGB",
+        (64, 64),
+        colour[: 4 if image_format == "PNG" else 3],
+    ).save(buffer, format=image_format)
     return buffer.getvalue()
 
 
@@ -86,5 +88,5 @@ def test_bytes_that_are_not_an_image_are_refused(workspace: Workspace) -> None:
 def test_an_image_that_is_not_a_png_is_refused(workspace: Workspace) -> None:
     before = _designs(workspace)
     with pytest.raises(ListingDesignUploadRefusedError, match="must be PNG files"):
-        save_listing_design(workspace, "photo.jpg", _image(RED, format="JPEG"))
+        save_listing_design(workspace, "photo.jpg", _image(RED, image_format="JPEG"))
     assert _designs(workspace) == before

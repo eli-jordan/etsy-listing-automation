@@ -87,7 +87,7 @@ def run(output: Path) -> None:
                     output="cancel-real.npz",
                     size=(2048, 2048),
                 )
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001 -- measurement boundary; record any failure in the report
                 cancellation["error"] = str(exc)
             cancellation["call_seconds"] = time.perf_counter() - started
 

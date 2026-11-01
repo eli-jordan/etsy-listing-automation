@@ -65,7 +65,10 @@ def main() -> None:
         return
     backend = Models(args.weights)
     if args.capabilities:
-        print(backend.capabilities().model_dump_json(), flush=True)
+        print(  # noqa: T201 -- stdout is the worker capabilities protocol
+            backend.capabilities().model_dump_json(),
+            flush=True,
+        )
         return
     if args.cache_root is None:
         parser.error("--cache-root is required for inference")
@@ -80,5 +83,9 @@ if __name__ == "__main__":
     try:
         main()
     except Exception as exc:
-        print(f"Marigold worker: {exc}", file=sys.stderr, flush=True)
+        print(  # noqa: T201 -- process boundary; the failure goes to stderr, not protocol stdout
+            f"Marigold worker: {exc}",
+            file=sys.stderr,
+            flush=True,
+        )
         raise SystemExit(1) from exc

@@ -43,12 +43,12 @@ def viewable_design(source: Path, cache_dir: Path) -> Path:
     target = cache_dir / digest / source.name
     if target.is_file():
         return target
-    background = Image.new("RGBA", rgba.size, _background_for(rgba) + (255,))
+    background = Image.new("RGBA", rgba.size, (*_background_for(rgba), 255))
     flattened = Image.alpha_composite(background, rgba).convert("RGB")
     target.parent.mkdir(parents=True, exist_ok=True)
     partial = target.with_name(f"{target.name}.{os.getpid()}.tmp")
     flattened.save(partial, format="PNG")
-    os.replace(partial, target)
+    partial.replace(target)
     return target
 
 

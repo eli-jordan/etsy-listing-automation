@@ -199,7 +199,7 @@ def run(output: Path) -> None:
                     output="depth.npz",
                     size=(2048, 2048),
                 )
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001 -- measurement boundary; record any failure in the report
                 measurement["error"] = str(exc)
             measurement["seconds"] = time.perf_counter() - started
 

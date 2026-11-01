@@ -68,6 +68,10 @@ def serve(backend: Backend, *, cache_root: str, idle_seconds: float = 300) -> No
     output_lock = threading.Lock()
     active: dict[str, Any] = {"id": None, "cancelled": False, "shutdown": False, "hello": False}
 
+    def invalid(message: str) -> None:
+        # S01 TRY301: the request loop answers this; the raise stays out of its try.
+        raise ValueError(message)
+
     def emit(reply: HelloReply | Progress | InferenceResult | Acknowledged | Failure) -> None:
         with output_lock:
             sys.stdout.write(encode(reply))
@@ -79,7 +83,7 @@ def serve(backend: Backend, *, cache_root: str, idle_seconds: float = 300) -> No
                 request_id = "invalid"
                 try:
                     if len(line) > MAX_LINE or not line.endswith(chr(10)):
-                        raise ValueError("Oversized or incomplete request")
+                        invalid("Oversized or incomplete request")
                     raw = json.loads(line)
                     request_id = Envelope.model_validate(raw).request_id
                     request = REQUEST.validate_python(raw)
@@ -97,16 +101,14 @@ def serve(backend: Backend, *, cache_root: str, idle_seconds: float = 300) -> No
                             return
                         elif isinstance(request, HelloRequest):
                             if active["id"] is not None:
-                                raise ValueError("Worker is busy")
+                                invalid("Worker is busy")
                             active["hello"] = True
                             emit(HelloReply(request_id=request_id, **capabilities.model_dump()))
                         else:
                             if not active["hello"]:
-                                raise ValueError("Handshake required before inference")
+                                invalid("Handshake required before inference")
                             if active["id"] is not None:
-                                raise ValueError(
-                                    "Worker is busy; only one inference call is allowed"
-                                )
+                                invalid("Worker is busy; only one inference call is allowed")
                             active["id"] = request_id
                             active["cancelled"] = False
                             pending.put_nowait(request)
@@ -136,10 +138,10 @@ def serve(backend: Backend, *, cache_root: str, idle_seconds: float = 300) -> No
             source = safe_path(root, message.input)
             destination = safe_path(root, message.output)
             if destination.exists():
-                raise ValueError("Output already exists; choose a new evidence artifact")
+                invalid("Output already exists; choose a new evidence artifact")
             with Image.open(source) as opened:
                 if max(opened.size) > 4096 or opened.width * opened.height > MAX_PIXELS:
-                    raise ValueError("Inference image exceeds 4096 by 4096 pixel budget")
+                    invalid("Inference image exceeds 4096 by 4096 pixel budget")
                 image = opened.convert("RGB")
             emit(Progress(request_id=request_id, step=role))
             prediction, metadata = backend.infer(role, image, message.settings)
@@ -154,19 +156,19 @@ def serve(backend: Backend, *, cache_root: str, idle_seconds: float = 300) -> No
                 or prediction.shape != expected
                 or not np.isfinite(prediction).all()
             ):
-                raise ValueError("Model returned invalid prediction shape, dtype or finite values")
+                invalid("Model returned invalid prediction shape, dtype or finite values")
             if role == "normals":
                 if not np.allclose(np.linalg.norm(prediction, axis=-1), 1, atol=0.02):
-                    raise ValueError("Model normals are not unit vectors")
+                    invalid("Model normals are not unit vectors")
             elif prediction.min() < 0 or prediction.max() > 1:
-                raise ValueError("Model prediction is outside [0, 1]")
+                invalid("Model prediction is outside [0, 1]")
             destination.parent.mkdir(parents=True, exist_ok=True)
             temporary = destination.with_name("." + destination.name + "." + uuid.uuid4().hex)
             with temporary.open("wb") as stream:
                 np.savez_compressed(stream, prediction=prediction)
                 stream.flush()
                 os.fsync(stream.fileno())
-            os.replace(temporary, destination)
+            temporary.replace(destination)
             with destination.open("rb") as checksum_stream:
                 checksum = hashlib.file_digest(checksum_stream, "sha256").hexdigest()
             with lock:
@@ -181,7 +183,7 @@ def serve(backend: Backend, *, cache_root: str, idle_seconds: float = 300) -> No
                         metadata=metadata,
                     )
                 )
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 -- one failed call becomes a protocol Failure; the worker stays up
             if temporary:
                 temporary.unlink(missing_ok=True)
             with lock:

@@ -183,13 +183,13 @@ def create_rows(
             if row.creation == "created" or (only is not None and row.id not in only):
                 continue
             try:
-                row = _create(workspace, batches, batch, index, frozen)
+                updated = _create(workspace, batches, batch, index, frozen)
             except (OSError, ConfigLoadError, ValidationError, UserFacingError) as exc:
-                row = batch.rows[index].model_copy(
+                updated = batch.rows[index].model_copy(
                     update={"creation": "failed", "error": _failure(row, exc)}
                 )
-                _keep_input(workspace, batch, row)
-            batch.rows[index] = row
+                _keep_input(workspace, batch, updated)
+            batch.rows[index] = updated
             batches.save(batch)
     if all(_materialised(workspace, batch, row) for row in batch.rows):
         with staging.lock(batch_id):

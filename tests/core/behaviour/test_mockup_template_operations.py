@@ -265,7 +265,7 @@ class TestConfig:
 
     def test_a_folder_with_no_config_is_absent_not_broken(self, workspace: Workspace) -> None:
         _folder(workspace, "fresh", "black.png")
-        with pytest.raises(TemplateConfigMissingError, match="no template.yaml for 'fresh'"):
+        with pytest.raises(TemplateConfigMissingError, match=r"no template.yaml for 'fresh'"):
             read_config(workspace, "fresh")
 
     def test_saving_needs_a_template_to_save_into(self, workspace: Workspace) -> None:
@@ -425,7 +425,7 @@ class TestPhotosAndSwatch:
         ):
             template_photo(workspace, "flat-lay-01", "nope")
         _folder(workspace, "empty")
-        with pytest.raises(TemplatePhotoMissingError, match="no photo for 'empty'$"):
+        with pytest.raises(TemplatePhotoMissingError, match=r"no photo for 'empty'$"):
             template_photo(workspace, "empty", None)
 
     def test_a_swatch_is_the_median_shade_inside_the_saved_box(self, workspace: Workspace) -> None:

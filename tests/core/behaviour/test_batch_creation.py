@@ -123,7 +123,7 @@ class TestConfirm:
     ) -> None:
         id_ = _stage(workspace, staging, ("★★★.png", png(8)), ("☆☆☆.png", png(9)))
 
-        with pytest.raises(ConfirmRefusedError, match="Fix 2 names to create the listings."):
+        with pytest.raises(ConfirmRefusedError, match=r"Fix 2 names to create the listings."):
             _confirm(workspace, staging, batches, id_)
 
     def test_a_name_claimed_between_staging_and_confirm_gets_a_fresh_suffix(

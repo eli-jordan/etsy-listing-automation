@@ -391,9 +391,10 @@ def test_reader_lease_releases_after_the_renderer_raises_its_own_error(workspace
     inputs = preparation_inputs()
     first = store.publish("shirt", inputs, {None: material_maps()}, current_inputs=lambda: inputs)
     error = ValueError("artwork failure")
-    with pytest.raises(ValueError) as caught, store.acquire("shirt", inputs):
+    with store.acquire("shirt", inputs):
         store.publish("shirt", inputs, {None: material_maps()}, current_inputs=lambda: inputs)
-        raise error
+        with pytest.raises(ValueError, match="artwork failure") as caught:
+            raise error
     assert caught.value is error
     assert store.cleanup("shirt") == [first.generation_id]
 

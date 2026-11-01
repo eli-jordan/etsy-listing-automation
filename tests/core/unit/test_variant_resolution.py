@@ -25,9 +25,9 @@ from etsy_listings.core.clients.printify.resolve import (
 from etsy_listings.core.config.slug import ColourExceptions
 
 
-def _variant(id: int, colour: str, size: str) -> Variant:
+def _variant(variant_id: int, colour: str, size: str) -> Variant:
     return Variant(
-        id=id, title=f"{colour} / {size}", options=VariantOptions(color=colour, size=size)
+        id=variant_id, title=f"{colour} / {size}", options=VariantOptions(color=colour, size=size)
     )
 
 

@@ -49,6 +49,11 @@ class WorkerError(RuntimeError):
     """A retryable worker failure. Settings and earlier evidence remain intact."""
 
 
+def _protocol_error(message: str) -> None:
+    """Raised from a helper so the caller's ``try`` can clean up first (S01 TRY301)."""
+    raise WorkerError(message)
+
+
 class Worker:
     def __init__(
         self,
@@ -88,7 +93,7 @@ class Worker:
                 or set(capabilities.roles) != {"normals", "lighting", "depth"}
                 or capabilities.cuda is not True
             ):
-                raise WorkerError("Worker capability mismatch; run etsy-listings marigold update.")
+                _protocol_error("Worker capability mismatch; run etsy-listings marigold update.")
             self.capabilities = capabilities
         except BaseException:
             self.close(force=True)
@@ -99,7 +104,7 @@ class Worker:
         try:
             while line := self._process.stdout.readline(MAX_LINE + 1):
                 if len(line) > MAX_LINE or not line.endswith(chr(10)):
-                    raise WorkerError("Worker emitted an oversized or incomplete protocol line")
+                    _protocol_error("Worker emitted an oversized or incomplete protocol line")
                 try:
                     self._messages.put(REPLY.validate_json(line))
                 except ValidationError as exc:
@@ -107,8 +112,8 @@ class Worker:
                         "Malformed worker protocol message: " + describe(exc)
                     ) from exc
             self._stderr_thread.join(timeout=0.2)
-            raise WorkerError("Worker exited unexpectedly; retry preparation. " + self.diagnostics)
-        except BaseException as exc:
+            _protocol_error("Worker exited unexpectedly; retry preparation. " + self.diagnostics)
+        except BaseException as exc:  # noqa: BLE001 -- the reader thread hands every failure back to the caller
             self._messages.put(exc)
 
     def _stderr(self) -> None:
@@ -170,7 +175,7 @@ class Worker:
         *,
         request_id: str,
         role: Role,
-        input: str,
+        input: str,  # noqa: A002 -- worker protocol field, also splatted from request dicts
         output: str,
         size: tuple[int, int],
         num_inference_steps: int = 10,
@@ -273,7 +278,7 @@ class WarmWorker:
         *,
         request_id: str,
         role: Role,
-        input: str,
+        input: str,  # noqa: A002 -- worker protocol field, also splatted from request dicts
         output: str,
         size: tuple[int, int],
         num_inference_steps: int = 10,

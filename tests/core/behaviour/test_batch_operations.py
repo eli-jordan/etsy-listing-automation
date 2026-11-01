@@ -412,7 +412,7 @@ class TestConfirm:
         queue: BatchQueue,
     ) -> None:
         session = _stage(workspace, staging, ("★★★.png", png(1)))
-        with pytest.raises(ConfirmRefusedError, match="Fix 1 name to create the listings."):
+        with pytest.raises(ConfirmRefusedError, match=r"Fix 1 name to create the listings."):
             _confirm(workspace, staging, batches, session.id, queue)
         assert workspace.listing_names() == ["take-a-hike"]
         assert not _woken(queue)

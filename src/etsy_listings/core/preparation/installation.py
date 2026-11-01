@@ -33,6 +33,11 @@ REVISIONS = (
 )
 
 
+def _unverified(message: str) -> None:
+    """Integrity failure the caller's handler records (S01 TRY301)."""
+    raise SetupError(message)
+
+
 def _run(command: list[str], *, timeout: float = 1800) -> str:
     try:
         result = subprocess.run(
@@ -44,10 +49,11 @@ def _run(command: list[str], *, timeout: float = 1800) -> str:
             timeout=timeout,
             check=True,
         )
-        return result.stdout
     except (OSError, subprocess.SubprocessError) as exc:
         details = getattr(exc, "stderr", "") or str(exc)
         raise SetupError(f"Marigold setup failed: {details[-8192:]}") from exc
+    else:
+        return result.stdout
 
 
 def _digest(path: Path) -> str:
@@ -243,17 +249,18 @@ class NativeInstaller:
                 )
             else:
                 record_file.unlink(missing_ok=True)
-            return report
         except (OSError, ValueError, KeyError, TypeError, SetupError) as exc:
             return Capability(
                 False, f"{exc}. Run etsy-listings marigold update.", engine_version=version
             )
+        else:
+            return report
 
     def _inspect(self, target: Path, weights: Path, version: str) -> Capability:
         try:
             manifest = json.loads((target / "installation.json").read_text(encoding="utf-8"))
             if manifest["schema_version"] != 1 or manifest["engine_version"] != version:
-                raise SetupError("Unsupported runtime installation manifest")
+                _unverified("Unsupported runtime installation manifest")
             project = target / "distribution"
             for relative, checksum in manifest["files"].items():
                 path = project / relative
@@ -261,26 +268,26 @@ class NativeInstaller:
                     not path.resolve().is_relative_to(project.resolve())
                     or _digest(path) != checksum
                 ):
-                    raise SetupError("Worker distribution integrity mismatch")
+                    _unverified("Worker distribution integrity mismatch")
             if set(manifest["weights"]) != set(REVISIONS):
-                raise SetupError("Incomplete pinned checkpoints")
+                _unverified("Incomplete pinned checkpoints")
             for revision, files in manifest["weights"].items():
                 for relative, descriptor in files.items():
                     path = weights / revision / relative
                     if not path.resolve().is_relative_to((weights / revision).resolve()):
-                        raise SetupError("Unsafe checkpoint path")
+                        _unverified("Unsafe checkpoint path")
                     if (
                         path.stat().st_size != descriptor["size"]
                         or _digest(path) != descriptor["sha256"]
                     ):
-                        raise SetupError("Pinned weights failed integrity verification")
+                        _unverified("Pinned weights failed integrity verification")
             python = project / ".venv" / "Scripts" / "python.exe"
             capabilities = Capabilities.model_validate_json(
                 self._run([*worker_command(python, weights), "--capabilities"], timeout=120)
             )
             self._verify_packages(project, capabilities)
             if capabilities.engine_version != version or capabilities.cuda is not True:
-                raise SetupError("Native worker or CUDA capability is unavailable")
+                _unverified("Native worker or CUDA capability is unavailable")
             return Capability(
                 True,
                 None,

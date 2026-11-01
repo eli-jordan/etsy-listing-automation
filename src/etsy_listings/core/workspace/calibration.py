@@ -312,10 +312,15 @@ class CalibrationStore:
                     "Prepare the template first to create its automatic mask"
                 )
             automatic, edited = paths["automatic"].read_bytes(), paths["edited"].read_bytes()
+
+            def damaged(message: str) -> None:
+                # S01 TRY301: the handler wraps this as a repair refusal.
+                raise ValueError(message)
+
             try:
                 metadata = json.loads(paths["metadata"].read_bytes())
                 if metadata["schema_version"] != 1:
-                    raise ValueError("unsupported mask metadata schema")
+                    damaged("unsupported mask metadata schema")
                 if metadata["photo"] != self.photo_identity(name, calibration.config):
                     raise MaskPhotoMismatchError(
                         "Main photo changed; explicitly reset masks for this photo"
@@ -323,7 +328,7 @@ class CalibrationStore:
                 if metadata["automatic_checksum"] != digest(automatic) or metadata[
                     "edited_checksum"
                 ] != digest(edited):
-                    raise ValueError("mask checksum mismatch")
+                    damaged("mask checksum mismatch")
                 self.validate_mask(automatic, metadata["photo"])
                 self.validate_mask(edited, metadata["photo"])
             except (OSError, ValueError, KeyError, TypeError) as exc:
@@ -565,10 +570,15 @@ class CalibrationStore:
             if not manifest_path.is_file():
                 remove_tree(transaction)
                 return
+
+            def damaged(message: str) -> None:
+                # S01 TRY301: the handler wraps this as a repair refusal.
+                raise ValueError(message)
+
             try:
                 manifest = json.loads(manifest_path.read_bytes())
                 if manifest["schema_version"] != 1:
-                    raise ValueError("unsupported transaction schema")
+                    damaged("unsupported transaction schema")
                 if not manifest.get("commit_intent"):
                     remove_tree(transaction)
                     return
@@ -582,7 +592,7 @@ class CalibrationStore:
                     payload.relative_to(transaction.resolve())
                     data = payload.read_bytes()
                     if digest(data) != entry["checksum"]:
-                        raise ValueError("transaction checksum mismatch")
+                        damaged("transaction checksum mismatch")
                     payloads.append((target, data, entry["checksum"]))
             except (OSError, ValueError, KeyError, TypeError) as exc:
                 raise CalibrationRepairRequiredError(

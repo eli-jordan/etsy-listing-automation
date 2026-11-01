@@ -181,12 +181,12 @@ class Stage(Protocol[D, A, L]):
 
     # A stage may also implement:
     #
-    # def review_hash(self, desired: D) -> str: ...
+    # def review_hash(self, desired) -> str: ...  # noqa: ERA001 -- optional method, not dead code
     #
     # Stable execution evidence not visible in changes/actions (ADR-0039).
     # The planner includes it in StagePlan separately from transient snapshots.
     #
-    # def snapshot(self, desired: D, live: L | None) -> BaseModel | None:...
+    # def snapshot(self, desired, live) -> BaseModel | None:
     #
     # a **public pydantic model of domain facts** for the before/after review
     # -- never layout, and never a second copy of what a `Change`

@@ -148,7 +148,7 @@ def test_the_pacing_holds_across_five_threads_with_one_sleep() -> None:
         try:
             start.wait()
             transport.get("/concurrent")
-        except BaseException as exc:  # noqa: BLE001 - surfaced below
+        except BaseException as exc:  # noqa: BLE001 -- the thread hands the transport error back to the test
             errors.append(exc)
 
     threads = [threading.Thread(target=call) for _ in range(5)]

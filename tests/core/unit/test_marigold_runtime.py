@@ -85,7 +85,8 @@ def test_failed_post_rename_probe_leaves_previous_current_and_allows_retry(tmp_p
     from etsy_listings.core.preparation.runtime import Capability, SetupError
 
     class Installer:
-        rejected_versions = set()
+        def __init__(self) -> None:
+            self.rejected_versions: set[str] = set()
 
         def install(self, target, weights, version):
             (target / "python.exe").write_bytes(b"valid")

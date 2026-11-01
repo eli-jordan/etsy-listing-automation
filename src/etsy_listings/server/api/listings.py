@@ -33,7 +33,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, UploadFile
 from fastapi.responses import Response
 
 from etsy_listings.core import connections
@@ -411,11 +411,11 @@ def listing_preview(
     target: Annotated[Target, Depends(target)],
     template: str,
     request: Request,
-    hash: str | None = None,
+    content_hash: Annotated[str | None, Query(alias="hash")] = None,
 ) -> Response:
     """A ``multiple``/``single``-kind scene: no per-colour photo, so no
     colour segment (ADR-0014's rule, mirrored from ``render_file``)."""
-    return _preview_response(request, target, template, None, hash)
+    return _preview_response(request, target, template, None, content_hash)
 
 
 @router.get("/{name}/previews/{template}/{colour}")
@@ -424,10 +424,10 @@ def listing_preview_coloured(
     template: str,
     colour: str,
     request: Request,
-    hash: str | None = None,
+    content_hash: Annotated[str | None, Query(alias="hash")] = None,
 ) -> Response:
     """A ``colour-matrix``-kind scene: one preview per colour."""
-    return _preview_response(request, target, template, colour, hash)
+    return _preview_response(request, target, template, colour, content_hash)
 
 
 @router.get("/{name}/scene-preview")

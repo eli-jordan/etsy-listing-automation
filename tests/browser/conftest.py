@@ -60,7 +60,7 @@ class _SingleProcessChromium:
 def _launch(chromium):
     try:
         return chromium.launch()
-    except Exception:  # pragma: no cover - environment-dependent
+    except Exception:  # noqa: BLE001 -- launch failure falls back to single-process chromium  # pragma: no cover
         return _SingleProcessChromium(chromium)
 
 
@@ -73,7 +73,7 @@ def browser_type(prerequisite_missing):
     with playwright.sync_playwright() as p:
         try:
             browser = _launch(p.chromium)
-        except Exception as exc:  # pragma: no cover - environment-dependent
+        except Exception as exc:  # noqa: BLE001 -- missing chromium skips the browser layer  # pragma: no cover
             prerequisite_missing(
                 f"no chromium available (`uv run playwright install chromium`): {exc}"
             )

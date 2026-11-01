@@ -50,11 +50,12 @@ def _replace(temporary: str, path: Path) -> None:
     refusal still there after that is a real one and is raised."""
     for _ in range(REPLACE_ATTEMPTS - 1):
         try:
-            os.replace(temporary, path)
-            return
+            Path(temporary).replace(path)
         except PermissionError:
             time.sleep(REPLACE_BACKOFF_SECONDS)
-    os.replace(temporary, path)
+        else:
+            return
+    Path(temporary).replace(path)
 
 
 def read_bytes_retrying(path: Path) -> bytes:

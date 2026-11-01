@@ -115,8 +115,9 @@ def read_prediction(
         with np.load(path, allow_pickle=False) as arrays:
             array: NDArray[np.float32] = arrays["prediction"]
         validate_prediction(array, role=role, size=size)
-        return array
     except (OSError, ValueError, zipfile.BadZipFile, EOFError) as exc:
         if isinstance(exc, PredictionError):
             raise
         raise PredictionError(f"Invalid prediction artifact: {exc}") from exc
+    else:
+        return array

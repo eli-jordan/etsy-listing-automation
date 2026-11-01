@@ -603,9 +603,10 @@ def test_template_alias_saves_share_canonical_directory_lock(workspace_root: Pat
         started.set()
         try:
             store.save("alias", config, expected_revision=before.revision, request_id="alias-save")
-            return "saved"
         except CalibrationConflictError:
             return "conflict"
+        else:
+            return "saved"
         finally:
             finished.set()
 

@@ -266,8 +266,8 @@ class ListingDetail(Listing):
     draft, which has no file yet."""
     status: ListingStatus
     issues: list[Issue]
-    field_errors: dict[str, str] = {}
-    gestures: list[ListingGesture] = []
+    field_errors: dict[str, str] = Field(default_factory=dict)
+    gestures: list[ListingGesture] = Field(default_factory=list)
     """The lifecycle actions the editor's action row offers: the listings
     table's row gestures, from the same rule. Empty for the unsaved
     draft, which has no lifecycle yet."""
@@ -281,7 +281,7 @@ class ListingDetail(Listing):
     pricing_plan_name: str | None = None
     """The resolved plan's filename stem, for display -- selecting a
     different plan from the UI is deferred (features/listings-ui-20260915/spec.md)."""
-    resolved_prices: list[ResolvedPrice] = []
+    resolved_prices: list[ResolvedPrice] = Field(default_factory=list)
     garment_materials: list[str] | None = None
     """Read-only fibre materials from the selected garment profile.
 
@@ -530,11 +530,11 @@ class ListingTemplateDetail(ListingTemplate):
     garment: str | None = None
     pricing_plan_name: str | None = None
     source: ListingTemplateSource | None = None
-    assets: list[ListingTemplateAsset] = []
+    assets: list[ListingTemplateAsset] = Field(default_factory=list)
     # What the listing editor's tabs read off a `ListingDetail`, computed the
     # same way, because the listing-template editor mounts those tabs
     # unchanged (UI doc §3, *Existing components the template editor needs*).
-    resolved_prices: list[ResolvedPrice] = []
+    resolved_prices: list[ResolvedPrice] = Field(default_factory=list)
     garment_materials: list[str] | None = None
     garment_product_type: str | None = None
     garment_brand: str | None = None

@@ -379,11 +379,12 @@ def read_maps(
             raise ArtifactError("Prepared numerical checksum mismatch")
         for array in arrays.values():
             array.flags.writeable = False
-        return maps
     except (OSError, ValueError, zipfile.BadZipFile, EOFError, KeyError, TypeError) as exc:
         if isinstance(exc, ArtifactError):
             raise
         raise ArtifactError("Invalid prepared artifact; prepare the template again") from exc
+    else:
+        return maps
 
 
 _READERS: dict[tuple[str, str], int] = {}
@@ -396,7 +397,12 @@ _VALIDATED: OrderedDict[tuple[Any, ...], None] = OrderedDict()
 _VALIDATED_LOCK = threading.Lock()
 MAP_CACHE_BYTES = 512 * 1024 * 1024
 _MAPS: OrderedDict[tuple[Any, ...], tuple[Mapping[str | None, MaterialMaps], int]] = OrderedDict()
-_MAP_BYTES = 0
+
+
+class _MapBudget:
+    """Bytes retained by ``_MAPS``. A holder, so the cache can update it without ``global``."""
+
+    used = 0
 
 
 def _remember_maps(
@@ -405,20 +411,19 @@ def _remember_maps(
     *,
     previous: tuple[Any, ...] | None = None,
 ) -> None:
-    global _MAP_BYTES
     size = sum(a.nbytes for m in maps.values() for a in arrays_of(m).values())
     with _VALIDATED_LOCK:
         for key in (signature, previous):
             if key is not None and key in _MAPS:
                 _, removed = _MAPS.pop(key)
-                _MAP_BYTES -= removed
+                _MapBudget.used -= removed
         if size > MAP_CACHE_BYTES:
             return
-        while _MAPS and _MAP_BYTES + size > MAP_CACHE_BYTES:
+        while _MAPS and _MapBudget.used + size > MAP_CACHE_BYTES:
             _, (_, removed) = _MAPS.popitem(last=False)
-            _MAP_BYTES -= removed
+            _MapBudget.used -= removed
         _MAPS[signature] = maps, size
-        _MAP_BYTES += size
+        _MapBudget.used += size
 
 
 def _remember_validation(signature: tuple[Any, ...]) -> None:
@@ -650,7 +655,9 @@ class Artifacts:
         with self.calibration.lock(name):
             config = self.calibration.config(name)
             if not isinstance(config.renderer, MarigoldRenderer):
-                raise ValueError("Prepared inputs require a Marigold template")
+                raise ValueError(  # noqa: TRY004 -- callers record this ValueError as a bad template
+                    "Prepared inputs require a Marigold template"
+                )
             accepted: dict[str | None, str] = {}
             if evidence is None:
                 try:

@@ -19,7 +19,7 @@ class InferenceWorker(Protocol):
         *,
         request_id: str,
         role: Role,
-        input: str,
+        input: str,  # noqa: A002 -- worker protocol field, also splatted from request dicts
         output: str,
         size: tuple[int, int],
         num_inference_steps: int = 10,

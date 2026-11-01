@@ -31,9 +31,9 @@ PRODUCT_ID = "6a9ffdbfecfdc9324d023442"
 UPLOAD_ID = "6a9ffd8a2c8e5a0d3f1b0c11"
 
 
-def _variant(id: int, *, enabled: bool, price: int = 2499, sku: str = "auto-1") -> dict:
+def _variant(variant_id: int, *, enabled: bool, price: int = 2499, sku: str = "auto-1") -> dict:
     return {
-        "id": id,
+        "id": variant_id,
         "sku": sku,
         "cost": 1304,
         "price": price,

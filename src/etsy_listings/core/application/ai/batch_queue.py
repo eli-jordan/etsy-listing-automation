@@ -202,7 +202,7 @@ class BatchQueue:
         under the write lock before it writes."""
         try:
             return not self._workspace.load_listing(name).brief.strip()
-        except Exception:  # the run fails on the listing, with its own message
+        except Exception:  # noqa: BLE001 -- a listing that will not load is an empty brief; the run reports it
             return True
 
     def _finished(self, run: AiRun) -> None:

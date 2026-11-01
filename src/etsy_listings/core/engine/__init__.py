@@ -117,7 +117,7 @@ from etsy_listings.core.engine.status import (
     workspace_listing_status,
 )
 
-__all__ = [
+__all__ = [  # noqa: RUF022 -- grouped by topic, not alphabetically
     # Running the pipeline over a set of listings -- what `cli` calls, and
     # what the UI calls. Continue-on-error and the lockfile's lifecycle live
     # behind these two, not in the entry point that drives them.

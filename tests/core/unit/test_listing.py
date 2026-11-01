@@ -237,7 +237,7 @@ def _media(*entries: object) -> Listing:
 
 
 def test_a_file_ref_with_an_unknown_extension_is_malformed() -> None:
-    with pytest.raises(ValidationError, match="common-media/size-guide.gif"):
+    with pytest.raises(ValidationError, match=r"common-media/size-guide.gif"):
         _media(THUMB, "common-media/size-guide.gif")
 
 

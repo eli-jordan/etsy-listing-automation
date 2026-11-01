@@ -55,7 +55,7 @@ class FakePopen:
         self._stderr = stderr
         self._done.set()
 
-    def communicate(self, input: str | None = None) -> tuple[str, str]:  # noqa: A002
+    def communicate(self, input: str | None = None) -> tuple[str, str]:  # noqa: A002 -- matches Popen.communicate
         self.stdin_received = input
         self._done.wait(timeout=5.0)
         if not self._done.is_set():  # pragma: no cover - defensive, should not happen

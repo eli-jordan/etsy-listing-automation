@@ -206,10 +206,12 @@ def _print_area_changes(wanted: AppliedProduct, was: AppliedProduct) -> list[Cha
                 )
             )
     wanted_hashes = {area.design_hash for area in wanted.print_areas}
-    for digest in sorted(set(previous) - wanted_hashes):
-        # A file that no longer prints on anything. Positional matching could
-        # not see this at all: a shorter list simply stopped being compared.
-        changes.append(FieldChange(path=_area_path(digest), before=digest, after=None))
+    # A file that no longer prints on anything. Positional matching could
+    # not see this at all: a shorter list simply stopped being compared.
+    changes.extend(
+        FieldChange(path=_area_path(digest), before=digest, after=None)
+        for digest in sorted(set(previous) - wanted_hashes)
+    )
     return changes
 
 

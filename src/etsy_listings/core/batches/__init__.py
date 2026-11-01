@@ -55,7 +55,7 @@ from etsy_listings.core.batches.staging import (
 )
 from etsy_listings.core.batches.status import BatchStatus, Standing, standing
 
-__all__ = [
+__all__ = [  # noqa: RUF022 -- grouped by topic, not alphabetically
     # Records and their stores.
     "StagingSession",
     "StagingRow",

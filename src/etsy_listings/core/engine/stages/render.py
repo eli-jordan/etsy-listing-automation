@@ -137,7 +137,7 @@ def _copy_preview(source: Path, target: Path) -> None:
     temporary = Path(temporary_name)
     try:
         shutil.copyfile(source, temporary)
-        os.replace(temporary, target)
+        temporary.replace(target)
     finally:
         temporary.unlink(missing_ok=True)
 
@@ -937,6 +937,11 @@ class RenderStage:
     ) -> None:
         assert work.preparation is not None
         assert work.appearance is not None
+
+        def inputs_changed() -> None:
+            # S01 TRY301: the stage turns this into a block; the raise stays out of its try.
+            raise ArtifactError("Render inputs changed; plan the listing again")
+
         try:
             with lease_scene(
                 workspace,
@@ -947,7 +952,7 @@ class RenderStage:
                 expected=work.preparation,
             ) as scene:
                 if scene.identity != work.render_identity:
-                    raise ArtifactError("Render inputs changed; plan the listing again")
+                    inputs_changed()
                 if preview is not None and preview.is_file():
                     _copy_preview(preview, target)
                     return

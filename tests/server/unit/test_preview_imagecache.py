@@ -129,7 +129,7 @@ class TestMemo:
         assert small.shape != full.shape
 
     def test_a_missing_file_is_the_caller_s_error_not_a_stale_hit(self, tmp_path: Path) -> None:
-        with pytest.raises(OSError):
+        with pytest.raises(OSError, match=r"gone.png"):
             PreviewImages().base(tmp_path / "gone.png", 200)
 
 
@@ -139,7 +139,7 @@ class TestBudget:
         one -- and a future accident should fail here rather than corrupt what
         the next request is served."""
         base = PreviewImages().base(photo, 200)
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match="read-only"):
             base.image[0, 0, 0] = 1
 
     def test_the_least_recently_used_entry_goes_first(self, tmp_path: Path) -> None:
