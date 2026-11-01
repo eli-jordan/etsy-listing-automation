@@ -16,7 +16,7 @@ from etsy_listings.core.application.preparation.activity import interactive
 from etsy_listings.core.application.preparation.evidence_reader import EvidenceReader
 from etsy_listings.core.application.preparation.models import CropEvidence, placement_key
 from etsy_listings.core.preparation.artifacts import Artifacts, PlacementInput
-from etsy_listings.core.preparation.numerics import prepare
+from etsy_listings.core.preparation.numerics import Placement, prepare
 from etsy_listings.core.render import (
     AnyTemplate,
     MarigoldRenderer,
@@ -192,7 +192,7 @@ def editor_preview(
                 mask: FloatMap = masks[key],
             ) -> MaterialMaps:
                 evidence = evidence_store.load(candidate, inputs)
-                return prepare(image, quad, evidence, mask=mask, max_edge=EDITOR_EDGE).maps
+                return prepare(image, Placement(quad, mask), evidence, max_edge=EDITOR_EDGE).maps
 
             layers.append(
                 MaterialLayer(design, _maps(cache_key, compute), key, premultiplied=packed)

@@ -29,7 +29,12 @@ from etsy_listings.core.preparation.artifacts import (
     file_checksum,
     read_maps,
 )
-from etsy_listings.core.preparation.numerics import prepare, propose_mask
+from etsy_listings.core.preparation.numerics import (
+    Cooperation,
+    Placement,
+    prepare,
+    propose_mask,
+)
 from etsy_listings.core.preparation.predictions import read_prediction
 from etsy_listings.core.render import FloatMap, MaterialMaps
 from etsy_listings.core.workspace.atomic import write_bytes_atomic
@@ -479,11 +484,9 @@ class Execution:
 
                     prepared = prepare(
                         base,
-                        np.array(placement.quad, np.float32),
+                        Placement(np.array(placement.quad, np.float32), mask),
                         self.evidence.load(value, job.snapshot),
-                        mask=mask,
-                        checkpoint=checkpoint,
-                        cooperate=cooperate,
+                        cooperation=Cooperation(checkpoint, cooperate),
                     ).maps
 
                     for array in arrays_of(prepared).values():

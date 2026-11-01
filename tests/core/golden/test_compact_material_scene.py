@@ -4,7 +4,13 @@ from pathlib import Path
 
 import numpy as np
 
-from etsy_listings.core.preparation.numerics import Evidence, EvidenceIdentity, plan_crop, prepare
+from etsy_listings.core.preparation.numerics import (
+    Evidence,
+    EvidenceIdentity,
+    Placement,
+    plan_crop,
+    prepare,
+)
 from etsy_listings.core.render import MarigoldAppearance, MaterialLayer, render_marigold_scene
 
 
@@ -35,7 +41,7 @@ def compact_fixture():
 
 def test_compact_preparation_preserves_full_photo_pixels_and_blur_neighbours(assert_matches_golden):
     base, box, evidence, mask, art = compact_fixture()
-    maps = prepare(base, box, evidence, mask=mask).maps
+    maps = prepare(base, Placement(box, mask), evidence).maps
     assert maps.origin == (60, 64)
     assert maps.material.shape[0] < base.shape[0]
     image = render_marigold_scene(
@@ -49,7 +55,7 @@ def test_compact_preparation_preserves_full_photo_pixels_and_blur_neighbours(ass
 
 def test_editor_raster_keeps_photo_coordinates_and_composites_current_mask():
     base, box, evidence, mask, art = compact_fixture()
-    maps = prepare(base, box, evidence, mask=mask, max_edge=128).maps
+    maps = prepare(base, Placement(box, mask), evidence, max_edge=128).maps
     image = render_marigold_scene(
         base[::2, ::2].copy(), [MaterialLayer(art, maps)], appearance=MarigoldAppearance()
     )
@@ -63,8 +69,8 @@ def test_editor_composites_small_valid_placements_after_downsampling():
     base, box, evidence, mask, art = compact_fixture()
     box = (box - box[0]) * np.float32(0.4) + np.array([90, 90], np.float32)
     mask[:] = 1
-    assert prepare(base, box, evidence, mask=mask).maps.size == (256, 256)
-    preview = prepare(base, box, evidence, mask=mask, max_edge=64).maps
+    assert prepare(base, Placement(box, mask), evidence).maps.size == (256, 256)
+    preview = prepare(base, Placement(box, mask), evidence, max_edge=64).maps
     image = render_marigold_scene(base[::4, ::4].copy(), [MaterialLayer(art, preview)])
     assert image.size == (64, 64)
     assert not np.array_equal(np.asarray(image)[26, 26], base[104, 104])
@@ -74,7 +80,7 @@ def test_editor_raster_samples_original_photo_pixel_centres():
     base, _, evidence, mask, _ = compact_fixture()
     box = np.array([[80, 80], [160, 80], [160, 160], [80, 160]], np.float32)
     mask[:] = 1
-    maps = prepare(base, box, evidence, mask=mask, max_edge=128).maps
+    maps = prepare(base, Placement(box, mask), evidence, max_edge=128).maps
     # Output pixel 40 covers original pixels 80 and 81, centred at 80.5.
     # The flat 80px print therefore samples U=V=0.5/80, rather than zero.
     x, y = 40 - maps.origin[0], 40 - maps.origin[1]

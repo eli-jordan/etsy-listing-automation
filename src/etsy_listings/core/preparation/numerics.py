@@ -156,22 +156,46 @@ class Preparation:
     diagnostics: dict[str, Any]
 
 
+@dataclass(frozen=True)
+class Placement:
+    """One placement to prepare: its quad in photo coordinates (TL, TR, BR,
+    BL) and its visibility mask -- the durable edited visibility, not brush
+    history -- as float32 photo pixels in [0, 1]."""
+
+    box: FloatMap
+    mask: FloatMap
+
+
+def _no_checkpoint(_step: str) -> None:
+    return None
+
+
+def _no_cooperation() -> None:
+    return None
+
+
+@dataclass(frozen=True)
+class Cooperation:
+    """How a preparation yields while it runs. ``checkpoint`` is told each
+    phase as it starts and may raise to cancel without publishing partial
+    maps; ``cooperate`` runs between numerical solves without publishing
+    phase progress."""
+
+    checkpoint: Callable[[str], None] = _no_checkpoint
+    cooperate: Callable[[], None] = _no_cooperation
+
+
 def prepare(
     base: RGB,
-    box: FloatMap,
+    placement: Placement,
     evidence: Evidence,
     *,
-    mask: FloatMap,
     max_edge: int | None = None,
-    checkpoint: Callable[[str], None] = lambda _: None,
-    cooperate: Callable[[], None] = lambda: None,
+    cooperation: Cooperation = Cooperation(),
 ) -> Preparation:
-    """Fit one placement from explicit evidence, with cancellation between phases.
-
-    A supplied mask is the durable edited visibility, not brush history. The
-    checkpoint callback may raise to cancel without publishing partial maps.
-    cooperate runs between numerical solves without publishing phase progress.
-    """
+    """Fit one placement from explicit evidence, with cancellation between phases."""
+    box, mask = placement.box, placement.mask
+    checkpoint, cooperate = cooperation.checkpoint, cooperation.cooperate
     height, width = base.shape[:2]
     size = (width, height)
     if not evidence_covers(evidence.crop, evidence.identity, box, size, evidence.identity):
@@ -195,10 +219,8 @@ def prepare(
     checkpoint("fitting")
     surface, diagnostics = geometry.integrate(
         grid / placement_width,
-        normals,
-        confidence,
+        geometry.SurfaceEvidence(normals, confidence, evidence.sample(evidence.depth, grid)),
         grid_ids,
-        evidence.sample(evidence.depth, grid),
         cooperate=cooperate,
     )
     checkpoint("flattening")
@@ -245,9 +267,11 @@ def prepare(
     local_box = box - np.array([left, top], np.float32)
     local_fields, light_diagnostics = geometry.lighting_fields(
         base[region],
-        evidence.sample(evidence.shading, xy),
-        evidence.sample(evidence.albedo, xy),
-        evidence.sample(evidence.residual, xy),
+        geometry.Intrinsics(
+            evidence.sample(evidence.shading, xy),
+            evidence.sample(evidence.albedo, xy),
+            evidence.sample(evidence.residual, xy),
+        ),
         mask[region] * geometry.polygon_mask((right - left, bottom - top), local_box.tolist()),
         confidence,
         # Interactive samples represent a larger original-photo area. Keep the

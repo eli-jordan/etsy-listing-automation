@@ -405,6 +405,7 @@ def test_small_placement_on_a_large_photo_prepares_and_publishes_invisible_coord
     from etsy_listings.core.preparation.numerics import (
         Evidence,
         EvidenceIdentity,
+        Placement,
         plan_crop,
         prepare,
     )
@@ -425,7 +426,9 @@ def test_small_placement_on_a_large_photo_prepares_and_publishes_invisible_coord
         np.full((height, width), 0.5, np.float32),
     )
     prepared = prepare(
-        np.full((512, 512, 3), 128, np.uint8), box, evidence, mask=np.ones((512, 512), np.float32)
+        np.full((512, 512, 3), 128, np.uint8),
+        Placement(box, np.ones((512, 512), np.float32)),
+        evidence,
     )
     assert prepared.maps.visibility[0, 0] == 0
     assert prepared.maps.origin == (224, 224)

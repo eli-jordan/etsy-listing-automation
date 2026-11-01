@@ -7,6 +7,7 @@ No experimental anchors or overlap controls are exposed.
 from __future__ import annotations
 
 from collections.abc import Callable
+from dataclasses import dataclass
 from typing import Any, cast
 
 import cv2
@@ -109,16 +110,27 @@ def cg(
     return value
 
 
+@dataclass(frozen=True)
+class SurfaceEvidence:
+    """What :func:`integrate` fits a height field to, sampled on its grid:
+    unit normals and their confidence, and an optional affine-invariant
+    depth prior with its own confidence."""
+
+    normals: Float
+    confidence: Float
+    depth: Float | None = None
+    depth_confidence: Float | None = None
+
+
 def integrate(
     xy: Float,
-    normals: Float,
-    confidence: Float,
+    evidence: SurfaceEvidence,
     patch_ids: NDArray[Any],
-    depth: Float | None = None,
-    depth_confidence: Float | None = None,
     *,
     cooperate: Callable[[], None] = lambda: None,
 ) -> tuple[Float, dict[str, Any]]:
+    normals, confidence = evidence.normals, evidence.confidence
+    depth, depth_confidence = evidence.depth, evidence.depth_confidence
     mesh = xy.shape[0]
     a, b, _ = surface_math.graph(mesh)
     p = xy.reshape(-1, 2).astype(np.float64)
@@ -326,16 +338,25 @@ def polygon_mask(size: tuple[int, int], points: list[list[float]]) -> Float:
     return mask.astype(np.float32)
 
 
+@dataclass(frozen=True)
+class Intrinsics:
+    """A photo region's intrinsic decomposition: shading, albedo and the
+    residual neither explains."""
+
+    shading: Float
+    albedo: Float
+    residual: Float
+
+
 def lighting_fields(
     base: Pixels,
-    shading: Float,
-    albedo: Float,
-    residual: Float,
+    intrinsics: Intrinsics,
     cloth: Float,
     confidence: Float,
     *,
     minimum_samples: int = 100,
 ) -> tuple[dict[str, Float], dict[str, Any]]:
+    shading, albedo, residual = intrinsics.shading, intrinsics.albedo, intrinsics.residual
     selected = (cloth > _CLOTH_COVERAGE) & (confidence > _LIGHTING_CONFIDENCE)
     if selected.sum() < minimum_samples:
         raise ValueError("Not enough confident visible cloth to normalize lighting")
