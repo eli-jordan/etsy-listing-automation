@@ -37,7 +37,7 @@ class Money:
     currency: str
 
     @classmethod
-    def parse(cls, raw: Any) -> Money:
+    def parse(cls, raw: Any) -> Money:  # accepts arbitrary YAML scalars
         if isinstance(raw, Money):
             return raw
         if isinstance(raw, bool) or not isinstance(raw, str | int | float):
@@ -116,7 +116,7 @@ def require_currency(money: Money, expected: str, field: str) -> None:
         )
 
 
-def _coerce_money(raw: Any) -> Money:
+def _coerce_money(raw: Any) -> Money:  # pydantic validator boundary
     return Money.parse(raw)
 
 

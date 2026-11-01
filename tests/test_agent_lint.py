@@ -13,9 +13,6 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 HOOK = ROOT / "scripts" / "agent_lint.py"
-# A reasonless suppression of a real finding (RUF100's safe fix would delete a
-# stale one first), split so the hook does not read this file as carrying one.
-REASONLESS_SUPPRESSION = b"UNUSED = undefined  # " + b"noqa: F821\n"
 
 
 @pytest.fixture
@@ -153,8 +150,13 @@ def test_a_suppression_with_a_reason_is_accepted(scratch: Path) -> None:
 
 def test_output_is_capped_at_twenty_findings_with_a_count_of_the_rest(scratch: Path) -> None:
     source = scratch / "noisy.py"
-    # One finding a line: `print(...)` would add T201 to every F821.
-    source.write_text("".join(f"value_{n} = undefined_{n}\n" for n in range(30)))
+    # One undefined name per line. A `print` would also be T201 now that S01
+    # enables T20, and the omitted count would no longer be the line count.
+    source.write_text(
+        "def keep(value: object) -> object:\n"
+        "    return value\n"
+        "\n" + "".join(f"keep(undefined_{n})\n" for n in range(30))
+    )
 
     result = run_hook(edited(source))
 
@@ -171,14 +173,22 @@ def test_only_suppressions_the_edit_adds_need_a_reason() -> None:
     tracked = ROOT / "scripts" / "generate_test_assets.py"
     original = tracked.read_bytes()
     lines = original.decode().splitlines()
+    # A module assignment is not F841, and a short E501 suppression is unused:
+    # RUF100's safe fix removes it before the reason check. A local binding
+    # still needs the suppression. The marker is split so this file's own
+    # added lines are not suppressions.
+    marker = b"def unused_binding() -> None:\n    local = 1  # " + b"noqa: F841\n"
+    body = original if original.endswith(b"\n") else original + b"\n"
     try:
-        tracked.write_bytes(original + REASONLESS_SUPPRESSION)
+        tracked.write_bytes(body + marker)
         result = run_hook(edited(tracked))
     finally:
         tracked.write_bytes(original)
 
     assert result.returncode == 2
-    assert f"generate_test_assets.py:{len(lines) + 1}: suppression" in result.stderr
+    # Format inserts the two blank lines a new top-level function needs,
+    # so the silenced binding lands four lines past the old end.
+    assert f"generate_test_assets.py:{len(lines) + 4}: suppression" in result.stderr
     assert ":275:" not in result.stderr
 
 
@@ -186,12 +196,20 @@ def test_a_rewrite_with_windows_line_endings_adds_only_its_new_lines() -> None:
     tracked = ROOT / "scripts" / "generate_test_assets.py"
     original = tracked.read_bytes()
     try:
-        tracked.write_bytes((original + REASONLESS_SUPPRESSION).replace(b"\n", b"\r\n"))
+        marker = b"def unused_binding() -> None:\n    local = 1  # " + b"noqa: F841\n"
+        # A core.autocrlf checkout is already CRLF. Replacing `\n` there
+        # writes `\r\r\n`, and ruff format collapses that to bare CR, which
+        # `git diff --ignore-cr-at-eol` does not report as added lines.
+        normalized = original.replace(b"\r\n", b"\n").replace(b"\r", b"\n")
+        body = normalized if normalized.endswith(b"\n") else normalized + b"\n"
+        tracked.write_bytes((body + marker).replace(b"\n", b"\r\n"))
         result = run_hook(edited(tracked))
     finally:
         tracked.write_bytes(original)
 
+    assert result.returncode == 2
     assert ":275:" not in result.stderr
+    assert "suppression without a reason" in result.stderr
 
 
 def test_a_missing_virtualenv_falls_back_to_uv_run_instead_of_skipping(

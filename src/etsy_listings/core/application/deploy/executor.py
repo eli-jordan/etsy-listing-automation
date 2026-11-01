@@ -247,7 +247,7 @@ _EventFactory = Callable[[int], AnyRunEvent]
 @singledispatch
 def _public_event(event: EngineRunEvent) -> _EventFactory:
     """The public SSE event an engine-domain event becomes."""
-    assert isinstance(event, EngineStageFailed)
+    assert isinstance(event, EngineStageFailed)  # closed union
     return lambda i: StageFailedEvent(
         id=i,
         listing=event.listing,

@@ -173,7 +173,7 @@ class CachedEtsyMarketClient:
         )
 
 
-def _decoded_listing(data: Any) -> MarketListing | None:
+def _decoded_listing(data: Any) -> MarketListing | None:  # JSON
     """A cached listing, or ``None`` when it was recorded as gone."""
     if data is None:
         return None

@@ -343,7 +343,7 @@ def _draft(
             if not ListingDocuments(workspace).exists(listing):
                 raise ListingMissingError(listing)
             return TemplateSource("listing", listing), conversion.from_listing(workspace, listing)
-        assert template is not None
+        assert template is not None  # exactly one, checked above
         _require(workspace, template)
         return TemplateSource("listing-template", template), conversion.from_template(
             workspace, template
