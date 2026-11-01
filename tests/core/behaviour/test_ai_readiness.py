@@ -19,6 +19,7 @@ from etsy_listings.core.ai.providers import AiProvider, FakeAiProvider
 from etsy_listings.core.application.ai.readiness import (
     AiReadinessBlock,
     batch_blocked,
+    current_providers,
     default_ai_providers,
     unready_reason,
 )
@@ -179,7 +180,7 @@ def test_a_batch_needs_a_ready_provider(workspace: Workspace) -> None:
 
 
 def test_the_default_providers_are_codex_then_claude_then_grok(workspace: Workspace) -> None:
-    providers = default_ai_providers(workspace)
+    providers = current_providers(default_ai_providers, workspace)
 
     assert [type(p).__name__ for p in providers] == [
         "CodexProvider",

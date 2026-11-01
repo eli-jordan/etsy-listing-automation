@@ -4,12 +4,18 @@ import type { ReactNode } from "react";
  * Presentational half of the app shell. The routed shell supplies its real
  * navigation; design fixtures can supply inert navigation without mounting a
  * router or touching the workspace API.
+ *
+ * `footer` is the bottom entry: the app passes its Admin link (Admin plan,
+ * PR 3). Without one, the placeholder Setup entry the design frames were
+ * drawn around stays, so those frames render unchanged.
  */
 export function ShellSidebar({
   shopName,
+  footer,
   children,
 }: {
   shopName: string | null;
+  footer?: ReactNode;
   children: ReactNode;
 }) {
   return (
@@ -42,26 +48,30 @@ export function ShellSidebar({
 
       {children}
 
-      <div className="sidebar__bottom">
-        <div className="nav-item nav-item--secondary">
-          <svg
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.75"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <line x1="4" y1="6" x2="20" y2="6" />
-            <circle cx="9" cy="6" r="2" fill="var(--color-surface)" />
-            <line x1="4" y1="12" x2="20" y2="12" />
-            <circle cx="15" cy="12" r="2" fill="var(--color-surface)" />
-            <line x1="4" y1="18" x2="20" y2="18" />
-            <circle cx="11" cy="18" r="2" fill="var(--color-surface)" />
-          </svg>
-          Setup
+      {footer !== undefined ? (
+        <div className="sidebar__bottom">{footer}</div>
+      ) : (
+        <div className="sidebar__bottom">
+          <div className="nav-item nav-item--secondary">
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.75"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <line x1="4" y1="6" x2="20" y2="6" />
+              <circle cx="9" cy="6" r="2" fill="var(--color-surface)" />
+              <line x1="4" y1="12" x2="20" y2="12" />
+              <circle cx="15" cy="12" r="2" fill="var(--color-surface)" />
+              <line x1="4" y1="18" x2="20" y2="18" />
+              <circle cx="11" cy="18" r="2" fill="var(--color-surface)" />
+            </svg>
+            Setup
+          </div>
         </div>
-      </div>
+      )}
     </aside>
   );
 }

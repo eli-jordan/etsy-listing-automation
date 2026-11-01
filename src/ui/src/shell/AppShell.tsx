@@ -1,3 +1,4 @@
+import { GearIcon } from "@phosphor-icons/react/dist/csr/Gear";
 import { StackIcon } from "@phosphor-icons/react/dist/csr/Stack";
 import { useEffect, useState } from "react";
 import { NavLink, Outlet, useLocation } from "react-router-dom";
@@ -5,8 +6,8 @@ import { getWorkspace } from "../api/listings";
 import { ShellSidebar } from "./ShellSidebar";
 
 /**
- * The app shell (phase 5): a fixed sidebar (brand, nav, a placeholder Setup
- * entry) around whatever page the router picks, from the design mockup's
+ * The app shell (phase 5): a fixed sidebar (brand, nav, the Admin entry
+ * at the bottom) around whatever page the router picks, from the design mockup's
  * app-shell markup (`Main.dc.html`). The Dashboard/Listings/Mockup Templates
  * routes are declared by the caller (`main.tsx`) as child routes rendered
  * into `<Outlet/>` -- this component only ever draws the chrome around them.
@@ -32,7 +33,15 @@ export function AppShell() {
 
   return (
     <div className="shell">
-      <ShellSidebar shopName={shopName}>
+      <ShellSidebar
+        shopName={shopName}
+        footer={
+          <NavLink to="/admin" className={navClass}>
+            <GearIcon size={18} />
+            Admin
+          </NavLink>
+        }
+      >
         <nav className="sidebar__nav">
           <NavLink to="/" end className={navClass}>
             <svg

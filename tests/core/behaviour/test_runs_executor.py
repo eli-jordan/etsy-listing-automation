@@ -11,6 +11,7 @@ from pathlib import Path
 
 import pytest
 
+from etsy_listings.core.application import shop_settings
 from etsy_listings.core.application.deploy.events import TERMINAL_PHASES
 from etsy_listings.core.application.deploy.executor import INTERNAL_ERROR_MESSAGE, RunExecutor
 from etsy_listings.core.application.deploy.registry import (
@@ -342,3 +343,40 @@ def test_an_apply_run_with_a_stale_expect_ends_stale(executor: RunExecutor) -> N
     assert failed
     assert failed[-1].stale_plan is not None
     assert failed[-1].stale_plan.listing == LISTING
+
+
+@pytest.mark.parametrize("kind", ["plan", "apply"])
+def test_a_run_keeps_the_shop_it_started_with(workspace_root: Path, kind: str) -> None:
+    live = Workspace.discover(root_override=workspace_root)
+    seen: list[RunContext] = []
+
+    def context(workspace: Workspace, on_event: EventSink | None) -> RunContext:
+        ctx = RunContext(
+            workspace=workspace, catalog=FakeCatalogClient([], {}, {}), printify=None, etsy=None
+        )
+        seen.append(ctx)
+        if len(seen) == 1:
+            # The seller saves on the Admin page while this run is under way.
+            revision = shop_settings.read_shop(live).revision
+            shop_settings.edit_shop(
+                live, expected_revision=revision, changes={"etsy.currency": "EUR"}
+            )
+        return ctx
+
+    executor = RunExecutor(workspace=live, context_factory=context, registry=RunRegistry())
+    executor.start()
+    try:
+        command = ListingPlan((LISTING,)) if kind == "plan" else ListingApply((LISTING,), {})
+        first = executor.registry.create(command)
+        assert isinstance(first, Run)
+        _wait_until(first, timeout=30)
+        second = executor.registry.create(command)
+        assert isinstance(second, Run)
+        _wait_until(second, timeout=30)
+    finally:
+        executor.stop()
+
+    assert live.defaults.etsy.currency == "EUR"
+    assert seen[0].workspace.defaults.etsy.currency == "NOK"
+    assert seen[0].workspace is not live
+    assert seen[-1].workspace.defaults.etsy.currency == "EUR"

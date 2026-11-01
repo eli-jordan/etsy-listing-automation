@@ -16,6 +16,7 @@ from __future__ import annotations
 from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from fastapi.testclient import TestClient
@@ -23,7 +24,7 @@ from fastapi.testclient import TestClient
 from etsy_listings.core.ai.proposals import ProposalStore
 from etsy_listings.core.application.ai.batch_queue import BatchQueue
 from etsy_listings.core.application.ai.registry import AiRun, AiRunRegistry
-from etsy_listings.core.application.ai.runner import RUN_LIMIT_SECONDS, TIMEOUT_MESSAGE, AiRunner
+from etsy_listings.core.application.ai.runner import AiRunner
 from etsy_listings.core.batches import (
     Batch,
     BatchRow,
@@ -33,6 +34,7 @@ from etsy_listings.core.batches import (
     stage_pngs,
 )
 from etsy_listings.core.clients.etsy.fakes import FakeEtsyMarketClient
+from etsy_listings.core.config.errors import ConfigLoadError
 from etsy_listings.core.workspace.workspace import Workspace
 from etsy_listings.server.api.app import create_app
 
@@ -71,7 +73,7 @@ class Queue:
         self.runner = AiRunner(
             workspace=self.workspace,
             registry=self.registry,
-            providers=lambda _workspace: [provider],
+            providers=lambda _workspace, _ai: [provider],
             market_client=lambda _workspace: market,
             proposals=self.proposals,
             now=lambda: TODAY,
@@ -194,6 +196,18 @@ def test_concurrency_two_drafts_two_rows_at_once(q: Queue) -> None:
     q.settle(batch, "done", "done", "done")
 
 
+def test_invalid_settings_refuse_dispatch_instead_of_using_a_default(q: Queue) -> None:
+    """Admin config-validation rule: a broken file is never a default limit."""
+    q.workspace.settings_file().write_text("batch_ai:\n  concurency: 2\n", encoding="utf-8")
+    batch = q.confirm(*_designs("night-hike-club"))
+    with pytest.raises(ConfigLoadError, match="batch_ai.concurency"):
+        q.queue.concurrency()
+    q.queue.start()
+    q.idle()
+    assert q.batch_runs() == []
+    assert q.states(batch) == ["queued"]
+
+
 def test_two_batches_are_served_round_robin_oldest_first(q: Queue) -> None:
     started: list[str] = []
     q.provider.during["brief"] = lambda: started.extend(q.batch_runs())
@@ -205,6 +219,43 @@ def test_two_batches_are_served_round_robin_oldest_first(q: Queue) -> None:
     q.settle(first, "done", "done")
     q.settle(second, "done", "done")
     assert started == ["a-one", "b-one", "a-two", "b-two"]
+
+
+def test_admin_limit_changes_apply_to_the_next_dispatch_without_stopping_active_runs(
+    q: Queue,
+) -> None:
+    """Admin PR 4 and ADR-0048: raising starts another row; lowering leaves
+    those runs alone, and a later row waits for the smaller allowance."""
+    gate = q.provider.gate("brief")
+    batch = q.confirm(*_designs("night-hike-club", "cedar-trail", "lake-loop"))
+    app = create_app(q.workspace)
+    # Use the same coordinator queue the server normally wakes after a save.
+    app.state.ai = SimpleNamespace(queue=q.queue)
+    client = TestClient(app)
+    q.queue.start()
+    q.idle()
+    assert q.states(batch) == ["running", "queued", "queued"]
+    revision = client.get("/api/admin/settings").json()["revision"]
+    raised = client.patch(
+        "/api/admin/settings", json={"revision": revision, "changes": {"concurrency": 2}}
+    )
+    assert raised.status_code == 200
+    q.idle()
+    assert q.states(batch) == ["running", "running", "queued"]
+    active = q.batch_runs()
+    lowered = client.patch(
+        "/api/admin/settings",
+        json={"revision": raised.json()["revision"], "changes": {"concurrency": 1}},
+    )
+    assert lowered.status_code == 200
+    q.idle()
+    assert q.batch_runs() == active
+    assert q.states(batch) == ["running", "running", "queued"]
+    alongside: list[int] = []
+    q.provider.during["brief"] = lambda: alongside.append(len(q.batch_runs()))
+    gate.set()
+    q.settle(batch, "done", "done", "done")
+    assert alongside[-1] == 1
 
 
 def test_a_manual_run_does_not_count_against_the_limit_and_its_listing_waits(
@@ -312,17 +363,24 @@ def test_brief_drafting_leaves_an_existing_proposal_intact(q: Queue) -> None:
 
 
 def test_a_run_that_outlives_the_limit_becomes_a_failed_row(q: Queue) -> None:
+    """A batch brief run captures the configured limits like any other run
+    (ADR-0057), and its row reports the limit it ran out."""
+    q.workspace.settings_file().write_text(
+        "ai:\n  providers: [{name: codex}]\n  step_limit_minutes: 1\n  run_limit_minutes: 5\n",
+        encoding="utf-8",
+    )
     q.provider.gate("brief")
     batch = q.confirm(*_designs("night-hike-club", "cedar-trail"))
     q.queue.start()
     wait_for(lambda: q.provider.started["brief"].is_set())
 
-    q.clock.now = RUN_LIMIT_SECONDS
+    q.clock.now = 5 * 60.0
 
     wait_for(lambda: q.states(batch)[0] == "failed")
     row = q.row(batch, 0)
-    assert row.ai_error is not None
-    assert TIMEOUT_MESSAGE in row.ai_error
+    assert row.ai_error == "The AI run took longer than 5 minutes, so it was stopped. Try again."
+    assert q.provider.remaining[0] == ("brief", 60.0)
+    assert q.proposals.load("night-hike-club") is None
 
 
 # ---------------------------------------------------- cancel and resume
@@ -370,7 +428,7 @@ def test_a_row_running_when_the_server_stops_reruns_after_a_restart(
         return TestClient(
             create_app(
                 workspace,
-                seo_provider_factory=lambda _workspace: [provider],
+                seo_provider_factory=lambda _workspace, _ai: [provider],
                 market_client_factory=lambda _workspace: market,
             )
         )
