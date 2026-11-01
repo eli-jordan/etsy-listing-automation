@@ -66,7 +66,11 @@ def queue_order(batches: list[Batch], after: str | None) -> list[Slot]:
     if after in ids:
         turn = ids.index(after) + 1
         ordered = ordered[turn:] + ordered[:turn]
-    lanes = [[(b.id, row.id) for row in b.rows if row.ai == "queued"] for b in ordered]
+    return _dealt([[(b.id, row.id) for row in b.rows if row.ai == "queued"] for b in ordered])
+
+
+def _dealt(lanes: list[list[Slot]]) -> list[Slot]:
+    """Every lane's slots, one from each lane in turn."""
     order: list[Slot] = []
     for depth in range(max((len(lane) for lane in lanes), default=0)):
         order.extend(lane[depth] for lane in lanes if depth < len(lane))
