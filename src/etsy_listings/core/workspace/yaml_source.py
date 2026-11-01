@@ -30,6 +30,7 @@ from typing import Any
 
 import yaml
 from ruamel.yaml import YAML
+from ruamel.yaml.error import YAMLError as RoundTripYamlError
 from ruamel.yaml.nodes import MappingNode, Node, ScalarNode, SequenceNode
 from ruamel.yaml.scalarstring import (
     DoubleQuotedScalarString,
@@ -89,15 +90,18 @@ def edit_yaml(
     ``sequence_keys`` declares stable identities for ordered mapping rows.
     Reordering those rows moves their original source, including comments.
     """
-    current = yaml.safe_load(source)
-    wanted = _plain(after)
-    target = wanted if before is UNSET else _merge(current, _plain(before), wanted)
-    if _same(current, target):
-        return source
-    edited = _Editor(source, sequence_keys=sequence_keys).edit(current, target)
-    if not _same(yaml.safe_load(edited), target):
-        raise UneditableYaml("the edited text would not read back as the intended document")
-    return edited
+    try:
+        current = yaml.safe_load(source)
+        wanted = _plain(after)
+        target = wanted if before is UNSET else _merge(current, _plain(before), wanted)
+        if _same(current, target):
+            return source
+        edited = _Editor(source, sequence_keys=sequence_keys).edit(current, target)
+        if not _same(yaml.safe_load(edited), target):
+            raise UneditableYaml("the edited text would not read back as the intended document")
+        return edited
+    except (yaml.YAMLError, RoundTripYamlError) as exc:
+        raise UneditableYaml(f"YAML source could not be edited safely: {exc}") from exc
 
 
 # ------------------------------------------------------------------ values
@@ -183,10 +187,7 @@ class _Editor:
         self.newline = "\r\n" if "\r\n" in source else "\n"
         composer = YAML(typ="rt", pure=True)
         composer.version = _YAML_VERSION
-        try:
-            self.root: Node | None = composer.compose(source)
-        except Exception as exc:  # the reader already accepted it; ruamel must too
-            raise UneditableYaml(str(exc)) from exc
+        self.root: Node | None = composer.compose(source)
         self.edits: list[tuple[int, int, int, str]] = []
         self.mapping_indent = 2
         self.sequence_offset = 0
@@ -379,12 +380,18 @@ class _Editor:
         }
         replacement = ""
         for row in new:
+            # The old EOF row has no separator to carry when it moves before
+            # another row. Only insert that necessary line boundary.
+            if replacement and not replacement.endswith("\n"):
+                replacement += self.newline
             if row[key] in fragments:
                 original, source = fragments[row[key]]
                 replacement += edit_yaml(source, [row], before=[original])
             else:
                 rendered = self._lines(self._render_item(row), indent=column)
                 replacement += " " * column + rendered.replace("\n", self.newline) + self.newline
+        if end == len(self.source) and not self.source.endswith("\n"):
+            replacement = replacement.removesuffix(self.newline)
         # Existing fragments already carry their exact line endings.
         self.edits.append((starts[0], end, len(self.edits), replacement))
 

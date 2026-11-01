@@ -26,17 +26,26 @@ from etsy_listings.core.ai.grok import GrokProvider
 from etsy_listings.core.ai.providers import AiProvider
 from etsy_listings.core.config.artwork import representative
 from etsy_listings.core.config.listing import Listing
+from etsy_listings.core.config.settings import AiSettings
 from etsy_listings.core.workspace.facts import WorkspaceFacts
 from etsy_listings.core.workspace.workspace import Workspace
 
-ProviderFactory = Callable[[Workspace], Sequence[AiProvider]]
-"""The providers to ask, in order. Called afresh for every readiness check
-and every run, since a provider's own ``readiness()`` can change between
-calls (the CLI signed out mid-session, for instance)."""
+ProviderFactory = Callable[[Workspace, AiSettings], Sequence[AiProvider]]
+"""The providers to ask, in order, built from already-loaded AI settings.
+Called afresh for every readiness check and every run, since a provider's
+own ``readiness()`` can change between calls (the CLI signed out
+mid-session, for instance). A run passes the same load it takes its time
+limits from, so both come from one revision of ``settings.yaml`` (ADR-0057)."""
 
 
-def default_ai_providers(workspace: Workspace) -> Sequence[AiProvider]:
-    """Capture the enabled workspace chain and all task preferences (ADR-0056).
+def current_providers(factory: ProviderFactory, workspace: Workspace) -> Sequence[AiProvider]:
+    """``factory``'s providers for ``settings.yaml`` as it is now: for a
+    readiness check, which captures nothing."""
+    return factory(workspace, workspace.load_settings().ai)
+
+
+def default_ai_providers(workspace: Workspace, ai: AiSettings) -> Sequence[AiProvider]:
+    """Capture the enabled chain and all task preferences from ``ai`` (ADR-0056).
 
     Newly constructed adapters never reread settings during repair or fallback.
     Missing AI settings preserve Codex, Claude, Grok and account defaults.
@@ -50,7 +59,7 @@ def default_ai_providers(workspace: Workspace) -> Sequence[AiProvider]:
         adapters[provider.name](
             workspace_root=workspace.root, model=provider.model, effort=provider.effort
         )
-        for provider in workspace.load_settings().ai.providers
+        for provider in ai.providers
         if provider.enabled
     )
 

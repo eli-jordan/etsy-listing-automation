@@ -8,7 +8,7 @@ import pytest
 from etsy_listings.core.ai import claude, codex, grok
 from etsy_listings.core.ai.models import Deadline, ProviderTask, RepairContext
 from etsy_listings.core.ai.process import ProcessResult
-from etsy_listings.core.application.ai.readiness import default_ai_providers
+from etsy_listings.core.application.ai.readiness import current_providers, default_ai_providers
 from etsy_listings.core.workspace import Workspace
 
 
@@ -18,12 +18,14 @@ def test_factory_captures_order_and_preferences_until_next_call(workspace_root: 
         "ai:\n  providers:\n    - name: grok\n      model: retired\n      effort: high\n"
         "    - name: codex\n      enabled: false\n    - name: claude\n"
     )
-    captured = default_ai_providers(workspace)
+    captured = current_providers(default_ai_providers, workspace)
     assert [type(p).__name__ for p in captured] == ["GrokProvider", "ClaudeProvider"]
     assert captured[0].model == "retired"
     assert captured[0].effort == "high"
     workspace.settings_file().write_text("ai:\n  providers: [{name: codex}]\n")
-    assert [type(p).__name__ for p in default_ai_providers(workspace)] == ["CodexProvider"]
+    assert [type(p).__name__ for p in current_providers(default_ai_providers, workspace)] == [
+        "CodexProvider"
+    ]
     assert captured[0].model == "retired"
 
 
@@ -98,7 +100,7 @@ def test_a_rejected_saved_model_falls_through_without_rewriting_preferences(
     result = generate_brief(
         BriefRequest(design_image=workspace_root / "design.png"),
         "Read artwork",
-        default_ai_providers(workspace),
+        current_providers(default_ai_providers, workspace),
     )
     assert result.brief == "A sunset design."
     assert [argv[argv.index("--model") + 1] for argv in calls] == ["retired", "pinned"]

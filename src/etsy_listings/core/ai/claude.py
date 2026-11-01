@@ -296,7 +296,7 @@ class ClaudeProvider:
             )
             reported = (
                 stdout
-                if has_sentence or "api_error_status" in envelope
+                if has_sentence or "api_error_status" in envelope or "error" in envelope
                 else "claude reported is_error"
             )
             raise classify_process_failure(PROVIDER_NAME, returncode=0, stdout=reported, stderr="")

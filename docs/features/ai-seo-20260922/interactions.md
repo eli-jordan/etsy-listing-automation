@@ -168,9 +168,11 @@ at run start (ADR-0056). Missing AI settings use Codex, Claude, Grok and account
 defaults. Recognized provider-unavailable, authentication/quota, rate-limit or
 saved model/effort rejection permits fallback to the next configured provider; a
 malformed response receives one repair attempt from the same provider. Every
-other error exposes **Try again**. Each provider call (brief, market queries,
-proposal), including its repair and allowed fallback, has one 5-minute
-deadline. The whole AI run is capped at 20 minutes.
+other error exposes **Try again**. Each provider tried for a task (brief,
+market queries, proposal) gets the configured step limit, shared with its
+repair; an allowed fallback gets a fresh one. The whole AI run is capped at the
+configured run limit. The defaults are 5 and 20 minutes, set in Admin →
+Settings → AI time limits (ADR-0057).
 
 A short fixed delay is not a product requirement; the implementation reveals
 results when the real request completes.

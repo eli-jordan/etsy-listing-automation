@@ -249,7 +249,7 @@ def _seo_server(
     port = _free_port()
     etsy_market = market if market is not None else seeded_market()
     kwargs: dict[str, Any] = {
-        "seo_provider_factory": lambda _workspace: providers,
+        "seo_provider_factory": lambda _workspace, _ai: providers,
         "market_client_factory": lambda _workspace: etsy_market,
     }
     app = create_app(workspace, **kwargs)

@@ -17,9 +17,13 @@ from __future__ import annotations
 import threading
 from collections.abc import Callable, Iterator
 from contextlib import AbstractContextManager, contextmanager
+from pathlib import Path
 from typing import Any
 
 import pytest
+
+from etsy_listings.core.config.defaults import Defaults
+from etsy_listings.core.workspace.workspace import Workspace
 
 GATE_TIMEOUT = 15.0
 """Long enough for a loaded runner; reached only when something is broken."""
@@ -173,3 +177,28 @@ def workers(*gates: Gate | LockGate) -> Iterator[Callable[[str, Callable[[], obj
             worker.thread.join(GATE_TIMEOUT)
         alive = [w.thread.name for w in started if w.thread.is_alive()]
         assert not alive, f"helper threads outlived the test: {alive}"
+
+
+class GatedWorkspace(Workspace):
+    """A :class:`Workspace` whose next ``defaults`` publication, once armed,
+    holds :attr:`published` before taking effect: the point a Shop save
+    adopts what it wrote. Construction is never gated."""
+
+    def __init__(self, root: Path, defaults: Defaults) -> None:
+        self.published: Gate | None = None
+        super().__init__(root, defaults)
+
+    def arm(self) -> Gate:
+        self.published = Gate("the defaults publication")
+        return self.published
+
+    @property
+    def defaults(self) -> Defaults:
+        return self._defaults
+
+    @defaults.setter
+    def defaults(self, value: Defaults) -> None:
+        gate, self.published = self.published, None
+        if gate is not None:
+            gate.hold()
+        self._defaults = value

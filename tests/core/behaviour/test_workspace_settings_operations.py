@@ -24,6 +24,8 @@ from etsy_listings.core.workspace import layout
 from etsy_listings.core.workspace.revisions import content_revision
 from etsy_listings.core.workspace.workspace import Workspace
 
+from tests.support.source_files import identity
+
 SETTINGS_YAML = """\
 # Tuned after the October research run.
 market_seo:
@@ -406,3 +408,127 @@ def test_provider_reorder_does_not_materialize_untouched_optional_defaults(
     assert settings_path(workspace).read_bytes() == (
         b"ai:\r\n  providers:\r\n    - name: claude\r\n    - name: codex # account defaults\r\n"
     )
+
+
+@pytest.mark.parametrize("newline", ["\n", "\r\n"], ids=["lf", "crlf"])
+@pytest.mark.parametrize("insert", [False, True], ids=["reorder", "insert-after-eof-row"])
+@pytest.mark.parametrize("ending", ["", "\n"], ids=["bare-eof", "final-newline"])
+def test_provider_rows_at_eof_can_move_or_gain_a_sibling(
+    workspace: Workspace, newline: str, insert: bool, ending: str
+) -> None:
+    header = "# Keep preferences\nbatch_ai: {concurrency: 2} # untouched\nai:\n  providers:\n"
+    codex = "  - name: codex # account default\n"
+    grok = '  - name: grok\n    model: "old" # saved choice'
+    source = (header + codex + grok + ending).replace("\n", newline).encode()
+    path = settings_path(workspace)
+    path.write_bytes(source)
+    view = workspace_settings.read_settings(workspace)
+    rows = [{"name": "grok", "model": "old"}, {"name": "claude"}, {"name": "codex"}]
+    if insert:
+        rows = [{"name": "codex"}, *rows[:2]]
+    else:
+        rows.pop(1)
+
+    saved = workspace_settings.edit_settings(
+        workspace, expected_revision=view.revision, changes={"ai.providers": rows}
+    )
+
+    expected = header + (
+        codex + grok + "\n  - name: claude" if insert else grok + "\n" + codex.rstrip("\n")
+    )
+    assert path.read_bytes() == (expected + ending).replace("\n", newline).encode()
+    assert [p.name for p in saved.settings.ai.providers] == [row["name"] for row in rows]
+    assert workspace.load_settings() == saved.settings
+    before = identity(path)
+    again = workspace_settings.edit_settings(
+        workspace, expected_revision=saved.revision, changes={"ai.providers": rows}
+    )
+    assert again == saved
+    assert identity(path) == before
+
+
+# ------------------------------------------------------ AI time limits (ADR-0057)
+
+
+def test_time_limits_read_as_their_defaults_on_a_missing_file(workspace: Workspace) -> None:
+    ai = workspace_settings.read_settings(workspace).settings.ai
+    assert (ai.step_limit_minutes, ai.run_limit_minutes) == (5, 20)
+
+
+def test_a_step_limit_raised_with_its_run_limit_saves_both_together(
+    workspace: Workspace,
+) -> None:
+    written(workspace, SETTINGS_YAML)
+    view = workspace_settings.read_settings(workspace)
+
+    saved = workspace_settings.edit_settings(
+        workspace,
+        expected_revision=view.revision,
+        changes={"ai.step_limit_minutes": 10, "ai.run_limit_minutes": 30},
+    )
+
+    ai = saved.settings.ai
+    assert (ai.step_limit_minutes, ai.run_limit_minutes) == (10, 30)
+    text = settings_path(workspace).read_bytes()
+    assert text.startswith(SETTINGS_YAML.replace("\n", "\r\n").encode())
+    assert b"step_limit_minutes: 10" in text
+    assert b"run_limit_minutes: 30" in text
+
+
+def test_enabling_a_provider_with_a_raised_run_limit_is_one_save(workspace: Workspace) -> None:
+    written(
+        workspace,
+        "ai:\n  providers: [{name: codex}, {name: claude, enabled: false}]\n"
+        "  step_limit_minutes: 15\n  run_limit_minutes: 15\n",
+    )
+    view = workspace_settings.read_settings(workspace)
+
+    saved = workspace_settings.edit_settings(
+        workspace,
+        expected_revision=view.revision,
+        changes={
+            "ai.providers": [{"name": "codex"}, {"name": "claude"}],
+            "ai.run_limit_minutes": 30,
+        },
+    )
+
+    assert saved.settings.ai.run_limit_minutes == 30
+
+
+@pytest.mark.parametrize(
+    ("changes", "key"),
+    [
+        ({"ai.step_limit_minutes": 0}, "ai.step_limit_minutes"),
+        ({"ai.step_limit_minutes": 16}, "ai.step_limit_minutes"),
+        ({"ai.run_limit_minutes": 4}, "ai.run_limit_minutes"),
+        ({"ai.run_limit_minutes": 61}, "ai.run_limit_minutes"),
+        # Three default providers at ten minutes need thirty.
+        ({"ai.step_limit_minutes": 10}, "ai.run_limit_minutes"),
+        ({"ai.run_limit_minutes": 14}, "ai.run_limit_minutes"),
+    ],
+)
+def test_a_limit_edit_outside_its_range_or_floor_writes_nothing(
+    workspace: Workspace, changes: dict[str, object], key: str
+) -> None:
+    written(workspace, SETTINGS_YAML)
+    view = workspace_settings.read_settings(workspace)
+    before = settings_path(workspace).read_bytes()
+
+    with pytest.raises(InvalidSettingsEdit) as caught:
+        workspace_settings.edit_settings(
+            workspace, expected_revision=view.revision, changes=changes
+        )
+
+    assert key in caught.value.field_errors
+    assert settings_path(workspace).read_bytes() == before
+
+
+def test_lowering_the_step_limit_keeps_the_sellers_run_limit(workspace: Workspace) -> None:
+    written(workspace, "ai:\n  step_limit_minutes: 10\n  run_limit_minutes: 40\n")
+    view = workspace_settings.read_settings(workspace)
+
+    saved = workspace_settings.edit_settings(
+        workspace, expected_revision=view.revision, changes={"ai.step_limit_minutes": 2}
+    )
+
+    assert (saved.settings.ai.step_limit_minutes, saved.settings.ai.run_limit_minutes) == (2, 40)

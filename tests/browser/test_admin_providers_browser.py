@@ -159,3 +159,67 @@ def test_discovery_failure_keeps_saved_choices_until_refresh_reads_the_lists(
     assert ["refresh=true" in url for url in requests] == [False, True]
     assert path.read_text(encoding="utf-8") == SOURCE
     capture(page, theme, "refreshed")
+
+
+def test_yaml_source_refusal_keeps_the_attempt_and_explains_the_correction(
+    page,
+    expect,
+    calibrator_server: str,
+    workspace_root: Path,
+    theme: str,  # noqa: ANN001
+) -> None:
+    path = Workspace.discover(root_override=workspace_root).settings_file()
+    source = (
+        b"ai:\n  providers: [{<<: {name: codex}, model: old}, "
+        b"{name: claude, enabled: false}, {name: grok, enabled: false}]\n"
+    )
+    path.write_bytes(source)
+    serve_models(page, LOADED, LOADED)
+    open_settings(page, calibrator_server, theme)
+    model = page.get_by_role("combobox", name="Codex model")
+    expect(model.locator('option[value="gpt-6.1-sol"]')).to_have_count(1)
+    with page.expect_response(is_save) as refused:
+        model.select_option("gpt-6.1-sol")
+        model.press("Tab")
+    assert refused.value.status == 422
+    reason = refused.value.json()["field_errors"]["__root__"]
+    assert "Edit this value in the file, then reload Settings." in reason
+    expect(page.get_by_role("status").filter(has_text="Edit this value")).to_contain_text(reason)
+    expect(model).to_have_value("gpt-6.1-sol")
+    assert path.read_bytes() == source
+    for width in (1280, 1024):
+        page.set_viewport_size({"width": width, "height": 800})
+        assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
+        capture(page, theme, f"yaml-source-refusal-{width}")
+
+
+def test_startup_discovery_status_keeps_saved_preferences_and_allows_refresh(
+    page,
+    expect,
+    calibrator_server: str,
+    workspace_root: Path,
+    theme: str,
+) -> None:
+    path = Workspace.discover(root_override=workspace_root).settings_file()
+    path.write_text(SOURCE, encoding="utf-8")
+    pending = {
+        "cache_seconds": 1800,
+        "providers": {
+            **LOADED["providers"],
+            "codex": {
+                **LOADED["providers"]["codex"],
+                "problem": "Model discovery is in progress. Refresh to check again.",
+            },
+        },
+    }
+    serve_models(page, pending, LOADED)
+    open_settings(page, calibrator_server, theme)
+    expect(
+        page.get_by_text("Model discovery is in progress. Refresh to check again.")
+    ).to_be_visible()
+    expect(page.get_by_role("combobox", name="Codex model")).to_have_value("gpt-6.1-sol")
+    expect(page.get_by_role("combobox", name="Codex reasoning")).to_have_value("")
+    capture(page, theme, "discovery-pending")
+    page.get_by_role("button", name="Refresh lists").click()
+    expect(page.get_by_text("Model lists loaded. Cached for 30 minutes.")).to_be_visible()
+    assert path.read_text(encoding="utf-8") == SOURCE

@@ -1,40 +1,25 @@
 """Installed CLI formats, advisory failures, expiry and explicit refresh."""
 
-import json
-import subprocess
+import threading
 
 import pytest
 
 from etsy_listings.core.ai.discovery import ModelDiscovery
 
+from tests.support.ai_processes import ModelCli
+from tests.support.gates import GATE_TIMEOUT, Gate, workers
 
-def test_discovery_reads_catalogs_once_until_expiry_or_refresh(monkeypatch):
-    calls = []
-    now = [0.0]
 
-    def run(argv, **kwargs):
-        calls.append(argv)
-        output = (
-            json.dumps(
-                {
-                    "models": [
-                        {
-                            "slug": "sol",
-                            "display_name": "Sol",
-                            "supported_reasoning_levels": [{"effort": "high"}, {"effort": "ultra"}],
-                        },
-                        {"slug": "hidden", "visibility": "hide"},
-                    ]
-                }
-            )
-            if "codex" in argv[0]
-            else "You are logged in with grok.com.\n\nDefault model: grok-4.7\n\n"
-            "Available models:\n  * grok-4.7 (default)\n  - grok-4.6\n"
-        )
-        return subprocess.CompletedProcess(argv, 0, output, "")
-
+@pytest.fixture
+def cli(monkeypatch):
+    cli = ModelCli()
     monkeypatch.setattr("etsy_listings.core.ai.discovery.shutil.which", lambda name: name)
-    monkeypatch.setattr("etsy_listings.core.ai.discovery.subprocess.run", run)
+    monkeypatch.setattr("etsy_listings.core.ai.discovery.run_managed", cli)
+    return cli
+
+
+def test_discovery_reads_catalogs_once_until_expiry_or_refresh(cli):
+    now = [0.0]
     discovery = ModelDiscovery(monotonic=lambda: now[0])
     first = discovery.read()
     assert [m.id for m in first.providers["codex"].models] == ["sol"]
@@ -46,56 +31,108 @@ def test_discovery_reads_catalogs_once_until_expiry_or_refresh(monkeypatch):
         "claude-sonnet-5-5",
         "claude-haiku-5-5",
     ]
-    assert calls == [["codex", "debug", "models"], ["grok", "models"]]
+    assert cli.calls == [["codex", "debug", "models"], ["grok", "models"]]
     now[0] = 1799
     assert discovery.read() == first
-    assert len(calls) == 2
+    assert len(cli.calls) == 2
     now[0] = 1800
     discovery.read()
-    assert len(calls) == 4
+    assert len(cli.calls) == 4
     discovery.read(refresh=True)
-    assert len(calls) == 6
+    assert len(cli.calls) == 6
 
 
-def test_failure_retains_last_catalog_and_is_cached(monkeypatch):
+def test_failure_retains_last_catalog_and_is_cached(cli):
     now = [0.0]
-    calls = []
-
-    def run(argv, **kwargs):
-        calls.append(argv)
-        if now[0]:
-            raise subprocess.TimeoutExpired(argv, 15)
-        return subprocess.CompletedProcess(
-            argv,
-            0,
-            json.dumps({"models": [{"slug": "sol", "supported_reasoning_levels": []}]})
-            if "codex" in argv[0]
-            else "Available models:\n - grok-4.7\n",
-            "",
-        )
-
-    monkeypatch.setattr("etsy_listings.core.ai.discovery.shutil.which", lambda name: name)
-    monkeypatch.setattr("etsy_listings.core.ai.discovery.subprocess.run", run)
     discovery = ModelDiscovery(monotonic=lambda: now[0])
     discovery.read()
     now[0] = 1800
+    cli.failure = True
     failed = discovery.read()
     assert failed.providers["codex"].models[0].id == "sol"
     assert failed.providers["codex"].problem
     assert failed.providers["grok"].problem
     discovery.read()
-    assert len(calls) == 4
+    assert len(cli.calls) == 4
 
 
 @pytest.mark.parametrize(
     "output", ["null", "{}", '{"models": [1]}', '{"models": []}', '{"models": [{"slug": 1}]}']
 )
-def test_changed_or_malformed_cli_formats_are_advisory_failures(monkeypatch, output):
-    monkeypatch.setattr("etsy_listings.core.ai.discovery.shutil.which", lambda name: name)
-    monkeypatch.setattr(
-        "etsy_listings.core.ai.discovery.subprocess.run",
-        lambda argv, **kwargs: subprocess.CompletedProcess(argv, 0, output, ""),
-    )
+def test_changed_or_malformed_cli_formats_are_advisory_failures(cli, output):
+    cli.codex = cli.grok = output
     catalog = ModelDiscovery().read()
     assert catalog.providers["codex"].problem
     assert catalog.providers["grok"].problem
+
+
+def test_the_refresh_budget_is_shared_by_all_probes(cli):
+    now = [0.0]
+
+    def spend_budget(deadline, cancel):
+        now[0] = 16.0
+
+    cli.during = spend_budget
+    catalog = ModelDiscovery(monotonic=lambda: now[0]).read()
+    assert cli.calls == [["codex", "debug", "models"]]
+    assert catalog.providers["grok"].problem
+
+
+def test_busy_refresh_reads_keep_successful_choices_without_waiting_on_a_probe(cli):
+    discovery = ModelDiscovery()
+    first = discovery.read()
+    gate = Gate("refresh")
+    cli.during = lambda deadline, cancel: gate.hold()
+    with workers(gate) as start:
+        refresh = start("refresh", lambda: discovery.read(refresh=True))
+        gate.wait_entered()
+        busy = discovery.read()
+        assert busy.providers["codex"].models == first.providers["codex"].models
+        assert "in progress" in busy.providers["codex"].problem
+        assert discovery.read(refresh=True) == busy
+        assert len(cli.calls) == 3, "concurrent refreshes must share one probe"
+        gate.release()
+        assert refresh.result() == first
+
+
+def test_construction_starts_no_thread_and_stop_cancels_the_started_probe(cli):
+    entered, exited = threading.Event(), threading.Event()
+
+    def until_cancelled(deadline, cancel):
+        entered.set()
+        assert cancel.wait(GATE_TIMEOUT)
+        exited.set()
+
+    cli.during = until_cancelled
+    before = set(threading.enumerate())
+    discovery = ModelDiscovery()
+    assert set(threading.enumerate()) == before
+    assert cli.calls == []
+    discovery.start()
+    try:
+        assert entered.wait(GATE_TIMEOUT)
+        discovery.start()  # idempotent while the first attempt is active
+        pending = discovery.read()
+        assert pending.providers["codex"].models == ()
+        assert pending.providers["claude"].models
+        assert "in progress" in pending.providers["codex"].problem
+    finally:
+        discovery.stop()
+    assert exited.is_set()
+    assert len(cli.calls) == 1
+    assert "stopped" in discovery.read(refresh=True).providers["codex"].problem
+    discovery.stop()
+
+
+def test_shutdown_wait_is_bounded_even_if_a_process_substitute_ignores_cancellation(cli):
+    gate = Gate("uncooperative external process")
+    cli.during = lambda deadline, cancel: gate.hold()
+    discovery = ModelDiscovery()
+    discovery.start()
+    try:
+        gate.wait_entered()
+        discovery.stop(timeout=0.01)
+        assert "stopped" in discovery.read().providers["grok"].problem
+    finally:
+        gate.release()
+        discovery.stop()

@@ -2,7 +2,7 @@ import { useRef, useState } from "react";
 import { WarningIcon } from "@phosphor-icons/react/dist/csr/Warning";
 import { useWorkspaceSettings } from "./useWorkspaceSettings";
 import { MarketWeights } from "./MarketWeights";
-import { AiProviders } from "./AiProviders";
+import { AiSettingsSections } from "./AiTimeLimits";
 import "./settings.css";
 
 export function SettingsPanel() {
@@ -39,14 +39,20 @@ export function SettingsPanel() {
           </button>
         </div>
       )}
-      <div role="status" className="adm-save settings-save">
-        {status.kind === "saving"
-          ? "Saving…"
-          : status.kind === "saved"
-            ? "Saved"
-            : status.kind === "error"
-              ? status.message
-              : ""}
+      <div
+        role="status"
+        className={status.kind === "error" ? "adm-warn settings-notice" : "adm-save settings-save"}
+      >
+        {status.kind === "error" && <WarningIcon size={20} />}
+        <span>
+          {status.kind === "saving"
+            ? "Saving…"
+            : status.kind === "saved"
+              ? "Saved"
+              : status.kind === "error"
+                ? status.message
+                : ""}
+        </span>
       </div>
       {status.kind === "error" && (
         <button className="btn btn-secondary" onClick={state.retry}>
@@ -54,19 +60,14 @@ export function SettingsPanel() {
         </button>
       )}
       <fieldset disabled={state.locked} className="settings-fields">
-        <AiProviders
-          key={`providers-${state.loadedVersion}`}
-          initial={settings.providers}
+        <AiSettingsSections
+          key={`ai-${state.loadedVersion}`}
+          providers={settings.providers}
+          limits={{ step: settings.step_limit_minutes, run: settings.run_limit_minutes }}
           locked={state.locked}
-          onSave={(providers) => state.save({ providers })}
+          fieldErrors={state.fieldErrors}
+          onSave={state.save}
         />
-        {Object.entries(state.fieldErrors)
-          .filter(([key]) => key.startsWith("ai"))
-          .map(([key, message]) => (
-            <p role="alert" key={key}>
-              {key}: {message}
-            </p>
-          ))}
         <Batch
           key={state.loadedVersion}
           initial={settings.concurrency}
