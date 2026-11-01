@@ -17,6 +17,8 @@ from etsy_listings.core.preparation.artifacts import Artifacts
 from etsy_listings.core.render import MarigoldAppearance, MaterialLayer, render_marigold_scene
 from etsy_listings.core.workspace import Workspace
 
+VISIBLE = 0.5  # visibility above which a map pixel counts as shown
+
 
 def run(output: Path) -> None:
     workspace = Workspace.discover(root_override=output / "workspace")
@@ -39,7 +41,7 @@ def run(output: Path) -> None:
                 name = pack + "-" + colour
                 with artifacts.acquire(name, artifacts.saved_inputs(name)) as independent:
                     b = independent.maps[None]
-                    visible = (a.visibility > 0.5) & (b.visibility > 0.5)
+                    visible = (a.visibility > VISIBLE) & (b.visibility > VISIBLE)
                     box = artifacts.saved_inputs(name).placements[0].quad
                     placement_width = (
                         np.linalg.norm(np.array(box[1]) - box[0])
@@ -68,7 +70,7 @@ def run(output: Path) -> None:
                             "max": float(distance.max()),
                         },
                         "visibility_difference_pixels": int(
-                            np.count_nonzero((a.visibility > 0.5) != (b.visibility > 0.5))
+                            np.count_nonzero((a.visibility > VISIBLE) != (b.visibility > VISIBLE))
                         ),
                         "artworks": [],
                     }

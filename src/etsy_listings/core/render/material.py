@@ -18,7 +18,14 @@ from PIL import Image
 
 from etsy_listings.core.render import _material_math as material_math
 from etsy_listings.core.render.config import MarigoldAppearance
-from etsy_listings.core.render.types import RGB, RGBA, FloatMap
+from etsy_listings.core.render.types import (
+    IMAGE_NDIM,
+    RGB,
+    RGB_CHANNELS,
+    RGBA,
+    RGBA_CHANNELS,
+    FloatMap,
+)
 
 
 @dataclass(frozen=True)
@@ -168,8 +175,8 @@ def prepare_material_artwork(artwork: RGBA) -> FloatMap:
 
 def _validate_artwork(artwork: RGBA) -> None:
     if (
-        artwork.ndim != 3
-        or artwork.shape[2] != 4
+        artwork.ndim != IMAGE_NDIM
+        or artwork.shape[2] != RGBA_CHANNELS
         or artwork.dtype != np.uint8
         or min(artwork.shape[:2]) < 1
     ):
@@ -194,7 +201,7 @@ def render_marigold_scene(
     refuses colour photos with different dimensions. Artwork never uses albedo.
     """
     settings = appearance or MarigoldAppearance()
-    if base.ndim != 3 or base.shape[2] != 3 or base.dtype != np.uint8:
+    if base.ndim != IMAGE_NDIM or base.shape[2] != RGB_CHANNELS or base.dtype != np.uint8:
         raise ValueError("Background must be uint8 RGB")
     result = np.empty(base.shape, np.float32)
     initialized = np.zeros(base.shape[:2], bool)

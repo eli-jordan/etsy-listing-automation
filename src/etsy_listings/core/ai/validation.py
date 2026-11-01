@@ -44,6 +44,7 @@ from etsy_listings.core.config.listing import MAX_TAG_LENGTH, MAX_TITLE_LENGTH
 
 ALLOWED_INTENTS = frozenset({"core_product", "bottom_of_funnel", "style"})
 ALLOWED_USED_IN = frozenset({"title", "tags", "description_lead"})
+RATIONALE_ENTRIES = 7  # the seven priority phrases the SEO prompt asks for
 
 AFFILIATION_TERMS = frozenset(
     {
@@ -100,6 +101,7 @@ _WRAPPING_QUOTE_PAIRS: dict[str, str] = {
     "“": "”",
     "‘": "’",
 }
+_QUOTE_PAIR_LENGTH = 2  # an opening and a closing quote
 
 
 class ProposalValidationError(ValueError):
@@ -124,7 +126,7 @@ def _normalize_text(value: str) -> str:
     warnings) -- never to ``observed_text``, whose own line breaks are part
     of what it is disclosing."""
     trimmed = value.strip()
-    if len(trimmed) >= 2 and _WRAPPING_QUOTE_PAIRS.get(trimmed[0]) == trimmed[-1]:
+    if len(trimmed) >= _QUOTE_PAIR_LENGTH and _WRAPPING_QUOTE_PAIRS.get(trimmed[0]) == trimmed[-1]:
         trimmed = trimmed[1:-1].strip()
     return re.sub(r"\s+", " ", trimmed)
 
@@ -203,10 +205,10 @@ def _check_string_list(
 
 def _check_rationale(value: Any) -> list[str]:
     if not isinstance(value, list):
-        return ["rationale: expected a list of 7 entries"]
+        return [f"rationale: expected a list of {RATIONALE_ENTRIES} entries"]
     reasons: list[str] = []
-    if len(value) != 7:
-        reasons.append(f"rationale: expected exactly 7 entries, got {len(value)}")
+    if len(value) != RATIONALE_ENTRIES:
+        reasons.append(f"rationale: expected exactly {RATIONALE_ENTRIES} entries, got {len(value)}")
     for i, item in enumerate(value):
         if not isinstance(item, Mapping):
             reasons.append(f"rationale[{i}]: expected an object")

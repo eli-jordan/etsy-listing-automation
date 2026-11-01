@@ -18,6 +18,7 @@ import statistics
 import subprocess
 import threading
 import time
+from http import HTTPStatus
 from io import BytesIO
 from pathlib import Path
 from typing import Any, override
@@ -34,6 +35,9 @@ from etsy_listings.core.preparation.runtime import Capability
 from etsy_listings.core.workspace import Workspace
 from etsy_listings.server.api import app as api_app
 from etsy_listings.server.api.app import create_app
+
+# The smallest per-channel difference that counts as ink, or as a changed pixel.
+VISIBLE_INK = 30
 
 FINGERPRINT_JS = """async img => {
   await img.decode();
@@ -96,7 +100,7 @@ def visible_ink_point(
     )
     region = difference[y0:y1, x0:x1]
     assert region.size, "Real artwork must have visible ink to mask"
-    assert region.max() > 30, "Real artwork must have visible ink to mask"
+    assert region.max() > VISIBLE_INK, "Real artwork must have visible ink to mask"
     y, x = np.unravel_index(region.argmax(), region.shape)
     return {
         "x": bounds["x"] + (x0 + int(x) + 0.5) * bounds["width"] / width,
@@ -179,7 +183,7 @@ def measure(
     def finished(request: Request) -> None:
         if request.url.endswith(f"/templates/{name}/preparation"):
             result = request.response()
-            if result and result.status == 200:
+            if result and result.status == HTTPStatus.OK:
                 preparation_responses.append(result.json())
 
     page.on("response", response)
@@ -266,9 +270,10 @@ def measure(
         )
         after_pixel = image.evaluate(PIXEL_JS, point) if point else None
         if before_pixel is not None:
-            assert sum(abs(a - b) for a, b in zip(before_pixel, after_pixel, strict=True)) > 30, (
-                "Mask must change the decoded artwork pixel: " + str((before_pixel, after_pixel))
-            )
+            assert (
+                sum(abs(a - b) for a, b in zip(before_pixel, after_pixel, strict=True))
+                > VISIBLE_INK
+            ), "Mask must change the decoded artwork pixel: " + str((before_pixel, after_pixel))
 
         displayed_preparation = page.evaluate(
             "async name => (await fetch('/api/templates/' + encodeURIComponent(name) + "
@@ -349,7 +354,11 @@ def measure(
     )
     clicked = time.perf_counter()
     with page.expect_response(
-        lambda r: "/preview?scale=full" in r.url and r.request.method == "POST" and r.status == 200
+        lambda r: (
+            "/preview?scale=full" in r.url
+            and r.request.method == "POST"
+            and r.status == HTTPStatus.OK
+        )
     ):
         page.get_by_role("tab", name="Preview", exact=True).click()
         render = page.get_by_role("button", name="Re-render", exact=True)
@@ -469,7 +478,7 @@ def run(
             page.set_default_timeout(180_000)
 
             def rejected_preview(response: Response) -> None:
-                if "/preview?scale=editor" in response.url and response.status != 200:
+                if "/preview?scale=editor" in response.url and response.status != HTTPStatus.OK:
                     print("Editor preview refused: " + response.text(), flush=True)
 
             page.on("response", rejected_preview)

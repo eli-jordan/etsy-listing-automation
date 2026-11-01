@@ -39,6 +39,7 @@ if TYPE_CHECKING:
 
 _GUARD = threading.Lock()
 _LOCKS: dict[str, threading.RLock] = {}
+MAX_MASK_EDIT_BYTES = 2_000_000
 
 
 def digest(data: bytes) -> str:
@@ -440,7 +441,7 @@ class CalibrationStore:
     ) -> tuple[dict[Path, bytes], dict[Path, object]]:
         files: dict[Path, bytes] = {}
         histories: dict[Path, object] = {}
-        if len(json_bytes([edit.model_dump(mode="json") for edit in edits])) > 2_000_000:
+        if len(json_bytes([edit.model_dump(mode="json") for edit in edits])) > MAX_MASK_EDIT_BYTES:
             raise ValueError("Mask edit request is too large")
         ids = [edit.placement_id for edit in edits]
         if len(ids) != len(set(ids)):

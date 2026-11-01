@@ -43,6 +43,9 @@ from etsy_listings.core.workspace.file_version import file_version
 
 SCHEMA = 2
 MAX_PIXELS = 32 * 1024 * 1024
+MAX_DIMENSION = 8192
+MAX_POINTER_BYTES = 64 * 1024
+_EXTENTS_SCHEMA = 2  # the manifest schema that records placement extents
 MAX_ARCHIVE_BYTES = 2 * 1024 * 1024 * 1024
 SEMANTICS = {
     "array_axes": "row,column,channel",
@@ -213,7 +216,7 @@ def validate_maps(maps: MaterialMaps, size: tuple[int, int]) -> None:
     ):
         raise ArtifactError("Prepared map extent does not match main photo")
     width, height = right - left, bottom - top
-    if min(size) < 1 or max(size) > 8192 or width * height > MAX_PIXELS:
+    if min(size) < 1 or max(size) > MAX_DIMENSION or width * height > MAX_PIXELS:
         raise UnsupportedSchemaError("Unsupported prepared-map dimensions")
     arrays = arrays_of(maps)
     for name, (low, high, channels) in BOUNDS.items():
@@ -395,6 +398,7 @@ _READERS: dict[tuple[str, str], int] = {}
 # files are revalidated after replacement, writes, removal or process restart.
 _VALIDATED: OrderedDict[tuple[Any, ...], None] = OrderedDict()
 _VALIDATED_LOCK = threading.Lock()
+_VALIDATED_LIMIT = 128
 MAP_CACHE_BYTES = 512 * 1024 * 1024
 _MAPS: OrderedDict[tuple[Any, ...], tuple[Mapping[str | None, MaterialMaps], int]] = OrderedDict()
 
@@ -430,7 +434,7 @@ def _remember_validation(signature: tuple[Any, ...]) -> None:
     with _VALIDATED_LOCK:
         _VALIDATED[signature] = None
         _VALIDATED.move_to_end(signature)
-        while len(_VALIDATED) > 128:
+        while len(_VALIDATED) > _VALIDATED_LIMIT:
             _VALIDATED.popitem(last=False)
 
 
@@ -483,7 +487,7 @@ class Artifacts:
 
     def _pointer(self, name: str) -> dict[str, Any]:
         path = self.workspace.template_map_current(name)
-        if path.stat().st_size > 65536:
+        if path.stat().st_size > MAX_POINTER_BYTES:
             raise ArtifactError("Invalid current map pointer")
         value = json.loads(path.read_bytes())
         if not isinstance(value, dict) or set(value) != {
@@ -622,7 +626,7 @@ class Artifacts:
             _descriptor_digest(
                 {p.id: p.arrays for p in manifest.placements},
                 extents={p.id: p.extent for p in manifest.placements}
-                if manifest.schema_version == 2
+                if manifest.schema_version == _EXTENTS_SCHEMA
                 else None,
             )
             != manifest.content_digest

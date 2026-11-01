@@ -55,6 +55,8 @@ from etsy_listings.core.config.slug import SlugCollisionError
 from etsy_listings.core.workspace.listing_documents import ListingDocuments
 from etsy_listings.core.workspace.workspace import Workspace
 
+MIN_SIZES_TO_COMPARE = 2  # one print area has nothing to be the largest of
+
 
 def _pick_blueprint(workspace: Workspace, blueprints: list[Blueprint]) -> Blueprint:
     """Pick from ``marker brand model title`` rows.
@@ -94,7 +96,7 @@ def _report_print_area_choice(variant_set: VariantSet) -> None:
     it decides how big the design file has to be.
     """
     sizes = variant_set.placeholder_sizes(DEFAULT_PLACEHOLDER)
-    if len(sizes) < 2:
+    if len(sizes) < MIN_SIZES_TO_COMPARE:
         return
     largest, smallest = sizes[0], sizes[-1]
     typer.echo(

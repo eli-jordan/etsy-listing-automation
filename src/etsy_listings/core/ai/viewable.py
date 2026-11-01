@@ -28,6 +28,7 @@ from PIL import Image, ImageStat
 LIGHT_BACKGROUND: Final = (255, 255, 255)
 DARK_BACKGROUND: Final = (34, 34, 34)
 _DARK_ARTWORK_LUMINANCE: Final = 128
+_OPAQUE: Final = 255  # 8-bit alpha of a fully opaque pixel
 """Below this alpha-weighted mean luminance the artwork reads as dark, and
 gets :data:`LIGHT_BACKGROUND`."""
 
@@ -58,7 +59,7 @@ def _has_transparency(image: Image.Image) -> bool:
     if image.mode not in ("RGBA", "LA", "PA"):
         return False
     low = ImageStat.Stat(image.getchannel("A")).extrema[0][0]
-    return bool(low < 255)
+    return bool(low < _OPAQUE)
 
 
 def _background_for(rgba: Image.Image) -> tuple[int, int, int]:

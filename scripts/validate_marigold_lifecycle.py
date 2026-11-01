@@ -18,6 +18,10 @@ from PIL import Image
 from etsy_listings.core.preparation.runtime import Runtime
 from etsy_listings.core.preparation.worker_client import WorkerError
 
+# Past the worker's 300 s idle exit (marigold_worker.server.serve), so the
+# next call has to restart it.
+IDLE_WAIT_S = 305
+
 
 def run(output: Path) -> None:
     cache = output / "lifecycle"
@@ -117,7 +121,7 @@ def run(output: Path) -> None:
         )
         save()
         idle_started = time.perf_counter()
-        while time.perf_counter() - idle_started < 305:
+        while time.perf_counter() - idle_started < IDLE_WAIT_S:
             time.sleep(5)
         restarted = time.perf_counter()
         report["after_default_idle"] = worker.infer(

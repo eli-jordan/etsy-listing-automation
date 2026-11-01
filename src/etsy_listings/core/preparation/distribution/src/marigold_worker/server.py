@@ -39,7 +39,8 @@ from .protocol import (
     encode,
 )
 
-MAX_PIXELS = 4096 * 4096
+MAX_DIMENSION = 4096
+MAX_PIXELS = MAX_DIMENSION * MAX_DIMENSION
 
 
 class Backend(Protocol):
@@ -140,7 +141,7 @@ def serve(backend: Backend, *, cache_root: str, idle_seconds: float = 300) -> No
             if destination.exists():
                 invalid("Output already exists; choose a new evidence artifact")
             with Image.open(source) as opened:
-                if max(opened.size) > 4096 or opened.width * opened.height > MAX_PIXELS:
+                if max(opened.size) > MAX_DIMENSION or opened.width * opened.height > MAX_PIXELS:
                     invalid("Inference image exceeds 4096 by 4096 pixel budget")
                 image = opened.convert("RGB")
             emit(Progress(request_id=request_id, step=role))

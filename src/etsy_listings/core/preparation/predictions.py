@@ -12,7 +12,11 @@ from numpy.typing import NDArray
 
 from etsy_listings.core.workspace.file_version import file_version
 
-MAX_PIXELS = 4096 * 4096
+MAX_DIMENSION = 4096
+MAX_PIXELS = MAX_DIMENSION * MAX_DIMENSION
+# A unit normal's components, and its length, allow this much float error.
+MAX_NORMAL_COMPONENT = 1.01
+UNIT_NORMAL_TOLERANCE = 0.02
 MAX_ARCHIVE_BYTES = 640 * 1024 * 1024
 ROLES = ("normals", "lighting", "depth")
 
@@ -41,7 +45,7 @@ def validate_prediction(array: NDArray[np.float32], *, role: str, size: tuple[in
         role not in ROLES
         or width <= 0
         or height <= 0
-        or max(width, height) > 4096
+        or max(width, height) > MAX_DIMENSION
         or width * height > MAX_PIXELS
     ):
         raise PredictionError("Unsupported role or prediction dimensions")
@@ -50,8 +54,8 @@ def validate_prediction(array: NDArray[np.float32], *, role: str, size: tuple[in
     if not np.isfinite(array).all():
         raise PredictionError("Prediction contains non-finite values")
     if role == "normals":
-        if np.any(np.abs(array) > 1.01) or not np.allclose(
-            np.linalg.norm(array, axis=-1), 1, atol=0.02
+        if np.any(np.abs(array) > MAX_NORMAL_COMPONENT) or not np.allclose(
+            np.linalg.norm(array, axis=-1), 1, atol=UNIT_NORMAL_TOLERANCE
         ):
             raise PredictionError("Normals must be finite unit vectors")
     elif array.min() < 0 or array.max() > 1:
@@ -103,13 +107,13 @@ def read_prediction(
                 else:
                     raise PredictionError("Unsupported prediction NPY version")
             width, height = size
-            if min(width, height) < 1 or max(width, height) > 4096:
+            if min(width, height) < 1 or max(width, height) > MAX_DIMENSION:
                 raise PredictionError("Unsupported prediction dimensions")
             expected = (3 if role == "lighting" else 1, height, width, 1 if role == "depth" else 3)
             if (
                 dtype != np.dtype("float32")
                 or shape != expected
-                or max(width, height) > 4096
+                or max(width, height) > MAX_DIMENSION
                 or width * height > MAX_PIXELS
             ):
                 raise PredictionError("Prediction header has unsafe dtype or shape")

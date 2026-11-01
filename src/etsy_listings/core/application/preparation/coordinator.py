@@ -38,6 +38,12 @@ from etsy_listings.core.workspace.calibration import (
     json_bytes,
 )
 
+MAX_JOB_PAGE = 1000
+"""The most jobs one :meth:`Preparations.list_jobs` page returns."""
+MAX_EVENT_WAIT_S = 30
+"""The longest :meth:`Preparations.events` holds a request open for new events."""
+MAX_REQUEST_ID_LENGTH = 256
+
 
 class PreparationRefusedError(ValueError):
     """Actionable refusal without any inference or installation side effect."""
@@ -89,14 +95,14 @@ class Preparations:
     def list_jobs(
         self, *, template: str | None = None, offset: int = 0, limit: int = 100
     ) -> list[Job]:
-        if offset < 0 or not 1 <= limit <= 1000:
+        if offset < 0 or not 1 <= limit <= MAX_JOB_PAGE:
             raise ValueError("Invalid job pagination")
         return [j for j in self.store.jobs() if template is None or j.template == template][
             offset : offset + limit
         ]
 
     def events(self, identity: str, *, after: int = 0, wait: float = 0) -> tuple[Event, ...]:
-        if after < 0 or not 0 <= wait <= 30:
+        if after < 0 or not 0 <= wait <= MAX_EVENT_WAIT_S:
             raise ValueError("Invalid event cursor or wait")
         with self.store.condition:
             job = self.store.read(identity)
@@ -123,7 +129,7 @@ class Preparations:
         if (
             action not in ("prepare", "prepare_again", "retry")
             or not request_id
-            or len(request_id) > 256
+            or len(request_id) > MAX_REQUEST_ID_LENGTH
         ):
             raise PreparationRefusedError("Invalid preparation action or request ID")
         if (action == "retry") != (previous_job is not None):

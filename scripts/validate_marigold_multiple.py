@@ -36,6 +36,9 @@ PROCESS_QUERY_INFORMATION = 0x0400
 PROCESS_VM_READ = 0x0010
 INHERIT_HANDLE = False
 
+# How long normals inference runs before the script interrupts it.
+INFERENCE_RUNNING_S = 8
+
 
 def host_memory(pid: int | None = None) -> dict[str, int]:
     """Native process working set and private commit, including peak values."""
@@ -136,7 +139,7 @@ def run(output: Path) -> None:
             if (
                 normals_started
                 and not cancel_requested
-                and time.perf_counter() - normals_started > 8
+                and time.perf_counter() - normals_started > INFERENCE_RUNNING_S
             ):
                 before = time.perf_counter()
                 coordinator.cancel(job.id)

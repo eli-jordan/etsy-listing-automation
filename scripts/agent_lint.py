@@ -29,6 +29,8 @@ MAX_FINDINGS = 20
 # hook does not report complexity the repo's own gates still allow.
 COMPLEXIPY_ENABLED = False
 COGNITIVE_COMPLEXITY_LIMIT = 10  # S02
+ESLINT_ERROR = 2  # ESLint's severity for an error; 1 is a warning
+COMPLEXIPY_FIELDS = 3  # a `--plain` finding line: path, function, complexity
 
 # S07: a suppression ends with ` -- <reason>`. mypy rejects text after
 # `# type: ignore[code]`, so there the reason is a comment of its own:
@@ -115,7 +117,7 @@ def _typescript_findings(relative: Path) -> list[str]:
         f"{message.get('ruleId') or 'eslint'} {message['message']}"
         for report in json.loads(result.stdout or "[]")
         for message in report["messages"]
-        if message.get("severity") == 2
+        if message.get("severity") == ESLINT_ERROR
     ]
 
 
@@ -151,7 +153,7 @@ def _complexity_findings(relative: Path) -> list[str]:
     findings = []
     for line in result.stdout.splitlines():
         parts = line.split()
-        if len(parts) >= 3 and parts[-1].isdigit():
+        if len(parts) >= COMPLEXIPY_FIELDS and parts[-1].isdigit():
             findings.append(
                 f"{relative.as_posix()}: {parts[-2]} has cognitive complexity {parts[-1]} "
                 f"(limit {COGNITIVE_COMPLEXITY_LIMIT}); split it rather than suppress it"

@@ -11,6 +11,13 @@ from numpy.typing import NDArray
 Float = NDArray[np.float32]
 Pixels = NDArray[np.uint8]
 
+# The sRGB transfer function's linear segment ends here, in encoded and in
+# linear terms (IEC 61966-2-1).
+_SRGB_ENCODED_KNEE = 0.04045
+_SRGB_LINEAR_KNEE = 0.0031308
+# A homography denominator this close to zero maps a pixel to infinity.
+_DEGENERATE_HOMOGRAPHY = 1e-8
+
 
 def blur(array: Float, sigma: float) -> Float:
     return cast(Float, cv2.GaussianBlur(array, (0, 0), sigma, borderType=cv2.BORDER_REFLECT_101))
@@ -22,15 +29,19 @@ def linear(rgb: NDArray[Any]) -> Float:
     # table keeps this pass pure and preserves the non-byte input contract.
     if rgb.dtype == np.uint8:
         values = np.arange(256, dtype=np.float32) / 255
-        table = np.where(values <= 0.04045, values / 12.92, ((values + 0.055) / 1.055) ** 2.4)
+        table = np.where(
+            values <= _SRGB_ENCODED_KNEE, values / 12.92, ((values + 0.055) / 1.055) ** 2.4
+        )
         return cast(Float, table[rgb])
     values = rgb.astype(np.float32) / 255
-    return np.where(values <= 0.04045, values / 12.92, ((values + 0.055) / 1.055) ** 2.4)
+    return np.where(values <= _SRGB_ENCODED_KNEE, values / 12.92, ((values + 0.055) / 1.055) ** 2.4)
 
 
 def display(rgb: Float) -> Pixels:
     values = np.clip(rgb, 0, 1)
-    values = np.where(values <= 0.0031308, values * 12.92, 1.055 * values ** (1 / 2.4) - 0.055)
+    values = np.where(
+        values <= _SRGB_LINEAR_KNEE, values * 12.92, 1.055 * values ** (1 / 2.4) - 0.055
+    )
     return np.round(np.clip(values, 0, 1) * 255).astype(np.uint8)
 
 
@@ -78,7 +89,7 @@ def bake(
             origin[1] + top : origin[1] + bottom, origin[0] : origin[0] + width
         ].astype(np.float32)
         den = matrix[2, 0] * xx + matrix[2, 1] * yy + matrix[2, 2]
-        den = np.where(np.abs(den) < 1e-8, np.nan, den)
+        den = np.where(np.abs(den) < _DEGENERATE_HOMOGRAPHY, np.nan, den)
         x = (matrix[0, 0] * xx + matrix[0, 1] * yy + matrix[0, 2]) / den / 255
         y = (matrix[1, 0] * xx + matrix[1, 1] * yy + matrix[1, 2]) / den / 255
         valid = (x >= 0) & (x <= 1) & (y >= 0) & (y <= 1) & np.isfinite(x + y)

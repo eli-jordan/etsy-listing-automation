@@ -16,6 +16,18 @@ from numpy.typing import NDArray
 from etsy_listings.core.render import _material_math as surface_math
 
 Float = NDArray[np.float32]
+
+# Thresholds of the evaluated prototype (ADR-0054). Named, not tuned here.
+_MIN_FACING_Z = 0.22  # a normal's camera-facing component below this is grazing
+_CG_BREAKDOWN = 1e-25  # conjugate-gradient curvature at which the solve stops
+_CONFIDENT = 0.15  # normals confidence above which a pixel is trusted
+_MIN_DEPTH_SAMPLES = 30  # confident depth pixels needed to fit depth to height
+_MIN_DEPTH_SPREAD = 1e-5  # depth standard deviation below which the fit is skipped
+_FOLDED_AREA = 1e-9  # a mesh triangle at or below this signed area has folded
+_FLATTEN_CONVERGED = 1e-6  # largest vertex move at which flattening has converged
+_CLOTH_COVERAGE = 0.95  # cloth mask value of a pixel inside the garment
+_LIGHTING_CONFIDENCE = 0.35  # confidence above which a pixel informs lighting
+_CLIPPED_GAIN = 1.7  # shading over exposure above which a gain counts as clipped
 Pixels = NDArray[np.uint8]
 
 
@@ -45,8 +57,8 @@ def placement_grid(box: Float, mesh: int) -> Float:
 def slopes(normals: Float) -> tuple[Float, Float]:
     normal = normals / np.maximum(np.linalg.norm(normals, axis=-1, keepdims=True), 1e-8)
     # One camera -> image axis conversion: dz/dx=-Nx/Nz, dz/drow=+Ny/Nz.
-    valid = normal[..., 2] > 0.22
-    denominator = np.maximum(normal[..., 2], 0.22)
+    valid = normal[..., 2] > _MIN_FACING_Z
+    denominator = np.maximum(normal[..., 2], _MIN_FACING_Z)
     gradient = np.stack([-normal[..., 0] / denominator, normal[..., 1] / denominator], -1)
     return gradient.astype(np.float32), valid.astype(np.float32)
 
@@ -81,7 +93,7 @@ def cg(
             return value
         product = multiply(direction)
         denominator = float(direction @ product)
-        if denominator <= 1e-25:
+        if denominator <= _CG_BREAKDOWN:
             break
         step = dot / denominator
         value += step * direction
@@ -166,8 +178,8 @@ def integrate(
         d = -depth.ravel().astype(np.float64)
         dc = np.ones_like(d) if depth_confidence is None else depth_confidence.ravel()
         dc = dc * conf
-        selected = dc > 0.15
-        if selected.sum() > 30 and np.std(d[selected]) > 1e-5:
+        selected = dc > _CONFIDENT
+        if selected.sum() > _MIN_DEPTH_SAMPLES and np.std(d[selected]) > _MIN_DEPTH_SPREAD:
             design = np.stack([d, np.ones_like(d)], axis=-1)
             weight = np.sqrt(dc[selected])
             scale, offset = np.linalg.lstsq(
@@ -198,7 +210,7 @@ def integrate(
             ((edge_weight < original_weight * 0.95) & (original_weight > 0)).mean()
         ),
         "grazing_fraction": float(1 - usable.mean()),
-        "uncertain_fraction": float((conf < 0.15).mean()),
+        "uncertain_fraction": float((conf < _CONFIDENT).mean()),
         "depth": depth_metrics,
         "camera": "orthographic visible height patches",
         "boundary_height": "free",
@@ -262,7 +274,7 @@ def flatten(
         while step > 1 / 1024:
             candidate = value + step * (proposal - value)
             areas = surface_math.signed_areas(candidate.reshape(mesh, mesh, 2).astype(np.float32))
-            if not np.any(areas.ravel()[selected_triangles] <= 1e-9):
+            if not np.any(areas.ravel()[selected_triangles] <= _FOLDED_AREA):
                 break
             step /= 2
             barriers += 1
@@ -270,7 +282,7 @@ def flatten(
             break
         delta = float(np.max(np.abs(candidate - value)))
         value = candidate
-        if delta < 1e-6:
+        if delta < _FLATTEN_CONVERGED:
             break
     # Placement establishes a material coordinate FRAME, not physical patch
     # boundaries. One global affine frame for all patches; never normalize
@@ -324,7 +336,7 @@ def lighting_fields(
     *,
     minimum_samples: int = 100,
 ) -> tuple[dict[str, Float], dict[str, Any]]:
-    selected = (cloth > 0.95) & (confidence > 0.35)
+    selected = (cloth > _CLOTH_COVERAGE) & (confidence > _LIGHTING_CONFIDENCE)
     if selected.sum() < minimum_samples:
         raise ValueError("Not enough confident visible cloth to normalize lighting")
     luminance = np.sum(shading * np.array([0.2126, 0.7152, 0.0722]), -1)
@@ -355,7 +367,7 @@ def lighting_fields(
         "normalization": "70th percentile linear shading luminance on confident visible cloth",
         "blank_reconstruction_mae_linear": reconstruction_error,
         "clipped_gain_fraction": float(
-            ((shading / exposure > 1.7).any(-1) & selected).sum() / selected.sum()
+            ((shading / exposure > _CLIPPED_GAIN).any(-1) & selected).sum() / selected.sum()
         ),
         "texture_range": [0.9, 1.1],
         "residual_range": [0, 0.035],

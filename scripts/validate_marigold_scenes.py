@@ -27,6 +27,9 @@ from etsy_listings.core.render import MaterialLayer, render_marigold_scene
 from etsy_listings.core.workspace import Workspace
 from etsy_listings.core.workspace.calibration import CalibrationStore
 
+# How long normals inference runs before the script interrupts it.
+INFERENCE_RUNNING_S = 8
+
 
 def run(source: Path, output: Path) -> None:
     workspace = Workspace.discover(root_override=output / "workspace")
@@ -80,7 +83,10 @@ def run(source: Path, output: Path) -> None:
                 if name == "fence-colours" and not closed_active:
                     if job.step == "normals" and normals_started is None:
                         normals_started = time.perf_counter()
-                    if normals_started and time.perf_counter() - normals_started > 8:
+                    if (
+                        normals_started
+                        and time.perf_counter() - normals_started > INFERENCE_RUNNING_S
+                    ):
                         before = time.perf_counter()
                         coordinator.close()
                         report["active_coordinator_close_seconds"] = time.perf_counter() - before

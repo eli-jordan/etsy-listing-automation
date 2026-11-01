@@ -12,6 +12,7 @@ import cv2
 import numpy as np
 
 from etsy_listings.core.preparation import _geometry as geometry
+from etsy_listings.core.preparation.predictions import MAX_NORMAL_COMPONENT, UNIT_NORMAL_TOLERANCE
 from etsy_listings.core.render import _material_math as material_math
 from etsy_listings.core.render.material import MaterialMaps
 from etsy_listings.core.render.types import RGB, FloatMap
@@ -132,8 +133,8 @@ class Evidence:
             shape = (height, width, channels) if channels else (height, width)
             if array.shape != shape or array.dtype != np.float32 or not np.isfinite(array).all():
                 raise ValueError("Invalid evidence shape, dtype or finite values")
-        if np.any(np.abs(self.normals) > 1.01) or not np.allclose(
-            np.linalg.norm(self.normals, axis=-1), 1, atol=0.02
+        if np.any(np.abs(self.normals) > MAX_NORMAL_COMPONENT) or not np.allclose(
+            np.linalg.norm(self.normals, axis=-1), 1, atol=UNIT_NORMAL_TOLERANCE
         ):
             raise ValueError("Evidence normals must be unit vectors")
         if any(
@@ -278,6 +279,13 @@ class MaskProposal:
 
 
 _MASK_PROPOSAL_LOCK = threading.Lock()
+# Fewer seed or sure-garment pixels than this fall back to manual visibility.
+_MIN_SEED_PIXELS = 20
+# Chroma distance from the seed median, in robust deviations, that GrabCut
+# starts from: sure garment, probable garment, and sure background.
+_SURE_GARMENT = 1.7
+_PROBABLE_GARMENT = 3.5
+_SURE_BACKGROUND = 5
 
 
 def propose_mask(base: RGB, box: FloatMap) -> MaskProposal:
@@ -296,7 +304,7 @@ def propose_mask(base: RGB, box: FloatMap) -> MaskProposal:
     lab = cv2.cvtColor(small, cv2.COLOR_RGB2LAB).astype(np.float32)
     ab = lab[..., 1:]
     values = ab[seed > 0]
-    if len(values) < 20:
+    if len(values) < _MIN_SEED_PIXELS:
         return MaskProposal(
             np.ones((h, w), np.float32),
             {"fallback": "manual visibility; too few reliable colour seeds"},
@@ -306,12 +314,12 @@ def propose_mask(base: RGB, box: FloatMap) -> MaskProposal:
     distance = np.linalg.norm((ab - median) / deviation, axis=-1)
     mask = np.full(seed.shape, cv2.GC_BGD, np.uint8)
     mask[region > 0] = cv2.GC_PR_BGD
-    mask[(region > 0) & (distance < 3.5)] = cv2.GC_PR_FGD
-    mask[(seed > 0) & (distance < 1.7)] = cv2.GC_FGD
+    mask[(region > 0) & (distance < _PROBABLE_GARMENT)] = cv2.GC_PR_FGD
+    mask[(seed > 0) & (distance < _SURE_GARMENT)] = cv2.GC_FGD
     # Strong chroma disagreement excludes skin on these development shirts;
     # lighting changes and dark creases alone do not supply background seeds.
-    mask[(region > 0) & (distance > 5)] = cv2.GC_BGD
-    if (mask == cv2.GC_FGD).sum() < 20 or not np.any(mask == cv2.GC_BGD):
+    mask[(region > 0) & (distance > _SURE_BACKGROUND)] = cv2.GC_BGD
+    if (mask == cv2.GC_FGD).sum() < _MIN_SEED_PIXELS or not np.any(mask == cv2.GC_BGD):
         return MaskProposal(
             np.ones((h, w), np.float32),
             {
