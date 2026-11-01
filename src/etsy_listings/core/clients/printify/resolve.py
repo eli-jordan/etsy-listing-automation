@@ -10,10 +10,10 @@ on brand + model, the pair anyone buying blanks quotes.
 from __future__ import annotations
 
 import re
-from collections.abc import Collection, Sequence
+from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass
 
-from etsy_listings.core.clients.printify.models import Blueprint, PrintProvider, VariantSet
+from etsy_listings.core.clients.printify.models import Blueprint, PrintProvider, Variant, VariantSet
 from etsy_listings.core.config.slug import ColourExceptions, slug_map
 from etsy_listings.core.errors import UserFacingError
 
@@ -163,24 +163,31 @@ def resolve_variants(
     if unknown:
         raise CatalogResolutionError("colour", unknown[0], sorted(by_slug))
 
+    _check_sizes(variant_set, sizes)
+    by_cell = {(v.options.color, v.options.size): v for v in variant_set.variants}
+    return _resolve_cells(
+        [(slug, by_slug[slug], size) for slug in colour_slugs for size in sizes], by_cell
+    )
+
+
+def _check_sizes(variant_set: VariantSet, sizes: Sequence[str]) -> None:
     offered_sizes = {v.options.size for v in variant_set.variants}
     for size in sizes:
         if size not in offered_sizes:
             raise UnknownSizeError(size, sorted(offered_sizes))
 
-    by_cell = {(v.options.color, v.options.size): v for v in variant_set.variants}
 
+def _resolve_cells(
+    cells: list[tuple[str, str, str]], by_cell: Mapping[tuple[str, str], Variant]
+) -> VariantResolution:
+    """Each ``(slug, colour, size)`` cell's variant, or the cell as missing
+    when the catalog has dropped it."""
     resolved: list[ResolvedVariant] = []
     missing: list[tuple[str, str]] = []
-    for slug in colour_slugs:
-        colour = by_slug[slug]
-        for size in sizes:
-            variant = by_cell.get((colour, size))
-            if variant is None:
-                missing.append((slug, size))
-                continue
-            resolved.append(
-                ResolvedVariant(id=variant.id, colour=colour, colour_slug=slug, size=size)
-            )
-
+    for slug, colour, size in cells:
+        variant = by_cell.get((colour, size))
+        if variant is None:
+            missing.append((slug, size))
+            continue
+        resolved.append(ResolvedVariant(id=variant.id, colour=colour, colour_slug=slug, size=size))
     return VariantResolution(variants=tuple(resolved), missing=tuple(missing))
