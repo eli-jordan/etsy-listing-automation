@@ -1,6 +1,7 @@
 """Public I/O contract using local executables, alongside real tree tests."""
 
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -49,6 +50,27 @@ def test_run_managed_drains_large_streams_while_writing_input(tmp_path: Path):
     assert result.stdout == "o" * 200000
     assert result.stderr == "e" * 200000
     assert not result.timed_out
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX process-group delivery")
+@pytest.mark.parametrize("refusal", [ProcessLookupError, PermissionError])
+def test_run_managed_accepts_a_group_holding_only_its_exited_leader(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, refusal: type[OSError]
+):
+    # Darwin's killpg skips zombies, so a completed command's group can report
+    # no member while the leader is reserved but unreaped.
+    def killpg_skipping_zombies(pgid: int, signum: int) -> None:
+        raise refusal("no live member of the process group")
+
+    monkeypatch.setattr(os, "killpg", killpg_skipping_zombies)
+    result = run_managed(
+        [sys.executable, "-c", "print('done')"],
+        cwd=tmp_path,
+        input_text="",
+        deadline=Deadline.starting_now(seconds=30),
+    )
+    assert result.returncode == 0
+    assert result.stdout == "done\n"
 
 
 def test_run_managed_refuses_an_unlaunchable_executable(tmp_path: Path):
