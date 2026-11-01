@@ -34,6 +34,7 @@ The table's buttons are the same facts, as :func:`listing_gestures`.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
@@ -79,13 +80,15 @@ def workspace_listing_status(
     lock = Lockfile.read(workspace.lock_file(name))
     applied = lock.parse_applied_for("etsy_listing", AppliedEtsyListing) if lock else None
     return listing_status(
-        applied=lock is not None and bool(lock.stages_completed),
-        edited=edited_since_apply(workspace.listing_file(name), workspace.lock_file(name)),
-        live=live,
-        lifecycle=lifecycle,
-        etsy_state=etsy_state,
-        last_applied_lifecycle="retired" if applied and applied.state == "inactive" else None,
-        incomplete=lock is not None and lock.incomplete is not None,
+        StatusInputs(
+            applied=lock is not None and bool(lock.stages_completed),
+            edited=edited_since_apply(workspace.listing_file(name), workspace.lock_file(name)),
+            live=live,
+            lifecycle=lifecycle,
+            etsy_state=etsy_state,
+            last_applied_lifecycle="retired" if applied and applied.state == "inactive" else None,
+            incomplete=lock is not None and lock.incomplete is not None,
+        )
     )
 
 
@@ -130,18 +133,9 @@ def edited_since_apply(listing_file: Path, lock_file: Path) -> bool:
     return listing_file.stat().st_mtime > lock_file.stat().st_mtime
 
 
-def listing_status(
-    *,
-    applied: bool,
-    edited: bool,
-    live: bool,
-    lifecycle: ListingLifecycle | None = None,
-    etsy_state: str | None = None,
-    last_applied_lifecycle: ListingLifecycle | None = None,
-    incomplete: bool = False,
-) -> ListingStatus:
-    """The badge. Pure -- see the module docstring for what each combination
-    means and why.
+@dataclass(frozen=True)
+class StatusInputs:
+    """The facts a listing's badge is decided from (:func:`listing_status`).
 
     ``lifecycle`` / ``etsy_state`` / ``last_applied_lifecycle`` are optional
     so the original four-state table still answers from the two facts it
@@ -155,9 +149,23 @@ def listing_status(
     marker is folded into the same branch ``edited`` already decides: it
     invents no status of its own, and delete/retire still win over both.
     """
+
+    applied: bool
+    edited: bool
+    live: bool
+    lifecycle: ListingLifecycle | None = None
+    etsy_state: str | None = None
+    last_applied_lifecycle: ListingLifecycle | None = None
+    incomplete: bool = False
+
+
+def listing_status(inputs: StatusInputs) -> ListingStatus:
+    """The badge. Pure -- see the module docstring for what each combination
+    means and why, and :class:`StatusInputs` for the facts."""
+    lifecycle, etsy_state = inputs.lifecycle, inputs.etsy_state
     if lifecycle == "deleted":
         return "pending-delete"
-    if lifecycle == "renew" or (lifecycle is None and last_applied_lifecycle == "retired"):
+    if lifecycle == "renew" or (lifecycle is None and inputs.last_applied_lifecycle == "retired"):
         # Un-retire and pending renew: the workspace wants it on sale, Etsy
         # does not. Etsy cannot go back to `draft` (birth-only), so the
         # badge is ours.
@@ -170,10 +178,10 @@ def listing_status(
         return "expired"
     if etsy_state in {"inactive", "removed"}:
         return "inactive"
-    dirty = edited or incomplete
-    if live:
+    dirty = inputs.edited or inputs.incomplete
+    if inputs.live:
         return "dirty" if dirty else "live"
-    if not applied or dirty:
+    if not inputs.applied or dirty:
         return "draft"
     return "deployed"
 

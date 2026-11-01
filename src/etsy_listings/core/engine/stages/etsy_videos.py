@@ -42,7 +42,6 @@ from typing import override
 
 from pydantic import BaseModel, ConfigDict
 
-from etsy_listings.core.clients.etsy.listings import EtsyListingClient
 from etsy_listings.core.config.media import media_kind
 from etsy_listings.core.engine.change import Action, Drift, FieldChange, Verdict
 from etsy_listings.core.engine.context import RunContext
@@ -50,6 +49,7 @@ from etsy_listings.core.engine.lock import Lockfile, hash_file, to_workspace_rel
 from etsy_listings.core.engine.stage import Blocked, Stage, StageApplyResult
 from etsy_listings.core.engine.stages.etsy_media import IMAGE_IDS_KEY
 from etsy_listings.core.engine.stages.etsy_target import (
+    EtsyListingTarget,
     check_etsy_shop,
     etsy_listing_id,
     require_etsy_listing_id,
@@ -312,9 +312,11 @@ class EtsyVideosStage(Stage[EtsyVideosDesired, AppliedEtsyVideos, EtsyVideosLive
     ) -> StageApplyResult:
         placer = _Placer(
             ctx,
-            ctx.require_etsy(),
-            shop_id=ctx.workspace.defaults.etsy.require_shop_id(),
-            listing_id=require_etsy_listing_id(lock, to="place videos"),
+            EtsyListingTarget(
+                ctx.require_etsy(),
+                shop_id=ctx.workspace.defaults.etsy.require_shop_id(),
+                listing_id=require_etsy_listing_id(lock, to="place videos"),
+            ),
             known=dict(lock.remote.get(VIDEO_IDS_KEY) or {}),
             applied=applied,
             live=live,
@@ -353,18 +355,17 @@ class _Placer:
     def __init__(
         self,
         ctx: RunContext,
-        client: EtsyListingClient,
+        target: EtsyListingTarget,
         *,
-        shop_id: int,
-        listing_id: int,
         known: dict[str, int],
         applied: AppliedEtsyVideos | None,
         live: EtsyVideosLive | None,
     ) -> None:
         self._ctx = ctx
-        self._client = client
-        self._shop_id = shop_id
-        self._listing_id = listing_id
+        self._target = target
+        self._client = target.client
+        self._shop_id = target.shop_id
+        self._listing_id = target.listing_id
         self._known = known
         self._applied = applied.videos if applied is not None else ()
         self._drifted = live.drifted_refs if live is not None else frozenset()
@@ -448,9 +449,7 @@ class _Placer:
         if desired.swatches:
             set_variation_images(
                 self._ctx,
-                self._client,
-                shop_id=self._shop_id,
-                listing_id=self._listing_id,
+                self._target,
                 colours=desired.colours,
                 image_id_by_colour={
                     colour: image_ids_by_ref[ref]

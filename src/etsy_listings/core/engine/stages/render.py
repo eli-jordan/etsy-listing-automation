@@ -477,15 +477,24 @@ def _prepared_layers(
     return [PreparedLayer(design(layer.design), layer.placement_id) for layer in layers]
 
 
+@dataclass(frozen=True)
+class _SceneRef:
+    """One scene a listing's media asks for: a mockup template, its config,
+    and the colour it depicts (``None`` unless colour-matrix)."""
+
+    template_name: str
+    template_cfg: AnyTemplate
+    colour: str | None
+
+
 def _resolve_scene(
     *,
     workspace: Workspace,
     listing: str,
     design_for: DesignFor,
-    template_name: str,
-    template_cfg: AnyTemplate,
-    colour: str | None,
+    ref: _SceneRef,
 ) -> SceneWork | Blocked:
+    template_name, template_cfg, colour = ref.template_name, ref.template_cfg, ref.colour
     kind = template_cfg.kind
     blocked = check_scene_colour(template_name, kind, colour)
     if blocked is not None:
@@ -636,9 +645,7 @@ class RenderStage(Stage[RenderDesired, RenderApplied, RenderLive]):
                 workspace=workspace,
                 listing=listing,
                 design_for=design_for,
-                template_name=template_name,
-                template_cfg=template_configs[template_name],
-                colour=colour,
+                ref=_SceneRef(template_name, template_configs[template_name], colour),
             )
             if isinstance(work, Blocked):
                 return work

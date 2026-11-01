@@ -46,7 +46,6 @@ from typing import override
 
 from pydantic import BaseModel, ConfigDict
 
-from etsy_listings.core.clients.etsy.listings import EtsyListingClient
 from etsy_listings.core.config.listing import TemplateMediaEntry
 from etsy_listings.core.config.media import MAX_IMAGES, media_kind
 from etsy_listings.core.engine.change import Action, Drift, MediaChange, Verdict
@@ -54,6 +53,7 @@ from etsy_listings.core.engine.context import RunContext
 from etsy_listings.core.engine.lock import Lockfile, hash_file, to_workspace_relative_posix
 from etsy_listings.core.engine.stage import Blocked, Stage, StageApplyResult
 from etsy_listings.core.engine.stages.etsy_target import (
+    EtsyListingTarget,
     check_etsy_shop,
     etsy_listing_id,
     require_etsy_listing_id,
@@ -404,7 +404,10 @@ class EtsyMediaStage(Stage[EtsyMediaDesired, AppliedEtsyMedia, EtsyMediaLive]):
                 continue
             if len(attached) >= MAX_IMAGES:
                 attached = _make_room(
-                    ctx, client, shop_id, listing_id, attached, keep=set(image_ids.values())
+                    ctx,
+                    EtsyListingTarget(client, shop_id, listing_id),
+                    attached,
+                    keep=set(image_ids.values()),
                 )
             ctx.emit(f"uploading {entry.ref}")
             image = client.upload_listing_image(
@@ -426,9 +429,7 @@ class EtsyMediaStage(Stage[EtsyMediaDesired, AppliedEtsyMedia, EtsyMediaLive]):
         if desired.variation_images_template is not None:
             set_variation_images(
                 ctx,
-                client,
-                shop_id=shop_id,
-                listing_id=listing_id,
+                EtsyListingTarget(client, shop_id, listing_id),
                 colours=desired.colours,
                 image_id_by_colour={
                     e.colour: image_ids[e.ref] for e in desired.manifest if e.colour is not None
@@ -457,13 +458,7 @@ class MediaNotRenderedError(RuntimeError):
 
 
 def _make_room(
-    ctx: RunContext,
-    client: EtsyListingClient,
-    shop_id: int,
-    listing_id: int,
-    attached: list[int],
-    *,
-    keep: set[int],
+    ctx: RunContext, target: EtsyListingTarget, attached: list[int], *, keep: set[int]
 ) -> list[int]:
     """Detach what the manifest no longer wants, so the next upload fits.
 
@@ -472,7 +467,7 @@ def _make_room(
     the first image stays until an upload of ours can take its place."""
     remaining = [image_id for image_id in attached if image_id in keep] or attached[:1]
     ctx.emit(f"detaching {len(attached) - len(remaining)} image(s) to stay within Etsy's limit")
-    client.update_listing(shop_id, listing_id, {"image_ids": remaining})
+    target.client.update_listing(target.shop_id, target.listing_id, {"image_ids": remaining})
     return remaining
 
 
