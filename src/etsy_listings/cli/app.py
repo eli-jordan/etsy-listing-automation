@@ -12,16 +12,19 @@ import sys
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any
+from typing import Annotated, Any
 
 import typer
 
 from etsy_listings.cli import prompts, terminal
 from etsy_listings.cli.auth import ALL_PARTS as ALL_AUTH_PARTS
 from etsy_listings.cli.auth import Part as AuthPart
+from etsy_listings.cli.auth import run_auth
 from etsy_listings.cli.marigold import app as marigold_app
+from etsy_listings.cli.new import run_new
 from etsy_listings.cli.options import open_workspace, root_option
 from etsy_listings.cli.render import format_blocked, format_plan
+from etsy_listings.cli.setup import run_setup
 from etsy_listings.cli.ui import ui
 from etsy_listings.core import connections
 from etsy_listings.core.clients.printify import (
@@ -39,6 +42,7 @@ from etsy_listings.core.engine.events import (
     EngineListingFailed,
     EngineListingPlanned,
     EngineRunEvent,
+    RunHooks,
 )
 from etsy_listings.core.engine.lock import Lockfile
 from etsy_listings.core.engine.run import RunReport, apply_listings, plan_listings
@@ -166,7 +170,7 @@ def _echo_failure(listing: str, error: UserFacingError) -> None:
     typer.echo("", err=True)
 
 
-def _target_listings(workspace: Workspace, listing: str | None, every: bool) -> list[str]:
+def _target_listings(workspace: Workspace, listing: str | None, *, every: bool) -> list[str]:
     if not listing and not every:
         typer.echo("pass a listing name or --all", err=True)
         raise typer.Exit(code=1)
@@ -214,15 +218,18 @@ def setup(
         show_envvar=True,
         metavar="PATH",
     ),
-    replace_prompts: bool = typer.Option(
-        False,
-        "--replace-prompts",
-        help=(
-            "Overwrite every prompt in prompts/ that differs from its packaged "
-            "default, keeping yours as <name>.md.bak (replacing an older .bak). "
-            "Without it, a differing prompt is kept and named in a warning."
+    *,
+    replace_prompts: Annotated[
+        bool,
+        typer.Option(
+            "--replace-prompts",
+            help=(
+                "Overwrite every prompt in prompts/ that differs from its packaged "
+                "default, keeping yours as <name>.md.bak (replacing an older .bak). "
+                "Without it, a differing prompt is kept and named in a warning."
+            ),
         ),
-    ),
+    ] = False,
 ) -> None:
     """Initialise a workspace: directories, shop.yaml, and the Printify token.
 
@@ -233,7 +240,6 @@ def setup(
 
     Stops before Etsy sign-in, which arrives with `auth` in Phase 3.
     """
-    from etsy_listings.cli.setup import run_setup
 
     target = to_native_path(root) if root else Path.cwd()
     with _wizard():
@@ -248,15 +254,16 @@ auth_app = typer.Typer(
 app.add_typer(auth_app, name="auth")
 
 
-def _check_option() -> Any:  # noqa: ANN401 - typer.Option is typed Any at this boundary
-    return typer.Option(
-        False,
+CheckOption = Annotated[
+    bool,
+    typer.Option(
         "--check",
         help="Report what is stored and how long the Etsy consent has left. Writes nothing.",
-    )
+    ),
+]
 
 
-def _auth_root_option() -> Any:  # noqa: ANN401 - typer.Option is typed Any at this boundary
+def _auth_root_option() -> Any:  # typer.Option is typed Any at this boundary
     """``--root`` as `auth` needs it: no shop.yaml required.
 
     `auth` and `setup` are the two commands that run *before* a workspace
@@ -277,8 +284,7 @@ def _auth_root_option() -> Any:  # noqa: ANN401 - typer.Option is typed Any at t
     )
 
 
-def _run_auth(root: str | None, check: bool, parts: Sequence[AuthPart]) -> None:
-    from etsy_listings.cli.auth import run_auth
+def _run_auth(root: str | None, parts: Sequence[AuthPart], *, check: bool) -> None:
 
     target = to_native_path(root) if root else Path.cwd()
     with _wizard():
@@ -289,7 +295,8 @@ def _run_auth(root: str | None, check: bool, parts: Sequence[AuthPart]) -> None:
 def auth(
     ctx: typer.Context,
     root: str | None = _auth_root_option(),
-    check: bool = _check_option(),
+    *,
+    check: CheckOption = False,
 ) -> None:
     """Capture every credential: Printify, Etsy, and the Anthropic key.
 
@@ -303,40 +310,46 @@ def auth(
     """
     if ctx.invoked_subcommand is not None:
         return
-    _run_auth(root, check, ALL_AUTH_PARTS)
+    _run_auth(root, ALL_AUTH_PARTS, check=check)
 
 
 @auth_app.command("printify", epilog=EPILOG)
 def auth_printify(
     root: str | None = _auth_root_option(),
-    check: bool = _check_option(),
+    *,
+    check: CheckOption = False,
 ) -> None:
     """Capture just the Printify API token, verified against the live API."""
-    _run_auth(root, check, ["printify"])
+    _run_auth(root, ["printify"], check=check)
 
 
 @auth_app.command("etsy", epilog=EPILOG)
 def auth_etsy(
     root: str | None = _auth_root_option(),
-    check: bool = _check_option(),
+    *,
+    check: CheckOption = False,
 ) -> None:
     """Capture just the Etsy app key pair and sign in through the browser."""
-    _run_auth(root, check, ["etsy"])
+    _run_auth(root, ["etsy"], check=check)
 
 
 @auth_app.command("anthropic", epilog=EPILOG)
 def auth_anthropic(
     root: str | None = _auth_root_option(),
-    check: bool = _check_option(),
+    *,
+    check: CheckOption = False,
 ) -> None:
     """Capture just the Anthropic API key (used by `generate`, from Phase 4)."""
-    _run_auth(root, check, ["anthropic"])
+    _run_auth(root, ["anthropic"], check=check)
 
 
 @app.command(epilog=EPILOG)
 def plan(
     listing: str | None = typer.Argument(None, help="Listing name, e.g. take-a-hike"),
-    all: bool = typer.Option(False, "--all", help="Plan every listing in the workspace"),
+    *,
+    all_: Annotated[
+        bool, typer.Option("--all", help="Plan every listing in the workspace")
+    ] = False,
     root: str | None = root_option(),
 ) -> None:
     """Three-way diff against live state; decides which stages need to run.
@@ -357,9 +370,9 @@ def plan(
     _exit_for(
         plan_listings(
             connections.run_context(workspace),
-            _target_listings(workspace, listing, all),
+            _target_listings(workspace, listing, every=all_),
             STAGES,
-            on_event=show,
+            hooks=RunHooks(on_event=show),
         )
     )
 
@@ -367,7 +380,10 @@ def plan(
 @app.command(epilog=EPILOG)
 def apply(
     listing: str | None = typer.Argument(None, help="Listing name, e.g. take-a-hike"),
-    all: bool = typer.Option(False, "--all", help="Apply every listing in the workspace"),
+    *,
+    all_: Annotated[
+        bool, typer.Option("--all", help="Apply every listing in the workspace")
+    ] = False,
     root: str | None = root_option(),
 ) -> None:
     """Execute every stage the plan identified: render, create or update the
@@ -392,9 +408,9 @@ def apply(
     _exit_for(
         apply_listings(
             connections.run_context(workspace, on_event=_echo_event),
-            _target_listings(workspace, listing, all),
+            _target_listings(workspace, listing, every=all_),
             STAGES,
-            on_event=announce,
+            hooks=RunHooks(on_event=announce),
         )
     )
 
@@ -448,7 +464,6 @@ def new(
     Reads Printify's catalog, so it needs PRINTIFY_API_TOKEN with the
     `catalog.read` scope (see the environment variables below).
     """
-    from etsy_listings.cli.new import run_new
 
     workspace = open_workspace(root)
     try:

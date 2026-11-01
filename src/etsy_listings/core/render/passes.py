@@ -19,6 +19,8 @@ from PIL import Image
 from etsy_listings.core.render.config import BoundingBox, DisplaceConfig, ShadeConfig
 from etsy_listings.core.render.types import RGB, RGBA, FloatMap
 
+_SOFT_LIGHT_PIVOT = 0.5  # light at or below this darkens in soft light; above lightens
+
 DISPLACE_MAX_PX = 24.0
 """Pixel displacement at strength=1.0. A calibration constant, not derived --
 tuned by eye in the calibrator, per template."""
@@ -83,7 +85,7 @@ def _soft_light(base: FloatMap, light: FloatMap) -> FloatMap:
     """Photoshop-style soft-light blend, both operands in [0, 1]."""
     dark = 2 * base * light + base**2 * (1 - 2 * light)
     bright = np.sqrt(base) * (2 * light - 1) + 2 * base * (1 - light)
-    return np.where(light <= 0.5, dark, bright)
+    return np.where(light <= _SOFT_LIGHT_PIVOT, dark, bright)
 
 
 def shade(img: RGBA, cfg: ShadeConfig, luminance: FloatMap) -> RGBA:

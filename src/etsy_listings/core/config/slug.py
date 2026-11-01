@@ -23,8 +23,7 @@ _NON_ALNUM = re.compile(r"[^a-z0-9]+")
 def slugify(name: str) -> str:
     """Lowercase, collapse runs of non-alphanumerics to a single hyphen, trim."""
     lowered = name.strip().lower()
-    slug = _NON_ALNUM.sub("-", lowered).strip("-")
-    return slug
+    return _NON_ALNUM.sub("-", lowered).strip("-")
 
 
 class ColourExceptions(RootModel[dict[str, str]]):

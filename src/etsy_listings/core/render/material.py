@@ -18,7 +18,14 @@ from PIL import Image
 
 from etsy_listings.core.render import _material_math as material_math
 from etsy_listings.core.render.config import MarigoldAppearance
-from etsy_listings.core.render.types import RGB, RGBA, FloatMap
+from etsy_listings.core.render.types import (
+    IMAGE_NDIM,
+    RGB,
+    RGB_CHANNELS,
+    RGBA,
+    RGBA_CHANNELS,
+    FloatMap,
+)
 
 
 @dataclass(frozen=True)
@@ -76,21 +83,6 @@ Float = FloatMap
 Pixels = RGBA
 
 
-def sample(field: Float, xy: Float, border: int = cv2.BORDER_REPLICATE) -> Float:
-    xy = np.asarray(xy, np.float32)
-    return cast(
-        Float,
-        cv2.remap(
-            field,
-            xy[..., 0],
-            xy[..., 1],
-            interpolation=cv2.INTER_LINEAR,
-            borderMode=border,
-            borderValue=(0,),
-        ).astype(np.float32),
-    )
-
-
 def patch_derivative(material: Float, labels: NDArray[np.int32], axis: int) -> Float:
     """Centred differences inside a patch; one-sided at its boundary."""
     forward = np.roll(material, -1, axis=axis) - material
@@ -107,6 +99,17 @@ def patch_derivative(material: Float, labels: NDArray[np.int32], axis: int) -> F
         Float,
         (forward * valid_forward[..., None] + backward * valid_backward[..., None])
         / np.maximum(count[..., None], 1),
+    )
+
+
+def _half_size(packed: Float) -> Float:
+    return cast(
+        Float,
+        cv2.resize(
+            packed,
+            (max(1, packed.shape[1] // 2), max(1, packed.shape[0] // 2)),
+            interpolation=cv2.INTER_AREA,
+        ),
     )
 
 
@@ -135,28 +138,14 @@ def filtered_sample(
     # weights. Do not allocate their full-photo weight arrays or smaller mips.
     for level in range(last + 1):
         if level < first:
-            packed = cast(
-                Float,
-                cv2.resize(
-                    packed,
-                    (max(1, packed.shape[1] // 2), max(1, packed.shape[0] // 2)),
-                    interpolation=cv2.INTER_AREA,
-                ),
-            )
+            packed = _half_size(packed)
             continue
         weight = np.where(low == level, 1 - fraction, 0) + np.where(low + 1 == level, fraction, 0)
         if np.any(weight > 0):
             xy = material * np.array([packed.shape[1] - 1, packed.shape[0] - 1], np.float32)
-            result += sample(packed, xy, cv2.BORDER_CONSTANT) * weight[..., None]
+            result += material_math.sample(packed, xy, cv2.BORDER_CONSTANT) * weight[..., None]
         if level < last:
-            packed = cast(
-                Float,
-                cv2.resize(
-                    packed,
-                    (max(1, packed.shape[1] // 2), max(1, packed.shape[0] // 2)),
-                    interpolation=cv2.INTER_AREA,
-                ),
-            )
+            packed = _half_size(packed)
     return result
 
 
@@ -168,8 +157,8 @@ def prepare_material_artwork(artwork: RGBA) -> FloatMap:
 
 def _validate_artwork(artwork: RGBA) -> None:
     if (
-        artwork.ndim != 3
-        or artwork.shape[2] != 4
+        artwork.ndim != IMAGE_NDIM
+        or artwork.shape[2] != RGBA_CHANNELS
         or artwork.dtype != np.uint8
         or min(artwork.shape[:2]) < 1
     ):
@@ -194,64 +183,110 @@ def render_marigold_scene(
     refuses colour photos with different dimensions. Artwork never uses albedo.
     """
     settings = appearance or MarigoldAppearance()
-    if base.ndim != 3 or base.shape[2] != 3 or base.dtype != np.uint8:
+    if base.ndim != IMAGE_NDIM or base.shape[2] != RGB_CHANNELS or base.dtype != np.uint8:
         raise ValueError("Background must be uint8 RGB")
-    result = np.empty(base.shape, np.float32)
-    initialized = np.zeros(base.shape[:2], bool)
-    changed = np.zeros(base.shape[:2], bool)
+    canvas = _Canvas(base)
     for layer in layers:
-        maps = layer.maps
-        if maps.size != (base.shape[1], base.shape[0]):
-            raise ValueError("Shared colour photo dimensions differ from the main photo")
-        _validate_artwork(layer.design)
-        left, top, right, bottom = maps.extent
-        if not (0 <= left < right <= base.shape[1] and 0 <= top < bottom <= base.shape[0]):
-            raise ValueError("Prepared map extent is outside the reference photo")
-        visible = maps.visibility > 0
-        if not visible.any():
+        _check_layer(base, layer)
+        regions = _visible_regions(layer.maps)
+        if regions is None:
             continue
-        # Mip footprints use immediate neighbours, including invisible ones.
-        # Keep a one-pixel halo so every visible derivative matches the full
-        # frame exactly. All sampling/lighting inside the region is unchanged.
-        x, y, width, height = cv2.boundingRect(visible.astype(np.uint8))
-        region = (
-            slice(max(0, y - 1), min(maps.visibility.shape[0], y + height + 1)),
-            slice(max(0, x - 1), min(maps.visibility.shape[1], x + width + 1)),
-        )
-        photo_region = (
-            slice(region[0].start + maps.origin[1], region[0].stop + maps.origin[1]),
-            slice(region[1].start + maps.origin[0], region[1].stop + maps.origin[0]),
-        )
-        material = maps.material[region]
-        labels = maps.patch_ids[region] if maps.patch_ids is not None else None
-        visibility = maps.visibility[region]
-        packed = layer.premultiplied
-        if packed is None:
-            packed = prepare_material_artwork(layer.design)
-        if packed.shape != layer.design.shape or packed.dtype != np.float32:
-            raise ValueError("Premultiplied artwork must match its RGBA source")
-        sampled = filtered_sample(layer.design, material, labels, packed=packed)
-        del packed
-        selected_gain = (
-            maps.estimated[region]
-            if settings.lighting_source == "estimated"
-            else maps.photographic[region]
-        )
-        gain = 1 + settings.lighting_strength * (selected_gain - 1)
-        alpha = sampled[..., 3] * visibility
-        ink = (
-            sampled[..., :3]
-            * gain
-            * (1 + settings.fabric_texture * (maps.texture[region] - 1))[..., None]
-            + sampled[..., 3, None] * settings.print_shine * maps.residual[region]
-        )
-        destination = result[photo_region]
-        fresh = ~initialized[photo_region]
+        region, photo_region = regions
+        ink, alpha, visibility = _layer_ink(layer, region, settings)
+        canvas.add(photo_region, ink, alpha, visibility)
+    return canvas.image()
+
+
+def _check_layer(base: RGB, layer: MaterialLayer) -> None:
+    maps = layer.maps
+    if maps.size != (base.shape[1], base.shape[0]):
+        raise ValueError("Shared colour photo dimensions differ from the main photo")
+    _validate_artwork(layer.design)
+    left, top, right, bottom = maps.extent
+    if not (0 <= left < right <= base.shape[1] and 0 <= top < bottom <= base.shape[0]):
+        raise ValueError("Prepared map extent is outside the reference photo")
+
+
+Region = tuple[slice, slice]
+
+
+def _visible_regions(maps: MaterialMaps) -> tuple[Region, Region] | None:
+    """The visible part of the maps with a one-pixel halo, in map and in photo
+    coordinates; None when nothing is visible."""
+    visible = maps.visibility > 0
+    if not visible.any():
+        return None
+    # Mip footprints use immediate neighbours, including invisible ones.
+    # Keep a one-pixel halo so every visible derivative matches the full
+    # frame exactly. All sampling/lighting inside the region is unchanged.
+    x, y, width, height = cv2.boundingRect(visible.astype(np.uint8))
+    region = (
+        slice(max(0, y - 1), min(maps.visibility.shape[0], y + height + 1)),
+        slice(max(0, x - 1), min(maps.visibility.shape[1], x + width + 1)),
+    )
+    photo_region = (
+        slice(region[0].start + maps.origin[1], region[0].stop + maps.origin[1]),
+        slice(region[1].start + maps.origin[0], region[1].stop + maps.origin[0]),
+    )
+    return region, photo_region
+
+
+def _layer_ink(
+    layer: MaterialLayer, region: Region, settings: MarigoldAppearance
+) -> tuple[FloatMap, FloatMap, FloatMap]:
+    """The layer's lit linear ink over ``region``, its coverage, and the
+    maps' visibility there."""
+    maps = layer.maps
+    material = maps.material[region]
+    labels = maps.patch_ids[region] if maps.patch_ids is not None else None
+    visibility = maps.visibility[region]
+    packed = layer.premultiplied
+    if packed is None:
+        packed = prepare_material_artwork(layer.design)
+    if packed.shape != layer.design.shape or packed.dtype != np.float32:
+        raise ValueError("Premultiplied artwork must match its RGBA source")
+    sampled = filtered_sample(layer.design, material, labels, packed=packed)
+    del packed
+    selected_gain = (
+        maps.estimated[region]
+        if settings.lighting_source == "estimated"
+        else maps.photographic[region]
+    )
+    gain = 1 + settings.lighting_strength * (selected_gain - 1)
+    alpha = sampled[..., 3] * visibility
+    ink = (
+        sampled[..., :3]
+        * gain
+        * (1 + settings.fabric_texture * (maps.texture[region] - 1))[..., None]
+        + sampled[..., 3, None] * settings.print_shine * maps.residual[region]
+    )
+    return ink, alpha, visibility
+
+
+class _Canvas:
+    """One linear colour buffer over the photo, initialised from it only
+    where some layer first lands, so untouched pixels keep their exact bytes."""
+
+    def __init__(self, base: RGB) -> None:
+        self._base = base
+        self._result = np.empty(base.shape, np.float32)
+        self._initialized = np.zeros(base.shape[:2], bool)
+        self._changed = np.zeros(base.shape[:2], bool)
+
+    def add(
+        self, photo_region: Region, ink: FloatMap, alpha: FloatMap, visibility: FloatMap
+    ) -> None:
+        destination = self._result[photo_region]
+        fresh = ~self._initialized[photo_region]
         if fresh.any():
-            destination[fresh] = material_math.linear(base[photo_region][fresh])
-            initialized[photo_region] = True
-        result[photo_region] = ink * visibility[..., None] + destination * (1 - alpha[..., None])
-        changed[photo_region] |= alpha > 0
-    output = base.copy()
-    output[changed] = material_math.display(result[changed])
-    return Image.fromarray(output)
+            destination[fresh] = material_math.linear(self._base[photo_region][fresh])
+            self._initialized[photo_region] = True
+        self._result[photo_region] = ink * visibility[..., None] + destination * (
+            1 - alpha[..., None]
+        )
+        self._changed[photo_region] |= alpha > 0
+
+    def image(self) -> Image.Image:
+        output = self._base.copy()
+        output[self._changed] = material_math.display(self._result[self._changed])
+        return Image.fromarray(output)

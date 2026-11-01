@@ -7,6 +7,7 @@ reproduce or it blesses a broken media stage (features/etsy-listing-20260910/spe
 from __future__ import annotations
 
 from etsy_listings.core.clients.etsy.fakes import FakeEtsyListingClient
+from etsy_listings.core.clients.etsy.listings import ImageUpload
 from etsy_listings.core.clients.etsy.models import VariationImageLink
 
 SHOP_ID = 67961328
@@ -23,7 +24,9 @@ def test_a_new_upload_lands_at_its_rank() -> None:
     client = _seeded()
 
     image = client.upload_listing_image(
-        SHOP_ID, LISTING_ID, file_name="black.png", contents=b"one", rank=1, alt_text="Black"
+        SHOP_ID,
+        LISTING_ID,
+        ImageUpload(file_name="black.png", contents=b"one", rank=1, alt_text="Black"),
     )
 
     listing = client.get_listing(LISTING_ID, include_images=True)
@@ -33,8 +36,12 @@ def test_a_new_upload_lands_at_its_rank() -> None:
 
 def test_image_ids_reorders_the_full_set() -> None:
     client = _seeded()
-    a = client.upload_listing_image(SHOP_ID, LISTING_ID, file_name="a.png", contents=b"a", rank=1)
-    b = client.upload_listing_image(SHOP_ID, LISTING_ID, file_name="b.png", contents=b"b", rank=2)
+    a = client.upload_listing_image(
+        SHOP_ID, LISTING_ID, ImageUpload(file_name="a.png", contents=b"a", rank=1)
+    )
+    b = client.upload_listing_image(
+        SHOP_ID, LISTING_ID, ImageUpload(file_name="b.png", contents=b"b", rank=2)
+    )
 
     client.update_listing(
         SHOP_ID, LISTING_ID, {"image_ids": [b.listing_image_id, a.listing_image_id]}
@@ -51,10 +58,12 @@ def test_image_ids_detaches_whatever_it_omits() -> None:
     merely left unordered."""
     client = _seeded()
     ours = client.upload_listing_image(
-        SHOP_ID, LISTING_ID, file_name="ours.png", contents=b"ours", rank=1
+        SHOP_ID, LISTING_ID, ImageUpload(file_name="ours.png", contents=b"ours", rank=1)
     )
     client.upload_listing_image(
-        SHOP_ID, LISTING_ID, file_name="printify-mockup.png", contents=b"mockup", rank=2
+        SHOP_ID,
+        LISTING_ID,
+        ImageUpload(file_name="printify-mockup.png", contents=b"mockup", rank=2),
     )
 
     client.update_listing(SHOP_ID, LISTING_ID, {"image_ids": [ours.listing_image_id]})
@@ -67,20 +76,22 @@ def test_image_ids_detaches_whatever_it_omits() -> None:
 def test_overwrite_replaces_in_place_leaving_count_and_neighbours_untouched() -> None:
     client = _seeded()
     first = client.upload_listing_image(
-        SHOP_ID, LISTING_ID, file_name="a.png", contents=b"a", rank=1
+        SHOP_ID, LISTING_ID, ImageUpload(file_name="a.png", contents=b"a", rank=1)
     )
     second = client.upload_listing_image(
-        SHOP_ID, LISTING_ID, file_name="b.png", contents=b"b", rank=2
+        SHOP_ID, LISTING_ID, ImageUpload(file_name="b.png", contents=b"b", rank=2)
     )
 
     replaced = client.upload_listing_image(
         SHOP_ID,
         LISTING_ID,
-        file_name="a-v2.png",
-        contents=b"a-v2",
-        rank=1,
-        overwrite=True,
-        listing_image_id=first.listing_image_id,
+        ImageUpload(
+            file_name="a-v2.png",
+            contents=b"a-v2",
+            rank=1,
+            overwrite=True,
+            listing_image_id=first.listing_image_id,
+        ),
     )
 
     listing = client.get_listing(LISTING_ID, include_images=True)
@@ -99,7 +110,7 @@ def test_a_replaced_images_variation_link_is_left_dangling() -> None:
     notice."""
     client = _seeded()
     first = client.upload_listing_image(
-        SHOP_ID, LISTING_ID, file_name="a.png", contents=b"a", rank=1
+        SHOP_ID, LISTING_ID, ImageUpload(file_name="a.png", contents=b"a", rank=1)
     )
     client.update_variation_images(
         SHOP_ID,
@@ -110,11 +121,13 @@ def test_a_replaced_images_variation_link_is_left_dangling() -> None:
     client.upload_listing_image(
         SHOP_ID,
         LISTING_ID,
-        file_name="a-v2.png",
-        contents=b"a-v2",
-        rank=1,
-        overwrite=True,
-        listing_image_id=first.listing_image_id,
+        ImageUpload(
+            file_name="a-v2.png",
+            contents=b"a-v2",
+            rank=1,
+            overwrite=True,
+            listing_image_id=first.listing_image_id,
+        ),
     )
 
     links = client.get_listing_variation_images(SHOP_ID, LISTING_ID)

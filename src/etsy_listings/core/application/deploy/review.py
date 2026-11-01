@@ -14,17 +14,17 @@ from __future__ import annotations
 
 from etsy_listings.core.application.deploy.events import ListingPlannedEvent
 from etsy_listings.core.application.deploy.registry import Run, WorkspaceApply
-from etsy_listings.core.application.refusals import ReviewedPlanRefused
+from etsy_listings.core.application.refusals import ReviewedPlanRefusedError
 
 
 def check_reviewed_apply(reviewed: Run | None, command: WorkspaceApply) -> None:
-    """Raise :class:`ReviewedPlanRefused` unless ``command`` names exactly
+    """Raise :class:`ReviewedPlanRefusedError` unless ``command`` names exactly
     what ``reviewed`` -- the run its ``reviewed_run_id`` names, if any --
     planned."""
     if reviewed is None or reviewed.scope != "workspace" or reviewed.kind != "plan":
-        raise ReviewedPlanRefused("reviewed_run_id is not a workspace plan")
+        raise ReviewedPlanRefusedError("reviewed_run_id is not a workspace plan")
     if reviewed.phase != "ready":
-        raise ReviewedPlanRefused("reviewed workspace plan is not ready")
+        raise ReviewedPlanRefusedError("reviewed workspace plan is not ready")
 
     # A listing planned again after its previews rendered has a second event;
     # the later one is what the seller reviewed, in first-planned order.
@@ -33,8 +33,10 @@ def check_reviewed_apply(reviewed: Run | None, command: WorkspaceApply) -> None:
         if isinstance(event, ListingPlannedEvent):
             fingerprints[event.listing] = event.fingerprint
     if list(command.listings) != list(fingerprints):
-        raise ReviewedPlanRefused("apply listings must exactly match the reviewed workspace plan")
+        raise ReviewedPlanRefusedError(
+            "apply listings must exactly match the reviewed workspace plan"
+        )
     if dict(command.expect) != fingerprints:
-        raise ReviewedPlanRefused(
+        raise ReviewedPlanRefusedError(
             "apply fingerprints must exactly match the reviewed workspace plan"
         )

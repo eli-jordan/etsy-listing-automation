@@ -18,34 +18,34 @@ from pathlib import Path
 
 from PIL import Image, UnidentifiedImageError
 
-from etsy_listings.core.application.refusals import ListingDesignUploadRefused
+from etsy_listings.core.application.refusals import ListingDesignUploadRefusedError
 from etsy_listings.core.workspace.atomic import write_bytes_atomic
 from etsy_listings.core.workspace.workspace import Workspace
 
 
 def save_listing_design(workspace: Workspace, filename: str, payload: bytes) -> str:
     """Add an upload to ``designs/`` and answer the design name it landed
-    under. Refuses with :class:`ListingDesignUploadRefused`, writing nothing,
+    under. Refuses with :class:`ListingDesignUploadRefusedError`, writing nothing,
     unless ``filename`` is a plain filename and ``payload`` decodes as a PNG
     -- ``designs/`` holds PNGs only, and a design is resolved by name to
     ``<name>.png``."""
     if not filename:
-        raise ListingDesignUploadRefused("the upload needs a filename")
+        raise ListingDesignUploadRefusedError("the upload needs a filename")
     if filename != Path(filename).name:
-        raise ListingDesignUploadRefused(f"{filename!r} is not a plain filename")
+        raise ListingDesignUploadRefusedError(f"{filename!r} is not a plain filename")
     stem = Path(filename).stem
     # `Path(".png").stem` is ".png": a dotfile, not a name.
     if not stem or stem.startswith("."):
-        raise ListingDesignUploadRefused(f"{filename!r} has no name to save it under")
+        raise ListingDesignUploadRefusedError(f"{filename!r} has no name to save it under")
 
     try:
         with Image.open(BytesIO(payload)) as probe:
             kind = probe.format
             probe.verify()
     except (UnidentifiedImageError, OSError, ValueError) as exc:
-        raise ListingDesignUploadRefused("that file is not a readable image") from exc
+        raise ListingDesignUploadRefusedError("that file is not a readable image") from exc
     if kind != "PNG":
-        raise ListingDesignUploadRefused(
+        raise ListingDesignUploadRefusedError(
             f"designs must be PNG files, and {filename} is a {kind or 'different'} image"
         )
 

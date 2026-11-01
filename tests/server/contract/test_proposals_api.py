@@ -81,12 +81,12 @@ def _generate(client: TestClient, listing: str = LISTING) -> dict[str, Any]:
     return body
 
 
-def _saved(workspace: Workspace, **over: Any) -> str:  # noqa: ANN401
+def _saved(workspace: Workspace, **over: Any) -> str:
     """Saves a valid proposal for the fixture listing; its ``generated_at``."""
     return save_proposal(workspace, LISTING, **over).generated_at.isoformat()
 
 
-def _resolve(client: TestClient, generated_at: str, **sections: str) -> Any:  # noqa: ANN401
+def _resolve(client: TestClient, generated_at: str, **sections: str) -> Any:
     return client.patch(RESOLUTION, json={"generated_at": generated_at, **sections})
 
 
@@ -241,7 +241,7 @@ def test_deleting_the_listing_cancels_its_run_before_it_writes_a_proposal(
     ).write(workspace.lock_file(LISTING))
     provider.gate("seo")
     run = client.post("/api/ai/runs", json={"listing": LISTING}).json()
-    wait_for(lambda: provider.started["seo"].is_set())
+    wait_for(provider.started["seo"].is_set)
 
     assert client.delete(f"/api/listings/{LISTING}").status_code == 200
 

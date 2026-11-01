@@ -22,4 +22,4 @@ mean different things depending on import order. Reach for it as
 from etsy_listings.cli.app import main
 from etsy_listings.cli.render import format_plan
 
-__all__ = ["main", "format_plan"]
+__all__ = ["format_plan", "main"]

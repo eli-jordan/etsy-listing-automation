@@ -54,7 +54,7 @@ from etsy_listings.core.workspace.workspace import (
     WorkspaceNotFoundError,
 )
 
-__all__ = [
+__all__ = [  # noqa: RUF022 -- grouped by topic, not alphabetically
     "Workspace",
     "DescriptionResolution",
     "ScenePhoto",

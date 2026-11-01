@@ -35,7 +35,7 @@ CONNECTED_SHOP = [Shop(id=28819281, title="TakeAHikeTees", sales_channel="etsy")
 ETSY_SHOP = EtsyShop(shop_id=12345678, shop_name="TakeAHikeTees", currency_code="NOK")
 
 
-def _etsy(client: FakeEtsyShopClient | None = None, *, user_id: int | None = 99):  # noqa: ANN202 - a test double
+def _etsy(client: FakeEtsyShopClient | None = None, *, user_id: int | None = 99):
     """An `EtsyAccess` factory, or one that reports no credentials at all.
 
     `None` is the state a workspace is in before `auth` has run, which is also
@@ -63,7 +63,7 @@ def _no_ambient_token(monkeypatch) -> None:
 def _factory(client: FakePrintifyClient) -> callable:
     seen: list[str] = []
 
-    def make(token: str):  # noqa: ANN202 - a test double
+    def make(token: str):
         seen.append(token)
         return client
 

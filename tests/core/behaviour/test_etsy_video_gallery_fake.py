@@ -12,6 +12,7 @@ Manager on 2026-09-25.
 from __future__ import annotations
 
 from etsy_listings.core.clients.etsy.fakes import FakeEtsyListingClient, GallerySlot
+from etsy_listings.core.clients.etsy.listings import ImageUpload
 
 SHOP_ID = 67961328
 LISTING_ID = 4582417670
@@ -31,9 +32,9 @@ class Probe:
         image = self.client.upload_listing_image(
             SHOP_ID,
             LISTING_ID,
-            file_name=f"img{label}.png",
-            contents=label.encode(),
-            rank=len(self.images) + 1,
+            ImageUpload(
+                file_name=f"img{label}.png", contents=label.encode(), rank=len(self.images) + 1
+            ),
         )
         self.images[label] = image.listing_image_id
 
@@ -369,12 +370,12 @@ def test_what_decision_9_did_not_measure_is_refused_rather_than_guessed() -> Non
     probe.image("1")
     probe.video("A")
 
-    with pytest.raises(ValueError, match="unmeasured: attaching .* already active"):
+    with pytest.raises(ValueError, match=r"unmeasured: attaching .* already active"):
         probe.attach("A")
-    with pytest.raises(ValueError, match="unmeasured: attaching .* never had"):
+    with pytest.raises(ValueError, match=r"unmeasured: attaching .* never had"):
         probe.client.attach_listing_video(SHOP_ID, LISTING_ID, 1)
     probe.delete("A")
-    with pytest.raises(ValueError, match="unmeasured: deleting .* not on the listing"):
+    with pytest.raises(ValueError, match=r"unmeasured: deleting .* not on the listing"):
         probe.delete("A")
 
 

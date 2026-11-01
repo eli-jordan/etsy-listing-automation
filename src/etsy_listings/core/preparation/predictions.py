@@ -4,15 +4,21 @@ from __future__ import annotations
 
 import hashlib
 import zipfile
+from collections.abc import Callable, Mapping
 from functools import lru_cache
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 from numpy.typing import NDArray
 
 from etsy_listings.core.workspace.file_version import file_version
 
-MAX_PIXELS = 4096 * 4096
+MAX_DIMENSION = 4096
+MAX_PIXELS = MAX_DIMENSION * MAX_DIMENSION
+# A unit normal's components, and its length, allow this much float error.
+MAX_NORMAL_COMPONENT = 1.01
+UNIT_NORMAL_TOLERANCE = 0.02
 MAX_ARCHIVE_BYTES = 640 * 1024 * 1024
 ROLES = ("normals", "lighting", "depth")
 
@@ -34,24 +40,32 @@ def cache_path(root: Path, relative: str, *, suffix: str) -> Path:
     return path
 
 
+def _expected_shape(role: str, size: tuple[int, int]) -> tuple[int, int, int, int]:
+    width, height = size
+    return (3 if role == "lighting" else 1, height, width, 1 if role == "depth" else 3)
+
+
 def validate_prediction(array: NDArray[np.float32], *, role: str, size: tuple[int, int]) -> None:
     width, height = size
-    expected = (3 if role == "lighting" else 1, height, width, 1 if role == "depth" else 3)
     if (
         role not in ROLES
         or width <= 0
         or height <= 0
-        or max(width, height) > 4096
+        or max(width, height) > MAX_DIMENSION
         or width * height > MAX_PIXELS
     ):
         raise PredictionError("Unsupported role or prediction dimensions")
-    if array.dtype != np.dtype("float32") or array.shape != expected:
+    if array.dtype != np.dtype("float32") or array.shape != _expected_shape(role, size):
         raise PredictionError("Prediction dtype or shape does not match its declared role and size")
     if not np.isfinite(array).all():
         raise PredictionError("Prediction contains non-finite values")
+    _check_range(array, role=role)
+
+
+def _check_range(array: NDArray[np.float32], *, role: str) -> None:
     if role == "normals":
-        if np.any(np.abs(array) > 1.01) or not np.allclose(
-            np.linalg.norm(array, axis=-1), 1, atol=0.02
+        if np.any(np.abs(array) > MAX_NORMAL_COMPONENT) or not np.allclose(
+            np.linalg.norm(array, axis=-1), 1, atol=UNIT_NORMAL_TOLERANCE
         ):
             raise PredictionError("Normals must be finite unit vectors")
     elif array.min() < 0 or array.max() > 1:
@@ -60,8 +74,9 @@ def validate_prediction(array: NDArray[np.float32], *, role: str, size: tuple[in
 
 @lru_cache(maxsize=128)
 def _validated_file(
-    path: Path, role: str, checksum: str, size: tuple[int, int], stamp: tuple[int | str, ...]
+    path: Path, role: str, checksum: str, size: tuple[int, int], _stamp: tuple[int | str, ...]
 ) -> None:
+    # ``_stamp`` is read by lru_cache only: a changed file is a new cache key.
     read_prediction(path, role=role, checksum=checksum, size=size)
 
 
@@ -82,41 +97,54 @@ def read_prediction(
 ) -> NDArray[np.float32]:
     """Validate ZIP bounds and NPY headers before allocating, with pickle disabled."""
     try:
-        if path.stat().st_size > MAX_ARCHIVE_BYTES:
-            raise PredictionError("Prediction archive exceeds size limit")
-        with path.open("rb") as stream:
-            if hashlib.file_digest(stream, "sha256").hexdigest() != checksum:
-                raise PredictionError("Prediction checksum mismatch")
-        with zipfile.ZipFile(path) as archive:
-            members = archive.infolist()
-            if len(members) != 1 or members[0].filename != "prediction.npy":
-                raise PredictionError("Prediction archive has unexpected members")
-            if members[0].file_size > MAX_ARCHIVE_BYTES:
-                raise PredictionError("Prediction array exceeds size limit")
-            with archive.open(members[0]) as stream:
-                version = np.lib.format.read_magic(stream)
-                if version == (1, 0):
-                    shape, _, dtype = np.lib.format.read_array_header_1_0(stream)
-                elif version == (2, 0):
-                    shape, _, dtype = np.lib.format.read_array_header_2_0(stream)
-                else:
-                    raise PredictionError("Unsupported prediction NPY version")
-            width, height = size
-            if min(width, height) < 1 or max(width, height) > 4096:
-                raise PredictionError("Unsupported prediction dimensions")
-            expected = (3 if role == "lighting" else 1, height, width, 1 if role == "depth" else 3)
-            if (
-                dtype != np.dtype("float32")
-                or shape != expected
-                or max(width, height) > 4096
-                or width * height > MAX_PIXELS
-            ):
-                raise PredictionError("Prediction header has unsafe dtype or shape")
+        _check_archive(path, role=role, checksum=checksum, size=size)
         with np.load(path, allow_pickle=False) as arrays:
             array: NDArray[np.float32] = arrays["prediction"]
         validate_prediction(array, role=role, size=size)
-        return array
     except (OSError, ValueError, zipfile.BadZipFile, EOFError) as exc:
         if isinstance(exc, PredictionError):
             raise
         raise PredictionError(f"Invalid prediction artifact: {exc}") from exc
+    else:
+        return array
+
+
+_NPY_HEADER_READERS: Mapping[tuple[int, int], Callable[[Any], tuple[Any, bool, np.dtype]]] = {
+    (1, 0): np.lib.format.read_array_header_1_0,
+    (2, 0): np.lib.format.read_array_header_2_0,
+}
+
+
+def _check_archive(path: Path, *, role: str, checksum: str, size: tuple[int, int]) -> None:
+    if path.stat().st_size > MAX_ARCHIVE_BYTES:
+        raise PredictionError("Prediction archive exceeds size limit")
+    with path.open("rb") as stream:
+        if hashlib.file_digest(stream, "sha256").hexdigest() != checksum:
+            raise PredictionError("Prediction checksum mismatch")
+    with zipfile.ZipFile(path) as archive:
+        members = archive.infolist()
+        if len(members) != 1 or members[0].filename != "prediction.npy":
+            raise PredictionError("Prediction archive has unexpected members")
+        if members[0].file_size > MAX_ARCHIVE_BYTES:
+            raise PredictionError("Prediction array exceeds size limit")
+        with archive.open(members[0]) as stream:
+            read_header = _NPY_HEADER_READERS.get(np.lib.format.read_magic(stream))
+            if read_header is None:
+                raise PredictionError("Unsupported prediction NPY version")
+            shape, _, dtype = read_header(stream)
+        _check_header(shape, dtype, role=role, size=size)
+
+
+def _check_header(
+    shape: tuple[int, ...], dtype: np.dtype, *, role: str, size: tuple[int, int]
+) -> None:
+    width, height = size
+    if min(width, height) < 1 or max(width, height) > MAX_DIMENSION:
+        raise PredictionError("Unsupported prediction dimensions")
+    if (
+        dtype != np.dtype("float32")
+        or shape != _expected_shape(role, size)
+        or max(width, height) > MAX_DIMENSION
+        or width * height > MAX_PIXELS
+    ):
+        raise PredictionError("Prediction header has unsafe dtype or shape")

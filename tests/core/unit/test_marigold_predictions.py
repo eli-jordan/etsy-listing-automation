@@ -25,7 +25,7 @@ def test_prediction_dimension_cap_applies_to_each_axis_before_allocation(tmp_pat
 
 
 @pytest.mark.parametrize(
-    "array,reason",
+    ("array", "reason"),
     [
         (np.array([object()], dtype=object), "dtype"),
         (np.full((1, 8, 12, 1), np.nan, dtype=np.float32), "non-finite"),
@@ -66,6 +66,7 @@ def test_prediction_loading_imports_no_model_runtime(tmp_path):
         ],
         capture_output=True,
         text=True,
+        check=False,
     )
     assert result.returncode == 0, result.stderr
 

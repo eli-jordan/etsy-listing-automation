@@ -375,67 +375,14 @@ def test_full_workflow_independent_title_tags_and_lead_acceptance(
         tags_drawer.wait_for(state="visible")  # untouched by the title drawer closing
         assert page.locator("#details-title").input_value() == "Retro Sunset Hike Tee"
 
-        # -- Tags: individual toggle, both directions --
-        first_tag = tags_drawer.get_by_role("button", name="+ tag0", exact=True)
-        first_tag.click()
-        page.locator(".chips .chip", has_text="tag0").wait_for(state="visible")
-        tags_drawer.get_by_role("button", name="✓ tag0", exact=True).wait_for(state="visible")
-        tags_drawer.get_by_role("button", name="✓ tag0", exact=True).click()
-        page.locator(".chips .chip", has_text="tag0").wait_for(state="hidden")
-        tags_drawer.get_by_role("button", name="+ tag0", exact=True).wait_for(state="visible")
-
-        # -- The 13-tag cap: select every "Best 13" suggestion, then prove
-        # a "More options" one is disabled, then free a slot --
-        for i in range(13):
-            tags_drawer.get_by_role("button", name=f"+ tag{i}", exact=True).click()
-        tags_drawer.get_by_text("13 of 13 tags selected").wait_for(state="visible")
-        more_option = tags_drawer.get_by_role("button", name="+ tag13", exact=True)
-        assert more_option.get_attribute("aria-disabled") == "true"
-        more_option.click(force=True)
-        page.locator(".chips .chip", has_text="tag13").wait_for(state="hidden")  # no-op
-
-        tags_drawer.get_by_role("button", name="✓ tag0", exact=True).click()
-        tags_drawer.get_by_text("12 of 13 tags selected").wait_for(state="visible")
-        more_option = tags_drawer.get_by_role("button", name="+ tag13", exact=True)
-        assert more_option.get_attribute("aria-disabled") == "false"
-        more_option.click()
-        page.locator(".chips .chip", has_text="tag13").wait_for(state="visible")
-        tags_drawer.get_by_text("13 of 13 tags selected").wait_for(state="visible")
-
-        # -- Accept best 13 replaces the whole collection wholesale,
-        # regardless of the manual toggles just made, and closes the
-        # drawer --
-        tags_drawer.get_by_role("button", name="Accept best 13").click()
-        tags_drawer.wait_for(state="hidden")
-        chips = page.locator(".chips .chip")
-        assert chips.count() == 13
-        for i in range(13):
-            assert chips.filter(has_text=re.compile(rf"^tag{i}\D*$")).count() == 1, i
-        # `tag13` was individually toggled on above and then wholesale
-        # replaced by Accept best 13 -- it must not survive.
-        assert chips.filter(has_text=re.compile(r"^tag13\D*$")).count() == 0
+        _assert_tag_choices(page, tags_drawer)
 
         # -- Lead: Reject all leaves the field untouched --
         lead_drawer.get_by_role("button", name="Reject all").click()
         lead_drawer.wait_for(state="hidden")
         assert page.locator("#details-description-lead").input_value() == ""
 
-        # -- Every accepted value went through ordinary autosave: reload
-        # and confirm it is really on disk, not only in React state --
-        page.wait_for_timeout(500)  # autosave's own debounce
-        for _ in range(50):
-            written = _listing_yaml(workspace_root)
-            if (
-                written["etsy"]["title"] == "Retro Sunset Hike Tee"
-                and len(written["etsy"]["tags"]) == 13
-            ):
-                break
-            page.wait_for_timeout(100)
-        else:
-            raise AssertionError(f"autosave never wrote the accepted values: {written}")
-        assert written["etsy"]["title"] == "Retro Sunset Hike Tee"
-        assert sorted(written["etsy"]["tags"]) == sorted(f"tag{i}" for i in range(13))
-        assert written["etsy"]["description"]["lead"] == ""  # rejected, untouched
+        _assert_autosaved(page, workspace_root)
 
         # -- Every drawer resolved: nothing is pending, but the server keeps
         # the proposal with each section recorded as resolved, and the
@@ -447,6 +394,69 @@ def test_full_workflow_independent_title_tags_and_lead_acceptance(
         }
         ai_mode.wait_for(state="visible")
         assert ai_mode.is_enabled()
+
+
+def _assert_tag_choices(page, tags_drawer) -> None:
+    """Tags toggle one by one up to the 13-tag cap, and Accept best 13 then
+    replaces the whole collection and closes the drawer."""
+    # -- Tags: individual toggle, both directions --
+    first_tag = tags_drawer.get_by_role("button", name="+ tag0", exact=True)
+    first_tag.click()
+    page.locator(".chips .chip", has_text="tag0").wait_for(state="visible")
+    tags_drawer.get_by_role("button", name="✓ tag0", exact=True).wait_for(state="visible")
+    tags_drawer.get_by_role("button", name="✓ tag0", exact=True).click()
+    page.locator(".chips .chip", has_text="tag0").wait_for(state="hidden")
+    tags_drawer.get_by_role("button", name="+ tag0", exact=True).wait_for(state="visible")
+
+    # -- The 13-tag cap: select every "Best 13" suggestion, then prove
+    # a "More options" one is disabled, then free a slot --
+    for i in range(13):
+        tags_drawer.get_by_role("button", name=f"+ tag{i}", exact=True).click()
+    tags_drawer.get_by_text("13 of 13 tags selected").wait_for(state="visible")
+    more_option = tags_drawer.get_by_role("button", name="+ tag13", exact=True)
+    assert more_option.get_attribute("aria-disabled") == "true"
+    more_option.click(force=True)
+    page.locator(".chips .chip", has_text="tag13").wait_for(state="hidden")  # no-op
+
+    tags_drawer.get_by_role("button", name="✓ tag0", exact=True).click()
+    tags_drawer.get_by_text("12 of 13 tags selected").wait_for(state="visible")
+    more_option = tags_drawer.get_by_role("button", name="+ tag13", exact=True)
+    assert more_option.get_attribute("aria-disabled") == "false"
+    more_option.click()
+    page.locator(".chips .chip", has_text="tag13").wait_for(state="visible")
+    tags_drawer.get_by_text("13 of 13 tags selected").wait_for(state="visible")
+
+    # -- Accept best 13 replaces the whole collection wholesale,
+    # regardless of the manual toggles just made, and closes the
+    # drawer --
+    tags_drawer.get_by_role("button", name="Accept best 13").click()
+    tags_drawer.wait_for(state="hidden")
+    chips = page.locator(".chips .chip")
+    assert chips.count() == 13
+    for i in range(13):
+        assert chips.filter(has_text=re.compile(rf"^tag{i}\D*$")).count() == 1, i
+    # `tag13` was individually toggled on above and then wholesale
+    # replaced by Accept best 13 -- it must not survive.
+    assert chips.filter(has_text=re.compile(r"^tag13\D*$")).count() == 0
+
+
+def _assert_autosaved(page, workspace_root: Path) -> None:
+    # -- Every accepted value went through ordinary autosave: reload
+    # and confirm it is really on disk, not only in React state --
+    page.wait_for_timeout(500)  # autosave's own debounce
+    for _ in range(50):
+        written = _listing_yaml(workspace_root)
+        if (
+            written["etsy"]["title"] == "Retro Sunset Hike Tee"
+            and len(written["etsy"]["tags"]) == 13
+        ):
+            break
+        page.wait_for_timeout(100)
+    else:
+        raise AssertionError(f"autosave never wrote the accepted values: {written}")
+    assert written["etsy"]["title"] == "Retro Sunset Hike Tee"
+    assert sorted(written["etsy"]["tags"]) == sorted(f"tag{i}" for i in range(13))
+    assert written["etsy"]["description"]["lead"] == ""  # rejected, untouched
 
 
 # ===========================================================================
@@ -1418,7 +1428,8 @@ def test_a_saved_search_shows_beside_the_fields_and_after_a_reload(
 
         fields = page.get_by_role("group", name="Listing details").bounding_box()
         beside = panel.bounding_box()
-        assert fields is not None and beside is not None
+        assert fields is not None
+        assert beside is not None
         assert beside["x"] >= fields["x"] + fields["width"]
 
         page.reload()
@@ -1429,7 +1440,8 @@ def test_a_saved_search_shows_beside_the_fields_and_after_a_reload(
         page.set_viewport_size({"width": 1000, "height": 1000})
         fields = page.get_by_role("group", name="Listing details").bounding_box()
         below = panel.bounding_box()
-        assert fields is not None and below is not None
+        assert fields is not None
+        assert below is not None
         assert below["y"] >= fields["y"] + fields["height"]
 
 

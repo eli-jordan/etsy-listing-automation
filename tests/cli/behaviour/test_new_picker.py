@@ -85,7 +85,11 @@ def test_design_choices_break_ties_on_name(workspace_root: Path) -> None:
 def test_design_rows_carry_the_date_and_mark_designs_that_already_have_a_listing(
     workspace_root: Path,
 ) -> None:
-    _design(workspace_root, "fresh", mtime=datetime(2026, 3, 1, 9, 30).timestamp())
+    _design(
+        workspace_root,
+        "fresh",
+        mtime=datetime(2026, 3, 1, 9, 30, tzinfo=datetime.now().astimezone().tzinfo).timestamp(),
+    )
     workspace = Workspace.discover(root_override=workspace_root)
 
     rows = {

@@ -30,6 +30,11 @@ from etsy_listings.core.ai.models import Deadline
 from tests.support.gates import GATE_TIMEOUT, workers
 
 
+@pytest.fixture(autouse=True)
+def fast_polling(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(process, "POLL_INTERVAL", 0.01)
+
+
 class FakePopen:
     """A `subprocess.Popen` double whose `communicate()` blocks until either
     the test lets it finish (`finish()`) or something kills it -- exactly the
@@ -55,7 +60,7 @@ class FakePopen:
         self._stderr = stderr
         self._done.set()
 
-    def communicate(self, input: str | None = None) -> tuple[str, str]:  # noqa: A002
+    def communicate(self, input: str | None = None) -> tuple[str, str]:  # noqa: A002 -- matches Popen.communicate
         self.stdin_received = input
         self._done.wait(timeout=5.0)
         if not self._done.is_set():  # pragma: no cover - defensive, should not happen
@@ -105,7 +110,7 @@ def fake_popen(monkeypatch: pytest.MonkeyPatch) -> Launches:
 
 
 @contextmanager
-def finishing(launches: Launches, **outcome: Any) -> Iterator[None]:  # noqa: ANN401
+def finishing(launches: Launches, **outcome: Any) -> Iterator[None]:
     """Finish the child with ``outcome`` once `run_managed` has created it,
     from a helper joined on the way out; a child left running is finished so
     `run_managed` cannot outlive a failed test."""
@@ -127,7 +132,6 @@ def test_run_managed_returns_completed_output(fake_popen: Launches) -> None:
             cwd=Path("/workspace"),
             input_text="prompt text",
             deadline=Deadline.starting_now(seconds=60),
-            poll_interval=0.01,
         )
 
     assert result.returncode == 0
@@ -144,7 +148,6 @@ def test_run_managed_passes_cwd_and_argv(fake_popen: Launches) -> None:
             cwd=Path("/some/workspace"),
             input_text="",
             deadline=Deadline.starting_now(seconds=60),
-            poll_interval=0.01,
         )
 
     assert fake_popen[0].argv == ["claude", "-p", "hi"]
@@ -166,7 +169,6 @@ def test_run_managed_kills_the_process_tree_on_timeout(
         cwd=Path("/workspace"),
         input_text="prompt",
         deadline=already_expired,
-        poll_interval=0.01,
     )
 
     assert result.timed_out is True
@@ -190,7 +192,6 @@ def test_run_managed_kills_the_process_tree_on_cancellation(
         input_text="prompt",
         deadline=Deadline.starting_now(seconds=60),
         cancel_event=cancel_event,
-        poll_interval=0.01,
     )
 
     assert result.cancelled is True
@@ -210,7 +211,6 @@ def test_run_managed_does_not_kill_a_process_that_finishes_in_time(
             cwd=Path("/workspace"),
             input_text="prompt",
             deadline=Deadline.starting_now(seconds=60),
-            poll_interval=0.01,
         )
 
     assert result.returncode == 0
@@ -339,7 +339,7 @@ def test_kill_process_tree_on_posix_survives_a_process_that_already_exited(
     monkeypatch.setattr(process.sys, "platform", "linux")
 
     def _raise(pid: int) -> int:
-        raise ProcessLookupError()
+        raise ProcessLookupError
 
     def _unexpected_killpg(pgid: int, sig: int) -> None:
         raise AssertionError("killpg must not be called once getpgid raises")

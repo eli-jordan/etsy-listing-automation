@@ -25,10 +25,11 @@ from pathlib import Path
 from etsy_listings.core.ai import ProposalStore
 from etsy_listings.core.workspace.listing_documents import (
     ListingDocuments,
-    ListingMissing,
-    ListingNameTaken,
+    ListingMissingError,
+    ListingNameTakenError,
 )
-from etsy_listings.core.workspace.workspace import Workspace, remove_tree
+from etsy_listings.core.workspace.trees import remove_tree
+from etsy_listings.core.workspace.workspace import Workspace
 
 
 def move_listing(workspace: Workspace, old: str, new: str) -> None:
@@ -42,15 +43,15 @@ def move_listing(workspace: Workspace, old: str, new: str) -> None:
     them true again, and rewriting them here would breach "only the lockfile
     merges a lockfile".
 
-    Raises :class:`ListingMissing`, also after waiting for the lock, and
-    :class:`ListingNameTaken` when ``new`` is not free.
+    Raises :class:`ListingMissingError`, also after waiting for the lock, and
+    :class:`ListingNameTakenError` when ``new`` is not free.
     """
     documents = ListingDocuments(workspace)
     with documents.lock(old, new):
         if not documents.exists(old):
-            raise ListingMissing(old)
+            raise ListingMissingError(old)
         if not documents.is_free(new):
-            raise ListingNameTaken(new)
+            raise ListingNameTakenError(new)
         for source, target in zip(_keyed(workspace, old), _keyed(workspace, new), strict=True):
             if not source.exists():
                 continue

@@ -37,7 +37,7 @@ from etsy_listings.core.listing_artifacts import remove_listing
 from etsy_listings.core.workspace.listing_documents import (
     Document,
     ListingDocuments,
-    ListingMissing,
+    ListingMissingError,
 )
 
 if TYPE_CHECKING:
@@ -141,7 +141,7 @@ def _omit_consumed_renew(ctx: RunContext, listing: str, planned: PlannedRun) -> 
     )
     if etsy_plan is None or etsy_plan.blocked is not None:
         return
-    with suppress(ListingMissing):
+    with suppress(ListingMissingError):
         ListingDocuments(ctx.workspace).edit(listing, _without_renew)
 
 

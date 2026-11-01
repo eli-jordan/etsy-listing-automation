@@ -9,6 +9,10 @@ code, so the agent started before `.venv` and `node_modules` existed. `bash`
 by name is no better there; on that PATH it can be WSL's. From cygwin,
 `./setup_worktree.sh` runs this same script.
 
+It also points git's `core.hooksPath` at `.githooks`, whose pre-commit hook
+is the static-analysis backstop for every commit (spec S06). That setting is
+shared by every worktree of the clone.
+
 Exits with the first failing step's code.
 """
 
@@ -30,7 +34,7 @@ def main() -> int:
         print("setup_worktree: uv is not on PATH", file=sys.stderr)
         return 1
     print("== uv sync ==", flush=True)
-    code = subprocess.run([uv, "sync"], cwd=ROOT).returncode
+    code = subprocess.run([uv, "sync"], cwd=ROOT, check=False).returncode
     if code:
         return code
     npm = npm_command()
@@ -39,7 +43,17 @@ def main() -> int:
         print("setup_worktree: npm is not on PATH; src/ui is not installed", file=sys.stderr)
         return 1
     print("== npm install (src/ui) ==", flush=True)
-    return subprocess.run([*npm, "install"], cwd=UI).returncode
+    code = subprocess.run([*npm, "install"], cwd=UI, check=False).returncode
+    if code:
+        return code
+    git = shutil.which("git")
+    if git is None:
+        print("setup_worktree: git is not on PATH; the pre-commit hook is off", file=sys.stderr)
+        return 1
+    print("== git hooks (.githooks) ==", flush=True)
+    return subprocess.run(
+        [git, "config", "core.hooksPath", ".githooks"], cwd=ROOT, check=False
+    ).returncode
 
 
 if __name__ == "__main__":

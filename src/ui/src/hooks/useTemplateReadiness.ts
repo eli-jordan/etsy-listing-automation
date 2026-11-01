@@ -27,21 +27,23 @@ export function useTemplateReadiness(
     for (const name of checked.current.keys())
       if (!names.includes(name)) checked.current.delete(name);
     if (selected) checked.current.delete(selected);
+    async function readOne(name: string, token: string) {
+      try {
+        const status = await getPreparation(name, controller.signal);
+        if (!active) return;
+        checked.current.set(name, token);
+        setFacts((current) => ({ ...current, [name]: status.maps }));
+      } catch {
+        // Keep the catalog row unknown. Selecting it exposes the actionable error.
+      }
+    }
     async function read() {
       for (const name of names) {
         if (!active) return;
-        if (name === selected) continue;
         const token = JSON.stringify(states.filter(([template]) => template === name));
-        if (checked.current.get(name) === token) continue;
+        if (name === selected || checked.current.get(name) === token) continue;
         checked.current.delete(name);
-        try {
-          const status = await getPreparation(name, controller.signal);
-          if (!active) return;
-          checked.current.set(name, token);
-          setFacts((current) => ({ ...current, [name]: status.maps }));
-        } catch {
-          // Keep the catalog row unknown. Selecting it exposes the actionable error.
-        }
+        await readOne(name, token);
       }
     }
     void read();

@@ -79,7 +79,7 @@ class TestLoadCommonCopy:
         self, workspace_root: Path
     ) -> None:
         ws = Workspace.discover(root_override=workspace_root)
-        with pytest.raises(CommonCopyError, match="common-copy/missing.md"):
+        with pytest.raises(CommonCopyError, match=r"common-copy/missing.md"):
             ws.load_common_copy("common-copy/missing.md")
 
     def test_malformed_front_matter_is_a_common_copy_error(self, workspace_root: Path) -> None:

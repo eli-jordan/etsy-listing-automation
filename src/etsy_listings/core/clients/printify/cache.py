@@ -56,14 +56,14 @@ class CachedCatalogClient(CatalogClient):
         cache_dir: Path,
         *,
         ttl: timedelta = DEFAULT_TTL,
-        clock: Any = time.time,  # noqa: ANN401 - injected for deterministic tests
+        clock: Any = time.time,  # injected for deterministic tests
     ) -> None:
         self._inner = inner
         self._cache_dir = cache_dir
         self._ttl_seconds = ttl.total_seconds()
         self._clock = clock
 
-    def _read(self, name: str) -> Any | None:  # noqa: ANN401
+    def _read(self, name: str) -> Any | None:
         path = self._cache_dir / name
         if not path.is_file():
             return None
@@ -74,7 +74,7 @@ class CachedCatalogClient(CatalogClient):
             return None
         return payload["data"]
 
-    def _write(self, name: str, data: Any) -> None:  # noqa: ANN401
+    def _write(self, name: str, data: Any) -> None:
         self._cache_dir.mkdir(parents=True, exist_ok=True)
         path = self._cache_dir / name
         payload = {"schema": CACHE_SCHEMA, "fetched_at": self._clock(), "data": data}

@@ -61,7 +61,7 @@ def test_an_unknown_encoding_is_treated_as_unable_to_print() -> None:
         ({"LC_ALL": "", "LANG": "en_GB.UTF-8"}, True),
     ],
 )
-def test_declared_utf8_reads_the_locale_the_shell_set(environ, expected: bool) -> None:
+def test_declared_utf8_reads_the_locale_the_shell_set(environ, *, expected: bool) -> None:
     assert terminal.declared_utf8(environ) is expected
 
 
@@ -144,7 +144,7 @@ def test_a_broken_pipe_is_a_reader_gone_everywhere() -> None:
     [("win32", True, True), ("win32", False, False), ("linux", True, False)],
 )
 def test_einval_is_a_reader_gone_only_for_a_windows_stdout_pipe(
-    monkeypatch, platform: str, is_pipe: bool, expected: bool
+    monkeypatch, platform: str, *, is_pipe: bool, expected: bool
 ) -> None:
     monkeypatch.setattr(terminal.sys, "platform", platform)
     monkeypatch.setattr(terminal, "_stdout_is_pipe", lambda: is_pipe)

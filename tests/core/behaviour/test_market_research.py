@@ -28,7 +28,8 @@ from etsy_listings.core.clients.etsy.models import MarketCandidate, MarketListin
 from etsy_listings.core.market import (
     MarketResearchError,
     MarketWeights,
-    ResearchCancelled,
+    ResearchCancelledError,
+    ResearchSettings,
     research,
 )
 
@@ -46,7 +47,7 @@ def _seed(fake: FakeEtsyMarketClient, listing_id: int, *, reviews: int = 0, **fi
     fake.seed_listing(market_listing(listing_id, **fields), reviews=reviews)
 
 
-def _run(fake: FakeEtsyMarketClient, **kwargs: Any):  # noqa: ANN202 - MarketResult
+def _run(fake: FakeEtsyMarketClient, **kwargs: Any):
     kwargs.setdefault("today", TODAY)
     return research(QUERIES, fake, **kwargs)
 
@@ -102,7 +103,7 @@ def _three_listings() -> FakeEtsyMarketClient:
 
 
 def test_listings_are_scored_ranked_and_described_for_the_panel() -> None:
-    result = _run(_three_listings(), own_shop_id=1002)
+    result = _run(_three_listings(), settings=ResearchSettings(own_shop_id=1002))
 
     assert [(row.listing_id, row.rank, row.score) for row in result.listings] == [
         (1, 1, 73),
@@ -148,7 +149,7 @@ def test_weights_change_the_order() -> None:
         shop_sales=0,
         shop_rating=0,
     )
-    result = _run(_three_listings(), weights=only_reviews)
+    result = _run(_three_listings(), settings=ResearchSettings(weights=only_reviews))
     assert [(row.listing_id, row.score) for row in result.listings] == [(2, 100), (1, 50), (3, 0)]
 
 
@@ -354,14 +355,14 @@ def test_a_cancel_before_research_starts_makes_no_calls() -> None:
     fake = FakeEtsyMarketClient()
     cancel = threading.Event()
     cancel.set()
-    with pytest.raises(ResearchCancelled):
+    with pytest.raises(ResearchCancelledError):
         _run(fake, cancel_event=cancel)
     assert fake.calls == []
 
 
 def test_a_cancel_during_the_searches_stops_before_the_batch() -> None:
     fake = _graded_cancelling("search_active")
-    with pytest.raises(ResearchCancelled):
+    with pytest.raises(ResearchCancelledError):
         _run(fake, cancel_event=fake.cancel)
     assert fake.count("listings_by_ids") == 0
     assert fake.count("review_count") == 0
@@ -369,14 +370,14 @@ def test_a_cancel_during_the_searches_stops_before_the_batch() -> None:
 
 def test_a_cancel_during_the_batch_stops_before_any_review_count() -> None:
     fake = _graded_cancelling("listings_by_ids")
-    with pytest.raises(ResearchCancelled):
+    with pytest.raises(ResearchCancelledError):
         _run(fake, cancel_event=fake.cancel)
     assert fake.count("review_count") == 0
 
 
 def test_a_cancel_during_the_review_counts_starts_no_new_call() -> None:
     fake = _graded_cancelling("review_count")
-    with pytest.raises(ResearchCancelled):
+    with pytest.raises(ResearchCancelledError):
         _run(fake, cancel_event=fake.cancel)
     # Only the calls already in flight when the first one cancelled.
     assert 1 <= fake.count("review_count") <= 5

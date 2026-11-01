@@ -37,7 +37,7 @@ class Money:
     currency: str
 
     @classmethod
-    def parse(cls, raw: Any) -> Money:  # noqa: ANN401 - accepts arbitrary YAML scalars
+    def parse(cls, raw: Any) -> Money:  # accepts arbitrary YAML scalars
         if isinstance(raw, Money):
             return raw
         if isinstance(raw, bool) or not isinstance(raw, str | int | float):
@@ -77,12 +77,13 @@ class Money:
         Rounded half-up rather than truncated: banker's rounding on a price
         is a surprise, and truncation loses a øre on every odd amount.
         """
-        return int((self.amount * 100).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
+        return int((self.amount * 100).quantize(Decimal(1), rounding=ROUND_HALF_UP))
 
     @classmethod
     def __get_pydantic_core_schema__(
-        cls, source_type: Any, handler: GetCoreSchemaHandler
+        cls, _source_type: Any, _handler: GetCoreSchemaHandler
     ) -> core_schema.CoreSchema:
+        # Pydantic supplies both arguments; this plain validator needs neither (S04).
         return core_schema.no_info_plain_validator_function(
             cls.parse,
             serialization=core_schema.plain_serializer_function_ser_schema(str),
@@ -115,7 +116,7 @@ def require_currency(money: Money, expected: str, field: str) -> None:
         )
 
 
-def _coerce_money(raw: Any) -> Money:  # noqa: ANN401 - pydantic validator boundary
+def _coerce_money(raw: Any) -> Money:  # pydantic validator boundary
     return Money.parse(raw)
 
 

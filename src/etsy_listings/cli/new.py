@@ -38,12 +38,14 @@ from etsy_listings.core.application.garment_profiles import (
     resolve_colour_slugs,
 )
 from etsy_listings.core.application.listing_creation import (
-    build_listing_stub,
+    ListingStub,
     build_media_entries,
     load_template_kind,
     validate_listing_stub,
 )
 from etsy_listings.core.application.pricing_plans import (
+    GarmentOffer,
+    PriceSources,
     create_starting_pricing_plan,
     load_candidate_pricing_plans,
 )
@@ -54,6 +56,8 @@ from etsy_listings.core.config.media import MAX_IMAGES
 from etsy_listings.core.config.slug import SlugCollisionError
 from etsy_listings.core.workspace.listing_documents import ListingDocuments
 from etsy_listings.core.workspace.workspace import Workspace
+
+MIN_SIZES_TO_COMPARE = 2  # one print area has nothing to be the largest of
 
 
 def _pick_blueprint(workspace: Workspace, blueprints: list[Blueprint]) -> Blueprint:
@@ -94,7 +98,7 @@ def _report_print_area_choice(variant_set: VariantSet) -> None:
     it decides how big the design file has to be.
     """
     sizes = variant_set.placeholder_sizes(DEFAULT_PLACEHOLDER)
-    if len(sizes) < 2:
+    if len(sizes) < MIN_SIZES_TO_COMPARE:
         return
     largest, smallest = sizes[0], sizes[-1]
     typer.echo(
@@ -187,18 +191,12 @@ def _warn_if_design_missing(workspace: Workspace, design_name: str) -> None:
 
 
 def _pick_or_create_pricing_plan(
-    workspace: Workspace,
-    catalog: CatalogClient,
-    garment_profile_slug: str,
-    blueprint: Blueprint,
-    provider: PrintProvider,
-    variant_set: VariantSet,
-    sizes: list[str],
+    workspace: Workspace, catalog: CatalogClient, offer: GarmentOffer
 ) -> Path:
     """Returns the chosen/generated plan's absolute path -- turning that into
     a ref is the caller's job (`pricing_plan_ref`, ADR-0046)."""
     candidates = load_candidate_pricing_plans(workspace)
-    choices = build_pricing_plan_choices(candidates, garment_profile_slug)
+    choices = build_pricing_plan_choices(candidates, offer.garment_profile_slug)
     rows = [c.label for c in choices] + [CREATE_NEW_PLAN_LABEL]
     by_label = {c.label: c for c in choices}
 
@@ -212,14 +210,7 @@ def _pick_or_create_pricing_plan(
     if answer == CREATE_NEW_PLAN_LABEL:
         name = prompts.ask_text("Pricing plan name:")
         created = create_starting_pricing_plan(
-            workspace,
-            catalog,
-            name=name,
-            garment_profile_slug=garment_profile_slug,
-            blueprint=blueprint,
-            provider=provider,
-            variant_set=variant_set,
-            sizes=sizes,
+            workspace, PriceSources(catalog), name=name, offer=offer
         )
         typer.echo(f"wrote {created.path}")
         if not created.complete:
@@ -280,21 +271,23 @@ def run_new(
     typer.echo(f"{'wrote' if saved.written else 'reusing existing'} garment-profiles/{slug}.yaml")
 
     plan_path = _pick_or_create_pricing_plan(
-        workspace, catalog, slug, blueprint, provider, variant_set, saved.profile.sizes
+        workspace,
+        catalog,
+        GarmentOffer(slug, blueprint, provider, variant_set, saved.profile.sizes),
     )
     plan_ref = make_pricing_plan_ref(plan_path, root=workspace.root)
 
     colours = listing_colours(saved.profile, colour_slugs)
     media = build_media_entries(template=mockup_template, kind=template_kind, colours=colours)
     _report_media_choice(mockup_template, template_kind, colours, media)
-    listing_data = build_listing_stub(
+    listing_data = ListingStub(
         garment_profile_slug=slug,
         design_ref=workspace.design_file(design_name).relative_to(workspace.root).as_posix(),
         colours=colours,
         pricing_plan_ref=plan_ref,
         brief="",
         media=media,
-    )
+    ).document()
     validate_listing_stub(listing_data, currency=workspace.defaults.etsy.currency)
     path = ListingDocuments(workspace).create(design_name, listing_data)
     typer.echo(f"wrote {path}")

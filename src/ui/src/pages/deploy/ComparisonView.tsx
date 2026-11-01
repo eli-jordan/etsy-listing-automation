@@ -7,6 +7,7 @@ import type {
   BeforeImageTile,
   BeforeVideoTile,
   Comparison as ComparisonData,
+  TagsBlock,
 } from "./comparison";
 import { wordDiff } from "./wordDiff";
 
@@ -71,6 +72,42 @@ function sceneState(
   return renderSnapshot?.scenes.find((s) => s.template === template && s.colour === colour) ?? null;
 }
 
+interface TileImage {
+  src: string | null;
+  /** The plan's preview of this scene is still rendering. */
+  pending: boolean;
+}
+
+/** Where an after-apply tile's image comes from: the caller's own lookup,
+ * the listing's picture for a plain file, or the scene -- its cached render,
+ * or this plan's preview once that has rendered. */
+function afterTileImage(
+  ref: string,
+  listing: ListingMediaContext,
+  renderSnapshot: RenderSnapshot | null,
+  previewsRendered: Set<string>,
+  imageUrlForRef: ((ref: string) => string | null) | undefined,
+): TileImage {
+  if (imageUrlForRef !== undefined) return { src: imageUrlForRef(ref), pending: false };
+  const parsed = parseRef(ref);
+  if (parsed === null) {
+    return { src: pictureFor(ref, listing.scene, "full", listing.name || null), pending: false };
+  }
+  const scene = sceneState(renderSnapshot, parsed.template, parsed.colour);
+  const key = `${parsed.template}|${parsed.colour ?? ""}`;
+  const ready =
+    scene === null || scene.state === "cached" || scene.preview || previewsRendered.has(key);
+  if (!ready) return { src: null, pending: true };
+  if (scene !== null && scene.state !== "cached") {
+    return {
+      src: previewUrl(listing.name, parsed.template, parsed.colour, scene.scene_hash),
+      pending: false,
+    };
+  }
+  const picture = { template: parsed.template, colour: parsed.colour };
+  return { src: pictureFor(picture, listing.scene, "full"), pending: false };
+}
+
 function AfterTile({
   tile,
   listing,
@@ -84,28 +121,13 @@ function AfterTile({
   previewsRendered: Set<string>;
   imageUrlForRef: ((ref: string) => string | null) | undefined;
 }) {
-  const parsed = parseRef(tile.ref);
-  let src: string | null = null;
-  let pending = false;
-
-  if (imageUrlForRef !== undefined) {
-    src = imageUrlForRef(tile.ref);
-  } else if (parsed === null) {
-    src = pictureFor(tile.ref, listing.scene, "full", listing.name || null);
-  } else {
-    const scene = sceneState(renderSnapshot, parsed.template, parsed.colour);
-    const key = `${parsed.template}|${parsed.colour ?? ""}`;
-    const ready =
-      scene === null || scene.state === "cached" || scene.preview || previewsRendered.has(key);
-    if (ready) {
-      src =
-        scene !== null && scene.state !== "cached"
-          ? previewUrl(listing.name, parsed.template, parsed.colour, scene.scene_hash)
-          : pictureFor({ template: parsed.template, colour: parsed.colour }, listing.scene, "full");
-    } else {
-      pending = true;
-    }
-  }
+  const { src, pending } = afterTileImage(
+    tile.ref,
+    listing,
+    renderSnapshot,
+    previewsRendered,
+    imageUrlForRef,
+  );
 
   return (
     <figure className="dv-thumb-wrap">
@@ -222,6 +244,54 @@ function Block({
   );
 }
 
+function StringList({
+  label,
+  block,
+  side,
+}: {
+  label: string;
+  block: TagsBlock;
+  side: "before" | "after";
+}) {
+  const isAfter = side === "after";
+  return (
+    <Block label={label} changed={block.changed} side={side}>
+      <div className="dv-chips">
+        {(isAfter ? block.after : block.before).map((value) => {
+          const added = isAfter && block.added.includes(value);
+          const removed = !isAfter && block.removed.includes(value);
+          return (
+            <span
+              key={value}
+              className={`dv-chip${added ? " dv-chip--add" : ""}${removed ? " dv-chip--rm" : ""}`}
+            >
+              {value}
+            </span>
+          );
+        })}
+      </div>
+    </Block>
+  );
+}
+
+/** A text field on one side: the word diff after a change, the plain
+ * value otherwise, and a dash for nothing on Etsy yet. */
+function TextDiff({
+  field,
+  isAfter,
+}: {
+  field: { before: string | null; after: string; changed: boolean };
+  isAfter: boolean;
+}) {
+  if (!isAfter) return field.before ?? "—";
+  if (!field.changed) return field.after;
+  return wordDiff(field.before ?? "", field.after).map((token, index) => (
+    <span key={index} className={token.type === "same" ? undefined : `dv-${token.type}`}>
+      {token.text}{" "}
+    </span>
+  ));
+}
+
 function Column({
   side,
   comparison,
@@ -283,18 +353,7 @@ function Column({
       {title && (
         <Block label="Title" changed={title.changed} side={side}>
           <div className="dv-title">
-            {isAfter && title.changed
-              ? wordDiff(title.before ?? "", title.after).map((token, index) => (
-                  <span
-                    key={index}
-                    className={token.type === "same" ? undefined : `dv-${token.type}`}
-                  >
-                    {token.text}{" "}
-                  </span>
-                ))
-              : isAfter
-                ? title.after
-                : (title.before ?? "—")}
+            <TextDiff field={title} isAfter={isAfter} />
           </div>
         </Block>
       )}
@@ -302,18 +361,7 @@ function Column({
       {description && (
         <Block label="Description" changed={description.changed} side={side}>
           <div className="dv-description">
-            {isAfter && description.changed
-              ? wordDiff(description.before ?? "", description.after).map((token, index) => (
-                  <span
-                    key={index}
-                    className={token.type === "same" ? undefined : `dv-${token.type}`}
-                  >
-                    {token.text}{" "}
-                  </span>
-                ))
-              : isAfter
-                ? description.after
-                : (description.before ?? "—")}
+            <TextDiff field={description} isAfter={isAfter} />
           </div>
         </Block>
       )}
@@ -342,43 +390,8 @@ function Column({
         </Block>
       )}
 
-      {tags && (
-        <Block label="Tags" changed={tags.changed} side={side}>
-          <div className="dv-chips">
-            {(isAfter ? tags.after : tags.before).map((tag) => {
-              const added = isAfter && tags.added.includes(tag);
-              const removed = !isAfter && tags.removed.includes(tag);
-              return (
-                <span
-                  key={tag}
-                  className={`dv-chip${added ? " dv-chip--add" : ""}${removed ? " dv-chip--rm" : ""}`}
-                >
-                  {tag}
-                </span>
-              );
-            })}
-          </div>
-        </Block>
-      )}
-
-      {materials && (
-        <Block label="Materials" changed={materials.changed} side={side}>
-          <div className="dv-chips">
-            {(isAfter ? materials.after : materials.before).map((material) => {
-              const added = isAfter && materials.added.includes(material);
-              const removed = !isAfter && materials.removed.includes(material);
-              return (
-                <span
-                  key={material}
-                  className={`dv-chip${added ? " dv-chip--add" : ""}${removed ? " dv-chip--rm" : ""}`}
-                >
-                  {material}
-                </span>
-              );
-            })}
-          </div>
-        </Block>
-      )}
+      {tags && <StringList label="Tags" block={tags} side={side} />}
+      {materials && <StringList label="Materials" block={materials} side={side} />}
     </div>
   );
 }
@@ -415,19 +428,19 @@ export function ComparisonView({
   imageUrlForRef?: (ref: string) => string | null;
 }) {
   const etsyListingIdLabel = etsyListingId !== null ? `listing ${etsyListingId}` : "";
+  const columnProps = {
+    comparison,
+    listing,
+    renderSnapshot,
+    previewsRendered,
+    etsyListingIdLabel,
+    imageUrlForRef,
+  };
 
   if (!comparison.hasEtsyListing) {
     return (
       <div className="dv-compare dv-compare--single">
-        <Column
-          side="after"
-          comparison={comparison}
-          listing={listing}
-          renderSnapshot={renderSnapshot}
-          previewsRendered={previewsRendered}
-          etsyListingIdLabel={etsyListingIdLabel}
-          imageUrlForRef={imageUrlForRef}
-        />
+        <Column {...columnProps} side="after" />
         <p className="dv-note">Not on Etsy yet.</p>
       </div>
     );
@@ -436,39 +449,15 @@ export function ComparisonView({
   if (collapsed) {
     return (
       <div className="dv-compare dv-compare--single">
-        <Column
-          side="before"
-          comparison={comparison}
-          listing={listing}
-          renderSnapshot={renderSnapshot}
-          previewsRendered={previewsRendered}
-          etsyListingIdLabel={etsyListingIdLabel}
-          imageUrlForRef={imageUrlForRef}
-        />
+        <Column {...columnProps} side="before" />
       </div>
     );
   }
 
   return (
     <div className="dv-compare">
-      <Column
-        side="before"
-        comparison={comparison}
-        listing={listing}
-        renderSnapshot={renderSnapshot}
-        previewsRendered={previewsRendered}
-        etsyListingIdLabel={etsyListingIdLabel}
-        imageUrlForRef={imageUrlForRef}
-      />
-      <Column
-        side="after"
-        comparison={comparison}
-        listing={listing}
-        renderSnapshot={renderSnapshot}
-        previewsRendered={previewsRendered}
-        etsyListingIdLabel={etsyListingIdLabel}
-        imageUrlForRef={imageUrlForRef}
-      />
+      <Column {...columnProps} side="before" />
+      <Column {...columnProps} side="after" />
     </div>
   );
 }

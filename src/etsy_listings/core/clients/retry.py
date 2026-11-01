@@ -109,6 +109,20 @@ def wait_for(
     return delay - spread + (2 * spread * random())
 
 
+def _send_once(
+    send: Callable[[], httpx.Response], method: str
+) -> tuple[httpx.Response | None, httpx.TransportError | None]:
+    """One call: its response, or the transport error a retry may answer."""
+    try:
+        return send(), None
+    except httpx.TransportError as exc:
+        # No response at all: the same ambiguity as a 5xx, so the same
+        # rule about which verbs may be sent again.
+        if method.upper() not in IDEMPOTENT_METHODS:
+            raise
+        return None, exc
+
+
 def with_retries(
     send: Callable[[], httpx.Response],
     method: str,
@@ -128,24 +142,17 @@ def with_retries(
     """
     last_error: httpx.TransportError | None = None
     for attempt in range(policy.attempts):
-        response: httpx.Response | None = None
-        try:
-            response = send()
-        except httpx.TransportError as exc:
-            # No response at all: the same ambiguity as a 5xx, so the same
-            # rule about which verbs may be sent again.
-            if method.upper() not in IDEMPOTENT_METHODS:
-                raise
-            last_error = exc
-        else:
-            if not should_retry(method, response):
-                return response
+        response, error = _send_once(send, method)
+        if error is not None:
+            last_error = error
+        elif response is not None and not should_retry(method, response):
+            return response
 
         if attempt == policy.attempts - 1:
             break
         sleep(wait_for(policy, attempt, response, random=random))
 
     if response is None:
-        assert last_error is not None  # noqa: S101 - unreachable without one
+        assert last_error is not None  # unreachable without one
         raise last_error
     return response

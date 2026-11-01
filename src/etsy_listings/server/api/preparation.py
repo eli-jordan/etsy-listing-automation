@@ -3,20 +3,28 @@
 import time
 from collections.abc import AsyncIterator
 from dataclasses import asdict
-from typing import Literal
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import Response
 from starlette.concurrency import run_in_threadpool
 from starlette.responses import StreamingResponse
 
-from etsy_listings.core.application.preparation.coordinator import PreparationRefused, Preparations
+from etsy_listings.core.application.preparation.coordinator import (
+    PreparationRefusedError,
+    PreparationRequest,
+    Preparations,
+)
 from etsy_listings.core.application.preparation.models import TERMINAL, Event, Job
 from etsy_listings.core.application.preparation_views import preparation_view, read_mask
-from etsy_listings.core.application.refusals import TemplateMissing
+from etsy_listings.core.application.refusals import TemplateMissingError
 from etsy_listings.core.config.errors import ConfigLoadError
 from etsy_listings.core.errors import UserFacingError
-from etsy_listings.core.workspace.calibration import CalibrationConflict, CalibrationStore
+from etsy_listings.core.workspace.calibration import (
+    CalibrationConflictError,
+    CalibrationStore,
+    SavedMask,
+)
 from etsy_listings.server.api.schemas import (
     CreatePreparationRequest,
     MapReadinessResponse,
@@ -56,13 +64,13 @@ def job_response(preparations: Preparations, job: Job) -> PreparationJobResponse
     )
 
 
-@router.get("/templates/{name}/preparation", response_model=PreparationResponse)
+@router.get("/templates/{name}/preparation")
 def status(request: Request, name: str, response: Response) -> PreparationResponse:
     response.headers["Cache-Control"] = "no-store"
     preparations = coordinator(request)
     try:
         view = preparation_view(preparations, name)
-    except (TemplateMissing, ConfigLoadError) as exc:
+    except (TemplateMissingError, ConfigLoadError) as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except UserFacingError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
@@ -79,12 +87,12 @@ def status(request: Request, name: str, response: Response) -> PreparationRespon
     )
 
 
-@router.get("/preparation/jobs", response_model=list[PreparationJobResponse])
+@router.get("/preparation/jobs")
 def jobs(
     request: Request,
     template: str | None = None,
-    offset: int = Query(0, ge=0),
-    limit: int = Query(100, ge=1, le=1000),
+    offset: Annotated[int, Query(ge=0)] = 0,
+    limit: Annotated[int, Query(ge=1, le=1000)] = 100,
 ) -> list[PreparationJobResponse]:
     preparations = coordinator(request)
     if template is not None:
@@ -95,17 +103,21 @@ def jobs(
     ]
 
 
-def mask_response(
-    request: Request, name: str, placement_id: str | None, source: Literal["edited", "automatic"]
-) -> Response:
+def _read_mask(request: Request, name: str, placement_id: str | None) -> SavedMask:
     try:
-        mask = read_mask(coordinator(request).workspace, name, placement_id)
-    except TemplateMissing as exc:
+        return read_mask(coordinator(request).workspace, name, placement_id)
+    except TemplateMissingError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except UserFacingError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+def mask_response(
+    request: Request, name: str, placement_id: str | None, source: Literal["edited", "automatic"]
+) -> Response:
+    mask = _read_mask(request, name, placement_id)
     return Response(
         mask.edited if source == "edited" else mask.automatic,
         media_type="image/png",
@@ -131,14 +143,7 @@ def placement_mask(
 
 
 def history_response(request: Request, name: str, placement_id: str | None) -> MaskHistoryResponse:
-    try:
-        mask = read_mask(coordinator(request).workspace, name, placement_id)
-    except TemplateMissing as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    except UserFacingError as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    mask = _read_mask(request, name, placement_id)
     store = CalibrationStore(coordinator(request).workspace)
     strokes = store.history(name, placement_id, mask.checksum)
     return MaskHistoryResponse(
@@ -148,15 +153,13 @@ def history_response(request: Request, name: str, placement_id: str | None) -> M
     )
 
 
-@router.get("/templates/{name}/mask-history", response_model=MaskHistoryResponse)
+@router.get("/templates/{name}/mask-history")
 def mask_history(request: Request, name: str, response: Response) -> MaskHistoryResponse:
     response.headers["Cache-Control"] = "no-store"
     return history_response(request, name, None)
 
 
-@router.get(
-    "/templates/{name}/placements/{placement_id}/mask-history", response_model=MaskHistoryResponse
-)
+@router.get("/templates/{name}/placements/{placement_id}/mask-history")
 def placement_history(
     request: Request, name: str, placement_id: str, response: Response
 ) -> MaskHistoryResponse:
@@ -164,7 +167,7 @@ def placement_history(
     return history_response(request, name, placement_id)
 
 
-@router.get("/marigold/runtime", response_model=MarigoldRuntimeResponse)
+@router.get("/marigold/runtime")
 def runtime_status(request: Request) -> MarigoldRuntimeResponse:
     capability = coordinator(request).runtime.inspect()
     return MarigoldRuntimeResponse(
@@ -180,24 +183,26 @@ def runtime_status(request: Request) -> MarigoldRuntimeResponse:
     )
 
 
-@router.post("/preparation/jobs", response_model=PreparationJobResponse, status_code=202)
+@router.post("/preparation/jobs", status_code=202)
 def submit(request: Request, body: CreatePreparationRequest) -> PreparationJobResponse:
     preparations = coordinator(request)
     try:
         job = preparations.submit(
             body.template,
-            config_revision=body.config_revision,
-            request_id=body.request_id,
-            action=body.action,
-            previous_job=body.previous_job,
-            reset_masks_for_photo=body.reset_masks_for_photo,
+            PreparationRequest(
+                config_revision=body.config_revision,
+                request_id=body.request_id,
+                action=body.action,
+                previous_job=body.previous_job,
+                reset_masks_for_photo=body.reset_masks_for_photo,
+            ),
         )
-    except CalibrationConflict as exc:
+    except CalibrationConflictError as exc:
         raise HTTPException(status_code=412, detail=str(exc)) from exc
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except ValueError as exc:
-        if isinstance(exc, PreparationRefused):
+        if isinstance(exc, PreparationRefusedError):
             raise HTTPException(
                 status_code=409, detail={"reason": "preparation_refused", "message": str(exc)}
             ) from exc
@@ -216,17 +221,23 @@ def existing_job(preparations: Preparations, identity: str) -> Job:
         raise HTTPException(status_code=404, detail="Preparation job not found") from exc
 
 
-@router.get("/preparation/jobs/{identity}", response_model=PreparationJobResponse)
+@router.get("/preparation/jobs/{identity}")
 def job_status(request: Request, identity: str) -> PreparationJobResponse:
     preparations = coordinator(request)
     return job_response(preparations, existing_job(preparations, identity))
 
 
-@router.delete("/preparation/jobs/{identity}", response_model=PreparationJobResponse)
+@router.delete("/preparation/jobs/{identity}")
 def cancel(request: Request, identity: str) -> PreparationJobResponse:
     preparations = coordinator(request)
     existing_job(preparations, identity)
     return job_response(preparations, preparations.cancel(identity))
+
+
+async def _caught_up(preparations: Preparations, identity: str, after: int) -> bool:
+    """Whether the job has ended and every event it emitted has been sent."""
+    job = await run_in_threadpool(preparations.status, identity)
+    return job.phase in TERMINAL and after >= job.last_event_sequence
 
 
 async def event_stream(
@@ -245,8 +256,7 @@ async def event_stream(
         for event in pending:
             after = event.sequence
             yield f"id: {after}\nevent: progress\ndata: {event.model_dump_json()}\n\n".encode()
-        job = await run_in_threadpool(preparations.status, identity)
-        if job.phase in TERMINAL and after >= job.last_event_sequence:
+        if await _caught_up(preparations, identity, after):
             return
         if not pending:
             yield b": keepalive\n\n"

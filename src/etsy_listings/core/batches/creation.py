@@ -47,7 +47,7 @@ from etsy_listings.core.workspace.listing_documents import ListingDocuments
 from etsy_listings.core.workspace.workspace import Workspace
 
 
-class ConfirmRefused(UserFacingError, ValueError):
+class ConfirmRefusedError(UserFacingError, ValueError):
     """The session cannot become a batch yet, and nothing was written."""
 
 
@@ -56,7 +56,9 @@ def _revalidate(frozen: FrozenListingTemplate, name: str) -> None:
     issues = frozen.issues(facts=WorkspaceFacts.gather(frozen.workspace))
     blocking = [issue.message for issue in issues if issue.severity == "block"]
     if blocking:
-        raise ConfirmRefused(f"{name} as staged can no longer make listings: {' '.join(blocking)}")
+        raise ConfirmRefusedError(
+            f"{name} as staged can no longer make listings: {' '.join(blocking)}"
+        )
 
 
 def confirm(
@@ -69,7 +71,7 @@ def confirm(
 ) -> Batch:
     """Create the batch for ``session_id`` and its listings, or finish the
     one a previous confirm began. Raises :class:`KeyError` for a session that
-    does not exist and :class:`ConfirmRefused` for one that cannot be
+    does not exist and :class:`ConfirmRefusedError` for one that cannot be
     confirmed yet."""
     with staging.lock(session_id), batches.lock(session_id):
         batch = batches.load(session_id)
@@ -91,11 +93,11 @@ def _start(
     reviewed = review(workspace, session)
     if reviewed.name_problems:
         count = reviewed.name_problems
-        raise ConfirmRefused(
+        raise ConfirmRefusedError(
             f"Fix {count} {'name' if count == 1 else 'names'} to create the listings."
         )
     if not reviewed.creatable:
-        raise ConfirmRefused("There is no design here that can become a listing.")
+        raise ConfirmRefusedError("There is no design here that can become a listing.")
     frozen = FrozenListingTemplate.restore(
         workspace,
         session.template,
@@ -181,13 +183,13 @@ def create_rows(
             if row.creation == "created" or (only is not None and row.id not in only):
                 continue
             try:
-                row = _create(workspace, batches, batch, index, frozen)
+                updated = _create(workspace, batches, batch, index, frozen)
             except (OSError, ConfigLoadError, ValidationError, UserFacingError) as exc:
-                row = batch.rows[index].model_copy(
+                updated = batch.rows[index].model_copy(
                     update={"creation": "failed", "error": _failure(row, exc)}
                 )
-                _keep_input(workspace, batch, row)
-            batch.rows[index] = row
+                _keep_input(workspace, batch, updated)
+            batch.rows[index] = updated
             batches.save(batch)
     if all(_materialised(workspace, batch, row) for row in batch.rows):
         with staging.lock(batch_id):
@@ -280,15 +282,21 @@ def _create(
                 # Created is queued (spec, *Confirming a batch*), in the same
                 # save, so a crash cannot leave a listing the queue never sees.
                 return row.model_copy(update={"creation": "created", "error": None, "ai": "queued"})
-        others = {r.name.casefold() for i, r in enumerate(batch.rows) if i != index}
-        # A design that already holds the row's bytes -- one it reuses, or
-        # one it wrote itself before its name was taken -- is kept.
-        design = row.design if _holds(workspace, row.design, row.sha256) else None
-        taken = taken_for(workspace_names(workspace), design)
-        name = allocate(row.base, taken | others)
-        row = row.model_copy(update={"name": name, "design": design or name, "claimed": False})
+        row = _renamed(workspace, batch, index, row)
         batch.rows[index] = row
         batches.save(batch)
+
+
+def _renamed(workspace: Workspace, batch: Batch, index: int, row: BatchRow) -> BatchRow:
+    """``row`` under the next name free of the workspace and the batch's other
+    rows, unclaimed."""
+    others = {r.name.casefold() for i, r in enumerate(batch.rows) if i != index}
+    # A design that already holds the row's bytes -- one it reuses, or
+    # one it wrote itself before its name was taken -- is kept.
+    design = row.design if _holds(workspace, row.design, row.sha256) else None
+    taken = taken_for(workspace_names(workspace), design)
+    name = allocate(row.base, taken | others)
+    return row.model_copy(update={"name": name, "design": design or name, "claimed": False})
 
 
 def _put(workspace: Workspace, target: Path, write: Callable[[], object]) -> None:

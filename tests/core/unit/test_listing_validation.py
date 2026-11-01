@@ -19,6 +19,7 @@ from etsy_listings.core.config.garment_profile import BlueprintRef, GarmentProfi
 from etsy_listings.core.config.listing import EtsyListingConfig, Listing, TemplateMediaEntry
 from etsy_listings.core.config.listing_template import ListingTemplate
 from etsy_listings.core.config.listing_validation import (
+    CheckInputs,
     Issue,
     TemplateInfo,
     check_lifecycle_verb,
@@ -92,15 +93,19 @@ def _check(
 ) -> list[Issue]:
     return check_listing(
         listing,
-        garment_profile=garment_profile,
-        garment_profile_names=(
-            garment_profile_names if garment_profile_names is not None else ["comfort-colors-1717"]
+        CheckInputs(
+            garment_profile=garment_profile,
+            garment_profile_names=(
+                garment_profile_names
+                if garment_profile_names is not None
+                else ["comfort-colors-1717"]
+            ),
+            templates=templates if templates is not None else {"flat-lay-01": FLAT_LAY},
+            description_ref_error=description_ref_error,
+            videos=videos if videos is not None else {},
         ),
         design_paths=design_paths if design_paths is not None else {},
-        templates=templates if templates is not None else {"flat-lay-01": FLAT_LAY},
         published=published,
-        description_ref_error=description_ref_error,
-        videos=videos if videos is not None else {},
     )
 
 
@@ -578,7 +583,7 @@ class TestLifecycleVerb:
     ) -> None:
         issues = check_lifecycle_verb("retired", published=False)
         assert len(issues) == 1
-        first, *rest = issues[0].message.splitlines()
+        first, *_rest = issues[0].message.splitlines()
         assert "never been for sale" in first
         assert "nothing to pause" in first
         assert issues[0].severity == "block"
@@ -676,23 +681,30 @@ class TestVideos:
     def test_over_100_mb_blocks_naming_the_file_and_the_limit(self) -> None:
         [issue] = _video_issues(replace(GOOD_VIDEO, size_bytes=100_000_001))
         assert issue.severity == "block"
-        assert CLIP in issue.message and "100 MB" in issue.message
+        assert CLIP in issue.message
+        assert "100 MB" in issue.message
 
     def test_under_3_seconds_blocks_naming_the_file_and_the_limit(self) -> None:
         [issue] = _video_issues(replace(GOOD_VIDEO, duration_seconds=2.0))
         assert issue.severity == "block"
-        assert CLIP in issue.message and "2.0 s" in issue.message and "3–15" in issue.message
+        assert CLIP in issue.message
+        assert "2.0 s" in issue.message
+        assert "3–15" in issue.message
 
     def test_over_15_seconds_blocks_naming_the_file_and_the_limit(self) -> None:
         [issue] = _video_issues(replace(GOOD_VIDEO, duration_seconds=20.0))
-        assert CLIP in issue.message and "20.0 s" in issue.message and "3–15" in issue.message
+        assert CLIP in issue.message
+        assert "20.0 s" in issue.message
+        assert "3–15" in issue.message
 
     def test_a_short_side_under_500_px_blocks_naming_the_file_and_the_limit(self) -> None:
         """The shorter side, whichever it is: a 1920x400 banner is refused as
         surely as a 400x400 square."""
         [issue] = _video_issues(replace(GOOD_VIDEO, width=1920, height=400))
         assert issue.severity == "block"
-        assert CLIP in issue.message and "1920x400" in issue.message and "500" in issue.message
+        assert CLIP in issue.message
+        assert "1920x400" in issue.message
+        assert "500" in issue.message
 
     def test_no_aspect_rule_applies(self) -> None:
         assert _video_issues(replace(GOOD_VIDEO, width=2000, height=500)) == []
@@ -711,7 +723,8 @@ class TestVideos:
     def test_audio_is_an_info_note_not_a_block(self) -> None:
         [issue] = _video_issues(replace(GOOD_VIDEO, has_audio=True))
         assert issue.severity == "info"
-        assert CLIP in issue.message and "sound" in issue.message
+        assert CLIP in issue.message
+        assert "sound" in issue.message
 
     def test_issues_point_at_the_images_tab_and_the_file(self) -> None:
         [issue] = _video_issues(ProbeFailure("was not found"), ref="./close-up.mov")
@@ -750,11 +763,13 @@ class TestListingTemplateCompleteness:
     ) -> list[Issue]:
         return check_listing_template(
             template,
-            garment_profile=garment_profile,
-            garment_profile_names=garment_profile_names,
-            templates={"flat-lay-01": FLAT_LAY, "colour-chart-01": CHART},
-            description_ref_error=description_ref_error,
-            videos=videos,
+            CheckInputs(
+                garment_profile=garment_profile,
+                garment_profile_names=garment_profile_names,
+                templates={"flat-lay-01": FLAT_LAY, "colour-chart-01": CHART},
+                description_ref_error=description_ref_error,
+                videos=videos or {},
+            ),
         )
 
     def test_a_complete_template_has_no_issues(self) -> None:

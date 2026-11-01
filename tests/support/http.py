@@ -19,6 +19,7 @@ import httpx
 
 from etsy_listings.core.clients.etsy.transport import BASE_URL as ETSY_BASE_URL
 from etsy_listings.core.clients.etsy.transport import OAuthClient
+from etsy_listings.core.clients.etsy.transport import Timing as EtsyTiming
 from etsy_listings.core.clients.etsy.transport import Transport as EtsyTransport
 from etsy_listings.core.clients.printify import BASE_URL, Transport
 from etsy_listings.core.clients.retry import DEFAULT_POLICY, RetryPolicy
@@ -65,7 +66,7 @@ def etsy_transport(
         bearer=bearer,
         client=httpx.Client(transport=httpx.MockTransport(handler), base_url=ETSY_BASE_URL),
         policy=policy,
-        sleep=lambda _: None,
+        timing=EtsyTiming(sleep=lambda _: None),
     )
 
 

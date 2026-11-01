@@ -20,6 +20,7 @@ first apply only ever leaves an Etsy draft (non-goal 1).
 
 from __future__ import annotations
 
+import itertools
 import shutil
 import socket
 import threading
@@ -58,7 +59,7 @@ def _free_port() -> int:
 
 
 @pytest.fixture
-def deploy_server(workspace_root: Path, prerequisite_missing) -> Iterator[str]:  # noqa: ANN001
+def deploy_server(workspace_root: Path, prerequisite_missing) -> Iterator[str]:
     """The real app, over `create_app(context_factory=fakes)` (this PR's own
     "done when"), against a throwaway copy of the fixture workspace -- so a
     run's writes (rendered PNGs, `state.lock.json`) land where this test can
@@ -95,7 +96,7 @@ DEFAULT_TIMEOUT_MS = 60_000
 
 
 @pytest.fixture
-def page(browser_type, deploy_server: str):  # noqa: ANN001, ANN201
+def page(browser_type, deploy_server: str):
     context = browser_type.new_context(viewport={"width": 1280, "height": 960})
     context.set_default_timeout(DEFAULT_TIMEOUT_MS)
     context.set_default_navigation_timeout(DEFAULT_TIMEOUT_MS)
@@ -106,7 +107,7 @@ def page(browser_type, deploy_server: str):  # noqa: ANN001, ANN201
 
 
 def test_deploy_plan_preview_apply_back_reattach_and_pill(
-    page,  # noqa: ANN001
+    page,
     workspace_root: Path,
 ) -> None:
     # -- Edit view: the new control, and nothing else about the page changed --
@@ -189,7 +190,7 @@ def test_deploy_plan_preview_apply_back_reattach_and_pill(
 
 
 def test_batch_apply_leaves_reattaches_and_continues_after_stale_listing(
-    page,  # noqa: ANN001
+    page,
     workspace_root: Path,
 ) -> None:
     """The workspace route preserves review while one listing goes stale.
@@ -209,88 +210,10 @@ def test_batch_apply_leaves_reattaches_and_continues_after_stale_listing(
 
     apply_button = page.get_by_role("button", name="Apply")
     apply_button.wait_for(state="visible")
-    for _ in range(200):
-        if apply_button.is_enabled():
-            break
-        page.wait_for_timeout(100)
-    else:
-        raise AssertionError("batch Apply never became enabled once previews finished")
+    _wait_until_enabled(page, apply_button)
 
-    # The listing drawer is a real modal detail surface: its handle expands
-    # the sheet, and the visual treatment is part of the public interaction.
-    animation_samples = page.evaluate(
-        """async () => {
-          const samples = [];
-          document.querySelector('.batch-listing-row')?.click();
-          for (let index = 0; index < 40; index += 1) {
-            await new Promise((resolve) => requestAnimationFrame(resolve));
-            const panel = document.querySelector('.batch-drawer-panel');
-            if (panel !== null && panel.getBoundingClientRect().height > 0) {
-              samples.push({
-                top: panel.getBoundingClientRect().top,
-                dialogScrollTop: panel.parentElement?.scrollTop,
-              });
-            }
-          }
-          return samples;
-        }"""
-    )
-    drawer = page.get_by_role("dialog")
-    drawer.wait_for(state="visible")
-    assert animation_samples
-    assert all(sample["dialogScrollTop"] == 0 for sample in animation_samples), animation_samples
-    assert all(
-        later["top"] <= earlier["top"] + 1
-        for earlier, later in zip(animation_samples, animation_samples[1:], strict=False)
-    ), animation_samples
-
-    handle = drawer.get_by_role("button", name="Expand drawer")
-    handle_box = handle.bounding_box()
-    assert handle_box is not None
-    drag_x = handle_box["x"] + handle_box["width"] / 2
-    drag_y = handle_box["y"] + handle_box["height"] / 2
-    initial_height = page.locator(".batch-drawer-panel").evaluate(
-        "panel => panel.getBoundingClientRect().height"
-    )
-    page.mouse.move(drag_x, drag_y)
-    page.mouse.down()
-    page.mouse.move(drag_x, drag_y - 40)
-    middle_height = page.locator(".batch-drawer-panel").evaluate(
-        "panel => panel.getBoundingClientRect().height"
-    )
-    page.mouse.move(drag_x, drag_y - 100)
-    final_drag_height = page.locator(".batch-drawer-panel").evaluate(
-        "panel => panel.getBoundingClientRect().height"
-    )
-    page.mouse.up()
-    assert middle_height > initial_height
-    assert final_drag_height > middle_height
-
-    handle = drawer.get_by_role("button", name="Collapse drawer")
-    page.locator(".batch-drawer-panel--expanded").wait_for(state="visible")
-    assert (
-        page.evaluate(
-            """() => {
-          const panel = document.querySelector('.batch-drawer-panel');
-          return panel === null ? '' : getComputedStyle(panel).borderTopLeftRadius;
-        }"""
-        )
-        != "0px"
-    )
-
-    handle_box = handle.bounding_box()
-    assert handle_box is not None
-    drag_x = handle_box["x"] + handle_box["width"] / 2
-    drag_y = handle_box["y"] + handle_box["height"] / 2
-    page.mouse.move(drag_x, drag_y)
-    page.mouse.down()
-    page.mouse.move(drag_x, drag_y + (final_drag_height - initial_height) + 60)
-    reduced_height = page.locator(".batch-drawer-panel").evaluate(
-        "panel => panel.getBoundingClientRect().height"
-    )
-    page.mouse.up()
-    assert reduced_height < initial_height
-    drawer.get_by_role("button", name="Expand drawer").wait_for(state="visible")
+    drawer = _open_drawer(page)
+    _assert_drawer_drags(page, drawer)
     drawer.get_by_role("button", name="Close").click()
 
     listing_file = second / "listing.yaml"
@@ -320,3 +243,92 @@ def test_batch_apply_leaves_reattaches_and_continues_after_stale_listing(
     page.get_by_text("Batch partially applied.").wait_for(state="visible")
     page.get_by_text("1 listing succeeded · 1 listing stale").wait_for(state="visible")
     page.get_by_role("button", name="Plan again").wait_for(state="visible")
+
+
+def _wait_until_enabled(page, button) -> None:
+    for _ in range(200):
+        if button.is_enabled():
+            return
+        page.wait_for_timeout(100)
+    raise AssertionError("batch Apply never became enabled once previews finished")
+
+
+def _open_drawer(page):
+    """The listing drawer is a real modal detail surface, and the visual
+    treatment is part of the public interaction: it slides up without
+    scrolling its dialog."""
+    animation_samples = page.evaluate(
+        """async () => {
+          const samples = [];
+          document.querySelector('.batch-listing-row')?.click();
+          for (let index = 0; index < 40; index += 1) {
+            await new Promise((resolve) => requestAnimationFrame(resolve));
+            const panel = document.querySelector('.batch-drawer-panel');
+            if (panel !== null && panel.getBoundingClientRect().height > 0) {
+              samples.push({
+                top: panel.getBoundingClientRect().top,
+                dialogScrollTop: panel.parentElement?.scrollTop,
+              });
+            }
+          }
+          return samples;
+        }"""
+    )
+    drawer = page.get_by_role("dialog")
+    drawer.wait_for(state="visible")
+    assert animation_samples
+    assert all(sample["dialogScrollTop"] == 0 for sample in animation_samples), animation_samples
+    assert all(
+        later["top"] <= earlier["top"] + 1
+        for earlier, later in itertools.pairwise(animation_samples)
+    ), animation_samples
+    return drawer
+
+
+def _panel_height(page) -> float:
+    return page.locator(".batch-drawer-panel").evaluate(
+        "panel => panel.getBoundingClientRect().height"
+    )
+
+
+def _centre(handle) -> tuple[float, float]:
+    box = handle.bounding_box()
+    assert box is not None
+    return box["x"] + box["width"] / 2, box["y"] + box["height"] / 2
+
+
+def _assert_drawer_drags(page, drawer) -> None:
+    """Its handle expands the sheet as it is dragged up, and shrinks it again
+    when dragged down."""
+    drag_x, drag_y = _centre(drawer.get_by_role("button", name="Expand drawer"))
+    initial_height = _panel_height(page)
+    page.mouse.move(drag_x, drag_y)
+    page.mouse.down()
+    page.mouse.move(drag_x, drag_y - 40)
+    middle_height = _panel_height(page)
+    page.mouse.move(drag_x, drag_y - 100)
+    final_drag_height = _panel_height(page)
+    page.mouse.up()
+    assert middle_height > initial_height
+    assert final_drag_height > middle_height
+
+    handle = drawer.get_by_role("button", name="Collapse drawer")
+    page.locator(".batch-drawer-panel--expanded").wait_for(state="visible")
+    assert (
+        page.evaluate(
+            """() => {
+          const panel = document.querySelector('.batch-drawer-panel');
+          return panel === null ? '' : getComputedStyle(panel).borderTopLeftRadius;
+        }"""
+        )
+        != "0px"
+    )
+
+    drag_x, drag_y = _centre(handle)
+    page.mouse.move(drag_x, drag_y)
+    page.mouse.down()
+    page.mouse.move(drag_x, drag_y + (final_drag_height - initial_height) + 60)
+    reduced_height = _panel_height(page)
+    page.mouse.up()
+    assert reduced_height < initial_height
+    drawer.get_by_role("button", name="Expand drawer").wait_for(state="visible")

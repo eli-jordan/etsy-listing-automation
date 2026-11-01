@@ -52,14 +52,14 @@ def screenshot_dir() -> Path:
     return directory
 
 
-def _token(page, name: str) -> str:  # noqa: ANN001
+def _token(page, name: str) -> str:
     """Read a custom property off :root, trimmed."""
     return page.evaluate(
         f"() => getComputedStyle(document.documentElement).getPropertyValue('{name}').trim()"
     )
 
 
-def _computed(page, selector: str, prop: str) -> str:  # noqa: ANN001
+def _computed(page, selector: str, prop: str) -> str:
     return page.evaluate(
         f"() => {{ const el = document.querySelector('{selector}');"
         f"  return el && getComputedStyle(el).getPropertyValue('{prop}'); }}"
@@ -71,7 +71,7 @@ class TestOrganicTokens:
     the contract between it and us -- if one drifts, the page has silently
     stopped being Organic."""
 
-    def test_root_defines_the_organic_palette(self, page) -> None:  # noqa: ANN001
+    def test_root_defines_the_organic_palette(self, page) -> None:
         page.wait_for_selector(PREVIEW_IMAGE)
         assert _token(page, "--color-bg") == ORGANIC_BG
         assert _token(page, "--color-text") == ORGANIC_TEXT
@@ -79,7 +79,7 @@ class TestOrganicTokens:
         assert _token(page, "--color-accent-2") == ORGANIC_ACCENT_2
         assert _token(page, "--color-surface") == ORGANIC_SURFACE
 
-    def test_root_defines_the_scales(self, page) -> None:  # noqa: ANN001
+    def test_root_defines_the_scales(self, page) -> None:
         page.wait_for_selector(PREVIEW_IMAGE)
         # Density 1.10x from the vendored Organic; radii are flattened to a
         # single 4px by the app's :root override (index.css:347) for boxes,
@@ -89,7 +89,7 @@ class TestOrganicTokens:
         assert _token(page, "--radius-lg") == "4px"
         assert _token(page, "--shadow-md") != ""
 
-    def test_tonal_ramps_are_present(self, page) -> None:  # noqa: ANN001
+    def test_tonal_ramps_are_present(self, page) -> None:
         """All three roles carry a 100-900 ramp; tinted fills and pressed
         states come from these rather than ad-hoc color-mix()."""
         page.wait_for_selector(PREVIEW_IMAGE)
@@ -101,22 +101,22 @@ class TestOrganicTokens:
 
 
 class TestOrganicGround:
-    def test_body_uses_the_warm_ground_not_the_old_grey(self, page) -> None:  # noqa: ANN001
+    def test_body_uses_the_warm_ground_not_the_old_grey(self, page) -> None:
         page.wait_for_selector(PREVIEW_IMAGE)
         assert _computed(page, "body", "background-color") == _rgb(ORGANIC_BG)
         assert _computed(page, "body", "color") == _rgb(ORGANIC_TEXT)
 
-    def test_body_text_is_set_in_the_body_face(self, page) -> None:  # noqa: ANN001
+    def test_body_text_is_set_in_the_body_face(self, page) -> None:
         page.wait_for_selector(PREVIEW_IMAGE)
         assert "Figtree" in _computed(page, "body", "font-family")
 
-    def test_headings_use_the_display_face(self, page) -> None:  # noqa: ANN001
+    def test_headings_use_the_display_face(self, page) -> None:
         page.wait_for_selector(PREVIEW_IMAGE)
         assert "Caprasimo" in _computed(page, "h1", "font-family")
 
 
 class TestOrganicComponents:
-    def test_editor_action_buttons_are_flat(self, page) -> None:  # noqa: ANN001
+    def test_editor_action_buttons_are_flat(self, page) -> None:
         """Buttons now use the flat 4px (via --radius-sm override); only tags,
         chips, switches and circles retain the 999px pill radius."""
         page.wait_for_selector(PREVIEW_IMAGE)
@@ -125,11 +125,11 @@ class TestOrganicComponents:
         )
         assert radius == "4px", f"expected flat 4px, got {radius}"
 
-    def test_there_is_no_manual_save_action(self, page) -> None:  # noqa: ANN001
+    def test_there_is_no_manual_save_action(self, page) -> None:
         page.wait_for_selector(PREVIEW_IMAGE)
         assert page.get_by_role("button", name="Save template.yaml").count() == 0
 
-    def test_unclassed_actions_still_read_as_buttons(self, page) -> None:  # noqa: ANN001
+    def test_unclassed_actions_still_read_as_buttons(self, page) -> None:
         """`.btn` is deliberately transparent -- the design system expects a
         variant class on every button. The calibrator has plain `<button>`s
         that never got one, and a transparent button is just text: no edge, no
@@ -144,13 +144,13 @@ class TestOrganicComponents:
         plain.wait_for()
         assert plain.evaluate("el => getComputedStyle(el).backgroundColor") != "rgba(0, 0, 0, 0)"
 
-    def test_the_preview_sits_on_the_surface_tone(self, page) -> None:  # noqa: ANN001
+    def test_the_preview_sits_on_the_surface_tone(self, page) -> None:
         """The photo frame was a cold #e5e5e5; on a warm ground that reads as
         a hole in the page."""
         page.wait_for_selector(PREVIEW_IMAGE)
         assert _computed(page, ".app__preview", "background-color") == _rgb(ORGANIC_SURFACE)
 
-    def test_the_selected_tab_is_the_one_that_looks_selected(self, page) -> None:  # noqa: ANN001
+    def test_the_selected_tab_is_the_one_that_looks_selected(self, page) -> None:
         """`.seg-opt` and `.seg-opt--on` have the same specificity, so source
         order decides -- and with the base rule last, the *active* tab rendered
         as the grey one. Backwards, and invisible in a unit test."""
@@ -163,7 +163,7 @@ class TestOrganicComponents:
         active.wait_for()
         assert active.evaluate("el => getComputedStyle(el).backgroundColor") == _rgb(ORGANIC_ACCENT)
 
-    def test_the_quad_overlay_is_drawn_in_the_accent(self, page) -> None:  # noqa: ANN001
+    def test_the_quad_overlay_is_drawn_in_the_accent(self, page) -> None:
         """The old overlay was hardcoded #3f7dff -- a blue that belongs to no
         token and fights the warm ground."""
         page.wait_for_selector(PREVIEW_IMAGE)
@@ -171,7 +171,7 @@ class TestOrganicComponents:
         assert stroke == _rgb(ORGANIC_ACCENT), f"overlay still {stroke}"
 
 
-def test_no_console_errors_with_the_new_stylesheet(page) -> None:  # noqa: ANN001
+def test_no_console_errors_with_the_new_stylesheet(page) -> None:
     """The stylesheet pulls Caprasimo and Figtree from Google Fonts at runtime,
     so this doubles as the guard on that decision: a font request that starts
     erroring shows up here rather than as a silently plain-looking page."""
@@ -183,7 +183,7 @@ def test_no_console_errors_with_the_new_stylesheet(page) -> None:  # noqa: ANN00
 
 
 @pytest.mark.capture
-def test_capture_full_page_screenshot(page, screenshot_dir: Path) -> None:  # noqa: ANN001
+def test_capture_full_page_screenshot(page, screenshot_dir: Path) -> None:
     """Not an assertion about looks -- it produces the artifact a human (or
     Claude) reviews against the wireframe. Fails only if the page won't paint."""
     page.wait_for_selector(PREVIEW_IMAGE)
@@ -194,7 +194,7 @@ def test_capture_full_page_screenshot(page, screenshot_dir: Path) -> None:  # no
 
 
 @pytest.mark.capture
-def test_capture_preview_all_screenshot(page, screenshot_dir: Path) -> None:  # noqa: ANN001
+def test_capture_preview_all_screenshot(page, screenshot_dir: Path) -> None:
     """The Preview tab with every colour rendered -- the state you approve
     from, and the only place the grid exists.
 
@@ -214,7 +214,7 @@ def test_capture_preview_all_screenshot(page, screenshot_dir: Path) -> None:  # 
 
 
 @pytest.mark.capture
-def test_capture_lightbox_screenshot(page, screenshot_dir: Path) -> None:  # noqa: ANN001
+def test_capture_lightbox_screenshot(page, screenshot_dir: Path) -> None:
     """A rendered preview opened large -- where a calibration is actually
     judged, and the reason the Preview tab renders at full size at all."""
     row = page.locator(".template-rail__item[data-template='flat-lay-01']")
@@ -233,7 +233,7 @@ def test_capture_lightbox_screenshot(page, screenshot_dir: Path) -> None:  # noq
 
 
 @pytest.mark.capture
-def test_capture_multiple_editor_screenshot(page, screenshot_dir: Path) -> None:  # noqa: ANN001
+def test_capture_multiple_editor_screenshot(page, screenshot_dir: Path) -> None:
     """The chart editor with a box selected -- the colour captions, the extent
     readout and the Add box affordance are the parts that only exist here."""
     row = page.locator(".template-rail__item[data-template='colour-chart-01']")
@@ -247,9 +247,7 @@ def test_capture_multiple_editor_screenshot(page, screenshot_dir: Path) -> None:
 
 
 @pytest.mark.capture
-def test_capture_workbench_screenshot(  # noqa: ANN001
-    page, screenshot_dir: Path, workspace_root: Path
-) -> None:
+def test_capture_workbench_screenshot(page, screenshot_dir: Path, workspace_root: Path) -> None:
     """The three-column workbench with an uncalibrated template present -- the
     state wireframe 2a is drawn in. The fixture workspace is otherwise fully
     calibrated, so the rail's banner and its whole top group would be missing

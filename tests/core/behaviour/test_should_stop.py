@@ -18,9 +18,9 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict
 
 from etsy_listings.core.engine.apply import execute
-from etsy_listings.core.engine.change import Plan, StagePlan, Verdict
+from etsy_listings.core.engine.change import Plan, StagePlan, StageWork, Verdict
 from etsy_listings.core.engine.context import RunContext
-from etsy_listings.core.engine.events import EngineListingPlanned, EngineRunEvent
+from etsy_listings.core.engine.events import EngineListingPlanned, EngineRunEvent, RunHooks
 from etsy_listings.core.engine.lock import Lockfile
 from etsy_listings.core.engine.plan import PlannedRun, StageState
 from etsy_listings.core.engine.run import apply_listings, plan_listings
@@ -63,7 +63,7 @@ class _Stage:
 
 
 def _planned(*stages: _Stage) -> PlannedRun:
-    stage_plans = tuple(StagePlan.work(s.name, "test work") for s in stages)
+    stage_plans = tuple(StagePlan.work(s.name, StageWork("test work")) for s in stages)
     return PlannedRun(
         plan=Plan(listing=LISTING, is_live=False, etsy_listing_id=None, stage_plans=stage_plans),
         states=tuple(
@@ -96,7 +96,7 @@ def test_should_stop_finishes_the_current_stage_and_starts_no_other(workspace_ro
         ctx,
         _planned(_Stage("render"), _Stage("printify_product")),
         a_lock(),
-        should_stop=stop,
+        hooks=RunHooks(should_stop=stop),
     )
 
     assert result.stages_completed == ["render"]
@@ -109,7 +109,9 @@ def test_a_graceful_stop_does_not_clear_a_previous_incomplete_marker(workspace_r
     ctx = a_context(workspace_root)
     lock = a_lock().marked_incomplete("printify_product")
 
-    result = execute(ctx, _planned(_Stage("render")), lock, should_stop=lambda: True)
+    result = execute(
+        ctx, _planned(_Stage("render")), lock, hooks=RunHooks(should_stop=lambda: True)
+    )
 
     assert result.stages_completed == []
     assert result.incomplete is not None
@@ -118,7 +120,9 @@ def test_a_graceful_stop_does_not_clear_a_previous_incomplete_marker(workspace_r
 def test_stopping_before_the_first_stage_records_nothing(workspace_root: Path) -> None:
     ctx = a_context(workspace_root)
 
-    result = execute(ctx, _planned(_Stage("render")), a_lock(), should_stop=lambda: True)
+    result = execute(
+        ctx, _planned(_Stage("render")), a_lock(), hooks=RunHooks(should_stop=lambda: True)
+    )
 
     assert result.stages_completed == []
 
@@ -149,9 +153,8 @@ def test_plan_listings_should_stop_is_checked_between_listings(workspace_root: P
     plan_listings(
         ctx,
         [LISTING, "second"],
-        [_Stage("render")],  # type: ignore[list-item]
-        on_event=capture,
-        should_stop=stop,
+        [_Stage("render")],
+        hooks=RunHooks(on_event=capture, should_stop=stop),
     )
 
     assert seen == [LISTING], "the second listing must never have started"
@@ -165,7 +168,9 @@ def test_apply_listings_should_stop_before_any_listing_applies_nothing(
 ) -> None:
     ctx = a_context(workspace_root)
 
-    report = apply_listings(ctx, [LISTING], [_Stage("render")], should_stop=lambda: True)  # type: ignore[list-item]
+    report = apply_listings(
+        ctx, [LISTING], [_Stage("render")], hooks=RunHooks(should_stop=lambda: True)
+    )  # type: ignore[list-item]  # -- a minimal stand-in, not a full Stage
 
     assert report.outcomes == ()
     assert not (workspace_root / "listings" / LISTING / "state.lock.json").is_file()
@@ -197,8 +202,8 @@ def test_a_stop_before_etsy_listing_does_not_consume_renew(workspace_root: Path)
     report = apply_listings(
         a_context(workspace_root),
         [LISTING],
-        [_Stage("render"), _Stage("etsy_listing")],  # type: ignore[list-item]
-        should_stop=stop,
+        [_Stage("render"), _Stage("etsy_listing")],
+        hooks=RunHooks(should_stop=stop),
     )
 
     assert report.outcomes[0].ok
@@ -217,7 +222,9 @@ def test_a_stop_before_retract_keeps_the_listing(workspace_root: Path) -> None:
         checks["count"] += 1
         return checks["count"] > 1
 
-    apply_listings(a_context(workspace_root), [LISTING], [_Stage("render")], should_stop=stop)  # type: ignore[list-item]
+    apply_listings(
+        a_context(workspace_root), [LISTING], [_Stage("render")], hooks=RunHooks(should_stop=stop)
+    )  # type: ignore[list-item]  # -- a minimal stand-in, not a full Stage
 
     workspace = Workspace.discover(root_override=workspace_root)
     assert workspace.listing_file(LISTING).is_file()

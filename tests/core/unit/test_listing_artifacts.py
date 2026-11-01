@@ -16,8 +16,8 @@ import pytest
 from etsy_listings.core.listing_artifacts import discard_research, move_listing, remove_listing
 from etsy_listings.core.workspace.listing_documents import (
     ListingDocuments,
-    ListingMissing,
-    ListingNameTaken,
+    ListingMissingError,
+    ListingNameTakenError,
 )
 from etsy_listings.core.workspace.workspace import Workspace
 
@@ -74,14 +74,14 @@ class TestMove:
         assert workspace.preview_file("hike-away", "flat-lay-01", "black", "deadbeef").is_file()
 
     def test_refuses_a_missing_listing(self, workspace: Workspace) -> None:
-        with pytest.raises(ListingMissing):
+        with pytest.raises(ListingMissingError):
             move_listing(workspace, "no-such", "whatever")
 
     def test_refuses_a_taken_name_and_moves_nothing(self, workspace: Workspace) -> None:
         _seed_caches(workspace)
         workspace.listing_dir("taken").mkdir(parents=True)
 
-        with pytest.raises(ListingNameTaken):
+        with pytest.raises(ListingNameTakenError):
             move_listing(workspace, NAME, "taken")
 
         assert set(_keyed_by(workspace, NAME).values()) == {True}

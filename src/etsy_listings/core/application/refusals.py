@@ -2,7 +2,7 @@
 
 Application meaning only, no status codes (module-structure spec,
 *Responsibility and dependency rules*): an adapter decides what each becomes
--- the listings API turns :class:`ListingMissing` into a 404 and the name and
+-- the listings API turns :class:`ListingMissingError` into a 404 and the name and
 publication refusals into 409s, while :class:`InvalidListing` stays an
 ordinary answer carrying field errors (``ListingDetail.field_errors``).
 
@@ -21,17 +21,21 @@ from dataclasses import dataclass
 
 from pydantic import ValidationError
 
-from etsy_listings.core.batches import ConfirmRefused
+from etsy_listings.core.batches import ConfirmRefusedError
 from etsy_listings.core.config.listing_validation import DELETED_ON_PUBLISHED
 from etsy_listings.core.errors import UserFacingError
 
 # The listing document module raises these two itself, and the listing operations
 # let them through, so they are defined there and listed here with the rest.
-from etsy_listings.core.workspace.listing_documents import ListingMissing as ListingMissing
-from etsy_listings.core.workspace.listing_documents import ListingNameTaken as ListingNameTaken
+from etsy_listings.core.workspace.listing_documents import (
+    ListingMissingError as ListingMissingError,
+)
+from etsy_listings.core.workspace.listing_documents import (
+    ListingNameTakenError as ListingNameTakenError,
+)
 
 
-class PublishedListingDeletion(UserFacingError, ValueError):
+class PublishedListingDeletionError(UserFacingError, ValueError):
     """ADR-0035: a listing Etsy has published is retired, never deleted."""
 
     def __init__(self, name: str) -> None:
@@ -69,7 +73,7 @@ def field_errors_of(exc: ValidationError) -> dict[str, str]:
 # every operation names one that must already exist.
 
 
-class TemplateMissing(UserFacingError, LookupError):
+class TemplateMissingError(UserFacingError, LookupError):
     """No ``mockup-templates/{name}/`` directory."""
 
     def __init__(self, name: str) -> None:
@@ -77,7 +81,7 @@ class TemplateMissing(UserFacingError, LookupError):
         self.name = name
 
 
-class TemplateConfigMissing(UserFacingError, LookupError):
+class TemplateConfigMissingError(UserFacingError, LookupError):
     """The template has no ``template.yaml`` -- the normal state of a folder
     nobody has given a kind yet: absent, not broken."""
 
@@ -86,7 +90,7 @@ class TemplateConfigMissing(UserFacingError, LookupError):
         self.name = name
 
 
-class TemplateAlreadyCalibrated(UserFacingError, ValueError):
+class TemplateAlreadyCalibratedError(UserFacingError, ValueError):
     """Kind decides the whole ``template.yaml`` shape, so assigning another
     would silently discard the calibration done in the old one's fields."""
 
@@ -95,12 +99,12 @@ class TemplateAlreadyCalibrated(UserFacingError, ValueError):
         self.name = name
 
 
-class TemplateKindRefused(UserFacingError, ValueError):
+class TemplateKindRefusedError(UserFacingError, ValueError):
     """The folder's photos cannot be the kind asked for: none at all, or a
     set where a fixed scene takes exactly one."""
 
 
-class TemplatePreviewKindMismatch(UserFacingError, ValueError):
+class TemplatePreviewKindMismatchError(UserFacingError, ValueError):
     """Unsaved preview geometry shaped for another kind than the template
     is -- a well-formed request that is wrong for this template."""
 
@@ -109,24 +113,24 @@ class TemplatePreviewKindMismatch(UserFacingError, ValueError):
         self.kind = kind
 
 
-class TemplatePhotoMissing(UserFacingError, LookupError):
+class TemplatePhotoMissingError(UserFacingError, LookupError):
     """There is no one photo to show, sample or composite over: none for the
     colour asked about, an ambiguous colour suffix, or a template kind that
     has no per-colour photos at all. The message names what was asked for."""
 
 
-class DesignUploadRefused(UserFacingError, ValueError):
+class DesignUploadRefusedError(UserFacingError, ValueError):
     """A test-design upload the library will not take: no filename, a name
     that is not a plain filename, or bytes that are not an image. Nothing is
     written."""
 
 
-class ListingDesignUploadRefused(UserFacingError, ValueError):
+class ListingDesignUploadRefusedError(UserFacingError, ValueError):
     """An upload ``designs/`` will not take: no filename, a name that is not
     a plain filename, or bytes that are not a PNG. Nothing is written."""
 
 
-class CalibrationDesignMissing(UserFacingError, LookupError):
+class CalibrationDesignMissingError(UserFacingError, LookupError):
     """No uploaded test design by that id. The id came from a list the
     library handed out, so a missing one means the list moved on."""
 
@@ -142,7 +146,7 @@ class CalibrationDesignMissing(UserFacingError, LookupError):
 # alike; a refused *document* is not raised but answered (``TemplateSave``).
 
 
-class ListingTemplateMissing(UserFacingError, LookupError):
+class ListingTemplateMissingError(UserFacingError, LookupError):
     """No ``listing-templates/{name}/template.yaml`` -- never was, or a rename
     or delete holding the template's lock moved it first."""
 
@@ -151,7 +155,7 @@ class ListingTemplateMissing(UserFacingError, LookupError):
         self.name = name
 
 
-class ReservedListingTemplateName(UserFacingError, ValueError):
+class ReservedListingTemplateNameError(UserFacingError, ValueError):
     """``draft`` names the *name it* page's unsaved template, so a listing
     template called that could be created and never opened."""
 
@@ -160,7 +164,7 @@ class ReservedListingTemplateName(UserFacingError, ValueError):
         self.name = name
 
 
-class ListingTemplateSourceRefused(UserFacingError, ValueError):
+class ListingTemplateSourceRefusedError(UserFacingError, ValueError):
     """What a new listing template is made from cannot become one: not
     exactly one source, a ``./`` file that cannot be read, a source document
     that will not load, or an edit naming a ``./`` file the template does
@@ -169,13 +173,13 @@ class ListingTemplateSourceRefused(UserFacingError, ValueError):
 
 # ------------------------------------------------------- staging and batches
 #
-# Batch creation's own refusals stay the domain's: ``batches.StagingRefused``
+# Batch creation's own refusals stay the domain's: ``batches.StagingRefusedError``
 # for an upload refused before staging (ADR-0051's limits and archive
-# safety), ``batches.ConfirmRefused`` for a session that cannot be confirmed
+# safety), ``batches.ConfirmRefusedError`` for a session that cannot be confirmed
 # yet. These are the ones the operations around them add.
 
 
-class StagingMissing(UserFacingError, LookupError):
+class StagingMissingError(UserFacingError, LookupError):
     """No staging session by this id: never staged, cancelled, confirmed and
     materialised, or swept seven days after its last edit."""
 
@@ -184,25 +188,25 @@ class StagingMissing(UserFacingError, LookupError):
         self.session_id = session_id
 
 
-class StagedRowMissing(UserFacingError, LookupError):
+class StagedRowMissingError(UserFacingError, LookupError):
     def __init__(self, row: str) -> None:
         super().__init__(f"no staged row {row!r}")
         self.row = row
 
 
-class BatchMissing(UserFacingError, LookupError):
+class BatchMissingError(UserFacingError, LookupError):
     def __init__(self, batch_id: str) -> None:
         super().__init__(f"no batch {batch_id!r}")
         self.batch_id = batch_id
 
 
-class BatchRowMissing(UserFacingError, LookupError):
+class BatchRowMissingError(UserFacingError, LookupError):
     def __init__(self, row: str) -> None:
         super().__init__(f"no batch row {row!r}")
         self.row = row
 
 
-class BatchRowUploadMissing(UserFacingError, LookupError):
+class BatchRowUploadMissingError(UserFacingError, LookupError):
     """A never-created row whose upload is no longer kept anywhere."""
 
     def __init__(self, row: str) -> None:
@@ -210,7 +214,7 @@ class BatchRowUploadMissing(UserFacingError, LookupError):
         self.row = row
 
 
-class NothingToRetry(UserFacingError, ValueError):
+class NothingToRetryError(UserFacingError, ValueError):
     """The row was created and its AI is neither failed nor stopped -- or
     its listing was deleted, leaving nothing to draft."""
 
@@ -219,7 +223,7 @@ class NothingToRetry(UserFacingError, ValueError):
         self.name = name
 
 
-class BatchRowNotReviewable(UserFacingError, ValueError):
+class BatchRowNotReviewableError(UserFacingError, ValueError):
     """Mark reviewed on a row still queued or drafting, deleted, or never
     created (spec, *Review workflow*)."""
 
@@ -228,7 +232,7 @@ class BatchRowNotReviewable(UserFacingError, ValueError):
         self.name = name
 
 
-class AiDraftingBlocked(ConfirmRefused):
+class AiDraftingBlockedError(ConfirmRefusedError):
     """Spec, *Design validation*: a batch is not knowingly created into a
     queue that cannot run. Nothing is created and the staging stays."""
 
@@ -237,7 +241,7 @@ class AiDraftingBlocked(ConfirmRefused):
         self.reason = reason
 
 
-class AiRunRefused(UserFacingError, ValueError):
+class AiRunRefusedError(UserFacingError, ValueError):
     """An AI run may not start for this listing now; the message says why,
     in words the editor shows as AI Mode's hint. One of the three below."""
 
@@ -246,7 +250,7 @@ class AiRunRefused(UserFacingError, ValueError):
         self.name = name
 
 
-class ListingDeploying(AiRunRefused):
+class ListingDeployingError(AiRunRefusedError):
     """ADR-0050: a UI plan or apply holds the listing, and deploying takes
     precedence over AI. AI Mode is back once the deploy ends."""
 
@@ -256,7 +260,7 @@ class ListingDeploying(AiRunRefused):
         )
 
 
-class ListingDraftingInBatch(AiRunRefused):
+class ListingDraftingInBatchError(AiRunRefusedError):
     """ADR-0048: a queued or running batch row owns the listing's AI, even
     while no run holds it yet -- two runs must never own one listing."""
 
@@ -266,7 +270,7 @@ class ListingDraftingInBatch(AiRunRefused):
         )
 
 
-class AiNotReady(AiRunRefused):
+class AiNotReadyError(AiRunRefusedError):
     """A readiness rule failed (``ai/readiness.py``): the listing lacks a
     design, a brief or a usable garment profile, a prompt file is missing,
     or no provider is ready."""
@@ -276,7 +280,7 @@ class AiNotReady(AiRunRefused):
         self.reason = reason
 
 
-class ProposalMissing(UserFacingError, LookupError):
+class ProposalMissingError(UserFacingError, LookupError):
     """No proposal is cached for the listing: none was generated, or a
     replacement, deletion, fully successful apply or cache clearing removed
     it (ADR-0049)."""
@@ -286,7 +290,7 @@ class ProposalMissing(UserFacingError, LookupError):
         self.name = name
 
 
-class ProposalReplaced(UserFacingError, ValueError):
+class ProposalReplacedError(UserFacingError, ValueError):
     """A resolution named a proposal regenerated since the page read it;
     nothing was recorded."""
 
@@ -295,7 +299,7 @@ class ProposalReplaced(UserFacingError, ValueError):
         self.name = name
 
 
-class ReviewedPlanRefused(UserFacingError, ValueError):
+class ReviewedPlanRefusedError(UserFacingError, ValueError):
     """ADR-0042: a workspace apply names exactly the listings and plan
     fingerprints of a ready workspace plan the seller reviewed, or it is not
     queued. The message says which part did not hold."""

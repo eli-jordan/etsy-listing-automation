@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 from PIL import Image, ImageDraw
 
-from etsy_listings.core.application.preparation.coordinator import Preparations
+from etsy_listings.core.application.preparation.coordinator import PreparationRequest, Preparations
 from etsy_listings.core.preparation.runtime import Capability
 from etsy_listings.core.render import load_template_config
 from etsy_listings.core.workspace import Workspace
@@ -36,13 +36,26 @@ def test_submission_deduplicates_and_cancelled_jobs_stay_cancelled_on_restart(wo
     workspace = template(workspace_root)
     coordinator = Preparations(workspace, runtime=Runtime())
     revision = CalibrationStore(workspace).read("shirt").revision
-    job = coordinator.submit("shirt", config_revision=revision, request_id="one")
+    job = coordinator.submit(
+        "shirt", PreparationRequest(config_revision=revision, request_id="one")
+    )
     assert job.phase == "queued"
-    assert coordinator.submit("shirt", config_revision=revision, request_id="one").id == job.id
-    assert coordinator.submit("shirt", config_revision=revision, request_id="two").id == job.id
+    assert (
+        coordinator.submit(
+            "shirt", PreparationRequest(config_revision=revision, request_id="one")
+        ).id
+        == job.id
+    )
+    assert (
+        coordinator.submit(
+            "shirt", PreparationRequest(config_revision=revision, request_id="two")
+        ).id
+        == job.id
+    )
     with pytest.raises(ValueError, match="request ID"):
         coordinator.submit(
-            "shirt", config_revision=revision, request_id="one", action="prepare_again"
+            "shirt",
+            PreparationRequest(config_revision=revision, request_id="one", action="prepare_again"),
         )
     assert coordinator.cancel(job.id).phase == "cancelled"
     restarted = Preparations(workspace, runtime=Runtime())
@@ -113,8 +126,9 @@ def test_explicit_preparation_publishes_every_required_placement(workspace_root,
     coordinator = Preparations(workspace, runtime=runtime)
     job = coordinator.submit(
         "shirt",
-        config_revision=CalibrationStore(workspace).read("shirt").revision,
-        request_id="prepare",
+        PreparationRequest(
+            config_revision=CalibrationStore(workspace).read("shirt").revision, request_id="prepare"
+        ),
     )
     coordinator.start()
     result = wait_terminal(coordinator, job.id)
@@ -136,8 +150,9 @@ def prepare_template(workspace_root):
     coordinator = Preparations(workspace, runtime=runtime)
     job = coordinator.submit(
         "shirt",
-        config_revision=CalibrationStore(workspace).read("shirt").revision,
-        request_id="prepare",
+        PreparationRequest(
+            config_revision=CalibrationStore(workspace).read("shirt").revision, request_id="prepare"
+        ),
     )
     coordinator.start()
     result = wait_terminal(coordinator, job.id)
@@ -186,7 +201,7 @@ def test_save_without_covered_evidence_waits_for_explicit_prepare(workspace_root
 
 
 def test_startup_closes_gap_between_calibration_commit_and_cpu_job(workspace_root):
-    workspace, runtime, coordinator, first = prepare_template(workspace_root)
+    workspace, runtime, coordinator, _first = prepare_template(workspace_root)
     coordinator.close()
     move_box(workspace, 1)
     restarted = Preparations(workspace, runtime=runtime)
@@ -212,8 +227,9 @@ def test_status_and_cancel_remain_available_during_another_runtime_probe(workspa
     coordinator = Preparations(workspace, runtime=runtime)
     first = coordinator.submit(
         "shirt",
-        config_revision=CalibrationStore(workspace).read("shirt").revision,
-        request_id="first",
+        PreparationRequest(
+            config_revision=CalibrationStore(workspace).read("shirt").revision, request_id="first"
+        ),
     )
     entered = threading.Event()
     release = threading.Event()
@@ -228,8 +244,10 @@ def test_status_and_cancel_remain_available_during_another_runtime_probe(workspa
         pending = executor.submit(
             coordinator.submit,
             "second",
-            config_revision=CalibrationStore(workspace).read("second").revision,
-            request_id="second",
+            PreparationRequest(
+                config_revision=CalibrationStore(workspace).read("second").revision,
+                request_id="second",
+            ),
         )
         assert entered.wait(5)
         try:
@@ -255,8 +273,9 @@ def test_active_cancel_saves_current_role_and_retry_reuses_it_with_warm_worker(w
     coordinator = Preparations(workspace, runtime=runtime)
     job = coordinator.submit(
         "shirt",
-        config_revision=CalibrationStore(workspace).read("shirt").revision,
-        request_id="first",
+        PreparationRequest(
+            config_revision=CalibrationStore(workspace).read("shirt").revision, request_id="first"
+        ),
     )
     coordinator.start()
     try:
@@ -270,10 +289,12 @@ def test_active_cancel_saves_current_role_and_retry_reuses_it_with_warm_worker(w
         assert not worker.closed
         retry = coordinator.submit(
             "shirt",
-            config_revision=CalibrationStore(workspace).read("shirt").revision,
-            request_id="retry",
-            action="retry",
-            previous_job=job.id,
+            PreparationRequest(
+                config_revision=CalibrationStore(workspace).read("shirt").revision,
+                request_id="retry",
+                action="retry",
+                previous_job=job.id,
+            ),
         )
         assert wait_terminal(coordinator, retry.id).phase == "completed"
     finally:
@@ -293,8 +314,9 @@ def test_cancel_during_worker_startup_prevents_undispatched_model_call(workspace
     coordinator = Preparations(workspace, runtime=runtime)
     job = coordinator.submit(
         "shirt",
-        config_revision=CalibrationStore(workspace).read("shirt").revision,
-        request_id="first",
+        PreparationRequest(
+            config_revision=CalibrationStore(workspace).read("shirt").revision, request_id="first"
+        ),
     )
     coordinator.start()
     try:
@@ -344,13 +366,14 @@ def test_restart_at_cpu_mask_and_publication_checkpoints_finishes_coherently(wor
     def crash(identity, checkpoint):
         if checkpoint == step:
             exited.set()
-            raise ProcessExit()
+            raise ProcessExit
 
     coordinator = Preparations(workspace, runtime=runtime, checkpoint=crash)
     job = coordinator.submit(
         "shirt",
-        config_revision=CalibrationStore(workspace).read("shirt").revision,
-        request_id="first",
+        PreparationRequest(
+            config_revision=CalibrationStore(workspace).read("shirt").revision, request_id="first"
+        ),
     )
     coordinator.start()
     assert exited.wait(10)
@@ -397,13 +420,14 @@ def test_multiple_first_mask_crash_never_exposes_partial_maps_and_preserves_new_
     def crash(identity, step):
         if step == "mask_committed":
             exited.set()
-            raise ProcessExit()
+            raise ProcessExit
 
     coordinator = Preparations(workspace, runtime=runtime, checkpoint=crash)
     job = coordinator.submit(
         "shirt",
-        config_revision=CalibrationStore(workspace).read("shirt").revision,
-        request_id="first",
+        PreparationRequest(
+            config_revision=CalibrationStore(workspace).read("shirt").revision, request_id="first"
+        ),
     )
     coordinator.start()
     assert exited.wait(10)
@@ -459,15 +483,17 @@ def test_cpu_preparation_overlaps_next_template_gpu_work_with_serial_model_calls
     coordinator = Preparations(workspace, runtime=runtime, checkpoint=checkpoint)
     first = coordinator.submit(
         "shirt",
-        config_revision=CalibrationStore(workspace).read("shirt").revision,
-        request_id="first",
+        PreparationRequest(
+            config_revision=CalibrationStore(workspace).read("shirt").revision, request_id="first"
+        ),
     )
     coordinator.start()
     assert entered.wait(10)
     second = coordinator.submit(
         "second",
-        config_revision=CalibrationStore(workspace).read("second").revision,
-        request_id="second",
+        PreparationRequest(
+            config_revision=CalibrationStore(workspace).read("second").revision, request_id="second"
+        ),
     )
     try:
         import time
@@ -500,9 +526,11 @@ def test_cleanup_preserves_last_complete_predictions_failed_retry_and_active_ren
     worker.failure = RuntimeError("Worker exited unexpectedly; retry preparation")
     refresh = coordinator.submit(
         "shirt",
-        config_revision=CalibrationStore(workspace).read("shirt").revision,
-        request_id="refresh",
-        action="prepare_again",
+        PreparationRequest(
+            config_revision=CalibrationStore(workspace).read("shirt").revision,
+            request_id="refresh",
+            action="prepare_again",
+        ),
     )
     assert wait_terminal(coordinator, refresh.id).phase == "failed"
     coordinator.cleanup("shirt")
@@ -518,10 +546,12 @@ def test_cleanup_preserves_last_complete_predictions_failed_retry_and_active_ren
     with artifacts.acquire("shirt", artifacts.saved_inputs("shirt")) as leased:
         retry = coordinator.submit(
             "shirt",
-            config_revision=CalibrationStore(workspace).read("shirt").revision,
-            request_id="retry",
-            action="retry",
-            previous_job=refresh.id,
+            PreparationRequest(
+                config_revision=CalibrationStore(workspace).read("shirt").revision,
+                request_id="retry",
+                action="retry",
+                previous_job=refresh.id,
+            ),
         )
         result = wait_terminal(coordinator, retry.id)
         assert result.phase == "completed", result.error
@@ -546,8 +576,9 @@ def test_edits_during_model_work_stop_remaining_calls_without_new_inference_auth
     coordinator = Preparations(workspace, runtime=runtime)
     job = coordinator.submit(
         "shirt",
-        config_revision=CalibrationStore(workspace).read("shirt").revision,
-        request_id="first",
+        PreparationRequest(
+            config_revision=CalibrationStore(workspace).read("shirt").revision, request_id="first"
+        ),
     )
     coordinator.start()
     assert worker.entered.wait(5)
@@ -563,7 +594,7 @@ def test_edits_during_model_work_stop_remaining_calls_without_new_inference_auth
 
 
 def test_queued_cpu_rebuilds_coalesce_to_latest_saved_geometry(workspace_root):
-    workspace, runtime, coordinator, first = prepare_template(workspace_root)
+    workspace, runtime, coordinator, _first = prepare_template(workspace_root)
     coordinator.close()
     queued = Preparations(workspace, runtime=runtime)
     move_box(workspace, 1)
@@ -580,12 +611,12 @@ def test_queued_cpu_rebuilds_coalesce_to_latest_saved_geometry(workspace_root):
 
 
 def test_new_photo_refuses_old_masks_without_reinterpreting_corrections(workspace_root):
-    from etsy_listings.core.workspace.calibration import MaskUnavailable
+    from etsy_listings.core.workspace.calibration import MaskUnavailableError
 
-    workspace, runtime, coordinator, first = prepare_template(workspace_root)
+    workspace, runtime, coordinator, _first = prepare_template(workspace_root)
     before = workspace.template_mask_file("shirt").read_bytes()
     Image.new("RGB", (64, 64), "red").save(workspace.template_scene_image("shirt"))
-    with pytest.raises(MaskUnavailable):
+    with pytest.raises(MaskUnavailableError):
         coordinator.reconcile_saved("shirt")
     assert workspace.template_mask_file("shirt").read_bytes() == before
     assert len(runtime.workers[0].calls) == 3
@@ -595,7 +626,7 @@ def test_new_photo_refuses_old_masks_without_reinterpreting_corrections(workspac
 def test_inference_setting_change_requires_prepare_and_missing_runtime_is_actionable(
     workspace_root,
 ):
-    workspace, runtime, coordinator, first = prepare_template(workspace_root)
+    workspace, runtime, coordinator, _first = prepare_template(workspace_root)
     current = CalibrationStore(workspace).read("shirt")
     document = current.config.model_dump(mode="json")
     document["renderer"]["config"]["inference"]["ensemble_size"] = 2
@@ -608,7 +639,9 @@ def test_inference_setting_change_requires_prepare_and_missing_runtime_is_action
     assert coordinator.reconcile_saved("shirt") is None
     runtime.capability = Capability(False, "Run etsy-listings marigold setup")
     with pytest.raises(ValueError, match="marigold setup"):
-        coordinator.submit("shirt", config_revision=saved.revision, request_id="changed")
+        coordinator.submit(
+            "shirt", PreparationRequest(config_revision=saved.revision, request_id="changed")
+        )
     assert len(coordinator.list_jobs()) == 1
     coordinator.close()
 
@@ -622,11 +655,11 @@ def test_model_lighting_component_order_preserves_estimated_shading_gradient(wor
     from tests.support.marigold import PreparationRuntime, PreparationWorker
 
     class DistinctLighting(PreparationWorker):
-        def infer(self, **request):
-            result = super().infer(**request)
-            if request["role"] == "lighting":
-                path = self.root / request["output"]
-                width, height = request["size"]
+        def infer(self, call, **options):
+            result = super().infer(call, **options)
+            if call.role == "lighting":
+                path = self.root / call.output
+                width, height = call.size
                 prediction = np.zeros((3, height, width, 3), np.float32)
                 prediction[0] = 0.25  # Worker channel zero is albedo.
                 prediction[1] = np.linspace(0.2, 0.8, width, dtype=np.float32)[None, :, None]
@@ -643,8 +676,10 @@ def test_model_lighting_component_order_preserves_estimated_shading_gradient(wor
     coordinator = Preparations(workspace, runtime=runtime)
     job = coordinator.submit(
         "shirt",
-        config_revision=CalibrationStore(workspace).read("shirt").revision,
-        request_id="distinct",
+        PreparationRequest(
+            config_revision=CalibrationStore(workspace).read("shirt").revision,
+            request_id="distinct",
+        ),
     )
     coordinator.start()
     result = wait_terminal(coordinator, job.id)
@@ -668,7 +703,7 @@ def test_other_jobs_remain_responsive_while_save_verifies_maps(workspace_root):
 
     from etsy_listings.core.preparation.artifacts import Artifacts
 
-    workspace, runtime, initial, first = prepare_template(workspace_root)
+    workspace, runtime, initial, _first = prepare_template(workspace_root)
     initial.close()
     template(workspace_root, "second")
     move_box(workspace, 1)
@@ -684,8 +719,9 @@ def test_other_jobs_remain_responsive_while_save_verifies_maps(workspace_root):
     coordinator = Preparations(workspace, runtime=runtime, artifacts=HeldArtifacts(workspace))
     other = coordinator.submit(
         "second",
-        config_revision=CalibrationStore(workspace).read("second").revision,
-        request_id="other",
+        PreparationRequest(
+            config_revision=CalibrationStore(workspace).read("second").revision, request_id="other"
+        ),
     )
     with ThreadPoolExecutor(max_workers=2) as executor:
         pending = executor.submit(coordinator.reconcile_saved, "shirt")
@@ -705,7 +741,7 @@ def test_cleanup_cannot_remove_an_active_prediction_replacement(workspace_root):
     import json
     import threading
 
-    workspace, runtime, coordinator, first = prepare_template(workspace_root)
+    workspace, runtime, coordinator, _first = prepare_template(workspace_root)
     coordinator.close()
     before = json.loads(workspace.preparation_prediction_current("shirt").read_bytes())["id"]
     staged = threading.Event()
@@ -719,9 +755,11 @@ def test_cleanup_cannot_remove_an_active_prediction_replacement(workspace_root):
     coordinator = Preparations(workspace, runtime=runtime, checkpoint=checkpoint)
     job = coordinator.submit(
         "shirt",
-        config_revision=CalibrationStore(workspace).read("shirt").revision,
-        request_id="refresh",
-        action="prepare_again",
+        PreparationRequest(
+            config_revision=CalibrationStore(workspace).read("shirt").revision,
+            request_id="refresh",
+            action="prepare_again",
+        ),
     )
     coordinator.start()
     assert staged.wait(10)
@@ -743,16 +781,18 @@ def test_later_complete_replacement_retires_historical_cancelled_and_failed_pred
 ):
     import json
 
-    workspace, runtime, coordinator, first = prepare_template(workspace_root)
+    workspace, runtime, coordinator, _first = prepare_template(workspace_root)
     worker = runtime.workers[0]
     previous = json.loads(workspace.preparation_prediction_current("shirt").read_bytes())["id"]
     worker.entered.clear()
     worker.release.clear()
     cancelled = coordinator.submit(
         "shirt",
-        config_revision=CalibrationStore(workspace).read("shirt").revision,
-        request_id="cancel",
-        action="prepare_again",
+        PreparationRequest(
+            config_revision=CalibrationStore(workspace).read("shirt").revision,
+            request_id="cancel",
+            action="prepare_again",
+        ),
     )
     assert worker.entered.wait(5)
     coordinator.cancel(cancelled.id)
@@ -762,18 +802,22 @@ def test_later_complete_replacement_retires_historical_cancelled_and_failed_pred
     worker.failure = RuntimeError("worker failed")
     failed = coordinator.submit(
         "shirt",
-        config_revision=CalibrationStore(workspace).read("shirt").revision,
-        request_id="fail",
-        action="prepare_again",
+        PreparationRequest(
+            config_revision=CalibrationStore(workspace).read("shirt").revision,
+            request_id="fail",
+            action="prepare_again",
+        ),
     )
     assert wait_terminal(coordinator, failed.id).phase == "failed"
     assert workspace.preparation_prediction_set("shirt", previous).exists()
     worker.failure = None
     replacement = coordinator.submit(
         "shirt",
-        config_revision=CalibrationStore(workspace).read("shirt").revision,
-        request_id="replace",
-        action="prepare_again",
+        PreparationRequest(
+            config_revision=CalibrationStore(workspace).read("shirt").revision,
+            request_id="replace",
+            action="prepare_again",
+        ),
     )
     assert wait_terminal(coordinator, replacement.id).phase == "completed"
     coordinator.close()
@@ -804,13 +848,15 @@ def test_queue_order_and_worker_installation_are_pinned_across_restart_update(wo
     coordinator = Preparations(workspace, runtime=runtime)
     first = coordinator.submit(
         "shirt",
-        config_revision=CalibrationStore(workspace).read("shirt").revision,
-        request_id="first",
+        PreparationRequest(
+            config_revision=CalibrationStore(workspace).read("shirt").revision, request_id="first"
+        ),
     )
     second = coordinator.submit(
         "second",
-        config_revision=CalibrationStore(workspace).read("second").revision,
-        request_id="second",
+        PreparationRequest(
+            config_revision=CalibrationStore(workspace).read("second").revision, request_id="second"
+        ),
     )
     coordinator.close()
     runtime.capability = replace(runtime.capability, engine_version="2.0.0", installation_id="new")
@@ -840,13 +886,14 @@ def test_restart_revalidates_corrupted_partial_prediction_and_only_restarts_that
     def crash(identity, step):
         if step == "normals_saved":
             entered.set()
-            raise ProcessExit()
+            raise ProcessExit
 
     coordinator = Preparations(workspace, runtime=runtime, checkpoint=crash)
     job = coordinator.submit(
         "shirt",
-        config_revision=CalibrationStore(workspace).read("shirt").revision,
-        request_id="first",
+        PreparationRequest(
+            config_revision=CalibrationStore(workspace).read("shirt").revision, request_id="first"
+        ),
     )
     coordinator.start()
     assert entered.wait(10)
@@ -870,7 +917,7 @@ def test_restart_revalidates_corrupted_partial_prediction_and_only_restarts_that
 def test_geometry_save_during_cpu_phase_refuses_old_publication_and_rebuilds_latest(workspace_root):
     import threading
 
-    workspace, runtime, initial, first = prepare_template(workspace_root)
+    workspace, runtime, initial, _first = prepare_template(workspace_root)
     initial.close()
     entered = threading.Event()
     release = threading.Event()
@@ -902,7 +949,7 @@ def test_geometry_save_during_cpu_phase_refuses_old_publication_and_rebuilds_lat
 def test_cpu_cancel_stops_at_phase_boundary_and_is_persisted(workspace_root):
     import threading
 
-    workspace, runtime, initial, first = prepare_template(workspace_root)
+    workspace, runtime, initial, _first = prepare_template(workspace_root)
     initial.close()
     entered = threading.Event()
     release = threading.Event()
@@ -935,10 +982,14 @@ def test_request_receipts_do_not_emit_duplicate_step_events(workspace_root):
     workspace = template(workspace_root)
     coordinator = Preparations(workspace, runtime=Runtime())
     revision = CalibrationStore(workspace).read("shirt").revision
-    first = coordinator.submit("shirt", config_revision=revision, request_id="first")
+    first = coordinator.submit(
+        "shirt", PreparationRequest(config_revision=revision, request_id="first")
+    )
     for number in range(10):
         assert (
-            coordinator.submit("shirt", config_revision=revision, request_id=str(number)).id
+            coordinator.submit(
+                "shirt", PreparationRequest(config_revision=revision, request_id=str(number))
+            ).id
             == first.id
         )
     assert coordinator.status(first.id).last_event_sequence == 1
@@ -951,7 +1002,7 @@ def test_request_receipts_do_not_emit_duplicate_step_events(workspace_root):
 def test_prepare_again_refreshes_models_even_with_matching_active_cpu_rebuild(workspace_root):
     import threading
 
-    workspace, runtime, initial, first = prepare_template(workspace_root)
+    workspace, runtime, initial, _first = prepare_template(workspace_root)
     initial.close()
     entered = threading.Event()
     release = threading.Event()
@@ -968,11 +1019,16 @@ def test_prepare_again_refreshes_models_even_with_matching_active_cpu_rebuild(wo
     assert entered.wait(10)
     try:
         assert (
-            coordinator.submit("shirt", config_revision=saved.revision, request_id="ordinary").id
+            coordinator.submit(
+                "shirt", PreparationRequest(config_revision=saved.revision, request_id="ordinary")
+            ).id
             == rebuilding.id
         )
         refresh = coordinator.submit(
-            "shirt", config_revision=saved.revision, request_id="fresh", action="prepare_again"
+            "shirt",
+            PreparationRequest(
+                config_revision=saved.revision, request_id="fresh", action="prepare_again"
+            ),
         )
         assert refresh.id != rebuilding.id
     finally:
@@ -988,7 +1044,7 @@ def test_invalid_current_map_pointer_does_not_prevent_explicit_preparation_repai
 
     from etsy_listings.core.preparation.artifacts import Artifacts
 
-    workspace, runtime, initial, first = prepare_template(workspace_root)
+    workspace, runtime, initial, _first = prepare_template(workspace_root)
     initial.close()
     pointer = json.loads(workspace.template_map_current("shirt").read_bytes())
     pointer["schema_version"] = 2
@@ -996,8 +1052,9 @@ def test_invalid_current_map_pointer_does_not_prevent_explicit_preparation_repai
     coordinator = Preparations(workspace, runtime=runtime)
     job = coordinator.submit(
         "shirt",
-        config_revision=CalibrationStore(workspace).read("shirt").revision,
-        request_id="repair",
+        PreparationRequest(
+            config_revision=CalibrationStore(workspace).read("shirt").revision, request_id="repair"
+        ),
     )
     coordinator.start()
     result = wait_terminal(coordinator, job.id)
@@ -1016,33 +1073,43 @@ def test_explicit_photo_reset_is_durable_and_cancellation_preserves_old_masks(
     workspace_root, cancel
 ):
     from etsy_listings.core.preparation.artifacts import Artifacts
-    from etsy_listings.core.workspace.calibration import MaskPhotoMismatch
+    from etsy_listings.core.workspace.calibration import MaskPhotoMismatchError
 
-    workspace, runtime, coordinator, first = prepare_template(workspace_root)
+    workspace, runtime, coordinator, _first = prepare_template(workspace_root)
     coordinator.close()
     before = workspace.template_mask_file("shirt").read_bytes()
     Image.new("RGB", (64, 64), "red").save(workspace.template_scene_image("shirt"))
     coordinator = Preparations(workspace, runtime=runtime)
     revision = CalibrationStore(workspace).read("shirt").revision
-    with pytest.raises(MaskPhotoMismatch):
-        coordinator.submit("shirt", config_revision=revision, request_id="ordinary")
+    with pytest.raises(MaskPhotoMismatchError):
+        coordinator.submit(
+            "shirt", PreparationRequest(config_revision=revision, request_id="ordinary")
+        )
     with pytest.raises(ValueError, match="Prepare again"):
         coordinator.submit(
-            "shirt", config_revision=revision, request_id="wrong", reset_masks_for_photo=True
+            "shirt",
+            PreparationRequest(
+                config_revision=revision, request_id="wrong", reset_masks_for_photo=True
+            ),
         )
     job = coordinator.submit(
         "shirt",
-        config_revision=revision,
-        request_id="reset",
-        action="prepare_again",
-        reset_masks_for_photo=True,
+        PreparationRequest(
+            config_revision=revision,
+            request_id="reset",
+            action="prepare_again",
+            reset_masks_for_photo=True,
+        ),
     )
     assert job.reset_masks_for_photo
     assert all(p.mask == "0" * 64 for p in job.snapshot.placements)
     assert not workspace.preparation_work(job.id, "mask-.png").exists()
     with pytest.raises(ValueError, match="request ID"):
         coordinator.submit(
-            "shirt", config_revision=revision, request_id="reset", action="prepare_again"
+            "shirt",
+            PreparationRequest(
+                config_revision=revision, request_id="reset", action="prepare_again"
+            ),
         )
     if cancel:
         coordinator.cancel(job.id)
@@ -1052,10 +1119,9 @@ def test_explicit_photo_reset_is_durable_and_cancellation_preserves_old_masks(
         assert coordinator.status(job.id).phase == "cancelled"
         job = coordinator.submit(
             "shirt",
-            config_revision=revision,
-            request_id="retry",
-            action="retry",
-            previous_job=job.id,
+            PreparationRequest(
+                config_revision=revision, request_id="retry", action="retry", previous_job=job.id
+            ),
         )
         assert job.reset_masks_for_photo
     coordinator.start()
@@ -1081,8 +1147,9 @@ def test_photo_reset_partial_multiple_install_recovers_only_exact_inputs(workspa
     coordinator = Preparations(workspace, runtime=runtime)
     first = coordinator.submit(
         "shirt",
-        config_revision=CalibrationStore(workspace).read("shirt").revision,
-        request_id="first",
+        PreparationRequest(
+            config_revision=CalibrationStore(workspace).read("shirt").revision, request_id="first"
+        ),
     )
     coordinator.start()
     assert wait_terminal(coordinator, first.id).phase == "completed"
@@ -1094,15 +1161,17 @@ def test_photo_reset_partial_multiple_install_recovers_only_exact_inputs(workspa
     def crash(identity, step):
         if step == "mask_committed":
             exited.set()
-            raise ProcessExit()
+            raise ProcessExit
 
     coordinator = Preparations(workspace, runtime=runtime, checkpoint=crash)
     job = coordinator.submit(
         "shirt",
-        config_revision=CalibrationStore(workspace).read("shirt").revision,
-        request_id="reset",
-        action="prepare_again",
-        reset_masks_for_photo=True,
+        PreparationRequest(
+            config_revision=CalibrationStore(workspace).read("shirt").revision,
+            request_id="reset",
+            action="prepare_again",
+            reset_masks_for_photo=True,
+        ),
     )
     coordinator.start()
     wait_checkpoint(coordinator, job.id, exited)
@@ -1145,7 +1214,7 @@ def test_photo_reset_partial_multiple_install_recovers_only_exact_inputs(workspa
 def test_photo_reset_intent_preserves_same_photo_manual_mask(workspace_root):
     from etsy_listings.core.workspace.calibration import MaskEdit, Stroke
 
-    workspace, runtime, coordinator, first = prepare_template(workspace_root)
+    workspace, _runtime, coordinator, _first = prepare_template(workspace_root)
     store = CalibrationStore(workspace)
     current = store.read("shirt")
     saved = store.save(
@@ -1162,10 +1231,12 @@ def test_photo_reset_intent_preserves_same_photo_manual_mask(workspace_root):
     checksum = store.mask("shirt").checksum
     job = coordinator.submit(
         "shirt",
-        config_revision=saved.revision,
-        request_id="refresh",
-        action="prepare_again",
-        reset_masks_for_photo=True,
+        PreparationRequest(
+            config_revision=saved.revision,
+            request_id="refresh",
+            action="prepare_again",
+            reset_masks_for_photo=True,
+        ),
     )
     assert job.snapshot.placements[0].mask == checksum
     result = wait_terminal(coordinator, job.id)
@@ -1191,8 +1262,9 @@ def test_checkpoint_wait_reports_terminal_model_failure(workspace_root):
     coordinator = Preparations(workspace, runtime=runtime)
     job = coordinator.submit(
         "shirt",
-        config_revision=CalibrationStore(workspace).read("shirt").revision,
-        request_id="failure",
+        PreparationRequest(
+            config_revision=CalibrationStore(workspace).read("shirt").revision, request_id="failure"
+        ),
     )
     coordinator.start()
     try:
@@ -1215,11 +1287,15 @@ def test_budget_preflight_refuses_before_runtime_or_prediction_allocation(
     coordinator = Preparations(workspace, runtime=runtime)
     revision = CalibrationStore(workspace).read("shirt").revision
     if operation == "recover":
-        job = coordinator.submit("shirt", config_revision=revision, request_id="saved")
+        job = coordinator.submit(
+            "shirt", PreparationRequest(config_revision=revision, request_id="saved")
+        )
     monkeypatch.setattr(policy, "MAX_ARCHIVE_BYTES", 64 * 64 * 56)
     if operation == "submit":
         with pytest.raises(ValueError, match="allocation budget"):
-            coordinator.submit("shirt", config_revision=revision, request_id="too-large")
+            coordinator.submit(
+                "shirt", PreparationRequest(config_revision=revision, request_id="too-large")
+            )
         assert runtime.inspections == 0
         assert coordinator.list_jobs() == []
         assert workspace.preparation_work_ids() == []
@@ -1238,7 +1314,7 @@ def test_budget_preflight_refuses_before_runtime_or_prediction_allocation(
 def test_saved_reconcile_preflights_before_loading_retained_maps(workspace_root, monkeypatch):
     import etsy_listings.core.preparation.artifacts as policy
 
-    workspace, runtime, coordinator, first = prepare_template(workspace_root)
+    workspace, runtime, coordinator, _first = prepare_template(workspace_root)
     move_box(workspace, 1)
     monkeypatch.setattr(policy, "MAX_ARCHIVE_BYTES", 1)
     with pytest.raises(ValueError, match="allocation budget"):
@@ -1253,9 +1329,11 @@ def test_prepare_again_refits_fresh_predictions_even_when_geometry_matches(works
     try:
         refresh = coordinator.submit(
             "shirt",
-            config_revision=CalibrationStore(workspace).read("shirt").revision,
-            request_id="fresh-fit",
-            action="prepare_again",
+            PreparationRequest(
+                config_revision=CalibrationStore(workspace).read("shirt").revision,
+                request_id="fresh-fit",
+                action="prepare_again",
+            ),
         )
         assert wait_terminal(coordinator, refresh.id).phase == "completed"
         assert any(event.step == "flattening" for event in coordinator.events(refresh.id))

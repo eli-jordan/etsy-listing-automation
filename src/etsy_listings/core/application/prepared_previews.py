@@ -18,6 +18,7 @@ from pathlib import Path
 
 from etsy_listings.core.application.mockup_templates import (
     LayerDesign,
+    LazyMaps,
     PreviewScene,
     compose_preview,
     read_config,
@@ -25,20 +26,21 @@ from etsy_listings.core.application.mockup_templates import (
     saved_preview,
 )
 from etsy_listings.core.application.refusals import (
-    TemplatePhotoMissing,
-    TemplatePreviewKindMismatch,
+    TemplatePhotoMissingError,
+    TemplatePreviewKindMismatchError,
 )
 from etsy_listings.core.preparation.artifacts import ArtifactError, Artifacts, PreparationInputs
 from etsy_listings.core.preparation.readiness import template_readiness
 from etsy_listings.core.preparation.scene_cache import PIXEL_DIGESTS, SceneCache
-from etsy_listings.core.preparation.scenes import PreparedLayer, lease_scene
+from etsy_listings.core.preparation.scenes import Composition, PreparedLayer, lease_scene
 from etsy_listings.core.render import (
     AnyTemplate,
     ColourMatrixTemplate,
     MarigoldAppearance,
     MarigoldRenderer,
     MultipleTemplate,
-    PreparationRequired,
+    PreparationRequiredError,
+    RenderConfig,
     encode_png,
     scene_colours,
 )
@@ -69,8 +71,8 @@ def saved_scene(
     :func:`~etsy_listings.core.application.mockup_templates.saved_preview`
     asks it. Photo warp returns the scene for the host to composite from its
     image memo; Marigold returns the composed image. Refusals:
-    :class:`TemplateMissing`, :class:`TemplateConfigMissing`,
-    :class:`TemplatePhotoMissing`, :class:`PreparationRequired`."""
+    :class:`TemplateMissingError`, :class:`TemplateConfigMissingError`,
+    :class:`TemplatePhotoMissingError`, :class:`PreparationRequiredError`."""
     if isinstance(read_config(workspace, name).config.renderer, MarigoldRenderer):
         return prepared_preview(workspace, name, config=None, colour=colour, design=design)
     return saved_preview(workspace, name, colour=colour, design=design)
@@ -100,16 +102,9 @@ def photo_warp_preview(
         if path is not None
     ]
     cache = SceneCache(workspace)
-    photo_pixels = PIXEL_DIGESTS.photo(scene.photo.path)
-    known = [digest for _, path in painted if (digest := PIXEL_DIGESTS.design(path)) is not None]
-    if photo_pixels is not None and len(known) == len(painted):
-        identity = photo_warp_scene_identity(
-            photo_pixels=photo_pixels,
-            layers=[(cfg, digest) for (cfg, _), digest in zip(painted, known, strict=True)],
-        )
-        png = cache.read(identity)
-        if png is not None:
-            return PhotoWarpPreview(png, identity)
+    cached = _cached_photo_warp(cache, scene, painted)
+    if cached is not None:
+        return cached
 
     photo, photo_pixels = PIXEL_DIGESTS.decode_photo(scene.photo.path, base)
     decoded: dict[Path, tuple[RGBA, str]] = {}
@@ -127,12 +122,63 @@ def photo_warp_preview(
             base=photo,
             scale=1.0,
             design=lambda path: decoded[path][0],
-            height=lambda: maps.height(scene.photo.map_key, photo),
-            luminance=lambda: maps.luminance(scene.photo.map_key, photo),
+            maps=LazyMaps(
+                height=lambda: maps.height(scene.photo.map_key, photo),
+                luminance=lambda: maps.luminance(scene.photo.map_key, photo),
+            ),
         )
         return encode_png(image, compression=PHOTO_WARP_PNG_COMPRESSION)
 
     return PhotoWarpPreview(cache.get_or_compose(identity, compose), identity)
+
+
+def _cached_photo_warp(
+    cache: SceneCache, scene: PreviewScene, painted: list[tuple[RenderConfig, Path]]
+) -> PhotoWarpPreview | None:
+    """The cached scene, without decoding, when every file's pixel digest is
+    still known."""
+    photo_pixels = PIXEL_DIGESTS.photo(scene.photo.path)
+    known = [digest for _, path in painted if (digest := PIXEL_DIGESTS.design(path)) is not None]
+    if photo_pixels is None or len(known) != len(painted):
+        return None
+    identity = photo_warp_scene_identity(
+        photo_pixels=photo_pixels,
+        layers=[(cfg, digest) for (cfg, _), digest in zip(painted, known, strict=True)],
+    )
+    png = cache.read(identity)
+    return None if png is None else PhotoWarpPreview(png, identity)
+
+
+def _requested_marigold(
+    saved: AnyTemplate, config: AnyTemplate | None
+) -> tuple[AnyTemplate, MarigoldRenderer]:
+    """The geometry to render (the saved one when ``config`` is None) and its
+    renderer; refuses a different kind or a renderer not saved as Marigold."""
+    requested = config if config is not None else saved
+    if requested.kind != saved.kind:
+        raise TemplatePreviewKindMismatchError(saved.kind)
+    if not isinstance(requested.renderer, MarigoldRenderer) or not isinstance(
+        saved.renderer, MarigoldRenderer
+    ):
+        raise PreparationRequiredError("Save the Marigold renderer selection before rendering")
+    return requested, requested.renderer
+
+
+def _check_prepared_geometry(
+    requested: AnyTemplate, renderer: MarigoldRenderer, inputs: PreparationInputs
+) -> None:
+    boxes = (
+        {p.id: p.bounding_box for p in requested.placements}
+        if isinstance(requested, MultipleTemplate)
+        else {None: requested.bounding_box}
+    )
+    expected = {p.id: p.quad for p in inputs.placements}
+    if {
+        key: tuple((p.x, p.y) for p in box) for key, box in boxes.items()
+    } != expected or renderer.config.inference != inputs.inference:
+        raise PreparationRequiredError(
+            "Save geometry and inference settings, then rebuild or prepare the template"
+        )
 
 
 def prepared_preview(
@@ -154,40 +200,23 @@ def prepared_preview(
     # lease_scene re-checks them after the images are decoded.
     with store.lock(name):
         saved = store.read(name)
-        requested = config if config is not None else saved.config
-        if requested.kind != saved.config.kind:
-            raise TemplatePreviewKindMismatch(saved.config.kind)
-        if not isinstance(requested.renderer, MarigoldRenderer) or not isinstance(
-            saved.config.renderer, MarigoldRenderer
-        ):
-            raise PreparationRequired("Save the Marigold renderer selection before rendering")
+        requested, renderer = _requested_marigold(saved.config, config)
         readiness = template_readiness(workspace, name, saved.config)
         if not readiness.can_render:
-            raise PreparationRequired(readiness.message or "Prepare the template first")
+            raise PreparationRequiredError(readiness.message or "Prepare the template first")
         inputs = artifacts.saved_inputs(name)
-        boxes = (
-            {p.id: p.bounding_box for p in requested.placements}
-            if isinstance(requested, MultipleTemplate)
-            else {None: requested.bounding_box}
-        )
-        expected = {p.id: p.quad for p in inputs.placements}
-        if {
-            key: tuple((p.x, p.y) for p in box) for key, box in boxes.items()
-        } != expected or requested.renderer.config.inference != inputs.inference:
-            raise PreparationRequired(
-                "Save geometry and inference settings, then rebuild or prepare the template"
-            )
+        _check_prepared_geometry(requested, renderer, inputs)
         depicted = colour if isinstance(requested, ColourMatrixTemplate) else None
         path = workspace.scene_photo(name, depicted).path
         if not path.is_file():
-            raise TemplatePhotoMissing("Selected target photo is missing")
+            raise TemplatePhotoMissingError("Selected target photo is missing")
         sources = _layer_sources(requested, depicted, design)
-        appearance = requested.renderer.config.appearance
+        appearance = renderer.config.appearance
         cache = SceneCache(workspace)
         try:
-            cached = _cached(workspace, name, inputs, cache, path, sources, appearance)
+            cached = _cached(workspace, name, inputs, cache, _SceneFiles(path, sources, appearance))
         except ArtifactError as exc:
-            raise PreparationRequired(str(exc)) from exc
+            raise PreparationRequiredError(str(exc)) from exc
         if cached is not None:
             png, identity, generation_id = cached
             return PreparedPreview(png, identity, generation_id, saved.revision)
@@ -195,13 +224,23 @@ def prepared_preview(
         layers = _layers(sources)
     try:
         with lease_scene(
-            workspace, name, base=base, layers=layers, appearance=appearance, expected=inputs
+            workspace, name, Composition(base, layers, appearance), expected=inputs
         ) as scene:
             return PreparedPreview(
                 scene.encoded(cache), scene.identity, scene.manifest.generation_id, saved.revision
             )
     except ArtifactError as exc:
-        raise PreparationRequired(str(exc)) from exc
+        raise PreparationRequiredError(str(exc)) from exc
+
+
+@dataclass(frozen=True)
+class _SceneFiles:
+    """A composition named by its files, before any is decoded: the photo,
+    each layer's design and placement, and the appearance."""
+
+    photo: Path
+    sources: list[tuple[Path, str | None]]
+    appearance: MarigoldAppearance
 
 
 def _cached(
@@ -209,15 +248,14 @@ def _cached(
     name: str,
     inputs: PreparationInputs,
     cache: SceneCache,
-    photo: Path,
-    sources: list[tuple[Path, str | None]],
-    appearance: MarigoldAppearance,
+    files: _SceneFiles,
 ) -> tuple[bytes, str, str] | None:
     """The cached scene, without decoding, when every file's pixel digest is
     still known: ``(png, identity, generation_id)``, else ``None``. The
     identity is the one :func:`lease_scene` would compute from the decoded
     pixels, so an entry found under it is exactly that composition."""
-    photo_pixels = PIXEL_DIGESTS.photo(photo)
+    sources = files.sources
+    photo_pixels = PIXEL_DIGESTS.photo(files.photo)
     artwork = [PIXEL_DIGESTS.design(path) for path, _ in sources]
     if photo_pixels is None or None in artwork:
         return None
@@ -227,7 +265,7 @@ def _cached(
         placement_ids=[placement for _, placement in sources],
         artwork_digests=[digest for digest in artwork if digest is not None],
         photo_pixels=photo_pixels,
-        appearance=appearance,
+        appearance=files.appearance,
     )
     png = cache.read(identity)
     return None if png is None else (png, identity, manifest.generation_id)

@@ -34,9 +34,9 @@ from etsy_listings.core.application.listing_reads import (
 )
 from etsy_listings.core.application.refusals import (
     InvalidListing,
-    ListingMissing,
-    ListingNameTaken,
-    PublishedListingDeletion,
+    ListingMissingError,
+    ListingNameTakenError,
+    PublishedListingDeletionError,
 )
 from etsy_listings.core.batches import BatchStore
 from etsy_listings.core.config.listing import EMPTY_DRAFT
@@ -70,7 +70,7 @@ def _document(workspace: Workspace, name: str = NAME) -> dict[str, Any]:
     return loaded
 
 
-def _edit(workspace: Workspace, patch: dict[str, Any], **kwargs: Any) -> InvalidListing | None:  # noqa: ANN401
+def _edit(workspace: Workspace, patch: dict[str, Any], **kwargs: Any) -> InvalidListing | None:
     return edit_listing(
         workspace,
         kwargs.pop("name", NAME),
@@ -79,7 +79,7 @@ def _edit(workspace: Workspace, patch: dict[str, Any], **kwargs: Any) -> Invalid
     )
 
 
-def _rename(workspace: Workspace, new: str, **kwargs: Any) -> None:  # noqa: ANN401
+def _rename(workspace: Workspace, new: str, **kwargs: Any) -> None:
     rename_listing(
         workspace,
         kwargs.pop("old", NAME),
@@ -89,7 +89,7 @@ def _rename(workspace: Workspace, new: str, **kwargs: Any) -> None:  # noqa: ANN
     )
 
 
-def _delete(workspace: Workspace, **kwargs: Any):  # noqa: ANN202, ANN401
+def _delete(workspace: Workspace, **kwargs: Any):
     return delete_listing(
         workspace,
         kwargs.pop("name", NAME),
@@ -125,7 +125,7 @@ class TestReadListing:
         )
 
     def test_a_missing_listing_is_refused(self, workspace: Workspace) -> None:
-        with pytest.raises(ListingMissing):
+        with pytest.raises(ListingMissingError):
             read_listing(workspace, "does-not-exist", etsy_states=etsy_reports())
 
     def test_asks_etsy_about_a_published_listing(self, workspace: Workspace) -> None:
@@ -193,7 +193,7 @@ class TestListListings:
         asked: list[list[int]] = []
         etsy = etsy_reports({555: "active"})
 
-        def counting(ids: Any) -> Any:  # noqa: ANN401
+        def counting(ids: Any) -> Any:
             asked.append(list(ids))
             return etsy(ids)
 
@@ -254,7 +254,7 @@ class TestEditListing:
         assert "lifecycle" not in _document(workspace)
 
     def test_a_missing_listing_is_refused(self, workspace: Workspace) -> None:
-        with pytest.raises(ListingMissing):
+        with pytest.raises(ListingMissingError):
             _edit(workspace, {"brief": "x"}, name="does-not-exist")
 
         assert not workspace.listing_dir("does-not-exist").exists()
@@ -330,14 +330,14 @@ class TestRenameListing:
         workspace.listing_dir("taken").mkdir(parents=True)
         seed_proposal(workspace.root, NAME)
 
-        with pytest.raises(ListingNameTaken):
+        with pytest.raises(ListingNameTakenError):
             _rename(workspace, "taken")
 
         assert workspace.listing_file(NAME).is_file()
         assert has_proposal(workspace.root, NAME)
 
     def test_refuses_a_missing_listing(self, workspace: Workspace) -> None:
-        with pytest.raises(ListingMissing):
+        with pytest.raises(ListingMissingError):
             _rename(workspace, "whatever", old="no-such")
 
     def test_refuses_a_name_that_is_not_a_path_segment(self, workspace: Workspace) -> None:
@@ -384,7 +384,7 @@ class TestDeleteListing:
         runs, run = ai_run(NAME)
         before = workspace.listing_file(NAME).read_bytes()
 
-        with pytest.raises(PublishedListingDeletion) as refused:
+        with pytest.raises(PublishedListingDeletionError) as refused:
             _delete(workspace, ai_runs=runs, etsy_states=etsy_reports({555: "active"}))
 
         assert "published" in str(refused.value)
@@ -408,7 +408,8 @@ class TestDeleteListing:
 
         _delete(workspace, ai_runs=runs)
 
-        assert run.stop_reason == "cancelled" and run.cancel_event.is_set()
+        assert run.stop_reason == "cancelled"
+        assert run.cancel_event.is_set()
         assert [(row.name, row.deleted) for row in batch_rows(store, "b1")] == [
             (NAME, True),
             ("someone-else", False),
@@ -428,7 +429,7 @@ class TestDeleteListing:
         store = batch_naming(workspace, "b1", "gone")
         runs, run = ai_run("gone", finished=True)
 
-        with pytest.raises(ListingMissing):
+        with pytest.raises(ListingMissingError):
             _delete(workspace, name="gone", ai_runs=runs)
 
         assert not batch_rows(store, "b1")[0].deleted
@@ -458,7 +459,7 @@ def _refused(call: Callable[[], object]) -> Callable[[], object]:
     def outcome() -> object:
         try:
             return call()
-        except (ListingMissing, ListingNameTaken) as exc:
+        except (ListingMissingError, ListingNameTakenError) as exc:
             return exc
 
     return outcome
@@ -504,7 +505,7 @@ class TestCompetingWrites:
         )
 
         assert rename is None
-        assert isinstance(edit, ListingMissing)
+        assert isinstance(edit, ListingMissingError)
         assert not workspace.listing_dir(NAME).exists()
         assert _document(workspace, "hike-away").get("brief") != "Too late."
 
@@ -520,6 +521,6 @@ class TestCompetingWrites:
         )
 
         assert rename is None
-        assert isinstance(create, ListingNameTaken)
+        assert isinstance(create, ListingNameTakenError)
         assert not workspace.listing_dir(NAME).exists()
         assert workspace.listing_file("fresh").is_file()

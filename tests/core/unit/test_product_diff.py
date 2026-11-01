@@ -134,8 +134,8 @@ def test_a_price_change_is_reported_in_the_currency_the_listing_wrote() -> None:
         PriceChange(
             size="M",
             color="black",
-            before=Money(Decimal("349"), "NOK"),
-            after=Money(Decimal("399"), "NOK"),
+            before=Money(Decimal(349), "NOK"),
+            after=Money(Decimal(399), "NOK"),
         ),
     )
 

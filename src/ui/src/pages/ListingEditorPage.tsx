@@ -86,12 +86,8 @@ export function ListingEditorPage() {
   // rather than clearing on change is what makes showing a stale document
   // impossible: one left over from a previous listing simply does not match. (A
   // draft's name is `""`, which is never a route name.)
-  const initial =
-    handed !== null && handed.name === routeName
-      ? handed
-      : fetched !== null && (fetched.name || null) === routeName
-        ? fetched
-        : null;
+  const matchingFetched = fetched !== null && (fetched.name || null) === routeName ? fetched : null;
+  const initial = handed !== null && handed.name === routeName ? handed : matchingFetched;
 
   useEffect(() => {
     if (initial !== null) return;
@@ -392,6 +388,37 @@ type ShellProps = {
     }
 );
 
+/** The issues banner, in the listing template's wording when it is one. */
+function ShellIssues({
+  template,
+  issues,
+  tab,
+  onJumpTo,
+}: {
+  template: boolean;
+  issues: ListingDetail["issues"];
+  tab: Tab;
+  onJumpTo: (tab: Tab) => void;
+}) {
+  if (!template) return <IssuesBanner issues={issues} activeTab={tab} onJumpTo={onJumpTo} />;
+  // A block is what stops the save; warnings alone stop
+  // nothing, so they are not told the file is being held back.
+  const blocked = issues.some((issue) => issue.severity === "block");
+  return (
+    <IssuesBanner
+      issues={issues}
+      activeTab={tab}
+      onJumpTo={onJumpTo}
+      subject="listing-template"
+      when={
+        blocked
+          ? "Last complete version is kept until then"
+          : "Checked against this template’s own configuration"
+      }
+    />
+  );
+}
+
 export function ListingEditorShell(props: ShellProps) {
   const { detail, update, flush, head } = props;
   const template = props.kind === "listing-template";
@@ -449,23 +476,7 @@ export function ListingEditorShell(props: ShellProps) {
         )}
       {head}
 
-      {template ? (
-        <IssuesBanner
-          issues={detail.issues}
-          activeTab={tab}
-          onJumpTo={pickTab}
-          subject="listing-template"
-          // A block is what stops the save; warnings alone stop
-          // nothing, so they are not told the file is being held back.
-          when={
-            detail.issues.some((issue) => issue.severity === "block")
-              ? "Last complete version is kept until then"
-              : "Checked against this template’s own configuration"
-          }
-        />
-      ) : (
-        <IssuesBanner issues={detail.issues} activeTab={tab} onJumpTo={pickTab} />
-      )}
+      <ShellIssues template={template} issues={detail.issues} tab={tab} onJumpTo={pickTab} />
 
       {/* Above the tabs, not inside one: the artwork is what both Variants
           (which colours suit it) and Listing Images (which mockups show it)

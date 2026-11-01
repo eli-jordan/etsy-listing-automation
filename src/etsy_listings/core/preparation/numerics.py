@@ -12,6 +12,7 @@ import cv2
 import numpy as np
 
 from etsy_listings.core.preparation import _geometry as geometry
+from etsy_listings.core.preparation.predictions import MAX_NORMAL_COMPONENT, UNIT_NORMAL_TOLERANCE
 from etsy_listings.core.render import _material_math as material_math
 from etsy_listings.core.render.material import MaterialMaps
 from etsy_listings.core.render.types import RGB, FloatMap
@@ -132,8 +133,8 @@ class Evidence:
             shape = (height, width, channels) if channels else (height, width)
             if array.shape != shape or array.dtype != np.float32 or not np.isfinite(array).all():
                 raise ValueError("Invalid evidence shape, dtype or finite values")
-        if np.any(np.abs(self.normals) > 1.01) or not np.allclose(
-            np.linalg.norm(self.normals, axis=-1), 1, atol=0.02
+        if np.any(np.abs(self.normals) > MAX_NORMAL_COMPONENT) or not np.allclose(
+            np.linalg.norm(self.normals, axis=-1), 1, atol=UNIT_NORMAL_TOLERANCE
         ):
             raise ValueError("Evidence normals must be unit vectors")
         if any(
@@ -144,7 +145,7 @@ class Evidence:
 
     def sample(self, array: FloatMap, xy: FloatMap) -> FloatMap:
         sx, sy, ox, oy = self.crop.photo_to_prediction
-        return geometry.sample(
+        return material_math.sample(
             array, xy * np.array([sx, sy], np.float32) + np.array([ox, oy], np.float32)
         )
 
@@ -155,24 +156,38 @@ class Preparation:
     diagnostics: dict[str, Any]
 
 
-def prepare(
-    base: RGB,
-    box: FloatMap,
-    evidence: Evidence,
-    *,
-    mask: FloatMap,
-    max_edge: int | None = None,
-    checkpoint: Callable[[str], None] = lambda _: None,
-    cooperate: Callable[[], None] = lambda: None,
-) -> Preparation:
-    """Fit one placement from explicit evidence, with cancellation between phases.
+@dataclass(frozen=True)
+class Placement:
+    """One placement to prepare: its quad in photo coordinates (TL, TR, BR,
+    BL) and its visibility mask -- the durable edited visibility, not brush
+    history -- as float32 photo pixels in [0, 1]."""
 
-    A supplied mask is the durable edited visibility, not brush history. The
-    checkpoint callback may raise to cancel without publishing partial maps.
-    cooperate runs between numerical solves without publishing phase progress.
-    """
-    height, width = base.shape[:2]
-    size = (width, height)
+    box: FloatMap
+    mask: FloatMap
+
+
+def _no_checkpoint(_step: str) -> None:
+    return None
+
+
+def _no_cooperation() -> None:
+    return None
+
+
+@dataclass(frozen=True)
+class Cooperation:
+    """How a preparation yields while it runs. ``checkpoint`` is told each
+    phase as it starts and may raise to cancel without publishing partial
+    maps; ``cooperate`` runs between numerical solves without publishing
+    phase progress."""
+
+    checkpoint: Callable[[str], None] = _no_checkpoint
+    cooperate: Callable[[], None] = _no_cooperation
+
+
+def _check_placement(placement: Placement, evidence: Evidence, size: tuple[int, int]) -> None:
+    box, mask = placement.box, placement.mask
+    width, height = size
     if not evidence_covers(evidence.crop, evidence.identity, box, size, evidence.identity):
         raise ValueError("Evidence does not cover the full placement margin")
     if not cv2.isContourConvex(box) or cv2.contourArea(box) < 1:
@@ -184,20 +199,34 @@ def prepare(
         or np.any((mask < 0) | (mask > 1))
     ):
         raise ValueError("Visibility mask must be finite float32 photo pixels in [0,1]")
+
+
+def prepare(
+    base: RGB,
+    placement: Placement,
+    evidence: Evidence,
+    *,
+    max_edge: int | None = None,
+    cooperation: Cooperation = Cooperation(),
+) -> Preparation:
+    """Fit one placement from explicit evidence, with cancellation between phases."""
+    box, mask = placement.box, placement.mask
+    checkpoint, cooperate = cooperation.checkpoint, cooperation.cooperate
+    height, width = base.shape[:2]
+    size = (width, height)
+    _check_placement(placement, evidence, size)
     mesh = 17 if max_edge is not None else 49
     grid = geometry.placement_grid(box, mesh)
     placement_width = float((np.linalg.norm(box[1] - box[0]) + np.linalg.norm(box[2] - box[3])) / 2)
     normals = evidence.sample(evidence.normals, grid)
     normals /= np.maximum(np.linalg.norm(normals, axis=-1, keepdims=True), 1e-8)
-    confidence = geometry.sample(mask, grid)
+    confidence = material_math.sample(mask, grid)
     grid_ids = np.ones((mesh, mesh), np.int32)
     checkpoint("fitting")
     surface, diagnostics = geometry.integrate(
         grid / placement_width,
-        normals,
-        confidence,
+        geometry.SurfaceEvidence(normals, confidence, evidence.sample(evidence.depth, grid)),
         grid_ids,
-        evidence.sample(evidence.depth, grid),
         cooperate=cooperate,
     )
     checkpoint("flattening")
@@ -233,7 +262,7 @@ def prepare(
     material, valid = material_math.bake(
         neutral, box, (right - left, bottom - top), origin=(left, top)
     )
-    material += geometry.sample(uv - neutral, material * (mesh - 1))
+    material += material_math.sample(uv - neutral, material * (mesh - 1))
     valid *= mask[region]
     labels = (valid > 0).astype(np.int32)
     checkpoint("lighting")
@@ -244,9 +273,11 @@ def prepare(
     local_box = box - np.array([left, top], np.float32)
     local_fields, light_diagnostics = geometry.lighting_fields(
         base[region],
-        evidence.sample(evidence.shading, xy),
-        evidence.sample(evidence.albedo, xy),
-        evidence.sample(evidence.residual, xy),
+        geometry.Intrinsics(
+            evidence.sample(evidence.shading, xy),
+            evidence.sample(evidence.albedo, xy),
+            evidence.sample(evidence.residual, xy),
+        ),
         mask[region] * geometry.polygon_mask((right - left, bottom - top), local_box.tolist()),
         confidence,
         # Interactive samples represent a larger original-photo area. Keep the
@@ -278,6 +309,13 @@ class MaskProposal:
 
 
 _MASK_PROPOSAL_LOCK = threading.Lock()
+# Fewer seed or sure-garment pixels than this fall back to manual visibility.
+_MIN_SEED_PIXELS = 20
+# Chroma distance from the seed median, in robust deviations, that GrabCut
+# starts from: sure garment, probable garment, and sure background.
+_SURE_GARMENT = 1.7
+_PROBABLE_GARMENT = 3.5
+_SURE_BACKGROUND = 5
 
 
 def propose_mask(base: RGB, box: FloatMap) -> MaskProposal:
@@ -296,7 +334,7 @@ def propose_mask(base: RGB, box: FloatMap) -> MaskProposal:
     lab = cv2.cvtColor(small, cv2.COLOR_RGB2LAB).astype(np.float32)
     ab = lab[..., 1:]
     values = ab[seed > 0]
-    if len(values) < 20:
+    if len(values) < _MIN_SEED_PIXELS:
         return MaskProposal(
             np.ones((h, w), np.float32),
             {"fallback": "manual visibility; too few reliable colour seeds"},
@@ -306,12 +344,12 @@ def propose_mask(base: RGB, box: FloatMap) -> MaskProposal:
     distance = np.linalg.norm((ab - median) / deviation, axis=-1)
     mask = np.full(seed.shape, cv2.GC_BGD, np.uint8)
     mask[region > 0] = cv2.GC_PR_BGD
-    mask[(region > 0) & (distance < 3.5)] = cv2.GC_PR_FGD
-    mask[(seed > 0) & (distance < 1.7)] = cv2.GC_FGD
+    mask[(region > 0) & (distance < _PROBABLE_GARMENT)] = cv2.GC_PR_FGD
+    mask[(seed > 0) & (distance < _SURE_GARMENT)] = cv2.GC_FGD
     # Strong chroma disagreement excludes skin on these development shirts;
     # lighting changes and dark creases alone do not supply background seeds.
-    mask[(region > 0) & (distance > 5)] = cv2.GC_BGD
-    if (mask == cv2.GC_FGD).sum() < 20 or not np.any(mask == cv2.GC_BGD):
+    mask[(region > 0) & (distance > _SURE_BACKGROUND)] = cv2.GC_BGD
+    if (mask == cv2.GC_FGD).sum() < _MIN_SEED_PIXELS or not np.any(mask == cv2.GC_BGD):
         return MaskProposal(
             np.ones((h, w), np.float32),
             {

@@ -3,7 +3,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from etsy_listings.core.preparation.artifacts import Artifacts
+from etsy_listings.core.preparation.artifacts import Artifacts, PublishOptions
 from etsy_listings.core.workspace import Workspace
 
 from tests.support.marigold import material_maps, preparation_inputs
@@ -41,7 +41,7 @@ def test_cleanup_cannot_remove_a_generation_while_publication_is_validating(work
         inputs,
         {None: material_maps()},
         current_inputs=lambda: inputs,
-        checkpoint=checkpoint,
+        options=PublishOptions(checkpoint=checkpoint),
     )
     assert observed == []
     assert store.readiness("shirt", inputs).state == "ready"
@@ -81,14 +81,18 @@ def test_generation_identity_ignores_provenance_storage_names_and_placement_orde
     reverse_inputs = preparation_inputs(("right", "left"))
     maps = {"left": material_maps(), "right": material_maps()}
     first = store.publish(
-        "shirt", first_inputs, maps, current_inputs=lambda: first_inputs, provenance={"seconds": 1}
+        "shirt",
+        first_inputs,
+        maps,
+        current_inputs=lambda: first_inputs,
+        options=PublishOptions(provenance={"seconds": 1}),
     )
     second = store.publish(
         "shirt",
         reverse_inputs,
         maps,
         current_inputs=lambda: reverse_inputs,
-        provenance={"seconds": 99, "engine": "new"},
+        options=PublishOptions(provenance={"seconds": 99, "engine": "new"}),
     )
     assert first.generation_id != second.generation_id
     assert first.content_digest == second.content_digest
@@ -118,7 +122,7 @@ def test_old_generation_is_retained_by_alias_readers_and_durable_job_references(
 def test_stale_publication_and_crash_before_pointer_preserve_the_current_generation(
     workspace_root,
 ) -> None:
-    from etsy_listings.core.preparation.artifacts import StalePreparation
+    from etsy_listings.core.preparation.artifacts import StalePreparationError
 
     store = Artifacts(Workspace.discover(root_override=workspace_root))
     inputs = preparation_inputs()
@@ -126,7 +130,7 @@ def test_stale_publication_and_crash_before_pointer_preserve_the_current_generat
     changed = inputs.model_copy(
         update={"photo": inputs.photo.model_copy(update={"pixels": "d" * 64})}
     )
-    with pytest.raises(StalePreparation):
+    with pytest.raises(StalePreparationError):
         store.publish("shirt", inputs, {None: material_maps()}, current_inputs=lambda: changed)
 
     def crash(phase):
@@ -139,7 +143,7 @@ def test_stale_publication_and_crash_before_pointer_preserve_the_current_generat
             inputs,
             {None: material_maps()},
             current_inputs=lambda: inputs,
-            checkpoint=crash,
+            options=PublishOptions(checkpoint=crash),
         )
     with Artifacts(store.workspace).acquire("shirt", inputs) as acquired:
         assert acquired.manifest.generation_id == first.generation_id
@@ -174,7 +178,7 @@ def test_saved_readiness_reuses_durable_evidence_identity_without_runtime_or_cac
     from PIL import Image
 
     from etsy_listings.core.render import load_template_config
-    from etsy_listings.core.workspace.workspace import remove_tree
+    from etsy_listings.core.workspace.trees import remove_tree
 
     workspace = Workspace.discover(root_override=workspace_root)
     workspace.template_dir("shirt").mkdir()
@@ -289,7 +293,7 @@ def test_malicious_array_headers_are_rejected_before_numpy_can_allocate(
 
 
 @pytest.mark.parametrize(
-    "field,value",
+    ("field", "value"),
     [
         ("material", np.nan),
         ("visibility", 1.1),
@@ -377,7 +381,7 @@ def test_restart_at_each_publication_checkpoint_exposes_one_complete_generation(
             inputs,
             {None: material_maps()},
             current_inputs=lambda: inputs,
-            checkpoint=crash,
+            options=PublishOptions(checkpoint=crash),
         )
     restarted = Artifacts(store.workspace)
     with restarted.acquire("shirt", inputs) as acquired:
@@ -391,9 +395,10 @@ def test_reader_lease_releases_after_the_renderer_raises_its_own_error(workspace
     inputs = preparation_inputs()
     first = store.publish("shirt", inputs, {None: material_maps()}, current_inputs=lambda: inputs)
     error = ValueError("artwork failure")
-    with pytest.raises(ValueError) as caught, store.acquire("shirt", inputs):
+    with store.acquire("shirt", inputs):
         store.publish("shirt", inputs, {None: material_maps()}, current_inputs=lambda: inputs)
-        raise error
+        with pytest.raises(ValueError, match="artwork failure") as caught:
+            raise error
     assert caught.value is error
     assert store.cleanup("shirt") == [first.generation_id]
 
@@ -404,6 +409,7 @@ def test_small_placement_on_a_large_photo_prepares_and_publishes_invisible_coord
     from etsy_listings.core.preparation.numerics import (
         Evidence,
         EvidenceIdentity,
+        Placement,
         plan_crop,
         prepare,
     )
@@ -424,7 +430,9 @@ def test_small_placement_on_a_large_photo_prepares_and_publishes_invisible_coord
         np.full((height, width), 0.5, np.float32),
     )
     prepared = prepare(
-        np.full((512, 512, 3), 128, np.uint8), box, evidence, mask=np.ones((512, 512), np.float32)
+        np.full((512, 512, 3), 128, np.uint8),
+        Placement(box, np.ones((512, 512), np.float32)),
+        evidence,
     )
     assert prepared.maps.visibility[0, 0] == 0
     assert prepared.maps.origin == (224, 224)
@@ -446,9 +454,8 @@ def test_small_placement_on_a_large_photo_prepares_and_publishes_invisible_coord
 def test_explicit_photo_reset_capture_only_bypasses_photo_mismatch(workspace_root, damage) -> None:
     from PIL import Image
 
-    from etsy_listings.core.errors import UserFacingError
     from etsy_listings.core.render import load_template_config
-    from etsy_listings.core.workspace.calibration import MaskPhotoMismatch
+    from etsy_listings.core.workspace.calibration import AutomaticMask, MaskPhotoMismatchError
 
     workspace = Workspace.discover(root_override=workspace_root)
     workspace.template_dir("shirt").mkdir()
@@ -468,41 +475,58 @@ def test_explicit_photo_reset_capture_only_bypasses_photo_mismatch(workspace_roo
     calibration = store.calibration
     calibration.install_automatic(
         "shirt",
-        calibration.encode_mask(Image.new("L", (16, 16), 123)),
-        algorithm_version="test",
+        AutomaticMask(
+            calibration.encode_mask(Image.new("L", (16, 16), 123)), algorithm_version="test"
+        ),
         expected_revision=calibration.read("shirt").revision,
     )
     checksum = calibration.mask("shirt").checksum
-    if damage == "photo":
-        Image.new("RGB", (16, 16), "red").save(photo)
-    elif damage == "missing":
-        workspace.template_mask_file("shirt", source="automatic").unlink()
-    elif damage == "missing_edited":
-        workspace.template_mask_file("shirt").unlink()
-    elif damage == "corrupt":
-        workspace.template_mask_file("shirt", source="metadata").write_bytes(b"[]")
+    _damage_saved_inputs(workspace, damage)
     paths = [
         workspace.template_mask_file("shirt", source=source)
         for source in ("automatic", "edited", "metadata")
     ]
     before = {p: p.read_bytes() for p in paths if p.exists()}
     if damage == "photo":
-        with pytest.raises(MaskPhotoMismatch):
+        with pytest.raises(MaskPhotoMismatchError):
             store.saved_inputs("shirt")
-        assert (
-            store.saved_inputs("shirt", reset_masks_for_photo=True).placements[0].mask == "0" * 64
-        )
-    elif damage == "same_photo":
-        assert (
-            store.saved_inputs("shirt", reset_masks_for_photo=True).placements[0].mask == checksum
-        )
-    else:
-        with pytest.raises(UserFacingError):
-            store.saved_inputs("shirt", reset_masks_for_photo=True)
+    _assert_photo_reset(store, damage, checksum)
     assert {p: p.read_bytes() for p in paths if p.exists()} == before
 
 
-@pytest.mark.parametrize("height, accepted", [(4681, True), (4682, False)])
+def _damage_saved_inputs(workspace: Workspace, damage: str) -> None:
+    from PIL import Image
+
+    damages = {
+        "photo": lambda: Image.new("RGB", (16, 16), "red").save(
+            workspace.template_scene_image("shirt")
+        ),
+        "missing": lambda: workspace.template_mask_file("shirt", source="automatic").unlink(),
+        "missing_edited": lambda: workspace.template_mask_file("shirt").unlink(),
+        "corrupt": lambda: workspace.template_mask_file("shirt", source="metadata").write_bytes(
+            b"[]"
+        ),
+    }
+    if damage in damages:
+        damages[damage]()
+
+
+def _assert_photo_reset(store: Artifacts, damage: str, checksum: str) -> None:
+    """A reset clears the masks of a replaced photo, keeps those of the same
+    photo, and refuses anything else that is wrong."""
+    from etsy_listings.core.errors import UserFacingError
+
+    if damage in ("photo", "same_photo"):
+        expected = "0" * 64 if damage == "photo" else checksum
+        assert (
+            store.saved_inputs("shirt", reset_masks_for_photo=True).placements[0].mask == expected
+        )
+        return
+    with pytest.raises(UserFacingError):
+        store.saved_inputs("shirt", reset_masks_for_photo=True)
+
+
+@pytest.mark.parametrize(("height", "accepted"), [(4681, True), (4682, False)])
 def test_validate_inputs_enforces_last_accepted_aggregate_height_without_allocating(
     workspace_root, monkeypatch, height, accepted
 ) -> None:

@@ -57,9 +57,7 @@ def app_options(workspace_root: Path) -> dict[str, Any]:
 DESIGNS = {"Night Hike Club.png": 1, "cedar-trail.png": 2, "★★★.png": 3}
 
 
-def test_drop_three_pngs_fix_a_name_and_create_three_listings(  # noqa: ANN001
-    page, workspace_root: Path
-) -> None:
+def test_drop_three_pngs_fix_a_name_and_create_three_listings(page, workspace_root: Path) -> None:
     a_listing_template(Workspace.discover(root_override=workspace_root))
     base = page.url.rsplit("/", 1)[0]
     page.goto(f"{base}/listing-templates")
@@ -108,7 +106,7 @@ def test_drop_three_pngs_fix_a_name_and_create_three_listings(  # noqa: ANN001
         assert design_name.inner_text() == listing
 
 
-def test_a_batch_drafts_briefs_then_the_seller_edits_one_and_starts_ai_mode(  # noqa: ANN001
+def test_a_batch_drafts_briefs_then_the_seller_edits_one_and_starts_ai_mode(
     page, workspace_root: Path
 ) -> None:
     a_listing_template(Workspace.discover(root_override=workspace_root))
@@ -149,7 +147,7 @@ def test_a_batch_drafts_briefs_then_the_seller_edits_one_and_starts_ai_mode(  # 
     page.get_by_role("region", name="tag AI suggestions").wait_for(state="visible")
 
 
-def test_open_from_the_summary_mark_reviewed_and_go_back_to_the_batch(  # noqa: ANN001
+def test_open_from_the_summary_mark_reviewed_and_go_back_to_the_batch(
     page, workspace_root: Path
 ) -> None:
     workspace = Workspace.discover(root_override=workspace_root)
@@ -189,9 +187,7 @@ def _zip(*entries: tuple[str, bytes]) -> bytes:
     return buffer.getvalue()
 
 
-def test_drop_a_zip_with_folders_a_duplicate_and_a_text_file(  # noqa: ANN001
-    page, workspace_root: Path
-) -> None:
+def test_drop_a_zip_with_folders_a_duplicate_and_a_text_file(page, workspace_root: Path) -> None:
     """Batch plan PR 7: the counts and rows match the ZIP -- folder names
     dropped, the duplicate merged, the text file ignored and listed, and the
     design already in ``designs/`` reused -- and the listings Create makes

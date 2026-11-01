@@ -15,7 +15,8 @@ from etsy_listings.core.errors import UserFacingError
 from etsy_listings.core.preparation.artifacts import (
     ArtifactError,
     Artifacts,
-    IncompatibleDimensions,
+    IncompatibleDimensionsError,
+    PreparationInputs,
     Readiness,
     ReadinessReason,
 )
@@ -25,7 +26,7 @@ from etsy_listings.core.render.config import (
     MultipleTemplate,
     PhotoWarpRenderer,
 )
-from etsy_listings.core.workspace.calibration import CalibrationStore, MaskPhotoMismatch
+from etsy_listings.core.workspace.calibration import CalibrationStore, MaskPhotoMismatchError
 from etsy_listings.core.workspace.workspace import Workspace
 
 __all__ = [
@@ -61,49 +62,69 @@ def template_readiness(workspace: Workspace, name: str, config: AnyTemplate) -> 
 def saved_preparation_facts(workspace: Workspace, name: str) -> SavedPreparationFacts:
     """Validate one fixed generation without prediction cache or model access."""
     store = CalibrationStore(workspace)
-    artifacts = Artifacts(workspace)
     with store.lock(name):
         try:
-            config = store.config(name)
-            known = catalog_readiness(config)
-            if known is not None:
-                return SavedPreparationFacts(known)
-            if isinstance(config, MultipleTemplate) and not config.placements:
-                return SavedPreparationFacts(
-                    Readiness(
-                        "needs_preparation",
-                        "missing_placements",
-                        "Add a placement before preparing the template",
-                    )
-                )
-            inputs = artifacts.saved_inputs(name)
-            prepared_engine = None
-            try:
-                manifest = artifacts.inspect(name, inputs)
-                maps = Readiness("ready", content_digest=manifest.content_digest)
-                engine = manifest.provenance.get("engine_version")
-                prepared_engine = engine if isinstance(engine, str) else None
-            except ArtifactError:
-                maps = artifacts.readiness(name, inputs)
-            if isinstance(config, ColourMatrixTemplate):
-                # Every colour shares the main photo's maps, so every photo
-                # must match its size, not only the one a scene asks for.
-                for photo in workspace.template_photos(name):
-                    with Image.open(photo) as image:
-                        if image.size != (inputs.photo.width, inputs.photo.height):
-                            return SavedPreparationFacts(
-                                Readiness(
-                                    "out_of_date",
-                                    IncompatibleDimensions.reason,
-                                    "Shared colour photo dimensions differ from the main photo. "
-                                    "Use matching photos or separate templates.",
-                                )
-                            )
-            return SavedPreparationFacts(maps, prepared_engine)
+            return _saved_facts(workspace, store, name)
         except (UserFacingError, ValueError, OSError) as exc:
-            reason: ReadinessReason = ArtifactError.reason
-            if isinstance(exc, ArtifactError):
-                reason = exc.reason
-            elif isinstance(exc, MaskPhotoMismatch):
-                reason = "photo_changed"
-            return SavedPreparationFacts(Readiness("out_of_date", reason, str(exc)))
+            return SavedPreparationFacts(Readiness("out_of_date", _failure_reason(exc), str(exc)))
+
+
+def _saved_facts(workspace: Workspace, store: CalibrationStore, name: str) -> SavedPreparationFacts:
+    config = store.config(name)
+    known = catalog_readiness(config)
+    if known is not None:
+        return SavedPreparationFacts(known)
+    if isinstance(config, MultipleTemplate) and not config.placements:
+        return SavedPreparationFacts(
+            Readiness(
+                "needs_preparation",
+                "missing_placements",
+                "Add a placement before preparing the template",
+            )
+        )
+    artifacts = Artifacts(workspace)
+    inputs = artifacts.saved_inputs(name)
+    maps, prepared_engine = _map_readiness(artifacts, name, inputs)
+    # Every colour shares the main photo's maps, so every photo must match its
+    # size, not only the one a scene asks for.
+    if isinstance(config, ColourMatrixTemplate) and _any_photo_differs(workspace, name, inputs):
+        return SavedPreparationFacts(
+            Readiness(
+                "out_of_date",
+                IncompatibleDimensionsError.reason,
+                "Shared colour photo dimensions differ from the main photo. "
+                "Use matching photos or separate templates.",
+            )
+        )
+    return SavedPreparationFacts(maps, prepared_engine)
+
+
+def _map_readiness(
+    artifacts: Artifacts, name: str, inputs: PreparationInputs
+) -> tuple[Readiness, str | None]:
+    """The maps' readiness and, when ready, the engine that prepared them."""
+    try:
+        manifest = artifacts.inspect(name, inputs)
+    except ArtifactError:
+        return artifacts.readiness(name, inputs), None
+    engine = manifest.provenance.get("engine_version")
+    return (
+        Readiness("ready", content_digest=manifest.content_digest),
+        engine if isinstance(engine, str) else None,
+    )
+
+
+def _any_photo_differs(workspace: Workspace, name: str, inputs: PreparationInputs) -> bool:
+    for photo in workspace.template_photos(name):
+        with Image.open(photo) as image:
+            if image.size != (inputs.photo.width, inputs.photo.height):
+                return True
+    return False
+
+
+def _failure_reason(exc: Exception) -> ReadinessReason:
+    if isinstance(exc, ArtifactError):
+        return exc.reason
+    if isinstance(exc, MaskPhotoMismatchError):
+        return "photo_changed"
+    return ArtifactError.reason

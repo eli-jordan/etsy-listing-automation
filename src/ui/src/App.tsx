@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { listTemplates } from "./api/calibrator";
+import type { Preparation, Runtime } from "./api/preparation";
 import { InferenceSettings } from "./components/InferenceSettings";
 import { KindPicker } from "./components/KindPicker";
 import { preparationLabel, marigoldMapsReady } from "./components/preparationLabel";
@@ -12,9 +13,14 @@ import { MultipleEditor } from "./editors/MultipleEditor";
 import { SingleEditor } from "./editors/SingleEditor";
 import { usePreparationQueue } from "./hooks/usePreparationQueue";
 import { useTemplateReadiness } from "./hooks/useTemplateReadiness";
-import { useTemplateSession } from "./hooks/useTemplateSession";
+import {
+  useTemplateSession,
+  type TemplateLoad,
+  type TemplateSaveState,
+  type TemplateSession,
+} from "./hooks/useTemplateSession";
 import { SavedAgo } from "./pages/editor/SavedAgo";
-import type { Renderer, TemplateKind, TemplateSummary } from "./types";
+import type { Renderer, TemplateConfigState, TemplateKind, TemplateSummary } from "./types";
 
 /** A thin router: picks the template, hands it to an authoring session
  * (`useTemplateSession`, which reads, saves and prepares it) and picks an
@@ -32,11 +38,179 @@ const KIND_LABELS: Record<TemplateKind, string> = {
   single: "Single",
 };
 
+type CatalogState = "loading" | "ready" | "error";
+
+/** What switching to a renderer this template has no draft for starts from:
+ * the settings its preparation stored, else the renderer's defaults. */
+function fallbackRenderer(
+  type: Renderer["type"],
+  stored: Preparation["renderer_settings"][Renderer["type"]] | undefined,
+): Renderer {
+  if (stored) return { type, config: stored } as Renderer;
+  if (type === "marigold") return MARIGOLD_DEFAULTS;
+  return {
+    type: "photo-warp",
+    config: {
+      displace: { enabled: false, strength: 0 },
+      shade: { enabled: true, opacity: 0.6, blend: "soft-light" },
+    },
+  };
+}
+
+/** The inference limits the runtime reports, or none while it is unknown --
+ * the settings form then keeps its own defaults. */
+function runtimeLimits(runtime: Runtime | null) {
+  if (!runtime) return {};
+  return {
+    limits: {
+      num_inference_steps: runtime.max_num_inference_steps,
+      ensemble_size: runtime.max_ensemble_size,
+    },
+  };
+}
+
+function marigoldStatusClass(preparing: boolean, preparation: Preparation | null): string {
+  if (!preparing && marigoldMapsReady(preparation?.maps)) return " mg-status--ready";
+  return preparation?.latest_job?.phase === "failed" ? " mg-status--failed" : "";
+}
+
+/** The breadcrumb's summary of what the open template holds. */
+function templateMeta(selected: TemplateSummary, config: TemplateConfigState | null): string {
+  if (config?.kind === "multiple") return "Multiple · " + config.placements.length + " placements";
+  if (selected.status !== "calibrated") return selected.status_reason ?? "not calibrated";
+  const kindLabel = selected.kind ? KIND_LABELS[selected.kind] : null;
+  const colours = selected.colours.length;
+  return `${kindLabel ?? "Unknown"} · ${colours} colour${colours === 1 ? "" : "s"}`;
+}
+
+function TemplateCrumb({
+  selected,
+  config,
+  preparationStatus,
+  statusClass,
+}: {
+  selected: TemplateSummary;
+  config: TemplateConfigState | null;
+  preparationStatus: string;
+  statusClass: string;
+}) {
+  return (
+    <>
+      <span className="app__crumb-sep">/</span>
+      <span className="app__crumb">{selected.name}</span>
+      {config && config.renderer.type !== "marigold" && (
+        <span className={selected.status === "calibrated" ? "tag tag-accent-2" : "tag tag-accent"}>
+          {selected.status === "calibrated" ? "calibrated" : "needs calibration"}
+        </span>
+      )}
+      {config?.renderer.type === "marigold" && (
+        <span className={"tag mg-status" + statusClass}>{preparationStatus}</span>
+      )}
+      <span className="app__meta">{templateMeta(selected, config)}</span>
+    </>
+  );
+}
+
+function SaveStatus({
+  save,
+  load,
+  catalogState,
+}: {
+  save: TemplateSaveState;
+  load: TemplateLoad;
+  catalogState: CatalogState;
+}): ReactNode {
+  if (save.kind === "saved") {
+    return (
+      <span className="page-head__saved">
+        <span className="page-head__dot" aria-hidden="true" />
+        <SavedAgo savedAt={save.savedAt} />
+      </span>
+    );
+  }
+  if (save.kind === "saving") return "Saving…";
+  if (save.kind === "failed" || save.kind === "conflict") return save.message;
+  if (load === "error") return "failed to load template config";
+  return catalogState === "error" ? "failed to load templates" : "";
+}
+
+/** The workspace with no template open. Templates are folders in the
+ * workspace, not something this page creates: the calibrator calibrates. */
+function CatalogStatus({ catalogState }: { catalogState: CatalogState }) {
+  if (catalogState === "loading") return <p role="status">Loading templates...</p>;
+  if (catalogState === "error") {
+    return <p role="alert">Could not load templates. Reload to try again.</p>;
+  }
+  return <p>No templates yet -- add a folder of photos under mockup-templates/.</p>;
+}
+
+interface TemplateEditorProps {
+  templateName: string;
+  config: TemplateConfigState;
+  session: TemplateSession;
+  space: [number, number] | null;
+  colours: string[];
+  knownColours: string[];
+  design: string;
+  onDesignChange: (design: string) => void;
+  rendererControls: ReactNode;
+}
+
+/** The editor for the template's renderer and kind. */
+function TemplateEditor({
+  templateName,
+  config,
+  session,
+  colours,
+  knownColours,
+  ...shared
+}: TemplateEditorProps) {
+  const { preparation } = session;
+  const common = { ...shared, templateName, onChange: session.update };
+  if (config.renderer.type === "marigold") {
+    const recovery = preparation?.maps.reason === "photo_changed";
+    return (
+      <MarigoldEditor
+        key={templateName}
+        {...common}
+        config={{ ...config, renderer: config.renderer }}
+        colours={colours}
+        knownColours={knownColours}
+        preparation={preparation}
+        calibrationRevision={session.calibrationRevision}
+        maskEdits={session.maskEdits}
+        onMaskEdits={session.setMaskEdits}
+        onPreviewPending={session.setPreviewPending}
+        savedConfig={session.saved}
+        onPrepare={() => void session.prepare(recovery ? "prepare_again" : "prepare", recovery)}
+      />
+    );
+  }
+  if (config.renderer.type !== "photo-warp") return null;
+  if (config.kind === "colour-matrix") {
+    return (
+      <ColourMatrixEditor
+        key={templateName}
+        {...common}
+        config={config}
+        colours={colours}
+        onApprove={() => void session.approve()}
+      />
+    );
+  }
+  if (config.kind === "multiple") {
+    return (
+      <MultipleEditor key={templateName} {...common} config={config} knownColours={knownColours} />
+    );
+  }
+  return <SingleEditor key={templateName} {...common} config={config} />;
+}
+
 export function App() {
   const preparationJobs = usePreparationQueue();
   const rendererCache = useRef<Record<string, Partial<Record<Renderer["type"], Renderer>>>>({});
   const [templates, setTemplates] = useState<TemplateSummary[]>([]);
-  const [catalogState, setCatalogState] = useState<"loading" | "ready" | "error">("loading");
+  const [catalogState, setCatalogState] = useState<CatalogState>("loading");
   const [templateName, setTemplateName] = useState<string | null>(null);
   // Which test artwork the previews render with. A way of looking at a
   // template rather than a property of one, so it lives here and never enters
@@ -96,20 +270,7 @@ export function App() {
     const cache = rendererCache.current[templateName] ?? {};
     cache[config.renderer.type] = config.renderer;
     rendererCache.current[templateName] = cache;
-    const stored = preparation?.renderer_settings[type];
-    const renderer =
-      cache[type] ??
-      (stored
-        ? ({ type, config: stored } as Renderer)
-        : type === "marigold"
-          ? MARIGOLD_DEFAULTS
-          : {
-              type: "photo-warp",
-              config: {
-                displace: { enabled: false, strength: 0 },
-                shade: { enabled: true, opacity: 0.6, blend: "soft-light" },
-              },
-            });
+    const renderer = cache[type] ?? fallbackRenderer(type, preparation?.renderer_settings[type]);
     setConfig({ ...config, renderer });
   };
   const queueKey = preparationJobs
@@ -148,14 +309,7 @@ export function App() {
               templateName={templateName}
               value={config.renderer.config.inference}
               capabilityKnown={Boolean(runtime)}
-              {...(runtime
-                ? {
-                    limits: {
-                      num_inference_steps: runtime.max_num_inference_steps,
-                      ensemble_size: runtime.max_ensemble_size,
-                    },
-                  }
-                : {})}
+              {...runtimeLimits(runtime)}
               onSave={(inference) => {
                 if (config.renderer.type === "marigold")
                   setConfig({
@@ -180,7 +334,8 @@ export function App() {
     () => [...new Set(templates.flatMap((t) => t.colours))].filter(Boolean).sort(),
     [templates],
   );
-  const kindLabel = selected?.kind ? KIND_LABELS[selected.kind] : null;
+  const isMarigold = config?.renderer.type === "marigold";
+  const preparationStatus = preparing ? "Preparing" : preparationLabel(preparation);
 
   // The photo's true pixel size, which is the coordinate space every bounding
   // box in template.yaml is written in. It has to come from the API: the
@@ -192,64 +347,21 @@ export function App() {
     selected?.width && selected.height ? [selected.width, selected.height] : null;
 
   return (
-    <div className={config?.renderer.type === "marigold" ? "app mg-frame mg-app" : "app mg-frame"}>
+    <div className={isMarigold ? "app mg-frame mg-app" : "app mg-frame"}>
       <header className="app__header">
         <h1 className="app__title">Mockup Templates</h1>
         {selected && (
-          <>
-            <span className="app__crumb-sep">/</span>
-            <span className="app__crumb">{selected.name}</span>
-            {config && config.renderer.type !== "marigold" && (
-              <span
-                className={selected.status === "calibrated" ? "tag tag-accent-2" : "tag tag-accent"}
-              >
-                {selected.status === "calibrated" ? "calibrated" : "needs calibration"}
-              </span>
-            )}
-            {config?.renderer.type === "marigold" && (
-              <span
-                className={
-                  "tag mg-status" +
-                  (!preparing && marigoldMapsReady(preparation?.maps)
-                    ? " mg-status--ready"
-                    : preparation?.latest_job?.phase === "failed"
-                      ? " mg-status--failed"
-                      : "")
-                }
-              >
-                {preparing ? "Preparing" : preparationLabel(preparation)}
-              </span>
-            )}
-            <span className="app__meta">
-              {config?.kind === "multiple"
-                ? "Multiple · " + config.placements.length + " placements"
-                : selected.status === "calibrated"
-                  ? `${kindLabel ?? "Unknown"} · ${selected.colours.length} colour${
-                      selected.colours.length === 1 ? "" : "s"
-                    }`
-                  : (selected.status_reason ?? "not calibrated")}
-            </span>
-          </>
+          <TemplateCrumb
+            selected={selected}
+            config={config}
+            preparationStatus={preparationStatus}
+            statusClass={marigoldStatusClass(preparing, preparation)}
+          />
         )}
 
         <div className="app__actions">
           <p className="app__status" role="status">
-            {save.kind === "saved" ? (
-              <span className="page-head__saved">
-                <span className="page-head__dot" aria-hidden="true" />
-                <SavedAgo savedAt={save.savedAt} />
-              </span>
-            ) : save.kind === "saving" ? (
-              "Saving…"
-            ) : save.kind === "failed" || save.kind === "conflict" ? (
-              save.message
-            ) : session.load === "error" ? (
-              "failed to load template config"
-            ) : catalogState === "error" ? (
-              "failed to load templates"
-            ) : (
-              ""
-            )}
+            <SaveStatus save={save} load={session.load} catalogState={catalogState} />
           </p>
           {save.kind === "conflict" && <button onClick={session.reload}>Reload template</button>}
         </div>
@@ -258,13 +370,7 @@ export function App() {
       <div className="app__workbench">
         <TemplateRail
           templates={railTemplates}
-          selectedPreparationStatus={
-            config?.renderer.type === "marigold"
-              ? preparing
-                ? "Preparing"
-                : preparationLabel(preparation)
-              : null
-          }
+          selectedPreparationStatus={isMarigold ? preparationStatus : null}
           selected={templateName}
           onSelect={setTemplateName}
           jobs={preparationJobs}
@@ -275,13 +381,15 @@ export function App() {
               choice, so nothing else can be touched yet. Kind decides the
               whole shape of template.yaml (ADR-0014) -- every other control is
               meaningless or wrong until it is answered. */}
-          {templateName && session.load !== "ready" ? (
+          {!templateName && <CatalogStatus catalogState={catalogState} />}
+          {templateName && session.load !== "ready" && (
             <p role={session.load === "error" ? "alert" : "status"}>
               {session.load === "error"
                 ? "Could not load template configuration. Reload to try again."
                 : "Loading template..."}
             </p>
-          ) : templateName && !config ? (
+          )}
+          {templateName && session.load === "ready" && !config && (
             <KindPicker
               key={templateName}
               templateName={templateName}
@@ -290,90 +398,19 @@ export function App() {
                 refreshTemplates(templateName);
               }}
             />
-          ) : (
-            <>
-              {templateName && config?.renderer.type === "marigold" && (
-                <MarigoldEditor
-                  key={templateName}
-                  templateName={templateName}
-                  config={{ ...config, renderer: config.renderer }}
-                  space={space}
-                  colours={selected?.colours ?? []}
-                  knownColours={knownColours}
-                  design={design}
-                  onDesignChange={setDesign}
-                  onChange={setConfig}
-                  preparation={preparation}
-                  rendererControls={rendererControls}
-                  calibrationRevision={session.calibrationRevision}
-                  maskEdits={session.maskEdits}
-                  onMaskEdits={session.setMaskEdits}
-                  onPreviewPending={session.setPreviewPending}
-                  savedConfig={session.saved}
-                  onPrepare={() =>
-                    void session.prepare(
-                      preparation?.maps.reason === "photo_changed" ? "prepare_again" : "prepare",
-                      preparation?.maps.reason === "photo_changed",
-                    )
-                  }
-                />
-              )}
-              {templateName &&
-                config?.renderer.type === "photo-warp" &&
-                config?.kind === "colour-matrix" && (
-                  <ColourMatrixEditor
-                    key={templateName}
-                    rendererControls={rendererControls}
-                    templateName={templateName}
-                    config={config}
-                    space={space}
-                    colours={selected?.colours ?? []}
-                    onChange={setConfig}
-                    design={design}
-                    onDesignChange={setDesign}
-                    onApprove={() => void session.approve()}
-                  />
-                )}
-              {templateName &&
-                config?.renderer.type === "photo-warp" &&
-                config?.kind === "multiple" && (
-                  <MultipleEditor
-                    key={templateName}
-                    rendererControls={rendererControls}
-                    templateName={templateName}
-                    config={config}
-                    space={space}
-                    onChange={setConfig}
-                    design={design}
-                    onDesignChange={setDesign}
-                    knownColours={knownColours}
-                  />
-                )}
-              {templateName &&
-                config?.renderer.type === "photo-warp" &&
-                config?.kind === "single" && (
-                  <SingleEditor
-                    key={templateName}
-                    rendererControls={rendererControls}
-                    templateName={templateName}
-                    config={config}
-                    space={space}
-                    onChange={setConfig}
-                    design={design}
-                    onDesignChange={setDesign}
-                  />
-                )}
-              {/* Templates are folders in the workspace, not something this
-                  page creates: the calibrator calibrates. */}
-              {!templateName &&
-                (catalogState === "loading" ? (
-                  <p role="status">Loading templates...</p>
-                ) : catalogState === "error" ? (
-                  <p role="alert">Could not load templates. Reload to try again.</p>
-                ) : (
-                  <p>No templates yet -- add a folder of photos under mockup-templates/.</p>
-                ))}
-            </>
+          )}
+          {templateName && session.load === "ready" && config && (
+            <TemplateEditor
+              templateName={templateName}
+              config={config}
+              session={session}
+              space={space}
+              colours={selected?.colours ?? []}
+              knownColours={knownColours}
+              design={design}
+              onDesignChange={setDesign}
+              rendererControls={rendererControls}
+            />
           )}
         </div>
       </div>

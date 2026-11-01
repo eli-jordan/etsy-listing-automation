@@ -3,7 +3,7 @@ import threading
 
 import pytest
 
-from etsy_listings.core.preparation.worker_client import WarmWorker, Worker
+from etsy_listings.core.preparation.worker_client import InferenceCall, WarmWorker, Worker
 
 from tests.support.gates import GATE_TIMEOUT
 
@@ -51,11 +51,13 @@ def test_cancellation_completes_active_call_and_retains_valid_evidence(tmp_path)
                 active = start(
                     "active inference",
                     lambda: worker.infer(
-                        request_id="active",
-                        role="depth",
-                        input="crop.png",
-                        output="depth.npz",
-                        size=(12, 8),
+                        InferenceCall(
+                            request_id="active",
+                            role="depth",
+                            input="crop.png",
+                            output="depth.npz",
+                            size=(12, 8),
+                        ),
                         progress=lambda _: started.set(),
                     ),
                 )
@@ -69,7 +71,13 @@ def test_cancellation_completes_active_call_and_retains_valid_evidence(tmp_path)
         assert (tmp_path / "depth.npz").exists()
         assert (
             worker.infer(
-                request_id="retry", role="depth", input="crop.png", output="retry.npz", size=(12, 8)
+                InferenceCall(
+                    request_id="retry",
+                    role="depth",
+                    input="crop.png",
+                    output="retry.npz",
+                    size=(12, 8),
+                )
             ).cancelled
             is False
         )
@@ -93,22 +101,26 @@ def test_worker_refuses_a_second_call_instead_of_queuing_after_cancellation(tmp_
                 active = start(
                     "active inference",
                     lambda: worker.infer(
-                        request_id="active",
-                        role="depth",
-                        input="crop.png",
-                        output="depth.npz",
-                        size=(12, 8),
+                        InferenceCall(
+                            request_id="active",
+                            role="depth",
+                            input="crop.png",
+                            output="depth.npz",
+                            size=(12, 8),
+                        ),
                         progress=lambda _: started.set(),
                     ),
                 )
                 assert started.wait(GATE_TIMEOUT)
                 with pytest.raises(WorkerError, match="busy"):
                     worker.infer(
-                        request_id="remaining",
-                        role="depth",
-                        input="crop.png",
-                        output="remaining.npz",
-                        size=(12, 8),
+                        InferenceCall(
+                            request_id="remaining",
+                            role="depth",
+                            input="crop.png",
+                            output="remaining.npz",
+                            size=(12, 8),
+                        )
                     )
                 worker.cancel("active")
                 active.result()
@@ -129,7 +141,9 @@ def test_idle_exit_restarts_on_next_call_without_failed_attempt(tmp_path):
         controlled_worker(tmp_path, idle=0.1), cache_root=tmp_path, engine_version="1.0.0"
     ) as worker:
         worker.infer(
-            request_id="first", role="depth", input="crop.png", output="first.npz", size=(12, 8)
+            InferenceCall(
+                request_id="first", role="depth", input="crop.png", output="first.npz", size=(12, 8)
+            )
         )
         [first] = worker_pids(tmp_path)
         # The idle exit is observed, not guessed: the process is gone (and
@@ -140,16 +154,20 @@ def test_idle_exit_restarts_on_next_call_without_failed_attempt(tmp_path):
         wait_until(lambda: not idle.alive, "the idle worker's exit")
         assert (
             worker.infer(
-                request_id="second",
-                role="depth",
-                input="crop.png",
-                output="second.npz",
-                size=(12, 8),
+                InferenceCall(
+                    request_id="second",
+                    role="depth",
+                    input="crop.png",
+                    output="second.npz",
+                    size=(12, 8),
+                )
             ).artifact
             == "second.npz"
         )
         starts = worker_pids(tmp_path)
-        assert len(starts) == 2 and starts[0] == first and starts[1] != first
+        assert len(starts) == 2
+        assert starts[0] == first
+        assert starts[1] != first
 
 
 def test_worker_protocol_rejects_unsafe_paths_and_malformed_requests(tmp_path):
@@ -177,6 +195,7 @@ def test_worker_protocol_rejects_unsafe_paths_and_malformed_requests(tmp_path):
         capture_output=True,
         text=True,
         timeout=5,
+        check=False,
     )
     messages = [json.loads(line) for line in result.stdout.splitlines()]
     assert any(
@@ -203,11 +222,13 @@ def test_watchdog_fails_without_publishing_partial_artifact(tmp_path):
     ) as worker:
         with pytest.raises(WorkerError, match="watchdog"):
             worker.infer(
-                request_id="hung",
-                role="depth",
-                input="crop.png",
-                output="partial.npz",
-                size=(12, 8),
+                InferenceCall(
+                    request_id="hung",
+                    role="depth",
+                    input="crop.png",
+                    output="partial.npz",
+                    size=(12, 8),
+                )
             )
         assert not worker.alive
     assert not (tmp_path / "partial.npz").exists()
@@ -242,11 +263,13 @@ def test_dispatch_guard_refuses_cancelled_call_and_allows_later_retry(tmp_path, 
             pending = start(
                 "pending inference",
                 lambda: worker.infer(
-                    request_id="pending",
-                    role="depth",
-                    input="crop.png",
-                    output="refused.npz",
-                    size=(12, 8),
+                    InferenceCall(
+                        request_id="pending",
+                        role="depth",
+                        input="crop.png",
+                        output="refused.npz",
+                        size=(12, 8),
+                    ),
                     dispatch_guard=dispatch_guard,
                 ),
             )
@@ -261,7 +284,9 @@ def test_dispatch_guard_refuses_cancelled_call_and_allows_later_retry(tmp_path, 
         output = adapter.__name__ + ".npz"
         assert (
             worker.infer(
-                request_id="retry", role="depth", input="crop.png", output=output, size=(12, 8)
+                InferenceCall(
+                    request_id="retry", role="depth", input="crop.png", output=output, size=(12, 8)
+                )
             ).artifact
             == output
         )
@@ -317,11 +342,13 @@ def test_warm_startup_cancellation_is_rechecked_before_dispatch(tmp_path):
                 starting = start(
                     "starting inference",
                     lambda: worker.infer(
-                        request_id="starting",
-                        role="depth",
-                        input="crop.png",
-                        output="refused.npz",
-                        size=(12, 8),
+                        InferenceCall(
+                            request_id="starting",
+                            role="depth",
+                            input="crop.png",
+                            output="refused.npz",
+                            size=(12, 8),
+                        ),
                         dispatch_guard=guard,
                     ),
                 )
@@ -331,11 +358,18 @@ def test_warm_startup_cancellation_is_rechecked_before_dispatch(tmp_path):
             finally:
                 (tmp_path / "startup-release").touch()
             error = starting.outcome()
-        assert isinstance(error, WorkerError) and "during startup" in str(error)
+        assert isinstance(error, WorkerError)
+        assert "during startup" in str(error)
         assert not (tmp_path / "refused.npz").exists()
         assert (
             worker.infer(
-                request_id="retry", role="depth", input="crop.png", output="retry.npz", size=(12, 8)
+                InferenceCall(
+                    request_id="retry",
+                    role="depth",
+                    input="crop.png",
+                    output="retry.npz",
+                    size=(12, 8),
+                )
             ).artifact
             == "retry.npz"
         )

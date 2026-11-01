@@ -93,15 +93,31 @@ PORTAL_VERIFICATION_NOTE = (
 )
 
 
+MARGIN_MULTIPLIER = Decimal("1.10")
+"""Applied to cost plus shipping; the generated file's header states it."""
+
+
+@dataclass(frozen=True)
+class LiveCosts:
+    """Today's figures a starting plan is priced from. Each is fail-soft:
+    an empty cost table or a missing rate prices the sizes it affects at 0."""
+
+    variant_costs: dict[int, int]
+    """Manufacturing cost in cents, by Printify variant id."""
+    shipping: ShippingRates
+    fx_rate: FxRate | None
+
+    @property
+    def complete(self) -> bool:
+        return bool(self.variant_costs) and self.fx_rate is not None
+
+
 def compute_starting_prices(
     *,
     sizes: list[str],
     variant_set: VariantSet,
-    variant_costs: dict[int, int],
-    shipping: ShippingRates,
-    fx_rate: FxRate | None,
+    costs: LiveCosts,
     target_currency: str,
-    margin_multiplier: Decimal = Decimal("1.10"),
 ) -> tuple[dict[str, Money], list[str]]:
     """size -> starting ``Money``, plus human-readable note lines for the
     generated file's comment block. Never raises -- every failure mode
@@ -117,54 +133,70 @@ def compute_starting_prices(
     prices: dict[str, Money] = {}
     notes: list[str] = [PORTAL_VERIFICATION_NOTE, ""]
     for size in sizes:
-        totals_cents: dict[str, int] = {}
-        missing_colours: list[str] = []
-        for variant in variant_set.variants:
-            if variant.options.size != size:
-                continue
-            mfg = variant_costs.get(variant.id)
-            ship = shipping.first_item_cost_cents(variant.id)
-            if mfg is None or ship is None:
-                missing_colours.append(variant.options.color)
-                continue
-            totals_cents[variant.options.color] = mfg + ship
-
-        if missing_colours:
-            notes.append(
-                f"{size}: no cost/shipping data for colour(s) "
-                f"{', '.join(sorted(missing_colours))} -- excluded from the calculation"
-            )
-        if not totals_cents:
-            prices[size] = Money(Decimal(0), target_currency)
-            notes.append(f"{size}: no cost data available at all -- priced at 0, fill in manually")
-            continue
-
-        distinct = set(totals_cents.values())
-        chosen_cents = max(distinct)
-        if len(distinct) > 1:
-            breakdown = ", ".join(
-                f"{colour}=${cents / 100:.2f}" for colour, cents in sorted(totals_cents.items())
-            )
-            notes.append(f"{size}: cost varies by colour ({breakdown}); using the max")
-
-        usd_amount = (Decimal(chosen_cents) / Decimal(100)) * margin_multiplier
-        if fx_rate is None:
-            prices[size] = Money(Decimal(0), target_currency)
-            notes.append(
-                f"{size}: cost+shipping+margin is ${usd_amount:.2f} USD, but no FX rate could "
-                f"be fetched -- priced at 0, fill in manually using "
-                f"today's USD->{target_currency} rate"
-            )
-            continue
-
-        converted = (usd_amount * fx_rate.rate).quantize(Decimal("0.01"))
-        prices[size] = Money(converted, target_currency)
-        notes.append(
-            f"{size}: (${chosen_cents / 100:.2f} cost+shipping) x {margin_multiplier} margin "
-            f"x {fx_rate.rate} {target_currency}/USD ({fx_rate.source}, "
-            f"{fx_rate.fetched_at.isoformat()}) = {converted} {target_currency}"
-        )
+        prices[size], size_notes = _price_size(size, variant_set, costs, target_currency)
+        notes.extend(size_notes)
     return prices, notes
+
+
+def _size_totals(
+    size: str, variant_set: VariantSet, costs: LiveCosts
+) -> tuple[dict[str, int], list[str]]:
+    """Manufacturing + first-item shipping in cents by colour for ``size``,
+    and the colours missing either figure."""
+    totals_cents: dict[str, int] = {}
+    missing_colours: list[str] = []
+    for variant in variant_set.variants:
+        if variant.options.size != size:
+            continue
+        mfg = costs.variant_costs.get(variant.id)
+        ship = costs.shipping.first_item_cost_cents(variant.id)
+        if mfg is None or ship is None:
+            missing_colours.append(variant.options.color)
+            continue
+        totals_cents[variant.options.color] = mfg + ship
+    return totals_cents, missing_colours
+
+
+def _price_size(
+    size: str, variant_set: VariantSet, costs: LiveCosts, target_currency: str
+) -> tuple[Money, list[str]]:
+    """One size's starting price and the note lines explaining it."""
+    fx_rate, margin_multiplier = costs.fx_rate, MARGIN_MULTIPLIER
+    totals_cents, missing_colours = _size_totals(size, variant_set, costs)
+    notes: list[str] = []
+    if missing_colours:
+        notes.append(
+            f"{size}: no cost/shipping data for colour(s) "
+            f"{', '.join(sorted(missing_colours))} -- excluded from the calculation"
+        )
+    if not totals_cents:
+        notes.append(f"{size}: no cost data available at all -- priced at 0, fill in manually")
+        return Money(Decimal(0), target_currency), notes
+
+    distinct = set(totals_cents.values())
+    chosen_cents = max(distinct)
+    if len(distinct) > 1:
+        breakdown = ", ".join(
+            f"{colour}=${cents / 100:.2f}" for colour, cents in sorted(totals_cents.items())
+        )
+        notes.append(f"{size}: cost varies by colour ({breakdown}); using the max")
+
+    usd_amount = (Decimal(chosen_cents) / Decimal(100)) * margin_multiplier
+    if fx_rate is None:
+        notes.append(
+            f"{size}: cost+shipping+margin is ${usd_amount:.2f} USD, but no FX rate could "
+            f"be fetched -- priced at 0, fill in manually using "
+            f"today's USD->{target_currency} rate"
+        )
+        return Money(Decimal(0), target_currency), notes
+
+    converted = (usd_amount * fx_rate.rate).quantize(Decimal("0.01"))
+    notes.append(
+        f"{size}: (${chosen_cents / 100:.2f} cost+shipping) x {margin_multiplier} margin "
+        f"x {fx_rate.rate} {target_currency}/USD ({fx_rate.source}, "
+        f"{fx_rate.fetched_at.isoformat()}) = {converted} {target_currency}"
+    )
+    return Money(converted, target_currency), notes
 
 
 def write_pricing_plan(
@@ -211,18 +243,46 @@ class StartingPricingPlan:
     fell back to 0 -- the file's comment block says which."""
 
 
+@dataclass(frozen=True)
+class GarmentOffer:
+    """The garment a starting plan prices: its profile, the blueprint and
+    print provider behind it, their variants, and the sizes the plan lists."""
+
+    garment_profile_slug: str
+    blueprint: Blueprint
+    provider: PrintProvider
+    variant_set: VariantSet
+    sizes: list[str]
+
+
+@dataclass(frozen=True)
+class PriceSources:
+    """Where a starting plan's figures come from: shipping from the
+    documented catalog, manufacturing costs from Printify's undocumented
+    endpoint, and the rate from a one-off FX fetch. The two fetches default
+    to the live ones, looked up at call time."""
+
+    catalog: CatalogClient
+    fetch_costs: Callable[[int, int], dict[int, int]] | None = None
+    fetch_rate: Callable[[str], FxRate | None] | None = None
+
+    def fetch(self, offer: GarmentOffer, currency: str) -> LiveCosts:
+        costs_for = self.fetch_costs or unofficial_variant_costs.fetch_variant_costs
+        rate_for = self.fetch_rate or fx_rates.fetch_usd_to
+        blueprint_id, provider_id = offer.blueprint.id, offer.provider.id
+        return LiveCosts(
+            variant_costs=costs_for(blueprint_id, provider_id),
+            shipping=self.catalog.shipping(blueprint_id, provider_id),
+            fx_rate=rate_for(currency),
+        )
+
+
 def create_starting_pricing_plan(
     workspace: Workspace,
-    catalog: CatalogClient,
+    sources: PriceSources,
     *,
     name: str,
-    garment_profile_slug: str,
-    blueprint: Blueprint,
-    provider: PrintProvider,
-    variant_set: VariantSet,
-    sizes: list[str],
-    fetch_costs: Callable[[int, int], dict[int, int]] | None = None,
-    fetch_rate: Callable[[str], FxRate | None] | None = None,
+    offer: GarmentOffer,
 ) -> StartingPricingPlan:
     """Write ``pricing-plans/{slugify(name)}.yaml`` priced from today's costs.
 
@@ -230,22 +290,12 @@ def create_starting_pricing_plan(
     rate from a one-off FX fetch; both are fail-soft, so a plan is always
     written and :attr:`StartingPricingPlan.complete` says whether it is all
     real numbers. Shipping comes from the documented catalog. Refuses with
-    ``FileExistsError`` to overwrite a plan. The fetches default to the live
-    ones, looked up at call time.
+    ``FileExistsError`` to overwrite a plan.
     """
-    costs_for = fetch_costs or unofficial_variant_costs.fetch_variant_costs
-    rate_for = fetch_rate or fx_rates.fetch_usd_to
     currency = workspace.defaults.etsy.currency
-    costs = costs_for(blueprint.id, provider.id)
-    shipping = catalog.shipping(blueprint.id, provider.id)
-    rate = rate_for(currency)
+    costs = sources.fetch(offer, currency)
     prices, notes = compute_starting_prices(
-        sizes=sizes,
-        variant_set=variant_set,
-        variant_costs=costs,
-        shipping=shipping,
-        fx_rate=rate,
-        target_currency=currency,
+        sizes=offer.sizes, variant_set=offer.variant_set, costs=costs, target_currency=currency
     )
-    path = write_pricing_plan(workspace, name, garment_profile_slug, prices, notes)
-    return StartingPricingPlan(path=path, complete=bool(costs) and rate is not None)
+    path = write_pricing_plan(workspace, name, offer.garment_profile_slug, prices, notes)
+    return StartingPricingPlan(path=path, complete=costs.complete)

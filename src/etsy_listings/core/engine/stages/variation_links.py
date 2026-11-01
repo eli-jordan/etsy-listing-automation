@@ -13,12 +13,12 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 
-from etsy_listings.core.clients.etsy.listings import EtsyListingClient
 from etsy_listings.core.clients.etsy.models import VariationImageLink
 from etsy_listings.core.config.listing import TemplateMediaEntry
 from etsy_listings.core.config.media import MediaEntry
 from etsy_listings.core.engine.context import RunContext
 from etsy_listings.core.engine.stages.colour_property import resolve_colour_property
+from etsy_listings.core.engine.stages.etsy_target import EtsyListingTarget
 
 
 def manifest_ref(entry: MediaEntry) -> str:
@@ -49,10 +49,8 @@ def swatch_refs(media: Sequence[MediaEntry], template: str | None) -> dict[str, 
 
 def set_variation_images(
     ctx: RunContext,
-    client: EtsyListingClient,
+    target: EtsyListingTarget,
     *,
-    shop_id: int,
-    listing_id: int,
     colours: tuple[str, ...],
     image_id_by_colour: Mapping[str, int],
 ) -> None:
@@ -60,6 +58,7 @@ def set_variation_images(
     property. Skipped, loudly, when the inventory has no single property
     matching the listing's colours -- decision 6's "reports and does
     nothing", not a failure."""
+    client, shop_id, listing_id = target.client, target.shop_id, target.listing_id
     inventory = client.get_listing_inventory(listing_id)
     colour_property = resolve_colour_property(inventory, colours, ctx.workspace.load_exceptions())
     if colour_property is None:

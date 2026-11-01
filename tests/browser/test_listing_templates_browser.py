@@ -26,7 +26,7 @@ from tests.support.batches import LISTING_TEMPLATE, a_listing_template, png
 pytestmark = pytest.mark.browser
 
 
-def test_create_a_listing_template_from_a_listing(page, workspace_root: Path) -> None:  # noqa: ANN001
+def test_create_a_listing_template_from_a_listing(page, workspace_root: Path) -> None:
     base = page.url.rsplit("/", 1)[0]
     page.goto(f"{base}/listings/take-a-hike")
 
@@ -64,7 +64,7 @@ def test_create_a_listing_template_from_a_listing(page, workspace_root: Path) ->
     assert "brief" not in written
 
 
-def test_delete_a_listing_template_from_its_editor(page, workspace_root: Path) -> None:  # noqa: ANN001
+def test_delete_a_listing_template_from_its_editor(page, workspace_root: Path) -> None:
     a_listing_template(Workspace.discover(root_override=workspace_root))
     folder = workspace_root / "listing-templates" / LISTING_TEMPLATE
     assert folder.is_dir()
@@ -78,7 +78,7 @@ def test_delete_a_listing_template_from_its_editor(page, workspace_root: Path) -
     assert not folder.exists()
 
 
-def test_dropping_pngs_on_a_card_lands_on_staging_with_that_template(  # noqa: ANN001
+def test_dropping_pngs_on_a_card_lands_on_staging_with_that_template(
     page, workspace_root: Path
 ) -> None:
     a_listing_template(Workspace.discover(root_override=workspace_root))

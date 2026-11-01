@@ -33,6 +33,7 @@ from __future__ import annotations
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
+from typing import override
 
 from pydantic import BaseModel, ConfigDict
 
@@ -42,7 +43,7 @@ from etsy_listings.core.config.money import Money
 from etsy_listings.core.engine.change import Drift, Verdict
 from etsy_listings.core.engine.context import RunContext
 from etsy_listings.core.engine.lock import Lockfile
-from etsy_listings.core.engine.stage import Blocked, StageApplyResult
+from etsy_listings.core.engine.stage import Blocked, Stage, StageApplyResult
 from etsy_listings.core.engine.stages.etsy_target import ETSY_LISTING_ID_KEY
 from etsy_listings.core.engine.stages.gates import (
     check_copy_is_concrete,
@@ -201,7 +202,7 @@ class PublishLive:
     Printify has never priced is not a below-cost question."""
 
 
-class PublishStage:
+class PublishStage(Stage[PublishDesired, PublishApplied, PublishLive]):
     name = "publish"
     local = False
     group: str | None = None
@@ -218,6 +219,7 @@ class PublishStage:
         self._now = now
         self._poll_ceiling = poll_ceiling
 
+    @override
     def desired(
         self, ctx: RunContext, listing: str, applied: PublishApplied | None
     ) -> PublishDesired | Blocked:
@@ -244,6 +246,7 @@ class PublishStage:
             currency=ctx.workspace.defaults.etsy.currency,
         )
 
+    @override
     def read_live(
         self, ctx: RunContext, listing: str, lock: Lockfile, applied: PublishApplied | None
     ) -> PublishLive | None:
@@ -262,6 +265,7 @@ class PublishStage:
             variant_costs={v.id: v.cost for v in product.variants if v.is_enabled},
         )
 
+    @override
     def plan(
         self, desired: PublishDesired, applied: PublishApplied | None, live: PublishLive | None
     ) -> Verdict:
@@ -306,6 +310,7 @@ class PublishStage:
         )
         return PublishSnapshot(below_cost=rows)
 
+    @override
     def apply(
         self,
         ctx: RunContext,
@@ -319,7 +324,7 @@ class PublishStage:
         shop_id = _shop_id(ctx)
         product_id = lock.remote.get(PRODUCT_ID_KEY)
         if not product_id:
-            raise PublishWithoutProductError()
+            raise PublishWithoutProductError
 
         ctx.emit(f"publishing product {product_id}")
         client.publish(shop_id, str(product_id), desired.sync_flags)

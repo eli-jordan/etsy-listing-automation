@@ -18,6 +18,7 @@ def test_the_frontend_gate_is_skipped_when_npm_is_not_on_path(tmp_path: Path) ->
         text=True,
         env={**os.environ, "PATH": str(tmp_path)},
         timeout=60,
+        check=False,
     )
 
     assert result.returncode == 0, result.stderr
@@ -31,6 +32,7 @@ def test_a_failing_npm_script_fails_the_gate_with_its_exit_code() -> None:
         capture_output=True,
         text=True,
         timeout=120,
+        check=False,
     )
 
     assert result.returncode != 0

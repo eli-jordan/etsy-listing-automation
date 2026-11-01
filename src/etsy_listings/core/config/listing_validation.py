@@ -39,6 +39,7 @@ from __future__ import annotations
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, replace
 from pathlib import Path
+from types import MappingProxyType
 from typing import Literal
 
 from PIL import Image, UnidentifiedImageError
@@ -448,9 +449,7 @@ def check_render_photo(
     ]
 
 
-def _check_variation_images(
-    listing: Production, templates: Mapping[str, TemplateInfo]
-) -> list[Issue]:
+def _check_variation_images(listing: Production) -> list[Issue]:
     name = listing.etsy.variation_images
     if name is None:
         return []
@@ -531,17 +530,25 @@ def _depicted(
     for entry in listing.media:
         if not isinstance(entry, TemplateMediaEntry):
             continue
-        if entry.colour is not None:
-            colours.setdefault(entry.colour, None)
-            continue
-        info = templates.get(entry.template)
-        if info is None or info.kind == "colour-matrix":
-            continue
-        if info.kind == "single" and not info.colours:
+        shown, unnamed = _scene_colours(entry, templates)
+        if unnamed:
             colourless.setdefault(entry.template, None)
-        for colour in sorted(info.colours):
+        for colour in shown:
             colours.setdefault(colour, None)
     return list(colours), list(colourless)
+
+
+def _scene_colours(
+    entry: TemplateMediaEntry, templates: Mapping[str, TemplateInfo]
+) -> tuple[list[str], bool]:
+    """The colours one media entry's scene shows, and whether it is a
+    ``single`` scene that names none."""
+    if entry.colour is not None:
+        return [entry.colour], False
+    info = templates.get(entry.template)
+    if info is None or info.kind == "colour-matrix":
+        return [], False
+    return sorted(info.colours), info.kind == "single" and not info.colours
 
 
 def _unclassified_issue(severity: Severity, profile: str, colours: list[str]) -> list[Issue]:
@@ -613,6 +620,14 @@ def check_artwork(
                 empty[tone].append(colour)
 
     issues = _unclassified_issue("block", listing.garment_profile, unclassified)
+    issues += _empty_slot_issues(empty)
+    if is_light_dark(design):
+        issues += _light_dark_issues(listing, tones, colourless)
+    return issues
+
+
+def _empty_slot_issues(empty: Mapping[Tone, list[str]]) -> list[Issue]:
+    issues: list[Issue] = []
     for tone, colours in empty.items():
         if not colours:
             continue
@@ -625,30 +640,38 @@ def check_artwork(
                 f"{_names(colours)} {noun}, but no design for {_shirts(tone)} is chosen",
             )
         )
-    if is_light_dark(design):
-        issues += [
+    return issues
+
+
+def _light_dark_issues(
+    listing: Listing, tones: Mapping[str, Tone], colourless: list[str]
+) -> list[Issue]:
+    """A scene that cannot pick between the pair, and a pair only half used."""
+    issues = [
+        Issue(
+            "block",
+            "images",
+            f"Listing Images › {template}",
+            f"{template!r} doesn't say which shirt colour it shows, so it can't choose "
+            f"between the designs for light and dark shirts. Name its colour in the "
+            f"calibrator, or remove it from this listing.",
+        )
+        for template in colourless
+    ]
+    used = [
+        tone for tone, users in slot_users(listing.design, listing.colors, tones).items() if users
+    ]
+    if len(used) == 1:
+        other: Tone = "dark" if used[0] == "light" else "light"
+        issues.append(
             Issue(
-                "block",
-                "images",
-                f"Listing Images › {template}",
-                f"{template!r} doesn't say which shirt colour it shows, so it can't choose "
-                f"between the designs for light and dark shirts. Name its colour in the "
-                f"calibrator, or remove it from this listing.",
+                "warn",
+                "variants",
+                _LINK_WHERE,
+                f"Only the design for {_shirts(used[0])} is in use — no {other} shirt you "
+                f"sell needs the design for {_shirts(other)}",
             )
-            for template in colourless
-        ]
-        used = [tone for tone, users in slot_users(design, listing.colors, tones).items() if users]
-        if len(used) == 1:
-            other: Tone = "dark" if used[0] == "light" else "light"
-            issues.append(
-                Issue(
-                    "warn",
-                    "variants",
-                    _LINK_WHERE,
-                    f"Only the design for {_shirts(used[0])} is in use — no {other} shirt you "
-                    f"sell needs the design for {_shirts(other)}",
-                )
-            )
+        )
     return issues
 
 
@@ -675,40 +698,40 @@ def check_videos(videos: Mapping[str, VideoFacts | ProbeFailure]) -> list[Issue]
     an image nor a video when it loads, and the probe refuses a file whose
     contents are not MP4/MOV whatever it is called.
     """
-    issues: list[Issue] = []
-    for ref, facts in videos.items():
-        where = f"Listing Images › {ref}"
+    return [issue for ref, facts in videos.items() for issue in _video_issues(ref, facts)]
 
-        def block(message: str, where: str = where) -> None:
-            issues.append(Issue("block", "images", where, message))
 
-        if isinstance(facts, ProbeFailure):
-            block(f"{ref} {facts.reason}. Etsy takes an MP4 or MOV video with a picture.")
-            continue
-        if facts.size_bytes > MAX_VIDEO_BYTES:
-            block(
-                f"{ref} is {facts.size_bytes / 1_000_000:.1f} MB, over Etsy's "
-                f"{MAX_VIDEO_BYTES // 1_000_000} MB limit for a video."
+def _video_issues(ref: str, facts: VideoFacts | ProbeFailure) -> list[Issue]:
+    where = f"Listing Images › {ref}"
+    if isinstance(facts, ProbeFailure):
+        message = f"{ref} {facts.reason}. Etsy takes an MP4 or MOV video with a picture."
+        return [Issue("block", "images", where, message)]
+    refusals: list[str] = []
+    if facts.size_bytes > MAX_VIDEO_BYTES:
+        refusals.append(
+            f"{ref} is {facts.size_bytes / 1_000_000:.1f} MB, over Etsy's "
+            f"{MAX_VIDEO_BYTES // 1_000_000} MB limit for a video."
+        )
+    if not MIN_VIDEO_SECONDS <= facts.duration_seconds <= MAX_VIDEO_SECONDS:
+        refusals.append(
+            f"{ref} runs {facts.duration_seconds:.1f} s; Etsy takes videos of "
+            f"{MIN_VIDEO_SECONDS:g}–{MAX_VIDEO_SECONDS:g} seconds."
+        )
+    if min(facts.width, facts.height) < MIN_VIDEO_SHORT_SIDE:
+        refusals.append(
+            f"{ref} is {facts.width}x{facts.height}; Etsy needs at least "
+            f"{MIN_VIDEO_SHORT_SIDE} px on the shorter side."
+        )
+    issues = [Issue("block", "images", where, message) for message in refusals]
+    if facts.has_audio:
+        issues.append(
+            Issue(
+                "info",
+                "images",
+                where,
+                f"{ref} has a sound track; Etsy strips the sound, so buyers see it silent.",
             )
-        if not MIN_VIDEO_SECONDS <= facts.duration_seconds <= MAX_VIDEO_SECONDS:
-            block(
-                f"{ref} runs {facts.duration_seconds:.1f} s; Etsy takes videos of "
-                f"{MIN_VIDEO_SECONDS:g}–{MAX_VIDEO_SECONDS:g} seconds."
-            )
-        if min(facts.width, facts.height) < MIN_VIDEO_SHORT_SIDE:
-            block(
-                f"{ref} is {facts.width}x{facts.height}; Etsy needs at least "
-                f"{MIN_VIDEO_SHORT_SIDE} px on the shorter side."
-            )
-        if facts.has_audio:
-            issues.append(
-                Issue(
-                    "info",
-                    "images",
-                    where,
-                    f"{ref} has a sound track; Etsy strips the sound, so buyers see it silent.",
-                )
-            )
+        )
     return issues
 
 
@@ -742,70 +765,72 @@ def check_listing_yaml_present(*, present: bool) -> list[Issue]:
     return [Issue("block", "details", _LIFECYCLE_WHERE, MISSING_LISTING_YAML)]
 
 
+@dataclass(frozen=True)
+class CheckInputs:
+    """What :func:`check_listing` and :func:`check_listing_template` need from
+    outside the document, pre-resolved by the caller: this module opens no
+    file.
+
+    ``garment_profile`` is ``None`` when the document's ``garment_profile``
+    does not resolve to a real file; the profile-dependent checks (design
+    resolution, colour classification) have nothing to check against then and
+    are skipped, leaving :func:`_check_garment_profile_exists`'s block as the
+    one issue that matters.
+
+    ``description_ref_error`` is the caller's own
+    ``Workspace.load_common_copy(...etsy.description.ref)`` attempt -- ``None``
+    when there is no ref to check, or when it resolved fine.
+
+    ``videos`` is every video ``media:`` names, probed by the caller --
+    `WorkspaceFacts.videos` -- and keyed by its ref.
+    """
+
+    garment_profile: GarmentProfile | None
+    garment_profile_names: Iterable[str]
+    templates: Mapping[str, TemplateInfo]
+    description_ref_error: str | None = None
+    videos: Mapping[str, VideoFacts | ProbeFailure] = MappingProxyType({})
+
+
 def check_listing(
     listing: Listing,
+    inputs: CheckInputs,
     *,
-    garment_profile: GarmentProfile | None,
-    garment_profile_names: Iterable[str],
     design_paths: Mapping[str, Path],
-    templates: Mapping[str, TemplateInfo],
     published: bool | None = None,
-    description_ref_error: str | None = None,
-    videos: Mapping[str, VideoFacts | ProbeFailure] | None = None,
 ) -> list[Issue]:
     """Every business-level issue with ``listing``, assuming it already passed
     `Listing.model_validate` -- structural failures are the API layer's to
-    catch and never reach here.
-
-    ``garment_profile`` is ``None`` when ``listing.garment_profile`` does not
-    resolve to a real file; the profile-dependent checks (design resolution,
-    colour classification) have nothing to check against then and are
-    skipped, leaving :func:`_check_garment_profile_exists`'s block as the one
-    issue that matters.
-
-    ``description_ref_error`` is the caller's own
-    ``Workspace.load_common_copy(listing.etsy.description.ref)`` attempt,
-    pre-resolved the same way ``design_paths`` is -- ``None`` when there is no
-    ref to check, or when it resolved fine.
-
-    ``videos`` is every video ``media:`` names, probed by the caller --
-    `WorkspaceFacts.videos` -- and keyed by its ref, for the same reason: this
-    module opens no file.
+    catch and never reach here. ``design_paths`` arrive resolved, like the
+    rest of ``inputs``.
     """
+    garment_profile, templates = inputs.garment_profile, inputs.templates
     issues: list[Issue] = []
-    issues += _check_garment_profile_exists(listing, garment_profile_names)
+    issues += _check_garment_profile_exists(listing, inputs.garment_profile_names)
     issues += check_artwork(listing, garment_profile, templates)
     issues += _check_colours_enabled(listing)
     issues += _check_price_source(listing)
     issues += _check_media_present(listing)
-    issues += _check_copy(listing, description_ref_error=description_ref_error)
+    issues += _check_copy(listing, description_ref_error=inputs.description_ref_error)
     if garment_profile is not None:
         issues += _check_design(design_paths, garment_profile)
         issues += _check_printify_variant_limit(listing, garment_profile)
     issues += _check_template_kind_colour_match(listing, templates)
-    issues += _check_variation_images(listing, templates)
+    issues += _check_variation_images(listing)
     for name in dict.fromkeys(
         entry.template for entry in listing.media if isinstance(entry, TemplateMediaEntry)
     ):
         info = templates.get(name)
         if info is not None:
             issues += check_prepared_maps(name, info.preparation_error)
-    issues += check_videos(videos or {})
+    issues += check_videos(inputs.videos)
     issues += _check_tags(listing)
     if published is not None:
         issues += check_lifecycle_verb(listing.lifecycle, published=published)
     return issues
 
 
-def check_listing_template(
-    template: ListingTemplate,
-    *,
-    garment_profile: GarmentProfile | None,
-    garment_profile_names: Iterable[str],
-    templates: Mapping[str, TemplateInfo],
-    description_ref_error: str | None = None,
-    videos: Mapping[str, VideoFacts | ProbeFailure] | None = None,
-) -> list[Issue]:
+def check_listing_template(template: ListingTemplate, inputs: CheckInputs) -> list[Issue]:
     """Every production issue with a listing template: the checks
     :func:`check_listing` makes about garment, colours, price source,
     gallery, videos and mockup-template kinds, and none of its design, brief,
@@ -818,16 +843,17 @@ def check_listing_template(
     module opens no file), and nothing here asks a provider -- live facts such
     as a price under Printify's cost stay deployment-time checks.
     """
+    garment_profile = inputs.garment_profile
     issues: list[Issue] = []
-    issues += _check_garment_profile_exists(template, garment_profile_names)
+    issues += _check_garment_profile_exists(template, inputs.garment_profile_names)
     issues += _check_colours_enabled(template)
     issues += _check_price_source(template)
     issues += _check_media_present(template)
-    issues += check_description_ref(template.etsy.description.ref, description_ref_error)
+    issues += check_description_ref(template.etsy.description.ref, inputs.description_ref_error)
     if garment_profile is not None:
         issues += _check_template_tones(template, garment_profile)
         issues += _check_printify_variant_limit(template, garment_profile)
-    issues += _check_template_kind_colour_match(template, templates)
-    issues += _check_variation_images(template, templates)
-    issues += check_videos(videos or {})
+    issues += _check_template_kind_colour_match(template, inputs.templates)
+    issues += _check_variation_images(template)
+    issues += check_videos(inputs.videos)
     return issues

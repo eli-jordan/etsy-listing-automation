@@ -25,6 +25,52 @@ def wait_job(client, identity):
     raise AssertionError("Controlled preparation did not finish")
 
 
+STATUS_URL = "/api/templates/shirt/preparation"
+CONFIG_URL = "/api/templates/shirt/config"
+
+
+def worker_calls(runtime):
+    return sum(len(worker.calls) for worker in runtime.workers)
+
+
+def mask_url(kind):
+    if kind == "multiple":
+        return "/api/templates/shirt/placements/left-shirt/mask"
+    return "/api/templates/shirt/mask"
+
+
+def prepare(client, request_id):
+    """Prepare the template at its current revision and wait for the job."""
+    status = client.get(STATUS_URL).json()
+    created = client.post(
+        "/api/preparation/jobs",
+        json={
+            "template": "shirt",
+            "config_revision": status["config_revision"],
+            "request_id": request_id,
+        },
+    )
+    assert created.status_code == 202, created.text
+    wait_job(client, created.json()["id"])
+
+
+def settle(client):
+    """Wait for whatever rebuild a save queued."""
+    state = client.get(STATUS_URL).json()
+    if state["active_job"]:
+        wait_job(client, state["active_job"]["id"])
+
+
+def save_mask_edit(client, previous, request_id, edit):
+    saved = client.put(
+        CONFIG_URL,
+        headers={"If-Match": previous.headers["etag"]},
+        json={"request_id": request_id, "config": previous.json(), "mask_edits": [edit]},
+    )
+    assert saved.status_code == 200, saved.text
+    return saved
+
+
 @pytest.mark.parametrize("kind", ["single", "colour-matrix", "multiple"])
 def test_save_prepare_mask_undo_reset_and_preview_use_current_revision(
     workspace_root: Path, kind: str
@@ -32,89 +78,50 @@ def test_save_prepare_mask_undo_reset_and_preview_use_current_revision(
     workspace = marigold_template(workspace_root, kind)
     runtime = PreparationRuntime()
     with TestClient(create_app(workspace, preparation_runtime=runtime)) as client:
-        status_url = "/api/templates/shirt/preparation"
-        status_response = client.get(status_url)
+        status_response = client.get(STATUS_URL)
         assert status_response.headers["cache-control"] == "no-store"
-        status = status_response.json()
-        assert status["maps"]["state"] == "needs_preparation"
-        created = client.post(
-            "/api/preparation/jobs",
-            json={
-                "template": "shirt",
-                "config_revision": status["config_revision"],
-                "request_id": "explicit",
-            },
-        )
-        assert created.status_code == 202, created.text
-        wait_job(client, created.json()["id"])
-        ready = client.get(status_url).json()
+        assert status_response.json()["maps"]["state"] == "needs_preparation"
+        prepare(client, "explicit")
+        ready = client.get(STATUS_URL).json()
         assert ready["maps"]["can_render"] is True
         assert all(item["mask_available"] for item in ready["placements"])
         assert ready["prepared_engine"] == "1.0.0"
-        calls = sum(len(worker.calls) for worker in runtime.workers)
-        mask_url = (
-            "/api/templates/shirt/placements/left-shirt/mask"
-            if kind == "multiple"
-            else "/api/templates/shirt/mask"
-        )
-        baseline = client.get(mask_url, params={"source": "automatic"}).content
-        config_url = "/api/templates/shirt/config"
-        loaded = client.get(config_url)
-        edit = {
-            "operations": [
-                {
-                    "type": "stroke",
-                    "mode": "mask",
-                    "diameter_px": 12,
-                    "points": [[28, 28], [32, 32]],
-                }
-            ]
+        calls = worker_calls(runtime)
+        url = mask_url(kind)
+        baseline = client.get(url, params={"source": "automatic"}).content
+        stroke = {
+            "type": "stroke",
+            "mode": "mask",
+            "diameter_px": 12,
+            "points": [[28, 28], [32, 32]],
         }
+        edit = {"operations": [stroke]}
         if kind == "multiple":
             edit["placement_id"] = "left-shirt"
-        painted = client.put(
-            config_url,
-            headers={"If-Match": loaded.headers["etag"]},
-            json={"request_id": "paint", "config": loaded.json(), "mask_edits": [edit]},
-        )
-        assert painted.status_code == 200, painted.text
-        raster = Image.open(BytesIO(client.get(mask_url).content))
+        painted = save_mask_edit(client, client.get(CONFIG_URL), "paint", edit)
+        raster = Image.open(BytesIO(client.get(url).content))
         assert raster.getpixel((30, 30)) == 0
-        history_response = client.get(mask_url + "-history")
+        history_response = client.get(url + "-history")
         assert history_response.headers["cache-control"] == "no-store"
         history = history_response.json()
         assert history["undo_count"] == 1
         assert base64.b64decode(history["strokes"][0]["before"]) == baseline
-        state = client.get(status_url).json()
-        if state["active_job"]:
-            wait_job(client, state["active_job"]["id"])
-        assert sum(len(worker.calls) for worker in runtime.workers) == calls
+        settle(client)
+        assert worker_calls(runtime) == calls
         edit["operations"] = [{"type": "undo"}]
-        undone = client.put(
-            config_url,
-            headers={"If-Match": painted.headers["etag"]},
-            json={"request_id": "undo", "config": painted.json(), "mask_edits": [edit]},
-        )
-        assert undone.status_code == 200, undone.text
-        assert client.get(mask_url).content == baseline
+        undone = save_mask_edit(client, painted, "undo", edit)
+        assert client.get(url).content == baseline
         edit["operations"] = [{"type": "reset"}]
-        reset = client.put(
-            config_url,
-            headers={"If-Match": undone.headers["etag"]},
-            json={"request_id": "reset", "config": undone.json(), "mask_edits": [edit]},
-        )
-        assert reset.status_code == 200
-        state = client.get(status_url).json()
-        if state["active_job"]:
-            wait_job(client, state["active_job"]["id"])
-        assert client.get(status_url).json()["maps"]["can_render"] is True
+        reset = save_mask_edit(client, undone, "reset", edit)
+        settle(client)
+        assert client.get(STATUS_URL).json()["maps"]["can_render"] is True
         body = {**reset.json(), "design": "bundled-grid"}
         if kind == "colour-matrix":
             body["colour"] = "navy"
         preview = client.post("/api/templates/shirt/preview", json=body)
         assert preview.status_code == 200, preview.text
         assert Image.open(BytesIO(preview.content)).size == (64, 64)
-        assert sum(len(worker.calls) for worker in runtime.workers) == calls
+        assert worker_calls(runtime) == calls
 
 
 @pytest.mark.parametrize("kind", ["single", "colour-matrix", "multiple"])
@@ -160,77 +167,82 @@ def test_changed_photo_requires_explicit_mask_reset_and_prepare(
         assert sum(len(worker.calls) for worker in runtime.workers) == calls + 3
 
 
+def upload_white_design(client):
+    buffer = BytesIO()
+    Image.new("RGBA", (32, 32), "white").save(buffer, format="PNG")
+    uploaded = client.post(
+        "/api/designs", files={"file": ("white.png", buffer.getvalue(), "image/png")}
+    )
+    return uploaded.json()["id"]
+
+
+def placement_ids(body, kind):
+    return [p["id"] for p in body["placements"]] if kind == "multiple" else [None]
+
+
+def bounding_boxes(body, kind):
+    if kind == "multiple":
+        return [p["bounding_box"] for p in body["placements"]]
+    return [body["bounding_box"]]
+
+
+EDITOR_PREVIEW_URL = "/api/templates/shirt/preview?scale=editor"
+STROKE = {"type": "stroke", "mode": "mask", "diameter_px": 24, "points": [[32, 32]]}
+
+
+def assert_draft_strokes_are_not_saved(client, kind, body, baseline, saved):
+    """A drafted stroke changes the composite but no saved mask, calibration
+    or prepared maps; undoing or resetting it restores the baseline. ``saved``
+    is the loaded config response and the prepared status."""
+    loaded, ready = saved
+    ids = placement_ids(body, kind)
+    url = mask_url(kind)
+    mask_before = client.get(url).content
+    body["mask_edits"] = [{"placement_id": key, "operations": [STROKE]} for key in ids]
+    painted = client.post(EDITOR_PREVIEW_URL, json=body)
+    assert painted.status_code == 200, painted.text
+    before = Image.open(BytesIO(baseline.content)).convert("RGB")
+    after = Image.open(BytesIO(painted.content)).convert("RGB")
+    assert sum(before.getpixel((32, 32))) > sum(after.getpixel((32, 32))) + 200
+    assert client.get(url).content == mask_before
+    assert client.get(CONFIG_URL).headers["etag"] == loaded.headers["etag"]
+    assert (
+        client.get(STATUS_URL).json()["maps"]["content_digest"] == ready["maps"]["content_digest"]
+    )
+    assert client.post("/api/templates/shirt/preview", json=body).status_code == 409
+    for operation in ["undo", "reset"]:
+        body["mask_edits"] = [
+            {"placement_id": key, "operations": [STROKE, {"type": operation}]} for key in ids
+        ]
+        restored = client.post(EDITOR_PREVIEW_URL, json=body)
+        assert restored.status_code == 200, restored.text
+        assert restored.content == baseline.content
+    body["mask_edits"] = []
+
+
 @pytest.mark.parametrize("kind", ["single", "multiple"])
 def test_interactive_drafts_composite_without_saving_or_publishing(workspace_root, kind):
     workspace = marigold_template(workspace_root, kind)
     runtime = PreparationRuntime()
     with TestClient(create_app(workspace, preparation_runtime=runtime)) as client:
-        status = client.get("/api/templates/shirt/preparation").json()
-        created = client.post(
-            "/api/preparation/jobs",
-            json={
-                "template": "shirt",
-                "config_revision": status["config_revision"],
-                "request_id": "interactive-fixture",
-            },
-        )
-        wait_job(client, created.json()["id"])
-        loaded = client.get("/api/templates/shirt/config")
-        ready = client.get("/api/templates/shirt/preparation").json()
-        calls = sum(len(worker.calls) for worker in runtime.workers)
-        buffer = BytesIO()
-        Image.new("RGBA", (32, 32), "white").save(buffer, format="PNG")
-        uploaded = client.post(
-            "/api/designs", files={"file": ("white.png", buffer.getvalue(), "image/png")}
-        )
+        prepare(client, "interactive-fixture")
+        loaded = client.get(CONFIG_URL)
+        ready = client.get(STATUS_URL).json()
+        calls = worker_calls(runtime)
         body = {
             **loaded.json(),
-            "design": uploaded.json()["id"],
+            "design": upload_white_design(client),
             "calibration_revision": loaded.headers["etag"].strip(chr(34)),
         }
-        url = "/api/templates/shirt/preview?scale=editor"
-        baseline = client.post(url, json=body)
+        baseline = client.post(EDITOR_PREVIEW_URL, json=body)
         assert baseline.status_code == 200, baseline.text
         assert baseline.headers["content-type"] == "image/webp"
         assert baseline.headers["x-preview-quality"] == "interactive"
         assert "x-render-identity" not in baseline.headers
-        ids = [p["id"] for p in body["placements"]] if kind == "multiple" else [None]
-        mask_url = (
-            "/api/templates/shirt/placements/left-shirt/mask"
-            if kind == "multiple"
-            else "/api/templates/shirt/mask"
-        )
-        mask_before = client.get(mask_url).content
-        stroke = {"type": "stroke", "mode": "mask", "diameter_px": 24, "points": [[32, 32]]}
-        body["mask_edits"] = [{"placement_id": key, "operations": [stroke]} for key in ids]
-        painted = client.post(url, json=body)
-        assert painted.status_code == 200, painted.text
-        before = Image.open(BytesIO(baseline.content)).convert("RGB")
-        after = Image.open(BytesIO(painted.content)).convert("RGB")
-        assert sum(before.getpixel((32, 32))) > sum(after.getpixel((32, 32))) + 200
-        assert client.get(mask_url).content == mask_before
-        assert client.get("/api/templates/shirt/config").headers["etag"] == loaded.headers["etag"]
-        assert (
-            client.get("/api/templates/shirt/preparation").json()["maps"]["content_digest"]
-            == ready["maps"]["content_digest"]
-        )
-        assert client.post("/api/templates/shirt/preview", json=body).status_code == 409
-        for operation in ["undo", "reset"]:
-            body["mask_edits"] = [
-                {"placement_id": key, "operations": [stroke, {"type": operation}]} for key in ids
-            ]
-            restored = client.post(url, json=body)
-            assert restored.status_code == 200, restored.text
-            assert restored.content == baseline.content
-        body["mask_edits"] = []
-        boxes = (
-            [p["bounding_box"] for p in body["placements"]]
-            if kind == "multiple"
-            else [body["bounding_box"]]
-        )
-        for box in boxes:
+        assert_draft_strokes_are_not_saved(client, kind, body, baseline, (loaded, ready))
+        for box in bounding_boxes(body, kind):
             box[0]["x"] += 2
-        adjusted = client.post(url, json=body)
+        adjusted = client.post(EDITOR_PREVIEW_URL, json=body)
         assert adjusted.status_code == 200, adjusted.text
         assert adjusted.content != baseline.content
         # Cached transient maps must still require validated retained evidence.
@@ -238,12 +250,12 @@ def test_interactive_drafts_composite_without_saving_or_publishing(workspace_roo
         pointer = workspace.preparation_prediction_current("shirt")
         retained = pointer.read_bytes()
         pointer.unlink()
-        assert client.post(url, json=body).status_code == 409
-        assert client.get("/api/templates/shirt/preparation").json()["maps"]["can_render"]
+        assert client.post(EDITOR_PREVIEW_URL, json=body).status_code == 409
+        assert client.get(STATUS_URL).json()["maps"]["can_render"]
         pointer.write_bytes(retained)
         body["calibration_revision"] = "stale"
-        assert client.post(url, json=body).status_code == 409
-        assert sum(len(worker.calls) for worker in runtime.workers) == calls
+        assert client.post(EDITOR_PREVIEW_URL, json=body).status_code == 409
+        assert worker_calls(runtime) == calls
 
 
 def test_interactive_colour_selection_changes_only_the_target_photo(workspace_root):
@@ -279,7 +291,9 @@ def test_interactive_colour_selection_changes_only_the_target_photo(workspace_ro
             outputs[colour] = Image.open(BytesIO(response.content)).convert("RGB")
         navy = outputs["navy"].getpixel((9, 32))
         ivory = outputs["ivory"].getpixel((9, 32))
-        assert navy[0] < 40 and navy[1] < 40 and navy[2] > 90, navy
+        assert navy[0] < 40, navy
+        assert navy[1] < 40, navy
+        assert navy[2] > 90, navy
         assert min(ivory) > 200, ivory
         after = client.get(status_url).json()
         assert after["main_photo"] == ready["main_photo"]

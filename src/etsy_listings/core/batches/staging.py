@@ -22,13 +22,13 @@ import re
 import uuid
 from collections.abc import Iterable, Iterator
 from contextlib import nullcontext
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path, PurePosixPath
 from typing import BinaryIO, Literal
 
 from etsy_listings.core.batches import archive as archive_file
-from etsy_listings.core.batches.archive import PNG_MAGIC, ArchiveRefused
+from etsy_listings.core.batches.archive import PNG_MAGIC, ArchiveRefusedError
 from etsy_listings.core.batches.naming import allocate
 from etsy_listings.core.batches.records import StagingRow, StagingSession, StagingStore
 from etsy_listings.core.config.errors import ConfigLoadError
@@ -37,7 +37,8 @@ from etsy_listings.core.config.slug import slugify
 from etsy_listings.core.errors import UserFacingError
 from etsy_listings.core.listing_templates import FrozenListingTemplate, TemplateLock
 from etsy_listings.core.workspace.atomic import read_bytes_retrying
-from etsy_listings.core.workspace.workspace import Workspace, remove_tree
+from etsy_listings.core.workspace.trees import remove_tree
+from etsy_listings.core.workspace.workspace import Workspace
 
 # ADR-0051: safety limits, not settings. Module attributes so a test can lower them.
 MAX_DESIGNS = 25
@@ -50,7 +51,7 @@ _CHUNK = 1024 * 1024
 _UNDO = "Nothing was uploaded or changed."
 
 
-class StagingRefused(UserFacingError, ValueError):
+class StagingRefusedError(UserFacingError, ValueError):
     """The upload as a whole cannot be staged. ``message`` says why, the page
     heading it *... was not staged*; ``remedy`` says how to fix it and always
     ends by saying nothing was kept (UI doc §4)."""
@@ -93,12 +94,12 @@ class _Received:
                 size += len(chunk)
                 self._total += len(chunk)
                 if size > MAX_PNG_BYTES:
-                    raise StagingRefused(
+                    raise StagingRefusedError(
                         f"{name} is larger than {MAX_PNG_BYTES // 2**20} MiB.",
                         f"Export it smaller, or leave it out. {_UNDO}",
                     )
                 if self._total_limit is not None and self._total > self._total_limit:
-                    raise StagingRefused(
+                    raise StagingRefusedError(
                         f"These files are larger than {self._total_limit // 2**20} MiB together.",
                         f"Stage fewer at a time. {_UNDO}",
                     )
@@ -149,12 +150,12 @@ def _receive(workspace: Workspace, session: str, uploads: Iterable[Upload]) -> _
     heads = [(upload, upload.stream.read(len(PNG_MAGIC))) for upload in uploads]
     zips = [upload for upload, head in heads if _is_zip(upload, head)]
     if len(zips) > 1:
-        raise StagingRefused(
+        raise StagingRefusedError(
             f"These are {len(zips)} ZIPs, and a batch takes one.",
             f"Start a batch for each ZIP. {_UNDO}",
         )
     if zips and len(heads) > 1:
-        raise StagingRefused(
+        raise StagingRefusedError(
             "These are a ZIP and loose files together, and a batch takes one or the other.",
             f"Put the PNGs in the ZIP, or drop them without it. {_UNDO}",
         )
@@ -164,15 +165,21 @@ def _receive(workspace: Workspace, session: str, uploads: Iterable[Upload]) -> _
         ignored = _receive_zip(workspace, session, upload, head, received)
         _limit(received, "It holds", "Split the export into {} ZIPs and start a batch for each.")
         return _Receipt(list(received.rows.values()), ignored, _archive_name(upload.filename))
+    return _receive_pngs(workspace, session, heads)
+
+
+def _receive_pngs(
+    workspace: Workspace, session: str, heads: list[tuple[Upload, bytes]]
+) -> _Receipt:
     received = _Received(workspace, session, total_limit=MAX_UPLOAD_BYTES)
     for upload, head in heads:
         if head != PNG_MAGIC:
-            raise StagingRefused(
+            raise StagingRefusedError(
                 f"{upload.filename} is not a PNG.", f"Drop only PNG design files. {_UNDO}"
             )
         received.add(upload.filename, _chunks(head, upload.stream))
     if not received.rows:
-        raise StagingRefused("No files were dropped.", "Choose at least one PNG.")
+        raise StagingRefusedError("No files were dropped.", "Choose at least one PNG.")
     _limit(received, "They hold", "Split them into {} batches.")
     return _Receipt(list(received.rows.values()), [], None)
 
@@ -186,7 +193,7 @@ def _limit(received: _Received, subject: str, remedy: str) -> None:
     count = len(received.rows)
     if count > MAX_DESIGNS:
         parts = -(-count // MAX_DESIGNS)
-        raise StagingRefused(
+        raise StagingRefusedError(
             f"{subject} {count} different PNG designs, and a batch takes at most {MAX_DESIGNS}.",
             f"{remedy.format(_SPLITS.get(parts, str(parts)))} {_UNDO}",
         )
@@ -205,8 +212,8 @@ def _receive_zip(
             for name in archive.pngs:
                 received.add(name, archive.read(name))
             return archive.ignored
-    except ArchiveRefused as exc:
-        raise StagingRefused(exc.message, f"{exc.remedy} {_UNDO}") from exc
+    except ArchiveRefusedError as exc:
+        raise StagingRefusedError(exc.message, f"{exc.remedy} {_UNDO}") from exc
     finally:
         path.unlink(missing_ok=True)
 
@@ -221,7 +228,6 @@ def _default_label(listing_template: str, now: datetime, archive: str | None = N
 
 
 def stage_pngs(
-    workspace: Workspace,
     store: StagingStore,
     listing_template: str,
     uploads: Iterable[Upload],
@@ -230,11 +236,12 @@ def stage_pngs(
     template_lock: TemplateLock = lambda _: nullcontext(),
 ) -> StagingSession:
     """Stage ``uploads`` against ``listing_template``, or raise
-    :class:`StagingRefused` with nothing left on disk.
+    :class:`StagingRefusedError` with nothing left on disk.
 
     Each row is checked with the existing design rules against the frozen
     template's garment profile (spec, *Design validation*); a design that
     fails is a row that will not be created, not a refusal of the upload."""
+    workspace = store.workspace
     now = now or datetime.now(UTC)
     session = uuid.uuid4().hex
     directory = workspace.staging_dir(session)
@@ -246,7 +253,7 @@ def stage_pngs(
         try:
             profile = workspace.load_garment_profile(template.garment_profile)
         except ConfigLoadError as exc:
-            raise StagingRefused(f"{listing_template} cannot be used: {exc}", _UNDO) from exc
+            raise StagingRefusedError(f"{listing_template} cannot be used: {exc}", _UNDO) from exc
         receipt = _receive(workspace, session, uploads)
         rows, ignored = receipt.rows, receipt.ignored
         for row in rows:
@@ -364,6 +371,99 @@ def _typed_problem(name: str, holder: str | None) -> str | None:
     return None
 
 
+@dataclass(frozen=True)
+class _RowName:
+    """What name allocation decided for one valid row. ``note`` is added to
+    whatever the row's note already says."""
+
+    name: str
+    state: RowState = "ready"
+    message: str | None = None
+    suggestion: str | None = None
+    note: str | None = None
+
+
+def _with_note(note: str | None, addition: str) -> str:
+    return f"{note}; {addition}" if note else addition
+
+
+@dataclass
+class _NameAllocation:
+    """:func:`review`'s pass over the rows in upload order. Typed names are
+    claimed up front; ``allocated`` grows as each row takes its name."""
+
+    workspace_taken: dict[str, str]
+    typed: dict[str, str]
+    reused: dict[str, str]
+    allocated: set[str] = field(default_factory=set)
+
+    def review(self, row: StagingRow) -> RowReview:
+        note = (
+            f"{len(row.sources)} identical files, staged once: {', '.join(row.sources)}"
+            if len(row.sources) > 1
+            else None
+        )
+        if row.error is not None:
+            return _row_review(row, _RowName(row.base, "invalid", row.error), None, None)
+        reuse = self.reused.get(row.sha256)
+        if reuse is not None:
+            note = _with_note(
+                note, f"Same image as designs/{reuse}.png. The listing reuses that file"
+            )
+        taken = taken_for(self.workspace_taken, reuse)
+        claimed = taken | set(self.typed)
+        if row.typed:
+            named = self._typed(row, taken, claimed)
+        elif not row.base:
+            named = _RowName(
+                row.base,
+                "name",
+                "The file name has no letters or digits. Type a name for this listing.",
+            )
+        else:
+            named = self._generated(row, claimed)
+        if named.note is not None:
+            note = _with_note(note, named.note)
+        return _row_review(row, named, note, reuse)
+
+    def _typed(self, row: StagingRow, taken: set[str], claimed: set[str]) -> _RowName:
+        """A typed name is never changed: a taken one is flagged, with the
+        next free suffix as a suggestion."""
+        folded = row.base.casefold()
+        holder = (self.workspace_taken.get(folded) if folded in taken else None) or (
+            "row" if self.typed.get(folded) != row.id else None
+        )
+        message = _typed_problem(row.base, holder)
+        suggestion = None
+        if message and slugify(row.base):
+            suggestion = allocate(slugify(row.base), claimed | self.allocated)
+        self.allocated.add(folded)
+        return _RowName(row.base, "name" if message else "ready", message, suggestion)
+
+    def _generated(self, row: StagingRow, claimed: set[str]) -> _RowName:
+        name = allocate(row.base, claimed | self.allocated)
+        self.allocated.add(name.casefold())
+        if name == row.base:
+            return _RowName(name)
+        return _RowName(
+            name, note=f"{row.base} is taken, so {name.removeprefix(row.base)} was added"
+        )
+
+
+def _row_review(row: StagingRow, named: _RowName, note: str | None, reuse: str | None) -> RowReview:
+    return RowReview(
+        id=row.id,
+        sources=row.sources,
+        name=named.name,
+        typed=row.typed,
+        state=named.state,
+        message=named.message,
+        note=note,
+        suggestion=named.suggestion,
+        reuse=reuse,
+    )
+
+
 def review(workspace: Workspace, session: StagingSession) -> StagingReview:
     """Every row's name, state and note (name allocation; UI doc §5).
 
@@ -385,59 +485,8 @@ def review(workspace: Workspace, session: StagingSession) -> StagingReview:
             for row in valid
         },
     )
-    allocated: set[str] = set()
-    reviews: list[RowReview] = []
-    for row in session.rows:
-        note = (
-            f"{len(row.sources)} identical files, staged once: {', '.join(row.sources)}"
-            if len(row.sources) > 1
-            else None
-        )
-        name = row.base
-        state: RowState = "ready"
-        message: str | None = None
-        suggestion: str | None = None
-        reuse = reused.get(row.sha256) if row.error is None else None
-        if reuse is not None:
-            same = f"Same image as designs/{reuse}.png. The listing reuses that file"
-            note = f"{note}; {same}" if note else same
-        taken = taken_for(workspace_taken, reuse)
-        claimed = taken | set(typed)
-        if row.error is not None:
-            state, message, note = "invalid", row.error, None
-        elif row.typed:
-            folded = row.base.casefold()
-            holder = (workspace_taken.get(folded) if folded in taken else None) or (
-                "row" if typed.get(folded) != row.id else None
-            )
-            message = _typed_problem(row.base, holder)
-            if message:
-                state = "name"
-                if slugify(row.base):
-                    suggestion = allocate(slugify(row.base), claimed | allocated)
-            allocated.add(folded)
-        elif not row.base:
-            state = "name"
-            message = "The file name has no letters or digits. Type a name for this listing."
-        else:
-            name = allocate(row.base, claimed | allocated)
-            allocated.add(name.casefold())
-            if name != row.base:
-                suffixed = f"{row.base} is taken, so {name.removeprefix(row.base)} was added"
-                note = f"{note}; {suffixed}" if note else suffixed
-        reviews.append(
-            RowReview(
-                id=row.id,
-                sources=row.sources,
-                name=name,
-                typed=row.typed,
-                state=state,
-                message=message,
-                note=note,
-                suggestion=suggestion,
-                reuse=reuse,
-            )
-        )
+    names = _NameAllocation(workspace_taken, typed, reused)
+    reviews = [names.review(row) for row in session.rows]
     return StagingReview(session=session, rows=reviews)
 
 

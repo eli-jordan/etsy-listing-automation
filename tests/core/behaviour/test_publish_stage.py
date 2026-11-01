@@ -16,7 +16,7 @@ import pytest
 from etsy_listings.core.clients.printify.fakes import FakeCatalogClient, FakePrintifyClient
 from etsy_listings.core.clients.printify.models import ProductExternal, Shop
 from etsy_listings.core.engine.apply import execute
-from etsy_listings.core.engine.change import Plan, StagePlan
+from etsy_listings.core.engine.change import Plan, StagePlan, StageWork
 from etsy_listings.core.engine.context import RunContext
 from etsy_listings.core.engine.lock import Lockfile
 from etsy_listings.core.engine.plan import PlannedRun, StageState, build_plan
@@ -210,7 +210,7 @@ def test_publishing_without_a_product_id_fails_loudly(root, catalog, printify) -
     ctx = _ctx(root, catalog, printify)
     stage = _instant_stage()
     desired = stage.desired(ctx, LISTING, None)
-    stage_plan = StagePlan.work(stage.name, "test work")
+    stage_plan = StagePlan.work(stage.name, StageWork("test work"))
     planned = PlannedRun(
         plan=Plan(listing=LISTING, is_live=False, etsy_listing_id=None, stage_plans=(stage_plan,)),
         states=(

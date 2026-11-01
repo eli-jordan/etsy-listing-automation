@@ -25,7 +25,7 @@ from etsy_listings.server.api.app import create_app
 def serve(
     workspace: Workspace,
     *,
-    host: str = "0.0.0.0",  # noqa: S104 -- LAN reachability is the documented default
+    host: str = "0.0.0.0",
     port: int = 8000,
 ) -> None:
     """Block serving ``workspace`` over HTTP until the process is interrupted."""

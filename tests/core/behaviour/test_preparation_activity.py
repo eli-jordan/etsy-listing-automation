@@ -40,8 +40,9 @@ def test_foreground_exception_releases_background_and_other_workspaces_are_indep
     (other_root / "shop.yaml").write_text("etsy: {currency: USD}")
     other = Workspace.discover(root_override=other_root)
     with ThreadPoolExecutor() as pool:
-        with pytest.raises(ValueError, match="preview failed"), interactive(workspace):
+        with interactive(workspace):
             pool.submit(yield_to_interactive, other, lambda: None).result(timeout=1)
             waiting = pool.submit(yield_to_interactive, workspace, lambda: None)
-            raise ValueError("preview failed")
+            with pytest.raises(ValueError, match="preview failed"):
+                raise ValueError("preview failed")
         waiting.result(timeout=1)

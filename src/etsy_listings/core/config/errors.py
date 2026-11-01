@@ -6,11 +6,12 @@ actionable, never a bare stack trace.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
 import yaml
-from pydantic import ValidationError
+from pydantic import BaseModel, ValidationError
 
 from etsy_listings.core.errors import UserFacingError
 
@@ -19,6 +20,23 @@ class ConfigLoadError(UserFacingError, ValueError):
     def __init__(self, path: Path, detail: str) -> None:
         self.path = path
         super().__init__(f"{path}: {detail}")
+
+
+def load_model[Model: BaseModel](
+    model: type[Model],
+    path: Path,
+    *,
+    context: dict[str, Any],
+    read: Callable[[Path], bytes],
+    missing: str,
+) -> Model:
+    if not path.is_file():
+        raise ConfigLoadError(path, missing)
+    raw = parse_yaml(path, read(path).decode("utf-8")) or {}
+    try:
+        return model.model_validate(raw, context=context)
+    except ValidationError as exc:
+        raise format_validation_error(path, exc) from exc
 
 
 def parse_yaml(path: Path, text: str) -> Any:

@@ -16,6 +16,7 @@ import uuid
 from collections import deque
 from collections.abc import Callable, Sequence
 from contextlib import AbstractContextManager, nullcontext
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Self, cast
 
@@ -45,8 +46,29 @@ CALL_TIMEOUT = 900.0
 SHUTDOWN_TIMEOUT = 15.0
 
 
+@dataclass(frozen=True)
+class InferenceCall:
+    """One inference: which ``role`` to predict for the ``input`` crop, the
+    ``output`` artifact to write (both relative to the worker's cache root),
+    the crop's ``size`` the prediction must match, and the inference
+    settings. ``request_id`` names the call for progress and cancellation."""
+
+    request_id: str
+    role: Role
+    input: str
+    output: str
+    size: tuple[int, int]
+    num_inference_steps: int = 10
+    ensemble_size: int = 3
+
+
 class WorkerError(RuntimeError):
     """A retryable worker failure. Settings and earlier evidence remain intact."""
+
+
+def _protocol_error(message: str) -> None:
+    """Raised from a helper so the caller's ``try`` can clean up first (S01 TRY301)."""
+    raise WorkerError(message)
 
 
 class Worker:
@@ -88,7 +110,7 @@ class Worker:
                 or set(capabilities.roles) != {"normals", "lighting", "depth"}
                 or capabilities.cuda is not True
             ):
-                raise WorkerError("Worker capability mismatch; run etsy-listings marigold update.")
+                _protocol_error("Worker capability mismatch; run etsy-listings marigold update.")
             self.capabilities = capabilities
         except BaseException:
             self.close(force=True)
@@ -99,7 +121,7 @@ class Worker:
         try:
             while line := self._process.stdout.readline(MAX_LINE + 1):
                 if len(line) > MAX_LINE or not line.endswith(chr(10)):
-                    raise WorkerError("Worker emitted an oversized or incomplete protocol line")
+                    _protocol_error("Worker emitted an oversized or incomplete protocol line")
                 try:
                     self._messages.put(REPLY.validate_json(line))
                 except ValidationError as exc:
@@ -107,8 +129,8 @@ class Worker:
                         "Malformed worker protocol message: " + describe(exc)
                     ) from exc
             self._stderr_thread.join(timeout=0.2)
-            raise WorkerError("Worker exited unexpectedly; retry preparation. " + self.diagnostics)
-        except BaseException as exc:
+            _protocol_error("Worker exited unexpectedly; retry preparation. " + self.diagnostics)
+        except BaseException as exc:  # noqa: BLE001 -- the reader thread hands every failure back to the caller
             self._messages.put(exc)
 
     def _stderr(self) -> None:
@@ -143,50 +165,60 @@ class Worker:
     ) -> Reply:
         deadline = time.monotonic() + timeout
         while True:
-            try:
-                message = self._messages.get(timeout=max(0, deadline - time.monotonic()))
-            except queue.Empty as exc:
-                self.close(force=True)
-                raise WorkerError(
-                    "Worker watchdog expired; retry preparation with unchanged settings."
-                ) from exc
-            if isinstance(message, BaseException):
-                raise WorkerError(str(message)) from message
-            if message.request_id in self._controls:
-                self._controls.discard(message.request_id)
-                continue
-            if message.request_id != request_id:
-                raise WorkerError("Worker reply request ID does not match the active call")
-            if isinstance(message, Failure):
-                raise WorkerError(message.message)
-            if isinstance(message, Progress):
-                if progress:
-                    progress(message)
-                continue
-            return message
+            reply = self._answer(self._next_message(deadline), request_id, progress)
+            if reply is not None:
+                return reply
+
+    def _next_message(self, deadline: float) -> Reply:
+        try:
+            message = self._messages.get(timeout=max(0, deadline - time.monotonic()))
+        except queue.Empty as exc:
+            self.close(force=True)
+            raise WorkerError(
+                "Worker watchdog expired; retry preparation with unchanged settings."
+            ) from exc
+        if isinstance(message, BaseException):
+            raise WorkerError(str(message)) from message
+        return message
+
+    def _answer(
+        self,
+        message: Reply,
+        request_id: str,
+        progress: Callable[[Progress], None] | None,
+    ) -> Reply | None:
+        """The active call's reply, or None for a control acknowledgement or
+        progress, which ``_receive`` reads past."""
+        if message.request_id in self._controls:
+            self._controls.discard(message.request_id)
+            return None
+        if message.request_id != request_id:
+            raise WorkerError("Worker reply request ID does not match the active call")
+        if isinstance(message, Failure):
+            raise WorkerError(message.message)
+        if isinstance(message, Progress):
+            if progress:
+                progress(message)
+            return None
+        return message
 
     def infer(
         self,
+        call: InferenceCall,
         *,
-        request_id: str,
-        role: Role,
-        input: str,
-        output: str,
-        size: tuple[int, int],
-        num_inference_steps: int = 10,
-        ensemble_size: int = 3,
         progress: Callable[[Progress], None] | None = None,
         dispatch_guard: Callable[[], AbstractContextManager[None]] = nullcontext,
     ) -> InferenceResult:
-        cache_path(self.cache_root, input, suffix=".png")
+        request_id, role, output, size = call.request_id, call.role, call.output, call.size
+        cache_path(self.cache_root, call.input, suffix=".png")
         destination = cache_path(self.cache_root, output, suffix=".npz")
         request = InferRequest(
             request_id=request_id,
             role=role,
-            input=input,
+            input=call.input,
             output=output,
             settings=InferenceSettings(
-                num_inference_steps=num_inference_steps, ensemble_size=ensemble_size
+                num_inference_steps=call.num_inference_steps, ensemble_size=call.ensemble_size
             ),
         )
         if not self._call_lock.acquire(blocking=False):
@@ -217,27 +249,32 @@ class Worker:
         self._send(control)
 
     def close(self, *, force: bool = False) -> None:
-        if self._process.poll() is None:
-            if not force:
-                try:
-                    self._send(ShutdownRequest(request_id=uuid.uuid4().hex))
-                    self._process.wait(timeout=SHUTDOWN_TIMEOUT)
-                except (WorkerError, subprocess.TimeoutExpired):
-                    force = True
-            if force:
-                if os.name == "nt":
-                    subprocess.run(
-                        ["taskkill", "/PID", str(self._process.pid), "/T", "/F"],
-                        stdout=subprocess.DEVNULL,
-                        stderr=subprocess.DEVNULL,
-                        timeout=SHUTDOWN_TIMEOUT,
-                        check=False,
-                    )
-                self._process.kill()
-                self._process.wait(timeout=SHUTDOWN_TIMEOUT)
+        if self._process.poll() is None and (force or not self._shut_down()):
+            self._kill()
         for stream in (self._process.stdin, self._process.stdout, self._process.stderr):
             if stream:
                 stream.close()
+
+    def _shut_down(self) -> bool:
+        """Ask the worker to exit after any active call; False if it does not."""
+        try:
+            self._send(ShutdownRequest(request_id=uuid.uuid4().hex))
+            self._process.wait(timeout=SHUTDOWN_TIMEOUT)
+        except (WorkerError, subprocess.TimeoutExpired):
+            return False
+        return True
+
+    def _kill(self) -> None:
+        if os.name == "nt":
+            subprocess.run(
+                ["taskkill", "/PID", str(self._process.pid), "/T", "/F"],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                timeout=SHUTDOWN_TIMEOUT,
+                check=False,
+            )
+        self._process.kill()
+        self._process.wait(timeout=SHUTDOWN_TIMEOUT)
 
     def __enter__(self) -> Self:
         return self
@@ -270,14 +307,8 @@ class WarmWorker:
 
     def infer(
         self,
+        call: InferenceCall,
         *,
-        request_id: str,
-        role: Role,
-        input: str,
-        output: str,
-        size: tuple[int, int],
-        num_inference_steps: int = 10,
-        ensemble_size: int = 3,
         progress: Callable[[Progress], None] | None = None,
         dispatch_guard: Callable[[], AbstractContextManager[None]] = nullcontext,
     ) -> InferenceResult:
@@ -293,17 +324,7 @@ class WarmWorker:
                     engine_version=self.engine_version,
                     timeout=self.timeout,
                 )
-            return self._worker.infer(
-                request_id=request_id,
-                role=role,
-                input=input,
-                output=output,
-                size=size,
-                num_inference_steps=num_inference_steps,
-                ensemble_size=ensemble_size,
-                progress=progress,
-                dispatch_guard=dispatch_guard,
-            )
+            return self._worker.infer(call, progress=progress, dispatch_guard=dispatch_guard)
         finally:
             self._lock.release()
 

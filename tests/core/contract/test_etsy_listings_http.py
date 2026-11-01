@@ -14,7 +14,7 @@ from __future__ import annotations
 import httpx
 import pytest
 
-from etsy_listings.core.clients.etsy.listings import HttpEtsyListingClient
+from etsy_listings.core.clients.etsy.listings import HttpEtsyListingClient, ImageUpload
 from etsy_listings.core.clients.etsy.transport import EtsyApiError
 
 from tests.support.http import etsy_transport
@@ -50,7 +50,7 @@ LISTING_PAYLOAD = {
 }
 
 
-def _client(handler) -> HttpEtsyListingClient:  # noqa: ANN001 - a test handler
+def _client(handler) -> HttpEtsyListingClient:
     return HttpEtsyListingClient(etsy_transport(handler))
 
 
@@ -296,10 +296,12 @@ def test_upload_posts_multipart_with_rank_and_alt_text() -> None:
     image = _client(handler).upload_listing_image(
         SHOP_ID,
         LISTING_ID,
-        file_name="flat-lay-black.png",
-        contents=b"\x89PNG-bytes",
-        rank=1,
-        alt_text="Black, flat lay",
+        ImageUpload(
+            file_name="flat-lay-black.png",
+            contents=b"\x89PNG-bytes",
+            rank=1,
+            alt_text="Black, flat lay",
+        ),
     )
 
     assert (seen["method"], seen["path"]) == (
@@ -323,11 +325,13 @@ def test_overwrite_replaces_in_place_at_an_occupied_rank() -> None:
     _client(handler).upload_listing_image(
         SHOP_ID,
         LISTING_ID,
-        file_name="flat-lay-black.png",
-        contents=b"\x89PNG-bytes",
-        rank=1,
-        overwrite=True,
-        listing_image_id=8503331196,
+        ImageUpload(
+            file_name="flat-lay-black.png",
+            contents=b"\x89PNG-bytes",
+            rank=1,
+            overwrite=True,
+            listing_image_id=8503331196,
+        ),
     )
 
     assert seen["form"]["overwrite"] == "true"
@@ -761,7 +765,7 @@ def test_a_video_is_deleted_from_the_shop_scoped_path() -> None:
     assert result is None
 
 
-def _refusing(status: int, error: str, calls: list[httpx.Request]):  # noqa: ANN202 - a handler
+def _refusing(status: int, error: str, calls: list[httpx.Request]):
     def handler(request: httpx.Request) -> httpx.Response:
         calls.append(request)
         return httpx.Response(status, json={"error": error})
@@ -778,7 +782,7 @@ def _attach(client: HttpEtsyListingClient) -> None:
 
 
 @pytest.mark.parametrize("send", [_upload, _attach], ids=["upload", "attach"])
-def test_the_daily_budget_400_is_reworded_into_what_it_is(send) -> None:  # noqa: ANN001
+def test_the_daily_budget_400_is_reworded_into_what_it_is(send) -> None:
     """Measured on a listing holding **no** videos: the eleventh association
     within 24 h, upload or re-attach alike, answers `400` with the same text
     a full listing gets. Shown verbatim it would send the seller looking for
@@ -802,7 +806,7 @@ def test_the_daily_budget_400_is_reworded_into_what_it_is(send) -> None:  # noqa
 
 
 @pytest.mark.parametrize("send", [_upload, _attach], ids=["upload", "attach"])
-def test_a_full_listing_409_is_its_own_error(send) -> None:  # noqa: ANN001
+def test_a_full_listing_409_is_its_own_error(send) -> None:
     """Measured: a third upload with `is_multi_video=true` against two active
     videos answers `409`, after the bytes had been sent."""
     from etsy_listings.core.clients.etsy.listings import (

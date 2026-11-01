@@ -69,9 +69,9 @@ describe("TestDesignPicker", () => {
     await waitFor(() => expect(onChange).toHaveBeenCalledWith("my-art"));
     // ...and it is selectable straight away, without a reload
     await waitFor(() =>
-      expect(screen.getByLabelText("Test design").querySelector("option[value='my-art']")).not.toBe(
-        null,
-      ),
+      expect(
+        screen.getByLabelText("Test design").querySelector("option[value='my-art']"),
+      ).not.toBeNull(),
     );
   });
 
@@ -84,12 +84,12 @@ describe("TestDesignPicker", () => {
     fireEvent.change(screen.getByLabelText(/Upload a PNG/), {
       target: { files: [new File(["x"], "notes.txt")] },
     });
-    await screen.findByText("upload failed");
+    expect(await screen.findByText("upload failed")).toBeInTheDocument();
   });
 
   it("survives the library failing to load", async () => {
     vi.spyOn(calibrator, "listDesigns").mockRejectedValue(new Error("network"));
     render(<TestDesignPicker value="bundled-grid" onChange={vi.fn()} />);
-    await screen.findByText("could not load test designs");
+    expect(await screen.findByText("could not load test designs")).toBeInTheDocument();
   });
 });

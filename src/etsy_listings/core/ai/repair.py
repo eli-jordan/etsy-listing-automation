@@ -32,7 +32,9 @@ def repair_prompt_suffix(repair: RepairContext) -> str:
     )
 
 
-def prompt_text_for(task: ProviderTask, repair: RepairContext | None) -> str:
+def prompt_text_for(
+    task: ProviderTask, repair: RepairContext | None, *, image_tool: str | None = None
+) -> str:
     """The complete prompt text for one attempt at ``task``.
 
     Both adapters call exactly this, so "what does a repair send?" has one
@@ -40,6 +42,12 @@ def prompt_text_for(task: ProviderTask, repair: RepairContext | None) -> str:
     already split out to prevent, applied to the branch as well as the
     wording.
     """
+    text = task.prompt_text
+    if image_tool is not None:
+        text += (
+            f"\n\nThe design image is at this absolute path: {task.design_image}\n"
+            f"Use the {image_tool} tool to view it before answering.\n"
+        )
     if repair is None:
-        return task.prompt_text
-    return f"{task.prompt_text}\n\n{repair_prompt_suffix(repair)}"
+        return text
+    return f"{text}\n\n{repair_prompt_suffix(repair)}"

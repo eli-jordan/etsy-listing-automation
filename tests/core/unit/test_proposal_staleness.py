@@ -8,6 +8,8 @@ so the editor and the batch summary say the same thing about one proposal.
 
 from __future__ import annotations
 
+from typing import ClassVar
+
 import pytest
 
 from etsy_listings.core.ai.proposals import SeoProposalSnapshot, proposal_staleness
@@ -124,7 +126,7 @@ class TestALightDarkPair:
     and colour keys included, since every file in it is what the proposal was
     judged against."""
 
-    PAIR: dict[str, str | None] = {"on-light": "designs/light.png", "on-dark": None}
+    PAIR: ClassVar[dict[str, str | None]] = {"on-light": "designs/light.png", "on-dark": None}
 
     def test_the_same_pair_is_not_stale_empty_slot_and_key_order_aside(self) -> None:
         frozen = _snapshot(design=self.PAIR)

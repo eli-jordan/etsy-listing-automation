@@ -222,7 +222,8 @@ def test_an_unresolvable_listing_does_not_stop_the_batch(workspace_root: Path) -
 
     assert [outcome.ok for outcome in report.outcomes] == [True, True]
     paired, fixture = (outcome.planned for outcome in report.outcomes)
-    assert paired is not None and fixture is not None
+    assert paired is not None
+    assert fixture is not None
     render = {sp.stage: sp for sp in paired.plan.stage_plans}["render"]
     assert render.blocked is not None
     assert {sp.stage: sp for sp in fixture.plan.stage_plans}["render"].will_run is True

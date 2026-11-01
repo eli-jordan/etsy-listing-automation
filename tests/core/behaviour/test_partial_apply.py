@@ -25,7 +25,7 @@ import pytest
 from pydantic import BaseModel, ConfigDict
 
 from etsy_listings.core.engine.apply import execute
-from etsy_listings.core.engine.change import Plan, StagePlan, Verdict
+from etsy_listings.core.engine.change import Plan, StagePlan, StageWork, Verdict
 from etsy_listings.core.engine.context import RunContext
 from etsy_listings.core.engine.lock import IncompleteApply, Lockfile
 from etsy_listings.core.engine.plan import PlannedRun, StageState
@@ -91,7 +91,7 @@ def _planned(*stages: _Stage) -> PlannedRun:
     """A `PlannedRun` built by hand, the way `test_stage_remote_state.py`
     does -- `execute` never re-asks a stage anything, so a test of its
     recording behaviour does not need a real `build_plan` walk."""
-    stage_plans = tuple(StagePlan.work(s.name, "test work") for s in stages)
+    stage_plans = tuple(StagePlan.work(s.name, StageWork("test work")) for s in stages)
     return PlannedRun(
         plan=Plan(listing=LISTING, is_live=False, etsy_listing_id=None, stage_plans=stage_plans),
         states=tuple(

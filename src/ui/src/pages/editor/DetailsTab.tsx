@@ -7,6 +7,7 @@ import { MarketListingsPanel } from "./market/MarketListingsPanel";
 import { AiSeoControl } from "./aiSeo/AiSeoControl";
 import { AiTagsDrawer } from "./aiSeo/AiTagsDrawer";
 import type { AiSeoMode } from "./aiSeo/useAiSeoMode";
+import { useDrawerMotion } from "./useDrawerMotion";
 
 /** Title/tags/description/section (phase 5).
  *
@@ -71,15 +72,7 @@ export function DetailsTab(props: Props) {
   const previewButtonRef = useRef<HTMLButtonElement>(null);
   const phase = aiSeo?.phase ?? null;
   const proposal = aiSeo?.proposal ?? null;
-  const [trackedPhase, setTrackedPhase] = useState(phase);
-  const [drawerMotion, setDrawerMotion] = useState(false);
-  if (phase !== trackedPhase) {
-    setTrackedPhase(phase);
-    if (trackedPhase === "loading") {
-      setDrawerMotion(proposal !== null && document.visibilityState === "visible");
-    }
-  }
-  if (proposal === null && drawerMotion) setDrawerMotion(false);
+  const drawerMotion = useDrawerMotion(phase, proposal !== null);
   const aiModeButtonRef = useRef<HTMLButtonElement>(null);
   const titleDrawerRef = useRef<HTMLDivElement>(null);
   const hadAiSeoProposal = useRef(false);

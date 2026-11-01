@@ -20,21 +20,28 @@ run is refused by, which the **AI Mode** button is lit by, are core's
 
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException, Request
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, HTTPException, Request
 
 from etsy_listings.core.ai.proposals import ProposalStore
 from etsy_listings.core.application.ai.coordinator import AiCoordinator
-from etsy_listings.core.application.ai.listing_proposals import read_proposal, resolve_proposal
+from etsy_listings.core.application.ai.listing_proposals import (
+    ProposalResolution,
+    read_proposal,
+    resolve_proposal,
+)
 from etsy_listings.core.application.refusals import (
-    ListingDeploying,
-    ListingDraftingInBatch,
-    ListingMissing,
-    ProposalMissing,
-    ProposalReplaced,
+    ListingDeployingError,
+    ListingDraftingInBatchError,
+    ListingMissingError,
+    ProposalMissingError,
+    ProposalReplacedError,
 )
 from etsy_listings.core.market import snapshot as market_snapshot
 from etsy_listings.core.market.snapshot import MarketSnapshot
-from etsy_listings.server.api.listings import Existing
+from etsy_listings.server.api.listings import Target
+from etsy_listings.server.api.listings import target as listing_target
 from etsy_listings.server.api.schemas import (
     ListingProposal,
     ProposalResolutionPatch,
@@ -50,7 +57,9 @@ def _proposals(request: Request) -> ProposalStore:
 
 
 @router.get("/{name}/ai-seo/readiness", response_model=SeoReadinessResponse)
-def get_seo_readiness(target: Existing, request: Request) -> SeoReadinessResponse:
+def get_seo_readiness(
+    target: Annotated[Target, Depends(listing_target)], request: Request
+) -> SeoReadinessResponse:
     """Whether the **AI Mode** button may start a run for this saved listing
     right now -- the call the frontend makes to decide whether to enable the
     always visible control. The button drafts a brief when the saved one is
@@ -64,8 +73,8 @@ def get_seo_readiness(target: Existing, request: Request) -> SeoReadinessRespons
     return SeoReadinessResponse(
         ready=False,
         reason=str(refused),
-        deploying=isinstance(refused, ListingDeploying),
-        batch_pending=isinstance(refused, ListingDraftingInBatch),
+        deploying=isinstance(refused, ListingDeployingError),
+        batch_pending=isinstance(refused, ListingDraftingInBatchError),
     )
 
 
@@ -74,7 +83,7 @@ def get_seo_readiness(target: Existing, request: Request) -> SeoReadinessRespons
     response_model=MarketSnapshot,
     responses={404: {"description": "No such listing, or no market search for it yet"}},
 )
-def get_market_snapshot(target: Existing) -> MarketSnapshot:
+def get_market_snapshot(target: Annotated[Target, Depends(listing_target)]) -> MarketSnapshot:
     """The listing's latest market research, as the top listings panel shows
     it after a reload (features/market-seo-20260924/spec.md, *UI*). Written only by an AI run whose
     search succeeded, so a failed run leaves the previous one here. 404 until
@@ -91,14 +100,16 @@ def get_market_snapshot(target: Existing) -> MarketSnapshot:
     response_model=ListingProposal,
     responses={404: {"description": "No such listing, or no proposal cached for it"}},
 )
-def get_listing_proposal(target: Existing, request: Request) -> ListingProposal:
+def get_listing_proposal(
+    target: Annotated[Target, Depends(listing_target)], request: Request
+) -> ListingProposal:
     """The listing's latest AI SEO proposal (ADR-0049; spec, *Durable AI
     proposals*), with which sections were resolved and whether it has gone
     stale. Written by every AI run before it announces the proposal, so a
     reload, a server restart or a batch run all find it here."""
     try:
         return read_proposal(target.workspace, _proposals(request), target.name)
-    except (ListingMissing, ProposalMissing) as exc:
+    except (ListingMissingError, ProposalMissingError) as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
@@ -111,7 +122,9 @@ def get_listing_proposal(target: Existing, request: Request) -> ListingProposal:
     },
 )
 def resolve_listing_proposal(
-    target: Existing, body: ProposalResolutionPatch, request: Request
+    target: Annotated[Target, Depends(listing_target)],
+    body: ProposalResolutionPatch,
+    request: Request,
 ) -> ListingProposal:
     """Record accepted or dismissed sections (spec, *Durable AI proposals*),
     so a resolved drawer does not reopen as new after a reload. The chosen
@@ -124,12 +137,11 @@ def resolve_listing_proposal(
             target.workspace,
             _proposals(request),
             target.name,
-            generated_at=body.generated_at,
-            title=body.title,
-            tags=body.tags,
-            lead=body.lead,
+            ProposalResolution(
+                generated_at=body.generated_at, title=body.title, tags=body.tags, lead=body.lead
+            ),
         )
-    except (ListingMissing, ProposalMissing) as exc:
+    except (ListingMissingError, ProposalMissingError) as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
-    except ProposalReplaced as exc:
+    except ProposalReplacedError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc

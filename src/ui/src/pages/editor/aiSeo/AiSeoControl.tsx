@@ -48,32 +48,7 @@ export function AiSeoControl({
         </button>
 
         <div id="seo-ai-mode-tip" className="seo-ai-mode-tip" role="tooltip">
-          {loading ? (
-            <p className="seo-ai-mode-tip__note">
-              Generating title, description and tag recommendations for your review
-            </p>
-          ) : mode.available ? (
-            <p className="seo-ai-mode-tip__note">
-              {mode.draftsBrief
-                ? "Writes a brief from this design, then generates title, description and tag recommendations"
-                : "Generates SEO fields using AI (title, description lead and tags)"}
-            </p>
-          ) : (
-            <>
-              <strong>Ready to use AI Mode?</strong>
-              <ul>
-                {mode.requirements.map((requirement) => (
-                  <li
-                    key={requirement.label}
-                    className={requirement.ready ? "is-ready" : "is-missing"}
-                  >
-                    {requirement.label}
-                  </li>
-                ))}
-              </ul>
-              {mode.reason && <p>{mode.reason}</p>}
-            </>
-          )}
+          <AiModeTip mode={mode} loading={loading} />
         </div>
       </div>
 
@@ -110,6 +85,40 @@ export function AiSeoControl({
           </button>
         </div>
       )}
+    </>
+  );
+}
+
+/** The hover card: what a running request is doing, what AI Mode will do,
+ * or what it still needs. */
+function AiModeTip({ mode, loading }: { mode: AiSeoMode; loading: boolean }) {
+  if (loading) {
+    return (
+      <p className="seo-ai-mode-tip__note">
+        Generating title, description and tag recommendations for your review
+      </p>
+    );
+  }
+  if (mode.available) {
+    return (
+      <p className="seo-ai-mode-tip__note">
+        {mode.draftsBrief
+          ? "Writes a brief from this design, then generates title, description and tag recommendations"
+          : "Generates SEO fields using AI (title, description lead and tags)"}
+      </p>
+    );
+  }
+  return (
+    <>
+      <strong>Ready to use AI Mode?</strong>
+      <ul>
+        {mode.requirements.map((requirement) => (
+          <li key={requirement.label} className={requirement.ready ? "is-ready" : "is-missing"}>
+            {requirement.label}
+          </li>
+        ))}
+      </ul>
+      {mode.reason && <p>{mode.reason}</p>}
     </>
   );
 }

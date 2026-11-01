@@ -113,7 +113,7 @@ class ListingImage(BaseModel):
     listing_image_id: int
     rank: int | None = None
     alt_text: str | None = None
-    url_570xN: str | None = None
+    url_570xN: str | None = None  # noqa: N815 -- Etsy's ListingImage field name
     """A thumbnail up to 570px wide, variable height -- Etsy's own field name
     (the API's `ListingImage` schema). What the deploy review's "On Etsy now"
     column shows: the URL a draft or a hand-uploaded image already has,
@@ -258,6 +258,16 @@ def _drop_nulls(value: object) -> object:
     return value
 
 
+def _unescape_copy(value: dict[str, Any]) -> dict[str, Any]:
+    """The title, description and tags with Etsy's HTML entities decoded."""
+    for key in ("title", "description"):
+        if isinstance(value.get(key), str):
+            value[key] = html.unescape(value[key])
+    if isinstance(value.get("tags"), list):
+        value["tags"] = [html.unescape(t) if isinstance(t, str) else t for t in value["tags"]]
+    return value
+
+
 ALREADY_DECODED: Mapping[str, bool] = {"already_decoded": True}
 """Validation context for a market model read back from this tool's own
 cache: its text was unescaped when Etsy's answer was first decoded, and a
@@ -301,12 +311,7 @@ class MarketCandidate(BaseModel):
             return value
         if "original_creation_timestamp" not in value and "creation_timestamp" in value:
             value["original_creation_timestamp"] = value["creation_timestamp"]
-        for key in ("title", "description"):
-            if isinstance(value.get(key), str):
-                value[key] = html.unescape(value[key])
-        if isinstance(value.get("tags"), list):
-            value["tags"] = [html.unescape(t) if isinstance(t, str) else t for t in value["tags"]]
-        return value
+        return _unescape_copy(value)
 
 
 class ShopStats(BaseModel):

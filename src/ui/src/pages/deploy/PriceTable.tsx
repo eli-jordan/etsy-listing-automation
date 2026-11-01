@@ -17,6 +17,12 @@ function difference(before: string | null, after: string | null): string {
   return `${sign}${Math.abs(delta)} ${currency}`;
 }
 
+/** The after-apply cell's tone: below cost outranks a plain change. */
+function afterTone(row: PriceRow): string {
+  if (row.belowCost) return " dv-bad";
+  return row.changed ? " dv-up" : "";
+}
+
 export function PriceTable({ rows }: { rows: PriceRow[] }) {
   if (rows.length === 0) return null;
 
@@ -36,7 +42,7 @@ export function PriceTable({ rows }: { rows: PriceRow[] }) {
             <tr key={row.size}>
               <th scope="row">{row.size}</th>
               <td className="dv-tnum">{row.before ?? "—"}</td>
-              <td className={`dv-tnum${row.belowCost ? " dv-bad" : row.changed ? " dv-up" : ""}`}>
+              <td className={`dv-tnum${afterTone(row)}`}>
                 {row.after ?? "—"}
                 {row.belowCost && " · below cost"}
               </td>

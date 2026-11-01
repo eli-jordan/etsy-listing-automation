@@ -26,6 +26,7 @@ the same name wait for each other on the listing's document lock
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from typing import Annotated
 
 from fastapi import APIRouter, Form, HTTPException, Request, UploadFile
 from fastapi.responses import Response
@@ -36,22 +37,23 @@ from etsy_listings.core.application.ai.batch_queue import BatchQueue
 from etsy_listings.core.application.ai.registry import AiRunRegistry
 from etsy_listings.core.application.batch_workflow import RecentBatch
 from etsy_listings.core.application.refusals import (
-    BatchMissing,
-    BatchRowMissing,
-    BatchRowNotReviewable,
-    BatchRowUploadMissing,
-    ListingTemplateMissing,
-    NothingToRetry,
-    StagedRowMissing,
-    StagingMissing,
+    BatchMissingError,
+    BatchRowMissingError,
+    BatchRowNotReviewableError,
+    BatchRowUploadMissingError,
+    ListingTemplateMissingError,
+    NothingToRetryError,
+    StagedRowMissingError,
+    StagingMissingError,
 )
 from etsy_listings.core.application.workspace_locks import WorkspaceLocks
 from etsy_listings.core.batches import (
     Batch,
+    BatchRecords,
     BatchRow,
     BatchStore,
-    ConfirmRefused,
-    StagingRefused,
+    ConfirmRefusedError,
+    StagingRefusedError,
     StagingSession,
     StagingStore,
     Upload,
@@ -80,14 +82,14 @@ from etsy_listings.server.api.thumbnails import thumbnail_response
 router = APIRouter(tags=["batches"])
 
 _MISSING = (
-    StagingMissing,
-    StagedRowMissing,
-    BatchMissing,
-    BatchRowMissing,
-    BatchRowUploadMissing,
-    ListingTemplateMissing,
+    StagingMissingError,
+    StagedRowMissingError,
+    BatchMissingError,
+    BatchRowMissingError,
+    BatchRowUploadMissingError,
+    ListingTemplateMissingError,
 )
-_CONFLICTS = (ConfirmRefused, NothingToRetry, BatchRowNotReviewable)
+_CONFLICTS = (ConfirmRefusedError, NothingToRetryError, BatchRowNotReviewableError)
 
 
 def _not_found(exc: Exception) -> HTTPException:
@@ -206,7 +208,9 @@ def _batch_detail(request: Request, batch: Batch) -> BatchDetail:
     responses={422: {"model": StagingRefusal}},
 )
 def create_staging(
-    request: Request, listing_template: str = Form(...), files: list[UploadFile] | None = None
+    request: Request,
+    listing_template: Annotated[str, Form()],
+    files: list[UploadFile] | None = None,
 ) -> StagingDetail:
     """Stage one ZIP or loose PNGs (spec, *Accepted input*). Starlette has
     already spooled the parts to temporary files; each is handed on as a
@@ -215,15 +219,14 @@ def create_staging(
     received = [Upload(filename=f.filename or "unnamed.png", stream=f.file) for f in files or []]
     try:
         session = batch_staging.stage_upload(
-            _workspace(request),
             _staging(request),
             listing_template,
             received,
             locks=_locks(request),
         )
-    except ListingTemplateMissing as exc:
+    except ListingTemplateMissingError as exc:
         raise _not_found(exc) from exc
-    except StagingRefused as exc:
+    except StagingRefusedError as exc:
         refusal = StagingRefusal(message=exc.message, remedy=exc.remedy)
         raise HTTPException(status_code=422, detail=refusal.model_dump()) from exc
     except ConfigLoadError as exc:
@@ -236,7 +239,7 @@ def get_staging(request: Request, session_id: str) -> StagingDetail:
     """A reload reattaches here (spec, *Frozen staging*)."""
     try:
         session = batch_staging.read_staging(_workspace(request), _staging(request), session_id)
-    except StagingMissing as exc:
+    except StagingMissingError as exc:
         raise _not_found(exc) from exc
     return _staging_detail(request, session)
 
@@ -250,9 +253,7 @@ def patch_staging(request: Request, session_id: str, body: StagingPatch) -> Stag
             _workspace(request),
             _staging(request),
             session_id,
-            label=body.label,
-            names=body.names,
-            remove=body.remove,
+            batch_staging.StagingEdit(label=body.label, names=body.names, remove=body.remove),
         )
     except _MISSING as exc:
         raise _not_found(exc) from exc
@@ -265,7 +266,7 @@ def cancel_staging(request: Request, session_id: str) -> Response:
     were never touched."""
     try:
         batch_staging.cancel_staging(_workspace(request), _staging(request), session_id)
-    except StagingMissing as exc:
+    except StagingMissingError as exc:
         raise _not_found(exc) from exc
     return Response(status_code=204)
 
@@ -291,14 +292,13 @@ def confirm_staging(request: Request, session_id: str) -> BatchDetail:
     try:
         batch = batch_workflow.confirm_batch(
             _workspace(request),
-            _staging(request),
-            _batches(request),
+            BatchRecords(_staging(request), _batches(request)),
             session_id,
             queue=_queue(request),
         )
-    except StagingMissing as exc:
+    except StagingMissingError as exc:
         raise _not_found(exc) from exc
-    except ConfirmRefused as exc:
+    except ConfirmRefusedError as exc:
         raise _conflict(exc) from exc
     return _batch_detail(request, batch)
 
@@ -307,7 +307,7 @@ def confirm_staging(request: Request, session_id: str) -> BatchDetail:
 def get_batch(request: Request, batch_id: str) -> BatchDetail:
     try:
         batch = batch_workflow.read_batch(_workspace(request), _batches(request), batch_id)
-    except BatchMissing as exc:
+    except BatchMissingError as exc:
         raise _not_found(exc) from exc
     return _batch_detail(request, batch)
 
@@ -323,8 +323,7 @@ def retry_batch_row(request: Request, batch_id: str, row: str) -> BatchDetail:
     try:
         batch = batch_workflow.retry_batch_row(
             _workspace(request),
-            _staging(request),
-            _batches(request),
+            BatchRecords(_staging(request), _batches(request)),
             batch_id,
             row,
             queue=_queue(request),
@@ -342,12 +341,11 @@ def retry_batch(request: Request, batch_id: str) -> BatchDetail:
     try:
         batch = batch_workflow.retry_batch(
             _workspace(request),
-            _staging(request),
-            _batches(request),
+            BatchRecords(_staging(request), _batches(request)),
             batch_id,
             queue=_queue(request),
         )
-    except BatchMissing as exc:
+    except BatchMissingError as exc:
         raise _not_found(exc) from exc
     return _batch_detail(request, batch)
 
@@ -360,7 +358,7 @@ def cancel_batch(request: Request, batch_id: str) -> BatchDetail:
         batch = batch_workflow.cancel_batch(
             _workspace(request), _batches(request), batch_id, queue=_queue(request)
         )
-    except BatchMissing as exc:
+    except BatchMissingError as exc:
         raise _not_found(exc) from exc
     return _batch_detail(request, batch)
 
@@ -372,7 +370,7 @@ def resume_batch(request: Request, batch_id: str) -> BatchDetail:
         batch = batch_workflow.resume_batch(
             _workspace(request), _batches(request), batch_id, queue=_queue(request)
         )
-    except BatchMissing as exc:
+    except BatchMissingError as exc:
         raise _not_found(exc) from exc
     return _batch_detail(request, batch)
 
@@ -430,7 +428,7 @@ def rename_batch(request: Request, batch_id: str, body: BatchPatch) -> BatchDeta
         batch = batch_workflow.rename_batch(
             _workspace(request), _batches(request), batch_id, body.label
         )
-    except BatchMissing as exc:
+    except BatchMissingError as exc:
         raise _not_found(exc) from exc
     return _batch_detail(request, batch)
 
@@ -443,7 +441,7 @@ def delete_batch(request: Request, batch_id: str) -> Response:
         batch_workflow.delete_batch(
             _workspace(request), _batches(request), batch_id, queue=_queue(request)
         )
-    except BatchMissing as exc:
+    except BatchMissingError as exc:
         raise _not_found(exc) from exc
     return Response(status_code=204)
 
@@ -462,7 +460,7 @@ def set_reviewed(request: Request, batch_id: str, row: str, body: ReviewedReques
         )
     except _MISSING as exc:
         raise _not_found(exc) from exc
-    except BatchRowNotReviewable as exc:
+    except BatchRowNotReviewableError as exc:
         raise _conflict(exc) from exc
     return _batch_detail(request, batch)
 
