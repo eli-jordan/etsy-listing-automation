@@ -163,6 +163,23 @@ validation variants of F3, the focused StrictMode draft for F4, and already
 answered and queued sibling variants for F5. Final follow-up validation and
 fresh independent review are recorded separately from the earlier gates below.
 
+### Preset and pending acknowledgement
+
+The next technical recheck found a remaining F3 path in the POD preset: a
+failed Custom field stayed in Retry when choosing POD, because all three
+persisted values already matched that preset. POD now uses the same unchanged
+commit path as the selectors, abandoning failed intent for all three keys
+without another write.
+
+It also found F6: refocusing and blurring a value that matched a pending write
+was treated as persisted unchanged intent. That cleared the draft before the
+real request failed, hiding its attempted value for both network and validation
+failures. Each selector and list field now passes its explicit pending state
+to the draft owner. A matching pending value sends nothing and retains both
+the draft and its original save identity until the actual outcome. Three
+additional UI cases and the POD browser case in both color preferences proved
+the failures before these corrections.
+
 ### UI decision
 
 Shop gains the Retry save button Settings already had, beside the save status
@@ -178,7 +195,7 @@ preferences (the app has one palette), for default, saving, error, retried and c
 
 The full combined gate passed at `eda9772a`, the ordinary merge of State's
 `82f0aef7` and Runtime's `498badde`, followed by evidence commit `048cdc3f`.
-F3, F4 and F5 change frontend code and add regressions. Python production and generated
+The review follow-ups change frontend code and add regressions. Python production and generated
 schemas remain byte-identical to `048cdc3f`; their earlier local gate remains
 valid, and fresh CI rechecks the final head before State e2e. The frontend and
 browser checks below were rerun for the follow-up.
@@ -186,21 +203,22 @@ browser checks below were rerun for the follow-up.
 | Check | Result |
 |---|---|
 | Unchanged backend's full local gate | Passed. Python: 3,779 passed, seven platform skips, 55 deselected. Combined branch-enabled coverage: 95.50%; branches: 3,837 of 4,254, or 90.20%. Backend format, lint, strict typing and all 11 import contracts passed. |
-| Full follow-up frontend coverage gate | Passed: 1,306 tests across 97 files; 90.28% branch coverage. Format check, lint and strict typing passed. |
+| Full follow-up frontend coverage gate | Passed: 1,309 tests across 97 files; 90.31% branch coverage. Format check, lint and strict typing passed. |
 | Separate SPA build and `npm run test:design` | Passed; four design tests. |
-| Standalone `ETSY_LISTINGS_REQUIRE_EVERY_LAYER=1 uv run pytest -m browser` | Passed for the follow-up: 162 cases, zero skips. |
-| Red/green follow-up regressions | Five new public UI cases failed before the fixes; all 66 Shop/Settings cases pass after them. The new F3 browser case failed against the prior build under both color preferences, and both pass in the rebuilt SPA. |
+| Standalone full browser layer at `672121ba` | Passed: 162 cases, zero skips, with required prerequisites. Fresh CI rechecks the complete layer after the preset/pending correction. |
+| Latest built-SPA Admin browser layer | Passed: 32 cases, zero skips, with required prerequisites. Includes POD abandonment and the earlier Shop/Settings/provider cases. |
+| Red/green follow-up regressions | Eight public UI cases failed before their respective fixes; all 69 Shop/Settings cases pass after them. The F3 selector and POD browser cases each failed against the prior build under both color preferences, then passed after rebuilding. |
 | Generated API | No wire shape changed. The OpenAPI export regression passed and the generated client has no diff. |
 
 The independent Runtime Standards/process recheck reported no actionable
 findings. Its 91 focused tests and external Windows process diagnostics closed
 the exited-launcher residual. State's resumed Standards and Spec reviews
-identified F3, F4 and F5 above; those findings are fixed, and fresh independent rechecks
+identified F3, F4, F5 and F6 above; those findings are fixed, and fresh independent rechecks
 are pending on the follow-up. The old Spec review's S1-open remark concerned
 its earlier `82f0aef7` snapshot, which predates Runtime's merged correction.
 
-Against Runtime, `scripts/sloc.py` measures net additions of 22 backend and 179
-frontend production lines, plus 512 Python test and 434 frontend test lines.
+Against Runtime, `scripts/sloc.py` measures net additions of 22 backend and 192
+frontend production lines, plus 560 Python test and 500 frontend test lines.
 The shared queue replaces separate Shop and Settings save coordination.
 
 Runtime PR #150 passed all four CI checks and its parent-dispatched

@@ -508,6 +508,74 @@ describe("Listing defaults", () => {
     },
   );
 
+  it("abandons failed Custom values when the unchanged POD preset is chosen", async () => {
+    const server = fileServer();
+    server.failNext("custom offline");
+    await openDefaults();
+    await userEvent.click(screen.getByRole("radio", { name: /Custom/ }));
+    fireEvent.change(screen.getByLabelText("Who made it"), { target: { value: "i_did" } });
+    fireEvent.blur(screen.getByLabelText("Who made it"));
+    await screen.findByText("custom offline");
+    await userEvent.click(screen.getByRole("radio", { name: /Print on demand/ }));
+    expect(screen.queryByRole("button", { name: "Retry save" })).not.toBeInTheDocument();
+    expect(save).toHaveBeenCalledTimes(1);
+    server.failNext("shipping offline");
+    fireEvent.change(screen.getByLabelText("Shipping profile"), {
+      target: { value: "Printify EU standard" },
+    });
+    fireEvent.blur(screen.getByLabelText("Shipping profile"));
+    await screen.findByText("shipping offline");
+    await userEvent.click(screen.getByRole("button", { name: "Retry save" }));
+    await screen.findByText("Saved");
+    expect(save.mock.calls[2]).toEqual(["r1", { shipping_profile: "Printify EU standard" }]);
+    expect(server.file().listing_defaults).toMatchObject({
+      who_made: "someone_else",
+      when_made: "made_to_order",
+      is_supply: false,
+    });
+  });
+
+  it.each(["network", "validation"])(
+    "retains a matching pending draft when a reblurred save has a %s failure",
+    async (failure) => {
+      const server = fileServer();
+      let answer!: (outcome: SaveOutcome) => void;
+      let reject!: (error: Error) => void;
+      save.mockImplementationOnce(
+        () =>
+          new Promise((resolve, refuse) => {
+            answer = resolve;
+            reject = refuse;
+          }),
+      );
+      await openDefaults();
+      const renewal = screen.getByLabelText("Renewal");
+      fireEvent.change(renewal, { target: { value: "auto" } });
+      fireEvent.blur(renewal);
+      await waitFor(() => expect(save).toHaveBeenCalledTimes(1));
+      renewal.focus();
+      fireEvent.blur(renewal);
+      await act(async () => {});
+      expect(save).toHaveBeenCalledTimes(1);
+      await act(async () => {
+        if (failure === "network") reject(new Error("renewal offline"));
+        else
+          answer({
+            kind: "invalid",
+            message: "invalid renewal",
+            fieldErrors: { renewal: "renewal refused" },
+          });
+      });
+      await screen.findByText(failure === "network" ? "renewal offline" : "renewal refused");
+      expect(renewal).toHaveValue("auto");
+      await userEvent.click(screen.getByRole("button", { name: "Retry save" }));
+      await screen.findByText("Saved");
+      expect(save.mock.calls[1]).toEqual(["r1", { renewal: "auto" }]);
+      expect(server.file().listing_defaults.renewal).toBe("auto");
+      expect(renewal).toHaveValue("auto");
+    },
+  );
+
   it("ignores an abandoned initial Shop read under StrictMode", async () => {
     let release!: (value: ShopSettings) => void;
     vi.mocked(shopApi.getShop).mockImplementationOnce(

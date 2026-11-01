@@ -254,6 +254,59 @@ def etsy_shop(workspace_root: Path) -> None:
     set_etsy_shop_id(workspace_root, 51007712)
 
 
+def test_an_unchanged_pod_choice_abandons_failed_custom_values(
+    page,
+    expect,
+    calibrator_server: str,
+    workspace_root: Path,
+    theme: str,  # noqa: ANN001
+) -> None:
+    open_defaults(page, calibrator_server, theme)
+    pod = page.get_by_role("radio", name="Print on demand")
+    if pod.get_attribute("aria-checked") != "true":
+        with page.expect_response(is_save):
+            pod.click()
+    page.get_by_role("radio", name="Custom").click()
+    attempts: list[dict[str, object]] = []
+
+    def fail_first_two(route) -> None:  # noqa: ANN001
+        if route.request.method != "PATCH":
+            route.continue_()
+            return
+        attempts.append(route.request.post_data_json["changes"])
+        if len(attempts) <= 2:
+            route.fulfill(
+                status=503, content_type="application/json", body='{"detail":"disk unavailable"}'
+            )
+        else:
+            route.continue_()
+
+    page.route("**/api/admin/shop", fail_first_two)
+    choose(page.get_by_role("combobox", name="Who made it"), "i_did")
+    retry = page.get_by_role("button", name="Retry save")
+    expect(retry).to_be_visible()
+    pod.click()
+    expect(retry).to_have_count(0)
+    assert attempts == [{"who_made": "i_did"}]
+
+    choose(page.get_by_role("combobox", name="Renewal"), "auto")
+    expect(retry).to_be_visible()
+    with page.expect_response(is_save):
+        retry.click()
+    expect(page.get_by_text("Saved", exact=True)).to_be_visible()
+    assert attempts == [
+        {"who_made": "i_did"},
+        {"renewal": "auto"},
+        {"renewal": "auto"},
+    ]
+    defaults = on_disk(workspace_root).etsy.listing_defaults
+    assert (defaults.who_made, defaults.when_made, defaults.is_supply) == (
+        "someone_else",
+        "made_to_order",
+        False,
+    )
+
+
 def test_use_it_replaces_a_failed_draft_with_what_it_wrote(
     etsy_shop: None,
     page,

@@ -77,7 +77,7 @@ export function ListingDefaults({
 
   const choosePod = () => {
     setCustomChosen(false);
-    if (!isPrintOnDemand(defaults)) void commit(PRINT_ON_DEMAND);
+    void commit(PRINT_ON_DEMAND, { unchanged: isPrintOnDemand(defaults) });
   };
   const customCommit: Commit = (changes, options) => {
     // Editing one of the three keeps Custom open even if the values come
@@ -152,6 +152,7 @@ export function ListingDefaults({
             <BlurSelect
               label="Who made it"
               saved={defaults.who_made}
+              pending={"who_made" in pending}
               options={withSaved(WHO_MADE, defaults.who_made)}
               disabled={locked}
               onCommit={(value, options) => customCommit({ who_made: value }, options)}
@@ -166,6 +167,7 @@ export function ListingDefaults({
             <BlurSelect
               label="When it was made"
               saved={defaults.when_made}
+              pending={"when_made" in pending}
               options={withSaved(WHEN_MADE, defaults.when_made)}
               disabled={locked}
               onCommit={(value, options) => customCommit({ when_made: value }, options)}
@@ -175,6 +177,7 @@ export function ListingDefaults({
             <BlurSelect
               label="What it is"
               saved={String(defaults.is_supply)}
+              pending={"is_supply" in pending}
               options={IS_SUPPLY}
               disabled={locked}
               onCommit={(value, options) => customCommit({ is_supply: value === "true" }, options)}
@@ -225,6 +228,7 @@ export function ListingDefaults({
         <ListField
           label="Production partner"
           field="production_partner"
+          pending={"production_partner" in pending}
           saved={defaults.production_partner ?? ""}
           savedLabel={defaults.production_partner ?? ""}
           empty="Not set"
@@ -236,6 +240,7 @@ export function ListingDefaults({
         <ListField
           label="Preferred print provider"
           field="preferred_print_provider"
+          pending={"preferred_print_provider" in pending}
           saved={shop.preferred_print_provider ?? ""}
           savedLabel={shop.preferred_print_provider ?? ""}
           empty="No preference"
@@ -247,6 +252,7 @@ export function ListingDefaults({
         <ListField
           label="Shipping profile"
           field="shipping_profile"
+          pending={"shipping_profile" in pending}
           saved={defaults.shipping_profile ?? ""}
           savedLabel={defaults.shipping_profile ?? ""}
           empty="Not set"
@@ -258,6 +264,7 @@ export function ListingDefaults({
         <ListField
           label="Return policy"
           field="return_policy"
+          pending={"return_policy" in pending}
           saved={policyKey(defaults.return_policy)}
           savedLabel={defaults.return_policy ? describeTerms(defaults.return_policy) : ""}
           empty="Not set"
@@ -274,6 +281,7 @@ export function ListingDefaults({
           <BlurSelect
             label="Renewal"
             saved={defaults.renewal}
+            pending={"renewal" in pending}
             options={withSaved(RENEWAL, defaults.renewal)}
             disabled={locked}
             onCommit={(value, options) => commit({ renewal: value }, options)}
@@ -357,6 +365,7 @@ function ListField({
   label,
   field,
   saved,
+  pending,
   savedLabel,
   empty,
   lookups,
@@ -370,6 +379,7 @@ function ListField({
   label: string;
   field: Creatable;
   saved: string;
+  pending: boolean;
   savedLabel: string;
   empty: string;
   lookups: Lookups;
@@ -393,7 +403,7 @@ function ListField({
   // Use it is a choice in this field like any other: it goes through the
   // field's draft, so it supersedes an older draft and a newer one survives
   // its answer.
-  const draft = useDraft(saved, (value, options) => {
+  const draft = useDraft(saved, pending, (value, options) => {
     if (found?.value === value) lookups.dismiss(field);
     return save(toChange(value), options);
   });
@@ -448,6 +458,7 @@ type Draft = {
  */
 function useDraft(
   saved: string,
+  pending: boolean,
   onCommit: (value: string, options?: CommitOptions) => Promise<Answer>,
 ): Draft {
   const [draft, setDraft] = useState<string | null>(null);
@@ -461,7 +472,9 @@ function useDraft(
     setDraft(value);
   };
   const send = (value: string) => {
-    if (value === refused.current) return;
+    // Matching an unanswered write is not acknowledgement of this draft.
+    // Keep its save identity until the real outcome, without writing twice.
+    if (value === refused.current || (pending && value === saved)) return;
     const mine = { value, edit: edits.current };
     sent.current = mine;
     // An unchanged choice still abandons an older failed patch in the queue.
@@ -490,17 +503,19 @@ function useDraft(
 function BlurSelect({
   label,
   saved,
+  pending,
   options,
   disabled,
   onCommit,
 }: {
   label: string;
   saved: string;
+  pending: boolean;
   options: Option[];
   disabled: boolean;
   onCommit: (value: string, options?: CommitOptions) => Promise<Answer>;
 }) {
-  const draft = useDraft(saved, onCommit);
+  const draft = useDraft(saved, pending, onCommit);
   return <DraftSelect label={label} options={options} disabled={disabled} draft={draft} />;
 }
 

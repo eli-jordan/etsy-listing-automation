@@ -561,12 +561,17 @@ conflict stopping. A key stays failed until a later save of that key succeeds
 or the seller chooses what the file will already hold. That unchanged choice
 discards the field's failed patch and error without writing or cancelling a
 queued save. An unrelated success never reports Saved over a retained failure,
-and Retry sends only the failed keys. Each key's newest unanswered value, from a field save or Retry,
+and Retry sends only the failed keys. An unchanged Print on demand choice
+uses the same discard path for all three preset keys. Each key's newest
+unanswered value, from a field save or Retry,
 is `pending`; Shop's listing defaults show it over the saved file, so a newer
 choice is compared with what the file will hold. Responses never replace a
 newer local edit: each Shop field has one draft owner that its select and Use
 it both go through, which drops a draft only on the answer to the save made
-from it. A save whose caller reports and retries its own failure, the currency
+from it. Each control also knows whether that anticipated value is still
+pending. Matching an unanswered write suppresses a duplicate request without
+clearing the draft or changing its save identity; only persisted unchanged
+intent may acknowledge the draft without writing. A save whose caller reports and retries its own failure, the currency
 dialog's, passes `retain: false` so Retry never resends it. Such a failure keeps
 an earlier successful acknowledgement visible once the queue drains; loading
 a file or retaining a new failure clears that acknowledgement. Both panels
