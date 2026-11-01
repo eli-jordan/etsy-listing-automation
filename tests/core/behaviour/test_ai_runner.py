@@ -21,11 +21,15 @@ from pathlib import Path
 import pytest
 import yaml
 
+from etsy_listings.core.ai import codex
 from etsy_listings.core.ai.errors import SeoTryAgainError
+from etsy_listings.core.ai.models import ProviderTask
+from etsy_listings.core.ai.process import ProcessResult
 from etsy_listings.core.ai.proposals import ProposalStore
 from etsy_listings.core.application.ai.events import AiStepEvent, StepId
+from etsy_listings.core.application.ai.readiness import default_ai_providers
 from etsy_listings.core.application.ai.registry import AiRun, AiRunRegistry
-from etsy_listings.core.application.ai.runner import RUN_LIMIT_SECONDS, TIMEOUT_MESSAGE, AiRunner
+from etsy_listings.core.application.ai.runner import AiRunner
 from etsy_listings.core.clients.etsy.fakes import FakeEtsyMarketClient, server_error
 from etsy_listings.core.errors import INTERNAL_ERROR_MESSAGE
 from etsy_listings.core.listing_artifacts import remove_listing
@@ -77,7 +81,7 @@ class Chain:
         self.runner = AiRunner(
             workspace=self.workspace,
             registry=self.registry,
-            providers=lambda _workspace: [provider],
+            providers=lambda _workspace, _ai: [provider],
             market_client=lambda _workspace: market,
             proposals=self.proposals,
             now=lambda: TODAY,
@@ -549,22 +553,107 @@ def test_cancelling_during_market_search_stops_research(
 # ------------------------------------------------------------------ watchdog
 
 
-def test_the_watchdog_fails_a_run_that_outlives_three_minutes(chain: Chain) -> None:
+def test_the_watchdog_fails_a_run_that_outlives_twenty_minutes(chain: Chain) -> None:
     chain.provider.gate("seo")
     run = chain.start(draft_brief=False)
     wait_for(lambda: chain.provider.started["seo"].is_set())
 
-    chain.clock.now = RUN_LIMIT_SECONDS - 1
+    chain.clock.now = 20 * 60 - 1
     assert not _becomes(run, lambda: run.finished, timeout=0.1)
-    chain.clock.now = RUN_LIMIT_SECONDS
+    chain.clock.now = 20 * 60
     wait_until_finished(run)
 
-    assert RUN_LIMIT_SECONDS == 180
+    message = "The AI run took longer than 20 minutes, so it was stopped. Try again."
     assert run.phase == "failed"
-    assert run.events[-1].model_dump()["message"] == TIMEOUT_MESSAGE
+    assert run.events[-1].model_dump()["message"] == message
     assert _state(run) == {"brief": "skipped", "market": "done", "seo": "failed"}
-    assert _detail(run, "seo") == TIMEOUT_MESSAGE
+    assert _detail(run, "seo") == message
     assert chain.provider.cancelled == ["seo"]
+
+
+# ------------------------------------------------------ captured limits (ADR-0057)
+
+
+def _limits(chain: Chain, *, step: int, run: int) -> None:
+    chain.workspace.settings_file().write_text(
+        f"ai:\n  providers: [{{name: codex}}]\n"
+        f"  step_limit_minutes: {step}\n  run_limit_minutes: {run}\n",
+        encoding="utf-8",
+    )
+
+
+def test_the_watchdog_stops_the_run_at_its_configured_limit_and_says_so(chain: Chain) -> None:
+    _limits(chain, step=2, run=7)
+    chain.provider.gate("seo")
+    run = chain.start(draft_brief=False)
+    wait_for(lambda: chain.provider.started["seo"].is_set())
+
+    chain.clock.now = 7 * 60 - 1
+    assert not _becomes(run, lambda: run.finished, timeout=0.1)
+    chain.clock.now = 7 * 60
+    wait_until_finished(run)
+
+    message = "The AI run took longer than 7 minutes, so it was stopped. Try again."
+    assert run.phase == "failed"
+    assert run.events[-1].model_dump()["message"] == message
+    assert _detail(run, "seo") == message
+    assert chain.provider.cancelled == ["seo"]
+
+
+def test_every_task_gets_the_configured_step_within_what_the_run_has_left(
+    chain: Chain,
+) -> None:
+    """Brief drafting, query extraction and the proposal each start a fresh
+    step, clipped to the run deadline that research also spends."""
+    _limits(chain, step=3, run=6)
+    edit_listing(chain.workspace.root, brief="")
+    chain.provider.during["queries"] = lambda: setattr(chain.clock, "now", 4 * 60)
+
+    run = chain.run(draft_brief=True)
+
+    assert run.phase == "done"
+    assert chain.provider.remaining == [("brief", 180.0), ("queries", 180.0), ("seo", 120.0)]
+
+
+def test_a_task_the_run_limit_cuts_short_fails_naming_the_run_limit(chain: Chain) -> None:
+    _limits(chain, step=3, run=6)
+    chain.provider.during["queries"] = lambda: setattr(chain.clock, "now", 6 * 60)
+    chain.runner.watch_interval = 60.0  # the deadline, not the watchdog, ends it here
+
+    run = chain.run(draft_brief=False)
+    run.cancel_event.set()  # release the idle watchdog's long wait
+
+    assert run.phase == "failed"
+    detail = _detail(run, "seo")
+    assert detail is not None
+    assert "6-minute run limit" in detail
+    assert "seo" not in chain.provider.calls
+
+
+def test_a_running_job_keeps_its_limits_and_the_next_run_reads_the_edit(chain: Chain) -> None:
+    _limits(chain, step=3, run=6)
+    chain.provider.during["queries"] = lambda: _limits(chain, step=4, run=12)
+
+    first = chain.run(draft_brief=False)
+    chain.clock.now = 0.0
+    second = chain.run(draft_brief=False)
+
+    assert (first.phase, second.phase) == ("done", "done")
+    assert [r for _, r in chain.provider.remaining] == [180.0, 180.0, 240.0, 240.0]
+
+
+def test_an_invalid_limit_relationship_refuses_the_run_naming_the_key(chain: Chain) -> None:
+    chain.workspace.settings_file().write_text(
+        "ai:\n  step_limit_minutes: 10\n  run_limit_minutes: 20\n", encoding="utf-8"
+    )
+
+    run = chain.run(draft_brief=False)
+
+    assert run.phase == "failed"
+    message = run.events[-1].model_dump()["message"]
+    assert "settings.yaml" in message
+    assert "ai.run_limit_minutes" in message
+    assert chain.provider.calls == []
 
 
 # ------------------------------------------------------------------ threads
@@ -600,7 +689,11 @@ def test_listings_from_the_sellers_own_shop_are_marked(chain: Chain) -> None:
     assert {listing.listing_id for listing in saved.listings if listing.own_shop} == {2}
 
 
-def test_each_run_reads_the_weights_from_settings_yaml(chain: Chain) -> None:
+def test_an_unloadable_settings_yaml_fails_the_run_before_any_provider_call(
+    chain: Chain,
+) -> None:
+    """The run captures its limits from ``settings.yaml`` at start (ADR-0057),
+    so a file that does not load refuses the run there, naming the key."""
     settings = chain.workspace.settings_file()
     settings.write_text(
         "market_seo:\n  weights:\n"
@@ -620,10 +713,12 @@ def test_each_run_reads_the_weights_from_settings_yaml(chain: Chain) -> None:
 
     run = chain.run(draft_brief=False)
 
-    assert _state(run) == {"brief": "skipped", "market": "failed", "seo": "pending"}
-    detail = _detail(run, "market")
-    assert detail is not None
-    assert "at least one market_seo weight must be above zero" in detail
+    assert run.phase == "failed"
+    assert (
+        "at least one market_seo weight must be above zero"
+        in (run.events[-1].model_dump()["message"])
+    )
+    assert chain.provider.calls == []
 
 
 def test_an_invalid_design_ref_fails_with_the_sellers_actionable_reason(chain: Chain) -> None:
@@ -651,3 +746,108 @@ def test_an_edit_during_generation_is_judged_against_the_prepared_inputs(chain: 
     cached = chain.proposals.load(LISTING)
     assert cached is not None
     assert cached.snapshot.brief == original
+
+
+def test_limits_and_providers_are_captured_from_one_read_of_settings_yaml(
+    chain: Chain, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """ADR-0057: "capture limits and provider configuration together". A save
+    landing during capture must not pair one revision's limits with
+    another's providers."""
+    settings = chain.workspace.settings_file()
+    settings.write_text(
+        "ai:\n  providers: [{name: codex}]\n  step_limit_minutes: 2\n  run_limit_minutes: 7\n",
+        encoding="utf-8",
+    )
+    load = chain.workspace.load_settings
+    loads: list[object] = []
+
+    def load_then_save():  # noqa: ANN202
+        loaded = load()
+        loads.append(loaded)
+        # The seller's next save lands right after this read.
+        settings.write_text(
+            "ai:\n  providers: [{name: claude}, {name: grok}]\n"
+            "  step_limit_minutes: 3\n  run_limit_minutes: 9\n",
+            encoding="utf-8",
+        )
+        return loaded
+
+    monkeypatch.setattr(chain.workspace, "load_settings", load_then_save)
+    adapters = []
+
+    def factory(workspace, ai):  # noqa: ANN001, ANN202
+        adapters.append([type(p).__name__ for p in default_ai_providers(workspace, ai)])
+        return [chain.provider]
+
+    chain.runner.providers = factory
+
+    run = chain.run(draft_brief=False)
+
+    assert run.phase == "done"
+    assert adapters == [["CodexProvider"]]
+    assert chain.provider.remaining[0] == ("queries", 120.0)
+
+
+def test_provider_configuration_is_captured_before_the_run_thread_starts(chain: Chain) -> None:
+    edit_listing(chain.workspace.root, LISTING, brief="")
+    factory_threads = []
+
+    def factory(workspace, ai):
+        factory_threads.append(threading.current_thread())
+        return [chain.provider]
+
+    chain.runner.providers = factory
+    run = chain.start(draft_brief=True)
+    wait_until_finished(run)
+    assert factory_threads == [threading.current_thread()]
+    assert set(chain.provider.calls) == {"brief", "queries", "seo"}
+
+
+@pytest.mark.parametrize("origin", ["manual", "batch"])
+def test_run_tasks_and_repairs_keep_preferences_and_the_next_run_sees_edits(
+    chain: Chain, monkeypatch: pytest.MonkeyPatch, origin
+) -> None:
+    edit_listing(chain.workspace.root, LISTING, brief="")
+    settings = chain.workspace.settings_file()
+    settings.write_text("ai:\n  providers: [{name: codex, model: old, effort: high}]\n")
+    chain.runner.providers = default_ai_providers
+    chain.provider.answers["brief"] = ["{}", json.dumps({"brief": DRAFTED_BRIEF})]
+    models = []
+
+    def execute(argv, **kwargs):
+        models.append(argv[argv.index("--model") + 1])
+        assert argv[argv.index("-c") + 1] == 'model_reasoning_effort="high"'
+        if len(models) == 1:
+            settings.write_text("ai:\n  providers: [{name: codex, model: new, effort: high}]\n")
+        task = ProviderTask(
+            prompt_text=kwargs["input_text"],
+            response_schema=json.loads(Path(argv[argv.index("--output-schema") + 1]).read_text()),
+            design_image=Path(argv[argv.index("-i") + 1]),
+        )
+        raw = chain.provider.generate(task, kwargs["deadline"])
+        return ProcessResult(0, raw.raw_output, "", False, False)
+
+    monkeypatch.setattr(codex.shutil, "which", lambda name: name)
+    monkeypatch.setattr(codex, "run_managed", execute)
+    run = chain.registry.create(LISTING, draft_brief=True, origin=origin)
+    assert isinstance(run, AiRun)
+    chain.runner.start(run)
+    wait_until_finished(run)
+    assert run.phase == "done"
+    assert models == ["old"] * (2 if origin == "batch" else 4)
+    assert chain.provider.calls[:2] == ["brief", "brief"], "one repair keeps its captured model"
+    models.clear()
+    second = chain.run(draft_brief=False)
+    assert second.phase == "done"
+    assert models == ["new", "new"], "query extraction and SEO use the next run's preferences"
+
+
+def test_a_failed_provider_capture_finishes_the_run_instead_of_stranding_it(chain: Chain) -> None:
+    def unavailable(workspace):
+        raise RuntimeError("factory broke")
+
+    chain.runner.providers = unavailable
+    run = chain.start(draft_brief=False)
+    assert wait_until_finished(run).phase == "failed"
+    assert run.events[-1].model_dump()["message"] == INTERNAL_ERROR_MESSAGE

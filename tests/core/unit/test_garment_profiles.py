@@ -31,6 +31,8 @@ from etsy_listings.core.clients.printify.models import (
 from etsy_listings.core.config.slug import ColourExceptions, SlugCollisionError
 from etsy_listings.core.workspace.workspace import Workspace
 
+from tests.support.source_files import identity
+
 MUG = Blueprint(id=7, title="11oz Ceramic Mug", brand="Generic", model="MUG-11")
 TSHIRT = Blueprint(
     id=6, title="Unisex Garment-Dyed Heavy Weight Tee", brand="Comfort Colors", model="1717"
@@ -192,6 +194,7 @@ def test_an_existing_garment_profile_for_the_same_garment_is_reused_untouched(
     existing = workspace.garment_profile_file(garment_profile_slug_for(TSHIRT))
     assert existing.is_file(), "fixture should already hold this garment's profile"
     before = existing.read_bytes()
+    unreplaced = identity(existing)
 
     profile = build_garment_profile(
         blueprint=TSHIRT,
@@ -202,6 +205,7 @@ def test_an_existing_garment_profile_for_the_same_garment_is_reused_untouched(
     slug = garment_profile_slug_for(TSHIRT)
     assert write_garment_profile_if_absent(workspace, slug, profile) is False
     assert existing.read_bytes() == before, "an existing garment profile must not be rewritten"
+    assert identity(existing) == unreplaced
 
 
 def test_local_blueprint_keys_reads_the_workspace_garment_profiles(workspace_root: Path) -> None:

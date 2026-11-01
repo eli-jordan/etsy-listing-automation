@@ -49,6 +49,10 @@ class HttpCatalogClient(CatalogClient):
         )
         return [PrintProvider.model_validate(item) for item in response.json()]
 
+    def all_print_providers(self) -> list[PrintProvider]:
+        response = self._transport.get("/v1/catalog/print_providers.json")
+        return [PrintProvider.model_validate(item) for item in response.json()]
+
     def variants(self, blueprint_id: int, provider_id: int) -> VariantSet:
         response = self._transport.get(
             f"/v1/catalog/blueprints/{blueprint_id}/print_providers/{provider_id}/variants.json"
