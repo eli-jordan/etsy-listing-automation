@@ -178,6 +178,7 @@ select = [
     "SLF",
     "PLC0415",
     "PLR2004",
+    "PLR0913", "PLR0917",
 ]
 ignore = [
     "ANN401",           # Any is sometimes the honest type at a boundary

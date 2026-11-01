@@ -18,6 +18,7 @@ import statistics
 import subprocess
 import threading
 import time
+from dataclasses import dataclass
 from http import HTTPStatus
 from io import BytesIO
 from pathlib import Path
@@ -122,18 +123,51 @@ class EvidenceOnlyRuntime(PreparationRuntime):
         raise AssertionError("Benchmark must never run model inference")
 
 
+@dataclass(frozen=True)
+class BenchmarkOptions:
+    """The command line: how many repeats, the pass threshold, and what to
+    edit, render and serve."""
+
+    repeats: int = 4
+    threshold: float = 1
+    interactive: bool = False
+    names: list[str] | None = None
+    edits: list[str] | None = None
+    artwork_size: tuple[int, int] = (512, 512)
+    during_rebuild: bool = False
+    frontend_dist: Path | None = None
+    design: str | None = None
+
+
+@dataclass(frozen=True)
+class Trial:
+    """One measurement: an edit ``kind`` on template ``name``, repeat ``repeat``."""
+
+    name: str
+    kind: str
+    repeat: int
+
+
+@dataclass(frozen=True)
+class _Session:
+    """What every measurement of one run shares."""
+
+    output: Path
+    checkpoints: list[tuple[str, str, float]]
+    options: BenchmarkOptions
+
+
 def measure(
     page: Page,
-    name: str,
-    kind: str,
-    repeat: int,
-    output: Path,
-    checkpoints: list[tuple[str, str, float]],
+    trial: Trial,
+    session: _Session,
     *,
-    interactive: bool = False,
-    during_rebuild: bool = False,
     mask_background: Image.Image | None = None,
 ) -> dict[str, Any]:
+    name, kind, repeat = trial.name, trial.kind, trial.repeat
+    output, checkpoints = session.output, session.checkpoints
+    interactive = session.options.interactive
+    during_rebuild = session.options.during_rebuild
     page.get_by_role("tab", name="Calibrate", exact=True).click()
     polygon = page.locator(".quad-editor__polygon").first
     bounds = polygon.bounding_box()
@@ -422,20 +456,14 @@ def implementation_fingerprint() -> str:
     return digest.hexdigest()
 
 
-def run(
-    source: Path,
-    output: Path,
-    repeats: int,
-    threshold: float,
-    *,
-    interactive: bool = False,
-    names: list[str] | None = None,
-    edits: list[str] | None = None,
-    artwork_size: tuple[int, int] = (512, 512),
-    during_rebuild: bool = False,
-    frontend_dist: Path | None = None,
-    design: str | None = None,
-) -> None:
+def run(source: Path, output: Path, options: BenchmarkOptions) -> None:
+    repeats, threshold, interactive = options.repeats, options.threshold, options.interactive
+    names, edits, artwork_size = options.names, options.edits, options.artwork_size
+    during_rebuild, frontend_dist, design = (
+        options.during_rebuild,
+        options.frontend_dist,
+        options.design,
+    )
     if output.exists() or output.resolve().is_relative_to(source.resolve()):
         raise ValueError("Output must be a new isolated directory")
     output.mkdir(parents=True)
@@ -521,13 +549,8 @@ def run(
                     for repeat in range(repeats):
                         row = measure(
                             page,
-                            name,
-                            kind,
-                            repeat,
-                            output,
-                            checkpoints,
-                            interactive=interactive,
-                            during_rebuild=during_rebuild,
+                            Trial(name, kind, repeat),
+                            _Session(output, checkpoints, options),
                             mask_background=mask_background,
                         )
                         rows.append(row)
@@ -619,13 +642,15 @@ if __name__ == "__main__":
     run(
         args.source,
         args.output,
-        args.repeats,
-        args.threshold,
-        interactive=args.interactive,
-        names=args.template,
-        edits=args.edit,
-        artwork_size=tuple(args.artwork_size),
-        during_rebuild=args.during_rebuild,
-        frontend_dist=args.frontend_dist,
-        design=args.design,
+        BenchmarkOptions(
+            repeats=args.repeats,
+            threshold=args.threshold,
+            interactive=args.interactive,
+            names=args.template,
+            edits=args.edit,
+            artwork_size=tuple(args.artwork_size),
+            during_rebuild=args.during_rebuild,
+            frontend_dist=args.frontend_dist,
+            design=args.design,
+        ),
     )
