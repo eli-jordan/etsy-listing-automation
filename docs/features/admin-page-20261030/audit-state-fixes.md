@@ -218,7 +218,7 @@ browser checks below were rerun for the follow-up.
 | Unchanged backend's full local gate | Passed. Python: 3,779 passed, seven platform skips, 55 deselected. Combined branch-enabled coverage: 95.50%; branches: 3,837 of 4,254, or 90.20%. Backend format, lint, strict typing and all 11 import contracts passed. |
 | Full follow-up frontend coverage gate | Passed: 1,313 tests across 97 files; 90.29% branch coverage. Format check, lint and strict typing passed. |
 | Separate SPA build and `npm run test:design` | Passed; four design tests. |
-| Standalone full browser layer at `672121ba` | Passed: 162 cases, zero skips, with required prerequisites. Fresh CI rechecks the complete layer after the preset/pending correction. |
+| Full browser CI at `422b1b56` | Passed: 164 cases, zero skips, with required prerequisites. Fresh CI rechecks the complete layer after the Retry-refusal correction. |
 | Latest built-SPA Admin browser layer | Passed: 32 cases, zero skips, with required prerequisites. Includes POD abandonment and the earlier Shop/Settings/provider cases. |
 | Red/green follow-up regressions | Twelve public UI cases failed before their respective fixes; all 73 Shop/Settings cases pass after them. The F3 selector and POD browser cases each failed against the prior build under both color preferences, then passed after rebuilding. |
 | Generated API | No wire shape changed. The OpenAPI export regression passed and the generated client has no diff. |
@@ -239,6 +239,7 @@ The shared queue replaces separate Shop and Settings save coordination.
 Runtime PR #150 passed all four CI checks and its parent-dispatched
 [GitHub e2e run](https://github.com/eli-jordan/etsy-listing-automation/actions/runs/41256022498)
 on `498badde`: 47 passed, two expected connected-shop safety skips and zero new
-e2e products left behind. State CI and serialized GitHub e2e remain pending.
+e2e products left behind. State's final CI and serialized GitHub e2e outcomes
+are recorded in PR #151.
 Local e2e is waived; no real local workspace, credentials or auth configuration
 were changed.
