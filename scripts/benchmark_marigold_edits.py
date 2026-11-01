@@ -18,7 +18,7 @@ import statistics
 import subprocess
 import threading
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from http import HTTPStatus
 from io import BytesIO
 from pathlib import Path
@@ -157,106 +157,145 @@ class _Session:
     options: BenchmarkOptions
 
 
-def measure(
-    page: Page,
-    trial: Trial,
-    session: _Session,
-    *,
-    mask_background: Image.Image | None = None,
-) -> dict[str, Any]:
-    name, kind, repeat = trial.name, trial.kind, trial.repeat
-    output, checkpoints = session.output, session.checkpoints
-    interactive = session.options.interactive
-    during_rebuild = session.options.during_rebuild
-    page.get_by_role("tab", name="Calibrate", exact=True).click()
-    polygon = page.locator(".quad-editor__polygon").first
-    bounds = polygon.bounding_box()
-    assert bounds
-    page.mouse.click(bounds["x"] + bounds["width"] * 0.07, bounds["y"] + bounds["height"] * 0.45)
-    if interactive:
-        page.wait_for_function(
-            """() => {
-                const i=document.querySelector('.quad-editor img');
-                return i && i.src.startsWith('blob:') && i.complete &&
-                    i.naturalWidth === 1024 && i.naturalHeight === 1024;
-            }"""
-        )
-    old_editor_source = page.get_by_alt_text("Rendered preview").first.get_attribute("src")
-    old_fingerprint = (
-        page.get_by_alt_text("Rendered preview").first.evaluate(FINGERPRINT_JS)
-        if interactive
-        else None
-    )
-    initial_preparation = page.evaluate(
-        "async name => (await fetch('/api/templates/' + encodeURIComponent(name) + "
-        "'/preparation')).json()",
-        name,
-    )
-    before_pixel = None
-    point = None
-    spans = []
-    start = None
-    feedback = None
-    preparation_responses = []
-    saved_revision = None
+PREPARATION_JS = (
+    "async name => (await fetch('/api/templates/' + encodeURIComponent(name) + "
+    "'/preparation')).json()"
+)
+READY_JS = """() => document.querySelector('.mg-preparation .mg-status')
+                        ?.textContent === 'Ready'"""
+PUBLICATION_TIMEOUT_S = 180
 
-    def response(r: Response) -> None:
-        nonlocal saved_revision
+
+class _Measurement:
+    """One trial: make the edit, time it until its result is displayed, and
+    collect the API responses and preparation states seen on the way."""
+
+    def __init__(
+        self, page: Page, trial: Trial, session: _Session, mask_background: Image.Image | None
+    ) -> None:
+        self.page = page
+        self.trial = trial
+        self.session = session
+        self.mask_background = mask_background
+        self.interactive = session.options.interactive
+        self.spans: list[dict[str, Any]] = []
+        self.start: float | None = None
+        self.feedback: float | None = None
+        self.preparation_responses: list[dict[str, Any]] = []
+        self.saved_revision: str | None = None
+        self.point: dict[str, float] | None = None
+        self.before_pixel: list[int] | None = None
+
+    def response(self, r: Response) -> None:
         if r.request.method == "PUT" and r.url.endswith("/config"):
-            saved_revision = r.headers.get("etag", "").strip(chr(34))
-        if start is not None and "/api/" in r.url:
-            spans.append(
+            self.saved_revision = r.headers.get("etag", "").strip(chr(34))
+        if self.start is not None and "/api/" in r.url:
+            self.spans.append(
                 {
                     "url": r.url.split("/api/")[1],
                     "method": r.request.method,
                     "status": r.status,
-                    "at_seconds": time.perf_counter() - start,
+                    "at_seconds": time.perf_counter() - self.start,
                 }
             )
 
-    def finished(request: Request) -> None:
-        if request.url.endswith(f"/templates/{name}/preparation"):
+    def finished(self, request: Request) -> None:
+        if request.url.endswith(f"/templates/{self.trial.name}/preparation"):
             result = request.response()
             if result and result.status == HTTPStatus.OK:
-                preparation_responses.append(result.json())
+                self.preparation_responses.append(result.json())
 
-    page.on("response", response)
-    page.on("requestfinished", finished)
-    print(f"Editing {name} {kind} {repeat}", flush=True)
-    if kind == "mask":
+    def run(self) -> dict[str, Any]:
+        page, trial = self.page, self.trial
+        self._open_calibration()
+        old_editor_source = page.get_by_alt_text("Rendered preview").first.get_attribute("src")
+        old_fingerprint = (
+            page.get_by_alt_text("Rendered preview").first.evaluate(FINGERPRINT_JS)
+            if self.interactive
+            else None
+        )
+        initial_preparation = self._preparation()
+        page.on("response", self.response)
+        page.on("requestfinished", self.finished)
+        print(f"Editing {trial.name} {trial.kind} {trial.repeat}", flush=True)
+        if trial.kind == "mask":
+            self._edit_mask()
+        else:
+            self._edit_geometry()
+        if self.interactive:
+            return self._interactive(old_editor_source, old_fingerprint, initial_preparation)
+        return self._full()
+
+    def _started(self) -> float:
+        assert self.start is not None, "every edit starts the clock"
+        return self.start
+
+    def _preparation(self) -> dict[str, Any]:
+        return self.page.evaluate(PREPARATION_JS, self.trial.name)
+
+    def _stop_listening(self) -> None:
+        self.page.remove_listener("response", self.response)
+        self.page.remove_listener("requestfinished", self.finished)
+
+    def _open_calibration(self) -> None:
+        page = self.page
+        page.get_by_role("tab", name="Calibrate", exact=True).click()
+        polygon = page.locator(".quad-editor__polygon").first
+        bounds = polygon.bounding_box()
+        assert bounds
+        page.mouse.click(
+            bounds["x"] + bounds["width"] * 0.07, bounds["y"] + bounds["height"] * 0.45
+        )
+        if self.interactive:
+            page.wait_for_function(
+                """() => {
+                    const i=document.querySelector('.quad-editor img');
+                    return i && i.src.startsWith('blob:') && i.complete &&
+                        i.naturalWidth === 1024 && i.naturalHeight === 1024;
+                }"""
+            )
+
+    def _mask_point(self, area: dict[str, float]) -> dict[str, float]:
+        repeat = self.trial.repeat
+        fraction = (
+            (0.35 + repeat * 0.06)
+            if self.page.locator(".quad-editor__polygon").count() == 1
+            else (0.07 + repeat * 0.035)
+        )
+        if self.mask_background is not None:
+            return visible_ink_point(self.page, area, self.mask_background)
+        return {"x": area["x"] + area["width"] * fraction, "y": area["y"] + area["height"] * 0.45}
+
+    def _edit_mask(self) -> None:
+        page = self.page
         page.get_by_role("button", name="Edit mask", exact=True).click()
         page.get_by_label("Mask drawing area").wait_for()
         area = page.locator(".quad-editor__polygon").first.bounding_box()
         assert area
-        fraction = (
-            (0.35 + repeat * 0.06)
-            if page.locator(".quad-editor__polygon").count() == 1
-            else (0.07 + repeat * 0.035)
-        )
-        x = area["x"] + area["width"] * fraction
-        y = area["y"] + area["height"] * 0.45
-        point = {"x": x, "y": y}
-        if mask_background is not None:
-            point = visible_ink_point(page, area, mask_background)
-            x, y = point["x"], point["y"]
-        if interactive:
-            before_pixel = page.get_by_alt_text("Rendered preview").first.evaluate(PIXEL_JS, point)
+        self.point = self._mask_point(area)
+        x, y = self.point["x"], self.point["y"]
+        if self.interactive:
+            self.before_pixel = page.get_by_alt_text("Rendered preview").first.evaluate(
+                PIXEL_JS, self.point
+            )
         page.mouse.move(x, y)
         clip = {"x": x - 8, "y": y - 8, "width": 24, "height": 24}
         before_stroke = page.screenshot(clip=clip)
         feedback_start = time.perf_counter()
         page.mouse.down()
         after_stroke = page.screenshot(clip=clip)
-        feedback = time.perf_counter() - feedback_start
+        self.feedback = time.perf_counter() - feedback_start
         assert not np.array_equal(
             np.asarray(Image.open(BytesIO(before_stroke))),
             np.asarray(Image.open(BytesIO(after_stroke))),
         ), "Stroke must change visible pixels"
         page.mouse.move(x + 5, y + 5, steps=2)
-        start = time.perf_counter()
+        self.start = time.perf_counter()
         page.mouse.up()
         page.get_by_role("button", name="Done", exact=True).click()
-    else:
+
+    def _edit_geometry(self) -> None:
+        page = self.page
         # Moving one corner inward keeps the full conservative crop covered.
         corner = page.locator(".quad-editor__handle").first
         corner.scroll_into_view_if_needed()
@@ -275,14 +314,17 @@ def measure(
             bounds["y"] + bounds["height"] / 2 + 2,
             steps=5,
         )
-        start = time.perf_counter()
+        self.start = time.perf_counter()
         page.mouse.up()
-    if interactive:
-        image = page.get_by_alt_text("Rendered preview").first
-        seen_source = old_editor_source
+
+    def _changed_composite(
+        self, image: Any, old_source: str | None, old_fingerprint: str | None
+    ) -> tuple[dict[str, Any], float, str]:
+        """The first decoded composite whose pixels differ from the old one."""
+        seen_source = old_source
         deadline = time.monotonic() + 180
         while True:
-            page.wait_for_function(
+            self.page.wait_for_function(
                 """old => {
                     const i=document.querySelector('.quad-editor img');
                     return i && i.src.startsWith('blob:') && i.src !== old;
@@ -293,144 +335,209 @@ def measure(
             end = time.perf_counter()
             fingerprint = image.evaluate(FINGERPRINT_JS)
             if fingerprint != old_fingerprint:
-                break
+                return decoded, end, fingerprint
             # Autosave acknowledgement can legitimately refresh the same pixels.
             # It is not evidence that the new edit has reached the composite.
             seen_source = image.get_attribute("src")
             if time.monotonic() > deadline:
-                raise TimeoutError("No changed composite: " + json.dumps(spans))
+                raise TimeoutError("No changed composite: " + json.dumps(self.spans))
+
+    def _interactive(
+        self,
+        old_editor_source: str | None,
+        old_fingerprint: str | None,
+        initial_preparation: dict[str, Any],
+    ) -> dict[str, Any]:
+        trial = self.trial
+        image = self.page.get_by_alt_text("Rendered preview").first
+        decoded, end, fingerprint = self._changed_composite(
+            image, old_editor_source, old_fingerprint
+        )
         assert decoded == {"width": 1024, "height": 1024}, (
             "Interactive benchmark requires an actual decoded 1024px square composite"
         )
-        after_pixel = image.evaluate(PIXEL_JS, point) if point else None
-        if before_pixel is not None:
+        after_pixel = image.evaluate(PIXEL_JS, self.point) if self.point else None
+        if self.before_pixel is not None:
             assert (
-                sum(abs(a - b) for a, b in zip(before_pixel, after_pixel, strict=True))
+                sum(abs(a - b) for a, b in zip(self.before_pixel, after_pixel, strict=True))
                 > VISIBLE_INK
-            ), "Mask must change the decoded artwork pixel: " + str((before_pixel, after_pixel))
-
-        displayed_preparation = page.evaluate(
-            "async name => (await fetch('/api/templates/' + encodeURIComponent(name) + "
-            "'/preparation')).json()",
-            name,
+            ), "Mask must change the decoded artwork pixel: " + str(
+                (self.before_pixel, after_pixel)
+            )
+        row = self._interactive_row(
+            _Timing(self._started(), end, fingerprint, old_fingerprint),
+            (initial_preparation["active_job"], self._preparation()["active_job"]),
+            after_pixel,
+            decoded,
         )
-        active_before = initial_preparation["active_job"]
-        active_after = displayed_preparation["active_job"]
-        row = {
-            "template": name,
-            "edit": kind,
-            "repeat": repeat,
-            "cache": "warm" if interactive else ("first" if repeat == 0 else "warm"),
-            "service_seconds": end - start,
-            "edit_to_display_seconds": end - start,
-            "stroke_feedback_upper_bound_seconds": feedback,
-            "fingerprint": fingerprint,
-            "before_fingerprint": old_fingerprint,
-            "rebuild_active_at_edit": bool(active_before),
-            "rebuild_phase_at_edit": active_before["phase"] if active_before else None,
-            "rebuild_phase_after_display": active_after["phase"] if active_after else None,
-            "checkpoints": [
-                (identity, step, at - start)
-                for identity, step, at in checkpoints
-                if start <= at <= end
-            ],
-            "same_rebuild_active_through_display": bool(
-                active_before and active_after and active_before["id"] == active_after["id"]
-            ),
-            "before_pixel": before_pixel,
-            "after_pixel": after_pixel,
-            "mask_point": point,
-            "mask_target": "visible-artwork" if mask_background is not None else "fixed-contrast",
-            **decoded,
-            "responses": list(spans),
-        }
         # Capture the actual decoded raster after stopping the clock, so review
         # can inspect native detail rather than a CSS-scaled screen capture.
         png = image.evaluate(PNG_JS)
-        (output / f"{name}-{kind}-{repeat}-decoded.png").write_bytes(base64.b64decode(png))
+        (self.session.output / f"{trial.name}-{trial.kind}-{trial.repeat}-decoded.png").write_bytes(
+            base64.b64decode(png)
+        )
         print(json.dumps(row), flush=True)
+        self._await_publication()
+        self._stop_listening()
+        return row
+
+    def _interactive_row(
+        self,
+        timing: _Timing,
+        active: tuple[dict[str, Any] | None, dict[str, Any] | None],
+        after_pixel: list[int] | None,
+        decoded: dict[str, Any],
+    ) -> dict[str, Any]:
+        trial = self.trial
+        start, end = timing.start, timing.end
+        active_before, active_after = active
+        return {
+            "template": trial.name,
+            "edit": trial.kind,
+            "repeat": trial.repeat,
+            "cache": "warm",
+            "service_seconds": end - start,
+            "edit_to_display_seconds": end - start,
+            "stroke_feedback_upper_bound_seconds": self.feedback,
+            "fingerprint": timing.fingerprint,
+            "before_fingerprint": timing.before_fingerprint,
+            "rebuild_active_at_edit": bool(active_before),
+            "rebuild_phase_at_edit": _phase(active_before),
+            "rebuild_phase_after_display": _phase(active_after),
+            "checkpoints": [
+                (identity, step, at - start)
+                for identity, step, at in self.session.checkpoints
+                if start <= at <= end
+            ],
+            "same_rebuild_active_through_display": _same_job(active_before, active_after),
+            "before_pixel": self.before_pixel,
+            "after_pixel": after_pixel,
+            "mask_point": self.point,
+            "mask_target": "visible-artwork"
+            if self.mask_background is not None
+            else "fixed-contrast",
+            **decoded,
+            "responses": list(self.spans),
+        }
+
+    def _published(self, preparation: dict[str, Any]) -> bool:
+        if preparation["config_revision"] != self.saved_revision:
+            return False
         # The default isolates steady-state service cost. The contention mode
         # starts the next edit as soon as autosave has queued/runs a rebuild.
-        deadline = time.monotonic() + 180
-        while not saved_revision or not any(
-            p["config_revision"] == saved_revision
-            and (
-                bool(p["active_job"])
-                if during_rebuild
-                else (p["maps"]["can_render"] and not p["active_job"])
-            )
-            for p in preparation_responses
+        if self.session.options.during_rebuild:
+            return bool(preparation["active_job"])
+        return bool(_ready(preparation))
+
+    def _await_publication(self) -> None:
+        deadline = time.monotonic() + PUBLICATION_TIMEOUT_S
+        while not self.saved_revision or not any(
+            self._published(p) for p in self.preparation_responses
         ):
             if time.monotonic() > deadline:
-                raise TimeoutError("Background publication did not finish: " + json.dumps(spans))
-            page.wait_for_timeout(25)
-        page.remove_listener("response", response)
-        page.remove_listener("requestfinished", finished)
-        return row
-    save_deadline = time.monotonic() + 180
-    while not saved_revision or not any(
-        p["config_revision"] == saved_revision and p["maps"]["can_render"] and not p["active_job"]
-        for p in preparation_responses
-    ):
-        if time.monotonic() > save_deadline:
-            page.screenshot(path=str(output / "save-timeout.png"))
-            raise TimeoutError("No current ready generation: " + json.dumps(spans))
-        page.wait_for_timeout(25)
-    page.wait_for_function(
-        """() => document.querySelector('.mg-preparation .mg-status')
-                        ?.textContent === 'Ready'"""
-    )
-    ready = time.perf_counter()
-    old_source = (
-        page.locator(".preview-grid__tile img").first.get_attribute("src")
-        if page.locator(".preview-grid__tile img").count()
-        else None
-    )
-    clicked = time.perf_counter()
-    with page.expect_response(
-        lambda r: (
-            "/preview?scale=full" in r.url
-            and r.request.method == "POST"
-            and r.status == HTTPStatus.OK
+                raise TimeoutError(
+                    "Background publication did not finish: " + json.dumps(self.spans)
+                )
+            self.page.wait_for_timeout(25)
+
+    def _await_ready_generation(self) -> None:
+        save_deadline = time.monotonic() + PUBLICATION_TIMEOUT_S
+        while not self.saved_revision or not any(
+            p["config_revision"] == self.saved_revision and _ready(p)
+            for p in self.preparation_responses
+        ):
+            if time.monotonic() > save_deadline:
+                self.page.screenshot(path=str(self.session.output / "save-timeout.png"))
+                raise TimeoutError("No current ready generation: " + json.dumps(self.spans))
+            self.page.wait_for_timeout(25)
+
+    def _full(self) -> dict[str, Any]:
+        page, trial = self.page, self.trial
+        self._await_ready_generation()
+        page.wait_for_function(READY_JS)
+        ready = time.perf_counter()
+        old_source = (
+            page.locator(".preview-grid__tile img").first.get_attribute("src")
+            if page.locator(".preview-grid__tile img").count()
+            else None
         )
-    ):
-        page.get_by_role("tab", name="Preview", exact=True).click()
-        render = page.get_by_role("button", name="Re-render", exact=True)
-        if old_source:
-            render.click()
-    image = page.locator(".preview-grid__tile img").first
-    image.wait_for()
-    page.wait_for_function(
-        """old => {
-            const i=document.querySelector('.preview-grid__tile img');
-            return i && i.src !== old;
-        }""",
-        arg=old_source,
+        clicked = time.perf_counter()
+        with page.expect_response(_full_preview_response):
+            page.get_by_role("tab", name="Preview", exact=True).click()
+            render = page.get_by_role("button", name="Re-render", exact=True)
+            if old_source:
+                render.click()
+        image = page.locator(".preview-grid__tile img").first
+        image.wait_for()
+        page.wait_for_function(
+            """old => {
+                const i=document.querySelector('.preview-grid__tile img');
+                return i && i.src !== old;
+            }""",
+            arg=old_source,
+        )
+        decoded = image.evaluate(DECODE_JS)
+        end = time.perf_counter()
+        fingerprint = image.evaluate(FINGERPRINT_JS)
+        start = self._started()
+        row = {
+            "template": trial.name,
+            "stroke_feedback_upper_bound_seconds": self.feedback,
+            "edit": trial.kind,
+            "repeat": trial.repeat,
+            "cache": "first" if trial.repeat == 0 else "warm",
+            "edit_to_ready_seconds": ready - start,
+            "explicit_render_dwell_seconds": clicked - ready,
+            "edit_to_display_seconds": end - start,
+            "service_seconds": end - start - (clicked - ready),
+            "fingerprint": fingerprint,
+            **decoded,
+            "responses": list(self.spans),
+            "checkpoints": [
+                (identity, step, at - start)
+                for identity, step, at in self.session.checkpoints
+                if at >= start
+            ],
+        }
+        self._stop_listening()
+        print(json.dumps(row), flush=True)
+        return row
+
+
+@dataclass(frozen=True)
+class _Timing:
+    start: float
+    end: float
+    fingerprint: str
+    before_fingerprint: str | None
+
+
+def _phase(job: dict[str, Any] | None) -> str | None:
+    return job["phase"] if job else None
+
+
+def _same_job(before: dict[str, Any] | None, after: dict[str, Any] | None) -> bool:
+    return bool(before and after and before["id"] == after["id"])
+
+
+def _ready(preparation: dict[str, Any]) -> bool:
+    return preparation["maps"]["can_render"] and not preparation["active_job"]
+
+
+def _full_preview_response(r: Response) -> bool:
+    return (
+        "/preview?scale=full" in r.url and r.request.method == "POST" and r.status == HTTPStatus.OK
     )
-    decoded = image.evaluate(DECODE_JS)
-    end = time.perf_counter()
-    fingerprint = image.evaluate(FINGERPRINT_JS)
-    row = {
-        "template": name,
-        "stroke_feedback_upper_bound_seconds": feedback,
-        "edit": kind,
-        "repeat": repeat,
-        "cache": "warm" if interactive else ("first" if repeat == 0 else "warm"),
-        "edit_to_ready_seconds": ready - start,
-        "explicit_render_dwell_seconds": clicked - ready,
-        "edit_to_display_seconds": end - start,
-        "service_seconds": end - start - (clicked - ready),
-        "fingerprint": fingerprint,
-        **decoded,
-        "responses": list(spans),
-        "checkpoints": [
-            (identity, step, at - start) for identity, step, at in checkpoints if at >= start
-        ],
-    }
-    page.remove_listener("response", response)
-    page.remove_listener("requestfinished", finished)
-    print(json.dumps(row), flush=True)
-    return row
+
+
+def measure(
+    page: Page,
+    trial: Trial,
+    session: _Session,
+    *,
+    mask_background: Image.Image | None = None,
+) -> dict[str, Any]:
+    return _Measurement(page, trial, session, mask_background).run()
 
 
 def implementation_fingerprint() -> str:
@@ -456,14 +563,7 @@ def implementation_fingerprint() -> str:
     return digest.hexdigest()
 
 
-def run(source: Path, output: Path, options: BenchmarkOptions) -> None:
-    repeats, threshold, interactive = options.repeats, options.threshold, options.interactive
-    names, edits, artwork_size = options.names, options.edits, options.artwork_size
-    during_rebuild, frontend_dist, design = (
-        options.during_rebuild,
-        options.frontend_dist,
-        options.design,
-    )
+def _isolated_workspace(source: Path, output: Path, artwork_size: tuple[int, int]) -> Workspace:
     if output.exists() or output.resolve().is_relative_to(source.resolve()):
         raise ValueError("Output must be a new isolated directory")
     output.mkdir(parents=True)
@@ -474,155 +574,203 @@ def run(source: Path, output: Path, options: BenchmarkOptions) -> None:
     Image.new("RGBA", artwork_size, (230, 35, 160, 255)).save(
         workspace.test_design_file("benchmark-contrast")
     )
-    if frontend_dist is not None:
-        api_app.FRONTEND_DIST = frontend_dist.resolve()
+    return workspace
+
+
+@dataclass
+class _Server:
+    server: uvicorn.Server
+    thread: threading.Thread
+    port: int
+
+    @classmethod
+    def start(cls, app: Any) -> _Server:
+        with socket.socket() as sock:
+            sock.bind(("127.0.0.1", 0))
+            port = sock.getsockname()[1]
+        server = uvicorn.Server(
+            uvicorn.Config(app, host="127.0.0.1", port=port, log_level="warning")
+        )
+        thread = threading.Thread(target=server.run, daemon=True)
+        thread.start()
+        deadline = time.monotonic() + 180
+        while not server.started:
+            if not thread.is_alive() or time.monotonic() > deadline:
+                raise RuntimeError("Server failed to start")
+            time.sleep(0.05)
+        return cls(server, thread, port)
+
+    def stop(self) -> None:
+        self.server.should_exit = True
+        self.thread.join(180)
+
+
+@dataclass
+class _Results:
+    """What a run has measured so far; reported even when it fails."""
+
+    names: list[str]
+    edits: list[str]
+    rows: list[dict[str, Any]] = field(default_factory=list)
+    warmups: list[dict[str, Any]] = field(default_factory=list)
+    browser_version: str | None = None
+
+
+def _rejected_preview(response: Response) -> None:
+    if "/preview?scale=editor" in response.url and response.status != HTTPStatus.OK:
+        print("Editor preview refused: " + response.text(), flush=True)
+
+
+def _select_template(page: Page, name: str, options: BenchmarkOptions, results: _Results) -> None:
+    warmup_start = time.perf_counter()
+    print("Selecting " + name, flush=True)
+    page.get_by_role("searchbox", name="Search templates").fill(name)
+    page.locator(f'.template-rail__item[data-template="{name}"]').click()
+    page.wait_for_function(READY_JS)
+    design = options.design or "benchmark-contrast"
+    picker = page.get_by_label("Test design", exact=True)
+    old_design = picker.input_value()
+    old_src = page.get_by_alt_text("Rendered preview").first.get_attribute("src")
+    picker.select_option(design)
+    if not options.interactive:
+        return
+    page.wait_for_function(
+        """old => {
+        const i=document.querySelector('.quad-editor img');
+        return i && i.src.startsWith('blob:') && i.complete &&
+            (old === null || i.src !== old);
+    }""",
+        arg=old_src if old_design != design else None,
+        timeout=60_000,
+    )
+    page.get_by_alt_text("Rendered preview").first.evaluate(DECODE_JS)
+    results.warmups.append(
+        {"template": name, "initial_image_seconds": time.perf_counter() - warmup_start}
+    )
+
+
+def _mask_background(workspace: Workspace, name: str, design: str | None) -> Image.Image | None:
+    if design is None:
+        return None
+    with Image.open(workspace.template_main_photo(name)) as photo:
+        return photo.convert("RGB")
+
+
+def _drive_browser(port: int, workspace: Workspace, session: _Session, results: _Results) -> None:
+    options = session.options
+    with sync_playwright() as pw:
+        browser = pw.chromium.launch()
+        results.browser_version = browser.version
+        page = browser.new_page(viewport={"width": 1440, "height": 1100})
+        page.set_default_timeout(180_000)
+        page.on("response", _rejected_preview)
+        page.goto(f"http://127.0.0.1:{port}/templates")
+        for name in results.names:
+            _select_template(page, name, options, results)
+            mask_background = _mask_background(workspace, name, options.design)
+            for kind in results.edits:
+                for repeat in range(options.repeats):
+                    row = measure(
+                        page,
+                        Trial(name, kind, repeat),
+                        _Session(session.output, session.checkpoints, options),
+                        mask_background=mask_background,
+                    )
+                    results.rows.append(row)
+                    (session.output / "raw-rows.json").write_text(
+                        json.dumps(results.rows, indent=2), encoding="utf-8"
+                    )
+        browser.close()
+
+
+def _rows_for(results: _Results, name: str, kind: str) -> list[dict[str, Any]]:
+    return [r for r in results.rows if r["template"] == name and r["edit"] == kind]
+
+
+def _cases(results: _Results) -> list[tuple[str, str]]:
+    return [(name, kind) for name in results.names for kind in results.edits]
+
+
+def _summary(results: _Results) -> dict[str, dict[str, float]]:
+    summary = {}
+    for name, kind in _cases(results):
+        seconds = [r["service_seconds"] for r in _rows_for(results, name, kind)]
+        if seconds:
+            summary[name + "/" + kind] = {
+                "median_seconds": statistics.median(seconds),
+                "max_seconds": max(seconds),
+            }
+    return summary
+
+
+def _report(source: Path, options: BenchmarkOptions, results: _Results) -> dict[str, Any]:
+    return {
+        "machine": platform.platform(),
+        "python": platform.python_version(),
+        "numpy": np.__version__,
+        "pillow": pillow_version,
+        "browser": results.browser_version,
+        "cpu": platform.processor(),
+        "logical_processors": os.cpu_count(),
+        "thread_environment": {
+            k: os.environ.get(k)
+            for k in ["OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS"]
+        },
+        "implementation_fingerprint": implementation_fingerprint(),
+        "git_tip": subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip(),
+        "source": str(source.resolve()),
+        "mode": "interactive" if options.interactive else "full",
+        "artwork_size": options.artwork_size,
+        "design": options.design or "benchmark-contrast",
+        "frontend_dist": str(options.frontend_dist) if options.frontend_dist else None,
+        "during_rebuild": options.during_rebuild,
+        "warmups": results.warmups,
+        "summary": _summary(results),
+        "opencv": cv2.__version__,
+        "opencv_threads": cv2.getNumThreads(),
+        "threshold_seconds": options.threshold,
+        "rows": results.rows,
+    }
+
+
+def _check(options: BenchmarkOptions, results: _Results) -> None:
+    rows = results.rows
+    assert len(rows) == options.repeats * len(results.names) * len(results.edits)
+    if options.during_rebuild:
+        for name, kind in _cases(results):
+            assert any(row["rebuild_active_at_edit"] for row in _rows_for(results, name, kind)), (
+                "Contention mode did not overlap a rebuild for " + name + "/" + kind
+            )
+    warm = [r for r in rows if r["cache"] == "warm"]
+    measured = warm or rows
+    assert max(r["service_seconds"] for r in measured) < options.threshold, (
+        "Edit-to-display target exceeded"
+    )
+
+
+def run(source: Path, output: Path, options: BenchmarkOptions) -> None:
+    workspace = _isolated_workspace(source, output, options.artwork_size)
+    if options.frontend_dist is not None:
+        api_app.FRONTEND_DIST = options.frontend_dist.resolve()
     app = create_app(workspace, preparation_runtime=EvidenceOnlyRuntime())
-    checkpoints = []
+    checkpoints: list[tuple[str, str, float]] = []
     app.state.preparations.checkpoint = lambda identity, step: checkpoints.append(
         (identity, step, time.perf_counter())
     )
-    with socket.socket() as sock:
-        sock.bind(("127.0.0.1", 0))
-        port = sock.getsockname()[1]
-    server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port, log_level="warning"))
-    thread = threading.Thread(target=server.run, daemon=True)
-    thread.start()
-    deadline = time.monotonic() + 180
-    while not server.started:
-        if not thread.is_alive() or time.monotonic() > deadline:
-            raise RuntimeError("Server failed to start")
-        time.sleep(0.05)
-    rows = []
-    warmups = []
-    names = names or ["folded-bay", "multiple-validation"]
-    edits = edits or ["mask", "geometry"]
-    browser_version = None
+    server = _Server.start(app)
+    results = _Results(
+        names=options.names or ["folded-bay", "multiple-validation"],
+        edits=options.edits or ["mask", "geometry"],
+    )
     print("Server started", flush=True)
     try:
-        with sync_playwright() as pw:
-            browser = pw.chromium.launch()
-            browser_version = browser.version
-            page = browser.new_page(viewport={"width": 1440, "height": 1100})
-            page.set_default_timeout(180_000)
-
-            def rejected_preview(response: Response) -> None:
-                if "/preview?scale=editor" in response.url and response.status != HTTPStatus.OK:
-                    print("Editor preview refused: " + response.text(), flush=True)
-
-            page.on("response", rejected_preview)
-            page.goto(f"http://127.0.0.1:{port}/templates")
-            for name in names:
-                warmup_start = time.perf_counter()
-                print("Selecting " + name, flush=True)
-                page.get_by_role("searchbox", name="Search templates").fill(name)
-                page.locator(f'.template-rail__item[data-template="{name}"]').click()
-                page.wait_for_function(
-                    """() => document.querySelector('.mg-preparation .mg-status')
-                        ?.textContent === 'Ready'"""
-                )
-                picker = page.get_by_label("Test design", exact=True)
-                old_design = picker.input_value()
-                old_src = page.get_by_alt_text("Rendered preview").first.get_attribute("src")
-                picker.select_option(design or "benchmark-contrast")
-                if interactive:
-                    page.wait_for_function(
-                        """old => {
-                        const i=document.querySelector('.quad-editor img');
-                        return i && i.src.startsWith('blob:') && i.complete &&
-                            (old === null || i.src !== old);
-                    }""",
-                        arg=old_src if old_design != (design or "benchmark-contrast") else None,
-                        timeout=60_000,
-                    )
-                    page.get_by_alt_text("Rendered preview").first.evaluate(DECODE_JS)
-                    warmups.append(
-                        {
-                            "template": name,
-                            "initial_image_seconds": time.perf_counter() - warmup_start,
-                        }
-                    )
-                mask_background = None
-                if design is not None:
-                    with Image.open(workspace.template_main_photo(name)) as photo:
-                        mask_background = photo.convert("RGB")
-                for kind in edits:
-                    for repeat in range(repeats):
-                        row = measure(
-                            page,
-                            Trial(name, kind, repeat),
-                            _Session(output, checkpoints, options),
-                            mask_background=mask_background,
-                        )
-                        rows.append(row)
-                        (output / "raw-rows.json").write_text(
-                            json.dumps(rows, indent=2), encoding="utf-8"
-                        )
-            browser.close()
+        _drive_browser(server.port, workspace, _Session(output, checkpoints, options), results)
     finally:
-        server.should_exit = True
-        thread.join(180)
-        report = {
-            "machine": platform.platform(),
-            "python": platform.python_version(),
-            "numpy": np.__version__,
-            "pillow": pillow_version,
-            "browser": browser_version,
-            "cpu": platform.processor(),
-            "logical_processors": os.cpu_count(),
-            "thread_environment": {
-                k: os.environ.get(k)
-                for k in ["OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS"]
-            },
-            "implementation_fingerprint": implementation_fingerprint(),
-            "git_tip": subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip(),
-            "source": str(source.resolve()),
-            "mode": "interactive" if interactive else "full",
-            "artwork_size": artwork_size,
-            "design": design or "benchmark-contrast",
-            "frontend_dist": str(frontend_dist) if frontend_dist else None,
-            "during_rebuild": during_rebuild,
-            "warmups": warmups,
-            "summary": {
-                name + "/" + kind: {
-                    "median_seconds": statistics.median(
-                        [
-                            r["service_seconds"]
-                            for r in rows
-                            if r["template"] == name and r["edit"] == kind
-                        ]
-                    ),
-                    "max_seconds": max(
-                        r["service_seconds"]
-                        for r in rows
-                        if r["template"] == name and r["edit"] == kind
-                    ),
-                }
-                for name in names
-                for kind in edits
-                if any(r["template"] == name and r["edit"] == kind for r in rows)
-            },
-            "opencv": cv2.__version__,
-            "opencv_threads": cv2.getNumThreads(),
-            "threshold_seconds": threshold,
-            "rows": rows,
-        }
+        server.stop()
         (output / "measurements.json").write_text(
-            json.dumps(report, indent=2) + "\n", encoding="utf-8"
+            json.dumps(_report(source, options, results), indent=2) + "\n", encoding="utf-8"
         )
-    assert len(rows) == repeats * len(names) * len(edits)
-    if during_rebuild:
-        for name in names:
-            for kind in edits:
-                assert any(
-                    row["rebuild_active_at_edit"]
-                    for row in rows
-                    if row["template"] == name and row["edit"] == kind
-                ), "Contention mode did not overlap a rebuild for " + name + "/" + kind
-    warm = [r for r in rows if r["cache"] == "warm"]
-    measured = warm or rows
-    assert max(r["service_seconds"] for r in measured) < threshold, (
-        "Edit-to-display target exceeded"
-    )
+    _check(options, results)
 
 
 if __name__ == "__main__":
