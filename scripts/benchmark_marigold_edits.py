@@ -32,6 +32,7 @@ from playwright.sync_api import Page, Request, Response, sync_playwright
 from etsy_listings.core.application.preparation.dependencies import PreparationRuntime
 from etsy_listings.core.preparation.runtime import Capability
 from etsy_listings.core.workspace import Workspace
+from etsy_listings.server.api import app as api_app
 from etsy_listings.server.api.app import create_app
 
 FINGERPRINT_JS = """async img => {
@@ -437,8 +438,6 @@ def run(
         workspace.test_design_file("benchmark-contrast")
     )
     if frontend_dist is not None:
-        from etsy_listings.server.api import app as api_app
-
         api_app.FRONTEND_DIST = frontend_dist.resolve()
     app = create_app(workspace, preparation_runtime=EvidenceOnlyRuntime())
     checkpoints = []

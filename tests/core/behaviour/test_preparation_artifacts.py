@@ -174,7 +174,7 @@ def test_saved_readiness_reuses_durable_evidence_identity_without_runtime_or_cac
     from PIL import Image
 
     from etsy_listings.core.render import load_template_config
-    from etsy_listings.core.workspace.workspace import remove_tree
+    from etsy_listings.core.workspace.trees import remove_tree
 
     workspace = Workspace.discover(root_override=workspace_root)
     workspace.template_dir("shirt").mkdir()

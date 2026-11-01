@@ -13,7 +13,7 @@ from PIL import Image
 
 from etsy_listings.core.render import load_template_config
 from etsy_listings.core.workspace import Workspace
-from etsy_listings.core.workspace.workspace import remove_tree
+from etsy_listings.core.workspace.trees import remove_tree
 
 from tests.support.marigold import PreparationRuntime, PreparationWorker, marigold_template
 

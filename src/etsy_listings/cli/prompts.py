@@ -72,7 +72,9 @@ def prompt_toolkit_works() -> bool:
     it -- so the breadth of the ``except`` is the point, not an oversight.
     """
     try:
-        from prompt_toolkit.output.defaults import create_output
+        from prompt_toolkit.output.defaults import (  # noqa: PLC0415 -- startup cost: loads only to probe a prompt
+            create_output,
+        )
 
         create_output()
     except Exception:  # noqa: BLE001 -- any failure means prompt_toolkit cannot drive this terminal
@@ -173,7 +175,7 @@ def choose(message: str, rows: Sequence[str], *, marker_hint: str = "") -> str |
 
 def text(message: str, *, default: str = "") -> str | None:
     if prompt_toolkit_works():
-        import questionary
+        import questionary  # noqa: PLC0415 -- startup cost: questionary and prompt_toolkit load only when a prompt is shown
 
         answer: str | None = questionary.text(message, default=default).ask()
         return answer
@@ -187,7 +189,7 @@ def text(message: str, *, default: str = "") -> str | None:
 
 def confirm(message: str, *, default: bool = False) -> bool | None:
     if prompt_toolkit_works():
-        import questionary
+        import questionary  # noqa: PLC0415 -- startup cost: questionary and prompt_toolkit load only when a prompt is shown
 
         answer: bool | None = questionary.confirm(message, default=default).ask()
         return answer
@@ -317,7 +319,7 @@ def _choose_with_fzf(command: list[str], message: str, rows: list[str]) -> str |
 def _choose_with_questionary(message: str, rows: list[str], marker_hint: str) -> str | None:
     """Arrow keys over the list, no filtering -- ``questionary.select``, not
     ``autocomplete``. See this module's docstring for why."""
-    import questionary
+    import questionary  # noqa: PLC0415 -- startup cost: questionary and prompt_toolkit load only when a prompt is shown
 
     answer: str | None = questionary.select(
         message,

@@ -14,7 +14,10 @@ from .server import serve
 
 
 def install_weights(root: Path) -> None:
-    from huggingface_hub import HfApi, snapshot_download
+    from huggingface_hub import (  # noqa: PLC0415 -- worker venv only: downloads happen behind explicit setup
+        HfApi,
+        snapshot_download,
+    )
 
     for checkpoint, _, revision in MODELS.values():
         info = HfApi().model_info(checkpoint, revision=revision, files_metadata=True)

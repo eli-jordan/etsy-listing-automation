@@ -7,13 +7,11 @@ import threading
 import uuid
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import TYPE_CHECKING, Protocol
+from typing import Protocol
 
+from etsy_listings.core.preparation.worker_client import WarmWorker
 from etsy_listings.core.workspace.atomic import write_json_atomic
-from etsy_listings.core.workspace.workspace import remove_tree
-
-if TYPE_CHECKING:
-    from etsy_listings.core.preparation.worker_client import WarmWorker
+from etsy_listings.core.workspace.trees import remove_tree
 
 ENGINE_VERSION = "1.0.0"
 _LOCK = threading.Lock()
@@ -77,7 +75,9 @@ class Runtime:
         self.root = (home or Path.home()) / ".etsy-listings" / "marigold"
         self.engine_version = engine_version
         if installer is None:
-            from etsy_listings.core.preparation.installation import NativeInstaller
+            from etsy_listings.core.preparation.installation import (  # noqa: PLC0415 -- cycle: installation imports this module's Capability
+                NativeInstaller,
+            )
 
             installer = NativeInstaller()
         self.installer = installer
@@ -131,8 +131,9 @@ class Runtime:
 
     def worker(self, selected: Capability, *, cache_root: Path) -> WarmWorker:
         """Construct a lazy warm adapter for a retained, verified engine selection."""
-        from etsy_listings.core.preparation.installation import worker_command
-        from etsy_listings.core.preparation.worker_client import WarmWorker
+        from etsy_listings.core.preparation.installation import (  # noqa: PLC0415 -- cycle: installation imports this module's Capability
+            worker_command,
+        )
 
         if not selected.engine_version or not selected.installation_id:
             raise SetupError(selected.problem or "Run etsy-listings marigold setup first.")

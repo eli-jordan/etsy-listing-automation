@@ -32,6 +32,7 @@ from etsy_listings.core.render.config import (
 )
 from etsy_listings.core.workspace.atomic import write_bytes_atomic, write_json_atomic
 from etsy_listings.core.workspace.file_version import file_version
+from etsy_listings.core.workspace.trees import remove_tree
 
 if TYPE_CHECKING:
     from etsy_listings.core.workspace import Workspace
@@ -529,7 +530,6 @@ class CalibrationStore:
         After intent, recovery rolls forward. Payloads remain until every
         destination is verified; an ordinary sequence of renames is insufficient.
         """
-        from etsy_listings.core.workspace.workspace import remove_tree
 
         with self.lock(name):
             self.recover(name)
@@ -561,7 +561,6 @@ class CalibrationStore:
 
     def recover(self, name: str) -> None:
         """Server-side recovery, always under the shared template lock."""
-        from etsy_listings.core.workspace.workspace import remove_tree
 
         with self.lock(name):
             transaction = self.workspace.template_calibration_transaction(name)

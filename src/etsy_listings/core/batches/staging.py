@@ -37,7 +37,8 @@ from etsy_listings.core.config.slug import slugify
 from etsy_listings.core.errors import UserFacingError
 from etsy_listings.core.listing_templates import FrozenListingTemplate, TemplateLock
 from etsy_listings.core.workspace.atomic import read_bytes_retrying
-from etsy_listings.core.workspace.workspace import Workspace, remove_tree
+from etsy_listings.core.workspace.trees import remove_tree
+from etsy_listings.core.workspace.workspace import Workspace
 
 # ADR-0051: safety limits, not settings. Module attributes so a test can lower them.
 MAX_DESIGNS = 25

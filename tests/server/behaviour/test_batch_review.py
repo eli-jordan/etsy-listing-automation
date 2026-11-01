@@ -24,7 +24,8 @@ from etsy_listings.core.clients.printify.fakes import FakePrintifyClient
 from etsy_listings.core.engine.lock import Lockfile
 from etsy_listings.core.engine.run import plan_listings
 from etsy_listings.core.engine.stages import STAGES
-from etsy_listings.core.workspace.workspace import Workspace, remove_tree
+from etsy_listings.core.workspace.trees import remove_tree
+from etsy_listings.core.workspace.workspace import Workspace
 from etsy_listings.server.api.app import create_app
 
 from tests.support.ai_runs import ChainProvider, seed_prompts, seeded_market, wait_for

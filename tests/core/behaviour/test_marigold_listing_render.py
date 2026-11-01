@@ -108,7 +108,7 @@ def test_stale_geometry_blocks_every_required_scene_with_shared_refusal(workspac
 
 def test_compatible_map_republication_and_cache_deletion_keep_render_identity(workspace_root):
     from etsy_listings.core.engine import execute
-    from etsy_listings.core.workspace.workspace import remove_tree
+    from etsy_listings.core.workspace.trees import remove_tree
 
     workspace, _ = listing_with_marigold(workspace_root, prepare=True)
     ctx = a_context(workspace_root)
@@ -390,7 +390,7 @@ def test_full_pipeline_repeat_apply_is_idle_and_render_recovery_does_not_reuploa
     workspace_root,
 ):
     from etsy_listings.core.engine import apply_listings, plan_listings
-    from etsy_listings.core.workspace.workspace import remove_tree
+    from etsy_listings.core.workspace.trees import remove_tree
 
     from tests.support.pipeline import a_deployable_context, real_stages
 

@@ -40,6 +40,7 @@ from etsy_listings.core.application.deploy.events import (
     TERMINAL_PHASES,
     AnyRunEvent,
     ApplyRunPhase,
+    PhaseEvent,
     PlanRunPhase,
     RunKind,
     RunPhase,
@@ -112,7 +113,6 @@ class Run:
         a client that opens the SSE stream from event 0 sees the same phase
         history whether it connected before or after the worker thread ever
         looked at this run."""
-        from etsy_listings.core.application.deploy.events import PhaseEvent
 
         self._state = (
             PlanRunState()
@@ -181,7 +181,6 @@ class Run:
     def transition_plan(self, phase: PlanRunPhase) -> None:
         if not isinstance(self._state, PlanRunState):
             raise TypeError("an apply run cannot enter a plan phase")
-        from etsy_listings.core.application.deploy.events import PhaseEvent
 
         with self.condition:
             event = PhaseEvent(id=self._next_event_id, phase=phase)
@@ -193,7 +192,6 @@ class Run:
     def transition_apply(self, phase: ApplyRunPhase) -> None:
         if not isinstance(self._state, ApplyRunState):
             raise TypeError("a plan run cannot enter an apply phase")
-        from etsy_listings.core.application.deploy.events import PhaseEvent
 
         with self.condition:
             event = PhaseEvent(id=self._next_event_id, phase=phase)

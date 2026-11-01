@@ -48,8 +48,8 @@ MODEL_RAM_BUDGET = 4 * 1024**3
 
 class Models:
     def __init__(self, weights: Path) -> None:
-        import diffusers
-        import torch
+        import diffusers  # noqa: PLC0415 -- heavy optional dependency: loaded on the model thread (comment below)
+        import torch  # noqa: PLC0415 -- heavy optional dependency: torch loads on first model use, not on import
 
         # Native SciPy BLAS DLL loading stalled after the control reader started.
         # Resolve pipeline dependencies on the model thread before the handshake.
@@ -70,7 +70,7 @@ class Models:
         self.model_bytes = 0
 
     def capabilities(self) -> Capabilities:
-        import torch
+        import torch  # noqa: PLC0415 -- heavy optional dependency: torch loads on first model use, not on import
 
         return Capabilities(
             engine_version=importlib.metadata.version("etsy-marigold-worker"),
@@ -91,8 +91,8 @@ class Models:
     def infer(
         self, role: Role, image: Image.Image, settings: InferenceSettings
     ) -> tuple[NDArray[np.float32], InferenceMetadata]:
-        import psutil
-        import torch
+        import psutil  # noqa: PLC0415 -- optional dependency: worker environment only
+        import torch  # noqa: PLC0415 -- heavy optional dependency: torch loads on first model use, not on import
 
         checkpoint, _pipeline_class, revision = MODELS[role]
         started = time.perf_counter()

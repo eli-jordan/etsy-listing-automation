@@ -7,6 +7,7 @@ single executor lane; installation inspection never runs on their event loop.
 from __future__ import annotations
 
 import hashlib
+import json
 import time
 from collections.abc import Callable
 from concurrent.futures import Executor, Future, ThreadPoolExecutor
@@ -17,7 +18,7 @@ from uuid import uuid4
 from etsy_listings.core.application.preparation.dependencies import (
     PreparationRuntime,
 )
-from etsy_listings.core.application.preparation.execution import Execution, WorkerSlot
+from etsy_listings.core.application.preparation.execution import Execution, StoppedError, WorkerSlot
 from etsy_listings.core.application.preparation.models import (
     TERMINAL,
     Action,
@@ -354,8 +355,6 @@ class Preparations:
                 self.execution.safe(job.id, "recovery")
                 self.execution.write(job.id, phase="queued")
             except Exception as exc:  # noqa: BLE001 -- one job's recovery failure must not stop the rest
-                from etsy_listings.core.application.preparation.execution import StoppedError
-
                 self.execution.write(
                     job.id,
                     phase="superseded" if isinstance(exc, StoppedError) else "failed",
@@ -433,7 +432,6 @@ class Preparations:
 
     def cleanup(self, template: str) -> dict[str, list[str]]:
         """Release terminal scratch, retaining cancelled/failed retry evidence."""
-        import json
 
         removed_sets = []
         removed_work = []

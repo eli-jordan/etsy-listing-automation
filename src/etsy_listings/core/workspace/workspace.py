@@ -13,15 +13,13 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-import shutil
-import stat
-from collections.abc import Callable, Mapping
+from collections.abc import Mapping
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path, PureWindowsPath
 
 import yaml
-from pydantic import ValidationError
+from pydantic import TypeAdapter, ValidationError
 
 from etsy_listings.core.config.defaults import Defaults
 from etsy_listings.core.config.description import DescriptionConfig, compose_description
@@ -40,15 +38,20 @@ from etsy_listings.core.config.slug import ColourExceptions
 # `config`, which owns the commercial/product files. Loading it here is the same
 # edge `load_listing` already has to `config`: the workspace knows where every
 # file lives, and asks whichever module owns a file's shape to parse it.
-from etsy_listings.core.render.config import AnyTemplate
+from etsy_listings.core.render.config import AnyTemplate, PlacementId
 from etsy_listings.core.render.config import load_template_config as parse_template_config
 from etsy_listings.core.workspace import layout
 from etsy_listings.core.workspace.atomic import read_bytes_retrying, write_bytes_atomic
+from etsy_listings.core.workspace.calibration import (
+    CalibrationRepairRequiredError,
+    CalibrationStore,
+)
 from etsy_listings.core.workspace.common_copy import (
     CommonCopyDocument,
     CommonCopyError,
     parse_common_copy,
 )
+from etsy_listings.core.workspace.trees import remove_tree
 from etsy_listings.core.workspace.userpath import to_native_path
 
 
@@ -208,55 +211,6 @@ class ScenePhoto:
 
     path: Path
     map_key: str
-
-
-def _add_owner_write(path: Path) -> None:
-    """Add the owner-write bit, leaving the rest of the mode alone. On Windows
-    this is what clears ``FILE_ATTRIBUTE_READONLY``."""
-    path.chmod(path.stat().st_mode | stat.S_IWRITE)
-
-
-def remove_tree(path: Path) -> None:
-    """`shutil.rmtree`, surviving a tree that is marked read-only.
-
-    Every tree this project deletes is one it created and owns -- a listing's
-    directory, its render cache, its previews -- so a read-only flag on one is
-    an artefact of the filesystem it sits on, never an instruction from the
-    user. A workspace kept inside a Google Drive folder is the case that found
-    this: Drive sets the flag on every directory it syncs.
-
-    The two platforms this project is tested on refuse at different steps,
-    and the hook has to answer both:
-
-    * **Windows** refuses `os.rmdir` on a directory that is itself read-only.
-      The files inside delete fine, so the traceback points at the one step
-      that looks least likely to be the problem. Fix: make *the path* writable.
-    * **POSIX** refuses to unlink an entry whose *parent directory* is not
-      writable; the entry's own mode is irrelevant. Fix: make *the parent*
-      writable. The first version of this hook only did the Windows half,
-      said in its docstring that it did both, and passed on Windows while
-      failing on the Ubuntu CI runner.
-
-    Both are done, because it is not worth sniffing the platform to skip a
-    chmod that is harmless where it is not needed. The parent is only touched
-    while it is still inside the tree being removed: the root's own parent
-    belongs to the caller, and write permission on it is not this function's
-    to grant. Anything that is not a `PermissionError`, and any retry that
-    fails again, is raised -- this widens exactly one refusal, not every one.
-    """
-    root = Path(path)
-
-    def make_writable(func: Callable[[str], object], failed: str, exc: BaseException) -> None:
-        if not isinstance(exc, PermissionError):
-            raise exc
-        target = Path(failed)
-        _add_owner_write(target)
-        parent = target.parent
-        if parent == root or root in parent.parents:
-            _add_owner_write(parent)
-        func(failed)
-
-    shutil.rmtree(root, onexc=make_writable)
 
 
 class Workspace:
@@ -973,9 +927,6 @@ class Workspace:
         return self.template_renderer_dir(template) / layout.CALIBRATION_RECEIPT_FILE
 
     def template_mask_dir(self, template: str, placement_id: str | None = None) -> Path:
-        from pydantic import TypeAdapter
-
-        from etsy_listings.core.render.config import PlacementId
 
         directory = self.template_renderer_dir(template) / layout.MASKS_DIR
         if placement_id is not None:
@@ -1245,7 +1196,6 @@ class Workspace:
         return load_exceptions(self.exceptions_file())
 
     def load_template_config(self, template: str) -> AnyTemplate:
-        from etsy_listings.core.workspace.calibration import CalibrationStore
 
         with CalibrationStore(self).lock(template):
             return self._read_template_config(template)
@@ -1260,7 +1210,6 @@ class Workspace:
         of a layout that the layout accessors above exist to prevent, so it
         lives here with ``load_listing`` and ``load_garment_profile``.
         """
-        from etsy_listings.core.workspace.calibration import CalibrationRepairRequiredError
 
         if self.template_calibration_transaction(template).exists():
             raise CalibrationRepairRequiredError(
@@ -1283,6 +1232,5 @@ class Workspace:
         """Write ``template.yaml``. The calibrator is the only caller -- it is
         what produces this file -- but the
         path and the serialisation belong here, beside the read."""
-        from etsy_listings.core.workspace.calibration import CalibrationStore
 
         CalibrationStore(self).write_config(template, config)

@@ -17,6 +17,7 @@ import threading
 import time
 from pathlib import Path
 
+import cv2
 import numpy as np
 import yaml
 from PIL import Image
@@ -225,7 +226,6 @@ def run(output: Path) -> None:
             worker.close()
         report["cpu_gpu_overlap"] = measurement
         report["host_memory_after_overlap"] = host_memory()
-        import cv2
 
         report["opencv_threads"] = cv2.getNumThreads()
         report["cpu_host_torch_installed"] = importlib.util.find_spec("torch") is not None

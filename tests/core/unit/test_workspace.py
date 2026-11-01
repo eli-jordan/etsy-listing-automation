@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 
 from etsy_listings.core.config.errors import ConfigLoadError
+from etsy_listings.core.workspace.trees import remove_tree
 from etsy_listings.core.workspace.workspace import (
     AmbiguousColourSuffixError,
     InvalidNameError,
@@ -14,7 +15,6 @@ from etsy_listings.core.workspace.workspace import (
     PathEscapesWorkspaceError,
     Workspace,
     WorkspaceNotFoundError,
-    remove_tree,
 )
 
 from tests.support.refusals import refuse_reads

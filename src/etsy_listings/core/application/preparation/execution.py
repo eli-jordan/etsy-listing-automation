@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import os
 from collections.abc import Iterator, Mapping
 from contextlib import AbstractContextManager, contextmanager, nullcontext, suppress
 from dataclasses import dataclass
@@ -19,13 +21,17 @@ from etsy_listings.core.application.preparation.dependencies import (
 from etsy_listings.core.application.preparation.evidence import EvidenceStore
 from etsy_listings.core.application.preparation.models import Job, Prediction, placement_key
 from etsy_listings.core.preparation.artifacts import (
+    PlacementArtifact,
     PreparationInputs,
     StalePreparationError,
+    arrays_of,
+    descriptors,
     file_checksum,
+    read_maps,
 )
 from etsy_listings.core.preparation.numerics import prepare, propose_mask
 from etsy_listings.core.preparation.predictions import read_prediction
-from etsy_listings.core.render import MaterialMaps
+from etsy_listings.core.render import FloatMap, MaterialMaps
 from etsy_listings.core.workspace.atomic import write_bytes_atomic
 
 if TYPE_CHECKING:
@@ -141,8 +147,6 @@ class Execution:
             self.safe(identity, "loading_models" if lane == "gpu" else "fitting")
             job = self.owner.status(identity)
             with Image.open(self.owner.workspace.preparation_work(identity, "photo.png")) as image:
-                import hashlib
-
                 pixels = image.convert("RGB")
                 if (
                     pixels.size != (job.snapshot.photo.width, job.snapshot.photo.height)
@@ -384,11 +388,6 @@ class Execution:
             )
 
     def build(self, identity: str) -> None:
-        from etsy_listings.core.preparation.artifacts import (
-            PlacementArtifact,
-            descriptors,
-            read_maps,
-        )
 
         job = self.owner.status(identity)
         with Image.open(self.owner.workspace.preparation_work(identity, "photo.png")) as photo:
@@ -444,8 +443,6 @@ class Execution:
                     ):
                         raise ValueError("Saved mask snapshot checksum mismatch")
                 with Image.open(mask_path) as image:
-                    from etsy_listings.core.render import FloatMap
-
                     mask: FloatMap = np.array(image.convert("L"), dtype=np.float32)
                     mask /= np.float32(255)
                 record = job.cpu_checkpoints.get(placement_key(placement.id))
@@ -488,14 +485,12 @@ class Execution:
                         checkpoint=checkpoint,
                         cooperate=cooperate,
                     ).maps
-                    from etsy_listings.core.preparation.artifacts import arrays_of
 
                     for array in arrays_of(prepared).values():
                         array.flags.writeable = False
                     with archive.open("wb") as stream:
                         np.savez(stream, **arrays_of(prepared))
                         stream.flush()
-                        import os
 
                         os.fsync(stream.fileno())
                     descriptor = PlacementArtifact(
