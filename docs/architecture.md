@@ -573,10 +573,16 @@ pending. Matching an unanswered write suppresses a duplicate request without
 clearing the draft or changing its save identity; only persisted unchanged
 intent may acknowledge the draft without writing. The queue also owns each
 retained refused value and its attempt number, whether a field save or Retry
-received it. A field compares that refusal using its displayed value key and
-does not resend it on blur. A real new edit may try again; network failures
-remain retryable on blur. A save whose caller reports and retries its own failure, the currency
-dialog's, passes `retain: false` so Retry never resends it. Such a failure keeps
+received it. Only change keys identified by the workflow's field-error mapping
+are marked refused; other unwritten keys stay independently retryable. A field
+compares that refusal using its displayed value key and does not resend it on
+blur. A real new edit may try again; network failures
+remain retryable on blur. A draft captures its option label as well as its
+value, so a refreshed lookup cannot hide an unanswered or refused choice.
+Return-policy values encode their full terms and decode independently of the
+current lookup when saved or retried. A save whose caller reports and retries
+its own failure, the currency dialog's, passes `retain: false` so Retry never
+resends it. Such a failure keeps
 an earlier successful acknowledgement visible once the queue drains; loading
 a file or retaining a new failure clears that acknowledgement. Both panels
 discard local state only when a (re)load bumps `loadedVersion`. Initial Shop

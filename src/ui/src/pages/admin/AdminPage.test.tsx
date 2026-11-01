@@ -652,6 +652,137 @@ describe("Listing defaults", () => {
     },
   );
 
+  it.each([false, true])(
+    "keeps unrelated failed fields blur-saveable after Retry's field-specific refusal, reblur=%s",
+    async (reblur) => {
+      const server = fileServer();
+      server.failNext("renewal offline");
+      await openDefaults();
+      const renewal = screen.getByLabelText("Renewal");
+      fireEvent.change(renewal, { target: { value: "auto" } });
+      fireEvent.blur(renewal);
+      await screen.findByText("renewal offline");
+      server.failNext("shipping offline");
+      const shipping = screen.getByLabelText("Shipping profile");
+      fireEvent.change(shipping, { target: { value: "Printify EU standard" } });
+      fireEvent.blur(shipping);
+      await screen.findByText("shipping offline");
+      let answer!: (outcome: SaveOutcome) => void;
+      save.mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            answer = resolve;
+          }),
+      );
+      await userEvent.click(screen.getByRole("button", { name: "Retry save" }));
+      await waitFor(() => expect(save).toHaveBeenCalledTimes(3));
+      expect(save.mock.calls[2]).toEqual([
+        "r1",
+        {
+          renewal: "auto",
+          shipping_profile: "Printify EU standard",
+        },
+      ]);
+      if (reblur) {
+        renewal.focus();
+        fireEvent.blur(renewal);
+        await act(async () => {});
+        expect(save).toHaveBeenCalledTimes(3);
+      }
+      await act(async () =>
+        answer({
+          kind: "invalid",
+          message: "invalid shipping",
+          fieldErrors: {
+            shipping_profile: "shipping refused",
+          },
+        }),
+      );
+      await screen.findByText("shipping refused");
+      renewal.focus();
+      fireEvent.blur(renewal);
+      await waitFor(() => expect(save).toHaveBeenCalledTimes(4));
+      expect(save.mock.calls[3]).toEqual(["r1", { renewal: "auto" }]);
+      expect(server.file().listing_defaults.renewal).toBe("auto");
+      expect(server.file().listing_defaults.shipping_profile).toBe("Printify US standard");
+      expect(screen.queryByText("Saved")).not.toBeInTheDocument();
+      expect(shipping).toHaveValue("Printify EU standard");
+      shipping.focus();
+      fireEvent.blur(shipping);
+      await act(async () => {});
+      expect(save).toHaveBeenCalledTimes(4);
+      await userEvent.click(screen.getByRole("button", { name: "Retry save" }));
+      await screen.findByText("Saved");
+      expect(save.mock.calls[4]).toEqual(["r2", { shipping_profile: "Printify EU standard" }]);
+    },
+  );
+
+  it.each(["shipping_profile", "return_policy"] as const)(
+    "keeps a refused %s choice visible when its lookup becomes unavailable",
+    async (field) => {
+      save.mockResolvedValueOnce({
+        kind: "invalid",
+        message: "invalid edit",
+        fieldErrors: {
+          [field]: "edit refused",
+        },
+      });
+      await openDefaults();
+      const control = screen.getByLabelText(
+        field === "shipping_profile" ? "Shipping profile" : "Return policy",
+      );
+      const label =
+        field === "shipping_profile"
+          ? "Printify EU standard"
+          : "returns and exchanges within 14 days";
+      const option = within(control).getByRole("option", { name: label }) as HTMLOptionElement;
+      const value = option.value;
+      fireEvent.change(control, { target: { value } });
+      fireEvent.blur(control);
+      await screen.findByText("edit refused");
+      expect(control).toHaveValue(value);
+      getLookups.mockResolvedValueOnce(OFFLINE);
+      await userEvent.click(screen.getByRole("button", { name: "Refresh lists" }));
+      await waitFor(() => expect(control).toBeDisabled());
+      expect(control).toHaveValue(value);
+      expect(control).toHaveDisplayValue(label);
+      expect(save).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it.each([
+    { accepts_returns: true, accepts_exchanges: true, within_days: 14 },
+    { accepts_returns: false, accepts_exchanges: false, within_days: null },
+  ])("retries captured return-policy terms after the lookup drops them: %j", async (terms) => {
+    const server = fileServer();
+    const label = terms.accepts_returns
+      ? "returns and exchanges within 14 days"
+      : "no returns or exchanges";
+    getLookups.mockResolvedValue({
+      ...lookups(),
+      etsy: { ...lookups().etsy, return_policies: [{ terms, label }] },
+    });
+    server.failNext("policy offline");
+    await openDefaults();
+    const control = screen.getByLabelText("Return policy");
+    const value = (within(control).getByRole("option", { name: label }) as HTMLOptionElement).value;
+    fireEvent.change(control, { target: { value } });
+    fireEvent.blur(control);
+    await screen.findByText("policy offline");
+    getLookups.mockResolvedValueOnce({
+      ...lookups(),
+      etsy: { ...lookups().etsy, return_policies: [] },
+    });
+    await act(async () => window.dispatchEvent(new Event("focus")));
+    expect(control).toBeEnabled();
+    control.focus();
+    fireEvent.blur(control);
+    await screen.findByText("Saved");
+    expect(save.mock.calls[1]).toEqual(["r1", { return_policy: terms }]);
+    expect(server.file().listing_defaults.return_policy).toEqual(terms);
+    expect(control).toHaveDisplayValue(label);
+  });
+
   it("ignores an abandoned initial Shop read under StrictMode", async () => {
     let release!: (value: ShopSettings) => void;
     vi.mocked(shopApi.getShop).mockImplementationOnce(

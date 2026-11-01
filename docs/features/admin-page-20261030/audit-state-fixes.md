@@ -185,13 +185,43 @@ the failures before these corrections.
 F7 from the next Spec recheck concerned validation refusal through Retry.
 Only a field's own save had updated its local refusal marker, so a Retry
 refusal left the unchanged draft eligible for another blur request. The queue
-now owns the refused value and attempt number for every retained failure.
+now owns the refused value and attempt number for each field-specific refusal.
 Each field uses its displayed value key to recognize that refusal, including
 return-policy terms. Blurring again keeps the value and error without writing;
 an explicit new edit may try again. Network failures remain retryable on blur.
 Four regression cases, covering Renewal and Return policy with and without a
 matching blur during the held Retry, failed before the correction. Each also
 proves that choosing away and back after refusal permits a new save.
+
+### Field-specific refusal attribution
+
+F8 concerned a Retry containing independently failed fields. If its validation
+answer named only Shipping, the queue had also marked Renewal as refused,
+blocking its unchanged blur even though its value had no validation error.
+The queue now uses the workflow's field-error mapping for each changed key.
+Named keys retain their refusal; other unwritten keys stay failed and may be
+retried independently. Two cases with an explicitly held Retry, with and
+without a matching blur while pending, failed before the correction. They also
+prove that saving Renewal leaves Shipping's error intact, and the next explicit
+Retry sends only Shipping with the revision returned by Renewal's save.
+
+### Drafts survive lookup refresh
+
+F9 was found while checking retained drafts after F8. A refresh that removed
+the attempted option made the select display its persisted value, even though
+the refused draft was still retained. Each draft now captures its option label
+alongside its value and keeps that option visible when the live list lacks it.
+Return-policy select keys already encode the complete terms; saves now decode
+that captured identity instead of resolving it against the latest lookup. This
+prevents a network-failed policy from becoming `null` when retried after a refresh.
+
+Two public UI cases failed before the correction for refused Shipping and
+Return-policy choices when Etsy becomes unavailable. Two more failed because
+retrying a policy omitted by the refreshed list sent `null` rather than the
+captured terms, including the no-returns policy. The built-SPA Shipping journey
+also failed against the prior build under both color preferences: after the
+refresh, the select showed US instead of the refused EU choice. It now checks
+that the retained choice stays visible before Use it replaces it with UK.
 
 ### UI decision
 
@@ -216,24 +246,24 @@ browser checks below were rerun for the follow-up.
 | Check | Result |
 |---|---|
 | Unchanged backend's full local gate | Passed. Python: 3,779 passed, seven platform skips, 55 deselected. Combined branch-enabled coverage: 95.50%; branches: 3,837 of 4,254, or 90.20%. Backend format, lint, strict typing and all 11 import contracts passed. |
-| Full follow-up frontend coverage gate | Passed: 1,313 tests across 97 files; 90.29% branch coverage. Format check, lint and strict typing passed. |
+| Full follow-up frontend coverage gate | Passed: 1,319 tests across 97 files; 90.40% branch coverage. Format check, lint and strict typing passed. |
 | Separate SPA build and `npm run test:design` | Passed; four design tests. |
-| Full browser CI at `422b1b56` | Passed: 164 cases, zero skips, with required prerequisites. Fresh CI rechecks the complete layer after the Retry-refusal correction. |
+| Full browser CI at `422b1b56` | Passed: 164 cases, zero skips, with required prerequisites. Fresh CI rechecks the complete layer after the refusal-attribution and lookup-refresh corrections. |
 | Latest built-SPA Admin browser layer | Passed: 32 cases, zero skips, with required prerequisites. Includes POD abandonment and the earlier Shop/Settings/provider cases. |
-| Red/green follow-up regressions | Twelve public UI cases failed before their respective fixes; all 73 Shop/Settings cases pass after them. The F3 selector and POD browser cases each failed against the prior build under both color preferences, then passed after rebuilding. |
+| Red/green follow-up regressions | Eighteen public UI cases failed before their respective fixes; all 79 Shop/Settings cases pass after them. The F3 selector, POD and F9 lookup-refresh browser cases each failed against the prior build under both color preferences, then passed after rebuilding. |
 | Generated API | No wire shape changed. The OpenAPI export regression passed and the generated client has no diff. |
 
 The independent Runtime Standards/process recheck reported no actionable
 findings. Its 91 focused tests and external Windows process diagnostics closed
 the exited-launcher residual. State's resumed Standards and Spec reviews
-identified F3 through F7 above; those findings are fixed and backed by the
+identified F3 through F8 above; those findings and parent-found F9 are fixed and backed by the
 regressions recorded here. Final independent review and workflow outcomes are
 recorded in [State PR #151](https://github.com/eli-jordan/etsy-listing-automation/pull/151).
 The old Spec review's S1-open remark concerned
 its earlier `82f0aef7` snapshot, which predates Runtime's merged correction.
 
-Against Runtime, `scripts/sloc.py` measures net additions of 22 backend and 232
-frontend production lines, plus 560 Python test and 572 frontend test lines.
+Against Runtime, `scripts/sloc.py` measures net additions of 22 backend and 245
+frontend production lines, plus 571 Python test and 700 frontend test lines.
 The shared queue replaces separate Shop and Settings save coordination.
 
 Runtime PR #150 passed all four CI checks and its parent-dispatched

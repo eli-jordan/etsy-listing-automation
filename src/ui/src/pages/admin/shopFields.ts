@@ -84,6 +84,18 @@ export function policyKey(terms: ReturnPolicyTerms | null | undefined): string {
   return `${terms.accepts_returns}/${terms.accepts_exchanges}/${terms.within_days ?? ""}`;
 }
 
+/** Decode a select value produced by policyKey. Its terms survive a lookup
+ * refresh, so retrying an earlier choice cannot turn it into an empty policy. */
+export function policyTerms(key: string): ReturnPolicyTerms | null {
+  if (!key) return null;
+  const [returns, exchanges, days] = key.split("/");
+  return {
+    accepts_returns: returns === "true",
+    accepts_exchanges: exchanges === "true",
+    within_days: days ? Number(days) : null,
+  };
+}
+
 /** The same words `ReturnPolicy.describe()` uses server-side, for a saved
  * policy the lookup did not return. */
 export function describeTerms(terms: ReturnPolicyTerms): string {

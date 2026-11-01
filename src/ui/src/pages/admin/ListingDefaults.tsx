@@ -14,6 +14,7 @@ import {
   labelOf,
   type Option,
   policyKey,
+  policyTerms,
   PRINT_ON_DEMAND,
   RENEWAL,
   WHEN_MADE,
@@ -37,7 +38,7 @@ type Refusal = (value: string) => number | null;
  * external lists*). Print on demand is derived from three saved values and
  * writes all three in one save; Custom shows their selectors and changes
  * nothing by itself. Every selector saves on blur, once, and only a change.
- * Lists come from live lookups; a saved choice they lack stays visible.
+ * Lists come from live lookups; saved and draft choices they lack stay visible.
  * Mounted afresh for each loaded file, so a reload drops local drafts.
  * Shows `shop` with the queue's pending values over it: what the file will
  * hold once sent saves land, which a newer choice is compared against.
@@ -90,7 +91,6 @@ export function ListingDefaults({
     return commit(changes, options);
   };
 
-  const policies = lookups.lookups?.etsy.return_policies ?? [];
   function refusalFor<K extends ShopField>(
     field: K,
     display: (value: ShopChanges[K]) => string = (value) => String(value ?? ""),
@@ -291,11 +291,7 @@ export function ListingDefaults({
           lookups={lookups}
           available={lookups.etsyAvailable}
           {...{ info, locked, fieldErrors, save: commit }}
-          toChange={(value) => ({
-            return_policy:
-              policies.find((p) => policyKey(p.terms) === value)?.terms ??
-              (value === policyKey(defaults.return_policy) ? defaults.return_policy : null),
-          })}
+          toChange={(value) => ({ return_policy: policyTerms(value) })}
         />
         <Field label="Renewal" field="renewal" info={info} error={fieldErrors.renewal}>
           <BlurSelect
@@ -338,10 +334,8 @@ function unreachable(lookups: Lookups): string {
   return lookups.etsyAvailable ? "Printify" : "Etsy";
 }
 
-function withSaved(options: Option[], saved: string): Option[] {
-  return options.some((o) => o.value === saved)
-    ? options
-    : [...options, { value: saved, label: saved }];
+function withSaved(options: Option[], saved: string, label = saved): Option[] {
+  return options.some((o) => o.value === saved) ? options : [...options, { value: saved, label }];
 }
 
 function Field({
@@ -446,7 +440,7 @@ function ListField({
             type="button"
             className="sp-use"
             disabled={locked}
-            onClick={() => draft.choose(found.value)}
+            onClick={() => draft.choose(found.value, found.label)}
           >
             Use it
           </button>
@@ -458,12 +452,13 @@ function ListField({
 
 type Draft = {
   shown: string;
+  label: string | null;
   /** The seller changed the select; nothing is sent yet. */
-  change: (value: string) => void;
+  change: (value: string, label: string) => void;
   /** The seller left the select: send its draft if it changes the file. */
   leave: () => void;
   /** A choice made and sent at once, such as Use it. */
-  choose: (value: string) => void;
+  choose: (value: string, label: string) => void;
 };
 
 /**
@@ -485,17 +480,17 @@ function useDraft(
   refusal: Refusal,
   onCommit: (value: string, options?: CommitOptions) => Promise<Answer>,
 ): Draft {
-  const [draft, setDraft] = useState<string | null>(null);
+  const [draft, setDraft] = useState<Option | null>(null);
   const edits = useRef(0);
   const sent = useRef<{ value: string; edit: number } | null>(null);
   // Editing may retry a refusal already seen; a later refusal still blocks
   // automatic blur, even when Retry (rather than this draft) received it.
   const refusalAtEdit = useRef<number | null>(null);
 
-  const edit = (value: string) => {
+  const edit = (value: string, label: string) => {
     edits.current += 1;
     refusalAtEdit.current = refusal(value);
-    setDraft(value);
+    setDraft({ value, label });
   };
   const send = (value: string) => {
     // Matching an unanswered write is not acknowledgement of this draft.
@@ -514,13 +509,14 @@ function useDraft(
     });
   };
   return {
-    shown: draft ?? saved,
+    shown: draft?.value ?? saved,
+    label: draft?.label ?? null,
     change: edit,
     leave: () => {
-      if (draft !== null) send(draft);
+      if (draft !== null) send(draft.value);
     },
-    choose: (value) => {
-      edit(value);
+    choose: (value, label) => {
+      edit(value, label);
       send(value);
     },
   };
@@ -560,16 +556,22 @@ function DraftSelect({
   disabled: boolean;
   draft: Draft;
 }) {
+  // Lookup refresh may remove a refused or unanswered choice. Its captured
+  // label keeps the actual draft visible without exposing a policy's key.
+  const visible = draft.label === null ? options : withSaved(options, draft.shown, draft.label);
   return (
     <select
       className="adm-select"
       aria-label={label}
       disabled={disabled}
       value={draft.shown}
-      onChange={(e) => draft.change(e.target.value)}
+      onChange={(e) => {
+        const select = e.currentTarget;
+        draft.change(select.value, select.selectedOptions[0]?.label ?? select.value);
+      }}
       onBlur={draft.leave}
     >
-      {options.map((o) => (
+      {visible.map((o) => (
         <option key={o.value} value={o.value}>
           {o.label}
         </option>

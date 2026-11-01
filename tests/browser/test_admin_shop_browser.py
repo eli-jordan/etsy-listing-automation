@@ -329,6 +329,9 @@ def test_use_it_replaces_a_failed_draft_with_what_it_wrote(
     open_defaults(page, calibrator_server, theme)
     shipping = page.get_by_role("combobox", name="Shipping profile")
     expect(shipping).to_be_enabled()
+    if shipping.input_value() != "Printify US standard":
+        with page.expect_response(is_save):
+            choose(shipping, "Printify US standard")
     attempts: list[dict[str, object]] = []
 
     def fail_first(route) -> None:  # noqa: ANN001
@@ -346,6 +349,16 @@ def test_use_it_replaces_a_failed_draft_with_what_it_wrote(
     page.route("**/api/admin/shop", fail_first)
     choose(shipping, "Printify EU standard")
     expect(page.get_by_role("button", name="Retry save")).to_be_visible()
+
+    # A list refresh must not replace the refused draft with a saved option.
+    titles.clear()
+    with page.expect_response(lambda r: r.url.endswith("/api/admin/shop/lookups")):
+        page.evaluate("window.dispatchEvent(new Event('focus'))")
+    expect(page.locator(".sp-missing").filter(has_text="Printify US standard")).to_be_visible()
+    expect(shipping).to_have_value("Printify EU standard")
+    expect(shipping.locator("option:checked")).to_have_text("Printify EU standard")
+    assert attempts == [{"shipping_profile": "Printify EU standard"}]
+    assert on_disk(workspace_root).etsy.listing_defaults.shipping_profile == "Printify US standard"
 
     titles.append("Printify UK standard")
     page.evaluate("window.dispatchEvent(new Event('focus'))")

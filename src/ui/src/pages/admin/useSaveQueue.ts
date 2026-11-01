@@ -53,7 +53,8 @@ export function useSaveQueue<C extends Changes, O extends SaveOutcome>({
   send: (revision: string, changes: C) => Promise<O>;
   /** Adopts a successful answer's values, whichever save sent it. */
   onSaved?: (outcome: Extract<O, { kind: "saved" }>) => void;
-  /** Whether a successful save of `changes` answers the field error at `key`. */
+  /** Whether `changes` answers the error at `key`. Also called with a
+   * single-key patch to attribute a validation refusal to that change. */
   clears: (key: string, changes: C) => boolean;
   /** The status message for a failure that brought none. */
   fallback: string;
@@ -146,16 +147,22 @@ export function useSaveQueue<C extends Changes, O extends SaveOutcome>({
             ) as Partial<C>,
         );
       };
-      const fail = (message: string, refusedAt: number | null = null) => {
+      const fail = (message: string, errors: FieldErrors = {}) => {
         if (!retain) {
           // The caller reports this failure itself and owns its retry; the
           // page goes back to what the retained failures and queue say.
           settle(waiting.current - 1);
           return;
         }
-        for (const [key, value] of Object.entries(changes))
-          if (latest.current.get(key) === mine)
-            failed.current.set(key, { value, message, refusal: refusedAt });
+        const refusedFields = Object.keys(errors);
+        for (const [key, value] of Object.entries(changes)) {
+          if (latest.current.get(key) !== mine) continue;
+          // Unnamed changes were not written, but their values were not
+          // refused. Keep them retryable independently of the bad field.
+          const changed = { [key]: value } as C;
+          const refused = refusedFields.some((field) => clears(field, changed));
+          failed.current.set(key, { value, message, refusal: refused ? mine : null });
+        }
         acknowledged.current = false;
         setStatus({ kind: "error", message });
       };
@@ -179,7 +186,7 @@ export function useSaveQueue<C extends Changes, O extends SaveOutcome>({
             setStatus({ kind: "conflict", message: outcome.message });
           } else {
             if (retain) setFieldErrors((errors) => ({ ...errors, ...outcome.fieldErrors }));
-            fail("Not saved", mine);
+            fail("Not saved", outcome.fieldErrors);
           }
           return outcome;
         } catch (error) {
