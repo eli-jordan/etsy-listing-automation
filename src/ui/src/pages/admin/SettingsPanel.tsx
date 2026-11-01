@@ -39,14 +39,20 @@ export function SettingsPanel() {
           </button>
         </div>
       )}
-      <div role="status" className="adm-save settings-save">
-        {status.kind === "saving"
-          ? "Saving…"
-          : status.kind === "saved"
-            ? "Saved"
-            : status.kind === "error"
-              ? status.message
-              : ""}
+      <div
+        role="status"
+        className={status.kind === "error" ? "adm-warn settings-notice" : "adm-save settings-save"}
+      >
+        {status.kind === "error" && <WarningIcon size={20} />}
+        <span>
+          {status.kind === "saving"
+            ? "Saving…"
+            : status.kind === "saved"
+              ? "Saved"
+              : status.kind === "error"
+                ? status.message
+                : ""}
+        </span>
       </div>
       {status.kind === "error" && (
         <button className="btn btn-secondary" onClick={state.retry}>

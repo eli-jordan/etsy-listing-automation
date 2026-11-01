@@ -110,9 +110,9 @@ def create_app(
         The scene warmer stops before the rest, abandoning its queue: what
         it composes is only ever a head start."""
         await run_in_threadpool(preparations.start)
-        # ADR-0056: advisory, bounded probes. Failures stay in the catalog;
-        # they never prevent startup or replace the seller's preferences.
-        await run_in_threadpool(discovery.read)
+        # ADR-0056: discovery is advisory. Its owned worker must not hold
+        # application availability behind installed CLI processes.
+        discovery.start()
         staging_store.sweep(now=datetime.now(UTC))
         deployments.start()
         ai.start()
@@ -120,6 +120,7 @@ def create_app(
         try:
             yield
         finally:
+            await run_in_threadpool(discovery.stop)
             scene_warmer.stop()
             ai.stop()
             deployments.stop()

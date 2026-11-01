@@ -156,6 +156,11 @@ _PREFERENCE_REJECTION = re.compile(
 )
 """ADR-0056: a rejected saved preference permits fallback. Merely mentioning
 a model or effort in a generation failure does not."""
+_CLAUDE_SELECTED_MODEL_REJECTION = re.compile(
+    r"\bthere['’]s an issue with the selected model\b.{0,160}\bmay not exist\b",
+    re.IGNORECASE,
+)
+"""Claude's observed refusal of a saved model, fallback-eligible like the above."""
 _ERROR_PREFIX = re.compile(r"^error:\s*", re.IGNORECASE)
 """An explicit "HTTP 401"/"HTTP/1.1 403"/"http status 429"-shaped status
 line. A bare status number in prose is not trusted; this pattern is, because
@@ -191,14 +196,18 @@ def classify_process_failure(
     prompt) and then the failure as an ``ERROR:`` line; that line is the
     sentence, and a word in the prompt is not.
     """
-    shown, status = _seller_text(stdout, stderr)
+    shown, status, model_missing = _seller_text(stdout, stderr)
     shown = _clip(shown)
-    if _is_unavailable(shown, status):
+    if (
+        model_missing
+        or _is_unavailable(shown, status)
+        or (provider == "claude" and _CLAUDE_SELECTED_MODEL_REJECTION.search(shown))
+    ):
         return ProviderUnavailableError(provider, _as_sentence(shown))
     return ProviderGenerationError(provider, returncode, shown)
 
 
-def _seller_text(stdout: str, stderr: str) -> tuple[str, int | None]:
+def _seller_text(stdout: str, stderr: str) -> tuple[str, int | None, bool]:
     """The text a seller should read, and a structured HTTP status if that
     same stream carried one.
 
@@ -216,20 +225,28 @@ def _seller_text(stdout: str, stderr: str) -> tuple[str, int | None]:
     out = stdout.strip()
     primary = err or out
     if not primary:
-        return "", None
+        return "", None, False
     envelope = _envelope(primary)
     if envelope is not None:
         sentence = _sentence(envelope)
         status = _api_status(envelope)
+        error = envelope.get("error")
+        # Only the vendor's error object is trusted. Generated text and
+        # unrelated telemetry may legitimately mention this code.
+        model_missing = isinstance(error, dict) and any(
+            error.get(key) == "model_not_found" for key in ("type", "code")
+        )
         if sentence:
-            return _as_sentence(sentence), status
+            return _as_sentence(sentence), status, model_missing
+        if model_missing:
+            return "The selected model was not found.", status, True
         if status in _AUTH_OR_LIMIT_STATUS:
-            return f"HTTP {status}", status
-        return primary, status
+            return f"HTTP {status}", status, False
+        return primary, status, False
     failure = _failure_lines(primary)
     if failure:
-        return _as_sentence(failure), None
-    return primary, None
+        return _as_sentence(failure), None, False
+    return primary, None, False
 
 
 def _failure_lines(text: str) -> str | None:

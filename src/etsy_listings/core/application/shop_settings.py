@@ -7,7 +7,8 @@ Admin plan, PR 3, *Shop*. Three operations, each a caller's whole job:
   candidate document is validated as a whole ``Defaults`` before anything is
   written; an edit that changes nothing leaves the file byte-identical
   (``workspace.revisions``, ADR-0055). A save adopts the new defaults in the
-  running ``Workspace`` so the next plan or deploy reads them;
+  running ``Workspace`` so the next plan or deploy reads them, under the
+  file's lock so saves are adopted in the order they were written;
   a run already under way keeps the ``Workspace.snapshot`` it took.
 - :func:`shop_connections` -- the configured Etsy and Printify shops, and
   whether a live lookup agrees, without ever erasing a configured identity
@@ -145,12 +146,17 @@ def edit_shop(
             raise InvalidShopEdit({"__root__": str(exc)}) from exc
         return edit_yaml_bytes(source, candidate)
 
+    def adopt() -> None:
+        # Under the file's lock, once the write succeeded: published after
+        # the lock is released, an older save could overwrite the defaults
+        # of a newer save made against its revision.
+        (workspace.defaults,) = adopted
+
     try:
-        revised = replace_if_unchanged(path, expected_revision, change)
+        revised = replace_if_unchanged(path, expected_revision, change, adopt=adopt)
     except RevisionConflict as exc:
         raise ShopRevisionConflict() from exc
     (defaults,) = adopted
-    workspace.defaults = defaults
     return ShopView(revised.revision, defaults)
 
 

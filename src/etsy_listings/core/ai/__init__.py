@@ -35,7 +35,9 @@ step and run budgets (ADR-0057) are shared, which is what `ProviderTask` exists 
   reads a prompt file or knows which feature it is serving. The chain tries
   the workspace order, defaulting to Codex, Claude, Grok (ADR-0056).
 - ``discovery`` -- ``ModelDiscovery`` and its advisory ``ModelCatalogs``,
-  ``ProviderCatalog`` and ``ModelChoice``. Imported directly, not re-exported.
+  ``ProviderCatalog`` and ``ModelChoice``. Construction starts nothing;
+  ``start``/``stop`` own startup discovery, and ``read(refresh=True)`` retries
+  within one shared probe budget. Imported directly, not re-exported.
 - ``orchestrator`` -- `run_task`, and the three entry points over it,
   `generate_proposal`, `generate_brief` and `generate_market_queries`.
 - ``listing_inputs`` -- saved-listing AI facts, paired request/snapshot
@@ -44,7 +46,9 @@ step and run budgets (ADR-0057) are shared, which is what `ProviderTask` exists 
 - ``errors`` -- the exception hierarchy `orchestrator` and all adapters
   raise, and `classify_process_failure`, the availability classifier.
 - ``process`` -- `run_managed`: cross-platform subprocess-tree launch and
-  cleanup for timeouts, cancellation, and request disconnects (PR4).
+  cleanup for completion, timeouts, cancellation, and request disconnects.
+  Private ``_windows_process``/``_posix_process`` implement ownership; callers
+  never select a platform mechanism or manage child identities.
 
 `core/application/ai/` coordinates this package into runs, readiness and
 proposal operations; `server/api/airuns.py` and `server/api/seo.py` serve

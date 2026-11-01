@@ -455,12 +455,34 @@ rather than new garment facts (ADR-0044). The runner may save an automatically
 drafted brief after rechecking that it is still empty; SEO suggestions enter
 the listing through the seller's acceptance workflow (ADR-0003).
 
-The server owns one advisory `ai/discovery.ModelDiscovery` instance. Startup,
-30-minute cache expiry and explicit Refresh read the installed Codex/Grok model
-catalogs; Claude uses pinned ids. Failed discovery retains earlier catalog
-values and reports the failure. It never validates or rewrites preferences.
+The server owns one advisory `ai/discovery.ModelDiscovery` instance. Construction
+starts no thread. The lifespan starts a background discovery attempt and cancels
+it on shutdown, waiting at most six seconds. Startup can serve the dashboard
+while that attempt is running. Startup, 30-minute cache expiry and explicit
+Refresh read the installed Codex/Grok model catalogs; Claude uses pinned ids.
+One refresh shares a 15-second monotonic probe budget across both CLIs and uses
+the generation adapters' managed process-tree runner, with at most five further
+seconds for cleanup. The cache lock covers state publication, never a process
+wait. Concurrent catalog reads retain successful choices with an in-progress
+status instead of queuing behind the probe. Failed discovery retains earlier
+catalog values and reports the failure. It never validates or rewrites preferences.
+The shared process owner ends remaining descendants on launcher completion,
+timeout or cancellation and drains its pipe readers before returning. On
+Windows 10 or later, process creation atomically assigns an unnamed,
+non-inherited kill-on-close Job Object through `PROC_THREAD_ATTRIBUTE_JOB_LIST`;
+the job retains descendants after their launcher exits. Cleanup checks the
+job's active-process count within the same five-second allowance. POSIX uses
+a new session and observes exit with `waitid(WNOWAIT)`, retaining the unreaped
+leader until group termination so its PID/PGID cannot be reused. Children must
+remain in that process group on POSIX. Platform details stay inside the
+process owner; discovery and generation use the same public runner
+(ADR-0056, ADR-0057).
 Admin retains stale saved model/effort choices and warns without blocking runs.
 Omitted preferences pass no model/effort flags, preserving CLI account defaults.
+Invalid saved settings become the coordinator's `AiNotReady` refusal before a
+run is registered. Listing readiness and run start report the same file/key
+detail; batch readiness carries that detail and a correction remedy while
+keeping staging. Only configuration-loading failures are adapted this way.
 
 `ProposalStore` retains one latest proposal with its input snapshot,
 generation time, origin and per-section resolutions. Staleness is judged on
@@ -504,7 +526,11 @@ lock around read, revision comparison, validation and atomic replace. A stale
 revision refuses with 409; invalid values refuse with field errors and 422.
 Semantic no-ops leave the source bytes and file untouched, per ADR-0055.
 
-A successful save replaces the server workspace's defaults. Deployment plan
+A successful save replaces the server workspace's defaults inside the same
+revision lock, after the replace succeeds (`replace_if_unchanged(adopt=...)`),
+so saves publish in the order they reached the file: a save made against
+another save's revision always publishes after it, and a refused or failed
+write publishes nothing. Deployment plan
 and apply jobs capture `Workspace.snapshot()` when execution starts, and batch
 creation captures it before creating rows. Active work therefore keeps its
 starting defaults while subsequent work sees edits. Saves never rewrite listing
@@ -528,6 +554,46 @@ preserves untouched bytes and no-op saves do not replace the file (ADR-0055).
 An absent file uses defaults without creating it; invalid files refuse to load
 or dispatch batch work. The page serializes saves and adopts returned revisions;
 a conflict requires reload and never reapplies an old patch automatically.
+
+Shop and Settings share one client save queue, `pages/admin/useSaveQueue.ts`:
+revision progression, per-key acknowledgement, failure retention, Retry and
+conflict stopping. A key stays failed until a later save of that key succeeds
+or the seller chooses what the file will already hold. That unchanged choice
+discards the field's failed patch and error without writing or cancelling a
+queued save. An unrelated success never reports Saved over a retained failure,
+and Retry sends only the failed keys. An unchanged Print on demand choice
+uses the same discard path for all three preset keys. An incoming refusal only
+adds field errors for keys that still belong to that save. If newer queued
+saves supersede every key, status follows those saves and retained failures
+rather than offering an empty Retry. Each key's newest
+unanswered value, from a field save or Retry,
+is `pending`; Shop's listing defaults show it over the saved file, so a newer
+choice is compared with what the file will hold. Responses never replace a
+newer local edit: each Shop field has one draft owner that its select and Use
+it both go through, which drops a draft only on the answer to the save made
+from it. Each control also knows whether that anticipated value is still
+pending. Matching an unanswered write suppresses a duplicate request without
+clearing the draft or changing its save identity; only persisted unchanged
+intent may acknowledge the draft without writing. The queue also owns each
+retained refused value and its attempt number, whether a field save or Retry
+received it. Only change keys identified by the workflow's field-error mapping
+are marked refused; other unwritten keys stay independently retryable. A field
+compares that refusal using its displayed value key and does not resend it on
+blur. A real new edit may try again; network failures
+remain retryable on blur. A draft captures its option label as well as its
+value, so a refreshed lookup cannot hide an unanswered or refused choice.
+Return-policy values encode their full terms and decode independently of the
+current lookup when saved or retried. A document-level `__root__` refusal has
+no field control: its actionable reason stays in the queue's retained failure
+status until that patch is answered or abandoned. Settings renders error
+status in its wrapping warning notice. A save whose caller reports and retries
+its own failure, the currency dialog's, passes `retain: false` so Retry never
+resends it. Such a failure keeps
+an earlier successful acknowledgement visible once the queue drains; loading
+a file or retaining a new failure clears that acknowledgement. Both panels
+discard local state only when a (re)load bumps `loadedVersion`. Initial Shop
+and Settings reads ignore answers and errors after their effect is cleaned up,
+so development StrictMode replay cannot reset a newer focused draft.
 Batch concurrency is 1–8, read at the next dispatch, and lowering it leaves
 active runs alone (ADR-0048). Market shares normalize only for display until an
 edit saves whole percentages. The server returns the model's Reset defaults.
@@ -538,7 +604,10 @@ These are preserved deliberately; the restructure moved them into core without
 changing them. The listing document locks (`ListingDocuments.lock`) serialize
 every `listing.yaml` edit, proposal record write and listing rename or removal,
 including the engine's, and `WorkspaceLocks` serializes listing-template writes,
-inside one process only. Deployment and AI registries hold runs in
+inside one process only. Etsy token rotation is serialized per resolved token
+file across every `TokenStore` in the process, so concurrent Admin requests
+rotate an expired grant once; across processes only the `invalid_grant`
+re-read protects it. Deployment and AI registries hold runs in
 memory. There is no cross-process lock protecting concurrent CLI and server
 writes, no shared registry across multiple ASGI workers or servers on one
 workspace, and CLI `apply` neither consults nor joins the server's queue.
@@ -1097,7 +1166,17 @@ written under an identity computed from the very arrays composed, so apply and
 previews share entries without trusting anything but that identity. A preview
 reaches the identity without decoding through `PIXEL_DIGESTS`, which keeps each
 photo's and design's pixel digest only while its `file_version` stamp is
-unchanged; preview responses carry the identity as their ETag. One composition
+unchanged; preview responses carry the identity as their ETag. On Windows,
+USNs are trusted only while a short read-data metadata handle excludes other
+writers. An open writer can coalesce USN reasons, so a sharing conflict uses
+the existing content-hash fallback. Atomic replacement remains shared.
+This guard can temporarily reject another program opening the same file for
+an in-place write. The handle is held only for the metadata query and is
+closed in `finally`. Retain this trade-off rather than hash every Windows
+cache check: repeated whole-file reads scale with source and prediction-file
+sizes and would add work even when their contents have not changed. The
+fallback still hashes when a writer is already open or a USN is unavailable.
+One composition
 runs per identity: a second request waits and reads the first one's entry. At
 most four Marigold compositions run at once, across previews and apply.
 

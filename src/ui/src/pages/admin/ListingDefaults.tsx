@@ -2,8 +2,8 @@ import { ArrowSquareOutIcon } from "@phosphor-icons/react/dist/csr/ArrowSquareOu
 import { SparkleIcon } from "@phosphor-icons/react/dist/csr/Sparkle";
 import { WarningIcon } from "@phosphor-icons/react/dist/csr/Warning";
 import { WarningOctagonIcon } from "@phosphor-icons/react/dist/csr/WarningOctagon";
-import { type ReactNode, useState } from "react";
-import type { SaveOutcome, ShopChanges, ShopSettings } from "../../api/shop";
+import { type ReactNode, useRef, useState } from "react";
+import type { SaveOutcome, ShopChanges, ShopField, ShopSettings } from "../../api/shop";
 import { Info, type InfoState } from "./Info";
 import {
   CREATE_LINKS,
@@ -14,6 +14,7 @@ import {
   labelOf,
   type Option,
   policyKey,
+  policyTerms,
   PRINT_ON_DEMAND,
   RENEWAL,
   WHEN_MADE,
@@ -21,49 +22,84 @@ import {
 } from "./shopFields";
 import type { useShopLookups } from "./useShopLookups";
 import type { FieldErrors } from "./useShopSettings";
+import type { RefusedValue } from "./useSaveQueue";
 
 type Lookups = ReturnType<typeof useShopLookups>;
 type Save = (changes: ShopChanges) => Promise<SaveOutcome | null>;
+/** How a field's intent was answered: written, already held by the file,
+ * refused by validation, or not known to have reached the file. */
+type Answer = "saved" | "unchanged" | "refused" | "failed";
+type CommitOptions = { unchanged?: boolean };
+type Commit = (changes: ShopChanges, options?: CommitOptions) => Promise<Answer>;
+type Refusal = (value: string) => number | null;
 
 /**
  * Listing defaults (interactions, *Listing defaults, info cards and
  * external lists*). Print on demand is derived from three saved values and
  * writes all three in one save; Custom shows their selectors and changes
  * nothing by itself. Every selector saves on blur, once, and only a change.
- * Lists come from live lookups; a saved choice they lack stays visible.
+ * Lists come from live lookups; saved and draft choices they lack stay visible.
+ * Mounted afresh for each loaded file, so a reload drops local drafts.
+ * Shows `shop` with the queue's pending values over it: what the file will
+ * hold once sent saves land, which a newer choice is compared against.
  */
 export function ListingDefaults({
-  shop,
+  shop: saved,
+  pending,
   save,
+  discard,
+  refusal,
   fieldErrors,
   locked,
   lookups,
   info,
 }: {
   shop: ShopSettings;
+  pending: ShopChanges;
   save: Save;
+  discard: (changes: ShopChanges) => void;
+  refusal: <K extends ShopField>(field: K) => RefusedValue<ShopChanges[K]> | null;
   fieldErrors: FieldErrors;
   locked: boolean;
   lookups: Lookups;
   info: InfoState;
 }) {
+  const shop = held(saved, pending);
   const defaults = shop.listing_defaults;
   const [customChosen, setCustomChosen] = useState(false);
   const tier = customChosen || !isPrintOnDemand(defaults) ? "custom" : "pod";
-  const commit = (changes: ShopChanges) => void save(changes).catch(() => undefined);
+  const commit: Commit = (changes, { unchanged = false } = {}) => {
+    if (unchanged) {
+      discard(changes);
+      return Promise.resolve("unchanged");
+    }
+    return save(changes).then(
+      (outcome): Answer =>
+        outcome?.kind === "saved" ? "saved" : outcome?.kind === "invalid" ? "refused" : "failed",
+      (): Answer => "failed",
+    );
+  };
 
   const choosePod = () => {
     setCustomChosen(false);
-    if (!isPrintOnDemand(defaults)) commit(PRINT_ON_DEMAND);
+    void commit(PRINT_ON_DEMAND, { unchanged: isPrintOnDemand(defaults) });
   };
-  const customCommit = (changes: ShopChanges) => {
+  const customCommit: Commit = (changes, options) => {
     // Editing one of the three keeps Custom open even if the values come
     // to match Print on demand; reopening the page derives it again.
     setCustomChosen(true);
-    commit(changes);
+    return commit(changes, options);
   };
 
-  const policies = lookups.lookups?.etsy.return_policies ?? [];
+  function refusalFor<K extends ShopField>(
+    field: K,
+    display: (value: ShopChanges[K]) => string = (value) => String(value ?? ""),
+  ): Refusal {
+    return (value) => {
+      const held = refusal(field);
+      return held && display(held.value) === value ? held.attempt : null;
+    };
+  }
 
   return (
     <section className="b-panel" aria-labelledby="sp-defaults">
@@ -129,9 +165,11 @@ export function ListingDefaults({
             <BlurSelect
               label="Who made it"
               saved={defaults.who_made}
+              pending={"who_made" in pending}
+              refusal={refusalFor("who_made")}
               options={withSaved(WHO_MADE, defaults.who_made)}
               disabled={locked}
-              onCommit={(value) => customCommit({ who_made: value })}
+              onCommit={(value, options) => customCommit({ who_made: value }, options)}
             />
           </Field>
           <Field
@@ -143,18 +181,22 @@ export function ListingDefaults({
             <BlurSelect
               label="When it was made"
               saved={defaults.when_made}
+              pending={"when_made" in pending}
+              refusal={refusalFor("when_made")}
               options={withSaved(WHEN_MADE, defaults.when_made)}
               disabled={locked}
-              onCommit={(value) => customCommit({ when_made: value })}
+              onCommit={(value, options) => customCommit({ when_made: value }, options)}
             />
           </Field>
           <Field label="What it is" field="is_supply" info={info} error={fieldErrors.is_supply}>
             <BlurSelect
               label="What it is"
               saved={String(defaults.is_supply)}
+              pending={"is_supply" in pending}
+              refusal={refusalFor("is_supply")}
               options={IS_SUPPLY}
               disabled={locked}
-              onCommit={(value) => customCommit({ is_supply: value === "true" })}
+              onCommit={(value, options) => customCommit({ is_supply: value === "true" }, options)}
             />
           </Field>
         </div>
@@ -202,6 +244,8 @@ export function ListingDefaults({
         <ListField
           label="Production partner"
           field="production_partner"
+          pending={"production_partner" in pending}
+          refusal={refusalFor("production_partner")}
           saved={defaults.production_partner ?? ""}
           savedLabel={defaults.production_partner ?? ""}
           empty="Not set"
@@ -213,6 +257,8 @@ export function ListingDefaults({
         <ListField
           label="Preferred print provider"
           field="preferred_print_provider"
+          pending={"preferred_print_provider" in pending}
+          refusal={refusalFor("preferred_print_provider")}
           saved={shop.preferred_print_provider ?? ""}
           savedLabel={shop.preferred_print_provider ?? ""}
           empty="No preference"
@@ -224,6 +270,8 @@ export function ListingDefaults({
         <ListField
           label="Shipping profile"
           field="shipping_profile"
+          pending={"shipping_profile" in pending}
+          refusal={refusalFor("shipping_profile")}
           saved={defaults.shipping_profile ?? ""}
           savedLabel={defaults.shipping_profile ?? ""}
           empty="Not set"
@@ -235,25 +283,25 @@ export function ListingDefaults({
         <ListField
           label="Return policy"
           field="return_policy"
+          pending={"return_policy" in pending}
+          refusal={refusalFor("return_policy", (value) => policyKey(value ?? null))}
           saved={policyKey(defaults.return_policy)}
           savedLabel={defaults.return_policy ? describeTerms(defaults.return_policy) : ""}
           empty="Not set"
           lookups={lookups}
           available={lookups.etsyAvailable}
           {...{ info, locked, fieldErrors, save: commit }}
-          toChange={(value) => ({
-            return_policy:
-              policies.find((p) => policyKey(p.terms) === value)?.terms ??
-              (value === policyKey(defaults.return_policy) ? defaults.return_policy : null),
-          })}
+          toChange={(value) => ({ return_policy: policyTerms(value) })}
         />
         <Field label="Renewal" field="renewal" info={info} error={fieldErrors.renewal}>
           <BlurSelect
             label="Renewal"
             saved={defaults.renewal}
+            pending={"renewal" in pending}
+            refusal={refusalFor("renewal")}
             options={withSaved(RENEWAL, defaults.renewal)}
             disabled={locked}
-            onCommit={(value) => commit({ renewal: value })}
+            onCommit={(value, options) => commit({ renewal: value }, options)}
           />
         </Field>
       </div>
@@ -264,16 +312,30 @@ export function ListingDefaults({
   );
 }
 
+function held(shop: ShopSettings, pending: ShopChanges): ShopSettings {
+  const { currency, preferred_print_provider, ...defaults } = pending;
+  return {
+    ...shop,
+    currency: currency ?? shop.currency,
+    preferred_print_provider:
+      "preferred_print_provider" in pending
+        ? (preferred_print_provider ?? null)
+        : shop.preferred_print_provider,
+    listing_defaults: {
+      ...shop.listing_defaults,
+      ...(defaults as Partial<ShopSettings["listing_defaults"]>),
+    },
+  };
+}
+
 function unreachable(lookups: Lookups): string {
   if (lookups.lookups === null || (!lookups.etsyAvailable && !lookups.printifyAvailable))
     return "Etsy or Printify";
   return lookups.etsyAvailable ? "Printify" : "Etsy";
 }
 
-function withSaved(options: Option[], saved: string): Option[] {
-  return options.some((o) => o.value === saved)
-    ? options
-    : [...options, { value: saved, label: saved }];
+function withSaved(options: Option[], saved: string, label = saved): Option[] {
+  return options.some((o) => o.value === saved) ? options : [...options, { value: saved, label }];
 }
 
 function Field({
@@ -318,6 +380,8 @@ function ListField({
   label,
   field,
   saved,
+  pending,
+  refusal,
   savedLabel,
   empty,
   lookups,
@@ -331,6 +395,8 @@ function ListField({
   label: string;
   field: Creatable;
   saved: string;
+  pending: boolean;
+  refusal: Refusal;
   savedLabel: string;
   empty: string;
   lookups: Lookups;
@@ -338,7 +404,7 @@ function ListField({
   info: InfoState;
   locked: boolean;
   fieldErrors: FieldErrors;
-  save: (changes: ShopChanges) => void;
+  save: Commit;
   toChange: (value: string) => ShopChanges;
 }) {
   const found = lookups.found[field];
@@ -351,18 +417,16 @@ function ListField({
   if (missing) options.push({ value: saved, label: savedLabel });
   if (saved === "") options.unshift({ value: "", label: empty });
   const where = CREATE_LINKS[field].where;
+  // Use it is a choice in this field like any other: it goes through the
+  // field's draft, so it supersedes an older draft and a newer one survives
+  // its answer.
+  const draft = useDraft(saved, pending, refusal, (value, options) => {
+    if (found?.value === value) lookups.dismiss(field);
+    return save(toChange(value), options);
+  });
   return (
     <Field label={label} field={field} info={info} error={fieldErrors[field]} create={field}>
-      <BlurSelect
-        label={label}
-        saved={saved}
-        options={options}
-        disabled={locked || !available}
-        onCommit={(value) => {
-          if (found?.value === value) lookups.dismiss(field);
-          save(toChange(value));
-        }}
-      />
+      <DraftSelect label={label} options={options} disabled={locked || !available} draft={draft} />
       {available && missing && (
         <span className="sp-missing">
           <WarningIcon size={12} weight="bold" /> {savedLabel} is not in the list {where} returned.
@@ -376,10 +440,7 @@ function ListField({
             type="button"
             className="sp-use"
             disabled={locked}
-            onClick={() => {
-              lookups.dismiss(field);
-              save(toChange(found.value));
-            }}
+            onClick={() => draft.choose(found.value, found.label)}
           >
             Use it
           </button>
@@ -389,52 +450,128 @@ function ListField({
   );
 }
 
+type Draft = {
+  shown: string;
+  label: string | null;
+  /** The seller changed the select; nothing is sent yet. */
+  change: (value: string, label: string) => void;
+  /** The seller left the select: send its draft if it changes the file. */
+  leave: () => void;
+  /** A choice made and sent at once, such as Use it. */
+  choose: (value: string, label: string) => void;
+};
+
 /**
- * A select that saves on blur: changing it only changes what it shows, and
- * leaving it saves the shown value once, if it differs from the saved one.
- * A refused value stays shown until the seller picks another or reloads.
+ * One field's local edit and the identity of the saves made from it.
+ *
+ * `saved` is what the file will hold once sent saves land, so a draft is
+ * sent only when it differs from that. Each save carries the edit it was
+ * made from, and only its own answer drops the draft, and only if nothing
+ * was chosen since: an older answer never replaces a newer choice, focused
+ * or already queued. A failed save keeps the draft to be sent again on the
+ * next leave; a refused one stays shown with its error until the seller
+ * picks another or reloads. Every writer of the field (the select and
+ * Use it) goes through here, so a newer choice from either supersedes an
+ * older draft.
  */
+function useDraft(
+  saved: string,
+  pending: boolean,
+  refusal: Refusal,
+  onCommit: (value: string, options?: CommitOptions) => Promise<Answer>,
+): Draft {
+  const [draft, setDraft] = useState<Option | null>(null);
+  const edits = useRef(0);
+  const sent = useRef<{ value: string; edit: number } | null>(null);
+  // Editing may retry a refusal already seen; a later refusal still blocks
+  // automatic blur, even when Retry (rather than this draft) received it.
+  const refusalAtEdit = useRef<number | null>(null);
+
+  const edit = (value: string, label: string) => {
+    edits.current += 1;
+    refusalAtEdit.current = refusal(value);
+    setDraft({ value, label });
+  };
+  const send = (value: string) => {
+    // Matching an unanswered write is not acknowledgement of this draft.
+    // Keep its save identity until the real outcome, without writing twice.
+    const refusedAt = refusal(value);
+    if ((refusedAt !== null && refusedAt !== refusalAtEdit.current) || (pending && value === saved))
+      return;
+    const mine = { value, edit: edits.current };
+    sent.current = mine;
+    // An unchanged choice still abandons an older failed patch in the queue.
+    void onCommit(value, { unchanged: value === saved }).then((answer) => {
+      if (sent.current !== mine) return;
+      sent.current = null;
+      if ((answer === "saved" || answer === "unchanged") && edits.current === mine.edit)
+        setDraft(null);
+    });
+  };
+  return {
+    shown: draft?.value ?? saved,
+    label: draft?.label ?? null,
+    change: edit,
+    leave: () => {
+      if (draft !== null) send(draft.value);
+    },
+    choose: (value, label) => {
+      edit(value, label);
+      send(value);
+    },
+  };
+}
+
+/** A select that saves on blur, for a field with no other writer. */
 function BlurSelect({
   label,
   saved,
+  pending,
+  refusal,
   options,
   disabled,
   onCommit,
 }: {
   label: string;
   saved: string;
+  pending: boolean;
+  refusal: Refusal;
   options: Option[];
   disabled: boolean;
-  onCommit: (value: string) => void;
+  onCommit: (value: string, options?: CommitOptions) => Promise<Answer>;
 }) {
-  const [draft, setDraft] = useState<string | null>(null);
-  const [committed, setCommitted] = useState<string | null>(null);
-  // A save that lands (or a reload) makes the saved value the shown one.
-  const [seen, setSeen] = useState(saved);
-  if (seen !== saved) {
-    setSeen(saved);
-    setDraft(null);
-    setCommitted(null);
-  }
+  const draft = useDraft(saved, pending, refusal, onCommit);
+  return <DraftSelect label={label} options={options} disabled={disabled} draft={draft} />;
+}
 
-  const shown = draft ?? saved;
+/** Changing the select only changes what it shows; leaving it saves. */
+function DraftSelect({
+  label,
+  options,
+  disabled,
+  draft,
+}: {
+  label: string;
+  options: Option[];
+  disabled: boolean;
+  draft: Draft;
+}) {
+  // Lookup refresh may remove a refused or unanswered choice. Its captured
+  // label keeps the actual draft visible without exposing a policy's key.
+  const visible = draft.label === null ? options : withSaved(options, draft.shown, draft.label);
   return (
     <select
       className="adm-select"
       aria-label={label}
       disabled={disabled}
-      value={shown}
+      value={draft.shown}
       onChange={(e) => {
-        setDraft(e.target.value);
-        setCommitted(null);
+        const select = e.currentTarget;
+        draft.change(select.value, select.selectedOptions[0]?.label ?? select.value);
       }}
-      onBlur={() => {
-        if (draft === null || draft === saved || committed === draft) return;
-        setCommitted(draft);
-        onCommit(draft);
-      }}
+      onBlur={draft.leave}
     >
-      {options.map((o) => (
+      {visible.map((o) => (
         <option key={o.value} value={o.value}>
           {o.label}
         </option>

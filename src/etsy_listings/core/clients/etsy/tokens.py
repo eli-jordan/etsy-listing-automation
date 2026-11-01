@@ -8,12 +8,17 @@ here follows from that.
 - The write is **atomic and lands before the new access token is used**, so a
   crash mid-rotation leaves either the old pair or the new one, never a
   half-file and never a rotated-but-unrecorded token.
-- Refresh is **serialised in-process**, because `plan` fans its read-only
-  fetches across a thread pool and two threads refreshing the same token
-  would each invalidate the other's.
+- Refresh is **serialised in-process per token file**, because `plan` fans
+  its read-only fetches across a thread pool, and the Admin page's
+  connection and lookup requests each build their own store: two refreshes
+  of the same token would each invalidate the other's. The lock belongs to
+  the resolved file, not to a store, so every store for one file shares it
+  and stores for other workspaces never wait on it.
 - An `invalid_grant` is **re-read before it is believed**: a second process
   may have rotated the pair a moment ago, and the answer to that is to use
-  what it wrote, not to send the user to a browser.
+  what it wrote, not to send the user to a browser. That re-read is the only
+  defence across processes: a process that refreshes between this one's
+  refresh and its save still races it, which no in-process lock can close.
 
 The store never builds a client. It is handed a `refresh` callable, because
 the token endpoint is the one Etsy endpoint that needs no bearer -- which is
@@ -64,6 +69,12 @@ class EtsyAuthError(UserFacingError, RuntimeError):
 
     def __init__(self, detail: str) -> None:
         super().__init__(f"{detail}\n  Run `etsy-listings auth` to sign in to Etsy again.")
+
+
+class EtsyRefreshBusy(UserFacingError, RuntimeError):
+    """Another store's refresh of the same token file outlasted
+    :data:`ROTATION_WAIT_SECONDS`. The sign-in is not known to be dead, so
+    this asks for a retry, never a new sign-in."""
 
 
 @dataclass(frozen=True)
@@ -141,8 +152,24 @@ this module needs no HTTP client, and so the whole rotation story can be
 tested without one."""
 
 
+ROTATION_WAIT_SECONDS = 300.0
+"""How long a request waits for another store's refresh of the same file.
+Longer than a refresh takes, so it is reached only by a wedged one; finite,
+so that one never hangs every Etsy request in the process."""
+
+
 def utcnow() -> datetime:
     return datetime.now(UTC)
+
+
+_rotation_locks: dict[str, threading.Lock] = {}
+_rotation_locks_guard = threading.Lock()
+
+
+def _rotation_lock(path: Path) -> threading.Lock:
+    key = os.path.normcase(str(path.resolve()))
+    with _rotation_locks_guard:
+        return _rotation_locks.setdefault(key, threading.Lock())
 
 
 class TokenStore:
@@ -158,7 +185,6 @@ class TokenStore:
         self._path = path
         self._refresh = refresh
         self._now = now
-        self._lock = threading.Lock()
 
     @property
     def path(self) -> Path:
@@ -211,7 +237,14 @@ class TokenStore:
         builds clients it may never call, and a workspace that has not reached
         Phase 3 must not be made to sign in to build one.
         """
-        with self._lock:
+        lock = _rotation_lock(self._path)
+        if not lock.acquire(timeout=ROTATION_WAIT_SECONDS):
+            raise EtsyRefreshBusy(
+                f"Another request is still refreshing the Etsy sign-in in {self._path.name} "
+                f"after {ROTATION_WAIT_SECONDS:.0f}s. Try again; if it keeps happening, "
+                "restart the tool."
+            )
+        try:
             stored = self.load()
             if stored is None:
                 raise EtsyAuthError(f"No Etsy tokens in {self._path}.")
@@ -219,6 +252,8 @@ class TokenStore:
             if stored.is_fresh(now):
                 return stored.access_token
             return self._rotate(stored).access_token
+        finally:
+            lock.release()
 
     def _rotate(self, stored: StoredTokens) -> StoredTokens:
         """Exchange the refresh token, tolerating a rotation we did not make.

@@ -14,7 +14,7 @@ from pathlib import Path
 import pytest
 
 from etsy_listings.core.clients.etsy.fakes import FakeEtsyListingClient
-from etsy_listings.core.clients.etsy.tokens import EtsyAuthError
+from etsy_listings.core.clients.etsy.tokens import EtsyAuthError, EtsyRefreshBusy
 from etsy_listings.server.api import etsystate
 
 
@@ -116,12 +116,21 @@ def test_a_workspace_with_no_etsy_credentials_reports_nothing_live(
     assert etsystate.live_listing_ids(ROOT, [111], now=lambda: 0.0) == set()
 
 
-def test_a_sign_in_that_has_expired_is_silence_not_a_500(
+@pytest.mark.parametrize(
+    "failure",
+    [
+        EtsyAuthError("No Etsy tokens."),
+        EtsyRefreshBusy("Refresh still running. Try again shortly."),
+    ],
+    ids=["signed-out", "refresh-busy"],
+)
+def test_an_etsy_read_failure_is_silence_not_a_500(
     monkeypatch: pytest.MonkeyPatch,
+    failure: Exception,
 ) -> None:
     class Expired(FakeEtsyListingClient):
         def listing_states(self, listing_ids: Sequence[int]) -> dict[int, str]:
-            raise EtsyAuthError("No Etsy tokens in .auth/etsy-tokens.json.")
+            raise failure
 
     install(monkeypatch, Expired())
 

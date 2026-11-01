@@ -67,7 +67,9 @@ export function AdminPage() {
 
   const { shop, save } = settings;
   const changeCurrency = async (code: string) => {
-    const outcome = await save({ currency: code });
+    // The dialog shows its own failure and retries only through its
+    // acknowledged Change, so a cancelled change is never resent by Retry.
+    const outcome = await save({ currency: code }, { retain: false });
     if (outcome?.kind === "saved") closeCurrency();
     else if (outcome?.kind === "invalid")
       throw new Error(outcome.fieldErrors.currency ?? outcome.message);
@@ -80,7 +82,9 @@ export function AdminPage() {
         <h1 className="page-head__title">Admin</h1>
         <span className="page-head__meta">Changes save when you leave a field</span>
         <div className="page-head__actions">
-          {section !== "settings" && <SaveIndicator status={settings.status} />}
+          {section !== "settings" && (
+            <SaveIndicator status={settings.status} onRetry={() => void settings.retry()} />
+          )}
         </div>
       </div>
       {section !== "settings" && settings.status.kind === "conflict" && (
@@ -129,8 +133,12 @@ export function AdminPage() {
           <div hidden={section !== "defaults"}>
             {shop && (
               <ListingDefaults
+                key={settings.loadedVersion}
                 shop={shop}
+                pending={settings.pending}
                 save={save}
+                discard={settings.discard}
+                refusal={settings.refusal}
                 fieldErrors={settings.fieldErrors}
                 locked={settings.locked}
                 lookups={lookups}
@@ -156,7 +164,7 @@ export function AdminPage() {
   );
 }
 
-function SaveIndicator({ status }: { status: SaveStatus }) {
+function SaveIndicator({ status, onRetry }: { status: SaveStatus; onRetry: () => void }) {
   if (status.kind === "saving")
     return (
       <span className="adm-save adm-save--saving" role="status">
@@ -171,9 +179,14 @@ function SaveIndicator({ status }: { status: SaveStatus }) {
     );
   if (status.kind === "error")
     return (
-      <span className="adm-save adm-save--error" role="status">
-        <WarningIcon size={14} /> {status.message}
-      </span>
+      <>
+        <span className="adm-save adm-save--error" role="status">
+          <WarningIcon size={14} /> {status.message}
+        </span>
+        <button type="button" className="btn btn-secondary" onClick={onRetry}>
+          Retry save
+        </button>
+      </>
     );
   return <span role="status" />;
 }
