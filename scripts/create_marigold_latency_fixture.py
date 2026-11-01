@@ -116,7 +116,12 @@ class FixedWorker:
 
 class FixedRuntime:
     def inspect(self) -> Capability:
-        return Capability(True, None, "1.0.0", installation_id="fixed-numeric-fixture")
+        return Capability(
+            available=True,
+            problem=None,
+            engine_version="1.0.0",
+            installation_id="fixed-numeric-fixture",
+        )
 
     def selection(self, version: str, *, installation_id: str | None = None) -> Capability:
         return self.inspect()

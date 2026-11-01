@@ -239,7 +239,7 @@ def test_a_gate_agrees_with_the_banner_about_a_design(
     [("deleted", True), ("retired", False), ("deleted", False), (None, True)],
 )
 def test_a_gate_agrees_with_the_banner_about_the_lifecycle_verb(
-    lifecycle: str | None, published: bool
+    lifecycle: str | None, *, published: bool
 ) -> None:
     gate = check_lifecycle_verb(lifecycle, published=published)
     banner = rules.check_lifecycle_verb(lifecycle, published=published)
@@ -249,7 +249,7 @@ def test_a_gate_agrees_with_the_banner_about_the_lifecycle_verb(
 
 
 @pytest.mark.parametrize("present", [True, False])
-def test_a_gate_agrees_with_the_banner_about_a_missing_listing_yaml(present: bool) -> None:
+def test_a_gate_agrees_with_the_banner_about_a_missing_listing_yaml(*, present: bool) -> None:
     gate = check_listing_yaml_present(present=present)
     banner = rules.check_listing_yaml_present(present=present)
     assert (gate is None) == (banner == [])

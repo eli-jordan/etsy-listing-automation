@@ -30,6 +30,11 @@ from etsy_listings.core.render import MaterialLayer, render_marigold_scene
 from etsy_listings.core.workspace import Workspace
 from etsy_listings.core.workspace.calibration import CalibrationStore
 
+# OpenProcess access rights and handle inheritance (Win32 processthreadsapi.h).
+PROCESS_QUERY_INFORMATION = 0x0400
+PROCESS_VM_READ = 0x0010
+INHERIT_HANDLE = False
+
 
 def host_memory(pid: int | None = None) -> dict[str, int]:
     """Native process working set and private commit, including peak values."""
@@ -58,7 +63,11 @@ def host_memory(pid: int | None = None) -> dict[str, int]:
     api.GetProcessMemoryInfo.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_ulong]
     kernel.OpenProcess.restype = ctypes.c_void_p
     kernel.OpenProcess.argtypes = [ctypes.c_ulong, ctypes.c_int, ctypes.c_ulong]
-    handle = kernel.GetCurrentProcess() if pid is None else kernel.OpenProcess(0x0410, False, pid)
+    handle = (
+        kernel.GetCurrentProcess()
+        if pid is None
+        else kernel.OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, INHERIT_HANDLE, pid)
+    )
     if not handle:
         raise ctypes.WinError(ctypes.get_last_error())
     try:

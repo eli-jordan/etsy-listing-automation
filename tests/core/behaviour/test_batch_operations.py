@@ -478,6 +478,7 @@ class TestRetry:
         batches: BatchStore,
         queue: BatchQueue,
         ai: str,
+        *,
         deleted: bool,
     ) -> None:
         session = _stage(workspace, staging, ("a.png", png(1)))

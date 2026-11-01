@@ -104,7 +104,7 @@ def visible_ink_point(
 
 class EvidenceOnlyRuntime:
     def inspect(self) -> Capability:
-        return Capability(False, "Benchmark forbids model inference")
+        return Capability(available=False, problem="Benchmark forbids model inference")
 
     def selection(self, version: str, *, installation_id: str | None = None) -> Capability:
         raise AssertionError("Benchmark must not select a model")
@@ -120,6 +120,7 @@ def measure(
     repeat: int,
     output: Path,
     checkpoints: list[tuple[str, str, float]],
+    *,
     interactive: bool = False,
     during_rebuild: bool = False,
     mask_background: Image.Image | None = None,
@@ -412,6 +413,7 @@ def run(
     output: Path,
     repeats: int,
     threshold: float,
+    *,
     interactive: bool = False,
     names: list[str] | None = None,
     edits: list[str] | None = None,
@@ -512,9 +514,9 @@ def run(
                             repeat,
                             output,
                             checkpoints,
-                            interactive,
-                            during_rebuild,
-                            mask_background,
+                            interactive=interactive,
+                            during_rebuild=during_rebuild,
+                            mask_background=mask_background,
                         )
                         rows.append(row)
                         (output / "raw-rows.json").write_text(
@@ -607,11 +609,11 @@ if __name__ == "__main__":
         args.output,
         args.repeats,
         args.threshold,
-        args.interactive,
-        args.template,
-        args.edit,
-        tuple(args.artwork_size),
-        args.during_rebuild,
-        args.frontend_dist,
-        args.design,
+        interactive=args.interactive,
+        names=args.template,
+        edits=args.edit,
+        artwork_size=tuple(args.artwork_size),
+        during_rebuild=args.during_rebuild,
+        frontend_dist=args.frontend_dist,
+        design=args.design,
     )

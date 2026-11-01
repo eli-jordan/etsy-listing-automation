@@ -41,7 +41,7 @@ def _seo_request(market_block: str = "") -> SeoRequest:
     )
 
 
-def _check(name: str, actual: str, update_goldens: bool) -> None:
+def _check(name: str, actual: str, *, update_goldens: bool) -> None:
     golden = GOLDENS / name
     if update_goldens or not golden.is_file():
         golden.parent.mkdir(parents=True, exist_ok=True)
@@ -52,7 +52,7 @@ def _check(name: str, actual: str, update_goldens: bool) -> None:
     assert actual == golden.read_text(encoding="utf-8")
 
 
-def test_the_query_extraction_prompt(update_goldens: bool) -> None:
+def test_the_query_extraction_prompt(*, update_goldens: bool) -> None:
     task = build_market_queries_task(
         SELLER_PROMPT,
         MarketQueriesRequest(
@@ -61,18 +61,18 @@ def test_the_query_extraction_prompt(update_goldens: bool) -> None:
             design_image=Path("designs/take-a-hike.png"),
         ),
     )
-    _check("market_queries_prompt.txt", task.prompt_text, update_goldens)
+    _check("market_queries_prompt.txt", task.prompt_text, update_goldens=update_goldens)
 
 
-def test_the_proposal_prompt_without_market_data(update_goldens: bool) -> None:
+def test_the_proposal_prompt_without_market_data(*, update_goldens: bool) -> None:
     task = build_seo_task(SELLER_PROMPT, _seo_request())
     assert MARKET_BEGIN not in task.prompt_text
-    _check("seo_prompt.txt", task.prompt_text, update_goldens)
+    _check("seo_prompt.txt", task.prompt_text, update_goldens=update_goldens)
 
 
-def test_the_proposal_prompt_with_market_data(update_goldens: bool) -> None:
+def test_the_proposal_prompt_with_market_data(*, update_goldens: bool) -> None:
     task = build_seo_task(SELLER_PROMPT, _seo_request(BLOCK))
-    _check("seo_prompt_with_market.txt", task.prompt_text, update_goldens)
+    _check("seo_prompt_with_market.txt", task.prompt_text, update_goldens=update_goldens)
 
 
 def test_the_market_block_sits_after_the_listing_and_before_the_schema() -> None:

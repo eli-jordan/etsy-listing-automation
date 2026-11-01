@@ -96,14 +96,14 @@ class Runtime:
             )
         except FileNotFoundError:
             return Capability(
-                False,
-                "Run etsy-listings marigold setup to install the native worker.",
+                available=False,
+                problem="Run etsy-listings marigold setup to install the native worker.",
                 required_engine=self.engine_version,
             )
         except (ValueError, KeyError, TypeError, OSError, SetupError) as exc:
             return Capability(
-                False,
-                f"Invalid Marigold installation: {exc}. Run etsy-listings marigold update.",
+                available=False,
+                problem=f"Invalid Marigold installation: {exc}. Run etsy-listings marigold update.",
                 required_engine=self.engine_version,
             )
 

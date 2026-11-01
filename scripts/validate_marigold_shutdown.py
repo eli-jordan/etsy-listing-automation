@@ -22,6 +22,10 @@ from PIL import Image
 from etsy_listings.core.preparation.runtime import Runtime
 from etsy_listings.core.preparation.worker_client import SHUTDOWN_TIMEOUT
 
+# OpenProcess access right and handle inheritance (Win32 processthreadsapi.h).
+PROCESS_SUSPEND_RESUME = 0x0800
+INHERIT_HANDLE = False
+
 
 def run(output: Path) -> None:
     cache = output / ("shutdown-native-cache-" + uuid4().hex)
@@ -51,7 +55,7 @@ def run(output: Path) -> None:
         kernel = ctypes.WinDLL("kernel32", use_last_error=True)
         kernel.OpenProcess.restype = ctypes.c_void_p
         kernel.OpenProcess.argtypes = [ctypes.c_ulong, ctypes.c_int, ctypes.c_ulong]
-        handle = kernel.OpenProcess(0x0800, False, pid)
+        handle = kernel.OpenProcess(PROCESS_SUSPEND_RESUME, INHERIT_HANDLE, pid)
         if not handle:
             raise ctypes.WinError(ctypes.get_last_error())
         try:

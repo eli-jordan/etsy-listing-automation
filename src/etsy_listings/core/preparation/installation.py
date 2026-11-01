@@ -161,8 +161,8 @@ class NativeInstaller:
             },
         )
         return Capability(
-            True,
-            None,
+            available=True,
+            problem=None,
             engine_version=version,
             python=str(python),
             details=capabilities.model_dump(mode="json"),
@@ -216,15 +216,17 @@ class NativeInstaller:
                     and record.get("stamps") == stamps
                 ):
                     return Capability(
-                        True,
-                        None,
+                        available=True,
+                        problem=None,
                         engine_version=version,
                         python=record["python"],
                         details=record["capabilities"],
                     )
         except (OSError, ValueError, KeyError, TypeError, AttributeError, SetupError) as exc:
             return Capability(
-                False, f"{exc}. Run etsy-listings marigold update.", engine_version=version
+                available=False,
+                problem=f"{exc}. Run etsy-listings marigold update.",
+                engine_version=version,
             )
         return self.verify(target, weights, version)
 
@@ -251,7 +253,9 @@ class NativeInstaller:
                 record_file.unlink(missing_ok=True)
         except (OSError, ValueError, KeyError, TypeError, SetupError) as exc:
             return Capability(
-                False, f"{exc}. Run etsy-listings marigold update.", engine_version=version
+                available=False,
+                problem=f"{exc}. Run etsy-listings marigold update.",
+                engine_version=version,
             )
         else:
             return report
@@ -289,15 +293,15 @@ class NativeInstaller:
             if capabilities.engine_version != version or capabilities.cuda is not True:
                 _unverified("Native worker or CUDA capability is unavailable")
             return Capability(
-                True,
-                None,
+                available=True,
+                problem=None,
                 engine_version=version,
                 python=str(python),
                 details=capabilities.model_dump(mode="json"),
             )
         except (OSError, ValueError, KeyError, TypeError, SetupError) as exc:
             return Capability(
-                False,
-                f"{exc}. Run etsy-listings marigold setup/update to repair the runtime.",
+                available=False,
+                problem=f"{exc}. Run etsy-listings marigold setup/update to repair the runtime.",
                 engine_version=version,
             )

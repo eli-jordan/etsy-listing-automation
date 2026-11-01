@@ -155,8 +155,7 @@ select = [
     "ANN",              # annotations
     "C4",               # comprehensions
     "SIM",              # simplify
-    # S01 mechanical families. Judgment families (PLR, PLC, C90, ARG, FBT,
-    # SLF) and the rejected families stay off until their own PRs.
+    # S01 mechanical families.
     "RET", "PIE", "RSE",
     "PERF", "FURB",
     "PTH",
@@ -172,6 +171,9 @@ select = [
     "TRY",
     "PLE", "PLW",
     "N",
+    # S01 judgment families. The rest of PLR (PLR0911/0912/0915) and C90
+    # arrive with the complexity work.
+    "FBT",
 ]
 ignore = [
     "ANN401",           # Any is sometimes the honest type at a boundary
@@ -183,11 +185,19 @@ ignore = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**" = ["ANN"]
+# S01: tests compare against literal expectations, stub interfaces with unused
+# parameters, inspect the subject's internals, pass booleans to helpers, import
+# lazily, print diagnostics and build fixtures with many parameters.
+"tests/**" = ["ANN", "PLR2004", "ARG", "SLF001", "FBT003", "PLC0415", "T20", "PLR0913"]
 # S01: print is the interface of the CLI and of scripts/. Production code
 # elsewhere logs, or renders through the CLI.
 "src/etsy_listings/cli/**" = ["T20"]
 "scripts/**" = ["T20"]
+
+[tool.ruff.lint.pylint]
+# S02: never loosened to make a check pass.
+max-args = 5
+max-positional-args = 5
 
 [tool.ruff.lint.isort]
 known-first-party = ["etsy_listings"]
