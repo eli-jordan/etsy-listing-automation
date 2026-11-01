@@ -130,59 +130,73 @@ def compute_starting_prices(
     and the disagreement is called out in the notes, so the generated file
     is honest about the simplification.
     """
-    variant_costs, shipping, fx_rate = costs.variant_costs, costs.shipping, costs.fx_rate
-    margin_multiplier = MARGIN_MULTIPLIER
     prices: dict[str, Money] = {}
     notes: list[str] = [PORTAL_VERIFICATION_NOTE, ""]
     for size in sizes:
-        totals_cents: dict[str, int] = {}
-        missing_colours: list[str] = []
-        for variant in variant_set.variants:
-            if variant.options.size != size:
-                continue
-            mfg = variant_costs.get(variant.id)
-            ship = shipping.first_item_cost_cents(variant.id)
-            if mfg is None or ship is None:
-                missing_colours.append(variant.options.color)
-                continue
-            totals_cents[variant.options.color] = mfg + ship
-
-        if missing_colours:
-            notes.append(
-                f"{size}: no cost/shipping data for colour(s) "
-                f"{', '.join(sorted(missing_colours))} -- excluded from the calculation"
-            )
-        if not totals_cents:
-            prices[size] = Money(Decimal(0), target_currency)
-            notes.append(f"{size}: no cost data available at all -- priced at 0, fill in manually")
-            continue
-
-        distinct = set(totals_cents.values())
-        chosen_cents = max(distinct)
-        if len(distinct) > 1:
-            breakdown = ", ".join(
-                f"{colour}=${cents / 100:.2f}" for colour, cents in sorted(totals_cents.items())
-            )
-            notes.append(f"{size}: cost varies by colour ({breakdown}); using the max")
-
-        usd_amount = (Decimal(chosen_cents) / Decimal(100)) * margin_multiplier
-        if fx_rate is None:
-            prices[size] = Money(Decimal(0), target_currency)
-            notes.append(
-                f"{size}: cost+shipping+margin is ${usd_amount:.2f} USD, but no FX rate could "
-                f"be fetched -- priced at 0, fill in manually using "
-                f"today's USD->{target_currency} rate"
-            )
-            continue
-
-        converted = (usd_amount * fx_rate.rate).quantize(Decimal("0.01"))
-        prices[size] = Money(converted, target_currency)
-        notes.append(
-            f"{size}: (${chosen_cents / 100:.2f} cost+shipping) x {margin_multiplier} margin "
-            f"x {fx_rate.rate} {target_currency}/USD ({fx_rate.source}, "
-            f"{fx_rate.fetched_at.isoformat()}) = {converted} {target_currency}"
-        )
+        prices[size], size_notes = _price_size(size, variant_set, costs, target_currency)
+        notes.extend(size_notes)
     return prices, notes
+
+
+def _size_totals(
+    size: str, variant_set: VariantSet, costs: LiveCosts
+) -> tuple[dict[str, int], list[str]]:
+    """Manufacturing + first-item shipping in cents by colour for ``size``,
+    and the colours missing either figure."""
+    totals_cents: dict[str, int] = {}
+    missing_colours: list[str] = []
+    for variant in variant_set.variants:
+        if variant.options.size != size:
+            continue
+        mfg = costs.variant_costs.get(variant.id)
+        ship = costs.shipping.first_item_cost_cents(variant.id)
+        if mfg is None or ship is None:
+            missing_colours.append(variant.options.color)
+            continue
+        totals_cents[variant.options.color] = mfg + ship
+    return totals_cents, missing_colours
+
+
+def _price_size(
+    size: str, variant_set: VariantSet, costs: LiveCosts, target_currency: str
+) -> tuple[Money, list[str]]:
+    """One size's starting price and the note lines explaining it."""
+    fx_rate, margin_multiplier = costs.fx_rate, MARGIN_MULTIPLIER
+    totals_cents, missing_colours = _size_totals(size, variant_set, costs)
+    notes: list[str] = []
+    if missing_colours:
+        notes.append(
+            f"{size}: no cost/shipping data for colour(s) "
+            f"{', '.join(sorted(missing_colours))} -- excluded from the calculation"
+        )
+    if not totals_cents:
+        notes.append(f"{size}: no cost data available at all -- priced at 0, fill in manually")
+        return Money(Decimal(0), target_currency), notes
+
+    distinct = set(totals_cents.values())
+    chosen_cents = max(distinct)
+    if len(distinct) > 1:
+        breakdown = ", ".join(
+            f"{colour}=${cents / 100:.2f}" for colour, cents in sorted(totals_cents.items())
+        )
+        notes.append(f"{size}: cost varies by colour ({breakdown}); using the max")
+
+    usd_amount = (Decimal(chosen_cents) / Decimal(100)) * margin_multiplier
+    if fx_rate is None:
+        notes.append(
+            f"{size}: cost+shipping+margin is ${usd_amount:.2f} USD, but no FX rate could "
+            f"be fetched -- priced at 0, fill in manually using "
+            f"today's USD->{target_currency} rate"
+        )
+        return Money(Decimal(0), target_currency), notes
+
+    converted = (usd_amount * fx_rate.rate).quantize(Decimal("0.01"))
+    notes.append(
+        f"{size}: (${chosen_cents / 100:.2f} cost+shipping) x {margin_multiplier} margin "
+        f"x {fx_rate.rate} {target_currency}/USD ({fx_rate.source}, "
+        f"{fx_rate.fetched_at.isoformat()}) = {converted} {target_currency}"
+    )
+    return Money(converted, target_currency), notes
 
 
 def write_pricing_plan(
