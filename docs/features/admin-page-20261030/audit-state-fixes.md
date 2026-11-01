@@ -149,4 +149,30 @@ preferences (the app has one palette), for default, saving, error, retried and c
 
 ## Exit evidence
 
-Recorded in the pull request with the final combined code.
+The combined code was validated at `eda9772a`, the ordinary merge of State's
+`82f0aef7` and Runtime's `498badde`. Later changes to this record are prose only.
+
+| Check | Result |
+|---|---|
+| `./scripts/check.sh`, with required browser prerequisites | Passed. Python: 3,779 passed, seven platform skips, 55 deselected. Combined branch-enabled coverage: 95.50%; branches: 3,837 of 4,254, or 90.20%. Frontend: 1,301 passed across 97 files; 90.28% branch coverage. |
+| Format, lint, strict typing and Import Linter | Passed, all 11 contracts kept. Formatting left the checkout unchanged. |
+| Separate SPA build and `npm run test:design` | Passed; four design tests. The design suite also passed inside the full gate. |
+| Standalone `ETSY_LISTINGS_REQUIRE_EVERY_LAYER=1 uv run pytest -m browser` | Passed: 160 cases, zero skips. |
+| Generated API | No wire shape changed. The OpenAPI export regression passed and the generated client has no diff. |
+
+The independent Standards/process recheck reported no actionable findings at
+the combined tip. Its 91 focused tests and external Windows process diagnostics
+closed the exited-launcher residual. State's final Spec recheck remains pending
+the Opus quota reset; the seller chose to wait for Opus 5.5 medium. The failed
+recheck is not counted as a passing review.
+
+Against Runtime, `scripts/sloc.py` measures net additions of 22 backend and 132
+frontend production lines, plus 471 Python test and 351 frontend test lines.
+The shared queue replaces separate Shop and Settings save coordination.
+
+Runtime PR #150 passed all four CI checks and its parent-dispatched
+[GitHub e2e run](https://github.com/eli-jordan/etsy-listing-automation/actions/runs/41256022498)
+on `498badde`: 47 passed, two expected connected-shop safety skips and zero new
+e2e products left behind. State CI and serialized GitHub e2e remain pending.
+Local e2e is waived; no real local workspace, credentials or auth configuration
+were changed.
