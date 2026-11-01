@@ -15,7 +15,7 @@ import pytest
 from etsy_listings.core.workspace.revisions import (
     ABSENT_REVISION,
     Revised,
-    RevisionConflict,
+    RevisionConflictError,
     content_revision,
     read_revisioned,
     replace_if_unchanged,
@@ -53,7 +53,7 @@ def test_a_save_against_a_stale_revision_refuses_and_writes_nothing(tmp_path: Pa
     path.write_bytes(b"a: 1\n# the seller's comment\n")
     seen: list[bytes] = []
 
-    with pytest.raises(RevisionConflict):
+    with pytest.raises(RevisionConflictError):
         replace_if_unchanged(path, revision, lambda data: seen.append(data) or b"a: 2\n")
 
     assert seen == [], "the change is never computed against a file it was not made for"
@@ -113,7 +113,7 @@ def test_two_saves_from_one_revision_cannot_both_win(tmp_path: Path) -> None:
         try:
             replace_if_unchanged(path, revision, lambda data: b"n: 2\n")
             outcomes.append("second")
-        except RevisionConflict:
+        except RevisionConflictError:
             outcomes.append("conflict")
 
     other = threading.Thread(target=second)
@@ -165,7 +165,7 @@ def test_a_file_created_since_the_absent_read_is_a_conflict(tmp_path: Path) -> N
     path = tmp_path / "settings.yaml"
     path.write_bytes(b"")
 
-    with pytest.raises(RevisionConflict):
+    with pytest.raises(RevisionConflictError):
         replace_if_unchanged(path, ABSENT_REVISION, lambda data: b"a: 1\n", absent_ok=True)
     assert path.read_bytes() == b""
 
@@ -176,6 +176,6 @@ def test_a_file_deleted_since_its_read_is_a_conflict(tmp_path: Path) -> None:
     _, revision = read_revisioned(path, absent_ok=True)
     path.unlink()
 
-    with pytest.raises(RevisionConflict):
+    with pytest.raises(RevisionConflictError):
         replace_if_unchanged(path, revision, lambda data: b"a: 2\n", absent_ok=True)
     assert not path.exists()

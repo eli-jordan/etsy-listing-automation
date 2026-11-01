@@ -16,7 +16,7 @@ from fastapi.responses import JSONResponse
 
 from etsy_listings.core import connections
 from etsy_listings.core.application import shop_settings
-from etsy_listings.core.application.refusals import InvalidShopEdit, ShopRevisionConflict
+from etsy_listings.core.application.refusals import InvalidShopEditError, ShopRevisionConflictError
 from etsy_listings.core.config.currencies import OFFERED_CURRENCIES
 from etsy_listings.core.config.errors import ConfigLoadError
 from etsy_listings.core.workspace.workspace import Workspace
@@ -95,9 +95,9 @@ def edit_shop(request: Request, body: ShopPatchRequest) -> ShopSettingsResponse 
         view = shop_settings.edit_shop(
             _workspace(request), expected_revision=body.revision, changes=changes
         )
-    except ShopRevisionConflict as exc:
+    except ShopRevisionConflictError as exc:
         return _refusal(409, ShopSaveRefusal(kind="conflict", message=str(exc)))
-    except InvalidShopEdit as exc:
+    except InvalidShopEditError as exc:
         refusal = ShopSaveRefusal(kind="invalid", message=str(exc), field_errors=exc.field_errors)
         return _refusal(422, refusal)
     return _response(view)

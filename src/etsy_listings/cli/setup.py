@@ -41,7 +41,7 @@ from etsy_listings.core.application import shop_discovery, workspace_setup
 from etsy_listings.core.application.shop_discovery import EtsyAccess
 from etsy_listings.core.clients.etsy.models import ReturnPolicy
 from etsy_listings.core.clients.etsy.models import Shop as EtsyShop
-from etsy_listings.core.clients.etsy.tokens import EtsyAuthError, EtsyRefreshBusy
+from etsy_listings.core.clients.etsy.tokens import EtsyAuthError, EtsyRefreshBusyError
 from etsy_listings.core.clients.etsy.transport import EtsyApiError
 from etsy_listings.core.clients.printify import PrintifyAuthError
 from etsy_listings.core.clients.printify.models import Shop
@@ -180,7 +180,7 @@ def _discover_etsy(
                 access, shop, existing_listing_defaults.get("return_policy")
             ),
         )
-    except EtsyRefreshBusy as exc:
+    except EtsyRefreshBusyError as exc:
         typer.echo("")
         typer.echo(f"Could not read the Etsy shop: {exc}")
         typer.echo("  Keeping whatever shop.yaml already says. Try `setup` again shortly.")

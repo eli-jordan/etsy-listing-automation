@@ -19,7 +19,7 @@ from etsy_listings.core.clients.etsy.oauth import OAuthError, TokenResponse
 from etsy_listings.core.clients.etsy.tokens import (
     REFRESH_TOKEN_LIFETIME,
     EtsyAuthError,
-    EtsyRefreshBusy,
+    EtsyRefreshBusyError,
     StoredTokens,
     TokenStore,
 )
@@ -304,7 +304,7 @@ def test_a_rotation_held_past_the_wait_is_a_retryable_refusal(
     with workers(held) as start:
         start("wedged store", TokenStore(path, refresh=grant.refresh, now=clock).access_token)
         held.wait_entered()
-        with pytest.raises(EtsyRefreshBusy) as refused:
+        with pytest.raises(EtsyRefreshBusyError) as refused:
             TokenStore(path, refresh=grant.refresh, now=clock).access_token()
         held.release()
 

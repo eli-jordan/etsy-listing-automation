@@ -35,8 +35,8 @@ from pydantic import ValidationError
 
 from etsy_listings.core import connections
 from etsy_listings.core.application.refusals import (
-    InvalidShopEdit,
-    ShopRevisionConflict,
+    InvalidShopEditError,
+    ShopRevisionConflictError,
     field_errors_of,
 )
 from etsy_listings.core.application.shop_discovery import policy_terms
@@ -52,7 +52,7 @@ from etsy_listings.core.config.secrets import Secrets
 from etsy_listings.core.errors import UserFacingError
 from etsy_listings.core.workspace import layout
 from etsy_listings.core.workspace.revisions import (
-    RevisionConflict,
+    RevisionConflictError,
     read_revisioned,
     replace_if_unchanged,
 )
@@ -113,7 +113,7 @@ def edit_shop(
     """Apply ``changes`` (dotted key to value; ``None`` removes an optional
     key) if ``shop.yaml`` is still at ``expected_revision``.
 
-    Refuses with :class:`ShopRevisionConflict` or :class:`InvalidShopEdit`,
+    Refuses with :class:`ShopRevisionConflictError` or :class:`InvalidShopEditError`,
     writing nothing either way.
     """
     refused = {
@@ -126,7 +126,7 @@ def edit_shop(
             "must support it and its prices must have two decimals (ADR-0019)"
         )
     if refused:
-        raise InvalidShopEdit(refused)
+        raise InvalidShopEditError(refused)
 
     path = workspace.root / layout.SHOP_FILE
     adopted: list[Defaults] = []
@@ -134,16 +134,16 @@ def edit_shop(
     def change(source: bytes) -> bytes:
         raw = parse_yaml(path, source.decode("utf-8-sig")) or {}
         if not isinstance(raw, dict):
-            raise InvalidShopEdit({"__root__": "shop.yaml is not a mapping"})
+            raise InvalidShopEditError({"__root__": "shop.yaml is not a mapping"})
         candidate: dict[str, Any] = copy.deepcopy(raw)
         for key, value in changes.items():
             _assign(candidate, key.split("."), value)
         try:
             adopted.append(Defaults.from_document(path, candidate))
         except ValidationError as exc:
-            raise InvalidShopEdit(field_errors_of(exc)) from exc
+            raise InvalidShopEditError(field_errors_of(exc)) from exc
         except ConfigLoadError as exc:
-            raise InvalidShopEdit({"__root__": str(exc)}) from exc
+            raise InvalidShopEditError({"__root__": str(exc)}) from exc
         return edit_yaml_bytes(source, candidate)
 
     def adopt() -> None:
@@ -154,8 +154,8 @@ def edit_shop(
 
     try:
         revised = replace_if_unchanged(path, expected_revision, change, adopt=adopt)
-    except RevisionConflict as exc:
-        raise ShopRevisionConflict() from exc
+    except RevisionConflictError as exc:
+        raise ShopRevisionConflictError() from exc
     (defaults,) = adopted
     return ShopView(revised.revision, defaults)
 

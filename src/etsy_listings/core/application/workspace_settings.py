@@ -32,20 +32,20 @@ from typing import Any
 from pydantic import ValidationError
 
 from etsy_listings.core.application.refusals import (
-    InvalidSettingsEdit,
-    SettingsRevisionConflict,
+    InvalidSettingsEditError,
+    SettingsRevisionConflictError,
     field_errors_of,
 )
 from etsy_listings.core.config.errors import ConfigLoadError, parse_yaml
 from etsy_listings.core.config.market_weights import METRICS, MarketWeights
 from etsy_listings.core.config.settings import Settings
 from etsy_listings.core.workspace.revisions import (
-    RevisionConflict,
+    RevisionConflictError,
     read_revisioned,
     replace_if_unchanged,
 )
 from etsy_listings.core.workspace.workspace import Workspace
-from etsy_listings.core.workspace.yaml_source import UneditableYaml, edit_yaml_bytes
+from etsy_listings.core.workspace.yaml_source import UneditableYamlError, edit_yaml_bytes
 
 CONCURRENCY = "batch_ai.concurrency"
 WEIGHTS = "market_seo.weights"
@@ -88,8 +88,8 @@ def edit_settings(
     """Apply ``changes`` (dotted key to value) if ``settings.yaml`` is still
     at ``expected_revision``.
 
-    Refuses with :class:`SettingsRevisionConflict` or
-    :class:`InvalidSettingsEdit`, writing nothing either way.
+    Refuses with :class:`SettingsRevisionConflictError` or
+    :class:`InvalidSettingsEditError`, writing nothing either way.
     """
     refused = {
         key: "not editable from the Admin page" for key in changes if key not in EDITABLE_KEYS
@@ -97,7 +97,7 @@ def edit_settings(
     if WEIGHTS in changes and (problem := _percentage_problem(changes[WEIGHTS])):
         refused[WEIGHTS] = problem
     if refused:
-        raise InvalidSettingsEdit(refused)
+        raise InvalidSettingsEditError(refused)
 
     path = workspace.settings_file()
     adopted: list[Settings] = []
@@ -106,17 +106,17 @@ def edit_settings(
         try:
             raw = parse_yaml(path, source.decode("utf-8-sig"))
         except ConfigLoadError as exc:
-            raise InvalidSettingsEdit({"__root__": str(exc)}) from exc
+            raise InvalidSettingsEditError({"__root__": str(exc)}) from exc
         if raw is None:
             raw = {}
         if not isinstance(raw, dict):
-            raise InvalidSettingsEdit({"__root__": "settings.yaml is not a mapping"})
+            raise InvalidSettingsEditError({"__root__": "settings.yaml is not a mapping"})
         # An invalid hand edit must be corrected in the file, never repaired
         # implicitly by a page patch (Admin plan, config-validation rule).
         try:
             original = Settings.model_validate(raw)
         except ValidationError as exc:
-            raise InvalidSettingsEdit(field_errors_of(exc)) from exc
+            raise InvalidSettingsEditError(field_errors_of(exc)) from exc
         candidate: dict[str, Any] = copy.deepcopy(raw)
         for key, value in changes.items():
             _assign(candidate, key.split("."), value)
@@ -124,20 +124,20 @@ def edit_settings(
             validated = Settings.model_validate(candidate)
             adopted.append(validated)
         except ValidationError as exc:
-            raise InvalidSettingsEdit(field_errors_of(exc)) from exc
+            raise InvalidSettingsEditError(field_errors_of(exc)) from exc
         if PROVIDERS in changes:
             _retain_provider_source(raw, candidate, original, validated)
         try:
             return edit_yaml_bytes(source, candidate, sequence_keys={("ai", "providers"): "name"})
-        except UneditableYaml as exc:
-            raise InvalidSettingsEdit(
+        except UneditableYamlError as exc:
+            raise InvalidSettingsEditError(
                 {"__root__": f"{path}: {exc}. Edit this value in the file, then reload Settings."}
             ) from exc
 
     try:
         revised = replace_if_unchanged(path, expected_revision, change, absent_ok=True)
-    except RevisionConflict as exc:
-        raise SettingsRevisionConflict() from exc
+    except RevisionConflictError as exc:
+        raise SettingsRevisionConflictError() from exc
     (settings,) = adopted
     return SettingsView(revised.revision, settings)
 

@@ -35,15 +35,15 @@ from etsy_listings.core.workspace.atomic import read_bytes_retrying, write_bytes
 
 __all__ = [
     "ABSENT_REVISION",
-    "RevisionConflict",
     "Revised",
+    "RevisionConflictError",
     "content_revision",
     "read_revisioned",
     "replace_if_unchanged",
 ]
 
 
-class RevisionConflict(UserFacingError, RuntimeError):
+class RevisionConflictError(UserFacingError, RuntimeError):
     """The file changed since the revision a save was made against."""
 
     def __init__(self, path: Path) -> None:
@@ -107,7 +107,7 @@ def replace_if_unchanged(
     with _lock_for(path):
         current, revision = _read(path, absent_ok=absent_ok)
         if revision != expected_revision:
-            raise RevisionConflict(path)
+            raise RevisionConflictError(path)
         edited = change(current)
         if edited == current:
             revised = Revised(expected_revision, written=False)

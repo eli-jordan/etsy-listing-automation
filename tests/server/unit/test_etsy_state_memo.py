@@ -14,7 +14,7 @@ from pathlib import Path
 import pytest
 
 from etsy_listings.core.clients.etsy.fakes import FakeEtsyListingClient
-from etsy_listings.core.clients.etsy.tokens import EtsyAuthError, EtsyRefreshBusy
+from etsy_listings.core.clients.etsy.tokens import EtsyAuthError, EtsyRefreshBusyError
 from etsy_listings.server.api import etsystate
 
 
@@ -120,7 +120,7 @@ def test_a_workspace_with_no_etsy_credentials_reports_nothing_live(
     "failure",
     [
         EtsyAuthError("No Etsy tokens."),
-        EtsyRefreshBusy("Refresh still running. Try again shortly."),
+        EtsyRefreshBusyError("Refresh still running. Try again shortly."),
     ],
     ids=["signed-out", "refresh-busy"],
 )

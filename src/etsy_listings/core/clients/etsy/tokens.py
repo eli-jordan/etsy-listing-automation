@@ -71,7 +71,7 @@ class EtsyAuthError(UserFacingError, RuntimeError):
         super().__init__(f"{detail}\n  Run `etsy-listings auth` to sign in to Etsy again.")
 
 
-class EtsyRefreshBusy(UserFacingError, RuntimeError):
+class EtsyRefreshBusyError(UserFacingError, RuntimeError):
     """Another store's refresh of the same token file outlasted
     :data:`ROTATION_WAIT_SECONDS`. The sign-in is not known to be dead, so
     this asks for a retry, never a new sign-in."""
@@ -239,7 +239,7 @@ class TokenStore:
         """
         lock = _rotation_lock(self._path)
         if not lock.acquire(timeout=ROTATION_WAIT_SECONDS):
-            raise EtsyRefreshBusy(
+            raise EtsyRefreshBusyError(
                 f"Another request is still refreshing the Etsy sign-in in {self._path.name} "
                 f"after {ROTATION_WAIT_SECONDS:.0f}s. Try again; if it keeps happening, "
                 "restart the tool."

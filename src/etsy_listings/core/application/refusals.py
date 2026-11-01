@@ -311,14 +311,14 @@ class ReviewedPlanRefusedError(UserFacingError, ValueError):
 # written, and the page keeps the seller's edit visible with the reason.
 
 
-class ShopRevisionConflict(UserFacingError, RuntimeError):
+class ShopRevisionConflictError(UserFacingError, RuntimeError):
     """``shop.yaml`` changed since the page read it; the seller reloads."""
 
     def __init__(self) -> None:
         super().__init__("shop.yaml changed on disk since this page loaded it. Reload to continue.")
 
 
-class InvalidShopEdit(UserFacingError, ValueError):
+class InvalidShopEditError(UserFacingError, ValueError):
     """The edited ``shop.yaml`` would not load: each refused dotted key to
     the reason, as ``field_errors_of`` names a listing's."""
 
@@ -333,7 +333,7 @@ class InvalidShopEdit(UserFacingError, ValueError):
 # settings.yaml, which has its own revision.
 
 
-class SettingsRevisionConflict(UserFacingError, RuntimeError):
+class SettingsRevisionConflictError(UserFacingError, RuntimeError):
     """``settings.yaml`` changed since the page read it; the seller reloads."""
 
     def __init__(self) -> None:
@@ -342,7 +342,7 @@ class SettingsRevisionConflict(UserFacingError, RuntimeError):
         )
 
 
-class InvalidSettingsEdit(UserFacingError, ValueError):
+class InvalidSettingsEditError(UserFacingError, ValueError):
     """The edited ``settings.yaml`` would not load: each refused dotted key
     to the reason."""
 

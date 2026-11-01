@@ -14,7 +14,7 @@ Values are compared and checked with PyYAML's ``safe_load``, the reader every
 owner uses, and ruamel is held to the same YAML 1.1 rules so a rendered
 ``'yes'`` stays a string for that reader. After splicing, the result is read
 back and must equal the intended document exactly. When it cannot -- an edit
-through an alias, say -- :class:`UneditableYaml` is raised and the owner writes
+through an alias, say -- :class:`UneditableYamlError` is raised and the owner writes
 nothing, rather than writing a file that means something else.
 
 Owners do the reading, locking and atomic replacement; this module only turns
@@ -40,7 +40,7 @@ from ruamel.yaml.scalarstring import (
 
 from etsy_listings.core.errors import UserFacingError
 
-__all__ = ["UNSET", "UneditableYaml", "edit_yaml", "edit_yaml_bytes"]
+__all__ = ["UNSET", "UneditableYamlError", "edit_yaml", "edit_yaml_bytes"]
 
 UNSET: Any = object()
 """``before`` not given: the edit is two-way, against what the source reads as."""
@@ -48,7 +48,7 @@ _YAML_VERSION = (1, 1)
 """PyYAML's rules, which every reader of a workspace file applies."""
 
 
-class UneditableYaml(UserFacingError, ValueError):
+class UneditableYamlError(UserFacingError, ValueError):
     """The edit cannot be made in place without changing what the file means,
     such as a value shared through a YAML alias. Nothing is written."""
 
@@ -98,10 +98,12 @@ def edit_yaml(
             return source
         edited = _Editor(source, sequence_keys=sequence_keys).edit(current, target)
         if not _same(yaml.safe_load(edited), target):
-            raise UneditableYaml("the edited text would not read back as the intended document")
+            raise UneditableYamlError(
+                "the edited text would not read back as the intended document"
+            )
         return edited
     except (yaml.YAMLError, RoundTripYamlError) as exc:
-        raise UneditableYaml(f"YAML source could not be edited safely: {exc}") from exc
+        raise UneditableYamlError(f"YAML source could not be edited safely: {exc}") from exc
 
 
 # ------------------------------------------------------------------ values
@@ -172,7 +174,7 @@ def _is_flow(node: Node) -> bool:
     return bool(getattr(node, "flow_style", False))
 
 
-class _InPlaceRefused(Exception):
+class _InPlaceRefusedError(Exception):
     """A collection cannot be edited line by line; replace it whole."""
 
 
@@ -245,19 +247,19 @@ class _Editor:
                 else:
                     self._edit_block_sequence(node, old, new)
                 return
-        except _InPlaceRefused:
+        except _InPlaceRefusedError:
             pass
         if _is_flow(node) and isinstance(new, (dict, list)) and new:
             self._flow_replacer(node)(new)  # a flow collection stays one
         else:
             replace(self._styled(node, new))
 
-    def _key(self, node: Node) -> Any:  # noqa: ANN401 -- any YAML scalar
+    def _key(self, node: Node) -> Any:
         """A key as the reader reads it. Read by PyYAML from its own text,
         not constructed by ruamel, whose YAML 1.1 rules make a plain ``y``
         -- a bounding-box point's -- the boolean ``True``."""
         if not isinstance(node, ScalarNode):
-            raise UneditableYaml("a mapping key that is not a scalar")
+            raise UneditableYamlError("a mapping key that is not a scalar")
         return yaml.safe_load(self.source[node.start_mark.index : node.end_mark.index])
 
     def _entries(self, node: MappingNode, old: dict[Any, Any]) -> list[tuple[Any, Node, Node]]:
@@ -265,7 +267,7 @@ class _Editor:
         for key_node, value_node in node.value:
             key = self._key(key_node)
             if key not in old:
-                raise UneditableYaml(f"key {key!r} does not read as written (a merge key?)")
+                raise UneditableYamlError(f"key {key!r} does not read as written (a merge key?)")
             entries.append((key, key_node, value_node))
         return entries
 
@@ -273,13 +275,13 @@ class _Editor:
         self, node: MappingNode, old: dict[Any, Any], new: dict[Any, Any]
     ) -> None:
         if old.keys() != new.keys():
-            raise _InPlaceRefused
+            raise _InPlaceRefusedError
         for key, _, value_node in self._entries(node, old):
             self._edit(value_node, old[key], new[key], self._flow_replacer(value_node))
 
     def _edit_flow_sequence(self, node: SequenceNode, old: list[Any], new: list[Any]) -> None:
         if len(old) != len(new):
-            raise _InPlaceRefused
+            raise _InPlaceRefusedError
         for item, before, after in zip(node.value, old, new, strict=True):
             self._edit(item, before, after, self._flow_replacer(item))
 
@@ -288,11 +290,11 @@ class _Editor:
     ) -> None:
         entries = self._entries(node, old)
         if not new or not entries:
-            raise _InPlaceRefused
+            raise _InPlaceRefusedError
         column = entries[0][1].start_mark.column
         removed = [entry for entry in entries if entry[0] not in new]
         if any(not self._starts_its_line(key_node.start_mark.index) for _, key_node, _ in removed):
-            raise _InPlaceRefused
+            raise _InPlaceRefusedError
         for key, key_node, value_node in entries:
             if key not in new:
                 start = self._line_start(key_node.start_mark.index)
@@ -319,7 +321,7 @@ class _Editor:
     def _edit_block_sequence(self, node: SequenceNode, old: list[Any], new: list[Any]) -> None:
         items: list[Node] = list(node.value)
         if not new or not items:
-            raise _InPlaceRefused
+            raise _InPlaceRefusedError
         dashes = [self._dash(item) for item in items]
         column = dashes[0] - self._line_start(dashes[0])
         key = self.sequence_keys.get(id(node))
@@ -339,7 +341,7 @@ class _Editor:
         paired = min(len(changed_old), len(changed_new))
         removed = list(changed_old)[paired:]
         if any(not self._starts_its_line(dashes[index]) for index in removed):
-            raise _InPlaceRefused
+            raise _InPlaceRefusedError
         for offset in range(paired):
             index = prefix + offset
             self._edit(items[index], old[index], new[index], self._item_replacer(items[index]))
@@ -370,7 +372,7 @@ class _Editor:
         """
         names = [row[key] for row in old]
         if len(set(names)) != len(names):
-            raise UneditableYaml("duplicate identities in an ordered sequence")
+            raise UneditableYamlError("duplicate identities in an ordered sequence")
         starts = [self._line_start(dash) for dash in dashes]
         end = self._line_after(self._content_end(items[-1]))
         ends = [*starts[1:], end]
@@ -552,7 +554,7 @@ class _Editor:
         while index >= 0 and self.source[index] in " \t\r\n":
             index -= 1
         if index < 0 or self.source[index] != "-":
-            raise _InPlaceRefused
+            raise _InPlaceRefusedError
         return index
 
     def _detect_indentation(self, root: Node) -> None:
@@ -582,7 +584,7 @@ class _Editor:
                 if isinstance(value_node, SequenceNode) and not found_sequence:
                     try:
                         dash = self._dash(value_node.value[0])
-                    except _InPlaceRefused:
+                    except _InPlaceRefusedError:
                         continue
                     offset = dash - self._line_start(dash) - key_node.start_mark.column
                     if offset >= 0:

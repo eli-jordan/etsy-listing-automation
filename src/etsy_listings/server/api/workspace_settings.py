@@ -5,7 +5,10 @@ from fastapi.responses import JSONResponse
 
 from etsy_listings.core.ai.discovery import ModelCatalogs, ModelDiscovery
 from etsy_listings.core.application import workspace_settings
-from etsy_listings.core.application.refusals import InvalidSettingsEdit, SettingsRevisionConflict
+from etsy_listings.core.application.refusals import (
+    InvalidSettingsEditError,
+    SettingsRevisionConflictError,
+)
 from etsy_listings.core.config.errors import ConfigLoadError
 from etsy_listings.core.config.settings import PROVIDER_NAMES, AiProviderSettings
 from etsy_listings.server.api.schemas import (
@@ -72,12 +75,12 @@ def edit_settings(
             expected_revision=body.revision,
             changes=changes,
         )
-    except SettingsRevisionConflict as exc:
+    except SettingsRevisionConflictError as exc:
         return JSONResponse(
             status_code=409,
             content=SettingsSaveRefusal(kind="conflict", message=str(exc)).model_dump(),
         )
-    except InvalidSettingsEdit as exc:
+    except InvalidSettingsEditError as exc:
         return JSONResponse(
             status_code=422,
             content=SettingsSaveRefusal(

@@ -23,7 +23,7 @@ from etsy_listings.core.application.shop_discovery import EtsyAccess
 from etsy_listings.core.clients.etsy.fakes import FakeEtsyShopClient
 from etsy_listings.core.clients.etsy.models import ReturnPolicy
 from etsy_listings.core.clients.etsy.models import Shop as EtsyShop
-from etsy_listings.core.clients.etsy.tokens import EtsyRefreshBusy
+from etsy_listings.core.clients.etsy.tokens import EtsyRefreshBusyError
 from etsy_listings.core.clients.printify.fakes import FakePrintifyClient
 from etsy_listings.core.clients.printify.models import Shop
 from etsy_listings.core.config.secrets import PRINTIFY_TOKEN_VAR
@@ -455,7 +455,7 @@ def test_refresh_busy_discovery_keeps_setup_usable_without_asking_to_sign_in(
 ) -> None:
     class BusyShop(FakeEtsyShopClient):
         def shop_by_owner(self, user_id: int) -> EtsyShop | None:
-            raise EtsyRefreshBusy("Refresh still running. Try again shortly.")
+            raise EtsyRefreshBusyError("Refresh still running. Try again shortly.")
 
     scripted(HAPPY_PATH)
     run_setup(
