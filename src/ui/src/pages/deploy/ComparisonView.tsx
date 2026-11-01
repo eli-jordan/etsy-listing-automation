@@ -7,6 +7,7 @@ import type {
   BeforeImageTile,
   BeforeVideoTile,
   Comparison as ComparisonData,
+  TagsBlock,
 } from "./comparison";
 import { wordDiff } from "./wordDiff";
 
@@ -222,6 +223,36 @@ function Block({
   );
 }
 
+function StringList({
+  label,
+  block,
+  side,
+}: {
+  label: string;
+  block: TagsBlock;
+  side: "before" | "after";
+}) {
+  const isAfter = side === "after";
+  return (
+    <Block label={label} changed={block.changed} side={side}>
+      <div className="dv-chips">
+        {(isAfter ? block.after : block.before).map((value) => {
+          const added = isAfter && block.added.includes(value);
+          const removed = !isAfter && block.removed.includes(value);
+          return (
+            <span
+              key={value}
+              className={`dv-chip${added ? " dv-chip--add" : ""}${removed ? " dv-chip--rm" : ""}`}
+            >
+              {value}
+            </span>
+          );
+        })}
+      </div>
+    </Block>
+  );
+}
+
 function Column({
   side,
   comparison,
@@ -342,43 +373,8 @@ function Column({
         </Block>
       )}
 
-      {tags && (
-        <Block label="Tags" changed={tags.changed} side={side}>
-          <div className="dv-chips">
-            {(isAfter ? tags.after : tags.before).map((tag) => {
-              const added = isAfter && tags.added.includes(tag);
-              const removed = !isAfter && tags.removed.includes(tag);
-              return (
-                <span
-                  key={tag}
-                  className={`dv-chip${added ? " dv-chip--add" : ""}${removed ? " dv-chip--rm" : ""}`}
-                >
-                  {tag}
-                </span>
-              );
-            })}
-          </div>
-        </Block>
-      )}
-
-      {materials && (
-        <Block label="Materials" changed={materials.changed} side={side}>
-          <div className="dv-chips">
-            {(isAfter ? materials.after : materials.before).map((material) => {
-              const added = isAfter && materials.added.includes(material);
-              const removed = !isAfter && materials.removed.includes(material);
-              return (
-                <span
-                  key={material}
-                  className={`dv-chip${added ? " dv-chip--add" : ""}${removed ? " dv-chip--rm" : ""}`}
-                >
-                  {material}
-                </span>
-              );
-            })}
-          </div>
-        </Block>
-      )}
+      {tags && <StringList label="Tags" block={tags} side={side} />}
+      {materials && <StringList label="Materials" block={materials} side={side} />}
     </div>
   );
 }
@@ -415,19 +411,19 @@ export function ComparisonView({
   imageUrlForRef?: (ref: string) => string | null;
 }) {
   const etsyListingIdLabel = etsyListingId !== null ? `listing ${etsyListingId}` : "";
+  const columnProps = {
+    comparison,
+    listing,
+    renderSnapshot,
+    previewsRendered,
+    etsyListingIdLabel,
+    imageUrlForRef,
+  };
 
   if (!comparison.hasEtsyListing) {
     return (
       <div className="dv-compare dv-compare--single">
-        <Column
-          side="after"
-          comparison={comparison}
-          listing={listing}
-          renderSnapshot={renderSnapshot}
-          previewsRendered={previewsRendered}
-          etsyListingIdLabel={etsyListingIdLabel}
-          imageUrlForRef={imageUrlForRef}
-        />
+        <Column {...columnProps} side="after" />
         <p className="dv-note">Not on Etsy yet.</p>
       </div>
     );
@@ -436,39 +432,15 @@ export function ComparisonView({
   if (collapsed) {
     return (
       <div className="dv-compare dv-compare--single">
-        <Column
-          side="before"
-          comparison={comparison}
-          listing={listing}
-          renderSnapshot={renderSnapshot}
-          previewsRendered={previewsRendered}
-          etsyListingIdLabel={etsyListingIdLabel}
-          imageUrlForRef={imageUrlForRef}
-        />
+        <Column {...columnProps} side="before" />
       </div>
     );
   }
 
   return (
     <div className="dv-compare">
-      <Column
-        side="before"
-        comparison={comparison}
-        listing={listing}
-        renderSnapshot={renderSnapshot}
-        previewsRendered={previewsRendered}
-        etsyListingIdLabel={etsyListingIdLabel}
-        imageUrlForRef={imageUrlForRef}
-      />
-      <Column
-        side="after"
-        comparison={comparison}
-        listing={listing}
-        renderSnapshot={renderSnapshot}
-        previewsRendered={previewsRendered}
-        etsyListingIdLabel={etsyListingIdLabel}
-        imageUrlForRef={imageUrlForRef}
-      />
+      <Column {...columnProps} side="before" />
+      <Column {...columnProps} side="after" />
     </div>
   );
 }

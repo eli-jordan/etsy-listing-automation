@@ -261,9 +261,8 @@ export function BatchDeployPage() {
   const terminalApply = isTerminalApply(visibleState);
   const applying = visibleState.applyStarted && !terminalApply;
 
-  const startWorkspacePlan = useCallback(async () => {
-    try {
-      const created = await createRun({ kind: "plan", scope: "workspace" });
+  const followCreatedRun = useCallback(
+    async (created: Awaited<ReturnType<typeof createRun>>) => {
       if (created.kind === "conflict") {
         const conflict = await getRun(created.activeRun);
         if (conflict.scope === "workspace") {
@@ -274,10 +273,18 @@ export function BatchDeployPage() {
       } else {
         navigate(`/listings/deploy/${encodeURIComponent(created.run.id)}`, { replace: true });
       }
+    },
+    [navigate],
+  );
+
+  const startWorkspacePlan = useCallback(async () => {
+    try {
+      const created = await createRun({ kind: "plan", scope: "workspace" });
+      await followCreatedRun(created);
     } catch {
       setStatus("Could not start a fresh workspace plan.");
     }
-  }, [navigate]);
+  }, [followCreatedRun]);
 
   async function handleApply() {
     if (run?.kind !== "plan" || visibleState.phase !== "ready" || !previewsReady) return;
@@ -296,16 +303,7 @@ export function BatchDeployPage() {
           ),
           reviewed_run_id: run.id,
         });
-        if (created.kind === "conflict") {
-          const conflict = await getRun(created.activeRun);
-          if (conflict.scope === "workspace") {
-            navigate(`/listings/deploy/${encodeURIComponent(conflict.id)}`, { replace: true });
-          } else {
-            setStatus("A listing deploy is already running. Return to Listings to follow it.");
-          }
-        } else {
-          navigate(`/listings/deploy/${encodeURIComponent(created.run.id)}`, { replace: true });
-        }
+        await followCreatedRun(created);
       } catch {
         setStatus("Could not start the reviewed workspace apply.");
       }
