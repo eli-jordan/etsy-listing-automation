@@ -263,7 +263,7 @@ CheckOption = Annotated[
 ]
 
 
-def _auth_root_option() -> Any:
+def _auth_root_option() -> Any:  # typer.Option is typed Any at this boundary
     """``--root`` as `auth` needs it: no shop.yaml required.
 
     `auth` and `setup` are the two commands that run *before* a workspace

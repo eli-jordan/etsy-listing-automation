@@ -142,7 +142,7 @@ def create_run(request: Request, body: CreateRunRequest) -> RunSummary | JSONRes
     elif isinstance(body, ListingApplyRequest):
         command = ListingApply(tuple(body.listings), body.expect)
     else:
-        assert isinstance(body, WorkspaceApplyRequest)
+        assert isinstance(body, WorkspaceApplyRequest)  # closed request union
         command = WorkspaceApply(tuple(body.listings), body.expect, body.reviewed_run_id)
 
     try:

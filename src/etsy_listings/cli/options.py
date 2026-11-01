@@ -22,7 +22,7 @@ ROOT_HELP = (
 )
 
 
-def root_option() -> Any:
+def root_option() -> Any:  # typer.Option is typed Any at this boundary
     """One definition of ``--root``, shared by every command that takes a path.
 
     Declared ``str``, never ``Path``: on Windows ``str(Path("/home/Admin"))``

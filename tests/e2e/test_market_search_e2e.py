@@ -9,7 +9,7 @@ import pytest
 
 from etsy_listings.core import connections
 from etsy_listings.core.clients.etsy.transport import BASE_URL
-from etsy_listings.core.market import research
+from etsy_listings.core.market import ResearchSettings, research
 from etsy_listings.core.workspace.workspace import Workspace
 
 pytestmark = pytest.mark.e2e
@@ -32,7 +32,7 @@ def test_live_market_research_scores_comparables_without_writing(
             QUERIES,
             client,
             today=datetime.now(UTC),
-            own_shop_id=etsy_market_workspace.defaults.etsy.shop_id,
+            settings=ResearchSettings(own_shop_id=etsy_market_workspace.defaults.etsy.shop_id),
         )
 
     assert methods, "the test must reach Etsy rather than an empty fixture"
