@@ -978,6 +978,40 @@ describe("Listing defaults", () => {
     expect(renewal).toHaveValue("manual");
   });
 
+  it("shows no error for a refusal a pending newer save supersedes", async () => {
+    let refuse: (() => void) | undefined;
+    const server = fileServer();
+    save.mockImplementationOnce(
+      () =>
+        new Promise<SaveOutcome>((resolve) => {
+          refuse = () =>
+            resolve({
+              kind: "invalid",
+              message: "invalid renewal",
+              fieldErrors: { renewal: "auto refused" },
+            });
+        }),
+    );
+    const release = server.hold();
+    await openDefaults();
+    const renewal = screen.getByLabelText("Renewal");
+    fireEvent.change(renewal, { target: { value: "auto" } });
+    fireEvent.blur(renewal);
+    fireEvent.change(renewal, { target: { value: "manual" } });
+    fireEvent.blur(renewal);
+    await waitFor(() => expect(refuse).toBeDefined());
+    await act(async () => refuse?.());
+    await waitFor(() => expect(save).toHaveBeenCalledTimes(2));
+
+    expect(screen.queryByText("auto refused")).not.toBeInTheDocument();
+    expect(screen.queryByText("Not saved")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Retry save" })).not.toBeInTheDocument();
+    expect(renewal).toHaveValue("manual");
+    await release();
+    expect(await screen.findByText("Saved")).toBeInTheDocument();
+    expect(server.file().listing_defaults.renewal).toBe("manual");
+  });
+
   async function offerUk() {
     getLookups.mockResolvedValueOnce(lookups({ shipping: ["Printify UK standard"] }));
     await act(async () => {

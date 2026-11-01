@@ -148,12 +148,26 @@ export function useSaveQueue<C extends Changes, O extends SaveOutcome>({
         );
       };
       const fail = (message: string, errors: FieldErrors = {}) => {
-        if (!retain) {
-          // The caller reports this failure itself and owns its retry; the
-          // page goes back to what the retained failures and queue say.
+        const each = Object.entries(changes).map(([key, value]) => ({
+          current: latest.current.get(key) === mine,
+          changed: { [key]: value } as C,
+        }));
+        if (!retain || !each.some(({ current }) => current)) {
+          // The caller reports this failure itself and owns its retry, or a
+          // newer save of every key will answer instead; the page goes back
+          // to what the retained failures and queue say.
           settle(waiting.current - 1);
           return;
         }
+        // An error only about keys a newer save carries belongs to a value
+        // the seller has already replaced.
+        const stale = (field: string) =>
+          each.some(({ changed }) => clears(field, changed)) &&
+          !each.some(({ current, changed }) => current && clears(field, changed));
+        setFieldErrors((held) => ({
+          ...held,
+          ...Object.fromEntries(Object.entries(errors).filter(([field]) => !stale(field))),
+        }));
         const refusedFields = Object.keys(errors);
         for (const [key, value] of Object.entries(changes)) {
           if (latest.current.get(key) !== mine) continue;
@@ -185,7 +199,6 @@ export function useSaveQueue<C extends Changes, O extends SaveOutcome>({
             conflicted.current = true;
             setStatus({ kind: "conflict", message: outcome.message });
           } else {
-            if (retain) setFieldErrors((errors) => ({ ...errors, ...outcome.fieldErrors }));
             // Document errors have no field control to show their reason.
             // Retain it with the failed patch through sibling saves and Retry.
             fail(outcome.fieldErrors.__root__ ?? "Not saved", outcome.fieldErrors);
