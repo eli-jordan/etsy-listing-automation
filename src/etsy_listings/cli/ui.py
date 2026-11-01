@@ -29,6 +29,8 @@ def ui(
     The UI includes the dashboard, calibrator, listing editor and run runner.
     Ctrl-C stops the server once any in-flight apply finishes its current stage.
     """
-    from etsy_listings.server.hosting import serve
+    from etsy_listings.server.hosting import (  # noqa: PLC0415 -- startup cost: see module docstring
+        serve,
+    )
 
     serve(open_workspace(root), host=host, port=port)

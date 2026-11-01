@@ -58,12 +58,11 @@ export function stagePlan<Name extends StageName>(
     actions = [],
     ...fields
   } = overrides;
-  const outcome =
-    blocked !== null
-      ? ({ type: "blocked", message: blocked } as const)
-      : will_run || changes.length > 0 || actions.length > 0
-        ? ({ type: "work", reason: reason ?? "changed", changes, actions } as const)
-        : ({ type: "idle" } as const);
+  const unblocked =
+    will_run || changes.length > 0 || actions.length > 0
+      ? ({ type: "work", reason: reason ?? "changed", changes, actions } as const)
+      : ({ type: "idle" } as const);
+  const outcome = blocked !== null ? ({ type: "blocked", message: blocked } as const) : unblocked;
   return {
     stage,
     outcome,

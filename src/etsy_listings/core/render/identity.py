@@ -7,7 +7,7 @@ from typing import Any
 
 from etsy_listings.core.render.config import MarigoldAppearance, RenderConfig
 from etsy_listings.core.render.io import MARIGOLD_PNG_COMPRESSION
-from etsy_listings.core.render.types import RGBA
+from etsy_listings.core.render.types import IMAGE_NDIM, RGBA, RGBA_CHANNELS
 
 
 def _canonical(document: dict[str, Any]) -> str:
@@ -19,7 +19,11 @@ def _canonical(document: dict[str, Any]) -> str:
 
 def artwork_identity(artwork: RGBA) -> str:
     """Canonical decoded RGBA bytes include their shape and channel convention."""
-    if artwork.ndim != 3 or artwork.shape[2] != 4 or min(artwork.shape[:2]) < 1:
+    if (
+        artwork.ndim != IMAGE_NDIM
+        or artwork.shape[2] != RGBA_CHANNELS
+        or min(artwork.shape[:2]) < 1
+    ):
         raise ValueError("Artwork identity requires a nonempty RGBA image")
     return _canonical(
         {

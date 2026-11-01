@@ -81,7 +81,7 @@ def _batch(workspace: Workspace, batches: BatchStore, *names: str) -> Batch:
     queue -- what a confirm leaves on disk."""
     staging = StagingStore(workspace)
     files = [(f"{name}.png", png(i + 1)) for i, name in enumerate(names)]
-    session = stage_pngs(workspace, staging, LISTING_TEMPLATE, uploads(*files))
+    session = stage_pngs(staging, LISTING_TEMPLATE, uploads(*files))
     return confirm(workspace, staging, batches, session.id)
 
 

@@ -12,7 +12,7 @@ from PIL import Image
 
 from etsy_listings.core.preparation import scenes
 from etsy_listings.core.preparation.artifacts import Artifacts, StalePreparationError
-from etsy_listings.core.preparation.scenes import PreparedLayer, lease_scene
+from etsy_listings.core.preparation.scenes import Composition, PreparedLayer, lease_scene
 from etsy_listings.core.render import MarigoldAppearance, Point, load_template_base
 
 from tests.support.marigold import listing_with_marigold
@@ -37,9 +37,11 @@ def test_identity_names_the_artwork_and_the_scene_renders_at_the_photo_size(
         with lease_scene(
             workspace,
             "shirt",
-            base=_base(workspace),
-            layers=[PreparedLayer(_artwork(rgb))],
-            appearance=MarigoldAppearance(),
+            Composition(
+                base=_base(workspace),
+                layers=[PreparedLayer(_artwork(rgb))],
+                appearance=MarigoldAppearance(),
+            ),
         ) as scene:
             identities.append(scene.identity)
             assert scene.render().size == (64, 64)
@@ -60,9 +62,11 @@ def test_inputs_changed_since_they_were_read_refuse_as_stale(workspace_root) -> 
         lease_scene(
             workspace,
             "shirt",
-            base=_base(workspace),
-            layers=[PreparedLayer(_artwork((200, 30, 30)))],
-            appearance=MarigoldAppearance(),
+            Composition(
+                base=_base(workspace),
+                layers=[PreparedLayer(_artwork((200, 30, 30)))],
+                appearance=MarigoldAppearance(),
+            ),
             expected=planned,
         ),
     ):
@@ -97,9 +101,11 @@ def test_concurrent_renders_compose_at_most_the_cap_at_once(workspace_root, monk
         with lease_scene(
             workspace,
             "shirt",
-            base=_base(workspace),
-            layers=[PreparedLayer(_artwork((200, 30, 30)))],
-            appearance=MarigoldAppearance(),
+            Composition(
+                base=_base(workspace),
+                layers=[PreparedLayer(_artwork((200, 30, 30)))],
+                appearance=MarigoldAppearance(),
+            ),
         ) as scene:
             scene.render()
 

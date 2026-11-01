@@ -80,7 +80,7 @@ def _result() -> MarketResult:
     return research(QUERIES, fake, today=TODAY)
 
 
-def test_the_block_matches_the_golden(update_goldens: bool) -> None:
+def test_the_block_matches_the_golden(*, update_goldens: bool) -> None:
     actual = market_block(_result())
     if update_goldens or not GOLDEN.is_file():
         GOLDEN.parent.mkdir(parents=True, exist_ok=True)

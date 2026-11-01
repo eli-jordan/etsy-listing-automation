@@ -7,7 +7,7 @@ from PIL import Image
 
 from etsy_listings.core.render.config import load_template_config
 from etsy_listings.core.workspace import Workspace
-from etsy_listings.core.workspace.calibration import CalibrationStore
+from etsy_listings.core.workspace.calibration import AutomaticMask, CalibrationStore
 
 BOX = [{"x": 0, "y": 0}, {"x": 32, "y": 0}, {"x": 32, "y": 32}, {"x": 0, "y": 32}]
 
@@ -95,8 +95,7 @@ def test_mask_strokes_undo_restart_and_reset_after_cache_deletion(workspace_root
     saved = store.read("example")
     saved = store.install_automatic(
         "example",
-        automatic.getvalue(),
-        algorithm_version="test-v1",
+        AutomaticMask(automatic.getvalue(), algorithm_version="test-v1"),
         expected_revision=saved.revision,
     )
     edit = MaskEdit(
@@ -187,10 +186,13 @@ def test_fresh_baseline_refresh_preserves_manual_corrections(workspace_root: Pat
 
     saved = store.read("example")
     saved = store.install_automatic(
-        "example", png(255), algorithm_version="v1", expected_revision=saved.revision
+        "example", AutomaticMask(png(255), algorithm_version="v1"), expected_revision=saved.revision
     )
     saved = store.install_automatic(
-        "example", png(200), algorithm_version="v2", expected_revision=saved.revision, fresh=True
+        "example",
+        AutomaticMask(png(200), algorithm_version="v2"),
+        expected_revision=saved.revision,
+        fresh=True,
     )
     assert store.mask("example").automatic == png(200)
     saved = store.save(
@@ -206,7 +208,10 @@ def test_fresh_baseline_refresh_preserves_manual_corrections(workspace_root: Pat
     )
     edited = store.mask("example").edited
     store.install_automatic(
-        "example", png(255), algorithm_version="v3", expected_revision=saved.revision, fresh=True
+        "example",
+        AutomaticMask(png(255), algorithm_version="v3"),
+        expected_revision=saved.revision,
+        fresh=True,
     )
     assert store.mask("example").automatic == png(200)
     assert store.mask("example").edited == edited
@@ -247,8 +252,7 @@ def test_main_photo_change_refuses_mask_reuse_until_explicit_reset(workspace_roo
     Image.new("L", (32, 32), 255).save(png, format="PNG")
     saved = store.install_automatic(
         "example",
-        png.getvalue(),
-        algorithm_version="v1",
+        AutomaticMask(png.getvalue(), algorithm_version="v1"),
         expected_revision=store.read("example").revision,
     )
     Image.new("RGB", (32, 32), "black").save(store.workspace.template_main_photo("example"))
@@ -258,12 +262,13 @@ def test_main_photo_change_refuses_mask_reuse_until_explicit_reset(workspace_roo
         store.mask("example")
     with pytest.raises(MaskUnavailableError):
         store.install_automatic(
-            "example", png.getvalue(), algorithm_version="v1", expected_revision=changed.revision
+            "example",
+            AutomaticMask(png.getvalue(), algorithm_version="v1"),
+            expected_revision=changed.revision,
         )
     store.install_automatic(
         "example",
-        png.getvalue(),
-        algorithm_version="v1",
+        AutomaticMask(png.getvalue(), algorithm_version="v1"),
         expected_revision=changed.revision,
         reset_for_photo=True,
     )
@@ -295,10 +300,8 @@ def test_multiple_masks_follow_stable_ids_through_reorder(workspace_root: Path) 
         Image.new("L", (32, 32), value).save(png, format="PNG")
         saved = store.install_automatic(
             "example",
-            png.getvalue(),
-            algorithm_version="v1",
+            AutomaticMask(png.getvalue(), algorithm_version="v1", placement_id=placement_id),
             expected_revision=saved.revision,
-            placement_id=placement_id,
         )
     config = load_template_config(
         {
@@ -339,8 +342,7 @@ def test_every_save_checkpoint_recovers_coherent_calibration(
     Image.new("L", (32, 32), 255).save(png, format="PNG")
     before = store.install_automatic(
         "example",
-        png.getvalue(),
-        algorithm_version="v1",
+        AutomaticMask(png.getvalue(), algorithm_version="v1"),
         expected_revision=store.read("example").revision,
     )
     config = load_template_config(
@@ -460,8 +462,7 @@ def test_damaged_brush_history_is_discarded_without_losing_mask(workspace_root: 
     Image.new("L", (32, 32), 255).save(png, format="PNG")
     before = store.install_automatic(
         "example",
-        png.getvalue(),
-        algorithm_version="v1",
+        AutomaticMask(png.getvalue(), algorithm_version="v1"),
         expected_revision=store.read("example").revision,
     )
     saved = store.save(
@@ -557,8 +558,7 @@ def test_missing_automatic_baseline_does_not_overwrite_saved_edits(workspace_roo
     Image.new("L", (32, 32), 255).save(png, format="PNG")
     before = store.install_automatic(
         "example",
-        png.getvalue(),
-        algorithm_version="v1",
+        AutomaticMask(png.getvalue(), algorithm_version="v1"),
         expected_revision=store.read("example").revision,
     )
     store.save(
@@ -577,8 +577,7 @@ def test_missing_automatic_baseline_does_not_overwrite_saved_edits(workspace_roo
     with pytest.raises(CalibrationRepairRequiredError, match="baseline"):
         store.install_automatic(
             "example",
-            png.getvalue(),
-            algorithm_version="v2",
+            AutomaticMask(png.getvalue(), algorithm_version="v2"),
             expected_revision=store.read("example").revision,
         )
     assert store.workspace.template_mask_file("example").read_bytes() == edited

@@ -35,6 +35,7 @@ over the same transport would be the wrong seam to add.
 from __future__ import annotations
 
 from collections.abc import Sequence
+from dataclasses import dataclass
 from pathlib import PurePosixPath
 from typing import Any, Protocol
 
@@ -49,6 +50,7 @@ from etsy_listings.core.clients.etsy.models import (
     ShopSection,
     VariationImageLink,
 )
+from etsy_listings.core.clients.etsy.shops import ShopMetadataReads
 from etsy_listings.core.clients.etsy.transport import HTTP_NOT_FOUND, EtsyApiError, Transport
 
 HTTP_BAD_REQUEST = 400
@@ -128,6 +130,24 @@ module's job rather than the caller's -- a workspace with 150 listings is not
 a different question from one with five."""
 
 
+@dataclass(frozen=True)
+class ImageUpload:
+    """One image to upload to a listing, at ``rank`` with ``alt_text``.
+
+    ``overwrite`` replaces the image already at that rank in place, keeping
+    its count and neighbouring ranks untouched and minting a new id rather
+    than colliding with what was there (measured). It needs
+    ``listing_image_id`` naming what to replace.
+    """
+
+    file_name: str
+    contents: bytes
+    rank: int
+    alt_text: str = ""
+    overwrite: bool = False
+    listing_image_id: int | None = None
+
+
 class EtsyListingClient(Protocol):
     """Everything Phase 3's stages need from a signed-in Etsy connection:
     `listings_w` for listing writes, `shops_w` for the editor's section
@@ -143,16 +163,7 @@ class EtsyListingClient(Protocol):
     def update_listing(self, shop_id: int, listing_id: int, patch: dict[str, Any]) -> Listing: ...
 
     def upload_listing_image(
-        self,
-        shop_id: int,
-        listing_id: int,
-        *,
-        file_name: str,
-        contents: bytes,
-        rank: int,
-        alt_text: str = "",
-        overwrite: bool = False,
-        listing_image_id: int | None = None,
+        self, shop_id: int, listing_id: int, upload: ImageUpload
     ) -> ListingImage: ...
 
     def upload_listing_video(
@@ -186,7 +197,7 @@ class EtsyListingClient(Protocol):
     def create_shop_section(self, shop_id: int, title: str) -> ShopSection: ...
 
 
-class HttpEtsyListingClient:
+class HttpEtsyListingClient(ShopMetadataReads):
     def __init__(self, transport: Transport) -> None:
         self._transport = transport
 
@@ -270,14 +281,6 @@ class HttpEtsyListingClient:
         response = self._transport.get(f"/v3/application/shops/{shop_id}/production-partners")
         return [ProductionPartner.model_validate(row) for row in _results(response.json())]
 
-    def shop_sections(self, shop_id: int) -> list[ShopSection]:
-        response = self._transport.get(f"/v3/application/shops/{shop_id}/sections")
-        return [ShopSection.model_validate(row) for row in _results(response.json())]
-
-    def return_policies(self, shop_id: int) -> list[ReturnPolicy]:
-        response = self._transport.get(f"/v3/application/shops/{shop_id}/policies/return")
-        return [ReturnPolicy.model_validate(row) for row in _results(response.json())]
-
     # ------------------------------------------------------------- writes
 
     def create_shop_section(self, shop_id: int, title: str) -> ShopSection:
@@ -299,25 +302,13 @@ class HttpEtsyListingClient:
         return Listing.model_validate(response.json())
 
     def upload_listing_image(
-        self,
-        shop_id: int,
-        listing_id: int,
-        *,
-        file_name: str,
-        contents: bytes,
-        rank: int,
-        alt_text: str = "",
-        overwrite: bool = False,
-        listing_image_id: int | None = None,
+        self, shop_id: int, listing_id: int, upload: ImageUpload
     ) -> ListingImage:
-        """Upload at `rank`, with `alt_text` -- there is no image-update
-        endpoint, so alt text is only ever set here.
-
-        `overwrite` replaces the image already at that rank in place, keeping
-        its count and neighbouring ranks untouched and minting a new id
-        rather than colliding with what was there (measured). It needs
-        `listing_image_id` naming what to replace.
-        """
+        """Upload at ``upload.rank``, with its alt text -- there is no
+        image-update endpoint, so alt text is only ever set here."""
+        file_name, contents, rank = upload.file_name, upload.contents, upload.rank
+        alt_text, overwrite = upload.alt_text, upload.overwrite
+        listing_image_id = upload.listing_image_id
         data: dict[str, str] = {"rank": str(rank), "alt_text": alt_text}
         if overwrite:
             data["overwrite"] = "true"

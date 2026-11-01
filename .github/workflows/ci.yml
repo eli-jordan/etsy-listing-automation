@@ -31,19 +31,28 @@ permissions:
 
 jobs:
   quality:
-    # Format check, ruff, mypy and Import Linter (`poe lint`). Their verdicts do
-    # not depend on the OS, so they run once, on ubuntu.
+    # Format, ruff, mypy, imports, complexipy, Vulture and jscpd (`poe lint`).
+    # Their verdicts do not depend on the OS, so they run once, on ubuntu.
     name: quality
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: lts/*
+          cache: npm
+          cache-dependency-path: src/ui/package-lock.json
+
+      - name: install frontend tools (locked)
+        working-directory: src/ui
+        run: npm ci
 
       # Pinned exactly: setup-uv publishes no moving major tag past v7.
       - uses: astral-sh/setup-uv@v10.0.1
         with:
           enable-cache: true
 
-      # Without npm the editable build skips the SPA, which no lint step reads.
       - name: install (locked)
         run: uv sync --frozen
 

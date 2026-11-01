@@ -193,7 +193,8 @@ class Stage(Protocol[D, A, L]):
     # already decided. Deliberately *not* a member of this Protocol:
     # `retract` has none, and a Protocol member has no optional form for
     # a class that reaches it structurally rather than by inheriting `Stage`
-    # -- every stage here is exactly such a class. Declaring it anyway would
+    # -- `retract` is such a class. (The `STAGES` pipeline inherits `Stage`
+    # so that mypy checks each `@override`.) Declaring it anyway would
     # make every stage without one fail `list[AnyStage]`'s structural check,
     # which is the opposite of optional. `build_plan` looks it up with
     # `getattr(stage, "snapshot", None)` and stores whatever it returns, or

@@ -31,6 +31,7 @@ from etsy_listings.core.ai.proposals import ProposalStore
 from etsy_listings.core.application.ai.batch_queue import BatchQueue
 from etsy_listings.core.application.ai.coordinator import AiCoordinator
 from etsy_listings.core.application.batch_staging import (
+    StagingEdit,
     cancel_staging,
     edit_staging,
     read_staging,
@@ -66,6 +67,7 @@ from etsy_listings.core.application.refusals import (
 from etsy_listings.core.application.workspace_locks import WorkspaceLocks
 from etsy_listings.core.batches import (
     Batch,
+    BatchRecords,
     BatchStore,
     ConfirmRefusedError,
     StagingRefusedError,
@@ -150,9 +152,7 @@ def queue(workspace: Workspace, batches: BatchStore) -> BatchQueue:
 def _stage(
     workspace: Workspace, staging: StagingStore, *files: tuple[str, bytes]
 ) -> StagingSession:
-    return stage_upload(
-        workspace, staging, LISTING_TEMPLATE, uploads(*files), locks=WorkspaceLocks()
-    )
+    return stage_upload(staging, LISTING_TEMPLATE, uploads(*files), locks=WorkspaceLocks())
 
 
 def _confirm(
@@ -166,8 +166,7 @@ def _confirm(
     test is about what happens next."""
     return confirm_batch(
         workspace,
-        staging,
-        batches,
+        BatchRecords(staging, batches),
         session_id,
         queue=queue or _queue(workspace, batches),
     )
@@ -199,9 +198,7 @@ class TestStage:
         self, workspace: Workspace, staging: StagingStore
     ) -> None:
         with pytest.raises(ListingTemplateMissingError):
-            stage_upload(
-                workspace, staging, "nope", uploads(("a.png", png(1))), locks=WorkspaceLocks()
-            )
+            stage_upload(staging, "nope", uploads(("a.png", png(1))), locks=WorkspaceLocks())
         assert workspace.staging_ids() == []
 
     def test_the_design_and_size_limits_still_refuse_with_nothing_on_disk(
@@ -239,7 +236,6 @@ class TestStage:
             worker = threading.Thread(
                 target=lambda: staged.append(
                     stage_upload(
-                        workspace,
                         staging,
                         LISTING_TEMPLATE,
                         uploads(("a.png", png(1))),
@@ -272,9 +268,7 @@ class TestEditAndCancel:
             workspace,
             staging,
             session.id,
-            label="  Autumn drop ",
-            names={first: "take-a-hike"},
-            remove=[second],
+            StagingEdit(label="  Autumn drop ", names={first: "take-a-hike"}, remove=[second]),
             now=later - timedelta(days=7),
         )
 
@@ -289,7 +283,7 @@ class TestEditAndCancel:
         self, workspace: Workspace, staging: StagingStore
     ) -> None:
         session = _stage(workspace, staging, ("a.png", png(1)))
-        edited = edit_staging(workspace, staging, session.id, label="   ", names={}, remove=[])
+        edited = edit_staging(workspace, staging, session.id, StagingEdit(label="   "))
         assert edited.label == session.label
 
     def test_an_unknown_row_refuses_the_whole_edit(
@@ -297,7 +291,7 @@ class TestEditAndCancel:
     ) -> None:
         session = _stage(workspace, staging, ("a.png", png(1)))
         with pytest.raises(StagedRowMissingError, match="no staged row 'nope'"):
-            edit_staging(workspace, staging, session.id, label="New", names={}, remove=["nope"])
+            edit_staging(workspace, staging, session.id, StagingEdit(label="New", remove=["nope"]))
         assert read_staging(workspace, staging, session.id).label == session.label
 
     def test_cancel_removes_the_session_and_its_uploads(
@@ -395,7 +389,7 @@ class TestConfirm:
         session = _stage(workspace, staging, ("a.png", png(1)), ("b.png", png(2)))
 
         def confirm() -> Batch:
-            return confirm_batch(workspace, staging, batches, session.id, queue=queue)
+            return confirm_batch(workspace, BatchRecords(staging, batches), session.id, queue=queue)
 
         with ThreadPoolExecutor(max_workers=2) as pool:
             one, two = (f.result() for f in [pool.submit(confirm), pool.submit(confirm)])
@@ -442,7 +436,7 @@ class TestRetry:
         batch = _failed_batch(workspace, staging, batches)
 
         retried = retry_batch_row(
-            workspace, staging, batches, batch.id, batch.rows[0].id, queue=queue
+            workspace, BatchRecords(staging, batches), batch.id, batch.rows[0].id, queue=queue
         )
 
         assert (retried.rows[0].creation, retried.rows[0].ai) == ("created", "queued")
@@ -463,7 +457,9 @@ class TestRetry:
         batch.rows[0] = row.model_copy(update={"ai": ai, "ai_error": "it broke"})
         batches.save(batch)
 
-        retried = retry_batch_row(workspace, staging, batches, batch.id, row.id, queue=queue)
+        retried = retry_batch_row(
+            workspace, BatchRecords(staging, batches), batch.id, row.id, queue=queue
+        )
 
         assert (retried.rows[0].ai, retried.rows[0].ai_error) == ("queued", None)
         assert _woken(queue)
@@ -478,6 +474,7 @@ class TestRetry:
         batches: BatchStore,
         queue: BatchQueue,
         ai: str,
+        *,
         deleted: bool,
     ) -> None:
         session = _stage(workspace, staging, ("a.png", png(1)))
@@ -486,7 +483,9 @@ class TestRetry:
         batches.save(batch)
 
         with pytest.raises(NothingToRetryError, match="a has nothing to retry"):
-            retry_batch_row(workspace, staging, batches, batch.id, batch.rows[0].id, queue=queue)
+            retry_batch_row(
+                workspace, BatchRecords(staging, batches), batch.id, batch.rows[0].id, queue=queue
+            )
         assert _ai(batches, batch) == [ai]
         assert not _woken(queue)
 
@@ -499,9 +498,11 @@ class TestRetry:
     ) -> None:
         batch = _failed_batch(workspace, staging, batches)
         with pytest.raises(BatchRowMissingError, match="no batch row 'nope'"):
-            retry_batch_row(workspace, staging, batches, batch.id, "nope", queue=queue)
+            retry_batch_row(
+                workspace, BatchRecords(staging, batches), batch.id, "nope", queue=queue
+            )
         with pytest.raises(BatchMissingError, match="no batch '0123abcd'"):
-            retry_batch(workspace, staging, batches, "0123abcd", queue=queue)
+            retry_batch(workspace, BatchRecords(staging, batches), "0123abcd", queue=queue)
 
     def test_retry_all_creates_failed_rows_then_requeues_failed_ai(
         self,
@@ -517,7 +518,7 @@ class TestRetry:
         batch.rows[1] = batch.rows[1].model_copy(update={"ai": "failed"})
         batches.save(batch)
 
-        retried = retry_batch(workspace, staging, batches, batch.id, queue=queue)
+        retried = retry_batch(workspace, BatchRecords(staging, batches), batch.id, queue=queue)
 
         assert [(r.creation, r.ai) for r in retried.rows] == [
             ("created", "queued"),
@@ -682,7 +683,6 @@ class TestReads:
         )
         waiting = _stage(workspace, staging, ("c.png", png(3)))
         stale = stage_upload(
-            workspace,
             staging,
             LISTING_TEMPLATE,
             [Upload("d.png", BytesIO(png(4)))],

@@ -18,11 +18,9 @@ const requests: Request[] = [];
 const transport: Middleware = {
   onRequest({ request }) {
     requests.push(request);
-    const body = request.url.endsWith("/config")
-      ? SINGLE
-      : request.url.endsWith("/preparation")
-        ? READY
-        : { checksum: "mask", undo_count: 0, strokes: [] };
+    const maskHistory = { checksum: "mask", undo_count: 0, strokes: [] };
+    const preparationOrHistory = request.url.endsWith("/preparation") ? READY : maskHistory;
+    const body = request.url.endsWith("/config") ? SINGLE : preparationOrHistory;
     return Response.json(body, {
       headers: {
         ETag: '"current"',

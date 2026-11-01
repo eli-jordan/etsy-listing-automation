@@ -19,6 +19,7 @@ from etsy_listings.core.config.garment_profile import BlueprintRef, GarmentProfi
 from etsy_listings.core.config.listing import EtsyListingConfig, Listing, TemplateMediaEntry
 from etsy_listings.core.config.listing_template import ListingTemplate
 from etsy_listings.core.config.listing_validation import (
+    CheckInputs,
     Issue,
     TemplateInfo,
     check_lifecycle_verb,
@@ -92,15 +93,19 @@ def _check(
 ) -> list[Issue]:
     return check_listing(
         listing,
-        garment_profile=garment_profile,
-        garment_profile_names=(
-            garment_profile_names if garment_profile_names is not None else ["comfort-colors-1717"]
+        CheckInputs(
+            garment_profile=garment_profile,
+            garment_profile_names=(
+                garment_profile_names
+                if garment_profile_names is not None
+                else ["comfort-colors-1717"]
+            ),
+            templates=templates if templates is not None else {"flat-lay-01": FLAT_LAY},
+            description_ref_error=description_ref_error,
+            videos=videos if videos is not None else {},
         ),
         design_paths=design_paths if design_paths is not None else {},
-        templates=templates if templates is not None else {"flat-lay-01": FLAT_LAY},
         published=published,
-        description_ref_error=description_ref_error,
-        videos=videos if videos is not None else {},
     )
 
 
@@ -758,11 +763,13 @@ class TestListingTemplateCompleteness:
     ) -> list[Issue]:
         return check_listing_template(
             template,
-            garment_profile=garment_profile,
-            garment_profile_names=garment_profile_names,
-            templates={"flat-lay-01": FLAT_LAY, "colour-chart-01": CHART},
-            description_ref_error=description_ref_error,
-            videos=videos,
+            CheckInputs(
+                garment_profile=garment_profile,
+                garment_profile_names=garment_profile_names,
+                templates={"flat-lay-01": FLAT_LAY, "colour-chart-01": CHART},
+                description_ref_error=description_ref_error,
+                videos=videos or {},
+            ),
         )
 
     def test_a_complete_template_has_no_issues(self) -> None:

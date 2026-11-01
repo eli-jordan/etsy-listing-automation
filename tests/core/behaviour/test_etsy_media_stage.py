@@ -13,6 +13,7 @@ from pathlib import Path
 import pytest
 
 from etsy_listings.core.clients.etsy.fakes import FakeEtsyListingClient
+from etsy_listings.core.clients.etsy.listings import ImageUpload
 from etsy_listings.core.clients.etsy.models import (
     Inventory,
     InventoryProduct,
@@ -292,11 +293,13 @@ def test_an_image_deleted_outside_the_tool_is_drift_and_gets_reuploaded(
     etsy.upload_listing_image(
         SHOP_ID,
         ETSY_LISTING_ID,
-        file_name="replacement.png",
-        contents=b"someone-elses-upload",
-        rank=1,
-        overwrite=True,
-        listing_image_id=original_ids[f"{TEMPLATE}:black"],
+        ImageUpload(
+            file_name="replacement.png",
+            contents=b"someone-elses-upload",
+            rank=1,
+            overwrite=True,
+            listing_image_id=original_ids[f"{TEMPLATE}:black"],
+        ),
     )
 
     stage_plan = _stage_plan(ctx, lock)
@@ -311,7 +314,9 @@ def test_an_image_deleted_outside_the_tool_is_drift_and_gets_reuploaded(
 def _fill_with_foreign_images(etsy: FakeEtsyListingClient, count: int) -> None:
     for n in range(count):
         etsy.upload_listing_image(
-            SHOP_ID, ETSY_LISTING_ID, file_name=f"old-{n}.png", contents=b"old", rank=n + 1
+            SHOP_ID,
+            ETSY_LISTING_ID,
+            ImageUpload(file_name=f"old-{n}.png", contents=b"old", rank=n + 1),
         )
 
 

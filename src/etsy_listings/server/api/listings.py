@@ -47,7 +47,6 @@ from etsy_listings.core.application.listing_identity import rename_listing as re
 from etsy_listings.core.application.listing_reads import (
     ListingRow,
     ListingView,
-    PricedSize,
     describe_draft,
     listing_row,
     read_listing,
@@ -83,6 +82,7 @@ from etsy_listings.core.workspace.common_copy import CommonCopyError
 from etsy_listings.core.workspace.facts import WorkspaceFacts
 from etsy_listings.core.workspace.listing_documents import ListingDocuments
 from etsy_listings.core.workspace.workspace import Workspace
+from etsy_listings.server.api.editor_projections import garment_fields, wire_prices
 from etsy_listings.server.api.etsystate import etsy_states
 from etsy_listings.server.api.schemas import (
     CommonCopySummary,
@@ -98,11 +98,10 @@ from etsy_listings.server.api.schemas import (
     ListingSummary,
     PricingPlanSummary,
     RenameListingRequest,
-    ResolvedPrice,
     WorkspaceSummary,
 )
 from etsy_listings.server.api.templates import (
-    PreviewScale,
+    ScenePreviewQuery,
     preview_refusals,
     render_preview_response,
 )
@@ -175,12 +174,6 @@ def _conflict(exc: ListingNameTakenError | PublishedListingDeletionError) -> HTT
     return HTTPException(status_code=409, detail=str(exc))
 
 
-def wire_prices(prices: Sequence[PricedSize]) -> list[ResolvedPrice]:
-    """Resolved prices as the editor shows them, ``Money`` formatted as it
-    prints itself (e.g. ``"249 NOK"``). Shared with listing templates."""
-    return [ResolvedPrice(size=price.size, amount=str(price.amount)) for price in prices]
-
-
 def _wire_issues(issues: Sequence[ValidationIssue]) -> list[dict[str, str]]:
     return [
         {"severity": i.severity, "tab": i.tab, "where": i.where, "message": i.message}
@@ -234,12 +227,7 @@ def _project(workspace: Workspace, view: ListingView) -> ListingDetail:
             "printify_product_id": view.printify_product_id,
             "pricing_plan_name": view.pricing_plan_name,
             "resolved_prices": [p.model_dump() for p in wire_prices(view.resolved_prices)],
-            "garment_materials": profile.materials if profile is not None else [],
-            "garment_product_type": profile.blueprint.display_title
-            if profile is not None
-            else None,
-            "garment_brand": profile.blueprint.brand if profile is not None else None,
-            "garment_model": profile.blueprint.model if profile is not None else None,
+            **garment_fields(profile),
             "description_composed": view.description_composed,
             "design_content_hash": view.design_content_hash,
         },
@@ -435,9 +423,7 @@ def scene_preview(
     target: Annotated[Target, Depends(target)],
     template: str,
     request: Request,
-    colour: str | None = None,
-    scale: PreviewScale = "full",
-    v: str | None = None,
+    query: Annotated[ScenePreviewQuery, Depends()],
 ) -> Response:
     """One of this listing's scenes, each layer printing the file its depicted
     colour resolves to in the *saved* listing (A35) -- the Variants stage and
@@ -451,8 +437,7 @@ def scene_preview(
     ``v`` is ignored; the editor sends a signature of the saved design so a
     landed save is a new URL and the browser fetches it again.
     """
-    del v
-    workspace = target.workspace
+    workspace, colour, scale = target.workspace, query.colour, query.scale
     try:
         artwork = scene_artwork(workspace, target.name)
     except ListingMissingError as exc:

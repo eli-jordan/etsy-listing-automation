@@ -8,13 +8,19 @@ import hashlib
 import json
 import sys
 from pathlib import Path
+from typing import Any
 
 from .models import MODELS, Models
 from .server import serve
 
+PINNED_SUFFIXES = (".json", ".txt", ".fp16.safetensors")
+
 
 def install_weights(root: Path) -> None:
-    from huggingface_hub import HfApi, snapshot_download
+    from huggingface_hub import (  # noqa: PLC0415 -- worker venv only: downloads happen behind explicit setup
+        HfApi,
+        snapshot_download,
+    )
 
     for checkpoint, _, revision in MODELS.values():
         info = HfApi().model_info(checkpoint, revision=revision, files_metadata=True)
@@ -25,32 +31,38 @@ def install_weights(root: Path) -> None:
             checkpoint,
             revision=revision,
             local_dir=folder,
-            allow_patterns=["*.json", "*.txt", "*.fp16.safetensors"],
+            allow_patterns=[f"*{suffix}" for suffix in PINNED_SUFFIXES],
         )
-        files = {}
-        for sibling in info.siblings or []:
-            name = sibling.rfilename
-            if not name.endswith((".json", ".txt", ".fp16.safetensors")):
-                continue
-            path = folder / name
-            if not path.is_file() or not path.resolve().is_relative_to(folder.resolve()):
-                raise ValueError(f"Missing pinned weight file: {name}")
-            data = path.read_bytes()
-            if sibling.lfs is not None:
-                if hashlib.sha256(data).hexdigest() != sibling.lfs.sha256:
-                    raise ValueError(f"Weight integrity mismatch: {name}")
-            elif (
-                hashlib.sha1(b"blob " + str(len(data)).encode() + bytes([0]) + data).hexdigest()
-                != sibling.blob_id
-            ):
-                raise ValueError(f"Checkpoint configuration integrity mismatch: {name}")
-            files[name] = {"sha256": hashlib.sha256(data).hexdigest(), "size": len(data)}
+        files = {
+            sibling.rfilename: _verified_file(folder, sibling)
+            for sibling in info.siblings or []
+            if sibling.rfilename.endswith(PINNED_SUFFIXES)
+        }
         if not files or not any(name.endswith(".safetensors") for name in files):
             raise ValueError("Pinned checkpoint has no inference weights")
         (folder / "verified.json").write_text(
             json.dumps({"checkpoint": checkpoint, "revision": revision, "files": files}, indent=2),
             encoding="utf-8",
         )
+
+
+def _verified_file(folder: Path, sibling: Any) -> dict[str, Any]:
+    """Check one downloaded file against the hub's pinned hash: the LFS sha256
+    for weights, the git blob id for small configuration files."""
+    name = sibling.rfilename
+    path = folder / name
+    if not path.is_file() or not path.resolve().is_relative_to(folder.resolve()):
+        raise ValueError(f"Missing pinned weight file: {name}")
+    data = path.read_bytes()
+    if sibling.lfs is not None:
+        if hashlib.sha256(data).hexdigest() != sibling.lfs.sha256:
+            raise ValueError(f"Weight integrity mismatch: {name}")
+    elif (
+        hashlib.sha1(b"blob " + str(len(data)).encode() + bytes([0]) + data).hexdigest()
+        != sibling.blob_id
+    ):
+        raise ValueError(f"Checkpoint configuration integrity mismatch: {name}")
+    return {"sha256": hashlib.sha256(data).hexdigest(), "size": len(data)}
 
 
 def main() -> None:

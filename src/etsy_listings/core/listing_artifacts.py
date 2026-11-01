@@ -28,7 +28,8 @@ from etsy_listings.core.workspace.listing_documents import (
     ListingMissingError,
     ListingNameTakenError,
 )
-from etsy_listings.core.workspace.workspace import Workspace, remove_tree
+from etsy_listings.core.workspace.trees import remove_tree
+from etsy_listings.core.workspace.workspace import Workspace
 
 
 def move_listing(workspace: Workspace, old: str, new: str) -> None:

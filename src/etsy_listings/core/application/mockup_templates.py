@@ -377,27 +377,31 @@ def save_config(workspace: Workspace, name: str, config: AnyTemplate) -> None:
     workspace.save_template_config(name, config)
 
 
-def save_calibration(
-    workspace: Workspace,
-    name: str,
-    config: AnyTemplate,
-    *,
-    expected_revision: str,
-    request_id: str,
-    mask_edits: list[MaskEdit] | None = None,
-) -> Calibration:
+@dataclass(frozen=True)
+class CalibrationSave:
+    """One calibrator save: the whole template document and any flattened
+    mask edits, committed only if ``expected_revision`` is still current.
+    ``request_id`` makes a retried save idempotent."""
+
+    config: AnyTemplate
+    expected_revision: str
+    request_id: str
+    mask_edits: list[MaskEdit] | None = None
+
+
+def save_calibration(workspace: Workspace, name: str, save: CalibrationSave) -> Calibration:
     """ADR-0054: configuration and flattened masks commit as one revision."""
     require_template(workspace, name)
     store = CalibrationStore(workspace)
     with store.lock(name):
-        if store.read(name).config.kind != config.kind:
+        if store.read(name).config.kind != save.config.kind:
             raise TemplateKindRefusedError("Template kind cannot be changed after calibration")
         return store.save(
             name,
-            config,
-            expected_revision=expected_revision,
-            request_id=request_id,
-            mask_edits=mask_edits,
+            save.config,
+            expected_revision=save.expected_revision,
+            request_id=save.request_id,
+            mask_edits=save.mask_edits,
         )
 
 
@@ -523,21 +527,27 @@ def _scene(
     )
 
 
+@dataclass(frozen=True)
+class LazyMaps:
+    """The derived maps at a preview base's size, each asked for only when a
+    painted layer displaces (``height``) or shades (``luminance``)."""
+
+    height: Callable[[], FloatMap]
+    luminance: Callable[[], FloatMap]
+
+
 def compose_preview(
     scene: PreviewScene,
     *,
     base: RGB,
     scale: float,
     design: Callable[[Path], RGBA],
-    height: Callable[[], FloatMap],
-    luminance: Callable[[], FloatMap],
+    maps: LazyMaps,
 ) -> Image.Image:
     """Composite each layer's design onto ``base`` -- the scene's photo,
     possibly downscaled by ``scale`` -- at the scene's layers, scaled to
     match. ``design`` decodes a layer's file; a layer with none stays bare,
-    so no layers at all is the photo itself. ``height`` and ``luminance``
-    supply the derived maps at ``base``'s size, and are asked only when a
-    painted layer displaces or shades."""
+    so no layers at all is the photo itself."""
     painted = [
         (scaled(cfg, scale), path)
         for cfg, path in zip(scene.layers, scene.designs, strict=True)
@@ -547,8 +557,8 @@ def compose_preview(
     return render_scene(
         base,
         [Layer(design=design(path), cfg=cfg) for cfg, path in painted],
-        height=height() if any(cfg.displace.enabled for cfg in layers) else None,
-        luminance=luminance() if any(cfg.shade.enabled for cfg in layers) else None,
+        height=maps.height() if any(cfg.displace.enabled for cfg in layers) else None,
+        luminance=maps.luminance() if any(cfg.shade.enabled for cfg in layers) else None,
     )
 
 

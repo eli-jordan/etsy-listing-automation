@@ -42,6 +42,7 @@ deadline are shared, which is what `ProviderTask` exists to make possible.
   raise, and `classify_process_failure`, the availability classifier.
 - ``process`` -- `run_managed`: cross-platform subprocess-tree launch and
   cleanup for timeouts, cancellation, and request disconnects (PR4).
+- ``cli_support`` -- the shared local CLI provider contract, readiness probes and outcome decoding.
 
 `core/application/ai/` coordinates this package into runs, readiness and
 proposal operations; `server/api/airuns.py` and `server/api/seo.py` serve

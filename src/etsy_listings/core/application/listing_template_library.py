@@ -40,7 +40,7 @@ from etsy_listings.core.application.refusals import (
     field_errors_of,
 )
 from etsy_listings.core.application.workspace_locks import WorkspaceLocks
-from etsy_listings.core.batches import BatchStore, StagingStore
+from etsy_listings.core.batches import BatchRecords, BatchStore
 from etsy_listings.core.config.description import DescriptionConfig
 from etsy_listings.core.config.errors import ConfigLoadError
 from etsy_listings.core.config.garment_profile import GarmentProfile
@@ -167,25 +167,34 @@ def read_listing_template(workspace: Workspace, name: str) -> ListingTemplateVie
     return _saved_view(workspace, WorkspaceFacts.gather(workspace), name)
 
 
-def draft_listing_template(
-    workspace: Workspace, *, from_listing: str | None, from_template: str | None
-) -> ListingTemplateView:
+@dataclass(frozen=True)
+class DraftOrigin:
+    """Where a new listing template is drafted from: exactly one of a listing
+    (Save as listing template) or another template (Clone)."""
+
+    listing: str | None = None
+    template: str | None = None
+
+
+def draft_listing_template(workspace: Workspace, origin: DraftOrigin) -> ListingTemplateView:
     """The template Save as listing template or Clone would write, written
     nowhere -- what the *name it* page shows before a name is committed."""
-    source, draft = _draft(workspace, listing=from_listing, template=from_template)
+    source, draft = _draft(workspace, origin)
     facts = WorkspaceFacts.gather(workspace)
     return _view(
         workspace,
         facts,
         draft.template,
         draft_issues(workspace, draft, facts=facts),
-        resolve=lambda ref: (
-            draft.source(ref)
-            or workspace.resolve_ref(ref, listing_dir=workspace.draft_listing_dir())
+        _TemplateContext(
+            name="",
+            resolve=lambda ref: (
+                draft.source(ref)
+                or workspace.resolve_ref(ref, listing_dir=workspace.draft_listing_dir())
+            ),
+            source=source,
+            assets=draft.assets,
         ),
-        name="",
-        source=source,
-        assets=draft.assets,
     )
 
 
@@ -195,9 +204,8 @@ def draft_listing_template(
 def create_listing_template(
     workspace: Workspace,
     name: str,
+    origin: DraftOrigin,
     *,
-    from_listing: str | None,
-    from_template: str | None,
     document: Mapping[str, Any] | None = None,
     locks: WorkspaceLocks,
 ) -> TemplateSave:
@@ -214,7 +222,7 @@ def create_listing_template(
     ``ListingTemplateExistsError`` and is never suffixed.
     """
     _check_name(workspace, name)
-    _, draft = _draft(workspace, listing=from_listing, template=from_template)
+    _, draft = _draft(workspace, origin)
     if document is not None:
         try:
             draft = _edited(draft, document, currency=workspace.defaults.etsy.currency)
@@ -256,8 +264,7 @@ def rename_listing_template(
     new: str,
     *,
     locks: WorkspaceLocks,
-    staging: StagingStore,
-    batches: BatchStore,
+    records: BatchRecords,
 ) -> None:
     """Move a listing template, whole, to ``new``. Its name is its
     directory, so its ``./`` refs need no rewrite.
@@ -281,8 +288,7 @@ def rename_listing_template(
         if destination.exists():
             raise ListingTemplateExistsError(new)
         workspace.listing_template_dir(old).rename(destination)
-        staging.rename_listing_template(old, new)
-        batches.rename_listing_template(old, new)
+        records.rename_listing_template(old, new)
 
 
 def delete_listing_template(workspace: Workspace, name: str, *, locks: WorkspaceLocks) -> None:
@@ -327,8 +333,9 @@ def _plan_name(template: ListingTemplate) -> str | None:
 
 
 def _draft(
-    workspace: Workspace, *, listing: str | None, template: str | None
+    workspace: Workspace, origin: DraftOrigin
 ) -> tuple[TemplateSource, ListingTemplateDraft]:
+    listing, template = origin.listing, origin.template
     if (listing is None) == (template is None):
         raise ListingTemplateSourceRefusedError("give exactly one of from_listing, from_template")
     try:
@@ -373,10 +380,25 @@ def _saved_view(workspace: Workspace, facts: WorkspaceFacts, name: str) -> Listi
         facts,
         template,
         template_issues(workspace, name, template, facts=facts),
-        resolve=lambda ref: workspace.resolve_template_ref(ref, template=name),
-        name=name,
-        modified_at=datetime.fromtimestamp(modified, tz=UTC),
+        _TemplateContext(
+            name=name,
+            resolve=lambda ref: workspace.resolve_template_ref(ref, template=name),
+            modified_at=datetime.fromtimestamp(modified, tz=UTC),
+        ),
     )
+
+
+@dataclass(frozen=True)
+class _TemplateContext:
+    """What the caller of :func:`_view` knows that the template does not say.
+    ``resolve`` finds a ``./`` ref wherever the template's files are: its own
+    directory once saved, the files it will copy while a draft."""
+
+    name: str
+    resolve: Callable[[str], Path]
+    modified_at: datetime | None = None
+    source: TemplateSource | None = None
+    assets: tuple[AssetCopy, ...] = ()
 
 
 def _view(
@@ -384,26 +406,19 @@ def _view(
     facts: WorkspaceFacts,
     template: ListingTemplate,
     issues: list[Issue],
-    *,
-    resolve: Callable[[str], Path],
-    name: str,
-    modified_at: datetime | None = None,
-    source: TemplateSource | None = None,
-    assets: tuple[AssetCopy, ...] = (),
+    context: _TemplateContext,
 ) -> ListingTemplateView:
-    """``resolve`` finds a ``./`` ref wherever the template's files are: its
-    own directory once saved, the files it will copy while a draft."""
-    _, resolved_prices = pricing_summary(workspace, facts, template, resolve=resolve)
+    _, resolved_prices = pricing_summary(workspace, facts, template, resolve=context.resolve)
     body = template.etsy.description
     described = workspace.resolve_description(DescriptionConfig(text=body.text, ref=body.ref))
     return ListingTemplateView(
-        name=name,
+        name=context.name,
         template=template,
         issues=issues,
         garment_profile=facts.garment_profile(template.garment_profile),
         resolved_prices=resolved_prices,
         description_composed=described.composed,
-        modified_at=modified_at,
-        source=source,
-        assets=assets,
+        modified_at=context.modified_at,
+        source=context.source,
+        assets=context.assets,
     )

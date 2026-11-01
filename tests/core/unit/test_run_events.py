@@ -5,7 +5,10 @@ Pure, like ``plan_fingerprint`` -- no registry, no executor, no workspace.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from decimal import Decimal
+from enum import Enum
+from pathlib import Path
 
 import pytest
 from pydantic import BaseModel, TypeAdapter, ValidationError
@@ -34,6 +37,7 @@ from etsy_listings.core.engine.change import (
     Plan,
     PriceChange,
     StagePlan,
+    StageWork,
 )
 from etsy_listings.core.engine.stages.publish import PublishSnapshot
 
@@ -46,8 +50,7 @@ class _WrongSnapshot(BaseModel):
 def test_field_change_round_trips_through_the_dto() -> None:
     sp = StagePlan.work(
         "etsy_listing",
-        "copy changed",
-        changes=(FieldChange(path="title", before="Old", after="New"),),
+        StageWork("copy changed", changes=(FieldChange(path="title", before="Old", after="New"),)),
     )
 
     dto = stage_plan_dto(sp)
@@ -62,16 +65,84 @@ def test_field_change_round_trips_through_the_dto() -> None:
     }
 
 
+class _Fit(Enum):
+    SLIM = "slim"
+
+
+@dataclass(frozen=True)
+class _Swatch:
+    colour: str
+    price: Money
+
+
+def test_field_change_values_become_plain_json_at_any_depth() -> None:
+    """Money, models, paths, enums and dataclasses inside lists, tuples and
+    dicts all come out as JSON a client can read back."""
+    before = {
+        "fit": _Fit.SLIM,
+        "file": Path("renders/front.png"),
+        "swatches": (_Swatch("navy", Money(Decimal(25), "USD")),),
+        "snapshot": PublishSnapshot(),
+        "sizes": ["S", "M"],
+    }
+    sp = StagePlan.work(
+        "etsy_listing",
+        StageWork("copy changed", changes=(FieldChange(path="x", before=before, after=None),)),
+    )
+
+    dto = stage_plan_dto(sp)
+
+    assert isinstance(dto.outcome, WorkOutcomeDTO)
+    assert dto.outcome.changes[0].model_dump()["before"] == {
+        "fit": "slim",
+        "file": "renders/front.png",
+        "swatches": [{"colour": "navy", "price": str(Money(Decimal(25), "USD"))}],
+        "snapshot": PublishSnapshot().model_dump(mode="json"),
+        "sizes": ["S", "M"],
+    }
+
+
+@pytest.mark.parametrize(
+    "stage",
+    [
+        "render",
+        "printify_product",
+        "publish",
+        "etsy_listing",
+        "etsy_media",
+        "etsy_videos",
+        "retract",
+    ],
+)
+def test_each_stage_gets_its_own_plan_dto(stage: str) -> None:
+    dto = stage_plan_dto(StagePlan.no_work(stage))
+
+    assert dto.stage == stage
+    assert dto.snapshot is None
+
+
+def test_a_retract_plan_with_a_snapshot_is_rejected() -> None:
+    with pytest.raises(TypeError, match="retract"):
+        stage_plan_dto(StagePlan.no_work("retract", snapshot=PublishSnapshot()))
+
+
+def test_an_unknown_stage_is_rejected() -> None:
+    with pytest.raises(ValueError, match="unknown stage 'bogus'"):
+        stage_plan_dto(StagePlan.no_work("bogus"))
+
+
 def test_price_change_renders_money_as_its_display_string() -> None:
     sp = StagePlan.work(
         "publish",
-        "price changed",
-        changes=(
-            PriceChange(
-                size="M",
-                color="black",
-                before=Money(Decimal(349), "NOK"),
-                after=Money(Decimal(399), "NOK"),
+        StageWork(
+            "price changed",
+            changes=(
+                PriceChange(
+                    size="M",
+                    color="black",
+                    before=Money(Decimal(349), "NOK"),
+                    after=Money(Decimal(399), "NOK"),
+                ),
             ),
         ),
     )
@@ -87,10 +158,12 @@ def test_price_change_renders_money_as_its_display_string() -> None:
 def test_list_change_and_media_change_keep_their_own_kind() -> None:
     sp = StagePlan.work(
         "printify_product",
-        "product changed",
-        changes=(
-            ListChange(path="colors", added=("navy",), removed=()),
-            MediaChange(rank=0, before="old.png", after="new.png"),
+        StageWork(
+            "product changed",
+            changes=(
+                ListChange(path="colors", added=("navy",), removed=()),
+                MediaChange(rank=0, before="old.png", after="new.png"),
+            ),
         ),
     )
 
@@ -123,8 +196,10 @@ def test_drift_carries_its_labels() -> None:
 def test_actions_carry_their_paths() -> None:
     sp = StagePlan.work(
         "render",
-        "scene changed",
-        actions=(Action(description="render scene", inputs=("a.png",), outputs=("b.png",)),),
+        StageWork(
+            "scene changed",
+            actions=(Action(description="render scene", inputs=("a.png",), outputs=("b.png",)),),
+        ),
     )
 
     dto = stage_plan_dto(sp)
@@ -172,7 +247,7 @@ def test_plan_dto_carries_every_stage_plan_in_order() -> None:
         is_live=False,
         etsy_listing_id=None,
         stage_plans=(
-            StagePlan.work("render", "scene changed"),
+            StagePlan.work("render", StageWork("scene changed")),
             StagePlan.block("printify_product", "no shop configured"),
         ),
     )

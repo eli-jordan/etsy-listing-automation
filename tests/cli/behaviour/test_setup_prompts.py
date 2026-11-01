@@ -217,7 +217,7 @@ def test_the_cli_flag_reaches_setup(tmp_path: Path, monkeypatch) -> None:
     def fake_run_setup(root: Path, *, replace_prompts: bool = False) -> None:
         seen.update(root=root, replace_prompts=replace_prompts)
 
-    monkeypatch.setattr("etsy_listings.cli.setup.run_setup", fake_run_setup)
+    monkeypatch.setattr("etsy_listings.cli.app.run_setup", fake_run_setup)
 
     result = CliRunner().invoke(app, ["setup", "--root", str(tmp_path), "--replace-prompts"])
 

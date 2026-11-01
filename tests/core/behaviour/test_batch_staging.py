@@ -38,7 +38,7 @@ def store(workspace: Workspace) -> StagingStore:
 
 
 def _stage(workspace: Workspace, store: StagingStore, *files: tuple[str, bytes]):
-    return stage_pngs(workspace, store, "heavyweight-tee", uploads(*files), now=NOW)
+    return stage_pngs(store, "heavyweight-tee", uploads(*files), now=NOW)
 
 
 def _staging_left(workspace: Workspace) -> list[Path]:

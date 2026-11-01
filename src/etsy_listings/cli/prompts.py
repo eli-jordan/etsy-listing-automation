@@ -72,7 +72,9 @@ def prompt_toolkit_works() -> bool:
     it -- so the breadth of the ``except`` is the point, not an oversight.
     """
     try:
-        from prompt_toolkit.output.defaults import create_output
+        from prompt_toolkit.output.defaults import (  # noqa: PLC0415 -- startup cost: loads only to probe a prompt
+            create_output,
+        )
 
         create_output()
     except Exception:  # noqa: BLE001 -- any failure means prompt_toolkit cannot drive this terminal
@@ -173,7 +175,7 @@ def choose(message: str, rows: Sequence[str], *, marker_hint: str = "") -> str |
 
 def text(message: str, *, default: str = "") -> str | None:
     if prompt_toolkit_works():
-        import questionary
+        import questionary  # noqa: PLC0415 -- startup cost: questionary and prompt_toolkit load only when a prompt is shown
 
         answer: str | None = questionary.text(message, default=default).ask()
         return answer
@@ -187,7 +189,7 @@ def text(message: str, *, default: str = "") -> str | None:
 
 def confirm(message: str, *, default: bool = False) -> bool | None:
     if prompt_toolkit_works():
-        import questionary
+        import questionary  # noqa: PLC0415 -- startup cost: questionary and prompt_toolkit load only when a prompt is shown
 
         answer: bool | None = questionary.confirm(message, default=default).ask()
         return answer
@@ -317,7 +319,7 @@ def _choose_with_fzf(command: list[str], message: str, rows: list[str]) -> str |
 def _choose_with_questionary(message: str, rows: list[str], marker_hint: str) -> str | None:
     """Arrow keys over the list, no filtering -- ``questionary.select``, not
     ``autocomplete``. See this module's docstring for why."""
-    import questionary
+    import questionary  # noqa: PLC0415 -- startup cost: questionary and prompt_toolkit load only when a prompt is shown
 
     answer: str | None = questionary.select(
         message,
@@ -341,26 +343,46 @@ def _choose_with_input(message: str, rows: list[str], marker_hint: str) -> str |
     hint = (
         "number to pick, n/p to page, blank to cancel"
         if paged
-        else ("number to pick, blank to cancel")
+        else "number to pick, blank to cancel"
     )
     page = 0
     while True:
         _print_page(rows, page, pages, marker_hint)
-        try:
-            typed = input(f"{message} ({hint}) ").strip().lower()
-        except (EOFError, KeyboardInterrupt):
-            return None
+        typed = _typed(f"{message} ({hint}) ")
         if not typed:
             return None
-        if typed.isdigit():
-            index = int(typed) - 1
-            if 0 <= index < len(rows):
-                return rows[index]
-            print(f"  no option {typed}; pick 1-{len(rows)}")
-        elif paged and typed in {"n", "p"}:
-            page = (page + (1 if typed == "n" else -1)) % pages
-        else:
-            print(f"  {typed!r} is not {'a number or n/p' if paged else 'a number'}")
+        if not typed.isdigit():
+            page = _turned(typed, page, pages)
+            continue
+        picked = _numbered(rows, typed)
+        if picked is not None:
+            return picked
+
+
+def _typed(prompt: str) -> str:
+    """One line from ``input()``, normalised; blank when the input ended or
+    was interrupted, which cancels like a blank line does."""
+    try:
+        return input(prompt).strip().lower()
+    except (EOFError, KeyboardInterrupt):
+        return ""
+
+
+def _turned(typed: str, page: int, pages: int) -> int:
+    """The page ``n``/``p`` moves to; anything else is refused in place."""
+    paged = pages > 1
+    if paged and typed in {"n", "p"}:
+        return (page + (1 if typed == "n" else -1)) % pages
+    print(f"  {typed!r} is not {'a number or n/p' if paged else 'a number'}")
+    return page
+
+
+def _numbered(rows: list[str], typed: str) -> str | None:
+    index = int(typed) - 1
+    if 0 <= index < len(rows):
+        return rows[index]
+    print(f"  no option {typed}; pick 1-{len(rows)}")
+    return None
 
 
 def _print_page(rows: list[str], page: int, pages: int, marker_hint: str) -> None:

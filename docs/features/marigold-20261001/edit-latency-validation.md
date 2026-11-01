@@ -16,8 +16,8 @@ The fixture generator writes only to a new external directory. Its deterministic
 fitting, mask storage and generation publication without model inference.
 
 ```sh
-uv run python scripts/create_marigold_latency_fixture.py C:/cygwin64/tmp/marigold-fixture-new
-uv run python scripts/benchmark_marigold_edits.py C:/cygwin64/tmp/marigold-fixture-new C:/cygwin64/tmp/marigold-edits-new --interactive --during-rebuild --repeats 4 --threshold 1
+uv run python docs/features/marigold-20261001/scripts/create_marigold_latency_fixture.py C:/cygwin64/tmp/marigold-fixture-new
+uv run python docs/features/marigold-20261001/scripts/benchmark_marigold_edits.py C:/cygwin64/tmp/marigold-fixture-new C:/cygwin64/tmp/marigold-edits-new --interactive --during-rebuild --repeats 4 --threshold 1
 ```
 
 The browser driver copies its source into a fresh output directory. It never
@@ -226,7 +226,7 @@ geometry` for actual-artwork cases.
 
 ```sh
 unset ETSY_LISTINGS_ROOT
-uv run python scripts/benchmark_marigold_edits.py C:/cygwin64/tmp/marigold-1024-review/synthetic-source C:/cygwin64/tmp/marigold-1024-repeat-new --interactive --repeats 4 --threshold 1 --artwork-size 4200 4800 --frontend-dist C:/cygwin64/tmp/marigold-1024-review/ui-dist-final
+uv run python docs/features/marigold-20261001/scripts/benchmark_marigold_edits.py C:/cygwin64/tmp/marigold-1024-review/synthetic-source C:/cygwin64/tmp/marigold-1024-repeat-new --interactive --repeats 4 --threshold 1 --artwork-size 4200 4800 --frontend-dist C:/cygwin64/tmp/marigold-1024-review/ui-dist-final
 ```
 
 ### Revision verification

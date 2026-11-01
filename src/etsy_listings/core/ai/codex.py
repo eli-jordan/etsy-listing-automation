@@ -31,36 +31,19 @@ transcript. In particular:
 from __future__ import annotations
 
 import json
-import shutil
-import subprocess
 import tempfile
-import threading
 from dataclasses import dataclass
 from pathlib import Path
+from typing import override
 
-from etsy_listings.core.ai.errors import (
-    ProviderCancelledError,
-    ProviderTimeoutError,
-    ProviderUnavailableError,
-    classify_process_failure,
-)
+from etsy_listings.core.ai import cli_support
 from etsy_listings.core.ai.models import (
-    Deadline,
     ProviderReadiness,
-    ProviderTask,
     RawProviderResult,
-    RepairContext,
 )
 from etsy_listings.core.ai.process import run_managed
-from etsy_listings.core.ai.repair import prompt_text_for
 
 PROVIDER_NAME = "codex"
-
-_READINESS_TIMEOUT_SECONDS = 15.0
-"""A ceiling for the two readiness probes (`codex login status`, `codex exec
---help`) -- both are local, fast commands that talk to no remote quota
-endpoint (implementation plan: "Readiness needs no speculative quota
-check"), so this only guards against a genuinely hung executable."""
 
 _REQUIRED_EXEC_HELP_FLAGS: tuple[str, ...] = (
     "--sandbox",
@@ -77,7 +60,7 @@ writable (implementation plan, "Provider adapters")."""
 
 
 @dataclass
-class CodexProvider:
+class CodexProvider(cli_support.LocalCliProvider):
     """The `SeoProvider` adapter for the local Codex CLI.
 
     ``workspace_root`` is the real workspace directory `codex exec` is
@@ -95,110 +78,26 @@ class CodexProvider:
     rather than as this CLI being unready.
     """
 
-    workspace_root: Path
     binary: str = "codex"
+    provider_name = PROVIDER_NAME
 
-    def _resolved_binary(self) -> str:
-        """The executable path `shutil.which` resolved, not the bare
-        ``self.binary`` name.
-
-        On Windows, an npm-installed CLI like `codex` is a `.CMD` shim
-        (confirmed live: `shutil.which("codex")` resolves to
-        ``...\\codex.CMD``). `subprocess.run(["codex",...])` with the bare
-        name and no `shell=True` fails there with `WinError 2` -- Windows
-        `CreateProcess` does not search `PATHEXT` the way a shell or
-        `shutil.which` does. Every subprocess call below uses this resolved
-        path so the adapter works identically on Windows (this project's
-        primary development platform, per `AGENTS.md`) and POSIX.
-        """
-        return shutil.which(self.binary) or self.binary
-
-    def readiness(self) -> ProviderReadiness:
-        if shutil.which(self.binary) is None:
-            return ProviderReadiness(ready=False, reason=f"{self.binary} was not found on PATH")
-
-        unavailable = self._check_authenticated()
-        if unavailable is not None:
-            return unavailable
-
-        unavailable = self._check_read_only_capability()
-        if unavailable is not None:
-            return unavailable
-
-        return ProviderReadiness(ready=True)
-
+    @override
     def _check_authenticated(self) -> ProviderReadiness | None:
-        try:
-            result = subprocess.run(
-                [self._resolved_binary(), "login", "status"],
-                capture_output=True,
-                text=True,
-                timeout=_READINESS_TIMEOUT_SECONDS,
-                check=False,
-            )
-        except (OSError, subprocess.SubprocessError) as exc:
-            return ProviderReadiness(
-                ready=False, reason=f"could not check `{self.binary} login status`: {exc}"
-            )
-        if result.returncode != 0:
-            return ProviderReadiness(
-                ready=False,
-                reason=(
-                    f"{self.binary} is not authenticated "
-                    f"(`{self.binary} login status` exited {result.returncode})"
-                ),
-            )
+        result = cli_support.auth_probe(self.binary, "login")
+        if isinstance(result, ProviderReadiness):
+            return result
         return None
 
-    def _check_read_only_capability(self) -> ProviderReadiness | None:
-        # Known limitation (docs/features/ai-seo-20260922/plan.md, PR4): this
-        # only confirms `--help` advertises the required flags, not that a
-        # live `exec` invocation actually honours them. Same "no speculative
-        # quota check" tradeoff as the auth check above -- readiness stays a
-        # local, static check rather than spending a real generation call.
-        try:
-            result = subprocess.run(
-                [self._resolved_binary(), "exec", "--help"],
-                capture_output=True,
-                text=True,
-                timeout=_READINESS_TIMEOUT_SECONDS,
-                check=False,
-            )
-        except (OSError, subprocess.SubprocessError) as exc:
-            return ProviderReadiness(
-                ready=False, reason=f"could not check `{self.binary} exec --help`: {exc}"
-            )
-        if result.returncode != 0:
-            return ProviderReadiness(
-                ready=False, reason=f"`{self.binary} exec --help` exited {result.returncode}"
-            )
-        missing = [flag for flag in _REQUIRED_EXEC_HELP_FLAGS if flag not in result.stdout]
-        if missing:
-            return ProviderReadiness(
-                ready=False,
-                reason=(
-                    f"the installed {self.binary} CLI does not support the required "
-                    f"read-only exec flags: {', '.join(missing)}"
-                ),
-            )
-        return None
+    @override
+    def _check_capability(self) -> ProviderReadiness | None:
+        # A local help probe checks advertised flags without spending a generation call.
+        return cli_support.check_capability(
+            self.binary, ("exec", "--help"), _REQUIRED_EXEC_HELP_FLAGS, "read-only exec"
+        )
 
-    def generate(
-        self,
-        task: ProviderTask,
-        deadline: Deadline,
-        *,
-        repair: RepairContext | None = None,
-        cancel_event: threading.Event | None = None,
-    ) -> RawProviderResult:
-        if shutil.which(self.binary) is None:
-            # Recognised-unavailable, so the orchestrator moves on to the next
-            # provider. Launching the bare name would fail with WinError 2 --
-            # a process error, which ends the run instead -- and readiness
-            # only needs *one* provider to be ready, so on a machine with
-            # just the other CLI this is the ordinary case, not an edge.
-            raise ProviderUnavailableError(PROVIDER_NAME, f"{self.binary} was not found on PATH")
-        prompt_text = prompt_text_for(task, repair)
+    @override
+    def _generate(self, invocation: cli_support.Invocation) -> RawProviderResult:
+        task, prompt_text = invocation.task, invocation.prompt_text
         with tempfile.TemporaryDirectory(prefix="etsy-listings-ai-codex-") as tmp:
             tmp_path = Path(tmp)
             schema_path = tmp_path / "schema.json"
@@ -229,21 +128,11 @@ class CodexProvider:
                 argv,
                 cwd=self.workspace_root,
                 input_text=prompt_text,
-                deadline=deadline,
-                cancel_event=cancel_event,
+                deadline=invocation.deadline,
+                cancel_event=invocation.cancel_event,
             )
 
-            if result.cancelled:
-                raise ProviderCancelledError(PROVIDER_NAME)
-            if result.timed_out:
-                raise ProviderTimeoutError(PROVIDER_NAME)
-            if result.returncode != 0:
-                raise classify_process_failure(
-                    PROVIDER_NAME,
-                    returncode=result.returncode,
-                    stdout=result.stdout,
-                    stderr=result.stderr,
-                )
+            cli_support.check_result(PROVIDER_NAME, result)
             raw_output = (
                 last_message_path.read_text(encoding="utf-8")
                 if last_message_path.is_file()

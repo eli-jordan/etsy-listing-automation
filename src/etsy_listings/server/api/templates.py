@@ -34,6 +34,8 @@ from PIL import Image
 
 from etsy_listings.core.application import mockup_templates as calibration
 from etsy_listings.core.application.mockup_templates import (
+    CalibrationSave,
+    LazyMaps,
     PreviewGeometry,
     PreviewScene,
     TemplateOverview,
@@ -45,7 +47,11 @@ from etsy_listings.core.application.mockup_templates import (
     template_swatch,
     unsaved_preview,
 )
-from etsy_listings.core.application.preparation.previews import EDITOR_ARTWORK_EDGE, editor_preview
+from etsy_listings.core.application.preparation.previews import (
+    EDITOR_ARTWORK_EDGE,
+    EditorDraft,
+    editor_preview,
+)
 from etsy_listings.core.application.prepared_previews import (
     PhotoWarpPreview,
     PreparedPreview,
@@ -234,10 +240,12 @@ def put_config(
         saved = save_calibration(
             template.workspace,
             template.name,
-            body.config,
-            expected_revision=if_match.strip('"'),
-            request_id=body.request_id,
-            mask_edits=body.mask_edits,
+            CalibrationSave(
+                config=body.config,
+                expected_revision=if_match.strip('"'),
+                request_id=body.request_id,
+                mask_edits=body.mask_edits,
+            ),
         )
     except CalibrationConflictError as exc:
         raise HTTPException(
@@ -278,6 +286,25 @@ def _geometry(body: PreviewRequest) -> PreviewGeometry:
 
 
 PreviewScale = Literal["editor", "full"]
+
+
+@dataclass(frozen=True)
+class PreviewQuery:
+    """The query parameters every saved-scene preview takes: the depicted
+    ``colour`` (colour-matrix scenes) and the raster ``scale``."""
+
+    colour: str | None = None
+    scale: PreviewScale = "full"
+
+
+@dataclass(frozen=True)
+class ScenePreviewQuery(PreviewQuery):
+    """A listing scene's preview query. ``v`` is a cache-buster the editor
+    sends -- a signature of the saved design -- and is otherwise ignored."""
+
+    v: str | None = None
+
+
 """How big a preview to render.
 
 Two named sizes, not a pixel count from the client. ``full`` is the photo's
@@ -372,10 +399,69 @@ def render_preview_response(
         base=base.image,
         scale=base.scale,
         design=PREVIEW_IMAGES.design,
-        height=lambda: PREVIEW_IMAGES.height(scene.derived_dir, scene.photo.map_key, base),
-        luminance=lambda: PREVIEW_IMAGES.luminance(scene.derived_dir, scene.photo.map_key, base),
+        maps=LazyMaps(
+            height=lambda: PREVIEW_IMAGES.height(scene.derived_dir, scene.photo.map_key, base),
+            luminance=lambda: PREVIEW_IMAGES.luminance(
+                scene.derived_dir, scene.photo.map_key, base
+            ),
+        ),
     )
     return _encode_preview(image, scale)
+
+
+def _marigold_preview(template: Target, body: PreviewRequest, scale: PreviewScale) -> Response:
+    workspace = template.workspace
+    document = body.model_dump(
+        mode="json", exclude={"design", "calibration_revision", "mask_edits"}
+    )
+    colour = body.colour if isinstance(body, ColourMatrixPreviewRequest) else None
+    if isinstance(body, ColourMatrixPreviewRequest):
+        document.pop("colour")
+    config = load_template_config(document)
+    if scale == "editor":
+        return _editor_preview(
+            template,
+            body,
+            EditorDraft(
+                config=config,
+                revision=body.calibration_revision or "",
+                mask_edits=body.mask_edits,
+                colour=colour,
+            ),
+        )
+    if body.mask_edits:
+        raise HTTPException(status_code=409, detail="Save draft mask edits before full preview")
+    with preview_refusals():
+        prepared = prepared_preview(
+            workspace,
+            template.name,
+            config=config,
+            colour=colour,
+            design=lambda _colour: resolve_design(workspace, body.design),
+        )
+    return render_preview_response(prepared, scale, workspace=workspace)
+
+
+def _editor_preview(template: Target, body: PreviewRequest, draft: EditorDraft) -> Response:
+    """The interactive composite of an unsaved draft: never cached, and
+    refused rather than prepared when its maps are not ready."""
+    workspace = template.workspace
+    try:
+        image = editor_preview(
+            workspace,
+            template.name,
+            draft,
+            base=lambda path: PREVIEW_IMAGES.base(path).image,
+            artwork=lambda: PREVIEW_IMAGES.material_design(
+                resolve_design(workspace, body.design), max_edge=EDITOR_ARTWORK_EDGE
+            ),
+        )
+    except (PreparationRequiredError, ValueError, OSError) as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    response = _encode_preview(image, "editor")
+    response.headers["Cache-Control"] = "no-store"
+    response.headers["X-Preview-Quality"] = "interactive"
+    return response
 
 
 @router.post("/{name}/preview")
@@ -386,43 +472,7 @@ def preview(
     design from its own test-design library."""
     workspace = template.workspace
     if isinstance(body.renderer, MarigoldRenderer):
-        document = body.model_dump(
-            mode="json", exclude={"design", "calibration_revision", "mask_edits"}
-        )
-        if isinstance(body, ColourMatrixPreviewRequest):
-            document.pop("colour")
-        config = load_template_config(document)
-        if scale == "editor":
-            try:
-                image = editor_preview(
-                    workspace,
-                    template.name,
-                    config=config,
-                    revision=body.calibration_revision or "",
-                    mask_edits=body.mask_edits,
-                    colour=body.colour if isinstance(body, ColourMatrixPreviewRequest) else None,
-                    base=lambda path: PREVIEW_IMAGES.base(path).image,
-                    artwork=lambda: PREVIEW_IMAGES.material_design(
-                        resolve_design(workspace, body.design), max_edge=EDITOR_ARTWORK_EDGE
-                    ),
-                )
-            except (PreparationRequiredError, ValueError, OSError) as exc:
-                raise HTTPException(status_code=409, detail=str(exc)) from exc
-            response = _encode_preview(image, "editor")
-            response.headers["Cache-Control"] = "no-store"
-            response.headers["X-Preview-Quality"] = "interactive"
-            return response
-        if body.mask_edits:
-            raise HTTPException(status_code=409, detail="Save draft mask edits before full preview")
-        with preview_refusals():
-            prepared = prepared_preview(
-                workspace,
-                template.name,
-                config=config,
-                colour=body.colour if isinstance(body, ColourMatrixPreviewRequest) else None,
-                design=lambda _colour: resolve_design(workspace, body.design),
-            )
-        return render_preview_response(prepared, scale, workspace=workspace)
+        return _marigold_preview(template, body, scale)
     try:
         scene = unsaved_preview(
             workspace,
@@ -443,10 +493,9 @@ def preview(
 def design_preview(
     template: Annotated[Target, Depends(target)],
     request: Request,
+    query: Annotated[PreviewQuery, Depends()],
     design: str | None = None,
     test_design: str | None = None,
-    colour: str | None = None,
-    scale: PreviewScale = "full",
 ) -> Response:
     """One design on every layer of this template's saved geometry -- the
     listing-template editor's preview (UI doc §3): a listing template has no
@@ -463,7 +512,7 @@ def design_preview(
     saved listing (A35), so its editor cannot show one file while Printify
     prints another.
     """
-    workspace = template.workspace
+    workspace, colour, scale = template.workspace, query.colour, query.scale
     if (design is None) == (test_design is None):
         raise HTTPException(status_code=422, detail="give exactly one of design, test_design")
 

@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 
 from etsy_listings.core.config.errors import ConfigLoadError
+from etsy_listings.core.workspace.trees import remove_tree
 from etsy_listings.core.workspace.workspace import (
     AmbiguousColourSuffixError,
     InvalidNameError,
@@ -14,7 +15,6 @@ from etsy_listings.core.workspace.workspace import (
     PathEscapesWorkspaceError,
     Workspace,
     WorkspaceNotFoundError,
-    remove_tree,
 )
 
 from tests.support.refusals import refuse_reads
@@ -146,8 +146,8 @@ class TestResolveRef:
             == ws.root / "pricing-plans" / "tees" / "basic.yaml"
         )
 
-    def test_a_legacy_parent_ref_names_the_migration_script(self, ws: Workspace) -> None:
-        with pytest.raises(InvalidRefError, match=r"scripts/migrate_workspace_refs\.py"):
+    def test_a_legacy_parent_ref_is_refused_as_the_old_form(self, ws: Workspace) -> None:
+        with pytest.raises(InvalidRefError, match="listing-relative form"):
             ws.resolve_ref("../../designs/take-a-hike.png", listing_dir=ws.listing_dir("x"))
 
     @pytest.mark.parametrize(

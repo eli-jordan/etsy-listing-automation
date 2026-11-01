@@ -38,17 +38,18 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+from typing import override
 
 from pydantic import BaseModel, ConfigDict
 
-from etsy_listings.core.clients.etsy.listings import EtsyListingClient
 from etsy_listings.core.config.media import media_kind
 from etsy_listings.core.engine.change import Action, Drift, FieldChange, Verdict
 from etsy_listings.core.engine.context import RunContext
 from etsy_listings.core.engine.lock import Lockfile, hash_file, to_workspace_relative_posix
-from etsy_listings.core.engine.stage import Blocked, StageApplyResult
+from etsy_listings.core.engine.stage import Blocked, Stage, StageApplyResult
 from etsy_listings.core.engine.stages.etsy_media import IMAGE_IDS_KEY
 from etsy_listings.core.engine.stages.etsy_target import (
+    EtsyListingTarget,
     check_etsy_shop,
     etsy_listing_id,
     require_etsy_listing_id,
@@ -171,12 +172,13 @@ class EtsyVideosSnapshot(BaseModel):
     live: tuple[LiveVideoSnapshot, ...]
 
 
-class EtsyVideosStage:
+class EtsyVideosStage(Stage[EtsyVideosDesired, AppliedEtsyVideos, EtsyVideosLive]):
     name = "etsy_videos"
     local = False
     group: str | None = "etsy_media"
     applied_model = AppliedEtsyVideos
 
+    @override
     def desired(
         self, ctx: RunContext, listing: str, applied: AppliedEtsyVideos | None
     ) -> EtsyVideosDesired | Blocked:
@@ -221,6 +223,7 @@ class EtsyVideosStage:
             colours=tuple(config.colors),
         )
 
+    @override
     def read_live(
         self, ctx: RunContext, listing: str, lock: Lockfile, applied: AppliedEtsyVideos | None
     ) -> EtsyVideosLive | None:
@@ -250,6 +253,7 @@ class EtsyVideosStage:
             missing_refs=tuple(ref for ref, video_id in known.items() if video_id not in listed),
         )
 
+    @override
     def plan(
         self,
         desired: EtsyVideosDesired,
@@ -297,6 +301,7 @@ class EtsyVideosStage:
             ),
         )
 
+    @override
     def apply(
         self,
         ctx: RunContext,
@@ -307,9 +312,11 @@ class EtsyVideosStage:
     ) -> StageApplyResult:
         placer = _Placer(
             ctx,
-            ctx.require_etsy(),
-            shop_id=ctx.workspace.defaults.etsy.require_shop_id(),
-            listing_id=require_etsy_listing_id(lock, to="place videos"),
+            EtsyListingTarget(
+                ctx.require_etsy(),
+                shop_id=ctx.workspace.defaults.etsy.require_shop_id(),
+                listing_id=require_etsy_listing_id(lock, to="place videos"),
+            ),
             known=dict(lock.remote.get(VIDEO_IDS_KEY) or {}),
             applied=applied,
             live=live,
@@ -318,20 +325,9 @@ class EtsyVideosStage:
         placer.sweep(keep=wanted)
 
         featured, *rest = desired.videos or (None,)
-        second = rest[0] if rest else None
-        moved = False
-        if featured is not None:
-            if placer.placed(featured, slot=0):
-                placer.keep(featured)
-            else:
-                placer.remove_all()
-                placer.attach(featured)
-                moved = True
-        if second is not None:
-            if not moved and placer.placed(second, slot=1):
-                placer.keep(second)
-            else:
-                placer.place_after_images(second, desired, lock)
+        moved = featured is not None and placer.place_featured(featured)
+        if rest:
+            placer.place_second(rest[0], desired, lock, moved=moved)
 
         return StageApplyResult(
             applied=AppliedEtsyVideos(
@@ -348,18 +344,17 @@ class _Placer:
     def __init__(
         self,
         ctx: RunContext,
-        client: EtsyListingClient,
+        target: EtsyListingTarget,
         *,
-        shop_id: int,
-        listing_id: int,
         known: dict[str, int],
         applied: AppliedEtsyVideos | None,
         live: EtsyVideosLive | None,
     ) -> None:
         self._ctx = ctx
-        self._client = client
-        self._shop_id = shop_id
-        self._listing_id = listing_id
+        self._target = target
+        self._client = target.client
+        self._shop_id = target.shop_id
+        self._listing_id = target.listing_id
         self._known = known
         self._applied = applied.videos if applied is not None else ()
         self._drifted = live.drifted_refs if live is not None else frozenset()
@@ -385,6 +380,26 @@ class _Placer:
             and self._applied[slot] == video.applied()
             and video_id in self._on_listing
         )
+
+    def place_featured(self, video: DesiredVideo) -> bool:
+        """Step 2: keep the featured video in place, or remove every video and
+        attach it first. True when it moved."""
+        if self.placed(video, slot=0):
+            self.keep(video)
+            return False
+        self.remove_all()
+        self.attach(video)
+        return True
+
+    def place_second(
+        self, video: DesiredVideo, desired: EtsyVideosDesired, lock: Lockfile, *, moved: bool
+    ) -> None:
+        """Keep the second video in place unless the featured one moved, which
+        removed it too; otherwise place it after its images."""
+        if not moved and self.placed(video, slot=1):
+            self.keep(video)
+        else:
+            self.place_after_images(video, desired, lock)
 
     def keep(self, video: DesiredVideo) -> None:
         self.ids[video.ref] = self._known[video.ref]
@@ -443,9 +458,7 @@ class _Placer:
         if desired.swatches:
             set_variation_images(
                 self._ctx,
-                self._client,
-                shop_id=self._shop_id,
-                listing_id=self._listing_id,
+                self._target,
                 colours=desired.colours,
                 image_id_by_colour={
                     colour: image_ids_by_ref[ref]
@@ -478,34 +491,43 @@ def _changes(
     before_videos = applied.videos if applied is not None else ()
     changes: list[FieldChange] = []
     for slot, path in enumerate(("videos.featured", "videos.second")):
-        after = wanted.videos[slot] if slot < len(wanted.videos) else None
-        before = before_videos[slot] if slot < len(before_videos) else None
+        after = _in_slot(wanted.videos, slot)
+        before = _in_slot(before_videos, slot)
         if after == before:
             continue
         if after is None or before is None or after.ref != before.ref:
-            changes.append(
-                FieldChange(
-                    path=path,
-                    before=before.ref if before is not None else None,
-                    after=after.ref if after is not None else None,
-                )
-            )
-            continue
-        if after.hash != before.hash:
-            changes.append(
-                FieldChange(
-                    path=f"{path}.contents", before=_digest(before.hash), after=_digest(after.hash)
-                )
-            )
-        if after.after_images != before.after_images:
-            changes.append(
-                FieldChange(
-                    path=f"{path}.after_images",
-                    before=before.after_images,
-                    after=after.after_images,
-                )
-            )
+            changes.append(FieldChange(path=path, before=_ref(before), after=_ref(after)))
+        else:
+            changes += _same_video_changes(path, before, after)
     return tuple(changes)
+
+
+def _in_slot(videos: tuple[AppliedVideo, ...], slot: int) -> AppliedVideo | None:
+    return videos[slot] if slot < len(videos) else None
+
+
+def _ref(video: AppliedVideo | None) -> str | None:
+    return video.ref if video is not None else None
+
+
+def _same_video_changes(path: str, before: AppliedVideo, after: AppliedVideo) -> list[FieldChange]:
+    """New bytes, or a new anchor among the images, for the same ref."""
+    changes: list[FieldChange] = []
+    if after.hash != before.hash:
+        changes.append(
+            FieldChange(
+                path=f"{path}.contents", before=_digest(before.hash), after=_digest(after.hash)
+            )
+        )
+    if after.after_images != before.after_images:
+        changes.append(
+            FieldChange(
+                path=f"{path}.after_images",
+                before=before.after_images,
+                after=after.after_images,
+            )
+        )
+    return changes
 
 
 def _digest(content_hash: str) -> str:

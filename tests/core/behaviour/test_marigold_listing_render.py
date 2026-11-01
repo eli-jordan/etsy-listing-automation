@@ -1,9 +1,9 @@
 """Prepared rendering through the listing engine, with durable synthetic maps."""
 
-from etsy_listings.core.config.listing_validation import check_listing
+from etsy_listings.core.config.listing_validation import CheckInputs, check_listing
 from etsy_listings.core.engine import build_plan
 from etsy_listings.core.engine.stages.render import RenderStage
-from etsy_listings.core.preparation.artifacts import Artifacts
+from etsy_listings.core.preparation.artifacts import Artifacts, PublishOptions
 from etsy_listings.core.workspace import WorkspaceFacts
 from etsy_listings.core.workspace.listing_documents import ListingDocuments
 
@@ -16,10 +16,12 @@ def test_missing_maps_have_the_same_listing_and_engine_refusal(workspace_root):
     facts = WorkspaceFacts.gather(workspace)
     issues = check_listing(
         listing,
-        garment_profile=facts.garment_profile(listing.garment_profile),
-        garment_profile_names=facts.garment_profile_names,
+        CheckInputs(
+            garment_profile=facts.garment_profile(listing.garment_profile),
+            garment_profile_names=facts.garment_profile_names,
+            templates=facts.templates,
+        ),
         design_paths={},
-        templates=facts.templates,
     )
     planned = build_plan(a_context(workspace_root), FIXTURE_LISTING, a_lock(), (RenderStage(),))
     refusal = planned.plan.stage_plans[0].blocked
@@ -108,7 +110,7 @@ def test_stale_geometry_blocks_every_required_scene_with_shared_refusal(workspac
 
 def test_compatible_map_republication_and_cache_deletion_keep_render_identity(workspace_root):
     from etsy_listings.core.engine import execute
-    from etsy_listings.core.workspace.workspace import remove_tree
+    from etsy_listings.core.workspace.trees import remove_tree
 
     workspace, _ = listing_with_marigold(workspace_root, prepare=True)
     ctx = a_context(workspace_root)
@@ -121,7 +123,9 @@ def test_compatible_map_republication_and_cache_deletion_keep_render_identity(wo
         inputs,
         {None: material_maps((64, 64))},
         current_inputs=lambda: inputs,
-        provenance={"engine_version": "compatible-new", "timestamp": "tomorrow"},
+        options=PublishOptions(
+            provenance={"engine_version": "compatible-new", "timestamp": "tomorrow"}
+        ),
     )
     again = build_plan(ctx, FIXTURE_LISTING, first, (stage,))
     assert not again.plan.stage_plans[0].will_run
@@ -365,15 +369,17 @@ def test_shared_colour_scenes_use_each_target_photo_without_inference(workspace_
 
 
 def test_unprepared_reference_can_be_saved_as_reusable_listing_template(workspace_root):
-    from etsy_listings.core.application.listing_template_library import create_listing_template
+    from etsy_listings.core.application.listing_template_library import (
+        DraftOrigin,
+        create_listing_template,
+    )
     from etsy_listings.core.application.workspace_locks import WorkspaceLocks
 
     workspace, _ = listing_with_marigold(workspace_root)
     result = create_listing_template(
         workspace,
         "ready-for-artwork",
-        from_listing=FIXTURE_LISTING,
-        from_template=None,
+        DraftOrigin(listing=FIXTURE_LISTING),
         locks=WorkspaceLocks(),
     )
     assert result.saved
@@ -390,7 +396,7 @@ def test_full_pipeline_repeat_apply_is_idle_and_render_recovery_does_not_reuploa
     workspace_root,
 ):
     from etsy_listings.core.engine import apply_listings, plan_listings
-    from etsy_listings.core.workspace.workspace import remove_tree
+    from etsy_listings.core.workspace.trees import remove_tree
 
     from tests.support.pipeline import a_deployable_context, real_stages
 

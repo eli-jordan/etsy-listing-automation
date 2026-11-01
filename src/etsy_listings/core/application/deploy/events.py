@@ -33,6 +33,7 @@ from __future__ import annotations
 from dataclasses import fields, is_dataclass
 from datetime import UTC, datetime
 from enum import Enum
+from functools import singledispatch
 from pathlib import Path
 from typing import Annotated, Any, Literal
 
@@ -88,6 +89,7 @@ this to know when to close the stream (``server/api/runs.py``); the registry pol
 to know a listing's lock may be released."""
 
 
+@singledispatch
 def _jsonable(value: Any) -> Any:  # a generic tree walk, by construction
     """``value``, turned into something ``BaseModel`` can hold in an ``Any``
     field and get back out again as plain JSON.
@@ -101,21 +103,40 @@ def _jsonable(value: Any) -> Any:  # a generic tree walk, by construction
     name (including one literally called ``snapshot``) -- there is no
     fingerprint here for a snapshot to spoil.
     """
-    if isinstance(value, Money):
-        return str(value)
-    if isinstance(value, BaseModel):
-        return value.model_dump(mode="json")
-    if isinstance(value, Path):
-        return value.as_posix()
-    if isinstance(value, Enum):
-        return value.value
     if is_dataclass(value) and not isinstance(value, type):
         return {f.name: _jsonable(getattr(value, f.name)) for f in fields(value)}
-    if isinstance(value, list | tuple):
-        return [_jsonable(item) for item in value]
-    if isinstance(value, dict):
-        return {key: _jsonable(item) for key, item in value.items()}
     return value
+
+
+@_jsonable.register(Money)
+def _money(value: Money) -> str:
+    return str(value)
+
+
+@_jsonable.register(BaseModel)
+def _model(value: BaseModel) -> Any:
+    return value.model_dump(mode="json")
+
+
+@_jsonable.register(Path)
+def _path(value: Path) -> str:
+    return value.as_posix()
+
+
+@_jsonable.register(Enum)
+def _enum(value: Enum) -> Any:
+    return value.value
+
+
+@_jsonable.register(list)
+@_jsonable.register(tuple)
+def _sequence(value: list[Any] | tuple[Any, ...]) -> list[Any]:
+    return [_jsonable(item) for item in value]
+
+
+@_jsonable.register(dict)
+def _mapping(value: dict[Any, Any]) -> dict[Any, Any]:
+    return {key: _jsonable(item) for key, item in value.items()}
 
 
 # ------------------------------------------------------------------ Change
@@ -334,6 +355,25 @@ def _snapshot[SnapshotT: BaseModel](
     return snapshot
 
 
+_SnapshotStagePlanDTO = (
+    RenderStagePlanDTO
+    | ProductStagePlanDTO
+    | PublishStagePlanDTO
+    | EtsyListingStagePlanDTO
+    | EtsyMediaStagePlanDTO
+    | EtsyVideosStagePlanDTO
+)
+_SNAPSHOT_STAGES: dict[str, tuple[type[_SnapshotStagePlanDTO], type[BaseModel]]] = {
+    "render": (RenderStagePlanDTO, RenderSnapshot),
+    "printify_product": (ProductStagePlanDTO, ProductSnapshot),
+    "publish": (PublishStagePlanDTO, PublishSnapshot),
+    "etsy_listing": (EtsyListingStagePlanDTO, EtsyListingSnapshot),
+    "etsy_media": (EtsyMediaStagePlanDTO, EtsyMediaSnapshot),
+    "etsy_videos": (EtsyVideosStagePlanDTO, EtsyVideosSnapshot),
+}
+"""Each stage that carries a snapshot: its plan DTO and the snapshot type it holds."""
+
+
 def stage_plan_dto(
     stage_plan: StagePlan,
 ) -> (
@@ -346,25 +386,16 @@ def stage_plan_dto(
     | RetractStagePlanDTO
 ):
     fields = _stage_plan_fields(stage_plan)
-    if stage_plan.stage == "render":
-        return RenderStagePlanDTO(**fields, snapshot=_snapshot(stage_plan, RenderSnapshot))
-    if stage_plan.stage == "printify_product":
-        return ProductStagePlanDTO(**fields, snapshot=_snapshot(stage_plan, ProductSnapshot))
-    if stage_plan.stage == "publish":
-        return PublishStagePlanDTO(**fields, snapshot=_snapshot(stage_plan, PublishSnapshot))
-    if stage_plan.stage == "etsy_listing":
-        return EtsyListingStagePlanDTO(
-            **fields, snapshot=_snapshot(stage_plan, EtsyListingSnapshot)
-        )
-    if stage_plan.stage == "etsy_media":
-        return EtsyMediaStagePlanDTO(**fields, snapshot=_snapshot(stage_plan, EtsyMediaSnapshot))
-    if stage_plan.stage == "etsy_videos":
-        return EtsyVideosStagePlanDTO(**fields, snapshot=_snapshot(stage_plan, EtsyVideosSnapshot))
     if stage_plan.stage == "retract":
         if stage_plan.snapshot is not None:
             raise TypeError("retract does not have a snapshot")
         return RetractStagePlanDTO(**fields)
-    raise ValueError(f"unknown stage {stage_plan.stage!r}")
+    if stage_plan.stage not in _SNAPSHOT_STAGES:
+        raise ValueError(f"unknown stage {stage_plan.stage!r}")
+    dto, expected = _SNAPSHOT_STAGES[stage_plan.stage]
+    # _snapshot has checked it is ``expected``, the type the table pairs with ``dto``.
+    snapshot: Any = _snapshot(stage_plan, expected)
+    return dto(**fields, snapshot=snapshot)
 
 
 class PlanDTO(BaseModel):

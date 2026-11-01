@@ -7,8 +7,9 @@ import { MagnifyingGlassIcon } from "@phosphor-icons/react/dist/csr/MagnifyingGl
 import { StarIcon } from "@phosphor-icons/react/dist/csr/Star";
 import { StorefrontIcon } from "@phosphor-icons/react/dist/csr/Storefront";
 import { WarningCircleIcon } from "@phosphor-icons/react/dist/csr/WarningCircle";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import type { MarketSnapshot, PhraseScore, ScoredListing, ProposalChoices } from "../../../types";
+import { useNow } from "../../../hooks/useNow";
 import { timeAgo } from "../timeAgo";
 
 /**
@@ -49,16 +50,6 @@ function listings(n: number, noun: string): string {
 function sentence(reason: string): string {
   const trimmed = reason.trim();
   return /[.!?]$/.test(trimmed) ? trimmed : `${trimmed}.`;
-}
-
-/** Ages "searched a moment ago" without a new search, as `SavedAgo` does. */
-function useNow(): number {
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    const id = setInterval(() => setNow(Date.now()), 15_000);
-    return () => clearInterval(id);
-  }, []);
-  return now;
 }
 
 /** The Etsy searches AI Mode wrote from the brief, as a sentence rather than

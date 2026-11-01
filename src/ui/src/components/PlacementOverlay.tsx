@@ -43,13 +43,11 @@ export function PlacementOverlay({
     cursor.current?.setAttribute("visibility", "hidden");
   }
   const { automatic, strokes, undoSaved } = maskDraft(operations);
-  const base = automatic
-    ? automaticMaskUrl
-    : undoSaved
-      ? undoBases[undoBases.length - undoSaved]
-        ? `data:image/png;base64,${undoBases[undoBases.length - undoSaved]}`
-        : maskUrl
-      : maskUrl;
+  let base = maskUrl;
+  if (undoSaved && undoBases[undoBases.length - undoSaved]) {
+    base = `data:image/png;base64,${undoBases[undoBases.length - undoSaved]}`;
+  }
+  if (automatic) base = automaticMaskUrl;
   function point(event: React.PointerEvent<SVGRectElement>): [number, number] | null {
     const svg = event.currentTarget.ownerSVGElement;
     const ctm = svg?.getScreenCTM();

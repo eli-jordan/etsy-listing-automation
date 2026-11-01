@@ -326,7 +326,9 @@ describe("ListingEditorPage", () => {
     );
     renderAt("/listings/take-a-hike");
 
-    await screen.findByText("1 to fix before deploying · 2 other warnings");
+    expect(
+      await screen.findByText("1 to fix before deploying · 2 other warnings"),
+    ).toBeInTheDocument();
   });
 
   it("summarises warnings alone when nothing blocks", async () => {
@@ -337,7 +339,7 @@ describe("ListingEditorPage", () => {
     );
     renderAt("/listings/take-a-hike");
 
-    await screen.findByText("1 warning");
+    expect(await screen.findByText("1 warning")).toBeInTheDocument();
   });
 
   it("does not show a video's audio note in the editor's global issues banner", async () => {
@@ -380,7 +382,7 @@ describe("ListingEditorPage", () => {
     );
     renderAt("/listings/take-a-hike");
 
-    await screen.findByText("2 to fix before deploying");
+    expect(await screen.findByText("2 to fix before deploying")).toBeInTheDocument();
   });
 
   it("jumps to the tab that owns an issue when Fix is clicked", async () => {
@@ -408,7 +410,7 @@ describe("ListingEditorPage", () => {
     );
     renderAt("/listings/take-a-hike");
 
-    await screen.findByText("Below");
+    expect(await screen.findByText("Below")).toBeInTheDocument();
   });
 
   it("carries the design strip above the tabs, where both tabs can see it", async () => {

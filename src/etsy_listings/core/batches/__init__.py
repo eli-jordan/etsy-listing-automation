@@ -35,6 +35,7 @@ from etsy_listings.core.batches.records import (
     AiState,
     AiStep,
     Batch,
+    BatchRecords,
     BatchRow,
     BatchStore,
     NotReviewableError,
@@ -66,6 +67,7 @@ __all__ = [  # noqa: RUF022 -- grouped by topic, not alphabetically
     "AiStep",
     "RETRYABLE",
     "BatchStore",
+    "BatchRecords",
     # Staging and its review.
     "Upload",
     "stage_pngs",

@@ -12,6 +12,7 @@ Manager on 2026-09-25.
 from __future__ import annotations
 
 from etsy_listings.core.clients.etsy.fakes import FakeEtsyListingClient, GallerySlot
+from etsy_listings.core.clients.etsy.listings import ImageUpload
 
 SHOP_ID = 67961328
 LISTING_ID = 4582417670
@@ -31,9 +32,9 @@ class Probe:
         image = self.client.upload_listing_image(
             SHOP_ID,
             LISTING_ID,
-            file_name=f"img{label}.png",
-            contents=label.encode(),
-            rank=len(self.images) + 1,
+            ImageUpload(
+                file_name=f"img{label}.png", contents=label.encode(), rank=len(self.images) + 1
+            ),
         )
         self.images[label] = image.listing_image_id
 

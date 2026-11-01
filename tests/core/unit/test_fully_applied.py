@@ -12,7 +12,7 @@ from dataclasses import dataclass
 
 import pytest
 
-from etsy_listings.core.engine.change import Plan, StagePlan
+from etsy_listings.core.engine.change import Plan, StagePlan, StageWork
 from etsy_listings.core.engine.lock import Lockfile
 from etsy_listings.core.engine.plan import PlannedRun
 from etsy_listings.core.engine.run import ListingOutcome, fully_applied
@@ -27,7 +27,7 @@ def _planned(*stage_plans: StagePlan) -> PlannedRun:
     return PlannedRun(plan=plan, states=())
 
 
-_RAN = StagePlan.work("render", "design changed")
+_RAN = StagePlan.work("render", StageWork("design changed"))
 _IDLE = StagePlan.no_work("etsy_listing")
 _BLOCKED = StagePlan.block("etsy_listing", "no Etsy shop configured")
 

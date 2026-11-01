@@ -29,7 +29,12 @@ from __future__ import annotations
 
 from etsy_listings.core.market.block import MARKET_BEGIN, MARKET_END, lead, market_block
 from etsy_listings.core.market.models import MarketResult, MarketWeights, PhraseScore, ScoredListing
-from etsy_listings.core.market.research import MarketResearchError, ResearchCancelledError, research
+from etsy_listings.core.market.research import (
+    MarketResearchError,
+    ResearchCancelledError,
+    ResearchSettings,
+    research,
+)
 
 __all__ = [
     "MARKET_BEGIN",
@@ -39,6 +44,7 @@ __all__ = [
     "MarketWeights",
     "PhraseScore",
     "ResearchCancelledError",
+    "ResearchSettings",
     "ScoredListing",
     "lead",
     "market_block",

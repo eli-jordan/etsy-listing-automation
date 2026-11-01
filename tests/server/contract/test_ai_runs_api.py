@@ -198,6 +198,7 @@ def test_post_refuses_with_the_readiness_reason(
     workspace_root: Path,
     client: TestClient,
     edit: dict[str, Any],
+    *,
     draft_brief: bool,
     reason: str,
 ) -> None:

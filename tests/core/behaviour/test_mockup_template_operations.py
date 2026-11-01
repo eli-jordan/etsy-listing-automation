@@ -18,6 +18,7 @@ import pytest
 from PIL import Image
 
 from etsy_listings.core.application.mockup_templates import (
+    LazyMaps,
     PreviewGeometry,
     assign_kind,
     colour_report,
@@ -400,8 +401,7 @@ class TestPreviewScene:
             base=half,
             scale=0.5,
             design=load_design,
-            height=never("height"),
-            luminance=never("luminance"),
+            maps=LazyMaps(height=never("height"), luminance=never("luminance")),
         )
         assert image.size == (half.shape[1], half.shape[0])
         assert asked == []

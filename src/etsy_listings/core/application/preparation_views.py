@@ -46,9 +46,20 @@ def preparation_view(preparations: Preparations, name: str) -> PreparationView:
         for identity in store.placement_ids(saved.config):
             try:
                 mask = store.mask(name, identity)
-                placements.append(PlacementState(identity, True, None, mask.undo_count))
+                placements.append(
+                    PlacementState(
+                        identity,
+                        mask_available=True,
+                        mask_reason=None,
+                        undo_count=mask.undo_count,
+                    )
+                )
             except (UserFacingError, ValueError, OSError) as exc:
-                placements.append(PlacementState(identity, False, str(exc), 0))
+                placements.append(
+                    PlacementState(
+                        identity, mask_available=False, mask_reason=str(exc), undo_count=0
+                    )
+                )
         jobs = preparations.list_jobs(template=name, limit=1000)
         active = next((job for job in reversed(jobs) if job.phase not in TERMINAL), None)
         return PreparationView(

@@ -1,7 +1,7 @@
 # Audit-to-delivery map
 
 Every identifier below belongs to the [implementation plan](plan.md).
-F01–F22 are the stable ranks in the [HTML audit](../../../reports/test-suite-audit.html).
+F01–F22 are the stable ranks in the HTML audit (`reports/test-suite-audit.html`, removed from the tree; it is in commit `f1113bef`).
 The final evidence ledger records old nodeid, action, replacement nodeid,
 retained boundary witness, requirement and proving command. A retain decision
 explains the actual contract; it does not silently defer work.
@@ -61,9 +61,7 @@ notes, even where they do not have their own F rank.
 
 ## Source evidence
 
-The [core notes](../../../research_notes/Test%20suite%20quality%20audit/audit-core.md),
-[frontend notes](../../../research_notes/Test%20suite%20quality%20audit/audit-frontend.md)
-and [boundary notes](../../../research_notes/Test%20suite%20quality%20audit/audit-boundaries.md)
-contain inspected test names, paths, line references, lower equivalents and
+The core, frontend and boundary audit notes (`research_notes/Test suite quality
+audit/`, removed from the tree; they are in commit `f1113bef`) contain inspected test names, paths, line references, lower equivalents and
 review-depth inventories. Line numbers are audit-time navigation aids; use
 subject/test names after earlier PRs move or split files.

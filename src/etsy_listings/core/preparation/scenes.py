@@ -80,17 +80,25 @@ class PreparedScene:
         )
 
 
+@dataclass(frozen=True)
+class Composition:
+    """What a scene composites: artwork ``layers`` on the ``base`` photo, in
+    ``appearance``."""
+
+    base: RGB
+    layers: Sequence[PreparedLayer]
+    appearance: MarigoldAppearance
+
+
 @contextmanager
 def lease_scene(
     workspace: Workspace,
     template: str,
+    composition: Composition,
     *,
-    base: RGB,
-    layers: Sequence[PreparedLayer],
-    appearance: MarigoldAppearance,
     expected: PreparationInputs | None = None,
 ) -> Iterator[PreparedScene]:
-    """Lease ``template``'s accepted generation to composite ``layers`` on ``base``.
+    """Lease ``template``'s accepted generation to composite ``composition``.
 
     The saved inputs are read and the generation acquired under one short
     template lock, then the lock is released while the lease keeps the
@@ -99,6 +107,7 @@ def lease_scene(
     since changed refuse with :class:`StalePreparationError`. Every refusal is an
     :class:`~etsy_listings.core.preparation.artifacts.ArtifactError`.
     """
+    base, layers, appearance = composition.base, composition.layers, composition.appearance
     artifacts = Artifacts(workspace)
     with ExitStack() as lease:
         with artifacts.calibration.lock(template):

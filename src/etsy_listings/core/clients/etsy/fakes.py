@@ -11,17 +11,20 @@ import threading
 import time
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-from typing import Any, Literal, NamedTuple
+from typing import Any, Literal, NamedTuple, override
 
 import httpx
 
 from etsy_listings.core.clients.etsy.listings import (
     DAILY_VIDEO_ASSOCIATIONS,
     VIDEO_SLOTS,
+    EtsyListingClient,
+    ImageUpload,
     VideoBudgetExhaustedError,
     VideoSlotsFullError,
     video_content_type,
 )
+from etsy_listings.core.clients.etsy.market import EtsyMarketClient
 from etsy_listings.core.clients.etsy.models import (
     ALREADY_DECODED,
     Inventory,
@@ -37,6 +40,7 @@ from etsy_listings.core.clients.etsy.models import (
     ShopSection,
     VariationImageLink,
 )
+from etsy_listings.core.clients.etsy.shops import EtsyShopClient, ShopMetadataClient
 from etsy_listings.core.clients.etsy.transport import EtsyApiError
 from etsy_listings.core.config.media import MAX_IMAGES
 
@@ -62,10 +66,37 @@ class _Attached:
     anchor: int
 
 
+def _videos_after(
+    count: int, featured: list[_Attached], others: list[_Attached], image_count: int
+) -> list[_Attached]:
+    """The videos Shop Manager shows right after the ``count``-th image: the
+    featured one after the first, each other after the image count it was
+    anchored at, clamped to the gallery."""
+    first = featured if count == 1 else []
+    return [*first, *(a for a in others if max(1, min(a.anchor, image_count)) == count)]
+
+
 DAY_SECONDS = 24 * 60 * 60
 
 
-class FakeEtsyShopClient:
+class _FakeShopMetadata(ShopMetadataClient):
+    _sections: list[ShopSection]
+    _policies: list[ReturnPolicy]
+    section_calls: int
+    return_policy_calls: int
+
+    @override
+    def shop_sections(self, shop_id: int) -> list[ShopSection]:
+        self.section_calls += 1
+        return list(self._sections)
+
+    @override
+    def return_policies(self, shop_id: int) -> list[ReturnPolicy]:
+        self.return_policy_calls += 1
+        return list(self._policies)
+
+
+class FakeEtsyShopClient(_FakeShopMetadata, EtsyShopClient):
     """Every read `setup` makes, answered from a dict.
 
     `find_shops` matches case-insensitively on the whole name rather than as a
@@ -90,24 +121,18 @@ class FakeEtsyShopClient:
         self.section_calls = 0
         self.return_policy_calls = 0
 
+    @override
     def find_shops(self, name: str) -> list[Shop]:
         self.searched.append(name)
         return [shop for shop in self._shops if shop.shop_name.lower() == name.lower()]
 
+    @override
     def shop_by_owner(self, user_id: int) -> Shop | None:
         self.owner_lookups.append(user_id)
         return self._owned
 
-    def shop_sections(self, shop_id: int) -> list[ShopSection]:
-        self.section_calls += 1
-        return list(self._sections)
 
-    def return_policies(self, shop_id: int) -> list[ReturnPolicy]:
-        self.return_policy_calls += 1
-        return list(self._policies)
-
-
-class FakeEtsyListingClient:
+class FakeEtsyListingClient(_FakeShopMetadata, EtsyListingClient):
     """Models the measured API quirks a tidy fake would hide: `image_ids`
     as a full-replacement set that detaches whatever it omits, and
     `overwrite: true` replacing an image in place -- a new id at the same
@@ -188,6 +213,7 @@ class FakeEtsyListingClient:
 
     # -------------------------------------------------------------- reads
 
+    @override
     def get_listing(
         self, listing_id: int, *, include_images: bool = False, include_videos: bool = False
     ) -> Listing | None:
@@ -229,15 +255,11 @@ class FakeEtsyListingClient:
         slots: list[GallerySlot] = []
         for count, image in enumerate(images, start=1):
             slots.append(GallerySlot("image", image.listing_image_id))
-            if count == 1:
-                slots.extend(GallerySlot("video", a.video_id) for a in featured)
-            slots.extend(
-                GallerySlot("video", a.video_id)
-                for a in others
-                if max(1, min(a.anchor, len(images))) == count
-            )
+            shown = _videos_after(count, featured, others, len(images))
+            slots.extend(GallerySlot("video", a.video_id) for a in shown)
         return tuple(slots)
 
+    @override
     def listing_states(self, listing_ids: Sequence[int]) -> dict[int, str]:
         """Only the ids this fake has actually been seeded with, and only
         those carrying a state -- the real batch read omits both, and a caller
@@ -250,32 +272,29 @@ class FakeEtsyListingClient:
                 states[listing_id] = listing.state
         return states
 
+    @override
     def get_listing_inventory(self, listing_id: int) -> Inventory:
         return self._inventory.get(listing_id, Inventory())
 
+    @override
     def get_listing_variation_images(
         self, shop_id: int, listing_id: int
     ) -> list[VariationImageLink]:
         return list(self._variation_images.get(listing_id, []))
 
+    @override
     def shipping_profiles(self, shop_id: int) -> list[ShippingProfile]:
         self.shipping_profile_calls += 1
         return list(self._shipping_profiles)
 
+    @override
     def production_partners(self, shop_id: int) -> list[ProductionPartner]:
         self.production_partner_calls += 1
         return list(self._production_partners)
 
-    def shop_sections(self, shop_id: int) -> list[ShopSection]:
-        self.section_calls += 1
-        return list(self._sections)
-
-    def return_policies(self, shop_id: int) -> list[ReturnPolicy]:
-        self.return_policy_calls += 1
-        return list(self._policies)
-
     # ------------------------------------------------------------- writes
 
+    @override
     def create_shop_section(self, shop_id: int, title: str) -> ShopSection:
         next_id = max((section.shop_section_id for section in self._sections), default=0) + 1
         section = ShopSection(shop_section_id=next_id, title=title)
@@ -283,6 +302,7 @@ class FakeEtsyListingClient:
         self.created_sections.append(section)
         return section
 
+    @override
     def update_listing(self, shop_id: int, listing_id: int, patch: dict[str, Any]) -> Listing:
         self.updated.append(dict(patch))
         image_ids = patch.get("image_ids")
@@ -312,18 +332,13 @@ class FakeEtsyListingClient:
         ]
         self._images[listing_id] = [known[image_id] for image_id in image_ids]
 
+    @override
     def upload_listing_image(
-        self,
-        shop_id: int,
-        listing_id: int,
-        *,
-        file_name: str,
-        contents: bytes,
-        rank: int,
-        alt_text: str = "",
-        overwrite: bool = False,
-        listing_image_id: int | None = None,
+        self, shop_id: int, listing_id: int, upload: ImageUpload
     ) -> ListingImage:
+        contents, rank = upload.contents, upload.rank
+        alt_text, overwrite = upload.alt_text, upload.overwrite
+        listing_image_id = upload.listing_image_id
         replacing = overwrite and listing_image_id is not None
         if not replacing and len(self._images.get(listing_id, [])) >= MAX_IMAGES:
             # Measured: a 21st upload is refused, nothing changed.
@@ -352,6 +367,7 @@ class FakeEtsyListingClient:
         images.append(image)
         return image
 
+    @override
     def upload_listing_video(
         self, shop_id: int, listing_id: int, *, file_name: str, contents: bytes
     ) -> ListingVideo:
@@ -375,6 +391,7 @@ class FakeEtsyListingClient:
         self._shop_videos[video.video_id] = video
         return video
 
+    @override
     def attach_listing_video(self, shop_id: int, listing_id: int, video_id: int) -> ListingVideo:
         """Re-attach a video the shop already has. One `inactive` on this
         listing is reactivated (measured); either way it is anchored afresh
@@ -389,6 +406,7 @@ class FakeEtsyListingClient:
         self._videos[listing_id] = [a for a in attached if a.video_id != video_id]
         return self._attach(listing_id, video_id)
 
+    @override
     def delete_listing_video(self, shop_id: int, listing_id: int, video_id: int) -> None:
         """Off the listing, `active` or `inactive`; the file stays the shop's."""
         attached = self._videos.get(listing_id, [])
@@ -421,6 +439,7 @@ class FakeEtsyListingClient:
         )
         return self._shop_videos[video_id].model_copy(update={"video_state": "active"})
 
+    @override
     def update_variation_images(
         self, shop_id: int, listing_id: int, links: list[VariationImageLink]
     ) -> None:
@@ -479,7 +498,7 @@ class _Failure:
     argument: object | None
 
 
-class FakeEtsyMarketClient:
+class FakeEtsyMarketClient(EtsyMarketClient):
     """The Etsy market, answered from what a test seeded.
 
     Listings are seeded once with everything the batch returns; a search
@@ -531,6 +550,7 @@ class FakeEtsyMarketClient:
 
     # ----------------------------------------------------------- the calls
 
+    @override
     def search_active(self, query: str, *, limit: int = 25) -> list[MarketCandidate]:
         self._record("search_active", query)
         with self._lock:
@@ -543,6 +563,7 @@ class FakeEtsyMarketClient:
                 for i in ids
             ]
 
+    @override
     def listings_by_ids(self, ids: Sequence[int]) -> list[MarketListing]:
         wanted = list(ids)
         found: list[MarketListing] = []
@@ -553,6 +574,7 @@ class FakeEtsyMarketClient:
                 found.extend(self._listings[i] for i in chunk if i in self._listings)
         return found
 
+    @override
     def review_count(self, listing_id: int) -> int:
         self._record("review_count", listing_id)
         with self._lock:

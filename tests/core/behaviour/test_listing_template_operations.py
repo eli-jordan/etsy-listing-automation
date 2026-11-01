@@ -22,6 +22,7 @@ import pytest
 from PIL import Image
 
 from etsy_listings.core.application.listing_template_library import (
+    DraftOrigin,
     TemplateSave,
     create_listing_template,
     delete_listing_template,
@@ -38,7 +39,7 @@ from etsy_listings.core.application.refusals import (
     ReservedListingTemplateNameError,
 )
 from etsy_listings.core.application.workspace_locks import WorkspaceLocks
-from etsy_listings.core.batches import Batch, BatchStore, StagingStore, stage_pngs
+from etsy_listings.core.batches import Batch, BatchRecords, BatchStore, StagingStore, stage_pngs
 from etsy_listings.core.listing_templates import ListingTemplateExistsError
 from etsy_listings.core.workspace.workspace import InvalidNameError, Workspace
 
@@ -71,8 +72,10 @@ def _create(
     return create_listing_template(
         workspace,
         name,
-        from_listing=source.get("from_listing", None if source else FIXTURE_LISTING),
-        from_template=source.get("from_template"),
+        DraftOrigin(
+            listing=source.get("from_listing", None if source else FIXTURE_LISTING),
+            template=source.get("from_template"),
+        ),
         document=document,
         locks=locks or WorkspaceLocks(),
     )
@@ -146,9 +149,7 @@ class TestCreate:
         with pytest.raises(ListingTemplateSourceRefusedError, match="exactly one"):
             _create(workspace, from_listing=FIXTURE_LISTING, from_template=NAME)
         with pytest.raises(ListingTemplateSourceRefusedError, match="exactly one"):
-            create_listing_template(
-                workspace, NAME, from_listing=None, from_template=None, locks=WorkspaceLocks()
-            )
+            create_listing_template(workspace, NAME, DraftOrigin(), locks=WorkspaceLocks())
 
     def test_an_unusable_or_reserved_name_is_refused_before_any_source_is_read(
         self, workspace: Workspace
@@ -162,7 +163,7 @@ class TestCreate:
     def test_edits_made_before_naming_are_what_is_written(self, workspace: Workspace) -> None:
         """A file the edit dropped is not copied."""
         _local_picture(workspace)
-        draft = draft_listing_template(workspace, from_listing=FIXTURE_LISTING, from_template=None)
+        draft = draft_listing_template(workspace, DraftOrigin(listing=FIXTURE_LISTING))
         document = {**draft.template.model_dump(mode="json"), "colors": ["black"], "media": [BLACK]}
 
         assert _create(workspace, document=document).saved
@@ -170,7 +171,7 @@ class TestCreate:
         assert not workspace.listing_template_assets_dir(NAME).exists()
 
     def test_an_edited_document_is_checked_like_an_edit(self, workspace: Workspace) -> None:
-        draft = draft_listing_template(workspace, from_listing=FIXTURE_LISTING, from_template=None)
+        draft = draft_listing_template(workspace, DraftOrigin(listing=FIXTURE_LISTING))
         document = draft.template.model_dump(mode="json")
 
         incomplete = _create(
@@ -201,7 +202,7 @@ class TestDraftAndRead:
             etsy={"title": "Take A Hike", "description": {"lead": "Retro.", "text": "Cotton."}},
         )
 
-        draft = draft_listing_template(workspace, from_listing=FIXTURE_LISTING, from_template=None)
+        draft = draft_listing_template(workspace, DraftOrigin(listing=FIXTURE_LISTING))
 
         assert draft.name == ""
         assert draft.modified_at is None
@@ -217,7 +218,7 @@ class TestDraftAndRead:
 
     def test_a_clone_s_draft_names_its_source(self, workspace: Workspace) -> None:
         _create(workspace)
-        clone = draft_listing_template(workspace, from_listing=None, from_template=NAME)
+        clone = draft_listing_template(workspace, DraftOrigin(template=NAME))
         assert clone.source is not None
         assert (clone.source.kind, clone.source.name) == ("listing-template", NAME)
 
@@ -338,8 +339,7 @@ class TestRenameAndDelete:
             NAME,
             "everyday-tee",
             locks=locks,
-            staging=StagingStore(workspace),
-            batches=BatchStore(workspace),
+            records=BatchRecords(StagingStore(workspace), BatchStore(workspace)),
         )
 
         assert workspace.listing_template_names() == ["everyday-tee"]
@@ -354,10 +354,10 @@ class TestRenameAndDelete:
         batches, staging = BatchStore(workspace), StagingStore(workspace)
         batches.save(_batch(NAME))
         small_print_area(workspace.root)
-        session = stage_pngs(workspace, staging, NAME, uploads(("night-hike.png", png(1))))
+        session = stage_pngs(staging, NAME, uploads(("night-hike.png", png(1))))
 
         rename_listing_template(
-            workspace, NAME, "everyday-tee", locks=locks, staging=staging, batches=batches
+            workspace, NAME, "everyday-tee", locks=locks, records=BatchRecords(staging, batches)
         )
 
         record = batches.load("b1")
@@ -513,8 +513,7 @@ def _rename(workspace: Workspace, old: str, new: str, locks: WorkspaceLocks) -> 
         old,
         new,
         locks=locks,
-        staging=StagingStore(workspace),
-        batches=BatchStore(workspace),
+        records=BatchRecords(StagingStore(workspace), BatchStore(workspace)),
     )
 
 

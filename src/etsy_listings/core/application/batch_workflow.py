@@ -38,6 +38,7 @@ from etsy_listings.core.application.refusals import (
 from etsy_listings.core.batches import (
     RETRYABLE,
     Batch,
+    BatchRecords,
     BatchRow,
     BatchStore,
     NotReviewableError,
@@ -61,8 +62,7 @@ ProposalState = Literal["ready", "stale", "resolved"]
 
 def confirm_batch(
     workspace: Workspace,
-    staging: StagingStore,
-    batches: BatchStore,
+    records: BatchRecords,
     session_id: str,
     *,
     queue: BatchQueue,
@@ -78,12 +78,12 @@ def confirm_batch(
     broken since staging), :class:`StagingMissingError`, ``InvalidNameError``.
     """
     workspace.staging_dir(session_id)
-    if batches.load(session_id) is None:
+    if records.batches.load(session_id) is None:
         blocked = queue.blocked()
         if blocked is not None:
             raise AiDraftingBlockedError(blocked.message)
     try:
-        batch = confirm(workspace, staging, batches, session_id)
+        batch = confirm(workspace, records.staging, records.batches, session_id)
     except KeyError as exc:
         raise StagingMissingError(session_id) from exc
     queue.wake()
@@ -95,8 +95,7 @@ def confirm_batch(
 
 def retry_batch_row(
     workspace: Workspace,
-    staging: StagingStore,
-    batches: BatchStore,
+    records: BatchRecords,
     batch_id: str,
     row_id: str,
     *,
@@ -106,45 +105,43 @@ def retry_batch_row(
     queues it once it exists -- else its AI, keeping the saved brief.
     :class:`NothingToRetryError` for a row whose AI is not failed, stopped or
     cancelled, or whose listing was deleted."""
-    batch = read_batch(workspace, batches, batch_id)
+    batch = read_batch(workspace, records.batches, batch_id)
     target = _row(batch, row_id)
     if target.creation == "failed":
-        _recreate(workspace, staging, batches, batch_id, {row_id}, queue=queue)
+        _recreate(workspace, records, batch_id, {row_id}, queue=queue)
     elif target.ai in RETRYABLE and not target.deleted:
         queue.retry(batch_id, row_id)
     else:
         raise NothingToRetryError(target.name)
-    return read_batch(workspace, batches, batch_id)
+    return read_batch(workspace, records.batches, batch_id)
 
 
 def retry_batch(
     workspace: Workspace,
-    staging: StagingStore,
-    batches: BatchStore,
+    records: BatchRecords,
     batch_id: str,
     *,
     queue: BatchQueue,
 ) -> Batch:
     """**Retry N failed**: every row whose creation failed is created, then
     every row whose AI failed is queued again."""
-    batch = read_batch(workspace, batches, batch_id)
+    batch = read_batch(workspace, records.batches, batch_id)
     failed = {row.id for row in batch.rows if row.creation == "failed"}
-    _recreate(workspace, staging, batches, batch_id, failed, queue=queue)
+    _recreate(workspace, records, batch_id, failed, queue=queue)
     queue.retry(batch_id)
-    return read_batch(workspace, batches, batch_id)
+    return read_batch(workspace, records.batches, batch_id)
 
 
 def _recreate(
     workspace: Workspace,
-    staging: StagingStore,
-    batches: BatchStore,
+    records: BatchRecords,
     batch_id: str,
     rows: Iterable[str],
     *,
     queue: BatchQueue,
 ) -> None:
     for row in rows:
-        retry_row(workspace, staging, batches, batch_id, row)
+        retry_row(workspace, records.staging, records.batches, batch_id, row)
     queue.wake()
 
 

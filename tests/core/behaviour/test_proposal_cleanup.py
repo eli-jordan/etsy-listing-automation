@@ -26,7 +26,7 @@ from typer.testing import CliRunner
 from etsy_listings.cli import app as cli_app
 from etsy_listings.core.engine.change import Verdict
 from etsy_listings.core.engine.context import EventSink, RunContext
-from etsy_listings.core.engine.events import EngineRunEvent, EngineStageApplying
+from etsy_listings.core.engine.events import EngineRunEvent, EngineStageApplying, RunHooks
 from etsy_listings.core.engine.lock import Lockfile
 from etsy_listings.core.engine.run import ListingOutcome, apply_listings, plan_listings
 from etsy_listings.core.engine.stage import StageApplyResult
@@ -177,8 +177,7 @@ def test_an_ok_apply_that_leaves_the_incomplete_marker_keeps_the_proposal(
         workspace_root,
         _Stage("render"),
         _Stage("etsy"),
-        on_event=count,
-        should_stop=lambda: bool(started),
+        hooks=RunHooks(on_event=count, should_stop=lambda: bool(started)),
     )
 
     assert retried.ok, retried.error
@@ -215,8 +214,7 @@ def test_a_stop_after_the_last_runnable_stage_still_removes_the_proposal(
         ctx,
         [LISTING],
         real_stages(),
-        on_event=count_started,
-        should_stop=stop_after_last_runnable_stage,
+        hooks=RunHooks(on_event=count_started, should_stop=stop_after_last_runnable_stage),
     )
 
     assert report.outcomes[0].ok, report.outcomes[0].error

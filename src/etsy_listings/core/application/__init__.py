@@ -20,7 +20,7 @@ import names the module it depends on. Public interfaces:
     ``edit_listing``: an editor save's patch merged into ``listing.yaml``.
 ``listing_creation``
     ``create_listing``; the ``new`` wizard's stub --
-    ``load_template_kind``, ``build_media_entries``, ``build_listing_stub``,
+    ``load_template_kind``, ``build_media_entries``, ``ListingStub``,
     ``validate_listing_stub``.
 ``listing_identity``
     ``rename_listing``, ``delete_listing`` -> ``Deletion``: everything keyed

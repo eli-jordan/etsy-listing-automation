@@ -77,6 +77,7 @@ from etsy_listings.core.engine.events import (
     EngineStageChecking,
     EngineStageFailed,
     EngineStagePlanned,
+    RunHooks,
 )
 from etsy_listings.core.engine.lock import (
     SCHEMA_VERSION,
@@ -109,6 +110,7 @@ from etsy_listings.core.engine.status import (
     ListingGesture,
     ListingLifecycle,
     ListingStatus,
+    StatusInputs,
     edited_since_apply,
     is_live_etsy_state,
     listing_gestures,
@@ -123,6 +125,7 @@ __all__ = [  # noqa: RUF022 -- grouped by topic, not alphabetically
     # behind these two, not in the entry point that drives them.
     "plan_listings",
     "apply_listings",
+    "RunHooks",
     "preview_listing",
     "needs_preview",
     "lookup_preview",
@@ -183,6 +186,7 @@ __all__ = [  # noqa: RUF022 -- grouped by topic, not alphabetically
     "ListingLifecycle",
     "ListingGesture",
     "listing_status",
+    "StatusInputs",
     "listing_gestures",
     "edited_since_apply",
     "is_live_etsy_state",

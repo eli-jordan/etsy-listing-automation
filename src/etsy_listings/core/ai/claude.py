@@ -49,36 +49,21 @@ transcript. In particular:
 from __future__ import annotations
 
 import json
-import shutil
-import subprocess
-import threading
 from dataclasses import dataclass
-from pathlib import Path
-from typing import Any
+from typing import Any, override
 
+from etsy_listings.core.ai import cli_support
 from etsy_listings.core.ai.errors import (
-    ProviderCancelledError,
     ProviderGenerationError,
-    ProviderTimeoutError,
-    ProviderUnavailableError,
     classify_process_failure,
 )
 from etsy_listings.core.ai.models import (
-    Deadline,
     ProviderReadiness,
-    ProviderTask,
     RawProviderResult,
-    RepairContext,
 )
 from etsy_listings.core.ai.process import run_managed
-from etsy_listings.core.ai.repair import prompt_text_for
 
 PROVIDER_NAME = "claude"
-
-_READINESS_TIMEOUT_SECONDS = 15.0
-"""Mirrors `ai/codex.py`'s own readiness timeout -- both probes below are
-local and fast (`claude auth status`, `claude -p --help`), never a
-speculative quota check."""
 
 _READ_ONLY_TOOLS = "Read,Grep,Glob"
 """The complete allowed-tool set for a generation call. Write, Edit,
@@ -100,7 +85,7 @@ is reported unready rather than launched anyway."""
 
 
 @dataclass
-class ClaudeProvider:
+class ClaudeProvider(cli_support.LocalCliProvider):
     """The `AiProvider` adapter for the local Claude Code CLI.
 
     Same shape and reasoning as `ai/codex.py.CodexProvider`: a plain `Path`
@@ -108,54 +93,15 @@ class ClaudeProvider:
     arrives with its prompt already assembled (`ai/models.py.ProviderTask`).
     """
 
-    workspace_root: Path
     binary: str = "claude"
+    provider_name = PROVIDER_NAME
+    image_tool = "Read"
 
-    def _resolved_binary(self) -> str:
-        """The executable path `shutil.which` resolved, not the bare
-        ``self.binary`` name -- see `ai/codex.py.CodexProvider._resolved_binary`
-        for why: an npm-installed CLI on Windows is a shim (`claude.EXE` here,
-        but a `.CMD` for other CLIs -- either way, `shutil.which`'s own
-        `PATHEXT` search is what finds it, and every subprocess call needs
-        that same resolved path rather than assuming the bare name is
-        directly launchable without `shell=True`."""
-        return shutil.which(self.binary) or self.binary
-
-    def readiness(self) -> ProviderReadiness:
-        if shutil.which(self.binary) is None:
-            return ProviderReadiness(ready=False, reason=f"{self.binary} was not found on PATH")
-
-        unavailable = self._check_authenticated()
-        if unavailable is not None:
-            return unavailable
-
-        unavailable = self._check_read_only_capability()
-        if unavailable is not None:
-            return unavailable
-
-        return ProviderReadiness(ready=True)
-
+    @override
     def _check_authenticated(self) -> ProviderReadiness | None:
-        try:
-            result = subprocess.run(
-                [self._resolved_binary(), "auth", "status"],
-                capture_output=True,
-                text=True,
-                timeout=_READINESS_TIMEOUT_SECONDS,
-                check=False,
-            )
-        except (OSError, subprocess.SubprocessError) as exc:
-            return ProviderReadiness(
-                ready=False, reason=f"could not check `{self.binary} auth status`: {exc}"
-            )
-        if result.returncode != 0:
-            return ProviderReadiness(
-                ready=False,
-                reason=(
-                    f"{self.binary} is not authenticated "
-                    f"(`{self.binary} auth status` exited {result.returncode})"
-                ),
-            )
+        result = cli_support.auth_probe(self.binary, "auth")
+        if isinstance(result, ProviderReadiness):
+            return result
         try:
             status: Any = json.loads(result.stdout)
         except json.JSONDecodeError:
@@ -167,55 +113,16 @@ class ClaudeProvider:
             return ProviderReadiness(ready=False, reason=f"{self.binary} is not authenticated")
         return None
 
-    def _check_read_only_capability(self) -> ProviderReadiness | None:
-        # Known limitation (docs/features/ai-seo-20260922/plan.md, PR4): this
-        # only confirms `--help` advertises the required flags, not that a
-        # live `-p` invocation actually honours them. Same "no speculative
-        # quota check" tradeoff as the auth check above -- readiness stays a
-        # local, static check rather than spending a real generation call.
-        try:
-            result = subprocess.run(
-                [self._resolved_binary(), "-p", "--help"],
-                capture_output=True,
-                text=True,
-                timeout=_READINESS_TIMEOUT_SECONDS,
-                check=False,
-            )
-        except (OSError, subprocess.SubprocessError) as exc:
-            return ProviderReadiness(
-                ready=False, reason=f"could not check `{self.binary} -p --help`: {exc}"
-            )
-        if result.returncode != 0:
-            return ProviderReadiness(
-                ready=False, reason=f"`{self.binary} -p --help` exited {result.returncode}"
-            )
-        missing = [flag for flag in _REQUIRED_HELP_FLAGS if flag not in result.stdout]
-        if missing:
-            return ProviderReadiness(
-                ready=False,
-                reason=(
-                    f"the installed {self.binary} CLI does not support the required "
-                    f"read-only/no-session flags: {', '.join(missing)}"
-                ),
-            )
-        return None
+    @override
+    def _check_capability(self) -> ProviderReadiness | None:
+        # A local help probe checks advertised flags without spending a generation call.
+        return cli_support.check_capability(
+            self.binary, ("-p", "--help"), _REQUIRED_HELP_FLAGS, "read-only/no-session"
+        )
 
-    def generate(
-        self,
-        task: ProviderTask,
-        deadline: Deadline,
-        *,
-        repair: RepairContext | None = None,
-        cancel_event: threading.Event | None = None,
-    ) -> RawProviderResult:
-        if shutil.which(self.binary) is None:
-            # Recognised-unavailable, so the orchestrator moves on to the next
-            # provider. Launching the bare name would fail with WinError 2 --
-            # a process error, which ends the run instead -- and readiness
-            # only needs *one* provider to be ready, so on a machine with
-            # just the other CLI this is the ordinary case, not an edge.
-            raise ProviderUnavailableError(PROVIDER_NAME, f"{self.binary} was not found on PATH")
-        prompt_text = self._prompt_text(task, repair)
+    @override
+    def _generate(self, invocation: cli_support.Invocation) -> RawProviderResult:
+        task, prompt_text = invocation.task, invocation.prompt_text
         argv = [
             self._resolved_binary(),
             "-p",
@@ -236,24 +143,11 @@ class ClaudeProvider:
             argv,
             cwd=self.workspace_root,
             input_text=prompt_text,
-            deadline=deadline,
-            cancel_event=cancel_event,
+            deadline=invocation.deadline,
+            cancel_event=invocation.cancel_event,
         )
 
-        if result.cancelled:
-            raise ProviderCancelledError(PROVIDER_NAME)
-        if result.timed_out:
-            raise ProviderTimeoutError(PROVIDER_NAME)
-        if result.returncode != 0:
-            # stdout may be the `--output-format json` envelope. Classification
-            # reads its `result` sentence; the rest is telemetry.
-            raise classify_process_failure(
-                PROVIDER_NAME,
-                returncode=result.returncode,
-                stdout=result.stdout,
-                stderr=result.stderr,
-            )
-
+        cli_support.check_result(PROVIDER_NAME, result)
         return RawProviderResult(
             provider=PROVIDER_NAME, raw_output=self._extract_result_text(result.stdout)
         )
@@ -272,14 +166,7 @@ class ClaudeProvider:
         rather than only its ``result`` string keeps ``api_error_status``
         visible -- an availability failure must be recognised as one
         regardless of which of the two shapes carried it."""
-        try:
-            envelope: Any = json.loads(stdout)
-        except json.JSONDecodeError as exc:
-            raise ProviderGenerationError(
-                PROVIDER_NAME, 0, f"stdout was not valid JSON: {exc}"
-            ) from exc
-        if not isinstance(envelope, dict):
-            raise ProviderGenerationError(PROVIDER_NAME, 0, "stdout was not a JSON object")
+        envelope = cli_support.json_object(PROVIDER_NAME, stdout)
         if envelope.get("is_error"):
             # No sentence and no status: the old fixed line, so a bare
             # `is_error` doesn't surface the envelope. A status with no
@@ -299,23 +186,3 @@ class ClaudeProvider:
         if not isinstance(result_text, str):
             raise ProviderGenerationError(PROVIDER_NAME, 0, "envelope had no `result` string")
         return result_text
-
-    def _prompt_text(self, task: ProviderTask, repair: RepairContext | None) -> str:
-        """The task's prompt, plus how *this* CLI is told to look at the design.
-
-        Codex takes the image as an argument (`-i`); `claude -p` has no
-        equivalent, so the path is named in the prompt and the model reads it
-        with its own read-only Read tool. That difference is the adapter's to
-        know -- everything after it, including what a repair attempt resends,
-        is the shared `ai/repair.py` rule.
-        """
-        with_image = ProviderTask(
-            prompt_text=(
-                f"{task.prompt_text}\n\n"
-                f"The design image is at this absolute path: {task.design_image}\n"
-                "Use the Read tool to view it before answering.\n"
-            ),
-            response_schema=task.response_schema,
-            design_image=task.design_image,
-        )
-        return prompt_text_for(with_image, repair)

@@ -400,15 +400,12 @@ def test_the_listing_template_card_carries_the_design_size_it_needs(client: Test
 def test_an_expired_session_is_swept_when_the_server_starts(workspace: Workspace) -> None:
     week_ago = datetime.now(UTC) - timedelta(days=7, minutes=1)
     stale = stage_pngs(
-        workspace,
         StagingStore(workspace),
         LISTING_TEMPLATE,
         uploads(("a.png", png(1))),
         now=week_ago,
     )
-    fresh = stage_pngs(
-        workspace, StagingStore(workspace), LISTING_TEMPLATE, uploads(("b.png", png(2)))
-    )
+    fresh = stage_pngs(StagingStore(workspace), LISTING_TEMPLATE, uploads(("b.png", png(2))))
 
     with TestClient(create_app(workspace)) as client:
         assert client.get(f"/api/staging/{stale.id}").status_code == 404

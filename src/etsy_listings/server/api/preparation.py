@@ -12,6 +12,7 @@ from starlette.responses import StreamingResponse
 
 from etsy_listings.core.application.preparation.coordinator import (
     PreparationRefusedError,
+    PreparationRequest,
     Preparations,
 )
 from etsy_listings.core.application.preparation.models import TERMINAL, Event, Job
@@ -19,7 +20,11 @@ from etsy_listings.core.application.preparation_views import preparation_view, r
 from etsy_listings.core.application.refusals import TemplateMissingError
 from etsy_listings.core.config.errors import ConfigLoadError
 from etsy_listings.core.errors import UserFacingError
-from etsy_listings.core.workspace.calibration import CalibrationConflictError, CalibrationStore
+from etsy_listings.core.workspace.calibration import (
+    CalibrationConflictError,
+    CalibrationStore,
+    SavedMask,
+)
 from etsy_listings.server.api.schemas import (
     CreatePreparationRequest,
     MapReadinessResponse,
@@ -98,17 +103,21 @@ def jobs(
     ]
 
 
-def mask_response(
-    request: Request, name: str, placement_id: str | None, source: Literal["edited", "automatic"]
-) -> Response:
+def _read_mask(request: Request, name: str, placement_id: str | None) -> SavedMask:
     try:
-        mask = read_mask(coordinator(request).workspace, name, placement_id)
+        return read_mask(coordinator(request).workspace, name, placement_id)
     except TemplateMissingError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except UserFacingError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+def mask_response(
+    request: Request, name: str, placement_id: str | None, source: Literal["edited", "automatic"]
+) -> Response:
+    mask = _read_mask(request, name, placement_id)
     return Response(
         mask.edited if source == "edited" else mask.automatic,
         media_type="image/png",
@@ -134,14 +143,7 @@ def placement_mask(
 
 
 def history_response(request: Request, name: str, placement_id: str | None) -> MaskHistoryResponse:
-    try:
-        mask = read_mask(coordinator(request).workspace, name, placement_id)
-    except TemplateMissingError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    except UserFacingError as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    mask = _read_mask(request, name, placement_id)
     store = CalibrationStore(coordinator(request).workspace)
     strokes = store.history(name, placement_id, mask.checksum)
     return MaskHistoryResponse(
@@ -187,11 +189,13 @@ def submit(request: Request, body: CreatePreparationRequest) -> PreparationJobRe
     try:
         job = preparations.submit(
             body.template,
-            config_revision=body.config_revision,
-            request_id=body.request_id,
-            action=body.action,
-            previous_job=body.previous_job,
-            reset_masks_for_photo=body.reset_masks_for_photo,
+            PreparationRequest(
+                config_revision=body.config_revision,
+                request_id=body.request_id,
+                action=body.action,
+                previous_job=body.previous_job,
+                reset_masks_for_photo=body.reset_masks_for_photo,
+            ),
         )
     except CalibrationConflictError as exc:
         raise HTTPException(status_code=412, detail=str(exc)) from exc
@@ -230,6 +234,12 @@ def cancel(request: Request, identity: str) -> PreparationJobResponse:
     return job_response(preparations, preparations.cancel(identity))
 
 
+async def _caught_up(preparations: Preparations, identity: str, after: int) -> bool:
+    """Whether the job has ended and every event it emitted has been sent."""
+    job = await run_in_threadpool(preparations.status, identity)
+    return job.phase in TERMINAL and after >= job.last_event_sequence
+
+
 async def event_stream(
     request: Request, preparations: Preparations, identity: str, after: int, initial: Job | None
 ) -> AsyncIterator[bytes]:
@@ -246,8 +256,7 @@ async def event_stream(
         for event in pending:
             after = event.sequence
             yield f"id: {after}\nevent: progress\ndata: {event.model_dump_json()}\n\n".encode()
-        job = await run_in_threadpool(preparations.status, identity)
-        if job.phase in TERMINAL and after >= job.last_event_sequence:
+        if await _caught_up(preparations, identity, after):
             return
         if not pending:
             yield b": keepalive\n\n"

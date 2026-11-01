@@ -19,6 +19,7 @@ import json
 import threading
 from collections.abc import Callable, Iterator
 from contextlib import ExitStack, contextmanager
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Literal, Self
@@ -26,7 +27,8 @@ from typing import Any, Literal, Self
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from etsy_listings.core.workspace.atomic import read_bytes_retrying, write_json_atomic
-from etsy_listings.core.workspace.workspace import Workspace, remove_tree
+from etsy_listings.core.workspace.trees import remove_tree
+from etsy_listings.core.workspace.workspace import Workspace
 
 SCHEMA = 1
 
@@ -200,6 +202,11 @@ class _Store[R: _Record]:
         self._ids = ids
         self._guard = threading.Lock()
         self._locks: dict[str, threading.Lock] = {}
+
+    @property
+    def workspace(self) -> Workspace:
+        """The workspace these records live in, and the only one they know."""
+        return self._workspace
 
     @contextmanager
     def lock(self, record: str) -> Iterator[None]:
@@ -381,3 +388,19 @@ class BatchStore(_Store[Batch]):
             row.model_copy(update=change(row)) if which(row) else row for row in batch.rows
         ]
         self.save(batch)
+
+
+@dataclass(frozen=True)
+class BatchRecords:
+    """The two records a batch moves through: its staging session, then the batch.
+
+    Confirming and retrying read both, and a listing template's rename
+    rewrites both, so the stores travel together.
+    """
+
+    staging: StagingStore
+    batches: BatchStore
+
+    def rename_listing_template(self, old: str, new: str) -> None:
+        self.staging.rename_listing_template(old, new)
+        self.batches.rename_listing_template(old, new)

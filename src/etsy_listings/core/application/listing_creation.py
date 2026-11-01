@@ -3,13 +3,14 @@
 Both creation paths write through ``ListingDocuments.create``. The listings
 editor creates through :func:`create_listing`. The ``new`` wizard builds its
 stub with :func:`build_media_entries` for the template's kind and
-:func:`build_listing_stub`, checks it with :func:`validate_listing_stub`, and
+:class:`ListingStub`, checks it with :func:`validate_listing_stub`, and
 creates it directly.
 """
 
 from __future__ import annotations
 
 from collections.abc import Mapping
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -77,30 +78,33 @@ def build_media_entries(*, template: str, kind: str, colours: list[str]) -> list
     return [{"template": template}]
 
 
-def build_listing_stub(
-    *,
-    garment_profile_slug: str,
-    design_ref: str,
-    colours: list[str],
-    pricing_plan_ref: str,
-    brief: str,
-    media: list[dict[str, str]],
-) -> dict[str, Any]:
-    """A starting ``listing.yaml`` document: prices come from the referenced
-    pricing plan (per-size/per-colour adjustment is a manual edit), the media entries
-    :func:`build_media_entries` decided, and blank
-    title, description and tags -- ordinary editable values, nothing
-    invented."""
-    return {
-        "garment_profile": garment_profile_slug,
-        "design": {"default": design_ref},
-        "colors": colours,
-        "brief": brief,
-        "pricing_plan": pricing_plan_ref,
-        "prices": {},
-        "etsy": {"title": "", "description": {}, "tags": []},
-        "media": media,
-    }
+@dataclass(frozen=True)
+class ListingStub:
+    """What a new listing starts from: its garment, design, colours, pricing
+    plan, brief, and the media entries :func:`build_media_entries` decided."""
+
+    garment_profile_slug: str
+    design_ref: str
+    colours: list[str]
+    pricing_plan_ref: str
+    brief: str
+    media: list[dict[str, str]]
+
+    def document(self) -> dict[str, Any]:
+        """A starting ``listing.yaml`` document: prices come from the referenced
+        pricing plan (per-size/per-colour adjustment is a manual edit), and the
+        title, description and tags are blank -- ordinary editable values,
+        nothing invented."""
+        return {
+            "garment_profile": self.garment_profile_slug,
+            "design": {"default": self.design_ref},
+            "colors": self.colours,
+            "brief": self.brief,
+            "pricing_plan": self.pricing_plan_ref,
+            "prices": {},
+            "etsy": {"title": "", "description": {}, "tags": []},
+            "media": self.media,
+        }
 
 
 def validate_listing_stub(data: dict[str, Any], *, currency: str) -> Listing:
