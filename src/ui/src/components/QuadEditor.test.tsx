@@ -23,6 +23,27 @@ const BOX_B: BoundingBox = [
   { x: 200, y: 100 },
 ];
 
+function ControlledQuad({
+  onChangeBox,
+}: {
+  onChangeBox: (index: number, next: BoundingBox) => void;
+}) {
+  const [box, setBox] = useState(BOX_A);
+  return (
+    <QuadEditor
+      imageUrl="preview.png"
+      space={SPACE}
+      boxes={[box]}
+      selectedIndex={0}
+      onSelect={vi.fn()}
+      onChangeBox={(index, next) => {
+        onChangeBox(index, next);
+        setBox(next);
+      }}
+    />
+  );
+}
+
 function loadImage() {
   const img = screen.getByAltText("Rendered preview");
   Object.defineProperty(img, "naturalWidth", { value: 400, configurable: true });
@@ -387,23 +408,7 @@ describe("sliding a whole box", () => {
     // second move sees the already-moved box in props. Measured from the live
     // box, the same pointer position would move it again.
     const onChangeBox = vi.fn();
-    function Controlled() {
-      const [box, setBox] = useState(BOX_A);
-      return (
-        <QuadEditor
-          imageUrl="preview.png"
-          space={SPACE}
-          boxes={[box]}
-          selectedIndex={0}
-          onSelect={vi.fn()}
-          onChangeBox={(index, next) => {
-            onChangeBox(index, next);
-            setBox(next);
-          }}
-        />
-      );
-    }
-    const { container } = render(<Controlled />);
+    const { container } = render(<ControlledQuad onChangeBox={onChangeBox} />);
     loadImage();
     press(must(container.querySelector(".quad-editor__polygon")), 10, 10);
     fireEvent.pointerMove(overlay(container), { clientX: 40, clientY: 25 });
@@ -596,23 +601,7 @@ describe("resizing a box from a corner", () => {
     const onChangeBox = vi.fn();
     // A parent that applies each change, as the calibrator does, so the
     // second move sees the already-doubled box in props.
-    function Controlled() {
-      const [box, setBox] = useState(BOX_A);
-      return (
-        <QuadEditor
-          imageUrl="preview.png"
-          space={SPACE}
-          boxes={[box]}
-          selectedIndex={0}
-          onSelect={vi.fn()}
-          onChangeBox={(index, next) => {
-            onChangeBox(index, next);
-            setBox(next);
-          }}
-        />
-      );
-    }
-    const { container } = render(<Controlled />);
+    const { container } = render(<ControlledQuad onChangeBox={onChangeBox} />);
     loadImage();
     grabBottomRight(container);
     fireEvent.pointerMove(overlay(container), { clientX: 200, clientY: 200, shiftKey: true });

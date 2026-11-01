@@ -61,7 +61,8 @@ function place(position: number): string {
 function createdAt(iso: string): string {
   const created = new Date(iso);
   const today = created.toDateString() === new Date().toDateString();
-  return `${today ? "today" : `on ${dayMonth(created)}`} at ${clock(created)}`;
+  const day = today ? "today" : `on ${dayMonth(created)}`;
+  return `${day} at ${clock(created)}`;
 }
 
 type Kind =
@@ -322,15 +323,9 @@ export function BatchSummaryPage() {
   const concurrency = batch?.concurrency ?? 1;
   // How drafting runs is news only while it runs: once nothing is queued or
   // running, the line says where the batch got to instead (UI doc §7).
-  const pace = busy
-    ? `${
-        concurrency === 1
-          ? "Drafting one listing at a time."
-          : `Drafting up to ${concurrency} listings at a time.`
-      } Work carries on if you close this tab.`
-    : count("stopped") > 0
-      ? "Drafting stopped. Resume queues the rest."
-      : "Drafting finished.";
+  const draftingPace = concurrency === 1 ? "Drafting one listing at a time." : `Drafting up to ${concurrency} listings at a time.`;
+  const settledPace = count("stopped") > 0 ? "Drafting stopped. Resume queues the rest." : "Drafting finished.";
+  const pace = busy ? `${draftingPace} Work carries on if you close this tab.` : settledPace;
 
   return (
     <>

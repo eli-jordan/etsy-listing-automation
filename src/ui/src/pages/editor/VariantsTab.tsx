@@ -187,10 +187,11 @@ export function VariantsTab({
   function setColours(next: string[]) {
     const lost = mediaLostBy(detail, next);
     onUpdate(selectColours(detail, next));
+    const mediaKind = lost === 1 ? "image" : "images";
     setStatus(
       lost === 0
         ? ""
-        : `Removed ${lost} listing ${lost === 1 ? "image" : "images"} for colours no longer sold.`,
+        : `Removed ${lost} listing ${mediaKind} for colours no longer sold.`,
     );
   }
 
@@ -214,10 +215,11 @@ export function VariantsTab({
     const colours = chosen === undefined ? [] : Object.keys(chosen.colors).sort();
     const lost = mediaLostBy(detail, colours);
     onUpdate(selectGarmentProfile(detail, name, colours));
+    const mediaKind = lost === 1 ? "image" : "images";
     setStatus(
       lost === 0
         ? ""
-        : `Removed ${lost} listing ${lost === 1 ? "image" : "images"} for colours no longer sold.`,
+        : `Removed ${lost} listing ${mediaKind} for colours no longer sold.`,
     );
   }
 
@@ -467,10 +469,7 @@ function ownDesignHint(
   );
   const only = `Only ${cap(colour)} changes.`;
   if (siblings.length === 0) return only;
-  const what = linked
-    ? "the design for all shirts"
-    : tone === undefined
-      ? "their design"
-      : `the design for ${toneLabel(tone)}`;
+  const toneDesign = tone === undefined ? "their design" : `the design for ${toneLabel(tone)}`;
+  const what = linked ? "the design for all shirts" : toneDesign;
   return `${only} ${listNames(siblings)} keep${siblings.length === 1 ? "s" : ""} ${what}.`;
 }

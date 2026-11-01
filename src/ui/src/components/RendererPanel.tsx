@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { getRuntime, type Preparation, type Runtime } from "../api/preparation";
 import type { Renderer } from "../types";
+import { mapStatusClass, preparationAction, prepareButtonLabel } from "./preparationPresentation";
 export function RendererPanel({
   settings,
   renderer,
@@ -45,14 +46,7 @@ export function RendererPanel({
   const rebuilding = job?.kind === "rebuild";
   const label = pending ? "Preparing" : preparationLabel(preparation);
   const recovery = preparation?.maps.reason === "photo_changed";
-  const action =
-    preparation?.latest_job?.phase === "failed"
-      ? "retry"
-      : recovery
-        ? "prepare_again"
-        : marigoldMapsReady(preparation?.maps)
-          ? "prepare_again"
-          : "prepare";
+  const action = preparationAction(preparation);
   return (
     <section className="realism mg-preparation">
       <h3 className="realism__heading">Renderer</h3>
@@ -70,7 +64,7 @@ export function RendererPanel({
           <div className="mg-row">
             <strong>Template maps</strong>
             <span
-              className={`tag mg-status${label === "Ready" ? " mg-status--ready" : label === "Failed" ? " mg-status--failed" : ""}`}
+              className={`tag mg-status${mapStatusClass(label)}`}
             >
               {label}
             </span>
@@ -78,12 +72,13 @@ export function RendererPanel({
           {!job && preparation?.maps.state === "out_of_date" && preparation.maps.reason && (
             <p className="mg-help">{preparation.maps.message}</p>
           )}
-          {rebuilding ? (
+          {rebuilding && (
             <div className="mg-progress mg-rebuild" role="status">
               <span className="dv-spinner" aria-hidden="true" />
               Rebuilding maps
             </div>
-          ) : job ? (
+          )}
+          {!rebuilding && job && (
             <div className="mg-progress">
               <PreparationProgress job={job} />
               <button
@@ -94,7 +89,8 @@ export function RendererPanel({
                 {job.phase === "cancelling" ? "Cancelling…" : "Cancel preparation"}
               </button>
             </div>
-          ) : (
+          )}
+          {!rebuilding && !job && (
             <button
               type="button"
               className={
@@ -104,13 +100,7 @@ export function RendererPanel({
               disabled={pending || !preparation || !runtime?.available}
               onClick={() => onPrepare(action, recovery && action !== "retry")}
             >
-              {action === "retry"
-                ? "Retry preparation"
-                : recovery
-                  ? "Reset masks and prepare"
-                  : action === "prepare_again"
-                    ? "Prepare again"
-                    : "Prepare template"}
+              {prepareButtonLabel(action, recovery)}
             </button>
           )}
           {(preparation?.latest_job?.error || error) && (
@@ -133,11 +123,10 @@ export function RendererPanel({
                 Prepare again to use {runtime.engine_version}.
               </p>
             )}
-          {job && !rebuilding ? (
+          {job && !rebuilding && (
             <p className="mg-help">You can close this browser. Preparation will continue.</p>
-          ) : (
-            !job && action === "retry" && <p className="mg-help">Completed steps will be reused.</p>
           )}
+          {!job && action === "retry" && <p className="mg-help">Completed steps will be reused.</p>}
           {settings(runtime)}
         </>
       )}

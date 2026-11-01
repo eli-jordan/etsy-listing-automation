@@ -22,7 +22,7 @@
 export interface EventStreamOptions<Event> {
   /** The last event id already known -- `undefined` asks the server for
    * everything, which is what a caller that has seen nothing wants. */
-  lastEventId?: number | undefined;
+  lastEventId?: number;
   onEvent: (event: Event) => void;
   /** The stream closed because the run reached its last event -- there is
    * nothing more to read. */

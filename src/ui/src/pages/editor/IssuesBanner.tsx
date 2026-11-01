@@ -110,7 +110,7 @@ export function IssuesBanner({
               )}
             </span>
           </span>
-          {onJumpTo === undefined ? null : issue.tab === activeTab ? (
+          {onJumpTo !== undefined && (issue.tab === activeTab ? (
             <span className="issue__fix issue__fix--here">Below</span>
           ) : (
             <button
@@ -121,7 +121,7 @@ export function IssuesBanner({
             >
               Fix &rarr;
             </button>
-          )}
+          ))}
         </div>
       ))}
     </div>

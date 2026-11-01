@@ -2,7 +2,6 @@ import { api } from "./client";
 import type {
   MediaFileSummary,
   ListingTemplateDetail,
-  ListingTemplateDraft,
   ListingTemplateSaveResult,
   ListingTemplateSource,
   ListingTemplateSummary,
@@ -42,7 +41,7 @@ function sourceQuery(source: ListingTemplateSource) {
  * become one -- a `./` file that cannot be read names the file. */
 export async function getListingTemplateDraft(
   source: ListingTemplateSource,
-): Promise<ListingTemplateDraft> {
+): Promise<ListingTemplateDetail> {
   const { data, error } = await api.GET("/api/listing-templates/draft", {
     params: { query: sourceQuery(source) },
   });

@@ -82,14 +82,12 @@ function TemplateCard({
     if (files.length > 0) onDropFiles(files);
   }
 
-  const what =
-    over === null
-      ? ""
-      : over.zip
-        ? "a ZIP"
-        : over.allPngs
-          ? plural(over.count, "PNG", "PNGs")
-          : plural(over.count, "file", "files");
+  let what = "";
+  if (over !== null) {
+    what = plural(over.count, "file", "files");
+    if (over.allPngs) what = plural(over.count, "PNG", "PNGs");
+    if (over.zip) what = "a ZIP";
+  }
 
   return (
     <article

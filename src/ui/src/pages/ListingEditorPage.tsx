@@ -86,12 +86,8 @@ export function ListingEditorPage() {
   // rather than clearing on change is what makes showing a stale document
   // impossible: one left over from a previous listing simply does not match. (A
   // draft's name is `""`, which is never a route name.)
-  const initial =
-    handed !== null && handed.name === routeName
-      ? handed
-      : fetched !== null && (fetched.name || null) === routeName
-        ? fetched
-        : null;
+  const matchingFetched = fetched !== null && (fetched.name || null) === routeName ? fetched : null;
+  const initial = handed !== null && handed.name === routeName ? handed : matchingFetched;
 
   useEffect(() => {
     if (initial !== null) return;

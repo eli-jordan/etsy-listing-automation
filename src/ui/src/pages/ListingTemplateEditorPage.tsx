@@ -85,6 +85,7 @@ export function ListingTemplateEditorPage() {
   const [fetched, setFetched] = useState<Loaded | null>(null);
   const [loadError, setLoadError] = useState("");
 
+  const matchingFetched = fetched !== null && fetched.key === key ? fetched : null;
   const initial: Loaded | null =
     handed !== null && handed.name === routeName
       ? {
@@ -92,9 +93,7 @@ export function ListingTemplateEditorPage() {
           detail: handed,
           owner: { kind: "listing-template", name: routeName },
         }
-      : fetched !== null && fetched.key === key
-        ? fetched
-        : null;
+      : matchingFetched;
 
   useEffect(() => {
     if (initial !== null || key === null) return;

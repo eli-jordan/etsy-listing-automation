@@ -31,15 +31,9 @@ export async function prepareTemplate(
   const { data, error } = await api.POST("/api/preparation/jobs", { body });
   if (error || !data) {
     const detail: unknown = error?.detail;
-    const message =
-      typeof detail === "string"
-        ? detail
-        : detail &&
-            typeof detail === "object" &&
-            "message" in detail &&
-            typeof detail.message === "string"
-          ? detail.message
-          : "Preparation could not start. Try again.";
+    let message = "Preparation could not start. Try again.";
+    if (typeof detail === "string") message = detail;
+    else if (detail && typeof detail === "object" && "message" in detail && typeof detail.message === "string") message = detail.message;
     throw new Error(message);
   }
   return data;
