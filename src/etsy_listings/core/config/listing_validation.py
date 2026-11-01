@@ -39,6 +39,7 @@ from __future__ import annotations
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, replace
 from pathlib import Path
+from types import MappingProxyType
 from typing import Literal
 
 from PIL import Image, UnidentifiedImageError
@@ -740,43 +741,53 @@ def check_listing_yaml_present(*, present: bool) -> list[Issue]:
     return [Issue("block", "details", _LIFECYCLE_WHERE, MISSING_LISTING_YAML)]
 
 
+@dataclass(frozen=True)
+class CheckInputs:
+    """What :func:`check_listing` and :func:`check_listing_template` need from
+    outside the document, pre-resolved by the caller: this module opens no
+    file.
+
+    ``garment_profile`` is ``None`` when the document's ``garment_profile``
+    does not resolve to a real file; the profile-dependent checks (design
+    resolution, colour classification) have nothing to check against then and
+    are skipped, leaving :func:`_check_garment_profile_exists`'s block as the
+    one issue that matters.
+
+    ``description_ref_error`` is the caller's own
+    ``Workspace.load_common_copy(...etsy.description.ref)`` attempt -- ``None``
+    when there is no ref to check, or when it resolved fine.
+
+    ``videos`` is every video ``media:`` names, probed by the caller --
+    `WorkspaceFacts.videos` -- and keyed by its ref.
+    """
+
+    garment_profile: GarmentProfile | None
+    garment_profile_names: Iterable[str]
+    templates: Mapping[str, TemplateInfo]
+    description_ref_error: str | None = None
+    videos: Mapping[str, VideoFacts | ProbeFailure] = MappingProxyType({})
+
+
 def check_listing(
     listing: Listing,
+    inputs: CheckInputs,
     *,
-    garment_profile: GarmentProfile | None,
-    garment_profile_names: Iterable[str],
     design_paths: Mapping[str, Path],
-    templates: Mapping[str, TemplateInfo],
     published: bool | None = None,
-    description_ref_error: str | None = None,
-    videos: Mapping[str, VideoFacts | ProbeFailure] | None = None,
 ) -> list[Issue]:
     """Every business-level issue with ``listing``, assuming it already passed
     `Listing.model_validate` -- structural failures are the API layer's to
-    catch and never reach here.
-
-    ``garment_profile`` is ``None`` when ``listing.garment_profile`` does not
-    resolve to a real file; the profile-dependent checks (design resolution,
-    colour classification) have nothing to check against then and are
-    skipped, leaving :func:`_check_garment_profile_exists`'s block as the one
-    issue that matters.
-
-    ``description_ref_error`` is the caller's own
-    ``Workspace.load_common_copy(listing.etsy.description.ref)`` attempt,
-    pre-resolved the same way ``design_paths`` is -- ``None`` when there is no
-    ref to check, or when it resolved fine.
-
-    ``videos`` is every video ``media:`` names, probed by the caller --
-    `WorkspaceFacts.videos` -- and keyed by its ref, for the same reason: this
-    module opens no file.
+    catch and never reach here. ``design_paths`` arrive resolved, like the
+    rest of ``inputs``.
     """
+    garment_profile, templates = inputs.garment_profile, inputs.templates
     issues: list[Issue] = []
-    issues += _check_garment_profile_exists(listing, garment_profile_names)
+    issues += _check_garment_profile_exists(listing, inputs.garment_profile_names)
     issues += check_artwork(listing, garment_profile, templates)
     issues += _check_colours_enabled(listing)
     issues += _check_price_source(listing)
     issues += _check_media_present(listing)
-    issues += _check_copy(listing, description_ref_error=description_ref_error)
+    issues += _check_copy(listing, description_ref_error=inputs.description_ref_error)
     if garment_profile is not None:
         issues += _check_design(design_paths, garment_profile)
         issues += _check_printify_variant_limit(listing, garment_profile)
@@ -788,22 +799,14 @@ def check_listing(
         info = templates.get(name)
         if info is not None:
             issues += check_prepared_maps(name, info.preparation_error)
-    issues += check_videos(videos or {})
+    issues += check_videos(inputs.videos)
     issues += _check_tags(listing)
     if published is not None:
         issues += check_lifecycle_verb(listing.lifecycle, published=published)
     return issues
 
 
-def check_listing_template(
-    template: ListingTemplate,
-    *,
-    garment_profile: GarmentProfile | None,
-    garment_profile_names: Iterable[str],
-    templates: Mapping[str, TemplateInfo],
-    description_ref_error: str | None = None,
-    videos: Mapping[str, VideoFacts | ProbeFailure] | None = None,
-) -> list[Issue]:
+def check_listing_template(template: ListingTemplate, inputs: CheckInputs) -> list[Issue]:
     """Every production issue with a listing template: the checks
     :func:`check_listing` makes about garment, colours, price source,
     gallery, videos and mockup-template kinds, and none of its design, brief,
@@ -816,16 +819,17 @@ def check_listing_template(
     module opens no file), and nothing here asks a provider -- live facts such
     as a price under Printify's cost stay deployment-time checks.
     """
+    garment_profile = inputs.garment_profile
     issues: list[Issue] = []
-    issues += _check_garment_profile_exists(template, garment_profile_names)
+    issues += _check_garment_profile_exists(template, inputs.garment_profile_names)
     issues += _check_colours_enabled(template)
     issues += _check_price_source(template)
     issues += _check_media_present(template)
-    issues += check_description_ref(template.etsy.description.ref, description_ref_error)
+    issues += check_description_ref(template.etsy.description.ref, inputs.description_ref_error)
     if garment_profile is not None:
         issues += _check_template_tones(template, garment_profile)
         issues += _check_printify_variant_limit(template, garment_profile)
-    issues += _check_template_kind_colour_match(template, templates)
+    issues += _check_template_kind_colour_match(template, inputs.templates)
     issues += _check_variation_images(template)
-    issues += check_videos(videos or {})
+    issues += check_videos(inputs.videos)
     return issues

@@ -17,7 +17,7 @@ from pathlib import Path
 
 from etsy_listings.core.config.description import DescriptionConfig
 from etsy_listings.core.config.listing_template import ListingTemplate
-from etsy_listings.core.config.listing_validation import Issue, check_listing_template
+from etsy_listings.core.config.listing_validation import CheckInputs, Issue, check_listing_template
 from etsy_listings.core.config.media import ProbeFailure, VideoFacts, media_kind
 from etsy_listings.core.workspace.facts import WorkspaceFacts
 from etsy_listings.core.workspace.workspace import InvalidRefError, Workspace
@@ -45,11 +45,13 @@ def check_listing_template_files(
             videos[entry] = ProbeFailure(f"cannot be used: {exc.detail}")
     return check_listing_template(
         template,
-        garment_profile=facts.garment_profile(template.garment_profile),
-        garment_profile_names=facts.garment_profile_names,
-        templates=facts.templates,
-        description_ref_error=str(described.error) if described.error is not None else None,
-        videos=videos,
+        CheckInputs(
+            garment_profile=facts.garment_profile(template.garment_profile),
+            garment_profile_names=facts.garment_profile_names,
+            templates=facts.templates,
+            description_ref_error=str(described.error) if described.error is not None else None,
+            videos=videos,
+        ),
     )
 
 

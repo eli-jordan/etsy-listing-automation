@@ -1,6 +1,6 @@
 """Prepared rendering through the listing engine, with durable synthetic maps."""
 
-from etsy_listings.core.config.listing_validation import check_listing
+from etsy_listings.core.config.listing_validation import CheckInputs, check_listing
 from etsy_listings.core.engine import build_plan
 from etsy_listings.core.engine.stages.render import RenderStage
 from etsy_listings.core.preparation.artifacts import Artifacts
@@ -16,10 +16,12 @@ def test_missing_maps_have_the_same_listing_and_engine_refusal(workspace_root):
     facts = WorkspaceFacts.gather(workspace)
     issues = check_listing(
         listing,
-        garment_profile=facts.garment_profile(listing.garment_profile),
-        garment_profile_names=facts.garment_profile_names,
+        CheckInputs(
+            garment_profile=facts.garment_profile(listing.garment_profile),
+            garment_profile_names=facts.garment_profile_names,
+            templates=facts.templates,
+        ),
         design_paths={},
-        templates=facts.templates,
     )
     planned = build_plan(a_context(workspace_root), FIXTURE_LISTING, a_lock(), (RenderStage(),))
     refusal = planned.plan.stage_plans[0].blocked
