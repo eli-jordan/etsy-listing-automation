@@ -15,6 +15,7 @@ import subprocess
 import threading
 import time
 from pathlib import Path
+from typing import Any
 from uuid import uuid4
 
 from PIL import Image
@@ -27,10 +28,24 @@ PROCESS_SUSPEND_RESUME = 0x0800
 INHERIT_HANDLE = False
 
 
-def run(output: Path) -> None:
-    cache = output / ("shutdown-native-cache-" + uuid4().hex)
-    cache.mkdir()
-    Image.new("RGB", (2048, 2048), (130, 150, 170)).save(cache / "photo.png")
+def _suspend_process(pid: int) -> None:
+    kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel.OpenProcess.restype = ctypes.c_void_p
+    kernel.OpenProcess.argtypes = [ctypes.c_ulong, ctypes.c_int, ctypes.c_ulong]
+    handle = kernel.OpenProcess(PROCESS_SUSPEND_RESUME, INHERIT_HANDLE, pid)
+    if not handle:
+        raise ctypes.WinError(ctypes.get_last_error())
+    try:
+        native = ctypes.WinDLL("ntdll")
+        native.NtSuspendProcess.argtypes = [ctypes.c_void_p]
+        if status := native.NtSuspendProcess(handle):
+            raise RuntimeError(f"Native suspend failed: {status}")
+    finally:
+        kernel.CloseHandle.argtypes = [ctypes.c_void_p]
+        kernel.CloseHandle(handle)
+
+
+def _load_watchdog() -> Any:
     spec = importlib.util.spec_from_file_location(
         "watchdog", Path(__file__).with_name("validate_marigold_watchdog.py")
     )
@@ -38,35 +53,53 @@ def run(output: Path) -> None:
     assert spec.loader
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
+    return module
+
+
+class _Suspender:
+    """Suspends the worker's owned native backend at the call's first progress."""
+
+    def __init__(self, cache: Path, watchdog: Any) -> None:
+        self.cache = cache
+        self.watchdog = watchdog
+        self.pid: int | None = None
+        self.suspended = threading.Event()
+
+    def __call__(self, _progress: dict) -> None:
+        if self.pid is not None:
+            return
+        self.pid = self.watchdog.owned_pid(self.cache)
+        _suspend_process(self.pid)
+        self.suspended.set()
+
+    def kill(self) -> None:
+        if self.pid is not None:
+            subprocess.run(
+                ["taskkill", "/PID", str(self.pid), "/T", "/F"],
+                timeout=30,
+                capture_output=True,
+                check=False,
+            )
+
+
+def _write_report(output: Path, cache: Path, report: dict) -> None:
+    report["artifact_exists"] = (cache / "depth.npz").exists()
+    report["partial_artifacts"] = [p.name for p in cache.glob(".depth.npz.*")]
+    (output / "shutdown.json").write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
+    print(json.dumps(report, indent=2), flush=True)
+
+
+def run(output: Path) -> None:
+    cache = output / ("shutdown-native-cache-" + uuid4().hex)
+    cache.mkdir()
+    Image.new("RGB", (2048, 2048), (130, 150, 170)).save(cache / "photo.png")
+    suspend = _Suspender(cache, _load_watchdog())
     runtime = Runtime()
     worker = runtime.worker(runtime.inspect(), cache_root=cache)
     report: dict = {
         "shutdown_grace_seconds": SHUTDOWN_TIMEOUT,
         "fault": "owned native backend suspended",
     }
-    suspended = threading.Event()
-    pid = None
-
-    def suspend(_progress: dict) -> None:
-        nonlocal pid
-        if pid is not None:
-            return
-        pid = module.owned_pid(cache)
-        kernel = ctypes.WinDLL("kernel32", use_last_error=True)
-        kernel.OpenProcess.restype = ctypes.c_void_p
-        kernel.OpenProcess.argtypes = [ctypes.c_ulong, ctypes.c_int, ctypes.c_ulong]
-        handle = kernel.OpenProcess(PROCESS_SUSPEND_RESUME, INHERIT_HANDLE, pid)
-        if not handle:
-            raise ctypes.WinError(ctypes.get_last_error())
-        try:
-            native = ctypes.WinDLL("ntdll")
-            native.NtSuspendProcess.argtypes = [ctypes.c_void_p]
-            if status := native.NtSuspendProcess(handle):
-                raise RuntimeError(f"Native suspend failed: {status}")
-        finally:
-            kernel.CloseHandle.argtypes = [ctypes.c_void_p]
-            kernel.CloseHandle(handle)
-        suspended.set()
 
     def active() -> None:
         try:
@@ -87,7 +120,7 @@ def run(output: Path) -> None:
     thread = threading.Thread(target=active)
     try:
         thread.start()
-        if not suspended.wait(timeout=120):
+        if not suspend.suspended.wait(timeout=120):
             raise RuntimeError("Native owned process was not suspended within startup deadline")
         started = time.perf_counter()
         worker.close()
@@ -95,18 +128,9 @@ def run(output: Path) -> None:
         thread.join(timeout=30)
         report["active_call_finished"] = not thread.is_alive()
     finally:
-        if pid is not None:
-            subprocess.run(
-                ["taskkill", "/PID", str(pid), "/T", "/F"],
-                timeout=30,
-                capture_output=True,
-                check=False,
-            )
+        suspend.kill()
         worker.close()
-        report["artifact_exists"] = (cache / "depth.npz").exists()
-        report["partial_artifacts"] = [p.name for p in cache.glob(".depth.npz.*")]
-        (output / "shutdown.json").write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
-        print(json.dumps(report, indent=2), flush=True)
+        _write_report(output, cache, report)
 
 
 if __name__ == "__main__":

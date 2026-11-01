@@ -1,10 +1,10 @@
 import { useState } from "react";
-import { templateThumbnailUrl } from "../../api/calibrator";
 import { MutedClip } from "../../components/MutedClip";
 import { useHoverPlay } from "../../hooks/useHoverPlay";
-import { isInMedia, mediaKind, missingColours, pictureFor, type MediaOwner } from "../../media";
+import { mediaKind, pictureFor, type MediaOwner } from "../../media";
 import type { ListingDetail, MediaFileSummary, TemplateSummary } from "../../types";
 import type { Focus } from "./focus";
+import { LocatorTemplate } from "./LocatorTemplate";
 import { MAX_VIDEOS } from "./mediaEdits";
 
 /**
@@ -49,13 +49,6 @@ interface Props {
 
 /** Which half of `media:` the locator is browsing. */
 type LocatorMode = "templates" | "files";
-
-function kindLabel(kind: TemplateSummary["kind"]): string {
-  if (kind === "colour-matrix") return "Colour matrix · one photo per colour";
-  if (kind === "multiple") return "Multiple · several garments in one photo";
-  if (kind === "single") return "Single · one fixed photo";
-  return "";
-}
 
 /** `0:06`, `1:15` -- a clip's length as the badge shows it. */
 function clipLength(seconds: number): string {
@@ -158,10 +151,6 @@ export function MediaLocator({
   const videoLimitReached =
     detail.media.filter((entry) => mediaKind(entry) === "video").length >= MAX_VIDEOS;
 
-  function entriesFor(template: string): number {
-    return detail.media.filter((m) => typeof m !== "string" && m.template === template).length;
-  }
-
   return (
     <div className="locator">
       <div className="locator__head">
@@ -246,187 +235,19 @@ export function MediaLocator({
 
       {mode === "templates" && (
         <div className="locator__list">
-          {filtered.map((t) => {
-            const open = openTemplate === t.name;
-            const inCount = entriesFor(t.name);
-            const missing = missingColours(detail.media, detail.colors, t.name);
-            const uncovered = swatchTemplate === t.name ? missing : [];
-            return (
-              <div key={t.name} className={open ? "loc-tmpl loc-tmpl--open" : "loc-tmpl"}>
-                <div
-                  className="loc-tmpl__head"
-                  onClick={() => setOpenTemplate((current) => (current === t.name ? null : t.name))}
-                  onMouseEnter={() =>
-                    onFocus({
-                      kind: "template",
-                      template: t.name,
-                      colour: t.kind === "colour-matrix" ? (detail.colors[0] ?? null) : null,
-                    })
-                  }
-                >
-                  <span className="loc-tmpl__mini">
-                    <img src={templateThumbnailUrl(t.name)} alt="" loading="lazy" />
-                  </span>
-                  <span className="loc-tmpl__text">
-                    <span className="loc-tmpl__name">{t.name}</span>
-                    <span className="loc-tmpl__kind">{kindLabel(t.kind)}</span>
-                  </span>
-                  {inCount > 0 && <span className="loc-tmpl__count">{inCount} in listing</span>}
-                  <span className="loc-tmpl__caret" aria-hidden="true">
-                    {open ? "▾" : "▸"}
-                  </span>
-                </div>
-
-                {open && (
-                  <div className="loc-tmpl__body">
-                    {t.kind === "colour-matrix" && detail.colors.length === 0 ? (
-                      // Nothing to offer: a colour-matrix entry needs a
-                      // colour, and every colour it could name comes from
-                      // the listing's own `colors:`. Adding one anyway would
-                      // write `{template, colour: null}`, which is a block.
-                      <p className="loc-tmpl__note">Pick colours on Variants first.</p>
-                    ) : t.kind === "colour-matrix" ? (
-                      <>
-                        <div className="cchips">
-                          {/* The listing's own colours, not `t.colours`:
-                              a colour-matrix set's photos are named for
-                              ADR-0004's slug, but a template with a shared
-                              filename prefix (`{template}-{colour}.png`)
-                              reports that whole prefixed stem as its
-                              "colour" (`template_colours`'s enumeration
-                              direction has no slug to match against,
-                              unlike `template_base_image`'s lookup
-                              direction, which resolves a bare slug against
-                              exactly this fallback) -- so comparing against
-                              `detail.colors` by string equality showed
-                              nothing at all for such a template. `media[]`
-                              always stores the listing's own bare slug
-                              (confirmed by `isInMedia`), so that is what a
-                              chip must offer, regardless of what the
-                              template's own photos happen to be named. */}
-                          {detail.colors.map((colour) => {
-                            const inListing = isInMedia(detail.media, t.name, colour);
-                            return (
-                              <button
-                                key={colour}
-                                type="button"
-                                className={inListing ? "cchip cchip--in" : "cchip"}
-                                aria-pressed={inListing}
-                                onClick={() => onToggleTemplate(t.name, colour)}
-                                onMouseEnter={() =>
-                                  onFocus({ kind: "template", template: t.name, colour })
-                                }
-                              >
-                                {colour}
-                                {inListing && (
-                                  <svg
-                                    className="cchip__tick"
-                                    viewBox="0 0 24 24"
-                                    strokeWidth="3.5"
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
-                                    aria-hidden="true"
-                                  >
-                                    <path d="M5 13l4 4L19 7" />
-                                  </svg>
-                                )}
-                              </button>
-                            );
-                          })}
-                        </div>
-
-                        {missing.length > 1 && (
-                          <button
-                            type="button"
-                            className="btn-like btn-like--ghost btn-sm"
-                            onClick={() => onAddMissingColours(t.name)}
-                          >
-                            + Add all {missing.length} remaining colours
-                          </button>
-                        )}
-                        {detail.colors.length > 0 && missing.length === 0 && (
-                          <p className="loc-tmpl__note">
-                            Every colour this listing sells is already in the reel.
-                          </p>
-                        )}
-
-                        {inCount > 0 && (
-                          <div className="tmpl-swatch">
-                            <div className="tmpl-swatch__row">
-                              <span className="tmpl-swatch__label" id={`swatch-${t.name}`}>
-                                Use for Etsy colour swatches
-                                <span className="tmpl-swatch__sub">
-                                  {swatchTemplate === t.name
-                                    ? "Etsy shows these beside each colour option"
-                                    : swatchTemplate
-                                      ? `Currently using ${swatchTemplate}`
-                                      : "Off — no swatch images sent"}
-                                </span>
-                              </span>
-                              <button
-                                type="button"
-                                role="switch"
-                                aria-checked={swatchTemplate === t.name}
-                                aria-labelledby={`swatch-${t.name}`}
-                                className={
-                                  swatchTemplate === t.name ? "switch switch--on" : "switch"
-                                }
-                                onClick={() => onToggleSwatchSource(t.name)}
-                              >
-                                <span className="switch__knob" />
-                              </button>
-                            </div>
-                            {swatchTemplate === t.name && (
-                              <>
-                                <span
-                                  className={
-                                    uncovered.length > 0
-                                      ? "swatch-status swatch-status--warn"
-                                      : "swatch-status swatch-status--ok"
-                                  }
-                                >
-                                  {uncovered.length > 0
-                                    ? `${detail.colors.length - uncovered.length} of ${detail.colors.length} covered`
-                                    : `All ${detail.colors.length} covered`}
-                                </span>
-                                {uncovered.length > 0 && (
-                                  <p className="swatch-note">
-                                    {uncovered.join(", ")} {uncovered.length === 1 ? "has" : "have"}{" "}
-                                    no image here — Etsy keeps{" "}
-                                    {uncovered.length === 1 ? "that swatch" : "those swatches"}{" "}
-                                    empty.
-                                  </p>
-                                )}
-                              </>
-                            )}
-                          </div>
-                        )}
-                      </>
-                    ) : (
-                      <>
-                        <p className="loc-tmpl__note">
-                          {t.kind === "multiple"
-                            ? "One photo showing several colours at once — it carries no colour of its own."
-                            : "One fixed photo, the same for every colour."}
-                        </p>
-                        <button
-                          type="button"
-                          className={
-                            isInMedia(detail.media, t.name, null)
-                              ? "btn-like btn-like--ghost btn-sm"
-                              : "btn-like btn-like--primary btn-sm"
-                          }
-                          onClick={() => onToggleTemplate(t.name, null)}
-                        >
-                          {isInMedia(detail.media, t.name, null) ? "Remove from listing" : "+ Add"}
-                        </button>
-                      </>
-                    )}
-                  </div>
-                )}
-              </div>
-            );
-          })}
+          {filtered.map((t) => (
+            <LocatorTemplate
+              key={t.name}
+              template={t}
+              detail={detail}
+              open={openTemplate === t.name}
+              onToggleOpen={() =>
+                setOpenTemplate((current) => (current === t.name ? null : t.name))
+              }
+              swatchTemplate={swatchTemplate}
+              actions={{ onToggleTemplate, onAddMissingColours, onToggleSwatchSource, onFocus }}
+            />
+          ))}
           {filtered.length === 0 && (
             <p className="locator__empty">No template matches that search.</p>
           )}

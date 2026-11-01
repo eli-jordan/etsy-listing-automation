@@ -16,6 +16,12 @@ function VariantsTab(
   return <VariantsTabView {...props} previewed={previewed} onPreview={setPreviewed} />;
 }
 
+function card(container: HTMLElement): HTMLElement {
+  const el = container.querySelector(".color-prints");
+  if (el === null) throw new Error("no prints card");
+  return el as HTMLElement;
+}
+
 function template(over: Partial<TemplateSummary> & { name: string }): TemplateSummary {
   return {
     kind: "colour-matrix",
@@ -259,7 +265,7 @@ describe("VariantsTab", () => {
       { name: "comfort-colors-1717", sizes: ["S"], colors: {} },
     ]);
     render(<VariantsTab detail={detail({ colors: ["forest"] })} onUpdate={vi.fn()} />);
-    await screen.findByText("forest");
+    expect(await screen.findByText("forest")).toBeInTheDocument();
   });
 
   it("toggling a colour off removes it from colors", async () => {
@@ -463,12 +469,6 @@ describe("VariantsTab's tone tags and the card under the stage", () => {
     return { ...view, onChooseSlot };
   }
 
-  function card(container: HTMLElement): HTMLElement {
-    const el = container.querySelector(".color-prints");
-    if (el === null) throw new Error("no prints card");
-    return el as HTMLElement;
-  }
-
   it("marks a colour the garment profile has no tone for as no tone", async () => {
     renderTab({ colors: ["black", "heather"] });
     const row = (await screen.findByText("heather")).closest(".color-row");
@@ -590,12 +590,6 @@ describe("VariantsTab's colour designs (interactions §5-§7)", () => {
   const row = (colour: string) => {
     const el = screen.getByText(colour).closest(".color-row");
     if (el === null) throw new Error(`no row for ${colour}`);
-    return el as HTMLElement;
-  };
-
-  const card = (container: HTMLElement) => {
-    const el = container.querySelector(".color-prints");
-    if (el === null) throw new Error("no prints card");
     return el as HTMLElement;
   };
 

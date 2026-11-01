@@ -86,9 +86,6 @@ export type MediaEntry = TemplateMediaEntry | string;
 
 export type ListingTemplateSummary = components["schemas"]["ListingTemplateSummary"];
 export type ListingTemplateDetail = components["schemas"]["ListingTemplateDetail"];
-/** A detail with `name` `""`: what Save as listing template or Clone would
- * write, written nowhere. `source` and `assets` say where it came from. */
-export type ListingTemplateDraft = ListingTemplateDetail;
 export type ListingTemplateSource = components["schemas"]["ListingTemplateSource"];
 export type ListingTemplateSaveResult = components["schemas"]["ListingTemplateSaveResult"];
 

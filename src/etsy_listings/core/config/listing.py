@@ -78,6 +78,22 @@ the seller has not filled yet. *Which* file a colour prints is
 `config/artwork.py`'s question, never a reader's (ADR-0053)."""
 
 
+def _check_design_entry(key: str, ref: str | None, colors: list[str] | None) -> None:
+    if key in TONE_KEYS.values():
+        if ref is not None and not ref.strip():
+            raise ValueError(f"design.{key} has no file; leave it null until one is chosen")
+        return
+    if ref is None or not ref.strip():
+        raise ValueError(
+            f"design.{key} has no file; only on-light and on-dark may be left unchosen"
+        )
+    if key != DEFAULT and colors is not None and key not in colors:
+        raise ValueError(
+            f"design.{key} is not a colour this listing sells -- a key other than "
+            f"default, on-light and on-dark must name one of colors"
+        )
+
+
 def _check_design(design: Mapping[str, str | None], colors: list[str] | None) -> None:
     """The malformed maps -- refused writes, not blockers (spec: *Saving,
     blockers and warnings*). Incomplete ones (an empty slot, no design at
@@ -88,19 +104,7 @@ def _check_design(design: Mapping[str, str | None], colors: list[str] | None) ->
             "prints one design on every shirt, or one for light shirts and one for dark"
         )
     for key, ref in design.items():
-        if key in TONE_KEYS.values():
-            if ref is not None and not ref.strip():
-                raise ValueError(f"design.{key} has no file; leave it null until one is chosen")
-            continue
-        if ref is None or not ref.strip():
-            raise ValueError(
-                f"design.{key} has no file; only on-light and on-dark may be left unchosen"
-            )
-        if key != DEFAULT and colors is not None and key not in colors:
-            raise ValueError(
-                f"design.{key} is not a colour this listing sells -- a key other than "
-                f"default, on-light and on-dark must name one of colors"
-            )
+        _check_design_entry(key, ref, colors)
     has_colour_keys = any(key not in BASE_KEYS for key in design)
     if has_colour_keys and not any(key in design for key in BASE_KEYS):
         raise ValueError(
@@ -162,6 +166,16 @@ def _check_gallery(media: list[MediaEntry]) -> None:
         )
 
 
+def _check_currencies(
+    prices: Mapping[str, Money], price_overrides: Mapping[str, Mapping[str, Money]], currency: str
+) -> None:
+    for size, price in prices.items():
+        require_currency(price, currency, f"prices.{size}")
+    for color, overrides in price_overrides.items():
+        for size, price in overrides.items():
+            require_currency(price, currency, f"price_overrides.{color}.{size}")
+
+
 def check_production_fields(
     *,
     colors: list[str],
@@ -178,11 +192,7 @@ def check_production_fields(
     is instantiated *into* a listing: a rule stated twice here is a template
     that saves and then makes listings that will not load."""
     if currency:
-        for size, price in prices.items():
-            require_currency(price, currency, f"prices.{size}")
-        for color, overrides in price_overrides.items():
-            for size, price in overrides.items():
-                require_currency(price, currency, f"price_overrides.{color}.{size}")
+        _check_currencies(prices, price_overrides, currency)
 
     _check_gallery(media)
 

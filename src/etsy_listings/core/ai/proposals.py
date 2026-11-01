@@ -292,16 +292,23 @@ def proposal_staleness(frozen: SeoProposalSnapshot, now: SeoProposalSnapshot) ->
     if frozen.garment_profile != now.garment_profile:
         reasons.append("garment profile changed since")
     else:
-        if not _same_set(frozen.materials, now.materials):
-            reasons.append("materials changed since")
-        if frozen.product_type != now.product_type:
-            reasons.append("product type changed since")
-        if frozen.garment_brand != now.garment_brand:
-            reasons.append("garment brand changed since")
-        if frozen.garment_model != now.garment_model:
-            reasons.append("garment model changed since")
+        reasons += _profile_edits(frozen, now)
     if frozen.design != now.design:
         reasons.append("design changed since")
     elif frozen.design_content_hash != now.design_content_hash:
         reasons.append("design file edited since")
     return ProposalStaleness(is_stale=bool(reasons), reasons=reasons)
+
+
+def _profile_edits(frozen: SeoProposalSnapshot, now: SeoProposalSnapshot) -> list[str]:
+    """The profile's own facts that moved under an unchanged profile name."""
+    reasons: list[str] = []
+    if not _same_set(frozen.materials, now.materials):
+        reasons.append("materials changed since")
+    if frozen.product_type != now.product_type:
+        reasons.append("product type changed since")
+    if frozen.garment_brand != now.garment_brand:
+        reasons.append("garment brand changed since")
+    if frozen.garment_model != now.garment_model:
+        reasons.append("garment model changed since")
+    return reasons

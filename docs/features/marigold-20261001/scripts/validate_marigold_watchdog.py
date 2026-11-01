@@ -63,6 +63,24 @@ def owned_pid(cache: Path) -> int:
     return leaf
 
 
+def _suspend_process(pid: int) -> None:
+    kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel.OpenProcess.restype = ctypes.c_void_p
+    kernel.OpenProcess.argtypes = [ctypes.c_ulong, ctypes.c_int, ctypes.c_ulong]
+    handle = kernel.OpenProcess(PROCESS_SUSPEND_RESUME, INHERIT_HANDLE, pid)
+    if not handle:
+        raise ctypes.WinError(ctypes.get_last_error())
+    try:
+        native = ctypes.WinDLL("ntdll")
+        native.NtSuspendProcess.argtypes = [ctypes.c_void_p]
+        status = native.NtSuspendProcess(handle)
+        if status:
+            raise RuntimeError(f"NtSuspendProcess failed with {status}")
+    finally:
+        kernel.CloseHandle.argtypes = [ctypes.c_void_p]
+        kernel.CloseHandle(handle)
+
+
 def run(output: Path) -> None:
     cache = output / ("watchdog-native-cache-" + uuid4().hex)
     cache.mkdir()
@@ -79,21 +97,7 @@ def run(output: Path) -> None:
         if pid is not None:
             return
         pid = owned_pid(cache)
-        kernel = ctypes.WinDLL("kernel32", use_last_error=True)
-        kernel.OpenProcess.restype = ctypes.c_void_p
-        kernel.OpenProcess.argtypes = [ctypes.c_ulong, ctypes.c_int, ctypes.c_ulong]
-        handle = kernel.OpenProcess(PROCESS_SUSPEND_RESUME, INHERIT_HANDLE, pid)
-        if not handle:
-            raise ctypes.WinError(ctypes.get_last_error())
-        try:
-            native = ctypes.WinDLL("ntdll")
-            native.NtSuspendProcess.argtypes = [ctypes.c_void_p]
-            status = native.NtSuspendProcess(handle)
-            if status:
-                raise RuntimeError(f"NtSuspendProcess failed with {status}")
-        finally:
-            kernel.CloseHandle.argtypes = [ctypes.c_void_p]
-            kernel.CloseHandle(handle)
+        _suspend_process(pid)
         suspended_at = time.perf_counter()
         report["pid"] = pid
         report["progress_before_suspend"] = progress

@@ -530,17 +530,25 @@ def _depicted(
     for entry in listing.media:
         if not isinstance(entry, TemplateMediaEntry):
             continue
-        if entry.colour is not None:
-            colours.setdefault(entry.colour, None)
-            continue
-        info = templates.get(entry.template)
-        if info is None or info.kind == "colour-matrix":
-            continue
-        if info.kind == "single" and not info.colours:
+        shown, unnamed = _scene_colours(entry, templates)
+        if unnamed:
             colourless.setdefault(entry.template, None)
-        for colour in sorted(info.colours):
+        for colour in shown:
             colours.setdefault(colour, None)
     return list(colours), list(colourless)
+
+
+def _scene_colours(
+    entry: TemplateMediaEntry, templates: Mapping[str, TemplateInfo]
+) -> tuple[list[str], bool]:
+    """The colours one media entry's scene shows, and whether it is a
+    ``single`` scene that names none."""
+    if entry.colour is not None:
+        return [entry.colour], False
+    info = templates.get(entry.template)
+    if info is None or info.kind == "colour-matrix":
+        return [], False
+    return sorted(info.colours), info.kind == "single" and not info.colours
 
 
 def _unclassified_issue(severity: Severity, profile: str, colours: list[str]) -> list[Issue]:
@@ -612,6 +620,14 @@ def check_artwork(
                 empty[tone].append(colour)
 
     issues = _unclassified_issue("block", listing.garment_profile, unclassified)
+    issues += _empty_slot_issues(empty)
+    if is_light_dark(design):
+        issues += _light_dark_issues(listing, tones, colourless)
+    return issues
+
+
+def _empty_slot_issues(empty: Mapping[Tone, list[str]]) -> list[Issue]:
+    issues: list[Issue] = []
     for tone, colours in empty.items():
         if not colours:
             continue
@@ -624,30 +640,38 @@ def check_artwork(
                 f"{_names(colours)} {noun}, but no design for {_shirts(tone)} is chosen",
             )
         )
-    if is_light_dark(design):
-        issues += [
+    return issues
+
+
+def _light_dark_issues(
+    listing: Listing, tones: Mapping[str, Tone], colourless: list[str]
+) -> list[Issue]:
+    """A scene that cannot pick between the pair, and a pair only half used."""
+    issues = [
+        Issue(
+            "block",
+            "images",
+            f"Listing Images › {template}",
+            f"{template!r} doesn't say which shirt colour it shows, so it can't choose "
+            f"between the designs for light and dark shirts. Name its colour in the "
+            f"calibrator, or remove it from this listing.",
+        )
+        for template in colourless
+    ]
+    used = [
+        tone for tone, users in slot_users(listing.design, listing.colors, tones).items() if users
+    ]
+    if len(used) == 1:
+        other: Tone = "dark" if used[0] == "light" else "light"
+        issues.append(
             Issue(
-                "block",
-                "images",
-                f"Listing Images › {template}",
-                f"{template!r} doesn't say which shirt colour it shows, so it can't choose "
-                f"between the designs for light and dark shirts. Name its colour in the "
-                f"calibrator, or remove it from this listing.",
+                "warn",
+                "variants",
+                _LINK_WHERE,
+                f"Only the design for {_shirts(used[0])} is in use — no {other} shirt you "
+                f"sell needs the design for {_shirts(other)}",
             )
-            for template in colourless
-        ]
-        used = [tone for tone, users in slot_users(design, listing.colors, tones).items() if users]
-        if len(used) == 1:
-            other: Tone = "dark" if used[0] == "light" else "light"
-            issues.append(
-                Issue(
-                    "warn",
-                    "variants",
-                    _LINK_WHERE,
-                    f"Only the design for {_shirts(used[0])} is in use — no {other} shirt you "
-                    f"sell needs the design for {_shirts(other)}",
-                )
-            )
+        )
     return issues
 
 
@@ -674,40 +698,40 @@ def check_videos(videos: Mapping[str, VideoFacts | ProbeFailure]) -> list[Issue]
     an image nor a video when it loads, and the probe refuses a file whose
     contents are not MP4/MOV whatever it is called.
     """
-    issues: list[Issue] = []
-    for ref, facts in videos.items():
-        where = f"Listing Images › {ref}"
+    return [issue for ref, facts in videos.items() for issue in _video_issues(ref, facts)]
 
-        def block(message: str, where: str = where) -> None:
-            issues.append(Issue("block", "images", where, message))
 
-        if isinstance(facts, ProbeFailure):
-            block(f"{ref} {facts.reason}. Etsy takes an MP4 or MOV video with a picture.")
-            continue
-        if facts.size_bytes > MAX_VIDEO_BYTES:
-            block(
-                f"{ref} is {facts.size_bytes / 1_000_000:.1f} MB, over Etsy's "
-                f"{MAX_VIDEO_BYTES // 1_000_000} MB limit for a video."
+def _video_issues(ref: str, facts: VideoFacts | ProbeFailure) -> list[Issue]:
+    where = f"Listing Images › {ref}"
+    if isinstance(facts, ProbeFailure):
+        message = f"{ref} {facts.reason}. Etsy takes an MP4 or MOV video with a picture."
+        return [Issue("block", "images", where, message)]
+    refusals: list[str] = []
+    if facts.size_bytes > MAX_VIDEO_BYTES:
+        refusals.append(
+            f"{ref} is {facts.size_bytes / 1_000_000:.1f} MB, over Etsy's "
+            f"{MAX_VIDEO_BYTES // 1_000_000} MB limit for a video."
+        )
+    if not MIN_VIDEO_SECONDS <= facts.duration_seconds <= MAX_VIDEO_SECONDS:
+        refusals.append(
+            f"{ref} runs {facts.duration_seconds:.1f} s; Etsy takes videos of "
+            f"{MIN_VIDEO_SECONDS:g}–{MAX_VIDEO_SECONDS:g} seconds."
+        )
+    if min(facts.width, facts.height) < MIN_VIDEO_SHORT_SIDE:
+        refusals.append(
+            f"{ref} is {facts.width}x{facts.height}; Etsy needs at least "
+            f"{MIN_VIDEO_SHORT_SIDE} px on the shorter side."
+        )
+    issues = [Issue("block", "images", where, message) for message in refusals]
+    if facts.has_audio:
+        issues.append(
+            Issue(
+                "info",
+                "images",
+                where,
+                f"{ref} has a sound track; Etsy strips the sound, so buyers see it silent.",
             )
-        if not MIN_VIDEO_SECONDS <= facts.duration_seconds <= MAX_VIDEO_SECONDS:
-            block(
-                f"{ref} runs {facts.duration_seconds:.1f} s; Etsy takes videos of "
-                f"{MIN_VIDEO_SECONDS:g}–{MAX_VIDEO_SECONDS:g} seconds."
-            )
-        if min(facts.width, facts.height) < MIN_VIDEO_SHORT_SIDE:
-            block(
-                f"{ref} is {facts.width}x{facts.height}; Etsy needs at least "
-                f"{MIN_VIDEO_SHORT_SIDE} px on the shorter side."
-            )
-        if facts.has_audio:
-            issues.append(
-                Issue(
-                    "info",
-                    "images",
-                    where,
-                    f"{ref} has a sound track; Etsy strips the sound, so buyers see it silent.",
-                )
-            )
+        )
     return issues
 
 

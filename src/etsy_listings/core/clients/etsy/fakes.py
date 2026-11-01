@@ -66,6 +66,16 @@ class _Attached:
     anchor: int
 
 
+def _videos_after(
+    count: int, featured: list[_Attached], others: list[_Attached], image_count: int
+) -> list[_Attached]:
+    """The videos Shop Manager shows right after the ``count``-th image: the
+    featured one after the first, each other after the image count it was
+    anchored at, clamped to the gallery."""
+    first = featured if count == 1 else []
+    return [*first, *(a for a in others if max(1, min(a.anchor, image_count)) == count)]
+
+
 DAY_SECONDS = 24 * 60 * 60
 
 
@@ -245,13 +255,8 @@ class FakeEtsyListingClient(_FakeShopMetadata, EtsyListingClient):
         slots: list[GallerySlot] = []
         for count, image in enumerate(images, start=1):
             slots.append(GallerySlot("image", image.listing_image_id))
-            if count == 1:
-                slots.extend(GallerySlot("video", a.video_id) for a in featured)
-            slots.extend(
-                GallerySlot("video", a.video_id)
-                for a in others
-                if max(1, min(a.anchor, len(images))) == count
-            )
+            shown = _videos_after(count, featured, others, len(images))
+            slots.extend(GallerySlot("video", a.video_id) for a in shown)
         return tuple(slots)
 
     @override

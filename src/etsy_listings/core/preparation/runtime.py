@@ -63,6 +63,15 @@ class Installer(Protocol):
     def verify(self, target: Path, weights: Path, version: str) -> Capability: ...
 
 
+def _discard_staging(staging: Path, failure: BaseException) -> None:
+    if not staging.exists():
+        return
+    try:
+        remove_tree(staging)
+    except OSError as cleanup:
+        failure.add_note(f"Unactivated staging remains for cleanup: {staging}: {cleanup}")
+
+
 class Runtime:
     def __init__(
         self,
@@ -157,45 +166,52 @@ class Runtime:
     def update(self) -> Capability:
         """Stage, validate, then switch. Keep failed and in-use installations immutable."""
         with _LOCK:
-            try:
-                existing = self.selection(self.engine_version, verify=True)
-                if existing.available:
-                    write_json_atomic(
-                        self.root / "current.json", self._pointer(existing.installation_id)
-                    )
-                    return existing
-            except (OSError, ValueError, KeyError, SetupError):
-                pass
+            existing = self._reselect_current()
+            if existing is not None:
+                return existing
             installation_id = uuid.uuid4().hex
             engine = self.root / "runtimes" / self.engine_version
-            staging = engine / (".staging-" + installation_id)
-            target = engine / installation_id
-            staging.mkdir(parents=True)
-            try:
-                report = self.installer.install(staging, self.root / "weights", self.engine_version)
-                if not report.available or report.engine_version != self.engine_version:
-                    _setup_failed(report.problem or "Worker capability mismatch")
-                staging.rename(target)
-                report = self.selection(
-                    self.engine_version, installation_id=installation_id, verify=True
-                )
-                if not report.available:
-                    _setup_failed(report.problem or "Relocated worker is unavailable")
-            except BaseException as exc:
-                if staging.exists():
-                    try:
-                        remove_tree(staging)
-                    except OSError as cleanup:
-                        exc.add_note(
-                            f"Unactivated staging remains for cleanup: {staging}: {cleanup}"
-                        )
-                # A failed relocated installation is unreferenced. Retain it for
-                # diagnostics; the next explicit retry gets a new immutable ID.
-                raise
+            report = self._install(engine, installation_id)
             pointer = self._pointer(installation_id)
             write_json_atomic(engine / "current.json", pointer)
             write_json_atomic(self.root / "current.json", pointer)
             return report
+
+    def _reselect_current(self) -> Capability | None:
+        """Point back at a fully verified installation of the required engine,
+        if one exists; None when a new one must be installed."""
+        try:
+            existing = self.selection(self.engine_version, verify=True)
+            if existing.available:
+                write_json_atomic(
+                    self.root / "current.json", self._pointer(existing.installation_id)
+                )
+                return existing
+        except (OSError, ValueError, KeyError, SetupError):
+            pass
+        return None
+
+    def _install(self, engine: Path, installation_id: str) -> Capability:
+        """Install into staging, relocate it to its immutable directory and
+        verify it there. Staging is removed on any failure."""
+        staging = engine / (".staging-" + installation_id)
+        staging.mkdir(parents=True)
+        try:
+            report = self.installer.install(staging, self.root / "weights", self.engine_version)
+            if not report.available or report.engine_version != self.engine_version:
+                _setup_failed(report.problem or "Worker capability mismatch")
+            staging.rename(engine / installation_id)
+            report = self.selection(
+                self.engine_version, installation_id=installation_id, verify=True
+            )
+            if not report.available:
+                _setup_failed(report.problem or "Relocated worker is unavailable")
+        except BaseException as exc:
+            _discard_staging(staging, exc)
+            # A failed relocated installation is unreferenced. Retain it for
+            # diagnostics; the next explicit retry gets a new immutable ID.
+            raise
+        return report
 
     def _pointer(self, installation_id: str | None) -> dict[str, object]:
         return {

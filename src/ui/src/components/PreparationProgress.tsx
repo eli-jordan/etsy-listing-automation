@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { CheckCircleIcon } from "@phosphor-icons/react/dist/csr/CheckCircle";
 import { ClockIcon } from "@phosphor-icons/react/dist/csr/Clock";
 import type { PreparationJob } from "../api/preparation";
+import { activePreparationStep } from "./preparationPresentation";
 const stepLabels: Record<string, string> = {
   loading_models: "Loading models",
   normals: "Estimating surface direction",
@@ -20,22 +21,14 @@ export function PreparationProgress({ job }: { job: PreparationJob }) {
     const timer = setInterval(() => setTicks((n) => n + 1), 1000);
     return () => clearInterval(timer);
   }, [job.phase]);
-  const step = job.step.toLowerCase();
-  const active = step.includes("normal")
-    ? 0
-    : step.includes("lighting")
-      ? 1
-      : step.includes("depth")
-        ? 2
-        : step.includes("build") || step.includes("bake")
-          ? 3
-          : -1;
+  const active = activePreparationStep(job.step);
+  const queuePosition = job.queue_position ? ` · ${job.queue_position}` : "";
   return (
     <>
       <p className="mg-row">
         <strong>
           {job.phase === "queued"
-            ? `Waiting in queue${job.queue_position ? ` · ${job.queue_position}` : ""}`
+            ? `Waiting in queue${queuePosition}`
             : (stepLabels[job.step] ?? job.step.replaceAll("_", " "))}
         </strong>
         <span>{Math.floor(job.elapsed + ticks - base.ticks)}s</span>
@@ -44,15 +37,15 @@ export function PreparationProgress({ job }: { job: PreparationJob }) {
         {job.placements_completed} / {job.placements_total} placements
       </p>
       <ol className="mg-steps">
-        {["Surface direction", "Garment lighting", "Depth", "Build maps"].map((label, i) => (
-          <li
-            key={label}
-            className={i === active ? "mg-step--active" : i < active ? "mg-step--done" : ""}
-          >
-            {i < active ? <CheckCircleIcon /> : <ClockIcon />}
-            {label}
-          </li>
-        ))}
+        {["Surface direction", "Garment lighting", "Depth", "Build maps"].map((label, i) => {
+          const settledClass = i < active ? "mg-step--done" : "";
+          return (
+            <li key={label} className={i === active ? "mg-step--active" : settledClass}>
+              {i < active ? <CheckCircleIcon /> : <ClockIcon />}
+              {label}
+            </li>
+          );
+        })}
       </ol>
     </>
   );

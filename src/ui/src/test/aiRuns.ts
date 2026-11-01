@@ -154,10 +154,8 @@ export function fakeAiRuns(): FakeAiRuns {
 }
 
 function proposalOf(event: Extract<AiRunEvent, { type: "proposal" }>): ListingProposal {
-  const { type, seq, ...proposal } = event;
-  void type;
-  void seq;
-  return proposal;
+  const { proposal, resolution, snapshot, stale, generated_at, origin } = event;
+  return { proposal, resolution, snapshot, stale, generated_at, origin };
 }
 
 /** A current proposal, every section still open. */

@@ -87,7 +87,7 @@ export function DeployPage() {
   const openStream = useCallback((id: string, lastEventId?: number) => {
     streamRef.current?.close();
     streamRef.current = openRunStream(id, {
-      lastEventId,
+      ...(lastEventId === undefined ? {} : { lastEventId }),
       onEvent: (event) => setState((s) => applyRunEvent(s, event)),
     });
   }, []);
