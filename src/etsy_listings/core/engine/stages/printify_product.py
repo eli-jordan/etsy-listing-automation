@@ -60,10 +60,10 @@ from etsy_listings.core.engine.lock import Lockfile, hash_file
 from etsy_listings.core.engine.stage import Blocked, Stage, StageApplyResult
 from etsy_listings.core.engine.stages.gates import (
     check_artwork,
-    check_copy_is_concrete,
     check_design_resolution,
     check_garment_profile_chosen,
     check_price_source,
+    concrete_description,
     resolved_design,
 )
 from etsy_listings.core.engine.stages.product_diff import compare
@@ -75,7 +75,6 @@ from etsy_listings.core.engine.stages.product_document import (
     check_garment_unchanged,
     money,
 )
-from etsy_listings.core.workspace.common_copy import CommonCopyError
 
 PRODUCT_ID_KEY = "printify_product_id"
 UPLOAD_IDS_KEY = "printify_upload_ids"
@@ -164,13 +163,9 @@ class PrintifyProductStage(Stage[PrintifyProductDesired, AppliedProduct, Product
         if blocked is not None:
             return blocked
 
-        blocked = check_copy_is_concrete(title=config.etsy.title, lead=config.etsy.description.lead)
-        if blocked is not None:
-            return blocked
-        try:
-            description = workspace.compose_description(config.etsy.description)
-        except CommonCopyError as exc:
-            return Blocked(str(exc))
+        description = concrete_description(config.etsy, workspace.compose_description)
+        if isinstance(description, Blocked):
+            return description
 
         # ADR-0053: the colours this product sells must each resolve to a file.
         # No scenes: which photo a mockup uses is the render stage's question.

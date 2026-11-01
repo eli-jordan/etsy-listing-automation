@@ -33,16 +33,30 @@ stage, which is the half that has to stay hard.
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 
 from etsy_listings.core.config import listing_validation as rules
 from etsy_listings.core.config.artwork import DesignMap, Resolved, Tone, resolve
+from etsy_listings.core.config.description import DescriptionConfig
 from etsy_listings.core.config.garment_profile import GarmentProfile
-from etsy_listings.core.config.listing import Listing
+from etsy_listings.core.config.listing import EtsyListingConfig, Listing
 from etsy_listings.core.config.listing_validation import Issue, TemplateInfo
 from etsy_listings.core.config.media import ProbeFailure, VideoFacts
 from etsy_listings.core.engine.stage import Blocked
+from etsy_listings.core.workspace.common_copy import CommonCopyError
+
+
+def concrete_description(
+    config: EtsyListingConfig, compose: Callable[[DescriptionConfig], str]
+) -> str | Blocked:
+    blocked = check_copy_is_concrete(title=config.title, lead=config.description.lead)
+    if blocked is not None:
+        return blocked
+    try:
+        return compose(config.description)
+    except CommonCopyError as exc:
+        return Blocked(str(exc))
 
 
 def _refuse(issues: Sequence[Issue]) -> Blocked | None:

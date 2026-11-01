@@ -52,10 +52,9 @@ from etsy_listings.core.engine.stages.etsy_target import (
     require_etsy_listing_id,
 )
 from etsy_listings.core.engine.stages.gates import (
-    check_copy_is_concrete,
     check_garment_profile_chosen,
+    concrete_description,
 )
-from etsy_listings.core.workspace.common_copy import CommonCopyError
 
 NO_SHOP_CONSEQUENCE = "this listing's copy and settings cannot be patched on Etsy"
 
@@ -220,13 +219,9 @@ class EtsyListingStage(Stage[EtsyListingDesired, AppliedEtsyListing, EtsyListing
         if blocked is not None:
             return blocked
         profile = workspace.load_garment_profile(config.garment_profile)
-        blocked = check_copy_is_concrete(title=config.etsy.title, lead=config.etsy.description.lead)
-        if blocked is not None:
-            return blocked
-        try:
-            description = workspace.compose_description(config.etsy.description)
-        except CommonCopyError as exc:
-            return Blocked(str(exc))
+        description = concrete_description(config.etsy, workspace.compose_description)
+        if isinstance(description, Blocked):
+            return description
 
         shop_id = workspace.defaults.etsy.require_shop_id()
         catalog = EtsyShopCatalog(ctx.require_etsy(), shop_id)
