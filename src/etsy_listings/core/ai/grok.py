@@ -29,27 +29,24 @@ for the shared orchestrator to validate. Flags below were confirmed against
 from __future__ import annotations
 
 import json
-import shutil
 import tempfile
-import threading
 from dataclasses import dataclass
 from pathlib import Path
+from typing import override
 
+# jscpd:ignore-start -- S05/S07: sharing these imports would add a re-export facade.
 from etsy_listings.core.ai import cli_support
 from etsy_listings.core.ai.errors import (
     ProviderGenerationError,
-    ProviderUnavailableError,
     classify_process_failure,
 )
 from etsy_listings.core.ai.models import (
-    Deadline,
     ProviderReadiness,
-    ProviderTask,
     RawProviderResult,
-    RepairContext,
 )
 from etsy_listings.core.ai.process import run_managed
-from etsy_listings.core.ai.repair import prompt_text_for
+
+# jscpd:ignore-end -- dependencies stay explicit in each adapter.
 
 PROVIDER_NAME = "grok"
 
@@ -79,22 +76,14 @@ def auth_file() -> Path:
 
 
 @dataclass
-class GrokProvider:
+class GrokProvider(cli_support.LocalCliProvider):
     """The `AiProvider` adapter for the local Grok CLI."""
 
-    workspace_root: Path
     binary: str = "grok"
+    provider_name = PROVIDER_NAME
+    image_tool = "read_file"
 
-    def _resolved_binary(self) -> str:
-        """See `CodexProvider._resolved_binary`: on Windows the bare name is
-        not launchable without ``shell=True``."""
-        return shutil.which(self.binary) or self.binary
-
-    def readiness(self) -> ProviderReadiness:
-        return cli_support.readiness(
-            self.binary, self._check_authenticated, self._check_headless_capability
-        )
-
+    @override
     def _check_authenticated(self) -> ProviderReadiness | None:
         path = auth_file()
         try:
@@ -110,23 +99,16 @@ class GrokProvider:
             )
         return None
 
-    def _check_headless_capability(self) -> ProviderReadiness | None:
+    @override
+    def _check_capability(self) -> ProviderReadiness | None:
         # A local help probe checks advertised flags without spending a generation call.
         return cli_support.check_capability(
             self.binary, ("--help",), _REQUIRED_HELP_FLAGS, "headless"
         )
 
-    def generate(
-        self,
-        task: ProviderTask,
-        deadline: Deadline,
-        *,
-        repair: RepairContext | None = None,
-        cancel_event: threading.Event | None = None,
-    ) -> RawProviderResult:
-        if shutil.which(self.binary) is None:
-            raise ProviderUnavailableError(PROVIDER_NAME, f"{self.binary} was not found on PATH")
-        prompt_text = self._prompt_text(task, repair)
+    @override
+    def _generate(self, invocation: cli_support.Invocation) -> RawProviderResult:
+        task, prompt_text = invocation.task, invocation.prompt_text
         prompt_path = self._write_prompt(prompt_text)
         argv = [
             self._resolved_binary(),
@@ -153,8 +135,8 @@ class GrokProvider:
                 argv,
                 cwd=self.workspace_root,
                 input_text="",
-                deadline=deadline,
-                cancel_event=cancel_event,
+                deadline=invocation.deadline,
+                cancel_event=invocation.cancel_event,
             )
         finally:
             prompt_path.unlink(missing_ok=True)
@@ -186,9 +168,6 @@ class GrokProvider:
         if isinstance(text, str) and text.strip():
             return text
         raise ProviderGenerationError(PROVIDER_NAME, 0, "envelope had no structured output")
-
-    def _prompt_text(self, task: ProviderTask, repair: RepairContext | None) -> str:
-        return prompt_text_for(task, repair, image_tool="read_file")
 
     def _write_prompt(self, prompt_text: str) -> Path:
         with tempfile.NamedTemporaryFile(

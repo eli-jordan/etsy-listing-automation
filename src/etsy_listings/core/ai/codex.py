@@ -31,25 +31,17 @@ transcript. In particular:
 from __future__ import annotations
 
 import json
-import shutil
 import tempfile
-import threading
 from dataclasses import dataclass
 from pathlib import Path
+from typing import override
 
 from etsy_listings.core.ai import cli_support
-from etsy_listings.core.ai.errors import (
-    ProviderUnavailableError,
-)
 from etsy_listings.core.ai.models import (
-    Deadline,
     ProviderReadiness,
-    ProviderTask,
     RawProviderResult,
-    RepairContext,
 )
 from etsy_listings.core.ai.process import run_managed
-from etsy_listings.core.ai.repair import prompt_text_for
 
 PROVIDER_NAME = "codex"
 
@@ -68,7 +60,7 @@ writable (implementation plan, "Provider adapters")."""
 
 
 @dataclass
-class CodexProvider:
+class CodexProvider(cli_support.LocalCliProvider):
     """The `SeoProvider` adapter for the local Codex CLI.
 
     ``workspace_root`` is the real workspace directory `codex exec` is
@@ -86,65 +78,26 @@ class CodexProvider:
     rather than as this CLI being unready.
     """
 
-    workspace_root: Path
     binary: str = "codex"
+    provider_name = PROVIDER_NAME
 
-    def _resolved_binary(self) -> str:
-        """The executable path `shutil.which` resolved, not the bare
-        ``self.binary`` name.
-
-        On Windows, an npm-installed CLI like `codex` is a `.CMD` shim
-        (confirmed live: `shutil.which("codex")` resolves to
-        ``...\\codex.CMD``). `subprocess.run(["codex",...])` with the bare
-        name and no `shell=True` fails there with `WinError 2` -- Windows
-        `CreateProcess` does not search `PATHEXT` the way a shell or
-        `shutil.which` does. Every subprocess call below uses this resolved
-        path so the adapter works identically on Windows (this project's
-        primary development platform, per `AGENTS.md`) and POSIX.
-        """
-        return shutil.which(self.binary) or self.binary
-
-    def readiness(self) -> ProviderReadiness:
-        return cli_support.readiness(
-            self.binary, self._check_authenticated, self._check_read_only_capability
-        )
-
+    @override
     def _check_authenticated(self) -> ProviderReadiness | None:
-        result = cli_support.probe(self.binary, ("login", "status"))
+        result = cli_support.auth_probe(self.binary, "login")
         if isinstance(result, ProviderReadiness):
             return result
-        if result.returncode != 0:
-            return ProviderReadiness(
-                ready=False,
-                reason=(
-                    f"{self.binary} is not authenticated "
-                    f"(`{self.binary} login status` exited {result.returncode})"
-                ),
-            )
         return None
 
-    def _check_read_only_capability(self) -> ProviderReadiness | None:
+    @override
+    def _check_capability(self) -> ProviderReadiness | None:
         # A local help probe checks advertised flags without spending a generation call.
         return cli_support.check_capability(
             self.binary, ("exec", "--help"), _REQUIRED_EXEC_HELP_FLAGS, "read-only exec"
         )
 
-    def generate(
-        self,
-        task: ProviderTask,
-        deadline: Deadline,
-        *,
-        repair: RepairContext | None = None,
-        cancel_event: threading.Event | None = None,
-    ) -> RawProviderResult:
-        if shutil.which(self.binary) is None:
-            # Recognised-unavailable, so the orchestrator moves on to the next
-            # provider. Launching the bare name would fail with WinError 2 --
-            # a process error, which ends the run instead -- and readiness
-            # only needs *one* provider to be ready, so on a machine with
-            # just the other CLI this is the ordinary case, not an edge.
-            raise ProviderUnavailableError(PROVIDER_NAME, f"{self.binary} was not found on PATH")
-        prompt_text = prompt_text_for(task, repair)
+    @override
+    def _generate(self, invocation: cli_support.Invocation) -> RawProviderResult:
+        task, prompt_text = invocation.task, invocation.prompt_text
         with tempfile.TemporaryDirectory(prefix="etsy-listings-ai-codex-") as tmp:
             tmp_path = Path(tmp)
             schema_path = tmp_path / "schema.json"
@@ -175,8 +128,8 @@ class CodexProvider:
                 argv,
                 cwd=self.workspace_root,
                 input_text=prompt_text,
-                deadline=deadline,
-                cancel_event=cancel_event,
+                deadline=invocation.deadline,
+                cancel_event=invocation.cancel_event,
             )
 
             cli_support.check_result(PROVIDER_NAME, result)

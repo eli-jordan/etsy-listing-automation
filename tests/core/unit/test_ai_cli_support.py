@@ -9,6 +9,7 @@ from etsy_listings.core.ai.errors import (
     ProviderCancelledError,
     ProviderGenerationError,
     ProviderTimeoutError,
+    ProviderUnavailableError,
 )
 from etsy_listings.core.ai.models import ProviderReadiness
 from etsy_listings.core.ai.process import ProcessResult
@@ -61,3 +62,17 @@ def test_readiness_stops_before_capability_when_authentication_fails(monkeypatch
         pytest.fail("capability probe must wait for authentication")
 
     assert cli_support.readiness("test", lambda: unavailable, capability) == unavailable
+
+
+def test_generation_refuses_a_missing_binary_before_launch(monkeypatch):
+    monkeypatch.setattr("shutil.which", lambda binary: None)
+    with pytest.raises(ProviderUnavailableError, match="custom-cli was not found on PATH"):
+        cli_support.require_binary("test", "custom-cli")
+
+
+def test_failed_auth_probe_preserves_command_and_exit_code(monkeypatch):
+    monkeypatch.setattr(
+        subprocess, "run", lambda *args, **kwargs: subprocess.CompletedProcess([], 7, "")
+    )
+    result = cli_support.auth_probe("custom-cli", "login")
+    assert result.reason == ("custom-cli is not authenticated (`custom-cli login status` exited 7)")
