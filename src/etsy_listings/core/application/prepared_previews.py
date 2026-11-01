@@ -40,6 +40,7 @@ from etsy_listings.core.render import (
     MarigoldRenderer,
     MultipleTemplate,
     PreparationRequiredError,
+    RenderConfig,
     encode_png,
     scene_colours,
 )
@@ -101,16 +102,9 @@ def photo_warp_preview(
         if path is not None
     ]
     cache = SceneCache(workspace)
-    photo_pixels = PIXEL_DIGESTS.photo(scene.photo.path)
-    known = [digest for _, path in painted if (digest := PIXEL_DIGESTS.design(path)) is not None]
-    if photo_pixels is not None and len(known) == len(painted):
-        identity = photo_warp_scene_identity(
-            photo_pixels=photo_pixels,
-            layers=[(cfg, digest) for (cfg, _), digest in zip(painted, known, strict=True)],
-        )
-        png = cache.read(identity)
-        if png is not None:
-            return PhotoWarpPreview(png, identity)
+    cached = _cached_photo_warp(cache, scene, painted)
+    if cached is not None:
+        return cached
 
     photo, photo_pixels = PIXEL_DIGESTS.decode_photo(scene.photo.path, base)
     decoded: dict[Path, tuple[RGBA, str]] = {}
@@ -138,6 +132,55 @@ def photo_warp_preview(
     return PhotoWarpPreview(cache.get_or_compose(identity, compose), identity)
 
 
+def _cached_photo_warp(
+    cache: SceneCache, scene: PreviewScene, painted: list[tuple[RenderConfig, Path]]
+) -> PhotoWarpPreview | None:
+    """The cached scene, without decoding, when every file's pixel digest is
+    still known."""
+    photo_pixels = PIXEL_DIGESTS.photo(scene.photo.path)
+    known = [digest for _, path in painted if (digest := PIXEL_DIGESTS.design(path)) is not None]
+    if photo_pixels is None or len(known) != len(painted):
+        return None
+    identity = photo_warp_scene_identity(
+        photo_pixels=photo_pixels,
+        layers=[(cfg, digest) for (cfg, _), digest in zip(painted, known, strict=True)],
+    )
+    png = cache.read(identity)
+    return None if png is None else PhotoWarpPreview(png, identity)
+
+
+def _requested_marigold(
+    saved: AnyTemplate, config: AnyTemplate | None
+) -> tuple[AnyTemplate, MarigoldRenderer]:
+    """The geometry to render (the saved one when ``config`` is None) and its
+    renderer; refuses a different kind or a renderer not saved as Marigold."""
+    requested = config if config is not None else saved
+    if requested.kind != saved.kind:
+        raise TemplatePreviewKindMismatchError(saved.kind)
+    if not isinstance(requested.renderer, MarigoldRenderer) or not isinstance(
+        saved.renderer, MarigoldRenderer
+    ):
+        raise PreparationRequiredError("Save the Marigold renderer selection before rendering")
+    return requested, requested.renderer
+
+
+def _check_prepared_geometry(
+    requested: AnyTemplate, renderer: MarigoldRenderer, inputs: PreparationInputs
+) -> None:
+    boxes = (
+        {p.id: p.bounding_box for p in requested.placements}
+        if isinstance(requested, MultipleTemplate)
+        else {None: requested.bounding_box}
+    )
+    expected = {p.id: p.quad for p in inputs.placements}
+    if {
+        key: tuple((p.x, p.y) for p in box) for key, box in boxes.items()
+    } != expected or renderer.config.inference != inputs.inference:
+        raise PreparationRequiredError(
+            "Save geometry and inference settings, then rebuild or prepare the template"
+        )
+
+
 def prepared_preview(
     workspace: Workspace,
     name: str,
@@ -157,35 +200,18 @@ def prepared_preview(
     # lease_scene re-checks them after the images are decoded.
     with store.lock(name):
         saved = store.read(name)
-        requested = config if config is not None else saved.config
-        if requested.kind != saved.config.kind:
-            raise TemplatePreviewKindMismatchError(saved.config.kind)
-        if not isinstance(requested.renderer, MarigoldRenderer) or not isinstance(
-            saved.config.renderer, MarigoldRenderer
-        ):
-            raise PreparationRequiredError("Save the Marigold renderer selection before rendering")
+        requested, renderer = _requested_marigold(saved.config, config)
         readiness = template_readiness(workspace, name, saved.config)
         if not readiness.can_render:
             raise PreparationRequiredError(readiness.message or "Prepare the template first")
         inputs = artifacts.saved_inputs(name)
-        boxes = (
-            {p.id: p.bounding_box for p in requested.placements}
-            if isinstance(requested, MultipleTemplate)
-            else {None: requested.bounding_box}
-        )
-        expected = {p.id: p.quad for p in inputs.placements}
-        if {
-            key: tuple((p.x, p.y) for p in box) for key, box in boxes.items()
-        } != expected or requested.renderer.config.inference != inputs.inference:
-            raise PreparationRequiredError(
-                "Save geometry and inference settings, then rebuild or prepare the template"
-            )
+        _check_prepared_geometry(requested, renderer, inputs)
         depicted = colour if isinstance(requested, ColourMatrixTemplate) else None
         path = workspace.scene_photo(name, depicted).path
         if not path.is_file():
             raise TemplatePhotoMissingError("Selected target photo is missing")
         sources = _layer_sources(requested, depicted, design)
-        appearance = requested.renderer.config.appearance
+        appearance = renderer.config.appearance
         cache = SceneCache(workspace)
         try:
             cached = _cached(workspace, name, inputs, cache, _SceneFiles(path, sources, appearance))
