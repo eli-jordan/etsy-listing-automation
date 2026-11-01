@@ -75,27 +75,35 @@ class _Candidate:
     search_rank: int
 
 
+@dataclass(frozen=True)
+class ResearchSettings:
+    """The seller's side of a search: the ranking ``weights`` from settings
+    (the defaults when ``None``), and ``own_shop_id``, ``shop.yaml``'s
+    ``etsy.shop_id`` -- a listing from it is marked, never excluded."""
+
+    weights: MarketWeights | None = None
+    own_shop_id: int | None = None
+
+
 def research(
     queries: Sequence[str],
     client: EtsyMarketClient,
     *,
     today: datetime,
-    weights: MarketWeights | None = None,
-    own_shop_id: int | None = None,
+    settings: ResearchSettings = ResearchSettings(),
     cancel_event: threading.Event | None = None,
 ) -> MarketResult:
     """Search, filter, rank on the free signals, count reviews for the top
     twenty, score them, and list their phrases.
 
-    ``today`` is the moment listing ages are measured from. ``own_shop_id``
-    is ``shop.yaml``'s ``etsy.shop_id``; a listing from it is marked, never
-    excluded. ``cancel_event`` is checked before every call.
+    ``today`` is the moment listing ages are measured from.
+    ``cancel_event`` is checked before every call.
 
     Raises :class:`MarketResearchError` when an Etsy call fails, and
     :class:`ResearchCancelledError` when ``cancel_event`` is set.
     """
     calls = _Calls(cancel_event or threading.Event())
-    weights = weights or MarketWeights()
+    weights = settings.weights or MarketWeights()
     queries = tuple(queries)
 
     searches = calls.each(lambda query: client.search_active(query, limit=SEARCH_LIMIT), queries)
@@ -132,8 +140,9 @@ def research(
     final = _order(top, rescaled(weights), now, reviews=counts)
     review_of = {c.listing.listing_id: n for c, n in zip(top, counts, strict=True)}
 
+    scoring = _Scoring(now, settings.own_shop_id)
     listings = tuple(
-        _scored(candidate, rank, score, review_of[candidate.listing.listing_id], now, own_shop_id)
+        scoring.listing(candidate, rank, score, review_of[candidate.listing.listing_id])
         for rank, (candidate, score) in enumerate(final, start=1)
     )
     return MarketResult(
@@ -254,36 +263,40 @@ def _order(
     return paired
 
 
-def _scored(
-    candidate: _Candidate,
-    rank: int,
-    score: float,
-    reviews: int,
-    now: float,
-    own_shop_id: int | None,
-) -> ScoredListing:
-    listing = candidate.listing
-    shop = listing.shop
-    return ScoredListing(
-        listing_id=listing.listing_id,
-        rank=rank,
-        score_raw=score,
-        score=display_score(score),
-        title=listing.title,
-        url=listing.url,
-        shop_id=listing.shop_id,
-        shop_name=shop.shop_name if shop else "",
-        own_shop=own_shop_id is not None and listing.shop_id == own_shop_id,
-        thumbnail_url=listing.thumbnail_url,
-        search_rank=candidate.search_rank,
-        reviews=reviews,
-        favourites_per_day=_per_day(listing.num_favorers, listing, now),
-        views_per_day=_per_day(listing.views, listing, now),
-        shop_sales=shop.transaction_sold_count if shop else 0,
-        shop_rating=shop.review_average if shop else None,
-        tags=listing.tags,
-        lead=lead(listing.description),
-    )
+@dataclass(frozen=True)
+class _Scoring:
+    """What is the same for every scored row of one run: the moment ages are
+    measured from, and the seller's own shop."""
+
+    now: float
+    own_shop_id: int | None
+
+    def listing(
+        self, candidate: _Candidate, rank: int, score: float, reviews: int
+    ) -> ScoredListing:
+        now, own_shop_id = self.now, self.own_shop_id
+        listing = candidate.listing
+        shop = listing.shop
+        return ScoredListing(
+            listing_id=listing.listing_id,
+            rank=rank,
+            score_raw=score,
+            score=display_score(score),
+            title=listing.title,
+            url=listing.url,
+            shop_id=listing.shop_id,
+            shop_name=shop.shop_name if shop else "",
+            own_shop=own_shop_id is not None and listing.shop_id == own_shop_id,
+            thumbnail_url=listing.thumbnail_url,
+            search_rank=candidate.search_rank,
+            reviews=reviews,
+            favourites_per_day=_per_day(listing.num_favorers, listing, now),
+            views_per_day=_per_day(listing.views, listing, now),
+            shop_sales=shop.transaction_sold_count if shop else 0,
+            shop_rating=shop.review_average if shop else None,
+            tags=listing.tags,
+            lead=lead(listing.description),
+        )
 
 
 def _empty(queries: tuple[str, ...], found: int, *, relaxed: bool) -> MarketResult:

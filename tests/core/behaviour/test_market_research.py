@@ -29,6 +29,7 @@ from etsy_listings.core.market import (
     MarketResearchError,
     MarketWeights,
     ResearchCancelledError,
+    ResearchSettings,
     research,
 )
 
@@ -102,7 +103,7 @@ def _three_listings() -> FakeEtsyMarketClient:
 
 
 def test_listings_are_scored_ranked_and_described_for_the_panel() -> None:
-    result = _run(_three_listings(), own_shop_id=1002)
+    result = _run(_three_listings(), settings=ResearchSettings(own_shop_id=1002))
 
     assert [(row.listing_id, row.rank, row.score) for row in result.listings] == [
         (1, 1, 73),
@@ -148,7 +149,7 @@ def test_weights_change_the_order() -> None:
         shop_sales=0,
         shop_rating=0,
     )
-    result = _run(_three_listings(), weights=only_reviews)
+    result = _run(_three_listings(), settings=ResearchSettings(weights=only_reviews))
     assert [(row.listing_id, row.score) for row in result.listings] == [(2, 100), (1, 50), (3, 0)]
 
 

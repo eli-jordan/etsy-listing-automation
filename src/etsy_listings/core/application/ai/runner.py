@@ -63,7 +63,12 @@ from etsy_listings.core.application.ai.readiness import ProviderFactory
 from etsy_listings.core.application.ai.registry import AiRun, AiRunRegistry
 from etsy_listings.core.application.dependencies import MarketClientFactory
 from etsy_listings.core.errors import INTERNAL_ERROR_MESSAGE, UserFacingError
-from etsy_listings.core.market import MarketResearchError, ResearchCancelledError, research
+from etsy_listings.core.market import (
+    MarketResearchError,
+    ResearchCancelledError,
+    ResearchSettings,
+    research,
+)
 from etsy_listings.core.market import snapshot as market_snapshot
 from etsy_listings.core.market.cache import CachedEtsyMarketClient
 from etsy_listings.core.workspace.listing_documents import (
@@ -271,8 +276,10 @@ class AiRunner:
             queries,
             CachedEtsyMarketClient.in_workspace(inner, workspace),
             today=self.now(),
-            weights=workspace.load_settings().market_seo.weights,
-            own_shop_id=workspace.defaults.etsy.shop_id,
+            settings=ResearchSettings(
+                weights=workspace.load_settings().market_seo.weights,
+                own_shop_id=workspace.defaults.etsy.shop_id,
+            ),
             cancel_event=run.cancel_event,
         )
         self._check(run)
