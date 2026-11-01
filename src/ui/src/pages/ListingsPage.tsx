@@ -51,6 +51,38 @@ function UndoMarkIcon() {
   );
 }
 
+type WorkspaceRun = NonNullable<Awaited<ReturnType<typeof currentWorkspaceRun>>>;
+
+interface WorkspaceAction {
+  label: string;
+  prefix: string;
+}
+
+/** The toolbar's way back to the workspace run: its progress while it
+ * runs, then its outcome until it has been seen. */
+function workspaceRunAction(run: WorkspaceRun | null): WorkspaceAction | null {
+  if (run === null) return null;
+  if (!TERMINAL_PHASES.has(run.phase)) {
+    return {
+      label: "View batch progress",
+      prefix: run.kind === "apply" ? "Deploying…" : "Planning…",
+    };
+  }
+  return run.seen ? null : unseenRunAction(run);
+}
+
+function unseenRunAction(run: WorkspaceRun): WorkspaceAction | null {
+  if (run.kind === "apply" && run.phase === "applied") {
+    return { label: "View batch result", prefix: "Deployed ✓" };
+  }
+  if (run.kind === "apply" && run.phase === "stale") {
+    return { label: "View batch result", prefix: "Deploy failed" };
+  }
+  if (run.phase === "ready") return { label: "View batch review", prefix: "Review ready" };
+  if (run.phase === "failed") return { label: "View batch result", prefix: "Deploy failed" };
+  return null;
+}
+
 export function ListingsPage() {
   const [listings, setListings] = useState<ListingSummary[]>([]);
   const [workspaceRun, setWorkspaceRun] =
@@ -92,32 +124,7 @@ export function ListingsPage() {
     }
   }, [navigate]);
 
-  const workspaceAction = useMemo(() => {
-    if (workspaceRun === null) return null;
-    if (workspaceRun.kind === "apply" && !TERMINAL_PHASES.has(workspaceRun.phase)) {
-      return { label: "View batch progress", prefix: "Deploying…" };
-    }
-    if (!TERMINAL_PHASES.has(workspaceRun.phase)) {
-      return { label: "View batch progress", prefix: "Planning…" };
-    }
-    if (workspaceRun.kind === "apply" && !workspaceRun.seen && workspaceRun.phase === "applied") {
-      return { label: "View batch result", prefix: "Deployed ✓" };
-    }
-    if (
-      workspaceRun.kind === "apply" &&
-      !workspaceRun.seen &&
-      (workspaceRun.phase === "failed" || workspaceRun.phase === "stale")
-    ) {
-      return { label: "View batch result", prefix: "Deploy failed" };
-    }
-    if (!workspaceRun.seen && workspaceRun.phase === "ready") {
-      return { label: "View batch review", prefix: "Review ready" };
-    }
-    if (!workspaceRun.seen && workspaceRun.phase === "failed") {
-      return { label: "View batch result", prefix: "Deploy failed" };
-    }
-    return null;
-  }, [workspaceRun]);
+  const workspaceAction = useMemo(() => workspaceRunAction(workspaceRun), [workspaceRun]);
 
   const runGesture = useCallback(
     async (row: ListingSummary, gesture: Gesture) => {

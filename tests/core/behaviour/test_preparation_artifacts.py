@@ -454,7 +454,6 @@ def test_small_placement_on_a_large_photo_prepares_and_publishes_invisible_coord
 def test_explicit_photo_reset_capture_only_bypasses_photo_mismatch(workspace_root, damage) -> None:
     from PIL import Image
 
-    from etsy_listings.core.errors import UserFacingError
     from etsy_listings.core.render import load_template_config
     from etsy_listings.core.workspace.calibration import AutomaticMask, MaskPhotoMismatchError
 
@@ -482,14 +481,7 @@ def test_explicit_photo_reset_capture_only_bypasses_photo_mismatch(workspace_roo
         expected_revision=calibration.read("shirt").revision,
     )
     checksum = calibration.mask("shirt").checksum
-    if damage == "photo":
-        Image.new("RGB", (16, 16), "red").save(photo)
-    elif damage == "missing":
-        workspace.template_mask_file("shirt", source="automatic").unlink()
-    elif damage == "missing_edited":
-        workspace.template_mask_file("shirt").unlink()
-    elif damage == "corrupt":
-        workspace.template_mask_file("shirt", source="metadata").write_bytes(b"[]")
+    _damage_saved_inputs(workspace, damage)
     paths = [
         workspace.template_mask_file("shirt", source=source)
         for source in ("automatic", "edited", "metadata")
@@ -498,17 +490,40 @@ def test_explicit_photo_reset_capture_only_bypasses_photo_mismatch(workspace_roo
     if damage == "photo":
         with pytest.raises(MaskPhotoMismatchError):
             store.saved_inputs("shirt")
-        assert (
-            store.saved_inputs("shirt", reset_masks_for_photo=True).placements[0].mask == "0" * 64
-        )
-    elif damage == "same_photo":
-        assert (
-            store.saved_inputs("shirt", reset_masks_for_photo=True).placements[0].mask == checksum
-        )
-    else:
-        with pytest.raises(UserFacingError):
-            store.saved_inputs("shirt", reset_masks_for_photo=True)
+    _assert_photo_reset(store, damage, checksum)
     assert {p: p.read_bytes() for p in paths if p.exists()} == before
+
+
+def _damage_saved_inputs(workspace: Workspace, damage: str) -> None:
+    from PIL import Image
+
+    damages = {
+        "photo": lambda: Image.new("RGB", (16, 16), "red").save(
+            workspace.template_scene_image("shirt")
+        ),
+        "missing": lambda: workspace.template_mask_file("shirt", source="automatic").unlink(),
+        "missing_edited": lambda: workspace.template_mask_file("shirt").unlink(),
+        "corrupt": lambda: workspace.template_mask_file("shirt", source="metadata").write_bytes(
+            b"[]"
+        ),
+    }
+    if damage in damages:
+        damages[damage]()
+
+
+def _assert_photo_reset(store: Artifacts, damage: str, checksum: str) -> None:
+    """A reset clears the masks of a replaced photo, keeps those of the same
+    photo, and refuses anything else that is wrong."""
+    from etsy_listings.core.errors import UserFacingError
+
+    if damage in ("photo", "same_photo"):
+        expected = "0" * 64 if damage == "photo" else checksum
+        assert (
+            store.saved_inputs("shirt", reset_masks_for_photo=True).placements[0].mask == expected
+        )
+        return
+    with pytest.raises(UserFacingError):
+        store.saved_inputs("shirt", reset_masks_for_photo=True)
 
 
 @pytest.mark.parametrize(("height", "accepted"), [(4681, True), (4682, False)])

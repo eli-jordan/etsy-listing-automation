@@ -181,6 +181,20 @@ function allRunnableStagesApplied(listing: BatchListingState): boolean {
   );
 }
 
+type ResultBucket =
+  "succeeded" | "clean" | "failed" | "stale" | "blocked" | "attention" | "pending";
+
+/** The result lists one listing belongs in, before failed, stale and blocked
+ * listings are also counted as needing attention. */
+function resultBuckets(listing: BatchListingState, terminal: boolean): ResultBucket[] {
+  if (listing.stale) return ["stale"];
+  if (listing.plan === null || listing.planFailure !== null) return ["attention"];
+  if (listing.failureMessage !== null) return ["failed"];
+  if (planIsBlocked(listing.plan)) return ["blocked"];
+  if (planIsClean(listing.plan)) return ["clean", terminal ? "succeeded" : "pending"];
+  return [allRunnableStagesApplied(listing) ? "succeeded" : "pending"];
+}
+
 export function batchResult(state: BatchDeployState): BatchResult {
   const terminal = state.applyStarted && TERMINAL_PHASES.has(state.phase);
   const result: BatchResult = {
@@ -196,23 +210,7 @@ export function batchResult(state: BatchDeployState): BatchResult {
   };
 
   for (const [name, listing] of Object.entries(state.listings)) {
-    if (listing.stale) {
-      result.stale.push(name);
-    } else if (listing.plan === null || listing.planFailure !== null) {
-      result.attention.push(name);
-    } else if (listing.failureMessage !== null) {
-      result.failed.push(name);
-    } else if (planIsBlocked(listing.plan)) {
-      result.blocked.push(name);
-    } else if (planIsClean(listing.plan)) {
-      result.clean.push(name);
-      if (terminal) result.succeeded.push(name);
-      else result.pending.push(name);
-    } else if (allRunnableStagesApplied(listing)) {
-      result.succeeded.push(name);
-    } else {
-      result.pending.push(name);
-    }
+    for (const bucket of resultBuckets(listing, terminal)) result[bucket].push(name);
   }
 
   result.attention.push(...result.failed, ...result.stale, ...result.blocked);

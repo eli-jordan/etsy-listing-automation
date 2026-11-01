@@ -19,6 +19,7 @@ from etsy_listings.core.preparation.artifacts import Artifacts, PlacementInput
 from etsy_listings.core.preparation.numerics import Placement, prepare
 from etsy_listings.core.render import (
     AnyTemplate,
+    BoundingBox,
     MarigoldRenderer,
     MaterialLayer,
     MaterialMaps,
@@ -28,7 +29,7 @@ from etsy_listings.core.render import (
 )
 from etsy_listings.core.render.types import RGB, RGBA, FloatMap
 from etsy_listings.core.workspace import Workspace
-from etsy_listings.core.workspace.calibration import CalibrationStore, MaskEdit
+from etsy_listings.core.workspace.calibration import Calibration, CalibrationStore, MaskEdit
 
 EDITOR_EDGE = 1024
 EDITOR_ARTWORK_EDGE = 3072
@@ -79,6 +80,47 @@ class EditorDraft:
     colour: str | None = None
 
 
+def _previewable_renderer(saved: Calibration, draft: EditorDraft) -> MarigoldRenderer:
+    """The draft's Marigold renderer; refuses a draft the saved calibration
+    has moved past, or one whose renderer or inference is not yet saved."""
+    config = draft.config
+    if saved.revision != draft.revision:
+        raise PreparationRequiredError("Calibration changed; refresh the editor preview")
+    if config.kind != saved.config.kind or not isinstance(config.renderer, MarigoldRenderer):
+        raise PreparationRequiredError("Save the renderer selection before previewing")
+    if (
+        not isinstance(saved.config.renderer, MarigoldRenderer)
+        or config.renderer.config.inference != saved.config.renderer.config.inference
+    ):
+        raise PreparationRequiredError("Prepare changed inference settings before previewing")
+    return config.renderer
+
+
+def _boxes(config: AnyTemplate) -> list[tuple[str | None, BoundingBox]]:
+    if isinstance(config, MultipleTemplate):
+        return [(p.id, p.bounding_box) for p in config.placements]
+    return [(None, config.bounding_box)]
+
+
+def _composite_target(
+    workspace: Workspace,
+    name: str,
+    draft: EditorDraft,
+    image: RGB,
+    base: Callable[[Path], RGB],
+) -> RGB:
+    """The composite background. Shared maps are fitted against the fixed main
+    photo ``image``; only this background follows the editor's colour."""
+    target = (
+        base(workspace.template_base_image(name, draft.colour))
+        if draft.config.kind == "colour-matrix" and draft.colour is not None
+        else image
+    )
+    if target.shape != image.shape:
+        raise PreparationRequiredError("Colour photos must match the main photo dimensions")
+    return target
+
+
 def editor_preview(
     workspace: Workspace,
     name: str,
@@ -94,47 +136,21 @@ def editor_preview(
     the lock before fitting; the host/client must discard superseded responses.
     No generation pointer, history, PNG or approval identity is written.
     """
-    config, revision, mask_edits, colour = (
-        draft.config,
-        draft.revision,
-        draft.mask_edits,
-        draft.colour,
-    )
+    config, revision, mask_edits = draft.config, draft.revision, draft.mask_edits
     with interactive(workspace):
         store = CalibrationStore(workspace)
         evidence_store = EvidenceReader(workspace)
         with store.lock(name):
             saved = store.read(name)
-            if saved.revision != revision:
-                raise PreparationRequiredError("Calibration changed; refresh the editor preview")
-            if config.kind != saved.config.kind or not isinstance(
-                config.renderer, MarigoldRenderer
-            ):
-                raise PreparationRequiredError("Save the renderer selection before previewing")
-            if (
-                not isinstance(saved.config.renderer, MarigoldRenderer)
-                or config.renderer.config.inference != saved.config.renderer.config.inference
-            ):
-                raise PreparationRequiredError(
-                    "Prepare changed inference settings before previewing"
-                )
+            renderer = _previewable_renderer(saved, draft)
             original = Artifacts(workspace).saved_inputs(name)
-            boxes = (
-                [(p.id, p.bounding_box) for p in config.placements]
-                if isinstance(config, MultipleTemplate)
-                else [(None, config.bounding_box)]
-            )
+            boxes = _boxes(config)
             inputs = original.model_copy(
                 update={
                     "placements": tuple(
-                        PlacementInput(
-                            id=key,
-                            quad=(
-                                (box[0].x, box[0].y),
-                                (box[1].x, box[1].y),
-                                (box[2].x, box[2].y),
-                                (box[3].x, box[3].y),
-                            ),
+                        PlacementInput.from_box(
+                            key,
+                            box,
                             mask="0" * 64,
                             evidence="0" * 64,
                         )
@@ -165,15 +181,7 @@ def editor_preview(
                 for key, _ in boxes
             }
             image = base(workspace.template_main_photo(name, saved.config))
-            # Fit shared maps against the fixed main photo. Only the final
-            # composite background follows the editor's colour selection.
-            target = (
-                base(workspace.template_base_image(name, colour))
-                if config.kind == "colour-matrix" and colour is not None
-                else image
-            )
-            if target.shape != image.shape:
-                raise PreparationRequiredError("Colour photos must match the main photo dimensions")
+            target = _composite_target(workspace, name, draft, image, base)
             design, packed = artwork()
         layers = []
         for key, box in boxes:
@@ -200,7 +208,7 @@ def editor_preview(
 
         width, height = layers[0].maps.size
         small = cast(RGB, cv2.resize(target, (width, height), interpolation=cv2.INTER_AREA))
-        result = render_marigold_scene(small, layers, appearance=config.renderer.config.appearance)
+        result = render_marigold_scene(small, layers, appearance=renderer.config.appearance)
         with store.lock(name):
             if store.read(name).revision != revision:
                 raise PreparationRequiredError("Calibration changed during the editor preview")

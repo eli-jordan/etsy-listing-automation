@@ -19,6 +19,21 @@ _SRGB_LINEAR_KNEE = 0.0031308
 _DEGENERATE_HOMOGRAPHY = 1e-8
 
 
+def sample(field: Float, xy: Float, border: int = cv2.BORDER_REPLICATE) -> Float:
+    xy = np.asarray(xy, np.float32)
+    return cast(
+        Float,
+        cv2.remap(
+            field,
+            xy[..., 0],
+            xy[..., 1],
+            interpolation=cv2.INTER_LINEAR,
+            borderMode=border,
+            borderValue=(0,),
+        ).astype(np.float32),
+    )
+
+
 def blur(array: Float, sigma: float) -> Float:
     return cast(Float, cv2.GaussianBlur(array, (0, 0), sigma, borderType=cv2.BORDER_REFLECT_101))
 

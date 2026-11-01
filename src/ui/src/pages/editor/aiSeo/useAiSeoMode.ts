@@ -213,7 +213,8 @@ export function useAiSeoMode(
     () => startRun({ draftBrief: latestDetail.current.brief.trim() === "" }),
     [startRun],
   );
-  const phase: AiSeoPhase = run.busy ? "loading" : run.phase === "failed" ? "failed" : "idle";
+  const settledPhase = run.phase === "failed" ? "failed" : "idle";
+  const phase: AiSeoPhase = run.busy ? "loading" : settledPhase;
 
   return {
     available: ready,

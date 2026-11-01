@@ -4,11 +4,14 @@ parallelises writes -- only ``plan``'s read-only live fetches may fan out)."""
 from __future__ import annotations
 
 from collections.abc import Callable
+from dataclasses import dataclass
 from datetime import UTC, datetime
+from typing import Any
 
 from etsy_listings import __about__
 from etsy_listings.core.engine.context import Event, RunContext
 from etsy_listings.core.engine.events import (
+    EngineEventSink,
     EngineProgress,
     EngineStageApplied,
     EngineStageApplying,
@@ -16,7 +19,8 @@ from etsy_listings.core.engine.events import (
     RunHooks,
 )
 from etsy_listings.core.engine.lock import Lockfile
-from etsy_listings.core.engine.plan import PlannedRun
+from etsy_listings.core.engine.plan import PlannedRun, StageState
+from etsy_listings.core.engine.stage import StageApplyResult
 from etsy_listings.core.errors import INTERNAL_ERROR_MESSAGE, UserFacingError
 
 RecordSink = Callable[[Lockfile], None]
@@ -34,6 +38,49 @@ def _ignore_record(_lock: Lockfile) -> None:
 
 def _stamp(lock: Lockfile) -> Lockfile:
     return lock.stamped(tool_version=__about__.VERSION, applied_at=datetime.now(UTC).isoformat())
+
+
+@dataclass(frozen=True)
+class _StageRun:
+    """Applies one stage of an :func:`execute` run, bracketed by its events."""
+
+    ctx: RunContext
+    listing: str
+    lock: Lockfile
+    on_event: EngineEventSink
+    record: RecordSink
+
+    def apply(
+        self, state: StageState, remote: dict[str, Any], result_lock: Lockfile
+    ) -> StageApplyResult:
+        """``result_lock`` is the run's lockfile so far, recorded marked
+        incomplete if the stage raises."""
+        listing, stage = self.listing, state.stage
+        self.on_event(EngineStageApplying(listing, stage.name))
+        stage_name = stage.name
+
+        def forward_progress(event: Event, stage_name: str = stage_name) -> None:
+            self.on_event(EngineProgress(listing, stage_name, event.message, event.swatches))
+
+        stage_ctx = self.ctx.with_event_sink(forward_progress)
+        stage_ctx.emit(f"applying {stage.name}")
+        # `lock.applied`, not `result_lock.applied`: a stage's own applied
+        # document is still the one describing the world before this run
+        # started. `remote` is the accumulator instead, so an id minted a
+        # moment ago in this same loop is there to be read.
+        live_lock = self.lock.model_copy(update={"remote": remote})
+        try:
+            return stage.apply(stage_ctx, state.desired, state.applied, state.live, live_lock)
+        except Exception as exc:
+            self.record(_stamp(result_lock.marked_incomplete(stage.name)))
+            # A `UserFacingError`'s message is safe to show verbatim (the
+            # same rule `_over` already applies to a listing-level failure);
+            # anything else is a defect and may carry whatever its own text
+            # happens to say, so it is masked here, at the one place that
+            # decides, rather than trusting every future event consumer to guess.
+            reported = str(exc) if isinstance(exc, UserFacingError) else INTERNAL_ERROR_MESSAGE
+            self.on_event(EngineStageFailed(listing, stage.name, reported))
+            raise
 
 
 def execute(
@@ -110,47 +157,22 @@ def execute(
     """
     on_event, should_stop = hooks.on_event, hooks.should_stop
     listing = planned.plan.listing
+    run = _StageRun(ctx, listing, lock, on_event, record)
     result_lock = lock
     remote = dict(lock.remote)
     stopped = False
 
     for state in planned.states:
-        stage_plan = state.stage_plan
-        if not stage_plan.will_run:
+        if not state.stage_plan.will_run:
             continue
         if should_stop():
             stopped = True
             break
-        stage = state.stage
-        on_event(EngineStageApplying(listing, stage.name))
-        stage_name = stage.name
-
-        def forward_progress(event: Event, stage_name: str = stage_name) -> None:
-            on_event(EngineProgress(listing, stage_name, event.message, event.swatches))
-
-        stage_ctx = ctx.with_event_sink(forward_progress)
-        stage_ctx.emit(f"applying {stage.name}")
-        # `lock.applied`, not `result_lock.applied`: a stage's own applied
-        # document is still the one describing the world before this run
-        # started. `remote` is the accumulator instead, so an id minted a
-        # moment ago in this same loop is there to be read.
-        live_lock = lock.model_copy(update={"remote": remote})
-        try:
-            result = stage.apply(stage_ctx, state.desired, state.applied, state.live, live_lock)
-        except Exception as exc:
-            record(_stamp(result_lock.marked_incomplete(stage.name)))
-            # A `UserFacingError`'s message is safe to show verbatim (the
-            # same rule `_over` already applies to a listing-level failure);
-            # anything else is a defect and may carry whatever its own text
-            # happens to say, so it is masked here, at the one place that
-            # decides, rather than trusting every future event consumer to guess.
-            reported = str(exc) if isinstance(exc, UserFacingError) else INTERNAL_ERROR_MESSAGE
-            on_event(EngineStageFailed(listing, stage.name, reported))
-            raise
-        result_lock = result_lock.fold(stage.name, result)
+        result = run.apply(state, remote, result_lock)
+        result_lock = result_lock.fold(state.stage.name, result)
         remote = {**remote, **result.remote}
         record(_stamp(result_lock))
-        on_event(EngineStageApplied(listing, stage.name))
+        on_event(EngineStageApplied(listing, state.stage.name))
 
     if not stopped and result_lock.incomplete is not None:
         result_lock = result_lock.completed()

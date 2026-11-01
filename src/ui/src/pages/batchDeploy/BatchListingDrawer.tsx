@@ -7,10 +7,10 @@ import {
   type MouseEvent,
   type PointerEvent,
 } from "react";
-import { stageBlocked, type ListingSummary, type RenderSnapshot } from "../../types";
+import { stageBlocked, type ListingSummary, type PlanDTO, type RenderSnapshot } from "../../types";
 import { sceneSource } from "../../media";
 import { ComparisonView } from "../deploy/ComparisonView";
-import { buildComparison } from "../deploy/comparison";
+import { buildComparison, type Comparison } from "../deploy/comparison";
 import { PriceTable } from "../deploy/PriceTable";
 import { StepStrip } from "../deploy/StepStrip";
 import { planGroup, type BatchPlanGroup } from "./batchDeployPresentation";
@@ -105,6 +105,56 @@ function comparisonPreviews(listing: string, previewsRendered: ReadonlySet<strin
     [...previewsRendered]
       .filter((key) => key.startsWith(prefix))
       .map((key) => key.slice(prefix.length)),
+  );
+}
+
+const STEP_HEADINGS: Record<BatchDrawerMode, string> = {
+  applied: "What apply did",
+  applying: "Live progress for this listing",
+  review: "What apply will do",
+};
+
+/** The listing's plan: its stages, then what changes and at what price. */
+function DrawerPlan({
+  name,
+  plan,
+  comparison,
+  stageRuntime,
+  mode,
+  previewsRendered,
+  renderSnapshot,
+  collapsed,
+  imageUrlForRef,
+}: {
+  name: string;
+  plan: PlanDTO;
+  comparison: Comparison;
+  stageRuntime: BatchListingState["stageRuntime"];
+  mode: BatchDrawerMode;
+  previewsRendered: ReadonlySet<string>;
+  renderSnapshot: RenderSnapshot | null;
+  collapsed: boolean;
+  imageUrlForRef: ((ref: string) => string | null) | undefined;
+}) {
+  return (
+    <>
+      <StepStrip plan={plan} stageRuntime={stageRuntime} heading={STEP_HEADINGS[mode]} />
+      <ComparisonView
+        comparison={comparison}
+        listing={{
+          name,
+          // The server resolves every layer from the saved listing
+          // (A35); nothing is edited here, so no version to key by.
+          scene: sceneSource(name, ""),
+        }}
+        renderSnapshot={renderSnapshot}
+        previewsRendered={comparisonPreviews(name, previewsRendered)}
+        collapsed={collapsed}
+        etsyListingId={plan.etsy_listing_id}
+        {...(imageUrlForRef === undefined ? {} : { imageUrlForRef })}
+      />
+      <PriceTable rows={comparison.priceRows} />
+    </>
   );
 }
 
@@ -314,34 +364,17 @@ export function BatchListingDrawer({
               <p>The reviewed plan is no longer available for this listing.</p>
             </div>
           ) : (
-            <>
-              <StepStrip
-                plan={plan}
-                stageRuntime={listing?.stageRuntime ?? {}}
-                heading={
-                  mode === "applied"
-                    ? "What apply did"
-                    : mode === "applying"
-                      ? "Live progress for this listing"
-                      : "What apply will do"
-                }
-              />
-              <ComparisonView
-                comparison={comparison}
-                listing={{
-                  name,
-                  // The server resolves every layer from the saved listing
-                  // (A35); nothing is edited here, so no version to key by.
-                  scene: sceneSource(name, ""),
-                }}
-                renderSnapshot={renderSnapshot}
-                previewsRendered={comparisonPreviews(name, previewsRendered)}
-                collapsed={collapsed}
-                etsyListingId={plan.etsy_listing_id}
-                {...(imageUrlForRef === undefined ? {} : { imageUrlForRef })}
-              />
-              <PriceTable rows={comparison?.priceRows ?? []} />
-            </>
+            <DrawerPlan
+              name={name}
+              plan={plan}
+              comparison={comparison}
+              stageRuntime={listing?.stageRuntime ?? {}}
+              mode={mode}
+              previewsRendered={previewsRendered}
+              renderSnapshot={renderSnapshot}
+              collapsed={collapsed}
+              imageUrlForRef={imageUrlForRef}
+            />
           )}
         </div>
       </div>

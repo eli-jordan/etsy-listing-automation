@@ -80,7 +80,7 @@ it("describes each node's stage, and this run's detail only when there is one", 
 
   expect(screen.getByRole("status", { name: "AI Mode: Writing suggestions…" })).toBeInTheDocument();
   expect(screen.getByLabelText("Market research: Done")).toHaveAccessibleDescription(
-    /^Market research\s*Done\s*Turns the brief into three Etsy searches, .*\s*20 listings scored, from 58 found$/,
+    "Market research Done Turns the brief into three Etsy searches, then scores the comparable listings buyers reward. 20 listings scored, from 58 found",
   );
   const seo = screen.getByLabelText("SEO suggestions: In progress");
   expect(seo).toHaveAccessibleDescription(

@@ -188,6 +188,17 @@ def capture[T](
         proof = verify(values)[0] if verify_reused else None
         return Capture(values=values, proof=proof, reused=True)
 
+    values = _ask(prompt, existing)
+    if prompt.credential.optional and not any(values):
+        typer.echo("  skipped.")
+        return Capture(values=values, proof=None, reused=False)
+
+    proof, detail = verify(values)
+    typer.echo(f"  {detail}")
+    return Capture(values=values, proof=proof, reused=False)
+
+
+def _ask(prompt: CredentialPrompt, existing: Sequence[str | None]) -> tuple[str, ...]:
     typer.echo("")
     for line in prompt.blurb:
         typer.echo(line)
@@ -198,15 +209,7 @@ def capture[T](
         # A half-present pair keeps the half it has and asks only for the
         # rest, which is what makes re-running after one bad paste cheap.
         answers.append(already or prompts.ask_text(ask, allow_blank=allow_blank))
-
-    values = tuple(answer.strip() for answer in answers)
-    if allow_blank and not any(values):
-        typer.echo("  skipped.")
-        return Capture(values=values, proof=None, reused=False)
-
-    proof, detail = verify(values)
-    typer.echo(f"  {detail}")
-    return Capture(values=values, proof=proof, reused=False)
+    return tuple(answer.strip() for answer in answers)
 
 
 def store[T](root: Path, prompt: CredentialPrompt, capture: Capture[T]) -> None:

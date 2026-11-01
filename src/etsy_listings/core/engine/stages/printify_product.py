@@ -53,6 +53,8 @@ from etsy_listings.core.clients.printify.resolve import (
     resolve_variants,
 )
 from etsy_listings.core.config.artwork import DesignMap, Tone
+from etsy_listings.core.config.garment_profile import GarmentProfile
+from etsy_listings.core.config.listing import Listing
 from etsy_listings.core.config.money import Money
 from etsy_listings.core.engine.change import Verdict
 from etsy_listings.core.engine.context import RunContext
@@ -60,10 +62,10 @@ from etsy_listings.core.engine.lock import Lockfile, hash_file
 from etsy_listings.core.engine.stage import Blocked, Stage, StageApplyResult
 from etsy_listings.core.engine.stages.gates import (
     check_artwork,
-    check_copy_is_concrete,
     check_design_resolution,
     check_garment_profile_chosen,
     check_price_source,
+    concrete_description,
     resolved_design,
 )
 from etsy_listings.core.engine.stages.product_diff import compare
@@ -75,7 +77,7 @@ from etsy_listings.core.engine.stages.product_document import (
     check_garment_unchanged,
     money,
 )
-from etsy_listings.core.workspace.common_copy import CommonCopyError
+from etsy_listings.core.workspace.workspace import Workspace
 
 PRODUCT_ID_KEY = "printify_product_id"
 UPLOAD_IDS_KEY = "printify_upload_ids"
@@ -123,6 +125,51 @@ that could exist.
 """
 
 
+@dataclass(frozen=True)
+class _ListingInputs:
+    """What the product is built from, once the listing's own gates pass."""
+
+    config: Listing
+    profile: GarmentProfile
+    description: str
+    paths: dict[str, Path]
+
+
+def _listing_inputs(workspace: Workspace, listing: str) -> _ListingInputs | Blocked:
+    config = workspace.load_listing(listing)
+    blocked = check_garment_profile_chosen(config.garment_profile)
+    if blocked is not None:
+        return blocked
+    profile = workspace.load_garment_profile(config.garment_profile)
+
+    # ADR-0043: an unpriced listing is written, and refused here. Before the
+    # variants are built, because `resolved_price` raises `KeyError` rather
+    # than refusing, and a `KeyError` ends a `--all` batch.
+    blocked = check_price_source(pricing_plan=config.pricing_plan, priced_sizes=bool(config.prices))
+    if blocked is not None:
+        return blocked
+
+    description = concrete_description(config.etsy, workspace.compose_description)
+    if isinstance(description, Blocked):
+        return description
+
+    # ADR-0053: the colours this product sells must each resolve to a file.
+    # No scenes: which photo a mockup uses is the render stage's question.
+    blocked = check_artwork(config, profile, {})
+    if blocked is not None:
+        return blocked
+    listing_dir = workspace.listing_dir(listing)
+    paths = {
+        ref: workspace.resolve_ref(ref, listing_dir=listing_dir)
+        for ref in dict.fromkeys(ref for ref in config.design.values() if ref is not None)
+    }
+    for path in paths.values():
+        blocked = check_design_resolution(path, profile)
+        if blocked is not None:
+            return blocked
+    return _ListingInputs(config, profile, description, paths)
+
+
 class PrintifyProductStage(Stage[PrintifyProductDesired, AppliedProduct, Product]):
     name = "printify_product"
     local = False
@@ -149,43 +196,10 @@ class PrintifyProductStage(Stage[PrintifyProductDesired, AppliedProduct, Product
         if workspace.defaults.printify.shop_id is None:
             return NO_SHOP_BLOCKED
 
-        config = workspace.load_listing(listing)
-        blocked = check_garment_profile_chosen(config.garment_profile)
-        if blocked is not None:
-            return blocked
-        profile = workspace.load_garment_profile(config.garment_profile)
-
-        # ADR-0043: an unpriced listing is written, and refused here. Before the
-        # variants are built, because `resolved_price` raises `KeyError` rather
-        # than refusing, and a `KeyError` ends a `--all` batch.
-        blocked = check_price_source(
-            pricing_plan=config.pricing_plan, priced_sizes=bool(config.prices)
-        )
-        if blocked is not None:
-            return blocked
-
-        blocked = check_copy_is_concrete(title=config.etsy.title, lead=config.etsy.description.lead)
-        if blocked is not None:
-            return blocked
-        try:
-            description = workspace.compose_description(config.etsy.description)
-        except CommonCopyError as exc:
-            return Blocked(str(exc))
-
-        # ADR-0053: the colours this product sells must each resolve to a file.
-        # No scenes: which photo a mockup uses is the render stage's question.
-        blocked = check_artwork(config, profile, {})
-        if blocked is not None:
-            return blocked
-        listing_dir = workspace.listing_dir(listing)
-        paths = {
-            ref: workspace.resolve_ref(ref, listing_dir=listing_dir)
-            for ref in dict.fromkeys(ref for ref in config.design.values() if ref is not None)
-        }
-        for path in paths.values():
-            blocked = check_design_resolution(path, profile)
-            if blocked is not None:
-                return blocked
+        inputs = _listing_inputs(workspace, listing)
+        if isinstance(inputs, Blocked):
+            return inputs
+        config, profile, paths = inputs.config, inputs.profile, inputs.paths
 
         resolved = resolve_variant_pricing(ctx, listing)
 
@@ -208,7 +222,7 @@ class PrintifyProductStage(Stage[PrintifyProductDesired, AppliedProduct, Product
 
         return PrintifyProductDesired(
             title=config.etsy.title,
-            description=description,
+            description=inputs.description,
             blueprint_id=resolved.blueprint_id,
             print_provider_id=resolved.print_provider_id,
             position=profile.placeholder,

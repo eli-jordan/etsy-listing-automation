@@ -90,20 +90,26 @@ def resolve(design: DesignMap, colour: str | None, tones: Mapping[str, Tone]) ->
         if own is not None:
             return Resolved(own, "colour")
     if is_light_dark(design):
-        if colour is None:
-            return NeedsColour()
-        tone = tones.get(colour)
-        if tone is None:
-            return Unclassified(colour)
-        key = TONE_KEYS[tone]
-        ref = design.get(key)
-        if ref is None:
-            return SlotEmpty(tone)
-        return Resolved(ref, "on-light" if tone == "light" else "on-dark")
+        return _resolve_by_tone(design, colour, tones)
     default = design.get(DEFAULT)
     if default is None:
         return NoDesign()
     return Resolved(default, "default")
+
+
+def _resolve_by_tone(
+    design: DesignMap, colour: str | None, tones: Mapping[str, Tone]
+) -> Resolution:
+    """The light/dark slot ``colour``'s tone prints, or why there is none."""
+    if colour is None:
+        return NeedsColour()
+    tone = tones.get(colour)
+    if tone is None:
+        return Unclassified(colour)
+    ref = design.get(TONE_KEYS[tone])
+    if ref is None:
+        return SlotEmpty(tone)
+    return Resolved(ref, "on-light" if tone == "light" else "on-dark")
 
 
 def representative(design: DesignMap) -> str | None:

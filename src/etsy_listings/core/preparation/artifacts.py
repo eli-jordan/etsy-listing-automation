@@ -26,6 +26,8 @@ import numpy as np
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from etsy_listings.core.render.config import (
+    AnyTemplate,
+    BoundingBox,
     MarigoldInference,
     MarigoldRenderer,
     MultipleTemplate,
@@ -133,6 +135,22 @@ class PlacementInput(Record):
     mask: str = Field(pattern=r"^[0-9a-f]{64}$")
     evidence: str = Field(pattern=r"^[0-9a-f]{64}$")
 
+    @classmethod
+    def from_box(
+        cls, placement_id: PlacementId | None, box: BoundingBox, *, mask: str, evidence: str
+    ) -> PlacementInput:
+        return cls(
+            id=placement_id,
+            quad=(
+                (box[0].x, box[0].y),
+                (box[1].x, box[1].y),
+                (box[2].x, box[2].y),
+                (box[3].x, box[3].y),
+            ),
+            mask=mask,
+            evidence=evidence,
+        )
+
     @model_validator(mode="after")
     def finite(self) -> PlacementInput:
         if not all(math.isfinite(v) for point in self.quad for v in point):
@@ -204,31 +222,56 @@ class Readiness:
         return self.state in ("ready", "not_required")
 
 
+_ZERO_DIGEST = "0" * 64  # the identity of an absent mask or evidence
+
+
+def _bounding_box(config: AnyTemplate, placement_id: str | None) -> BoundingBox:
+    if isinstance(config, MultipleTemplate):
+        return next(p.bounding_box for p in config.placements if p.id == placement_id)
+    return config.bounding_box
+
+
 def arrays_of(maps: MaterialMaps) -> dict[str, Any]:
     return {name: getattr(maps, name) for name in BOUNDS if getattr(maps, name) is not None}
 
 
-def validate_maps(maps: MaterialMaps, size: tuple[int, int]) -> None:
+def _within(extent: tuple[int, int, int, int], size: tuple[int, int]) -> bool:
+    """Whether the half-open ``extent`` is non-empty and inside the photo."""
     photo_width, photo_height = size
+    left, top, right, bottom = extent
+    return 0 <= left < right <= photo_width and 0 <= top < bottom <= photo_height
+
+
+def _layout(name: str, extent: tuple[int, int, int, int]) -> tuple[tuple[int, ...], np.dtype]:
+    """The shape and dtype array ``name`` must have over ``extent``."""
+    left, top, right, bottom = extent
+    width, height = right - left, bottom - top
+    channels = BOUNDS[name][2]
+    shape = (height, width, channels) if channels else (height, width)
+    return shape, np.dtype("int32" if name == "patch_ids" else "float32")
+
+
+def validate_maps(maps: MaterialMaps, size: tuple[int, int]) -> None:
     left, top, right, bottom = maps.extent
-    if maps.size != size or not (
-        0 <= left < right <= photo_width and 0 <= top < bottom <= photo_height
-    ):
+    if maps.size != size or not _within(maps.extent, size):
         raise ArtifactError("Prepared map extent does not match main photo")
     width, height = right - left, bottom - top
     if min(size) < 1 or max(size) > MAX_DIMENSION or width * height > MAX_PIXELS:
         raise UnsupportedSchemaError("Unsupported prepared-map dimensions")
     arrays = arrays_of(maps)
-    for name, (low, high, channels) in BOUNDS.items():
+    for name in BOUNDS:
         if name == "patch_ids" and name not in arrays:
             continue
-        value = arrays[name]
-        shape = (height, width, channels) if channels else (height, width)
-        dtype = np.dtype("int32" if name == "patch_ids" else "float32")
-        if value.shape != shape or value.dtype != dtype or not np.isfinite(value).all():
-            raise ArtifactError(f"Invalid {name} shape, dtype or finite values")
-        if np.any(value < low - 1e-6) or np.any(value > high + 1e-6):
-            raise ArtifactError(f"Prepared {name} values outside declared bounds")
+        _check_array(name, arrays[name], maps.extent)
+
+
+def _check_array(name: str, value: Any, extent: tuple[int, int, int, int]) -> None:
+    low, high, _ = BOUNDS[name]
+    shape, dtype = _layout(name, extent)
+    if value.shape != shape or value.dtype != dtype or not np.isfinite(value).all():
+        raise ArtifactError(f"Invalid {name} shape, dtype or finite values")
+    if np.any(value < low - 1e-6) or np.any(value > high + 1e-6):
+        raise ArtifactError(f"Prepared {name} values outside declared bounds")
 
 
 _DESCRIPTOR_LOCK = threading.Lock()
@@ -295,6 +338,17 @@ def _descriptor_digest(
     return hashlib.sha256(json_bytes({"semantics": SEMANTICS, "placements": content})).hexdigest()
 
 
+def _manifest_digest(manifest: Manifest) -> str:
+    """The content digest ``manifest``'s descriptors imply; only schema 2
+    records extents."""
+    return _descriptor_digest(
+        {p.id: p.arrays for p in manifest.placements},
+        extents={p.id: p.extent for p in manifest.placements}
+        if manifest.schema_version == _EXTENTS_SCHEMA
+        else None,
+    )
+
+
 def file_checksum(path: Path) -> str:
     with path.open("rb") as stream:
         return hashlib.file_digest(stream, "sha256").hexdigest()
@@ -308,86 +362,116 @@ def read_maps(
     known_maps: MaterialMaps | None = None,
 ) -> MaterialMaps:
     """Check all NPY headers and uncompressed byte budgets before allocation."""
-    photo_width, photo_height = size
-    left, top, right, bottom = descriptor.extent
-    if not (0 <= left < right <= photo_width and 0 <= top < bottom <= photo_height):
+    if not _within(descriptor.extent, size):
         raise ArtifactError("Prepared map extent does not match main photo")
     if known_maps is not None and any(a.flags.writeable for a in arrays_of(known_maps).values()):
         known_maps = None
     try:
-        if path.stat().st_size > MAX_ARCHIVE_BYTES or file_checksum(path) != descriptor.checksum:
-            raise ArtifactError("Prepared archive size/checksum mismatch")
-        required = set(BOUNDS) - {"patch_ids"}
-        names = set(descriptor.arrays)
-        if names not in (required, set(BOUNDS)):
-            raise ArtifactError("Prepared array descriptor set is incomplete")
-        with zipfile.ZipFile(path) as archive:
-            members = archive.infolist()
-            if len(members) != len(names) or {m.filename for m in members} != {
-                name + ".npy" for name in names
-            }:
-                raise ArtifactError("Prepared archive has unexpected or duplicate members")
-            if sum(m.file_size for m in members) > MAX_ARCHIVE_BYTES:
-                raise ArtifactError("Prepared arrays exceed allocation budget")
-            for member in members:
-                name = member.filename[:-4]
-                expected = descriptor.arrays[name]
-                channels = BOUNDS[name][2]
-                width, height = right - left, bottom - top
-                shape = (height, width, channels) if channels else (height, width)
-                dtype = np.dtype("int32" if name == "patch_ids" else "float32")
-                if expected.shape != shape or expected.dtype != str(dtype):
-                    raise ArtifactError("Unsafe prepared array descriptor")
-                with archive.open(member) as stream:
-                    version = np.lib.format.read_magic(stream)
-                    if version == (1, 0):
-                        actual_shape, fortran, actual_dtype = np.lib.format.read_array_header_1_0(
-                            stream
-                        )
-                    elif version == (2, 0):
-                        actual_shape, fortran, actual_dtype = np.lib.format.read_array_header_2_0(
-                            stream
-                        )
-                    else:
-                        raise UnsupportedSchemaError("Unsupported prepared NPY format")
-                    header_size = stream.tell()
-                if (
-                    actual_shape != shape
-                    or actual_dtype != dtype
-                    or fortran
-                    or member.file_size != header_size + math.prod(shape) * dtype.itemsize
-                ):
-                    raise ArtifactError(
-                        "Prepared array header has unsafe shape, dtype or byte length"
-                    )
-                if known_maps is not None:
-                    # Verify written payload bytes and ZIP CRC only after header,
-                    # shape, dtype and byte-budget checks have passed.
-                    with archive.open(member) as stream:
-                        stream.read(header_size)
-                        payload = hashlib.sha256()
-                        while chunk := stream.read(1024 * 1024):
-                            payload.update(chunk)
-                        if payload.hexdigest() != expected.checksum:
-                            raise ArtifactError("Prepared numerical checksum mismatch")
-        if known_maps is None:
-            with np.load(path, allow_pickle=False) as archive:
-                arrays = {name: archive[name] for name in names}
-            maps = MaterialMaps(**arrays, origin=(left, top), photo_size=size)
-        else:
-            maps = known_maps
-            arrays = arrays_of(maps)
-        validate_maps(maps, size)
-        if descriptors(maps) != descriptor.arrays:
-            raise ArtifactError("Prepared numerical checksum mismatch")
-        for array in arrays.values():
-            array.flags.writeable = False
+        maps = _read_checked_maps(path, descriptor, size, known_maps)
     except (OSError, ValueError, zipfile.BadZipFile, EOFError, KeyError, TypeError) as exc:
         if isinstance(exc, ArtifactError):
             raise
         raise ArtifactError("Invalid prepared artifact; prepare the template again") from exc
     else:
         return maps
+
+
+def _read_checked_maps(
+    path: Path,
+    descriptor: PlacementArtifact,
+    size: tuple[int, int],
+    known_maps: MaterialMaps | None,
+) -> MaterialMaps:
+    """``known_maps`` are the read-only arrays just written to ``path``; they
+    are kept, after their written bytes are proven, instead of loading a copy."""
+    if path.stat().st_size > MAX_ARCHIVE_BYTES or file_checksum(path) != descriptor.checksum:
+        raise ArtifactError("Prepared archive size/checksum mismatch")
+    names = set(descriptor.arrays)
+    if names not in (set(BOUNDS) - {"patch_ids"}, set(BOUNDS)):
+        raise ArtifactError("Prepared array descriptor set is incomplete")
+    with zipfile.ZipFile(path) as archive:
+        _check_archive(archive, descriptor, names, verify_payload=known_maps is not None)
+    if known_maps is None:
+        with np.load(path, allow_pickle=False) as loaded:
+            arrays = {name: loaded[name] for name in names}
+        left, top, _, _ = descriptor.extent
+        maps = MaterialMaps(**arrays, origin=(left, top), photo_size=size)
+    else:
+        maps = known_maps
+        arrays = arrays_of(maps)
+    validate_maps(maps, size)
+    if descriptors(maps) != descriptor.arrays:
+        raise ArtifactError("Prepared numerical checksum mismatch")
+    for array in arrays.values():
+        array.flags.writeable = False
+    return maps
+
+
+def _check_archive(
+    archive: zipfile.ZipFile,
+    descriptor: PlacementArtifact,
+    names: set[str],
+    *,
+    verify_payload: bool,
+) -> None:
+    members = archive.infolist()
+    if len(members) != len(names) or {m.filename for m in members} != {
+        name + ".npy" for name in names
+    }:
+        raise ArtifactError("Prepared archive has unexpected or duplicate members")
+    if sum(m.file_size for m in members) > MAX_ARCHIVE_BYTES:
+        raise ArtifactError("Prepared arrays exceed allocation budget")
+    for member in members:
+        _check_member(archive, member, descriptor, verify_payload=verify_payload)
+
+
+_NPY_HEADER_READERS: Mapping[tuple[int, int], Callable[[Any], tuple[Any, bool, np.dtype]]] = {
+    (1, 0): np.lib.format.read_array_header_1_0,
+    (2, 0): np.lib.format.read_array_header_2_0,
+}
+
+
+def _check_member(
+    archive: zipfile.ZipFile,
+    member: zipfile.ZipInfo,
+    descriptor: PlacementArtifact,
+    *,
+    verify_payload: bool,
+) -> None:
+    name = member.filename[:-4]
+    expected = descriptor.arrays[name]
+    shape, dtype = _layout(name, descriptor.extent)
+    if expected.shape != shape or expected.dtype != str(dtype):
+        raise ArtifactError("Unsafe prepared array descriptor")
+    with archive.open(member) as stream:
+        read_header = _NPY_HEADER_READERS.get(np.lib.format.read_magic(stream))
+        if read_header is None:
+            raise UnsupportedSchemaError("Unsupported prepared NPY format")
+        actual_shape, fortran, actual_dtype = read_header(stream)
+        header_size = stream.tell()
+    if (
+        actual_shape != shape
+        or actual_dtype != dtype
+        or fortran
+        or member.file_size != header_size + math.prod(shape) * dtype.itemsize
+    ):
+        raise ArtifactError("Prepared array header has unsafe shape, dtype or byte length")
+    if verify_payload:
+        # Verify written payload bytes and ZIP CRC only after header,
+        # shape, dtype and byte-budget checks have passed.
+        _check_payload(archive, member, header_size, expected.checksum)
+
+
+def _check_payload(
+    archive: zipfile.ZipFile, member: zipfile.ZipInfo, header_size: int, checksum: str
+) -> None:
+    with archive.open(member) as stream:
+        stream.read(header_size)
+        payload = hashlib.sha256()
+        while chunk := stream.read(1024 * 1024):
+            payload.update(chunk)
+        if payload.hexdigest() != checksum:
+            raise ArtifactError("Prepared numerical checksum mismatch")
 
 
 _READERS: dict[tuple[str, str], int] = {}
@@ -628,7 +712,6 @@ class Artifacts:
             if cached is not None:
                 _MAPS.move_to_end(signature)
                 return Acquired(manifest, cached[0])
-        size = (manifest.preparation_inputs.photo.width, manifest.preparation_inputs.photo.height)
         if (
             sum(
                 math.prod(descriptor.shape) * 4
@@ -638,25 +721,17 @@ class Artifacts:
             > MAX_ARCHIVE_BYTES
         ):
             raise ArtifactError("Prepared generation exceeds allocation budget")
-        maps = {}
-        for placement in manifest.placements:
-            if manifest.schema_version == 1 and placement.extent != (0, 0, *size):
-                raise ArtifactError("Prepared map extent does not match main photo")
-            maps[placement.id] = read_maps(
-                self.workspace.template_map_file(name, generation, placement.id, staging=staging),
+        maps = {
+            placement.id: self._read_placement(
+                name,
+                manifest,
                 placement,
-                size,
+                staging=staging,
                 known_maps=known_maps.get(placement.id) if known_maps is not None else None,
             )
-        if (
-            _descriptor_digest(
-                {p.id: p.arrays for p in manifest.placements},
-                extents={p.id: p.extent for p in manifest.placements}
-                if manifest.schema_version == _EXTENTS_SCHEMA
-                else None,
-            )
-            != manifest.content_digest
-        ):
+            for placement in manifest.placements
+        }
+        if _manifest_digest(manifest) != manifest.content_digest:
             raise ArtifactError("Prepared generation numerical identity mismatch")
         if self._signature(name, manifest, checksum, staging=staging) != signature:
             raise ArtifactError("Prepared files changed during validation")
@@ -664,6 +739,28 @@ class Artifacts:
         frozen = MappingProxyType(maps)
         _remember_maps(signature, frozen)
         return Acquired(manifest, frozen)
+
+    def _read_placement(
+        self,
+        name: str,
+        manifest: Manifest,
+        placement: PlacementArtifact,
+        *,
+        staging: bool,
+        known_maps: MaterialMaps | None,
+    ) -> MaterialMaps:
+        photo = manifest.preparation_inputs.photo
+        size = (photo.width, photo.height)
+        if manifest.schema_version == 1 and placement.extent != (0, 0, *size):
+            raise ArtifactError("Prepared map extent does not match main photo")
+        return read_maps(
+            self.workspace.template_map_file(
+                name, manifest.generation_id, placement.id, staging=staging
+            ),
+            placement,
+            size,
+            known_maps=known_maps,
+        )
 
     def saved_inputs(
         self,
@@ -688,61 +785,57 @@ class Artifacts:
                 raise ValueError(  # noqa: TRY004 -- callers record this ValueError as a bad template
                     "Prepared inputs require a Marigold template"
                 )
-            accepted: dict[str | None, str] = {}
-            if evidence is None:
-                try:
-                    pointer = self._pointer(name)
-                    manifest = self._read_manifest(
-                        name, pointer["generation_id"], pointer["manifest_checksum"]
-                    )
-                    accepted = {p.id: p.evidence for p in manifest.preparation_inputs.placements}
-                except (OSError, ValueError, KeyError, TypeError):
-                    pass
             ids = self.calibration.placement_ids(config)
-            if evidence is not None and set(evidence) != set(ids):
+            if evidence is None:
+                evidence = self._accepted_evidence(name)
+            elif set(evidence) != set(ids):
                 raise ArtifactError("Evidence identity must cover the exact placement set")
-            placements = []
-            for placement_id in ids:
-                box = (
-                    next(p.bounding_box for p in config.placements if p.id == placement_id)
-                    if isinstance(config, MultipleTemplate)
-                    else config.bounding_box
+            placements = tuple(
+                PlacementInput.from_box(
+                    placement_id,
+                    _bounding_box(config, placement_id),
+                    mask=self._mask_checksum(name, placement_id, reset=reset_masks_for_photo),
+                    evidence=evidence.get(placement_id, _ZERO_DIGEST),
                 )
-                checksum = "0" * 64
-                has_mask = self.workspace.template_mask_file(name, placement_id).exists()
-                if reset_masks_for_photo:
-                    has_mask = has_mask or any(
-                        self.workspace.template_mask_file(
-                            name, placement_id, source=source
-                        ).exists()
-                        for source in ("automatic", "metadata")
-                    )
-                if has_mask:
-                    try:
-                        checksum = self.calibration.mask(name, placement_id).checksum
-                    except MaskPhotoMismatchError:
-                        if not reset_masks_for_photo:
-                            raise
-                placements.append(
-                    PlacementInput(
-                        id=placement_id,
-                        quad=(
-                            (box[0].x, box[0].y),
-                            (box[1].x, box[1].y),
-                            (box[2].x, box[2].y),
-                            (box[3].x, box[3].y),
-                        ),
-                        mask=checksum,
-                        evidence=(evidence if evidence is not None else accepted).get(
-                            placement_id, "0" * 64
-                        ),
-                    )
-                )
+                for placement_id in ids
+            )
             return PreparationInputs(
                 photo=PhotoIdentity.model_validate(self.calibration.photo_identity(name, config)),
-                placements=tuple(placements),
+                placements=placements,
                 inference=config.renderer.config.inference,
             )
+
+    def _accepted_evidence(self, name: str) -> Mapping[str | None, str]:
+        """Each placement's evidence identity in the current generation; none
+        when there is no readable generation."""
+        try:
+            pointer = self._pointer(name)
+            manifest = self._read_manifest(
+                name, pointer["generation_id"], pointer["manifest_checksum"]
+            )
+        except (OSError, ValueError, KeyError, TypeError):
+            return {}
+        return {p.id: p.evidence for p in manifest.preparation_inputs.placements}
+
+    def _mask_checksum(self, name: str, placement_id: str | None, *, reset: bool) -> str:
+        """The saved mask's identity, or zero for none. A photo reset also
+        counts a mask belonging to another photo as none."""
+        if not self._has_mask(name, placement_id, reset=reset):
+            return _ZERO_DIGEST
+        try:
+            return self.calibration.mask(name, placement_id).checksum
+        except MaskPhotoMismatchError:
+            if not reset:
+                raise
+            return _ZERO_DIGEST
+
+    def _has_mask(self, name: str, placement_id: str | None, *, reset: bool) -> bool:
+        if self.workspace.template_mask_file(name, placement_id).exists():
+            return True
+        return reset and any(
+            self.workspace.template_mask_file(name, placement_id, source=source).exists()
+            for source in ("automatic", "metadata")
+        )
 
     def publish(
         self,
@@ -919,26 +1012,28 @@ class Artifacts:
             manifest = self.inspect(name, inputs, target_size=target_size)
             return Readiness("ready", content_digest=manifest.content_digest)
         except StalePreparationError as exc:
-            # The accepted inputs are immutable, so explain the first relevant change.
-            reason: ReadinessReason = exc.reason
-            try:
-                pointer = self._pointer(name)
-                accepted = self._read_manifest(
-                    name, pointer["generation_id"], pointer["manifest_checksum"]
-                ).preparation_inputs
-                if accepted.photo != inputs.photo:
-                    reason = "photo_changed"
-                elif accepted.inference != inputs.inference:
-                    reason = "inference_changed"
-                elif {p.id: p.mask for p in accepted.placements} != {
-                    p.id: p.mask for p in inputs.placements
-                }:
-                    reason = "mask_changed"
-            except (OSError, ValueError, KeyError, TypeError):
-                pass
-            return Readiness("out_of_date", reason, str(exc))
+            return Readiness("out_of_date", self._stale_reason(name, inputs, exc), str(exc))
         except ArtifactError as exc:
             return Readiness("out_of_date", exc.reason, str(exc))
+
+    def _stale_reason(
+        self, name: str, inputs: PreparationInputs, exc: StalePreparationError
+    ) -> ReadinessReason:
+        """The first relevant change since the accepted, immutable inputs."""
+        try:
+            pointer = self._pointer(name)
+            accepted = self._read_manifest(
+                name, pointer["generation_id"], pointer["manifest_checksum"]
+            ).preparation_inputs
+        except (OSError, ValueError, KeyError, TypeError):
+            return exc.reason
+        if accepted.photo != inputs.photo:
+            return "photo_changed"
+        if accepted.inference != inputs.inference:
+            return "inference_changed"
+        if {p.id: p.mask for p in accepted.placements} != {p.id: p.mask for p in inputs.placements}:
+            return "mask_changed"
+        return exc.reason
 
     def cleanup(self, name: str, *, retained_generations: set[str] | None = None) -> list[str]:
         """Remove unreferenced generations; caller supplies all persisted job refs."""

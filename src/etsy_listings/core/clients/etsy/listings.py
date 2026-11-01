@@ -50,6 +50,7 @@ from etsy_listings.core.clients.etsy.models import (
     ShopSection,
     VariationImageLink,
 )
+from etsy_listings.core.clients.etsy.shops import ShopMetadataReads
 from etsy_listings.core.clients.etsy.transport import HTTP_NOT_FOUND, EtsyApiError, Transport
 
 HTTP_BAD_REQUEST = 400
@@ -196,7 +197,7 @@ class EtsyListingClient(Protocol):
     def create_shop_section(self, shop_id: int, title: str) -> ShopSection: ...
 
 
-class HttpEtsyListingClient:
+class HttpEtsyListingClient(ShopMetadataReads):
     def __init__(self, transport: Transport) -> None:
         self._transport = transport
 
@@ -279,14 +280,6 @@ class HttpEtsyListingClient:
     def production_partners(self, shop_id: int) -> list[ProductionPartner]:
         response = self._transport.get(f"/v3/application/shops/{shop_id}/production-partners")
         return [ProductionPartner.model_validate(row) for row in _results(response.json())]
-
-    def shop_sections(self, shop_id: int) -> list[ShopSection]:
-        response = self._transport.get(f"/v3/application/shops/{shop_id}/sections")
-        return [ShopSection.model_validate(row) for row in _results(response.json())]
-
-    def return_policies(self, shop_id: int) -> list[ReturnPolicy]:
-        response = self._transport.get(f"/v3/application/shops/{shop_id}/policies/return")
-        return [ReturnPolicy.model_validate(row) for row in _results(response.json())]
 
     # ------------------------------------------------------------- writes
 

@@ -18,19 +18,35 @@ from etsy_listings.core.clients.etsy.models import ReturnPolicy, Shop, ShopSecti
 from etsy_listings.core.clients.etsy.transport import HTTP_NOT_FOUND, EtsyApiError, Transport
 
 
-class EtsyShopClient(Protocol):
+class ShopMetadataClient(Protocol):
+    def shop_sections(self, shop_id: int) -> list[ShopSection]: ...
+
+    def return_policies(self, shop_id: int) -> list[ReturnPolicy]: ...
+
+
+class EtsyShopClient(ShopMetadataClient, Protocol):
     """What `setup` asks Etsy. Reads only, and shop-level only."""
 
     def find_shops(self, name: str) -> list[Shop]: ...
 
     def shop_by_owner(self, user_id: int) -> Shop | None: ...
 
-    def shop_sections(self, shop_id: int) -> list[ShopSection]: ...
 
-    def return_policies(self, shop_id: int) -> list[ReturnPolicy]: ...
+class ShopMetadataReads:
+    """The unscoped section/policy reads shared by shop and listing clients (ADR-0024)."""
+
+    _transport: Transport
+
+    def shop_sections(self, shop_id: int) -> list[ShopSection]:
+        response = self._transport.get(f"/v3/application/shops/{shop_id}/sections")
+        return [ShopSection.model_validate(row) for row in _results(response.json())]
+
+    def return_policies(self, shop_id: int) -> list[ReturnPolicy]:
+        response = self._transport.get(f"/v3/application/shops/{shop_id}/policies/return")
+        return [ReturnPolicy.model_validate(row) for row in _results(response.json())]
 
 
-class HttpEtsyShopClient:
+class HttpEtsyShopClient(ShopMetadataReads):
     def __init__(self, transport: Transport) -> None:
         self._transport = transport
 
@@ -62,14 +78,6 @@ class HttpEtsyShopClient:
         if rows:
             return Shop.model_validate(rows[0])
         return Shop.model_validate(body) if isinstance(body, dict) and "shop_id" in body else None
-
-    def shop_sections(self, shop_id: int) -> list[ShopSection]:
-        response = self._transport.get(f"/v3/application/shops/{shop_id}/sections")
-        return [ShopSection.model_validate(row) for row in _results(response.json())]
-
-    def return_policies(self, shop_id: int) -> list[ReturnPolicy]:
-        response = self._transport.get(f"/v3/application/shops/{shop_id}/policies/return")
-        return [ReturnPolicy.model_validate(row) for row in _results(response.json())]
 
 
 def _results(body: Any) -> list[Any]:

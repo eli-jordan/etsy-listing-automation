@@ -35,7 +35,7 @@ From the repo root in Cygwin zsh, reproduce the complete serial run with native
 Windows path arguments:
 
 ```sh
-env -u ETSY_LISTINGS_ROOT uv run python scripts/run_marigold_validation.py \
+env -u ETSY_LISTINGS_ROOT uv run python docs/features/marigold-20261001/scripts/run_marigold_validation.py \
   C:/Users/Admin/Desktop/try-workspace \
   C:/cygwin64/tmp/marigold-validation-new
 ```

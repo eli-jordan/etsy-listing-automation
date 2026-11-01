@@ -1,3 +1,4 @@
+import { PreparationNotice } from "./PreparationNotice";
 import type { ReactNode } from "react";
 import type { PhotoWarpTemplate } from "../types";
 import { useCallback, useMemo } from "react";
@@ -19,15 +20,8 @@ interface Props {
 }
 
 /** One placement over one photo, with the shared preview and realism controls. */
-function PhotoWarpSingleEditor({
-  rendererControls,
-  templateName,
-  config,
-  space,
-  onChange,
-  design,
-  onDesignChange,
-}: Props) {
+function PhotoWarpSingleEditor(props: Props) {
+  const { templateName, config, onChange, design } = props;
   const body = useMemo(
     () => ({
       bounding_box: config.bounding_box,
@@ -53,13 +47,8 @@ function PhotoWarpSingleEditor({
 
   return (
     <EditorShell
-      {...(rendererControls ? { rendererControls } : {})}
-      templateName={templateName}
-      config={config}
-      onChange={onChange}
-      design={design}
-      onDesignChange={onDesignChange}
-      space={space}
+      {...props}
+      rendererControls={props.rendererControls || null}
       previewUrl={previewUrl}
       jobs={jobs}
       canvas={(ctx) => <OneBoxCanvas {...ctx} box={config.bounding_box} onChange={setBox} />}
@@ -70,12 +59,7 @@ function PhotoWarpSingleEditor({
 export function SingleEditor(props: Omit<Props, "config"> & { config: SingleTemplate }) {
   const renderer = props.config.renderer;
   if (renderer.type !== "photo-warp") {
-    return (
-      <p role="status">
-        Prepare the template first. Marigold rendering is unavailable until template maps are
-        prepared.
-      </p>
-    );
+    return <PreparationNotice />;
   }
   return <PhotoWarpSingleEditor {...props} config={{ ...props.config, renderer }} />;
 }

@@ -1,0 +1,12 @@
+#!/bin/sh
+# The static-analysis backstop for every commit (spec S06): ruff, formatting,
+# cognitive complexity, ESLint and Prettier, and S07's suppression reasons,
+# over the staged files, whatever wrote them. It reports and fixes nothing.
+# scripts/setup_worktree.py points `core.hooksPath` here.
+root=$(git rev-parse --show-toplevel) || exit 0
+for python in "$root/.venv/Scripts/python.exe" "$root/.venv/bin/python"; do
+	if [ -x "$python" ]; then
+		exec "$python" -S "$root/scripts/agent_lint.py" pre-commit </dev/null
+	fi
+done
+exec uv run --no-project python "$root/scripts/agent_lint.py" pre-commit </dev/null

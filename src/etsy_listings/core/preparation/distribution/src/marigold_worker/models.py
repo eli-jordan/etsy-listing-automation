@@ -98,30 +98,7 @@ class Models:
         started = time.perf_counter()
         reused = self.role == role
         if not reused:
-            # Bound retained pipelines to one. Components of only that pipeline
-            # enter CUDA via accelerate's model_cpu_offload hooks (ADR-0054).
-            self.pipe = None
-            self.role = None
-            gc.collect()
-            torch.cuda.empty_cache()
-            pipe = self.pipeline_classes[role].from_pretrained(
-                str(self.weights / revision),
-                variant="fp16",
-                torch_dtype=torch.float16,
-                local_files_only=True,
-            )
-            tensors = {}
-            for component in pipe.components.values():
-                if isinstance(component, torch.nn.Module):
-                    for tensor in list(component.parameters()) + list(component.buffers()):
-                        tensors[tensor.data_ptr()] = tensor.nelement() * tensor.element_size()
-            self.model_bytes = sum(tensors.values())
-            if self.model_bytes > MODEL_RAM_BUDGET:
-                raise RuntimeError("Pinned pipeline exceeds the supported 4 GiB model RAM budget")
-            pipe.enable_model_cpu_offload()
-            pipe.vae.enable_tiling()
-            pipe.set_progress_bar_config(disable=True)
-            self.pipe, self.role = pipe, role
+            self._load(role)
         load_seconds = time.perf_counter() - started
         torch.cuda.reset_peak_memory_stats()
         started = time.perf_counter()
@@ -141,13 +118,8 @@ class Models:
         elapsed = time.perf_counter() - started
         prediction = np.asarray(result.prediction, dtype=np.float32)
         properties = dict(getattr(self.pipe, "target_properties", {}))
-        if role == "lighting" and (
-            properties.get("target_names") != ["albedo", "shading", "residual"]
-            or any(
-                properties[k]["prediction_space"] != "linear" for k in properties["target_names"]
-            )
-        ):
-            raise ValueError("Unsupported intrinsic property ordering or colour space")
+        if role == "lighting":
+            _check_intrinsic_properties(properties)
         processed, padding, original = self.pipe.image_processor.preprocess(
             image,
             processing_resolution=768,
@@ -180,3 +152,47 @@ class Models:
             **self.capabilities().model_dump(),
         )
         return prediction, metadata
+
+    def _load(self, role: Role) -> None:
+        import torch  # noqa: PLC0415 -- heavy optional dependency: torch loads on first model use, not on import
+
+        _, _, revision = MODELS[role]
+        # Bound retained pipelines to one. Components of only that pipeline
+        # enter CUDA via accelerate's model_cpu_offload hooks (ADR-0054).
+        self.pipe = None
+        self.role = None
+        gc.collect()
+        torch.cuda.empty_cache()
+        pipe = self.pipeline_classes[role].from_pretrained(
+            str(self.weights / revision),
+            variant="fp16",
+            torch_dtype=torch.float16,
+            local_files_only=True,
+        )
+        self.model_bytes = _resident_bytes(pipe)
+        if self.model_bytes > MODEL_RAM_BUDGET:
+            raise RuntimeError("Pinned pipeline exceeds the supported 4 GiB model RAM budget")
+        pipe.enable_model_cpu_offload()
+        pipe.vae.enable_tiling()
+        pipe.set_progress_bar_config(disable=True)
+        self.pipe, self.role = pipe, role
+
+
+def _resident_bytes(pipe: Any) -> int:
+    """Bytes held by the pipeline's module parameters and buffers, counting
+    storage shared between components once."""
+    import torch  # noqa: PLC0415 -- heavy optional dependency: torch loads on first model use, not on import
+
+    tensors = {}
+    for component in pipe.components.values():
+        if isinstance(component, torch.nn.Module):
+            for tensor in list(component.parameters()) + list(component.buffers()):
+                tensors[tensor.data_ptr()] = tensor.nelement() * tensor.element_size()
+    return sum(tensors.values())
+
+
+def _check_intrinsic_properties(properties: dict[str, Any]) -> None:
+    if properties.get("target_names") != ["albedo", "shading", "residual"] or any(
+        properties[k]["prediction_space"] != "linear" for k in properties["target_names"]
+    ):
+        raise ValueError("Unsupported intrinsic property ordering or colour space")

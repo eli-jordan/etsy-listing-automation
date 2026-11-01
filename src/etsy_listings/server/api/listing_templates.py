@@ -44,7 +44,7 @@ from etsy_listings.core.batches import BatchRecords, BatchStore, StagingStore
 from etsy_listings.core.config.listing_validation import Issue as ValidationIssue
 from etsy_listings.core.listing_templates import ListingTemplateExistsError
 from etsy_listings.core.workspace.workspace import Workspace
-from etsy_listings.server.api.listings import wire_prices
+from etsy_listings.server.api.editor_projections import garment_fields, wire_prices
 from etsy_listings.server.api.schemas import (
     CreateListingTemplateRequest,
     Issue,
@@ -113,12 +113,7 @@ def _detail(workspace: Workspace, view: ListingTemplateView) -> ListingTemplateD
             "garment": view.garment,
             "pricing_plan_name": view.pricing_plan_name,
             "resolved_prices": [p.model_dump() for p in wire_prices(view.resolved_prices)],
-            "garment_materials": profile.materials if profile is not None else [],
-            "garment_product_type": profile.blueprint.display_title
-            if profile is not None
-            else None,
-            "garment_brand": profile.blueprint.brand if profile is not None else None,
-            "garment_model": profile.blueprint.model if profile is not None else None,
+            **garment_fields(profile),
             "description_composed": view.description_composed,
             "name": view.name,
             "modified_at": view.modified_at,

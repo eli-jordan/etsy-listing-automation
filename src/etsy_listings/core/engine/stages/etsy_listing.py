@@ -52,10 +52,9 @@ from etsy_listings.core.engine.stages.etsy_target import (
     require_etsy_listing_id,
 )
 from etsy_listings.core.engine.stages.gates import (
-    check_copy_is_concrete,
     check_garment_profile_chosen,
+    concrete_description,
 )
-from etsy_listings.core.workspace.common_copy import CommonCopyError
 
 NO_SHOP_CONSEQUENCE = "this listing's copy and settings cannot be patched on Etsy"
 
@@ -220,13 +219,9 @@ class EtsyListingStage(Stage[EtsyListingDesired, AppliedEtsyListing, EtsyListing
         if blocked is not None:
             return blocked
         profile = workspace.load_garment_profile(config.garment_profile)
-        blocked = check_copy_is_concrete(title=config.etsy.title, lead=config.etsy.description.lead)
-        if blocked is not None:
-            return blocked
-        try:
-            description = workspace.compose_description(config.etsy.description)
-        except CommonCopyError as exc:
-            return Blocked(str(exc))
+        description = concrete_description(config.etsy, workspace.compose_description)
+        if isinstance(description, Blocked):
+            return description
 
         shop_id = workspace.defaults.etsy.require_shop_id()
         catalog = EtsyShopCatalog(ctx.require_etsy(), shop_id)
@@ -459,74 +454,87 @@ def _drift(
     if was is None or live is None:
         return ()
 
-    found: list[Drift] = []
-    for path, ours, theirs in (
-        ("title", was.title, live.title),
-        ("who_made", was.who_made, live.who_made),
-        ("when_made", was.when_made, live.when_made),
-        ("is_supply", was.is_supply, live.is_supply),
-        ("should_auto_renew", was.should_auto_renew, live.should_auto_renew),
-    ):
-        change = drift(path, ours, theirs)
-        if change is not None:
-            found.append(change)
+    found = [
+        change
+        for change in (*_field_drifts(was, live), *_id_drifts(was, live, catalog))
+        if change is not None
+    ]
+    partners = _partner_drift(was, live)
+    if partners is not None:
+        found.append(partners)
 
-    # `description` kept out of the loop above only because it is long
-    # enough that a label would be redundant with the value itself -- unlike
-    # the three below, whose live side is otherwise a bare id.
-    description_drift = drift("description", was.description, live.description)
-    if description_drift is not None:
-        found.append(description_drift)
+    return tuple(found)
 
-    for id_path, our_id, their_id, last_label, live_label in (
-        (
-            "shop_section_id",
-            was.shop_section_id,
-            live.shop_section_id,
-            was.shop_section,
-            catalog.shop_section_title(live.shop_section_id) if catalog else None,
-        ),
-        (
-            "shipping_profile_id",
-            was.shipping_profile_id,
-            live.shipping_profile_id,
-            was.shipping_profile,
-            catalog.shipping_profile_title(live.shipping_profile_id) if catalog else None,
-        ),
-        (
-            "return_policy_id",
-            was.return_policy_id,
-            live.return_policy_id,
-            was.return_policy.describe(),
-            catalog.return_policy_label(live.return_policy_id) if catalog else None,
-        ),
-    ):
-        change = drift(
-            id_path, our_id, their_id, last_applied_label=last_label, live_label=live_label
+
+def _field_drifts(was: AppliedEtsyListing, live: EtsyListing) -> list[Drift | None]:
+    fields = [
+        drift(path, ours, theirs)
+        for path, ours, theirs in (
+            ("title", was.title, live.title),
+            ("who_made", was.who_made, live.who_made),
+            ("when_made", was.when_made, live.when_made),
+            ("is_supply", was.is_supply, live.is_supply),
+            ("should_auto_renew", was.should_auto_renew, live.should_auto_renew),
         )
-        if change is not None:
-            found.append(change)
+    ]
+    # `description` kept out of the list above only because it is long
+    # enough that a label would be redundant with the value itself -- unlike
+    # the three ids, whose live side is otherwise a bare id.
+    return [*fields, drift("description", was.description, live.description)]
 
+
+def _id_drifts(
+    was: AppliedEtsyListing, live: EtsyListing, catalog: EtsyShopCatalog | None
+) -> list[Drift | None]:
+    labels = (
+        (
+            catalog.shop_section_title(live.shop_section_id),
+            catalog.shipping_profile_title(live.shipping_profile_id),
+            catalog.return_policy_label(live.return_policy_id),
+        )
+        if catalog
+        else (None, None, None)
+    )
+    return [
+        drift(id_path, our_id, their_id, last_applied_label=last_label, live_label=live_label)
+        for (id_path, our_id, their_id, last_label), live_label in zip(
+            (
+                ("shop_section_id", was.shop_section_id, live.shop_section_id, was.shop_section),
+                (
+                    "shipping_profile_id",
+                    was.shipping_profile_id,
+                    live.shipping_profile_id,
+                    was.shipping_profile,
+                ),
+                (
+                    "return_policy_id",
+                    was.return_policy_id,
+                    live.return_policy_id,
+                    was.return_policy.describe(),
+                ),
+            ),
+            labels,
+            strict=True,
+        )
+    ]
+
+
+def _partner_drift(was: AppliedEtsyListing, live: EtsyListing) -> Drift | None:
     live_partner_ids = {p.production_partner_id for p in live.production_partners}
-    if set(was.production_partner_ids) != live_partner_ids and live.production_partners:
+    if set(was.production_partner_ids) == live_partner_ids or not live.production_partners:
         # An empty `production_partners` on a draft this tool has already
         # patched reads as "not returned by this call" rather than "cleared"
         # -- Etsy gives no way to tell the two apart, so only a live set that
         # actually names something is trusted to disagree.
-        found.append(
-            Drift(
-                path="production_partner_ids",
-                last_applied=sorted(was.production_partner_ids),
-                live=sorted(live_partner_ids),
-                last_applied_label=", ".join(sorted(was.production_partners)) or None,
-                live_label=", ".join(
-                    sorted(
-                        partner.partner_name or str(partner.production_partner_id)
-                        for partner in live.production_partners
-                    )
-                )
-                or None,
-            )
-        )
-
-    return tuple(found)
+        return None
+    live_names = sorted(
+        partner.partner_name or str(partner.production_partner_id)
+        for partner in live.production_partners
+    )
+    return Drift(
+        path="production_partner_ids",
+        last_applied=sorted(was.production_partner_ids),
+        live=sorted(live_partner_ids),
+        last_applied_label=", ".join(sorted(was.production_partners)) or None,
+        live_label=", ".join(live_names) or None,
+    )

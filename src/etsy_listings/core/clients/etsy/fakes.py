@@ -40,7 +40,7 @@ from etsy_listings.core.clients.etsy.models import (
     ShopSection,
     VariationImageLink,
 )
-from etsy_listings.core.clients.etsy.shops import EtsyShopClient
+from etsy_listings.core.clients.etsy.shops import EtsyShopClient, ShopMetadataClient
 from etsy_listings.core.clients.etsy.transport import EtsyApiError
 from etsy_listings.core.config.media import MAX_IMAGES
 
@@ -66,10 +66,37 @@ class _Attached:
     anchor: int
 
 
+def _videos_after(
+    count: int, featured: list[_Attached], others: list[_Attached], image_count: int
+) -> list[_Attached]:
+    """The videos Shop Manager shows right after the ``count``-th image: the
+    featured one after the first, each other after the image count it was
+    anchored at, clamped to the gallery."""
+    first = featured if count == 1 else []
+    return [*first, *(a for a in others if max(1, min(a.anchor, image_count)) == count)]
+
+
 DAY_SECONDS = 24 * 60 * 60
 
 
-class FakeEtsyShopClient(EtsyShopClient):
+class _FakeShopMetadata(ShopMetadataClient):
+    _sections: list[ShopSection]
+    _policies: list[ReturnPolicy]
+    section_calls: int
+    return_policy_calls: int
+
+    @override
+    def shop_sections(self, shop_id: int) -> list[ShopSection]:
+        self.section_calls += 1
+        return list(self._sections)
+
+    @override
+    def return_policies(self, shop_id: int) -> list[ReturnPolicy]:
+        self.return_policy_calls += 1
+        return list(self._policies)
+
+
+class FakeEtsyShopClient(_FakeShopMetadata, EtsyShopClient):
     """Every read `setup` makes, answered from a dict.
 
     `find_shops` matches case-insensitively on the whole name rather than as a
@@ -104,18 +131,8 @@ class FakeEtsyShopClient(EtsyShopClient):
         self.owner_lookups.append(user_id)
         return self._owned
 
-    @override
-    def shop_sections(self, shop_id: int) -> list[ShopSection]:
-        self.section_calls += 1
-        return list(self._sections)
 
-    @override
-    def return_policies(self, shop_id: int) -> list[ReturnPolicy]:
-        self.return_policy_calls += 1
-        return list(self._policies)
-
-
-class FakeEtsyListingClient(EtsyListingClient):
+class FakeEtsyListingClient(_FakeShopMetadata, EtsyListingClient):
     """Models the measured API quirks a tidy fake would hide: `image_ids`
     as a full-replacement set that detaches whatever it omits, and
     `overwrite: true` replacing an image in place -- a new id at the same
@@ -238,13 +255,8 @@ class FakeEtsyListingClient(EtsyListingClient):
         slots: list[GallerySlot] = []
         for count, image in enumerate(images, start=1):
             slots.append(GallerySlot("image", image.listing_image_id))
-            if count == 1:
-                slots.extend(GallerySlot("video", a.video_id) for a in featured)
-            slots.extend(
-                GallerySlot("video", a.video_id)
-                for a in others
-                if max(1, min(a.anchor, len(images))) == count
-            )
+            shown = _videos_after(count, featured, others, len(images))
+            slots.extend(GallerySlot("video", a.video_id) for a in shown)
         return tuple(slots)
 
     @override
@@ -279,16 +291,6 @@ class FakeEtsyListingClient(EtsyListingClient):
     def production_partners(self, shop_id: int) -> list[ProductionPartner]:
         self.production_partner_calls += 1
         return list(self._production_partners)
-
-    @override
-    def shop_sections(self, shop_id: int) -> list[ShopSection]:
-        self.section_calls += 1
-        return list(self._sections)
-
-    @override
-    def return_policies(self, shop_id: int) -> list[ReturnPolicy]:
-        self.return_policy_calls += 1
-        return list(self._policies)
 
     # ------------------------------------------------------------- writes
 

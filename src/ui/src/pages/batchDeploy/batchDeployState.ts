@@ -103,6 +103,9 @@ export function applyBatchRunEvent(
     case "phase":
       return withPhase(state, event.phase, eventTime(event));
 
+    case "stage_applying":
+    case "stage_applied":
+    case "stage_failed":
     case "stage_checking": {
       const current = listingState(state, event.listing);
       return withListing(
@@ -135,15 +138,6 @@ export function applyBatchRunEvent(
         ),
       };
 
-    case "stage_applying": {
-      const current = listingState(state, event.listing);
-      return withListing(
-        { ...state, currentListing: event.listing, currentStage: event.stage },
-        event.listing,
-        project(current, event, source),
-      );
-    }
-
     case "progress": {
       const current = listingState(state, event.listing);
       const projected = project(current, event, source);
@@ -152,24 +146,6 @@ export function applyBatchRunEvent(
         { ...state, currentListing: event.listing, currentStage: event.stage },
         event.listing,
         projected,
-      );
-    }
-
-    case "stage_applied": {
-      const current = listingState(state, event.listing);
-      return withListing(
-        { ...state, currentListing: event.listing, currentStage: event.stage },
-        event.listing,
-        project(current, event, source),
-      );
-    }
-
-    case "stage_failed": {
-      const current = listingState(state, event.listing);
-      return withListing(
-        { ...state, currentListing: event.listing, currentStage: event.stage },
-        event.listing,
-        project(current, event, source),
       );
     }
 

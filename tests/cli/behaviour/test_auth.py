@@ -398,22 +398,27 @@ def test_cancelling_any_question_auth_asks_keeps_only_what_came_before_it(
 
         answered = set(run.asked) - {question}
         stored = env_values(root) if (root / layout.ENV_FILE).exists() else {}
+        _assert_only_complete_credentials_stored(question, answered, stored)
 
-        # A *credential* is the unit that gets stored, not a question. The
-        # Etsy app key is two prompts and one step, because both halves ride
-        # on one header and the ping that proves them cannot say which was
-        # wrong -- so answering only the keystring stores neither.
-        for asks, variables in (
-            (("Printify API token",), (PRINTIFY_TOKEN_VAR,)),
-            (
-                ("Etsy keystring", "Etsy shared secret"),
-                (ETSY_KEYSTRING_VAR, ETSY_SHARED_SECRET_VAR),
-            ),
-            (("Anthropic API key",), (ANTHROPIC_KEY_VAR,)),
-        ):
-            complete = all(any(ask in q for q in answered) for ask in asks)
-            for variable in variables:
-                assert (variable in stored) == complete, (
-                    f"cancelling {question!r}: {variable} should "
-                    f"{'be' if complete else 'not be'} on disk"
-                )
+
+# A *credential* is the unit that gets stored, not a question. The Etsy app
+# key is two prompts and one step, because both halves ride on one header and
+# the ping that proves them cannot say which was wrong -- so answering only
+# the keystring stores neither.
+CREDENTIALS = (
+    (("Printify API token",), (PRINTIFY_TOKEN_VAR,)),
+    (("Etsy keystring", "Etsy shared secret"), (ETSY_KEYSTRING_VAR, ETSY_SHARED_SECRET_VAR)),
+    (("Anthropic API key",), (ANTHROPIC_KEY_VAR,)),
+)
+
+
+def _assert_only_complete_credentials_stored(
+    question: str, answered: set[str], stored: dict[str, str]
+) -> None:
+    for asks, variables in CREDENTIALS:
+        complete = all(any(ask in q for q in answered) for ask in asks)
+        for variable in variables:
+            assert (variable in stored) == complete, (
+                f"cancelling {question!r}: {variable} should "
+                f"{'be' if complete else 'not be'} on disk"
+            )

@@ -1,4 +1,4 @@
-import { stageBlocked, stageWillRun, type PlanDTO } from "../../types";
+import { stageBlocked, stageWillRun, type PlanDTO, type StagePlanDTO } from "../../types";
 import {
   buyerFacingImpacts,
   listingStageProgress,
@@ -31,6 +31,15 @@ function rowStatus(listing: BatchListingState, plan: PlanDTO | null): string {
       : "No changes";
   }
 
+  return runnableStatus(listing, plan, runnable);
+}
+
+/** How far a listing with work to run has got through its runnable stages. */
+function runnableStatus(
+  listing: BatchListingState,
+  plan: PlanDTO,
+  runnable: readonly StagePlanDTO[],
+): string {
   let completed = 0;
   let failed = 0;
   let running = false;

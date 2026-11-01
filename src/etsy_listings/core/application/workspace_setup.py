@@ -155,15 +155,26 @@ def shop_yaml_document(answers: SetupAnswers, existing: dict[str, Any] | None) -
     prior: dict[str, Any] = dict(existing or {})
     prior_etsy: dict[str, Any] = dict(prior.get("etsy") or {})
     prior_printify: dict[str, Any] = dict(prior.get("printify") or {})
-    prior_listing_defaults: dict[str, Any] = dict(prior_etsy.get("listing_defaults") or {})
+    carried = {k: v for k, v in prior.items() if k not in ASKED_TOP_LEVEL_KEYS}
+    document: dict[str, Any] = {
+        "printify": _printify_section(answers, prior_printify),
+        "etsy": _etsy_section(answers, prior_etsy),
+    }
+    document.update(carried)
+    return document
 
+
+def _printify_section(answers: SetupAnswers, prior_printify: dict[str, Any]) -> dict[str, Any]:
     printify: dict[str, Any] = {
         k: v for k, v in prior_printify.items() if k not in ASKED_PRINTIFY_KEYS
     }
     printify.update({"shop_name": answers.printify_shop_name, "shop_id": answers.printify_shop_id})
     if answers.preferred_print_provider:
         printify["preferred_print_provider"] = answers.preferred_print_provider
+    return printify
 
+
+def _etsy_section(answers: SetupAnswers, prior_etsy: dict[str, Any]) -> dict[str, Any]:
     etsy: dict[str, Any] = {
         k: v for k, v in prior_etsy.items() if k not in (*ASKED_ETSY_KEYS, "listing_defaults")
     }
@@ -175,7 +186,15 @@ def shop_yaml_document(answers: SetupAnswers, existing: dict[str, Any] | None) -
         if kept is not None:
             etsy[key] = kept
     etsy["currency"] = answers.currency
+    etsy["listing_defaults"] = _listing_defaults(
+        answers, dict(prior_etsy.get("listing_defaults") or {})
+    )
+    return etsy
 
+
+def _listing_defaults(
+    answers: SetupAnswers, prior_listing_defaults: dict[str, Any]
+) -> dict[str, Any]:
     listing_defaults: dict[str, Any] = {
         k: v for k, v in prior_listing_defaults.items() if k not in ASKED_LISTING_DEFAULT_KEYS
     }
@@ -201,12 +220,7 @@ def shop_yaml_document(answers: SetupAnswers, existing: dict[str, Any] | None) -
     )
     if return_policy:
         listing_defaults["return_policy"] = return_policy
-    etsy["listing_defaults"] = listing_defaults
-
-    carried = {k: v for k, v in prior.items() if k not in ASKED_TOP_LEVEL_KEYS}
-    document: dict[str, Any] = {"printify": printify, "etsy": etsy}
-    document.update(carried)
-    return document
+    return listing_defaults
 
 
 SHOP_YAML_HEADER = """\
@@ -280,22 +294,30 @@ def render_shop_yaml(document: dict[str, Any]) -> str:
     lines: list[str] = []
     ancestors: list[tuple[int, str]] = []
     for line in dumped.splitlines():
-        stripped = line.strip()
         indent = len(line) - len(line.lstrip(" "))
-        key = stripped.split(":", 1)[0] if ":" in stripped and not stripped.startswith("-") else ""
-        path = ""
-        if key:
-            while ancestors and ancestors[-1][0] >= indent:
-                ancestors.pop()
-            path = ".".join([*(k for _, k in ancestors), key])
-            ancestors.append((indent, key))
-        comment = FIELD_COMMENTS.get(path)
+        comment = FIELD_COMMENTS.get(_dotted_path(line, indent, ancestors))
         if comment:
             if indent == 0:
                 lines.append("")
             lines.append(f"{' ' * indent}# {comment}")
         lines.append(line)
     return SHOP_YAML_HEADER + "\n".join(lines) + "\n"
+
+
+def _dotted_path(line: str, indent: int, ancestors: list[tuple[int, str]]) -> str:
+    """The dotted path of the key ``line`` sets, or "" for a line that sets
+    none; ``ancestors`` is the ``(indent, key)`` stack, updated in place."""
+    stripped = line.strip()
+    if ":" not in stripped or stripped.startswith("-"):
+        return ""
+    key = stripped.split(":", 1)[0]
+    if not key:
+        return ""
+    while ancestors and ancestors[-1][0] >= indent:
+        ancestors.pop()
+    path = ".".join([*(k for _, k in ancestors), key])
+    ancestors.append((indent, key))
+    return path
 
 
 # ------------------------------------------------------------ packaged prompts

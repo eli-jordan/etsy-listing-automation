@@ -145,7 +145,7 @@ class Evidence:
 
     def sample(self, array: FloatMap, xy: FloatMap) -> FloatMap:
         sx, sy, ox, oy = self.crop.photo_to_prediction
-        return geometry.sample(
+        return material_math.sample(
             array, xy * np.array([sx, sy], np.float32) + np.array([ox, oy], np.float32)
         )
 
@@ -185,6 +185,22 @@ class Cooperation:
     cooperate: Callable[[], None] = _no_cooperation
 
 
+def _check_placement(placement: Placement, evidence: Evidence, size: tuple[int, int]) -> None:
+    box, mask = placement.box, placement.mask
+    width, height = size
+    if not evidence_covers(evidence.crop, evidence.identity, box, size, evidence.identity):
+        raise ValueError("Evidence does not cover the full placement margin")
+    if not cv2.isContourConvex(box) or cv2.contourArea(box) < 1:
+        raise ValueError("Choose a convex uncrossed placement in TL, TR, BR, BL order")
+    if (
+        mask.shape != (height, width)
+        or mask.dtype != np.float32
+        or not np.isfinite(mask).all()
+        or np.any((mask < 0) | (mask > 1))
+    ):
+        raise ValueError("Visibility mask must be finite float32 photo pixels in [0,1]")
+
+
 def prepare(
     base: RGB,
     placement: Placement,
@@ -198,23 +214,13 @@ def prepare(
     checkpoint, cooperate = cooperation.checkpoint, cooperation.cooperate
     height, width = base.shape[:2]
     size = (width, height)
-    if not evidence_covers(evidence.crop, evidence.identity, box, size, evidence.identity):
-        raise ValueError("Evidence does not cover the full placement margin")
-    if not cv2.isContourConvex(box) or cv2.contourArea(box) < 1:
-        raise ValueError("Choose a convex uncrossed placement in TL, TR, BR, BL order")
-    if (
-        mask.shape != (height, width)
-        or mask.dtype != np.float32
-        or not np.isfinite(mask).all()
-        or np.any((mask < 0) | (mask > 1))
-    ):
-        raise ValueError("Visibility mask must be finite float32 photo pixels in [0,1]")
+    _check_placement(placement, evidence, size)
     mesh = 17 if max_edge is not None else 49
     grid = geometry.placement_grid(box, mesh)
     placement_width = float((np.linalg.norm(box[1] - box[0]) + np.linalg.norm(box[2] - box[3])) / 2)
     normals = evidence.sample(evidence.normals, grid)
     normals /= np.maximum(np.linalg.norm(normals, axis=-1, keepdims=True), 1e-8)
-    confidence = geometry.sample(mask, grid)
+    confidence = material_math.sample(mask, grid)
     grid_ids = np.ones((mesh, mesh), np.int32)
     checkpoint("fitting")
     surface, diagnostics = geometry.integrate(
@@ -256,7 +262,7 @@ def prepare(
     material, valid = material_math.bake(
         neutral, box, (right - left, bottom - top), origin=(left, top)
     )
-    material += geometry.sample(uv - neutral, material * (mesh - 1))
+    material += material_math.sample(uv - neutral, material * (mesh - 1))
     valid *= mask[region]
     labels = (valid > 0).astype(np.int32)
     checkpoint("lighting")

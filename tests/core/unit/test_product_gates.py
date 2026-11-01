@@ -27,6 +27,7 @@ from pathlib import Path
 import pytest
 from PIL import Image
 
+from etsy_listings.core.config import DescriptionConfig, EtsyListingConfig
 from etsy_listings.core.config import listing_validation as rules
 from etsy_listings.core.config.garment_profile import BlueprintRef, GarmentProfile, PrintArea
 from etsy_listings.core.config.media import ProbeFailure, VideoFacts
@@ -38,7 +39,9 @@ from etsy_listings.core.engine.stages.gates import (
     check_lifecycle_verb,
     check_listing_yaml_present,
     check_videos,
+    concrete_description,
 )
+from etsy_listings.core.workspace.common_copy import CommonCopyError
 
 PROFILE = GarmentProfile(
     blueprint=BlueprintRef(brand="Comfort Colors", model="1717"),
@@ -51,6 +54,15 @@ PROFILE = GarmentProfile(
 full-size RGBA design costs each case a ~80 MB encode. One case below keeps
 the real dimensions."""
 FULL_PROFILE = PROFILE.model_copy(update={"print_area": PrintArea(width=4200, height=4800)})
+
+
+def test_description_loading_errors_are_stage_refusals():
+    config = EtsyListingConfig(title="Title", description=DescriptionConfig(lead="Lead"))
+
+    def compose(description):
+        raise CommonCopyError("body file is missing")
+
+    assert concrete_description(config, compose) == Blocked("body file is missing")
 
 
 def _design(tmp_path: Path, size: tuple[int, int], mode: str = "RGBA") -> Path:

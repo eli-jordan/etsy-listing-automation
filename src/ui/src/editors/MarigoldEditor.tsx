@@ -1,3 +1,4 @@
+import { ColourPicker } from "./ColourPicker";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   getMaskHistory,
@@ -21,6 +22,15 @@ import { TestDesignPicker } from "../components/TestDesignPicker";
 import { ViewTabs, type View } from "../components/ViewTabs";
 import type { BoundingBox, Renderer, TemplateConfigState, Placement } from "../types";
 import "../components/marigold.css";
+import {
+  canUndoMask,
+  editorPlacements,
+  editorPreviewRequest,
+  marigoldMapInputs,
+  previewBlocker,
+  previewJobs,
+  undoBases,
+} from "./marigoldEditorModel";
 
 interface Props {
   templateName: string;
@@ -40,6 +50,107 @@ interface Props {
   onPrepare: () => void;
   onPreviewPending?: (pending: boolean) => void;
 }
+/** The view tabs and the calibrate view's pickers: colour (for a colour
+ * matrix with a choice) and the design box toggle. */
+function PreviewBar({
+  tab,
+  onTabChange,
+  design,
+  onDesignChange,
+  colour,
+  colours,
+  onColourChange,
+  showBox,
+  onShowBoxChange,
+}: {
+  tab: View;
+  onTabChange: (tab: View) => void;
+  design: string;
+  onDesignChange: (design: string) => void;
+  colour: string;
+  colours: string[];
+  onColourChange: (colour: string) => void;
+  showBox: boolean;
+  onShowBoxChange: (show: boolean) => void;
+}) {
+  const calibrating = tab === "calibrate";
+  return (
+    <div className="app__preview-bar">
+      <ViewTabs value={tab} onChange={onTabChange} />
+      <TestDesignPicker compact value={design} onChange={onDesignChange} />
+      {calibrating && colours.length > 1 && (
+        <ColourPicker colour={colour} colours={colours} onChange={onColourChange} />
+      )}
+      {calibrating && (
+        <div className="app__outline-toggle">
+          <BoxToggle checked={showBox} onChange={onShowBoxChange} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Each placement's artwork and mask, with the brush on the one being
+ * edited. */
+function PlacementOverlays({
+  placements,
+  multiple,
+  preparation,
+  showArtwork,
+  design,
+  templateName,
+  revision,
+  histories,
+  maskEdits,
+  space,
+  editingIndex,
+  mode,
+  diameter,
+  onStroke,
+}: {
+  placements: Placement[];
+  multiple: boolean;
+  preparation: Preparation | null;
+  showArtwork: boolean;
+  design: string;
+  templateName: string;
+  revision: string;
+  histories: { revision: string; values: Record<string, MaskHistory> };
+  maskEdits: MaskEdit[];
+  space: [number, number];
+  editingIndex: number | null;
+  mode: "mask" | "unmask";
+  diameter: number;
+  onStroke: (stroke: MaskOperation, id: string | null) => void;
+}) {
+  return (
+    <>
+      {placements.map((p, i) => {
+        const id = multiple ? p.id : null;
+        const maskState = preparation?.placements.find((s) => s.placement_id === id);
+        const masked = !!maskState?.mask_available;
+        return (
+          <PlacementOverlay
+            key={p.id}
+            showArtwork={showArtwork}
+            box={p.bounding_box}
+            designUrl={`/api/designs/${encodeURIComponent(design)}/image`}
+            maskUrl={masked ? maskUrl(templateName, id, false, revision) : null}
+            undoBases={undoBases(histories, revision, id)}
+            automaticMaskUrl={masked ? maskUrl(templateName, id, true, revision) : null}
+            operations={maskEdits.find((e) => e.placement_id === id)?.operations ?? []}
+            space={space}
+            editing={i === editingIndex}
+            mode={mode}
+            diameter={diameter}
+            onStroke={(stroke) => onStroke(stroke, id)}
+          />
+        );
+      })}
+    </>
+  );
+}
+
 export function MarigoldEditor({
   templateName,
   config,
@@ -80,16 +191,7 @@ export function MarigoldEditor({
   const [showBox, setShowBox] = useState(true);
   const [mode, setMode] = useState<"mask" | "unmask">("mask");
   const [diameter, setDiameter] = useState(24);
-  const placements: Placement[] =
-    config.kind === "multiple"
-      ? config.placements
-      : [
-          {
-            id: "implicit",
-            colour: config.kind === "single" ? (config.colour ?? "") : (colours[0] ?? ""),
-            bounding_box: config.bounding_box,
-          },
-        ];
+  const placements = editorPlacements(config, colours);
   const index = Math.max(
     0,
     placements.findIndex((p) => p.id === selectedId),
@@ -107,8 +209,6 @@ export function MarigoldEditor({
   }
   const placementState = preparation?.placements.find((p) => p.placement_id === placementId);
   const draft = maskDraft(operations);
-  const draftUndo = draft.strokes.length;
-  const historyUndos = draft.undoSaved;
   const controls: MaskControls = {
     editing,
     setEditing,
@@ -117,8 +217,7 @@ export function MarigoldEditor({
     diameter,
     setDiameter,
     canEdit: !!selected && !!placementState?.mask_available,
-    canUndo:
-      draftUndo > 0 || (!draft.automatic && (placementState?.undo_count ?? 0) > historyUndos),
+    canUndo: canUndoMask(draft, placementState?.undo_count ?? 0),
     undo: () => append({ type: "undo" }),
     reset: () => append({ type: "reset" }),
   };
@@ -159,34 +258,83 @@ export function MarigoldEditor({
     next.splice(index + 1, 0, copy);
     mutate(next, copy.id);
   }
+  /** QuadEditor's placement controls, which only a multiple template has. */
+  function placementEditing() {
+    if (config.kind !== "multiple") return {};
+    return {
+      labels: placements.map((p) => p.colour),
+      labelSuggestions: knownColours,
+      labelPlaceholder: "assign colour",
+      onLabelChange: (i: number, c: string) =>
+        mutate(
+          placements.map((p, n) => (n === i ? { ...p, colour: c } : p)),
+          placements[i]?.id ?? null,
+        ),
+      onAddBox: add,
+      onDuplicateSelected: duplicate,
+      onDeleteSelected: () => {
+        if (!selected) return;
+        mutate(
+          placements.filter((p) => p.id !== selected.id),
+          null,
+        );
+        onMaskEdits(maskEdits.filter((e) => e.placement_id !== selected.id));
+      },
+      onBringSelectedToFront: () => {
+        if (selected)
+          mutate([...placements.filter((p) => p.id !== selected.id), selected], selected.id);
+      },
+    };
+  }
+  /** The calibrate view's canvas: the photo (or its live preview) with
+   * every placement's box, artwork and mask. */
+  function calibrationCanvas(space: [number, number]) {
+    return (
+      <QuadEditor
+        imageUrl={
+          editorPreview ??
+          templatePhotoUrl(templateName, config.kind === "colour-matrix" ? colour : null)
+        }
+        space={space}
+        boxes={placements.map((p) => p.bounding_box)}
+        selectedIndex={index}
+        onSelect={(i) => {
+          setSelectedId(placements[i]?.id ?? null);
+          setEditing(false);
+        }}
+        onChangeBox={changeBox}
+        outlines={showBox ? "all" : "none"}
+        interactive={!editing}
+        {...placementEditing()}
+        overlay={
+          <PlacementOverlays
+            placements={placements}
+            multiple={config.kind === "multiple"}
+            preparation={preparation}
+            showArtwork={!editorPreview}
+            design={design}
+            templateName={templateName}
+            revision={revision}
+            histories={histories}
+            maskEdits={maskEdits}
+            space={space}
+            editingIndex={editing ? index : null}
+            mode={mode}
+            diameter={diameter}
+            onStroke={append}
+          />
+        }
+      />
+    );
+  }
   const jobs: PreviewJob[] = useMemo(
-    () =>
-      config.kind === "colour-matrix"
-        ? colours.map((c) => ({
-            id: c,
-            label: c,
-            body: { colour: c, bounding_box: config.bounding_box, renderer: config.renderer },
-          }))
-        : [
-            {
-              id: templateName,
-              label: templateName,
-              body:
-                config.kind === "multiple"
-                  ? { placements: config.placements, renderer: config.renderer }
-                  : { bounding_box: config.bounding_box, renderer: config.renderer },
-            },
-          ],
+    () => previewJobs(config, colours, templateName),
     [config, colours, templateName],
   );
   const editorRevision = calibrationRevision || preparation?.config_revision || "";
-  const editorBody =
-    config.kind === "colour-matrix" ? jobs.find((job) => job.id === colour)?.body : jobs[0]?.body;
   const editorPreview = usePreview(
     templateName,
-    editorRevision && editorBody
-      ? { ...editorBody, calibration_revision: editorRevision, mask_edits: maskEdits }
-      : null,
+    editorPreviewRequest(config.kind, jobs, colour, editorRevision, maskEdits),
     design,
     true,
     onPreviewPending,
@@ -209,141 +357,36 @@ export function MarigoldEditor({
       active = false;
     };
   }, [templateName, revision, placementKey]);
-  const mapInputs = (value: TemplateConfigState | null) =>
-    value?.renderer.type === "marigold"
-      ? JSON.stringify({
-          kind: value.kind,
-          geometry:
-            value.kind === "multiple"
-              ? value.placements.map((p) => ({ id: p.id, bounding_box: p.bounding_box }))
-              : value.bounding_box,
-          inference: value.renderer.config.inference,
-        })
-      : null;
-  const unsavedMaps = mapInputs(config) !== mapInputs(savedConfig) || maskEdits.length > 0;
+  const unsavedMaps =
+    marigoldMapInputs(config) !== marigoldMapInputs(savedConfig) || maskEdits.length > 0;
   const awaitingSavedRevision =
     !!calibrationRevision && preparation?.config_revision !== calibrationRevision;
-  const blocked =
-    !marigoldMapsReady(preparation?.maps) ||
-    unsavedMaps ||
-    awaitingSavedRevision ||
-    !!preparation?.active_job;
+  const blocked = previewBlocker({
+    mapsReady: marigoldMapsReady(preparation?.maps),
+    unsavedMaps,
+    awaitingSavedRevision,
+    activeJob: !!preparation?.active_job,
+    mapsMessage: preparation?.maps.message,
+  });
   return (
     <main className="app__main">
       <div className="app__preview">
-        <div className="app__preview-bar">
-          <ViewTabs value={tab} onChange={setTab} />
-          <TestDesignPicker compact value={design} onChange={onDesignChange} />
-          {tab === "calibrate" && config.kind === "colour-matrix" && colours.length > 1 && (
-            <label className="app__bar-field">
-              <span>Colour</span>
-              <select value={colour} onChange={(e) => setSelectedColour(e.target.value)}>
-                {colours.map((c) => (
-                  <option key={c} value={c}>
-                    {c}
-                  </option>
-                ))}
-              </select>
-            </label>
-          )}
-          {tab === "calibrate" && (
-            <div className="app__outline-toggle">
-              <BoxToggle checked={showBox} onChange={setShowBox} />
-            </div>
-          )}
-        </div>
+        <PreviewBar
+          tab={tab}
+          onTabChange={setTab}
+          design={design}
+          onDesignChange={onDesignChange}
+          colour={colour}
+          colours={config.kind === "colour-matrix" ? colours : []}
+          onColourChange={setSelectedColour}
+          showBox={showBox}
+          onShowBoxChange={setShowBox}
+        />
         {tab === "calibrate" && (
           <>
             <div className="mg-stage mg-editor-stage">
               {space ? (
-                <QuadEditor
-                  imageUrl={
-                    editorPreview ??
-                    templatePhotoUrl(templateName, config.kind === "colour-matrix" ? colour : null)
-                  }
-                  space={space}
-                  boxes={placements.map((p) => p.bounding_box)}
-                  selectedIndex={index}
-                  onSelect={(i) => {
-                    setSelectedId(placements[i]?.id ?? null);
-                    setEditing(false);
-                  }}
-                  onChangeBox={changeBox}
-                  outlines={showBox ? "all" : "none"}
-                  interactive={!editing}
-                  {...(config.kind === "multiple"
-                    ? {
-                        labels: placements.map((p) => p.colour),
-                        labelSuggestions: knownColours,
-                        labelPlaceholder: "assign colour",
-                        onLabelChange: (i: number, c: string) =>
-                          mutate(
-                            placements.map((p, n) => (n === i ? { ...p, colour: c } : p)),
-                            placements[i]?.id ?? null,
-                          ),
-                        onAddBox: add,
-                        onDuplicateSelected: duplicate,
-                        onDeleteSelected: () => {
-                          if (!selected) return;
-                          mutate(
-                            placements.filter((p) => p.id !== selected.id),
-                            null,
-                          );
-                          onMaskEdits(maskEdits.filter((e) => e.placement_id !== selected.id));
-                        },
-                        onBringSelectedToFront: () => {
-                          if (selected)
-                            mutate(
-                              [...placements.filter((p) => p.id !== selected.id), selected],
-                              selected.id,
-                            );
-                        },
-                      }
-                    : {})}
-                  overlay={
-                    <>
-                      {placements.map((p, i) => {
-                        const id = config.kind === "multiple" ? p.id : null;
-                        const maskState = preparation?.placements.find(
-                          (s) => s.placement_id === id,
-                        );
-                        return (
-                          <PlacementOverlay
-                            key={p.id}
-                            showArtwork={!editorPreview}
-                            box={p.bounding_box}
-                            designUrl={`/api/designs/${encodeURIComponent(design)}/image`}
-                            maskUrl={
-                              maskState?.mask_available
-                                ? maskUrl(templateName, id, false, revision)
-                                : null
-                            }
-                            undoBases={
-                              histories.revision === revision
-                                ? (histories.values[id ?? "implicit"]?.strokes.map(
-                                    (s) => s.before,
-                                  ) ?? [])
-                                : []
-                            }
-                            automaticMaskUrl={
-                              maskState?.mask_available
-                                ? maskUrl(templateName, id, true, revision)
-                                : null
-                            }
-                            operations={
-                              maskEdits.find((e) => e.placement_id === id)?.operations ?? []
-                            }
-                            space={space}
-                            editing={editing && i === index}
-                            mode={mode}
-                            diameter={diameter}
-                            onStroke={(stroke) => append(stroke, id)}
-                          />
-                        );
-                      })}
-                    </>
-                  }
-                />
+                calibrationCanvas(space)
               ) : (
                 <p className="app__loading">No readable scene photo.</p>
               )}
@@ -357,15 +400,7 @@ export function MarigoldEditor({
           jobs={jobs}
           design={design}
           active={tab === "preview"}
-          blocked={
-            blocked
-              ? unsavedMaps
-                ? "Save your calibration changes before rendering."
-                : awaitingSavedRevision
-                  ? "Waiting for current calibration status. Reload the template if it changed elsewhere."
-                  : (preparation?.maps.message ?? "Prepare the template first.")
-              : null
-          }
+          blocked={blocked}
           onPrepare={onPrepare}
           prepareLabel={
             preparation?.maps.reason === "photo_changed"
