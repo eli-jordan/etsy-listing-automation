@@ -19,6 +19,7 @@ from etsy_listings.core.engine.events import (
     EngineStageApplied,
     EngineStageApplying,
     EngineStageFailed,
+    RunHooks,
 )
 from etsy_listings.core.engine.lock import Lockfile
 from etsy_listings.core.engine.plan import PlannedRun, StageState
@@ -91,7 +92,7 @@ def test_stage_events_and_progress_are_one_ordered_stream(workspace_root: Path) 
         a_context(workspace_root),
         _planned(_Stage("render"), _Stage("printify_product")),
         a_lock(),
-        on_event=events.append,
+        hooks=RunHooks(on_event=events.append),
     )
 
     assert [
@@ -120,7 +121,7 @@ def test_stage_failed_carries_a_safe_message_before_reraising(workspace_root: Pa
             a_context(workspace_root),
             _planned(_Stage("render"), _Stage("etsy_listing", fails=True)),
             a_lock(),
-            on_event=events.append,
+            hooks=RunHooks(on_event=events.append),
         )
 
     assert [event.stage for event in events if isinstance(event, EngineStageApplied)] == ["render"]
@@ -137,7 +138,7 @@ def test_a_bare_defect_is_masked_on_the_event_stream(workspace_root: Path) -> No
             a_context(workspace_root),
             _planned(_Stage("etsy_listing", defect=True)),
             a_lock(),
-            on_event=events.append,
+            hooks=RunHooks(on_event=events.append),
         )
 
     failed = [event for event in events if isinstance(event, EngineStageFailed)]
@@ -165,7 +166,7 @@ def test_a_stage_that_never_runs_emits_no_apply_event(workspace_root: Path) -> N
     )
     events: list[EngineRunEvent] = []
 
-    execute(a_context(workspace_root), planned, a_lock(), on_event=events.append)
+    execute(a_context(workspace_root), planned, a_lock(), hooks=RunHooks(on_event=events.append))
 
     assert events == []
 
@@ -184,7 +185,7 @@ def test_apply_listings_threads_the_event_sink_into_execute(workspace_root: Path
         a_context(workspace_root),
         [LISTING],
         [RenderStage()],
-        on_event=events.append,
+        hooks=RunHooks(on_event=events.append),
     )
 
     assert [event.stage for event in events if isinstance(event, EngineStageApplying)] == ["render"]

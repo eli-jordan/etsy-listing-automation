@@ -56,6 +56,7 @@ from etsy_listings.core.engine.events import (
     EngineStageChecking,
     EngineStageFailed,
     EngineStagePlanned,
+    RunHooks,
 )
 from etsy_listings.core.engine.preview import needs_preview
 from etsy_listings.core.engine.run import (
@@ -236,7 +237,9 @@ class RunExecutor:
         def stop() -> bool:
             return self._should_stop(run)
 
-        report = plan_listings(ctx, run.listings, self.stages, on_event=emit, should_stop=stop)
+        report = plan_listings(
+            ctx, run.listings, self.stages, hooks=RunHooks(on_event=emit, should_stop=stop)
+        )
 
         if self._should_stop(run):
             run.transition_plan("cancelled")
@@ -263,7 +266,9 @@ class RunExecutor:
             # image that differs from one that came out identical. The later
             # `listing_planned` supersedes the first, fingerprint included.
             if previewed and not self._should_stop(run):
-                plan_listings(ctx, previewed, self.stages, on_event=emit, should_stop=stop)
+                plan_listings(
+                    ctx, previewed, self.stages, hooks=RunHooks(on_event=emit, should_stop=stop)
+                )
 
         if self._should_stop(run):
             run.transition_plan("cancelled")
@@ -283,9 +288,8 @@ class RunExecutor:
             ctx,
             run.listings,
             self.stages,
-            on_event=emit,
             expect=run.expect,
-            should_stop=lambda: self._should_stop(run),
+            hooks=RunHooks(on_event=emit, should_stop=lambda: self._should_stop(run)),
         )
 
         errors = [outcome.error for outcome in report.failures]

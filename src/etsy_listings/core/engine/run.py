@@ -42,6 +42,7 @@ from etsy_listings.core.engine.events import (
     EngineListingFailed,
     EngineListingPlanned,
     EnginePreviewRendered,
+    RunHooks,
     ignore_engine_event,
 )
 from etsy_listings.core.engine.lifecycle import after_apply
@@ -197,8 +198,7 @@ def plan_listings(
     listings: Sequence[str],
     stages: list[AnyStage],
     *,
-    on_event: EngineEventSink = ignore_engine_event,
-    should_stop: Callable[[], bool] | None = None,
+    hooks: RunHooks = RunHooks(),
 ) -> RunReport:
     """Plan every listing. Reads only -- nothing is created or written.
 
@@ -210,11 +210,13 @@ def plan_listings(
     """
 
     def work(listing: str) -> PlannedRun:
-        planned = build_plan(ctx, listing, _read_lock(ctx, listing), stages, on_event=on_event)
-        on_event(EngineListingPlanned(listing, planned.plan))
+        planned = build_plan(
+            ctx, listing, _read_lock(ctx, listing), stages, on_event=hooks.on_event
+        )
+        hooks.on_event(EngineListingPlanned(listing, planned.plan))
         return planned
 
-    return _over(listings, work, on_event, should_stop=should_stop or _never_stop)
+    return _over(listings, work, hooks.on_event, should_stop=hooks.should_stop)
 
 
 def preview_listing(
@@ -261,9 +263,8 @@ def apply_listings(
     listings: Sequence[str],
     stages: list[AnyStage],
     *,
-    on_event: EngineEventSink = ignore_engine_event,
+    hooks: RunHooks = RunHooks(),
     expect: Mapping[str, str] | None = None,
-    should_stop: Callable[[], bool] | None = None,
 ) -> RunReport:
     """Plan and then execute every listing, writing the lockfile after every
         stage that succeeds, not just once at the end.
@@ -293,7 +294,7 @@ def apply_listings(
     : the proposal described copy that is now deployed or deliberately
         not taken, and every entry point must leave the same proposal state.
     """
-    stop = should_stop or _never_stop
+    on_event, stop = hooks.on_event, hooks.should_stop
 
     def work(listing: str) -> PlannedRun:
         lock = _read_lock(ctx, listing)
@@ -317,9 +318,8 @@ def apply_listings(
             ctx,
             planned,
             lock,
-            on_event=on_event,
+            hooks=RunHooks(on_event, stop_here),
             record=lambda updated: updated.write(lock_file),
-            should_stop=stop_here,
         )
         if halted:
             # ADR-0041's graceful stop skipped stages the plan meant to run, so

@@ -42,6 +42,7 @@ from etsy_listings.core.engine.events import (
     EngineListingFailed,
     EngineListingPlanned,
     EngineRunEvent,
+    RunHooks,
 )
 from etsy_listings.core.engine.lock import Lockfile
 from etsy_listings.core.engine.run import RunReport, apply_listings, plan_listings
@@ -371,7 +372,7 @@ def plan(
             connections.run_context(workspace),
             _target_listings(workspace, listing, every=all_),
             STAGES,
-            on_event=show,
+            hooks=RunHooks(on_event=show),
         )
     )
 
@@ -409,7 +410,7 @@ def apply(
             connections.run_context(workspace, on_event=_echo_event),
             _target_listings(workspace, listing, every=all_),
             STAGES,
-            on_event=announce,
+            hooks=RunHooks(on_event=announce),
         )
     )
 

@@ -9,12 +9,11 @@ from datetime import UTC, datetime
 from etsy_listings import __about__
 from etsy_listings.core.engine.context import Event, RunContext
 from etsy_listings.core.engine.events import (
-    EngineEventSink,
     EngineProgress,
     EngineStageApplied,
     EngineStageApplying,
     EngineStageFailed,
-    ignore_engine_event,
+    RunHooks,
 )
 from etsy_listings.core.engine.lock import Lockfile
 from etsy_listings.core.engine.plan import PlannedRun
@@ -37,18 +36,13 @@ def _stamp(lock: Lockfile) -> Lockfile:
     return lock.stamped(tool_version=__about__.VERSION, applied_at=datetime.now(UTC).isoformat())
 
 
-def _never_stop() -> bool:
-    return False
-
-
 def execute(
     ctx: RunContext,
     planned: PlannedRun,
     lock: Lockfile,
     *,
-    on_event: EngineEventSink = ignore_engine_event,
+    hooks: RunHooks = RunHooks(),
     record: RecordSink = _ignore_record,
-    should_stop: Callable[[], bool] = _never_stop,
 ) -> Lockfile:
     """Run every stage the plan flagged, in pipeline order, folding each result
     into a new lockfile. Resumable: a stage that already appears in
@@ -114,6 +108,7 @@ def execute(
     callable that never stops, so this is invisible to every caller that
     predates it.
     """
+    on_event, should_stop = hooks.on_event, hooks.should_stop
     listing = planned.plan.listing
     result_lock = lock
     remote = dict(lock.remote)
