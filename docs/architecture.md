@@ -1170,6 +1170,12 @@ unchanged; preview responses carry the identity as their ETag. On Windows,
 USNs are trusted only while a short read-data metadata handle excludes other
 writers. An open writer can coalesce USN reasons, so a sharing conflict uses
 the existing content-hash fallback. Atomic replacement remains shared.
+This guard can temporarily reject another program opening the same file for
+an in-place write. The handle is held only for the metadata query and is
+closed in `finally`. Retain this trade-off rather than hash every Windows
+cache check: repeated whole-file reads scale with source and prediction-file
+sizes and would add work even when their contents have not changed. The
+fallback still hashes when a writer is already open or a USN is unavailable.
 One composition
 runs per identity: a second request waits and reads the first one's entry. At
 most four Marigold compositions run at once, across previews and apply.

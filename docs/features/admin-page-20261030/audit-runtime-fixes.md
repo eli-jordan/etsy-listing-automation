@@ -146,3 +146,33 @@ changes are confined to `docs/architecture.md` and `core/ai/__init__.py`.
 
 Linux execution, independent review of this new Runtime head and serial GitHub
 e2e remain CI/parent work. No live provider or real-shop e2e ran here.
+
+## Additional Opus review
+
+The supplemental review found a macOS process-group cleanup defect. Darwin
+excludes zombie members when delivering a group signal and can return ESRCH
+or EPERM when only the reserved, unreaped leader remains. The process owner
+now accepts those responses only after its leader has exited. Errors while
+the leader is still running continue to propagate. The preference-rejection
+pattern's displaced docstring was also restored.
+
+Both POSIX regression variants ran successfully in Linux CI at `0d93d614`.
+The focused Windows run passed 84 cases and skipped the two POSIX cases;
+Ruff and AI-owner typing for Windows, Linux and macOS passed. macOS itself
+was not executed. Exact-head CI passed all four checks. Refreshed final-head
+workflow outcomes are recorded in [PR #150](https://github.com/eli-jordan/etsy-listing-automation/pull/150).
+
+The review also identified the Windows cache-token guard's brief write-sharing
+exclusion. Its read-data handle can reject a newly opened in-place writer
+until the metadata query closes. Atomic replacement is allowed. This shared
+helper serves photo/artwork caches and prepared-map/prediction validation,
+not only one preview endpoint.
+
+The chosen policy is to retain and document the fast USN check. Always using
+the existing content-hash fallback would reread each file on every validation.
+A warm synthetic 64 MiB file on the local Windows drive took about 135 ms
+to hash, compared with about 0.1 ms for the metadata token. These measurements
+are whole-check medians, not exclusive-handle durations or editor collision
+rates. No real editor save failure was observed. The additional work does not
+justify replacing the fast path; the fallback for open writers and unsupported
+USNs remains unchanged. No hashing behavior changed in this decision.
