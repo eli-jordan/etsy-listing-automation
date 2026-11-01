@@ -186,7 +186,9 @@ export function useSaveQueue<C extends Changes, O extends SaveOutcome>({
             setStatus({ kind: "conflict", message: outcome.message });
           } else {
             if (retain) setFieldErrors((errors) => ({ ...errors, ...outcome.fieldErrors }));
-            fail("Not saved", outcome.fieldErrors);
+            // Document errors have no field control to show their reason.
+            // Retain it with the failed patch through sibling saves and Retry.
+            fail(outcome.fieldErrors.__root__ ?? "Not saved", outcome.fieldErrors);
           }
           return outcome;
         } catch (error) {

@@ -580,7 +580,10 @@ blur. A real new edit may try again; network failures
 remain retryable on blur. A draft captures its option label as well as its
 value, so a refreshed lookup cannot hide an unanswered or refused choice.
 Return-policy values encode their full terms and decode independently of the
-current lookup when saved or retried. A save whose caller reports and retries
+current lookup when saved or retried. A document-level `__root__` refusal has
+no field control: its actionable reason stays in the queue's retained failure
+status until that patch is answered or abandoned. Settings renders error
+status in its wrapping warning notice. A save whose caller reports and retries
 its own failure, the currency dialog's, passes `retain: false` so Retry never
 resends it. Such a failure keeps
 an earlier successful acknowledgement visible once the queue drains; loading

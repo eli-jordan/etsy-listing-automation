@@ -223,13 +223,33 @@ also failed against the prior build under both color preferences: after the
 refresh, the select showed US instead of the refused EU choice. It now checks
 that the retained choice stays visible before Use it replaces it with UK.
 
+### Document-level YAML refusals
+
+F10 from the final Sol Spec review concerned a refusal to edit unsupported
+YAML source. The API returned the file-specific reason and correction under
+`__root__`, which no field control renders. The save status had replaced it
+with Not saved. The queue now keeps that document-level reason with its failed
+patch, so an unrelated success cannot hide the explanation. Ordinary field
+errors retain their existing control-specific presentation.
+
+Settings displays an error status in its existing wrapping warning notice,
+keeping long file paths and YAML diagnostics readable without overlapping
+the controls. Shop error status text can wrap too. A public UI regression
+checks the reason, retained model choice, sibling success and eventual
+acknowledgement. The built-SPA browser regression uses real merge-key YAML and
+the real 422 response, checks exact source bytes remain unchanged and verifies
+the attempted model and correction at 1280 and 1024 pixels in both color
+preferences. Both regressions failed before the correction.
+
+![Settings keeps the YAML-source refusal and correction visible above the controls](screenshots/settings-yaml-refusal.png)
+
 ### UI decision
 
 Shop gains the Retry save button Settings already had, beside the save status
 in the page heading. It appears only for an error, never for a conflict,
 which keeps Reload shop.yaml. Focus stays on the field that failed; the
-status is announced through the existing `role="status"`. No layout or copy
-changed otherwise. Checked at 1280×800 and 1024 wide, under both color
+status is announced through the existing `role="status"`. F10 places Settings
+error status in its existing wrapping warning notice. Checked at 1280×800 and 1024 wide, under both color
 preferences (the app has one palette), for default, saving, error, retried and conflict states.
 
 ![Failed Renewal save with Retry save beside the status](screenshots/defaults-retry.png)
@@ -246,24 +266,24 @@ browser checks below were rerun for the follow-up.
 | Check | Result |
 |---|---|
 | Unchanged backend's full local gate | Passed. Python: 3,779 passed, seven platform skips, 55 deselected. Combined branch-enabled coverage: 95.50%; branches: 3,837 of 4,254, or 90.20%. Backend format, lint, strict typing and all 11 import contracts passed. |
-| Full follow-up frontend coverage gate | Passed: 1,319 tests across 97 files; 90.40% branch coverage. Format check, lint and strict typing passed. |
+| Full follow-up frontend coverage gate | Passed: 1,320 tests across 97 files; 90.41% branch coverage. Format check, lint and strict typing passed. |
 | Separate SPA build and `npm run test:design` | Passed; four design tests. |
-| Full browser CI at `422b1b56` | Passed: 164 cases, zero skips, with required prerequisites. Fresh CI rechecks the complete layer after the refusal-attribution and lookup-refresh corrections. |
-| Latest built-SPA Admin browser layer | Passed: 32 cases, zero skips, with required prerequisites. Includes POD abandonment and the earlier Shop/Settings/provider cases. |
-| Red/green follow-up regressions | Eighteen public UI cases failed before their respective fixes; all 79 Shop/Settings cases pass after them. The F3 selector, POD and F9 lookup-refresh browser cases each failed against the prior build under both color preferences, then passed after rebuilding. |
+| Full browser CI at `2c3c464f` | Passed: 164 cases, zero skips, with required prerequisites. Fresh CI rechecks the complete layer, now 166 cases, after the document-level refusal correction. |
+| Latest built-SPA Admin browser layer | Passed: 34 cases, zero skips, with required prerequisites. Includes the real YAML-source refusal, POD abandonment and earlier Shop/Settings/provider cases. |
+| Red/green follow-up regressions | Nineteen public UI cases failed before their respective fixes; all 80 Shop/Settings cases pass after them. The F3 selector, POD, F9 lookup-refresh and F10 YAML-source refusal browser cases each failed against the prior build under both color preferences, then passed after rebuilding. |
 | Generated API | No wire shape changed. The OpenAPI export regression passed and the generated client has no diff. |
 
 The independent Runtime Standards/process recheck reported no actionable
 findings. Its 91 focused tests and external Windows process diagnostics closed
 the exited-launcher residual. State's resumed Standards and Spec reviews
-identified F3 through F8 above; those findings and parent-found F9 are fixed and backed by the
+identified F3 through F8 and F10 above; those findings and parent-found F9 are fixed and backed by the
 regressions recorded here. Final independent review and workflow outcomes are
 recorded in [State PR #151](https://github.com/eli-jordan/etsy-listing-automation/pull/151).
 The old Spec review's S1-open remark concerned
 its earlier `82f0aef7` snapshot, which predates Runtime's merged correction.
 
-Against Runtime, `scripts/sloc.py` measures net additions of 22 backend and 245
-frontend production lines, plus 571 Python test and 700 frontend test lines.
+Against Runtime, `scripts/sloc.py` measures net additions of 22 backend and 251
+frontend production lines, plus 601 Python test and 753 frontend test lines.
 The shared queue replaces separate Shop and Settings save coordination.
 
 Runtime PR #150 passed all four CI checks and its parent-dispatched
