@@ -1,0 +1,19 @@
+{
+  "minTokens": 50,
+  "threshold": 0,
+  "gitignore": false,
+  "noTips": true,
+  "format": ["python", "typescript", "tsx"],
+  "ignore": [
+    "**/tests/**",
+    "**/*.test.ts",
+    "**/*.test.tsx",
+    "**/__tests__/**",
+    "**/src/ui/src/test/**",
+    "**/src/ui/src/api/schema.ts",
+    "**/src/etsy_listings/server/static/**",
+    "**/src/ui/dist/**",
+    "**/node_modules/**"
+  ],
+  "reporters": ["console"]
+}

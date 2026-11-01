@@ -56,6 +56,7 @@ dev = [
     "playwright>=1.49,<2",
     "import-linter>=2.15,<3",
     "poethepoet>=0.37,<1",
+    "vulture>=2.14,<3",
 ]
 
 # Every check is defined once, here (spec S09). `uv run poe check` is what you
@@ -82,8 +83,11 @@ mypy = "mypy src"
 # Core/server/CLI dependency direction and protected application modules
 # (ADR-0052); contracts below.
 imports = "lint-imports"
+# S04/S05: whole-program checks use application source only.
+dead-code = "vulture src/etsy_listings --min-confidence 90"
+duplicates = "node src/ui/node_modules/jscpd/bin/jscpd src/etsy_listings src/ui/src --config .jscpd.json"
 # The `quality` CI job: report only, change nothing.
-lint = ["format-check", "ruff", "mypy", "imports"]
+lint = ["format-check", "ruff", "mypy", "imports", "dead-code", "duplicates"]
 # Coverage is measured over the whole default selection, browser layer
 # included. Those tests skip themselves when chromium or src/ui/dist is
 # missing, which costs about a point; the 85% floor (`fail_under`, below) has
@@ -101,7 +105,7 @@ test-browser = "pytest -m browser"
 frontend = "python scripts/frontend_gate.py format lint typecheck test:coverage test:design"
 # Fix, then format (so a fix's output is formatted and E501 is judged on
 # formatted lines), then report what is left.
-check = ["fix", "format", "ruff", "mypy", "imports", "test", "frontend"]
+check = ["fix", "format", "lint", "test", "frontend"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
