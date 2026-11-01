@@ -169,7 +169,11 @@ def test_a_rewrite_with_windows_line_endings_adds_only_its_new_lines() -> None:
     original = tracked.read_bytes()
     try:
         marker = b"def unused_binding() -> None:\n    local = 1  # " + b"noqa: F841\n"
-        body = original if original.endswith(b"\n") else original + b"\n"
+        # A core.autocrlf checkout is already CRLF. Replacing `\n` there
+        # writes `\r\r\n`, and ruff format collapses that to bare CR, which
+        # `git diff --ignore-cr-at-eol` does not report as added lines.
+        normalized = original.replace(b"\r\n", b"\n").replace(b"\r", b"\n")
+        body = normalized if normalized.endswith(b"\n") else normalized + b"\n"
         tracked.write_bytes((body + marker).replace(b"\n", b"\r\n"))
         result = run_hook(edited(tracked))
     finally:
