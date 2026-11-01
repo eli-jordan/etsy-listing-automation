@@ -550,7 +550,7 @@ def implementation_fingerprint() -> str:
             "--exclude-standard",
             "src/etsy_listings",
             "src/ui/src",
-            "scripts",
+            "docs/features/marigold-20261001/scripts",
         ],
         text=True,
     ).splitlines()

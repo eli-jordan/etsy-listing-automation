@@ -9,7 +9,8 @@ from PIL import Image
 
 def test_diagnostic_artwork_covers_opaque_and_transparent_print(tmp_path):
     spec = importlib.util.spec_from_file_location(
-        "validation", Path(__file__).parents[1] / "scripts/validate_marigold.py"
+        "validation",
+        Path(__file__).parents[1] / "docs/features/marigold-20261001/scripts/validate_marigold.py",
     )
     assert spec
     assert spec.loader
@@ -32,7 +33,8 @@ def test_validation_refuses_output_inside_read_only_input(tmp_path):
     import pytest
 
     spec = importlib.util.spec_from_file_location(
-        "validation", Path(__file__).parents[1] / "scripts/validate_marigold.py"
+        "validation",
+        Path(__file__).parents[1] / "docs/features/marigold-20261001/scripts/validate_marigold.py",
     )
     assert spec
     assert spec.loader
@@ -48,7 +50,9 @@ def test_validation_refuses_output_inside_read_only_input(tmp_path):
 
 def test_watchdog_identifies_only_its_native_worker_despite_blank_wmic_rows(tmp_path, monkeypatch):
     spec = importlib.util.spec_from_file_location(
-        "watchdog", Path(__file__).parents[1] / "scripts/validate_marigold_watchdog.py"
+        "watchdog",
+        Path(__file__).parents[1]
+        / "docs/features/marigold-20261001/scripts/validate_marigold_watchdog.py",
     )
     assert spec
     assert spec.loader
@@ -67,7 +71,9 @@ def test_watchdog_identifies_only_its_native_worker_despite_blank_wmic_rows(tmp_
 
 def test_watchdog_selects_backend_child_of_its_verified_venv_launcher(tmp_path, monkeypatch):
     spec = importlib.util.spec_from_file_location(
-        "watchdog", Path(__file__).parents[1] / "scripts/validate_marigold_watchdog.py"
+        "watchdog",
+        Path(__file__).parents[1]
+        / "docs/features/marigold-20261001/scripts/validate_marigold_watchdog.py",
     )
     assert spec
     assert spec.loader
