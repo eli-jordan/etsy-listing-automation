@@ -26,8 +26,8 @@ The proposal itself is server-cached, not listing content (ADR-0047). Accepted v
 ordinary listing-editor autosave path; the model never writes `listing.yaml`, a
 lockfile, `generated.yaml`, or a remote listing.
 
-This is a single-user local feature. It runs the subscription-authenticated
-Codex CLI first and Claude Code second; it does not require an OpenAI or
+This is a single-user local feature. It runs subscription-authenticated local
+CLIs in the workspace's configured order, per ADR-0056; it does not require an OpenAI or
 Anthropic API account. Codex supports ChatGPT subscription sign-in for local CLI
 work and exposes `codex exec` for repeatable terminal workflows. API-key use is
 the separate usage-priced route. See the official [Codex authentication
@@ -47,7 +47,7 @@ different credentials boundary.
 | Entry point | AI Mode stays visible in Listing Details and is disabled until the listing is saved with a selected design, a non-empty brief, `prompts/seo.md`, and at least one ready provider. The brief is editable in Listing Details. |
 | Drafting on design attach | Attaching a design to a listing whose brief is empty drafts a brief from the artwork, writes it through the ordinary autosave path, and then starts one SEO request (ADR-0003). The draft is requested from the design-strip's own pick handler, so it goes out immediately and needs no saved listing — `POST /api/ai/design-brief` takes the design path alone -- no listing name and no garment profile, since the brief prompt forbids describing the garment anyway. Only that transition starts it, only into an empty brief, and never again automatically after a failure. The chain belongs to the open editor: same request-scoped endpoints, same 60-second deadline per request, same abort-on-leave rule — there is still no server-side job, queue or proposal cache. |
 | Brief prompt | `prompts/brief.md`, seeded by `setup` exactly as `prompts/seo.md` is, wrapped in the same delimited JSON context and response schema. A valid draft is one non-empty plain-text brief within a fixed length ceiling; there is no repair-specific handling beyond the one the shared orchestrator already gives every task. |
-| Providers | The chain tries Codex, then Claude, then Grok. Grok is the local `grok` CLI (`--prompt-file`, `--json-schema`, read-only `--tools`). `--json-schema` is what makes the answer JSON: the adapter reads `structuredOutput`, the schema-valid object, not the model's `text`. A recognised unavailable failure falls through to the next. Each CLI uses its currently configured account model; there is no model picker or provider settings UI. |
+| Providers | Amended by ADR-0056. `settings.yaml` holds ordered `ai.providers` entries with optional enabled, model and effort. Missing AI settings use Codex, Claude, Grok in that order; omitted providers are off. Each provider's preferences apply to all tasks. Account default omits its CLI flag. Admin Settings edits these preferences and advisory catalogs; saved stale choices remain visible and are still passed to the CLI. Recognized availability or model/effort rejection permits fallback. Grok's schema-valid answer remains `structuredOutput`, not its prose `text`. |
 | Provider process | Run in the real workspace with full coding-agent tools constrained to read-only mode, automatic non-interactive approval, no durable provider session, and access to all readable workspace files. This explicitly includes readable workspace secrets and caches. |
 | Timeout and retries | The entire request, including a repair and provider fallback, has a 60-second deadline. A malformed response gets one repair attempt from the same provider. Only recognised provider-unavailable, authentication-quota, or rate-limit failures fall through to Claude. Other failures show **Try again**. |
 | Concurrent requests | One request may run for each listing concurrently. A second request for the same listing is refused while its first request is active. There is no durable queue or job record. |
@@ -135,6 +135,15 @@ deadline, and conversion from raw output to `SeoProposal`. An adapter owns only
 its CLI invocation, structured-output parsing, process lifetime, and provider
 specific error classification. It must not edit a listing or implement SEO
 validation.
+
+ADR-0056 replaces the original fixed chain and account-model restriction.
+ProviderFactory captures fresh adapters at run start, retaining order, enabled
+state, model and effort through every task, fallback and repair. Later runs and
+readiness checks reread settings. Advisory discovery uses `codex debug models`
+and `grok models`, with a curated pinned-id Claude list. The host attempts it
+at startup and caches success or failure for 30 minutes. Expiry or Refresh
+retries it without changing saved preferences. Codex effort choices are per
+model and exclude ultra. There are no service-tier controls.
 
 The Codex adapter uses a non-interactive `codex exec` invocation with its
 read-only sandbox, ephemeral/no-session mode, structured output schema, and
@@ -255,11 +264,12 @@ provisioning tests.
 1. Add Codex and Claude adapter implementations behind `SeoProvider`.
 2. Add provider readiness checks for executable, authentication, read-only
    capability, and required prompt. Readiness needs no speculative quota check.
-3. Implement the Codex → Claude chain, recognised availability classification,
+3. Originally implement the Codex → Claude chain, now superseded by ADR-0056's
+   workspace order, recognised availability and preference-rejection classification,
    one same-provider output repair, and one 60-second request deadline.
 4. Launch subprocesses in the real workspace, with the agreed readable scope,
    no session persistence, automatic tool approval inside read-only mode, and
-   default configured CLI model.
+   account-default CLI model unless ADR-0056 workspace preferences override it.
 5. Add process-tree cleanup for timeouts, cancellation, and request disconnects.
 
 **Validation:** exact-argv subprocess tests, readiness tests, fallback matrix,

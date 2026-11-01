@@ -21,7 +21,8 @@ for the shared orchestrator to validate. Flags below were confirmed against
   ``--session-id``, so it does not continue a previous conversation. Grok
   still writes a new session under its own home directory; that is the CLI's
   behaviour, not a session this adapter reads back.
-- No ``--model``. The account's configured model is used as-is.
+- ADR-0056: preferences use ``--model`` and ``--reasoning-effort``.
+  Account defaults omit those flags.
 - The design image has no attach flag. Its path is named in the prompt and
   the model opens it with ``read_file``.
 """
@@ -66,7 +67,7 @@ _REQUIRED_HELP_FLAGS: tuple[str, ...] = (
 
 _MAX_TURNS = "8"
 """Enough to open the design image and answer. An unbounded turn count is
-how a read-only call wanders until the shared deadline kills it."""
+how a read-only call wanders until its step deadline kills it."""
 
 
 def auth_file() -> Path:
@@ -130,6 +131,10 @@ class GrokProvider(cli_support.LocalCliProvider):
             "--cwd",
             str(self.workspace_root),
         ]
+        if self.model is not None:
+            argv += ["--model", self.model]
+        if self.effort is not None:
+            argv += ["--reasoning-effort", self.effort]
         try:
             result = run_managed(
                 argv,

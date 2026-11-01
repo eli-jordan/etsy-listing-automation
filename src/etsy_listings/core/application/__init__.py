@@ -52,6 +52,24 @@ import names the module it depends on. Public interfaces:
     ``find_etsy_shop`` -> ``FoundShop``, ``lookup_etsy_shop`` ->
     ``ShopLookup``, ``return_policy_options`` -> ``ReturnPolicyOptions``,
     ``policy_terms``, ``currency_default``.
+``shop_settings``
+    The Admin page's Shop tab: ``read_shop`` -> ``ShopView`` (``shop.yaml``'s
+    defaults and a revision of its exact bytes); ``edit_shop`` applies dotted
+    ``EDITABLE_KEYS`` changes (``PRINT_ON_DEMAND`` for the derived preset)
+    against an expected revision, validated as a whole ``Defaults``, refusing
+    with ``ShopRevisionConflict`` / ``InvalidShopEdit`` and writing nothing
+    for a no-op; ``shop_connections`` -> ``ShopConnections`` of
+    ``ConnectionRow``; ``shop_lookups`` -> ``ShopLookups`` (``EtsyLookups``,
+    ``PrintifyLookups``, ``ReturnPolicyChoice``), each failing on its own.
+``workspace_settings``
+    The Admin page's Settings tab: ``read_settings`` -> ``SettingsView``
+    (``settings.yaml``'s ``Settings`` and its own revision, ``ABSENT_REVISION``
+    while there is no file); ``edit_settings`` applies dotted ``EDITABLE_KEYS``
+    changes -- ``ai.providers`` (ADR-0056), ``batch_ai.concurrency``, and
+    ``market_seo.weights`` as six
+    whole percentages totalling 100 -- against an expected revision, validated
+    as a whole ``Settings``, refusing with ``SettingsRevisionConflict`` /
+    ``InvalidSettingsEdit``; ``default_weights`` is what Reset writes.
 ``mockup_templates``
     The calibrator: ``list_templates`` -> ``TemplateOverview``,
     ``colour_report``, ``assign_kind``, ``read_config`` / ``save_config``,
@@ -100,7 +118,9 @@ import names the module it depends on. Public interfaces:
     ``NothingToRetryError``, ``BatchRowNotReviewableError``, ``AiDraftingBlockedError``;
     ``AiRunRefusedError`` -- ``ListingDeployingError``, ``ListingDraftingInBatchError``,
     ``AiNotReadyError``; ``ProposalMissingError``, ``ProposalReplacedError``;
-    ``ReviewedPlanRefusedError``.
+    ``ReviewedPlanRefusedError``; the Shop tab's ``ShopRevisionConflictError`` and
+    ``InvalidShopEditError``; the Settings tab's ``SettingsRevisionConflictError`` and
+    ``InvalidSettingsEditError``.
 ``workspace_locks``
     ``WorkspaceLocks``: the per-listing-template write locks every
     template check-then-write holds, one instance per application runtime;

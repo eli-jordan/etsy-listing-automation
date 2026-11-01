@@ -33,7 +33,11 @@ from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
 
 from etsy_listings.core.application.ai.events import AiPhaseEvent
-from etsy_listings.core.application.ai.readiness import AiReadinessBlock, batch_blocked
+from etsy_listings.core.application.ai.readiness import (
+    AiReadinessBlock,
+    batch_blocked,
+    current_providers,
+)
 from etsy_listings.core.application.ai.registry import AiRun, AiRunRegistry
 from etsy_listings.core.application.ai.runner import AiRunner
 from etsy_listings.core.batches import RETRYABLE, AiState, AiStep, Batch, BatchRow, BatchStore
@@ -151,11 +155,10 @@ class BatchQueue:
     # ------------------------------------------------------------- dispatch
 
     def _limit(self) -> int:
-        try:
-            return self._workspace.load_settings().batch_ai.concurrency
-        except ConfigLoadError as exc:
-            logger.warning("settings.yaml is unreadable, so batch AI runs one at a time: %s", exc)
-            return 1
+        # Invalid hand edits refuse dispatch; only an absent file uses the
+        # model defaults (Admin plan, config-validation rule). The dispatcher
+        # reports the failure and leaves queued rows and active runs alone.
+        return self._workspace.load_settings().batch_ai.concurrency
 
     def _running(self) -> int:
         return sum(1 for run in self._registry.active() if run.origin == "batch")
@@ -290,7 +293,7 @@ class BatchQueue:
 
         The runs are waited for without a limit of their own: a stop kills
         a provider's process tree and research starts no new call, and the
-        runner's watchdog bounds any run to ``runner.RUN_LIMIT_SECONDS``.
+        runner's watchdog bounds any run to its captured run limit (ADR-0057).
         """
         names = list(listings)
         # Holding first means every run the dispatcher could still start
@@ -337,10 +340,14 @@ class BatchQueue:
         """Why a batch could not draft its briefs: the brief prompt or a
         ready provider is missing (spec, *Design validation*)."""
         workspace = self._workspace
-        return batch_blocked(
-            workspace,
-            self._runner.providers(workspace),
-        )
+        try:
+            providers = current_providers(self._runner.providers, workspace)
+        except ConfigLoadError as exc:
+            return AiReadinessBlock(
+                message=str(exc),
+                remedy="Correct the named key in settings.yaml, then retry. Your staging is kept.",
+            )
+        return batch_blocked(workspace, providers)
 
     # -------------------------------------------------------------- helpers
 

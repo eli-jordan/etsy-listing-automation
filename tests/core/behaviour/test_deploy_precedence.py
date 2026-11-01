@@ -84,7 +84,7 @@ class Host:
             workspace,
             proposals=ProposalStore(workspace),
             batches=self.batches,
-            providers=lambda _workspace: [provider],
+            providers=lambda _workspace, _ai: [provider],
             market_client=lambda _workspace: market,
         )
         self.deployments = Deployments(workspace, deploys, ai=self.ai)

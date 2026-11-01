@@ -39,6 +39,7 @@ from etsy_listings.core.batches import AiState
 from etsy_listings.core.config.listing import Listing
 from etsy_listings.core.config.listing_template import ListingTemplate
 from etsy_listings.core.config.media import MediaEntry, MediaKind
+from etsy_listings.core.config.settings import AiProviderSettings
 
 # ``draft``/``deployed``/``live``/``dirty``, imported rather than restated:
 # the lifecycle rule is the engine's (the UI's badge and Phase 6's `status`
@@ -979,3 +980,150 @@ class MarigoldRuntimeResponse(BaseModel):
 
 class PreparationResyncResponse(BaseModel):
     resync: Literal[True] = True
+
+
+# ------------------------------------------------------------- Admin: Shop
+#
+# Admin plan, PR 3. The editable shop.yaml values and the revision every save
+# names; core/application/shop_settings.py owns the rules.
+
+
+class ReturnPolicyTermsBody(BaseModel):
+    """``etsy.listing_defaults.return_policy``: a policy by its terms."""
+
+    accepts_returns: bool
+    accepts_exchanges: bool
+    within_days: int | None = None
+
+
+class CurrencyOption(BaseModel):
+    code: str
+    name: str
+
+
+class ShopListingDefaults(BaseModel):
+    who_made: str
+    when_made: str
+    is_supply: bool
+    production_partner: str | None
+    shipping_profile: str | None
+    return_policy: ReturnPolicyTermsBody | None
+    renewal: str
+
+
+class ShopSettingsResponse(BaseModel):
+    revision: str
+    """sha256 of the file's exact bytes; the next PATCH must send it."""
+    currency: str
+    supported_currencies: list[CurrencyOption]
+    """Etsy Payments' currencies, in the order the page offers them."""
+    listing_defaults: ShopListingDefaults
+    preferred_print_provider: str | None
+
+
+class ShopChanges(BaseModel):
+    """Only the keys sent are changed; ``null`` removes an optional one.
+    Values are loosely typed on purpose: the whole candidate document is
+    validated by ``Defaults``, which names each refused field."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    currency: str | None = None
+    who_made: str | None = None
+    when_made: str | None = None
+    is_supply: bool | None = None
+    production_partner: str | None = None
+    shipping_profile: str | None = None
+    return_policy: ReturnPolicyTermsBody | None = None
+    renewal: str | None = None
+    preferred_print_provider: str | None = None
+
+
+class ShopPatchRequest(BaseModel):
+    revision: str
+    changes: ShopChanges
+
+
+class ShopSaveRefusal(BaseModel):
+    """A 409 (``conflict``: reload, then edit again) or a 422 (``invalid``:
+    each refused dotted shop.yaml key to its reason). Nothing was written."""
+
+    kind: Literal["conflict", "invalid"]
+    message: str
+    field_errors: dict[str, str] = Field(default_factory=dict)
+
+
+class WorkspaceSettingsResponse(BaseModel):
+    revision: str
+    concurrency: int
+    weights: dict[str, float]
+    """Relative weights, normalized only for display by the page."""
+    default_weights: dict[str, int]
+    providers: list[AiProviderSettings]
+    step_limit_minutes: int
+    run_limit_minutes: int
+    """At least ``max(5, enabled providers x step_limit_minutes)`` (ADR-0057);
+    the page computes that floor from ``providers`` as the seller edits."""
+
+
+class WorkspaceSettingsChanges(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    concurrency: int | float | None = None
+    weights: dict[str, int | float] | None = None
+    providers: list[dict[str, Any]] | None = None
+    step_limit_minutes: int | float | None = None
+    run_limit_minutes: int | float | None = None
+
+
+class WorkspaceSettingsPatch(BaseModel):
+    revision: str
+    changes: WorkspaceSettingsChanges
+
+
+class SettingsSaveRefusal(BaseModel):
+    kind: Literal["conflict", "invalid"]
+    message: str
+    field_errors: dict[str, str] = Field(default_factory=dict)
+
+
+class ConnectionRowBody(BaseModel):
+    state: Literal["connected", "not_connected", "lookup_failed"]
+    shop_name: str | None
+    shop_id: int | None
+    commands: list[str]
+    """What to run in a terminal, in order, when ``not_connected``."""
+    problem: str | None
+    signed_in_user_id: int | None
+    sales_channel: str | None
+    shop_currency: str | None
+    """The live Etsy shop's own currency, when a lookup read it."""
+
+
+class ShopConnectionsResponse(BaseModel):
+    etsy: ConnectionRowBody
+    printify: ConnectionRowBody
+
+
+class ReturnPolicyChoiceBody(BaseModel):
+    terms: ReturnPolicyTermsBody
+    label: str
+
+
+class EtsyLookupsBody(BaseModel):
+    available: bool
+    problem: str | None
+    production_partners: list[str]
+    shipping_profiles: list[str]
+    return_policies: list[ReturnPolicyChoiceBody]
+
+
+class PrintifyLookupsBody(BaseModel):
+    available: bool
+    problem: str | None
+    print_providers: list[str]
+
+
+class ShopLookupsResponse(BaseModel):
+    etsy: EtsyLookupsBody
+    printify: PrintifyLookupsBody

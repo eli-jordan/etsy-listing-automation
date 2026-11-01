@@ -69,7 +69,7 @@ from etsy_listings.core.application.refusals import (
 )
 from etsy_listings.core.application.scene_warming import SceneWarmer
 from etsy_listings.core.batches import BatchStore
-from etsy_listings.core.clients.etsy.tokens import EtsyAuthError
+from etsy_listings.core.clients.etsy.tokens import EtsyAuthError, EtsyRefreshBusy
 from etsy_listings.core.clients.etsy.transport import EtsyApiError
 from etsy_listings.core.config.artwork import representative
 from etsy_listings.core.config.errors import ConfigLoadError
@@ -540,7 +540,7 @@ def list_etsy_sections(request: Request) -> EtsySectionsResponse:
         return EtsySectionsResponse(available=False, sections=[])
     try:
         sections = client.shop_sections(shop_id)
-    except (EtsyApiError, EtsyAuthError, MissingCredentialError):
+    except (EtsyApiError, EtsyAuthError, EtsyRefreshBusy, MissingCredentialError):
         return EtsySectionsResponse(available=False, sections=[])
     return EtsySectionsResponse(
         available=True,
@@ -569,6 +569,8 @@ def create_etsy_section(request: Request, body: CreateEtsySectionRequest) -> Ets
         )
     try:
         section = client.create_shop_section(shop_id, body.title)
+    except EtsyRefreshBusy as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
     except (EtsyAuthError, MissingCredentialError) as exc:
         raise HTTPException(status_code=401, detail=str(exc)) from exc
     except EtsyApiError as exc:

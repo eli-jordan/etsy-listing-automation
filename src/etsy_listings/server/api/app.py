@@ -18,6 +18,7 @@ from starlette.requests import Request
 from starlette.responses import FileResponse, JSONResponse, Response
 
 from etsy_listings.core import connections
+from etsy_listings.core.ai.discovery import ModelDiscovery
 from etsy_listings.core.ai.proposals import ProposalStore
 from etsy_listings.core.application.ai.coordinator import AiCoordinator
 from etsy_listings.core.application.ai.readiness import ProviderFactory, default_ai_providers
@@ -43,7 +44,9 @@ from etsy_listings.server.api.media_files import router as media_files_router
 from etsy_listings.server.api.preparation import router as preparation_router
 from etsy_listings.server.api.runs import router as runs_router
 from etsy_listings.server.api.seo import router as seo_router
+from etsy_listings.server.api.shop import router as shop_router
 from etsy_listings.server.api.templates import router as templates_router
+from etsy_listings.server.api.workspace_settings import router as workspace_settings_router
 
 
 def _frontend_dist() -> Path:
@@ -64,6 +67,7 @@ def create_app(
     seo_provider_factory: ProviderFactory = default_ai_providers,
     market_client_factory: MarketClientFactory = default_market_client,
     preparation_runtime: PreparationRuntime | None = None,
+    model_discovery: ModelDiscovery | None = None,
 ) -> FastAPI:
     # One of each per process, so their locks mean something: the listing
     # template write locks, and the cache records' stores. Listing locks
@@ -84,6 +88,7 @@ def create_app(
     )
     deployments = Deployments(workspace, context_factory, ai=ai)
     scene_warmer = SceneWarmer(workspace)
+    discovery = model_discovery if model_discovery is not None else ModelDiscovery()
 
     @asynccontextmanager
     async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
@@ -105,6 +110,9 @@ def create_app(
         The scene warmer stops before the rest, abandoning its queue: what
         it composes is only ever a head start."""
         await run_in_threadpool(preparations.start)
+        # ADR-0056: discovery is advisory. Its owned worker must not hold
+        # application availability behind installed CLI processes.
+        discovery.start()
         staging_store.sweep(now=datetime.now(UTC))
         deployments.start()
         ai.start()
@@ -112,6 +120,7 @@ def create_app(
         try:
             yield
         finally:
+            await run_in_threadpool(discovery.stop)
             scene_warmer.stop()
             ai.stop()
             deployments.stop()
@@ -120,6 +129,7 @@ def create_app(
     app = FastAPI(title="etsy-listings", version="0.1.0", lifespan=lifespan)
     app.state.preparations = preparations
     app.state.workspace = workspace
+    app.state.model_discovery = discovery
     app.state.deployments = deployments
     # Shared with the preview endpoint (`listings.py`), which needs a
     # `RunContext` to ask the render stage for a scene's current hash but has
@@ -189,6 +199,8 @@ API_ROUTERS = (
     runs_router,
     ai_runs_router,
     seo_router,
+    shop_router,
+    workspace_settings_router,
 )
 
 

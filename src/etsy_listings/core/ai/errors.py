@@ -32,7 +32,8 @@ class SeoGenerationError(RuntimeError):
 class ProviderUnavailableError(SeoGenerationError):
     """A recognised provider-unavailable, authentication, quota, or
     rate-limit failure -- the one category the settled plan permits to fall
-    through to the next provider in the Codex-then-Claude chain."""
+    through to the next captured provider (ADR-0056). Rejected saved model
+    or effort choices belong to this same category."""
 
     def __init__(self, provider: str, reason: str) -> None:
         self.provider = provider
@@ -54,12 +55,12 @@ class ProviderCancelledError(SeoGenerationError):
 class SeoTryAgainError(SeoGenerationError):
     """Every failure the settled plan says surfaces as **Try again**: a
     validation failure that survived the one same-provider repair, an
-    unrecognised process error, or the shared deadline expiring."""
+    unrecognised process error, or a step or run limit running out."""
 
 
 class SeoDeadlineExceededError(SeoTryAgainError):
-    """The shared 60-second request deadline expired before a validated
-    proposal was produced."""
+    """A step or run limit (ADR-0057) ran out before a validated result
+    was produced. The message names the configured limit."""
 
 
 class SeoAllProvidersUnavailableError(SeoTryAgainError):
@@ -73,13 +74,13 @@ class SeoAllProvidersUnavailableError(SeoTryAgainError):
 
 
 class ProviderTimeoutError(SeoTryAgainError):
-    """A provider's subprocess did not finish before the shared deadline
+    """A provider's subprocess did not finish before its step deadline
     expired -- distinct from :class:`SeoDeadlineExceededError`, which is the
     orchestrator refusing to start another call once time is already up."""
 
     def __init__(self, provider: str) -> None:
         self.provider = provider
-        super().__init__(f"{provider}: timed out before the shared deadline")
+        super().__init__(f"{provider}: timed out before its step deadline")
 
 
 class ProviderGenerationError(SeoTryAgainError):
@@ -145,6 +146,21 @@ structured ``api_error_status`` on a CLI envelope is the other place a bare
 status is trusted -- it is a field, not a number floating in prose."""
 
 _HTTP_STATUS_PATTERN = re.compile(r"\bhttp\D{0,5}(401|403|429)\b", re.IGNORECASE)
+_PREFERENCE_REJECTION = re.compile(
+    r"\b(?:unknown|unsupported|invalid) (?:reasoning )?effort\b"
+    r"|\b(?:unknown|unsupported|invalid) model\b(?!\s+(?:output|response)\b)"
+    r"|\bmodel\b[^\n]{0,120}\b(?:does not exist|not found|not supported)\b"
+    r"|\binvalid value\b[^\n]{0,120}--(?:model|effort|reasoning-effort)\b"
+    r"|\bunknown variant\b[^\n]{0,120}\bmodel_reasoning_effort\b",
+    re.IGNORECASE,
+)
+"""ADR-0056: a rejected saved preference permits fallback. Merely mentioning
+a model or effort in a generation failure does not."""
+_CLAUDE_SELECTED_MODEL_REJECTION = re.compile(
+    r"\bthere['’]s an issue with the selected model\b.{0,160}\bmay not exist\b",
+    re.IGNORECASE,
+)
+"""Claude's observed refusal of a saved model, fallback-eligible like the above."""
 _ERROR_PREFIX = re.compile(r"^error:\s*", re.IGNORECASE)
 """An explicit "HTTP 401"/"HTTP/1.1 403"/"http status 429"-shaped status
 line. A bare status number in prose is not trusted; this pattern is, because
@@ -181,14 +197,18 @@ def classify_process_failure(
     prompt) and then the failure as an ``ERROR:`` line; that line is the
     sentence, and a word in the prompt is not.
     """
-    shown, status = _seller_text(stdout, stderr)
+    shown, status, model_missing = _seller_text(stdout, stderr)
     shown = _clip(shown)
-    if _is_unavailable(shown, status):
+    if (
+        model_missing
+        or _is_unavailable(shown, status)
+        or (provider == "claude" and _CLAUDE_SELECTED_MODEL_REJECTION.search(shown))
+    ):
         return ProviderUnavailableError(provider, _as_sentence(shown))
     return ProviderGenerationError(provider, returncode, shown)
 
 
-def _seller_text(stdout: str, stderr: str) -> tuple[str, int | None]:
+def _seller_text(stdout: str, stderr: str) -> tuple[str, int | None, bool]:
     """The text a seller should read, and a structured HTTP status if that
     same stream carried one.
 
@@ -206,20 +226,28 @@ def _seller_text(stdout: str, stderr: str) -> tuple[str, int | None]:
     out = stdout.strip()
     primary = err or out
     if not primary:
-        return "", None
+        return "", None, False
     envelope = _envelope(primary)
     if envelope is not None:
         sentence = _sentence(envelope)
         status = _api_status(envelope)
+        error = envelope.get("error")
+        # Only the vendor's error object is trusted. Generated text and
+        # unrelated telemetry may legitimately mention this code.
+        model_missing = isinstance(error, dict) and any(
+            error.get(key) == "model_not_found" for key in ("type", "code")
+        )
         if sentence:
-            return _as_sentence(sentence), status
+            return _as_sentence(sentence), status, model_missing
+        if model_missing:
+            return "The selected model was not found.", status, True
         if status in _AUTH_OR_LIMIT_STATUS:
-            return f"HTTP {status}", status
-        return primary, status
+            return f"HTTP {status}", status, False
+        return primary, status, False
     failure = _failure_lines(primary)
     if failure:
-        return _as_sentence(failure), None
-    return primary, None
+        return _as_sentence(failure), None, False
+    return primary, None, False
 
 
 def _failure_lines(text: str) -> str | None:
@@ -312,6 +340,8 @@ def _is_unavailable(shown: str, status: int | None) -> bool:
         return True
     folded = shown.casefold()
     if any(marker in folded for marker in _AVAILABILITY_MARKERS):
+        return True
+    if _PREFERENCE_REJECTION.search(shown):
         return True
     return _HTTP_STATUS_PATTERN.search(shown) is not None
 

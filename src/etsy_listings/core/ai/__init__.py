@@ -7,12 +7,13 @@ Two features, one machine. **SEO generation** produces a proposal a seller
 reviews suggestion by suggestion; **brief drafting** produces the one input
 that generation needs, from the design image alone. They differ only in the
 prompt, the schema and the validation -- the provider adapters, the
-Codex-then-Claude-then-Grok fallback, the one same-provider repair and the 60-second
-deadline are shared, which is what `ProviderTask` exists to make possible.
+workspace-configured fallback (ADR-0056), the one same-provider repair and the run's
+step and run budgets (ADR-0057) are shared, which is what `ProviderTask` exists to make possible.
 
 - ``models`` -- ``ProviderTask``, ``SeoRequest``, ``SeoProposal``,
   ``PhraseRationale``, ``ProposalWarning``, ``ProviderReadiness``,
-  ``RawProviderResult``, ``RepairContext``, ``Deadline``.
+  ``RawProviderResult``, ``RepairContext``, ``Deadline``, ``AiLimits``,
+  ``RunBudget``.
 - ``prompt`` -- the packaged default ``seo.md``, ``seed_prompt`` and
   ``sync_prompt`` (setup's seed, check and ``--replace-prompts`` operations,
   for any prompt file), ``build_task_prompt`` (the shared
@@ -32,7 +33,11 @@ deadline are shared, which is what `ProviderTask` exists to make possible.
 - ``grok``/``codex``/``claude`` -- the real CLI adapters: a non-interactive,
   read-only invocation each, behind the same `AiProvider` protocol. None
   reads a prompt file or knows which feature it is serving. The chain tries
-  Codex first, then Claude, then Grok.
+  the workspace order, defaulting to Codex, Claude, Grok (ADR-0056).
+- ``discovery`` -- ``ModelDiscovery`` and its advisory ``ModelCatalogs``,
+  ``ProviderCatalog`` and ``ModelChoice``. Construction starts nothing;
+  ``start``/``stop`` own startup discovery, and ``read(refresh=True)`` retries
+  within one shared probe budget. Imported directly, not re-exported.
 - ``orchestrator`` -- `run_task`, and the three entry points over it,
   `generate_proposal`, `generate_brief` and `generate_market_queries`.
 - ``listing_inputs`` -- saved-listing AI facts, paired request/snapshot
@@ -41,7 +46,9 @@ deadline are shared, which is what `ProviderTask` exists to make possible.
 - ``errors`` -- the exception hierarchy `orchestrator` and all adapters
   raise, and `classify_process_failure`, the availability classifier.
 - ``process`` -- `run_managed`: cross-platform subprocess-tree launch and
-  cleanup for timeouts, cancellation, and request disconnects (PR4).
+  cleanup for completion, timeouts, cancellation, and request disconnects.
+  Private ``_windows_process``/``_posix_process`` implement ownership; callers
+  never select a platform mechanism or manage child identities.
 - ``cli_support`` -- the shared local CLI provider contract, readiness probes and outcome decoding.
 
 `core/application/ai/` coordinates this package into runs, readiness and
@@ -88,6 +95,7 @@ from etsy_listings.core.ai.market_queries import (
     validate_market_queries,
 )
 from etsy_listings.core.ai.models import (
+    AiLimits,
     Deadline,
     GarmentContext,
     PhraseRationale,
@@ -96,6 +104,7 @@ from etsy_listings.core.ai.models import (
     ProviderTask,
     RawProviderResult,
     RepairContext,
+    RunBudget,
     SeoProposal,
     SeoRequest,
 )
@@ -122,6 +131,7 @@ from etsy_listings.core.ai.validation import ProposalValidationError, validate_p
 __all__ = [
     "BRIEF_RESPONSE_SCHEMA",
     "MARKET_QUERIES_RESPONSE_SCHEMA",
+    "AiLimits",
     "AiProvider",
     "BriefRequest",
     "BriefValidationError",
@@ -151,6 +161,7 @@ __all__ = [
     "ProviderUnavailableError",
     "RawProviderResult",
     "RepairContext",
+    "RunBudget",
     "SeoAllProvidersUnavailableError",
     "SeoDeadlineExceededError",
     "SeoGenerationError",

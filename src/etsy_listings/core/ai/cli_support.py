@@ -44,6 +44,8 @@ class LocalCliProvider(ABC):
 
     workspace_root: Path
     binary: str
+    model: str | None = None
+    effort: str | None = None
     provider_name: ClassVar[str]
     image_tool: ClassVar[str | None] = None
 
