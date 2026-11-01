@@ -40,7 +40,7 @@ from etsy_listings.core.application.deploy.events import TERMINAL_PHASES
 from etsy_listings.core.application.deploy.registry import ListingApply, ListingPlan, Run
 from etsy_listings.core.application.refusals import ListingDeployingError
 from etsy_listings.core.application.workspace_locks import WorkspaceLocks
-from etsy_listings.core.batches import BatchStore, StagingStore
+from etsy_listings.core.batches import BatchRecords, BatchStore, StagingStore
 from etsy_listings.core.clients.printify.fakes import FakeCatalogClient
 from etsy_listings.core.engine.context import EventSink, RunContext
 from etsy_listings.core.workspace.workspace import Workspace
@@ -96,8 +96,7 @@ class Host:
         )
         batch = batch_workflow.confirm_batch(
             self.workspace,
-            self.staging,
-            self.batches,
+            BatchRecords(self.staging, self.batches),
             session.id,
             queue=self.ai.queue,
         )
@@ -239,8 +238,7 @@ def test_retry_queues_a_row_the_deploy_cancelled(host: Host, provider: ChainProv
 
     batch_workflow.retry_batch_row(
         host.workspace,
-        host.staging,
-        host.batches,
+        BatchRecords(host.staging, host.batches),
         batch_id,
         cedar.id,
         queue=host.ai.queue,

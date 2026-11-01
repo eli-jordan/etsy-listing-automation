@@ -35,10 +35,11 @@ from typing import Any
 
 from etsy_listings.core.ai.models import Deadline
 
-_DEFAULT_POLL_INTERVAL = 0.05
+POLL_INTERVAL = 0.05
 """How often the polling loop below wakes up to check the deadline and the
 cancellation event. Small enough that a 60-second deadline is honoured to
-within a fraction of a second; large enough not to spin the CPU."""
+within a fraction of a second; large enough not to spin the CPU. Read at each
+call rather than bound as a default, so a test can shorten it."""
 
 _REAP_TIMEOUT = 5.0
 """How long `run_managed` waits for the worker thread to notice a kill and
@@ -174,7 +175,6 @@ def run_managed(
     input_text: str,
     deadline: Deadline,
     cancel_event: threading.Event | None = None,
-    poll_interval: float = _DEFAULT_POLL_INTERVAL,
 ) -> ProcessResult:
     """Launch ``argv`` as a managed child process, write ``input_text`` to
     its stdin, and wait for it to finish, the shared ``deadline`` to expire,
@@ -224,7 +224,7 @@ def run_managed(
         if deadline.expired:
             timed_out = True
             break
-        worker.join(timeout=poll_interval)
+        worker.join(timeout=POLL_INTERVAL)
 
     if timed_out or cancelled:
         _kill_process_tree(proc)

@@ -40,7 +40,7 @@ from etsy_listings.core.application.refusals import (
     field_errors_of,
 )
 from etsy_listings.core.application.workspace_locks import WorkspaceLocks
-from etsy_listings.core.batches import BatchStore, StagingStore
+from etsy_listings.core.batches import BatchRecords, BatchStore
 from etsy_listings.core.config.description import DescriptionConfig
 from etsy_listings.core.config.errors import ConfigLoadError
 from etsy_listings.core.config.garment_profile import GarmentProfile
@@ -256,8 +256,7 @@ def rename_listing_template(
     new: str,
     *,
     locks: WorkspaceLocks,
-    staging: StagingStore,
-    batches: BatchStore,
+    records: BatchRecords,
 ) -> None:
     """Move a listing template, whole, to ``new``. Its name is its
     directory, so its ``./`` refs need no rewrite.
@@ -281,8 +280,7 @@ def rename_listing_template(
         if destination.exists():
             raise ListingTemplateExistsError(new)
         workspace.listing_template_dir(old).rename(destination)
-        staging.rename_listing_template(old, new)
-        batches.rename_listing_template(old, new)
+        records.rename_listing_template(old, new)
 
 
 def delete_listing_template(workspace: Workspace, name: str, *, locks: WorkspaceLocks) -> None:

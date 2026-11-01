@@ -19,6 +19,7 @@ import json
 import threading
 from collections.abc import Callable, Iterator
 from contextlib import ExitStack, contextmanager
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Literal, Self
@@ -382,3 +383,19 @@ class BatchStore(_Store[Batch]):
             row.model_copy(update=change(row)) if which(row) else row for row in batch.rows
         ]
         self.save(batch)
+
+
+@dataclass(frozen=True)
+class BatchRecords:
+    """The two records a batch moves through: its staging session, then the batch.
+
+    Confirming and retrying read both, and a listing template's rename
+    rewrites both, so the stores travel together.
+    """
+
+    staging: StagingStore
+    batches: BatchStore
+
+    def rename_listing_template(self, old: str, new: str) -> None:
+        self.staging.rename_listing_template(old, new)
+        self.batches.rename_listing_template(old, new)

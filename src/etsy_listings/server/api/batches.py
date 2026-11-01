@@ -49,6 +49,7 @@ from etsy_listings.core.application.refusals import (
 from etsy_listings.core.application.workspace_locks import WorkspaceLocks
 from etsy_listings.core.batches import (
     Batch,
+    BatchRecords,
     BatchRow,
     BatchStore,
     ConfirmRefusedError,
@@ -294,8 +295,7 @@ def confirm_staging(request: Request, session_id: str) -> BatchDetail:
     try:
         batch = batch_workflow.confirm_batch(
             _workspace(request),
-            _staging(request),
-            _batches(request),
+            BatchRecords(_staging(request), _batches(request)),
             session_id,
             queue=_queue(request),
         )
@@ -326,8 +326,7 @@ def retry_batch_row(request: Request, batch_id: str, row: str) -> BatchDetail:
     try:
         batch = batch_workflow.retry_batch_row(
             _workspace(request),
-            _staging(request),
-            _batches(request),
+            BatchRecords(_staging(request), _batches(request)),
             batch_id,
             row,
             queue=_queue(request),
@@ -345,8 +344,7 @@ def retry_batch(request: Request, batch_id: str) -> BatchDetail:
     try:
         batch = batch_workflow.retry_batch(
             _workspace(request),
-            _staging(request),
-            _batches(request),
+            BatchRecords(_staging(request), _batches(request)),
             batch_id,
             queue=_queue(request),
         )

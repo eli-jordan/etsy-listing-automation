@@ -44,6 +44,7 @@ from __future__ import annotations
 import json
 import threading
 from collections.abc import Callable, Mapping, Sequence
+from dataclasses import dataclass
 
 from etsy_listings.core.ai.brief import (
     BriefRequest,
@@ -68,6 +69,7 @@ from etsy_listings.core.ai.market_queries import (
 from etsy_listings.core.ai.models import (
     Deadline,
     ProviderTask,
+    RawProviderResult,
     RepairContext,
     SeoProposal,
     SeoRequest,
@@ -127,42 +129,46 @@ def _market_queries_decoder(raw_output: str) -> MarketQueries:
         raise _MalformedError(exc.reasons) from exc
 
 
-def _resolve[Result](
-    provider: AiProvider,
-    task: ProviderTask,
-    decode: Callable[[str], Result],
-    deadline: Deadline,
-    raw_output: str,
-    provider_name: str,
-    cancel_event: threading.Event | None,
-) -> Result:
-    try:
-        return decode(raw_output)
-    except _MalformedError as first_error:
-        if deadline.expired:
-            raise SeoDeadlineExceededError(
-                f"{provider_name}: the shared deadline expired before a same-provider "
-                f"repair could be attempted"
-            ) from first_error
+@dataclass(frozen=True)
+class _Run[Result]:
+    """One task's inputs, shared by every provider that :func:`run_task` tries."""
 
-        try:
-            repaired = provider.generate(
-                task,
-                deadline,
-                repair=RepairContext(prior_raw_output=raw_output, reasons=first_error.reasons),
-                cancel_event=cancel_event,
-            )
-        except ProviderUnavailableError as repair_error:
-            raise SeoTryAgainError(
-                f"{provider_name} became unavailable during its repair attempt: {repair_error}"
-            ) from repair_error
+    task: ProviderTask
+    decode: Callable[[str], Result]
+    deadline: Deadline
+    cancel_event: threading.Event | None
 
+    def resolve(self, provider: AiProvider, raw: RawProviderResult) -> Result:
+        """``raw`` decoded, or decoded after one same-provider repair."""
         try:
-            return decode(repaired.raw_output)
-        except _MalformedError as second_error:
-            raise SeoTryAgainError(
-                f"{provider_name}: the repaired response was still invalid: {second_error}"
-            ) from second_error
+            return self.decode(raw.raw_output)
+        except _MalformedError as first_error:
+            if self.deadline.expired:
+                raise SeoDeadlineExceededError(
+                    f"{raw.provider}: the shared deadline expired before a same-provider "
+                    f"repair could be attempted"
+                ) from first_error
+
+            try:
+                repaired = provider.generate(
+                    self.task,
+                    self.deadline,
+                    repair=RepairContext(
+                        prior_raw_output=raw.raw_output, reasons=first_error.reasons
+                    ),
+                    cancel_event=self.cancel_event,
+                )
+            except ProviderUnavailableError as repair_error:
+                raise SeoTryAgainError(
+                    f"{raw.provider} became unavailable during its repair attempt: {repair_error}"
+                ) from repair_error
+
+            try:
+                return self.decode(repaired.raw_output)
+            except _MalformedError as second_error:
+                raise SeoTryAgainError(
+                    f"{raw.provider}: the repaired response was still invalid: {second_error}"
+                ) from second_error
 
 
 def run_task[Result](
@@ -171,12 +177,11 @@ def run_task[Result](
     providers: Sequence[AiProvider],
     *,
     deadline: Deadline | None = None,
-    seconds: float = _DEFAULT_SECONDS,
     cancel_event: threading.Event | None = None,
 ) -> Result:
     """Try ``providers`` in order -- Codex, then Claude, then Grok -- against
-    ``task``, within one shared ``deadline`` (a fresh ``seconds``-second one
-    is started if none is given).
+    ``task``, within one shared ``deadline`` (a fresh 60-second one is
+    started if none is given).
 
     ``decode`` takes raw provider text and returns a validated result,
     raising `_MalformedError` for anything in between -- the only thing this
@@ -203,7 +208,8 @@ def run_task[Result](
     `~etsy_listings.core.ai.errors.ProviderCancelledError` propagate untouched.
     """
     if deadline is None:
-        deadline = Deadline.starting_now(seconds=seconds)
+        deadline = Deadline.starting_now(seconds=_DEFAULT_SECONDS)
+    run = _Run(task, decode, deadline, cancel_event)
 
     unavailable_reasons: list[str] = []
     for provider in providers:
@@ -216,9 +222,7 @@ def run_task[Result](
         except ProviderUnavailableError as exc:
             unavailable_reasons.append(str(exc))
             continue
-        return _resolve(
-            provider, task, decode, deadline, raw.raw_output, raw.provider, cancel_event
-        )
+        return run.resolve(provider, raw)
 
     raise SeoAllProvidersUnavailableError(unavailable_reasons)
 
@@ -229,7 +233,6 @@ def generate_proposal(
     providers: Sequence[AiProvider],
     *,
     deadline: Deadline | None = None,
-    seconds: float = _DEFAULT_SECONDS,
     cancel_event: threading.Event | None = None,
 ) -> SeoProposal:
     """One complete SEO proposal for ``request``, using the seller's own
@@ -245,7 +248,6 @@ def generate_proposal(
         _seo_decoder,
         providers,
         deadline=deadline,
-        seconds=seconds,
         cancel_event=cancel_event,
     )
 
@@ -256,7 +258,6 @@ def generate_brief(
     providers: Sequence[AiProvider],
     *,
     deadline: Deadline | None = None,
-    seconds: float = _DEFAULT_SECONDS,
     cancel_event: threading.Event | None = None,
 ) -> DesignBrief:
     """One drafted listing brief for ``request``, using the seller's own
@@ -272,7 +273,6 @@ def generate_brief(
         _brief_decoder,
         providers,
         deadline=deadline,
-        seconds=seconds,
         cancel_event=cancel_event,
     )
 
@@ -283,7 +283,6 @@ def generate_market_queries(
     providers: Sequence[AiProvider],
     *,
     deadline: Deadline | None = None,
-    seconds: float = _DEFAULT_SECONDS,
     cancel_event: threading.Event | None = None,
 ) -> MarketQueries:
     """Three buyer search queries for ``request``, using the seller's own
@@ -299,6 +298,5 @@ def generate_market_queries(
         _market_queries_decoder,
         providers,
         deadline=deadline,
-        seconds=seconds,
         cancel_event=cancel_event,
     )

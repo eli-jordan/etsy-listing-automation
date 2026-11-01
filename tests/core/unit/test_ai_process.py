@@ -30,6 +30,11 @@ from etsy_listings.core.ai.models import Deadline
 from tests.support.gates import GATE_TIMEOUT, workers
 
 
+@pytest.fixture(autouse=True)
+def fast_polling(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(process, "POLL_INTERVAL", 0.01)
+
+
 class FakePopen:
     """A `subprocess.Popen` double whose `communicate()` blocks until either
     the test lets it finish (`finish()`) or something kills it -- exactly the
@@ -127,7 +132,6 @@ def test_run_managed_returns_completed_output(fake_popen: Launches) -> None:
             cwd=Path("/workspace"),
             input_text="prompt text",
             deadline=Deadline.starting_now(seconds=60),
-            poll_interval=0.01,
         )
 
     assert result.returncode == 0
@@ -144,7 +148,6 @@ def test_run_managed_passes_cwd_and_argv(fake_popen: Launches) -> None:
             cwd=Path("/some/workspace"),
             input_text="",
             deadline=Deadline.starting_now(seconds=60),
-            poll_interval=0.01,
         )
 
     assert fake_popen[0].argv == ["claude", "-p", "hi"]
@@ -166,7 +169,6 @@ def test_run_managed_kills_the_process_tree_on_timeout(
         cwd=Path("/workspace"),
         input_text="prompt",
         deadline=already_expired,
-        poll_interval=0.01,
     )
 
     assert result.timed_out is True
@@ -190,7 +192,6 @@ def test_run_managed_kills_the_process_tree_on_cancellation(
         input_text="prompt",
         deadline=Deadline.starting_now(seconds=60),
         cancel_event=cancel_event,
-        poll_interval=0.01,
     )
 
     assert result.cancelled is True
@@ -210,7 +211,6 @@ def test_run_managed_does_not_kill_a_process_that_finishes_in_time(
             cwd=Path("/workspace"),
             input_text="prompt",
             deadline=Deadline.starting_now(seconds=60),
-            poll_interval=0.01,
         )
 
     assert result.returncode == 0

@@ -66,6 +66,7 @@ from etsy_listings.core.application.refusals import (
 from etsy_listings.core.application.workspace_locks import WorkspaceLocks
 from etsy_listings.core.batches import (
     Batch,
+    BatchRecords,
     BatchStore,
     ConfirmRefusedError,
     StagingRefusedError,
@@ -166,8 +167,7 @@ def _confirm(
     test is about what happens next."""
     return confirm_batch(
         workspace,
-        staging,
-        batches,
+        BatchRecords(staging, batches),
         session_id,
         queue=queue or _queue(workspace, batches),
     )
@@ -395,7 +395,7 @@ class TestConfirm:
         session = _stage(workspace, staging, ("a.png", png(1)), ("b.png", png(2)))
 
         def confirm() -> Batch:
-            return confirm_batch(workspace, staging, batches, session.id, queue=queue)
+            return confirm_batch(workspace, BatchRecords(staging, batches), session.id, queue=queue)
 
         with ThreadPoolExecutor(max_workers=2) as pool:
             one, two = (f.result() for f in [pool.submit(confirm), pool.submit(confirm)])
@@ -442,7 +442,7 @@ class TestRetry:
         batch = _failed_batch(workspace, staging, batches)
 
         retried = retry_batch_row(
-            workspace, staging, batches, batch.id, batch.rows[0].id, queue=queue
+            workspace, BatchRecords(staging, batches), batch.id, batch.rows[0].id, queue=queue
         )
 
         assert (retried.rows[0].creation, retried.rows[0].ai) == ("created", "queued")
@@ -463,7 +463,9 @@ class TestRetry:
         batch.rows[0] = row.model_copy(update={"ai": ai, "ai_error": "it broke"})
         batches.save(batch)
 
-        retried = retry_batch_row(workspace, staging, batches, batch.id, row.id, queue=queue)
+        retried = retry_batch_row(
+            workspace, BatchRecords(staging, batches), batch.id, row.id, queue=queue
+        )
 
         assert (retried.rows[0].ai, retried.rows[0].ai_error) == ("queued", None)
         assert _woken(queue)
@@ -487,7 +489,9 @@ class TestRetry:
         batches.save(batch)
 
         with pytest.raises(NothingToRetryError, match="a has nothing to retry"):
-            retry_batch_row(workspace, staging, batches, batch.id, batch.rows[0].id, queue=queue)
+            retry_batch_row(
+                workspace, BatchRecords(staging, batches), batch.id, batch.rows[0].id, queue=queue
+            )
         assert _ai(batches, batch) == [ai]
         assert not _woken(queue)
 
@@ -500,9 +504,11 @@ class TestRetry:
     ) -> None:
         batch = _failed_batch(workspace, staging, batches)
         with pytest.raises(BatchRowMissingError, match="no batch row 'nope'"):
-            retry_batch_row(workspace, staging, batches, batch.id, "nope", queue=queue)
+            retry_batch_row(
+                workspace, BatchRecords(staging, batches), batch.id, "nope", queue=queue
+            )
         with pytest.raises(BatchMissingError, match="no batch '0123abcd'"):
-            retry_batch(workspace, staging, batches, "0123abcd", queue=queue)
+            retry_batch(workspace, BatchRecords(staging, batches), "0123abcd", queue=queue)
 
     def test_retry_all_creates_failed_rows_then_requeues_failed_ai(
         self,
@@ -518,7 +524,7 @@ class TestRetry:
         batch.rows[1] = batch.rows[1].model_copy(update={"ai": "failed"})
         batches.save(batch)
 
-        retried = retry_batch(workspace, staging, batches, batch.id, queue=queue)
+        retried = retry_batch(workspace, BatchRecords(staging, batches), batch.id, queue=queue)
 
         assert [(r.creation, r.ai) for r in retried.rows] == [
             ("created", "queued"),

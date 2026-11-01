@@ -38,7 +38,7 @@ from etsy_listings.core.application.refusals import (
     ReservedListingTemplateNameError,
 )
 from etsy_listings.core.application.workspace_locks import WorkspaceLocks
-from etsy_listings.core.batches import Batch, BatchStore, StagingStore, stage_pngs
+from etsy_listings.core.batches import Batch, BatchRecords, BatchStore, StagingStore, stage_pngs
 from etsy_listings.core.listing_templates import ListingTemplateExistsError
 from etsy_listings.core.workspace.workspace import InvalidNameError, Workspace
 
@@ -338,8 +338,7 @@ class TestRenameAndDelete:
             NAME,
             "everyday-tee",
             locks=locks,
-            staging=StagingStore(workspace),
-            batches=BatchStore(workspace),
+            records=BatchRecords(StagingStore(workspace), BatchStore(workspace)),
         )
 
         assert workspace.listing_template_names() == ["everyday-tee"]
@@ -357,7 +356,7 @@ class TestRenameAndDelete:
         session = stage_pngs(workspace, staging, NAME, uploads(("night-hike.png", png(1))))
 
         rename_listing_template(
-            workspace, NAME, "everyday-tee", locks=locks, staging=staging, batches=batches
+            workspace, NAME, "everyday-tee", locks=locks, records=BatchRecords(staging, batches)
         )
 
         record = batches.load("b1")
@@ -513,8 +512,7 @@ def _rename(workspace: Workspace, old: str, new: str, locks: WorkspaceLocks) -> 
         old,
         new,
         locks=locks,
-        staging=StagingStore(workspace),
-        batches=BatchStore(workspace),
+        records=BatchRecords(StagingStore(workspace), BatchStore(workspace)),
     )
 
 

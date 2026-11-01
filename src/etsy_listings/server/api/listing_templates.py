@@ -40,7 +40,7 @@ from etsy_listings.core.application.refusals import (
     ReservedListingTemplateNameError,
 )
 from etsy_listings.core.application.workspace_locks import WorkspaceLocks
-from etsy_listings.core.batches import BatchStore, StagingStore
+from etsy_listings.core.batches import BatchRecords, BatchStore, StagingStore
 from etsy_listings.core.config.listing_validation import Issue as ValidationIssue
 from etsy_listings.core.listing_templates import ListingTemplateExistsError
 from etsy_listings.core.workspace.workspace import Workspace
@@ -253,8 +253,7 @@ def rename_listing_template(
             name,
             body.new_name,
             locks=_locks(request),
-            staging=_staging_store(request),
-            batches=_batch_store(request),
+            records=BatchRecords(_staging_store(request), _batch_store(request)),
         )
         view = library.read_listing_template(workspace, body.new_name)
     except _REFUSALS as exc:
