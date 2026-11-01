@@ -18,7 +18,7 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict
 
 from etsy_listings.core.engine.apply import execute
-from etsy_listings.core.engine.change import Plan, StagePlan, Verdict
+from etsy_listings.core.engine.change import Plan, StagePlan, StageWork, Verdict
 from etsy_listings.core.engine.context import RunContext
 from etsy_listings.core.engine.events import EngineListingPlanned, EngineRunEvent, RunHooks
 from etsy_listings.core.engine.lock import Lockfile
@@ -63,7 +63,7 @@ class _Stage:
 
 
 def _planned(*stages: _Stage) -> PlannedRun:
-    stage_plans = tuple(StagePlan.work(s.name, "test work") for s in stages)
+    stage_plans = tuple(StagePlan.work(s.name, StageWork("test work")) for s in stages)
     return PlannedRun(
         plan=Plan(listing=LISTING, is_live=False, etsy_listing_id=None, stage_plans=stage_plans),
         states=tuple(

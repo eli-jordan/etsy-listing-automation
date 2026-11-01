@@ -11,7 +11,7 @@ import pytest
 from pydantic import BaseModel, ConfigDict
 
 from etsy_listings.core.engine.apply import execute
-from etsy_listings.core.engine.change import Plan, StagePlan, Verdict
+from etsy_listings.core.engine.change import Plan, StagePlan, StageWork, Verdict
 from etsy_listings.core.engine.context import RunContext
 from etsy_listings.core.engine.events import (
     EngineProgress,
@@ -69,7 +69,9 @@ class _Stage:
 
 
 def _planned(*stages: _Stage, listing: str = LISTING) -> PlannedRun:
-    stage_plans = tuple(StagePlan.work(s.name, f"{s.name} has work to do") for s in stages)
+    stage_plans = tuple(
+        StagePlan.work(s.name, StageWork(f"{s.name} has work to do")) for s in stages
+    )
     return PlannedRun(
         plan=Plan(listing=listing, is_live=False, etsy_listing_id=None, stage_plans=stage_plans),
         states=tuple(

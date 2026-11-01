@@ -275,19 +275,12 @@ class StagePlan:
     def work(
         cls,
         stage: str,
-        reason: str,
+        work: StageWork,
         *,
-        changes: tuple[Change, ...] = (),
         drift: tuple[Drift, ...] = (),
-        actions: tuple[Action, ...] = (),
         snapshot: BaseModel | None = None,
     ) -> StagePlan:
-        return cls(
-            stage=stage,
-            outcome=StageWork(reason=reason, changes=changes, actions=actions),
-            drift=drift,
-            snapshot=snapshot,
-        )
+        return cls(stage=stage, outcome=work, drift=drift, snapshot=snapshot)
 
     @classmethod
     def block(cls, stage: str, message: str, *, group: str | None = None) -> StagePlan:

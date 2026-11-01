@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Any
 
 from etsy_listings.core.engine.apply import execute
-from etsy_listings.core.engine.change import Plan, StagePlan
+from etsy_listings.core.engine.change import Plan, StagePlan, StageWork
 from etsy_listings.core.engine.context import RunContext
 from etsy_listings.core.engine.lock import Lockfile
 from etsy_listings.core.engine.plan import PlannedRun, StageState
@@ -51,7 +51,7 @@ class RecordingStage:
         return None
 
     def plan(self, desired: Any, applied: Any, live: Any) -> StagePlan:
-        return StagePlan.work(self.name, "test work")
+        return StagePlan.work(self.name, StageWork("test work"))
 
     def apply(
         self,
@@ -72,7 +72,7 @@ class RecordingStage:
 
 def _run(*stages: RecordingStage, lock: Lockfile, root: Path) -> Lockfile:
     ctx = a_context(root)
-    stage_plans = tuple(StagePlan.work(stage.name, "test work") for stage in stages)
+    stage_plans = tuple(StagePlan.work(stage.name, StageWork("test work")) for stage in stages)
     planned = PlannedRun(
         plan=Plan(
             listing="take-a-hike",

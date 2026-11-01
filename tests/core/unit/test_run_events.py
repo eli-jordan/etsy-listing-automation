@@ -34,6 +34,7 @@ from etsy_listings.core.engine.change import (
     Plan,
     PriceChange,
     StagePlan,
+    StageWork,
 )
 from etsy_listings.core.engine.stages.publish import PublishSnapshot
 
@@ -46,8 +47,7 @@ class _WrongSnapshot(BaseModel):
 def test_field_change_round_trips_through_the_dto() -> None:
     sp = StagePlan.work(
         "etsy_listing",
-        "copy changed",
-        changes=(FieldChange(path="title", before="Old", after="New"),),
+        StageWork("copy changed", changes=(FieldChange(path="title", before="Old", after="New"),)),
     )
 
     dto = stage_plan_dto(sp)
@@ -65,13 +65,15 @@ def test_field_change_round_trips_through_the_dto() -> None:
 def test_price_change_renders_money_as_its_display_string() -> None:
     sp = StagePlan.work(
         "publish",
-        "price changed",
-        changes=(
-            PriceChange(
-                size="M",
-                color="black",
-                before=Money(Decimal(349), "NOK"),
-                after=Money(Decimal(399), "NOK"),
+        StageWork(
+            "price changed",
+            changes=(
+                PriceChange(
+                    size="M",
+                    color="black",
+                    before=Money(Decimal(349), "NOK"),
+                    after=Money(Decimal(399), "NOK"),
+                ),
             ),
         ),
     )
@@ -87,10 +89,12 @@ def test_price_change_renders_money_as_its_display_string() -> None:
 def test_list_change_and_media_change_keep_their_own_kind() -> None:
     sp = StagePlan.work(
         "printify_product",
-        "product changed",
-        changes=(
-            ListChange(path="colors", added=("navy",), removed=()),
-            MediaChange(rank=0, before="old.png", after="new.png"),
+        StageWork(
+            "product changed",
+            changes=(
+                ListChange(path="colors", added=("navy",), removed=()),
+                MediaChange(rank=0, before="old.png", after="new.png"),
+            ),
         ),
     )
 
@@ -123,8 +127,10 @@ def test_drift_carries_its_labels() -> None:
 def test_actions_carry_their_paths() -> None:
     sp = StagePlan.work(
         "render",
-        "scene changed",
-        actions=(Action(description="render scene", inputs=("a.png",), outputs=("b.png",)),),
+        StageWork(
+            "scene changed",
+            actions=(Action(description="render scene", inputs=("a.png",), outputs=("b.png",)),),
+        ),
     )
 
     dto = stage_plan_dto(sp)
@@ -172,7 +178,7 @@ def test_plan_dto_carries_every_stage_plan_in_order() -> None:
         is_live=False,
         etsy_listing_id=None,
         stage_plans=(
-            StagePlan.work("render", "scene changed"),
+            StagePlan.work("render", StageWork("scene changed")),
             StagePlan.block("printify_product", "no shop configured"),
         ),
     )

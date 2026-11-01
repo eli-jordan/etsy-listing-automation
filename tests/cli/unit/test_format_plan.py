@@ -9,7 +9,7 @@ from dataclasses import replace
 from pathlib import Path
 
 from etsy_listings.cli.render import format_plan
-from etsy_listings.core.engine.change import Action, Drift, Plan, StagePlan
+from etsy_listings.core.engine.change import Action, Drift, Plan, StagePlan, StageWork
 
 from tests.support.builders import FIXTURE_LISTING as LISTING
 
@@ -71,7 +71,7 @@ def test_a_grouped_stage_is_named_under_its_group(workspace_root: Path) -> None:
     grouped = replace(
         StagePlan.work(
             "etsy_videos",
-            "the videos in media: changed",
+            StageWork("the videos in media: changed"),
             drift=(Drift(path="videos", last_applied=["a.mp4"], live="missing"),),
         ),
         group="etsy_media",
@@ -100,15 +100,17 @@ NO_SHOP = (
 EMPTY_TITLE = "etsy.title is empty, and Printify requires it"
 RENDER = StagePlan.work(
     "render",
-    "2 mockups to render",
-    actions=(
-        Action(
-            description="render flat-lay-01 in black",
-            inputs=("designs/take-a-hike.png", "mockup-templates/flat-lay-01"),
-            outputs=(".cache/renders/black.png",),
-            missing_outputs=(".cache/renders/black.png",),
+    StageWork(
+        "2 mockups to render",
+        actions=(
+            Action(
+                description="render flat-lay-01 in black",
+                inputs=("designs/take-a-hike.png", "mockup-templates/flat-lay-01"),
+                outputs=(".cache/renders/black.png",),
+                missing_outputs=(".cache/renders/black.png",),
+            ),
+            Action(description="render flat-lay-01 in ivory"),
         ),
-        Action(description="render flat-lay-01 in ivory"),
     ),
 )
 
@@ -185,7 +187,7 @@ def test_a_run_lists_each_action_with_what_it_reads_and_writes() -> None:
 
 
 def test_one_action_is_counted_in_the_singular() -> None:
-    one = StagePlan.work("render", "1 mockup", actions=(Action(description="render"),))
+    one = StagePlan.work("render", StageWork("1 mockup", actions=(Action(description="render"),)))
 
     assert format_plan(_plan(one)).endswith(
         "  1 to run (1 action), 0 to change, 0 drift warning(s)"
