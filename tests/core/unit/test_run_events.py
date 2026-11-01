@@ -5,7 +5,10 @@ Pure, like ``plan_fingerprint`` -- no registry, no executor, no workspace.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from decimal import Decimal
+from enum import Enum
+from pathlib import Path
 
 import pytest
 from pydantic import BaseModel, TypeAdapter, ValidationError
@@ -60,6 +63,72 @@ def test_field_change_round_trips_through_the_dto() -> None:
         "before": "Old",
         "after": "New",
     }
+
+
+class _Fit(Enum):
+    SLIM = "slim"
+
+
+@dataclass(frozen=True)
+class _Swatch:
+    colour: str
+    price: Money
+
+
+def test_field_change_values_become_plain_json_at_any_depth() -> None:
+    """Money, models, paths, enums and dataclasses inside lists, tuples and
+    dicts all come out as JSON a client can read back."""
+    before = {
+        "fit": _Fit.SLIM,
+        "file": Path("renders/front.png"),
+        "swatches": (_Swatch("navy", Money(Decimal(25), "USD")),),
+        "snapshot": PublishSnapshot(),
+        "sizes": ["S", "M"],
+    }
+    sp = StagePlan.work(
+        "etsy_listing",
+        StageWork("copy changed", changes=(FieldChange(path="x", before=before, after=None),)),
+    )
+
+    dto = stage_plan_dto(sp)
+
+    assert isinstance(dto.outcome, WorkOutcomeDTO)
+    assert dto.outcome.changes[0].model_dump()["before"] == {
+        "fit": "slim",
+        "file": "renders/front.png",
+        "swatches": [{"colour": "navy", "price": str(Money(Decimal(25), "USD"))}],
+        "snapshot": PublishSnapshot().model_dump(mode="json"),
+        "sizes": ["S", "M"],
+    }
+
+
+@pytest.mark.parametrize(
+    "stage",
+    [
+        "render",
+        "printify_product",
+        "publish",
+        "etsy_listing",
+        "etsy_media",
+        "etsy_videos",
+        "retract",
+    ],
+)
+def test_each_stage_gets_its_own_plan_dto(stage: str) -> None:
+    dto = stage_plan_dto(StagePlan.no_work(stage))
+
+    assert dto.stage == stage
+    assert dto.snapshot is None
+
+
+def test_a_retract_plan_with_a_snapshot_is_rejected() -> None:
+    with pytest.raises(TypeError, match="retract"):
+        stage_plan_dto(StagePlan.no_work("retract", snapshot=PublishSnapshot()))
+
+
+def test_an_unknown_stage_is_rejected() -> None:
+    with pytest.raises(ValueError, match="unknown stage 'bogus'"):
+        stage_plan_dto(StagePlan.no_work("bogus"))
 
 
 def test_price_change_renders_money_as_its_display_string() -> None:
