@@ -170,7 +170,7 @@ def test_apply_listings_should_stop_before_any_listing_applies_nothing(
 
     report = apply_listings(
         ctx, [LISTING], [_Stage("render")], hooks=RunHooks(should_stop=lambda: True)
-    )  # type: ignore[list-item]
+    )  # type: ignore[list-item]  # -- a minimal stand-in, not a full Stage
 
     assert report.outcomes == ()
     assert not (workspace_root / "listings" / LISTING / "state.lock.json").is_file()
@@ -224,7 +224,7 @@ def test_a_stop_before_retract_keeps_the_listing(workspace_root: Path) -> None:
 
     apply_listings(
         a_context(workspace_root), [LISTING], [_Stage("render")], hooks=RunHooks(should_stop=stop)
-    )  # type: ignore[list-item]
+    )  # type: ignore[list-item]  # -- a minimal stand-in, not a full Stage
 
     workspace = Workspace.discover(root_override=workspace_root)
     assert workspace.listing_file(LISTING).is_file()

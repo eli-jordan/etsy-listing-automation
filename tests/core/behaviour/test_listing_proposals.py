@@ -62,7 +62,7 @@ def _resolve(workspace: Workspace, proposals: ProposalStore, **sections: object)
         LISTING,
         ProposalResolution(
             generated_at=sections.pop("generated_at", TODAY),
-            **sections,  # type: ignore[arg-type]
+            **sections,  # type: ignore[arg-type]  # -- sections arrive as object through **kwargs
         ),
     )
 
