@@ -16,6 +16,7 @@ import sys
 import threading
 import time
 from pathlib import Path
+from typing import Any
 
 import cv2
 import numpy as np
@@ -23,7 +24,7 @@ import yaml
 from PIL import Image
 
 from etsy_listings.core.application.preparation.coordinator import PreparationRequest, Preparations
-from etsy_listings.core.application.preparation.models import TERMINAL
+from etsy_listings.core.application.preparation.models import TERMINAL, Job
 from etsy_listings.core.preparation.artifacts import Artifacts
 from etsy_listings.core.preparation.numerics import EvidenceIdentity, evidence_covers, plan_crop
 from etsy_listings.core.preparation.runtime import Runtime
@@ -88,15 +89,19 @@ def host_memory(pid: int | None = None) -> dict[str, int]:
     }
 
 
-def run(output: Path) -> None:
-    workspace = Workspace.discover(root_override=output / "workspace")
+NAME = "multiple-validation"
+PLACEMENTS = ["outer-white", "inner-magenta"]
+
+
+def _write_template(workspace: Workspace) -> tuple[Path, np.ndarray, np.ndarray]:
+    """Two overlapping placements on one photo: the reference box and a smaller
+    one inside it. Returns the template directory and both boxes."""
     reference = workspace.root / "mockup-templates/fence-ivory"
     original = yaml.safe_load((reference / "template.yaml").read_text(encoding="utf-8"))
     box = np.array([[p["x"], p["y"]] for p in original["bounding_box"]], np.float32)
     centre = box.mean(axis=0)
     small = centre + (box - centre) * 0.6
-    name = "multiple-validation"
-    directory = workspace.root / "mockup-templates" / name
+    directory = workspace.root / "mockup-templates" / NAME
     directory.mkdir()
     shutil.copyfile(reference / "scene.png", directory / "scene.png")
     config = {
@@ -112,142 +117,180 @@ def run(output: Path) -> None:
         "renderer": {"type": "marigold", "config": {}},
     }
     (directory / "template.yaml").write_text(yaml.safe_dump(config), encoding="utf-8")
-    report: dict = {
-        "provenance": "two overlapping prints on one copied real shirt",
-        "status_latency_seconds": [],
-    }
+    return directory, box, small
+
+
+def _cancel_during_inference(coordinator: Preparations, workspace: Workspace, report: dict) -> Job:
+    job = coordinator.submit(
+        NAME,
+        PreparationRequest(
+            config_revision=CalibrationStore(workspace).read(NAME).revision,
+            request_id="multiple-native-validation",
+        ),
+    )
+    deadline = time.monotonic() + 900
+    normals_started = None
+    cancel_requested = None
+    while (job := coordinator.status(job.id)).phase not in TERMINAL:
+        before = time.perf_counter()
+        coordinator.status(job.id)
+        report["status_latency_seconds"].append(time.perf_counter() - before)
+        if time.monotonic() > deadline:
+            coordinator.cancel(job.id)
+            raise TimeoutError("Multiple preparation deadline exceeded")
+        if job.step == "normals" and normals_started is None:
+            normals_started = time.perf_counter()
+        if (
+            normals_started
+            and not cancel_requested
+            and time.perf_counter() - normals_started > INFERENCE_RUNNING_S
+        ):
+            before = time.perf_counter()
+            coordinator.cancel(job.id)
+            report["cancel_control_seconds"] = time.perf_counter() - before
+            cancel_requested = time.perf_counter()
+        time.sleep(0.25)
+    report["cancelled_job"] = job.model_dump(mode="json")
+    report["cancel_to_terminal_seconds"] = (
+        time.perf_counter() - cancel_requested if cancel_requested else None
+    )
+    return job
+
+
+def _retry(coordinator: Preparations, workspace: Workspace, previous: str) -> Job:
+    job = coordinator.submit(
+        NAME,
+        PreparationRequest(
+            config_revision=CalibrationStore(workspace).read(NAME).revision,
+            request_id="multiple-native-retry",
+            action="retry",
+            previous_job=previous,
+        ),
+    )
+    deadline = time.monotonic() + 900
+    while (job := coordinator.status(job.id)).phase not in TERMINAL:
+        if time.monotonic() > deadline:
+            coordinator.cancel(job.id)
+            raise TimeoutError("Multiple native retry exceeded deadline")
+        time.sleep(0.25)
+    return job
+
+
+def _prepare(workspace: Workspace, report: dict) -> None:
+    """Cancel a preparation mid-inference, then retry it to completion."""
     coordinator = Preparations(workspace)
     coordinator.start()
     try:
         started = time.perf_counter()
-        job = coordinator.submit(
-            name,
-            PreparationRequest(
-                config_revision=CalibrationStore(workspace).read(name).revision,
-                request_id="multiple-native-validation",
-            ),
-        )
-        deadline = time.monotonic() + 900
-        normals_started = None
-        cancel_requested = None
-        while (job := coordinator.status(job.id)).phase not in TERMINAL:
-            before = time.perf_counter()
-            coordinator.status(job.id)
-            report["status_latency_seconds"].append(time.perf_counter() - before)
-            if time.monotonic() > deadline:
-                coordinator.cancel(job.id)
-                raise TimeoutError("Multiple preparation deadline exceeded")
-            if job.step == "normals" and normals_started is None:
-                normals_started = time.perf_counter()
-            if (
-                normals_started
-                and not cancel_requested
-                and time.perf_counter() - normals_started > INFERENCE_RUNNING_S
-            ):
-                before = time.perf_counter()
-                coordinator.cancel(job.id)
-                report["cancel_control_seconds"] = time.perf_counter() - before
-                cancel_requested = time.perf_counter()
-            time.sleep(0.25)
-        report["cancelled_job"] = job.model_dump(mode="json")
-        report["cancel_to_terminal_seconds"] = (
-            time.perf_counter() - cancel_requested if cancel_requested else None
-        )
+        job = _cancel_during_inference(coordinator, workspace, report)
         if job.phase != "cancelled" or not any(v.predictions for v in job.evidence):
             raise RuntimeError("Native cancellation did not retain active-call evidence")
-        job = coordinator.submit(
-            name,
-            PreparationRequest(
-                config_revision=CalibrationStore(workspace).read(name).revision,
-                request_id="multiple-native-retry",
-                action="retry",
-                previous_job=job.id,
-            ),
-        )
-        deadline = time.monotonic() + 900
-        while (job := coordinator.status(job.id)).phase not in TERMINAL:
-            if time.monotonic() > deadline:
-                coordinator.cancel(job.id)
-                raise TimeoutError("Multiple native retry exceeded deadline")
-            time.sleep(0.25)
+        job = _retry(coordinator, workspace, job.id)
         report["prepare_seconds"] = time.perf_counter() - started
         report["job"] = job.model_dump(mode="json")
         if job.phase != "completed":
             raise RuntimeError(job.error or job.phase)
     finally:
         coordinator.close()
-    artifacts = Artifacts(workspace)
-    with Image.open(directory / "scene.png") as image:
-        base = np.array(image.convert("RGB"))
+
+
+def _render_orders(
+    base: np.ndarray, acquired: Any, output: Path, report: dict
+) -> list[MaterialLayer]:
     designs = [
         np.full((512, 512, 4), 255, np.uint8),
         np.tile(np.array([255, 0, 255, 255], np.uint8), (512, 512, 1)),
     ]
-    with artifacts.acquire(name, artifacts.saved_inputs(name)) as acquired:
-        assert set(acquired.maps) == {"outer-white", "inner-magenta"}
-        layers = [
-            MaterialLayer(design, acquired.maps[key], key)
-            for key, design in zip(["outer-white", "inner-magenta"], designs, strict=True)
-        ]
+    assert set(acquired.maps) == set(PLACEMENTS)
+    layers = [
+        MaterialLayer(design, acquired.maps[key], key)
+        for key, design in zip(PLACEMENTS, designs, strict=True)
+    ]
+    started = time.perf_counter()
+    forward = render_marigold_scene(base, layers)
+    report["render_seconds"] = time.perf_counter() - started
+    reverse = render_marigold_scene(base, list(reversed(layers)))
+    forward.save(output / "renders/multiple-forward.png")
+    reverse.save(output / "renders/multiple-reverse.png")
+    report["order_changed_pixels"] = int(
+        np.any(np.array(forward) != np.array(reverse), axis=-1).sum()
+    )
+    report["complete_placements"] = list(acquired.maps)
+    return layers
+
+
+def _cpu_gpu_overlap(
+    base: np.ndarray, layers: list[MaterialLayer], directory: Path, output: Path
+) -> dict:
+    """A real model call runs while CPU rendering uses accepted maps."""
+    runtime = Runtime()
+    cache = output / "overlap"
+    cache.mkdir()
+    shutil.copyfile(directory / "scene.png", cache / "photo.png")
+    worker = runtime.worker(runtime.inspect(), cache_root=cache)
+    measurement = {}
+
+    def infer() -> None:
         started = time.perf_counter()
-        forward = render_marigold_scene(base, layers)
-        report["render_seconds"] = time.perf_counter() - started
-        reverse = render_marigold_scene(base, list(reversed(layers)))
-        forward.save(output / "renders/multiple-forward.png")
-        reverse.save(output / "renders/multiple-reverse.png")
-        report["order_changed_pixels"] = int(
-            np.any(np.array(forward) != np.array(reverse), axis=-1).sum()
-        )
-        report["complete_placements"] = list(acquired.maps)
-        # A real model call runs while CPU rendering uses accepted maps.
-        runtime = Runtime()
-        cache = output / "overlap"
-        cache.mkdir()
-        shutil.copyfile(directory / "scene.png", cache / "photo.png")
-        worker = runtime.worker(runtime.inspect(), cache_root=cache)
-        measurement = {}
-
-        def infer() -> None:
-            started = time.perf_counter()
-            try:
-                measurement["result"] = worker.infer(
-                    InferenceCall(
-                        request_id="overlap",
-                        role="depth",
-                        input="photo.png",
-                        output="depth.npz",
-                        size=(2048, 2048),
-                    )
-                )
-            except Exception as exc:  # noqa: BLE001 -- measurement boundary; record any failure in the report
-                measurement["error"] = str(exc)
-            measurement["seconds"] = time.perf_counter() - started
-
-        thread = threading.Thread(target=infer)
         try:
-            thread.start()
-            time.sleep(8)
-            started = time.perf_counter()
-            render_marigold_scene(base, layers)
-            measurement["cpu_render_seconds"] = time.perf_counter() - started
-            thread.join(timeout=930)
-            measurement["finished"] = not thread.is_alive()
-        finally:
-            worker.close()
-        report["cpu_gpu_overlap"] = measurement
-        report["host_memory_after_overlap"] = host_memory()
+            measurement["result"] = worker.infer(
+                InferenceCall(
+                    request_id="overlap",
+                    role="depth",
+                    input="photo.png",
+                    output="depth.npz",
+                    size=(2048, 2048),
+                )
+            )
+        except Exception as exc:  # noqa: BLE001 -- measurement boundary; record any failure in the report
+            measurement["error"] = str(exc)
+        measurement["seconds"] = time.perf_counter() - started
 
-        report["opencv_threads"] = cv2.getNumThreads()
-        report["cpu_host_torch_installed"] = importlib.util.find_spec("torch") is not None
-        report["cpu_host_torch_loaded"] = "torch" in sys.modules
+    thread = threading.Thread(target=infer)
+    try:
+        thread.start()
+        time.sleep(8)
+        started = time.perf_counter()
+        render_marigold_scene(base, layers)
+        measurement["cpu_render_seconds"] = time.perf_counter() - started
+        thread.join(timeout=930)
+        measurement["finished"] = not thread.is_alive()
+    finally:
+        worker.close()
+    return measurement
+
+
+def _reuse(box: np.ndarray, small: np.ndarray) -> dict:
     identity = EvidenceIdentity("photo", "checkpoint", "settings", "preprocessing")
     crop = plan_crop(box, (2048, 2048))
-    report["reuse"] = {
+    return {
         "rectangle": crop.rectangle,
         "original": evidence_covers(crop, identity, box, (2048, 2048), identity),
         "smaller": evidence_covers(crop, identity, small, (2048, 2048), identity),
         "shift_one_pixel": evidence_covers(crop, identity, box + 1, (2048, 2048), identity),
     }
+
+
+def run(output: Path) -> None:
+    workspace = Workspace.discover(root_override=output / "workspace")
+    directory, box, small = _write_template(workspace)
+    report: dict = {
+        "provenance": "two overlapping prints on one copied real shirt",
+        "status_latency_seconds": [],
+    }
+    _prepare(workspace, report)
+    artifacts = Artifacts(workspace)
+    with Image.open(directory / "scene.png") as image:
+        base = np.array(image.convert("RGB"))
+    with artifacts.acquire(NAME, artifacts.saved_inputs(NAME)) as acquired:
+        layers = _render_orders(base, acquired, output, report)
+        report["cpu_gpu_overlap"] = _cpu_gpu_overlap(base, layers, directory, output)
+        report["host_memory_after_overlap"] = host_memory()
+
+        report["opencv_threads"] = cv2.getNumThreads()
+        report["cpu_host_torch_installed"] = importlib.util.find_spec("torch") is not None
+        report["cpu_host_torch_loaded"] = "torch" in sys.modules
+    report["reuse"] = _reuse(box, small)
     # Worker replies are protocol models.
     text = json.dumps(report, indent=2, default=lambda reply: reply.model_dump(mode="json"))
     (output / "multiple.json").write_text(text + "\n", encoding="utf-8")

@@ -12,6 +12,7 @@ import json
 import shutil
 import time
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import yaml
@@ -51,7 +52,19 @@ def save_report(path: Path, report: dict) -> None:
     path.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
 
 
-def run(source: Path, output: Path) -> None:
+PACKS = ["cc-1717-folded-with-hat-and-leaf", "cc1717-hanging-on-fence"]
+COLOURS = ["bay", "ivory", "black"]
+TEMPLATES = [
+    "folded-bay",
+    "folded-ivory",
+    "folded-black",
+    "fence-bay",
+    "fence-ivory",
+    "fence-black",
+]
+
+
+def _isolated_workspace(source: Path, output: Path) -> Workspace:
     if output.resolve().is_relative_to(source.resolve()):
         raise ValueError("Output must be outside the read-only source workspace")
     if output.exists() or output.resolve().is_relative_to(Path(__file__).resolve().parents[1]):
@@ -61,15 +74,16 @@ def run(source: Path, output: Path) -> None:
     root.mkdir()
     (root / "shop.yaml").write_text("etsy: {currency: USD}\n", encoding="utf-8")
     (root / "mockup-templates").mkdir()
-    workspace = Workspace.discover(root_override=root)
-    report: dict = {"target": "production", "source_read_only": str(source), "cases": []}
-    report_path = output / "measurements.json"
-    packs = ["cc-1717-folded-with-hat-and-leaf", "cc1717-hanging-on-fence"]
-    for pack in packs:
+    return Workspace.discover(root_override=root)
+
+
+def _copy_templates(source: Path, root: Path) -> None:
+    """One single template per pack colour, sharing the pack's bounding box."""
+    for pack in PACKS:
         original = source / "mockup-templates" / pack
         old = yaml.safe_load((original / "template.yaml").read_text(encoding="utf-8"))
-        for colour in ["bay", "ivory", "black"]:
-            name = ("folded" if pack == packs[0] else "fence") + "-" + colour
+        for colour in COLOURS:
+            name = ("folded" if pack == PACKS[0] else "fence") + "-" + colour
             directory = root / "mockup-templates" / name
             directory.mkdir()
             photo = next(original.glob("*-" + colour + ".png"))
@@ -80,101 +94,118 @@ def run(source: Path, output: Path) -> None:
                 "renderer": {"type": "marigold", "config": {}},
             }
             (directory / "template.yaml").write_text(yaml.safe_dump(config), encoding="utf-8")
-    runtime = Runtime()
+
+
+def _prepare(coordinator: Preparations, workspace: Workspace, name: str) -> dict:
     started = time.perf_counter()
-    capability = runtime.inspect()
-    report["runtime_inspect_seconds"] = time.perf_counter() - started
-    report["runtime"] = capability.__dict__
-    save_report(report_path, report)
-    if not capability.available:
-        raise RuntimeError(capability.problem)
+    record = coordinator.submit(
+        name,
+        PreparationRequest(
+            config_revision=CalibrationStore(workspace).read(name).revision,
+            request_id="validation-" + name,
+        ),
+    )
+    deadline = time.monotonic() + 900
+    seen = None
+    while (job := coordinator.status(record.id)).phase not in TERMINAL:
+        if time.monotonic() > deadline:
+            coordinator.cancel(job.id)
+            raise TimeoutError("Coordinator measurement exceeded 900 seconds")
+        if job.step != seen:
+            print(name, job.phase, job.step, round(time.perf_counter() - started, 3), flush=True)
+            seen = job.step
+        time.sleep(0.25)
+    return {
+        "name": name,
+        "seconds": time.perf_counter() - started,
+        "job": job.model_dump(mode="json"),
+    }
+
+
+def _prepare_all(workspace: Workspace, runtime: Runtime, report: dict, report_path: Path) -> None:
     coordinator = Preparations(workspace, runtime=runtime)
     coordinator.start()
     try:
-        for name in [
-            "folded-bay",
-            "folded-ivory",
-            "folded-black",
-            "fence-bay",
-            "fence-ivory",
-            "fence-black",
-        ]:
-            started = time.perf_counter()
-            record = coordinator.submit(
-                name,
-                PreparationRequest(
-                    config_revision=CalibrationStore(workspace).read(name).revision,
-                    request_id="validation-" + name,
-                ),
-            )
-            deadline = time.monotonic() + 900
-            seen = None
-            while (job := coordinator.status(record.id)).phase not in TERMINAL:
-                if time.monotonic() > deadline:
-                    coordinator.cancel(job.id)
-                    raise TimeoutError("Coordinator measurement exceeded 900 seconds")
-                if job.step != seen:
-                    print(
-                        name,
-                        job.phase,
-                        job.step,
-                        round(time.perf_counter() - started, 3),
-                        flush=True,
-                    )
-                    seen = job.step
-                time.sleep(0.25)
-            case = {
-                "name": name,
-                "seconds": time.perf_counter() - started,
-                "job": job.model_dump(mode="json"),
-            }
+        for name in TEMPLATES:
+            case = _prepare(coordinator, workspace, name)
             report["cases"].append(case)
             save_report(report_path, report)
-            if job.phase != "completed":
-                print("FAILED", name, job.error, flush=True)
+            if case["job"]["phase"] != "completed":
+                print("FAILED", name, case["job"]["error"], flush=True)
     finally:
         started = time.perf_counter()
         coordinator.close()
         report["idle_coordinator_close_seconds"] = time.perf_counter() - started
         save_report(report_path, report)
+
+
+def _render(base: np.ndarray, layer: MaterialLayer, path: Path) -> dict:
+    started = time.perf_counter()
+    image = render_marigold_scene(base, [layer])
+    elapsed = time.perf_counter() - started
+    encoded = time.perf_counter()
+    image.save(path)
+    return {"render_seconds": elapsed, "encode_seconds": time.perf_counter() - encoded}
+
+
+def _render_colour(
+    workspace: Workspace, shared: Any, name: str, designs: dict[str, np.ndarray], report: Report
+) -> None:
+    with Image.open(workspace.root / "mockup-templates" / name / "scene.png") as image:
+        base = np.array(image.convert("RGB"))
+    renders = report.path.parent / "renders"
+    with Artifacts(workspace).acquire(name, Artifacts(workspace).saved_inputs(name)) as independent:
+        for artwork, pixels in designs.items():
+            for mode, maps in [
+                ("shared", shared.maps[None]),
+                ("independent", independent.maps[None]),
+            ]:
+                path = renders / (name + "-" + artwork + "-" + mode + ".png")
+                timing = _render(base, MaterialLayer(pixels, maps), path)
+                report.data["render_cases"].append(
+                    {"name": name, "artwork": artwork, "mode": mode, **timing}
+                )
+            print("rendered", name, artwork, flush=True)
+            save_report(report.path, report.data)
+
+
+class Report:
+    """The measurements so far and where they are saved.
+
+    A plain class: other scripts load this module without registering it in
+    `sys.modules`, where `dataclass` would look for it."""
+
+    def __init__(self, data: dict, path: Path) -> None:
+        self.data = data
+        self.path = path
+
+
+def run(source: Path, output: Path) -> None:
+    workspace = _isolated_workspace(source, output)
+    report = Report(
+        {"target": "production", "source_read_only": str(source), "cases": []},
+        output / "measurements.json",
+    )
+    _copy_templates(source, workspace.root)
+    runtime = Runtime()
+    started = time.perf_counter()
+    capability = runtime.inspect()
+    report.data["runtime_inspect_seconds"] = time.perf_counter() - started
+    report.data["runtime"] = capability.__dict__
+    save_report(report.path, report.data)
+    if not capability.available:
+        raise RuntimeError(capability.problem)
+    _prepare_all(workspace, runtime, report.data, report.path)
     designs = artwork_cases(source / "designs" / "coding-x-music-master-of-packets.png")
-    renders = output / "renders"
-    renders.mkdir()
-    report["render_cases"] = []
+    (output / "renders").mkdir()
+    report.data["render_cases"] = []
     for pack in ["folded", "fence"]:
         reference = pack + "-bay"
         with Artifacts(workspace).acquire(
             reference, Artifacts(workspace).saved_inputs(reference)
         ) as shared:
-            for colour in ["bay", "ivory", "black"]:
-                name = pack + "-" + colour
-                with Image.open(root / "mockup-templates" / name / "scene.png") as image:
-                    base = np.array(image.convert("RGB"))
-                with Artifacts(workspace).acquire(
-                    name, Artifacts(workspace).saved_inputs(name)
-                ) as independent:
-                    for artwork, pixels in designs.items():
-                        for mode, maps in [
-                            ("shared", shared.maps[None]),
-                            ("independent", independent.maps[None]),
-                        ]:
-                            started = time.perf_counter()
-                            image = render_marigold_scene(base, [MaterialLayer(pixels, maps)])
-                            elapsed = time.perf_counter() - started
-                            path = renders / (name + "-" + artwork + "-" + mode + ".png")
-                            encoded = time.perf_counter()
-                            image.save(path)
-                            report["render_cases"].append(
-                                {
-                                    "name": name,
-                                    "artwork": artwork,
-                                    "mode": mode,
-                                    "render_seconds": elapsed,
-                                    "encode_seconds": time.perf_counter() - encoded,
-                                }
-                            )
-                        print("rendered", name, artwork, flush=True)
-                        save_report(report_path, report)
+            for colour in COLOURS:
+                _render_colour(workspace, shared, pack + "-" + colour, designs, report)
 
 
 if __name__ == "__main__":
