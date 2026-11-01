@@ -207,6 +207,9 @@ ignore = [
 # elsewhere logs, or renders through the CLI.
 "src/etsy_listings/cli/**" = ["T20"]
 "scripts/**" = ["T20"]
+# S06: the Codex gate decides on every shell command; os.path and open() spare
+# the 10ms pathlib import, about 6% of its skip path.
+"scripts/agent_lint_gate.py" = ["T20", "PTH"]
 
 [tool.ruff.lint.pylint]
 # S02: never loosened to make a check pass.
