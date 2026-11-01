@@ -1,6 +1,6 @@
 # Static analysis implementation plan
 
-Status: planned; no implementation PRs have been opened.
+Status: delivered; every gate below is on. See [Delivery](#delivery).
 
 This plan delivers the [specification](spec.md) through the repository's
 [implement-stack skill](../../../.claude/skills/implement-stack/SKILL.md). The
@@ -247,3 +247,20 @@ and `C901` at 8 with the `PLR091x` limits in ruff config.
 **Exit conditions:** `poe check` and CI pass with every gate on; the hook
 reports a deliberately complex new function; G4 passes with byte-identical
 goldens; spec status updated to delivered with PR links in this plan.
+
+## Delivery
+
+Delivered as seven stacked PRs, merged bottom-up. The gates are on from PR 7:
+complexipy at 10 over `src`, `tests` and `scripts` (`poe complexity`, run by
+`poe lint` in `poe check` and CI's `quality` job, and by the edit hook), and
+ruff's `C901` at 8 with `PLR0911`/`PLR0912`/`PLR0915` at 6/12/50.
+
+| PR | Link |
+|---|---|
+| 1 | TBD |
+| 2 | TBD |
+| 3 | TBD |
+| 4 | TBD |
+| 5 | TBD |
+| 6 | TBD |
+| 7 | TBD |

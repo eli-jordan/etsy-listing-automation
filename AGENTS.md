@@ -166,17 +166,18 @@ Run it locally before merging rather than iterating through CI. `gh workflow run
 
 <important if="you are editing code, or the lint hook reports findings after an edit">
 
-[`scripts/agent_lint.py`](scripts/agent_lint.py) runs after every edit you make in Claude, Grok or Codex ([static analysis spec](docs/features/static-analysis-20261031/spec.md), S06). It applies safe fixes to the file, then reports what is left (ruff, mypy through a warm dmypy daemon, ESLint); exit 2 means its stderr lists findings you must deal with before moving on. mypy findings appear only once the daemon has finished its first check, about 30s into a session.
+[`scripts/agent_lint.py`](scripts/agent_lint.py) runs after every edit you make in Claude, Grok or Codex ([static analysis spec](docs/features/static-analysis-20261031/spec.md), S06). It applies safe fixes to the file, then reports what is left (ruff, complexipy, mypy through a warm dmypy daemon, ESLint); exit 2 means its stderr lists findings you must deal with before moving on. mypy findings appear only once the daemon has finished its first check, about 30s into a session.
 
 - Fix the finding. Do not suppress it to make the hook pass.
 - A suppression you add must say why: `# noqa: E501 -- <reason>`, `// eslint-disable-next-line <rule> -- <reason>`, and for mypy, which rejects text after the code, `# type: ignore[code]  # -- <reason>` (S07). The hook rejects one without a reason.
 - Never loosen a threshold or rule configuration to pass a check (S02).
+- Every Python function, tests included, stays under the complexity limits: cognitive complexity 10 (complexipy), cyclomatic 8 (`C901`), 12 branches, 50 statements, 6 returns. Over a limit, split the function: extract named helpers, use guard clauses or a dispatch table. Frontend functions have the same cognitive limit (sonarjs).
 - `uv run poe check` and CI run the whole-program checks the hook does not.
 </important>
 
 <important if="you are changing CI workflows or the poe tasks in pyproject.toml">
 
-[ci.yml](.github/workflows/ci.yml): PRs, pushes to `main` and manual runs run `poe lint` (format-check, ruff, mypy, `lint-imports`) once in the `quality` job, `poe test-ci` (`pytest -m "not browser and not e2e"` under the coverage floor) on ubuntu and windows, plus the frontend gate. A separate `pytest -m browser` job runs after those gates on all three triggers; the opt-in `capture` screenshots are deselected unless `-m` names them (`tests/conftest.py`), so neither CI nor `poe check` runs them. These jobs use no real shop APIs. [e2e.yml](.github/workflows/e2e.yml): `pytest -m e2e`, on push to `main` or manually. Windows is in the matrix because goldens were generated there; ubuntu proves the OpenCV/Pillow pins produce the same bytes. CI calls the poe tasks defined in `pyproject.toml` rather than listing commands, so a check is changed in one place; the frontend job, which has no Python, runs the npm scripts `poe frontend` runs (`tests/test_ci_selection.py` compares them).
+[ci.yml](.github/workflows/ci.yml): PRs, pushes to `main` and manual runs run `poe lint` (format-check, ruff, mypy, `lint-imports`, complexipy, Vulture, jscpd) once in the `quality` job, `poe test-ci` (`pytest -m "not browser and not e2e"` under the coverage floor) on ubuntu and windows, plus the frontend gate. A separate `pytest -m browser` job runs after those gates on all three triggers; the opt-in `capture` screenshots are deselected unless `-m` names them (`tests/conftest.py`), so neither CI nor `poe check` runs them. These jobs use no real shop APIs. [e2e.yml](.github/workflows/e2e.yml): `pytest -m e2e`, on push to `main` or manually. Windows is in the matrix because goldens were generated there; ubuntu proves the OpenCV/Pillow pins produce the same bytes. CI calls the poe tasks defined in `pyproject.toml` rather than listing commands, so a check is changed in one place; the frontend job, which has no Python, runs the npm scripts `poe frontend` runs (`tests/test_ci_selection.py` compares them).
 </important>
 
 <important if="you are measuring or reducing code size">

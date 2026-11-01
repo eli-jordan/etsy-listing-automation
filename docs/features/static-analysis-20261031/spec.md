@@ -1,6 +1,6 @@
 # Static analysis specification
 
-Status: planned; implementation has not started.
+Status: delivered by the seven PRs listed in the [plan](plan.md#delivery).
 
 Coding agents (Claude, Codex and Grok, run through T3 Code) write most of the
 code in this repository. Today they see lint results only when they run
