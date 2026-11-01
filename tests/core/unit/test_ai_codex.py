@@ -2,7 +2,7 @@
 implementation plan, PR4, items 1-4).
 
 Nothing here launches a real `codex` process. Readiness tests replace
-`etsy_listings.core.ai.codex.subprocess.run` (the same double-and-monkeypatch
+`etsy_listings.core.ai.subprocess.run` (the same double-and-monkeypatch
 pattern `tests/support/doubles.py.FakeRun` already established for
 `cli/prompts.py`'s fzf lookup); generate/argv tests replace
 `etsy_listings.core.ai.codex.run_managed` so they can assert on exactly what argv,
@@ -123,7 +123,7 @@ def test_readiness_fails_when_not_authenticated(
 ) -> None:
     monkeypatch.setattr(codex.shutil, "which", lambda name: "/usr/bin/codex")
     fake = _FakeRun({("login", "status"): subprocess.CompletedProcess([], 1, stdout="", stderr="")})
-    monkeypatch.setattr(codex.subprocess, "run", fake)
+    monkeypatch.setattr(subprocess, "run", fake)
     provider = _provider(tmp_path)
 
     readiness = provider.readiness()
@@ -141,7 +141,7 @@ def test_readiness_fails_when_login_status_cannot_be_run(
     def _raise(argv: list[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:
         raise OSError("boom")
 
-    monkeypatch.setattr(codex.subprocess, "run", _raise)
+    monkeypatch.setattr(subprocess, "run", _raise)
     provider = _provider(tmp_path)
 
     readiness = provider.readiness()
@@ -160,7 +160,7 @@ def test_readiness_fails_when_exec_help_is_missing_required_flags(
             ("exec", "--help"): _ok(stdout="Usage: codex exec [OPTIONS] [PROMPT]\n"),
         }
     )
-    monkeypatch.setattr(codex.subprocess, "run", fake)
+    monkeypatch.setattr(subprocess, "run", fake)
     provider = _provider(tmp_path)
 
     readiness = provider.readiness()
@@ -179,7 +179,7 @@ def test_readiness_fails_when_exec_help_check_raises(
             return _ok()
         raise OSError("boom")
 
-    monkeypatch.setattr(codex.subprocess, "run", _run)
+    monkeypatch.setattr(subprocess, "run", _run)
     provider = _provider(tmp_path)
 
     readiness = provider.readiness()
@@ -198,7 +198,7 @@ def test_readiness_fails_when_exec_help_exits_nonzero(
             return _ok()
         return subprocess.CompletedProcess(argv, 1, stdout="", stderr="")
 
-    monkeypatch.setattr(codex.subprocess, "run", _run)
+    monkeypatch.setattr(subprocess, "run", _run)
     provider = _provider(tmp_path)
 
     readiness = provider.readiness()
@@ -217,7 +217,7 @@ def test_readiness_says_nothing_about_a_prompt_file(
     twice, since `server/api/seo.py` checked the same thing itself."""
     monkeypatch.setattr(codex.shutil, "which", lambda name: "/usr/bin/codex")
     fake = _FakeRun({("login", "status"): _ok(), ("exec", "--help"): _ok(stdout=_EXEC_HELP)})
-    monkeypatch.setattr(codex.subprocess, "run", fake)
+    monkeypatch.setattr(subprocess, "run", fake)
 
     readiness = codex.CodexProvider(workspace_root=tmp_path).readiness()
 
@@ -229,7 +229,7 @@ def test_readiness_is_ready_when_every_check_passes(
 ) -> None:
     monkeypatch.setattr(codex.shutil, "which", lambda name: "/usr/bin/codex")
     fake = _FakeRun({("login", "status"): _ok(), ("exec", "--help"): _ok(stdout=_EXEC_HELP)})
-    monkeypatch.setattr(codex.subprocess, "run", fake)
+    monkeypatch.setattr(subprocess, "run", fake)
     provider = _provider(tmp_path)
 
     assert provider.readiness() == ProviderReadiness(ready=True)

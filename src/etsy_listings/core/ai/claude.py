@@ -50,16 +50,14 @@ from __future__ import annotations
 
 import json
 import shutil
-import subprocess
 import threading
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from etsy_listings.core.ai import cli_support
 from etsy_listings.core.ai.errors import (
-    ProviderCancelledError,
     ProviderGenerationError,
-    ProviderTimeoutError,
     ProviderUnavailableError,
     classify_process_failure,
 )
@@ -74,11 +72,6 @@ from etsy_listings.core.ai.process import run_managed
 from etsy_listings.core.ai.repair import prompt_text_for
 
 PROVIDER_NAME = "claude"
-
-_READINESS_TIMEOUT_SECONDS = 15.0
-"""Mirrors `ai/codex.py`'s own readiness timeout -- both probes below are
-local and fast (`claude auth status`, `claude -p --help`), never a
-speculative quota check."""
 
 _READ_ONLY_TOOLS = "Read,Grep,Glob"
 """The complete allowed-tool set for a generation call. Write, Edit,
@@ -122,32 +115,14 @@ class ClaudeProvider:
         return shutil.which(self.binary) or self.binary
 
     def readiness(self) -> ProviderReadiness:
-        if shutil.which(self.binary) is None:
-            return ProviderReadiness(ready=False, reason=f"{self.binary} was not found on PATH")
-
-        unavailable = self._check_authenticated()
-        if unavailable is not None:
-            return unavailable
-
-        unavailable = self._check_read_only_capability()
-        if unavailable is not None:
-            return unavailable
-
-        return ProviderReadiness(ready=True)
+        return cli_support.readiness(
+            self.binary, self._check_authenticated, self._check_read_only_capability
+        )
 
     def _check_authenticated(self) -> ProviderReadiness | None:
-        try:
-            result = subprocess.run(
-                [self._resolved_binary(), "auth", "status"],
-                capture_output=True,
-                text=True,
-                timeout=_READINESS_TIMEOUT_SECONDS,
-                check=False,
-            )
-        except (OSError, subprocess.SubprocessError) as exc:
-            return ProviderReadiness(
-                ready=False, reason=f"could not check `{self.binary} auth status`: {exc}"
-            )
+        result = cli_support.probe(self.binary, ("auth", "status"))
+        if isinstance(result, ProviderReadiness):
+            return result
         if result.returncode != 0:
             return ProviderReadiness(
                 ready=False,
@@ -168,37 +143,10 @@ class ClaudeProvider:
         return None
 
     def _check_read_only_capability(self) -> ProviderReadiness | None:
-        # Known limitation (docs/features/ai-seo-20260922/plan.md, PR4): this
-        # only confirms `--help` advertises the required flags, not that a
-        # live `-p` invocation actually honours them. Same "no speculative
-        # quota check" tradeoff as the auth check above -- readiness stays a
-        # local, static check rather than spending a real generation call.
-        try:
-            result = subprocess.run(
-                [self._resolved_binary(), "-p", "--help"],
-                capture_output=True,
-                text=True,
-                timeout=_READINESS_TIMEOUT_SECONDS,
-                check=False,
-            )
-        except (OSError, subprocess.SubprocessError) as exc:
-            return ProviderReadiness(
-                ready=False, reason=f"could not check `{self.binary} -p --help`: {exc}"
-            )
-        if result.returncode != 0:
-            return ProviderReadiness(
-                ready=False, reason=f"`{self.binary} -p --help` exited {result.returncode}"
-            )
-        missing = [flag for flag in _REQUIRED_HELP_FLAGS if flag not in result.stdout]
-        if missing:
-            return ProviderReadiness(
-                ready=False,
-                reason=(
-                    f"the installed {self.binary} CLI does not support the required "
-                    f"read-only/no-session flags: {', '.join(missing)}"
-                ),
-            )
-        return None
+        # A local help probe checks advertised flags without spending a generation call.
+        return cli_support.check_capability(
+            self.binary, ("-p", "--help"), _REQUIRED_HELP_FLAGS, "read-only/no-session"
+        )
 
     def generate(
         self,
@@ -240,20 +188,7 @@ class ClaudeProvider:
             cancel_event=cancel_event,
         )
 
-        if result.cancelled:
-            raise ProviderCancelledError(PROVIDER_NAME)
-        if result.timed_out:
-            raise ProviderTimeoutError(PROVIDER_NAME)
-        if result.returncode != 0:
-            # stdout may be the `--output-format json` envelope. Classification
-            # reads its `result` sentence; the rest is telemetry.
-            raise classify_process_failure(
-                PROVIDER_NAME,
-                returncode=result.returncode,
-                stdout=result.stdout,
-                stderr=result.stderr,
-            )
-
+        cli_support.check_result(PROVIDER_NAME, result)
         return RawProviderResult(
             provider=PROVIDER_NAME, raw_output=self._extract_result_text(result.stdout)
         )
@@ -272,14 +207,7 @@ class ClaudeProvider:
         rather than only its ``result`` string keeps ``api_error_status``
         visible -- an availability failure must be recognised as one
         regardless of which of the two shapes carried it."""
-        try:
-            envelope: Any = json.loads(stdout)
-        except json.JSONDecodeError as exc:
-            raise ProviderGenerationError(
-                PROVIDER_NAME, 0, f"stdout was not valid JSON: {exc}"
-            ) from exc
-        if not isinstance(envelope, dict):
-            raise ProviderGenerationError(PROVIDER_NAME, 0, "stdout was not a JSON object")
+        envelope = cli_support.json_object(PROVIDER_NAME, stdout)
         if envelope.get("is_error"):
             # No sentence and no status: the old fixed line, so a bare
             # `is_error` doesn't surface the envelope. A status with no
@@ -309,13 +237,4 @@ class ClaudeProvider:
         know -- everything after it, including what a repair attempt resends,
         is the shared `ai/repair.py` rule.
         """
-        with_image = ProviderTask(
-            prompt_text=(
-                f"{task.prompt_text}\n\n"
-                f"The design image is at this absolute path: {task.design_image}\n"
-                "Use the Read tool to view it before answering.\n"
-            ),
-            response_schema=task.response_schema,
-            design_image=task.design_image,
-        )
-        return prompt_text_for(with_image, repair)
+        return prompt_text_for(task, repair, image_tool="Read")

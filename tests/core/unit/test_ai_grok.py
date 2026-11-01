@@ -79,7 +79,7 @@ def _patch_ready(
     def _run(argv: list[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:
         return _ok(stdout=help_text)
 
-    monkeypatch.setattr(grok.subprocess, "run", _run)
+    monkeypatch.setattr(subprocess, "run", _run)
 
 
 def test_readiness_fails_when_the_binary_is_missing(

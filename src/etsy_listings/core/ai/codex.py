@@ -32,17 +32,14 @@ from __future__ import annotations
 
 import json
 import shutil
-import subprocess
 import tempfile
 import threading
 from dataclasses import dataclass
 from pathlib import Path
 
+from etsy_listings.core.ai import cli_support
 from etsy_listings.core.ai.errors import (
-    ProviderCancelledError,
-    ProviderTimeoutError,
     ProviderUnavailableError,
-    classify_process_failure,
 )
 from etsy_listings.core.ai.models import (
     Deadline,
@@ -55,12 +52,6 @@ from etsy_listings.core.ai.process import run_managed
 from etsy_listings.core.ai.repair import prompt_text_for
 
 PROVIDER_NAME = "codex"
-
-_READINESS_TIMEOUT_SECONDS = 15.0
-"""A ceiling for the two readiness probes (`codex login status`, `codex exec
---help`) -- both are local, fast commands that talk to no remote quota
-endpoint (implementation plan: "Readiness needs no speculative quota
-check"), so this only guards against a genuinely hung executable."""
 
 _REQUIRED_EXEC_HELP_FLAGS: tuple[str, ...] = (
     "--sandbox",
@@ -114,32 +105,14 @@ class CodexProvider:
         return shutil.which(self.binary) or self.binary
 
     def readiness(self) -> ProviderReadiness:
-        if shutil.which(self.binary) is None:
-            return ProviderReadiness(ready=False, reason=f"{self.binary} was not found on PATH")
-
-        unavailable = self._check_authenticated()
-        if unavailable is not None:
-            return unavailable
-
-        unavailable = self._check_read_only_capability()
-        if unavailable is not None:
-            return unavailable
-
-        return ProviderReadiness(ready=True)
+        return cli_support.readiness(
+            self.binary, self._check_authenticated, self._check_read_only_capability
+        )
 
     def _check_authenticated(self) -> ProviderReadiness | None:
-        try:
-            result = subprocess.run(
-                [self._resolved_binary(), "login", "status"],
-                capture_output=True,
-                text=True,
-                timeout=_READINESS_TIMEOUT_SECONDS,
-                check=False,
-            )
-        except (OSError, subprocess.SubprocessError) as exc:
-            return ProviderReadiness(
-                ready=False, reason=f"could not check `{self.binary} login status`: {exc}"
-            )
+        result = cli_support.probe(self.binary, ("login", "status"))
+        if isinstance(result, ProviderReadiness):
+            return result
         if result.returncode != 0:
             return ProviderReadiness(
                 ready=False,
@@ -151,37 +124,10 @@ class CodexProvider:
         return None
 
     def _check_read_only_capability(self) -> ProviderReadiness | None:
-        # Known limitation (docs/features/ai-seo-20260922/plan.md, PR4): this
-        # only confirms `--help` advertises the required flags, not that a
-        # live `exec` invocation actually honours them. Same "no speculative
-        # quota check" tradeoff as the auth check above -- readiness stays a
-        # local, static check rather than spending a real generation call.
-        try:
-            result = subprocess.run(
-                [self._resolved_binary(), "exec", "--help"],
-                capture_output=True,
-                text=True,
-                timeout=_READINESS_TIMEOUT_SECONDS,
-                check=False,
-            )
-        except (OSError, subprocess.SubprocessError) as exc:
-            return ProviderReadiness(
-                ready=False, reason=f"could not check `{self.binary} exec --help`: {exc}"
-            )
-        if result.returncode != 0:
-            return ProviderReadiness(
-                ready=False, reason=f"`{self.binary} exec --help` exited {result.returncode}"
-            )
-        missing = [flag for flag in _REQUIRED_EXEC_HELP_FLAGS if flag not in result.stdout]
-        if missing:
-            return ProviderReadiness(
-                ready=False,
-                reason=(
-                    f"the installed {self.binary} CLI does not support the required "
-                    f"read-only exec flags: {', '.join(missing)}"
-                ),
-            )
-        return None
+        # A local help probe checks advertised flags without spending a generation call.
+        return cli_support.check_capability(
+            self.binary, ("exec", "--help"), _REQUIRED_EXEC_HELP_FLAGS, "read-only exec"
+        )
 
     def generate(
         self,
@@ -233,17 +179,7 @@ class CodexProvider:
                 cancel_event=cancel_event,
             )
 
-            if result.cancelled:
-                raise ProviderCancelledError(PROVIDER_NAME)
-            if result.timed_out:
-                raise ProviderTimeoutError(PROVIDER_NAME)
-            if result.returncode != 0:
-                raise classify_process_failure(
-                    PROVIDER_NAME,
-                    returncode=result.returncode,
-                    stdout=result.stdout,
-                    stderr=result.stderr,
-                )
+            cli_support.check_result(PROVIDER_NAME, result)
             raw_output = (
                 last_message_path.read_text(encoding="utf-8")
                 if last_message_path.is_file()

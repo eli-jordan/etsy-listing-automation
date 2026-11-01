@@ -108,7 +108,7 @@ def test_readiness_fails_when_not_logged_in(
 ) -> None:
     monkeypatch.setattr(claude.shutil, "which", lambda name: "/usr/bin/claude")
     fake = _FakeRun({("auth", "status"): _ok(stdout=json.dumps({"loggedIn": False}))})
-    monkeypatch.setattr(claude.subprocess, "run", fake)
+    monkeypatch.setattr(subprocess, "run", fake)
     provider = _provider(tmp_path)
 
     readiness = provider.readiness()
@@ -122,7 +122,7 @@ def test_readiness_fails_when_auth_status_is_not_valid_json(
 ) -> None:
     monkeypatch.setattr(claude.shutil, "which", lambda name: "/usr/bin/claude")
     fake = _FakeRun({("auth", "status"): _ok(stdout="not json")})
-    monkeypatch.setattr(claude.subprocess, "run", fake)
+    monkeypatch.setattr(subprocess, "run", fake)
     provider = _provider(tmp_path)
 
     readiness = provider.readiness()
@@ -138,7 +138,7 @@ def test_readiness_fails_when_auth_status_cannot_be_run(
     def _raise(argv: list[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:
         raise OSError("boom")
 
-    monkeypatch.setattr(claude.subprocess, "run", _raise)
+    monkeypatch.setattr(subprocess, "run", _raise)
     provider = _provider(tmp_path)
 
     readiness = provider.readiness()
@@ -152,7 +152,7 @@ def test_readiness_fails_when_auth_status_exits_nonzero(
 ) -> None:
     monkeypatch.setattr(claude.shutil, "which", lambda name: "/usr/bin/claude")
     fake = _FakeRun({("auth", "status"): subprocess.CompletedProcess([], 1, stdout="", stderr="")})
-    monkeypatch.setattr(claude.subprocess, "run", fake)
+    monkeypatch.setattr(subprocess, "run", fake)
     provider = _provider(tmp_path)
 
     readiness = provider.readiness()
@@ -171,7 +171,7 @@ def test_readiness_fails_when_help_check_raises(
             return _ok(stdout=_AUTH_STATUS_JSON)
         raise OSError("boom")
 
-    monkeypatch.setattr(claude.subprocess, "run", _run)
+    monkeypatch.setattr(subprocess, "run", _run)
     provider = _provider(tmp_path)
 
     readiness = provider.readiness()
@@ -190,7 +190,7 @@ def test_readiness_fails_when_help_check_exits_nonzero(
             return _ok(stdout=_AUTH_STATUS_JSON)
         return subprocess.CompletedProcess(argv, 1, stdout="", stderr="")
 
-    monkeypatch.setattr(claude.subprocess, "run", _run)
+    monkeypatch.setattr(subprocess, "run", _run)
     provider = _provider(tmp_path)
 
     readiness = provider.readiness()
@@ -209,7 +209,7 @@ def test_readiness_fails_when_help_is_missing_required_flags(
             ("-p", "--help"): _ok(stdout="Usage: claude [options] [prompt]\n"),
         }
     )
-    monkeypatch.setattr(claude.subprocess, "run", fake)
+    monkeypatch.setattr(subprocess, "run", fake)
     provider = _provider(tmp_path)
 
     readiness = provider.readiness()
@@ -230,7 +230,7 @@ def test_readiness_says_nothing_about_a_prompt_file(
             ("-p", "--help"): _ok(stdout=_HELP_TEXT),
         }
     )
-    monkeypatch.setattr(claude.subprocess, "run", fake)
+    monkeypatch.setattr(subprocess, "run", fake)
 
     readiness = claude.ClaudeProvider(workspace_root=tmp_path).readiness()
 
@@ -247,7 +247,7 @@ def test_readiness_is_ready_when_every_check_passes(
             ("-p", "--help"): _ok(stdout=_HELP_TEXT),
         }
     )
-    monkeypatch.setattr(claude.subprocess, "run", fake)
+    monkeypatch.setattr(subprocess, "run", fake)
     provider = _provider(tmp_path)
 
     assert provider.readiness() == ProviderReadiness(ready=True)
