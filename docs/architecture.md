@@ -571,7 +571,11 @@ it both go through, which drops a draft only on the answer to the save made
 from it. Each control also knows whether that anticipated value is still
 pending. Matching an unanswered write suppresses a duplicate request without
 clearing the draft or changing its save identity; only persisted unchanged
-intent may acknowledge the draft without writing. A save whose caller reports and retries its own failure, the currency
+intent may acknowledge the draft without writing. The queue also owns each
+retained refused value and its attempt number, whether a field save or Retry
+received it. A field compares that refusal using its displayed value key and
+does not resend it on blur. A real new edit may try again; network failures
+remain retryable on blur. A save whose caller reports and retries its own failure, the currency
 dialog's, passes `retain: false` so Retry never resends it. Such a failure keeps
 an earlier successful acknowledgement visible once the queue drains; loading
 a file or retaining a new failure clears that acknowledgement. Both panels

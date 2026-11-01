@@ -86,6 +86,7 @@ export function useShopSettings() {
     fieldErrors: queue.fieldErrors as FieldErrors,
     pending: queue.pending,
     discard: queue.discard,
+    refusal: queue.refusal,
     save: save as (
       changes: ShopChanges,
       options?: { retain?: boolean },

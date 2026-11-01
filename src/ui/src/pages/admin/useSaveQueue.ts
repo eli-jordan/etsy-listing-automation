@@ -15,6 +15,7 @@ export type SaveOutcome =
   | { kind: "invalid"; message: string; fieldErrors: FieldErrors };
 
 export type FieldErrors = Partial<Record<string, string>>;
+export type RefusedValue<T> = { value: T; attempt: number };
 
 type Changes = Record<string, unknown>;
 
@@ -72,7 +73,9 @@ export function useSaveQueue<C extends Changes, O extends SaveOutcome>({
   /** The sequence of the newest save of each key. */
   const latest = useRef(new Map<string, number>());
   /** Keys whose newest save failed: the value it carried and why. */
-  const failed = useRef(new Map<string, { value: unknown; message: string }>());
+  const failed = useRef(
+    new Map<string, { value: unknown; message: string; refusal: number | null }>(),
+  );
   const acknowledged = useRef(false);
 
   const settle = useCallback((remaining: number) => {
@@ -101,6 +104,15 @@ export function useSaveQueue<C extends Changes, O extends SaveOutcome>({
   }, []);
 
   const afterSaves = useCallback(<T>(next: () => Promise<T>) => queue.current.then(next), []);
+
+  /** The latest refused value for a key, whichever save (including Retry)
+   * sent it. A new attempt, discard or reload supersedes this refusal. */
+  const refusal = useCallback(<K extends keyof C & string>(field: K): RefusedValue<C[K]> | null => {
+    const held = failed.current.get(field);
+    return held && held.refusal !== null
+      ? { value: held.value as C[K], attempt: held.refusal }
+      : null;
+  }, []);
 
   /** Choosing what the file will already hold abandons only that field's
    * failed patch. It never cancels a queued write or acknowledges a save. */
@@ -134,7 +146,7 @@ export function useSaveQueue<C extends Changes, O extends SaveOutcome>({
             ) as Partial<C>,
         );
       };
-      const fail = (message: string) => {
+      const fail = (message: string, refusedAt: number | null = null) => {
         if (!retain) {
           // The caller reports this failure itself and owns its retry; the
           // page goes back to what the retained failures and queue say.
@@ -142,7 +154,8 @@ export function useSaveQueue<C extends Changes, O extends SaveOutcome>({
           return;
         }
         for (const [key, value] of Object.entries(changes))
-          if (latest.current.get(key) === mine) failed.current.set(key, { value, message });
+          if (latest.current.get(key) === mine)
+            failed.current.set(key, { value, message, refusal: refusedAt });
         acknowledged.current = false;
         setStatus({ kind: "error", message });
       };
@@ -166,7 +179,7 @@ export function useSaveQueue<C extends Changes, O extends SaveOutcome>({
             setStatus({ kind: "conflict", message: outcome.message });
           } else {
             if (retain) setFieldErrors((errors) => ({ ...errors, ...outcome.fieldErrors }));
-            fail("Not saved");
+            fail("Not saved", mine);
           }
           return outcome;
         } catch (error) {
@@ -198,6 +211,7 @@ export function useSaveQueue<C extends Changes, O extends SaveOutcome>({
     pending,
     save,
     discard,
+    refusal,
     retry,
     reset,
     afterSaves,

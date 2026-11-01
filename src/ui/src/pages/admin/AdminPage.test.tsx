@@ -4,7 +4,13 @@ import { StrictMode } from "react";
 import { afterEach, beforeEach, describe, expect, it, type MockInstance, vi } from "vitest";
 import * as shopApi from "../../api/shop";
 import * as settingsApi from "../../api/workspaceSettings";
-import type { SaveOutcome, ShopConnections, ShopLookups, ShopSettings } from "../../api/shop";
+import type {
+  SaveOutcome,
+  ShopChanges,
+  ShopConnections,
+  ShopLookups,
+  ShopSettings,
+} from "../../api/shop";
 import { AdminPage } from "./AdminPage";
 
 /* Admin plan, PR 3: the Shop tab against a mocked HTTP surface. Each save
@@ -573,6 +579,76 @@ describe("Listing defaults", () => {
       expect(save.mock.calls[1]).toEqual(["r1", { renewal: "auto" }]);
       expect(server.file().listing_defaults.renewal).toBe("auto");
       expect(renewal).toHaveValue("auto");
+    },
+  );
+
+  it.each([
+    ["renewal", false],
+    ["renewal", true],
+    ["return_policy", false],
+    ["return_policy", true],
+  ] as const)(
+    "does not reblur a %s value refused by Retry, pending reblur=%s",
+    async (field, reblur) => {
+      const server = fileServer();
+      server.failNext("save offline");
+      await openDefaults();
+      const control = screen.getByLabelText(field === "renewal" ? "Renewal" : "Return policy");
+      const original = (control as HTMLSelectElement).value;
+      const value =
+        field === "renewal"
+          ? "auto"
+          : (
+              within(control).getByRole("option", {
+                name: "returns and exchanges within 14 days",
+              }) as HTMLOptionElement
+            ).value;
+      fireEvent.change(control, { target: { value } });
+      fireEvent.blur(control);
+      await screen.findByText("save offline");
+      let answer!: (outcome: SaveOutcome) => void;
+      save.mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            answer = resolve;
+          }),
+      );
+      await userEvent.click(screen.getByRole("button", { name: "Retry save" }));
+      await waitFor(() => expect(save).toHaveBeenCalledTimes(2));
+      if (reblur) {
+        control.focus();
+        fireEvent.blur(control);
+        await act(async () => {});
+      }
+      await act(async () =>
+        answer({
+          kind: "invalid",
+          message: "invalid edit",
+          fieldErrors: { [field]: "edit refused" },
+        }),
+      );
+      await screen.findByText("edit refused");
+      expect(control).toHaveValue(value);
+      control.focus();
+      fireEvent.blur(control);
+      await act(async () => {});
+      expect(save).toHaveBeenCalledTimes(2);
+      expect(server.file().listing_defaults[field]).toEqual(shop().listing_defaults[field]);
+
+      // A real new edit, including choosing back to the refused value, is
+      // allowed to try again. The old field error must not freeze it.
+      fireEvent.change(control, { target: { value: original } });
+      fireEvent.change(control, { target: { value } });
+      fireEvent.blur(control);
+      await screen.findByText("Saved");
+      const changes: ShopChanges =
+        field === "renewal"
+          ? { renewal: "auto" }
+          : {
+              return_policy: { accepts_returns: true, accepts_exchanges: true, within_days: 14 },
+            };
+      expect(save.mock.calls[2]).toEqual(["r1", changes]);
+      expect(server.file().listing_defaults[field]).toEqual(changes[field]);
     },
   );
 

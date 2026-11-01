@@ -180,6 +180,19 @@ the draft and its original save identity until the actual outcome. Three
 additional UI cases and the POD browser case in both color preferences proved
 the failures before these corrections.
 
+### Refusals received by Retry
+
+F7 from the next Spec recheck concerned validation refusal through Retry.
+Only a field's own save had updated its local refusal marker, so a Retry
+refusal left the unchanged draft eligible for another blur request. The queue
+now owns the refused value and attempt number for every retained failure.
+Each field uses its displayed value key to recognize that refusal, including
+return-policy terms. Blurring again keeps the value and error without writing;
+an explicit new edit may try again. Network failures remain retryable on blur.
+Four regression cases, covering Renewal and Return policy with and without a
+matching blur during the held Retry, failed before the correction. Each also
+proves that choosing away and back after refusal permits a new save.
+
 ### UI decision
 
 Shop gains the Retry save button Settings already had, beside the save status
@@ -203,22 +216,24 @@ browser checks below were rerun for the follow-up.
 | Check | Result |
 |---|---|
 | Unchanged backend's full local gate | Passed. Python: 3,779 passed, seven platform skips, 55 deselected. Combined branch-enabled coverage: 95.50%; branches: 3,837 of 4,254, or 90.20%. Backend format, lint, strict typing and all 11 import contracts passed. |
-| Full follow-up frontend coverage gate | Passed: 1,309 tests across 97 files; 90.31% branch coverage. Format check, lint and strict typing passed. |
+| Full follow-up frontend coverage gate | Passed: 1,313 tests across 97 files; 90.29% branch coverage. Format check, lint and strict typing passed. |
 | Separate SPA build and `npm run test:design` | Passed; four design tests. |
 | Standalone full browser layer at `672121ba` | Passed: 162 cases, zero skips, with required prerequisites. Fresh CI rechecks the complete layer after the preset/pending correction. |
 | Latest built-SPA Admin browser layer | Passed: 32 cases, zero skips, with required prerequisites. Includes POD abandonment and the earlier Shop/Settings/provider cases. |
-| Red/green follow-up regressions | Eight public UI cases failed before their respective fixes; all 69 Shop/Settings cases pass after them. The F3 selector and POD browser cases each failed against the prior build under both color preferences, then passed after rebuilding. |
+| Red/green follow-up regressions | Twelve public UI cases failed before their respective fixes; all 73 Shop/Settings cases pass after them. The F3 selector and POD browser cases each failed against the prior build under both color preferences, then passed after rebuilding. |
 | Generated API | No wire shape changed. The OpenAPI export regression passed and the generated client has no diff. |
 
 The independent Runtime Standards/process recheck reported no actionable
 findings. Its 91 focused tests and external Windows process diagnostics closed
 the exited-launcher residual. State's resumed Standards and Spec reviews
-identified F3, F4, F5 and F6 above; those findings are fixed, and fresh independent rechecks
-are pending on the follow-up. The old Spec review's S1-open remark concerned
+identified F3 through F7 above; those findings are fixed and backed by the
+regressions recorded here. Final independent review and workflow outcomes are
+recorded in [State PR #151](https://github.com/eli-jordan/etsy-listing-automation/pull/151).
+The old Spec review's S1-open remark concerned
 its earlier `82f0aef7` snapshot, which predates Runtime's merged correction.
 
-Against Runtime, `scripts/sloc.py` measures net additions of 22 backend and 192
-frontend production lines, plus 560 Python test and 500 frontend test lines.
+Against Runtime, `scripts/sloc.py` measures net additions of 22 backend and 232
+frontend production lines, plus 560 Python test and 572 frontend test lines.
 The shared queue replaces separate Shop and Settings save coordination.
 
 Runtime PR #150 passed all four CI checks and its parent-dispatched
