@@ -32,7 +32,7 @@ from etsy_listings.core.config.errors import ConfigLoadError, format_validation_
 from etsy_listings.core.config.market_weights import MarketWeights
 
 
-def _absent_is_empty(value: Any) -> Any:
+def _absent_is_empty(value: Any) -> Any:  # pre-validation YAML
     """A key written with nothing under it (``market_seo:``) is YAML's
     ``null``; it means "nothing tuned here", the same as leaving it out."""
     return {} if value is None else value

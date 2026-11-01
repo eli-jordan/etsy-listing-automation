@@ -88,7 +88,7 @@ this to know when to close the stream (``server/api/runs.py``); the registry pol
 to know a listing's lock may be released."""
 
 
-def _jsonable(value: Any) -> Any:
+def _jsonable(value: Any) -> Any:  # a generic tree walk, by construction
     """``value``, turned into something ``BaseModel`` can hold in an ``Any``
     field and get back out again as plain JSON.
 
@@ -176,7 +176,7 @@ def _change_dto(change: Change) -> FieldChangeDTO | ListChangeDTO | PriceChangeD
             after=str(change.after),
             color=change.color,
         )
-    assert isinstance(change, MediaChange)
+    assert isinstance(change, MediaChange)  # `Change` has exactly four members
     return MediaChangeDTO(rank=change.rank, before=change.before, after=change.after)
 
 
