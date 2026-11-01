@@ -282,15 +282,21 @@ def _create(
                 # Created is queued (spec, *Confirming a batch*), in the same
                 # save, so a crash cannot leave a listing the queue never sees.
                 return row.model_copy(update={"creation": "created", "error": None, "ai": "queued"})
-        others = {r.name.casefold() for i, r in enumerate(batch.rows) if i != index}
-        # A design that already holds the row's bytes -- one it reuses, or
-        # one it wrote itself before its name was taken -- is kept.
-        design = row.design if _holds(workspace, row.design, row.sha256) else None
-        taken = taken_for(workspace_names(workspace), design)
-        name = allocate(row.base, taken | others)
-        row = row.model_copy(update={"name": name, "design": design or name, "claimed": False})
+        row = _renamed(workspace, batch, index, row)
         batch.rows[index] = row
         batches.save(batch)
+
+
+def _renamed(workspace: Workspace, batch: Batch, index: int, row: BatchRow) -> BatchRow:
+    """``row`` under the next name free of the workspace and the batch's other
+    rows, unclaimed."""
+    others = {r.name.casefold() for i, r in enumerate(batch.rows) if i != index}
+    # A design that already holds the row's bytes -- one it reuses, or
+    # one it wrote itself before its name was taken -- is kept.
+    design = row.design if _holds(workspace, row.design, row.sha256) else None
+    taken = taken_for(workspace_names(workspace), design)
+    name = allocate(row.base, taken | others)
+    return row.model_copy(update={"name": name, "design": design or name, "claimed": False})
 
 
 def _put(workspace: Workspace, target: Path, write: Callable[[], object]) -> None:
