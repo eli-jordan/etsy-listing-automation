@@ -81,8 +81,9 @@ class Money:
 
     @classmethod
     def __get_pydantic_core_schema__(
-        cls, source_type: Any, handler: GetCoreSchemaHandler
+        cls, _source_type: Any, _handler: GetCoreSchemaHandler
     ) -> core_schema.CoreSchema:
+        # Pydantic supplies both arguments; this plain validator needs neither (S04).
         return core_schema.no_info_plain_validator_function(
             cls.parse,
             serialization=core_schema.plain_serializer_function_ser_schema(str),
