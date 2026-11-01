@@ -164,35 +164,45 @@ def create_app(
         """
         return JSONResponse(status_code=400, content={"detail": str(exc)})
 
-    app.include_router(preparation_router)
-    app.include_router(templates_router)
-    app.include_router(designs_router)
-    app.include_router(listings_router)
-    app.include_router(listings_support_router)
-    app.include_router(listing_templates_router)
-    app.include_router(batches_router)
-    app.include_router(media_files_router)
-    app.include_router(runs_router)
-    app.include_router(ai_runs_router)
-    app.include_router(seo_router)
+    for router in API_ROUTERS:
+        app.include_router(router)
 
     @app.get("/api/health")
     def health() -> dict[str, str]:
         return {"status": "ok", "workspace": str(workspace.root)}
 
     if FRONTEND_DIST.is_dir():
-        # Built assets under /assets; everything else falls back to
-        # index.html so client-side routing works on a hard refresh.
-        # `npm run build` must have run first -- in dev, use the Vite
-        # dev server instead and hit uvicorn only for /api.
-        app.mount("/assets", StaticFiles(directory=FRONTEND_DIST / "assets"), name="assets")
-
-        # Out of the schema: it is not API, and the exported contract must
-        # not depend on whether this checkout has a built SPA.
-        @app.get("/{full_path:path}", include_in_schema=False)
-        def spa_fallback(full_path: str) -> Response:
-            if full_path.startswith("api/"):
-                return JSONResponse(status_code=404, content={"detail": "not found"})
-            return FileResponse(FRONTEND_DIST / "index.html")
+        _serve_frontend(app, FRONTEND_DIST)
 
     return app
+
+
+API_ROUTERS = (
+    preparation_router,
+    templates_router,
+    designs_router,
+    listings_router,
+    listings_support_router,
+    listing_templates_router,
+    batches_router,
+    media_files_router,
+    runs_router,
+    ai_runs_router,
+    seo_router,
+)
+
+
+def _serve_frontend(app: FastAPI, dist: Path) -> None:
+    """Built assets under /assets; everything else falls back to
+    index.html so client-side routing works on a hard refresh.
+    `npm run build` must have run first -- in dev, use the Vite
+    dev server instead and hit uvicorn only for /api."""
+    app.mount("/assets", StaticFiles(directory=dist / "assets"), name="assets")
+
+    # Out of the schema: it is not API, and the exported contract must
+    # not depend on whether this checkout has a built SPA.
+    @app.get("/{full_path:path}", include_in_schema=False)
+    def spa_fallback(full_path: str) -> Response:
+        if full_path.startswith("api/"):
+            return JSONResponse(status_code=404, content={"detail": "not found"})
+        return FileResponse(dist / "index.html")
