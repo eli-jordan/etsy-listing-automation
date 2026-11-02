@@ -30,7 +30,7 @@ from io import BytesIO
 from pathlib import Path
 from typing import Annotated, Literal
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Request
 from fastapi.responses import Response
 from PIL import Image
 
@@ -49,6 +49,8 @@ from etsy_listings.core.application.mockup_templates import (
     template_swatch,
     unsaved_preview,
 )
+from etsy_listings.core.application.position_coverage import cover_recalibrated
+from etsy_listings.core.application.preparation.coordinator import Preparations
 from etsy_listings.core.application.preparation.previews import (
     EDITOR_ARTWORK_EDGE,
     EditorDraft,
@@ -107,6 +109,19 @@ def target(request: Request, name: str) -> Target:
     workspace = app_state.workspace(request)
     require_template(workspace, name)
     return Target(workspace=workspace, name=name)
+
+
+@dataclass(frozen=True)
+class AfterSave:
+    """Preparation work a calibration save starts: the coordinator, and the
+    tasks run after the response."""
+
+    preparations: Preparations
+    background: BackgroundTasks
+
+
+def after_save(request: Request, background: BackgroundTasks) -> AfterSave:
+    return AfterSave(request.app.state.preparations, background)
 
 
 def _not_found(exc: Exception) -> HTTPException:
@@ -208,7 +223,7 @@ def put_config(
     body: CalibrationSaveRequest,
     response: Response,
     if_match: Annotated[str, Header()],
-    request: Request,
+    after: Annotated[AfterSave, Depends(after_save)],
 ) -> AnyTemplate:
     try:
         saved = save_calibration(
@@ -228,7 +243,11 @@ def put_config(
     # Incomplete multiple geometry or missing evidence needs explicit Prepare.
     # The committed Save succeeds; read-only readiness explains that refusal.
     with suppress(UserFacingError, ValueError, OSError):
-        request.app.state.preparations.reconcile_saved(template.name)
+        after.preparations.reconcile_saved(template.name)
+    # A positioned template's new padded quad may leave its evidence: saving
+    # its geometry is the explicit request ADR-0058 names (option B), queued
+    # after the response because finding the worker can take seconds.
+    after.background.add_task(cover_recalibrated, after.preparations, template.name)
     response.headers["ETag"] = f'"{saved.revision}"'
     return saved.config
 

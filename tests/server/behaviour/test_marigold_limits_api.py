@@ -82,3 +82,29 @@ def test_saving_limits_queues_coverage_only_when_they_widen(
     _save(TestClient(app), limits)
 
     assert _queued(app) == queued
+
+
+@pytest.mark.parametrize(("positions", "coverage"), [("kept", 1), ("removed", 0)])
+def test_recalibrating_a_positioned_template_queues_coverage_for_its_new_box(
+    workspace: Workspace, positions: str, coverage: int
+):
+    """The moved box's padded quad leaves the evidence; only a template some
+    listing positions gets inference for it (spec *Recalibration*)."""
+    if positions == "removed":
+        edit_listing(workspace.root, template_positions={})
+    app = create_app(workspace, preparation_runtime=PreparationRuntime())
+    client = TestClient(app)
+    loaded = client.get("/api/templates/tee/config")
+    config = loaded.json()
+    config["bounding_box"] = [
+        {"x": point["x"] + 14, "y": point["y"] + 14} for point in config["bounding_box"]
+    ]
+
+    saved = client.put(
+        "/api/templates/tee/config",
+        headers={"If-Match": loaded.headers["etag"]},
+        json={"request_id": "move-tee", "config": config},
+    )
+
+    assert saved.status_code == 200, saved.text
+    assert [kind for _, kind in _queued(app)].count("coverage") == coverage
