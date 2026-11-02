@@ -31,6 +31,9 @@ dependencies = [
     # ADR-0055: writers edit seller YAML in place. ruamel's composer gives the
     # source spans those edits splice; PyYAML stays the reader.
     "ruamel.yaml>=0.19,<0.20",
+    # One locked, byte-budgeted LRU (core/bounded_cache.py) holds every
+    # in-process cache of decoded arrays; cachetools supplies the eviction.
+    "cachetools>=7,<8",
 ]
 
 [project.scripts]
@@ -61,6 +64,7 @@ dev = [
     "poethepoet>=0.37,<1",
     "vulture>=2.14,<3",
     "complexipy>=8.0,<9",
+    "types-cachetools>=7,<8",
 ]
 
 # Every check is defined once, here (spec S09). `uv run poe check` is what you

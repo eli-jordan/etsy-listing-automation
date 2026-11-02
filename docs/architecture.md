@@ -35,6 +35,7 @@ Versions here describe this checkout, not the latest vendor releases.
 | CLI and documents | Typer (locked 0.27.2, Click 8.5.0 transitively), pydantic v2 (2.13.5), pydantic-settings and PyYAML; questionary is used only through `cli/prompts.py` with a plain-input fallback |
 | HTTP clients | httpx (0.28.1); vendor protocols and shared retry policy, without vendor SDKs |
 | Images | `opencv-python-headless==4.10.0.84`, `pillow==10.4.0`, and NumPy (locked 2.5.2, currently supplied transitively by OpenCV); pure numerical passes plus explicit I/O/cache adapters |
+| In-process caches | cachetools (`>=7,<8`, locked 7.2.8) supplies the size-accounted LRU eviction behind `core/bounded_cache.py`, which adds the lock and the oversize rule; `types-cachetools` types it for strict mypy |
 | Videos | PyAV (`av>=15`, locked 18.1.0) probes streams, dimensions and duration; the tool uploads original video bytes rather than encoding them |
 | Web server | FastAPI (0.141.1), python-multipart and uvicorn; `ui` runs the application under uvicorn in the foreground and the user opens the printed URL in any browser |
 | Frontend | React/React DOM 19, React Router 7, Phosphor icons and openapi-fetch; TypeScript 5 and Vite 8 build the SPA; openapi-typescript generates `src/ui/src/api/schema.ts` from `docs/openapi.json` (ADR-0011) |
@@ -122,6 +123,7 @@ package never drags in OpenCV, FastAPI or Typer to reach one name.
 | `core/listing_templates` | Template conversion and frozen document/assets/timestamp capture | Capture occurs under the template write lock before upload; shared references are revalidated at confirm and retry |
 | `core/market` | Comparable-listing research, scoring and evidence snapshots | Read-only Etsy data informs wording rather than product facts |
 | `core/batches` | Upload validation, archive inspection, staging, name allocation and idempotent local creation | Creates ordinary listings; AI dispatch belongs to `application/ai` |
+| `core/bounded_cache.py` | `BoundedCache`: the one thread-safe least-recently-used cache, bounded by total `size(value)` (bytes, or entries without a size function), behind every in-process cache of decoded arrays, validation proofs and pixel digests | Locks only bookkeeping, never `get_or_compute`'s computation; an item larger than the whole budget is served, never kept, and evicts nothing; a replaced key counts only its new size |
 | `core/connections.py`, `core/errors.py` | Client and `RunContext` construction; `UserFacingError` and the refusal categories (`MissingError`, `ConflictError`, `StaleError`, `RefusedError`) | See the credential invariant below; core names a refusal's category, never its status code |
 
 Three boundaries carry most of the weight. Only `core/workspace` knows the
@@ -426,7 +428,8 @@ Two consequences worth knowing:
   nothing on screen looking wrong.
 - **`server/api/imagecache.py` memoises what the loop re-reads** — the decoded
   photo at each size, the decoded design, and the derived maps — keyed on path
-  and mtime, bounded by total bytes rather than entry count. It is request-serving
+  and mtime, bounded by total bytes rather than entry count (a
+  `core/bounded_cache.BoundedCache`, 384 MiB). It is request-serving
   infrastructure, so it sits in `server`, not in `core/render/io.py` or the
   calibrator operation: the render stage reads each file once per run and
   needs no cache, and giving it one would put mutable process state under the
@@ -1124,7 +1127,11 @@ cancellation and close intent. Per-solve cooperation does not write journal
 records or change solver arithmetic. Each phase retains full revision checks.
 A single active solve is not preempted; inference dispatch remains independent.
 Validated decoded evidence shares a fixed 384 MiB cache budget, with file-version
-checks retained before reuse.
+checks retained before reuse. Validated generation maps share 512 MiB
+(`MAP_CACHE_BYTES`), editor composite maps 64 MiB, and generation validation
+proofs 128 entries. Each is a `core/bounded_cache.BoundedCache`, so every one
+evicts least-recently-used first and serves, without keeping, a set larger
+than its whole budget.
 
 `preparation.artifacts.Artifacts` owns validated generation publication, readiness,
 acquisition and reference-aware cleanup. Workspace derives every durable path and

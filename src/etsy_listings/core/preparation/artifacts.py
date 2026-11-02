@@ -12,7 +12,6 @@ import os
 import threading
 import weakref
 import zipfile
-from collections import OrderedDict
 from collections.abc import Callable, Iterator, Mapping
 from contextlib import ExitStack, contextmanager, suppress
 from dataclasses import dataclass, field
@@ -33,6 +32,7 @@ from pydantic import (
     model_validator,
 )
 
+from etsy_listings.core.bounded_cache import BoundedCache
 from etsy_listings.core.render.config import (
     AnyTemplate,
     BoundingBox,
@@ -532,49 +532,18 @@ def _check_payload(
 _READERS: dict[tuple[str, str], int] = {}
 
 
+def _maps_bytes(maps: Mapping[str | None, MaterialMaps]) -> int:
+    return sum(a.nbytes for m in maps.values() for a in arrays_of(m).values())
+
+
 # Cache validation proofs, never arrays. A status poll must not decompress and
 # hash hundreds of MiB while holding the calibration lock. Immutable generation
 # files are revalidated after replacement, writes, removal or process restart.
-_VALIDATED: OrderedDict[tuple[Any, ...], None] = OrderedDict()
-_VALIDATED_LOCK = threading.Lock()
-_VALIDATED_LIMIT = 128
+_VALIDATED: BoundedCache[tuple[Any, ...], bool] = BoundedCache(128)
 MAP_CACHE_BYTES = 512 * 1024 * 1024
-_MAPS: OrderedDict[tuple[Any, ...], tuple[Mapping[str | None, MaterialMaps], int]] = OrderedDict()
-
-
-class _MapBudget:
-    """Bytes retained by ``_MAPS``. A holder, so the cache can update it without ``global``."""
-
-    used = 0
-
-
-def _remember_maps(
-    signature: tuple[Any, ...],
-    maps: Mapping[str | None, MaterialMaps],
-    *,
-    previous: tuple[Any, ...] | None = None,
-) -> None:
-    size = sum(a.nbytes for m in maps.values() for a in arrays_of(m).values())
-    with _VALIDATED_LOCK:
-        for key in (signature, previous):
-            if key is not None and key in _MAPS:
-                _, removed = _MAPS.pop(key)
-                _MapBudget.used -= removed
-        if size > MAP_CACHE_BYTES:
-            return
-        while _MAPS and _MapBudget.used + size > MAP_CACHE_BYTES:
-            _, (_, removed) = _MAPS.popitem(last=False)
-            _MapBudget.used -= removed
-        _MAPS[signature] = maps, size
-        _MapBudget.used += size
-
-
-def _remember_validation(signature: tuple[Any, ...]) -> None:
-    with _VALIDATED_LOCK:
-        _VALIDATED[signature] = None
-        _VALIDATED.move_to_end(signature)
-        while len(_VALIDATED) > _VALIDATED_LIMIT:
-            _VALIDATED.popitem(last=False)
+_MAPS: BoundedCache[tuple[Any, ...], Mapping[str | None, MaterialMaps]] = BoundedCache(
+    MAP_CACHE_BYTES, size=_maps_bytes
+)
 
 
 def _no_checkpoint(_step: str) -> None:
@@ -720,11 +689,7 @@ class Artifacts:
                 generation, checksum = pointer.generation_id, pointer.manifest_checksum
                 self._check_inputs(manifest, inputs, target_size)
                 signature = self._signature(name, manifest, checksum)
-                with _VALIDATED_LOCK:
-                    validated = signature in _VALIDATED
-                    if validated:
-                        _VALIDATED.move_to_end(signature)
-                if not validated:
+                if _VALIDATED.get(signature) is None:
                     manifest = self._load(name, generation, checksum).manifest
                 return manifest
         except (OSError, ValueError) as exc:
@@ -756,11 +721,9 @@ class Artifacts:
     ) -> Acquired:
         manifest = self._read_manifest(name, generation, checksum, staging=staging)
         signature = self._signature(name, manifest, checksum, staging=staging)
-        with _VALIDATED_LOCK:
-            cached = _MAPS.get(signature)
-            if cached is not None:
-                _MAPS.move_to_end(signature)
-                return Acquired(manifest, cached[0])
+        cached = _MAPS.get(signature)
+        if cached is not None:
+            return Acquired(manifest, cached)
         if (
             sum(
                 math.prod(descriptor.shape) * 4
@@ -784,9 +747,9 @@ class Artifacts:
             raise ArtifactError("Prepared generation numerical identity mismatch")
         if self._signature(name, manifest, checksum, staging=staging) != signature:
             raise ArtifactError("Prepared files changed during validation")
-        _remember_validation(signature)
+        _VALIDATED.put(signature, value=True)
         frozen = MappingProxyType(maps)
-        _remember_maps(signature, frozen)
+        _MAPS.put(signature, frozen)
         return Acquired(manifest, frozen)
 
     def _read_placement(
@@ -967,8 +930,9 @@ class Artifacts:
             final.parent.mkdir(parents=True, exist_ok=True)
             staging.rename(final)
             final_signature = self._signature(name, manifest, checksum)
-            _remember_validation(final_signature)
-            _remember_maps(final_signature, validated.maps, previous=staging_signature)
+            _VALIDATED.put(final_signature, value=True)
+            _MAPS.discard(staging_signature)
+            _MAPS.put(final_signature, validated.maps)
             checkpoint("generation")
             pointer = MapPointer(
                 schema_version=SCHEMA, generation_id=generation, manifest_checksum=checksum

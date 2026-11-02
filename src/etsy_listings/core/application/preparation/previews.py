@@ -1,8 +1,6 @@
 """Revision-bound transient composites; never publish maps or select models."""
 
 import hashlib
-import threading
-from collections import OrderedDict
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
@@ -15,6 +13,7 @@ from PIL import Image
 from etsy_listings.core.application.preparation.activity import interactive
 from etsy_listings.core.application.preparation.evidence_reader import EvidenceReader
 from etsy_listings.core.application.preparation.models import CropEvidence, placement_key
+from etsy_listings.core.bounded_cache import BoundedCache
 from etsy_listings.core.preparation.artifacts import Artifacts, PlacementInput
 from etsy_listings.core.preparation.numerics import Placement, prepare
 from etsy_listings.core.render import (
@@ -33,39 +32,26 @@ from etsy_listings.core.workspace.calibration import Calibration, CalibrationSto
 
 EDITOR_EDGE = 1024
 EDITOR_ARTWORK_EDGE = 3072
-_MAP_BUDGET = 64 * 1024 * 1024
-_MAP_LOCK = threading.Lock()
-_MAP_CACHE: OrderedDict[tuple[str, ...], tuple[MaterialMaps, int]] = OrderedDict()
 
 
-class _MapBudget:
-    """Bytes retained by ``_MAP_CACHE``. A holder, so the cache can update it without ``global``."""
+def _maps_bytes(value: MaterialMaps) -> int:
+    return sum(a.nbytes for a in vars(value).values() if isinstance(a, np.ndarray))
 
-    used = 0
+
+_MAP_CACHE: BoundedCache[tuple[str, ...], MaterialMaps] = BoundedCache(
+    64 * 1024 * 1024, size=_maps_bytes
+)
 
 
 def _maps(key: tuple[str, ...], compute: Callable[[], MaterialMaps]) -> MaterialMaps:
-    with _MAP_LOCK:
-        cached = _MAP_CACHE.get(key)
-        if cached is not None:
-            _MAP_CACHE.move_to_end(key)
-            return cached[0]
-    value = compute()
-    arrays = [a for a in vars(value).values() if isinstance(a, np.ndarray)]
-    size = sum(a.nbytes for a in arrays)
-    for array in arrays:
-        array.flags.writeable = False
-    with _MAP_LOCK:
-        old = _MAP_CACHE.pop(key, None)
-        if old is not None:
-            _MapBudget.used -= old[1]
-        while _MAP_CACHE and _MapBudget.used + size > _MAP_BUDGET:
-            _, (_, removed) = _MAP_CACHE.popitem(last=False)
-            _MapBudget.used -= removed
-        if size <= _MAP_BUDGET:
-            _MAP_CACHE[key] = value, size
-            _MapBudget.used += size
-    return value
+    def frozen() -> MaterialMaps:
+        value = compute()
+        for array in vars(value).values():
+            if isinstance(array, np.ndarray):
+                array.flags.writeable = False
+        return value
+
+    return _MAP_CACHE.get_or_compute(key, frozen)
 
 
 @dataclass(frozen=True)
