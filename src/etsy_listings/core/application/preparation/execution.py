@@ -21,13 +21,7 @@ from etsy_listings.core.application.preparation.dependencies import (
     PreparationRuntime,
 )
 from etsy_listings.core.application.preparation.evidence import EvidenceStore
-from etsy_listings.core.application.preparation.models import (
-    CropEvidence,
-    Job,
-    Prediction,
-    Publication,
-    placement_key,
-)
+from etsy_listings.core.application.preparation.models import Job, Publication
 from etsy_listings.core.preparation.artifacts import (
     PlacementArtifact,
     PlacementInput,
@@ -40,6 +34,7 @@ from etsy_listings.core.preparation.artifacts import (
     file_checksum,
     read_maps,
 )
+from etsy_listings.core.preparation.evidence_reader import CropEvidence, Prediction, placement_key
 from etsy_listings.core.preparation.numerics import (
     Cooperation,
     Placement,

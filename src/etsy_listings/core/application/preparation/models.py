@@ -1,12 +1,11 @@
 """Persisted job and event contract under ADR-0054."""
 
-import hashlib
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 
 from etsy_listings.core.preparation.artifacts import PlacementArtifact, PreparationInputs
-from etsy_listings.core.workspace.calibration import json_bytes
+from etsy_listings.core.preparation.evidence_reader import CropEvidence
 
 Phase = Literal["queued", "running", "cancelling", "cancelled", "superseded", "failed", "completed"]
 Action = Literal["prepare", "prepare_again", "retry"]
@@ -26,37 +25,6 @@ class Event(Record):
     placements_completed: int
     placements_total: int
     error: str | None = None
-
-
-class Prediction(Record):
-    role: Literal["normals", "lighting", "depth"]
-    path: str
-    checksum: str
-
-
-class CropEvidence(Record):
-    id: str
-    rectangle: tuple[int, int, int, int]
-    size: tuple[int, int]
-    identity: dict[str, str]
-    predictions: tuple[Prediction, ...] = ()
-
-    def semantic_digest(self) -> str:
-
-        return hashlib.sha256(
-            json_bytes({"rectangle": self.rectangle, "size": self.size, "identity": self.identity})
-        ).hexdigest()
-
-
-class PredictionPointer(Record):
-    """A retained prediction set's ``manifest.json``, written again as the
-    template's current pointer once the complete set is validated."""
-
-    schema_version: Literal[1]
-    id: str
-    job_order: int
-    inputs: PreparationInputs
-    evidence: tuple[CropEvidence, ...]
 
 
 class Publication(Record):
@@ -114,7 +82,3 @@ class Job(Record):
     @property
     def last_event_sequence(self) -> int:
         return self.events[-1].sequence if self.events else 0
-
-
-def placement_key(value: str | None) -> str:
-    return "" if value is None else value

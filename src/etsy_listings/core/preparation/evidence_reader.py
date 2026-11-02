@@ -3,19 +3,15 @@
 from __future__ import annotations
 
 import hashlib
+from collections.abc import Sequence
 from dataclasses import asdict
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal, Protocol
 from uuid import uuid4
 
 import numpy as np
+from pydantic import BaseModel, ConfigDict
 
-from etsy_listings.core.application.preparation.models import (
-    CropEvidence,
-    Job,
-    PredictionPointer,
-    placement_key,
-)
 from etsy_listings.core.bounded_cache import BoundedCache
 from etsy_listings.core.preparation.artifacts import PreparationInputs
 from etsy_listings.core.preparation.numerics import (
@@ -34,6 +30,56 @@ from etsy_listings.core.preparation.predictions import (
 from etsy_listings.core.workspace import Workspace
 from etsy_listings.core.workspace.calibration import json_bytes
 from etsy_listings.core.workspace.file_version import file_version
+
+
+class Record(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+
+class Prediction(Record):
+    role: Literal["normals", "lighting", "depth"]
+    path: str
+    checksum: str
+
+
+class CropEvidence(Record):
+    id: str
+    rectangle: tuple[int, int, int, int]
+    size: tuple[int, int]
+    identity: dict[str, str]
+    predictions: tuple[Prediction, ...] = ()
+
+    def semantic_digest(self) -> str:
+
+        return hashlib.sha256(
+            json_bytes({"rectangle": self.rectangle, "size": self.size, "identity": self.identity})
+        ).hexdigest()
+
+
+class PredictionPointer(Record):
+    """A retained prediction set's ``manifest.json``, written again as the
+    template's current pointer once the complete set is validated."""
+
+    schema_version: Literal[1]
+    id: str
+    job_order: int
+    inputs: PreparationInputs
+    evidence: tuple[CropEvidence, ...]
+
+
+def placement_key(value: str | None) -> str:
+    return "" if value is None else value
+
+
+class _JobEvidence(Protocol):
+    """What :meth:`EvidenceReader.candidates` reads of a preparation job."""
+
+    @property
+    def template(self) -> str: ...
+
+    @property
+    def evidence(self) -> tuple[CropEvidence, ...]: ...
+
 
 # Checkpoint and preprocessing semantics are immutable for this supported fitter.
 # Installation IDs intentionally do not change compatible evidence identity.
@@ -130,7 +176,7 @@ class EvidenceReader:
         pointer = self.pointer(template)
         return () if pointer is None else pointer.evidence
 
-    def candidates(self, template: str, jobs: list[Job]) -> tuple[CropEvidence, ...]:
+    def candidates(self, template: str, jobs: Sequence[_JobEvidence]) -> tuple[CropEvidence, ...]:
         return (
             *self.current(template),
             *(v for job in reversed(jobs) if job.template == template for v in job.evidence),

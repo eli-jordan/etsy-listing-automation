@@ -20,17 +20,11 @@ from etsy_listings.core.application.preparation.dependencies import (
     PreparationRuntime,
 )
 from etsy_listings.core.application.preparation.execution import Execution, StoppedError, WorkerSlot
-from etsy_listings.core.application.preparation.models import (
-    TERMINAL,
-    Action,
-    CropEvidence,
-    Event,
-    Job,
-    placement_key,
-)
+from etsy_listings.core.application.preparation.models import TERMINAL, Action, Event, Job
 from etsy_listings.core.application.preparation.store import Store
 from etsy_listings.core.errors import ConflictError, UserFacingError
 from etsy_listings.core.preparation.artifacts import Artifacts, PreparationInputs
+from etsy_listings.core.preparation.evidence_reader import CropEvidence, placement_key
 from etsy_listings.core.preparation.runtime import Capability, Runtime
 from etsy_listings.core.render.config import MarigoldRenderer
 from etsy_listings.core.workspace import Workspace
