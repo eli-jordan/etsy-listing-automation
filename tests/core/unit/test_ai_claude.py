@@ -1,16 +1,14 @@
 """``ai/claude.py``: the Claude Code CLI adapter behind `AiProvider` (AI SEO
 implementation plan, PR4, items 1-4).
 
-Same doubling strategy as `test_ai_codex.py`: `subprocess.run` is replaced
-for readiness checks, `run_managed` is replaced for generate/argv checks --
-no real `claude` process runs in this suite.
+Same doubling strategy as `test_ai_codex.py`: every provider runs on a
+`ScriptedCliHost` that answers the readiness probes and the managed
+generate call -- no real `claude` process runs in this suite.
 """
 
 from __future__ import annotations
 
 import json
-import shutil
-import subprocess
 from pathlib import Path
 from typing import Any
 
@@ -36,6 +34,14 @@ from etsy_listings.core.ai.process import ProcessResult
 from etsy_listings.core.ai.prompt import RESPONSE_SCHEMA, build_seo_task
 from etsy_listings.core.ai.providers import FakeAiProvider
 
+from tests.support.cli_host import (
+    RunAnswer,
+    ScriptedCliHost,
+    completed,
+    finished,
+    never_launched,
+)
+
 _HELP_TEXT = """
 Options:
   --json-schema <schema>                JSON Schema for structured output
@@ -47,6 +53,13 @@ Options:
 """
 
 _AUTH_STATUS_JSON = json.dumps({"loggedIn": True})
+
+
+def _generating(result: ProcessResult) -> ScriptedCliHost:
+    """`claude` on PATH, every managed run answering ``result``. `generate()`
+    resolves the binary through `which` rather than trusting the bare name is
+    launchable (see `LocalCliProvider._resolved_binary`)."""
+    return ScriptedCliHost(installed={"claude": "/resolved/claude"}, managed={(): result})
 
 
 @pytest.mark.parametrize(
@@ -61,7 +74,7 @@ _AUTH_STATUS_JSON = json.dumps({"loggedIn": True})
     ],
 )
 def test_rejected_saved_claude_model_falls_back_through_the_process_contract(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, stream: str
+    tmp_path: Path, stream: str
 ) -> None:
     # Observed vendor wording, Anthropic claude-code issue #103174, recorded
     # in the Admin audit. No installed CLI or live generation is needed.
@@ -103,9 +116,9 @@ def test_rejected_saved_claude_model_falls_back_through_the_process_contract(
             ),
             0,
         )
-    _patch_run_managed(monkeypatch, ProcessResult(code, stdout, stderr, False, False))
+    host = _generating(ProcessResult(code, stdout, stderr, False, False))
     effort = "extreme" if stream == "effort-envelope" else None
-    provider = claude.ClaudeProvider(tmp_path, model="retired-model", effort=effort)
+    provider = claude.ClaudeProvider(tmp_path, model="retired-model", effort=effort, host=host)
     fallback = FakeAiProvider("grok", responses=["valid"])
 
     result = run_task(
@@ -132,15 +145,15 @@ def test_rejected_saved_claude_model_falls_back_through_the_process_contract(
     ],
 )
 def test_generation_failures_do_not_fall_back_for_an_incidental_model_mention(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, envelope: dict[str, Any]
+    tmp_path: Path, envelope: dict[str, Any]
 ) -> None:
-    _patch_run_managed(monkeypatch, ProcessResult(0, json.dumps(envelope), "", False, False))
+    host = _generating(finished(json.dumps(envelope)))
     fallback = FakeAiProvider("grok", responses=["valid"])
     with pytest.raises(ProviderGenerationError):
         run_task(
             ProviderTask("test", {}, tmp_path / "unused.png"),
             lambda raw: raw,
-            [claude.ClaudeProvider(tmp_path), fallback],
+            [claude.ClaudeProvider(tmp_path, host=host), fallback],
         )
     assert fallback.tasks == []
 
@@ -160,8 +173,8 @@ def _request(tmp_path: Path) -> SeoRequest:
     )
 
 
-def _provider(tmp_path: Path, *, binary: str = "claude") -> claude.ClaudeProvider:
-    return claude.ClaudeProvider(workspace_root=tmp_path, binary=binary)
+def _provider(tmp_path: Path, host: ScriptedCliHost) -> claude.ClaudeProvider:
+    return claude.ClaudeProvider(workspace_root=tmp_path, host=host)
 
 
 def _task(tmp_path: Path) -> ProviderTask:
@@ -174,182 +187,119 @@ def _task(tmp_path: Path) -> ProviderTask:
 # --------------------------------------------------------------- readiness
 
 
-class _FakeRun:
-    def __init__(self, table: dict[tuple[str, ...], subprocess.CompletedProcess[str]]) -> None:
-        self.table = table
-        self.calls: list[list[str]] = []
-
-    def __call__(self, argv: list[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:
-        self.calls.append(list(argv))
-        key = tuple(argv[1:3])
-        if key not in self.table:
-            raise AssertionError(f"unexpected subprocess.run call: {argv!r}")
-        return self.table[key]
+def _installed(runs: dict[tuple[str, ...], RunAnswer]) -> ScriptedCliHost:
+    """`claude` on PATH, its probes answering from ``runs``."""
+    return ScriptedCliHost(installed={"claude": "/usr/bin/claude"}, runs=runs)
 
 
-def _ok(stdout: str = "") -> subprocess.CompletedProcess[str]:
-    return subprocess.CompletedProcess([], 0, stdout=stdout, stderr="")
-
-
-def test_readiness_fails_when_executable_is_missing(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    monkeypatch.setattr(shutil, "which", lambda name: None)
-    provider = _provider(tmp_path)
-
-    readiness = provider.readiness()
+def test_readiness_fails_when_executable_is_missing(tmp_path: Path) -> None:
+    readiness = _provider(tmp_path, ScriptedCliHost()).readiness()
 
     assert readiness == ProviderReadiness(ready=False, reason="claude was not found on PATH")
 
 
-def test_readiness_fails_when_not_logged_in(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    monkeypatch.setattr(shutil, "which", lambda name: "/usr/bin/claude")
-    fake = _FakeRun({("auth", "status"): _ok(stdout=json.dumps({"loggedIn": False}))})
-    monkeypatch.setattr(subprocess, "run", fake)
-    provider = _provider(tmp_path)
+def test_readiness_fails_when_not_logged_in(tmp_path: Path) -> None:
+    host = _installed({("auth", "status"): completed(json.dumps({"loggedIn": False}))})
 
-    readiness = provider.readiness()
+    readiness = _provider(tmp_path, host).readiness()
 
     assert readiness.ready is False
     assert "authenticated" in (readiness.reason or "")
 
 
-def test_readiness_fails_when_auth_status_is_not_valid_json(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    monkeypatch.setattr(shutil, "which", lambda name: "/usr/bin/claude")
-    fake = _FakeRun({("auth", "status"): _ok(stdout="not json")})
-    monkeypatch.setattr(subprocess, "run", fake)
-    provider = _provider(tmp_path)
+def test_readiness_fails_when_auth_status_is_not_valid_json(tmp_path: Path) -> None:
+    host = _installed({("auth", "status"): completed("not json")})
 
-    readiness = provider.readiness()
+    readiness = _provider(tmp_path, host).readiness()
 
     assert readiness.ready is False
 
 
-def test_readiness_fails_when_auth_status_cannot_be_run(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    monkeypatch.setattr(shutil, "which", lambda name: "/usr/bin/claude")
+def test_readiness_fails_when_auth_status_cannot_be_run(tmp_path: Path) -> None:
+    host = _installed({("auth", "status"): OSError("boom")})
 
-    def _raise(argv: list[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:
-        raise OSError("boom")
-
-    monkeypatch.setattr(subprocess, "run", _raise)
-    provider = _provider(tmp_path)
-
-    readiness = provider.readiness()
+    readiness = _provider(tmp_path, host).readiness()
 
     assert readiness.ready is False
     assert "boom" in (readiness.reason or "")
 
 
-def test_readiness_fails_when_auth_status_exits_nonzero(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    monkeypatch.setattr(shutil, "which", lambda name: "/usr/bin/claude")
-    fake = _FakeRun({("auth", "status"): subprocess.CompletedProcess([], 1, stdout="", stderr="")})
-    monkeypatch.setattr(subprocess, "run", fake)
-    provider = _provider(tmp_path)
+def test_readiness_fails_when_auth_status_exits_nonzero(tmp_path: Path) -> None:
+    host = _installed({("auth", "status"): completed(returncode=1)})
 
-    readiness = provider.readiness()
+    readiness = _provider(tmp_path, host).readiness()
 
     assert readiness.ready is False
     assert "auth status" in (readiness.reason or "")
 
 
-def test_readiness_fails_when_help_check_raises(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    monkeypatch.setattr(shutil, "which", lambda name: "/usr/bin/claude")
+def test_readiness_fails_when_help_check_raises(tmp_path: Path) -> None:
+    host = _installed(
+        {("auth", "status"): completed(_AUTH_STATUS_JSON), ("-p", "--help"): OSError("boom")}
+    )
 
-    def _run(argv: list[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:
-        if tuple(argv[1:3]) == ("auth", "status"):
-            return _ok(stdout=_AUTH_STATUS_JSON)
-        raise OSError("boom")
-
-    monkeypatch.setattr(subprocess, "run", _run)
-    provider = _provider(tmp_path)
-
-    readiness = provider.readiness()
+    readiness = _provider(tmp_path, host).readiness()
 
     assert readiness.ready is False
     assert "boom" in (readiness.reason or "")
 
 
-def test_readiness_fails_when_help_check_exits_nonzero(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    monkeypatch.setattr(shutil, "which", lambda name: "/usr/bin/claude")
+def test_readiness_fails_when_help_check_exits_nonzero(tmp_path: Path) -> None:
+    host = _installed(
+        {
+            ("auth", "status"): completed(_AUTH_STATUS_JSON),
+            ("-p", "--help"): completed(returncode=1),
+        }
+    )
 
-    def _run(argv: list[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:
-        if tuple(argv[1:3]) == ("auth", "status"):
-            return _ok(stdout=_AUTH_STATUS_JSON)
-        return subprocess.CompletedProcess(argv, 1, stdout="", stderr="")
-
-    monkeypatch.setattr(subprocess, "run", _run)
-    provider = _provider(tmp_path)
-
-    readiness = provider.readiness()
+    readiness = _provider(tmp_path, host).readiness()
 
     assert readiness.ready is False
     assert "-p --help" in (readiness.reason or "")
 
 
-def test_readiness_fails_when_help_is_missing_required_flags(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    monkeypatch.setattr(shutil, "which", lambda name: "/usr/bin/claude")
-    fake = _FakeRun(
+def test_readiness_fails_when_help_is_missing_required_flags(tmp_path: Path) -> None:
+    host = _installed(
         {
-            ("auth", "status"): _ok(stdout=_AUTH_STATUS_JSON),
-            ("-p", "--help"): _ok(stdout="Usage: claude [options] [prompt]\n"),
+            ("auth", "status"): completed(_AUTH_STATUS_JSON),
+            ("-p", "--help"): completed("Usage: claude [options] [prompt]\n"),
         }
     )
-    monkeypatch.setattr(subprocess, "run", fake)
-    provider = _provider(tmp_path)
 
-    readiness = provider.readiness()
+    readiness = _provider(tmp_path, host).readiness()
 
     assert readiness.ready is False
     assert "tools" in (readiness.reason or "").casefold()
 
 
-def test_readiness_says_nothing_about_a_prompt_file(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
+def test_readiness_says_nothing_about_a_prompt_file(tmp_path: Path) -> None:
     """The same rule `test_ai_codex.py` states: a prompt file's existence is
     a fact about a request, not about this CLI."""
-    monkeypatch.setattr(shutil, "which", lambda name: "/usr/bin/claude")
-    fake = _FakeRun(
+    host = _installed(
         {
-            ("auth", "status"): _ok(stdout=_AUTH_STATUS_JSON),
-            ("-p", "--help"): _ok(stdout=_HELP_TEXT),
+            ("auth", "status"): completed(_AUTH_STATUS_JSON),
+            ("-p", "--help"): completed(_HELP_TEXT),
         }
     )
-    monkeypatch.setattr(subprocess, "run", fake)
 
-    readiness = claude.ClaudeProvider(workspace_root=tmp_path).readiness()
+    readiness = claude.ClaudeProvider(workspace_root=tmp_path, host=host).readiness()
 
     assert readiness == ProviderReadiness(ready=True)
 
 
-def test_readiness_is_ready_when_every_check_passes(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    monkeypatch.setattr(shutil, "which", lambda name: "/usr/bin/claude")
-    fake = _FakeRun(
+def test_readiness_is_ready_when_every_check_passes(tmp_path: Path) -> None:
+    host = _installed(
         {
-            ("auth", "status"): _ok(stdout=_AUTH_STATUS_JSON),
-            ("-p", "--help"): _ok(stdout=_HELP_TEXT),
+            ("auth", "status"): completed(_AUTH_STATUS_JSON),
+            ("-p", "--help"): completed(_HELP_TEXT),
         }
     )
-    monkeypatch.setattr(subprocess, "run", fake)
-    provider = _provider(tmp_path)
 
-    assert provider.readiness() == ProviderReadiness(ready=True)
+    assert _provider(tmp_path, host).readiness() == ProviderReadiness(ready=True)
+    assert host.ran == [
+        ["/usr/bin/claude", "auth", "status"],
+        ["/usr/bin/claude", "-p", "--help"],
+    ]
 
 
 # ------------------------------------------------------------------ generate
@@ -359,45 +309,22 @@ def _completed(payload: dict[str, Any]) -> str:
     return json.dumps(payload)
 
 
-def _patch_run_managed(
-    monkeypatch: pytest.MonkeyPatch, result: ProcessResult
-) -> list[dict[str, Any]]:
-    # See `LocalCliProvider._resolved_binary` and this project's
-    # test_ai_codex.py: `generate()` resolves the binary through
-    # `shutil.which` rather than trusting the bare name is launchable, so
-    # this needs patching deterministically too, independent of whatever
-    # happens to be on the machine actually running this test suite.
-    monkeypatch.setattr(shutil, "which", lambda name: f"/resolved/{name}")
-    calls: list[dict[str, Any]] = []
-
-    def fake_run_managed(argv: list[str], **kwargs: Any) -> ProcessResult:
-        calls.append({"argv": list(argv), **kwargs})
-        return result
-
-    monkeypatch.setattr(claude, "run_managed", fake_run_managed)
-    return calls
-
-
-def test_generate_builds_the_expected_argv(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_generate_builds_the_expected_argv(tmp_path: Path) -> None:
     envelope = _completed(
         {"type": "result", "subtype": "success", "is_error": False, "result": '{"ok": true}'}
     )
-    calls = _patch_run_managed(
-        monkeypatch,
-        ProcessResult(returncode=0, stdout=envelope, stderr="", timed_out=False, cancelled=False),
-    )
-    provider = _provider(tmp_path)
+    host = _generating(finished(envelope))
     request = _request(tmp_path)
     deadline = Deadline.starting_now(seconds=60)
 
-    result = provider.generate(_task(tmp_path), deadline)
+    result = _provider(tmp_path, host).generate(_task(tmp_path), deadline)
 
     assert result.provider == "claude"
     assert result.raw_output == '{"ok": true}'
-    assert len(calls) == 1
-    call = calls[0]
-    argv = call["argv"]
-    assert argv[0] == "/resolved/claude"  # the shutil.which-resolved path, not the bare name
+    assert len(host.managed_calls) == 1
+    call = host.last_managed
+    argv = call.argv
+    assert argv[0] == "/resolved/claude"  # the which-resolved path, not the bare name
     assert "-p" in argv
     assert "--output-format" in argv
     assert argv[argv.index("--output-format") + 1] == "json"
@@ -406,8 +333,8 @@ def test_generate_builds_the_expected_argv(monkeypatch: pytest.MonkeyPatch, tmp_
     assert "--json-schema" in argv
     schema_arg = argv[argv.index("--json-schema") + 1]
     assert json.loads(schema_arg) == RESPONSE_SCHEMA
-    assert call["cwd"] == tmp_path
-    assert call["deadline"] is deadline
+    assert call.cwd == tmp_path
+    assert call.deadline is deadline
     # The prompt is piped via stdin (see `ai/codex.py`'s own reasoning, which
     # applies here too, only more so since Claude's prompt also echoes the
     # response schema): it must never appear as a trailing argv element,
@@ -416,106 +343,80 @@ def test_generate_builds_the_expected_argv(monkeypatch: pytest.MonkeyPatch, tmp_
     assert not any(str(request.design_image) in arg for arg in argv)
 
 
-def test_generate_sends_the_seller_prompt_and_context_over_stdin(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    envelope = _completed({"type": "result", "is_error": False, "result": "{}"})
-    calls = _patch_run_managed(
-        monkeypatch,
-        ProcessResult(returncode=0, stdout=envelope, stderr="", timed_out=False, cancelled=False),
-    )
-    provider = _provider(tmp_path)
+def test_generate_sends_the_seller_prompt_and_context_over_stdin(tmp_path: Path) -> None:
+    host = _generating(finished(_completed({"type": "result", "is_error": False, "result": "{}"})))
     request = _request(tmp_path)
 
-    provider.generate(_task(tmp_path), Deadline.starting_now(seconds=60))
+    _provider(tmp_path, host).generate(_task(tmp_path), Deadline.starting_now(seconds=60))
 
-    stdin_text = calls[0]["input_text"]
+    stdin_text = host.last_managed.input_text
     assert "Write great SEO copy." in stdin_text
     assert request.brief in stdin_text
     assert str(request.design_image) in stdin_text
 
 
-def test_generate_appends_the_repair_block_when_repairing(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    envelope = _completed({"type": "result", "is_error": False, "result": "{}"})
-    calls = _patch_run_managed(
-        monkeypatch,
-        ProcessResult(returncode=0, stdout=envelope, stderr="", timed_out=False, cancelled=False),
-    )
-    provider = _provider(tmp_path)
+def test_generate_appends_the_repair_block_when_repairing(tmp_path: Path) -> None:
+    host = _generating(finished(_completed({"type": "result", "is_error": False, "result": "{}"})))
     repair = RepairContext(
         prior_raw_output='{"titles": []}', reasons=("titles: expected exactly 3",)
     )
 
-    provider.generate(_task(tmp_path), Deadline.starting_now(seconds=60), repair=repair)
+    _provider(tmp_path, host).generate(
+        _task(tmp_path), Deadline.starting_now(seconds=60), repair=repair
+    )
 
-    stdin_text = calls[0]["input_text"]
+    stdin_text = host.last_managed.input_text
     assert '{"titles": []}' in stdin_text
     assert "titles: expected exactly 3" in stdin_text
 
 
-def test_generate_raises_cancelled_when_the_process_was_cancelled(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    _patch_run_managed(
-        monkeypatch,
-        ProcessResult(returncode=None, stdout="", stderr="", timed_out=False, cancelled=True),
-    )
-    provider = _provider(tmp_path)
-
-    with pytest.raises(ProviderCancelledError):
-        provider.generate(_task(tmp_path), Deadline.starting_now(seconds=60))
-
-
-def test_generate_raises_timeout_when_the_process_timed_out(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    _patch_run_managed(
-        monkeypatch,
-        ProcessResult(returncode=None, stdout="", stderr="", timed_out=True, cancelled=False),
-    )
-    provider = _provider(tmp_path)
-
-    with pytest.raises(ProviderTimeoutError):
-        provider.generate(_task(tmp_path), Deadline.starting_now(seconds=60))
-
-
-def test_generate_classifies_an_availability_failure_from_exit_code(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    _patch_run_managed(
-        monkeypatch,
-        ProcessResult(
-            returncode=1,
-            stdout="",
-            stderr="Error: not authenticated",
-            timed_out=False,
-            cancelled=False,
+@pytest.mark.parametrize(
+    ("result", "error"),
+    [
+        (ProcessResult(None, "", "", timed_out=False, cancelled=True), ProviderCancelledError),
+        (ProcessResult(None, "", "", timed_out=True, cancelled=False), ProviderTimeoutError),
+        # An availability failure from the exit code, recognised by its text.
+        (finished(stderr="Error: not authenticated", returncode=1), ProviderUnavailableError),
+        (finished(stderr="boom", returncode=1), ProviderGenerationError),
+        (finished("not json at all"), ProviderGenerationError),
+        (
+            finished(_completed({"type": "result", "is_error": True, "result": "overloaded"})),
+            ProviderGenerationError,
         ),
-    )
-    provider = _provider(tmp_path)
-
-    with pytest.raises(ProviderUnavailableError):
-        provider.generate(_task(tmp_path), Deadline.starting_now(seconds=60))
-
-
-def test_generate_classifies_an_unrecognised_failure_as_generation_error(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+        # `claude -p --output-format json` reports an auth/quota/rate-limit
+        # failure inside its `is_error: true` envelope, with exit code 0 --
+        # the same recognised-availability text an exit-code failure would
+        # carry. It is classified the same way (`classify_process_failure`),
+        # not read as a generic generation error.
+        (
+            finished(
+                _completed(
+                    {"type": "result", "is_error": True, "result": "Error: not authenticated"}
+                )
+            ),
+            ProviderUnavailableError,
+        ),
+    ],
+    ids=[
+        "cancelled",
+        "timed-out",
+        "unavailable-exit",
+        "unrecognised-exit",
+        "unparseable-envelope",
+        "is-error-envelope",
+        "unavailable-envelope",
+    ],
+)
+def test_generate_classifies_how_the_process_ended(
+    tmp_path: Path, result: ProcessResult, error: type[Exception]
 ) -> None:
-    _patch_run_managed(
-        monkeypatch,
-        ProcessResult(returncode=1, stdout="", stderr="boom", timed_out=False, cancelled=False),
-    )
-    provider = _provider(tmp_path)
-
-    with pytest.raises(ProviderGenerationError):
-        provider.generate(_task(tmp_path), Deadline.starting_now(seconds=60))
+    with pytest.raises(error):
+        _provider(tmp_path, _generating(result)).generate(
+            _task(tmp_path), Deadline.starting_now(seconds=60)
+        )
 
 
-def test_generate_reports_a_weekly_limit_envelope_without_its_telemetry(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
+def test_generate_reports_a_weekly_limit_envelope_without_its_telemetry(tmp_path: Path) -> None:
     # `claude -p --output-format json` exits 1 on a subscription limit and
     # prints one envelope: the seller-facing sentence is `result`, and the
     # rest (session id, token counters) must not reach the editor.
@@ -529,14 +430,10 @@ def test_generate_reports_a_weekly_limit_envelope_without_its_telemetry(
             "result": "You've hit your weekly limit · resets Sep 29, 7am (Europe/Oslo)",
         }
     )
-    _patch_run_managed(
-        monkeypatch,
-        ProcessResult(returncode=1, stdout=envelope, stderr="", timed_out=False, cancelled=False),
-    )
-    provider = _provider(tmp_path)
+    host = _generating(finished(envelope, returncode=1))
 
     with pytest.raises(ProviderUnavailableError) as excinfo:
-        provider.generate(_task(tmp_path), Deadline.starting_now(seconds=60))
+        _provider(tmp_path, host).generate(_task(tmp_path), Deadline.starting_now(seconds=60))
 
     message = str(excinfo.value)
     assert message == "claude: You've hit your weekly limit · resets Sep 29, 7am (Europe/Oslo)."
@@ -544,82 +441,20 @@ def test_generate_reports_a_weekly_limit_envelope_without_its_telemetry(
     assert "input_tokens" not in message
 
 
-def test_generate_names_a_bare_is_error_envelope(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    envelope = _completed({"type": "result", "is_error": True})
-    _patch_run_managed(
-        monkeypatch,
-        ProcessResult(returncode=0, stdout=envelope, stderr="", timed_out=False, cancelled=False),
-    )
+def test_generate_names_a_bare_is_error_envelope(tmp_path: Path) -> None:
+    host = _generating(finished(_completed({"type": "result", "is_error": True})))
 
     with pytest.raises(ProviderGenerationError, match="claude reported is_error"):
-        _provider(tmp_path).generate(_task(tmp_path), Deadline.starting_now(seconds=60))
-
-
-def test_generate_treats_is_error_envelope_as_generation_error(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    envelope = _completed({"type": "result", "is_error": True, "result": "overloaded"})
-    _patch_run_managed(
-        monkeypatch,
-        ProcessResult(returncode=0, stdout=envelope, stderr="", timed_out=False, cancelled=False),
-    )
-    provider = _provider(tmp_path)
-
-    with pytest.raises(ProviderGenerationError):
-        provider.generate(_task(tmp_path), Deadline.starting_now(seconds=60))
-
-
-def test_generate_classifies_an_is_error_envelope_reporting_auth_failure_as_unavailable(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    # `claude -p --output-format json` reports an auth/quota/rate-limit
-    # failure inside its `is_error: true` envelope, with exit code 0 -- the
-    # same recognised-availability text an exit-code failure would carry,
-    # just delivered through the envelope instead of stderr. It must be
-    # classified the same way (`classify_process_failure`), not read as a
-    # generic generation error.
-    envelope = _completed(
-        {"type": "result", "is_error": True, "result": "Error: not authenticated"}
-    )
-    _patch_run_managed(
-        monkeypatch,
-        ProcessResult(returncode=0, stdout=envelope, stderr="", timed_out=False, cancelled=False),
-    )
-    provider = _provider(tmp_path)
-
-    with pytest.raises(ProviderUnavailableError):
-        provider.generate(_task(tmp_path), Deadline.starting_now(seconds=60))
-
-
-def test_generate_treats_unparseable_envelope_as_generation_error(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    _patch_run_managed(
-        monkeypatch,
-        ProcessResult(
-            returncode=0, stdout="not json at all", stderr="", timed_out=False, cancelled=False
-        ),
-    )
-    provider = _provider(tmp_path)
-
-    with pytest.raises(ProviderGenerationError):
-        provider.generate(_task(tmp_path), Deadline.starting_now(seconds=60))
+        _provider(tmp_path, host).generate(_task(tmp_path), Deadline.starting_now(seconds=60))
 
 
 def test_generate_with_no_binary_on_path_is_unavailable_so_the_next_provider_runs(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    tmp_path: Path,
 ) -> None:
     # A machine with only one of the two CLIs installed. Launching the bare
     # name fails with WinError 2, which is not an availability failure the
     # orchestrator falls through on -- it used to end the whole run.
-    monkeypatch.setattr(shutil, "which", lambda name: None)
-
-    def never_launched(argv: list[str], **kwargs: Any) -> ProcessResult:
-        raise AssertionError("a missing binary must not be launched")
-
-    monkeypatch.setattr(claude, "run_managed", never_launched)
+    host = ScriptedCliHost(managed={(): never_launched})
 
     with pytest.raises(ProviderUnavailableError, match="claude was not found on PATH"):
-        _provider(tmp_path).generate(_task(tmp_path), Deadline.starting_now(seconds=60))
+        _provider(tmp_path, host).generate(_task(tmp_path), Deadline.starting_now(seconds=60))

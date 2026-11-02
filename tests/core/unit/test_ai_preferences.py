@@ -1,15 +1,17 @@
 """ADR-0056 preferences through the provider factory and subprocess boundary."""
 
 import json
+from functools import partial
 from pathlib import Path
 
 import pytest
 
-from etsy_listings.core.ai import claude, cli_support, codex, grok
+from etsy_listings.core.ai import claude, codex, grok
 from etsy_listings.core.ai.models import Deadline, ProviderTask, RepairContext
-from etsy_listings.core.ai.process import ProcessResult
 from etsy_listings.core.application.ai.readiness import current_providers, default_ai_providers
 from etsy_listings.core.workspace import Workspace
+
+from tests.support.cli_host import ScriptedCliHost, finished
 
 
 def test_factory_captures_order_and_preferences_until_next_call(workspace_root: Path) -> None:
@@ -30,51 +32,41 @@ def test_factory_captures_order_and_preferences_until_next_call(workspace_root: 
 
 
 @pytest.mark.parametrize(
-    ("module", "adapter", "flags"),
+    ("adapter", "flags"),
     [
         (
-            codex,
             codex.CodexProvider,
             ["--model", "saved-model", "-c", 'model_reasoning_effort="saved-effort"'],
         ),
-        (claude, claude.ClaudeProvider, ["--model", "saved-model", "--effort", "saved-effort"]),
-        (grok, grok.GrokProvider, ["--model", "saved-model", "--reasoning-effort", "saved-effort"]),
+        (claude.ClaudeProvider, ["--model", "saved-model", "--effort", "saved-effort"]),
+        (grok.GrokProvider, ["--model", "saved-model", "--reasoning-effort", "saved-effort"]),
     ],
 )
 @pytest.mark.parametrize("repair", [None, RepairContext("{}", ("missing brief",))])
-def test_preferences_reach_every_task_and_repair_argv(
-    module, adapter, flags, *, monkeypatch, tmp_path, repair
-):
-    calls = []
-    monkeypatch.setattr(cli_support.shutil, "which", lambda name: name)
-
-    def execute(argv, **kwargs):
-        calls.append(argv)
-        return ProcessResult(
-            returncode=0,
-            stdout=json.dumps({"result": "{}", "structuredOutput": {}}),
-            stderr="",
-            timed_out=False,
-            cancelled=False,
-        )
-
-    monkeypatch.setattr(module, "run_managed", execute)
+def test_preferences_reach_every_task_and_repair_argv(adapter, flags, *, tmp_path, repair):
+    answer = finished(json.dumps({"result": "{}", "structuredOutput": {}}))
+    host = ScriptedCliHost(
+        installed={name: name for name in ("codex", "claude", "grok")}, managed={(): answer}
+    )
     task = ProviderTask(
         prompt_text="Read design", response_schema={}, design_image=tmp_path / "design.png"
     )
-    provider = adapter(workspace_root=tmp_path, model="saved-model", effort="saved-effort")
+    provider = adapter(
+        workspace_root=tmp_path, model="saved-model", effort="saved-effort", host=host
+    )
     provider.generate(task, Deadline.starting_now(seconds=300), repair=repair)
-    assert calls[0][-len(flags) :] == flags
-    assert "--service-tier" not in calls[0]
-    calls.clear()
-    adapter(workspace_root=tmp_path).generate(
+    argv = host.last_managed.argv
+    assert argv[-len(flags) :] == flags
+    assert "--service-tier" not in argv
+    adapter(workspace_root=tmp_path, host=host).generate(
         task, Deadline.starting_now(seconds=300), repair=repair
     )
-    assert not any(flag in calls[0] for flag in ["--model", "--effort", "--reasoning-effort", "-c"])
+    argv = host.last_managed.argv
+    assert not any(flag in argv for flag in ["--model", "--effort", "--reasoning-effort", "-c"])
 
 
 def test_a_rejected_saved_model_falls_through_without_rewriting_preferences(
-    workspace_root: Path, monkeypatch: pytest.MonkeyPatch
+    workspace_root: Path,
 ) -> None:
     from etsy_listings.core.ai.brief import BriefRequest
     from etsy_listings.core.ai.orchestrator import generate_brief
@@ -82,26 +74,19 @@ def test_a_rejected_saved_model_falls_through_without_rewriting_preferences(
     workspace = Workspace.discover(root_override=workspace_root)
     source = "ai:\n  providers: [{name: codex, model: retired}, {name: claude, model: pinned}]\n"
     workspace.settings_file().write_text(source)
-    calls = []
-    monkeypatch.setattr(cli_support.shutil, "which", lambda name: name)
-
-    def rejected(argv, **kwargs):
-        calls.append(argv)
-        return ProcessResult(1, "", "Unknown model: retired", False, False)
-
-    def fallback(argv, **kwargs):
-        calls.append(argv)
-        return ProcessResult(
-            0, json.dumps({"result": json.dumps({"brief": "A sunset design."})}), "", False, False
-        )
-
-    monkeypatch.setattr(codex, "run_managed", rejected)
-    monkeypatch.setattr(claude, "run_managed", fallback)
+    host = ScriptedCliHost(
+        installed={"codex": "codex", "claude": "claude"},
+        managed={
+            ("exec",): finished(stderr="Unknown model: retired", returncode=1),
+            ("-p",): finished(json.dumps({"result": json.dumps({"brief": "A sunset design."})})),
+        },
+    )
     result = generate_brief(
         BriefRequest(design_image=workspace_root / "design.png"),
         "Read artwork",
-        current_providers(default_ai_providers, workspace),
+        current_providers(partial(default_ai_providers, host=host), workspace),
     )
     assert result.brief == "A sunset design."
-    assert [argv[argv.index("--model") + 1] for argv in calls] == ["retired", "pinned"]
+    models = [call.argv[call.argv.index("--model") + 1] for call in host.managed_calls]
+    assert models == ["retired", "pinned"]
     assert workspace.settings_file().read_text() == source

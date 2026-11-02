@@ -112,4 +112,6 @@ def advisory_models_in_host_tests(
         return
     from tests.support.ai_processes import ModelCli
 
-    monkeypatch.setattr("etsy_listings.core.ai.discovery.run_managed", ModelCli())
+    # Process-wide on purpose: every app a host test builds constructs its own
+    # `ModelDiscovery()`, which reads this default when it is constructed.
+    monkeypatch.setattr("etsy_listings.core.ai.discovery.LOCAL_CLI_HOST", ModelCli().host)

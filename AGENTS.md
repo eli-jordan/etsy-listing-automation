@@ -119,7 +119,7 @@ The repo is `/home/Admin/code/etsy-listing-automation` in cygwin, `C:\cygwin64\h
 
 - `--root` / `ETSY_LISTINGS_ROOT` accept cygwin paths and translate them (`core/workspace/userpath.py`), so `--root` is declared `str`, not `Path`. Any new CLI option taking a user path needs the same treatment.
 - The cygwin pty is not a Windows console. prompt_toolkit cannot prompt (`NoConsoleScreenBufferError`), so all interactive prompts go through `cli/prompts.py`'s plain-`input()` fallback — never call questionary directly. `isatty()` is False and the encoding is cp1252; `terminal.adopt_declared_encoding()` trusts `LANG`, `FORCE_COLOR` opts colour back in.
-- A cygwin-only binary (e.g. `fzf`, a shebang script) is invisible to `shutil.which`. `cli/prompts.py` falls back to cygwin's `sh.exe`; any new external-command dependency needs the same two-step lookup.
+- A cygwin-only binary (e.g. `fzf`, a shebang script) is invisible to `shutil.which`. `cli/prompts.py` falls back to cygwin's `sh.exe`; any new external-command dependency needs the same two-step lookup. Find and run commands through an injected `core/ai/host.py` `CliHost`/`CommandHost`, not `shutil`/`subprocess` directly.
 - `core.fileMode` is false in this repo. Leave it; do not commit mode-only changes. `LF → CRLF` warnings are noise.
 - Synced workspaces (Google Drive) mark directories read-only and Windows then refuses `os.rmdir`. Use `remove_tree` (`core/workspace/trees.py`), not `shutil.rmtree`, for any tree this tool owns.
 </important>
@@ -142,7 +142,7 @@ Read the **Invariants** section of [docs/architecture.md](docs/architecture.md) 
 Layers (`ADR-0010`): unit, golden (per-pass and end-to-end renders), behaviour (in-memory fake clients), browser (`-m browser`, playwright over the built SPA), contract (cassette replay through real httpx), e2e (`-m e2e`), plus Vitest for the frontend.
 
 - Use a **fake** to test behaviour and a **cassette** to test payload shape; do not ask either to do the other's job.
-- A test file has one subject. Shared doubles live in `tests/support/` (`builders`, `scripted`, `doubles`, `http`) — look there before writing another `fake_run` closure.
+- A test file has one subject. Shared doubles live in `tests/support/` (`builders`, `scripted`, `doubles`, `http`, `cli_host`) — look there before writing another `fake_run` closure; `cli_host.ScriptedCliHost` stands in for every `which`/`subprocess` call.
 - Golden failures should name the guilty render pass. Regenerate with `--update-goldens` only after looking at the diff.
 - No real design files or photography in the repo; `scripts/generate_test_assets.py` generates deterministic synthetic assets.
 - The browser layer runs in a normal `pytest` but skips if playwright, chromium or `src/ui/dist` is missing. Assert through observable effects (decoded PNG size, the `template.yaml` Save wrote), not internal state.

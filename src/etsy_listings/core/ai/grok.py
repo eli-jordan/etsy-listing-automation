@@ -45,7 +45,6 @@ from etsy_listings.core.ai.models import (
     ProviderReadiness,
     RawProviderResult,
 )
-from etsy_listings.core.ai.process import run_managed
 
 # jscpd:ignore-end -- dependencies stay explicit in each adapter.
 
@@ -81,12 +80,14 @@ class GrokProvider(cli_support.LocalCliProvider):
     """The `AiProvider` adapter for the local Grok CLI."""
 
     binary: str = "grok"
+    credentials: Path | None = None
+    """The session file readiness checks; ``None`` is `auth_file`'s."""
     provider_name = PROVIDER_NAME
     image_tool = "read_file"
 
     @override
     def _check_authenticated(self) -> ProviderReadiness | None:
-        path = auth_file()
+        path = self.credentials or auth_file()
         try:
             present = path.is_file() and path.stat().st_size > 0
         except OSError as exc:
@@ -104,7 +105,7 @@ class GrokProvider(cli_support.LocalCliProvider):
     def _check_capability(self) -> ProviderReadiness | None:
         # A local help probe checks advertised flags without spending a generation call.
         return cli_support.check_capability(
-            self.binary, ("--help",), _REQUIRED_HELP_FLAGS, "headless"
+            self.host, self.binary, ("--help",), _REQUIRED_HELP_FLAGS, "headless"
         )
 
     @override
@@ -136,7 +137,7 @@ class GrokProvider(cli_support.LocalCliProvider):
         if self.effort is not None:
             argv += ["--reasoning-effort", self.effort]
         try:
-            result = run_managed(
+            result = self.host.run_managed(
                 argv,
                 cwd=self.workspace_root,
                 input_text="",

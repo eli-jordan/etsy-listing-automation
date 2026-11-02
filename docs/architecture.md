@@ -178,6 +178,23 @@ credential and both halves of the Etsy grant around the browser step;
 `cli/terminal.py` is a standard-library leaf for encoding and presentation.
 None of the three CLI modules is importable from core.
 
+Local commands are reached through one injected host, `core/ai/host.py`.
+`CommandHost` finds a command (`which`) and runs it to completion (`run`);
+`CliHost` adds `run_managed`, the process-tree owner in `ai/process.py`.
+`LOCAL_CLI_HOST` is the machine itself, through `shutil.which`,
+`subprocess.run` and `run_managed`, adding no policy of its own. The Codex,
+Claude and Grok adapters take it as their `host` field, `default_ai_providers`
+passes one through to every adapter it builds, and `ModelDiscovery` takes one
+at construction. `cli/prompts.py` wraps a `CommandHost` in a `PromptHost`
+with the rest of what choosing a backend asks: whether this is Windows,
+whether prompt_toolkit can draw, and how a plain line is read. Its two-step
+fzf lookup (`shutil.which`, then cygwin's `sh.exe` beside `cygpath`) asks
+that host, so a cygwin-only fzf is found exactly as before. Every function
+defaults to this machine, so wizards and the server pass nothing. Tests
+describe a machine with `tests/support/cli_host.py.ScriptedCliHost`, an
+argv-prefix table that records each call, rather than patching `shutil` and
+`subprocess` in each module that uses them.
+
 Template configuration reads still open the current UTF-8 bytes, with existing
 calibration lock scopes unchanged. A bounded content-keyed cache reuses parsing for documents up
 to 64 KiB, then returns a deep copy because placement lists remain mutable.

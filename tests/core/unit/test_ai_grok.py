@@ -1,16 +1,14 @@
 """``ai/grok.py``: the Grok CLI adapter behind `AiProvider`.
 
-Same doubling strategy as `test_ai_claude.py`: `subprocess.run` is replaced
-for the help check, `run_managed` for generate. No real `grok` process runs.
+Same doubling strategy as `test_ai_claude.py`: a `ScriptedCliHost` answers
+the help probe and the managed generate call, and the credential file is a
+temporary one. No real `grok` process runs.
 """
 
 from __future__ import annotations
 
 import json
-import shutil
-import subprocess
 from pathlib import Path
-from typing import Any
 
 import pytest
 
@@ -30,6 +28,8 @@ from etsy_listings.core.ai.models import (
 )
 from etsy_listings.core.ai.process import ProcessResult
 from etsy_listings.core.ai.prompt import RESPONSE_SCHEMA, build_seo_task
+
+from tests.support.cli_host import ScriptedCliHost, completed, finished, never_launched
 
 _HELP_TEXT = """
 Options:
@@ -57,102 +57,90 @@ def _request(tmp_path: Path) -> SeoRequest:
     )
 
 
-def _provider(tmp_path: Path) -> grok.GrokProvider:
-    return grok.GrokProvider(workspace_root=tmp_path, binary="grok")
+def _provider(
+    tmp_path: Path, host: ScriptedCliHost, *, credentials: Path | None = None
+) -> grok.GrokProvider:
+    return grok.GrokProvider(workspace_root=tmp_path, host=host, credentials=credentials)
 
 
 def _task(tmp_path: Path):
     return build_seo_task("Write great SEO copy.", _request(tmp_path))
 
 
-def _ok(stdout: str = "") -> subprocess.CompletedProcess[str]:
-    return subprocess.CompletedProcess(["grok"], 0, stdout=stdout, stderr="")
-
-
-def _patch_ready(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, *, help_text: str = _HELP_TEXT
-) -> None:
+def _signed_in(tmp_path: Path) -> Path:
     auth = tmp_path / "auth.json"
     auth.write_text('{"token":"x"}', encoding="utf-8")
-    monkeypatch.setattr(grok, "auth_file", lambda: auth)
-    monkeypatch.setattr(shutil, "which", lambda name: f"/resolved/{name}")
-
-    def _run(argv: list[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:
-        return _ok(stdout=help_text)
-
-    monkeypatch.setattr(subprocess, "run", _run)
+    return auth
 
 
-def test_readiness_fails_when_the_binary_is_missing(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    monkeypatch.setattr(shutil, "which", lambda name: None)
-    readiness = _provider(tmp_path).readiness()
+def _installed(help_text: str = _HELP_TEXT) -> ScriptedCliHost:
+    return ScriptedCliHost(
+        installed={"grok": "/resolved/grok"}, runs={("--help",): completed(help_text)}
+    )
+
+
+def test_readiness_fails_when_the_binary_is_missing(tmp_path: Path) -> None:
+    readiness = _provider(tmp_path, ScriptedCliHost()).readiness()
     assert readiness.ready is False
     assert "not found" in (readiness.reason or "")
 
 
-def test_readiness_fails_when_there_is_no_credential_file(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    monkeypatch.setattr(grok, "auth_file", lambda: tmp_path / "missing.json")
-    monkeypatch.setattr(shutil, "which", lambda name: "/resolved/grok")
-    readiness = _provider(tmp_path).readiness()
+def test_readiness_fails_when_there_is_no_credential_file(tmp_path: Path) -> None:
+    provider = _provider(tmp_path, _installed(), credentials=tmp_path / "missing.json")
+    readiness = provider.readiness()
     assert readiness.ready is False
     assert "not authenticated" in (readiness.reason or "")
 
 
-def test_readiness_fails_when_help_is_missing_required_flags(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    _patch_ready(monkeypatch, tmp_path, help_text="Usage: grok\n")
-    readiness = _provider(tmp_path).readiness()
+def test_readiness_fails_when_help_is_missing_required_flags(tmp_path: Path) -> None:
+    provider = _provider(tmp_path, _installed("Usage: grok\n"), credentials=_signed_in(tmp_path))
+    readiness = provider.readiness()
     assert readiness.ready is False
     assert "json-schema" in (readiness.reason or "")
 
 
-def test_readiness_is_ready_when_the_credential_and_flags_are_present(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    _patch_ready(monkeypatch, tmp_path)
-    assert _provider(tmp_path).readiness() == ProviderReadiness(ready=True)
+def test_readiness_is_ready_when_the_credential_and_flags_are_present(tmp_path: Path) -> None:
+    host = _installed()
+    provider = _provider(tmp_path, host, credentials=_signed_in(tmp_path))
+    assert provider.readiness() == ProviderReadiness(ready=True)
+    assert host.ran == [["/resolved/grok", "--help"]]
 
 
-def _patch_generate(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, result: ProcessResult
-) -> list[dict[str, Any]]:
-    monkeypatch.setattr(shutil, "which", lambda name: f"/resolved/{name}")
-    calls: list[dict[str, Any]] = []
+def test_the_default_credential_file_is_grok_logins(tmp_path: Path) -> None:
+    assert grok.auth_file() == Path.home() / ".grok" / "auth.json"
 
-    def fake_run_managed(argv: list[str], **kwargs: Any) -> ProcessResult:
+
+class _Grok:
+    """`grok` as the adapter sees it. The prompt file is removed once the
+    process returns, so its text is read here, during the call."""
+
+    def __init__(self, result: ProcessResult) -> None:
+        self.result = result
+        self.prompts: list[str] = []
+
+    def __call__(self, argv: list[str], **_: object) -> ProcessResult:
         prompt_path = Path(argv[argv.index("--prompt-file") + 1])
-        calls.append(
-            {"argv": list(argv), "prompt": prompt_path.read_text(encoding="utf-8"), **kwargs}
-        )
-        return result
-
-    monkeypatch.setattr(grok, "run_managed", fake_run_managed)
-    return calls
+        self.prompts.append(prompt_path.read_text(encoding="utf-8"))
+        return self.result
 
 
-def test_generate_writes_the_prompt_to_a_file_and_returns_the_text_field(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
+def _generating(cli: _Grok) -> ScriptedCliHost:
+    return ScriptedCliHost(installed={"grok": "/resolved/grok"}, managed={(): cli})
+
+
+def test_generate_writes_the_prompt_to_a_file_and_returns_the_text_field(tmp_path: Path) -> None:
     envelope = json.dumps(
         {"text": '{"ok": true}', "structuredOutput": {"ok": True}, "stopReason": "end_turn"}
     )
-    calls = _patch_generate(
-        monkeypatch,
-        tmp_path,
-        ProcessResult(returncode=0, stdout=envelope, stderr="", timed_out=False, cancelled=False),
-    )
+    cli = _Grok(finished(envelope))
+    host = _generating(cli)
     request = _request(tmp_path)
 
-    result = _provider(tmp_path).generate(_task(tmp_path), Deadline.starting_now(seconds=60))
+    result = _provider(tmp_path, host).generate(_task(tmp_path), Deadline.starting_now(seconds=60))
 
     assert result.provider == "grok"
     assert result.raw_output == '{"ok": true}'
-    argv = calls[0]["argv"]
+    argv = host.last_managed.argv
     assert argv[0] == "/resolved/grok"
     assert "--prompt-file" in argv
     assert argv[argv.index("--output-format") + 1] == "json"
@@ -162,7 +150,7 @@ def test_generate_writes_the_prompt_to_a_file_and_returns_the_text_field(
     assert "--no-subagents" in argv
     assert "--verbatim" in argv
     assert "-p" not in argv
-    prompt = calls[0]["prompt"]
+    prompt = cli.prompts[0]
     assert "Write great SEO copy." in prompt
     assert request.brief in prompt
     assert str(request.design_image) in prompt
@@ -171,9 +159,7 @@ def test_generate_writes_the_prompt_to_a_file_and_returns_the_text_field(
     assert not Path(argv[argv.index("--prompt-file") + 1]).exists()
 
 
-def test_generate_uses_the_schema_object_when_the_text_is_not_json(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
+def test_generate_uses_the_schema_object_when_the_text_is_not_json(tmp_path: Path) -> None:
     # `--json-schema` puts the valid object in `structuredOutput`. `text` is
     # the model's own write-up and is not required to parse.
     envelope = json.dumps(
@@ -183,109 +169,57 @@ def test_generate_uses_the_schema_object_when_the_text_is_not_json(
             "stopReason": "end_turn",
         }
     )
-    _patch_generate(
-        monkeypatch,
-        tmp_path,
-        ProcessResult(returncode=0, stdout=envelope, stderr="", timed_out=False, cancelled=False),
-    )
+    host = _generating(_Grok(finished(envelope)))
 
-    result = _provider(tmp_path).generate(_task(tmp_path), Deadline.starting_now(seconds=60))
+    result = _provider(tmp_path, host).generate(_task(tmp_path), Deadline.starting_now(seconds=60))
 
     assert json.loads(result.raw_output) == {"ok": True}
 
 
-def test_generate_falls_back_to_structured_output_when_text_is_missing(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
+def test_generate_falls_back_to_structured_output_when_text_is_missing(tmp_path: Path) -> None:
     envelope = json.dumps({"structuredOutput": {"ok": True}, "stopReason": "end_turn"})
-    _patch_generate(
-        monkeypatch,
-        tmp_path,
-        ProcessResult(returncode=0, stdout=envelope, stderr="", timed_out=False, cancelled=False),
-    )
+    host = _generating(_Grok(finished(envelope)))
 
-    result = _provider(tmp_path).generate(_task(tmp_path), Deadline.starting_now(seconds=60))
+    result = _provider(tmp_path, host).generate(_task(tmp_path), Deadline.starting_now(seconds=60))
 
     assert json.loads(result.raw_output) == {"ok": True}
 
 
-def test_generate_appends_the_repair_block(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    envelope = json.dumps({"text": "{}"})
-    calls = _patch_generate(
-        monkeypatch,
-        tmp_path,
-        ProcessResult(returncode=0, stdout=envelope, stderr="", timed_out=False, cancelled=False),
-    )
+def test_generate_appends_the_repair_block(tmp_path: Path) -> None:
+    cli = _Grok(finished(json.dumps({"text": "{}"})))
     repair = RepairContext(
         prior_raw_output='{"titles": []}', reasons=("titles: expected exactly 3",)
     )
 
-    _provider(tmp_path).generate(_task(tmp_path), Deadline.starting_now(seconds=60), repair=repair)
-
-    assert '{"titles": []}' in calls[0]["prompt"]
-    assert "titles: expected exactly 3" in calls[0]["prompt"]
-
-
-def test_generate_classifies_a_nonzero_exit(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    _patch_generate(
-        monkeypatch,
-        tmp_path,
-        ProcessResult(
-            returncode=1,
-            stdout="",
-            stderr="Error: not authenticated",
-            timed_out=False,
-            cancelled=False,
-        ),
+    _provider(tmp_path, _generating(cli)).generate(
+        _task(tmp_path), Deadline.starting_now(seconds=60), repair=repair
     )
 
-    with pytest.raises(ProviderUnavailableError):
-        _provider(tmp_path).generate(_task(tmp_path), Deadline.starting_now(seconds=60))
+    assert '{"titles": []}' in cli.prompts[0]
+    assert "titles: expected exactly 3" in cli.prompts[0]
 
 
-def test_generate_raises_timeout_and_cancelled(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+@pytest.mark.parametrize(
+    ("result", "error"),
+    [
+        (finished(stderr="Error: not authenticated", returncode=1), ProviderUnavailableError),
+        (ProcessResult(None, "", "", timed_out=True, cancelled=False), ProviderTimeoutError),
+        (ProcessResult(None, "", "", timed_out=False, cancelled=True), ProviderCancelledError),
+        (finished("not json"), ProviderGenerationError),
+    ],
+    ids=["nonzero-exit", "timed-out", "cancelled", "unparseable"],
+)
+def test_generate_classifies_how_the_process_ended(
+    tmp_path: Path, result: ProcessResult, error: type[Exception]
 ) -> None:
-    _patch_generate(
-        monkeypatch,
-        tmp_path,
-        ProcessResult(returncode=None, stdout="", stderr="", timed_out=True, cancelled=False),
-    )
-    with pytest.raises(ProviderTimeoutError):
-        _provider(tmp_path).generate(_task(tmp_path), Deadline.starting_now(seconds=60))
-
-    _patch_generate(
-        monkeypatch,
-        tmp_path,
-        ProcessResult(returncode=None, stdout="", stderr="", timed_out=False, cancelled=True),
-    )
-    with pytest.raises(ProviderCancelledError):
-        _provider(tmp_path).generate(_task(tmp_path), Deadline.starting_now(seconds=60))
+    with pytest.raises(error):
+        _provider(tmp_path, _generating(_Grok(result))).generate(
+            _task(tmp_path), Deadline.starting_now(seconds=60)
+        )
 
 
-def test_generate_with_no_binary_is_unavailable(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    monkeypatch.setattr(shutil, "which", lambda name: None)
-
-    def never_launched(argv: list[str], **kwargs: Any) -> ProcessResult:
-        raise AssertionError("a missing binary must not be launched")
-
-    monkeypatch.setattr(grok, "run_managed", never_launched)
+def test_generate_with_no_binary_is_unavailable(tmp_path: Path) -> None:
+    host = ScriptedCliHost(managed={(): never_launched})
 
     with pytest.raises(ProviderUnavailableError, match="grok was not found on PATH"):
-        _provider(tmp_path).generate(_task(tmp_path), Deadline.starting_now(seconds=60))
-
-
-def test_unparseable_stdout_is_a_generation_error(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    _patch_generate(
-        monkeypatch,
-        tmp_path,
-        ProcessResult(returncode=0, stdout="not json", stderr="", timed_out=False, cancelled=False),
-    )
-    with pytest.raises(ProviderGenerationError):
-        _provider(tmp_path).generate(_task(tmp_path), Deadline.starting_now(seconds=60))
+        _provider(tmp_path, host).generate(_task(tmp_path), Deadline.starting_now(seconds=60))

@@ -11,6 +11,7 @@ from etsy_listings.core.ai.discovery import ModelDiscovery
 from etsy_listings.core.ai.models import Deadline
 from etsy_listings.core.ai.process import run_managed
 
+from tests.support.cli_host import ScriptedCliHost
 from tests.support.exited_launcher import ExitedLauncher
 
 pytestmark = pytest.mark.skipif(
@@ -19,17 +20,15 @@ pytestmark = pytest.mark.skipif(
 )
 
 
-def test_discovery_reaps_an_exited_launchers_child_and_pipe_readers(tmp_path, monkeypatch):
+def test_discovery_reaps_an_exited_launchers_child_and_pipe_readers(tmp_path):
     with ExitedLauncher(tmp_path) as tree:
-        monkeypatch.setattr(
-            "etsy_listings.core.ai.discovery.shutil.which",
-            lambda name: str(tree.command) if name == "codex" else None,
-        )
+        # The real process owner, behind a machine where only `codex` is installed.
+        host = ScriptedCliHost(installed={"codex": str(tree.command)}, managed={(): run_managed})
 
         def clock():
             return time.monotonic() + (16 if tree.exited() else 0)
 
-        result = ModelDiscovery(monotonic=clock).read()
+        result = ModelDiscovery(monotonic=clock, host=host).read()
         assert result.providers["codex"].problem
         assert time.monotonic() - tree.started < 6
         tree.assert_clean()

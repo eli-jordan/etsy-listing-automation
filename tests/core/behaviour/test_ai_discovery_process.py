@@ -4,13 +4,13 @@ import time
 from pathlib import Path
 
 from etsy_listings.core.ai.discovery import ModelDiscovery
+from etsy_listings.core.ai.process import run_managed
 
 from tests.support.ai_processes import local_cli
+from tests.support.cli_host import ScriptedCliHost
 
 
-def test_discovery_kills_descendants_and_returns_within_its_budget(
-    monkeypatch, tmp_path: Path
-) -> None:
+def test_discovery_kills_descendants_and_returns_within_its_budget(tmp_path: Path) -> None:
     marker = tmp_path / "descendant.txt"
     descendant = (
         "import sys,time\n"
@@ -26,10 +26,8 @@ def test_discovery_kills_descendants_and_returns_within_its_budget(
         "time.sleep(10)\n"
     )
     command = local_cli(tmp_path, parent)
-    monkeypatch.setattr(
-        "etsy_listings.core.ai.discovery.shutil.which",
-        lambda name: str(command) if name == "codex" else None,
-    )
+    # The real process owner, behind a machine where only `codex` is installed.
+    host = ScriptedCliHost(installed={"codex": str(command)}, managed={(): run_managed})
     started = time.monotonic()
 
     def clock():
@@ -37,7 +35,7 @@ def test_discovery_kills_descendants_and_returns_within_its_budget(
         # A slow CI interpreter start cannot race our timeout assertion.
         return time.monotonic() + (16 if marker.exists() else 0)
 
-    result = ModelDiscovery(monotonic=clock).read()
+    result = ModelDiscovery(monotonic=clock, host=host).read()
 
     assert time.monotonic() - started < 6, "discovery waited for a descendant's natural exit"
     assert result.providers["codex"].problem

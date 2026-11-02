@@ -18,6 +18,7 @@ from etsy_listings.cli import prompts
 from etsy_listings.core.clients.printify.models import Blueprint
 from etsy_listings.core.workspace.workspace import Workspace
 
+from tests.support.cli_host import ScriptedCliHost
 from tests.support.doubles import replies
 
 GILDAN_TEE = Blueprint(id=12, title="Unisex Heavy Cotton Tee", brand="Gildan", model="5000")
@@ -137,8 +138,9 @@ def test_new_runs_end_to_end_through_the_plain_input_backend(
     """
     from etsy_listings.cli.new import run_new
 
-    monkeypatch.setattr(prompts, "fzf_command", lambda: None)
-    monkeypatch.setattr(prompts, "prompt_toolkit_works", lambda: False)
+    # This machine, minus fzf and prompt_toolkit: `new` never passes a host.
+    plain = prompts.PromptHost(commands=ScriptedCliHost(), prompt_toolkit=lambda: False)
+    monkeypatch.setattr(prompts, "LOCAL_PROMPT_HOST", plain)
     _no_network_pricing_plan_generation(monkeypatch)
 
     workspace = Workspace.discover(root_override=workspace_root)

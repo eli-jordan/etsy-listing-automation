@@ -1,12 +1,11 @@
 """Shared outcome rules for local CLI providers. Command and envelope formats stay local."""
 
 import json
-import shutil
 import subprocess
 import threading
 from abc import ABC, abstractmethod
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, ClassVar
 
@@ -17,6 +16,7 @@ from etsy_listings.core.ai.errors import (
     ProviderUnavailableError,
     classify_process_failure,
 )
+from etsy_listings.core.ai.host import LOCAL_CLI_HOST, CliHost, CommandHost
 from etsy_listings.core.ai.models import (
     Deadline,
     ProviderReadiness,
@@ -46,15 +46,17 @@ class LocalCliProvider(ABC):
     binary: str
     model: str | None = None
     effort: str | None = None
+    host: CliHost = field(default=LOCAL_CLI_HOST, repr=False, compare=False)
+    """Where the CLI is looked up and run; tests pass a scripted machine."""
     provider_name: ClassVar[str]
     image_tool: ClassVar[str | None] = None
 
     def _resolved_binary(self) -> str:
         # Windows npm shims need PATHEXT resolution before CreateProcess.
-        return shutil.which(self.binary) or self.binary
+        return self.host.which(self.binary) or self.binary
 
     def readiness(self) -> ProviderReadiness:
-        return readiness(self.binary, self._check_authenticated, self._check_capability)
+        return readiness(self.host, self.binary, self._check_authenticated, self._check_capability)
 
     @abstractmethod
     def _check_authenticated(self) -> ProviderReadiness | None: ...
@@ -70,7 +72,7 @@ class LocalCliProvider(ABC):
         repair: RepairContext | None = None,
         cancel_event: threading.Event | None = None,
     ) -> RawProviderResult:
-        require_binary(self.provider_name, self.binary)
+        require_binary(self.host, self.provider_name, self.binary)
         prompt = prompt_text_for(task, repair, image_tool=self.image_tool)
         return self._generate(Invocation(task, deadline, prompt, cancel_event))
 
@@ -78,17 +80,18 @@ class LocalCliProvider(ABC):
     def _generate(self, invocation: Invocation) -> RawProviderResult: ...
 
 
-def require_binary(provider: str, binary: str) -> None:
-    if shutil.which(binary) is None:
+def require_binary(host: CommandHost, provider: str, binary: str) -> None:
+    if host.which(binary) is None:
         raise ProviderUnavailableError(provider, f"{binary} was not found on PATH")
 
 
 def readiness(
+    host: CommandHost,
     binary: str,
     authenticated: Callable[[], ProviderReadiness | None],
     capability: Callable[[], ProviderReadiness | None],
 ) -> ProviderReadiness:
-    if shutil.which(binary) is None:
+    if host.which(binary) is None:
         return ProviderReadiness(ready=False, reason=f"{binary} was not found on PATH")
     for check in (authenticated, capability):
         unavailable = check()
@@ -108,25 +111,23 @@ def json_object(provider: str, stdout: str) -> dict[str, Any]:
 
 
 def probe(
-    binary: str, args: tuple[str, ...]
+    host: CommandHost, binary: str, args: tuple[str, ...]
 ) -> subprocess.CompletedProcess[str] | ProviderReadiness:
     command = " ".join((binary, *args))
     try:
-        return subprocess.run(
-            [shutil.which(binary) or binary, *args],
-            capture_output=True,
-            text=True,
-            timeout=READINESS_TIMEOUT_SECONDS,
-            check=False,
-        )
+        return host.run([host.which(binary) or binary, *args], timeout=READINESS_TIMEOUT_SECONDS)
     except (OSError, subprocess.SubprocessError) as exc:
         return ProviderReadiness(ready=False, reason=f"could not check `{command}`: {exc}")
 
 
 def check_capability(
-    binary: str, args: tuple[str, ...], required: tuple[str, ...], description: str
+    host: CommandHost,
+    binary: str,
+    args: tuple[str, ...],
+    required: tuple[str, ...],
+    description: str,
 ) -> ProviderReadiness | None:
-    result = probe(binary, args)
+    result = probe(host, binary, args)
     if isinstance(result, ProviderReadiness):
         return result
     if result.returncode != 0:
@@ -144,8 +145,10 @@ def check_capability(
     return None
 
 
-def auth_probe(binary: str, command: str) -> subprocess.CompletedProcess[str] | ProviderReadiness:
-    result = probe(binary, (command, "status"))
+def auth_probe(
+    host: CommandHost, binary: str, command: str
+) -> subprocess.CompletedProcess[str] | ProviderReadiness:
+    result = probe(host, binary, (command, "status"))
     if isinstance(result, ProviderReadiness):
         return result
     if result.returncode != 0:

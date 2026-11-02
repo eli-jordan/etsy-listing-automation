@@ -41,7 +41,6 @@ from etsy_listings.core.ai.models import (
     ProviderReadiness,
     RawProviderResult,
 )
-from etsy_listings.core.ai.process import run_managed
 
 PROVIDER_NAME = "codex"
 
@@ -83,7 +82,7 @@ class CodexProvider(cli_support.LocalCliProvider):
 
     @override
     def _check_authenticated(self) -> ProviderReadiness | None:
-        result = cli_support.auth_probe(self.binary, "login")
+        result = cli_support.auth_probe(self.host, self.binary, "login")
         if isinstance(result, ProviderReadiness):
             return result
         return None
@@ -92,7 +91,7 @@ class CodexProvider(cli_support.LocalCliProvider):
     def _check_capability(self) -> ProviderReadiness | None:
         # A local help probe checks advertised flags without spending a generation call.
         return cli_support.check_capability(
-            self.binary, ("exec", "--help"), _REQUIRED_EXEC_HELP_FLAGS, "read-only exec"
+            self.host, self.binary, ("exec", "--help"), _REQUIRED_EXEC_HELP_FLAGS, "read-only exec"
         )
 
     @override
@@ -129,7 +128,7 @@ class CodexProvider(cli_support.LocalCliProvider):
             if self.effort is not None:
                 argv += ["-c", f"model_reasoning_effort={json.dumps(self.effort)}"]
 
-            result = run_managed(
+            result = self.host.run_managed(
                 argv,
                 cwd=self.workspace_root,
                 input_text=prompt_text,

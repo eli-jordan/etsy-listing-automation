@@ -41,6 +41,12 @@ fuzzy version.
 Finding fzf is its own problem here, and ``shutil.which`` is not the answer:
 see :func:`fzf_command`.
 
+Every question that has to ask the machine something -- is fzf installed,
+can prompt_toolkit draw, what did the user type -- asks a :class:`PromptHost`.
+Each function takes one as ``host``; omitted, it is this machine
+(``LOCAL_PROMPT_HOST``), so a wizard never passes one and a test describes
+the machine it wants instead of patching this module.
+
 Every backend returns ``None`` for "the user cancelled", so callers handle
 cancellation one way regardless of which one ran -- and above them sit
 :func:`pick`, :func:`ask_choice`, :func:`ask_text` and :func:`ask_confirm`,
@@ -51,11 +57,13 @@ note above them for why a `None` nobody checks is worse than an exception.
 from __future__ import annotations
 
 import os
-import shutil
 import subprocess
 from collections.abc import Callable, Sequence
+from dataclasses import dataclass
 from functools import cache
 from pathlib import Path
+
+from etsy_listings.core.ai.host import LOCAL_CLI_HOST, CommandHost
 
 PAGE_SIZE = 20
 """Rows the numbered selector prints at a time. Enough to fill a terminal
@@ -82,6 +90,36 @@ def prompt_toolkit_works() -> bool:
     return True
 
 
+def _read_line(prompt: str) -> str:
+    # Looked up per call, so a redirected ``builtins.input`` is still honoured.
+    return input(prompt)
+
+
+@dataclass(frozen=True, eq=False)
+class PromptHost:
+    """The machine a question is asked on.
+
+    ``commands`` finds and runs fzf and cygwin's shell; ``windows`` is
+    whether cygwin's shell is worth looking for at all; ``prompt_toolkit``
+    answers :func:`prompt_toolkit_works`; ``read_line`` is the plain
+    backend's ``input()``. Compared by identity, so :func:`fzf_command`
+    caches one answer per host.
+    """
+
+    commands: CommandHost = LOCAL_CLI_HOST
+    windows: bool = os.name == "nt"
+    prompt_toolkit: Callable[[], bool] = prompt_toolkit_works
+    read_line: Callable[[str], str] = _read_line
+
+
+LOCAL_PROMPT_HOST = PromptHost()
+"""This machine. Read at each call, never bound as a default."""
+
+
+def _local(host: PromptHost | None) -> PromptHost:
+    return LOCAL_PROMPT_HOST if host is None else host
+
+
 FZF_PROBE_TIMEOUT_SECONDS = 5
 
 
@@ -90,7 +128,7 @@ class _FzfFailedError(Exception):
 
 
 @cache
-def fzf_command() -> list[str] | None:
+def fzf_command(host: PromptHost) -> list[str] | None:
     """The argv prefix that runs fzf here, or ``None`` if nothing can.
 
     ``shutil.which`` is the whole answer everywhere except the environment
@@ -106,24 +144,18 @@ def fzf_command() -> list[str] | None:
     Returning an argv prefix rather than a path is what lets the two cases --
     a real ``fzf.exe`` and ``sh -c 'exec fzf...'`` -- reach one call site.
     """
-    native = shutil.which("fzf")
+    native = host.commands.which("fzf")
     if native is not None:
         return [native]
-    return _fzf_via_cygwin_shell()
+    return _fzf_via_cygwin_shell(host)
 
 
-def _fzf_via_cygwin_shell() -> list[str] | None:
-    sh = _cygwin_sh()
+def _fzf_via_cygwin_shell(host: PromptHost) -> list[str] | None:
+    sh = _cygwin_sh(host)
     if sh is None:
         return None
     try:
-        found = subprocess.run(
-            [sh, "-c", "command -v fzf"],
-            capture_output=True,
-            text=True,
-            timeout=FZF_PROBE_TIMEOUT_SECONDS,
-            check=False,
-        )
+        found = host.commands.run([sh, "-c", "command -v fzf"], timeout=FZF_PROBE_TIMEOUT_SECONDS)
     except (OSError, subprocess.SubprocessError):
         return None
     if found.returncode != 0 or not found.stdout.strip():
@@ -134,21 +166,23 @@ def _fzf_via_cygwin_shell() -> list[str] | None:
     return [sh, "-c", 'exec fzf "$@"', "fzf"]
 
 
-def _cygwin_sh() -> str | None:
+def _cygwin_sh(host: PromptHost) -> str | None:
     """Cygwin's ``sh.exe``, found the way ``workspace/userpath.py`` finds
     ``cygpath``: cygwin hands a Windows child a translated PATH, so its
     ``/usr/bin`` is reachable as a Windows directory even though the POSIX
     spelling is not."""
-    if os.name != "nt":
+    if not host.windows:
         return None
-    cygpath = shutil.which("cygpath")
+    cygpath = host.commands.which("cygpath")
     if cygpath is None:
         return None
     sh = Path(cygpath).with_name("sh.exe")
     return str(sh) if sh.is_file() else None
 
 
-def choose(message: str, rows: Sequence[str], *, marker_hint: str = "") -> str | None:
+def choose(
+    message: str, rows: Sequence[str], *, marker_hint: str = "", host: PromptHost | None = None
+) -> str | None:
     """Pick one of ``rows``. ``None`` if the user cancelled.
 
     ``rows`` arrive in the order they should be offered and every backend
@@ -159,43 +193,46 @@ def choose(message: str, rows: Sequence[str], *, marker_hint: str = "") -> str |
     if not listed:
         return None
 
-    command = fzf_command()
+    machine = _local(host)
+    command = fzf_command(machine)
     if command is not None:
         try:
-            return _choose_with_fzf(command, message, listed)
+            return _choose_with_fzf(machine, command, message, listed)
         except _FzfFailedError as exc:
             # An fzf that is present but cannot run -- no terminal to draw on,
             # most likely -- must not read as a cancelled prompt, or `new`
             # would exit silently with nothing on screen to explain it.
             print(f"  {exc}; falling back to a plain list")
-    if prompt_toolkit_works():
+    if machine.prompt_toolkit():
         return _choose_with_questionary(message, listed, marker_hint)
-    return _choose_with_input(message, listed, marker_hint)
+    return _choose_with_input(machine, message, listed, marker_hint)
 
 
-def text(message: str, *, default: str = "") -> str | None:
-    if prompt_toolkit_works():
+def text(message: str, *, default: str = "", host: PromptHost | None = None) -> str | None:
+    machine = _local(host)
+    if machine.prompt_toolkit():
         import questionary  # noqa: PLC0415 -- startup cost: questionary and prompt_toolkit load only when a prompt is shown
 
         answer: str | None = questionary.text(message, default=default).ask()
         return answer
     suffix = f" [{default}]" if default else ""
     try:
-        typed = input(f"{message}{suffix} ").strip()
+        typed = machine.read_line(f"{message}{suffix} ").strip()
     except (EOFError, KeyboardInterrupt):
         return None
     return typed or default
 
 
-def confirm(message: str, *, default: bool = False) -> bool | None:
-    if prompt_toolkit_works():
+def confirm(message: str, *, default: bool = False, host: PromptHost | None = None) -> bool | None:
+    machine = _local(host)
+    if machine.prompt_toolkit():
         import questionary  # noqa: PLC0415 -- startup cost: questionary and prompt_toolkit load only when a prompt is shown
 
         answer: bool | None = questionary.confirm(message, default=default).ask()
         return answer
     hint = "Y/n" if default else "y/N"
     try:
-        typed = input(f"{message} [{hint}] ").strip().lower()
+        typed = machine.read_line(f"{message} [{hint}] ").strip().lower()
     except (EOFError, KeyboardInterrupt):
         return None
     if not typed:
@@ -229,9 +266,11 @@ class Cancelled(Exception):  # noqa: N818 -- a decision, not an error condition
     """
 
 
-def ask_choice(message: str, rows: Sequence[str], *, marker_hint: str = "") -> str:
+def ask_choice(
+    message: str, rows: Sequence[str], *, marker_hint: str = "", host: PromptHost | None = None
+) -> str:
     """:func:`choose`, where declining ends the wizard."""
-    answer = choose(message, rows, marker_hint=marker_hint)
+    answer = choose(message, rows, marker_hint=marker_hint, host=host)
     if answer is None:
         raise Cancelled
     return answer
@@ -243,6 +282,7 @@ def pick[T](
     *,
     label: Callable[[T], str] = str,
     marker_hint: str = "",
+    host: PromptHost | None = None,
 ) -> T:
     """Choose one of ``options``, offered by the label ``label`` gives it.
 
@@ -252,10 +292,12 @@ def pick[T](
     arrives in the order it should be offered, which every backend preserves.
     """
     by_label = {label(option): option for option in options}
-    return by_label[ask_choice(message, list(by_label), marker_hint=marker_hint)]
+    return by_label[ask_choice(message, list(by_label), marker_hint=marker_hint, host=host)]
 
 
-def ask_text(message: str, *, default: str = "", allow_blank: bool = False) -> str:
+def ask_text(
+    message: str, *, default: str = "", allow_blank: bool = False, host: PromptHost | None = None
+) -> str:
     """:func:`text`, where declining ends the wizard.
 
     A blank answer counts as declining by default -- most questions ask for a
@@ -263,24 +305,26 @@ def ask_text(message: str, *, default: str = "", allow_blank: bool = False) -> s
     real answer ("Preferred print provider (blank for none)"), and there it
     still ends the wizard on a true cancel.
     """
-    answer = text(message, default=default)
+    answer = text(message, default=default, host=host)
     if answer is None or (not answer and not allow_blank):
         raise Cancelled
     return answer
 
 
-def ask_confirm(message: str, *, default: bool = False) -> bool:
+def ask_confirm(message: str, *, default: bool = False, host: PromptHost | None = None) -> bool:
     """:func:`confirm`, where declining ends the wizard.
 
     Distinct from answering *no*, which is an answer and comes back ``False``.
     """
-    answer = confirm(message, default=default)
+    answer = confirm(message, default=default, host=host)
     if answer is None:
         raise Cancelled
     return answer
 
 
-def _choose_with_fzf(command: list[str], message: str, rows: list[str]) -> str | None:
+def _choose_with_fzf(
+    host: PromptHost, command: list[str], message: str, rows: list[str]
+) -> str | None:
     """fzf reads its keys from ``/dev/tty``, which is why it works under a
     cygwin pty where prompt_toolkit cannot.
 
@@ -298,13 +342,11 @@ def _choose_with_fzf(command: list[str], message: str, rows: list[str]) -> str |
     turn a diagnosable failure into a blank screen.
     """
     try:
-        result = subprocess.run(
+        result = host.commands.run(
             [*command, "--reverse", f"--prompt={message} > "],
-            input="\n".join(rows),
-            stdout=subprocess.PIPE,
-            text=True,
+            input_text="\n".join(rows),
+            capture_stderr=False,
             encoding="utf-8",
-            check=False,
         )
     except (OSError, subprocess.SubprocessError) as exc:
         raise _FzfFailedError(f"could not run fzf ({exc})") from exc
@@ -329,7 +371,9 @@ def _choose_with_questionary(message: str, rows: list[str], marker_hint: str) ->
     return answer
 
 
-def _choose_with_input(message: str, rows: list[str], marker_hint: str) -> str | None:
+def _choose_with_input(
+    host: PromptHost, message: str, rows: list[str], marker_hint: str
+) -> str | None:
     """A numbered list in plain ``input()``: one page at a time, ``n``/``p``
     to move between pages, a number to pick.
 
@@ -348,7 +392,7 @@ def _choose_with_input(message: str, rows: list[str], marker_hint: str) -> str |
     page = 0
     while True:
         _print_page(rows, page, pages, marker_hint)
-        typed = _typed(f"{message} ({hint}) ")
+        typed = _typed(host, f"{message} ({hint}) ")
         if not typed:
             return None
         if not typed.isdigit():
@@ -359,11 +403,11 @@ def _choose_with_input(message: str, rows: list[str], marker_hint: str) -> str |
             return picked
 
 
-def _typed(prompt: str) -> str:
+def _typed(host: PromptHost, prompt: str) -> str:
     """One line from ``input()``, normalised; blank when the input ended or
     was interrupted, which cancels like a blank line does."""
     try:
-        return input(prompt).strip().lower()
+        return host.read_line(prompt).strip().lower()
     except (EOFError, KeyboardInterrupt):
         return ""
 

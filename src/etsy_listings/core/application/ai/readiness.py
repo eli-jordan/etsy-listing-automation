@@ -23,6 +23,7 @@ from pydantic import BaseModel
 from etsy_listings.core.ai.claude import ClaudeProvider
 from etsy_listings.core.ai.codex import CodexProvider
 from etsy_listings.core.ai.grok import GrokProvider
+from etsy_listings.core.ai.host import LOCAL_CLI_HOST, CliHost
 from etsy_listings.core.ai.providers import AiProvider
 from etsy_listings.core.config.artwork import representative
 from etsy_listings.core.config.listing import Listing
@@ -44,11 +45,14 @@ def current_providers(factory: ProviderFactory, workspace: Workspace) -> Sequenc
     return factory(workspace, workspace.load_settings().ai)
 
 
-def default_ai_providers(workspace: Workspace, ai: AiSettings) -> Sequence[AiProvider]:
+def default_ai_providers(
+    workspace: Workspace, ai: AiSettings, *, host: CliHost = LOCAL_CLI_HOST
+) -> Sequence[AiProvider]:
     """Capture the enabled chain and all task preferences from ``ai`` (ADR-0056).
 
     Newly constructed adapters never reread settings during repair or fallback.
     Missing AI settings preserve Codex, Claude, Grok and account defaults.
+    Every adapter finds and runs its CLI through ``host``.
     """
     adapters: dict[str, type[CodexProvider] | type[ClaudeProvider] | type[GrokProvider]] = {
         "codex": CodexProvider,
@@ -57,7 +61,7 @@ def default_ai_providers(workspace: Workspace, ai: AiSettings) -> Sequence[AiPro
     }
     return tuple(
         adapters[provider.name](
-            workspace_root=workspace.root, model=provider.model, effort=provider.effort
+            workspace_root=workspace.root, model=provider.model, effort=provider.effort, host=host
         )
         for provider in ai.providers
         if provider.enabled
