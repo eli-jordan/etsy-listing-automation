@@ -1,10 +1,13 @@
 """Settings reads and revision-checked saves (Admin plan PR 4, ADR-0055)."""
 
-from fastapi import APIRouter, HTTPException, Request
+from contextlib import suppress
+
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Request
 from fastapi.responses import JSONResponse
 
 from etsy_listings.core.ai.discovery import ModelCatalogs, ModelDiscovery
 from etsy_listings.core.application import template_position_impact, workspace_settings
+from etsy_listings.core.application.position_coverage import cover_widened_limits
 from etsy_listings.core.application.refusals import (
     InvalidSettingsEditError,
     SettingsRevisionConflictError,
@@ -61,8 +64,12 @@ def read_settings(request: Request) -> WorkspaceSettingsResponse:
     responses={412: {"model": SettingsSaveRefusal}, 422: {"model": SettingsSaveRefusal}},
 )
 def edit_settings(
-    request: Request, body: WorkspaceSettingsPatch
+    request: Request, body: WorkspaceSettingsPatch, background: BackgroundTasks
 ) -> WorkspaceSettingsResponse | JSONResponse:
+    """Save ``changes`` against ``revision``. Wider template position limits
+    queue, after the response, coverage inference for each positioned Marigold
+    template whose evidence misses them (option B, ADR-0058); narrowing
+    queues nothing."""
     keys = {
         "concurrency": workspace_settings.CONCURRENCY,
         "weights": workspace_settings.WEIGHTS,
@@ -74,9 +81,14 @@ def edit_settings(
     changes = {
         keys[key]: value for key, value in body.changes.model_dump(exclude_unset=True).items()
     }
+    workspace = request.app.state.workspace
+    before = None
+    if workspace_settings.TEMPLATE_POSITIONS in changes:
+        with suppress(ConfigLoadError):
+            before = workspace.load_settings().template_positions
     try:
         view = workspace_settings.edit_settings(
-            request.app.state.workspace,
+            workspace,
             expected_revision=body.revision,
             changes=changes,
         )
@@ -91,6 +103,13 @@ def edit_settings(
     # stops active runs when the seller lowered the limit.
     if workspace_settings.CONCURRENCY in changes:
         request.app.state.ai.queue.wake()
+    if before is not None:
+        background.add_task(
+            cover_widened_limits,
+            request.app.state.preparations,
+            before,
+            view.settings.template_positions,
+        )
     return _response(view)
 
 

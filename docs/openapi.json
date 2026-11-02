@@ -8144,6 +8144,7 @@
         ]
       },
       "patch": {
+        "description": "Save ``changes`` against ``revision``. Wider template position limits\nqueue, after the response, coverage inference for each positioned Marigold\ntemplate whose evidence misses them (option B, ADR-0058); narrowing\nqueues nothing.",
         "operationId": "edit_settings_api_admin_settings_patch",
         "requestBody": {
           "content": {

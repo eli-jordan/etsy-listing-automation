@@ -397,3 +397,30 @@ def small_print(workspace_root, name="tee"):
     config = {"kind": "single", "bounding_box": box, "renderer": {"type": "marigold"}}
     workspace.save_template_config(name, load_template_config(config))
     return workspace
+
+
+def covered_small_print(workspace_root, name="tee"):
+    """:func:`small_print`, prepared and covered at the default limits through
+    the real queue: any wider limit leaves its padded quad short."""
+    import time
+
+    from etsy_listings.core.application.preparation.coordinator import Preparations
+    from etsy_listings.core.config.settings import TemplatePositionLimits
+
+    workspace = small_print(workspace_root, name)
+    prepare_template(workspace, name)
+    coordinator = Preparations(workspace, runtime=PreparationRuntime())
+    coordinator.start()
+    try:
+        job = coordinator.cover(name, TemplatePositionLimits())
+        assert job is not None
+        deadline = time.monotonic() + 60
+        while coordinator.status(job.id).phase not in {"completed", "failed", "cancelled"}:
+            assert time.monotonic() < deadline, "coverage did not finish"
+            coordinator.events(
+                job.id, after=coordinator.status(job.id).last_event_sequence, wait=0.2
+            )
+        assert coordinator.status(job.id).phase == "completed"
+    finally:
+        coordinator.close()
+    return workspace

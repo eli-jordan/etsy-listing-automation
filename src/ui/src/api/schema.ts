@@ -18,7 +18,13 @@ export interface paths {
     delete?: never;
     options?: never;
     head?: never;
-    /** Edit Settings */
+    /**
+     * Edit Settings
+     * @description Save ``changes`` against ``revision``. Wider template position limits
+     *     queue, after the response, coverage inference for each positioned Marigold
+     *     template whose evidence misses them (option B, ADR-0058); narrowing
+     *     queues nothing.
+     */
     patch: operations["edit_settings_api_admin_settings_patch"];
     trace?: never;
   };
