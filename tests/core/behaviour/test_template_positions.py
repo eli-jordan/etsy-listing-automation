@@ -165,3 +165,21 @@ def test_shape_and_membership_refuse_in_validation_and_plan(
     )
     assert message in issues[0].message
     assert_plan_refuses(ctx, issues[0].message)
+
+
+def test_unreadable_settings_refuse_a_positioned_listing_instead_of_raising(
+    workspace_root: Path,
+) -> None:
+    ctx = a_context(workspace_root)
+    template = ctx.workspace.load_template_config(TEMPLATE)
+    box = compose(template.bounding_box, Pose(scale=1.05))
+    edit_listing(
+        workspace_root,
+        template_positions={TEMPLATE: {"bounding_box": [point.model_dump() for point in box]}},
+    )
+    ctx.workspace.settings_file().write_bytes(b"template_positions:\n  rotation: lots\n")
+    planned = build_plan(ctx, FIXTURE_LISTING, a_lock(), STAGES)
+    render = next(stage for stage in planned.plan.stage_plans if stage.stage == "render")
+    assert render.blocked is not None
+    assert "settings.yaml" in render.blocked
+    assert "template_positions.rotation" in render.blocked

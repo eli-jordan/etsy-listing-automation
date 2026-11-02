@@ -54,7 +54,7 @@ Editor:   1 Entry selected ──switch on──► 2 Adjusting ──switch off
           4 Outside the limits ──Fit within limits──► 2
                                ──Reset to template / switch off──► 1
 Settings: 5 Template rendering ──move a slider, Review and save──► 6 Confirm
-          6 ──Save and refit / Keep current limits / ×──► 5
+          6 ──Save (and refit) / Keep current limits / ×──► 5
 ```
 
 Frame 4 is a second entry point, not reachable from frame 1: it is the state a
@@ -155,15 +155,12 @@ show it on. Its banner row's action removes the stale key.
 
 ## Marigold templates
 
-The editor shows no preparation progress. After a limits change, Marigold
-templates refit their maps in the background (spec, *Marigold (option A)*);
-that is expected to be fast and the spike measures it. If the preview route is
-asked for a scene whose refit has not finished, it waits for it like any slow
-render. The stage keeps its normal loading treatment. The switch stays
-enabled.
-
-If the spike fails and Marigold templates refuse positions (spec, rule 5), the
-switch is absent for entries on Marigold templates.
+Marigold positions use a fit per position (spec, *Marigold (option B)*). After
+a position saves, its fit runs in the background (spike: about 1–6 s). Until
+it is ready the stage keeps the drag overlay and then its normal loading
+treatment while the preview route waits; there is no progress card and the
+switch stays enabled. A limits change that needs new inference shows nothing
+in the editor either; previews of affected scenes simply wait.
 
 ## Settings: Template rendering
 
@@ -188,7 +185,7 @@ while nothing has changed and becomes the amber warning once a value differs
 from the saved one.
 
 **Saving differs from the rest of Admin.** Every other Admin field saves on
-blur; these do not, because each save refits Marigold maps. Edits stay a draft
+blur; these do not, because widening them can run Marigold inference. Edits stay a draft
 in the panel. **Discard** reverts the draft, and **Review and save…** opens the
 confirmation; both are disabled while the draft equals the saved values.
 Leaving the subsection or the page with a draft keeps it while the page stays
@@ -198,17 +195,19 @@ mounted (as Admin does for pending edits) and drops it on reload.
 
 The confirmation lists:
 
-1. each changed limit, old → new, and the Marigold templates that will be
-   refitted, by name (all Marigold templates; Photo warp templates are
-   unaffected and not listed);
+1. each changed limit, old → new, and the Marigold templates whose
+   preparation must run the model again to cover the wider limits, by name
+   (none when narrowing; Photo warp templates are never listed);
 2. which saved listing positions fall outside the new limits, by listing name,
    with "they will block deploying until edited". When none do, the bullet
    reads "Nothing else changes. Saved positions stay as they are; none fall
    outside the new limits."
 
-**Save and refit** writes `settings.yaml` through the same validated,
-revision-checked save as the AI settings, closes on success and starts the
-refits. A failure leaves the dialog open with the error. **Keep current
+**Save** writes `settings.yaml` through the same validated,
+revision-checked save as the AI settings, closes on success and queues any
+inference in the background. The dialog's title and primary button read
+"Refit N Marigold templates?" / "Save and refit" only when inference is
+needed; otherwise "Save new limits?" / "Save". A failure leaves the dialog open with the error. **Keep current
 limits**, ×, Escape and the backdrop close without saving and keep the draft.
 Focus moves into the dialog on open, stays inside it, and returns to Review
 and save on close, as the currency dialog does.
