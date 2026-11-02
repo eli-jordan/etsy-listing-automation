@@ -73,12 +73,17 @@ class WorkspaceFacts:
         self.templates = templates
         self._profiles: dict[str, GarmentProfile | None] = {}
         self._probes: dict[Path, VideoFacts | ProbeFailure] = {}
-        self._position_limits: TemplatePositionLimits | None = None
+        self._position_limits: TemplatePositionLimits | str | None = None
 
-    def template_position_limits(self) -> TemplatePositionLimits:
-        """Limits read once, on demand: unpositioned listings need no settings."""
+    def template_position_limits(self) -> TemplatePositionLimits | str:
+        """Limits read once, on demand: unpositioned listings need no settings.
+        A broken ``settings.yaml`` is its error message, for the caller to
+        report as an issue rather than fail the read."""
         if self._position_limits is None:
-            self._position_limits = self._workspace.load_settings().template_positions
+            try:
+                self._position_limits = self._workspace.load_settings().template_positions
+            except ConfigLoadError as exc:
+                self._position_limits = str(exc)
         return self._position_limits
 
     @classmethod
