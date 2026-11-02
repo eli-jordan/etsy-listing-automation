@@ -8,7 +8,6 @@ to stdio. No process-name matching, descendant snapshot or helper is needed.
 from __future__ import annotations
 
 import ctypes as c
-import msvcrt
 import os
 import subprocess
 import time
@@ -158,6 +157,8 @@ class WindowsProcess:
         _checked(self.job)
         self.handle: int | None = None
         self.streams: list[TextIO] = []
+        import msvcrt  # noqa: PLC0415 -- Windows-only: every core module is also imported on POSIX
+
         fds: set[int] = set()
         try:
             self._limit_job()
