@@ -36,7 +36,6 @@ from typing import Annotated, Any
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, UploadFile
 from fastapi.responses import Response
 
-from etsy_listings.core import connections
 from etsy_listings.core.application.ai.registry import AiRunRegistry
 from etsy_listings.core.application.dependencies import ContextFactory, EtsyStates
 from etsy_listings.core.application.listing_creation import create_listing as create
@@ -123,12 +122,14 @@ def _warm_scenes(request: Request, name: str) -> None:
     warmer.request(name)
 
 
-def _etsy_states(workspace: Workspace) -> EtsyStates:
+def _etsy_states(request: Request) -> EtsyStates:
     """Etsy's listing states through the process's short memo
     (``etsystate.py``), so an autosave burst costs one round trip."""
+    workspace = app_state.workspace(request)
+    client_for = app_state.clients(request).etsy_listing
 
     def lookup(listing_ids: Sequence[int]) -> Mapping[int, str | None]:
-        return etsy_states(workspace.root, listing_ids)
+        return etsy_states(workspace.root, listing_ids, client_for=client_for)
 
     return lookup
 
@@ -214,9 +215,10 @@ def _project(workspace: Workspace, view: ListingView) -> ListingDetail:
 
 
 def _detail(
-    workspace: Workspace, name: str, *, field_errors: dict[str, str] | None = None
+    request: Request, name: str, *, field_errors: dict[str, str] | None = None
 ) -> ListingDetail:
-    view = read_listing(workspace, name, etsy_states=_etsy_states(workspace))
+    workspace = app_state.workspace(request)
+    view = read_listing(workspace, name, etsy_states=_etsy_states(request))
     if field_errors:
         view = dataclasses.replace(view, field_errors=field_errors)
     return _project(workspace, view)
@@ -234,12 +236,12 @@ def list_listings(request: Request) -> list[ListingSummary]:
     """Every listing, with its status resolved in **one** Etsy round trip for
     the whole table rather than one per row."""
     workspace = app_state.workspace(request)
-    return [_summary(row) for row in listing_rows(workspace, etsy_states=_etsy_states(workspace))]
+    return [_summary(row) for row in listing_rows(workspace, etsy_states=_etsy_states(request))]
 
 
 @router.get("/{name}", response_model=ListingDetail)
-def get_listing(target: Annotated[Target, Depends(target)]) -> ListingDetail:
-    return _detail(target.workspace, target.name)
+def get_listing(target: Annotated[Target, Depends(target)], request: Request) -> ListingDetail:
+    return _detail(request, target.name)
 
 
 @router.patch("/{name}", response_model=ListingDetail)
@@ -253,7 +255,7 @@ def patch_listing(
     refused = edit_listing(workspace, name, body, batches=app_state.batch_store(request))
     if refused is None:
         _warm_scenes(request, name)
-    return _detail(workspace, name, field_errors=refused.field_errors if refused else None)
+    return _detail(request, name, field_errors=refused.field_errors if refused else None)
 
 
 @router.delete("/{name}", response_model=None)
@@ -273,7 +275,7 @@ def delete_listing(
         name,
         batches=app_state.batch_store(request),
         ai_runs=_ai_runs(request),
-        etsy_states=_etsy_states(workspace),
+        etsy_states=_etsy_states(request),
     )
     if deletion.wiped:
         return Response(status_code=204)
@@ -295,7 +297,7 @@ def create_listing(request: Request, body: CreateListingRequest) -> ListingDetai
     if refused is not None:
         return _describe_draft(workspace, body.document)
     _warm_scenes(request, body.name)
-    return _detail(workspace, body.name)
+    return _detail(request, body.name)
 
 
 @router.post("/{name}/rename", response_model=ListingDetail)
@@ -316,7 +318,7 @@ def rename_listing(
         batches=app_state.batch_store(request),
         ai_runs=_ai_runs(request),
     )
-    return _detail(target.workspace, body.new_name)
+    return _detail(request, body.new_name)
 
 
 def _preview_response(
@@ -491,9 +493,7 @@ def list_etsy_sections(request: Request) -> EtsySectionsResponse:
     shop_id = workspace.defaults.etsy.shop_id
     if shop_id is None:
         return EtsySectionsResponse(available=False, sections=[])
-    client = connections.etsy_shop_client(workspace.root)
-    if client is None:
-        return EtsySectionsResponse(available=False, sections=[])
+    client = app_state.clients(request).etsy_shop(workspace.root)
     try:
         sections = client.shop_sections(shop_id)
     except (EtsyApiError, EtsyAuthError, EtsyRefreshBusyError, MissingCredentialError):
@@ -518,11 +518,7 @@ def create_etsy_section(request: Request, body: CreateEtsySectionRequest) -> Ets
         raise HTTPException(
             status_code=409, detail="Configure an Etsy shop before adding a section."
         )
-    client = connections.etsy_listing_client(workspace.root)
-    if client is None:
-        raise HTTPException(
-            status_code=409, detail="Configure Etsy credentials before adding a section."
-        )
+    client = app_state.clients(request).etsy_listing(workspace.root)
     try:
         section = client.create_shop_section(shop_id, body.title)
     except EtsyRefreshBusyError as exc:

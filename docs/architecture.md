@@ -149,11 +149,25 @@ still answer it themselves.
 
 `core/connections.py` builds clients and `RunContext`. Printify tokens and Etsy
 bearers resolve at request time, but the Etsy app key pair is read during
-construction to decide whether an optional client exists. The server injects
-`connections.run_context` into `Deployments` as an
-`application.dependencies.ContextFactory`, and the AI coordinator receives
-its market client through `MarketClientFactory`; tests pass factories wired
-to the in-memory fakes.
+construction to decide whether an optional client exists. Nothing in the
+server calls `connections` for a client. `create_app` takes
+`connections.run_context` as `Deployments`' `ContextFactory`, and an
+`application.dependencies.ClientFactories` for every other client: the Etsy
+listing and shop clients, the Printify product and catalog clients, and the AI
+coordinator's market client. It keeps that record on `app.state`, and routes
+read it through `app_state.clients`. `DEFAULT_CLIENTS` holds `connections`'
+own factories and is what `ui` serves with. Core operations that need a client
+take its factory as an argument, as setup's `shop_discovery.etsy_access` takes
+the shop client, and the CLI passes `connections`' factory itself.
+
+Tests pass fakes through the same seams instead of patching `connections`.
+`tests/support/clients.py`'s `FakeClients` builds a `ClientFactories` over the
+in-memory fakes, and the `fake_clients` fixture gives every layer one; a test
+that needs `connections`' real token handling over a scripted network passes
+`http=` and `oauth=` to its Etsy factories. A record of factories beat a
+module-level patch because a patch silently reaches every caller of the
+module, including ones the test never meant to fake, and stops working once a
+caller holds the function rather than the module.
 
 `core/application/credentials.py` owns finding, verifying and storing a
 credential and both halves of the Etsy grant around the browser step;
@@ -538,9 +552,9 @@ AI, and holds those names against new AI until deployment ends (ADR-0050).
 
 The SPA's `/admin` route owns Shop navigation and serializes blur saves against
 `GET` and `PATCH /api/admin/shop`. Separate `/connections` and `/lookups` reads
-use the existing client factories. `core/application/shop_settings.py` owns
-whole-document validation, configured-identity retention and the editable key
-set. `core/workspace/revisions.py` owns exact-byte hashes and a per-path process
+build their clients through the app's `ClientFactories` (`app_state.clients`).
+`core/application/shop_settings.py` owns whole-document validation,
+configured-identity retention and the editable key set. `core/workspace/revisions.py` owns exact-byte hashes and a per-path process
 lock around read, revision comparison, validation and atomic replace. A stale
 revision refuses with 412; invalid values refuse with field errors and 422.
 Semantic no-ops leave the source bytes and file untouched, per ADR-0055.
@@ -872,8 +886,10 @@ later. Each traces to a decision.
   still `plan`. Etsy app keys, bearers and Printify tokens are lazy sources;
   the explicit `etsy_app_key` availability query is reserved for
   readiness/setup operations; setup's shop discovery uses that query to decide
-  whether to look, then reads through `etsy_shop_client` like every other
-  caller.
+  whether to look, then reads through the `etsy_shop_client` the CLI passes it,
+  like every other caller. The server reaches these factories only through
+  the `ClientFactories` `create_app` was given, which a real host fills with
+  them.
 - **A credential is found, verified and stored through
   `core/application/credentials.py`, and captured through `cli/credentials.py`.**
   Where it already lives (environment, then the workspace `.env`) and how to

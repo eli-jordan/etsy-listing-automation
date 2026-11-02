@@ -29,7 +29,7 @@ import time
 from collections.abc import Callable, Iterable
 from pathlib import Path
 
-from etsy_listings.core import connections
+from etsy_listings.core.clients.etsy.listings import EtsyListingClient
 from etsy_listings.core.clients.etsy.tokens import EtsyAuthError, EtsyRefreshBusyError
 from etsy_listings.core.clients.etsy.transport import EtsyApiError
 from etsy_listings.core.config.secrets import MissingCredentialError
@@ -40,6 +40,9 @@ TTL_SECONDS = 30.0
 
 Clock = Callable[[], float]
 
+ClientFor = Callable[[Path], EtsyListingClient]
+"""How to build the listing client that asks: ``app_state.clients``' factory."""
+
 _cache: dict[int, tuple[float, str | None]] = {}
 """listing id -> (expiry, Etsy ``state`` or ``None``). Process-wide rather
 than per-request: one `ui` process serves one workspace, and the whole
@@ -49,7 +52,11 @@ is what delete/retire badges need (inactive vs expired vs sold_out);
 
 
 def etsy_states(
-    root: Path, listing_ids: Iterable[int], *, now: Clock = time.monotonic
+    root: Path,
+    listing_ids: Iterable[int],
+    *,
+    client_for: ClientFor,
+    now: Clock = time.monotonic,
 ) -> dict[int, str | None]:
     """Each of ``listing_ids``' Etsy ``state``, or ``None`` when unknown.
 
@@ -69,31 +76,32 @@ def etsy_states(
         return found
 
     expiry = moment + TTL_SECONDS
-    for listing_id, state in _fetch(root, sorted(stale)).items():
+    for listing_id, state in _fetch(client_for(root), sorted(stale)).items():
         _cache[listing_id] = (expiry, state)
         found[listing_id] = state
     return found
 
 
 def live_listing_ids(
-    root: Path, listing_ids: Iterable[int], *, now: Clock = time.monotonic
+    root: Path,
+    listing_ids: Iterable[int],
+    *,
+    client_for: ClientFor,
+    now: Clock = time.monotonic,
 ) -> set[int]:
     """Which of ``listing_ids`` Etsy reports as published."""
     return {
         i
-        for i, state in etsy_states(root, listing_ids, now=now).items()
+        for i, state in etsy_states(root, listing_ids, client_for=client_for, now=now).items()
         if is_live_etsy_state(state)
     }
 
 
-def _fetch(root: Path, listing_ids: list[int]) -> dict[int, str | None]:
+def _fetch(client: EtsyListingClient, listing_ids: list[int]) -> dict[int, str | None]:
     """``listing_id -> state`` for every id asked about, including the ones
     Etsy had no answer for -- see the module docstring on why a failure is
     reported as "not live" rather than raised."""
     absent: dict[int, str | None] = dict.fromkeys(listing_ids)
-    client = connections.etsy_listing_client(root)
-    if client is None:
-        return absent
     try:
         states = client.listing_states(listing_ids)
     except (EtsyApiError, EtsyAuthError, EtsyRefreshBusyError, MissingCredentialError):

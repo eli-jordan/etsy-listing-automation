@@ -7,7 +7,7 @@ cache, and (for one test) the real Printify desired-document builder
 all agree, end to end, in a real browser against a real running app.
 
 Every test drives ``create_app(seo_provider_factory=...,
-market_client_factory=...)`` with :class:`~tests.support.ai_runs.ChainProvider`
+clients=...)`` with :class:`~tests.support.ai_runs.ChainProvider`
 (which answers the brief, query and proposal tasks apart) or small local
 doubles, and the in-memory Etsy market. No test here ever shells out to a
 real Codex or Claude CLI (PR4's own rule: CI stays fake-provider-only).
@@ -57,6 +57,7 @@ from etsy_listings.server.api.app import FRONTEND_DIST, create_app
 from tests.support.ai_runs import DRAFTED_BRIEF, ChainProvider, seed_snapshot, seeded_market
 from tests.support.builders import FIXTURE_LISTING as LISTING
 from tests.support.builders import edit_listing, write_design
+from tests.support.clients import FakeClients
 from tests.support.server import stop_server
 
 pytestmark = pytest.mark.browser
@@ -244,7 +245,7 @@ def _seo_server(
 ) -> Iterator[str]:
     """The real app -- built SPA served by FastAPI, exactly as `etsy-listings
     ui` runs it -- over `create_app(seo_provider_factory=...,
-    market_client_factory=...)`, so a test drives AI Mode's readiness and its
+    clients=...)`, so a test drives AI Mode's readiness and its
     AI runs against doubles instead of a real Codex or Claude CLI, and the
     in-memory Etsy market (three comparable listings unless ``market`` says
     otherwise) instead of Etsy."""
@@ -258,7 +259,7 @@ def _seo_server(
     etsy_market = market if market is not None else seeded_market()
     kwargs: dict[str, Any] = {
         "seo_provider_factory": lambda _workspace, _ai: providers,
-        "market_client_factory": lambda _workspace: etsy_market,
+        "clients": FakeClients(etsy_market=etsy_market).factories(),
     }
     app = create_app(workspace, **kwargs)
     config = uvicorn.Config(app, host="127.0.0.1", port=port, log_level="warning")

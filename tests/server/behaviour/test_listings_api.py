@@ -18,7 +18,6 @@ import yaml
 from fastapi.testclient import TestClient
 from PIL import Image
 
-from etsy_listings.core import connections
 from etsy_listings.core.clients.etsy.fakes import FakeEtsyListingClient, FakeEtsyShopClient
 from etsy_listings.core.clients.etsy.models import ShopSection
 from etsy_listings.core.clients.etsy.tokens import EtsyRefreshBusyError
@@ -34,14 +33,21 @@ from tests.support.builders import (
     listing_file,
     set_etsy_shop_id,
 )
+from tests.support.clients import FakeClients
 
 VIDEOS = Path(__file__).parents[2] / "fixtures" / "video"
 
 
 @pytest.fixture
-def client(workspace_root: Path) -> TestClient:
+def client(workspace_root: Path, fake_clients: FakeClients) -> TestClient:
+    return serve(workspace_root, fake_clients)
+
+
+def serve(workspace_root: Path, clients: FakeClients) -> TestClient:
+    """The app over the workspace as it is now, building its Etsy and
+    Printify clients from ``clients``."""
     workspace = Workspace.discover(root_override=workspace_root)
-    return TestClient(create_app(workspace))
+    return TestClient(create_app(workspace, clients=clients.factories()))
 
 
 @pytest.fixture(autouse=True)
@@ -116,15 +122,14 @@ EtsyStates = Callable[[dict[int, str]], CountingEtsyListingClient]
 
 
 @pytest.fixture
-def etsy_says(monkeypatch: pytest.MonkeyPatch) -> EtsyStates:
+def etsy_says(fake_clients: FakeClients) -> EtsyStates:
     """Point the status endpoints at an in-memory Etsy reporting these
-    states. Patched at `connections`, which is the one place a client is
-    built (see CLAUDE.md's invariant), so nothing here has to know how a
-    transport is assembled."""
+    states, through the app's client factories (``create_app(clients=...)``),
+    so nothing here has to know how a transport is assembled."""
 
     def install(states: dict[int, str]) -> CountingEtsyListingClient:
         fake = CountingEtsyListingClient(states)
-        monkeypatch.setattr(etsystate.connections, "etsy_listing_client", lambda _root: fake)
+        fake_clients.etsy_listing = fake
         return fake
 
     return install
@@ -1113,42 +1118,32 @@ class TestEtsySections:
 
     def test_is_empty_with_a_shop_id_but_no_app_key_pair(self, workspace_root: Path) -> None:
         set_etsy_shop_id(workspace_root, 12345678)
+        # The real clients: a workspace with no key pair is what is under test.
         keyless = TestClient(create_app(Workspace.discover(root_override=workspace_root)))
         response = keyless.get("/api/etsy/sections")
         assert response.status_code == 200
         assert response.json() == {"available": False, "sections": []}
 
     def test_an_available_shop_with_no_sections_is_distinct_from_no_shop(
-        self, workspace_root: Path, monkeypatch: pytest.MonkeyPatch
+        self, workspace_root: Path
     ) -> None:
         set_etsy_shop_id(workspace_root, 12345678)
-        monkeypatch.setattr(
-            connections,
-            "etsy_shop_client",
-            lambda root: FakeEtsyShopClient(sections=[]),
-        )
-        sectioned = TestClient(create_app(Workspace.discover(root_override=workspace_root)))
+        sectioned = serve(workspace_root, FakeClients(etsy_shop=FakeEtsyShopClient(sections=[])))
 
         response = sectioned.get("/api/etsy/sections")
 
         assert response.status_code == 200
         assert response.json() == {"available": True, "sections": []}
 
-    def test_lists_the_live_shops_sections(
-        self, workspace_root: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_lists_the_live_shops_sections(self, workspace_root: Path) -> None:
         set_etsy_shop_id(workspace_root, 12345678)
-        monkeypatch.setattr(
-            connections,
-            "etsy_shop_client",
-            lambda root: FakeEtsyShopClient(
-                sections=[
-                    ShopSection(shop_section_id=1, title="Tees"),
-                    ShopSection(shop_section_id=2, title="Hoodies"),
-                ]
-            ),
+        etsy = FakeEtsyShopClient(
+            sections=[
+                ShopSection(shop_section_id=1, title="Tees"),
+                ShopSection(shop_section_id=2, title="Hoodies"),
+            ]
         )
-        sectioned = TestClient(create_app(Workspace.discover(root_override=workspace_root)))
+        sectioned = serve(workspace_root, FakeClients(etsy_shop=etsy))
         response = sectioned.get("/api/etsy/sections")
         assert response.status_code == 200
         assert response.json() == {
@@ -1159,13 +1154,10 @@ class TestEtsySections:
             ],
         }
 
-    def test_creates_a_section_through_the_signed_in_client(
-        self, workspace_root: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_creates_a_section_through_the_signed_in_client(self, workspace_root: Path) -> None:
         set_etsy_shop_id(workspace_root, 12345678)
         etsy = FakeEtsyListingClient(sections=[ShopSection(shop_section_id=1, title="Tees")])
-        monkeypatch.setattr(connections, "etsy_listing_client", lambda root: etsy)
-        sectioned = TestClient(create_app(Workspace.discover(root_override=workspace_root)))
+        sectioned = serve(workspace_root, FakeClients(etsy_listing=etsy))
 
         response = sectioned.post("/api/etsy/sections", json={"title": "Trail Gear"})
 
@@ -1175,23 +1167,18 @@ class TestEtsySections:
             (2, "Trail Gear")
         ]
 
-    def test_refresh_busy_lists_sections_as_unavailable(
-        self, workspace_root: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_refresh_busy_lists_sections_as_unavailable(self, workspace_root: Path) -> None:
         class BusyShop(FakeEtsyShopClient):
             def shop_sections(self, shop_id: int) -> list[ShopSection]:
                 raise EtsyRefreshBusyError("Refresh still running. Try again shortly.")
 
         set_etsy_shop_id(workspace_root, 12345678)
-        monkeypatch.setattr(connections, "etsy_shop_client", lambda root: BusyShop())
-        sectioned = TestClient(create_app(Workspace.discover(root_override=workspace_root)))
+        sectioned = serve(workspace_root, FakeClients(etsy_shop=BusyShop()))
         response = sectioned.get("/api/etsy/sections")
         assert response.status_code == 200
         assert response.json() == {"available": False, "sections": []}
 
-    def test_refresh_busy_creation_is_retryable_without_sign_in(
-        self, workspace_root: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_refresh_busy_creation_is_retryable_without_sign_in(self, workspace_root: Path) -> None:
         message = "Refresh still running. Try again shortly."
 
         class BusyListing(FakeEtsyListingClient):
@@ -1200,8 +1187,7 @@ class TestEtsySections:
 
         etsy = BusyListing()
         set_etsy_shop_id(workspace_root, 12345678)
-        monkeypatch.setattr(connections, "etsy_listing_client", lambda root: etsy)
-        sectioned = TestClient(create_app(Workspace.discover(root_override=workspace_root)))
+        sectioned = serve(workspace_root, FakeClients(etsy_listing=etsy))
         response = sectioned.post("/api/etsy/sections", json={"title": "Trail Gear"})
         assert response.status_code == 503
         assert response.json() == {"detail": message}

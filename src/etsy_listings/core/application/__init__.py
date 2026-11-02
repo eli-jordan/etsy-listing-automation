@@ -134,8 +134,10 @@ import names the module it depends on. Public interfaces:
 ``dependencies``
     The seams a host fills: ``EtsyStates`` (the UI process's Etsy state memo,
     which stays in the server), ``ContextFactory`` (a deployment run's
-    engine context) and ``MarketClientFactory`` / ``default_market_client``
-    (the AI runs' Etsy market client).
+    engine context), ``MarketClientFactory`` / ``default_market_client``
+    (the AI runs' Etsy market client) and ``ClientFactories`` /
+    ``DEFAULT_CLIENTS`` (every vendor client the server builds, that market
+    client among them).
 
 Every module above is public. The implementation-only modules are inside
 ``deploy`` (``executor``, ``review``) and ``ai`` (``runner``), named in

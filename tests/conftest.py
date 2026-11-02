@@ -9,6 +9,7 @@ from typing import NoReturn
 import pytest
 
 from tests.support import scripted as scripted_prompts
+from tests.support.clients import FakeClients
 
 FIXTURE_WORKSPACE = Path(__file__).parent / "fixtures" / "workspace"
 
@@ -42,6 +43,15 @@ def workspace_root(tmp_path: Path) -> Path:
     dest = tmp_path / "workspace"
     shutil.copytree(FIXTURE_WORKSPACE, dest)
     return dest
+
+
+@pytest.fixture
+def fake_clients() -> FakeClients:
+    """The in-memory Etsy and Printify clients for a test's app: pass
+    ``fake_clients.factories()`` as ``create_app(clients=...)``, then set a
+    field to change what that vendor reports, before or after the app is
+    built."""
+    return FakeClients()
 
 
 @pytest.fixture

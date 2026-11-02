@@ -23,9 +23,9 @@ from etsy_listings.core.ai.proposals import ProposalStore
 from etsy_listings.core.application.ai.coordinator import AiCoordinator
 from etsy_listings.core.application.ai.readiness import ProviderFactory, default_ai_providers
 from etsy_listings.core.application.dependencies import (
+    DEFAULT_CLIENTS,
+    ClientFactories,
     ContextFactory,
-    MarketClientFactory,
-    default_market_client,
 )
 from etsy_listings.core.application.deploy.deployments import Deployments
 from etsy_listings.core.application.preparation.coordinator import Preparations
@@ -65,8 +65,8 @@ def create_app(
     *,
     context_factory: ContextFactory = connections.run_context,
     seo_provider_factory: ProviderFactory = default_ai_providers,
-    market_client_factory: MarketClientFactory = default_market_client,
     preparation_runtime: PreparationRuntime | None = None,
+    clients: ClientFactories = DEFAULT_CLIENTS,
 ) -> FastAPI:
     # One of each per process, so their locks mean something: the cache
     # records' stores. Listing, mockup-template and listing-template locks need
@@ -82,7 +82,7 @@ def create_app(
         proposals=proposal_store,
         batches=batch_store,
         providers=seo_provider_factory,
-        market_client=market_client_factory,
+        market_client=clients.etsy_market,
     )
     deployments = Deployments(workspace, context_factory, ai=ai)
     scene_warmer = SceneWarmer(workspace)
@@ -135,6 +135,9 @@ def create_app(
     # nothing to do with running a run -- reaching through `deployments` for
     # it would couple that endpoint to deployment's own shape for no reason.
     app.state.context_factory = context_factory
+    # The Etsy and Printify clients the routes ask through (`app_state.clients`),
+    # injected for the same reason as the context factory: a test passes fakes.
+    app.state.clients = clients
     # AI runs (features/market-seo-20260924/spec.md, *AI runs*) and the
     # batch AI queue (ADR-0048): a thread per run, never `deployments`.
     app.state.ai = ai

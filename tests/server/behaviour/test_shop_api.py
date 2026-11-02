@@ -8,6 +8,7 @@ lookups fail as an answer rather than a 500. Etsy and Printify are fakes.
 from __future__ import annotations
 
 import hashlib
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -16,26 +17,33 @@ import pytest
 from fastapi.testclient import TestClient
 
 from etsy_listings.core import connections
-from etsy_listings.core.clients.etsy.fakes import FakeEtsyListingClient, FakeEtsyShopClient
+from etsy_listings.core.application.dependencies import ClientFactories
+from etsy_listings.core.clients.etsy.fakes import FakeEtsyListingClient
 from etsy_listings.core.clients.etsy.models import ProductionPartner, ShippingProfile
 from etsy_listings.core.clients.etsy.oauth import TOKEN_URL
 from etsy_listings.core.clients.etsy.tokens import StoredTokens
-from etsy_listings.core.clients.etsy.transport import EtsyApiError
+from etsy_listings.core.clients.etsy.transport import BASE_URL, EtsyApiError, OAuthClient
 from etsy_listings.core.clients.printify import FakeCatalogClient, PrintProvider
-from etsy_listings.core.clients.printify.fakes import FakePrintifyClient
 from etsy_listings.core.config.secrets import ETSY_KEYSTRING_VAR, ETSY_SHARED_SECRET_VAR
 from etsy_listings.core.workspace import layout
 from etsy_listings.core.workspace.workspace import Workspace
 from etsy_listings.server.api.app import create_app
 
 from tests.support.builders import set_etsy_shop_id
+from tests.support.clients import FakeClients
 from tests.support.etsy_grants import USER_ID, RotatingGrant
 from tests.support.gates import STAYS_OUT, Gate, workers
 
 
 @pytest.fixture
-def client(workspace_root: Path) -> TestClient:
-    return TestClient(create_app(Workspace.discover(root_override=workspace_root)))
+def client(workspace_root: Path, fake_clients: FakeClients) -> TestClient:
+    return serve(workspace_root, fake_clients.factories())
+
+
+def serve(workspace_root: Path, clients: ClientFactories) -> TestClient:
+    """The app over the workspace as it is now, building its clients from ``clients``."""
+    workspace = Workspace.discover(root_override=workspace_root)
+    return TestClient(create_app(workspace, clients=clients))
 
 
 def shop_bytes(root: Path) -> bytes:
@@ -134,24 +142,15 @@ def test_a_return_policy_round_trips_as_terms(client: TestClient) -> None:
     assert saved.json()["listing_defaults"]["return_policy"] == terms
 
 
-def test_lookups_answer_each_service_separately(
-    client: TestClient, workspace_root: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_lookups_answer_each_service_separately(workspace_root: Path) -> None:
     set_etsy_shop_id(workspace_root, 51007712)
-    client = TestClient(create_app(Workspace.discover(root_override=workspace_root)))
 
     class Down(FakeEtsyListingClient):
         def production_partners(self, shop_id: int) -> list[ProductionPartner]:
             raise EtsyApiError(503, error="Etsy is down")
 
-    monkeypatch.setattr(connections, "etsy_listing_client", lambda root: Down())
-    monkeypatch.setattr(
-        connections,
-        "catalog_client",
-        lambda workspace: FakeCatalogClient(
-            [], {}, {}, all_providers=[PrintProvider(id=3, title="SwiftPOD")]
-        ),
-    )
+    catalog = FakeCatalogClient([], {}, {}, all_providers=[PrintProvider(id=3, title="SwiftPOD")])
+    client = serve(workspace_root, FakeClients(etsy_listing=Down(), catalog=catalog).factories())
 
     body = client.get("/api/admin/shop/lookups").json()
 
@@ -164,18 +163,12 @@ def test_lookups_answer_each_service_separately(
     }
 
 
-def test_lookups_list_the_shops_choices(
-    workspace_root: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_lookups_list_the_shops_choices(workspace_root: Path) -> None:
     set_etsy_shop_id(workspace_root, 51007712)
-    client = TestClient(create_app(Workspace.discover(root_override=workspace_root)))
     etsy = FakeEtsyListingClient(
         shipping_profiles=[ShippingProfile(shipping_profile_id=1, title="Standard")]
     )
-    monkeypatch.setattr(connections, "etsy_listing_client", lambda root: etsy)
-    monkeypatch.setattr(
-        connections, "catalog_client", lambda workspace: FakeCatalogClient([], {}, {})
-    )
+    client = serve(workspace_root, FakeClients(etsy_listing=etsy).factories())
 
     body = client.get("/api/admin/shop/lookups").json()
 
@@ -183,12 +176,7 @@ def test_lookups_list_the_shops_choices(
     assert body["etsy"]["return_policies"] == []
 
 
-def test_connections_say_what_to_run_when_nothing_is_set_up(
-    client: TestClient, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.setattr(connections, "etsy_shop_client", lambda root: FakeEtsyShopClient())
-    monkeypatch.setattr(connections, "printify_client", lambda workspace: FakePrintifyClient())
-
+def test_connections_say_what_to_run_when_nothing_is_set_up(client: TestClient) -> None:
     body = client.get("/api/admin/shop/connections").json()
 
     assert body["etsy"]["state"] == "not_connected"
@@ -200,11 +188,12 @@ def test_connections_say_what_to_run_when_nothing_is_set_up(
 SHOP_ID = 51007712
 
 
-def scripted_etsy(grant: RotatingGrant, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Etsy at the network boundary, so each route keeps building its own
-    clients and token store exactly as it does in production."""
+def scripted_etsy(grant: RotatingGrant) -> ClientFactories:
+    """Etsy at the network boundary: each route builds its Etsy clients and
+    token store through ``connections`` exactly as in production, and only
+    the sockets they send through are scripted."""
 
-    def handle(_: httpx.HTTPTransport, request: httpx.Request) -> httpx.Response:
+    def handle(request: httpx.Request) -> httpx.Response:
         if str(request.url) == TOKEN_URL:
             return grant.answer(request)
         expected = f"Bearer {USER_ID}.access-{grant.rotations}"
@@ -215,10 +204,16 @@ def scripted_etsy(grant: RotatingGrant, monkeypatch: pytest.MonkeyPatch) -> None
             return httpx.Response(200, json=shop)
         return httpx.Response(200, json={"count": 0, "results": []})
 
-    monkeypatch.setattr(httpx.HTTPTransport, "handle_request", handle)
-    monkeypatch.setattr(connections, "printify_client", lambda workspace: FakePrintifyClient())
-    monkeypatch.setattr(
-        connections, "catalog_client", lambda workspace: FakeCatalogClient([], {}, {})
+    def http() -> httpx.Client:
+        return httpx.Client(transport=httpx.MockTransport(handle), base_url=BASE_URL)
+
+    def oauth(keystring: str) -> OAuthClient:
+        return OAuthClient(keystring, client=httpx.Client(transport=httpx.MockTransport(handle)))
+
+    return replace(
+        FakeClients().factories(),
+        etsy_listing=lambda root: connections.etsy_listing_client(root, http=http(), oauth=oauth),
+        etsy_shop=lambda root: connections.etsy_shop_client(root, http=http(), oauth=oauth),
     )
 
 
@@ -241,7 +236,7 @@ def expired_sign_in(root: Path) -> None:
 
 
 def test_simultaneous_admin_reads_share_one_rotation_of_an_expired_sign_in(
-    workspace_root: Path, monkeypatch: pytest.MonkeyPatch
+    workspace_root: Path,
 ) -> None:
     """Admin audit I1. The page asks for connections and lookups at once;
     with an expired access token each route's store must not spend the same
@@ -249,8 +244,7 @@ def test_simultaneous_admin_reads_share_one_rotation_of_an_expired_sign_in(
     expired_sign_in(workspace_root)
     held = Gate("the connections request's rotation")
     grant = RotatingGrant(f"{USER_ID}.refresh-0", hold=held)
-    scripted_etsy(grant, monkeypatch)
-    client = TestClient(create_app(Workspace.discover(root_override=workspace_root)))
+    client = serve(workspace_root, scripted_etsy(grant))
 
     with workers(held) as start:
         rows = start("connections", lambda: client.get("/api/admin/shop/connections"))
@@ -266,14 +260,11 @@ def test_simultaneous_admin_reads_share_one_rotation_of_an_expired_sign_in(
     assert (grant.rotations, grant.refused) == (1, 0)
 
 
-def test_a_revoked_sign_in_is_still_reported_to_both_admin_reads(
-    workspace_root: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_a_revoked_sign_in_is_still_reported_to_both_admin_reads(workspace_root: Path) -> None:
     expired_sign_in(workspace_root)
     grant = RotatingGrant(f"{USER_ID}.refresh-0")
     grant.revoke()
-    scripted_etsy(grant, monkeypatch)
-    client = TestClient(create_app(Workspace.discover(root_override=workspace_root)))
+    client = serve(workspace_root, scripted_etsy(grant))
 
     etsy_row = client.get("/api/admin/shop/connections").json()["etsy"]
     etsy_lists = client.get("/api/admin/shop/lookups").json()["etsy"]

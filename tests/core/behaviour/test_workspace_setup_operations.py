@@ -20,6 +20,7 @@ from etsy_listings.core.application import shop_discovery, workspace_setup
 from etsy_listings.core.clients.etsy.fakes import FakeEtsyShopClient
 from etsy_listings.core.clients.etsy.models import ReturnPolicy
 from etsy_listings.core.clients.etsy.models import Shop as EtsyShop
+from etsy_listings.core.clients.etsy.shops import EtsyShopClient
 from etsy_listings.core.clients.printify.models import Shop
 from etsy_listings.core.config.secrets import (
     ETSY_KEYSTRING_VAR,
@@ -169,8 +170,12 @@ def test_rerunning_setup_with_the_same_answers_leaves_shop_yaml_alone(tmp_path: 
 # ------------------------------------------------------------- shop discovery
 
 
+def no_shop_client(root: Path) -> EtsyShopClient:
+    raise AssertionError("discovery built a client for a workspace with no app key pair")
+
+
 def test_no_stored_app_key_means_no_etsy_access(tmp_path: Path) -> None:
-    assert shop_discovery.etsy_access(tmp_path) is None
+    assert shop_discovery.etsy_access(tmp_path, no_shop_client) is None
 
 
 def test_a_stored_app_key_gives_access_even_before_anyone_signs_in(tmp_path: Path) -> None:
@@ -178,27 +183,31 @@ def test_a_stored_app_key_gives_access_even_before_anyone_signs_in(tmp_path: Pat
         f"{ETSY_KEYSTRING_VAR}=k\n{ETSY_SHARED_SECRET_VAR}=s\n", encoding="utf-8"
     )
 
-    access = shop_discovery.etsy_access(tmp_path)
+    access = shop_discovery.etsy_access(tmp_path, lambda root: FakeEtsyShopClient([]))
 
     assert access is not None
     assert access.user_id is None
 
 
-def test_access_reads_etsy_through_the_one_wired_shop_client(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """Setup builds no Etsy client of its own: ``connections`` decides when
-    the app key and bearer are resolved, for setup as for everything else."""
+def test_access_reads_etsy_through_the_shop_client_it_is_given(tmp_path: Path) -> None:
+    """Setup builds no Etsy client of its own: the host's factory --
+    ``connections``' in the CLI -- decides when the app key and bearer are
+    resolved, for setup as for everything else."""
     (tmp_path / layout.ENV_FILE).write_text(
         f"{ETSY_KEYSTRING_VAR}=k\n{ETSY_SHARED_SECRET_VAR}=s\n", encoding="utf-8"
     )
     wired = FakeEtsyShopClient([])
-    monkeypatch.setattr(shop_discovery.connections, "etsy_shop_client", lambda root: wired)
+    asked: list[Path] = []
 
-    access = shop_discovery.etsy_access(tmp_path)
+    def shop_client(root: Path) -> EtsyShopClient:
+        asked.append(root)
+        return wired
+
+    access = shop_discovery.etsy_access(tmp_path, shop_client)
 
     assert access is not None
     assert access.client is wired
+    assert asked == [tmp_path]
 
 
 def test_a_connected_printify_shop_names_its_etsy_shop() -> None:

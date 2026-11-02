@@ -259,6 +259,10 @@ def _pick_return_policy(
     return None if chosen is None else shop_discovery.policy_terms(chosen)
 
 
+def _stored_etsy_access(root: Path) -> EtsyAccess | None:
+    return shop_discovery.etsy_access(root, connections.etsy_shop_client)
+
+
 def run_setup(
     root: Path,
     *,
@@ -267,7 +271,7 @@ def run_setup(
     replace_prompts: bool = False,
 ) -> None:
     factory = client_factory or connections.printify_client_for
-    access_factory = etsy_access or shop_discovery.etsy_access
+    access_factory = etsy_access or _stored_etsy_access
     root.mkdir(parents=True, exist_ok=True)
 
     typer.echo(f"Setting up a workspace in {root}")

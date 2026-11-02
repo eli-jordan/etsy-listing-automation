@@ -12,17 +12,17 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+from typing import Any
 
 import pytest
 
-from etsy_listings.core import connections
-from etsy_listings.core.clients.etsy.fakes import FakeEtsyListingClient, FakeEtsyShopClient
+from etsy_listings.core.clients.etsy.fakes import FakeEtsyListingClient
 from etsy_listings.core.clients.etsy.models import ShippingProfile
-from etsy_listings.core.clients.printify.fakes import FakeCatalogClient, FakePrintifyClient
 from etsy_listings.core.config.defaults import Defaults
 from etsy_listings.core.workspace import layout
 
 from tests.support.builders import set_etsy_shop_id
+from tests.support.clients import FakeClients
 
 pytestmark = pytest.mark.browser
 
@@ -34,14 +34,10 @@ def expect(browser_type):
     return playwright_expect
 
 
-@pytest.fixture(autouse=True)
-def fake_connections(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(connections, "etsy_shop_client", lambda root: FakeEtsyShopClient())
-    monkeypatch.setattr(connections, "etsy_listing_client", lambda root: FakeEtsyListingClient())
-    monkeypatch.setattr(connections, "printify_client", lambda workspace: FakePrintifyClient())
-    monkeypatch.setattr(
-        connections, "catalog_client", lambda workspace: FakeCatalogClient([], {}, {})
-    )
+@pytest.fixture
+def app_options(fake_clients: FakeClients) -> dict[str, Any]:
+    """Serve the app with in-memory Etsy and Printify clients."""
+    return {"clients": fake_clients.factories()}
 
 
 def capture(page, theme: str, state: str) -> None:
@@ -132,18 +128,17 @@ def test_use_it_writes_the_profile_a_lookup_refresh_newly_offers(
     calibrator_server: str,
     workspace_root: Path,
     theme: str,
-    monkeypatch: pytest.MonkeyPatch,
+    fake_clients: FakeClients,
 ) -> None:
     titles = ["Printify US standard", "Printify EU standard"]
-    monkeypatch.setattr(
-        connections,
-        "etsy_listing_client",
-        lambda root: FakeEtsyListingClient(
-            shipping_profiles=[
-                ShippingProfile(shipping_profile_id=n, title=t) for n, t in enumerate(titles)
-            ]
-        ),
-    )
+
+    class Profiles(FakeEtsyListingClient):
+        """Etsy's profiles as ``titles`` holds them when the page asks."""
+
+        def shipping_profiles(self, shop_id: int) -> list[ShippingProfile]:
+            return [ShippingProfile(shipping_profile_id=n, title=t) for n, t in enumerate(titles)]
+
+    fake_clients.etsy_listing = Profiles()
     open_defaults(page, calibrator_server, theme)
     shipping = page.get_by_role("combobox", name="Shipping profile")
     expect(shipping).to_be_enabled()

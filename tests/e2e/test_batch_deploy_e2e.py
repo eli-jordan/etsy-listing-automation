@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import shutil
 from collections.abc import Callable, Iterator, Sequence
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -39,6 +40,7 @@ from etsy_listings.core.ai.brief import default_brief_prompt_text
 from etsy_listings.core.ai.market_queries import default_market_queries_prompt_text
 from etsy_listings.core.ai.prompt import default_seo_prompt_text
 from etsy_listings.core.ai.providers import AiProvider
+from etsy_listings.core.application.dependencies import DEFAULT_CLIENTS
 from etsy_listings.core.clients.etsy import HttpEtsyListingClient
 from etsy_listings.core.clients.printify import PrintifyClient
 from etsy_listings.core.engine.context import EventSink, RunContext
@@ -103,8 +105,11 @@ def client(
         workspace,
         context_factory=real_context,
         seo_provider_factory=ai_providers,
-        market_client_factory=lambda _workspace: connections.etsy_market_client(
-            etsy_market_workspace.root
+        clients=replace(
+            DEFAULT_CLIENTS,
+            etsy_market=lambda _workspace: connections.etsy_market_client(
+                etsy_market_workspace.root
+            ),
         ),
     )
     with TestClient(app) as client:

@@ -11,11 +11,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
 from typer.testing import CliRunner
 
-from etsy_listings.cli.app import app
-from etsy_listings.core import connections
+from etsy_listings.cli.app import app, unlock_listing
 from etsy_listings.core.clients.printify.fakes import FakePrintifyClient
+from etsy_listings.core.workspace.workspace import Workspace
 
 from tests.support.builders import FIXTURE_LISTING as LISTING
 from tests.support.builders import a_lock, set_shop_id
@@ -60,15 +61,16 @@ def test_no_printify_shop_id_fails_cleanly(workspace_root: Path) -> None:
     assert "setup" in result.output
 
 
-def test_it_calls_publishing_failed_on_the_right_product(workspace_root: Path, monkeypatch) -> None:
+def test_it_calls_publishing_failed_on_the_right_product(
+    workspace_root: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
     set_shop_id(workspace_root, SHOP_ID)
     _write_lock(workspace_root, printify_product_id=PRODUCT_ID)
     fake = FakePrintifyClient()
-    monkeypatch.setattr(connections, "printify_client", lambda workspace: fake)
 
-    result = _unlock(workspace_root)
+    unlock_listing(Workspace.discover(root_override=workspace_root), LISTING, lambda _ws: fake)
 
-    assert result.exit_code == 0, result.output
+    output = capsys.readouterr().out
     assert fake.publishing_failed_calls == [PRODUCT_ID]
-    assert PRODUCT_ID in result.output
-    assert "apply" in result.output.lower()
+    assert PRODUCT_ID in output
+    assert "apply" in output.lower()

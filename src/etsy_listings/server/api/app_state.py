@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from fastapi import Request
 
+from etsy_listings.core.application.dependencies import ClientFactories
 from etsy_listings.core.batches import BatchStore, StagingStore
 from etsy_listings.core.workspace.workspace import Workspace
 
@@ -27,4 +28,10 @@ def staging_store(request: Request) -> StagingStore:
 def batch_store(request: Request) -> BatchStore:
     """The process's batch-record store."""
     value: BatchStore = request.app.state.batch_store
+    return value
+
+
+def clients(request: Request) -> ClientFactories:
+    """How the routes build the Etsy and Printify clients they ask through."""
+    value: ClientFactories = request.app.state.clients
     return value

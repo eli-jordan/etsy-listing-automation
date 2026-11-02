@@ -1,8 +1,8 @@
 """The Admin page's Shop tab over HTTP: ``/api/admin/shop``.
 
 Thin by design (ADR-0052): ``core/application/shop_settings.py`` owns the
-revision check, validation and lookups; this module builds the clients from
-``connections``. A refused save is a :class:`ShopSaveRefusal` body rather
+revision check, validation and lookups; this module builds the clients through
+``app_state.clients``. A refused save is a :class:`ShopSaveRefusal` body rather
 than ``{"detail": ...}`` so the page can tell a conflict from field errors
 without parsing text, at the status the app's refusal table gives each
 category (``app.py``'s ``REFUSAL_STATUS``): ``412`` stale, ``422`` refused.
@@ -15,7 +15,6 @@ from dataclasses import asdict
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse
 
-from etsy_listings.core import connections
 from etsy_listings.core.application import shop_settings
 from etsy_listings.core.application.refusals import InvalidShopEditError, ShopRevisionConflictError
 from etsy_listings.core.config.currencies import OFFERED_CURRENCIES
@@ -106,10 +105,11 @@ def _refusal(status: int, refusal: ShopSaveRefusal) -> JSONResponse:
 @router.get("/connections", response_model=ShopConnectionsResponse)
 def read_connections(request: Request) -> ShopConnectionsResponse:
     workspace = app_state.workspace(request)
+    clients = app_state.clients(request)
     rows = shop_settings.shop_connections(
         workspace,
-        etsy=connections.etsy_shop_client(workspace.root),
-        printify=connections.printify_client(workspace),
+        etsy=clients.etsy_shop(workspace.root),
+        printify=clients.printify(workspace),
     )
     return ShopConnectionsResponse(
         etsy=ConnectionRowBody(**asdict(rows.etsy)),
@@ -122,10 +122,11 @@ def read_lookups(request: Request) -> ShopLookupsResponse:
     """Fresh on every call: the page asks again when its window regains
     focus or the seller retries (ADR-0033 forbids a disk cache for Etsy's)."""
     workspace = app_state.workspace(request)
+    clients = app_state.clients(request)
     lookups = shop_settings.shop_lookups(
         workspace,
-        etsy=connections.etsy_listing_client(workspace.root),
-        catalog=connections.catalog_client(workspace),
+        etsy=clients.etsy_listing(workspace.root),
+        catalog=clients.catalog(workspace),
     )
     etsy = lookups.etsy
     return ShopLookupsResponse(

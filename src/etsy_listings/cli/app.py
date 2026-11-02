@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import os
 import sys
-from collections.abc import Iterator, Sequence
+from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Annotated, Any
@@ -29,6 +29,7 @@ from etsy_listings.cli.ui import ui
 from etsy_listings.core import connections
 from etsy_listings.core.clients.printify import (
     PrintifyAuthError,
+    PrintifyClient,
 )
 from etsy_listings.core.config.defaults import MissingDefaultError
 from etsy_listings.core.config.secrets import (
@@ -429,7 +430,14 @@ def unlock(
     unverified rather than withheld. Re-run `apply` afterwards; this command
     only asks Printify to clear the lock, it does not touch the lockfile.
     """
-    workspace = open_workspace(root)
+    unlock_listing(open_workspace(root), listing, connections.printify_client)
+
+
+def unlock_listing(
+    workspace: Workspace, listing: str, printify_client: Callable[[Workspace], PrintifyClient]
+) -> None:
+    """`unlock`'s body, with the Printify client it asks through as an
+    argument so a test hands it a fake."""
     lock = Lockfile.read(workspace.lock_file(listing))
     product_id = lock.remote.get(PRODUCT_ID_KEY) if lock is not None else None
     if not product_id:
@@ -441,7 +449,7 @@ def unlock(
     except MissingDefaultError as exc:
         typer.echo(f"{listing}: {exc}", err=True)
         raise typer.Exit(code=1) from exc
-    printify = connections.printify_client(workspace)
+    printify = printify_client(workspace)
     printify.publishing_failed(
         shop_id, str(product_id), reason="cleared via `etsy-listings unlock`"
     )
