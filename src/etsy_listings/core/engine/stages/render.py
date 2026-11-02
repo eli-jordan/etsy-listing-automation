@@ -66,6 +66,7 @@ from pydantic import BaseModel, ConfigDict
 from etsy_listings.core.config.errors import ConfigLoadError
 from etsy_listings.core.config.garment_profile import GarmentProfile
 from etsy_listings.core.config.listing import Listing, TemplateMediaEntry
+from etsy_listings.core.config.template_positions import layer_boxes
 from etsy_listings.core.engine.change import Action, Verdict
 from etsy_listings.core.engine.context import RunContext, Swatch
 from etsy_listings.core.engine.lock import (
@@ -92,6 +93,7 @@ from etsy_listings.core.preparation.scenes import Composition, PreparedLayer, le
 from etsy_listings.core.render.config import (
     AnyTemplate,
     BoundingBox,
+    LayerBoxes,
     MarigoldAppearance,
     PhotoWarpRenderer,
     RenderConfig,
@@ -167,8 +169,11 @@ class ResolvedLayer:
     Not its ref and not a ``design:`` key, so a renamed file or a reshaped
     map that prints the same bytes hashes the same."""
     bounding_box: BoundingBox
-    """Where the layer prints on the photo, whichever renderer draws it: the
-    swatch every scene samples, and Photo warp's homography target."""
+    """The template's own box for this layer, whichever renderer draws it:
+    where every scene samples its swatch. A listing's position never moves
+    it -- the swatch reads the garment's colour, not the print (template
+    positions plan PR 3) -- so Photo warp's homography target is the
+    :class:`RenderConfig`'s box instead, which does follow the listing."""
     placement_id: str | None = None
 
 
@@ -513,6 +518,9 @@ class _SceneRef:
     template_name: str
     template_cfg: AnyTemplate
     colour: str | None
+    boxes: LayerBoxes
+    """The listing's saved position for this template (ADR-0058); empty
+    renders the template's own boxes."""
 
 
 def _resolve_layers(ref: _SceneRef, design_for: DesignFor) -> list[ResolvedLayer] | Blocked:
@@ -543,7 +551,7 @@ def _scene_render(
     renderer = ref.template_cfg.renderer
     if isinstance(renderer, PhotoWarpRenderer):
         return PhotoWarpRender(
-            configs=tuple(cfg for _, cfg in scene_layers(ref.template_cfg, ref.colour))
+            configs=tuple(cfg for _, cfg in scene_layers(ref.template_cfg, ref.colour, ref.boxes))
         )
     appearance = renderer.config.appearance
     try:
@@ -705,19 +713,24 @@ class _DesignFiles:
 def _resolve_scenes(
     workspace: Workspace,
     listing: str,
+    listing_cfg: Listing,
     design_for: DesignFor,
     templates: _Templates,
-    referenced: list[tuple[str, str | None]],
 ) -> tuple[list[SceneWork], dict[str, str]] | Blocked:
     """Each referenced scene's work, and the hash of each scene's photo."""
     base_hash: dict[str, str] = {}
     works: list[SceneWork] = []
-    for template_name, colour in referenced:
+    for template_name, colour in _referenced_scenes(listing_cfg):
         work = _resolve_scene(
             workspace=workspace,
             listing=listing,
             design_for=design_for,
-            ref=_SceneRef(template_name, templates.configs[template_name], colour),
+            ref=_SceneRef(
+                template_name,
+                templates.configs[template_name],
+                colour,
+                layer_boxes(listing_cfg.template_positions, template_name),
+            ),
         )
         if isinstance(work, Blocked):
             return work
@@ -904,7 +917,7 @@ class RenderStage(Stage[RenderDesired, RenderApplied, RenderLive]):
             return blocked
 
         design_for = _DesignFiles(workspace, listing_cfg, profile, workspace.listing_dir(listing))
-        scenes = _resolve_scenes(workspace, listing, design_for, templates, referenced)
+        scenes = _resolve_scenes(workspace, listing, listing_cfg, design_for, templates)
         if isinstance(scenes, Blocked):
             return scenes
         works, base_hash = scenes

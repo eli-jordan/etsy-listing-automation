@@ -1643,6 +1643,27 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/templates/{name}/positioned-listings": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Get Positioned Listings
+     * @description The listings holding positions for this template, which the calibrator
+     *     names around a save (spec, *Recalibration*). Read only.
+     */
+    get: operations["get_positioned_listings_api_templates__name__positioned_listings_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/templates/{name}/preparation": {
     parameters: {
       query?: never;
@@ -3847,6 +3868,18 @@ export interface components {
        * @default 0.8
        */
       min: number;
+    };
+    /**
+     * PositionedListingResponse
+     * @description A listing holding its own position for a template (ADR-0058), which a
+     *     recalibration may put outside the limits. ``placements`` lists the
+     *     ``multiple`` placement IDs it positions; empty for one box.
+     */
+    PositionedListingResponse: {
+      /** Listing */
+      listing: string;
+      /** Placements */
+      placements: string[];
     };
     /** PreparationJobResponse */
     PreparationJobResponse: {
@@ -8166,6 +8199,37 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["MaskHistoryResponse"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  get_positioned_listings_api_templates__name__positioned_listings_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        name: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PositionedListingResponse"][];
         };
       };
       /** @description Validation Error */

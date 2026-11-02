@@ -358,6 +358,14 @@ on disk — which is exactly the difference that makes it a preview.
 composites it from decoded images the server supplies out of its memo;
 encoding the frame as WebP or PNG is the server's.
 
+Listings may hold their own absolute position for a template (ADR-0058), so a
+recalibrated box never moves them; the next `plan` re-checks each against the
+limits. The calibrator therefore names those listings above its workbench, and
+reads the list again after each save: `positioned_listings()` in
+`application.mockup_templates`, served at
+`GET /api/templates/{name}/positioned-listings`. It reads raw listing documents
+and writes none.
+
 ### Renderer configuration and calibration recovery
 
 Templates require `renderer.type` and put active settings in `renderer.config`.
@@ -828,6 +836,13 @@ later. Each traces to a decision.
   Recalibration and limits edits never rewrite listing corners, and `plan`
   refuses rather than clamps. Marigold positions remain unsupported until the
   spike-gated implementation (ADR-0058; template positions plan PR 7).
+- **A Photo warp layer renders at its effective box.** That is the listing's
+  stored box for the template or placement, else the template's own:
+  `config.template_positions.layer_boxes` feeds `render.config.scene_layers`,
+  so the box is in the hashed `RenderConfig` and only scenes it moves go stale.
+  The scene preview and save-time warm-up read the same saved boxes through
+  `application.listing_reads.listing_scenes`. Swatches keep sampling the
+  template's box, since they read garment colour, not print (plan PR 3).
 - **Render passes are pure.** No I/O, no globals, no clock. Inputs are ndarrays
   and frozen config. This is what makes both the hash and the goldens meaningful
   (`ADR-0012`). Request caches stay in `server`, never in `core/render`.

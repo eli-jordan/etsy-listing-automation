@@ -762,6 +762,14 @@ button:not([class]):active:not(:disabled) {
   color: var(--color-accent-700);
 }
 
+/* Above the workbench rather than under one kind's canvas: every kind can
+   have positioned listings (spec, Recalibration). */
+.app__positions-note {
+  margin-bottom: var(--space-3);
+  background: var(--color-surface);
+  border-radius: var(--radius-lg);
+}
+
 /* — the preview-all grid — */
 .preview-grid {
   display: flex;

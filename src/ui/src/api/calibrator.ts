@@ -206,6 +206,24 @@ export async function getTemplateSwatch(name: string, colour: string): Promise<s
   return data.hex;
 }
 
+/** A listing holding its own position for a template (ADR-0058).
+ * `placements` names the placement IDs of a `multiple` chart it positions;
+ * empty for one box. */
+export interface PositionedListing {
+  listing: string;
+  placements: string[];
+}
+
+/** The listings a recalibration of `name` may put outside the position limits
+ * (spec, *Recalibration*). The calibrator only names them; it never edits one. */
+export async function getPositionedListings(name: string): Promise<PositionedListing[]> {
+  const { data, error } = await api.GET("/api/templates/{name}/positioned-listings", {
+    params: { path: { name } },
+  });
+  if (error || !data) throw new CalibratorApiError(`could not read listings positioned on ${name}`);
+  return data;
+}
+
 type PreviewBody = { calibration_revision?: string; mask_edits?: MaskEdit[] } & (
   | { colour: string; bounding_box: BoundingBox; renderer: Renderer }
   | { placements: Placement[]; renderer: Renderer }

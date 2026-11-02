@@ -192,11 +192,20 @@ class PixelDigests:
         load: Callable[[Path], _Pixels],
         digest: Callable[[_Pixels], str],
     ) -> tuple[_Pixels, str]:
+        """A digest already known for the stamp read before *and* after the
+        decode names these pixels, so it is reused: hashing a full-size
+        design costs more than decoding it from the host's memo, and every
+        colour of a scene decodes the same design again."""
+        key = (kind, path.resolve())
         before = file_version(path)
+        known = self._known.get(key)
         pixels = load(path)
+        unchanged = file_version(path) == before
+        if unchanged and known is not None and known[0] == before:
+            return pixels, known[1]
         value = digest(pixels)
-        if file_version(path) == before:
-            self._known.put((kind, path.resolve()), (before, value))
+        if unchanged:
+            self._known.put(key, (before, value))
         return pixels, value
 
 
