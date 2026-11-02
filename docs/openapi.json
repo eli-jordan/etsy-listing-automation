@@ -10386,7 +10386,7 @@
         ]
       },
       "patch": {
-        "description": "Merge the editor's slice into ``listing.yaml``. A merged document\nthat will not validate writes nothing and answers 200 with\n``field_errors`` beside the listing as it still is.",
+        "description": "Merge the editor's slice into ``listing.yaml``. A merged document\nthat will not validate writes nothing and answers 200 with\n``field_errors`` beside the listing as it still is. Saved positions\nqueue any Marigold coverage inference they need after the response, since\nfinding the installed worker can take seconds (option B).",
         "operationId": "patch_listing_api_listings__name__patch",
         "parameters": [
           {

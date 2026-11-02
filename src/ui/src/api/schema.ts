@@ -952,7 +952,9 @@ export interface paths {
      * Patch Listing
      * @description Merge the editor's slice into ``listing.yaml``. A merged document
      *     that will not validate writes nothing and answers 200 with
-     *     ``field_errors`` beside the listing as it still is.
+     *     ``field_errors`` beside the listing as it still is. Saved positions
+     *     queue any Marigold coverage inference they need after the response, since
+     *     finding the installed worker can take seconds (option B).
      */
     patch: operations["patch_listing_api_listings__name__patch"];
     trace?: never;
