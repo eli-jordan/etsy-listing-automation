@@ -61,7 +61,7 @@ from etsy_listings.core.config.media import ProbeFailure, VideoFacts
 from etsy_listings.core.config.settings import TemplatePositionLimits
 from etsy_listings.core.config.template_positions import BoxPosition, PlacementPositions
 from etsy_listings.core.render.config import AnyTemplate, BoundingBox, MultipleTemplate
-from etsy_listings.core.render.positions import decompose
+from etsy_listings.core.render.positions import Pose, decompose
 
 Severity = Literal["block", "warn", "info"]
 """``info`` is a note about what Etsy will do, not a problem with the listing
@@ -775,16 +775,20 @@ _POSITION_RESIDUAL_PIXELS = 1.0
 _POSITION_ROUNDOFF = 1e-8
 
 
-def _box_position_problems(
-    template_box: BoundingBox, box: BoundingBox, limits: TemplatePositionLimits
-) -> list[str]:
+def _similarity_pose(template_box: BoundingBox, box: BoundingBox) -> Pose | None:
+    """``box`` as a pose of ``template_box``, or ``None`` when it is not a
+    similarity of it (spec Validation 1)."""
     try:
         fit = decompose(template_box, box)
     except ValueError:
-        return ["is not a plain move, resize or tilt of the template's box"]
+        return None
     if fit.residual_pixels > _POSITION_RESIDUAL_PIXELS + _POSITION_ROUNDOFF:
-        return ["is not a plain move, resize or tilt of the template's box"]
-    pose = fit.pose
+        return None
+    return fit.pose
+
+
+def _limit_problems(pose: Pose, limits: TemplatePositionLimits) -> list[str]:
+    """Where ``pose`` lies outside ``limits`` (spec Validation 2)."""
     problems = []
     if (
         not limits.scale.min - _POSITION_ROUNDOFF
@@ -801,6 +805,15 @@ def _box_position_problems(
     if abs(pose.rotation) > limits.rotation + _POSITION_ROUNDOFF:
         problems.append(f"has rotation {pose.rotation:g}°; the limit is ±{limits.rotation:g}°")
     return problems
+
+
+def _box_position_problems(
+    template_box: BoundingBox, box: BoundingBox, limits: TemplatePositionLimits
+) -> list[str]:
+    pose = _similarity_pose(template_box, box)
+    if pose is None:
+        return ["is not a plain move, resize or tilt of the template's box"]
+    return _limit_problems(pose, limits)
 
 
 def _placement_position_problems(
@@ -873,6 +886,60 @@ def check_template_positions(
             problems.extend(_position_problems(key, position, templates[template_name], limits))
     prefix = f"{name}: " if name else ""
     return [Issue("block", "images", key, f"{prefix}{key} {problem}") for key, problem in problems]
+
+
+def positions_outside_limits(
+    listing: Listing,
+    templates: Mapping[str, AnyTemplate],
+    limits: TemplatePositionLimits,
+) -> list[str]:
+    """The dotted keys of ``listing``'s positions that ``limits`` would refuse
+    for their scale, offset or rotation alone (spec Validation 2).
+
+    What a limits change would newly block, for Settings' confirmation
+    (template positions PR 5). A position refused whatever the limits -- not
+    a similarity, a template missing from ``media`` or unavailable, a stale
+    placement, a Marigold template while rule 5 stands -- is not listed: the
+    listing is blocked already and new limits change nothing about it.
+    """
+    referenced = {
+        entry.template for entry in listing.media if isinstance(entry, TemplateMediaEntry)
+    }
+    outside: list[str] = []
+    for template_name, position in (listing.template_positions or {}).items():
+        template = templates.get(template_name) if template_name in referenced else None
+        if template is None:
+            continue
+        boxes = _positioned_boxes(f"template_positions.{template_name}", position, template)
+        outside += [path for path, own, box in boxes if _limited(own, box, limits)]
+    return outside
+
+
+def _limited(template_box: BoundingBox, box: BoundingBox, limits: TemplatePositionLimits) -> bool:
+    """Whether ``box`` is a similarity of ``template_box`` that ``limits`` refuse."""
+    pose = _similarity_pose(template_box, box)
+    return pose is not None and bool(_limit_problems(pose, limits))
+
+
+def _positioned_boxes(
+    key: str, position: BoxPosition | PlacementPositions, template: AnyTemplate
+) -> list[tuple[str, BoundingBox, BoundingBox]]:
+    """Each well-formed position under ``key`` with its template box. A
+    shape mismatch, a stale placement or a Marigold template yields none."""
+    if template.renderer.type == "marigold":
+        return []
+    if isinstance(template, MultipleTemplate):
+        if not isinstance(position, PlacementPositions):
+            return []
+        boxes = {placement.id: placement.bounding_box for placement in template.placements}
+        return [
+            (f"{key}.placements.{pid}", boxes[pid], placement.bounding_box)
+            for pid, placement in position.placements.items()
+            if pid in boxes
+        ]
+    if not isinstance(position, BoxPosition):
+        return []
+    return [(key, template.bounding_box, position.bounding_box)]
 
 
 @dataclass(frozen=True)

@@ -4,7 +4,7 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse
 
 from etsy_listings.core.ai.discovery import ModelCatalogs, ModelDiscovery
-from etsy_listings.core.application import workspace_settings
+from etsy_listings.core.application import template_position_impact, workspace_settings
 from etsy_listings.core.application.refusals import (
     InvalidSettingsEditError,
     SettingsRevisionConflictError,
@@ -12,7 +12,10 @@ from etsy_listings.core.application.refusals import (
 from etsy_listings.core.config.errors import ConfigLoadError
 from etsy_listings.core.config.settings import PROVIDER_NAMES, AiProviderSettings
 from etsy_listings.server.api.schemas import (
+    ListingOutsideBody,
     SettingsSaveRefusal,
+    TemplatePositionImpactRequest,
+    TemplatePositionImpactResponse,
     WorkspaceSettingsPatch,
     WorkspaceSettingsResponse,
 )
@@ -66,6 +69,7 @@ def edit_settings(
         "providers": workspace_settings.PROVIDERS,
         "step_limit_minutes": workspace_settings.STEP_LIMIT,
         "run_limit_minutes": workspace_settings.RUN_LIMIT,
+        "template_positions": workspace_settings.TEMPLATE_POSITIONS,
     }
     changes = {
         keys[key]: value for key, value in body.changes.model_dump(exclude_unset=True).items()
@@ -82,14 +86,42 @@ def edit_settings(
             content=SettingsSaveRefusal(kind="conflict", message=str(exc)).model_dump(),
         )
     except InvalidSettingsEditError as exc:
-        return JSONResponse(
-            status_code=422,
-            content=SettingsSaveRefusal(
-                kind="invalid", message=str(exc), field_errors=exc.field_errors
-            ).model_dump(),
-        )
+        return _invalid(exc)
     # ADR-0048: a newly available slot can dispatch immediately. Waking never
     # stops active runs when the seller lowered the limit.
     if workspace_settings.CONCURRENCY in changes:
         request.app.state.ai.queue.wake()
     return _response(view)
+
+
+@router.post(
+    "/template-positions/impact",
+    response_model=TemplatePositionImpactResponse,
+    responses={422: {"model": SettingsSaveRefusal}},
+)
+def template_positions_impact(
+    request: Request, body: TemplatePositionImpactRequest
+) -> TemplatePositionImpactResponse | JSONResponse:
+    """A read for Settings' confirmation (template positions PR 5): who the
+    candidate limits would block, and which Marigold templates would refit."""
+    try:
+        limits = template_position_impact.candidate_limits(body.limits)
+    except InvalidSettingsEditError as exc:
+        return _invalid(exc)
+    impact = template_position_impact.template_position_impact(request.app.state.workspace, limits)
+    return TemplatePositionImpactResponse(
+        outside=[
+            ListingOutsideBody(listing=row.listing, positions=list(row.positions))
+            for row in impact.outside
+        ],
+        refit=list(impact.refit),
+    )
+
+
+def _invalid(exc: InvalidSettingsEditError) -> JSONResponse:
+    return JSONResponse(
+        status_code=422,
+        content=SettingsSaveRefusal(
+            kind="invalid", message=str(exc), field_errors=exc.field_errors
+        ).model_dump(),
+    )

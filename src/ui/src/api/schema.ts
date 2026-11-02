@@ -39,6 +39,27 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/admin/settings/template-positions/impact": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Template Positions Impact
+     * @description A read for Settings' confirmation (template positions PR 5): who the
+     *     candidate limits would block, and which Marigold templates would refit.
+     */
+    post: operations["template_positions_impact_api_admin_settings_template_positions_impact_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/admin/shop": {
     parameters: {
       query?: never;
@@ -3056,6 +3077,13 @@ export interface components {
        */
       type: "listing_failed";
     };
+    /** ListingOutsideBody */
+    ListingOutsideBody: {
+      /** Listing */
+      listing: string;
+      /** Positions */
+      positions: string[];
+    };
     /** ListingPlanRequest */
     ListingPlanRequest: {
       /**
@@ -4849,6 +4877,23 @@ export interface components {
       /** File */
       file: string;
     };
+    /** TemplatePositionImpactRequest */
+    TemplatePositionImpactRequest: {
+      /** Limits */
+      limits: {
+        [key: string]: unknown;
+      };
+    };
+    /**
+     * TemplatePositionImpactResponse
+     * @description What saving the candidate limits would change; nothing is written.
+     */
+    TemplatePositionImpactResponse: {
+      /** Outside */
+      outside: components["schemas"]["ListingOutsideBody"][];
+      /** Refit */
+      refit: string[];
+    };
     /**
      * TemplatePositionLimits
      * @description Mockup-only similarity limits; fractions in the template's unit frame.
@@ -5009,6 +5054,10 @@ export interface components {
       run_limit_minutes?: number | null;
       /** Step Limit Minutes */
       step_limit_minutes?: number | null;
+      /** Template Positions */
+      template_positions?: {
+        [key: string]: unknown;
+      } | null;
       /** Weights */
       weights?: {
         [key: string]: number;
@@ -5036,7 +5085,7 @@ export interface components {
       run_limit_minutes: number;
       /** Step Limit Minutes */
       step_limit_minutes: number;
-      readonly template_positions: components["schemas"]["TemplatePositionLimits"];
+      template_positions: components["schemas"]["TemplatePositionLimits"];
       /** Weights */
       weights: {
         [key: string]: number;
@@ -5152,6 +5201,39 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  template_positions_impact_api_admin_settings_template_positions_impact_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["TemplatePositionImpactRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["TemplatePositionImpactResponse"];
+        };
+      };
+      /** @description Unprocessable Entity */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["SettingsSaveRefusal"];
         };
       };
     };

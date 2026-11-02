@@ -3115,6 +3115,27 @@
         "title": "ListingFailedEvent",
         "type": "object"
       },
+      "ListingOutsideBody": {
+        "properties": {
+          "listing": {
+            "title": "Listing",
+            "type": "string"
+          },
+          "positions": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Positions",
+            "type": "array"
+          }
+        },
+        "required": [
+          "listing",
+          "positions"
+        ],
+        "title": "ListingOutsideBody",
+        "type": "object"
+      },
       "ListingPlanRequest": {
         "additionalProperties": false,
         "properties": {
@@ -7496,6 +7517,45 @@
         "title": "TemplatePhoto",
         "type": "object"
       },
+      "TemplatePositionImpactRequest": {
+        "properties": {
+          "limits": {
+            "additionalProperties": true,
+            "title": "Limits",
+            "type": "object"
+          }
+        },
+        "required": [
+          "limits"
+        ],
+        "title": "TemplatePositionImpactRequest",
+        "type": "object"
+      },
+      "TemplatePositionImpactResponse": {
+        "description": "What saving the candidate limits would change; nothing is written.",
+        "properties": {
+          "outside": {
+            "items": {
+              "$ref": "#/components/schemas/ListingOutsideBody"
+            },
+            "title": "Outside",
+            "type": "array"
+          },
+          "refit": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Refit",
+            "type": "array"
+          }
+        },
+        "required": [
+          "outside",
+          "refit"
+        ],
+        "title": "TemplatePositionImpactResponse",
+        "type": "object"
+      },
       "TemplatePositionLimits": {
         "additionalProperties": false,
         "description": "Mockup-only similarity limits; fractions in the template's unit frame.",
@@ -7918,6 +7978,18 @@
             ],
             "title": "Step Limit Minutes"
           },
+          "template_positions": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Template Positions"
+          },
           "weights": {
             "anyOf": [
               {
@@ -7993,8 +8065,7 @@
             "type": "integer"
           },
           "template_positions": {
-            "$ref": "#/components/schemas/TemplatePositionLimits",
-            "readOnly": true
+            "$ref": "#/components/schemas/TemplatePositionLimits"
           },
           "weights": {
             "additionalProperties": {
@@ -8159,6 +8230,48 @@
           }
         },
         "summary": "Model Catalogs",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/api/admin/settings/template-positions/impact": {
+      "post": {
+        "description": "A read for Settings' confirmation (template positions PR 5): who the\ncandidate limits would block, and which Marigold templates would refit.",
+        "operationId": "template_positions_impact_api_admin_settings_template_positions_impact_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TemplatePositionImpactRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TemplatePositionImpactResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SettingsSaveRefusal"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          }
+        },
+        "summary": "Template Positions Impact",
         "tags": [
           "admin"
         ]
