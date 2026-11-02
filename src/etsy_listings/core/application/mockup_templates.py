@@ -1,6 +1,7 @@
 """Calibrating a mockup template: what the calibrator's rail lists, the kind
-a folder of photos is given, ``template.yaml`` read and saved, and the scene
-a preview composites (module-structure plan, PR 7).
+a folder of photos is given, ``template.yaml`` read and saved, the listings
+a save may affect, and the scene a preview composites (module-structure
+plan, PR 7).
 
 Nothing here creates a template. A template is a folder of photos the
 seller puts in the workspace, so every operation names one that exists and
@@ -31,6 +32,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal
 
+import yaml
 from PIL import Image
 
 from etsy_listings.core.application.refusals import (
@@ -62,6 +64,7 @@ from etsy_listings.core.render.pipeline import Layer, render_scene
 from etsy_listings.core.render.swatch import sample_swatch
 from etsy_listings.core.render.types import RGB, RGBA, FloatMap
 from etsy_listings.core.workspace.calibration import Calibration, CalibrationStore, MaskEdit
+from etsy_listings.core.workspace.listing_documents import ListingDocuments, ListingMissingError
 from etsy_listings.core.workspace.workspace import (
     AmbiguousColourSuffixError,
     ScenePhoto,
@@ -403,6 +406,57 @@ def save_calibration(workspace: Workspace, name: str, save: CalibrationSave) -> 
             request_id=save.request_id,
             mask_edits=save.mask_edits,
         )
+
+
+@dataclass(frozen=True)
+class PositionedListing:
+    """A listing that holds its own position for a template (ADR-0058).
+    ``placements`` names the placement IDs a ``multiple`` chart's position
+    covers, sorted; it is empty for a single or colour-matrix box."""
+
+    listing: str
+    placements: tuple[str, ...]
+
+
+def positioned_listings(workspace: Workspace, template: str) -> list[PositionedListing]:
+    """The listings whose positions a recalibration of ``template`` may put
+    outside the limits (spec, *Recalibration*). Positions are absolute, so a
+    new box never moves them; the next ``plan`` re-checks each one. This only
+    reads: the calibrator never edits listings.
+
+    Each document is read raw through :class:`ListingDocuments`, not
+    validated: a listing with some unrelated problem still holds its
+    position, and one unreadable file must not hide the rest. A listing
+    marked ``lifecycle: deleted`` never renders again, so it is left out, as
+    is a document that cannot be parsed or a position of no known shape.
+    """
+    require_template(workspace, template)
+    documents = ListingDocuments(workspace)
+    found: list[PositionedListing] = []
+    for name in workspace.listing_names():
+        try:
+            document = documents.read(name)
+        except (ListingMissingError, yaml.YAMLError, UnicodeDecodeError):
+            continue
+        placements = _held_position(document, template)
+        if placements is not None:
+            found.append(PositionedListing(name, placements))
+    return found
+
+
+def _held_position(document: dict[str, object], template: str) -> tuple[str, ...] | None:
+    """The placement IDs ``document`` positions on ``template`` (``()`` for one
+    box), or ``None`` when it holds no position there that could render."""
+    positions = document.get("template_positions")
+    if document.get("lifecycle") == "deleted" or not isinstance(positions, dict):
+        return None
+    entry = positions.get(template)
+    if not isinstance(entry, dict):
+        return None
+    placements = entry.get("placements")
+    if isinstance(placements, dict) and placements:
+        return tuple(sorted(str(p) for p in placements))
+    return () if "bounding_box" in entry else None
 
 
 def _load_config(workspace: Workspace, name: str) -> AnyTemplate:

@@ -137,6 +137,15 @@ class SwatchResponse(BaseModel):
     hex: str
 
 
+class PositionedListingResponse(BaseModel):
+    """A listing holding its own position for a template (ADR-0058), which a
+    recalibration may put outside the limits. ``placements`` lists the
+    ``multiple`` placement IDs it positions; empty for one box."""
+
+    listing: str
+    placements: list[str]
+
+
 class ColourReportRow(BaseModel):
     """What one photo in a candidate ``colour-matrix`` set will be taken as.
 
