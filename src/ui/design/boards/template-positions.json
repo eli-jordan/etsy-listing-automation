@@ -1,0 +1,69 @@
+{
+  "version": 1,
+  "name": "template-positions",
+  "auto": false,
+  "layout": {
+    "rows": [
+      [
+        "template-positions"
+      ],
+      [
+        {
+          "space": 200
+        }
+      ],
+      [
+        "template-positions-settings"
+      ]
+    ],
+    "scenes": {
+      "template-positions": {
+        "rows": [
+          [
+            "01-selected",
+            "02-adjusting",
+            "03-multiple",
+            "04-out-of-range"
+          ]
+        ]
+      },
+      "template-positions-settings": {
+        "rows": [
+          [
+            "01-limits",
+            "02-confirm"
+          ]
+        ]
+      }
+    }
+  },
+  "nodes": [
+    {
+      "key": "tp_01",
+      "frame": "template-positions/01-selected"
+    },
+    {
+      "key": "tp_02",
+      "frame": "template-positions/02-adjusting"
+    },
+    {
+      "key": "tp_03",
+      "frame": "template-positions/03-multiple"
+    },
+    {
+      "key": "tp_04",
+      "frame": "template-positions/04-out-of-range"
+    },
+    {
+      "key": "tps_01",
+      "frame": "template-positions-settings/01-limits"
+    },
+    {
+      "key": "tps_02",
+      "frame": "template-positions-settings/02-confirm"
+    }
+  ],
+  "order": 20,
+  "title": "Template Positions",
+  "description": "Clickable prototype (round 3): Adjust position switch + handles + Reset, a multiple template, an out-of-limits entry, and Settings > Template rendering."
+}
