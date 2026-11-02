@@ -807,6 +807,16 @@ later. Each traces to a decision.
 
 ### Rendering
 
+- **A listing's template position is absolute mockup geometry.**
+  `config.template_positions` reuses `render.config.BoundingBox`; a single or
+  colour-matrix template has one box, a multiple template a map by placement
+  ID. `render.positions` composes and fits similarities in the template's unit
+  frame through its homography, with a maximum photo-pixel corner residual.
+  `config.listing_validation.check_template_positions` owns the refusals and
+  receives the current templates and `Settings.template_positions` limits.
+  Recalibration and limits edits never rewrite listing corners, and `plan`
+  refuses rather than clamps. Marigold positions remain unsupported until the
+  spike-gated implementation (ADR-0058; template positions plan PR 7).
 - **Render passes are pure.** No I/O, no globals, no clock. Inputs are ndarrays
   and frozen config. This is what makes both the hash and the goldens meaningful
   (`ADR-0012`). Request caches stay in `server`, never in `core/render`.

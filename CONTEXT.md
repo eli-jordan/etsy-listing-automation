@@ -15,6 +15,11 @@ A listing's `listing.yaml`, as written. It is edited only by reading it,
 changing it and writing it back, all under the listing's lock.
 _Avoid_: listing config, listing file
 
+**Template position**:
+A listing's own position for artwork on one mockup template, or one placement
+within a template showing several garments. It changes the mockup only.
+_Avoid_: print placement, template calibration, per-colour position
+
 **Listing artifacts**:
 Everything in the workspace keyed by a listing's name: its directory, render
 cache, previews, market snapshot and cached proposal. They are moved and
