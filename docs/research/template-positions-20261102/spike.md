@@ -239,15 +239,43 @@ down-right), man-with-tattoos 60.2 px (offset right), woman-oversize-fit
 
 ### Pictures
 
-Each picture shows direct fit | option A | ΔE heat map (0–10).
+Each picture shows direct fit | option A | ΔE heat map (0–10), on the test
+chart. Shift figures are 99th percentiles.
 
-![Hanging on fence, identity, chart: option A matches apart from 1–3 px line offsets](PENDING:cc1717-hanging-on-fence-identity-chart.png)
-![Hanging on fence, corner down-right, chart: the worst flat-shirt pose, where the print runs onto the sleeve](PENDING:cc1717-hanging-on-fence-corner-down-right-chart.png)
-![Man with tattoos, identity, ruler: option A shifts and bends the grid at the template's own box](PENDING:cc1717-man-with-tattoos-standing-identity-hike.png)
-![Man with tattoos, identity, chart, anchored variant: most of the shift removed, a few-pixel residual](PENDING:cc1717-man-with-tattoos-standing-identity-chart-anchored.png)
-![Woman oversize fit, offset left, chart: the drape on the left is rendered differently](PENDING:cc1717-woman-with-oversize-fit-offset-left-chart.png)
-![Woman oversize fit, offset left, chart, anchored variant](PENDING:cc1717-woman-with-oversize-fit-offset-left-chart-anchored.png)
-![Published maps vs option A at the template box, man with tattoos, ruler](PENDING:cc1717-man-with-tattoos-standing-published-vs-option-a-hike.png)
+**Hanging on fence**
+
+![hanging on fence, template box (3.1 px; anchored 2.1 px), option A as specified](https://github.com/eli-jordan/etsy-listing-automation/blob/pr-screenshots/feat-positions-1-spike/cc1717-hanging-on-fence-identity-chart.png?raw=true)
+
+![hanging on fence, template box (3.1 px; anchored 2.1 px), anchored variant](https://github.com/eli-jordan/etsy-listing-automation/blob/pr-screenshots/feat-positions-1-spike/cc1717-hanging-on-fence-identity-chart-anchored.png?raw=true)
+
+![hanging on fence, corner down-right: worst pose, print runs onto the sleeve (31.9 px; anchored 4.1 px), option A as specified](https://github.com/eli-jordan/etsy-listing-automation/blob/pr-screenshots/feat-positions-1-spike/cc1717-hanging-on-fence-corner-down-right-chart.png?raw=true)
+
+![hanging on fence, corner down-right: worst pose, print runs onto the sleeve (31.9 px; anchored 4.1 px), anchored variant](https://github.com/eli-jordan/etsy-listing-automation/blob/pr-screenshots/feat-positions-1-spike/cc1717-hanging-on-fence-corner-down-right-chart-anchored.png?raw=true)
+
+**Man with tattoos**
+
+![man with tattoos, template box (36.0 px; anchored 11.7 px), option A as specified](https://github.com/eli-jordan/etsy-listing-automation/blob/pr-screenshots/feat-positions-1-spike/cc1717-man-with-tattoos-standing-identity-chart.png?raw=true)
+
+![man with tattoos, template box (36.0 px; anchored 11.7 px), anchored variant](https://github.com/eli-jordan/etsy-listing-automation/blob/pr-screenshots/feat-positions-1-spike/cc1717-man-with-tattoos-standing-identity-chart-anchored.png?raw=true)
+
+![man with tattoos, offset right: worst pose (60.2 px; anchored 11.4 px), option A as specified](https://github.com/eli-jordan/etsy-listing-automation/blob/pr-screenshots/feat-positions-1-spike/cc1717-man-with-tattoos-standing-offset-right-chart.png?raw=true)
+
+![man with tattoos, offset right: worst pose (60.2 px; anchored 11.4 px), anchored variant](https://github.com/eli-jordan/etsy-listing-automation/blob/pr-screenshots/feat-positions-1-spike/cc1717-man-with-tattoos-standing-offset-right-chart-anchored.png?raw=true)
+
+**Woman oversize fit**
+
+![woman oversize fit, template box (23.1 px; anchored 12.8 px), option A as specified](https://github.com/eli-jordan/etsy-listing-automation/blob/pr-screenshots/feat-positions-1-spike/cc1717-woman-with-oversize-fit-identity-chart.png?raw=true)
+
+![woman oversize fit, template box (23.1 px; anchored 12.8 px), anchored variant](https://github.com/eli-jordan/etsy-listing-automation/blob/pr-screenshots/feat-positions-1-spike/cc1717-woman-with-oversize-fit-identity-chart-anchored.png?raw=true)
+
+![woman oversize fit, offset left: worst pose, the left-side drape (51.6 px; anchored 25.1 px), option A as specified](https://github.com/eli-jordan/etsy-listing-automation/blob/pr-screenshots/feat-positions-1-spike/cc1717-woman-with-oversize-fit-offset-left-chart.png?raw=true)
+
+![woman oversize fit, offset left: worst pose, the left-side drape (51.6 px; anchored 25.1 px), anchored variant](https://github.com/eli-jordan/etsy-listing-automation/blob/pr-screenshots/feat-positions-1-spike/cc1717-woman-with-oversize-fit-offset-left-chart-anchored.png?raw=true)
+
+**Published maps vs option A at the template box** (man with tattoos, ruler
+design): the shift production would see on adopting option A unchanged.
+
+![Man with tattoos, published maps vs option A at the template box, ruler design](https://github.com/eli-jordan/etsy-listing-automation/blob/pr-screenshots/feat-positions-1-spike/cc1717-man-with-tattoos-standing-published-vs-option-a-hike.png?raw=true)
 
 The harness writes the same three-panel picture for every template, pose and
 design (and an `-anchored` twin), 162 in all.
