@@ -1,3 +1,4 @@
+import { PreparationNotice } from "./PreparationNotice";
 import type { ReactNode } from "react";
 import type { PhotoWarpTemplate } from "../types";
 import { useCallback, useMemo, useState } from "react";
@@ -57,16 +58,8 @@ function uncolouredWarning(placements: Placement[]): string | null {
  * docs/history/implementation-plan.md -- it belongs in the Advanced disclosure when it
  * comes back.
  */
-function PhotoWarpMultipleEditor({
-  rendererControls,
-  templateName,
-  config,
-  space,
-  onChange,
-  design,
-  onDesignChange,
-  knownColours,
-}: Props) {
+function PhotoWarpMultipleEditor(props: Props) {
+  const { templateName, config, onChange, design, knownColours } = props;
   const [selectedIndex, setSelectedIndex] = useState(0);
 
   const previewUrl = usePreview(
@@ -200,13 +193,8 @@ function PhotoWarpMultipleEditor({
 
   return (
     <EditorShell
-      {...(rendererControls ? { rendererControls } : {})}
-      templateName={templateName}
-      config={config}
-      onChange={onChange}
-      design={design}
-      onDesignChange={onDesignChange}
-      space={space}
+      {...props}
+      rendererControls={props.rendererControls || null}
       previewUrl={previewUrl}
       jobs={jobs}
       outlineLabel="Show all design boxes"
@@ -247,12 +235,7 @@ function PhotoWarpMultipleEditor({
 export function MultipleEditor(props: Omit<Props, "config"> & { config: MultipleTemplate }) {
   const renderer = props.config.renderer;
   if (renderer.type !== "photo-warp") {
-    return (
-      <p role="status">
-        Prepare the template first. Marigold rendering is unavailable until template maps are
-        prepared.
-      </p>
-    );
+    return <PreparationNotice />;
   }
   return <PhotoWarpMultipleEditor {...props} config={{ ...props.config, renderer }} />;
 }

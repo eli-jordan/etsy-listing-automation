@@ -30,7 +30,8 @@ from etsy_listings.core.errors import UserFacingError
 from etsy_listings.core.listing_templates.check import check_listing_template_files
 from etsy_listings.core.workspace import layout
 from etsy_listings.core.workspace.facts import WorkspaceFacts
-from etsy_listings.core.workspace.workspace import InvalidRefError, Workspace, remove_tree
+from etsy_listings.core.workspace.trees import remove_tree
+from etsy_listings.core.workspace.workspace import InvalidRefError, Workspace
 
 _ASSETS_REF = f"./{layout.LISTING_TEMPLATE_ASSETS_DIR}/"
 

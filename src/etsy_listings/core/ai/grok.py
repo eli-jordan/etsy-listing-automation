@@ -30,34 +30,26 @@ for the shared orchestrator to validate. Flags below were confirmed against
 from __future__ import annotations
 
 import json
-import shutil
-import subprocess
 import tempfile
-import threading
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import override
 
+# jscpd:ignore-start -- S05/S07: sharing these imports would add a re-export facade.
+from etsy_listings.core.ai import cli_support
 from etsy_listings.core.ai.errors import (
-    ProviderCancelledError,
     ProviderGenerationError,
-    ProviderTimeoutError,
-    ProviderUnavailableError,
     classify_process_failure,
 )
 from etsy_listings.core.ai.models import (
-    Deadline,
     ProviderReadiness,
-    ProviderTask,
     RawProviderResult,
-    RepairContext,
 )
 from etsy_listings.core.ai.process import run_managed
-from etsy_listings.core.ai.repair import prompt_text_for
+
+# jscpd:ignore-end -- dependencies stay explicit in each adapter.
 
 PROVIDER_NAME = "grok"
-
-_READINESS_TIMEOUT_SECONDS = 15.0
 
 _READ_ONLY_TOOLS = "read_file,grep,list_dir"
 """Allowlist passed to ``--tools``. Headless tool ids from Grok's own
@@ -85,33 +77,14 @@ def auth_file() -> Path:
 
 
 @dataclass
-class GrokProvider:
+class GrokProvider(cli_support.LocalCliProvider):
     """The `AiProvider` adapter for the local Grok CLI."""
 
-    workspace_root: Path
     binary: str = "grok"
-    model: str | None = None
-    effort: str | None = None
+    provider_name = PROVIDER_NAME
+    image_tool = "read_file"
 
-    def _resolved_binary(self) -> str:
-        """See `CodexProvider._resolved_binary`: on Windows the bare name is
-        not launchable without ``shell=True``."""
-        return shutil.which(self.binary) or self.binary
-
-    def readiness(self) -> ProviderReadiness:
-        if shutil.which(self.binary) is None:
-            return ProviderReadiness(ready=False, reason=f"{self.binary} was not found on PATH")
-
-        unavailable = self._check_authenticated()
-        if unavailable is not None:
-            return unavailable
-
-        unavailable = self._check_headless_capability()
-        if unavailable is not None:
-            return unavailable
-
-        return ProviderReadiness(ready=True)
-
+    @override
     def _check_authenticated(self) -> ProviderReadiness | None:
         path = auth_file()
         try:
@@ -127,44 +100,16 @@ class GrokProvider:
             )
         return None
 
-    def _check_headless_capability(self) -> ProviderReadiness | None:
-        try:
-            result = subprocess.run(
-                [self._resolved_binary(), "--help"],
-                capture_output=True,
-                text=True,
-                timeout=_READINESS_TIMEOUT_SECONDS,
-            )
-        except (OSError, subprocess.SubprocessError) as exc:
-            return ProviderReadiness(
-                ready=False, reason=f"could not check `{self.binary} --help`: {exc}"
-            )
-        if result.returncode != 0:
-            return ProviderReadiness(
-                ready=False, reason=f"`{self.binary} --help` exited {result.returncode}"
-            )
-        missing = [flag for flag in _REQUIRED_HELP_FLAGS if flag not in result.stdout]
-        if missing:
-            return ProviderReadiness(
-                ready=False,
-                reason=(
-                    f"the installed {self.binary} CLI does not support the required "
-                    f"headless flags: {', '.join(missing)}"
-                ),
-            )
-        return None
+    @override
+    def _check_capability(self) -> ProviderReadiness | None:
+        # A local help probe checks advertised flags without spending a generation call.
+        return cli_support.check_capability(
+            self.binary, ("--help",), _REQUIRED_HELP_FLAGS, "headless"
+        )
 
-    def generate(
-        self,
-        task: ProviderTask,
-        deadline: Deadline,
-        *,
-        repair: RepairContext | None = None,
-        cancel_event: threading.Event | None = None,
-    ) -> RawProviderResult:
-        if shutil.which(self.binary) is None:
-            raise ProviderUnavailableError(PROVIDER_NAME, f"{self.binary} was not found on PATH")
-        prompt_text = self._prompt_text(task, repair)
+    @override
+    def _generate(self, invocation: cli_support.Invocation) -> RawProviderResult:
+        task, prompt_text = invocation.task, invocation.prompt_text
         prompt_path = self._write_prompt(prompt_text)
         argv = [
             self._resolved_binary(),
@@ -195,23 +140,13 @@ class GrokProvider:
                 argv,
                 cwd=self.workspace_root,
                 input_text="",
-                deadline=deadline,
-                cancel_event=cancel_event,
+                deadline=invocation.deadline,
+                cancel_event=invocation.cancel_event,
             )
         finally:
             prompt_path.unlink(missing_ok=True)
 
-        if result.cancelled:
-            raise ProviderCancelledError(PROVIDER_NAME)
-        if result.timed_out:
-            raise ProviderTimeoutError(PROVIDER_NAME)
-        if result.returncode != 0:
-            raise classify_process_failure(
-                PROVIDER_NAME,
-                returncode=result.returncode,
-                stdout=result.stdout,
-                stderr=result.stderr,
-            )
+        cli_support.check_result(PROVIDER_NAME, result)
         return RawProviderResult(
             provider=PROVIDER_NAME, raw_output=self._extract_result_text(result.stdout)
         )
@@ -224,14 +159,7 @@ class GrokProvider:
         that answer, and it is often prose or a fenced block rather than
         JSON. The structured object is what gets validated.
         """
-        try:
-            envelope: Any = json.loads(stdout)
-        except json.JSONDecodeError as exc:
-            raise ProviderGenerationError(
-                PROVIDER_NAME, 0, f"stdout was not valid JSON: {exc}"
-            ) from exc
-        if not isinstance(envelope, dict):
-            raise ProviderGenerationError(PROVIDER_NAME, 0, "stdout was not a JSON object")
+        envelope = cli_support.json_object(PROVIDER_NAME, stdout)
         if envelope.get("is_error") or envelope.get("error"):
             reported = stdout
             text = envelope.get("text")
@@ -245,18 +173,6 @@ class GrokProvider:
         if isinstance(text, str) and text.strip():
             return text
         raise ProviderGenerationError(PROVIDER_NAME, 0, "envelope had no structured output")
-
-    def _prompt_text(self, task: ProviderTask, repair: RepairContext | None) -> str:
-        with_image = ProviderTask(
-            prompt_text=(
-                f"{task.prompt_text}\n\n"
-                f"The design image is at this absolute path: {task.design_image}\n"
-                "Use the read_file tool to view it before answering.\n"
-            ),
-            response_schema=task.response_schema,
-            design_image=task.design_image,
-        )
-        return prompt_text_for(with_image, repair)
 
     def _write_prompt(self, prompt_text: str) -> Path:
         with tempfile.NamedTemporaryFile(

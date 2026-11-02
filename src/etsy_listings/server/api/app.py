@@ -67,7 +67,6 @@ def create_app(
     seo_provider_factory: ProviderFactory = default_ai_providers,
     market_client_factory: MarketClientFactory = default_market_client,
     preparation_runtime: PreparationRuntime | None = None,
-    model_discovery: ModelDiscovery | None = None,
 ) -> FastAPI:
     # One of each per process, so their locks mean something: the listing
     # template write locks, and the cache records' stores. Listing locks
@@ -88,10 +87,9 @@ def create_app(
     )
     deployments = Deployments(workspace, context_factory, ai=ai)
     scene_warmer = SceneWarmer(workspace)
-    discovery = model_discovery if model_discovery is not None else ModelDiscovery()
 
     @asynccontextmanager
-    async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    async def lifespan(running: FastAPI) -> AsyncIterator[None]:
         """Starts the deployment worker thread with the app, and waits
         for it on the way out -- "finish what's in flight, start nothing
         else" (decision 7), on the path every ASGI server already calls
@@ -112,6 +110,8 @@ def create_app(
         await run_in_threadpool(preparations.start)
         # ADR-0056: discovery is advisory. Its owned worker must not hold
         # application availability behind installed CLI processes.
+        # Read from app.state, so a test can put its own discovery there first.
+        discovery: ModelDiscovery = running.state.model_discovery
         discovery.start()
         staging_store.sweep(now=datetime.now(UTC))
         deployments.start()
@@ -129,7 +129,7 @@ def create_app(
     app = FastAPI(title="etsy-listings", version="0.1.0", lifespan=lifespan)
     app.state.preparations = preparations
     app.state.workspace = workspace
-    app.state.model_discovery = discovery
+    app.state.model_discovery = ModelDiscovery()
     app.state.deployments = deployments
     # Shared with the preview endpoint (`listings.py`), which needs a
     # `RunContext` to ask the render stage for a scene's current hash but has
@@ -162,7 +162,7 @@ def create_app(
     )
 
     @app.exception_handler(InvalidNameError)
-    async def invalid_name(request: Request, exc: Exception) -> Response:
+    async def invalid_name(_request: Request, exc: Exception) -> Response:
         """A template, colour or design id from a URL that is not a single
         path segment is the client's fault, so it is a 400 -- and it is one
         rule, so it is stated once here.
@@ -174,37 +174,47 @@ def create_app(
         """
         return JSONResponse(status_code=400, content={"detail": str(exc)})
 
-    app.include_router(preparation_router)
-    app.include_router(templates_router)
-    app.include_router(designs_router)
-    app.include_router(listings_router)
-    app.include_router(listings_support_router)
-    app.include_router(listing_templates_router)
-    app.include_router(batches_router)
-    app.include_router(media_files_router)
-    app.include_router(runs_router)
-    app.include_router(ai_runs_router)
-    app.include_router(seo_router)
-    app.include_router(shop_router)
-    app.include_router(workspace_settings_router)
+    for router in API_ROUTERS:
+        app.include_router(router)
 
     @app.get("/api/health")
     def health() -> dict[str, str]:
         return {"status": "ok", "workspace": str(workspace.root)}
 
     if FRONTEND_DIST.is_dir():
-        # Built assets under /assets; everything else falls back to
-        # index.html so client-side routing works on a hard refresh.
-        # `npm run build` must have run first -- in dev, use the Vite
-        # dev server instead and hit uvicorn only for /api.
-        app.mount("/assets", StaticFiles(directory=FRONTEND_DIST / "assets"), name="assets")
-
-        # Out of the schema: it is not API, and the exported contract must
-        # not depend on whether this checkout has a built SPA.
-        @app.get("/{full_path:path}", include_in_schema=False)
-        def spa_fallback(full_path: str, request: Request) -> Response:
-            if full_path.startswith("api/"):
-                return JSONResponse(status_code=404, content={"detail": "not found"})
-            return FileResponse(FRONTEND_DIST / "index.html")
+        _serve_frontend(app, FRONTEND_DIST)
 
     return app
+
+
+API_ROUTERS = (
+    preparation_router,
+    templates_router,
+    designs_router,
+    listings_router,
+    listings_support_router,
+    listing_templates_router,
+    batches_router,
+    media_files_router,
+    runs_router,
+    ai_runs_router,
+    seo_router,
+    shop_router,
+    workspace_settings_router,
+)
+
+
+def _serve_frontend(app: FastAPI, dist: Path) -> None:
+    """Built assets under /assets; everything else falls back to
+    index.html so client-side routing works on a hard refresh.
+    `npm run build` must have run first -- in dev, use the Vite
+    dev server instead and hit uvicorn only for /api."""
+    app.mount("/assets", StaticFiles(directory=dist / "assets"), name="assets")
+
+    # Out of the schema: it is not API, and the exported contract must
+    # not depend on whether this checkout has a built SPA.
+    @app.get("/{full_path:path}", include_in_schema=False)
+    def spa_fallback(full_path: str) -> Response:
+        if full_path.startswith("api/"):
+            return JSONResponse(status_code=404, content={"detail": "not found"})
+        return FileResponse(dist / "index.html")

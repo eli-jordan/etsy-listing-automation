@@ -20,6 +20,7 @@ from etsy_listings.core.engine.change import (
     Plan,
     PriceChange,
     StagePlan,
+    StageWork,
 )
 from etsy_listings.core.engine.run import plan_fingerprint
 
@@ -36,8 +37,8 @@ def _plan(**stage_plan_overrides: object) -> Plan:
             PriceChange(
                 size="M",
                 color="black",
-                before=Money(Decimal("349"), "NOK"),
-                after=Money(Decimal("399"), "NOK"),
+                before=Money(Decimal(349), "NOK"),
+                after=Money(Decimal(399), "NOK"),
             ),
             ListChange(path="colors", added=("navy",), removed=()),
         ),
@@ -57,11 +58,13 @@ def _plan(**stage_plan_overrides: object) -> Plan:
         stage_plans=(
             StagePlan.work(
                 "printify_product",
-                "no Printify product yet -- it will be created",
-                changes=changes,  # type: ignore[arg-type]
-                drift=drift,  # type: ignore[arg-type]
-                actions=actions,  # type: ignore[arg-type]
-                snapshot=snapshot,  # type: ignore[arg-type]
+                StageWork(
+                    "no Printify product yet -- it will be created",
+                    changes=changes,  # type: ignore[arg-type]  # -- overrides arrive as object through **kwargs
+                    actions=actions,  # type: ignore[arg-type]  # -- overrides arrive as object through **kwargs
+                ),
+                drift=drift,  # type: ignore[arg-type]  # -- overrides arrive as object through **kwargs
+                snapshot=snapshot,  # type: ignore[arg-type]  # -- overrides arrive as object through **kwargs
             ),
         ),
     )
@@ -128,4 +131,5 @@ def test_money_renders_as_the_string_a_listing_would_recognise() -> None:
     string form."""
     plan = plan_fingerprint(_plan())
 
-    assert isinstance(plan, str) and plan.startswith("sha256:")
+    assert isinstance(plan, str)
+    assert plan.startswith("sha256:")

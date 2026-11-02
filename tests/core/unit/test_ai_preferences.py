@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from etsy_listings.core.ai import claude, codex, grok
+from etsy_listings.core.ai import claude, cli_support, codex, grok
 from etsy_listings.core.ai.models import Deadline, ProviderTask, RepairContext
 from etsy_listings.core.ai.process import ProcessResult
 from etsy_listings.core.application.ai.readiness import current_providers, default_ai_providers
@@ -43,10 +43,10 @@ def test_factory_captures_order_and_preferences_until_next_call(workspace_root: 
 )
 @pytest.mark.parametrize("repair", [None, RepairContext("{}", ("missing brief",))])
 def test_preferences_reach_every_task_and_repair_argv(
-    module, adapter, flags, monkeypatch, tmp_path, repair
+    module, adapter, flags, *, monkeypatch, tmp_path, repair
 ):
     calls = []
-    monkeypatch.setattr(module.shutil, "which", lambda name: name)
+    monkeypatch.setattr(cli_support.shutil, "which", lambda name: name)
 
     def execute(argv, **kwargs):
         calls.append(argv)
@@ -83,7 +83,7 @@ def test_a_rejected_saved_model_falls_through_without_rewriting_preferences(
     source = "ai:\n  providers: [{name: codex, model: retired}, {name: claude, model: pinned}]\n"
     workspace.settings_file().write_text(source)
     calls = []
-    monkeypatch.setattr(codex.shutil, "which", lambda name: name)
+    monkeypatch.setattr(cli_support.shutil, "which", lambda name: name)
 
     def rejected(argv, **kwargs):
         calls.append(argv)

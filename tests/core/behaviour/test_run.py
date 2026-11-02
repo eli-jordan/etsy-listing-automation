@@ -25,6 +25,7 @@ from etsy_listings.core.engine.events import (
     EngineRunEvent,
     EngineStageChecking,
     EngineStagePlanned,
+    RunHooks,
 )
 from etsy_listings.core.engine.lock import Lockfile
 from etsy_listings.core.engine.plan import PlannedRun
@@ -84,7 +85,8 @@ def test_local_render_refusals_preserve_the_rest_of_the_batch(
 
     assert report.outcomes[0].planned is not None
     plans = report.outcomes[0].planned.plan.stage_plans
-    assert plans[0].stage == "render" and plans[0].blocked
+    assert plans[0].stage == "render"
+    assert plans[0].blocked
     assert len(plans) == len(STAGES)
     assert report.outcomes[1].ok
 
@@ -118,7 +120,7 @@ def test_a_clean_batch_reports_no_failure(workspace_root: Path) -> None:
     assert report.outcomes[0].planned is not None
 
 
-def _blocked(report) -> dict[str, str]:  # noqa: ANN001
+def _blocked(report) -> dict[str, str]:
     planned = report.outcomes[0].planned
     assert planned is not None
     return {sp.stage: sp.blocked for sp in planned.plan.stage_plans if sp.blocked}
@@ -170,7 +172,7 @@ def test_a_failure_carries_the_message_not_a_stack(workspace_root: Path) -> None
     assert report.outcomes[0].planned is None
 
 
-def test_an_unmigrated_ref_fails_its_listing_naming_the_migration(workspace_root: Path) -> None:
+def test_an_unmigrated_ref_fails_its_listing_naming_the_old_form(workspace_root: Path) -> None:
     """ADR-0046: the old listing-relative form is refused by name -- as that
     listing's failure, so the rest of an `--all` batch still plans."""
     copy_listing(workspace_root, "legacy", design="../../designs/take-a-hike.png")
@@ -178,7 +180,7 @@ def test_an_unmigrated_ref_fails_its_listing_naming_the_migration(workspace_root
     report = plan_listings(_ctx(workspace_root), ["legacy", LISTING], STAGES)
 
     assert [outcome.ok for outcome in report.outcomes] == [False, True]
-    assert "scripts/migrate_workspace_refs.py" in str(report.outcomes[0].error)
+    assert "listing-relative form" in str(report.outcomes[0].error)
 
 
 class _RefusingCatalog(FakeCatalogClient):
@@ -310,12 +312,7 @@ def test_planned_fires_per_listing_as_the_run_goes(workspace_root: Path) -> None
         if isinstance(event, EngineListingPlanned):
             seen.append(event.listing)
 
-    plan_listings(
-        _ctx(workspace_root),
-        ["fine", LISTING],
-        STAGES,
-        on_event=capture,
-    )
+    plan_listings(_ctx(workspace_root), ["fine", LISTING], STAGES, hooks=RunHooks(on_event=capture))
 
     assert seen == ["fine", LISTING]
 
@@ -332,10 +329,7 @@ def test_failure_sink_fires_only_for_the_listing_that_failed(workspace_root: Pat
             failed.append(event.listing)
 
     plan_listings(
-        _ctx(workspace_root),
-        ["broken", LISTING],
-        STAGES,
-        on_event=capture,
+        _ctx(workspace_root), ["broken", LISTING], STAGES, hooks=RunHooks(on_event=capture)
     )
 
     assert failed == ["broken"]
@@ -354,12 +348,7 @@ def test_apply_announces_a_listing_before_it_does_the_work(workspace_root: Path)
         if isinstance(event, EngineListingPlanned):
             order.append(f"planned:{event.listing}")
 
-    apply_listings(
-        ctx,
-        [LISTING],
-        STAGES,
-        on_event=capture,
-    )
+    apply_listings(ctx, [LISTING], STAGES, hooks=RunHooks(on_event=capture))
 
     assert order[0] == f"planned:{LISTING}"
     assert any(entry.startswith("event:") for entry in order[1:])
@@ -419,12 +408,7 @@ def test_stage_checking_and_stage_planned_fire_once_per_stage_in_pipeline_order(
         elif isinstance(event, EngineStagePlanned):
             resolved.append(event.stage_plan.stage)
 
-    plan_listings(
-        _ctx(workspace_root),
-        [LISTING],
-        STAGES,
-        on_event=capture,
-    )
+    plan_listings(_ctx(workspace_root), [LISTING], STAGES, hooks=RunHooks(on_event=capture))
 
     expected = [stage.name for stage in STAGES]
     assert checking == expected
@@ -439,10 +423,7 @@ def test_stage_planned_carries_the_resolved_stage_plan(workspace_root: Path) -> 
             seen.append(event.stage_plan)
 
     plan_listings(
-        _ctx(workspace_root),
-        [LISTING],
-        [RenderStage()],
-        on_event=capture,
+        _ctx(workspace_root), [LISTING], [RenderStage()], hooks=RunHooks(on_event=capture)
     )
 
     assert len(seen) == 1

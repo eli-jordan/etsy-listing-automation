@@ -100,6 +100,19 @@ function useDragDepth(onChange: (holding: boolean) => void) {
   };
 }
 
+/** A tone slot's "Prints on …" line, or `null` when no colour uses it. */
+function tonePrintsOn(users: string[]): string | null {
+  return users.length === 0 ? null : `Prints on ${listNames(users)}`;
+}
+
+function finderHint(target: SlotTarget, users: ReturnType<typeof slotUsers>): string {
+  if (target.kind === "one") return "Every colour prints it, apart from any with their own design.";
+  const using = users[target.tone];
+  return using.length > 0
+    ? `Prints on ${listNames(using)}.`
+    : "No colour you sell uses it right now.";
+}
+
 export function ArtworkStrip({
   design,
   colours,
@@ -182,12 +195,7 @@ export function ArtworkStrip({
   const view = (target: SlotTarget) => {
     const file = slotFile(design, target);
     const tone = target.kind === "slot" ? target.tone : null;
-    const used =
-      tone === null
-        ? everyShirt
-        : users[tone].length === 0
-          ? null
-          : `Prints on ${listNames(users[tone])}`;
+    const used = tone === null ? everyShirt : tonePrintsOn(users[tone]);
     return {
       title: `For ${targetLabel(target)}`,
       target,
@@ -342,13 +350,7 @@ export function ArtworkStrip({
       {finding !== null && (
         <ArtworkPicker
           title={`Design for ${targetLabel(finding)}`}
-          hint={
-            finding.kind === "one"
-              ? "Every colour prints it, apart from any with their own design."
-              : users[finding.tone].length > 0
-                ? `Prints on ${listNames(users[finding.tone])}.`
-                : "No colour you sell uses it right now."
-          }
+          hint={finderHint(finding, users)}
           tile={finding.kind === "one" ? TILE.neutral : TILE[finding.tone]}
           current={slotFile(design, finding)}
           library={library}
@@ -371,6 +373,27 @@ export function ArtworkStrip({
       )}
     </div>
   );
+}
+
+/** The file a slot holds, the one uploading into it, or what it is for. */
+function SlotName({
+  uploading,
+  file,
+  emptyText,
+}: {
+  uploading: string | null;
+  file: string | null;
+  emptyText: string;
+}) {
+  if (uploading !== null) {
+    return (
+      <div className="design-row__name" role="status">
+        Uploading {uploading}…
+      </div>
+    );
+  }
+  if (file !== null) return <div className="design-row__name">{refName(file)}</div>;
+  return <div className="design-row__name design-row__name--empty">{emptyText}</div>;
 }
 
 function Slot({
@@ -446,15 +469,7 @@ function Slot({
       </div>
       <div className="design-row__text">
         <div className="design-row__title">{title}</div>
-        {uploading !== null ? (
-          <div className="design-row__name" role="status">
-            Uploading {uploading}…
-          </div>
-        ) : file !== null ? (
-          <div className="design-row__name">{refName(file)}</div>
-        ) : (
-          <div className="design-row__name design-row__name--empty">{emptyText}</div>
-        )}
+        <SlotName uploading={uploading} file={file} emptyText={emptyText} />
         <div
           className={
             usedBy === null ? "design-row__users design-row__users--idle" : "design-row__users"

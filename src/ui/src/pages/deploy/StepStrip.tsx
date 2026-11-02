@@ -143,9 +143,7 @@ function StepCell({
         <span className="dv-step__name">{label}</span>
         {runtime && <StageTimer runtime={runtime} />}
       </div>
-      <div className={state === "running" ? "dv-step__why" : "dv-step__why"}>
-        {whyText(state, stagePlan, runtime)}
-      </div>
+      <div className="dv-step__why">{whyText(state, stagePlan, runtime)}</div>
       {log !== null && <div className="dv-step__log">&rsaquo; {log}</div>}
       {(state === "run" || state === "done") && actions.length > 0 && (
         <details open={open} onToggle={(e) => setOpen((e.target as HTMLDetailsElement).open)}>

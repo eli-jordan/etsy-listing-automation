@@ -31,7 +31,8 @@ def test_run_managed_preserves_arguments_cwd_input_and_failure_output(tmp_path: 
     assert received == text
     assert result.stderr == "refused"
     assert result.returncode == 7
-    assert not result.timed_out and not result.cancelled
+    assert not result.timed_out
+    assert not result.cancelled
 
 
 def test_run_managed_drains_large_streams_while_writing_input(tmp_path: Path):

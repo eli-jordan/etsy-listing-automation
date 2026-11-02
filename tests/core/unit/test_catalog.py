@@ -203,7 +203,7 @@ LARGER_BACK = ("back", 5000, 6000)
 @pytest.mark.parametrize(
     "small_first", [True, False], ids=["small-sizes-first", "large-sizes-first"]
 )
-def test_the_largest_print_area_wins_when_sizes_differ(small_first: bool) -> None:
+def test_the_largest_print_area_wins_when_sizes_differ(*, small_first: bool) -> None:
     """Print areas differ per garment size and a profile carries exactly one,
     so `new` records the largest: art sized for the 3XL panel still covers the
     S panel, and the reverse prints soft where it matters most. Real 1717 /

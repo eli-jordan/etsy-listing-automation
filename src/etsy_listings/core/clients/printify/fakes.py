@@ -16,6 +16,7 @@ behaviour, a cassette to test payload shape).
 from __future__ import annotations
 
 import hashlib
+from typing import override
 
 from etsy_listings.core.clients.printify.models import (
     Blueprint,
@@ -49,12 +50,15 @@ class FakeCatalogClient(CatalogClient):
         self._variants_by_key = variants_by_key
         self._shipping_by_key = shipping_by_key or {}
 
+    @override
     def blueprints(self) -> list[Blueprint]:
         return list(self._blueprints)
 
+    @override
     def print_providers(self, blueprint_id: int) -> list[PrintProvider]:
         return list(self._providers_by_blueprint.get(blueprint_id, []))
 
+    @override
     def all_print_providers(self) -> list[PrintProvider]:
         """The given catalog-wide list, else every blueprint's providers once."""
         if self._all_providers is not None:
@@ -65,6 +69,7 @@ class FakeCatalogClient(CatalogClient):
                 seen.setdefault(provider.id, provider)
         return list(seen.values())
 
+    @override
     def variants(self, blueprint_id: int, provider_id: int) -> VariantSet:
         key = (blueprint_id, provider_id)
         if key not in self._variants_by_key:
@@ -73,6 +78,7 @@ class FakeCatalogClient(CatalogClient):
             )
         return self._variants_by_key[key]
 
+    @override
     def shipping(self, blueprint_id: int, provider_id: int) -> ShippingRates:
         key = (blueprint_id, provider_id)
         if key not in self._shipping_by_key:
@@ -117,6 +123,7 @@ class FakePrintifyClient(PrintifyClient):
 
     # ------------------------------------------------------------- shops
 
+    @override
     def shops(self) -> list[Shop]:
         self.shops_calls += 1
         if self.auth_fails:
@@ -125,6 +132,7 @@ class FakePrintifyClient(PrintifyClient):
 
     # ----------------------------------------------------------- uploads
 
+    @override
     def upload_image(self, file_name: str, contents: bytes) -> Upload:
         """Content-addressed, like the real one: the same bytes give the same
         id, and the file name takes no part in it. A stage that re-uploads
@@ -136,9 +144,11 @@ class FakePrintifyClient(PrintifyClient):
 
     # ---------------------------------------------------------- products
 
+    @override
     def get_product(self, shop_id: int, product_id: str) -> Product | None:
         return self.products.get(product_id)
 
+    @override
     def create_product(self, shop_id: int, spec: ProductSpec) -> Product:
         self._next_product += 1
         product_id = f"fake-product-{self._next_product}"
@@ -156,6 +166,7 @@ class FakePrintifyClient(PrintifyClient):
         self.created.append(spec)
         return product
 
+    @override
     def update_product(
         self, shop_id: int, product_id: str, spec: ProductSpec, *, live: Product
     ) -> Product:
@@ -185,10 +196,12 @@ class FakePrintifyClient(PrintifyClient):
         self.updated.append(spec)
         return product
 
+    @override
     def delete_product(self, shop_id: int, product_id: str) -> None:
         self.products.pop(product_id, None)
         self.deleted.append(product_id)
 
+    @override
     def publish(self, shop_id: int, product_id: str, sync_flags: dict[str, bool]) -> None:
         """Fire-and-forget, like the real one: `is_locked` and `external` are
         set immediately here rather than after a poll, since the fake has no
@@ -204,12 +217,14 @@ class FakePrintifyClient(PrintifyClient):
             update={"is_locked": external is None, "external": external}
         )
 
+    @override
     def publishing_failed(self, shop_id: int, product_id: str, *, reason: str) -> None:
         self.publishing_failed_calls.append(product_id)
         product = self.products.get(product_id)
         if product is not None:
             self.products[product_id] = product.model_copy(update={"is_locked": False})
 
+    @override
     def find_product_by_copy(self, shop_id: int, *, title: str, description: str) -> str | None:
         for product in self.products.values():
             if (

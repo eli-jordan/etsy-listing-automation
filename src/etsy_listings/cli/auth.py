@@ -142,9 +142,7 @@ def _printify_token(root: Path, back: Backends) -> None:
             credentials.refuse(str(exc), command="auth")
         return shops, f"verified -- the token can reach {len(shops)} shop(s)."
 
-    captured = credentials.capture(
-        root, credentials.PRINTIFY, verify=verify, command="auth", verify_reused=False
-    )
+    captured = credentials.capture(root, credentials.PRINTIFY, verify=verify, verify_reused=False)
     credentials.store(root, credentials.PRINTIFY, captured)
 
 
@@ -162,7 +160,6 @@ def _etsy_app_key(root: Path, back: Backends) -> EtsyAppKey:
         root,
         credentials.ETSY_APP_KEY,
         verify=verify,
-        command="auth",
         verify_reused=False,
         reuse_message=f"{ETSY_KEYSTRING_VAR} and {ETSY_SHARED_SECRET_VAR} already set.",
     )
@@ -221,7 +218,6 @@ def _anthropic_key(root: Path) -> None:
         root,
         credentials.ANTHROPIC,
         verify=credentials.nothing_to_prove,
-        command="auth",
         verify_reused=False,
     )
     credentials.store(root, credentials.ANTHROPIC, captured)

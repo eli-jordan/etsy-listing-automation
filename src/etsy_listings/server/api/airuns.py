@@ -37,10 +37,10 @@ from etsy_listings.core.application.ai.coordinator import AiCoordinator
 from etsy_listings.core.application.ai.events import AnyAiRunEvent
 from etsy_listings.core.application.ai.registry import AiRun, AiRunRegistry, Conflict
 from etsy_listings.core.application.refusals import (
-    AiNotReady,
-    ListingDeploying,
-    ListingDraftingInBatch,
-    ListingMissing,
+    AiNotReadyError,
+    ListingDeployingError,
+    ListingDraftingInBatchError,
+    ListingMissingError,
 )
 from etsy_listings.server.api.runs import last_event_id
 from etsy_listings.server.api.schemas import (
@@ -80,9 +80,6 @@ def _run(request: Request, run_id: str) -> AiRun:
     return run
 
 
-Existing = Annotated[AiRun, Depends(_run)]
-
-
 def _summary(run: AiRun) -> AiRunSummary:
     return AiRunSummary(
         id=run.id,
@@ -111,13 +108,13 @@ def create_ai_run(request: Request, body: CreateAiRunRequest) -> AiRunSummary | 
     to reattach to, or gives the readiness rule that failed."""
     try:
         run = _ai(request).start_run(body.listing, draft_brief=body.draft_brief)
-    except ListingMissing as exc:
+    except ListingMissingError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
-    except ListingDeploying:
+    except ListingDeployingError:
         return _refused(AiRunRefusal(reason=DEPLOYING))
-    except ListingDraftingInBatch:
+    except ListingDraftingInBatchError:
         return _refused(AiRunRefusal(reason=BATCH_PENDING))
-    except AiNotReady as exc:
+    except AiNotReadyError as exc:
         return _refused(AiRunRefusal(reason=exc.reason))
     if isinstance(run, Conflict):
         return _refused(AiRunRefusal(active_run=run.active_run))
@@ -135,13 +132,13 @@ def find_ai_run(request: Request, listing: str) -> AiRunSummary:
 
 
 @router.get("/{run_id}", response_model=AiRunDetail, responses={404: {}})
-def get_ai_run(run: Existing) -> AiRunDetail:
+def get_ai_run(run: Annotated[AiRun, Depends(_run)]) -> AiRunDetail:
     with run.condition:
         return AiRunDetail(**_summary(run).model_dump(), events=list(run.events))
 
 
 @router.delete("/{run_id}", response_model=AiRunSummary, responses={404: {}, 409: {}})
-def cancel_ai_run(run: Existing) -> AiRunSummary:
+def cancel_ai_run(run: Annotated[AiRun, Depends(_run)]) -> AiRunSummary:
     """Cancel: the run's provider subprocess tree is killed and research
     starts no new call. The run ends ``cancelled`` on its own thread
     shortly after; a brief or snapshot already written stays."""
@@ -175,7 +172,9 @@ async def sse_events(request: Request, run: AiRun, after_seq: int) -> AsyncItera
 
 
 @router.get("/{run_id}/events", responses={404: {}})
-def stream_ai_run_events(run: Existing, request: Request) -> StreamingResponse:
+def stream_ai_run_events(
+    run: Annotated[AiRun, Depends(_run)], request: Request
+) -> StreamingResponse:
     return StreamingResponse(
         sse_events(request, run, last_event_id(request)),
         media_type="text/event-stream",

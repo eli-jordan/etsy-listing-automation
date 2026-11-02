@@ -117,10 +117,8 @@ export function useProposalReview(
       // Finished-run replay is history. The server record owns resolutions.
       if (current === null || source.listing !== current.name || source.phase !== "running") return;
       ++current.version;
-      const { type, seq, ...record } = event;
-      void type;
-      void seq;
-      commit(current, record);
+      const { proposal, resolution, snapshot, stale, generated_at, origin } = event;
+      commit(current, { proposal, resolution, snapshot, stale, generated_at, origin });
     },
     [commit],
   );

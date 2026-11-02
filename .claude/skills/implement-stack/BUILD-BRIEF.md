@@ -1,8 +1,8 @@
 # Build brief
 
-The prompt for PR n's builder. Fill every `<…>`; delete nothing but the
-brackets. The builder starts with an empty context, so the brief carries
-everything.
+The `task` for PR n's builder delegate. Fill every `<…>`; delete nothing but
+the brackets. The builder starts with an empty context and may be Claude,
+Codex or Grok, so the brief carries everything and names files by path.
 
 ````markdown
 You are implementing **PR <n>** of a stacked PR series in an isolated git worktree. The main agent does GitHub: do not push or open a PR.
@@ -22,7 +22,8 @@ You are implementing **PR <n>** of a stacked PR series in an isolated git worktr
 - <code entry points the plan names, if any>
 
 ## How to work
-- Use the `tdd` skill: red-green-refactor through public interfaces. Every
+- Use the `tdd` skill (`.claude/skills/tdd/SKILL.md`; read the file if your
+  agent does not load skills): red-green-refactor through public interfaces. Every
   acceptance test the plan names for this PR is seen failing before it passes.
 - Cite decisions in commits and in comments where a choice looks arbitrary.
 - If the HTTP surface changes, regenerate `docs/openapi.json` and

@@ -109,10 +109,10 @@ def test_unavailable_first_provider_falls_through_to_the_second() -> None:
     assert claude.tasks == [_seo_task()]
 
 
-def _raise_unavailable(provider: str):  # noqa: ANN201 - test helper
+def _raise_unavailable(provider: str):
     from etsy_listings.core.ai.errors import ProviderUnavailableError
 
-    def _generate(request, deadline, *, repair=None, cancel_event=None):  # noqa: ANN001, ANN202
+    def _generate(request, deadline, *, repair=None, cancel_event=None):
         raise ProviderUnavailableError(provider, "not authenticated")
 
     return _generate
@@ -191,7 +191,7 @@ def test_default_budget_allows_a_slow_response_and_shares_remaining_time_with_re
     original_generate = codex.generate
     remaining: list[float] = []
 
-    def generate(task, deadline, *, repair=None, cancel_event=None):  # noqa: ANN001, ANN202
+    def generate(task, deadline, *, repair=None, cancel_event=None):
         nonlocal now
         remaining.append(deadline.remaining_seconds())
         now += 61.0
@@ -210,7 +210,7 @@ def test_default_budget_allows_a_slow_response_and_shares_remaining_time_with_re
 def test_cancelled_error_propagates_without_becoming_try_again() -> None:
     codex = FakeAiProvider(name="codex")
 
-    def _generate(request, deadline, *, repair=None, cancel_event=None):  # noqa: ANN001, ANN202
+    def _generate(request, deadline, *, repair=None, cancel_event=None):
         raise ProviderCancelledError("codex")
 
     codex.generate = _generate  # type: ignore[method-assign]
@@ -270,7 +270,7 @@ def test_provider_becoming_unavailable_during_repair_surfaces_as_try_again() -> 
     calls = {"count": 0}
     original_generate = codex.generate
 
-    def _generate(request, deadline, *, repair=None, cancel_event=None):  # noqa: ANN001, ANN202
+    def _generate(request, deadline, *, repair=None, cancel_event=None):
         calls["count"] += 1
         if repair is not None:
             raise ProviderUnavailableError("codex", "quota exhausted mid-repair")
@@ -335,7 +335,7 @@ def test_brief_drafting_falls_through_to_the_second_provider_too() -> None:
         responses=[],
     )
 
-    def _unavailable(task, deadline, *, repair=None, cancel_event=None):  # noqa: ANN001, ANN202
+    def _unavailable(task, deadline, *, repair=None, cancel_event=None):
         from etsy_listings.core.ai.errors import ProviderUnavailableError
 
         raise ProviderUnavailableError("codex", "not signed in")
@@ -375,7 +375,7 @@ class _Timed(FakeAiProvider):
         self.script = script
         self.remaining: list[float] = []
 
-    def generate(self, task, deadline, *, repair=None, cancel_event=None):  # noqa: ANN001, ANN201
+    def generate(self, task, deadline, *, repair=None, cancel_event=None):
         self.remaining.append(deadline.remaining_seconds())
         minutes, outcome = self.script.pop(0)
         self.clock.now += minutes * 60
@@ -467,7 +467,7 @@ def test_a_provider_that_runs_out_its_step_is_reported_with_the_configured_limit
     codex = _Timed("codex", clock, [(3, ProviderTimeoutError("codex"))])
     claude = _Timed("claude", clock, [])
 
-    with pytest.raises(SeoDeadlineExceededError, match="codex: .*3-minute step limit"):
+    with pytest.raises(SeoDeadlineExceededError, match=r"codex: .*3-minute step limit"):
         orchestrator.generate_proposal(
             _request(), _PROMPT, [codex, claude], budget=_budget(clock, step=3, run=20)
         )

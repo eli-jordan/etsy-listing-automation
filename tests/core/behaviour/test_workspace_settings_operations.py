@@ -16,8 +16,8 @@ import pytest
 
 from etsy_listings.core.application import workspace_settings
 from etsy_listings.core.application.refusals import (
-    InvalidSettingsEdit,
-    SettingsRevisionConflict,
+    InvalidSettingsEditError,
+    SettingsRevisionConflictError,
 )
 from etsy_listings.core.config.errors import ConfigLoadError
 from etsy_listings.core.workspace import layout
@@ -241,7 +241,7 @@ def test_a_stale_revision_is_a_conflict_that_keeps_the_external_edit(
     edited = SETTINGS_YAML + "# a comment the seller added meanwhile\n"
     written(workspace, edited)
 
-    with pytest.raises(SettingsRevisionConflict):
+    with pytest.raises(SettingsRevisionConflictError):
         workspace_settings.edit_settings(
             workspace, expected_revision=view.revision, changes={"batch_ai.concurrency": 4}
         )
@@ -253,7 +253,7 @@ def test_a_file_created_since_the_missing_read_is_a_conflict(workspace: Workspac
     view = workspace_settings.read_settings(workspace)
     settings_path(workspace).write_text("batch_ai:\n  concurrency: 6\n", encoding="utf-8")
 
-    with pytest.raises(SettingsRevisionConflict):
+    with pytest.raises(SettingsRevisionConflictError):
         workspace_settings.edit_settings(
             workspace, expected_revision=view.revision, changes={"batch_ai.concurrency": 2}
         )
@@ -301,7 +301,7 @@ def test_an_invalid_edit_names_its_key_and_writes_nothing(
     view = workspace_settings.read_settings(workspace)
     before = settings_path(workspace).read_bytes()
 
-    with pytest.raises(InvalidSettingsEdit) as caught:
+    with pytest.raises(InvalidSettingsEditError) as caught:
         workspace_settings.edit_settings(
             workspace, expected_revision=view.revision, changes=changes
         )
@@ -321,7 +321,7 @@ def test_an_edit_to_a_file_that_does_not_load_is_refused(workspace: Workspace, s
     before = settings_path(workspace).read_bytes()
     revision = content_revision(settings_path(workspace).read_bytes())
 
-    with pytest.raises(InvalidSettingsEdit) as caught:
+    with pytest.raises(InvalidSettingsEditError) as caught:
         workspace_settings.edit_settings(
             workspace, expected_revision=revision, changes={"batch_ai.concurrency": 3}
         )
@@ -352,7 +352,7 @@ def test_provider_save_keeps_unrelated_source_and_refuses_last_disabled(
         ("codex", False),
     ]
     before = settings_path(workspace).read_bytes()
-    with pytest.raises(InvalidSettingsEdit, match="at least one"):
+    with pytest.raises(InvalidSettingsEditError, match="at least one"):
         workspace_settings.edit_settings(
             workspace,
             expected_revision=saved.revision,
@@ -414,7 +414,7 @@ def test_provider_reorder_does_not_materialize_untouched_optional_defaults(
 @pytest.mark.parametrize("insert", [False, True], ids=["reorder", "insert-after-eof-row"])
 @pytest.mark.parametrize("ending", ["", "\n"], ids=["bare-eof", "final-newline"])
 def test_provider_rows_at_eof_can_move_or_gain_a_sibling(
-    workspace: Workspace, newline: str, insert: bool, ending: str
+    workspace: Workspace, newline: str, *, insert: bool, ending: str
 ) -> None:
     header = "# Keep preferences\nbatch_ai: {concurrency: 2} # untouched\nai:\n  providers:\n"
     codex = "  - name: codex # account default\n"
@@ -514,7 +514,7 @@ def test_a_limit_edit_outside_its_range_or_floor_writes_nothing(
     view = workspace_settings.read_settings(workspace)
     before = settings_path(workspace).read_bytes()
 
-    with pytest.raises(InvalidSettingsEdit) as caught:
+    with pytest.raises(InvalidSettingsEditError) as caught:
         workspace_settings.edit_settings(
             workspace, expected_revision=view.revision, changes=changes
         )

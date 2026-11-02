@@ -82,15 +82,7 @@ export function useSaveQueue<C extends Changes, O extends SaveOutcome>({
   const settle = useCallback((remaining: number) => {
     if (conflicted.current) return;
     const outstanding = [...failed.current.values()].pop();
-    setStatus(
-      outstanding
-        ? { kind: "error", message: outstanding.message }
-        : remaining > 0
-          ? { kind: "saving" }
-          : acknowledged.current
-            ? { kind: "saved" }
-            : { kind: "idle" },
-    );
+    setStatus(settledStatus(outstanding?.message, remaining, acknowledged.current));
   }, []);
 
   const reset = useCallback((loaded: string) => {
@@ -239,4 +231,15 @@ export function useSaveQueue<C extends Changes, O extends SaveOutcome>({
     afterSaves,
     locked: status.kind === "conflict",
   };
+}
+
+/** The queue's status once a save settles: an outstanding failure wins, then pending saves. */
+function settledStatus(
+  failure: string | undefined,
+  remaining: number,
+  acknowledged: boolean,
+): SaveStatus {
+  if (failure !== undefined) return { kind: "error", message: failure };
+  if (remaining > 0) return { kind: "saving" };
+  return acknowledged ? { kind: "saved" } : { kind: "idle" };
 }

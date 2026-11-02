@@ -36,14 +36,14 @@ def _designs(workspace_root: Path) -> None:
         shutil.copy(workspace_root / HIKE, workspace_root / ref)
 
 
-def _design(workspace_root: Path) -> Any:  # noqa: ANN401
+def _design(workspace_root: Path) -> Any:
     document = yaml.safe_load(
         (workspace_root / "listings" / "take-a-hike" / "listing.yaml").read_text(encoding="utf-8")
     )
     return document.get("design")
 
 
-def _wait_for_design(page: Any, workspace_root: Path, expected: object) -> None:  # noqa: ANN401
+def _wait_for_design(page: Any, workspace_root: Path, expected: object) -> None:
     """Poll the file: the page's "Saved" caption is already true during the
     debounce, so the file is the observable effect to wait on."""
     for _ in range(100):
@@ -53,20 +53,20 @@ def _wait_for_design(page: Any, workspace_root: Path, expected: object) -> None:
     raise AssertionError(f"design never reached {expected}: {_design(workspace_root)}")
 
 
-def _open(page: Any) -> None:  # noqa: ANN401
+def _open(page: Any) -> None:
     page.goto(page.url.rsplit("/", 1)[0] + "/listings/take-a-hike")
     page.get_by_role("heading", name="take-a-hike").wait_for(state="visible")
 
 
-def _card(page: Any, title: str) -> Any:  # noqa: ANN401
+def _card(page: Any, title: str) -> Any:
     return page.locator(".design-row--slot", has=page.get_by_text(title, exact=True))
 
 
-def _pick_recent(page: Any, name: str) -> None:  # noqa: ANN401
+def _pick_recent(page: Any, name: str) -> None:
     page.locator(".add-panel").get_by_role("button", name=re.compile(rf"^{name} ")).click()
 
 
-def test_split_pick_both_files_and_reload(page: Any, workspace_root: Path) -> None:  # noqa: ANN401
+def test_split_pick_both_files_and_reload(page: Any, workspace_root: Path) -> None:
     _designs(workspace_root)
     _open(page)
 
@@ -95,7 +95,7 @@ def test_split_pick_both_files_and_reload(page: Any, workspace_root: Path) -> No
     )
 
 
-def test_an_empty_pair_survives_a_reload(page: Any, workspace_root: Path) -> None:  # noqa: ANN401
+def test_an_empty_pair_survives_a_reload(page: Any, workspace_root: Path) -> None:
     edit_listing(workspace_root, design={})
     _open(page)
 
@@ -109,7 +109,7 @@ def test_an_empty_pair_survives_a_reload(page: Any, workspace_root: Path) -> Non
     assert "Choose the design for dark shirts" in _card(page, "For dark shirts").inner_text()
 
 
-def test_link_a_pair_of_two_files_and_choose_one(page: Any, workspace_root: Path) -> None:  # noqa: ANN401
+def test_link_a_pair_of_two_files_and_choose_one(page: Any, workspace_root: Path) -> None:
     _designs(workspace_root)
     edit_listing(workspace_root, design={"on-light": DARK_INK, "on-dark": LIGHT_INK})
     _open(page)
@@ -131,7 +131,7 @@ def test_link_a_pair_of_two_files_and_choose_one(page: Any, workspace_root: Path
 MOSS_SPECIAL = "designs/moss-special.png"
 
 
-def _shown(page: Any, image: Any) -> bytes:  # noqa: ANN401
+def _shown(page: Any, image: Any) -> bytes:
     """The picture ``image`` shows, once the browser has decoded it -- fetched
     again by its URL, so it can be compared with the render it should be."""
     page.wait_for_function("img => img.complete && img.naturalWidth > 0", arg=image)
@@ -142,7 +142,7 @@ def _shown(page: Any, image: Any) -> bytes:  # noqa: ANN401
     return bytes(response.body())
 
 
-def _stage_once_saved(page: Any, template: str, before: str) -> Any:  # noqa: ANN401
+def _stage_once_saved(page: Any, template: str, before: str) -> Any:
     """The large preview of ``template``, once its URL no longer carries the
     design signature ``before`` -- a save has landed and the picture is the
     newly saved listing's."""
@@ -155,7 +155,7 @@ def _stage_once_saved(page: Any, template: str, before: str) -> Any:  # noqa: AN
     return page.locator(selector).element_handle()
 
 
-def _signature(page: Any) -> str:  # noqa: ANN401
+def _signature(page: Any) -> str:
     """The saved design's signature on the Variants stage's picture."""
     stage = page.locator(".preview-stage--large img")
     stage.wait_for(state="visible")
@@ -163,7 +163,7 @@ def _signature(page: Any) -> str:  # noqa: ANN401
 
 
 def test_give_moss_its_own_design_and_return_it_to_automatic(
-    page: Any,  # noqa: ANN401
+    page: Any,
     workspace_root: Path,
 ) -> None:
     """Acceptance 4, and 5 for a colour's own design: Moss prints its own file
@@ -209,7 +209,7 @@ def test_give_moss_its_own_design_and_return_it_to_automatic(
     assert shown == expected_scene(workspace_root, "flat-lay-01", "moss", {"moss": HIKE})
 
 
-def _drop_png(page: Any, selector: str, filename: str, payload: bytes) -> None:  # noqa: ANN401
+def _drop_png(page: Any, selector: str, filename: str, payload: bytes) -> None:
     """Drop a file on ``selector`` the way the browser does: a DataTransfer
     holding it, through dragenter, dragover and drop."""
     page.evaluate(
@@ -227,7 +227,7 @@ def _drop_png(page: Any, selector: str, filename: str, payload: bytes) -> None: 
 
 
 def test_a_png_dropped_on_the_design_is_uploaded_and_printed_on_every_shirt(
-    page: Any,  # noqa: ANN401
+    page: Any,
     workspace_root: Path,
 ) -> None:
     """The drop target is the one design on show: the file lands in

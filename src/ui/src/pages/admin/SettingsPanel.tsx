@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 import { WarningIcon } from "@phosphor-icons/react/dist/csr/Warning";
 import { useWorkspaceSettings } from "./useWorkspaceSettings";
+import type { SaveStatus } from "./useSaveQueue";
 import { MarketWeights } from "./MarketWeights";
 import { AiSettingsSections } from "./AiTimeLimits";
 import "./settings.css";
@@ -44,15 +45,7 @@ export function SettingsPanel() {
         className={status.kind === "error" ? "adm-warn settings-notice" : "adm-save settings-save"}
       >
         {status.kind === "error" && <WarningIcon size={20} />}
-        <span>
-          {status.kind === "saving"
-            ? "Saving…"
-            : status.kind === "saved"
-              ? "Saved"
-              : status.kind === "error"
-                ? status.message
-                : ""}
-        </span>
+        <span>{statusText(status)}</span>
       </div>
       {status.kind === "error" && (
         <button className="btn btn-secondary" onClick={state.retry}>
@@ -144,4 +137,11 @@ function Batch({ initial, onSave }: { initial: number; onSave: (value: number) =
       </div>
     </section>
   );
+}
+
+function statusText(status: SaveStatus): string {
+  if (status.kind === "saving") return "Saving…";
+  if (status.kind === "saved") return "Saved";
+  if (status.kind === "error") return status.message;
+  return "";
 }

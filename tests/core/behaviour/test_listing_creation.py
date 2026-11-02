@@ -22,7 +22,7 @@ from etsy_listings.core.application.pricing_plans import (
     pricing_plan_options,
     pricing_plan_ref,
 )
-from etsy_listings.core.application.refusals import InvalidListing, ListingNameTaken
+from etsy_listings.core.application.refusals import InvalidListing, ListingNameTakenError
 from etsy_listings.core.config.money import Money
 from etsy_listings.core.config.pricing_plan import PricingPlan
 from etsy_listings.core.workspace.workspace import InvalidNameError, Workspace
@@ -35,7 +35,7 @@ def workspace(workspace_root: Path) -> Workspace:
     return Workspace.discover(root_override=workspace_root)
 
 
-def a_document(**over: Any) -> dict[str, Any]:  # noqa: ANN401
+def a_document(**over: Any) -> dict[str, Any]:
     document: dict[str, Any] = {
         "garment_profile": "comfort-colors-1717",
         "design": {"default": "designs/take-a-hike.png"},
@@ -81,7 +81,7 @@ class TestCreateListing:
     def test_refuses_a_name_already_in_use(self, workspace: Workspace) -> None:
         before = workspace.listing_file(FIXTURE_LISTING).read_bytes()
 
-        with pytest.raises(ListingNameTaken) as refused:
+        with pytest.raises(ListingNameTakenError) as refused:
             create_listing(workspace, FIXTURE_LISTING, a_document())
 
         assert refused.value.name == FIXTURE_LISTING
@@ -93,14 +93,14 @@ class TestCreateListing:
         leftover.mkdir(parents=True)
         (leftover / "state.lock.json").write_text("{}", encoding="utf-8")
 
-        with pytest.raises(ListingNameTaken):
+        with pytest.raises(ListingNameTakenError):
             create_listing(workspace, "half-deleted", a_document())
 
         assert not workspace.listing_file("half-deleted").exists()
 
     def test_a_name_taken_is_checked_before_the_document(self, workspace: Workspace) -> None:
         """A taken name is the refusal, whatever the document says."""
-        with pytest.raises(ListingNameTaken):
+        with pytest.raises(ListingNameTakenError):
             create_listing(workspace, FIXTURE_LISTING, a_document(prices={"S": 349}))
 
     def test_refuses_a_name_that_is_not_a_path_segment(self, workspace: Workspace) -> None:

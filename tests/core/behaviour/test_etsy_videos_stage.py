@@ -117,7 +117,7 @@ def _gallery(etsy: FakeEtsyListingClient, lock: Lockfile) -> list[str]:
     ]
 
 
-def _changes(stage_plan) -> list[tuple[str, object, object]]:  # noqa: ANN001
+def _changes(stage_plan) -> list[tuple[str, object, object]]:
     return [(c.path, c.before, c.after) for c in stage_plan.changes]
 
 
@@ -213,7 +213,8 @@ def test_replacing_a_files_bytes_uploads_that_one_again(ctx, etsy, workspace_roo
 
     [(path, before, after)] = _changes(stage_plan)
     assert path == "videos.featured.contents"
-    assert str(before).startswith("sha256:") and str(after).startswith("sha256:")
+    assert str(before).startswith("sha256:")
+    assert str(after).startswith("sha256:")
     assert before != after
     assert etsy.video_uploads[-1] == replacement
     assert len(etsy.video_uploads) == 3, "the second is re-attached, not re-sent"

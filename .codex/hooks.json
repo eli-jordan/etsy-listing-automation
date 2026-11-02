@@ -1,0 +1,43 @@
+{
+  "description": "Lint feedback after every edit and shell command, and the dmypy daemon's lifecycle (docs/features/static-analysis-20261031/spec.md, S06 and S08). Codex runs hook commands through the session's shell, which on Windows is always PowerShell (started with -NoProfile), so commandWindows is a bare program call with forward slashes, valid in PowerShell, zsh and bash, then `exit $LASTEXITCODE`: PowerShell -Command otherwise reports any failing program as exit 1, and Codex feeds findings back only on exit 2 (in zsh and bash the variable is unset, so `exit` returns the program's own status). It assumes the session starts at the repository root and that .venv exists (scripts/setup_worktree.py makes it).",
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && if [ -x .venv/bin/python ]; then exec .venv/bin/python -S scripts/agent_lint_gate.py session-start; fi; exec uv run --no-project python scripts/agent_lint_gate.py session-start",
+            "commandWindows": "./.venv/Scripts/python.exe -S scripts/agent_lint_gate.py session-start; exit $LASTEXITCODE",
+            "timeout": 15
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Bash|apply_patch|Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && if [ -x .venv/bin/python ]; then exec .venv/bin/python -S scripts/agent_lint_gate.py edit; fi; exec uv run --no-project python scripts/agent_lint_gate.py edit",
+            "commandWindows": "./.venv/Scripts/python.exe -S scripts/agent_lint_gate.py edit; exit $LASTEXITCODE",
+            "statusMessage": "Linting what changed",
+            "timeout": 60
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && if [ -x .venv/bin/python ]; then exec .venv/bin/python -S scripts/agent_lint_gate.py session-end; fi; exec uv run --no-project python scripts/agent_lint_gate.py session-end",
+            "commandWindows": "./.venv/Scripts/python.exe -S scripts/agent_lint_gate.py session-end; exit $LASTEXITCODE",
+            "timeout": 3
+          }
+        ]
+      }
+    ]
+  }
+}

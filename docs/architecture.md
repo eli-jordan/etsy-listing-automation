@@ -479,7 +479,7 @@ process owner; discovery and generation use the same public runner
 (ADR-0056, ADR-0057).
 Admin retains stale saved model/effort choices and warns without blocking runs.
 Omitted preferences pass no model/effort flags, preserving CLI account defaults.
-Invalid saved settings become the coordinator's `AiNotReady` refusal before a
+Invalid saved settings become the coordinator's `AiNotReadyError` refusal before a
 run is registered. Listing readiness and run start report the same file/key
 detail; batch readiness carries that detail and a correction remedy while
 keeping staging. Only configuration-loading failures are adapted this way.
@@ -943,15 +943,20 @@ importing core loads no framework and registering CLI commands loads no
 server. These checks constrain structure; behaviour, contract, golden and
 browser tests remain the evidence of correctness.
 
-`scripts/check.sh` formats, lints, typechecks, runs Import Linter and runs
-Python coverage, then the equivalent frontend gates when npm is available.
+`uv run poe check` fixes and formats, lints, typechecks, runs Import Linter and
+runs Python coverage, then the equivalent frontend gates when npm is available.
+Each check is a poethepoet task defined once in `pyproject.toml`, and CI calls
+the check-only tasks, so local and hosted gates cannot drift. A per-edit hook,
+`scripts/agent_lint.py`, gives coding agents the file-level subset of these
+checks after every edit (static-analysis spec, S06).
 Both coverage gates use an 85% floor with branch measurement. Browser tests
 skip when prerequisites are missing unless `ETSY_LISTINGS_REQUIRE_EVERY_LAYER=1`;
 E2E tests have credential guards and default pytest options exclude them.
 
-CI runs Python (Ubuntu and Windows) and frontend gates on PRs, main pushes and
-manual runs, including Import Linter, followed by a browser job on every
-trigger. The Python job explicitly uses `-m "not browser and not e2e"`: a
+CI runs a `quality` job (`poe lint`: format check, ruff, mypy, Import Linter,
+once on Ubuntu), Python tests (Ubuntu and Windows) and frontend gates on PRs,
+main pushes and manual runs, followed by a browser job on every trigger. The
+Python job's `poe test-ci` explicitly uses `-m "not browser and not e2e"`: a
 command-line marker replaces the default, so both exclusions must be stated.
 Browser checks require Chromium and the built SPA and prohibit clean skips.
 
@@ -963,7 +968,7 @@ fail for a product reason, and keeping it opt-in beat deleting it because
 reviewers still want the frames. The Marigold journey's real checks (font
 size, rail state, toolbar geometry) stay required in
 `test_the_marigold_toolbar_fits_its_bar_at_desktop_widths`.
-`tests/test_ci_selection.py` proves CI's browser selection equals `check.sh`'s
+`tests/test_ci_selection.py` proves CI's browser selection equals `poe check`'s
 and excludes exactly those six cases. Real process-tree timeout, cancellation and
 UTF-8 cases live in their own behaviour subject,
 `tests/core/behaviour/test_ai_process_tree.py`, apart from the fake-`Popen`
@@ -983,7 +988,7 @@ Vitest has three projects in `src/ui/vitest.config.ts`:
 A `node` subject that starts touching `document` fails with a
 `ReferenceError`, which is the point: the split states each file's actual
 dependency instead of giving everything jsdom. Prototype tests stay required
-(`check.sh` and CI run `test:design`) but sit outside production coverage, because a
+(`poe check` and CI run `test:design`) but sit outside production coverage, because a
 prototype frame exercising production components is not production coverage.
 Real-API E2E stays in its separate main/manual workflow.
 

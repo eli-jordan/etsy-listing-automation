@@ -27,7 +27,7 @@ from etsy_listings.core.listing_templates.convert import (
 )
 from etsy_listings.core.listing_templates.frozen import FrozenListingTemplate, TemplateLock
 
-__all__ = [
+__all__ = [  # noqa: RUF022 -- grouped by topic, not alphabetically
     "FrozenListingTemplate",
     "TemplateLock",
     # A draft: the document, and the files it will own.

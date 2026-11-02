@@ -15,6 +15,11 @@ from functools import lru_cache
 from pathlib import Path
 from typing import cast
 
+# USN_RECORD_V2 (winioctl.h): the version this reads, and the header bytes
+# up to and including its Usn field.
+_USN_RECORD_V2 = 2
+_USN_HEADER_BYTES = 32
+
 
 @lru_cache(maxsize=1)
 def _kernel_api() -> ctypes.CDLL:
@@ -65,7 +70,10 @@ def _windows_usn(path: Path) -> int | None:
             handle, 0x900EB, None, 0, buffer, len(buffer), ctypes.byref(returned), None
         ):
             return None
-        if returned.value < 32 or int.from_bytes(buffer.raw[4:6], "little") != 2:
+        if (
+            returned.value < _USN_HEADER_BYTES
+            or int.from_bytes(buffer.raw[4:6], "little") != _USN_RECORD_V2
+        ):
             return None
         usn = int.from_bytes(buffer.raw[24:32], "little", signed=True)
         return usn if usn > 0 else None

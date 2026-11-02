@@ -133,13 +133,14 @@ def write_atomic(path: Path, data: bytes) -> None:
     try:
         with os.fdopen(descriptor, "wb") as stream:
             stream.write(data)
-        os.replace(temporary, path)
+        Path(temporary).replace(path)
     except OSError:
         if not path.is_file():
             raise
     finally:
-        if os.path.exists(temporary):
-            os.unlink(temporary)
+        temporary_path = Path(temporary)
+        if temporary_path.exists():
+            temporary_path.unlink()
 
 
 _Pixels = TypeVar("_Pixels", RGB, RGBA)

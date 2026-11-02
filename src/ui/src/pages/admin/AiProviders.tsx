@@ -6,8 +6,13 @@ import {
   type ModelCatalogs,
   type ProviderPreference,
 } from "../../api/workspaceSettings";
+import type { components } from "../../api/schema";
+
+type ProviderCatalog = components["schemas"]["ProviderCatalog"];
+type ModelChoice = components["schemas"]["ModelChoice"];
 
 const names = ["codex", "claude", "grok"] as const;
+type ProviderName = (typeof names)[number];
 const labels = { codex: "Codex", claude: "Claude", grok: "Grok" };
 const sources = {
   codex: "from codex debug models",
@@ -129,13 +134,7 @@ export function AiProviders({
         </div>
       </div>
       <div className="sp-discovery">
-        <span role="status">
-          {busy
-            ? "Checking installed CLIs…"
-            : failed
-              ? "Model lists unavailable. Saved choices are kept."
-              : "Model lists loaded. Cached for 30 minutes."}
-        </span>
+        <span role="status">{discoveryStatus(busy, failed)}</span>
         <button
           type="button"
           className="btn btn-ghost"
@@ -162,166 +161,271 @@ export function AiProviders({
       <ol className="b-chain">
         {rows.map((p, index) => {
           const enabled = p.enabled !== false;
-          const label = labels[p.name];
-          const step = enabled ? ++number : null;
-          const catalog = catalogs?.providers?.[p.name];
-          const available = !!catalog && !catalog.problem && !problem;
-          const models = available ? (catalog.models ?? []) : [];
-          const selectedModel = models.find((m) => m.id === p.model);
-          const efforts =
-            p.name === "codex" && p.model
-              ? (selectedModel?.efforts ?? [])
-              : available
-                ? (catalog.efforts ?? [])
-                : [];
-          const staleModel = available && !!p.model && !selectedModel;
-          const staleEffort = available && !!p.effort && !efforts.includes(p.effort);
           return (
-            <li
+            <ProviderRow
               key={p.name}
-              className={enabled ? "b-step" : "b-step is-off"}
-              onDragOver={(event) => {
-                if (drag.current) event.preventDefault();
-              }}
-              onDrop={(event) => {
-                event.preventDefault();
-                if (drag.current)
-                  move(
-                    rows.findIndex((row) => row.name === drag.current),
-                    index,
-                  );
-                drag.current = null;
-              }}
-            >
-              <button
-                type="button"
-                className="b-step__num sp-num"
-                aria-pressed={enabled}
-                aria-label={
-                  enabled ? `${label} is step ${step}. Turn it off` : `${label} is off. Turn it on`
+              preference={p}
+              step={enabled ? ++number : null}
+              catalog={catalogs?.providers?.[p.name]}
+              problem={problem}
+              allFailed={allFailed}
+              locked={locked}
+              onToggle={() => {
+                if (enabled && count === 1) {
+                  setBlocked(true);
+                  return;
                 }
-                onClick={() => {
-                  if (enabled && count === 1) {
-                    setBlocked(true);
-                    return;
-                  }
-                  setBlocked(false);
-                  update(p.name, { enabled: !enabled }, true);
-                }}
-              >
-                {step ?? "–"}
-              </button>
-              <div className="b-step__body">
-                <div className="b-step__top">
-                  <button
-                    type="button"
-                    className="adm-handle"
-                    draggable={!locked}
-                    aria-label={`Move ${label}. Use the up and down arrow keys.`}
-                    onDragStart={(event) => {
-                      drag.current = p.name;
-                      event.dataTransfer.effectAllowed = "move";
-                      event.dataTransfer.setData("text/plain", p.name);
-                    }}
-                    onDragEnd={() => {
-                      drag.current = null;
-                    }}
-                    onKeyDown={(event) => {
-                      if (event.key === "ArrowUp" || event.key === "ArrowDown") {
-                        event.preventDefault();
-                        move(index, index + (event.key === "ArrowUp" ? -1 : 1));
-                      }
-                    }}
-                  >
-                    <DotsSixVerticalIcon size={18} />
-                  </button>
-                  <span className="b-step__name">{label}</span>
-                  <span className="b-step__spacer" />
-                  {!enabled && <span className="b-step__off-note">Off — runs skip it</span>}
-                </div>
-                {catalog?.problem && !allFailed && (
-                  <p className="adm-warn">
-                    <WarningIcon size={16} />
-                    <span>{catalog.problem} Keep a saved choice or use Account default.</span>
-                  </p>
-                )}
-                {enabled && (
-                  <div className="b-step__fields">
-                    <div>
-                      <label htmlFor={`model-${p.name}`}>Model · {sources[p.name]}</label>
-                      <select
-                        id={`model-${p.name}`}
-                        aria-label={`${label} model`}
-                        className={staleModel ? "adm-select adm-select--invalid" : "adm-select"}
-                        value={p.model ?? ""}
-                        onChange={(event) =>
-                          update(p.name, { model: event.target.value || null }, false)
-                        }
-                        onBlur={() => commit()}
-                      >
-                        <option value="">Account default</option>
-                        {p.model && !selectedModel && (
-                          <option value={p.model}>
-                            {staleModel ? `${p.model} (not offered)` : p.model}
-                          </option>
-                        )}
-                        {models.map((model) => (
-                          <option key={model.id} value={model.id}>
-                            {model.label}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <div>
-                      <label htmlFor={`effort-${p.name}`}>Reasoning</label>
-                      <select
-                        id={`effort-${p.name}`}
-                        aria-label={`${label} reasoning`}
-                        className={staleEffort ? "adm-select adm-select--invalid" : "adm-select"}
-                        value={p.effort ?? ""}
-                        onChange={(event) =>
-                          update(p.name, { effort: event.target.value || null }, false)
-                        }
-                        onBlur={() => commit()}
-                      >
-                        <option value="">Account default</option>
-                        {p.effort && !efforts.includes(p.effort) && (
-                          <option value={p.effort}>
-                            {staleEffort ? `${p.effort} (not offered)` : p.effort}
-                          </option>
-                        )}
-                        {efforts.map((effort) => (
-                          <option key={effort} value={effort}>
-                            {effort}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
-                )}
-                {staleModel && (
-                  <p className="adm-warn" role="status">
-                    <WarningIcon size={15} />
-                    <span>
-                      {p.model} is no longer offered by the {label} CLI. Runs still pass it; if{" "}
-                      {label} refuses it, the chain moves on.
-                    </span>
-                  </p>
-                )}
-                {staleEffort && (
-                  <p className="adm-warn" role="status">
-                    <WarningIcon size={15} />
-                    <span>
-                      {p.effort} is no longer offered for this model. Runs still pass it; if {label}{" "}
-                      refuses it, the chain moves on.
-                    </span>
-                  </p>
-                )}
-              </div>
-            </li>
+                setBlocked(false);
+                update(p.name, { enabled: !enabled }, true);
+              }}
+              onChange={(patch) => update(p.name, patch, false)}
+              onCommit={() => commit()}
+              drag={{
+                start: () => {
+                  drag.current = p.name;
+                },
+                end: () => {
+                  drag.current = null;
+                },
+                drop: () => {
+                  if (drag.current)
+                    move(
+                      rows.findIndex((row) => row.name === drag.current),
+                      index,
+                    );
+                  drag.current = null;
+                },
+                active: () => drag.current !== null,
+                move: (by) => move(index, index + by),
+              }}
+            />
           );
         })}
       </ol>
     </section>
+  );
+}
+
+function discoveryStatus(busy: boolean, failed: boolean): string {
+  if (busy) return "Checking installed CLIs…";
+  if (failed) return "Model lists unavailable. Saved choices are kept.";
+  return "Model lists loaded. Cached for 30 minutes.";
+}
+
+type Choices = {
+  models: ModelChoice[];
+  selectedModel: ModelChoice | undefined;
+  efforts: string[];
+  staleModel: boolean;
+  staleEffort: boolean;
+};
+
+/** What a row offers, and whether its saved choices are still among them. */
+function choicesFor(
+  p: ProviderPreference,
+  catalog: ProviderCatalog | undefined,
+  problem: boolean,
+): Choices {
+  const available = !!catalog && !catalog.problem && !problem;
+  const models = available ? (catalog.models ?? []) : [];
+  const selectedModel = models.find((m) => m.id === p.model);
+  let efforts: string[] = [];
+  if (p.name === "codex" && p.model) efforts = selectedModel?.efforts ?? [];
+  else if (available) efforts = catalog.efforts ?? [];
+  return {
+    models,
+    selectedModel,
+    efforts,
+    staleModel: available && !!p.model && !selectedModel,
+    staleEffort: available && !!p.effort && !efforts.includes(p.effort),
+  };
+}
+
+type RowDrag = {
+  start: () => void;
+  end: () => void;
+  drop: () => void;
+  active: () => boolean;
+  move: (by: number) => void;
+};
+
+function ProviderRow({
+  preference: p,
+  step,
+  catalog,
+  problem,
+  allFailed,
+  locked,
+  onToggle,
+  onChange,
+  onCommit,
+  drag,
+}: {
+  preference: ProviderPreference;
+  step: number | null;
+  catalog: ProviderCatalog | undefined;
+  problem: boolean;
+  allFailed: boolean;
+  locked: boolean;
+  onToggle: () => void;
+  onChange: (patch: Partial<ProviderPreference>) => void;
+  onCommit: () => void;
+  drag: RowDrag;
+}) {
+  const enabled = step !== null;
+  const name = p.name as ProviderName;
+  const label = labels[name];
+  const { models, selectedModel, efforts, staleModel, staleEffort } = choicesFor(
+    p,
+    catalog,
+    problem,
+  );
+  return (
+    <li
+      className={enabled ? "b-step" : "b-step is-off"}
+      onDragOver={(event) => {
+        if (drag.active()) event.preventDefault();
+      }}
+      onDrop={(event) => {
+        event.preventDefault();
+        drag.drop();
+      }}
+    >
+      <button
+        type="button"
+        className="b-step__num sp-num"
+        aria-pressed={enabled}
+        aria-label={
+          enabled ? `${label} is step ${step}. Turn it off` : `${label} is off. Turn it on`
+        }
+        onClick={onToggle}
+      >
+        {step ?? "–"}
+      </button>
+      <div className="b-step__body">
+        <div className="b-step__top">
+          <button
+            type="button"
+            className="adm-handle"
+            draggable={!locked}
+            aria-label={`Move ${label}. Use the up and down arrow keys.`}
+            onDragStart={(event) => {
+              drag.start();
+              event.dataTransfer.effectAllowed = "move";
+              event.dataTransfer.setData("text/plain", p.name);
+            }}
+            onDragEnd={drag.end}
+            onKeyDown={(event) => {
+              if (event.key === "ArrowUp" || event.key === "ArrowDown") {
+                event.preventDefault();
+                drag.move(event.key === "ArrowUp" ? -1 : 1);
+              }
+            }}
+          >
+            <DotsSixVerticalIcon size={18} />
+          </button>
+          <span className="b-step__name">{label}</span>
+          <span className="b-step__spacer" />
+          {!enabled && <span className="b-step__off-note">Off — runs skip it</span>}
+        </div>
+        {catalog?.problem && !allFailed && (
+          <p className="adm-warn">
+            <WarningIcon size={16} />
+            <span>{catalog.problem} Keep a saved choice or use Account default.</span>
+          </p>
+        )}
+        {enabled && (
+          <div className="b-step__fields">
+            <ChoiceSelect
+              id={`model-${p.name}`}
+              label={`Model · ${sources[name]}`}
+              ariaLabel={`${label} model`}
+              saved={p.model}
+              offered={!!selectedModel}
+              stale={staleModel}
+              options={models.map((model) => ({ value: model.id, label: model.label }))}
+              onChange={(value) => onChange({ model: value })}
+              onCommit={onCommit}
+            />
+            <ChoiceSelect
+              id={`effort-${p.name}`}
+              label="Reasoning"
+              ariaLabel={`${label} reasoning`}
+              saved={p.effort}
+              offered={!!p.effort && efforts.includes(p.effort)}
+              stale={staleEffort}
+              options={efforts.map((effort) => ({ value: effort, label: effort }))}
+              onChange={(value) => onChange({ effort: value })}
+              onCommit={onCommit}
+            />
+          </div>
+        )}
+        {staleModel && (
+          <p className="adm-warn" role="status">
+            <WarningIcon size={15} />
+            <span>
+              {p.model} is no longer offered by the {label} CLI. Runs still pass it; if {label}{" "}
+              refuses it, the chain moves on.
+            </span>
+          </p>
+        )}
+        {staleEffort && (
+          <p className="adm-warn" role="status">
+            <WarningIcon size={15} />
+            <span>
+              {p.effort} is no longer offered for this model. Runs still pass it; if {label} refuses
+              it, the chain moves on.
+            </span>
+          </p>
+        )}
+      </div>
+    </li>
+  );
+}
+
+/** One model or reasoning picker. A saved value the list no longer offers stays selectable. */
+function ChoiceSelect({
+  id,
+  label,
+  ariaLabel,
+  saved,
+  offered,
+  stale,
+  options,
+  onChange,
+  onCommit,
+}: {
+  id: string;
+  label: string;
+  ariaLabel: string;
+  saved: string | null | undefined;
+  offered: boolean;
+  stale: boolean;
+  options: { value: string; label: string }[];
+  onChange: (value: string | null) => void;
+  onCommit: () => void;
+}) {
+  return (
+    <div>
+      <label htmlFor={id}>{label}</label>
+      <select
+        id={id}
+        aria-label={ariaLabel}
+        className={stale ? "adm-select adm-select--invalid" : "adm-select"}
+        value={saved ?? ""}
+        onChange={(event) => onChange(event.target.value || null)}
+        onBlur={onCommit}
+      >
+        <option value="">Account default</option>
+        {saved && !offered && (
+          <option value={saved}>{stale ? `${saved} (not offered)` : saved}</option>
+        )}
+        {options.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
+          </option>
+        ))}
+      </select>
+    </div>
   );
 }

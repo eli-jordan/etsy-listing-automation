@@ -21,7 +21,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from etsy_listings.core.ai import codex
+from etsy_listings.core.ai import cli_support, codex
 from etsy_listings.core.ai.errors import SeoTryAgainError
 from etsy_listings.core.ai.models import ProviderTask
 from etsy_listings.core.ai.process import ProcessResult
@@ -228,7 +228,7 @@ def test_a_stop_while_the_proposal_waits_for_the_lock_caches_nothing(chain: Chai
     after the cleanup."""
     gate = chain.provider.gate("seo")
     run = chain.start(draft_brief=False)
-    wait_for(lambda: chain.provider.started["seo"].is_set())
+    wait_for(chain.provider.started["seo"].is_set)
 
     with chain.documents.lock(LISTING):
         gate.set()
@@ -441,7 +441,7 @@ def test_the_brief_write_waits_for_a_patch_holding_the_lock(chain: Chain) -> Non
     lock.__enter__()
     try:
         run = chain.start(draft_brief=True)
-        wait_for(lambda: chain.provider.started["brief"].is_set())
+        wait_for(chain.provider.started["brief"].is_set)
         assert not _becomes(run, lambda: "brief" in _types(run), timeout=0.3)
         # The PATCH that held the lock writes the seller's brief.
         edit_listing(chain.workspace.root, brief=SELLER_BRIEF)
@@ -500,7 +500,7 @@ class BlockingSearch(FakeEtsyMarketClient):
         self.cancel = cancel
         self.searching = threading.Event()
 
-    def search_active(self, query: str, *, limit: int = 25):  # noqa: ANN201 - the fake's own
+    def search_active(self, query: str, *, limit: int = 25):
         self.searching.set()
         self.cancel.wait(10)
         return super().search_active(query, limit=limit)
@@ -513,7 +513,7 @@ def test_cancelling_during_a_provider_call_kills_it_and_emits_no_proposal(
     edit_listing(chain.workspace.root, brief="")
     chain.provider.gate(step)  # type: ignore[arg-type]
     run = chain.start(draft_brief=True)
-    wait_for(lambda: chain.provider.started[step].is_set())  # type: ignore[index]
+    wait_for(chain.provider.started[step].is_set)  # type: ignore[index]
 
     assert run.request_stop("cancelled")
     wait_until_finished(run)
@@ -556,7 +556,7 @@ def test_cancelling_during_market_search_stops_research(
 def test_the_watchdog_fails_a_run_that_outlives_twenty_minutes(chain: Chain) -> None:
     chain.provider.gate("seo")
     run = chain.start(draft_brief=False)
-    wait_for(lambda: chain.provider.started["seo"].is_set())
+    wait_for(chain.provider.started["seo"].is_set)
 
     chain.clock.now = 20 * 60 - 1
     assert not _becomes(run, lambda: run.finished, timeout=0.1)
@@ -586,7 +586,7 @@ def test_the_watchdog_stops_the_run_at_its_configured_limit_and_says_so(chain: C
     _limits(chain, step=2, run=7)
     chain.provider.gate("seo")
     run = chain.start(draft_brief=False)
-    wait_for(lambda: chain.provider.started["seo"].is_set())
+    wait_for(chain.provider.started["seo"].is_set)
 
     chain.clock.now = 7 * 60 - 1
     assert not _becomes(run, lambda: run.finished, timeout=0.1)
@@ -662,7 +662,7 @@ def test_an_invalid_limit_relationship_refuses_the_run_naming_the_key(chain: Cha
 def test_each_run_has_its_own_daemon_thread_and_shutdown_cancels_it(chain: Chain) -> None:
     chain.provider.gate("queries")
     run = chain.start(draft_brief=False)
-    wait_for(lambda: chain.provider.started["queries"].is_set())
+    wait_for(chain.provider.started["queries"].is_set)
     threads = [t for t in threading.enumerate() if t.name.startswith("ai-run-")]
     assert threads
     assert all(thread.daemon for thread in threads)
@@ -762,7 +762,7 @@ def test_limits_and_providers_are_captured_from_one_read_of_settings_yaml(
     load = chain.workspace.load_settings
     loads: list[object] = []
 
-    def load_then_save():  # noqa: ANN202
+    def load_then_save():
         loaded = load()
         loads.append(loaded)
         # The seller's next save lands right after this read.
@@ -776,7 +776,7 @@ def test_limits_and_providers_are_captured_from_one_read_of_settings_yaml(
     monkeypatch.setattr(chain.workspace, "load_settings", load_then_save)
     adapters = []
 
-    def factory(workspace, ai):  # noqa: ANN001, ANN202
+    def factory(workspace, ai):
         adapters.append([type(p).__name__ for p in default_ai_providers(workspace, ai)])
         return [chain.provider]
 
@@ -828,7 +828,7 @@ def test_run_tasks_and_repairs_keep_preferences_and_the_next_run_sees_edits(
         raw = chain.provider.generate(task, kwargs["deadline"])
         return ProcessResult(0, raw.raw_output, "", False, False)
 
-    monkeypatch.setattr(codex.shutil, "which", lambda name: name)
+    monkeypatch.setattr(cli_support.shutil, "which", lambda name: name)
     monkeypatch.setattr(codex, "run_managed", execute)
     run = chain.registry.create(LISTING, draft_brief=True, origin=origin)
     assert isinstance(run, AiRun)

@@ -194,14 +194,25 @@ class HttpPrintifyClient(PrintifyClient):
                 params={"page": page, "limit": PRODUCTS_PAGE_SIZE},
             )
             body = response.json()
-            for raw in body.get("data", []):
-                if raw.get("is_deleted"):
-                    continue
-                if raw.get("title") == title and raw.get("description") == description:
-                    return str(raw["id"])
+            found = _product_with_copy(body.get("data", []), title=title, description=description)
+            if found is not None:
+                return found
             if page >= int(body.get("last_page", page)):
                 return None
             page += 1
+
+
+def _product_with_copy(
+    products: list[dict[str, Any]], *, title: str, description: str
+) -> str | None:
+    """The id of the first product on a page carrying this copy, skipping
+    deleted ones."""
+    for raw in products:
+        if raw.get("is_deleted"):
+            continue
+        if raw.get("title") == title and raw.get("description") == description:
+            return str(raw["id"])
+    return None
 
 
 def _variant_bodies(variants: dict[int, int], *, retiring: dict[int, int]) -> list[dict[str, Any]]:
@@ -225,6 +236,19 @@ def _variant_bodies(variants: dict[int, int], *, retiring: dict[int, int]) -> li
     return bodies
 
 
+def _print_area_body(area: PrintAreaSpec) -> dict[str, Any]:
+    return {
+        "variant_ids": list(area.variant_ids),
+        "placeholders": [
+            {
+                "position": placeholder.position,
+                "images": [image.model_dump() for image in placeholder.images],
+            }
+            for placeholder in area.placeholders
+        ],
+    }
+
+
 def _print_area_bodies(
     areas: tuple[PrintAreaSpec, ...], *, cover: tuple[int, ...] | None = None
 ) -> list[dict[str, Any]]:
@@ -237,19 +261,7 @@ def _print_area_bodies(
     depends on -- a dark-ink group that quietly gained the whole matrix would
     print the wrong file on half the shirts.
     """
-    bodies: list[dict[str, Any]] = [
-        {
-            "variant_ids": list(area.variant_ids),
-            "placeholders": [
-                {
-                    "position": placeholder.position,
-                    "images": [image.model_dump() for image in placeholder.images],
-                }
-                for placeholder in area.placeholders
-            ],
-        }
-        for area in areas
-    ]
+    bodies = [_print_area_body(area) for area in areas]
     if cover is not None and bodies:
         named = {vid for body in bodies for vid in body["variant_ids"]}
         bodies[-1]["variant_ids"] = sorted(set(bodies[-1]["variant_ids"]) | (set(cover) - named))

@@ -52,25 +52,32 @@ def _write_module(tree: Path, module: str, body: str = "") -> None:
         handle.write(body)
 
 
+def _write_contract(tree: Path, contract: dict[str, Any]) -> None:
+    for module in contract.get("source_modules", []) + contract.get("forbidden_modules", []):
+        if module.startswith(PACKAGE):
+            _write_module(tree, module)
+    for edge in contract.get("ignore_imports", []):
+        importer, imported = (part.strip() for part in edge.split("->"))
+        _write_importer(tree, importer, imported)
+    # A protected module's allowed importers really import it, so the
+    # control proves the contract admits them as well as rejecting others.
+    for protected in contract.get("protected_modules", []):
+        _write_module(tree, protected)
+        for importer in contract["allowed_importers"]:
+            _write_importer(tree, importer, protected)
+
+
+def _write_importer(tree: Path, importer: str, imported: str) -> None:
+    _write_module(tree, imported)
+    _write_module(tree, importer, f"import {imported}\n")
+
+
 def _fixture(tmp_path: Path) -> Path:
     tree = tmp_path / "tree"
     tree.mkdir()
     shutil.copyfile(ROOT / "pyproject.toml", tree / "pyproject.toml")
     for contract in _contracts():
-        for key in ("source_modules", "forbidden_modules"):
-            for module in contract.get(key, []):
-                if module.startswith(PACKAGE):
-                    _write_module(tree, module)
-        for edge in contract.get("ignore_imports", []):
-            importer, imported = (part.strip() for part in edge.split("->"))
-            _write_module(tree, imported)
-            _write_module(tree, importer, f"import {imported}\n")
-        # A protected module's allowed importers really import it, so the
-        # control proves the contract admits them as well as rejecting others.
-        for protected in contract.get("protected_modules", []):
-            _write_module(tree, protected)
-            for importer in contract["allowed_importers"]:
-                _write_module(tree, importer, f"import {protected}\n")
+        _write_contract(tree, contract)
     # Command registration reaching the launcher is intended (plan, PR 5).
     _write_module(tree, f"{PACKAGE}.cli.app", f"import {PACKAGE}.cli.ui\n")
     return tree

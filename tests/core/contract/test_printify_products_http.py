@@ -31,9 +31,9 @@ PRODUCT_ID = "6a9ffdbfecfdc9324d023442"
 UPLOAD_ID = "6a9ffd8a2c8e5a0d3f1b0c11"
 
 
-def _variant(id: int, *, enabled: bool, price: int = 2499, sku: str = "auto-1") -> dict:
+def _variant(variant_id: int, *, enabled: bool, price: int = 2499, sku: str = "auto-1") -> dict:
     return {
-        "id": id,
+        "id": variant_id,
         "sku": sku,
         "cost": 1304,
         "price": price,
@@ -294,7 +294,8 @@ def test_visible_is_kept_as_a_tripwire() -> None:
         SHOP_ID, PRODUCT_ID
     )
 
-    assert product is not None and product.visible is False
+    assert product is not None
+    assert product.visible is False
 
 
 def test_external_is_absent_rather_than_null_before_a_publish() -> None:
@@ -302,7 +303,8 @@ def test_external_is_absent_rather_than_null_before_a_publish() -> None:
         SHOP_ID, PRODUCT_ID
     )
 
-    assert product is not None and product.external is None
+    assert product is not None
+    assert product.external is None
 
 
 # ----------------------------------------------------------------- the update

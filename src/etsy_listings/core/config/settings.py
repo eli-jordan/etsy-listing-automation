@@ -49,7 +49,7 @@ Enforced here, not only by the slider, so a hand edit cannot set a limit
 the page could not show."""
 
 
-def _absent_is_empty(value: Any) -> Any:  # noqa: ANN401 - pre-validation YAML
+def _absent_is_empty(value: Any) -> Any:  # pre-validation YAML
     """A key written with nothing under it (``market_seo:``) is YAML's
     ``null``; it means "nothing tuned here", the same as leaving it out."""
     return {} if value is None else value

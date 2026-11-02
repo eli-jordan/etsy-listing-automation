@@ -115,7 +115,8 @@ def test_drafting_an_empty_brief_needs_the_brief_prompt(
     edit_listing(workspace_root, brief="")
 
     reason = _reason(workspace)
-    assert reason is not None and BRIEF_PROMPT_FILE in reason
+    assert reason is not None
+    assert BRIEF_PROMPT_FILE in reason
 
 
 def test_a_listing_without_a_usable_garment_profile_is_not_ready(

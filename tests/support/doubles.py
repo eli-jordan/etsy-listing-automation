@@ -50,7 +50,7 @@ class FakeRun:
         return str(self.calls[-1][1].get("input", ""))
 
 
-def replies(answers: list[str]):  # noqa: ANN201 - a bare `input` stand-in
+def replies(answers: list[str]):
     """An ``input()`` that answers ``answers`` in order.
 
     Deliberately raises ``IndexError`` once they run out rather than looping or

@@ -8,8 +8,9 @@ import platform
 import shutil
 import subprocess
 import tomllib
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Protocol
+from typing import Any, Protocol
 
 from PIL import Image
 
@@ -18,7 +19,7 @@ from etsy_listings.core.preparation.distribution.src.marigold_worker.protocol im
     Capabilities,
 )
 from etsy_listings.core.preparation.runtime import Capability, SetupError
-from etsy_listings.core.preparation.worker_client import Worker, WorkerError
+from etsy_listings.core.preparation.worker_client import InferenceCall, Worker, WorkerError
 from etsy_listings.core.workspace.atomic import write_json_atomic
 
 VERIFIED_FILE = "verified.json"
@@ -33,6 +34,11 @@ REVISIONS = (
 )
 
 
+def _unverified(message: str) -> None:
+    """Integrity failure the caller's handler records (S01 TRY301)."""
+    raise SetupError(message)
+
+
 def _run(command: list[str], *, timeout: float = 1800) -> str:
     try:
         result = subprocess.run(
@@ -44,10 +50,11 @@ def _run(command: list[str], *, timeout: float = 1800) -> str:
             timeout=timeout,
             check=True,
         )
-        return result.stdout
     except (OSError, subprocess.SubprocessError) as exc:
         details = getattr(exc, "stderr", "") or str(exc)
         raise SetupError(f"Marigold setup failed: {details[-8192:]}") from exc
+    else:
+        return result.stdout
 
 
 def _digest(path: Path) -> str:
@@ -60,6 +67,40 @@ def worker_command(python: Path, weights: Path, cache_root: Path | None = None) 
     if cache_root is not None:
         command.extend(["--cache-root", str(cache_root.resolve())])
     return command
+
+
+def _contained(root: Path, relatives: Iterable[str], message: str) -> list[Path]:
+    """``relatives`` under ``root``, refusing any that resolves outside it."""
+    paths = []
+    for relative in relatives:
+        path = root / relative
+        if not path.resolve().is_relative_to(root.resolve()):
+            raise SetupError(message)
+        paths.append(path)
+    return paths
+
+
+def _check_distribution(project: Path, files: dict[str, str]) -> None:
+    for relative, checksum in files.items():
+        path = project / relative
+        if not path.resolve().is_relative_to(project.resolve()) or _digest(path) != checksum:
+            _unverified("Worker distribution integrity mismatch")
+
+
+def _check_weights(weights: Path, revisions: dict[str, dict[str, dict[str, Any]]]) -> None:
+    if set(revisions) != set(REVISIONS):
+        _unverified("Incomplete pinned checkpoints")
+    for revision, files in revisions.items():
+        for relative, descriptor in files.items():
+            _check_weight(weights / revision, relative, descriptor)
+
+
+def _check_weight(folder: Path, relative: str, descriptor: dict[str, Any]) -> None:
+    path = folder / relative
+    if not path.resolve().is_relative_to(folder.resolve()):
+        _unverified("Unsafe checkpoint path")
+    if path.stat().st_size != descriptor["size"] or _digest(path) != descriptor["sha256"]:
+        _unverified("Pinned weights failed integrity verification")
 
 
 class CommandRunner(Protocol):
@@ -122,11 +163,13 @@ class NativeInstaller:
         ) as worker:
             for role in ROLES:
                 result = worker.infer(
-                    request_id="setup-" + role,
-                    role=role,
-                    input="crop.png",
-                    output=role + ".npz",
-                    size=(128, 128),
+                    InferenceCall(
+                        request_id="setup-" + role,
+                        role=role,
+                        input="crop.png",
+                        output=role + ".npz",
+                        size=(128, 128),
+                    )
                 )
                 smoke[role] = result.metadata.model_dump(mode="json")
         verified = {}
@@ -155,8 +198,8 @@ class NativeInstaller:
             },
         )
         return Capability(
-            True,
-            None,
+            available=True,
+            problem=None,
             engine_version=version,
             python=str(python),
             details=capabilities.model_dump(mode="json"),
@@ -174,19 +217,14 @@ class NativeInstaller:
         if manifest_file.stat().st_size > 1024 * 1024:
             raise SetupError("Runtime installation manifest exceeds size limit")
         manifest = json.loads(manifest_file.read_text(encoding="utf-8"))
-        paths = [manifest_file]
         project = target / "distribution"
-        for relative in manifest["files"]:
-            path = project / relative
-            if not path.resolve().is_relative_to(project.resolve()):
-                raise SetupError("Unsafe worker distribution path")
-            paths.append(path)
+        paths = [
+            manifest_file,
+            *_contained(project, manifest["files"], "Unsafe worker distribution path"),
+        ]
         for revision, files in manifest["weights"].items():
-            for relative in files:
-                path = weights / revision / relative
-                if not path.resolve().is_relative_to(weights.resolve()):
-                    raise SetupError("Unsafe checkpoint path")
-                paths.append(path)
+            relatives = [f"{revision}/{relative}" for relative in files]
+            paths.extend(_contained(weights, relatives, "Unsafe checkpoint path"))
         paths.extend((project / ".venv/Lib/site-packages").glob("*.dist-info/METADATA"))
         stamps = {}
         for path in paths:
@@ -210,15 +248,17 @@ class NativeInstaller:
                     and record.get("stamps") == stamps
                 ):
                     return Capability(
-                        True,
-                        None,
+                        available=True,
+                        problem=None,
                         engine_version=version,
                         python=record["python"],
                         details=record["capabilities"],
                     )
         except (OSError, ValueError, KeyError, TypeError, AttributeError, SetupError) as exc:
             return Capability(
-                False, f"{exc}. Run etsy-listings marigold update.", engine_version=version
+                available=False,
+                problem=f"{exc}. Run etsy-listings marigold update.",
+                engine_version=version,
             )
         return self.verify(target, weights, version)
 
@@ -243,54 +283,40 @@ class NativeInstaller:
                 )
             else:
                 record_file.unlink(missing_ok=True)
-            return report
         except (OSError, ValueError, KeyError, TypeError, SetupError) as exc:
             return Capability(
-                False, f"{exc}. Run etsy-listings marigold update.", engine_version=version
+                available=False,
+                problem=f"{exc}. Run etsy-listings marigold update.",
+                engine_version=version,
             )
+        else:
+            return report
 
     def _inspect(self, target: Path, weights: Path, version: str) -> Capability:
         try:
             manifest = json.loads((target / "installation.json").read_text(encoding="utf-8"))
             if manifest["schema_version"] != 1 or manifest["engine_version"] != version:
-                raise SetupError("Unsupported runtime installation manifest")
+                _unverified("Unsupported runtime installation manifest")
             project = target / "distribution"
-            for relative, checksum in manifest["files"].items():
-                path = project / relative
-                if (
-                    not path.resolve().is_relative_to(project.resolve())
-                    or _digest(path) != checksum
-                ):
-                    raise SetupError("Worker distribution integrity mismatch")
-            if set(manifest["weights"]) != set(REVISIONS):
-                raise SetupError("Incomplete pinned checkpoints")
-            for revision, files in manifest["weights"].items():
-                for relative, descriptor in files.items():
-                    path = weights / revision / relative
-                    if not path.resolve().is_relative_to((weights / revision).resolve()):
-                        raise SetupError("Unsafe checkpoint path")
-                    if (
-                        path.stat().st_size != descriptor["size"]
-                        or _digest(path) != descriptor["sha256"]
-                    ):
-                        raise SetupError("Pinned weights failed integrity verification")
+            _check_distribution(project, manifest["files"])
+            _check_weights(weights, manifest["weights"])
             python = project / ".venv" / "Scripts" / "python.exe"
             capabilities = Capabilities.model_validate_json(
                 self._run([*worker_command(python, weights), "--capabilities"], timeout=120)
             )
             self._verify_packages(project, capabilities)
             if capabilities.engine_version != version or capabilities.cuda is not True:
-                raise SetupError("Native worker or CUDA capability is unavailable")
+                _unverified("Native worker or CUDA capability is unavailable")
             return Capability(
-                True,
-                None,
+                available=True,
+                problem=None,
                 engine_version=version,
                 python=str(python),
                 details=capabilities.model_dump(mode="json"),
             )
         except (OSError, ValueError, KeyError, TypeError, SetupError) as exc:
             return Capability(
-                False,
-                f"{exc}. Run etsy-listings marigold setup/update to repair the runtime.",
+                available=False,
+                problem=f"{exc}. Run etsy-listings marigold setup/update to repair the runtime.",
                 engine_version=version,
             )

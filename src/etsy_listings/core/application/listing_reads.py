@@ -28,12 +28,13 @@ from typing import Any, Protocol
 from pydantic import ValidationError
 
 from etsy_listings.core.application.dependencies import EtsyStates
-from etsy_listings.core.application.refusals import ListingMissing, field_errors_of
+from etsy_listings.core.application.refusals import ListingMissingError, field_errors_of
 from etsy_listings.core.config.artwork import Resolved, resolve
 from etsy_listings.core.config.errors import ConfigLoadError
 from etsy_listings.core.config.garment_profile import GarmentProfile
 from etsy_listings.core.config.listing import Listing
 from etsy_listings.core.config.listing_validation import (
+    CheckInputs,
     Issue,
     check_listing,
     check_listing_yaml_present,
@@ -50,7 +51,7 @@ from etsy_listings.core.engine.status import (
 )
 from etsy_listings.core.workspace.facts import WorkspaceFacts
 from etsy_listings.core.workspace.listing_documents import ListingDocuments
-from etsy_listings.core.workspace.workspace import InvalidRefError, Workspace
+from etsy_listings.core.workspace.workspace import DescriptionResolution, InvalidRefError, Workspace
 
 
 @dataclass(frozen=True)
@@ -118,10 +119,10 @@ class ListingRow:
 
 
 def read_listing(workspace: Workspace, name: str, *, etsy_states: EtsyStates) -> ListingView:
-    """Listing ``name`` as the editor reads it. Raises :class:`ListingMissing`
+    """Listing ``name`` as the editor reads it. Raises :class:`ListingMissingError`
     when it has no ``listing.yaml``."""
     if not ListingDocuments(workspace).exists(name):
-        raise ListingMissing(name)
+        raise ListingMissingError(name)
     listing = workspace.load_listing(name)
     etsy_listing_id, printify_product_id = remote_ids(workspace, name)
     etsy_state = _etsy_state(etsy_states, etsy_listing_id)
@@ -130,20 +131,24 @@ def read_listing(workspace: Workspace, name: str, *, etsy_states: EtsyStates) ->
         workspace,
         WorkspaceFacts.gather(workspace),
         listing,
-        name=name,
-        listing_dir=workspace.listing_dir(name),
-        published=published,
-        status=workspace_listing_status(
-            workspace, name, live=published, lifecycle=listing.lifecycle, etsy_state=etsy_state
+        _ListingContext(
+            name=name,
+            listing_dir=workspace.listing_dir(name),
+            published=published,
+            status=workspace_listing_status(
+                workspace, name, live=published, lifecycle=listing.lifecycle, etsy_state=etsy_state
+            ),
+            # The table's row gestures, so the editor's action row offers the
+            # same lifecycle actions without deciding them itself.
+            gestures=listing_gestures(
+                lifecycle=listing.lifecycle, etsy_state=etsy_state, published=published
+            ),
+            modified_at=datetime.fromtimestamp(
+                workspace.listing_file(name).stat().st_mtime, tz=UTC
+            ),
+            etsy_listing_id=etsy_listing_id,
+            printify_product_id=printify_product_id,
         ),
-        # The table's row gestures, so the editor's action row offers the
-        # same lifecycle actions without deciding them itself.
-        gestures=listing_gestures(
-            lifecycle=listing.lifecycle, etsy_state=etsy_state, published=published
-        ),
-        modified_at=datetime.fromtimestamp(workspace.listing_file(name).stat().st_mtime, tz=UTC),
-        etsy_listing_id=etsy_listing_id,
-        printify_product_id=printify_product_id,
     )
 
 
@@ -155,11 +160,11 @@ def scene_artwork(workspace: Workspace, name: str) -> Callable[[str | None], Pat
     The answer is ``None`` -- the layer is left bare rather than failing the
     picture -- for an empty slot, an unclassified colour, a ref outside its
     root or a file since deleted: the issues banner already says why, and the
-    rest of the scene is still worth judging. Raises :class:`ListingMissing`
+    rest of the scene is still worth judging. Raises :class:`ListingMissingError`
     without a ``listing.yaml``, and ``ConfigLoadError`` when it does not load.
     """
     if not ListingDocuments(workspace).exists(name):
-        raise ListingMissing(name)
+        raise ListingMissingError(name)
     listing = workspace.load_listing(name)
     profile = WorkspaceFacts.for_files(workspace).garment_profile(listing.garment_profile)
     tones = profile.colors if profile is not None else {}
@@ -197,12 +202,14 @@ def describe_draft(workspace: Workspace, document: Mapping[str, Any]) -> Listing
         workspace,
         WorkspaceFacts.gather(workspace),
         listing,
-        name="",
-        listing_dir=workspace.draft_listing_dir(),
-        published=False,
-        status="draft",
-        gestures=(),
-        field_errors=field_errors,
+        _ListingContext(
+            name="",
+            listing_dir=workspace.draft_listing_dir(),
+            published=False,
+            status="draft",
+            gestures=(),
+            field_errors=field_errors,
+        ),
     )
 
 
@@ -257,11 +264,10 @@ def listing_row(
         ),
         issues=_business_issues(
             workspace,
-            facts,
             workspace.listing_dir(name),
             listing,
+            _check_inputs(facts, listing, workspace.listing_dir(name), description),
             published=published,
-            description_ref_error=str(description.error) if description.error is not None else None,
         ),
         gestures=listing_gestures(
             lifecycle=listing.lifecycle, etsy_state=etsy_state, published=published
@@ -313,33 +319,37 @@ def _etsy_state(etsy_states: EtsyStates, etsy_listing_id: int | None) -> str | N
     return etsy_states([etsy_listing_id]).get(etsy_listing_id)
 
 
+@dataclass(frozen=True)
+class _ListingContext:
+    """What the caller of :func:`_describe` knows about a listing that its
+    document does not say: where it lives, how it stands, and its remote ids."""
+
+    name: str
+    listing_dir: Path
+    published: bool
+    status: ListingStatus
+    gestures: Sequence[ListingGesture]
+    modified_at: datetime | None = None
+    etsy_listing_id: int | None = None
+    printify_product_id: str | None = None
+    field_errors: dict[str, str] | None = None
+
+
 def _describe(
-    workspace: Workspace,
-    facts: WorkspaceFacts,
-    listing: Listing,
-    *,
-    name: str,
-    listing_dir: Path,
-    published: bool,
-    status: ListingStatus,
-    gestures: Sequence[ListingGesture],
-    modified_at: datetime | None = None,
-    etsy_listing_id: int | None = None,
-    printify_product_id: str | None = None,
-    field_errors: dict[str, str] | None = None,
+    workspace: Workspace, facts: WorkspaceFacts, listing: Listing, context: _ListingContext
 ) -> ListingView:
     """A `Listing` as the editor reads it, whether or not it is on disk: the
     unnamed draft carries the same computed issues and resolved prices as a
     saved listing, or the editor would show one thing before the listing was
     named and another after."""
+    listing_dir = context.listing_dir
     description = workspace.resolve_description(listing.etsy.description)
     issues = _business_issues(
         workspace,
-        facts,
         listing_dir,
         listing,
-        published=published,
-        description_ref_error=str(description.error) if description.error is not None else None,
+        _check_inputs(facts, listing, listing_dir, description),
+        published=context.published,
     )
     plan_name, resolved_prices = pricing_summary(
         workspace,
@@ -348,31 +358,47 @@ def _describe(
         resolve=lambda ref: workspace.resolve_ref(ref, listing_dir=listing_dir),
     )
     return ListingView(
-        name=name,
+        name=context.name,
         listing=listing,
-        status=status,
+        status=context.status,
         issues=issues,
-        gestures=tuple(gestures),
+        gestures=tuple(context.gestures),
         description_composed=description.composed,
         design_content_hash=workspace.design_content_hash(listing.design, listing_dir=listing_dir),
         pricing_plan_name=plan_name,
         resolved_prices=resolved_prices,
         garment_profile=facts.garment_profile(listing.garment_profile),
-        modified_at=modified_at,
-        etsy_listing_id=etsy_listing_id,
-        printify_product_id=printify_product_id,
-        field_errors=field_errors or {},
+        modified_at=context.modified_at,
+        etsy_listing_id=context.etsy_listing_id,
+        printify_product_id=context.printify_product_id,
+        field_errors=context.field_errors or {},
+    )
+
+
+def _check_inputs(
+    facts: WorkspaceFacts,
+    listing: Listing,
+    listing_dir: Path,
+    description: DescriptionResolution,
+) -> CheckInputs:
+    """``listing``'s check inputs; ``description`` is the one resolution the
+    caller also shows, so its ref is read once."""
+    return CheckInputs(
+        garment_profile=facts.garment_profile(listing.garment_profile),
+        garment_profile_names=facts.garment_profile_names,
+        templates=facts.templates,
+        description_ref_error=str(description.error) if description.error is not None else None,
+        videos=facts.videos(listing, listing_dir),
     )
 
 
 def _business_issues(
     workspace: Workspace,
-    facts: WorkspaceFacts,
     listing_dir: Path,
     listing: Listing,
+    inputs: CheckInputs,
     *,
     published: bool,
-    description_ref_error: str | None,
 ) -> list[Issue]:
     """*listing_dir* rather than a listing name, because the unnamed draft
     has no directory. A workspace-rooted ref resolves the same against any
@@ -380,13 +406,9 @@ def _business_issues(
     exactly as a real one would."""
     return check_listing(
         listing,
-        garment_profile=facts.garment_profile(listing.garment_profile),
-        garment_profile_names=facts.garment_profile_names,
+        inputs,
         design_paths=_resolve_design_paths(workspace, listing, listing_dir),
-        templates=facts.templates,
         published=published,
-        description_ref_error=description_ref_error,
-        videos=facts.videos(listing, listing_dir),
     )
 
 

@@ -16,11 +16,19 @@ import time
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TextIO
+from typing import Literal, TextIO
 
 from etsy_listings.core.ai.models import Deadline
 
-_DEFAULT_POLL_INTERVAL = 0.05
+# Chosen once, at import: the other platform's module is never imported.
+if sys.platform == "win32":
+    from etsy_listings.core.ai._windows_process import WindowsProcess as _OwnedProcess
+else:
+    from etsy_listings.core.ai._posix_process import PosixProcess as _OwnedProcess
+
+POLL_INTERVAL = 0.05
+"""How often the wait loop checks the deadline, cancellation and exit. Read at
+each call rather than bound as a default, so a test can shorten it."""
 _REAP_TIMEOUT = 5.0
 
 
@@ -81,7 +89,6 @@ def run_managed(
     input_text: str,
     deadline: Deadline,
     cancel_event: threading.Event | None = None,
-    poll_interval: float = _DEFAULT_POLL_INTERVAL,
 ) -> ProcessResult:
     """Run a command within its deadline and cancellation signal.
 
@@ -90,50 +97,17 @@ def run_managed(
     The five-second cleanup allowance covers termination, drain and reaping.
     """
     try:
-        if sys.platform == "win32":
-            from etsy_listings.core.ai._windows_process import WindowsProcess
-
-            scope = WindowsProcess(argv, cwd)
-        else:
-            from etsy_listings.core.ai._posix_process import PosixProcess
-
-            scope = PosixProcess(argv, cwd)
+        scope = _OwnedProcess(argv, cwd)
     except OSError as exc:
         raise CliProcessError(f"could not start and own {list(argv)!r}: {exc}") from exc
 
     capture = _Capture(scope.stdin, scope.stdout, scope.stderr, input_text)
-    timed_out = cancelled = False
-    idle = cancel_event or threading.Event()
     try:
         capture.worker.start()
-        while True:
-            if cancel_event is not None and cancel_event.is_set():
-                cancelled = True
-                break
-            if deadline.expired:
-                timed_out = True
-                break
-            if scope.exited:
-                break
-            if capture.worker.is_alive():
-                capture.worker.join(poll_interval)
-            else:
-                idle.wait(poll_interval)
+        ending = _wait(scope, capture, deadline, cancel_event)
     finally:
-        reap_at = time.monotonic() + _REAP_TIMEOUT
-        try:
-            scope.kill()
-            if capture.worker.ident is not None:
-                capture.worker.join(max(0.0, reap_at - time.monotonic()))
-            if capture.worker.is_alive():
-                raise CliProcessError(
-                    "managed process pipe readers did not stop within cleanup allowance"
-                )
-            code = scope.wait(max(0.0, reap_at - time.monotonic()))
-        except (OSError, subprocess.TimeoutExpired) as exc:
-            raise CliProcessError(f"could not clean up managed processes: {exc}") from exc
-        finally:
-            scope.close()
+        code = _clean_up(scope, capture)
+    timed_out, cancelled = ending == "timed_out", ending == "cancelled"
     if capture.errors and not (timed_out or cancelled):
         errors = [error for error in capture.errors if not isinstance(error, BrokenPipeError)]
         if errors:
@@ -145,3 +119,52 @@ def run_managed(
         timed_out,
         cancelled,
     )
+
+
+type _Ending = Literal["exited", "timed_out", "cancelled"]
+
+
+def _wait(
+    scope: _OwnedProcess,
+    capture: _Capture,
+    deadline: Deadline,
+    cancel_event: threading.Event | None,
+) -> _Ending:
+    """Poll until the command exits, its deadline passes or it is cancelled."""
+    idle = cancel_event or threading.Event()
+    while (ending := _ending(scope, deadline, cancel_event)) is None:
+        if capture.worker.is_alive():
+            capture.worker.join(POLL_INTERVAL)
+        else:
+            idle.wait(POLL_INTERVAL)
+    return ending
+
+
+def _ending(
+    scope: _OwnedProcess, deadline: Deadline, cancel_event: threading.Event | None
+) -> _Ending | None:
+    """Why waiting is over, checked in this order, or None to keep waiting."""
+    if cancel_event is not None and cancel_event.is_set():
+        return "cancelled"
+    if deadline.expired:
+        return "timed_out"
+    return "exited" if scope.exited else None
+
+
+def _clean_up(scope: _OwnedProcess, capture: _Capture) -> int:
+    """End every owned process and drain the pipes, within the cleanup
+    allowance; the exit code once reaped."""
+    reap_at = time.monotonic() + _REAP_TIMEOUT
+    try:
+        scope.kill()
+        if capture.worker.ident is not None:
+            capture.worker.join(max(0.0, reap_at - time.monotonic()))
+        if capture.worker.is_alive():
+            raise CliProcessError(
+                "managed process pipe readers did not stop within cleanup allowance"
+            )
+        return scope.wait(max(0.0, reap_at - time.monotonic()))
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        raise CliProcessError(f"could not clean up managed processes: {exc}") from exc
+    finally:
+        scope.close()

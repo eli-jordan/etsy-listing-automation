@@ -52,7 +52,7 @@ Document = dict[str, Any]
 :class:`Listing`. An edit must keep the keys it does not understand."""
 
 
-class ListingMissing(UserFacingError, LookupError):
+class ListingMissingError(UserFacingError, LookupError):
     """There is no ``listing.yaml`` by this name. Either there never was, or
     a rename or delete holding the listing's lock moved it first."""
 
@@ -61,7 +61,7 @@ class ListingMissing(UserFacingError, LookupError):
         self.name = name
 
 
-class ListingNameTaken(UserFacingError, ValueError):
+class ListingNameTakenError(UserFacingError, ValueError):
     """A create or rename named a listing directory that already exists,
     with or without a ``listing.yaml`` in it."""
 
@@ -111,14 +111,14 @@ class ListingDocuments:
         return not self._workspace.listing_dir(name).exists()
 
     def read(self, name: str) -> Document:
-        """``name``'s document as written. Raises :class:`ListingMissing`
+        """``name``'s document as written. Raises :class:`ListingMissingError`
         when there is none. Unlike :meth:`Workspace.load_listing`, this does
         not validate it."""
         path = self._workspace.listing_file(name)
         try:
             text = read_bytes_retrying(path).decode("utf-8")
         except FileNotFoundError:
-            raise ListingMissing(name) from None
+            raise ListingMissingError(name) from None
         raw = yaml.safe_load(text)
         return raw if isinstance(raw, dict) else {}
 
@@ -128,7 +128,7 @@ class ListingDocuments:
 
         ``change`` returns ``None`` to write nothing, and that is returned.
         If it raises, nothing is written and the exception propagates.
-        Raises :class:`ListingMissing` when there is no document, whether
+        Raises :class:`ListingMissingError` when there is no document, whether
         before or after waiting for the lock.
 
         The document is not validated here. The editor's patch validates what
@@ -154,14 +154,14 @@ class ListingDocuments:
 
         * ``InvalidNameError``: ``name`` is not a single path segment
           (ADR-0013).
-        * :class:`ListingNameTaken`: the name is not :meth:`is_free`.
+        * :class:`ListingNameTakenError`: the name is not :meth:`is_free`.
         * ``pydantic.ValidationError``: ``document`` does not validate
           structurally. An incomplete document validates and is written
           (ADR-0043).
         """
         with self.lock(name):
             if not self.is_free(name):
-                raise ListingNameTaken(name)
+                raise ListingNameTakenError(name)
             return self.write(name, document)
 
     def write(self, name: str, document: Mapping[str, Any]) -> Path:

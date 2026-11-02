@@ -20,7 +20,7 @@ def refuse_reads(monkeypatch: pytest.MonkeyPatch, times: int) -> list[float]:
     real = Path.open
     refusals = iter([PermissionError(13, "Access is denied")] * times)
 
-    def busy(self: Path, mode: str = "r", *args: Any, **kwargs: Any) -> Any:  # noqa: ANN401
+    def busy(self: Path, mode: str = "r", *args: Any, **kwargs: Any) -> Any:
         if "r" in mode and "+" not in mode:
             refusal = next(refusals, None)
             if refusal is not None:

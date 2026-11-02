@@ -51,14 +51,7 @@ export function useShopLookups() {
   const answered = useCallback((next: ShopLookups) => {
     const before = previous.current;
     if (before) {
-      const discovered: Partial<Record<Creatable, Found>> = {};
-      for (const field of FIELDS) {
-        const known = new Set(choices(before, field).map((c) => c.value));
-        const service = field === "preferred_print_provider" ? "printify" : "etsy";
-        if (!before[service].available) continue;
-        const fresh = choices(next, field).find((c) => !known.has(c.value));
-        if (fresh) discovered[field] = fresh;
-      }
+      const discovered = discoveredChoices(before, next);
       setFound((current) => ({ ...current, ...discovered }));
     }
     previous.current = next;
@@ -116,4 +109,21 @@ export function useShopLookups() {
     refresh,
     choices: (field: Creatable) => (lookups ? choices(lookups, field) : []),
   };
+}
+
+/** The first choice per field that ``next`` offers and ``before`` did not,
+ * for fields whose service answered both times. */
+function discoveredChoices(
+  before: ShopLookups,
+  next: ShopLookups,
+): Partial<Record<Creatable, Found>> {
+  const discovered: Partial<Record<Creatable, Found>> = {};
+  for (const field of FIELDS) {
+    const service = field === "preferred_print_provider" ? "printify" : "etsy";
+    if (!before[service].available) continue;
+    const known = new Set(choices(before, field).map((c) => c.value));
+    const fresh = choices(next, field).find((c) => !known.has(c.value));
+    if (fresh) discovered[field] = fresh;
+  }
+  return discovered;
 }

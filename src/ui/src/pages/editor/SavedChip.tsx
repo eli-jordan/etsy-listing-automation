@@ -1,3 +1,4 @@
+import { useMenuDismiss } from "../../hooks/useMenuDismiss";
 import { CaretDownIcon } from "@phosphor-icons/react/dist/csr/CaretDown";
 import { CheckIcon } from "@phosphor-icons/react/dist/csr/Check";
 import { CopyIcon } from "@phosphor-icons/react/dist/csr/Copy";
@@ -29,21 +30,7 @@ export function SavedChip({
   const cardId = useId();
   const title = subject === "listing-template" ? "Listing template file" : "Listing file";
 
-  useEffect(() => {
-    if (!open) return;
-    function onPointerDown(event: MouseEvent) {
-      if (rootRef.current && !rootRef.current.contains(event.target as Node)) setOpen(false);
-    }
-    function onKey(event: KeyboardEvent) {
-      if (event.key === "Escape") setOpen(false);
-    }
-    document.addEventListener("mousedown", onPointerDown);
-    document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("mousedown", onPointerDown);
-      document.removeEventListener("keydown", onKey);
-    };
-  }, [open]);
+  useMenuDismiss(open, rootRef, setOpen);
 
   useEffect(() => {
     if (!copied) return;

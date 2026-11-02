@@ -57,6 +57,23 @@ function describe(t: TemplateSummary): string {
  * upload, or a folder made by hand -- and `/thumbnail` 404s for those. Without
  * this the browser draws its own broken-image icon, which reads as the rail
  * being broken rather than as the template being empty. */
+function mapsLabel(maps: TemplateSummary["maps"]): string {
+  if (!maps) return "Checking maps";
+  return marigoldMapsReady(maps) ? "Ready" : "Needs maps";
+}
+
+/** A template's place in the preparation queue, if it has one. */
+function queueStatus(jobs: PreparationJob[], name: string): string | null {
+  const job = jobs.find((candidate) => candidate.template === name);
+  if (!job) return null;
+  return job.phase === "queued" ? "Queued" : "Preparing";
+}
+
+function jobLabel(job: PreparationJob): string {
+  if (job.phase === "queued") return "Queued";
+  return job.kind === "rebuild" ? "Rebuilding maps" : "Preparing";
+}
+
 function Thumb({ name }: { name: string }) {
   const [failed, setFailed] = useState(false);
   if (failed) return <span className="template-rail__thumb template-rail__thumb--empty" />;
@@ -98,12 +115,7 @@ function Row({ template, selected, onSelect, preparationStatus }: RowProps) {
           <span
             className={`mg-rail-state${marigoldMapsReady(template.maps) ? " mg-rail-state--ready" : ""}`}
           >
-            {preparationStatus ||
-              (template.maps
-                ? marigoldMapsReady(template.maps)
-                  ? "Ready"
-                  : "Needs maps"
-                : "Checking maps")}
+            {preparationStatus || mapsLabel(template.maps)}
           </span>
         )}
       </span>
@@ -144,13 +156,7 @@ function Group({
           selected={t.name === selected}
           onSelect={onSelect}
           preparationStatus={
-            t.name === selected
-              ? (selectedPreparationStatus ?? null)
-              : jobs.find((job) => job.template === t.name)?.phase === "queued"
-                ? "Queued"
-                : jobs.some((job) => job.template === t.name)
-                  ? "Preparing"
-                  : null
+            t.name === selected ? (selectedPreparationStatus ?? null) : queueStatus(jobs, t.name)
           }
         />
       ))}
@@ -160,6 +166,55 @@ function Group({
         </button>
       )}
     </section>
+  );
+}
+
+/** The templates the filters leave: one list for Marigold, which prepares
+ * rather than calibrates, else what still needs calibrating above what is
+ * done. */
+function RailGroups({
+  shown,
+  marigold,
+  selected,
+  onSelect,
+  jobs,
+  selectedPreparationStatus,
+}: {
+  shown: TemplateSummary[];
+  marigold: boolean;
+  selected: string | null;
+  onSelect: (name: string) => void;
+  jobs: PreparationJob[];
+  selectedPreparationStatus: string | null;
+}) {
+  if (shown.length === 0) return <p className="template-rail__empty">No templates match.</p>;
+  if (marigold) {
+    return (
+      <Group
+        heading="Templates"
+        templates={shown}
+        selected={selected}
+        onSelect={onSelect}
+        jobs={jobs}
+        selectedPreparationStatus={selectedPreparationStatus}
+      />
+    );
+  }
+  return (
+    <>
+      <Group
+        heading="Needs calibration"
+        templates={shown.filter(needsCalibration)}
+        selected={selected}
+        onSelect={onSelect}
+      />
+      <Group
+        heading="Calibrated"
+        templates={shown.filter((t) => !needsCalibration(t))}
+        selected={selected}
+        onSelect={onSelect}
+      />
+    </>
   );
 }
 
@@ -201,9 +256,6 @@ export function TemplateRail({
       return true;
     });
   }, [templates, search, status, kind]);
-
-  const pending = shown.filter(needsCalibration);
-  const finished = shown.filter((t) => !needsCalibration(t));
 
   return (
     <nav className="template-rail" aria-label="Templates">
@@ -263,33 +315,14 @@ export function TemplateRail({
         ))}
       </div>
 
-      {shown.length === 0 ? (
-        <p className="template-rail__empty">No templates match.</p>
-      ) : marigold ? (
-        <Group
-          heading="Templates"
-          templates={shown}
-          selected={selected}
-          onSelect={onSelect}
-          jobs={jobs}
-          selectedPreparationStatus={selectedPreparationStatus ?? null}
-        />
-      ) : (
-        <>
-          <Group
-            heading="Needs calibration"
-            templates={pending}
-            selected={selected}
-            onSelect={onSelect}
-          />
-          <Group
-            heading="Calibrated"
-            templates={finished}
-            selected={selected}
-            onSelect={onSelect}
-          />
-        </>
-      )}
+      <RailGroups
+        shown={shown}
+        marigold={marigold}
+        selected={selected}
+        onSelect={onSelect}
+        jobs={jobs}
+        selectedPreparationStatus={selectedPreparationStatus ?? null}
+      />
       {jobs.length > 0 && (
         <section className="mg-queue">
           <h2 className="template-rail__heading">Preparation queue</h2>
@@ -301,13 +334,7 @@ export function TemplateRail({
               onClick={() => onSelect(job.template)}
             >
               <span>{job.template}</span>
-              <span>
-                {job.phase === "queued"
-                  ? "Queued"
-                  : job.kind === "rebuild"
-                    ? "Rebuilding maps"
-                    : "Preparing"}
-              </span>
+              <span>{jobLabel(job)}</span>
             </button>
           ))}
         </section>

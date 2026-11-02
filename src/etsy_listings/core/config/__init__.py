@@ -46,7 +46,7 @@ from etsy_listings.core.config.secrets import (
 )
 from etsy_listings.core.config.slug import ColourExceptions, SlugCollisionError, slug_map, slugify
 
-__all__ = [
+__all__ = [  # noqa: RUF022 -- grouped by topic, not alphabetically
     # One class per config file.
     "Defaults",
     "Listing",

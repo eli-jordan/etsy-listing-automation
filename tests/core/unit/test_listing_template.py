@@ -93,5 +93,5 @@ def test_load_names_the_file_it_could_not_read(tmp_path: Path) -> None:
     path = tmp_path / "template.yaml"
     path.write_text("garment_profile: x\ncolors: []\nmedia: []\nbrief: no\n", encoding="utf-8")
 
-    with pytest.raises(ConfigLoadError, match="template.yaml"):
+    with pytest.raises(ConfigLoadError, match=r"template.yaml"):
         ListingTemplate.load(path, currency="NOK")

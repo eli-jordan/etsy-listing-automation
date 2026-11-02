@@ -17,7 +17,7 @@ from fastapi.testclient import TestClient
 
 from etsy_listings.core import connections
 from etsy_listings.core.clients.etsy.fakes import FakeEtsyListingClient, FakeEtsyShopClient
-from etsy_listings.core.clients.etsy.models import ShippingProfile
+from etsy_listings.core.clients.etsy.models import ProductionPartner, ShippingProfile
 from etsy_listings.core.clients.etsy.oauth import TOKEN_URL
 from etsy_listings.core.clients.etsy.tokens import StoredTokens
 from etsy_listings.core.clients.etsy.transport import EtsyApiError
@@ -141,7 +141,7 @@ def test_lookups_answer_each_service_separately(
     client = TestClient(create_app(Workspace.discover(root_override=workspace_root)))
 
     class Down(FakeEtsyListingClient):
-        def production_partners(self, shop_id: int) -> list:  # type: ignore[type-arg]
+        def production_partners(self, shop_id: int) -> list[ProductionPartner]:
             raise EtsyApiError(503, error="Etsy is down")
 
     monkeypatch.setattr(connections, "etsy_listing_client", lambda root: Down())

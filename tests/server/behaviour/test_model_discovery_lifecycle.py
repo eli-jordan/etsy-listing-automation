@@ -22,7 +22,8 @@ def test_startup_serves_health_while_advisory_discovery_is_blocked(
     monkeypatch.setattr("etsy_listings.core.ai.discovery.run_managed", cli)
     discovery = ModelDiscovery()
     workspace = Workspace.discover(root_override=workspace_root)
-    app = create_app(workspace, model_discovery=discovery)
+    app = create_app(workspace)
+    app.state.model_discovery = discovery
     assert cli.calls == [], "construction must start no discovery"
     serving = threading.Event()
     health = []

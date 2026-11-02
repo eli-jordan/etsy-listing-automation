@@ -20,7 +20,7 @@ import names the module it depends on. Public interfaces:
     ``edit_listing``: an editor save's patch merged into ``listing.yaml``.
 ``listing_creation``
     ``create_listing``; the ``new`` wizard's stub --
-    ``load_template_kind``, ``build_media_entries``, ``build_listing_stub``,
+    ``load_template_kind``, ``build_media_entries``, ``ListingStub``,
     ``validate_listing_stub``.
 ``listing_identity``
     ``rename_listing``, ``delete_listing`` -> ``Deletion``: everything keyed
@@ -57,7 +57,7 @@ import names the module it depends on. Public interfaces:
     defaults and a revision of its exact bytes); ``edit_shop`` applies dotted
     ``EDITABLE_KEYS`` changes (``PRINT_ON_DEMAND`` for the derived preset)
     against an expected revision, validated as a whole ``Defaults``, refusing
-    with ``ShopRevisionConflict`` / ``InvalidShopEdit`` and writing nothing
+    with ``ShopRevisionConflictError`` / ``InvalidShopEditError`` and writing nothing
     for a no-op; ``shop_connections`` -> ``ShopConnections`` of
     ``ConnectionRow``; ``shop_lookups`` -> ``ShopLookups`` (``EtsyLookups``,
     ``PrintifyLookups``, ``ReturnPolicyChoice``), each failing on its own.
@@ -68,8 +68,8 @@ import names the module it depends on. Public interfaces:
     changes -- ``ai.providers`` (ADR-0056), ``batch_ai.concurrency``, and
     ``market_seo.weights`` as six
     whole percentages totalling 100 -- against an expected revision, validated
-    as a whole ``Settings``, refusing with ``SettingsRevisionConflict`` /
-    ``InvalidSettingsEdit``; ``default_weights`` is what Reset writes.
+    as a whole ``Settings``, refusing with ``SettingsRevisionConflictError`` /
+    ``InvalidSettingsEditError``; ``default_weights`` is what Reset writes.
 ``mockup_templates``
     The calibrator: ``list_templates`` -> ``TemplateOverview``,
     ``colour_report``, ``assign_kind``, ``read_config`` / ``save_config``,
@@ -109,18 +109,18 @@ import names the module it depends on. Public interfaces:
     ``listing_batch`` -> ``ListingMembership``, ``recent_batches`` ->
     ``RecentBatch``, ``row_proposal``.
 ``refusals``
-    ``ListingMissing``, ``ListingNameTaken``, ``PublishedListingDeletion``,
+    ``ListingMissingError``, ``ListingNameTakenError``, ``PublishedListingDeletionError``,
     ``InvalidListing``, ``field_errors_of``; the calibrator's ``Template*``
-    refusals, ``DesignUploadRefused``, ``CalibrationDesignMissing``;
-    ``ListingTemplateMissing``, ``ReservedListingTemplateName``,
-    ``ListingTemplateSourceRefused``; ``StagingMissing``, ``StagedRowMissing``,
-    ``BatchMissing``, ``BatchRowMissing``, ``BatchRowUploadMissing``,
-    ``NothingToRetry``, ``BatchRowNotReviewable``, ``AiDraftingBlocked``;
-    ``AiRunRefused`` -- ``ListingDeploying``, ``ListingDraftingInBatch``,
-    ``AiNotReady``; ``ProposalMissing``, ``ProposalReplaced``;
-    ``ReviewedPlanRefused``; the Shop tab's ``ShopRevisionConflict`` and
-    ``InvalidShopEdit``; the Settings tab's ``SettingsRevisionConflict`` and
-    ``InvalidSettingsEdit``.
+    refusals, ``DesignUploadRefusedError``, ``CalibrationDesignMissingError``;
+    ``ListingTemplateMissingError``, ``ReservedListingTemplateNameError``,
+    ``ListingTemplateSourceRefusedError``; ``StagingMissingError``, ``StagedRowMissingError``,
+    ``BatchMissingError``, ``BatchRowMissingError``, ``BatchRowUploadMissingError``,
+    ``NothingToRetryError``, ``BatchRowNotReviewableError``, ``AiDraftingBlockedError``;
+    ``AiRunRefusedError`` -- ``ListingDeployingError``, ``ListingDraftingInBatchError``,
+    ``AiNotReadyError``; ``ProposalMissingError``, ``ProposalReplacedError``;
+    ``ReviewedPlanRefusedError``; the Shop tab's ``ShopRevisionConflictError`` and
+    ``InvalidShopEditError``; the Settings tab's ``SettingsRevisionConflictError`` and
+    ``InvalidSettingsEditError``.
 ``workspace_locks``
     ``WorkspaceLocks``: the per-listing-template write locks every
     template check-then-write holds, one instance per application runtime;

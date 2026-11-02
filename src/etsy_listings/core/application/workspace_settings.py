@@ -27,31 +27,35 @@ from __future__ import annotations
 import copy
 from collections.abc import Mapping
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 from pydantic import ValidationError
 
+from etsy_listings.core.application.dotted_keys import parent_of
 from etsy_listings.core.application.refusals import (
-    InvalidSettingsEdit,
-    SettingsRevisionConflict,
+    InvalidSettingsEditError,
+    SettingsRevisionConflictError,
     field_errors_of,
 )
 from etsy_listings.core.config.errors import ConfigLoadError, parse_yaml
 from etsy_listings.core.config.market_weights import METRICS, MarketWeights
 from etsy_listings.core.config.settings import Settings
 from etsy_listings.core.workspace.revisions import (
-    RevisionConflict,
+    RevisionConflictError,
     read_revisioned,
     replace_if_unchanged,
 )
 from etsy_listings.core.workspace.workspace import Workspace
-from etsy_listings.core.workspace.yaml_source import UneditableYaml, edit_yaml_bytes
+from etsy_listings.core.workspace.yaml_source import UneditableYamlError, edit_yaml_bytes
 
 CONCURRENCY = "batch_ai.concurrency"
 WEIGHTS = "market_seo.weights"
 PROVIDERS = "ai.providers"
 STEP_LIMIT = "ai.step_limit_minutes"
 RUN_LIMIT = "ai.run_limit_minutes"
+_WHOLE = 100
+"""Percent: what the page's six shares total."""
 
 EDITABLE_KEYS: tuple[str, ...] = (CONCURRENCY, WEIGHTS, PROVIDERS, STEP_LIMIT, RUN_LIMIT)
 """One save may carry several keys. The page couples a provider enable or a
@@ -88,8 +92,8 @@ def edit_settings(
     """Apply ``changes`` (dotted key to value) if ``settings.yaml`` is still
     at ``expected_revision``.
 
-    Refuses with :class:`SettingsRevisionConflict` or
-    :class:`InvalidSettingsEdit`, writing nothing either way.
+    Refuses with :class:`SettingsRevisionConflictError` or
+    :class:`InvalidSettingsEditError`, writing nothing either way.
     """
     refused = {
         key: "not editable from the Admin page" for key in changes if key not in EDITABLE_KEYS
@@ -97,49 +101,42 @@ def edit_settings(
     if WEIGHTS in changes and (problem := _percentage_problem(changes[WEIGHTS])):
         refused[WEIGHTS] = problem
     if refused:
-        raise InvalidSettingsEdit(refused)
+        raise InvalidSettingsEditError(refused)
 
     path = workspace.settings_file()
     adopted: list[Settings] = []
 
     def change(source: bytes) -> bytes:
-        try:
-            raw = parse_yaml(path, source.decode("utf-8-sig"))
-        except ConfigLoadError as exc:
-            raise InvalidSettingsEdit({"__root__": str(exc)}) from exc
-        if raw is None:
-            raw = {}
-        if not isinstance(raw, dict):
-            raise InvalidSettingsEdit({"__root__": "settings.yaml is not a mapping"})
-        # An invalid hand edit must be corrected in the file, never repaired
-        # implicitly by a page patch (Admin plan, config-validation rule).
-        try:
-            original = Settings.model_validate(raw)
-        except ValidationError as exc:
-            raise InvalidSettingsEdit(field_errors_of(exc)) from exc
-        candidate: dict[str, Any] = copy.deepcopy(raw)
-        for key, value in changes.items():
-            _assign(candidate, key.split("."), value)
-        try:
-            validated = Settings.model_validate(candidate)
-            adopted.append(validated)
-        except ValidationError as exc:
-            raise InvalidSettingsEdit(field_errors_of(exc)) from exc
-        if PROVIDERS in changes:
-            _retain_provider_source(raw, candidate, original, validated)
-        try:
-            return edit_yaml_bytes(source, candidate, sequence_keys={("ai", "providers"): "name"})
-        except UneditableYaml as exc:
-            raise InvalidSettingsEdit(
-                {"__root__": f"{path}: {exc}. Edit this value in the file, then reload Settings."}
-            ) from exc
+        edited, settings = _edited(path, source, changes)
+        adopted.append(settings)
+        return edited
 
     try:
         revised = replace_if_unchanged(path, expected_revision, change, absent_ok=True)
-    except RevisionConflict as exc:
-        raise SettingsRevisionConflict() from exc
+    except RevisionConflictError as exc:
+        raise SettingsRevisionConflictError from exc
     (settings,) = adopted
     return SettingsView(revised.revision, settings)
+
+
+def _edited(path: Path, source: bytes, changes: Mapping[str, object]) -> tuple[bytes, Settings]:
+    """``source`` with ``changes`` applied, and the settings it then holds."""
+    raw = _document(path, source)
+    original = _validated(raw)
+    candidate: dict[str, Any] = copy.deepcopy(raw)
+    for key, value in changes.items():
+        node, leaf = parent_of(candidate, key)
+        node[leaf] = copy.deepcopy(dict(value) if isinstance(value, Mapping) else value)
+    validated = _validated(candidate)
+    if PROVIDERS in changes:
+        _retain_provider_source(raw, candidate, original, validated)
+    try:
+        edited = edit_yaml_bytes(source, candidate, sequence_keys={("ai", "providers"): "name"})
+    except UneditableYamlError as exc:
+        raise InvalidSettingsEditError(
+            {"__root__": f"{path}: {exc}. Edit this value in the file, then reload Settings."}
+        ) from exc
+    return edited, validated
 
 
 def _retain_provider_source(
@@ -155,15 +152,21 @@ def _retain_provider_source(
     source = {row["name"]: row for row in old_ai["providers"]}
     models = {row.name: row for row in original.ai.providers}
     for row, model in zip(candidate["ai"]["providers"], validated.ai.providers, strict=True):
-        if model.name not in source:
+        if model.name in source:
+            _retain_row(row, source[model.name], before=models[model.name], after=model)
+
+
+def _retain_row(
+    row: dict[str, Any], source: dict[str, Any], *, before: object, after: object
+) -> None:
+    """``row`` with each unchanged preference spelled, or left out, as ``source`` had it."""
+    for key in ("enabled", "model", "effort"):
+        if getattr(before, key) != getattr(after, key):
             continue
-        for key in ("enabled", "model", "effort"):
-            if getattr(models[model.name], key) != getattr(model, key):
-                continue
-            if key in source[model.name]:
-                row[key] = source[model.name][key]
-            else:
-                row.pop(key, None)
+        if key in source:
+            row[key] = source[key]
+        else:
+            row.pop(key, None)
 
 
 def _percentage_problem(weights: object) -> str | None:
@@ -175,18 +178,29 @@ def _percentage_problem(weights: object) -> str | None:
     values = list(weights.values())
     if not all(isinstance(v, int) and not isinstance(v, bool) for v in values):
         return "each share is a whole percentage"
-    if sum(values) != 100:
+    if sum(values) != _WHOLE:
         return f"the shares total {sum(values)}%, not 100%"
     return None
 
 
-def _assign(document: dict[str, Any], path: list[str], value: object) -> None:
-    *parents, leaf = path
-    node = document
-    for part in parents:
-        child = node.get(part)
-        if not isinstance(child, dict):
-            child = {}
-            node[part] = child
-        node = child
-    node[leaf] = copy.deepcopy(dict(value) if isinstance(value, Mapping) else value)
+def _document(path: Path, source: bytes) -> dict[str, Any]:
+    """``settings.yaml``'s mapping; an empty file is an empty one."""
+    try:
+        raw = parse_yaml(path, source.decode("utf-8-sig"))
+    except ConfigLoadError as exc:
+        raise InvalidSettingsEditError({"__root__": str(exc)}) from exc
+    if raw is None:
+        return {}
+    if not isinstance(raw, dict):
+        raise InvalidSettingsEditError({"__root__": "settings.yaml is not a mapping"})
+    return raw
+
+
+def _validated(document: dict[str, Any]) -> Settings:
+    """``document`` as ``Settings``, or refused naming each field. An invalid
+    hand edit must be corrected in the file, never repaired implicitly by a
+    page patch (Admin plan, config-validation rule)."""
+    try:
+        return Settings.model_validate(document)
+    except ValidationError as exc:
+        raise InvalidSettingsEditError(field_errors_of(exc)) from exc

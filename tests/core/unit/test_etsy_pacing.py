@@ -18,7 +18,7 @@ import threading
 import httpx
 import pytest
 
-from etsy_listings.core.clients.etsy.transport import BASE_URL, RateGate, Transport
+from etsy_listings.core.clients.etsy.transport import BASE_URL, RateGate, Timing, Transport
 from etsy_listings.core.config.secrets import EtsyAppKey
 
 
@@ -53,16 +53,15 @@ def _headers(remaining: int | str | None) -> dict[str, str]:
     return headers
 
 
-def _transport(time: FakeTime, handler) -> Transport:  # noqa: ANN001 - a test handler
+def _transport(time: FakeTime, handler) -> Transport:
     return Transport(
         EtsyAppKey("k", "s"),
         client=httpx.Client(transport=httpx.MockTransport(handler), base_url=BASE_URL),
-        sleep=time.sleep,
-        clock=time.clock,
+        timing=Timing(sleep=time.sleep, clock=time.clock),
     )
 
 
-def _answering(time: FakeTime, *remaining: int | str | None):  # noqa: ANN202
+def _answering(time: FakeTime, *remaining: int | str | None):
     """A handler answering each request with the next header value (the last
     one repeats), recording the fake time every request was *sent* at."""
     queue = list(remaining)
@@ -148,7 +147,7 @@ def test_the_pacing_holds_across_five_threads_with_one_sleep() -> None:
         try:
             start.wait()
             transport.get("/concurrent")
-        except BaseException as exc:  # noqa: BLE001 - surfaced below
+        except BaseException as exc:  # noqa: BLE001 -- the thread hands the transport error back to the test
             errors.append(exc)
 
     threads = [threading.Thread(target=call) for _ in range(5)]

@@ -16,7 +16,7 @@ import pytest
 
 from etsy_listings.core import connections
 from etsy_listings.core.application import shop_settings
-from etsy_listings.core.application.refusals import InvalidShopEdit, ShopRevisionConflict
+from etsy_listings.core.application.refusals import InvalidShopEditError, ShopRevisionConflictError
 from etsy_listings.core.clients.etsy.fakes import FakeEtsyListingClient, FakeEtsyShopClient
 from etsy_listings.core.clients.etsy.models import (
     ProductionPartner,
@@ -144,7 +144,7 @@ def test_a_save_against_a_stale_revision_never_overwrites(workspace: Workspace) 
     edited = shop_bytes(workspace) + b"# added in an editor\r\n"
     (workspace.root / layout.SHOP_FILE).write_bytes(edited)
 
-    with pytest.raises(ShopRevisionConflict):
+    with pytest.raises(ShopRevisionConflictError):
         shop_settings.edit_shop(
             workspace, expected_revision=revision, changes={"etsy.currency": "EUR"}
         )
@@ -159,7 +159,7 @@ def test_an_invalid_value_is_refused_with_its_field_and_never_written(
     original = shop_bytes(workspace)
     revision = shop_settings.read_shop(workspace).revision
 
-    with pytest.raises(InvalidShopEdit) as refused:
+    with pytest.raises(InvalidShopEditError) as refused:
         shop_settings.edit_shop(
             workspace,
             expected_revision=revision,
@@ -173,7 +173,7 @@ def test_an_invalid_value_is_refused_with_its_field_and_never_written(
 def test_a_currency_etsy_payments_does_not_support_is_refused(workspace: Workspace) -> None:
     revision = shop_settings.read_shop(workspace).revision
 
-    with pytest.raises(InvalidShopEdit) as refused:
+    with pytest.raises(InvalidShopEditError) as refused:
         shop_settings.edit_shop(
             workspace, expected_revision=revision, changes={"etsy.currency": "JPY"}
         )
@@ -185,7 +185,7 @@ def test_a_currency_minor_units_cannot_carry_is_refused(workspace: Workspace) ->
     """VND has no minor unit, and ADR-0019's minor units assume two."""
     revision = shop_settings.read_shop(workspace).revision
 
-    with pytest.raises(InvalidShopEdit) as refused:
+    with pytest.raises(InvalidShopEditError) as refused:
         shop_settings.edit_shop(
             workspace, expected_revision=revision, changes={"etsy.currency": "VND"}
         )
@@ -196,7 +196,7 @@ def test_a_currency_minor_units_cannot_carry_is_refused(workspace: Workspace) ->
 def test_a_key_the_page_does_not_edit_is_refused(workspace: Workspace) -> None:
     revision = shop_settings.read_shop(workspace).revision
 
-    with pytest.raises(InvalidShopEdit) as refused:
+    with pytest.raises(InvalidShopEditError) as refused:
         shop_settings.edit_shop(workspace, expected_revision=revision, changes={"etsy.shop_id": 1})
 
     assert set(refused.value.field_errors) == {"etsy.shop_id"}
@@ -388,7 +388,8 @@ def test_an_etsy_lookup_failure_leaves_the_printify_list_and_writes_nothing(
     lookups = shop_settings.shop_lookups(workspace, etsy=FailingEtsy(), catalog=CATALOG)
 
     assert not lookups.etsy.available
-    assert lookups.etsy.problem is not None and "Etsy is down" in lookups.etsy.problem
+    assert lookups.etsy.problem is not None
+    assert "Etsy is down" in lookups.etsy.problem
     assert lookups.etsy.shipping_profiles == ()
     assert lookups.printify.available
     assert shop_bytes(workspace) == original
@@ -412,7 +413,8 @@ def test_etsy_lists_wait_for_a_configured_shop(workspace_root: Path) -> None:
     lookups = shop_settings.shop_lookups(workspace, etsy=etsy, catalog=CATALOG)
 
     assert not lookups.etsy.available
-    assert lookups.etsy.problem is not None and "etsy-listings setup" in lookups.etsy.problem
+    assert lookups.etsy.problem is not None
+    assert "etsy-listings setup" in lookups.etsy.problem
     assert etsy.shipping_profile_calls == 0
 
 
@@ -523,4 +525,5 @@ def test_a_printify_shop_the_token_cannot_see_is_a_lookup_problem(workspace_root
     )
 
     assert rows.printify.state == "lookup_failed"
-    assert rows.printify.problem is not None and "28819281" in rows.printify.problem
+    assert rows.printify.problem is not None
+    assert "28819281" in rows.printify.problem

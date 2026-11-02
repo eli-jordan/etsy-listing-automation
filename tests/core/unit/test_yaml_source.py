@@ -9,7 +9,7 @@ from __future__ import annotations
 import pytest
 import yaml
 
-from etsy_listings.core.workspace.yaml_source import UneditableYaml, edit_yaml, edit_yaml_bytes
+from etsy_listings.core.workspace.yaml_source import UneditableYamlError, edit_yaml, edit_yaml_bytes
 
 SOURCE = """\
 # Shop-wide settings -- my notes stay.
@@ -196,7 +196,7 @@ def test_bytes_keep_a_byte_order_mark_and_a_no_op_returns_the_same_bytes() -> No
 def test_an_edit_through_an_alias_is_refused_rather_than_written_wrong() -> None:
     source = "base: &b {x: 1}\nother: *b\n"
 
-    with pytest.raises(UneditableYaml):
+    with pytest.raises(UneditableYamlError):
         edit_yaml(source, {"base": {"x": 2}, "other": {"x": 1}})
 
 

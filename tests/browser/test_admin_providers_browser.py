@@ -56,7 +56,7 @@ ai:
 
 
 @pytest.fixture
-def expect(browser_type):  # noqa: ANN001, ANN201 - optional Playwright after prerequisite check
+def expect(browser_type):
     from playwright.sync_api import expect as playwright_expect
 
     return playwright_expect
@@ -67,17 +67,17 @@ def theme(request: pytest.FixtureRequest) -> str:
     return str(request.param)
 
 
-def capture(page, theme: str, state: str) -> None:  # noqa: ANN001
+def capture(page, theme: str, state: str) -> None:
     if directory := os.environ.get("ADMIN_PROVIDERS_SCREENSHOT_DIR"):
         target = Path(directory)
         target.mkdir(parents=True, exist_ok=True)
         page.screenshot(path=str(target / f"app-{state}-{theme}.png"))
 
 
-def serve_models(page, first: dict, refreshed: dict) -> list[str]:  # noqa: ANN001
+def serve_models(page, first: dict, refreshed: dict) -> list[str]:
     requests: list[str] = []
 
-    def fulfil(route) -> None:  # noqa: ANN001
+    def fulfil(route) -> None:
         requests.append(route.request.url)
         route.fulfill(json=refreshed if "refresh=true" in route.request.url else first)
 
@@ -85,14 +85,14 @@ def serve_models(page, first: dict, refreshed: dict) -> list[str]:  # noqa: ANN0
     return requests
 
 
-def open_settings(page, base: str, theme: str) -> None:  # noqa: ANN001
+def open_settings(page, base: str, theme: str) -> None:
     page.set_viewport_size({"width": 1280, "height": 800})
     page.emulate_media(color_scheme=theme)
     page.goto(f"{base}/admin")
     page.get_by_role("link", name="Settings settings.yaml").click()
 
 
-def is_save(response) -> bool:  # noqa: ANN001
+def is_save(response) -> bool:
     return response.url.endswith("/api/admin/settings") and response.request.method == "PATCH"
 
 
@@ -101,7 +101,7 @@ def test_keyboard_reorder_and_toggles_save_the_ordered_list_and_keep_stale_choic
     expect,
     calibrator_server: str,
     workspace_root: Path,
-    theme: str,  # noqa: ANN001
+    theme: str,
 ) -> None:
     path = Workspace.discover(root_override=workspace_root).settings_file()
     path.write_text(SOURCE, encoding="utf-8")
@@ -141,7 +141,7 @@ def test_discovery_failure_keeps_saved_choices_until_refresh_reads_the_lists(
     expect,
     calibrator_server: str,
     workspace_root: Path,
-    theme: str,  # noqa: ANN001
+    theme: str,
 ) -> None:
     path = Workspace.discover(root_override=workspace_root).settings_file()
     path.write_text(SOURCE, encoding="utf-8")
@@ -166,7 +166,7 @@ def test_yaml_source_refusal_keeps_the_attempt_and_explains_the_correction(
     expect,
     calibrator_server: str,
     workspace_root: Path,
-    theme: str,  # noqa: ANN001
+    theme: str,
 ) -> None:
     path = Workspace.discover(root_override=workspace_root).settings_file()
     source = (

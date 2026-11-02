@@ -35,6 +35,11 @@ function refusedHeading(files: string[]): string {
   return files.length === 1 && only ? `${only} was not staged.` : "These files were not staged.";
 }
 
+function dropTitle(busy: boolean, refused: boolean): string {
+  if (busy) return "Staging…";
+  return refused ? "Drop a different ZIP or PNGs" : "Drop a ZIP or PNGs here";
+}
+
 export function NewBatchPage() {
   const navigate = useNavigate();
   const [params] = useSearchParams();
@@ -171,13 +176,7 @@ export function NewBatchPage() {
             onDrop={onDrop}
           >
             <FileZipIcon className="bc-drop__icon" />
-            <span className="bc-drop__title">
-              {busy
-                ? "Staging…"
-                : refused
-                  ? "Drop a different ZIP or PNGs"
-                  : "Drop a ZIP or PNGs here"}
-            </span>
+            <span className="bc-drop__title">{dropTitle(busy, refused !== null)}</span>
             <span className="bc-small bc-muted">
               Kittl exports work as they are. Every PNG in the ZIP, in any folder, becomes a design.
             </span>

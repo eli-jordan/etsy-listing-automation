@@ -43,17 +43,24 @@ def render_scene(
     warped_layers: list[RGBA] = []
     for entry in layers:
         result = warp(entry.design, entry.cfg.bounding_box, (w, h))
-
-        if entry.cfg.displace.enabled:
-            if height is None:
-                raise ValueError("displace is enabled but no height map was provided")
-            result = displace(result, entry.cfg.displace, height)
-
-        if entry.cfg.shade.enabled:
-            if luminance is None:
-                raise ValueError("shade is enabled but no luminance map was provided")
-            result = shade(result, entry.cfg.shade, luminance)
-
+        result = _displaced(result, entry.cfg, height)
+        result = _shaded(result, entry.cfg, luminance)
         warped_layers.append(result)
 
     return export_many(template_base, warped_layers)
+
+
+def _displaced(layer: RGBA, cfg: RenderConfig, height: FloatMap | None) -> RGBA:
+    if not cfg.displace.enabled:
+        return layer
+    if height is None:
+        raise ValueError("displace is enabled but no height map was provided")
+    return displace(layer, cfg.displace, height)
+
+
+def _shaded(layer: RGBA, cfg: RenderConfig, luminance: FloatMap | None) -> RGBA:
+    if not cfg.shade.enabled:
+        return layer
+    if luminance is None:
+        raise ValueError("shade is enabled but no luminance map was provided")
+    return shade(layer, cfg.shade, luminance)

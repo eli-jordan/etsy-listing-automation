@@ -26,7 +26,7 @@ pytestmark = pytest.mark.browser
 
 
 @pytest.fixture
-def expect(browser_type):  # noqa: ANN001, ANN201 - optional Playwright after prerequisite check
+def expect(browser_type):
     from playwright.sync_api import expect as playwright_expect
 
     return playwright_expect
@@ -47,25 +47,25 @@ def theme(request: pytest.FixtureRequest) -> str:
     return str(request.param)
 
 
-def capture(page, theme: str, state: str) -> None:  # noqa: ANN001
+def capture(page, theme: str, state: str) -> None:
     if directory := os.environ.get("ADMIN_SHOP_SCREENSHOT_DIR"):
         target = Path(directory)
         target.mkdir(parents=True, exist_ok=True)
         page.screenshot(path=str(target / f"shop-{state}-{theme}.png"))
 
 
-def open_defaults(page, base: str, theme: str) -> None:  # noqa: ANN001
+def open_defaults(page, base: str, theme: str) -> None:
     page.set_viewport_size({"width": 1280, "height": 800})
     page.emulate_media(color_scheme=theme)
     page.goto(f"{base}/admin")
     page.get_by_role("link", name="Listing defaults").click()
 
 
-def is_save(response) -> bool:  # noqa: ANN001
+def is_save(response) -> bool:
     return response.url.endswith("/api/admin/shop") and response.request.method == "PATCH"
 
 
-def choose(select, value: str) -> None:  # noqa: ANN001
+def choose(select, value: str) -> None:
     """What a seller does: focus the selector, pick, and leave it."""
     select.focus()
     select.select_option(value)
@@ -81,14 +81,14 @@ def test_a_newer_queued_choice_survives_the_older_answer(
     expect,
     calibrator_server: str,
     workspace_root: Path,
-    theme: str,  # noqa: ANN001
+    theme: str,
 ) -> None:
     open_defaults(page, calibrator_server, theme)
     renewal = page.get_by_role("combobox", name="Renewal")
     expect(renewal).to_have_value("manual")
     held = []
 
-    def hold_first(route) -> None:  # noqa: ANN001
+    def hold_first(route) -> None:
         if route.request.method == "PATCH" and not held:
             held.append(route)
         else:
@@ -115,14 +115,14 @@ def test_a_failed_field_stays_unsaved_through_a_sibling_success_until_retried(
     expect,
     calibrator_server: str,
     workspace_root: Path,
-    theme: str,  # noqa: ANN001
+    theme: str,
 ) -> None:
     open_defaults(page, calibrator_server, theme)
     renewal = page.get_by_role("combobox", name="Renewal")
     expect(renewal).to_have_value("manual")
     capture(page, theme, "default")
 
-    def fail_renewal(route) -> None:  # noqa: ANN001
+    def fail_renewal(route) -> None:
         if route.request.method == "PATCH" and "renewal" in route.request.post_data_json["changes"]:
             route.fulfill(
                 status=503, content_type="application/json", body='{"detail":"disk unavailable"}'
@@ -161,7 +161,7 @@ def test_a_choice_made_while_retry_is_pending_reaches_the_file(
     expect,
     calibrator_server: str,
     workspace_root: Path,
-    theme: str,  # noqa: ANN001
+    theme: str,
 ) -> None:
     """The retry carries auto; choosing manual meanwhile is a change from
     what the file will hold, so it is saved after the retry lands."""
@@ -171,7 +171,7 @@ def test_a_choice_made_while_retry_is_pending_reaches_the_file(
     attempts: list[dict[str, object]] = []
     held = []
 
-    def fail_then_hold(route) -> None:  # noqa: ANN001
+    def fail_then_hold(route) -> None:
         if route.request.method != "PATCH":
             route.continue_()
             return
@@ -206,13 +206,13 @@ def test_an_abandoned_failure_is_not_restored_by_a_siblings_retry(
     expect,
     calibrator_server: str,
     workspace_root: Path,
-    theme: str,  # noqa: ANN001
+    theme: str,
 ) -> None:
     open_defaults(page, calibrator_server, theme)
     renewal = page.get_by_role("combobox", name="Renewal")
     attempts: list[dict[str, object]] = []
 
-    def fail_first_two(route) -> None:  # noqa: ANN001
+    def fail_first_two(route) -> None:
         if route.request.method != "PATCH":
             route.continue_()
             return
@@ -259,7 +259,7 @@ def test_an_unchanged_pod_choice_abandons_failed_custom_values(
     expect,
     calibrator_server: str,
     workspace_root: Path,
-    theme: str,  # noqa: ANN001
+    theme: str,
 ) -> None:
     open_defaults(page, calibrator_server, theme)
     pod = page.get_by_role("radio", name="Print on demand")
@@ -269,7 +269,7 @@ def test_an_unchanged_pod_choice_abandons_failed_custom_values(
     page.get_by_role("radio", name="Custom").click()
     attempts: list[dict[str, object]] = []
 
-    def fail_first_two(route) -> None:  # noqa: ANN001
+    def fail_first_two(route) -> None:
         if route.request.method != "PATCH":
             route.continue_()
             return
@@ -308,12 +308,13 @@ def test_an_unchanged_pod_choice_abandons_failed_custom_values(
 
 
 def test_use_it_replaces_a_failed_draft_with_what_it_wrote(
+    *,
     etsy_shop: None,
     page,
     expect,
     calibrator_server: str,
     workspace_root: Path,
-    theme: str,  # noqa: ANN001
+    theme: str,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     titles = ["Printify US standard", "Printify EU standard"]
@@ -334,7 +335,7 @@ def test_use_it_replaces_a_failed_draft_with_what_it_wrote(
             choose(shipping, "Printify US standard")
     attempts: list[dict[str, object]] = []
 
-    def fail_first(route) -> None:  # noqa: ANN001
+    def fail_first(route) -> None:
         if route.request.method != "PATCH":
             route.continue_()
             return

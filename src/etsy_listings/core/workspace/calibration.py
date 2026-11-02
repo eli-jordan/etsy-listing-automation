@@ -16,7 +16,7 @@ from dataclasses import dataclass
 from functools import lru_cache
 from io import BytesIO
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, Any, Literal, cast
+from typing import TYPE_CHECKING, Annotated, Any, Literal, NoReturn, cast
 
 import yaml
 from PIL import Image, ImageDraw
@@ -32,6 +32,7 @@ from etsy_listings.core.render.config import (
 )
 from etsy_listings.core.workspace.atomic import write_bytes_atomic, write_json_atomic
 from etsy_listings.core.workspace.file_version import file_version
+from etsy_listings.core.workspace.trees import remove_tree
 from etsy_listings.core.workspace.yaml_source import edit_yaml_bytes
 
 if TYPE_CHECKING:
@@ -39,6 +40,7 @@ if TYPE_CHECKING:
 
 _GUARD = threading.Lock()
 _LOCKS: dict[str, threading.RLock] = {}
+MAX_MASK_EDIT_BYTES = 2_000_000
 
 
 def digest(data: bytes) -> str:
@@ -50,7 +52,8 @@ def json_bytes(value: object) -> bytes:
 
 
 @lru_cache(maxsize=128)
-def _photo_identity(path: Path, stamp: tuple[int | str, ...]) -> dict[str, Any]:
+def _photo_identity(path: Path, _stamp: tuple[int | str, ...]) -> dict[str, Any]:
+    # ``_stamp`` is read by lru_cache only: a changed photo is a new cache key.
     with Image.open(path) as image:
         pixels = image.convert("RGB")
         return {
@@ -72,19 +75,19 @@ def _validate_mask(data: bytes, width: int, height: int) -> None:
         image.load()
 
 
-class CalibrationRepairRequired(UserFacingError):
+class CalibrationRepairRequiredError(UserFacingError):
     """A calibration transaction is active or its recovery payload is damaged."""
 
 
-class CalibrationConflict(UserFacingError):
+class CalibrationConflictError(UserFacingError):
     """The supplied revision or save request ID cannot be accepted."""
 
 
-class MaskUnavailable(UserFacingError):
+class MaskUnavailableError(UserFacingError):
     """Mask editing or Undo has no usable saved baseline/history."""
 
 
-class MaskPhotoMismatch(MaskUnavailable):
+class MaskPhotoMismatchError(MaskUnavailableError):
     """Saved masks belong to another main photo and require an explicit reset."""
 
 
@@ -131,6 +134,53 @@ class Calibration:
     config: AnyTemplate
     revision: str
     main_photo: str = ""
+
+
+@dataclass(frozen=True)
+class AutomaticMask:
+    """A generated visibility mask: its PNG bytes, the algorithm version that
+    made it, and the placement it covers (``None`` for single-placement
+    kinds)."""
+
+    data: bytes
+    algorithm_version: str
+    placement_id: str | None = None
+
+
+def _damaged(message: str) -> NoReturn:
+    # S01 TRY301: the handler wraps this as a repair refusal.
+    raise ValueError(message)
+
+
+def _replayed(receipt_path: Path, request_id: str, request_digest: str) -> Calibration | None:
+    """The calibration a save with this request id already produced, so a
+    retried request answers as the first did; None for a new request."""
+    if not receipt_path.is_file():
+        return None
+    receipt = json.loads(receipt_path.read_bytes())
+    if receipt["request_id"] != request_id:
+        return None
+    if receipt["digest"] != request_digest:
+        raise CalibrationConflictError("Save request ID was reused with different content")
+    return Calibration(
+        load_template_config(receipt["config"]), receipt["revision"], receipt["main_photo"]
+    )
+
+
+def _renderer_settings(path: Path, current: AnyTemplate, config: AnyTemplate) -> bytes:
+    """Every renderer's last settings, so switching renderer and back keeps
+    them: the saved ones, then the current and the new renderer's."""
+    settings = json.loads(path.read_bytes()) if path.is_file() else {}
+    settings[current.renderer.type] = current.renderer.config.model_dump(mode="json")
+    settings[config.renderer.type] = config.renderer.config.model_dump(mode="json")
+    return json_bytes(settings)
+
+
+def _checksum(path: Path, files: dict[Path, bytes]) -> str | None:
+    """The digest of ``path`` as ``files`` is about to write it, else as it is
+    on disk; None when there is neither."""
+    data = files.get(path) if path in files else path.read_bytes() if path.is_file() else None
+    return digest(data) if data is not None else None
 
 
 class CalibrationStore:
@@ -186,29 +236,15 @@ class CalibrationStore:
                 )
             )
             receipt_path = self.workspace.template_calibration_receipt(name)
-            if receipt_path.is_file():
-                receipt = json.loads(receipt_path.read_bytes())
-                if receipt["request_id"] == request_id:
-                    if receipt["digest"] != request_digest:
-                        raise CalibrationConflict(
-                            "Save request ID was reused with different content"
-                        )
-                    return Calibration(
-                        load_template_config(receipt["config"]),
-                        receipt["revision"],
-                        receipt["main_photo"],
-                    )
+            replayed = _replayed(receipt_path, request_id, request_digest)
+            if replayed is not None:
+                return replayed
             if current.revision != expected_revision:
-                raise CalibrationConflict("Calibration changed; reload before saving")
+                raise CalibrationConflictError("Calibration changed; reload before saving")
             files, histories = self.apply_masks(name, config, mask_edits or [])
             revision = self.revision(name, config, files)
             settings_path = self.workspace.template_renderer_settings_file(name)
-            settings = json.loads(settings_path.read_bytes()) if settings_path.is_file() else {}
-            settings[current.config.renderer.type] = current.config.renderer.config.model_dump(
-                mode="json"
-            )
-            settings[config.renderer.type] = config.renderer.config.model_dump(mode="json")
-            files[settings_path] = json_bytes(settings)
+            files[settings_path] = _renderer_settings(settings_path, current.config, config)
             receipt = {
                 "request_id": request_id,
                 "digest": request_digest,
@@ -248,14 +284,7 @@ class CalibrationStore:
             checksums = {}
             for source in ("automatic", "edited"):
                 path = self.workspace.template_mask_file(name, placement_id, source=source)
-                data = (
-                    files.get(path)
-                    if path in files
-                    else path.read_bytes()
-                    if path.is_file()
-                    else None
-                )
-                checksums[source] = digest(data) if data is not None else None
+                checksums[source] = _checksum(path, files)
             masks.append({"id": placement_id, **checksums})
         return digest(
             json_bytes(
@@ -303,30 +332,37 @@ class CalibrationStore:
         with self.lock(name):
             calibration = self.read(name)
             if placement_id not in self.placement_ids(calibration.config):
-                raise MaskUnavailable("Mask placement does not belong to this template kind")
+                raise MaskUnavailableError("Mask placement does not belong to this template kind")
             paths = {
                 source: self.workspace.template_mask_file(name, placement_id, source=source)
                 for source in ("automatic", "edited", "metadata")
             }
             if not all(path.is_file() for path in paths.values()):
-                raise MaskUnavailable("Prepare the template first to create its automatic mask")
+                raise MaskUnavailableError(
+                    "Prepare the template first to create its automatic mask"
+                )
             automatic, edited = paths["automatic"].read_bytes(), paths["edited"].read_bytes()
+
+            def damaged(message: str) -> None:
+                # S01 TRY301: the handler wraps this as a repair refusal.
+                raise ValueError(message)
+
             try:
                 metadata = json.loads(paths["metadata"].read_bytes())
                 if metadata["schema_version"] != 1:
-                    raise ValueError("unsupported mask metadata schema")
+                    damaged("unsupported mask metadata schema")
                 if metadata["photo"] != self.photo_identity(name, calibration.config):
-                    raise MaskPhotoMismatch(
+                    raise MaskPhotoMismatchError(
                         "Main photo changed; explicitly reset masks for this photo"
                     )
                 if metadata["automatic_checksum"] != digest(automatic) or metadata[
                     "edited_checksum"
                 ] != digest(edited):
-                    raise ValueError("mask checksum mismatch")
+                    damaged("mask checksum mismatch")
                 self.validate_mask(automatic, metadata["photo"])
                 self.validate_mask(edited, metadata["photo"])
             except (OSError, ValueError, KeyError, TypeError) as exc:
-                raise CalibrationRepairRequired(
+                raise CalibrationRepairRequiredError(
                     "Saved mask is damaged; repair or explicitly reset its baseline"
                 ) from exc
             history = self.history(name, placement_id, digest(edited))
@@ -371,40 +407,38 @@ class CalibrationStore:
     def install_automatic(
         self,
         name: str,
-        data: bytes,
+        mask: AutomaticMask,
         *,
-        algorithm_version: str,
         expected_revision: str,
-        placement_id: str | None = None,
         reset_for_photo: bool = False,
         fresh: bool = False,
     ) -> Calibration:
+        data, algorithm_version, placement_id = mask.data, mask.algorithm_version, mask.placement_id
         with self.lock(name):
             current = self.read(name)
             if current.revision != expected_revision:
-                raise CalibrationConflict("Calibration changed before automatic mask publication")
+                raise CalibrationConflictError(
+                    "Calibration changed before automatic mask publication"
+                )
             if placement_id not in self.placement_ids(current.config):
-                raise MaskUnavailable("Mask placement does not belong to this template kind")
+                raise MaskUnavailableError("Mask placement does not belong to this template kind")
             photo = self.photo_identity(name, current.config)
             self.decode_mask(data, photo)
             automatic_path = self.workspace.template_mask_file(
                 name, placement_id, source="automatic"
             )
-            if not automatic_path.is_file() and any(
+            if automatic_path.is_file():
+                if self._keeps_saved_mask(
+                    name, placement_id, fresh=fresh, reset_for_photo=reset_for_photo
+                ):
+                    return current
+            elif any(
                 self.workspace.template_mask_file(name, placement_id, source=source).exists()
                 for source in ("edited", "metadata")
             ):
-                raise CalibrationRepairRequired(
+                raise CalibrationRepairRequiredError(
                     "Automatic baseline is missing; repair it before rebuilding masks"
                 )
-            if automatic_path.is_file():
-                try:
-                    saved_mask = self.mask(name, placement_id)
-                    if not fresh or saved_mask.automatic != saved_mask.edited:
-                        return current
-                except MaskUnavailable:
-                    if not reset_for_photo:
-                        raise
             metadata = {
                 "schema_version": 1,
                 "photo": photo,
@@ -425,66 +459,90 @@ class CalibrationStore:
             self.workspace.template_brush_history(name, placement_id).unlink(missing_ok=True)
             return self.read(name)
 
+    def _keeps_saved_mask(
+        self, name: str, placement_id: str | None, *, fresh: bool, reset_for_photo: bool
+    ) -> bool:
+        """Whether a saved automatic mask stands rather than being replaced: it
+        does unless ``fresh`` asks for a rebuild of one nobody has edited. A
+        mask for another photo is replaced only with ``reset_for_photo``."""
+        try:
+            saved_mask = self.mask(name, placement_id)
+        except MaskUnavailableError:
+            if not reset_for_photo:
+                raise
+            return False
+        return not fresh or saved_mask.automatic != saved_mask.edited
+
     def apply_masks(
         self, name: str, config: AnyTemplate, edits: list[MaskEdit]
     ) -> tuple[dict[Path, bytes], dict[Path, object]]:
         files: dict[Path, bytes] = {}
         histories: dict[Path, object] = {}
-        if len(json_bytes([edit.model_dump(mode="json") for edit in edits])) > 2_000_000:
+        if len(json_bytes([edit.model_dump(mode="json") for edit in edits])) > MAX_MASK_EDIT_BYTES:
             raise ValueError("Mask edit request is too large")
         ids = [edit.placement_id for edit in edits]
         if len(ids) != len(set(ids)):
             raise ValueError("Only one mask edit entry per placement is allowed")
         for edit in edits:
             if edit.placement_id not in self.placement_ids(config):
-                raise MaskUnavailable("Mask placement does not belong to saved template")
-            mask = self.mask(name, edit.placement_id)
-            history = self.history(name, edit.placement_id, mask.checksum)
-            metadata_path = self.workspace.template_mask_file(
-                name, edit.placement_id, source="metadata"
-            )
-            metadata = json.loads(metadata_path.read_bytes())
-            data = mask.edited
-            for operation in edit.operations:
-                if isinstance(operation, Reset):
-                    data, history = mask.automatic, []
-                elif isinstance(operation, Undo):
-                    if not history:
-                        raise MaskUnavailable(
-                            "Undo brush stroke unavailable; cached history was lost"
-                        )
-                    data = base64.b64decode(history.pop()["before"], validate=True)
-                    self.decode_mask(data, metadata["photo"])
-                else:
-                    image = self.decode_mask(data, metadata["photo"])
-                    if any(
-                        x < 0 or y < 0 or x >= image.width or y >= image.height
-                        for x, y in operation.points
-                    ):
-                        raise ValueError("Brush coordinates must be within the main photo")
-                    history.append(
-                        {
-                            "before": base64.b64encode(data).decode("ascii"),
-                            "operation": operation.model_dump(mode="json"),
-                        }
-                    )
-                    draw = ImageDraw.Draw(image)
-                    fill = 0 if operation.mode == "mask" else 255
-                    radius = operation.diameter_px / 2
-                    draw.line(
-                        operation.points, fill=fill, width=max(1, round(operation.diameter_px))
-                    )
-                    for x, y in operation.points:
-                        draw.ellipse((x - radius, y - radius, x + radius, y + radius), fill=fill)
-                    data = self.encode_mask(image)
-            metadata["edited_checksum"] = digest(data)
-            files[self.workspace.template_mask_file(name, edit.placement_id)] = data
-            files[metadata_path] = json_bytes(metadata)
-            histories[self.workspace.template_brush_history(name, edit.placement_id)] = {
-                "checksum": digest(data),
-                "strokes": history,
-            }
+                raise MaskUnavailableError("Mask placement does not belong to saved template")
+            edited, history = self._apply_edit(name, edit)
+            files |= edited
+            histories[self.workspace.template_brush_history(name, edit.placement_id)] = history
         return files, histories
+
+    def _apply_edit(self, name: str, edit: MaskEdit) -> tuple[dict[Path, bytes], object]:
+        """One placement's edited mask and metadata files, and its new brush
+        history."""
+        mask = self.mask(name, edit.placement_id)
+        history = self.history(name, edit.placement_id, mask.checksum)
+        metadata_path = self.workspace.template_mask_file(
+            name, edit.placement_id, source="metadata"
+        )
+        metadata = json.loads(metadata_path.read_bytes())
+        data = mask.edited
+        for operation in edit.operations:
+            if isinstance(operation, Reset):
+                data, history = mask.automatic, []
+            elif isinstance(operation, Undo):
+                data = self._undone(history, metadata["photo"])
+            else:
+                data = self._stroked(data, operation, history, metadata["photo"])
+        metadata["edited_checksum"] = digest(data)
+        files = {
+            self.workspace.template_mask_file(name, edit.placement_id): data,
+            metadata_path: json_bytes(metadata),
+        }
+        return files, {"checksum": digest(data), "strokes": history}
+
+    def _undone(self, history: list[dict[str, Any]], photo: dict[str, Any]) -> bytes:
+        """The mask before the last stroke, popped off ``history``."""
+        if not history:
+            raise MaskUnavailableError("Undo brush stroke unavailable; cached history was lost")
+        data = base64.b64decode(history.pop()["before"], validate=True)
+        self.decode_mask(data, photo)
+        return data
+
+    def _stroked(
+        self, data: bytes, stroke: Stroke, history: list[dict[str, Any]], photo: dict[str, Any]
+    ) -> bytes:
+        """``data`` with ``stroke`` painted on, recorded in ``history``."""
+        image = self.decode_mask(data, photo)
+        if any(x < 0 or y < 0 or x >= image.width or y >= image.height for x, y in stroke.points):
+            raise ValueError("Brush coordinates must be within the main photo")
+        history.append(
+            {
+                "before": base64.b64encode(data).decode("ascii"),
+                "operation": stroke.model_dump(mode="json"),
+            }
+        )
+        draw = ImageDraw.Draw(image)
+        fill = 0 if stroke.mode == "mask" else 255
+        radius = stroke.diameter_px / 2
+        draw.line(stroke.points, fill=fill, width=max(1, round(stroke.diameter_px)))
+        for x, y in stroke.points:
+            draw.ellipse((x - radius, y - radius, x + radius, y + radius), fill=fill)
+        return self.encode_mask(image)
 
     def write_config(self, name: str, config: AnyTemplate) -> None:
         """Initial assignment and trusted local writers still use recovery storage."""
@@ -531,7 +589,6 @@ class CalibrationStore:
         After intent, recovery rolls forward. Payloads remain until every
         destination is verified; an ordinary sequence of renames is insufficient.
         """
-        from etsy_listings.core.workspace.workspace import remove_tree
 
         with self.lock(name):
             self.recover(name)
@@ -561,9 +618,28 @@ class CalibrationStore:
             if transaction.exists():
                 remove_tree(transaction)
 
+    def _staged_payload(
+        self, name: str, transaction: Path, entry: dict[str, Any]
+    ) -> tuple[Path, bytes, str]:
+        """One manifest entry's destination, payload and checksum, each path
+        confined to its directory and the payload checked against it."""
+        target = self.workspace.resolve(entry["destination"], self.workspace.template_dir(name))
+        target.relative_to(self.workspace.template_dir(name).resolve())
+        payload = self.workspace.resolve(entry["payload"], transaction)
+        payload.relative_to(transaction.resolve())
+        data = payload.read_bytes()
+        if digest(data) != entry["checksum"]:
+            _damaged("transaction checksum mismatch")
+        return target, data, entry["checksum"]
+
+    def _roll_forward(self, target: Path, data: bytes, checksum: str) -> None:
+        if not target.is_file() or digest(target.read_bytes()) != checksum:
+            self.write_durable(target, data)
+        if digest(target.read_bytes()) != checksum:
+            raise CalibrationRepairRequiredError("Calibration transaction verification failed")
+
     def recover(self, name: str) -> None:
         """Server-side recovery, always under the shared template lock."""
-        from etsy_listings.core.workspace.workspace import remove_tree
 
         with self.lock(name):
             transaction = self.workspace.template_calibration_transaction(name)
@@ -573,34 +649,23 @@ class CalibrationStore:
             if not manifest_path.is_file():
                 remove_tree(transaction)
                 return
+
             try:
                 manifest = json.loads(manifest_path.read_bytes())
                 if manifest["schema_version"] != 1:
-                    raise ValueError("unsupported transaction schema")
+                    _damaged("unsupported transaction schema")
                 if not manifest.get("commit_intent"):
                     remove_tree(transaction)
                     return
-                payloads = []
-                for entry in manifest["files"]:
-                    target = self.workspace.resolve(
-                        entry["destination"], self.workspace.template_dir(name)
-                    )
-                    target.relative_to(self.workspace.template_dir(name).resolve())
-                    payload = self.workspace.resolve(entry["payload"], transaction)
-                    payload.relative_to(transaction.resolve())
-                    data = payload.read_bytes()
-                    if digest(data) != entry["checksum"]:
-                        raise ValueError("transaction checksum mismatch")
-                    payloads.append((target, data, entry["checksum"]))
+                payloads = [
+                    self._staged_payload(name, transaction, entry) for entry in manifest["files"]
+                ]
             except (OSError, ValueError, KeyError, TypeError) as exc:
-                raise CalibrationRepairRequired(
+                raise CalibrationRepairRequiredError(
                     "Damaged calibration transaction; repair saved recovery payloads"
                 ) from exc
             # Validate the whole set before replacing even one destination.
             for target, data, checksum in payloads:
-                if not target.is_file() or digest(target.read_bytes()) != checksum:
-                    self.write_durable(target, data)
-                if digest(target.read_bytes()) != checksum:
-                    raise CalibrationRepairRequired("Calibration transaction verification failed")
+                self._roll_forward(target, data, checksum)
             self.write_durable_json(manifest_path, {**manifest, "complete": True})
             remove_tree(transaction)

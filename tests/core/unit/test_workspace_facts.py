@@ -163,8 +163,10 @@ class TestVideos:
 
         assert set(videos) == {"common-media/size-guide.mp4", "./close-up.mov"}
         shared, local = videos["common-media/size-guide.mp4"], videos["./close-up.mov"]
-        assert isinstance(shared, VideoFacts) and shared.has_audio is False
-        assert isinstance(local, VideoFacts) and local.has_audio is True
+        assert isinstance(shared, VideoFacts)
+        assert shared.has_audio is False
+        assert isinstance(local, VideoFacts)
+        assert local.has_audio is True
 
     def test_images_are_not_probed(self, workspace: Workspace) -> None:
         listing = workspace.load_listing("take-a-hike")
@@ -214,4 +216,4 @@ class TestVideos:
             .values()
         )
         assert isinstance(failure, ProbeFailure)
-        assert "migrate_workspace_refs" in failure.reason
+        assert "listing-relative form" in failure.reason

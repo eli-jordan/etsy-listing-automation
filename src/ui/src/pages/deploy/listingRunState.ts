@@ -46,6 +46,45 @@ function eventTime(event: { occurred_at?: string }): number {
   return Number.isNaN(parsed) ? 0 : parsed;
 }
 
+/** When a finished stage started: when it began applying, or -- with no
+ * applying event seen -- when it finished. */
+function startedAt(current: StageRuntimeStatus | undefined, finishedAt: number): number {
+  return current?.kind === "applying" ? current.startedAt : finishedAt;
+}
+
+function withListingPlanned(
+  state: ListingRunState,
+  event: Extract<RunEvent, { type: "listing_planned" }>,
+  planMode: ListingPlanMode,
+): ListingRunState {
+  if (planMode === "runtime-only") {
+    return { ...state, planFailure: null, checkingStage: null };
+  }
+  return {
+    ...state,
+    reviewedPlan: planMode === "review" ? event.plan : state.reviewedPlan,
+    plan: event.plan,
+    fingerprint: event.fingerprint,
+    planFailure: null,
+    checkingStage: null,
+    stale: false,
+  };
+}
+
+function withListingFailed(
+  state: ListingRunState,
+  event: Extract<RunEvent, { type: "listing_failed" }>,
+): ListingRunState {
+  return {
+    ...state,
+    failureMessage: event.message,
+    planFailure: state.plan === null ? event.message : state.planFailure,
+    ...(event.stale_plan
+      ? { plan: event.stale_plan, stale: true, fingerprint: null, checkingStage: null }
+      : {}),
+  };
+}
+
 /** One authoritative projection for a listing's plan and stage-runtime events.
  * Individual deploy uses `replace`; batch review uses `review`; batch apply
  * uses `runtime-only` so re-planning cannot overwrite what was reviewed. */
@@ -65,18 +104,7 @@ export function applyListingRunEvent(
       };
 
     case "listing_planned":
-      if (planMode === "runtime-only") {
-        return { ...state, planFailure: null, checkingStage: null };
-      }
-      return {
-        ...state,
-        reviewedPlan: planMode === "review" ? event.plan : state.reviewedPlan,
-        plan: event.plan,
-        fingerprint: event.fingerprint,
-        planFailure: null,
-        checkingStage: null,
-        stale: false,
-      };
+      return withListingPlanned(state, event, planMode);
 
     case "stage_applying":
       return withRuntime(state, event.stage, {
@@ -96,7 +124,7 @@ export function applyListingRunEvent(
       const current = state.stageRuntime[event.stage];
       return withRuntime(state, event.stage, {
         kind: "applied",
-        startedAt: current?.kind === "applying" ? current.startedAt : finishedAt,
+        startedAt: startedAt(current, finishedAt),
         finishedAt,
       });
     }
@@ -107,20 +135,13 @@ export function applyListingRunEvent(
       return withRuntime(state, event.stage, {
         kind: "failed",
         message: event.message,
-        startedAt: current?.kind === "applying" ? current.startedAt : finishedAt,
+        startedAt: startedAt(current, finishedAt),
         finishedAt,
       });
     }
 
     case "listing_failed":
-      return {
-        ...state,
-        failureMessage: event.message,
-        planFailure: state.plan === null ? event.message : state.planFailure,
-        ...(event.stale_plan
-          ? { plan: event.stale_plan, stale: true, fingerprint: null, checkingStage: null }
-          : {}),
-      };
+      return withListingFailed(state, event);
 
     default:
       return state;

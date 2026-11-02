@@ -14,6 +14,14 @@ from collections.abc import Collection, Sequence
 from etsy_listings.core.config.market_weights import METRICS, MarketWeights, Metric
 
 
+def _last_tied(keys: list[float], order: list[int], start: int) -> int:
+    """The last position in ``order`` holding the same key as ``start``."""
+    end = start
+    while end + 1 < len(order) and keys[order[end + 1]] == keys[order[start]]:
+        end += 1
+    return end
+
+
 def percentiles(values: Sequence[float | None]) -> list[float]:
     """Each value's position in the set, 0 for the worst and 1 for the best,
     in the order given.
@@ -38,9 +46,7 @@ def percentiles(values: Sequence[float | None]) -> list[float]:
     result = [0.0] * count
     start = 0
     while start < count:
-        end = start
-        while end + 1 < count and keys[order[end + 1]] == keys[order[start]]:
-            end += 1
+        end = _last_tied(keys, order, start)
         shared = (start + end) / 2 / (count - 1)
         for position in range(start, end + 1):
             result[order[position]] = shared

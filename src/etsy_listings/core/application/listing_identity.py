@@ -14,7 +14,10 @@ from dataclasses import dataclass
 
 from etsy_listings.core.application.ai.registry import AiRunRegistry
 from etsy_listings.core.application.dependencies import EtsyStates
-from etsy_listings.core.application.refusals import ListingMissing, PublishedListingDeletion
+from etsy_listings.core.application.refusals import (
+    ListingMissingError,
+    PublishedListingDeletionError,
+)
 from etsy_listings.core.batches import BatchStore
 from etsy_listings.core.engine.status import is_live_etsy_state, remote_ids
 from etsy_listings.core.listing_artifacts import discard_research, move_listing, remove_listing
@@ -46,14 +49,14 @@ def rename_listing(
     forgotten.
 
     Renaming to the same name changes nothing, since the editor commits an
-    unchanged name on every blur. Refusals: :class:`ListingMissing` (also
+    unchanged name on every blur. Refusals: :class:`ListingMissingError` (also
     after waiting for the lock), ``InvalidNameError`` for a ``new`` that is
-    not a path segment, and :class:`ListingNameTaken` for a directory already
+    not a path segment, and :class:`ListingNameTakenError` for a directory already
     at ``new``.
     """
     documents = ListingDocuments(workspace)
     if not documents.exists(old):
-        raise ListingMissing(old)
+        raise ListingMissingError(old)
     workspace.listing_dir(new)
     if new == old:
         return
@@ -75,7 +78,7 @@ def delete_listing(
     """Delete listing ``name`` (ADR-0035).
 
     A listing published on Etsy is refused with
-    :class:`PublishedListingDeletion` before anything changes; it should be
+    :class:`PublishedListingDeletionError` before anything changes; it should be
     retired instead. A listing with no remotes is wiped now. A listing with
     remotes is marked ``lifecycle: deleted`` and left pending. Its market
     snapshot and proposal go now all the same, because the seller has
@@ -84,18 +87,18 @@ def delete_listing(
     Either way, its batch rows are marked deleted first, so the queue cannot
     start one between the stop and the delete. Its active AI run is then
     asked to stop, so it writes no proposal for a listing being deleted, and
-    is forgotten. Raises :class:`ListingMissing` when there is no listing,
+    is forgotten. Raises :class:`ListingMissingError` when there is no listing,
     whether before or after waiting for its lock.
     """
     documents = ListingDocuments(workspace)
     if not documents.exists(name):
-        raise ListingMissing(name)
+        raise ListingMissingError(name)
     etsy_listing_id, printify_product_id = remote_ids(workspace, name)
     etsy_state = (
         etsy_states([etsy_listing_id]).get(etsy_listing_id) if etsy_listing_id is not None else None
     )
     if is_live_etsy_state(etsy_state):
-        raise PublishedListingDeletion(name)
+        raise PublishedListingDeletionError(name)
     batches.mark_deleted(name)
     run = ai_runs.latest(name)
     if run is not None:
@@ -104,7 +107,7 @@ def delete_listing(
     with documents.lock(name):
         if etsy_listing_id is None and printify_product_id is None:
             if not documents.exists(name):
-                raise ListingMissing(name)
+                raise ListingMissingError(name)
             remove_listing(workspace, name)
             return Deletion(wiped=True, etsy_state=etsy_state)
         documents.edit(name, _mark_deleted)

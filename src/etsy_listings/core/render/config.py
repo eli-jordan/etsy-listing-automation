@@ -131,13 +131,13 @@ AnyRenderer = PhotoWarpRenderer | MarigoldRenderer
 Renderer = Annotated[AnyRenderer, Field(discriminator="type")]
 
 
-class PreparationRequired(ValueError):
+class PreparationRequiredError(ValueError):
     """ADR-0054 forbids rendering Marigold through Photo warp."""
 
 
 def photo_warp_config(renderer: AnyRenderer, box: BoundingBox) -> RenderConfig:
     if not isinstance(renderer, PhotoWarpRenderer):
-        raise PreparationRequired("Prepare the template first: Marigold maps are required")
+        raise PreparationRequiredError("Prepare the template first: Marigold maps are required")
     return RenderConfig(bounding_box=box, **renderer.config.model_dump())
 
 
@@ -175,7 +175,7 @@ class ColourMatrixTemplate(BaseModel):
         return photo_warp_config(self.renderer, self.bounding_box)
 
 
-def _reject_template_artwork(value: Any) -> Any:  # noqa: ANN401 - pydantic validator boundary
+def _reject_template_artwork(value: Any) -> Any:  # pydantic validator boundary
     """A template no longer chooses artwork (ADR-0053): a colour resolves to the
     same file in every mockup scene and on Printify, and a mockup showing a
     different print from the delivered shirt is not a useful exception. The
@@ -207,7 +207,7 @@ class Placement(BaseModel):
 
     @model_validator(mode="before")
     @classmethod
-    def _no_artwork(cls, value: Any) -> Any:  # noqa: ANN401 - pydantic validator boundary
+    def _no_artwork(cls, value: Any) -> Any:  # pydantic validator boundary
         return _reject_template_artwork(value)
 
 
@@ -258,7 +258,7 @@ class SingleTemplate(BaseModel):
 
     @model_validator(mode="before")
     @classmethod
-    def _no_artwork(cls, value: Any) -> Any:  # noqa: ANN401 - pydantic validator boundary
+    def _no_artwork(cls, value: Any) -> Any:  # pydantic validator boundary
         return _reject_template_artwork(value)
 
     def render_config(self) -> RenderConfig:

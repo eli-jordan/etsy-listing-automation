@@ -21,7 +21,7 @@ from PIL import Image
 from etsy_listings.core import connections
 from etsy_listings.core.clients.etsy.fakes import FakeEtsyListingClient, FakeEtsyShopClient
 from etsy_listings.core.clients.etsy.models import ShopSection
-from etsy_listings.core.clients.etsy.tokens import EtsyRefreshBusy
+from etsy_listings.core.clients.etsy.tokens import EtsyRefreshBusyError
 from etsy_listings.core.engine.lock import Lockfile
 from etsy_listings.core.workspace.workspace import Workspace
 from etsy_listings.server.api import etsystate
@@ -1180,7 +1180,7 @@ class TestEtsySections:
     ) -> None:
         class BusyShop(FakeEtsyShopClient):
             def shop_sections(self, shop_id: int) -> list[ShopSection]:
-                raise EtsyRefreshBusy("Refresh still running. Try again shortly.")
+                raise EtsyRefreshBusyError("Refresh still running. Try again shortly.")
 
         set_etsy_shop_id(workspace_root, 12345678)
         monkeypatch.setattr(connections, "etsy_shop_client", lambda root: BusyShop())
@@ -1196,7 +1196,7 @@ class TestEtsySections:
 
         class BusyListing(FakeEtsyListingClient):
             def create_shop_section(self, shop_id: int, title: str) -> ShopSection:
-                raise EtsyRefreshBusy(message)
+                raise EtsyRefreshBusyError(message)
 
         etsy = BusyListing()
         set_etsy_shop_id(workspace_root, 12345678)

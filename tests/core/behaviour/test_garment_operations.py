@@ -60,7 +60,8 @@ SHIPPING = ShippingRates(
         ),
     )
 )
-RATE = FxRate(rate=Decimal("10"), source="test", fetched_at=datetime(2026, 3, 1, tzinfo=UTC))
+RATE = FxRate(rate=Decimal(10), source="test", fetched_at=datetime(2026, 3, 1, tzinfo=UTC))
+OFFER = pricing_plans.GarmentOffer("gildan-5000", TEE, PROVIDER, VARIANTS, ["S", "M"])
 
 
 def _catalog() -> FakeCatalogClient:
@@ -120,15 +121,13 @@ def test_a_starting_plan_is_priced_from_live_costs(workspace_root: Path) -> None
 
     created = pricing_plans.create_starting_pricing_plan(
         workspace,
-        _catalog(),
+        pricing_plans.PriceSources(
+            _catalog(),
+            fetch_costs=lambda blueprint_id, provider_id: {1: 1000, 2: 1000},
+            fetch_rate=lambda currency: RATE,
+        ),
         name="Launch Low",
-        garment_profile_slug="gildan-5000",
-        blueprint=TEE,
-        provider=PROVIDER,
-        variant_set=VARIANTS,
-        sizes=["S", "M"],
-        fetch_costs=lambda blueprint_id, provider_id: {1: 1000, 2: 1000},
-        fetch_rate=lambda currency: RATE,
+        offer=OFFER,
     )
 
     assert created.path == workspace.pricing_plans_dir() / "launch-low.yaml"
@@ -144,15 +143,13 @@ def test_missing_live_data_still_writes_a_plan_and_says_so(workspace_root: Path)
 
     created = pricing_plans.create_starting_pricing_plan(
         workspace,
-        _catalog(),
+        pricing_plans.PriceSources(
+            _catalog(),
+            fetch_costs=lambda blueprint_id, provider_id: {},
+            fetch_rate=lambda currency: None,
+        ),
         name="fallback",
-        garment_profile_slug="gildan-5000",
-        blueprint=TEE,
-        provider=PROVIDER,
-        variant_set=VARIANTS,
-        sizes=["S", "M"],
-        fetch_costs=lambda blueprint_id, provider_id: {},
-        fetch_rate=lambda currency: None,
+        offer=OFFER,
     )
 
     assert not created.complete

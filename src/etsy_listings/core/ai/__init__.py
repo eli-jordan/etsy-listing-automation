@@ -49,6 +49,7 @@ step and run budgets (ADR-0057) are shared, which is what `ProviderTask` exists 
   cleanup for completion, timeouts, cancellation, and request disconnects.
   Private ``_windows_process``/``_posix_process`` implement ownership; callers
   never select a platform mechanism or manage child identities.
+- ``cli_support`` -- the shared local CLI provider contract, readiness probes and outcome decoding.
 
 `core/application/ai/` coordinates this package into runs, readiness and
 proposal operations; `server/api/airuns.py` and `server/api/seo.py` serve
@@ -128,8 +129,6 @@ from etsy_listings.core.ai.providers import AiProvider, FakeAiProvider
 from etsy_listings.core.ai.validation import ProposalValidationError, validate_proposal
 
 __all__ = [
-    "ListingAiInputs",
-    "PreparedSeo",
     "BRIEF_RESPONSE_SCHEMA",
     "MARKET_QUERIES_RESPONSE_SCHEMA",
     "AiLimits",
@@ -140,18 +139,19 @@ __all__ = [
     "CliProcessError",
     "CodexProvider",
     "Deadline",
-    "RunBudget",
     "DesignBrief",
     "FakeAiProvider",
     "GarmentContext",
     "GrokProvider",
+    "ListingAiInputs",
     "MarketQueries",
     "MarketQueriesRequest",
     "MarketQueriesValidationError",
     "PhraseRationale",
+    "PreparedSeo",
     "ProcessResult",
-    "ProposalValidationError",
     "ProposalStore",
+    "ProposalValidationError",
     "ProposalWarning",
     "ProviderCancelledError",
     "ProviderGenerationError",
@@ -161,6 +161,7 @@ __all__ = [
     "ProviderUnavailableError",
     "RawProviderResult",
     "RepairContext",
+    "RunBudget",
     "SeoAllProvidersUnavailableError",
     "SeoDeadlineExceededError",
     "SeoGenerationError",

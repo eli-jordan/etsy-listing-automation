@@ -115,6 +115,7 @@ def test_a_catalog_brand_rename_keeps_the_same_garment_and_product_plan(
     catalog: FakeCatalogClient,
     printify: FakePrintifyClient,
     monkeypatch: pytest.MonkeyPatch,
+    *,
     already_created: bool,
 ) -> None:
     ctx = _ctx(root, catalog, printify)
@@ -615,7 +616,7 @@ def test_a_discontinued_cell_is_reported_rather_than_fatal(root, catalog, printi
             if not (v.options.color == "Moss" and v.options.size == "XXXL")
         )
     )
-    catalog._variants_by_key[(706, 29)] = dropped  # noqa: SLF001 - fixture surgery
+    catalog._variants_by_key[(706, 29)] = dropped
 
     stage_plan = _stage_plan(_ctx(root, catalog, printify), a_lock())
 

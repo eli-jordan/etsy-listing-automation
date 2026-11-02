@@ -18,6 +18,6 @@ describe("purgeLegacyProposals", () => {
   it("is harmless with nothing to purge", () => {
     purgeLegacyProposals(localStorage);
 
-    expect(localStorage.length).toBe(0);
+    expect(localStorage).toHaveLength(0);
   });
 });

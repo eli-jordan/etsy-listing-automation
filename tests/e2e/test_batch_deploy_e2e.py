@@ -124,7 +124,7 @@ def cleanup_product(workspace: Workspace, printify_client: PrintifyClient) -> It
             printify_client.delete_product(shop_id, str(product_id))
 
 
-def _ok(response: Any, status: int = 200) -> Any:  # noqa: ANN401 - httpx response, JSON body
+def _ok(response: Any, status: int = 200) -> Any:  # httpx response, JSON body
     assert response.status_code == status, response.text
     return response.json()
 

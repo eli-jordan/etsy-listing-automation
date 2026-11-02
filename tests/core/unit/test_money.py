@@ -9,7 +9,7 @@ from etsy_listings.core.config.money import Money, MoneyFormatError, require_cur
 
 def test_parses_amount_and_currency() -> None:
     money = Money.parse("349 NOK")
-    assert money.amount == Decimal("349")
+    assert money.amount == Decimal(349)
     assert money.currency == "NOK"
 
 
@@ -26,7 +26,7 @@ def test_rejects_bare_number(bare: int | float) -> None:
 
 def test_rejects_bool() -> None:
     with pytest.raises(MoneyFormatError):
-        Money.parse(True)  # noqa: FBT003
+        Money.parse(True)
 
 
 @pytest.mark.parametrize(

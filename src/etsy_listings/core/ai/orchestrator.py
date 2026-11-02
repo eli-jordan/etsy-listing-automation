@@ -53,6 +53,7 @@ from __future__ import annotations
 import json
 import threading
 from collections.abc import Callable, Mapping, Sequence
+from dataclasses import dataclass
 
 from etsy_listings.core.ai.brief import (
     BriefRequest,
@@ -78,6 +79,7 @@ from etsy_listings.core.ai.market_queries import (
 from etsy_listings.core.ai.models import (
     Deadline,
     ProviderTask,
+    RawProviderResult,
     RepairContext,
     RunBudget,
     SeoProposal,
@@ -88,7 +90,7 @@ from etsy_listings.core.ai.providers import AiProvider
 from etsy_listings.core.ai.validation import ProposalValidationError, validate_proposal
 
 
-class _Malformed(Exception):
+class _MalformedError(Exception):
     """Internal-only: a provider's raw output could not become the result
     its task asked for, for any reason -- not valid JSON, not a JSON object,
     or a hard-validation failure. Never escapes this module; every case it
@@ -106,9 +108,9 @@ def _decoded(raw_output: str) -> Mapping[str, object]:
     try:
         parsed = json.loads(raw_output)
     except json.JSONDecodeError as exc:
-        raise _Malformed((f"response was not valid JSON: {exc}",)) from exc
+        raise _MalformedError((f"response was not valid JSON: {exc}",)) from exc
     if not isinstance(parsed, Mapping):
-        raise _Malformed(("response: expected a JSON object",)) from None
+        raise _MalformedError(("response: expected a JSON object",)) from None
     return parsed
 
 
@@ -116,21 +118,21 @@ def _seo_decoder(raw_output: str) -> SeoProposal:
     try:
         return validate_proposal(_decoded(raw_output))
     except ProposalValidationError as exc:
-        raise _Malformed(exc.reasons) from exc
+        raise _MalformedError(exc.reasons) from exc
 
 
 def _brief_decoder(raw_output: str) -> DesignBrief:
     try:
         return validate_brief(dict(_decoded(raw_output)))
     except BriefValidationError as exc:
-        raise _Malformed(exc.reasons) from exc
+        raise _MalformedError(exc.reasons) from exc
 
 
 def _market_queries_decoder(raw_output: str) -> MarketQueries:
     try:
         return validate_market_queries(dict(_decoded(raw_output)))
     except MarketQueriesValidationError as exc:
-        raise _Malformed(exc.reasons) from exc
+        raise _MalformedError(exc.reasons) from exc
 
 
 def _out_of_time(provider_name: str, budget: RunBudget, what: str) -> SeoDeadlineExceededError:
@@ -143,47 +145,50 @@ def _out_of_time(provider_name: str, budget: RunBudget, what: str) -> SeoDeadlin
     return SeoDeadlineExceededError(f"{provider_name}: {what} the {limit}")
 
 
-def _resolve[Result](
-    provider: AiProvider,
-    task: ProviderTask,
-    decode: Callable[[str], Result],
-    budget: RunBudget,
-    step: Deadline,
-    raw_output: str,
-    provider_name: str,
-    cancel_event: threading.Event | None,
-) -> Result:
-    try:
-        return decode(raw_output)
-    except _Malformed as first_error:
-        if step.expired:
-            raise _out_of_time(
-                provider_name, budget, "no time was left for a repair within"
-            ) from first_error
+@dataclass(frozen=True)
+class _Run[Result]:
+    """One task's inputs, shared by every provider that :func:`run_task` tries."""
 
-        try:
-            # ADR-0057: the repair spends what is left of the same step.
-            repaired = provider.generate(
-                task,
-                step,
-                repair=RepairContext(prior_raw_output=raw_output, reasons=first_error.reasons),
-                cancel_event=cancel_event,
-            )
-        except ProviderTimeoutError as timed_out:
-            raise _out_of_time(
-                provider_name, budget, "the repair did not finish within"
-            ) from timed_out
-        except ProviderUnavailableError as repair_error:
-            raise SeoTryAgainError(
-                f"{provider_name} became unavailable during its repair attempt: {repair_error}"
-            ) from repair_error
+    task: ProviderTask
+    decode: Callable[[str], Result]
+    budget: RunBudget
+    cancel_event: threading.Event | None
 
+    def resolve(self, provider: AiProvider, raw: RawProviderResult, step: Deadline) -> Result:
+        """``raw`` decoded, or decoded after one same-provider repair within ``step``."""
         try:
-            return decode(repaired.raw_output)
-        except _Malformed as second_error:
-            raise SeoTryAgainError(
-                f"{provider_name}: the repaired response was still invalid: {second_error}"
-            ) from second_error
+            return self.decode(raw.raw_output)
+        except _MalformedError as first_error:
+            if step.expired:
+                raise _out_of_time(
+                    raw.provider, self.budget, "no time was left for a repair within"
+                ) from first_error
+
+            try:
+                # ADR-0057: the repair spends what is left of the same step.
+                repaired = provider.generate(
+                    self.task,
+                    step,
+                    repair=RepairContext(
+                        prior_raw_output=raw.raw_output, reasons=first_error.reasons
+                    ),
+                    cancel_event=self.cancel_event,
+                )
+            except ProviderTimeoutError as timed_out:
+                raise _out_of_time(
+                    raw.provider, self.budget, "the repair did not finish within"
+                ) from timed_out
+            except ProviderUnavailableError as repair_error:
+                raise SeoTryAgainError(
+                    f"{raw.provider} became unavailable during its repair attempt: {repair_error}"
+                ) from repair_error
+
+            try:
+                return self.decode(repaired.raw_output)
+            except _MalformedError as second_error:
+                raise SeoTryAgainError(
+                    f"{raw.provider}: the repaired response was still invalid: {second_error}"
+                ) from second_error
 
 
 def run_task[Result](
@@ -204,7 +209,7 @@ def run_task[Result](
     and market research left.
 
     ``decode`` takes raw provider text and returns a validated result,
-    raising `_Malformed` for anything in between -- the only thing this
+    raising `_MalformedError` for anything in between -- the only thing this
     function needs to know about a task beyond how to run it, and the reason
     the whole classification rule this module documents applies to both AI
     features without either one restating it. `generate_proposal` and
@@ -229,6 +234,7 @@ def run_task[Result](
     """
     if budget is None:
         budget = RunBudget.starting_now()
+    run = _Run(task, decode, budget, cancel_event)
 
     unavailable_reasons: list[str] = []
     for provider in providers:
@@ -245,9 +251,7 @@ def run_task[Result](
         except ProviderUnavailableError as exc:
             unavailable_reasons.append(str(exc))
             continue
-        return _resolve(
-            provider, task, decode, budget, step, raw.raw_output, raw.provider, cancel_event
-        )
+        return run.resolve(provider, raw, step)
 
     raise SeoAllProvidersUnavailableError(unavailable_reasons)
 

@@ -90,9 +90,7 @@ class Queue:
         )
 
     def confirm(self, *designs: tuple[str, bytes], at: datetime = CREATED) -> Batch:
-        session = stage_pngs(
-            self.workspace, self.staging, LISTING_TEMPLATE, uploads(*designs), now=at
-        )
+        session = stage_pngs(self.staging, LISTING_TEMPLATE, uploads(*designs), now=at)
         batch = confirm(self.workspace, self.staging, self.batches, session.id, now=at)
         self.queue.wake()
         return batch
@@ -200,7 +198,7 @@ def test_invalid_settings_refuse_dispatch_instead_of_using_a_default(q: Queue) -
     """Admin config-validation rule: a broken file is never a default limit."""
     q.workspace.settings_file().write_text("batch_ai:\n  concurency: 2\n", encoding="utf-8")
     batch = q.confirm(*_designs("night-hike-club"))
-    with pytest.raises(ConfigLoadError, match="batch_ai.concurency"):
+    with pytest.raises(ConfigLoadError, match=r"batch_ai\.concurency"):
         q.queue.concurrency()
     q.queue.start()
     q.idle()
@@ -372,7 +370,7 @@ def test_a_run_that_outlives_the_limit_becomes_a_failed_row(q: Queue) -> None:
     q.provider.gate("brief")
     batch = q.confirm(*_designs("night-hike-club", "cedar-trail"))
     q.queue.start()
-    wait_for(lambda: q.provider.started["brief"].is_set())
+    wait_for(q.provider.started["brief"].is_set)
 
     q.clock.now = 5 * 60.0
 
@@ -440,7 +438,7 @@ def test_a_row_running_when_the_server_stops_reruns_after_a_restart(
             files=[("files", ("night-hike-club.png", png(1), "image/png"))],
         ).json()
         batch_id = client.post(f"/api/staging/{staged['id']}/confirm").json()["id"]
-        wait_for(lambda: stopping.started["brief"].is_set())
+        wait_for(stopping.started["brief"].is_set)
     assert stopping.cancelled == ["brief"]
     stored = BatchStore(workspace).load(batch_id)
     assert stored is not None

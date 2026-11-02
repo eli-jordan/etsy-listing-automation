@@ -18,8 +18,8 @@ If not supplied abort.
 # Implement a stacked plan
 
 You are the **orchestrator**. You write no feature code. You run a **pipeline**
-over the plan's PRs: each PR is built by its own background **implementer**
-agent, in its own git worktree, and finished by that same agent later.
+over the plan's PRs: each PR is built by its own **implementer**, a T3 Code
+delegate in its own worktree, and finished by that same delegate later.
 
 ```
 PR n:    build ──► report ──► finish (full gates, PR, CI, e2e) ──► report
@@ -28,6 +28,39 @@ PR n+1:                   └─► build ──► report ──► finish ...
 
 The builder works from targeted checks only; the finisher owns every
 exit condition.
+
+## Delegates
+
+Every implementer is a T3 Code delegate started with `delegate_task`, never a
+native subagent (the `Agent` tool). Delegates let each PR run on the model that
+suits it, in a worktree T3 prepares, and survive the orchestrator's restarts.
+
+Each PR gets a **difficulty**, from the plan when it states one, otherwise your
+judgement of its section:
+
+| Difficulty | Typical work | Model, in order of preference |
+|---|---|---|
+| hard | cross-cutting design, concurrency or process lifecycles, behavior-preserving refactors of complex or golden-sensitive code, diagnosis, ambiguous scope | `claudeAgent` `claude-opus-5-5`, `effort: medium` → `codex` `gpt-6.1-sol`, `reasoningEffort: high` |
+| standard | well-specified features and refactors within a few modules | `codex` `gpt-6.1-sol`, `reasoningEffort: high` → `claudeAgent` `claude-opus-5-5`, `effort: medium` → `grok` `grok-4.7`, `reasoningEffort: high` |
+| mechanical | renames, autofix sweeps, enabling rules with obvious fixes, config and docs | `grok` `grok-4.7`, `reasoningEffort: high` → `codex` `gpt-6.1-sol`, `reasoningEffort: high` → `claudeAgent` `claude-opus-5-5`, `effort: medium` |
+
+Immediately before each launch, read the providers' **headroom**:
+
+```
+node .claude/skills/implement-stack/provider-limits.mjs
+```
+
+It prints each provider's `available` flag and usage windows. `false` means a
+window is at least 90% used or the provider reports itself blocked; `null`
+means the probe failed, so the headroom is unknown. Launch on the first model
+in the PR's row whose provider is `available: true`; an unknown provider ranks
+after every available one. A launch that fails on a usage limit marks that
+provider unavailable until its reset; relaunch on the next model in the row.
+When no model in a hard PR's row is available, pause that launch and tell the
+user which providers are out and when each resets.
+
+Record the difficulty, the chosen provider and model, and the headroom reading
+in the ledger, so a reviewer can see why each PR ran where it did.
 
 ## 1. Preflight
 
@@ -45,17 +78,26 @@ block** you will paste into every brief.
 - Screenshots possible: the app (`etsy-listings ui`) and the mockups
   (`npx marver dev`) both serve, and a headless browser can capture a frame.
   Record the exact recipe that worked.
+- Delegates possible: `orchestrator_capabilities` lists all three models in
+  the difficulty table, and `provider-limits.mjs` runs. Record each PR's
+  difficulty in the ledger.
 
 Any item that fails: fix it or stop and tell the user.
 
 ## 2. Launch PR n's builder
 
-Start a background agent in an isolated worktree . Its prompt is
-[BUILD-BRIEF.md](BUILD-BRIEF.md), filled in for this PR, branching from the
-**tip** of PR n-1 (the stack base for PR 1).
+Pick the model (see Delegates), then call `delegate_task` with
+`isolation: "worktree"`, `role: "implementation"`, `mode: "async"`, a `title`
+naming the PR, the chosen `target` (`providerInstanceId`, `model`, `options`),
+and as `task` the [BUILD-BRIEF.md](BUILD-BRIEF.md) filled in for this PR,
+branching from the **tip** of PR n-1 (the stack base for PR 1).
 
-Keep a ledger per PR: branch, worktree path, agent id, base commit, tip, PR
-number, state (`building` / `finishing` / `open` / `green`).
+Keep a ledger per PR: branch, worktree path, `taskId`, `childThreadId`,
+difficulty, provider and model, base commit, tip, PR number, state
+(`building` / `finishing` / `open` / `green`).
+
+Follow each delegate's `next` instructions to learn when it reports. Its
+report arrives on its own; you never poll it.
 
 ## 3. When a build report arrives
 
@@ -67,10 +109,12 @@ number, state (`building` / `finishing` / `open` / `green`).
    only, no amend, rebase or force-push, because the next builder stands on it.
 3. In the same turn:
    - launch PR n+1's builder from that tip (step 2), and
-   - continue PR n's agent with [FINISH-BRIEF.md](FINISH-BRIEF.md), carrying
-     your decisions from 1.
+   - continue PR n's delegate with [FINISH-BRIEF.md](FINISH-BRIEF.md),
+     carrying your decisions from 1: `t3_thread_send` to its `childThreadId`.
+     The finisher stays on the builder's model, since it already holds the
+     context.
 4. Tell the user in a few lines: what PR n contains, its size, what it flagged,
-   and that PR n+1 has started.
+   and that PR n+1 has started on which model.
 
 ## 4. When a finish report arrives
 
@@ -78,9 +122,9 @@ Done when the PR is open, linked, and every check is green on its final
 commit.
 
 1. Verify, don't trust: `gh pr checks <n>` and the e2e run URL.
-2. If the finish added commits, tell PR n+1's agent: fetch, then
-   `git rebase --onto <new tip> <old base>`, at a convenient point. PR n+1's
-   branch is not frozen until its own build report.
+2. If the finish added commits, tell PR n+1's delegate (`t3_thread_send`):
+   fetch, then `git rebase --onto <new tip> <old base>`, at a convenient point.
+   PR n+1's branch is not frozen until its own build report.
 
 ## Cross-cutting fixes
 
@@ -92,10 +136,15 @@ it; the orchestrator decides where it lands.
 ## Interruptions
 
 After a restart or a spend-limit stop, inspect each live worktree (`git log`,
-`git status`) before anything else, then continue the same agent with a
-**resume** message: the branch, the commits it already has, the uncommitted
-work, and which step it was on. Never relaunch fresh over a worktree with work
-in it.
+`git status`) before anything else, then continue the same delegate with
+`t3_thread_send` and a **resume** message: the branch, the commits it already
+has, the uncommitted work, and which step it was on. When that delegate's
+provider is out of headroom, wait for its reset or, for a build that has not
+reported yet, hand it over: `task_cancel` the first delegate, commit its
+uncommitted work as a WIP commit on its branch, `git switch --detach` in that
+worktree to release the branch, then launch a replacement on the next model in
+the PR's row whose brief checks out that branch (instead of creating it) and
+carries the resume message.
 
 ## e2e is serial
 
@@ -106,4 +155,5 @@ time -- say so in its brief when two could overlap.
 ## Done
 
 Every PR in the plan is open, linked and CI is green.
-Report the PR list with URLs, and every deviation from the plan the implementers recorded.
+Report the PR list with URLs, the model each PR ran on, and every deviation
+from the plan the implementers recorded.

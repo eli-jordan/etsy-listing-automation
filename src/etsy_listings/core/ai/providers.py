@@ -28,7 +28,7 @@ from __future__ import annotations
 
 import threading
 from dataclasses import dataclass, field
-from typing import Protocol, runtime_checkable
+from typing import Protocol, override, runtime_checkable
 
 from etsy_listings.core.ai.models import (
     Deadline,
@@ -62,7 +62,7 @@ class AiProvider(Protocol):
 
 
 @dataclass
-class FakeAiProvider:
+class FakeAiProvider(AiProvider):
     """A scriptable `AiProvider` double, standing in for a real Codex or
     Claude adapter at the same seam the orchestration tests drive -- fallback
     ordering, one same-provider repair, and deadline handling can all be
@@ -89,9 +89,11 @@ class FakeAiProvider:
     repairs: list[RepairContext | None] = field(default_factory=list, init=False)
     cancel_events: list[threading.Event | None] = field(default_factory=list, init=False)
 
+    @override
     def readiness(self) -> ProviderReadiness:
         return self.ready
 
+    @override
     def generate(
         self,
         task: ProviderTask,

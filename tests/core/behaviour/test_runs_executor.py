@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import time
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -191,19 +192,20 @@ def test_an_apply_run_reaches_applied_and_streams_the_full_sequence(
     _wait_until(run)
 
     assert run.phase == "applied"
-    phases = [e.phase for e in run.events if e.type == "phase"]
-    assert phases == ["queued", "applying", "applied"]
+    assert [e.phase for e in _events(run, "phase")] == ["queued", "applying", "applied"]
 
-    applying = [e for e in run.events if e.type == "stage_applying"]
+    applying = _events(run, "stage_applying")
     assert [e.stage for e in applying] == ["render"], "the other four stages are blocked"
 
-    applied = [e for e in run.events if e.type == "stage_applied"]
-    assert [e.stage for e in applied] == ["render"]
+    assert [e.stage for e in _events(run, "stage_applied")] == ["render"]
 
-    progress = [e for e in run.events if e.type == "progress"]
+    progress = _events(run, "progress")
     assert progress, "the render stage emits at least one `ctx.emit` per scene"
-    assert all(e.stage == "render" for e in progress)
-    assert all(e.listing == LISTING for e in progress)
+    assert {(e.stage, e.listing) for e in progress} == {("render", LISTING)}
+
+
+def _events(run: Run, kind: str) -> list[Any]:
+    return [e for e in run.events if e.type == kind]
 
 
 def test_cancel_is_refused_for_an_apply_run(executor: RunExecutor) -> None:

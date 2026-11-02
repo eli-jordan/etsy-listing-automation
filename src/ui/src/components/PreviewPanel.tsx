@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { renderPreview } from "../api/calibrator";
 import { Lightbox } from "./Lightbox";
+import { previewProgress, type PreviewResult } from "./previewProgress";
 
 /**
  * The Preview tab, for every template kind.
@@ -69,17 +70,127 @@ interface Request {
   jobs: PreviewJob[];
 }
 
-/** What has come back for a request. Stamped with the request's key so a
- * count from this run can never appear beside tiles from the last one. */
-interface Result {
-  key: string;
-  rendered: Record<string, string>;
-  done: number;
-  failed: number;
-}
-
 function requestKey(templateName: string, design: string, jobs: PreviewJob[]): string {
   return `${templateName}|${design}|${JSON.stringify(jobs)}`;
+}
+
+/** A tile rendered for the run `key` names; a late answer for an older run
+ * changes nothing. */
+function withRendered(current: PreviewResult | null, key: string, id: string, url: string) {
+  if (current === null || current.key !== key) return current;
+  return { ...current, rendered: { ...current.rendered, [id]: url }, done: current.done + 1 };
+}
+
+function withFailure(current: PreviewResult | null, key: string) {
+  if (current === null || current.key !== key) return current;
+  return { ...current, failed: current.failed + 1 };
+}
+
+/** Renders a request's jobs one at a time, reporting each outcome. The
+ * returned function cancels: nothing is reported after it, and a render that
+ * lands afterwards is revoked rather than handed over. */
+function runRequest(
+  request: Request,
+  report: { onRendered: (id: string, url: string) => void; onFailed: () => void },
+): () => void {
+  let cancelled = false;
+
+  void (async () => {
+    for (const job of request.jobs) {
+      if (cancelled) return;
+      try {
+        const url = await renderPreview(request.templateName, job.body, request.design, "full");
+        if (cancelled) {
+          URL.revokeObjectURL(url);
+          return;
+        }
+        report.onRendered(job.id, url);
+      } catch {
+        // One unreadable photo costs you that tile, not the whole tab.
+        if (cancelled) return;
+        report.onFailed();
+      }
+    }
+  })();
+
+  return () => {
+    cancelled = true;
+  };
+}
+
+/** How far the run is (`asked` jobs), or how many colours there are to
+ * render before the first one. */
+function ProgressCount({
+  asked,
+  colours,
+  done,
+}: {
+  asked: number | null;
+  colours: number;
+  done: number;
+}) {
+  if (asked !== null) return <span className="preview-grid__count">{`${done} / ${asked}`}</span>;
+  return (
+    <span className="preview-grid__status">
+      {colours === 1 ? "not rendered yet" : `${colours} colours, not rendered yet`}
+    </span>
+  );
+}
+
+/** Why nothing can render yet, with the way out when there is one. */
+function BlockedNotice({
+  blocked,
+  prepareLabel,
+  onPrepare,
+}: {
+  blocked: string;
+  prepareLabel: string;
+  onPrepare: (() => void) | undefined;
+}) {
+  return (
+    <div className="mg-empty-preview">
+      <p role="status">{blocked}</p>
+      {onPrepare && (
+        <button type="button" className="btn btn-primary" onClick={onPrepare}>
+          {prepareLabel}
+        </button>
+      )}
+    </div>
+  );
+}
+
+function PreviewTile({
+  label,
+  url,
+  onOpen,
+}: {
+  label: string;
+  url: string | undefined;
+  onOpen: () => void;
+}) {
+  return (
+    <figure className="gallery__item preview-grid__tile">
+      {url ? (
+        <button
+          type="button"
+          className="preview-grid__open"
+          onClick={onOpen}
+          title="Open at full size"
+        >
+          <img src={url} alt={label} />
+        </button>
+      ) : (
+        <div className="gallery__placeholder" />
+      )}
+      <figcaption>{label}</figcaption>
+    </figure>
+  );
+}
+
+/** Render's emphasis: danger when stale, quiet once approval is the next step. */
+function renderButtonClass(stale: boolean, approvable: boolean): string {
+  if (stale) return "btn btn-danger";
+  return approvable ? "btn btn-secondary" : "btn btn-primary";
 }
 
 export function PreviewPanel({
@@ -97,7 +208,7 @@ export function PreviewPanel({
 }: Props) {
   const key = requestKey(templateName, design, jobs) + identity;
   const [request, setRequest] = useState<Request | null>(null);
-  const [result, setResult] = useState<Result | null>(null);
+  const [result, setResult] = useState<PreviewResult | null>(null);
   const [open, setOpen] = useState<string | null>(null);
   const [actualSize, setActualSize] = useState(false);
   const urlsRef = useRef<string[]>([]);
@@ -136,55 +247,20 @@ export function PreviewPanel({
 
   useEffect(() => {
     if (request === null || request.key !== key || blocked) return;
-    let cancelled = false;
-
-    void (async () => {
-      for (const job of request.jobs) {
-        if (cancelled) return;
-        try {
-          const url = await renderPreview(request.templateName, job.body, request.design, "full");
-          if (cancelled) {
-            URL.revokeObjectURL(url);
-            return;
-          }
-          urlsRef.current.push(url);
-          setResult((current) =>
-            current === null || current.key !== request.key
-              ? current
-              : {
-                  ...current,
-                  rendered: { ...current.rendered, [job.id]: url },
-                  done: current.done + 1,
-                },
-          );
-        } catch {
-          // One unreadable photo costs you that tile, not the whole tab.
-          if (cancelled) return;
-          setResult((current) =>
-            current === null || current.key !== request.key
-              ? current
-              : { ...current, failed: current.failed + 1 },
-          );
-        }
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
+    return runRequest(request, {
+      onRendered: (id, url) => {
+        urlsRef.current.push(url);
+        setResult((current) => withRendered(current, request.key, id, url));
+      },
+      onFailed: () => setResult((current) => withFailure(current, request.key)),
+    });
   }, [request, key, blocked]);
 
-  const rendered = result?.key === request?.key ? (result?.rendered ?? {}) : {};
-  const done = result?.done ?? 0;
-  const failed = result?.failed ?? 0;
-  // A run for an older config. Its images are still the last full-size renders
-  // there are, and worth looking at -- they are just no longer of what the
-  // editor is holding, and saying so is this banner's whole job.
-  const stale = request !== null && request.key !== key;
-  const complete = request !== null && done + failed >= request.jobs.length;
-  // Everything asked for has come back, and it is a picture of what the editor
-  // currently holds -- the only state in which approving means anything.
-  const approvable = complete && !stale && failed === 0;
+  const { rendered, done, failed, stale, complete, approvable } = previewProgress(
+    request,
+    result,
+    key,
+  );
 
   const items = (request?.jobs ?? [])
     .map((job) => ({ id: job.id, label: job.label, url: rendered[job.id] }))
@@ -197,23 +273,10 @@ export function PreviewPanel({
       hidden={!active}
     >
       {blocked && (
-        <div className="mg-empty-preview">
-          <p role="status">{blocked}</p>
-          {onPrepare && (
-            <button type="button" className="btn btn-primary" onClick={onPrepare}>
-              {prepareLabel}
-            </button>
-          )}
-        </div>
+        <BlockedNotice blocked={blocked} prepareLabel={prepareLabel} onPrepare={onPrepare} />
       )}
       <div className="preview-grid__head">
-        {request === null ? (
-          <span className="preview-grid__status">
-            {jobs.length === 1 ? "not rendered yet" : `${jobs.length} colours, not rendered yet`}
-          </span>
-        ) : (
-          <span className="preview-grid__count">{`${done} / ${request.jobs.length}`}</span>
-        )}
+        <ProgressCount asked={request?.jobs.length ?? null} colours={jobs.length} done={done} />
         {request !== null && !complete && !stale && !blocked && (
           <span className="preview-grid__status">rendering at full size…</span>
         )}
@@ -233,9 +296,7 @@ export function PreviewPanel({
         <div className="preview-grid__actions">
           <button
             type="button"
-            className={
-              stale ? "btn btn-danger" : approvable ? "btn btn-secondary" : "btn btn-primary"
-            }
+            className={renderButtonClass(stale, approvable)}
             disabled={!!blocked}
             onClick={start}
           >
@@ -260,26 +321,14 @@ export function PreviewPanel({
         </p>
       ) : (
         <div className="preview-grid__tiles">
-          {request.jobs.map((job) => {
-            const url = rendered[job.id];
-            return (
-              <figure key={job.id} className="gallery__item preview-grid__tile">
-                {url ? (
-                  <button
-                    type="button"
-                    className="preview-grid__open"
-                    onClick={() => setOpen(job.id)}
-                    title="Open at full size"
-                  >
-                    <img src={url} alt={job.label} />
-                  </button>
-                ) : (
-                  <div className="gallery__placeholder" />
-                )}
-                <figcaption>{job.label}</figcaption>
-              </figure>
-            );
-          })}
+          {request.jobs.map((job) => (
+            <PreviewTile
+              key={job.id}
+              label={job.label}
+              url={rendered[job.id]}
+              onOpen={() => setOpen(job.id)}
+            />
+          ))}
         </div>
       )}
 

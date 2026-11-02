@@ -26,6 +26,8 @@ if TYPE_CHECKING:
 from collections.abc import Iterator
 from contextlib import ExitStack, contextmanager
 
+from etsy_listings.core.workspace.calibration import CalibrationStore
+
 
 class WorkspaceLocks:
     """One lock per listing template name. Each lock is made on first use
@@ -59,7 +61,6 @@ class WorkspaceLocks:
         Reuse the document store's workspace-scoped reentrant lock, so all
         readers and coordinators serialize even across host lock instances.
         """
-        from etsy_listings.core.workspace.calibration import CalibrationStore
 
         with CalibrationStore(workspace).lock(name):
             yield

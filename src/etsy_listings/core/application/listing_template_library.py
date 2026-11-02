@@ -33,14 +33,14 @@ from pydantic import ValidationError
 from etsy_listings.core import listing_templates as conversion
 from etsy_listings.core.application.listing_reads import PricedSize, pricing_summary
 from etsy_listings.core.application.refusals import (
-    ListingMissing,
-    ListingTemplateMissing,
-    ListingTemplateSourceRefused,
-    ReservedListingTemplateName,
+    ListingMissingError,
+    ListingTemplateMissingError,
+    ListingTemplateSourceRefusedError,
+    ReservedListingTemplateNameError,
     field_errors_of,
 )
 from etsy_listings.core.application.workspace_locks import WorkspaceLocks
-from etsy_listings.core.batches import BatchStore, StagingStore
+from etsy_listings.core.batches import BatchRecords, BatchStore
 from etsy_listings.core.config.description import DescriptionConfig
 from etsy_listings.core.config.errors import ConfigLoadError
 from etsy_listings.core.config.garment_profile import GarmentProfile
@@ -167,25 +167,34 @@ def read_listing_template(workspace: Workspace, name: str) -> ListingTemplateVie
     return _saved_view(workspace, WorkspaceFacts.gather(workspace), name)
 
 
-def draft_listing_template(
-    workspace: Workspace, *, from_listing: str | None, from_template: str | None
-) -> ListingTemplateView:
+@dataclass(frozen=True)
+class DraftOrigin:
+    """Where a new listing template is drafted from: exactly one of a listing
+    (Save as listing template) or another template (Clone)."""
+
+    listing: str | None = None
+    template: str | None = None
+
+
+def draft_listing_template(workspace: Workspace, origin: DraftOrigin) -> ListingTemplateView:
     """The template Save as listing template or Clone would write, written
     nowhere -- what the *name it* page shows before a name is committed."""
-    source, draft = _draft(workspace, listing=from_listing, template=from_template)
+    source, draft = _draft(workspace, origin)
     facts = WorkspaceFacts.gather(workspace)
     return _view(
         workspace,
         facts,
         draft.template,
         draft_issues(workspace, draft, facts=facts),
-        resolve=lambda ref: (
-            draft.source(ref)
-            or workspace.resolve_ref(ref, listing_dir=workspace.draft_listing_dir())
+        _TemplateContext(
+            name="",
+            resolve=lambda ref: (
+                draft.source(ref)
+                or workspace.resolve_ref(ref, listing_dir=workspace.draft_listing_dir())
+            ),
+            source=source,
+            assets=draft.assets,
         ),
-        name="",
-        source=source,
-        assets=draft.assets,
     )
 
 
@@ -195,26 +204,25 @@ def draft_listing_template(
 def create_listing_template(
     workspace: Workspace,
     name: str,
+    origin: DraftOrigin,
     *,
-    from_listing: str | None,
-    from_template: str | None,
     document: Mapping[str, Any] | None = None,
     locks: WorkspaceLocks,
 ) -> TemplateSave:
     """Naming the draft is what writes it (UI doc §1).
 
     The name is checked first, so an unusable one (``InvalidNameError``) or
-    ``draft`` (:class:`ReservedListingTemplateName`) is refused before any
+    ``draft`` (:class:`ReservedListingTemplateNameError`) is refused before any
     source is read. Then the source: exactly one, existing
-    (:class:`ListingMissing`, :class:`ListingTemplateMissing`), and able to
-    become a template (:class:`ListingTemplateSourceRefused`). ``document``
+    (:class:`ListingMissingError`, :class:`ListingTemplateMissingError`), and able to
+    become a template (:class:`ListingTemplateSourceRefusedError`). ``document``
     is the seller's edit made before naming: it replaces the source's, and
     only the files it still names are copied. Under the name's write lock, a
     name already taken -- the *directory*, even half-written -- raises
     ``ListingTemplateExistsError`` and is never suffixed.
     """
     _check_name(workspace, name)
-    _, draft = _draft(workspace, listing=from_listing, template=from_template)
+    _, draft = _draft(workspace, origin)
     if document is not None:
         try:
             draft = _edited(draft, document, currency=workspace.defaults.etsy.currency)
@@ -232,7 +240,7 @@ def edit_listing_template(
     workspace: Workspace, name: str, document: Mapping[str, Any], *, locks: WorkspaceLocks
 ) -> TemplateSave:
     """Write the whole ``document`` as listing template ``name``, only if it
-    is complete (template completeness). :class:`ListingTemplateMissing`
+    is complete (template completeness). :class:`ListingTemplateMissingError`
     when there is none, before or after waiting for its lock."""
     facts = WorkspaceFacts.gather(workspace)
     with locks.listing_template(name):
@@ -256,8 +264,7 @@ def rename_listing_template(
     new: str,
     *,
     locks: WorkspaceLocks,
-    staging: StagingStore,
-    batches: BatchStore,
+    records: BatchRecords,
 ) -> None:
     """Move a listing template, whole, to ``new``. Its name is its
     directory, so its ``./`` refs need no rewrite.
@@ -268,12 +275,12 @@ def rename_listing_template(
     each under its own lock; a crash between leaves records naming a
     template that is gone, which is what a delete leaves too. Renaming to
     the same name changes nothing. Refusals: ``InvalidNameError``,
-    :class:`ReservedListingTemplateName`, :class:`ListingTemplateMissing`,
+    :class:`ReservedListingTemplateNameError`, :class:`ListingTemplateMissingError`,
     ``ListingTemplateExistsError``.
     """
     destination = workspace.listing_template_dir(new)
     if new == RESERVED_NAME:
-        raise ReservedListingTemplateName(new)
+        raise ReservedListingTemplateNameError(new)
     with locks.listing_template(old, new):
         _require(workspace, old)
         if new == old:
@@ -281,8 +288,7 @@ def rename_listing_template(
         if destination.exists():
             raise ListingTemplateExistsError(new)
         workspace.listing_template_dir(old).rename(destination)
-        staging.rename_listing_template(old, new)
-        batches.rename_listing_template(old, new)
+        records.rename_listing_template(old, new)
 
 
 def delete_listing_template(workspace: Workspace, name: str, *, locks: WorkspaceLocks) -> None:
@@ -300,14 +306,14 @@ def delete_listing_template(workspace: Workspace, name: str, *, locks: Workspace
 def _require(workspace: Workspace, name: str) -> Path:
     path = workspace.listing_template_file(name)
     if not path.is_file():
-        raise ListingTemplateMissing(name)
+        raise ListingTemplateMissingError(name)
     return path
 
 
 def _check_name(workspace: Workspace, name: str) -> None:
     workspace.listing_template_dir(name)  # InvalidNameError for a non-segment
     if name == RESERVED_NAME:
-        raise ReservedListingTemplateName(name)
+        raise ReservedListingTemplateNameError(name)
 
 
 def _blocked(issues: list[Issue]) -> bool:
@@ -327,22 +333,23 @@ def _plan_name(template: ListingTemplate) -> str | None:
 
 
 def _draft(
-    workspace: Workspace, *, listing: str | None, template: str | None
+    workspace: Workspace, origin: DraftOrigin
 ) -> tuple[TemplateSource, ListingTemplateDraft]:
+    listing, template = origin.listing, origin.template
     if (listing is None) == (template is None):
-        raise ListingTemplateSourceRefused("give exactly one of from_listing, from_template")
+        raise ListingTemplateSourceRefusedError("give exactly one of from_listing, from_template")
     try:
         if listing is not None:
             if not ListingDocuments(workspace).exists(listing):
-                raise ListingMissing(listing)
+                raise ListingMissingError(listing)
             return TemplateSource("listing", listing), conversion.from_listing(workspace, listing)
-        assert template is not None  # noqa: S101 - exactly one, checked above
+        assert template is not None  # exactly one, checked above
         _require(workspace, template)
         return TemplateSource("listing-template", template), conversion.from_template(
             workspace, template
         )
     except (UnreadableAssetError, ConfigLoadError) as exc:
-        raise ListingTemplateSourceRefused(str(exc)) from exc
+        raise ListingTemplateSourceRefusedError(str(exc)) from exc
 
 
 def _edited(
@@ -356,7 +363,7 @@ def _edited(
     planned = {asset.ref for asset in draft.assets}
     unplanned = [ref for ref in conversion.owned_refs(template) if ref not in planned]
     if unplanned:
-        raise ListingTemplateSourceRefused(
+        raise ListingTemplateSourceRefusedError(
             f"{unplanned[0]} is not one of the files this listing template copies"
         )
     kept = set(conversion.owned_refs(template))
@@ -373,10 +380,25 @@ def _saved_view(workspace: Workspace, facts: WorkspaceFacts, name: str) -> Listi
         facts,
         template,
         template_issues(workspace, name, template, facts=facts),
-        resolve=lambda ref: workspace.resolve_template_ref(ref, template=name),
-        name=name,
-        modified_at=datetime.fromtimestamp(modified, tz=UTC),
+        _TemplateContext(
+            name=name,
+            resolve=lambda ref: workspace.resolve_template_ref(ref, template=name),
+            modified_at=datetime.fromtimestamp(modified, tz=UTC),
+        ),
     )
+
+
+@dataclass(frozen=True)
+class _TemplateContext:
+    """What the caller of :func:`_view` knows that the template does not say.
+    ``resolve`` finds a ``./`` ref wherever the template's files are: its own
+    directory once saved, the files it will copy while a draft."""
+
+    name: str
+    resolve: Callable[[str], Path]
+    modified_at: datetime | None = None
+    source: TemplateSource | None = None
+    assets: tuple[AssetCopy, ...] = ()
 
 
 def _view(
@@ -384,26 +406,19 @@ def _view(
     facts: WorkspaceFacts,
     template: ListingTemplate,
     issues: list[Issue],
-    *,
-    resolve: Callable[[str], Path],
-    name: str,
-    modified_at: datetime | None = None,
-    source: TemplateSource | None = None,
-    assets: tuple[AssetCopy, ...] = (),
+    context: _TemplateContext,
 ) -> ListingTemplateView:
-    """``resolve`` finds a ``./`` ref wherever the template's files are: its
-    own directory once saved, the files it will copy while a draft."""
-    _, resolved_prices = pricing_summary(workspace, facts, template, resolve=resolve)
+    _, resolved_prices = pricing_summary(workspace, facts, template, resolve=context.resolve)
     body = template.etsy.description
     described = workspace.resolve_description(DescriptionConfig(text=body.text, ref=body.ref))
     return ListingTemplateView(
-        name=name,
+        name=context.name,
         template=template,
         issues=issues,
         garment_profile=facts.garment_profile(template.garment_profile),
         resolved_prices=resolved_prices,
         description_composed=described.composed,
-        modified_at=modified_at,
-        source=source,
-        assets=assets,
+        modified_at=context.modified_at,
+        source=context.source,
+        assets=context.assets,
     )

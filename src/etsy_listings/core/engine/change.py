@@ -73,7 +73,7 @@ class Drift:
 Change = FieldChange | ListChange | PriceChange | MediaChange
 
 
-def scalar(path: str, desired: Any, applied: Any) -> FieldChange | None:  # noqa: ANN401
+def scalar(path: str, desired: Any, applied: Any) -> FieldChange | None:
     """Compare two scalar values (or equal-shaped pydantic models); ``None`` if unchanged."""
     if desired == applied:
         return None
@@ -92,8 +92,8 @@ def sequence(path: str, desired: list[Any], applied: list[Any]) -> ListChange | 
 
 def drift(
     path: str,
-    applied: Any,  # noqa: ANN401
-    live: Any,  # noqa: ANN401
+    applied: Any,
+    live: Any,
     *,
     last_applied_label: str | None = None,
     live_label: str | None = None,
@@ -164,8 +164,30 @@ forbid. The union is the stored truth; compatibility properties on
 """
 
 
+class _OutcomeView:
+    """Compatibility views derived from the same closed stage outcome (S05)."""
+
+    outcome: StageOutcome
+
+    @property
+    def will_run(self) -> bool:
+        return isinstance(self.outcome, StageWork)
+
+    @property
+    def changes(self) -> tuple[Change, ...]:
+        return self.outcome.changes if isinstance(self.outcome, StageWork) else ()
+
+    @property
+    def reason(self) -> str | None:
+        return self.outcome.reason if isinstance(self.outcome, StageWork) else None
+
+    @property
+    def actions(self) -> tuple[Action, ...]:
+        return self.outcome.actions if isinstance(self.outcome, StageWork) else ()
+
+
 @dataclass(frozen=True)
-class Verdict:
+class Verdict(_OutcomeView):
     """What a stage's ``plan()`` decided, before the engine says whose it is."""
 
     outcome: StageOutcome
@@ -220,28 +242,12 @@ class Verdict:
         )
 
     @property
-    def will_run(self) -> bool:
-        return isinstance(self.outcome, StageWork)
-
-    @property
-    def changes(self) -> tuple[Change, ...]:
-        return self.outcome.changes if isinstance(self.outcome, StageWork) else ()
-
-    @property
-    def reason(self) -> str | None:
-        return self.outcome.reason if isinstance(self.outcome, StageWork) else None
-
-    @property
-    def actions(self) -> tuple[Action, ...]:
-        return self.outcome.actions if isinstance(self.outcome, StageWork) else ()
-
-    @property
     def refusal(self) -> str | None:
         return self.outcome.message if isinstance(self.outcome, StageBlocked) else None
 
 
 @dataclass(frozen=True)
-class StagePlan:
+class StagePlan(_OutcomeView):
     """One stage's named outcome, drift evidence and optional review facts.
 
     The outcome owns the mutually exclusive idle/work/blocked decision.
@@ -275,39 +281,16 @@ class StagePlan:
     def work(
         cls,
         stage: str,
-        reason: str,
+        work: StageWork,
         *,
-        changes: tuple[Change, ...] = (),
         drift: tuple[Drift, ...] = (),
-        actions: tuple[Action, ...] = (),
         snapshot: BaseModel | None = None,
     ) -> StagePlan:
-        return cls(
-            stage=stage,
-            outcome=StageWork(reason=reason, changes=changes, actions=actions),
-            drift=drift,
-            snapshot=snapshot,
-        )
+        return cls(stage=stage, outcome=work, drift=drift, snapshot=snapshot)
 
     @classmethod
     def block(cls, stage: str, message: str, *, group: str | None = None) -> StagePlan:
         return cls(stage=stage, outcome=StageBlocked(message=message), group=group)
-
-    @property
-    def will_run(self) -> bool:
-        return isinstance(self.outcome, StageWork)
-
-    @property
-    def changes(self) -> tuple[Change, ...]:
-        return self.outcome.changes if isinstance(self.outcome, StageWork) else ()
-
-    @property
-    def reason(self) -> str | None:
-        return self.outcome.reason if isinstance(self.outcome, StageWork) else None
-
-    @property
-    def actions(self) -> tuple[Action, ...]:
-        return self.outcome.actions if isinstance(self.outcome, StageWork) else ()
 
     @property
     def blocked(self) -> str | None:

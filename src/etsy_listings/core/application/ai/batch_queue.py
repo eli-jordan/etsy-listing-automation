@@ -70,7 +70,11 @@ def queue_order(batches: list[Batch], after: str | None) -> list[Slot]:
     if after in ids:
         turn = ids.index(after) + 1
         ordered = ordered[turn:] + ordered[:turn]
-    lanes = [[(b.id, row.id) for row in b.rows if row.ai == "queued"] for b in ordered]
+    return _dealt([[(b.id, row.id) for row in b.rows if row.ai == "queued"] for b in ordered])
+
+
+def _dealt(lanes: list[list[Slot]]) -> list[Slot]:
+    """Every lane's slots, one from each lane in turn."""
     order: list[Slot] = []
     for depth in range(max((len(lane) for lane in lanes), default=0)):
         order.extend(lane[depth] for lane in lanes if depth < len(lane))
@@ -205,7 +209,7 @@ class BatchQueue:
         under the write lock before it writes."""
         try:
             return not self._workspace.load_listing(name).brief.strip()
-        except Exception:  # the run fails on the listing, with its own message
+        except Exception:  # noqa: BLE001 -- a listing that will not load is an empty brief; the run reports it
             return True
 
     def _finished(self, run: AiRun) -> None:

@@ -191,7 +191,7 @@ describe("KindPicker", () => {
     vi.spyOn(calibrator, "assignKind").mockRejectedValue(new Error("409"));
     renderPicker();
     fireEvent.click(screen.getByRole("button", { name: /Start calibrating/ }));
-    await screen.findByText("could not set the kind");
+    expect(await screen.findByText("could not set the kind")).toBeInTheDocument();
   });
 
   it("survives the colour report failing", async () => {

@@ -89,3 +89,18 @@ EngineEventSink = Callable[[EngineRunEvent], None]
 
 def ignore_engine_event(event: EngineRunEvent) -> None:
     """The default sink for callers interested only in the final report."""
+
+
+def never_stop() -> bool:
+    """The default stop signal: a run nobody can pause."""
+    return False
+
+
+@dataclass(frozen=True)
+class RunHooks:
+    """How a caller watches and stops an engine run. ``on_event`` hears every
+    event the run emits; ``should_stop`` is asked at each boundary the run
+    may stop at -- between listings, and between stages while applying."""
+
+    on_event: EngineEventSink = ignore_engine_event
+    should_stop: Callable[[], bool] = never_stop

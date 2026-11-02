@@ -28,15 +28,17 @@ from __future__ import annotations
 import copy
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, replace
+from pathlib import Path
 from typing import Any, Literal
 
 import httpx
 from pydantic import ValidationError
 
 from etsy_listings.core import connections
+from etsy_listings.core.application.dotted_keys import parent_of
 from etsy_listings.core.application.refusals import (
-    InvalidShopEdit,
-    ShopRevisionConflict,
+    InvalidShopEditError,
+    ShopRevisionConflictError,
     field_errors_of,
 )
 from etsy_listings.core.application.shop_discovery import policy_terms
@@ -52,7 +54,7 @@ from etsy_listings.core.config.secrets import Secrets
 from etsy_listings.core.errors import UserFacingError
 from etsy_listings.core.workspace import layout
 from etsy_listings.core.workspace.revisions import (
-    RevisionConflict,
+    RevisionConflictError,
     read_revisioned,
     replace_if_unchanged,
 )
@@ -113,37 +115,24 @@ def edit_shop(
     """Apply ``changes`` (dotted key to value; ``None`` removes an optional
     key) if ``shop.yaml`` is still at ``expected_revision``.
 
-    Refuses with :class:`ShopRevisionConflict` or :class:`InvalidShopEdit`,
+    Refuses with :class:`ShopRevisionConflictError` or :class:`InvalidShopEditError`,
     writing nothing either way.
     """
-    refused = {
-        key: "not editable from the Admin page" for key in changes if key not in EDITABLE_KEYS
-    }
-    currency = changes.get("etsy.currency")
-    if "etsy.currency" in changes and currency not in OFFERED_CURRENCIES:
-        refused["etsy.currency"] = (
-            f"{currency!r} is not a currency this workspace can be set to: Etsy Payments "
-            "must support it and its prices must have two decimals (ADR-0019)"
-        )
+    refused = _refusals(changes)
     if refused:
-        raise InvalidShopEdit(refused)
+        raise InvalidShopEditError(refused)
 
     path = workspace.root / layout.SHOP_FILE
     adopted: list[Defaults] = []
 
     def change(source: bytes) -> bytes:
-        raw = parse_yaml(path, source.decode("utf-8-sig")) or {}
-        if not isinstance(raw, dict):
-            raise InvalidShopEdit({"__root__": "shop.yaml is not a mapping"})
-        candidate: dict[str, Any] = copy.deepcopy(raw)
-        for key, value in changes.items():
-            _assign(candidate, key.split("."), value)
+        candidate = _candidate(path, source, changes)
         try:
             adopted.append(Defaults.from_document(path, candidate))
         except ValidationError as exc:
-            raise InvalidShopEdit(field_errors_of(exc)) from exc
+            raise InvalidShopEditError(field_errors_of(exc)) from exc
         except ConfigLoadError as exc:
-            raise InvalidShopEdit({"__root__": str(exc)}) from exc
+            raise InvalidShopEditError({"__root__": str(exc)}) from exc
         return edit_yaml_bytes(source, candidate)
 
     def adopt() -> None:
@@ -154,25 +143,39 @@ def edit_shop(
 
     try:
         revised = replace_if_unchanged(path, expected_revision, change, adopt=adopt)
-    except RevisionConflict as exc:
-        raise ShopRevisionConflict() from exc
+    except RevisionConflictError as exc:
+        raise ShopRevisionConflictError from exc
     (defaults,) = adopted
     return ShopView(revised.revision, defaults)
 
 
-def _assign(document: dict[str, Any], path: list[str], value: object) -> None:
-    *parents, leaf = path
-    node = document
-    for part in parents:
-        child = node.get(part)
-        if not isinstance(child, dict):
-            child = {}
-            node[part] = child
-        node = child
-    if value is None:
-        node.pop(leaf, None)
-    else:
-        node[leaf] = value
+def _refusals(changes: Mapping[str, object]) -> dict[str, str]:
+    """Why each refused key in ``changes`` cannot be saved, before the file is read."""
+    refused = {
+        key: "not editable from the Admin page" for key in changes if key not in EDITABLE_KEYS
+    }
+    currency = changes.get("etsy.currency")
+    if "etsy.currency" in changes and currency not in OFFERED_CURRENCIES:
+        refused["etsy.currency"] = (
+            f"{currency!r} is not a currency this workspace can be set to: Etsy Payments "
+            "must support it and its prices must have two decimals (ADR-0019)"
+        )
+    return refused
+
+
+def _candidate(path: Path, source: bytes, changes: Mapping[str, object]) -> dict[str, Any]:
+    """``shop.yaml``'s document with ``changes`` applied; ``None`` removes a key."""
+    raw = parse_yaml(path, source.decode("utf-8-sig")) or {}
+    if not isinstance(raw, dict):
+        raise InvalidShopEditError({"__root__": "shop.yaml is not a mapping"})
+    candidate: dict[str, Any] = copy.deepcopy(raw)
+    for key, value in changes.items():
+        node, leaf = parent_of(candidate, key)
+        if value is None:
+            node.pop(leaf, None)
+        else:
+            node[leaf] = value
+    return candidate
 
 
 # ------------------------------------------------------------- connections
@@ -221,11 +224,7 @@ def shop_connections(
 def _etsy_row(workspace: Workspace, client: EtsyShopClient) -> ConnectionRow:
     configured = workspace.defaults.etsy
     tokens = connections.etsy_token_store(workspace.root).load()
-    commands: list[str] = []
-    if connections.etsy_app_key(workspace.root) is None or tokens is None:
-        commands.append("etsy-listings auth etsy")
-    if configured.shop_id is None:
-        commands.append(SETUP)
+    commands = _etsy_commands(workspace, signed_in=tokens is not None)
     user_id = tokens.user_id if tokens is not None else None
     if commands or tokens is None or configured.shop_id is None:
         return ConnectionRow(
@@ -246,6 +245,16 @@ def _etsy_row(workspace: Workspace, client: EtsyShopClient) -> ConnectionRow:
         owner = f"shop #{owned.shop_id} ({owned.shop_name})" if owned else "no shop"
         return _failed(row, f"The signed-in Etsy account owns {owner}, not #{configured.shop_id}.")
     return replace(row, shop_currency=owned.currency_code)
+
+
+def _etsy_commands(workspace: Workspace, *, signed_in: bool) -> list[str]:
+    """What to run, in order, before the Etsy shop can be looked up."""
+    commands: list[str] = []
+    if connections.etsy_app_key(workspace.root) is None or not signed_in:
+        commands.append("etsy-listings auth etsy")
+    if workspace.defaults.etsy.shop_id is None:
+        commands.append(SETUP)
+    return commands
 
 
 def _printify_row(workspace: Workspace, client: PrintifyClient) -> ConnectionRow:
@@ -331,7 +340,9 @@ def shop_lookups(
 def _etsy_lookups(workspace: Workspace, client: EtsyListingClient) -> EtsyLookups:
     shop_id = workspace.defaults.etsy.shop_id
     if shop_id is None:
-        return EtsyLookups(False, f"No Etsy shop is configured yet. Run `{SETUP}`.")
+        return EtsyLookups(
+            available=False, problem=f"No Etsy shop is configured yet. Run `{SETUP}`."
+        )
     # A fresh catalog per call: one in-memory fetch of each list (ADR-0033).
     shop = EtsyShopCatalog(client, shop_id)
     try:
@@ -339,9 +350,9 @@ def _etsy_lookups(workspace: Workspace, client: EtsyListingClient) -> EtsyLookup
         profiles = shop.shipping_profiles()
         policies = shop.return_policies()
     except LookupFailure as exc:
-        return EtsyLookups(False, f"Could not reach Etsy: {exc}")
+        return EtsyLookups(available=False, problem=f"Could not reach Etsy: {exc}")
     return EtsyLookups(
-        True,
+        available=True,
         production_partners=_unique(p.partner_name for p in partners if p.partner_name),
         shipping_profiles=_unique(p.title for p in profiles),
         return_policies=tuple(ReturnPolicyChoice(policy_terms(p), p.describe()) for p in policies),
@@ -352,10 +363,10 @@ def _printify_lookups(workspace: Workspace, catalog: CatalogClient) -> PrintifyL
     try:
         providers = catalog.all_print_providers()
     except LookupFailure as exc:
-        return PrintifyLookups(False, f"Could not reach Printify: {exc}")
+        return PrintifyLookups(available=False, problem=f"Could not reach Printify: {exc}")
     preferred = workspace.defaults.printify.preferred_print_provider
     names = sorted(_unique(p.title for p in providers), key=lambda name: name != preferred)
-    return PrintifyLookups(True, print_providers=tuple(names))
+    return PrintifyLookups(available=True, print_providers=tuple(names))
 
 
 def _unique(names: Iterable[str]) -> tuple[str, ...]:

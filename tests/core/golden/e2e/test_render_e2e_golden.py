@@ -20,7 +20,7 @@ GOLDENS = Path(__file__).parent / "goldens"
 
 
 @pytest.mark.parametrize("colour", ["black", "white"])
-def test_e2e_composite_golden(colour: str, assert_matches_golden) -> None:  # noqa: ANN001
+def test_e2e_composite_golden(colour: str, assert_matches_golden) -> None:
     template_config = load_template_config(
         yaml.safe_load((TEMPLATE_DIR / "template.yaml").read_text(encoding="utf-8"))
     )
@@ -35,7 +35,7 @@ def test_e2e_composite_golden(colour: str, assert_matches_golden) -> None:  # no
     assert_matches_golden(result, GOLDENS / f"{colour}.png")
 
 
-def test_e2e_composite_with_displace_enabled_golden(assert_matches_golden) -> None:  # noqa: ANN001
+def test_e2e_composite_with_displace_enabled_golden(assert_matches_golden) -> None:
     template_config = load_template_config(
         yaml.safe_load((TEMPLATE_DIR / "template.yaml").read_text(encoding="utf-8"))
     )

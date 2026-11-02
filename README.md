@@ -128,7 +128,7 @@ npm run dev           # Vite dev server
 npm run build         # production build -> dist/
 npm run typecheck     # tsc, strict
 npm run lint          # eslint
-npm run format        # prettier --write (check.sh runs this)
+npm run format        # prettier --write (`poe check` runs this)
 npm run format:check  # prettier --check (CI runs this)
 npm run test          # vitest, every project (node, dom, design)
 npm run test:coverage # node + dom projects with the coverage gate
@@ -146,27 +146,28 @@ npm run gen:api                            # from src/ui/
 
 ## Development
 
-One command runs everything, including the coverage gates for Python and the
-frontend:
+One command fixes and formats in place, then runs every gate, including the
+coverage gates for Python and the frontend (it skips the frontend when npm is
+not on PATH):
 
 ```bash
-./scripts/check.sh
+uv run poe check
 ```
 
-Or the individual steps:
+The checks are [poethepoet](https://poethepoet.natn.io/) tasks defined once in
+`pyproject.toml`; `uv run poe` lists them. The individual steps:
 
 ```bash
-uv run ruff format .           # formatter
-uv run ruff check .            # linter
-uv run mypy src                # strict type check
-uv run lint-imports            # core/server/CLI import contracts
-uv run pytest                  # full suite (excludes -m e2e by default)
-uv run pytest --cov            # ...with the branch-coverage gate
+uv run poe format              # ruff format .
+uv run poe fix                 # ruff check --fix (never fails; `poe ruff` reports)
+uv run poe lint                # report only: format check, ruff, mypy, import contracts
+uv run poe test                # pytest with the branch-coverage gate
+uv run poe frontend            # prettier, eslint, tsc, vitest + coverage, prototypes
 ```
 
-CI ([ci.yml](.github/workflows/ci.yml)) runs the same gates on pull requests,
-on Ubuntu and Windows. The Python coverage job explicitly excludes browser
-and e2e tests. A separate browser job runs on pull requests, pushes to `main`
+CI ([ci.yml](.github/workflows/ci.yml)) runs the same tasks on pull requests:
+`poe lint` once in its `quality` job, and the tests on Ubuntu and Windows.
+The Python coverage job explicitly excludes browser and e2e tests. A separate browser job runs on pull requests, pushes to `main`
 and manual runs after the other gates pass. The [e2e workflow](.github/workflows/e2e.yml)
 uses real services and runs only on `main` or manually.
 
@@ -174,7 +175,7 @@ uses real services and runs only on `main` or manually.
 
 Branch coverage must stay at or above **85%**. It isn't on by default, so
 running one file doesn't trip a gate it could never meet; the gate lives in
-`check.sh`. `uv run pytest --cov --cov-report=html` then opening
+`poe test` and `poe check`. `uv run pytest --cov --cov-report=html` then opening
 `htmlcov/index.html` shows which branches are missed.
 
 ```bash

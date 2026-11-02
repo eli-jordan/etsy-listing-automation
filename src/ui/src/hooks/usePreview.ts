@@ -13,6 +13,23 @@ export const PREVIEW_DEBOUNCE_MS = 80;
 
 type PreviewBody = Parameters<typeof renderPreview>[1];
 
+/** A job's request in the shape `requestIdentity` names the newest one. */
+function jobIdentity(job: Job): string {
+  return JSON.stringify({
+    templateName: job.templateName,
+    body: JSON.parse(job.key) as PreviewBody,
+    design: job.design,
+  });
+}
+
+/** A `setUrl` updater that shows `next` and revokes the blob it replaces. */
+function replacingUrl(next: string | null) {
+  return (previous: string | null) => {
+    if (previous) URL.revokeObjectURL(previous);
+    return next;
+  };
+}
+
 interface Job {
   templateName: string;
   key: string;
@@ -90,62 +107,42 @@ export function usePreview(
   // one, and writing it as recursion only made the function reference itself
   // before it existed.
   const pump = useCallback(async () => {
+    async function renderJob(job: Job) {
+      const sent = generation.current;
+      try {
+        const next = await renderPreview(
+          job.templateName,
+          JSON.parse(job.key) as PreviewBody,
+          job.design,
+          "editor",
+        );
+        // A response for a template the editor has already left: revoked
+        // here rather than stored, or it leaks exactly like the old cleanup
+        // let the displayed one leak.
+        const current = sent === generation.current;
+        if (!current || (strictMode.current && latest.current !== jobIdentity(job))) {
+          URL.revokeObjectURL(next);
+          return;
+        }
+        setDisplayedTemplate(job.templateName);
+        setUrl(replacingUrl(next));
+        pendingListener.current?.(false);
+      } catch {
+        // A refused strict frame must not leave an old material composite
+        // under newly edited geometry. Its caller can show the local overlay.
+        const current = sent === generation.current;
+        if (current && latest.current === jobIdentity(job)) pendingListener.current?.(false);
+        if (strictMode.current && current) setUrl(replacingUrl(null));
+      }
+    }
+
     if (busy.current) return;
     busy.current = true;
     try {
       while (queued.current) {
         const job = queued.current;
         queued.current = null;
-        const sent = generation.current;
-        try {
-          const next = await renderPreview(
-            job.templateName,
-            JSON.parse(job.key) as PreviewBody,
-            job.design,
-            "editor",
-          );
-          // A response for a template the editor has already left: revoked
-          // here rather than stored, or it leaks exactly like the old cleanup
-          // let the displayed one leak.
-          if (
-            sent !== generation.current ||
-            (strictMode.current &&
-              latest.current !==
-                JSON.stringify({
-                  templateName: job.templateName,
-                  body: JSON.parse(job.key) as PreviewBody,
-                  design: job.design,
-                }))
-          ) {
-            URL.revokeObjectURL(next);
-            continue;
-          }
-          setDisplayedTemplate(job.templateName);
-          setUrl((previous) => {
-            if (previous) URL.revokeObjectURL(previous);
-            return next;
-          });
-          pendingListener.current?.(false);
-        } catch {
-          // A refused strict frame must not leave an old material composite
-          // under newly edited geometry. Its caller can show the local overlay.
-          if (
-            sent === generation.current &&
-            latest.current ===
-              JSON.stringify({
-                templateName: job.templateName,
-                body: JSON.parse(job.key) as PreviewBody,
-                design: job.design,
-              })
-          )
-            pendingListener.current?.(false);
-          if (strictMode.current && sent === generation.current) {
-            setUrl((previous) => {
-              if (previous) URL.revokeObjectURL(previous);
-              return null;
-            });
-          }
-        }
+        await renderJob(job);
       }
     } finally {
       busy.current = false;

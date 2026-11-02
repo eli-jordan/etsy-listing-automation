@@ -21,7 +21,7 @@ def test_evidence_reuse_requires_exact_identity_and_the_full_clipped_margin() ->
     identity = EvidenceIdentity("photo-a", "checkpoints-a", "inference-a", "crop-v1")
     crop = plan_crop(box, (50, 50))
     assert evidence_covers(crop, identity, box, (50, 50), identity)
-    moved = box + [1, 0]
+    moved = box + [1, 0]  # noqa: RUF005 -- numpy broadcast add, not concatenation
     assert not evidence_covers(crop, identity, moved, (50, 50), identity)
     changed = EvidenceIdentity("photo-b", "checkpoints-a", "inference-a", "crop-v1")
     assert not evidence_covers(crop, identity, box, (50, 50), changed)
@@ -31,7 +31,12 @@ def test_evidence_reuse_requires_exact_identity_and_the_full_clipped_margin() ->
 
 
 def test_flat_cloth_preparation_bakes_pixel_centres_and_the_saved_mask() -> None:
-    from etsy_listings.core.preparation.numerics import Evidence, prepare
+    from etsy_listings.core.preparation.numerics import (
+        Cooperation,
+        Evidence,
+        Placement,
+        prepare,
+    )
 
     size = (64, 64)
     box = np.array([[10, 10], [53, 10], [53, 53], [10, 53]], np.float32)
@@ -50,7 +55,10 @@ def test_flat_cloth_preparation_bakes_pixel_centres_and_the_saved_mask() -> None
     mask[30:35, 30:35] = 0
     phases = []
     result = prepare(
-        np.full((64, 64, 3), 128, np.uint8), box, evidence, mask=mask, checkpoint=phases.append
+        np.full((64, 64, 3), 128, np.uint8),
+        Placement(box, mask),
+        evidence,
+        cooperation=Cooperation(checkpoint=phases.append),
     )
     np.testing.assert_allclose(result.maps.material[10, 10], [0, 0], atol=1e-6)
     np.testing.assert_allclose(result.maps.material[53, 53], [1, 1], atol=1e-6)
@@ -87,9 +95,13 @@ def test_prediction_resize_and_padding_preserve_half_pixel_photo_centres() -> No
 
 
 def test_folded_normals_and_depth_fit_a_nonplanar_material_field() -> None:
-    from etsy_listings.core.preparation.numerics import Evidence, prepare
+    from etsy_listings.core.preparation.numerics import (
+        Evidence,
+        Placement,
+        prepare,
+    )
 
-    yy, xx = np.mgrid[:64, :64].astype(np.float32)
+    _yy, xx = np.mgrid[:64, :64].astype(np.float32)
     slope = 0.6 * np.cos(xx / 64 * 2 * np.pi)
     normals = np.stack([-slope, np.zeros_like(slope), np.ones_like(slope)], -1)
     normals /= np.linalg.norm(normals, axis=-1, keepdims=True)
@@ -105,7 +117,7 @@ def test_folded_normals_and_depth_fit_a_nonplanar_material_field() -> None:
         depth,
     )
     result = prepare(
-        np.full((64, 64, 3), 128, np.uint8), box, evidence, mask=np.ones((64, 64), np.float32)
+        np.full((64, 64, 3), 128, np.uint8), Placement(box, np.ones((64, 64), np.float32)), evidence
     )
     assert result.diagnostics["depth"]["used"] is True
     assert result.diagnostics["invalid_triangles"] == 0
@@ -114,7 +126,12 @@ def test_folded_normals_and_depth_fit_a_nonplanar_material_field() -> None:
 
 
 def test_cpu_cancellation_stops_at_the_requested_phase_without_baking() -> None:
-    from etsy_listings.core.preparation.numerics import Evidence, prepare
+    from etsy_listings.core.preparation.numerics import (
+        Cooperation,
+        Evidence,
+        Placement,
+        prepare,
+    )
 
     box = np.array([[10, 10], [53, 10], [53, 53], [10, 53]], np.float32)
     normals = np.zeros((64, 64, 3), np.float32)
@@ -138,16 +155,15 @@ def test_cpu_cancellation_stops_at_the_requested_phase_without_baking() -> None:
     with pytest.raises(InterruptedError, match="cancel"):
         prepare(
             np.full((64, 64, 3), 128, np.uint8),
-            box,
+            Placement(box, np.ones((64, 64), np.float32)),
             evidence,
-            mask=np.ones((64, 64), np.float32),
-            checkpoint=cancel,
+            cooperation=Cooperation(checkpoint=cancel),
         )
     assert phases == ["fitting", "flattening"]
 
 
 @pytest.mark.parametrize(
-    "box,size",
+    ("box", "size"),
     [
         (np.zeros((4, 2), np.float32), (50, 50)),
         (np.full((4, 2), np.nan, np.float32), (50, 50)),
@@ -155,13 +171,21 @@ def test_cpu_cancellation_stops_at_the_requested_phase_without_baking() -> None:
     ],
 )
 def test_crop_refuses_degenerate_nonfinite_or_outside_placements(box, size) -> None:
-    with pytest.raises(ValueError):
+    with pytest.raises(
+        ValueError,
+        match=r"Invalid placement or photo dimensions|positive width and height|does not intersect",
+    ):
         plan_crop(box, size)
 
 
 @pytest.mark.parametrize("stop_phase", ["fitting", "flattening"])
 def test_cpu_cooperation_can_interrupt_a_solver_before_the_next_durable_phase(stop_phase):
-    from etsy_listings.core.preparation.numerics import Evidence, prepare
+    from etsy_listings.core.preparation.numerics import (
+        Cooperation,
+        Evidence,
+        Placement,
+        prepare,
+    )
 
     box = np.array([[10, 10], [53, 10], [53, 53], [10, 53]], np.float32)
     normals = np.zeros((64, 64, 3), np.float32)
@@ -184,11 +208,9 @@ def test_cpu_cooperation_can_interrupt_a_solver_before_the_next_durable_phase(st
     with pytest.raises(InterruptedError, match="yield inside solver phase"):
         prepare(
             np.full((64, 64, 3), 128, np.uint8),
-            box,
+            Placement(box, np.ones((64, 64), np.float32)),
             evidence,
-            mask=np.ones((64, 64), np.float32),
-            checkpoint=phases.append,
-            cooperate=cooperate,
+            cooperation=Cooperation(checkpoint=phases.append, cooperate=cooperate),
         )
     assert phases[-1] == stop_phase
     assert "baking" not in phases

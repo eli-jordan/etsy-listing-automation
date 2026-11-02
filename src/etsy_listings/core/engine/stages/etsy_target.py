@@ -32,6 +32,9 @@ differences that the shared shape would flatten.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
+from etsy_listings.core.clients.etsy.listings import EtsyListingClient
 from etsy_listings.core.engine.context import RunContext
 from etsy_listings.core.engine.lock import Lockfile
 from etsy_listings.core.engine.stage import Blocked
@@ -42,6 +45,16 @@ ETSY_LISTING_ID_KEY = "etsy_listing_id"
 the stage that happens to mint it."""
 
 SHOP_REMEDY = "Run `etsy-listings setup`, then `etsy-listings auth`, to connect one."
+
+
+@dataclass(frozen=True)
+class EtsyListingTarget:
+    """The Etsy listing a stage writes: the signed-in client, and the shop
+    and listing ids every write names."""
+
+    client: EtsyListingClient
+    shop_id: int
+    listing_id: int
 
 
 class EtsyListingNotMintedError(RuntimeError):

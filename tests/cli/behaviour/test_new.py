@@ -217,7 +217,7 @@ def test_new_can_generate_a_pricing_plan_from_fabricated_cost_data(
     monkeypatch.setattr(
         unofficial_variant_costs, "fetch_variant_costs", lambda *a, **k: {1: 1000, 2: 1000}
     )
-    fixed_rate = FxRate(rate=Decimal("10"), source="test", fetched_at=datetime.now(UTC))
+    fixed_rate = FxRate(rate=Decimal(10), source="test", fetched_at=datetime.now(UTC))
     monkeypatch.setattr(fx_rate, "fetch_usd_to", lambda *a, **k: fixed_rate)
     scripted({**NEW_WIZARD, "Pricing plan name": "computed-plan"})
 

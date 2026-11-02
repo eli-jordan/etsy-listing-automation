@@ -1,3 +1,5 @@
+import { ColourPicker } from "./ColourPicker";
+import { PreparationNotice } from "./PreparationNotice";
 import type { ReactNode } from "react";
 import type { PhotoWarpTemplate } from "../types";
 import { useCallback, useMemo, useState } from "react";
@@ -27,17 +29,8 @@ interface Props {
 /** One box that has to work in every colour of the set. What it adds to the
  * shell is the choice of which colour the canvas is showing, and a preview
  * that renders all of them. */
-function PhotoWarpColourMatrixEditor({
-  rendererControls,
-  templateName,
-  config,
-  colours,
-  space,
-  onChange,
-  design,
-  onDesignChange,
-  onApprove,
-}: Props) {
+function PhotoWarpColourMatrixEditor(props: Props) {
+  const { templateName, config, colours, onChange, design, onApprove } = props;
   const [selectedColour, setSelectedColour] = useState<string | null>(null);
   // Derived rather than synced via effect+setState: falls back to the first
   // colour whenever the selection isn't (or is no longer) one of them --
@@ -86,13 +79,8 @@ function PhotoWarpColourMatrixEditor({
 
   return (
     <EditorShell
-      {...(rendererControls ? { rendererControls } : {})}
-      templateName={templateName}
-      config={config}
-      onChange={onChange}
-      design={design}
-      onDesignChange={onDesignChange}
-      space={space}
+      {...props}
+      rendererControls={props.rendererControls || null}
       previewUrl={previewUrl}
       jobs={jobs}
       onApprove={onApprove}
@@ -108,16 +96,7 @@ function PhotoWarpColourMatrixEditor({
            Only when there is a choice to make: a one-colour set has none, and
            the Preview tab renders every colour regardless. */
         colours.length > 1 ? (
-          <label className="app__bar-field">
-            <span>Colour</span>
-            <select value={colour} onChange={(e) => setSelectedColour(e.target.value)}>
-              {colours.map((c) => (
-                <option key={c} value={c}>
-                  {c}
-                </option>
-              ))}
-            </select>
-          </label>
+          <ColourPicker colour={colour} colours={colours} onChange={setSelectedColour} />
         ) : null
       }
     />
@@ -129,12 +108,7 @@ export function ColourMatrixEditor(
 ) {
   const renderer = props.config.renderer;
   if (renderer.type !== "photo-warp") {
-    return (
-      <p role="status">
-        Prepare the template first. Marigold rendering is unavailable until template maps are
-        prepared.
-      </p>
-    );
+    return <PreparationNotice />;
   }
   return <PhotoWarpColourMatrixEditor {...props} config={{ ...props.config, renderer }} />;
 }

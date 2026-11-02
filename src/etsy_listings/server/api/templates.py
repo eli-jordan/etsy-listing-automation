@@ -34,6 +34,8 @@ from PIL import Image
 
 from etsy_listings.core.application import mockup_templates as calibration
 from etsy_listings.core.application.mockup_templates import (
+    CalibrationSave,
+    LazyMaps,
     PreviewGeometry,
     PreviewScene,
     TemplateOverview,
@@ -45,7 +47,11 @@ from etsy_listings.core.application.mockup_templates import (
     template_swatch,
     unsaved_preview,
 )
-from etsy_listings.core.application.preparation.previews import EDITOR_ARTWORK_EDGE, editor_preview
+from etsy_listings.core.application.preparation.previews import (
+    EDITOR_ARTWORK_EDGE,
+    EditorDraft,
+    editor_preview,
+)
 from etsy_listings.core.application.prepared_previews import (
     PhotoWarpPreview,
     PreparedPreview,
@@ -54,20 +60,20 @@ from etsy_listings.core.application.prepared_previews import (
     saved_scene,
 )
 from etsy_listings.core.application.refusals import (
-    TemplateAlreadyCalibrated,
-    TemplateConfigMissing,
-    TemplateKindRefused,
-    TemplateMissing,
-    TemplatePhotoMissing,
-    TemplatePreviewKindMismatch,
+    TemplateAlreadyCalibratedError,
+    TemplateConfigMissingError,
+    TemplateKindRefusedError,
+    TemplateMissingError,
+    TemplatePhotoMissingError,
+    TemplatePreviewKindMismatchError,
 )
 from etsy_listings.core.config.slug import SlugCollisionError
 from etsy_listings.core.errors import UserFacingError
 from etsy_listings.core.preparation.readiness import catalog_readiness
 from etsy_listings.core.render import MarigoldRenderer, load_template_config
-from etsy_listings.core.render.config import AnyTemplate, PreparationRequired, TemplateConfig
+from etsy_listings.core.render.config import AnyTemplate, PreparationRequiredError, TemplateConfig
 from etsy_listings.core.render.io import encode_png
-from etsy_listings.core.workspace.calibration import CalibrationConflict
+from etsy_listings.core.workspace.calibration import CalibrationConflictError
 from etsy_listings.core.workspace.workspace import Workspace
 from etsy_listings.server.api.designs import resolve_design
 from etsy_listings.server.api.imagecache import (
@@ -110,12 +116,9 @@ def target(request: Request, name: str) -> Target:
     workspace = _workspace(request)
     try:
         require_template(workspace, name)
-    except TemplateMissing as exc:
+    except TemplateMissingError as exc:
         raise _not_found(exc) from exc
     return Target(workspace=workspace, name=name)
-
-
-Existing = Annotated[Target, Depends(target)]
 
 
 def _not_found(exc: Exception) -> HTTPException:
@@ -159,7 +162,7 @@ def list_templates(request: Request) -> list[TemplateSummary]:
 
 
 @router.get("/{name}/colour-report", response_model=list[ColourReportRow])
-def colour_report(template: Existing) -> list[ColourReportRow]:
+def colour_report(template: Annotated[Target, Depends(target)]) -> list[ColourReportRow]:
     """What each photo will be taken as if this becomes a colour-matrix set,
     shown in the kind picker before committing. ``clean: false`` is a file
     assigning the kind will rename (ADR-0004)."""
@@ -171,27 +174,29 @@ def colour_report(template: Existing) -> list[ColourReportRow]:
 
 
 @router.post("/{name}/kind", response_model=TemplateConfig)
-def assign_kind(template: Existing, body: AssignKindRequest) -> AnyTemplate:
+def assign_kind(
+    template: Annotated[Target, Depends(target)], body: AssignKindRequest
+) -> AnyTemplate:
     """The first calibration step: say what this template is, and get the
     starting ``template.yaml`` for that shape. Refused for a template that
     already has one -- changing kind would discard its calibration."""
     try:
         return calibration.assign_kind(template.workspace, template.name, body.kind)
-    except TemplateAlreadyCalibrated as exc:
+    except TemplateAlreadyCalibratedError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
-    except (TemplateKindRefused, SlugCollisionError) as exc:
+    except (TemplateKindRefusedError, SlugCollisionError) as exc:
         raise _bad_request(exc) from exc
 
 
 def _photo(template: Target, colour: str | None) -> Path:
     try:
         return template_photo(template.workspace, template.name, colour)
-    except TemplatePhotoMissing as exc:
+    except TemplatePhotoMissingError as exc:
         raise _not_found(exc) from exc
 
 
 @router.get("/{name}/thumbnail")
-def thumbnail(template: Existing, colour: str | None = None) -> Response:
+def thumbnail(template: Annotated[Target, Depends(target)], colour: str | None = None) -> Response:
     """The template's own photo, downscaled, for the rail -- not a render,
     which once per row would make opening the calibrator cost as much as
     calibrating. ``colour`` narrows it to one photo of a colour-matrix set,
@@ -202,7 +207,7 @@ def thumbnail(template: Existing, colour: str | None = None) -> Response:
 
 
 @router.get("/{name}/photo")
-def photo(template: Existing, colour: str | None = None) -> Response:
+def photo(template: Annotated[Target, Depends(target)], colour: str | None = None) -> Response:
     """The same photo at its own resolution, for the listing editors' large
     preview stage when no design is picked yet."""
     source = _photo(template, colour)
@@ -212,10 +217,10 @@ def photo(template: Existing, colour: str | None = None) -> Response:
 
 
 @router.get("/{name}/config", response_model=TemplateConfig)
-def get_config(template: Existing, response: Response) -> AnyTemplate:
+def get_config(template: Annotated[Target, Depends(target)], response: Response) -> AnyTemplate:
     try:
         saved = read_config(template.workspace, template.name)
-    except TemplateConfigMissing as exc:
+    except TemplateConfigMissingError as exc:
         raise _not_found(exc) from exc
     response.headers["ETag"] = f'"{saved.revision}"'
     response.headers["Last-Modified"] = format_datetime(saved.modified_at, usegmt=True)
@@ -225,7 +230,7 @@ def get_config(template: Existing, response: Response) -> AnyTemplate:
 
 @router.put("/{name}/config", response_model=TemplateConfig)
 def put_config(
-    template: Existing,
+    template: Annotated[Target, Depends(target)],
     body: CalibrationSaveRequest,
     response: Response,
     if_match: Annotated[str, Header()],
@@ -235,16 +240,18 @@ def put_config(
         saved = save_calibration(
             template.workspace,
             template.name,
-            body.config,
-            expected_revision=if_match.strip('"'),
-            request_id=body.request_id,
-            mask_edits=body.mask_edits,
+            CalibrationSave(
+                config=body.config,
+                expected_revision=if_match.strip('"'),
+                request_id=body.request_id,
+                mask_edits=body.mask_edits,
+            ),
         )
-    except CalibrationConflict as exc:
+    except CalibrationConflictError as exc:
         raise HTTPException(
             status_code=409 if "request ID" in str(exc) else 412, detail=str(exc)
         ) from exc
-    except TemplateKindRefused as exc:
+    except TemplateKindRefusedError as exc:
         raise _bad_request(exc) from exc
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
@@ -279,6 +286,25 @@ def _geometry(body: PreviewRequest) -> PreviewGeometry:
 
 
 PreviewScale = Literal["editor", "full"]
+
+
+@dataclass(frozen=True)
+class PreviewQuery:
+    """The query parameters every saved-scene preview takes: the depicted
+    ``colour`` (colour-matrix scenes) and the raster ``scale``."""
+
+    colour: str | None = None
+    scale: PreviewScale = "full"
+
+
+@dataclass(frozen=True)
+class ScenePreviewQuery(PreviewQuery):
+    """A listing scene's preview query. ``v`` is a cache-buster the editor
+    sends -- a signature of the saved design -- and is otherwise ignored."""
+
+    v: str | None = None
+
+
 """How big a preview to render.
 
 Two named sizes, not a pixel count from the client. ``full`` is the photo's
@@ -366,62 +392,87 @@ def render_preview_response(
         if if_none_match == headers["ETag"]:
             return Response(status_code=304, headers=headers)
         return Response(composed.png, media_type="image/png", headers=headers)
-    assert isinstance(scene, PreviewScene)  # noqa: S101 - every composed scene returned above
+    assert isinstance(scene, PreviewScene)  # every composed scene returned above
     base = PREVIEW_IMAGES.base(scene.photo.path, EDITOR_MAX_EDGE if scale == "editor" else None)
     image = compose_preview(
         scene,
         base=base.image,
         scale=base.scale,
         design=PREVIEW_IMAGES.design,
-        height=lambda: PREVIEW_IMAGES.height(scene.derived_dir, scene.photo.map_key, base),
-        luminance=lambda: PREVIEW_IMAGES.luminance(scene.derived_dir, scene.photo.map_key, base),
+        maps=LazyMaps(
+            height=lambda: PREVIEW_IMAGES.height(scene.derived_dir, scene.photo.map_key, base),
+            luminance=lambda: PREVIEW_IMAGES.luminance(
+                scene.derived_dir, scene.photo.map_key, base
+            ),
+        ),
     )
     return _encode_preview(image, scale)
 
 
+def _marigold_preview(template: Target, body: PreviewRequest, scale: PreviewScale) -> Response:
+    workspace = template.workspace
+    document = body.model_dump(
+        mode="json", exclude={"design", "calibration_revision", "mask_edits"}
+    )
+    colour = body.colour if isinstance(body, ColourMatrixPreviewRequest) else None
+    if isinstance(body, ColourMatrixPreviewRequest):
+        document.pop("colour")
+    config = load_template_config(document)
+    if scale == "editor":
+        return _editor_preview(
+            template,
+            body,
+            EditorDraft(
+                config=config,
+                revision=body.calibration_revision or "",
+                mask_edits=body.mask_edits,
+                colour=colour,
+            ),
+        )
+    if body.mask_edits:
+        raise HTTPException(status_code=409, detail="Save draft mask edits before full preview")
+    with preview_refusals():
+        prepared = prepared_preview(
+            workspace,
+            template.name,
+            config=config,
+            colour=colour,
+            design=lambda _colour: resolve_design(workspace, body.design),
+        )
+    return render_preview_response(prepared, scale, workspace=workspace)
+
+
+def _editor_preview(template: Target, body: PreviewRequest, draft: EditorDraft) -> Response:
+    """The interactive composite of an unsaved draft: never cached, and
+    refused rather than prepared when its maps are not ready."""
+    workspace = template.workspace
+    try:
+        image = editor_preview(
+            workspace,
+            template.name,
+            draft,
+            base=lambda path: PREVIEW_IMAGES.base(path).image,
+            artwork=lambda: PREVIEW_IMAGES.material_design(
+                resolve_design(workspace, body.design), max_edge=EDITOR_ARTWORK_EDGE
+            ),
+        )
+    except (PreparationRequiredError, ValueError, OSError) as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    response = _encode_preview(image, "editor")
+    response.headers["Cache-Control"] = "no-store"
+    response.headers["X-Preview-Quality"] = "interactive"
+    return response
+
+
 @router.post("/{name}/preview")
-def preview(template: Existing, body: PreviewRequest, scale: PreviewScale = "full") -> Response:
+def preview(
+    template: Annotated[Target, Depends(target)], body: PreviewRequest, scale: PreviewScale = "full"
+) -> Response:
     """The calibrator's preview of the geometry under the cursor, against a
     design from its own test-design library."""
     workspace = template.workspace
     if isinstance(body.renderer, MarigoldRenderer):
-        document = body.model_dump(
-            mode="json", exclude={"design", "calibration_revision", "mask_edits"}
-        )
-        if isinstance(body, ColourMatrixPreviewRequest):
-            document.pop("colour")
-        config = load_template_config(document)
-        if scale == "editor":
-            try:
-                image = editor_preview(
-                    workspace,
-                    template.name,
-                    config=config,
-                    revision=body.calibration_revision or "",
-                    mask_edits=body.mask_edits,
-                    colour=body.colour if isinstance(body, ColourMatrixPreviewRequest) else None,
-                    base=lambda path: PREVIEW_IMAGES.base(path).image,
-                    artwork=lambda: PREVIEW_IMAGES.material_design(
-                        resolve_design(workspace, body.design), max_edge=EDITOR_ARTWORK_EDGE
-                    ),
-                )
-            except (PreparationRequired, ValueError, OSError) as exc:
-                raise HTTPException(status_code=409, detail=str(exc)) from exc
-            response = _encode_preview(image, "editor")
-            response.headers["Cache-Control"] = "no-store"
-            response.headers["X-Preview-Quality"] = "interactive"
-            return response
-        if body.mask_edits:
-            raise HTTPException(status_code=409, detail="Save draft mask edits before full preview")
-        with preview_refusals():
-            prepared = prepared_preview(
-                workspace,
-                template.name,
-                config=config,
-                colour=body.colour if isinstance(body, ColourMatrixPreviewRequest) else None,
-                design=lambda _colour: resolve_design(workspace, body.design),
-            )
-        return render_preview_response(prepared, scale, workspace=workspace)
+        return _marigold_preview(template, body, scale)
     try:
         scene = unsaved_preview(
             workspace,
@@ -429,23 +480,22 @@ def preview(template: Existing, body: PreviewRequest, scale: PreviewScale = "ful
             _geometry(body),
             design=lambda: resolve_design(workspace, body.design),
         )
-    except (TemplateConfigMissing, TemplatePhotoMissing) as exc:
+    except (TemplateConfigMissingError, TemplatePhotoMissingError) as exc:
         raise _not_found(exc) from exc
-    except PreparationRequired as exc:
+    except PreparationRequiredError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
-    except TemplatePreviewKindMismatch as exc:
+    except TemplatePreviewKindMismatchError as exc:
         raise _bad_request(exc) from exc
     return render_preview_response(scene, scale, workspace=workspace)
 
 
 @router.get("/{name}/design-preview")
 def design_preview(
-    template: Existing,
+    template: Annotated[Target, Depends(target)],
     request: Request,
+    query: Annotated[PreviewQuery, Depends()],
     design: str | None = None,
     test_design: str | None = None,
-    colour: str | None = None,
-    scale: PreviewScale = "full",
 ) -> Response:
     """One design on every layer of this template's saved geometry -- the
     listing-template editor's preview (UI doc §3): a listing template has no
@@ -462,14 +512,14 @@ def design_preview(
     saved listing (A35), so its editor cannot show one file while Printify
     prints another.
     """
-    workspace = template.workspace
+    workspace, colour, scale = template.workspace, query.colour, query.scale
     if (design is None) == (test_design is None):
         raise HTTPException(status_code=422, detail="give exactly one of design, test_design")
 
     def design_path() -> Path:
         if test_design is not None:
             return resolve_design(workspace, test_design)
-        assert design is not None  # noqa: S101 - exactly one, checked above
+        assert design is not None  # exactly one, checked above
         path = workspace.design_file(design)
         if not path.is_file():
             raise HTTPException(status_code=404, detail=f"no design {design!r}")
@@ -487,7 +537,7 @@ def design_preview(
 
 
 @router.get("/{name}/swatch", response_model=SwatchResponse)
-def swatch(template: Existing, colour: str) -> SwatchResponse:
+def swatch(template: Annotated[Target, Depends(target)], colour: str) -> SwatchResponse:
     """This colour's real garment shade, for a quick-glance dot next to its
     name -- sampled off the colour's own photo, decoded through the preview
     memo. Any kind but colour-matrix 404s, as a photo-less colour does."""
@@ -498,7 +548,7 @@ def swatch(template: Existing, colour: str) -> SwatchResponse:
             colour,
             photo=lambda path: PREVIEW_IMAGES.base(path).image,
         )
-    except (TemplateConfigMissing, TemplatePhotoMissing) as exc:
+    except (TemplateConfigMissingError, TemplatePhotoMissingError) as exc:
         raise _not_found(exc) from exc
     return SwatchResponse(hex=hex_colour)
 
@@ -508,9 +558,9 @@ def preview_refusals() -> Iterator[None]:
     """A saved or prepared preview's refusals, as every preview route reports them."""
     try:
         yield
-    except PreparationRequired as exc:
+    except PreparationRequiredError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
-    except TemplatePreviewKindMismatch as exc:
+    except TemplatePreviewKindMismatchError as exc:
         raise _bad_request(exc) from exc
-    except (TemplateMissing, TemplateConfigMissing, TemplatePhotoMissing) as exc:
+    except (TemplateMissingError, TemplateConfigMissingError, TemplatePhotoMissingError) as exc:
         raise _not_found(exc) from exc
