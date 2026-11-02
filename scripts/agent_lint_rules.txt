@@ -5,60 +5,97 @@
 # before the hook loads. Anything else falls through to the snapshot check,
 # which finds what changed by content, so a command misjudged as read-only
 # only delays its feedback to the next command that falls through (or to the
-# pre-commit hook); nothing is lost. Patterns are Python regular expressions,
-# searched with re.search.
+# pre-commit hook); nothing is lost. But a skip is the one unsafe answer: when
+# unsure, leave a command out.
 #
-#   strip <text>     literal text removed from the command before any rule
-#                    runs: redirections that write no file
-#   unwrap <regex>   a shell wrapper; its last group is the command it runs
-#                    (a trailing quote left behind is dropped)
-#   deny <regex>     the command may write: lint
-#   allow <regex>    one read-only segment; every segment between &&, ||, ;
-#                    and | must match one of these
+# The gate splits the line as its shell does (quotes, escapes, &&, ||, ;, |,
+# a bare &, newlines) and judges every simple command in it: each segment,
+# each $(...), backtick and <(...) substitution, and the script of a nested
+# shell. Heredoc bodies are data and are skipped, unless their delimiter is
+# unquoted and they substitute. Before a segment is matched, its leading
+# VAR=value assignments and `prefix` words are dropped and its program is
+# reduced to its name (`/usr/bin/git` is `git`, `C:\...\zsh.exe` is `zsh`).
+# Patterns are Python regular expressions.
+#
+#   target <regex>             fullmatch: a redirect target that is no source
+#                              file. A redirect to anything else falls through.
+#                              Scratch directories can hold a checkout, so
+#                              a target there must not be a source file
+#                              either, nor a variable, glob or `..`.
+#   variable <regex>           fullmatch on NAME=value (or NAME, for unset and
+#                              a bare export): an assignment that can run a
+#                              command or move a target. It falls through.
+#   prefix <regex>             fullmatch on the leading words: they run the
+#                              rest of the segment as it is
+#   unwrap <regex>             fullmatch on the words before the last: a POSIX
+#                              shell whose script is the last word
+#   unwrap-powershell <regex>  the same for PowerShell, whose script is the
+#                              rest of the segment
+#   deny <regex>               search in a segment: it may write
+#   allow <regex>              search in a segment: it only reads. Every
+#                              segment must match one, and no deny.
 
-strip 2>&1
-strip 1>&2
-strip >&2
-strip 2>/dev/null
-strip 2> /dev/null
-strip &>/dev/null
-strip >/dev/null
-strip > /dev/null
-strip 2>$null
-strip >$null
+target /dev/null
+target \$null
+target (?i)nul
+target (/tmp|/c/cygwin64/tmp|/cygdrive/c/cygwin64/tmp|(?i:C:[/\\]cygwin64[/\\]tmp))[/\\](?!.*\.\.)(?!.*\.(py|pyi|ts|tsx)$)[^\s$`*?\[{~]+
+target (\$\{?(TMP|TEMP|TMPDIR)\}?|(?i:\$env:(TMP|TEMP)))[/\\](?!.*\.\.)(?!.*\.(py|pyi|ts|tsx)$)[^\s$`*?\[{~]+
+target (?i:(C:|/c|/cygdrive/c)[/\\]Users[/\\][^/\\$`]+[/\\]AppData[/\\]Local[/\\]Temp)[/\\](?!.*\.\.)(?!.*\.(py|pyi|ts|tsx)$)[^\s$`*?\[{~]+
 
-unwrap ^(bash|sh) -l?c '(.*)'$
-unwrap ^(bash|sh) -l?c "(.*)"$
-unwrap ^[^ ]*(powershell|pwsh)(\.exe)? (-NoProfile )?-Command '?"?(.*)$
+variable (TMP|TEMP|TMPDIR|ENV|BASH_ENV|ZDOTDIR|PROMPT_COMMAND|IFS|NODE_OPTIONS|PYTHONSTARTUP|PYTHONHOME)(=.*)?
+variable (LD_\w+|DYLD_\w+|\w*EDITOR|\w*PAGER(?!=cat$))(=.*)?
+variable GIT_(?!OPTIONAL_LOCKS=|CONFIG_COUNT=0$|TERMINAL_PROMPT=|PAGER=cat$)\w+(=.*)?
+variable PATH(=(?!((/usr/local/bin|/usr/bin|/bin|/c/cygwin64/bin|/cygdrive/c/cygwin64/bin|\$PATH|\$\{PATH\})(:|$))+$).*)?
 
-deny >
+prefix exec
+prefix time
+prefix noglob
+prefix env( -i| -u \S+| --unset=\S+)*
+prefix timeout( -[a-zA-Z]+( \S+)?)* \d+(\.\d+)?[smhd]?
+
+unwrap (bash|sh|zsh)( (-l|--login|--no-login|--noprofile|--norc|-e))* -l?c
+unwrap-powershell (?i)(powershell|pwsh)( -(NoProfile|NonInteractive|NoLogo|ExecutionPolicy \S+))* -(Command|c)
+
 deny (^| )tee( |$)
-deny (^| )-i( |$)
-deny (^| )-u( |$)
-deny (^| )-o( |$)
 deny --in-place
 deny --fix
 deny --write
-deny --output
 deny --update
 deny --snapshot-update
-deny (^| )-delete
-deny (^| )-exec
-deny (^| )-ok( |$)
-deny (^| )-fprint
-deny (^| )(Set-Content|Add-Content|Out-File|New-Item|Remove-Item|Copy-Item|Move-Item|Rename-Item)( |$)
+deny --output(?!-format)
+deny --out(dir|file|Dir|File)
+deny --pre(=| |$)
+deny --open-files-in-pager
+deny (^| )-(delete|exec|execdir|ok|okdir|fprint|fprint0|fprintf|fls)( |$)
+deny (?i)(^| )(Set-Content|Add-Content|Out-File|New-Item|Remove-Item|Copy-Item|Move-Item|Rename-Item|Clear-Content|Tee-Object|Export-\w+|Invoke-Expression|iex)( |$)
+deny ^(sed|perl|ruby)( .*)? -[a-zA-Z]*i
+deny ^(sort|eslint|npx eslint)( .*)? -o
+deny ^(npm|npx|vitest|jest)( .*)? -u( |$)
+deny ^git( .*)? -O
+deny ^awk .*\bsystem\b
+deny ^curl( .*)? (-[a-zA-Z]*[ODcK]|-[a-zA-Z]*o(?! ?/dev/null( |$))|--(remote-name|dump-header|cookie-jar|trace|stderr|libcurl|etag-save|hsts|alt-svc|config|create-dirs))
+deny %output\{
 
 allow ^cd( |$)
-allow ^(ls|dir|cat|head|tail|wc|grep|egrep|rg|find|echo|printf|pwd|which|type|date|sort|uniq|cut|tr|diff|cmp|stat|file|du|df|env|true|false|test|sleep|basename|dirname|realpath|readlink|jq|column|nl)( |$)
+allow ^(ls|dir|cat|head|tail|wc|grep|egrep|rg|find|echo|printf|pwd|which|type|date|sort|cut|tr|diff|cmp|stat|file|du|df|true|false|test|sleep|basename|dirname|realpath|readlink|jq|column|nl|ps|netstat|tasklist|printenv|wait|cygpath|whoami|uname|whence|seq|taskkill|kill)( |$)
+allow ^(env|uniq( -[a-z]+)*)$
+allow ^unzip -(l|v|t|Z1?)( |$)
+allow ^curl( |$)
 allow ^command -v( |$)
-allow ^git (-C [^ ]+ )?(status|log|diff|show|rev-parse|ls-files|ls-tree|grep|blame|describe|shortlog|cat-file|merge-base|rev-list|fetch|reflog)( |$)
-allow ^git (-C [^ ]+ )?(worktree list|stash list|branch --show-current|remote -v|config --get)( |$)
-allow ^gh (pr (view|list|checks|diff|status)|run (list|view|watch)|issue (view|list)|repo view|label list|search|api)( |$)
-allow ^(uv run )?(python -m )?pytest( |$)
-allow ^uv run (mypy|lint-imports|complexipy|vulture)( |$)
-allow ^uv run ruff (check|format --check)( |$)
-allow ^uv run poe (lint|test|test-ci|test-browser|ruff|mypy|imports|complexity|dead-code|duplicates|format-check)( |$)
-allow ^npm (run )?(test|lint|typecheck|format:check|test:coverage|test:design)( |$)
-allow ^npx (vitest run|tsc|eslint|prettier --check)( |$)
-allow ^(node|uv|python|git|gh|npm) --version$
-allow ^(Get-ChildItem|Get-Content|Select-String|Get-Location|Test-Path|Get-Item|Write-Output|gci|gc|sls)( |$)
+allow ^(unset|export)( [A-Za-z_][A-Za-z0-9_]*(=\S*)?)+$
+allow ^set( [-+][a-zA-Z]+| -o \w+| pipefail)*$
+allow ^sed( -n| -E| -r)* -n( -E| -r)* '?((\d+|\$|/[^/'\\]*/)(,(\d+|\$|/[^/'\\]*/|\+\d+))?!?p;?)+'?( [^ -][^ ]*)*$
+allow ^awk( -F ?\S+)? '[^'>|]*'( [^ -][^ ]*)*$
+allow ^git( -C [^ ]+| --no-pager| -c '?(safe\.directory|core\.(symlinks|quotepath|autocrlf|safecrlf|whitespace|longpaths)|color\.[a-z.]+|user\.(name|email)|advice\.[a-zA-Z]+|init\.defaultBranch)=[^ ]*)* (status|log|diff|show|rev-parse|ls-files|ls-tree|grep|blame|describe|shortlog|cat-file|merge-base|rev-list|fetch|reflog|add|commit|push|ls-remote|for-each-ref|show-ref|name-rev|check-ignore|range-diff|cherry|count-objects|version|help)( |$)
+allow ^git( -C [^ ]+)? (worktree list|stash list|stash show|branch|remote -v|remote get-url)( |$)
+allow ^git( -C [^ ]+)? config( --get| --get-all| --list| -l| --show-origin)*( [a-zA-Z][\w.-]*)?$
+allow ^gh (pr (view|list|checks|diff|status|edit|create|comment|review|ready|close|reopen)|run (list|view|watch|rerun|cancel)|workflow (run|list|view)|issue (view|list|create|comment|edit|close)|release (view|list)|repo view|label list|search|api|auth status)( |$)
+allow ^(uv run( --[a-z-]+)* )?(python -m )?pytest( |$)
+allow ^uv run( --[a-z-]+)* (mypy|lint-imports|complexipy|vulture)( |$)
+allow ^uv run( --[a-z-]+)* ruff (check|format --check)( |$)
+allow ^uv run( --[a-z-]+)* poe (lint|test|test-ci|test-browser|ruff|mypy|imports|complexity|dead-code|duplicates|format-check)( |$)
+allow ^npm( --prefix [^ ]+)? (run( -s)? )?(test|lint|typecheck|format:check|test:coverage|test:design|build)( |$)
+allow ^npm (ls|view|outdated)( |$)
+allow ^npx( --no-install| -y| --yes)* (vitest run|tsc|eslint|prettier --check)( |$)
+allow ^(node|uv|python|git|gh|npm|npx|zsh|bash) --version$
+allow (?i)^(Get-ChildItem|Get-Content|Select-String|Get-Location|Test-Path|Get-Item|Write-Output|Write-Host|Select-Object|Sort-Object|Measure-Object|Format-Table|Format-List|Out-String|Out-Null|Get-Process|Get-CimInstance|Get-Date|Get-Command|Resolve-Path|Split-Path|Join-Path|Start-Sleep|Get-FileHash|gci|gc|sls)( |$)

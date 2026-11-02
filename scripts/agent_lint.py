@@ -58,6 +58,7 @@ PYTHON_SUFFIXES = {".py", ".pyi"}
 TYPESCRIPT_SUFFIXES = {".ts", ".tsx"}
 SOURCE_SUFFIXES = PYTHON_SUFFIXES | TYPESCRIPT_SUFFIXES
 UI = ROOT / "src" / "ui"
+SHELL_TOOLS = ("Bash", "PowerShell")  # Claude Code's PowerShell tool writes files too
 
 
 def _edited_paths(payload: dict[str, object]) -> list[Path]:
@@ -604,7 +605,7 @@ def pre_commit(paths: list[Path]) -> int:
 def run(mode: str, payload: dict[str, object]) -> int:
     """One hook event. The gates call this once they have read the payload."""
     if mode == "edit":
-        return shell() if payload.get("tool_name") == "Bash" else edit(payload)
+        return shell() if payload.get("tool_name") in SHELL_TOOLS else edit(payload)
     handlers = {
         "shell": shell,
         "snapshot": snapshot,
