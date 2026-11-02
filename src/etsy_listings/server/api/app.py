@@ -67,7 +67,6 @@ def create_app(
     seo_provider_factory: ProviderFactory = default_ai_providers,
     market_client_factory: MarketClientFactory = default_market_client,
     preparation_runtime: PreparationRuntime | None = None,
-    model_discovery: ModelDiscovery | None = None,
 ) -> FastAPI:
     # One of each per process, so their locks mean something: the listing
     # template write locks, and the cache records' stores. Listing locks
@@ -88,10 +87,9 @@ def create_app(
     )
     deployments = Deployments(workspace, context_factory, ai=ai)
     scene_warmer = SceneWarmer(workspace)
-    discovery = model_discovery if model_discovery is not None else ModelDiscovery()
 
     @asynccontextmanager
-    async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+    async def lifespan(running: FastAPI) -> AsyncIterator[None]:
         """Starts the deployment worker thread with the app, and waits
         for it on the way out -- "finish what's in flight, start nothing
         else" (decision 7), on the path every ASGI server already calls
@@ -112,6 +110,8 @@ def create_app(
         await run_in_threadpool(preparations.start)
         # ADR-0056: discovery is advisory. Its owned worker must not hold
         # application availability behind installed CLI processes.
+        # Read from app.state, so a test can put its own discovery there first.
+        discovery: ModelDiscovery = running.state.model_discovery
         discovery.start()
         staging_store.sweep(now=datetime.now(UTC))
         deployments.start()
@@ -129,7 +129,7 @@ def create_app(
     app = FastAPI(title="etsy-listings", version="0.1.0", lifespan=lifespan)
     app.state.preparations = preparations
     app.state.workspace = workspace
-    app.state.model_discovery = discovery
+    app.state.model_discovery = ModelDiscovery()
     app.state.deployments = deployments
     # Shared with the preview endpoint (`listings.py`), which needs a
     # `RunContext` to ask the render stage for a scene's current hash but has

@@ -20,8 +20,8 @@ from etsy_listings.server.api.schemas import (
 router = APIRouter(prefix="/api/admin/settings", tags=["admin"])
 
 
-@router.get("/models", response_model=ModelCatalogs)
-def model_catalogs(request: Request, refresh: bool = False) -> ModelCatalogs:
+@router.get("/models")
+def model_catalogs(request: Request, *, refresh: bool = False) -> ModelCatalogs:
     discovery: ModelDiscovery = request.app.state.model_discovery
     return discovery.read(refresh=refresh)
 
@@ -43,7 +43,7 @@ def _response(view: workspace_settings.SettingsView) -> WorkspaceSettingsRespons
     )
 
 
-@router.get("", response_model=WorkspaceSettingsResponse)
+@router.get("")
 def read_settings(request: Request) -> WorkspaceSettingsResponse:
     try:
         return _response(workspace_settings.read_settings(request.app.state.workspace))
