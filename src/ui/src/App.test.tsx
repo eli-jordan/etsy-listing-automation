@@ -260,7 +260,8 @@ describe("App", () => {
     expect(screen.getByText("Saved a moment ago")).toBeInTheDocument();
     await waitFor(() =>
       expect(screen.getByRole("note")).toHaveTextContent(
-        "1 listing holds its own position on this template: take-a-hike.",
+        "1 listing holds its own position on this template: take-a-hike. " +
+          "Changing the box does not move it; the next plan re-checks it against the position limits.",
       ),
     );
   });
