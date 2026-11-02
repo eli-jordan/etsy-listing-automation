@@ -159,7 +159,7 @@ E2E_REAL_AI=1 ETSY_LISTINGS_ROOT=/path/to/workspace uv run pytest -m e2e tests/e
 ETSY_LISTINGS_ROOT=/path/to/workspace uv run pytest -m e2e tests/e2e/test_phase3_publish_e2e.py::test_the_full_cycle_from_nothing_to_a_media_complete_draft # the Phase 3 journey alone
 ```
 
-Run it locally before merging rather than iterating through CI. `gh workflow run e2e --ref <branch>` re-runs just that workflow. If CI's Etsy sign-in goes stale (refresh tokens rotate on use), run `etsy-listings auth etsy` locally and update the `ETSY_TOKENS_JSON` secret.
+Before merging, run it on GitHub Actions, not locally: once CI is green, `gh workflow run e2e --ref <branch>` and wait for it to pass. Run one e2e workflow at a time: Etsy rotates the refresh token on every use, so two concurrent runs race and the loser fails with `invalid_grant`. If CI's Etsy sign-in goes stale (refresh tokens rotate on use), run `etsy-listings auth etsy` locally and update the `ETSY_TOKENS_JSON` secret.
 </important>
 
 <important if="you are adding code that changes test coverage, or a coverage gate fails">
