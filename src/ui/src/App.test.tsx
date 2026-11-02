@@ -79,6 +79,7 @@ beforeEach(() => {
   // Every editor's inspector mounts the test-design picker, which fetches the
   // library. Stubbed so these tests stay about App's own behaviour.
   vi.spyOn(calibrator, "listDesigns").mockResolvedValue([]);
+  vi.spyOn(calibrator, "getPositionedListings").mockResolvedValue([]);
 });
 
 describe("App", () => {
@@ -230,6 +231,50 @@ describe("App", () => {
     expect(screen.getByText("Saved a moment ago")).toBeInTheDocument();
     expect(document.querySelector(".page-head__saved .page-head__dot")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Save template/ })).not.toBeInTheDocument();
+  });
+
+  it("names the listings holding positions for the template, before and after a save", async () => {
+    vi.spyOn(calibrator, "listTemplates").mockResolvedValue([summary({ name: "flat-lay-01" })]);
+    vi.spyOn(calibrator, "getTemplateConfig").mockResolvedValue(configDocument(COLOUR_MATRIX));
+    vi.spyOn(calibrator, "renderPreview").mockResolvedValue("blob:preview");
+    const held = vi.spyOn(calibrator, "getPositionedListings").mockResolvedValue([
+      { listing: "take-a-hike", placements: [] },
+      { listing: "tote-bag", placements: ["back", "front"] },
+    ]);
+    const write = deferred<calibrator.SavedTemplateConfig>();
+    vi.spyOn(calibrator, "saveTemplateConfig").mockReturnValue(write.promise);
+    const clock = controlledClock();
+
+    render(<App />);
+    const note = await screen.findByRole("note");
+    expect(held).toHaveBeenCalledWith("flat-lay-01");
+    expect(note).toHaveTextContent(
+      "2 listings hold their own position on this template: take-a-hike, tote-bag (back, front). " +
+        "Changing the box does not move them; the next plan re-checks them against the position limits.",
+    );
+
+    fireEvent.change(await screen.findByLabelText("Wrinkle strength"), { target: { value: "75" } });
+    await clock.advance(AUTOSAVE_DEBOUNCE_MS);
+    held.mockResolvedValue([{ listing: "take-a-hike", placements: [] }]);
+    await act(async () => write.resolve(saved(COLOUR_MATRIX)));
+    expect(screen.getByText("Saved a moment ago")).toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.getByRole("note")).toHaveTextContent(
+        "1 listing holds its own position on this template: take-a-hike.",
+      ),
+    );
+  });
+
+  it("says nothing about positions when no listing holds one", async () => {
+    vi.spyOn(calibrator, "listTemplates").mockResolvedValue([summary({ name: "flat-lay-01" })]);
+    vi.spyOn(calibrator, "getTemplateConfig").mockResolvedValue(configDocument(COLOUR_MATRIX));
+    vi.spyOn(calibrator, "renderPreview").mockResolvedValue("blob:preview");
+    const held = vi.spyOn(calibrator, "getPositionedListings").mockResolvedValue([]);
+
+    render(<App />);
+    await screen.findByLabelText("Wrinkle strength");
+    await waitFor(() => expect(held).toHaveBeenCalledWith("flat-lay-01"));
+    expect(screen.queryByRole("note")).not.toBeInTheDocument();
   });
 
   it("offers a reload for a conflicting save, and only for one", async () => {
