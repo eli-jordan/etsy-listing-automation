@@ -1,8 +1,12 @@
-"""Similarity poses in a template's unit frame, mapped to photo pixels (ADR-0058).
+"""Similarity poses in a template box's rectified frame, mapped to photo pixels (ADR-0058).
 
-Offsets are fractions of width/height; positive rotation is clockwise in image
-coordinates. Fit in the unit frame, measure the maximum corner residual in photo
-pixels. No workspace, listing or settings imports: limits use a structural protocol.
+The rectified frame is the box's unit-square parameterisation scaled by
+``(W, H)``, the mean lengths of its top/bottom and left/right sides in photo
+pixels, so a tilt is a rigid rotation of a box with its real proportions
+(ADR-0058 amendment, 2026-11-02). Offsets are fractions of W and H; positive
+rotation is clockwise in image coordinates. Fit in the rectified frame, measure
+the maximum corner residual in photo pixels. No workspace, listing or settings
+imports: limits use a structural protocol.
 """
 
 from dataclasses import dataclass
@@ -38,7 +42,8 @@ class PositionLimits(Protocol):
 
 @dataclass(frozen=True)
 class Pose:
-    """Uniform scale and clockwise degrees about (0.5, 0.5), then translation."""
+    """Uniform scale and clockwise degrees about the box centre in its rectified
+    frame, then translation in fractions of W and H."""
 
     scale: float = 1.0
     offset_x: float = 0.0
@@ -58,6 +63,16 @@ def _pixels(box: BoundingBox) -> NDArray[np.float64]:
 
 def _unit() -> NDArray[np.float64]:
     return np.array([(0, 0), (1, 0), (1, 1), (0, 1)], dtype=np.float64)
+
+
+def _proportions(box: BoundingBox) -> NDArray[np.float64]:
+    """``(W, H)``: mean top/bottom and left/right side lengths in photo pixels."""
+    tl, tr, br, bl = _pixels(box)
+    width = (np.linalg.norm(tr - tl) + np.linalg.norm(br - bl)) / 2
+    height = (np.linalg.norm(bl - tl) + np.linalg.norm(br - tr)) / 2
+    if not width > 0 or not height > 0:
+        raise ValueError("template box has no invertible homography")
+    return np.array((width, height), dtype=np.float64)
 
 
 def _homography(box: BoundingBox) -> NDArray[np.float64]:
@@ -92,12 +107,15 @@ def _map(points: NDArray[np.float64], matrix: NDArray[np.float64]) -> NDArray[np
 
 
 def compose(template_box: BoundingBox, pose: Pose) -> BoundingBox:
-    """Apply ``pose`` before the template homography; return TL, TR, BR, BL."""
+    """Apply ``pose`` in the rectified frame, then the template homography;
+    return TL, TR, BR, BL."""
+    homography = _homography(template_box)
+    size = _proportions(template_box)
     angle = radians(pose.rotation)
     a, b = pose.scale * cos(angle), pose.scale * sin(angle)
-    unit = (_unit() - 0.5) @ np.array([[a, b], [-b, a]])
-    unit += (0.5 + pose.offset_x, 0.5 + pose.offset_y)
-    points = _map(unit, _homography(template_box))
+    rectified = ((_unit() - 0.5) * size) @ np.array([[a, b], [-b, a]])
+    rectified += (pose.offset_x, pose.offset_y) * size
+    points = _map(rectified / size + 0.5, homography)
     return (
         Point(x=points[0, 0], y=points[0, 1]),
         Point(x=points[1, 0], y=points[1, 1]),
@@ -110,23 +128,25 @@ def decompose(template_box: BoundingBox, box: BoundingBox) -> PoseFit:
     """Least-squares orientation-preserving similarity, even for a non-similarity.
 
     Raises ValueError for singular geometry or a quad crossing projective infinity.
-    The residual is the largest Euclidean photo-pixel error, not a unit-frame error.
+    The residual is the largest Euclidean photo-pixel error, not a rectified-frame error.
     """
     try:
         inverse = np.linalg.inv(_homography(template_box))
     except np.linalg.LinAlgError as exc:
         raise ValueError("template box has no invertible homography") from exc
-    target = _map(_pixels(box), inverse)
+    size = _proportions(template_box)
+    target = (_map(_pixels(box), inverse) - 0.5) * size
     centre = target.mean(axis=0)
-    source = _unit() - 0.5
+    source = (_unit() - 0.5) * size
     centred = target - centre
-    # The four unit corners have sum of squared distances 2.
-    a = float(np.sum(source * centred) / 2)
-    b = float(np.sum(source[:, 0] * centred[:, 1] - source[:, 1] * centred[:, 0]) / 2)
+    # The four centred corners have sum of squared distances W² + H².
+    norm = float(np.sum(source * source))
+    a = float(np.sum(source * centred) / norm)
+    b = float(np.sum(source[:, 0] * centred[:, 1] - source[:, 1] * centred[:, 0]) / norm)
     pose = Pose(
         scale=hypot(a, b),
-        offset_x=float(centre[0] - 0.5),
-        offset_y=float(centre[1] - 0.5),
+        offset_x=float(centre[0] / size[0]),
+        offset_y=float(centre[1] / size[1]),
         rotation=degrees(atan2(b, a)),
     )
     residual = float(

@@ -4884,7 +4884,7 @@ export interface components {
     };
     /**
      * TemplatePositionLimits
-     * @description Mockup-only similarity limits; fractions in the template's unit frame.
+     * @description Mockup-only similarity limits; offsets are fractions of the box's rectified W and H.
      */
     TemplatePositionLimits: {
       /**
