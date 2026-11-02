@@ -32,7 +32,7 @@ import threading
 from collections import OrderedDict
 from collections.abc import Callable
 
-from etsy_listings.core.application.listing_reads import scene_artwork
+from etsy_listings.core.application.listing_reads import listing_scenes
 from etsy_listings.core.application.mockup_templates import PreviewScene
 from etsy_listings.core.application.prepared_previews import photo_warp_preview, saved_scene
 from etsy_listings.core.config.listing import TemplateMediaEntry
@@ -64,8 +64,16 @@ def gallery_scenes(workspace: Workspace, name: str) -> list[Scene]:
 
 def warm_scene(workspace: Workspace, name: str, template: str, colour: str | None) -> None:
     """Compose one of ``name``'s scenes at full size into the scene cache,
-    or find it there. Refusals are the preview endpoint's."""
-    scene = saved_scene(workspace, template, colour=colour, design=scene_artwork(workspace, name))
+    or find it there, at the listing's saved position. Refusals are the
+    preview endpoint's."""
+    listing = listing_scenes(workspace, name)
+    scene = saved_scene(
+        workspace,
+        template,
+        colour=colour,
+        design=listing.artwork,
+        boxes=listing.boxes(template),
+    )
     if isinstance(scene, PreviewScene):
         photo_warp_preview(workspace, scene, base=load_template_base, design=load_design)
 
