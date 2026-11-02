@@ -22,6 +22,19 @@ export default tseslint.config(
       "sonarjs/cognitive-complexity": ["error", 10],
       ...reactHooks.configs.recommended.rules,
       "react-refresh/only-export-components": ["warn", { allowConstantExport: true }],
+      // The package root re-exports every icon (~3,000 files), which tsc and
+      // vite then load on every build. Import each icon from its own module.
+      "no-restricted-imports": [
+        "error",
+        {
+          paths: [
+            {
+              name: "@phosphor-icons/react",
+              message: 'Import the icon from "@phosphor-icons/react/dist/csr/<Name>" instead.',
+            },
+          ],
+        },
+      ],
     },
   },
 );
