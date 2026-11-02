@@ -178,13 +178,13 @@ def test_a_section_can_be_reopened(client: TestClient, workspace: Workspace) -> 
     assert _resolve(client, generated_at, lead="pending").json()["resolution"]["lead"] == "pending"
 
 
-def test_resolving_a_regenerated_proposal_is_409(client: TestClient, workspace: Workspace) -> None:
+def test_resolving_a_regenerated_proposal_is_412(client: TestClient, workspace: Workspace) -> None:
     first = _saved(workspace)
     _saved(workspace, generated_at=TODAY + timedelta(minutes=5))
 
     response = _resolve(client, first, title="accepted")
 
-    assert response.status_code == 409
+    assert response.status_code == 412
     assert client.get(PROPOSAL).json()["resolution"]["title"] == "pending"
 
 

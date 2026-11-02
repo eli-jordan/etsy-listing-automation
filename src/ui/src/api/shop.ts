@@ -46,7 +46,7 @@ export async function saveShop(revision: string, changes: ShopChanges): Promise<
   });
   if (data) return { kind: "saved", shop: data };
   const refusal = error as Refusal | undefined;
-  if (response.status === 409 && refusal?.kind === "conflict")
+  if (response.status === 412 && refusal?.kind === "conflict")
     return { kind: "conflict", message: refusal.message };
   if (response.status === 422 && refusal?.kind === "invalid") {
     const fieldErrors = Object.fromEntries(

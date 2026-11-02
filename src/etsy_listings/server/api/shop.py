@@ -2,9 +2,10 @@
 
 Thin by design (ADR-0052): ``core/application/shop_settings.py`` owns the
 revision check, validation and lookups; this module builds the clients from
-``connections`` and turns refusals into status codes. A refused save is a
-:class:`ShopSaveRefusal` body rather than ``{"detail": ...}`` so the page can
-tell a conflict from field errors without parsing text.
+``connections``. A refused save is a :class:`ShopSaveRefusal` body rather
+than ``{"detail": ...}`` so the page can tell a conflict from field errors
+without parsing text, at the status the app's refusal table gives each
+category (``app.py``'s ``REFUSAL_STATUS``): ``412`` stale, ``422`` refused.
 """
 
 from __future__ import annotations
@@ -78,7 +79,7 @@ def read_shop(request: Request) -> ShopSettingsResponse:
 @router.patch(
     "",
     response_model=ShopSettingsResponse,
-    responses={409: {"model": ShopSaveRefusal}, 422: {"model": ShopSaveRefusal}},
+    responses={412: {"model": ShopSaveRefusal}, 422: {"model": ShopSaveRefusal}},
 )
 def edit_shop(request: Request, body: ShopPatchRequest) -> ShopSettingsResponse | JSONResponse:
     sent = body.changes.model_dump(exclude_unset=True)
@@ -91,7 +92,7 @@ def edit_shop(request: Request, body: ShopPatchRequest) -> ShopSettingsResponse 
             app_state.workspace(request), expected_revision=body.revision, changes=changes
         )
     except ShopRevisionConflictError as exc:
-        return _refusal(409, ShopSaveRefusal(kind="conflict", message=str(exc)))
+        return _refusal(412, ShopSaveRefusal(kind="conflict", message=str(exc)))
     except InvalidShopEditError as exc:
         refusal = ShopSaveRefusal(kind="invalid", message=str(exc), field_errors=exc.field_errors)
         return _refusal(422, refusal)

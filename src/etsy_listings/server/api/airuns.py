@@ -40,7 +40,6 @@ from etsy_listings.core.application.refusals import (
     AiNotReadyError,
     ListingDeployingError,
     ListingDraftingInBatchError,
-    ListingMissingError,
 )
 from etsy_listings.server.api.runs import last_event_id
 from etsy_listings.server.api.schemas import (
@@ -108,8 +107,6 @@ def create_ai_run(request: Request, body: CreateAiRunRequest) -> AiRunSummary | 
     to reattach to, or gives the readiness rule that failed."""
     try:
         run = _ai(request).start_run(body.listing, draft_brief=body.draft_brief)
-    except ListingMissingError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
     except ListingDeployingError:
         return _refused(AiRunRefusal(reason=DEPLOYING))
     except ListingDraftingInBatchError:

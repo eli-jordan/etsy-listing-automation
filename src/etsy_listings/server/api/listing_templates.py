@@ -4,13 +4,13 @@ template and Clone), read, valid-only ``PUT``, rename and delete.
 
 The operations are
 :mod:`etsy_listings.core.application.listing_template_library`'s
-(module-structure plan, PR 7); this module decides only what each answer is
-on the wire, in the listings endpoints' idiom:
+(module-structure plan, PR 7); this module only projects their answers
+onto the wire, in the listings endpoints' idiom. Their refusals pass through to
+the app's one refusal table (``app.py``'s ``REFUSAL_STATUS``):
 
 * A **name** the server will not take is a status code -- ``400`` for one
-  that is not a single path segment (the app-wide ``InvalidNameError``
-  handler) or is ``draft``, ``409`` for one already taken, which is never
-  suffixed.
+  that is not a single path segment or is ``draft``, ``409`` for one already
+  taken, which is never suffixed.
 * A **document** it will not write is a ``200`` with ``saved: false`` and the
   issues or field errors, and nothing on disk changes. That is what lets
   the editor keep the seller's values and say why.
@@ -25,7 +25,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Request
 from fastapi.responses import Response
 
 from etsy_listings.core.application import listing_template_library as library
@@ -33,15 +33,8 @@ from etsy_listings.core.application.listing_template_library import (
     ListingTemplateView,
     TemplateSave,
 )
-from etsy_listings.core.application.refusals import (
-    ListingMissingError,
-    ListingTemplateMissingError,
-    ListingTemplateSourceRefusedError,
-    ReservedListingTemplateNameError,
-)
 from etsy_listings.core.batches import BatchRecords
 from etsy_listings.core.config.listing_validation import Issue as ValidationIssue
-from etsy_listings.core.listing_templates import ListingTemplateExistsError
 from etsy_listings.core.workspace.workspace import Workspace
 from etsy_listings.server.api import app_state
 from etsy_listings.server.api.editor_projections import garment_fields, wire_prices
@@ -58,26 +51,6 @@ from etsy_listings.server.api.schemas import (
 )
 
 router = APIRouter(prefix="/api/listing-templates", tags=["listing-templates"])
-
-
-def _refused(exc: Exception) -> HTTPException:
-    """A refusal of a name or a source, as its status code."""
-    if isinstance(exc, ListingMissingError | ListingTemplateMissingError):
-        return HTTPException(status_code=404, detail=str(exc))
-    if isinstance(exc, ListingTemplateExistsError):
-        return HTTPException(status_code=409, detail=str(exc))
-    if isinstance(exc, ReservedListingTemplateNameError):
-        return HTTPException(status_code=400, detail=str(exc))
-    return HTTPException(status_code=422, detail=str(exc))
-
-
-_REFUSALS = (
-    ListingMissingError,
-    ListingTemplateMissingError,
-    ListingTemplateExistsError,
-    ReservedListingTemplateNameError,
-    ListingTemplateSourceRefusedError,
-)
 
 
 def _wire(issues: list[ValidationIssue]) -> list[Issue]:
@@ -156,12 +129,9 @@ def listing_template_draft(
     nowhere: what the *name it* page shows before the seller commits a name
     (UI doc §1)."""
     workspace = app_state.workspace(request)
-    try:
-        view = library.draft_listing_template(
-            workspace, library.DraftOrigin(listing=from_listing, template=from_template)
-        )
-    except _REFUSALS as exc:
-        raise _refused(exc) from exc
+    view = library.draft_listing_template(
+        workspace, library.DraftOrigin(listing=from_listing, template=from_template)
+    )
     return _detail(workspace, view)
 
 
@@ -172,25 +142,19 @@ def create_listing_template(
     """Naming the draft is what writes it (UI doc §1). The name is checked
     first, so a bad one is a 400 before any source is read."""
     workspace = app_state.workspace(request)
-    try:
-        outcome = library.create_listing_template(
-            workspace,
-            body.name,
-            library.DraftOrigin(listing=body.from_listing, template=body.from_template),
-            document=body.document,
-        )
-    except _REFUSALS as exc:
-        raise _refused(exc) from exc
+    outcome = library.create_listing_template(
+        workspace,
+        body.name,
+        library.DraftOrigin(listing=body.from_listing, template=body.from_template),
+        document=body.document,
+    )
     return _save_result(workspace, outcome)
 
 
 @router.get("/{name}", response_model=ListingTemplateDetail)
 def get_listing_template(request: Request, name: str) -> ListingTemplateDetail:
     workspace = app_state.workspace(request)
-    try:
-        view = library.read_listing_template(workspace, name)
-    except ListingTemplateMissingError as exc:
-        raise _refused(exc) from exc
+    view = library.read_listing_template(workspace, name)
     return _detail(workspace, view)
 
 
@@ -203,10 +167,7 @@ def put_listing_template(
     server always holds the last complete version; the listing-template editor
     keeps the unsaved values on its side."""
     workspace = app_state.workspace(request)
-    try:
-        outcome = library.edit_listing_template(workspace, name, body)
-    except ListingTemplateMissingError as exc:
-        raise _refused(exc) from exc
+    outcome = library.edit_listing_template(workspace, name, body)
     return _save_result(workspace, outcome)
 
 
@@ -220,16 +181,13 @@ def rename_listing_template(
     batches made from it follow it by name
     (:func:`~etsy_listings.core.application.listing_template_library.rename_listing_template`)."""
     workspace = app_state.workspace(request)
-    try:
-        library.rename_listing_template(
-            workspace,
-            name,
-            body.new_name,
-            records=BatchRecords(app_state.staging_store(request), app_state.batch_store(request)),
-        )
-        view = library.read_listing_template(workspace, body.new_name)
-    except _REFUSALS as exc:
-        raise _refused(exc) from exc
+    library.rename_listing_template(
+        workspace,
+        name,
+        body.new_name,
+        records=BatchRecords(app_state.staging_store(request), app_state.batch_store(request)),
+    )
+    view = library.read_listing_template(workspace, body.new_name)
     return _detail(workspace, view)
 
 
@@ -237,8 +195,5 @@ def rename_listing_template(
 def delete_listing_template(request: Request, name: str) -> Response:
     """Allowed whatever was made from it: batches keep their own frozen copy,
     and a listing never had a link to it (spec, *Completeness and editing*)."""
-    try:
-        library.delete_listing_template(app_state.workspace(request), name)
-    except ListingTemplateMissingError as exc:
-        raise _refused(exc) from exc
+    library.delete_listing_template(app_state.workspace(request), name)
     return Response(status_code=204)

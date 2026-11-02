@@ -25,6 +25,8 @@ from typing import Annotated, Any, Literal
 
 from pydantic import AfterValidator, BaseModel, ConfigDict, Field, TypeAdapter, model_validator
 
+from etsy_listings.core.errors import ConflictError
+
 
 class Point(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -131,7 +133,7 @@ AnyRenderer = PhotoWarpRenderer | MarigoldRenderer
 Renderer = Annotated[AnyRenderer, Field(discriminator="type")]
 
 
-class PreparationRequiredError(ValueError):
+class PreparationRequiredError(ConflictError, ValueError):
     """ADR-0054 forbids rendering Marigold through Photo warp."""
 
 

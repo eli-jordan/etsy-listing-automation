@@ -166,7 +166,7 @@ def test_conflict_keeps_the_external_file_and_reload_discards_the_refused_edit(
     path.write_bytes(external)
     with page.expect_response(is_save) as refused:
         slider.press("ArrowRight")
-    assert refused.value.status == 409
+    assert refused.value.status == 412
     expect(slider).to_be_disabled()
     assert path.read_bytes() == external
     capture(page, theme, "conflict")

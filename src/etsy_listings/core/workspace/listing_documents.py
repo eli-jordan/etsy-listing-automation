@@ -43,7 +43,7 @@ from typing import Any
 import yaml
 
 from etsy_listings.core.config.listing import Listing, canonical_document
-from etsy_listings.core.errors import UserFacingError
+from etsy_listings.core.errors import ConflictError, MissingError
 from etsy_listings.core.workspace import locks
 from etsy_listings.core.workspace.atomic import read_bytes_retrying, write_yaml_atomic
 from etsy_listings.core.workspace.workspace import Workspace
@@ -53,7 +53,7 @@ Document = dict[str, Any]
 :class:`Listing`. An edit must keep the keys it does not understand."""
 
 
-class ListingMissingError(UserFacingError, LookupError):
+class ListingMissingError(MissingError):
     """There is no ``listing.yaml`` by this name. Either there never was, or
     a rename or delete holding the listing's lock moved it first."""
 
@@ -62,7 +62,7 @@ class ListingMissingError(UserFacingError, LookupError):
         self.name = name
 
 
-class ListingNameTakenError(UserFacingError, ValueError):
+class ListingNameTakenError(ConflictError, ValueError):
     """A create or rename named a listing directory that already exists,
     with or without a ``listing.yaml`` in it."""
 

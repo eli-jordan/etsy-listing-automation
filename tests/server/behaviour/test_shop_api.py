@@ -86,7 +86,7 @@ def test_a_stale_save_is_a_conflict_and_writes_nothing(
         "/api/admin/shop", json={"revision": revision, "changes": {"renewal": "auto"}}
     )
 
-    assert refused.status_code == 409
+    assert refused.status_code == 412
     assert refused.json()["kind"] == "conflict"
     assert shop_bytes(workspace_root) == edited
 

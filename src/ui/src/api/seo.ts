@@ -33,7 +33,7 @@ export async function getListingProposal(name: string): Promise<ListingProposal 
 
 /** Records accepted or dismissed sections of the proposal generated at
  * `patch.generated_at`. `null` when that proposal is gone (404) or was
- * replaced by a newer one (409): the caller reads the current one again. */
+ * replaced by a newer one (412): the caller reads the current one again. */
 export async function resolveListingProposal(
   name: string,
   patch: ProposalResolutionPatch,
@@ -42,7 +42,7 @@ export async function resolveListingProposal(
     params: { path: { name } },
     body: patch,
   });
-  if (response.status === 404 || response.status === 409) return null;
+  if (response.status === 404 || response.status === 412) return null;
   if (error || !data) throw new SeoApiError(`could not record the AI proposal choice for ${name}`);
   return data;
 }

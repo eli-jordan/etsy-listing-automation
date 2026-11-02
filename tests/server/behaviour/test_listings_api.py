@@ -1011,11 +1011,11 @@ class TestSupportingEndpoints:
         names = {row["name"] for row in client.get("/api/listing-designs").json()}
         assert "sunset-ridge" in names
 
-    def test_a_listing_design_upload_that_is_not_a_png_is_a_400(self, client: TestClient) -> None:
+    def test_a_listing_design_upload_that_is_not_a_png_is_a_422(self, client: TestClient) -> None:
         response = client.post(
             "/api/listing-designs", files={"file": ("notes.png", b"not a png", "image/png")}
         )
-        assert response.status_code == 400
+        assert response.status_code == 422
         assert "not a readable image" in response.json()["detail"]
 
     def test_lists_common_copy_files_with_their_front_matter(

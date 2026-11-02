@@ -79,7 +79,7 @@ describe("resolveListingProposal", () => {
     });
   });
 
-  it.each([404, 409])("answers null when the proposal is gone or replaced (%i)", async (status) => {
+  it.each([404, 412])("answers null when the proposal is gone or replaced (%i)", async (status) => {
     vi.spyOn(api, "PATCH").mockResolvedValue(answer(status, undefined, { detail: "no" }));
 
     await expect(resolveListingProposal("take-a-hike", patch)).resolves.toBeNull();

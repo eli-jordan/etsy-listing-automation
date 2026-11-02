@@ -6,23 +6,19 @@ garment, so the set of things you can preview against has to be open: three
 bundled targets (static files this package ships) plus whatever the user
 uploads. What an upload may be called, whether it is an image and where it
 lands are ``core/application/calibration_designs.py``'s; this module decodes
-the request and maps its refusals to 400.
+the request, and the app's refusal table answers what it refuses.
 """
 
 from __future__ import annotations
 
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException, Request, UploadFile
+from fastapi import APIRouter, Request, UploadFile
 from fastapi.responses import Response
 
 from etsy_listings.core.application.calibration_designs import (
     save_uploaded_design,
     uploaded_design,
-)
-from etsy_listings.core.application.refusals import (
-    CalibrationDesignMissingError,
-    DesignUploadRefusedError,
 )
 from etsy_listings.core.workspace.workspace import Workspace
 from etsy_listings.server.api import app_state
@@ -51,17 +47,15 @@ from a menu while looking at a photograph."""
 def resolve_design(workspace: Workspace, design: str) -> Path:
     """Turn an id from the library into a file on disk.
 
-    A stale id is a 400 rather than a ``KeyError`` escaping as a 500: the
+    A stale id is :class:`CalibrationDesignMissingError`, a 404 like every
+    other missing thing, rather than a ``KeyError`` escaping as a 500: the
     client picked it from a list this API handed out, so an id that no longer
     exists means the list moved on, not that the server broke.
     """
     bundled = BUNDLED_DESIGNS.get(design)
     if bundled is not None:
         return bundled
-    try:
-        return uploaded_design(workspace, design)
-    except CalibrationDesignMissingError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return uploaded_design(workspace, design)
 
 
 @router.get("", response_model=list[DesignSummary])
@@ -88,10 +82,7 @@ def design_thumbnail(request: Request, design: str) -> Response:
 @router.post("", response_model=DesignSummary)
 async def upload_design(request: Request, file: UploadFile) -> DesignSummary:
     payload = await file.read()
-    try:
-        design = save_uploaded_design(app_state.workspace(request), file.filename or "", payload)
-    except DesignUploadRefusedError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    design = save_uploaded_design(app_state.workspace(request), file.filename or "", payload)
     return DesignSummary(id=design, label=design, source="upload")
 
 

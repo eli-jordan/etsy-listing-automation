@@ -5,7 +5,7 @@ The routes share one workspace and the same engine services as the CLI.
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Awaitable, Callable, Mapping
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from pathlib import Path
@@ -32,6 +32,7 @@ from etsy_listings.core.application.preparation.coordinator import Preparations
 from etsy_listings.core.application.preparation.dependencies import PreparationRuntime
 from etsy_listings.core.application.scene_warming import SceneWarmer
 from etsy_listings.core.batches import BatchStore, StagingStore
+from etsy_listings.core.errors import ConflictError, MissingError, RefusedError, StaleError
 from etsy_listings.core.workspace.workspace import InvalidNameError, Workspace
 from etsy_listings.server.api.airuns import router as ai_runs_router
 from etsy_listings.server.api.batches import router as batches_router
@@ -156,18 +157,7 @@ def create_app(
         allow_headers=["*"],
     )
 
-    @app.exception_handler(InvalidNameError)
-    async def invalid_name(_request: Request, exc: Exception) -> Response:
-        """A template, colour or design id from a URL that is not a single
-        path segment is the client's fault, so it is a 400 -- and it is one
-        rule, so it is stated once here.
-
-        Nine endpoints used to wrap their own ``workspace.…(name)`` call in
-        the same three lines to say so. The refusal itself still belongs to
-        ``Workspace`` (ADR-0013 makes it a security boundary, not a formatting
-        concern); all this does is decide the status code it surfaces as.
-        """
-        return JSONResponse(status_code=400, content={"detail": str(exc)})
+    register_refusals(app)
 
     for router in API_ROUTERS:
         app.include_router(router)
@@ -197,6 +187,51 @@ API_ROUTERS = (
     shop_router,
     workspace_settings_router,
 )
+
+
+REFUSAL_STATUS: Mapping[type[Exception], int] = {
+    InvalidNameError: 400,
+    MissingError: 404,
+    ConflictError: 409,
+    StaleError: 412,
+    RefusedError: 422,
+}
+"""Each refusal category (``core/errors.py``) as the status it surfaces as.
+
+The one place a core refusal becomes a status code, so a route only lets it
+through. Core declares the category and never a code (ADR-0052); the routes
+used to decide per router, and disagreed -- a missing test design was a 400
+where every other missing thing was a 404, and a calibration conflict was a
+409 or a 412 depending on what its message said.
+
+* ``400``: a name from a URL or a body that the server will not take as a name
+  -- not a single path segment (ADR-0013 makes that a security boundary, so
+  the refusal belongs to ``Workspace``), or reserved.
+* ``404``: what the request names is not there.
+* ``409``: the request is fine, but what the workspace holds now forbids it.
+* ``412``: the request was made against a revision that has since changed;
+  reload and ask again.
+* ``422``: the request's own content cannot be taken.
+
+The detail is the refusal's message: a ``UserFacingError``'s message is the
+whole of what should reach a reader. A route whose refusal carries more than a
+sentence -- a staging refusal's remedy, an AI run's reason, the Admin page's
+field errors -- still answers it itself, with the status this table gives its
+category. Starlette picks a handler by walking the exception's MRO, so a class
+answers as the first category among its bases."""
+
+
+def register_refusals(app: FastAPI) -> None:
+    """Answer every refusal category with its :data:`REFUSAL_STATUS`."""
+    for category, status in REFUSAL_STATUS.items():
+        app.add_exception_handler(category, _refusal_handler(status))
+
+
+def _refusal_handler(status: int) -> Callable[[Request, Exception], Awaitable[Response]]:
+    async def answer(_request: Request, exc: Exception) -> Response:
+        return JSONResponse(status_code=status, content={"detail": str(exc)})
+
+    return answer
 
 
 def _serve_frontend(app: FastAPI, dist: Path) -> None:

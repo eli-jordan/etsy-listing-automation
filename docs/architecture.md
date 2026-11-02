@@ -110,7 +110,7 @@ package never drags in OpenCV, FastAPI or Typer to reach one name.
 | Module | Owns | Boundary |
 |---|---|---|
 | `cli` | Typer commands, terminal presentation of engine reports (`cli/render.py`), command options, prompts and the `auth`/`setup`/`new` wizards' question order (`cli/auth.py`, `cli/setup.py`, `cli/new.py`, with `cli/credentials.py` and `cli/pickers.py`) | Uses engine reports rather than computing a second diff; wizards call core operations for every decision and write; only `cli/ui.py` imports the server, and only `server.hosting` |
-| `server` | FastAPI routing and wire schemas (`server/api/`), HTTP status mapping, SSE framing, reconnect and disconnect polling, request-serving caches (`imagecache`, `etsystate`, thumbnails), static SPA serving and app startup/shutdown (`server/hosting.py`, the lifespan in `server/api/app.py`) | Constructs one of each core coordinator and store per process and starts and stops them; decides no workflow rule itself |
+| `server` | FastAPI routing and wire schemas (`server/api/`), the one refusal-to-status table (`REFUSAL_STATUS` in `server/api/app.py`), SSE framing, reconnect and disconnect polling, request-serving caches (`imagecache`, `etsystate`, thumbnails), static SPA serving and app startup/shutdown (`server/hosting.py`, the lifespan in `server/api/app.py`) | Constructs one of each core coordinator and store per process and starts and stops them; decides no workflow rule itself |
 | `core/application` | Operations shared by server and CLI: listing reads, edits, creation, rename/delete and pricing plans; the wizards' reusable operations (credentials, workspace setup, shop discovery, garment profiles); mockup-template calibration and preview scenes; listing-template library; batch staging and workflow; deployment runs (`deploy/`); AI runs, batch AI queue, readiness and proposals (`ai/`); host-supplied seams (`dependencies.py`) and typed refusals (`refusals.py`) | Owns the records that follow a listing or listing template, and holds a listing template's lock around each of its check-then-writes; listing documents and listing-keyed files are edited only through `core/workspace/listing_documents.py` and `core/listing_artifacts.py`; answers with results or typed refusals, never status codes or terminal text; constructing a coordinator starts no thread; takes decoded images and upload streams, never request objects or caches |
 | `core/engine` | Stage protocol, comparison, lockfile, lifecycle, runs, previews and status | Stages return values; the engine decides execution and records progress |
 | `core/workspace` | Root discovery, layout, reference resolution, file loading, atomic writes, in-place YAML edits (ADR-0055), video probes, Cygwin path translation and request facts; `locks.py`, the process-wide keyed locks for listings, mockup templates and listing templates; `listing_documents.py` is the one reader and writer of `listing.yaml` and takes each listing's lock | Owns workspace layout and containment; callers may do I/O on paths it supplies, except `listing.yaml`, which every writer edits through `ListingDocuments` |
@@ -122,13 +122,28 @@ package never drags in OpenCV, FastAPI or Typer to reach one name.
 | `core/listing_templates` | Template conversion and frozen document/assets/timestamp capture | Capture occurs under the template write lock before upload; shared references are revalidated at confirm and retry |
 | `core/market` | Comparable-listing research, scoring and evidence snapshots | Read-only Etsy data informs wording rather than product facts |
 | `core/batches` | Upload validation, archive inspection, staging, name allocation and idempotent local creation | Creates ordinary listings; AI dispatch belongs to `application/ai` |
-| `core/connections.py`, `core/errors.py` | Client and `RunContext` construction; `UserFacingError` | See the credential invariant below |
+| `core/connections.py`, `core/errors.py` | Client and `RunContext` construction; `UserFacingError` and the refusal categories (`MissingError`, `ConflictError`, `StaleError`, `RefusedError`) | See the credential invariant below; core names a refusal's category, never its status code |
 
 Three boundaries carry most of the weight. Only `core/workspace` knows the
 data tree, including how to enumerate it. Only `core/engine` computes
 deployment changes and folds a run's lockfile. Render passes are pure, so
 input hashes and golden images describe deterministic work shared by
 calibration and deployment.
+
+A core refusal reaches HTTP through one seam. Each refusal class inherits a
+category from `core/errors.py` (missing, conflict, stale or refused), and
+`server/api/app.py` registers one exception handler per category: `404`,
+`409`, `412` and `422`, with `InvalidNameError` and the reserved listing
+template name as `400`. Routes let refusals through rather than translating
+them. A route catches one only to answer with a richer body (a staging
+refusal's remedy, an AI run's reason, the Admin page's field errors), at the
+status its category already has. Per-router mappings had drifted: a missing
+test design was a `400` while every other missing thing was a `404`, and a
+calibration conflict was a `409` or a `412` depending on its message text. A
+category in core keeps ADR-0052's rule that core knows no transport, where a
+status code on each class would not. `ConfigLoadError` has no category yet: a
+document that does not load means different things to different routes, which
+still answer it themselves.
 
 ### Clients, credentials and prompts
 
@@ -527,7 +542,7 @@ use the existing client factories. `core/application/shop_settings.py` owns
 whole-document validation, configured-identity retention and the editable key
 set. `core/workspace/revisions.py` owns exact-byte hashes and a per-path process
 lock around read, revision comparison, validation and atomic replace. A stale
-revision refuses with 409; invalid values refuse with field errors and 422.
+revision refuses with 412; invalid values refuse with field errors and 422.
 Semantic no-ops leave the source bytes and file untouched, per ADR-0055.
 
 A successful save replaces the server workspace's defaults inside the same

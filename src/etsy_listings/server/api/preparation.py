@@ -1,4 +1,9 @@
-"""Thin HTTP adapters for durable preparation and calibration masks."""
+"""Thin HTTP adapters for durable preparation and calibration masks.
+
+Refusals pass through to the app's one refusal table (``app.py``'s
+``REFUSAL_STATUS``): a Prepare against a calibration revision that has moved
+is a ``412``, an unknown template a ``404``. Only a refused Prepare keeps its
+own body, the ``reason`` beside the sentence."""
 
 import time
 from collections.abc import AsyncIterator
@@ -11,20 +16,15 @@ from starlette.concurrency import run_in_threadpool
 from starlette.responses import StreamingResponse
 
 from etsy_listings.core.application.preparation.coordinator import (
-    PreparationRefusedError,
     PreparationRequest,
     Preparations,
 )
 from etsy_listings.core.application.preparation.models import TERMINAL, Event, Job
 from etsy_listings.core.application.preparation_views import preparation_view, read_mask
-from etsy_listings.core.application.refusals import TemplateMissingError
 from etsy_listings.core.config.errors import ConfigLoadError
-from etsy_listings.core.errors import UserFacingError
-from etsy_listings.core.workspace.calibration import (
-    CalibrationConflictError,
-    CalibrationStore,
-    SavedMask,
-)
+from etsy_listings.core.errors import ConflictError
+from etsy_listings.core.preparation.artifacts import ArtifactError
+from etsy_listings.core.workspace.calibration import CalibrationStore, SavedMask
 from etsy_listings.server.api.schemas import (
     CreatePreparationRequest,
     MapReadinessResponse,
@@ -70,10 +70,9 @@ def status(request: Request, name: str, response: Response) -> PreparationRespon
     preparations = coordinator(request)
     try:
         view = preparation_view(preparations, name)
-    except (TemplateMissingError, ConfigLoadError) as exc:
+    except ConfigLoadError as exc:
+        # A template.yaml that does not load has no preparation to describe.
         raise HTTPException(status_code=404, detail=str(exc)) from exc
-    except UserFacingError as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
     return PreparationResponse(
         template=view.template,
         config_revision=view.config_revision,
@@ -106,12 +105,8 @@ def jobs(
 def _read_mask(request: Request, name: str, placement_id: str | None) -> SavedMask:
     try:
         return read_mask(coordinator(request).workspace, name, placement_id)
-    except TemplateMissingError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
-    except ValueError as exc:
+    except ConfigLoadError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    except UserFacingError as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
 def mask_response(
@@ -200,20 +195,17 @@ def submit(request: Request, body: CreatePreparationRequest) -> PreparationJobRe
                 reset_masks_for_photo=body.reset_masks_for_photo,
             ),
         )
-    except CalibrationConflictError as exc:
-        raise HTTPException(status_code=412, detail=str(exc)) from exc
-    except FileNotFoundError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
-    except ValueError as exc:
-        if isinstance(exc, PreparationRefusedError):
-            raise HTTPException(
-                status_code=409, detail={"reason": "preparation_refused", "message": str(exc)}
-            ) from exc
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
-    except UserFacingError as exc:
+    except ConflictError as exc:
+        # PreparationRefusedError and the mask refusals: the 409 the refusal
+        # table gives a conflict, with a reason beside the sentence.
         raise HTTPException(
             status_code=409, detail={"reason": "preparation_refused", "message": str(exc)}
         ) from exc
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except (ArtifactError, ConfigLoadError) as exc:
+        # The saved inputs cannot be read as preparation inputs.
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     return job_response(preparations, job)
 
 

@@ -11,11 +11,23 @@ from typing import Any, cast
 import cv2
 import numpy as np
 
+from etsy_listings.core.errors import RefusedError
 from etsy_listings.core.preparation import _geometry as geometry
-from etsy_listings.core.preparation.predictions import MAX_NORMAL_COMPONENT, UNIT_NORMAL_TOLERANCE
+from etsy_listings.core.preparation.predictions import (
+    MAX_NORMAL_COMPONENT,
+    UNIT_NORMAL_TOLERANCE,
+    PredictionError,
+)
 from etsy_listings.core.render import _material_math as material_math
+from etsy_listings.core.render.config import PreparationRequiredError
 from etsy_listings.core.render.material import MaterialMaps
 from etsy_listings.core.render.types import RGB, FloatMap
+
+
+class PlacementRefusedError(RefusedError):
+    """A placement quad no preparation can fit: degenerate, crossed, or
+    outside the photo. Evidence that cannot be trusted is a
+    ``PredictionError`` instead; Prepare again, not redraw."""
 
 
 @dataclass(frozen=True)
@@ -37,14 +49,14 @@ class Crop:
                 0 <= left < right <= self.photo_size[0] and 0 <= top < bottom <= self.photo_size[1]
             )
         ):
-            raise ValueError("Invalid crop dimensions or photo bounds")
+            raise PredictionError("Invalid crop dimensions or photo bounds")
         width, height = self.prediction_size
         if width <= pl + pr or height <= pt + pb:
-            raise ValueError("Prediction padding leaves no crop pixels")
+            raise PredictionError("Prediction padding leaves no crop pixels")
         sx, sy = (width - pl - pr) / (right - left), (height - pt - pb) / (bottom - top)
         expected = (sx, sy, (-left + 0.5) * sx - 0.5 + pl, (-top + 0.5) * sy - 0.5 + pt)
         if not np.allclose(self.photo_to_prediction, expected, rtol=0, atol=1e-9):
-            raise ValueError("Crop transform does not preserve declared pixel centres")
+            raise PredictionError("Crop transform does not preserve declared pixel centres")
 
     def resized(
         self, size: tuple[int, int], *, padding: tuple[int, int, int, int] = (0, 0, 0, 0)
@@ -64,10 +76,10 @@ class Crop:
 def plan_crop(box: FloatMap, photo_size: tuple[int, int]) -> Crop:
     """40% per side, outward rounding, clipped half-open photo rectangle."""
     if box.shape != (4, 2) or not np.isfinite(box).all() or min(photo_size) < 1:
-        raise ValueError("Invalid placement or photo dimensions")
+        raise PlacementRefusedError("Invalid placement or photo dimensions")
     lo, hi = box.min(axis=0).astype(float), box.max(axis=0).astype(float)
     if np.any(hi <= lo):
-        raise ValueError("Placement must have positive width and height")
+        raise PlacementRefusedError("Placement must have positive width and height")
     margin = (hi - lo) * 0.4
     left, top = max(0, math.floor(lo[0] - margin[0])), max(0, math.floor(lo[1] - margin[1]))
     right, bottom = (
@@ -75,7 +87,7 @@ def plan_crop(box: FloatMap, photo_size: tuple[int, int]) -> Crop:
         min(photo_size[1], math.ceil(hi[1] + margin[1])),
     )
     if right <= left or bottom <= top:
-        raise ValueError("Placement does not intersect photo")
+        raise PlacementRefusedError("Placement does not intersect photo")
     return Crop(
         (left, top, right, bottom),
         photo_size,
@@ -132,16 +144,16 @@ class Evidence:
         ]:
             shape = (height, width, channels) if channels else (height, width)
             if array.shape != shape or array.dtype != np.float32 or not np.isfinite(array).all():
-                raise ValueError("Invalid evidence shape, dtype or finite values")
+                raise PredictionError("Invalid evidence shape, dtype or finite values")
         if np.any(np.abs(self.normals) > MAX_NORMAL_COMPONENT) or not np.allclose(
             np.linalg.norm(self.normals, axis=-1), 1, atol=UNIT_NORMAL_TOLERANCE
         ):
-            raise ValueError("Evidence normals must be unit vectors")
+            raise PredictionError("Evidence normals must be unit vectors")
         if any(
             np.any((array < 0) | (array > 1))
             for array in [self.shading, self.albedo, self.residual, self.depth]
         ):
-            raise ValueError("Evidence lighting/depth must be in [0,1]")
+            raise PredictionError("Evidence lighting/depth must be in [0,1]")
 
     def sample(self, array: FloatMap, xy: FloatMap) -> FloatMap:
         sx, sy, ox, oy = self.crop.photo_to_prediction
@@ -189,9 +201,9 @@ def _check_placement(placement: Placement, evidence: Evidence, size: tuple[int, 
     box, mask = placement.box, placement.mask
     width, height = size
     if not evidence_covers(evidence.crop, evidence.identity, box, size, evidence.identity):
-        raise ValueError("Evidence does not cover the full placement margin")
+        raise PreparationRequiredError("Evidence does not cover the full placement margin")
     if not cv2.isContourConvex(box) or cv2.contourArea(box) < 1:
-        raise ValueError("Choose a convex uncrossed placement in TL, TR, BR, BL order")
+        raise PlacementRefusedError("Choose a convex uncrossed placement in TL, TR, BR, BL order")
     if (
         mask.shape != (height, width)
         or mask.dtype != np.float32

@@ -21,7 +21,7 @@ import yaml
 from PIL import Image, ImageDraw
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
-from etsy_listings.core.errors import UserFacingError
+from etsy_listings.core.errors import ConflictError, RefusedError, StaleError
 from etsy_listings.core.render.config import (
     AnyTemplate,
     MultipleTemplate,
@@ -143,16 +143,27 @@ def _validate_mask(data: bytes, size: tuple[int, int]) -> None:
         image.load()
 
 
-class CalibrationRepairRequiredError(UserFacingError):
+class CalibrationRepairRequiredError(ConflictError):
     """A calibration transaction is active or its recovery payload is damaged."""
 
 
-class CalibrationConflictError(UserFacingError):
-    """The supplied revision or save request ID cannot be accepted."""
+class CalibrationChangedError(StaleError):
+    """The calibration revision a save or Prepare was made against is no
+    longer the saved one; the caller reloads before asking again."""
 
 
-class MaskUnavailableError(UserFacingError):
+class CalibrationRequestReusedError(ConflictError):
+    """A save request ID came back with different content. A retry of the
+    same save answers as the first did; this is not one."""
+
+
+class MaskUnavailableError(ConflictError):
     """Mask editing or Undo has no usable saved baseline/history."""
+
+
+class MaskEditRefusedError(RefusedError):
+    """Mask edits that no saved mask could take: too large a request, two
+    entries for one placement, or a stroke outside the main photo."""
 
 
 class MaskPhotoMismatchError(MaskUnavailableError):
@@ -253,7 +264,7 @@ def _replayed(receipt_path: Path, request_id: str, request_digest: str) -> Calib
     if receipt.request_id != request_id:
         return None
     if receipt.digest != request_digest:
-        raise CalibrationConflictError("Save request ID was reused with different content")
+        raise CalibrationRequestReusedError("Save request ID was reused with different content")
     return Calibration(load_template_config(receipt.config), receipt.revision, receipt.main_photo)
 
 
@@ -326,7 +337,7 @@ class CalibrationStore:
             if replayed is not None:
                 return replayed
             if current.revision != expected_revision:
-                raise CalibrationConflictError("Calibration changed; reload before saving")
+                raise CalibrationChangedError("Calibration changed; reload before saving")
             files, histories = self.apply_masks(name, config, mask_edits or [])
             revision = self.revision(name, config, files)
             settings_path = self.workspace.template_renderer_settings_file(name)
@@ -499,7 +510,7 @@ class CalibrationStore:
         with self.lock(name):
             current = self.read(name)
             if current.revision != expected_revision:
-                raise CalibrationConflictError(
+                raise CalibrationChangedError(
                     "Calibration changed before automatic mask publication"
                 )
             if placement_id not in self.placement_ids(current.config):
@@ -561,10 +572,10 @@ class CalibrationStore:
         files: dict[Path, bytes] = {}
         histories: dict[Path, BrushHistory] = {}
         if len(json_bytes([edit.model_dump(mode="json") for edit in edits])) > MAX_MASK_EDIT_BYTES:
-            raise ValueError("Mask edit request is too large")
+            raise MaskEditRefusedError("Mask edit request is too large")
         ids = [edit.placement_id for edit in edits]
         if len(ids) != len(set(ids)):
-            raise ValueError("Only one mask edit entry per placement is allowed")
+            raise MaskEditRefusedError("Only one mask edit entry per placement is allowed")
         for edit in edits:
             if edit.placement_id not in self.placement_ids(config):
                 raise MaskUnavailableError("Mask placement does not belong to saved template")
@@ -612,7 +623,7 @@ class CalibrationStore:
         """``data`` with ``stroke`` painted on, recorded in ``history``."""
         image = self.decode_mask(data, size)
         if any(x < 0 or y < 0 or x >= image.width or y >= image.height for x, y in stroke.points):
-            raise ValueError("Brush coordinates must be within the main photo")
+            raise MaskEditRefusedError("Brush coordinates must be within the main photo")
         history.append(BrushStroke(before=base64.b64encode(data).decode("ascii"), operation=stroke))
         draw = ImageDraw.Draw(image)
         fill = 0 if stroke.mode == "mask" else 255

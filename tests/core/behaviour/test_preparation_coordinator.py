@@ -3,11 +3,15 @@ from __future__ import annotations
 import pytest
 from PIL import Image, ImageDraw
 
-from etsy_listings.core.application.preparation.coordinator import PreparationRequest, Preparations
+from etsy_listings.core.application.preparation.coordinator import (
+    PreparationRefusedError,
+    PreparationRequest,
+    Preparations,
+)
 from etsy_listings.core.preparation.runtime import Capability
 from etsy_listings.core.render import load_template_config
 from etsy_listings.core.workspace import Workspace
-from etsy_listings.core.workspace.calibration import CalibrationStore
+from etsy_listings.core.workspace.calibration import CalibrationChangedError, CalibrationStore
 
 
 class Runtime:
@@ -32,6 +36,14 @@ def template(workspace_root, name="shirt"):
     return workspace
 
 
+def test_a_prepare_against_a_moved_revision_is_stale_and_queues_nothing(workspace_root):
+    workspace = template(workspace_root)
+    coordinator = Preparations(workspace, runtime=Runtime())
+    with pytest.raises(CalibrationChangedError):
+        coordinator.submit("shirt", PreparationRequest(config_revision="old", request_id="one"))
+    assert coordinator.list_jobs() == []
+
+
 def test_submission_deduplicates_and_cancelled_jobs_stay_cancelled_on_restart(workspace_root):
     workspace = template(workspace_root)
     coordinator = Preparations(workspace, runtime=Runtime())
@@ -52,7 +64,7 @@ def test_submission_deduplicates_and_cancelled_jobs_stay_cancelled_on_restart(wo
         ).id
         == job.id
     )
-    with pytest.raises(ValueError, match="request ID"):
+    with pytest.raises(PreparationRefusedError, match="request ID"):
         coordinator.submit(
             "shirt",
             PreparationRequest(config_revision=revision, request_id="one", action="prepare_again"),

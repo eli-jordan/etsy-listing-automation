@@ -8,14 +8,14 @@ table, ``listing_edits`` merges an editor save, ``listing_creation`` names a
 new one, ``listing_identity`` renames and deletes. Each owns its locking,
 existence re-checks and the records that follow a listing. This module
 decodes requests, passes in the process's coordinators (batch store, AI run
-registry, Etsy state memo), maps refusals to status codes and projects
-results onto the wire schemas.
+registry, Etsy state memo) and projects results onto the wire schemas. The
+operations' refusals pass through to the app's one refusal table
+(``app.py``'s ``REFUSAL_STATUS``), which decides their status codes.
 
 Follows ``templates.py``'s conventions: a ``target()`` dependency for
 existence-checking, ``Listing`` reused directly for the read/write body (the
 wire shape *is* ``listing.yaml``), new API-only schemas only where the shape
-genuinely differs, expected refusals caught locally and raised as
-``HTTPException`` rather than relying on a shared handler.
+genuinely differs.
 
 A document that fails structural validation is not a status code: PATCH,
 POST and the draft endpoints answer **200** with ``field_errors`` and the
@@ -62,10 +62,7 @@ from etsy_listings.core.application.pricing_plans import (
     pricing_plan_ref,
 )
 from etsy_listings.core.application.refusals import (
-    ListingDesignUploadRefusedError,
     ListingMissingError,
-    ListingNameTakenError,
-    PublishedListingDeletionError,
 )
 from etsy_listings.core.application.scene_warming import SceneWarmer
 from etsy_listings.core.clients.etsy.tokens import EtsyAuthError, EtsyRefreshBusyError
@@ -102,7 +99,6 @@ from etsy_listings.server.api.schemas import (
 )
 from etsy_listings.server.api.templates import (
     ScenePreviewQuery,
-    preview_refusals,
     render_preview_response,
 )
 from etsy_listings.server.api.thumbnails import thumbnail_response
@@ -145,7 +141,7 @@ class Target:
 
 def _require_listing(workspace: Workspace, name: str) -> None:
     if not ListingDocuments(workspace).exists(name):
-        raise _not_found(ListingMissingError(name))
+        raise ListingMissingError(name)
 
 
 def target(request: Request, name: str) -> Target:
@@ -154,14 +150,6 @@ def target(request: Request, name: str) -> Target:
     workspace = app_state.workspace(request)
     _require_listing(workspace, name)
     return Target(workspace=workspace, name=name)
-
-
-def _not_found(exc: ListingMissingError) -> HTTPException:
-    return HTTPException(status_code=404, detail=str(exc))
-
-
-def _conflict(exc: ListingNameTakenError | PublishedListingDeletionError) -> HTTPException:
-    return HTTPException(status_code=409, detail=str(exc))
 
 
 def _wire_issues(issues: Sequence[ValidationIssue]) -> list[dict[str, str]]:
@@ -228,10 +216,7 @@ def _project(workspace: Workspace, view: ListingView) -> ListingDetail:
 def _detail(
     workspace: Workspace, name: str, *, field_errors: dict[str, str] | None = None
 ) -> ListingDetail:
-    try:
-        view = read_listing(workspace, name, etsy_states=_etsy_states(workspace))
-    except ListingMissingError as exc:
-        raise _not_found(exc) from exc
+    view = read_listing(workspace, name, etsy_states=_etsy_states(workspace))
     if field_errors:
         view = dataclasses.replace(view, field_errors=field_errors)
     return _project(workspace, view)
@@ -265,10 +250,7 @@ def patch_listing(
     that will not validate writes nothing and answers 200 with
     ``field_errors`` beside the listing as it still is."""
     workspace, name = target.workspace, target.name
-    try:
-        refused = edit_listing(workspace, name, body, batches=app_state.batch_store(request))
-    except ListingMissingError as exc:
-        raise _not_found(exc) from exc
+    refused = edit_listing(workspace, name, body, batches=app_state.batch_store(request))
     if refused is None:
         _warm_scenes(request, name)
     return _detail(workspace, name, field_errors=refused.field_errors if refused else None)
@@ -286,18 +268,13 @@ def delete_listing(
     :func:`~etsy_listings.core.application.listing_identity.delete_listing`'s.
     """
     workspace, name = target.workspace, target.name
-    try:
-        deletion = delete(
-            workspace,
-            name,
-            batches=app_state.batch_store(request),
-            ai_runs=_ai_runs(request),
-            etsy_states=_etsy_states(workspace),
-        )
-    except ListingMissingError as exc:
-        raise _not_found(exc) from exc
-    except PublishedListingDeletionError as exc:
-        raise _conflict(exc) from exc
+    deletion = delete(
+        workspace,
+        name,
+        batches=app_state.batch_store(request),
+        ai_runs=_ai_runs(request),
+        etsy_states=_etsy_states(workspace),
+    )
     if deletion.wiped:
         return Response(status_code=204)
     return _summary(listing_row(workspace, name, etsy_state=deletion.etsy_state))
@@ -314,10 +291,7 @@ def create_listing(request: Request, body: CreateListingRequest) -> ListingDetai
     already taken (the directory, not just ``listing.yaml``) is a 409.
     """
     workspace = app_state.workspace(request)
-    try:
-        refused = create(workspace, body.name, body.document)
-    except ListingNameTakenError as exc:
-        raise _conflict(exc) from exc
+    refused = create(workspace, body.name, body.document)
     if refused is not None:
         return _describe_draft(workspace, body.document)
     _warm_scenes(request, body.name)
@@ -335,18 +309,13 @@ def rename_listing(
     representation, and a second call 404s. `POST /api/templates/{name}/kind` is
     the same shape.
     """
-    try:
-        rename(
-            target.workspace,
-            target.name,
-            body.new_name,
-            batches=app_state.batch_store(request),
-            ai_runs=_ai_runs(request),
-        )
-    except ListingMissingError as exc:
-        raise _not_found(exc) from exc
-    except ListingNameTakenError as exc:
-        raise _conflict(exc) from exc
+    rename(
+        target.workspace,
+        target.name,
+        body.new_name,
+        batches=app_state.batch_store(request),
+        ai_runs=_ai_runs(request),
+    )
     return _detail(target.workspace, body.new_name)
 
 
@@ -430,14 +399,11 @@ def scene_preview(
     workspace, colour, scale = target.workspace, query.colour, query.scale
     try:
         artwork = scene_artwork(workspace, target.name)
-    except ListingMissingError as exc:
-        raise _not_found(exc) from exc
     except ConfigLoadError as exc:
         raise HTTPException(
             status_code=404, detail=f"listing {target.name!r} does not load"
         ) from exc
-    with preview_refusals():
-        scene = saved_scene(workspace, template, colour=colour, design=artwork)
+    scene = saved_scene(workspace, template, colour=colour, design=artwork)
     return render_preview_response(
         scene, scale, workspace=workspace, if_none_match=request.headers.get("if-none-match")
     )
@@ -619,10 +585,7 @@ async def upload_listing_design(request: Request, file: UploadFile) -> ListingDe
     name already taken by other artwork gets a ``-2`` suffix rather than
     overwriting what another listing may print."""
     payload = await file.read()
-    try:
-        name = save_listing_design(app_state.workspace(request), file.filename or "", payload)
-    except ListingDesignUploadRefusedError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    name = save_listing_design(app_state.workspace(request), file.filename or "", payload)
     return ListingDesignSummary(name=name, file=f"designs/{name}.png")
 
 

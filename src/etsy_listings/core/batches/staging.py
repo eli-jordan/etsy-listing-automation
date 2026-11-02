@@ -33,7 +33,7 @@ from etsy_listings.core.batches.records import StagingRow, StagingSession, Stagi
 from etsy_listings.core.config.errors import ConfigLoadError
 from etsy_listings.core.config.listing_validation import check_design_resolution
 from etsy_listings.core.config.slug import slugify
-from etsy_listings.core.errors import UserFacingError
+from etsy_listings.core.errors import RefusedError
 from etsy_listings.core.listing_templates import FrozenListingTemplate
 from etsy_listings.core.workspace.atomic import read_bytes_retrying
 from etsy_listings.core.workspace.trees import remove_tree
@@ -50,7 +50,7 @@ _CHUNK = 1024 * 1024
 _UNDO = "Nothing was uploaded or changed."
 
 
-class StagingRefusedError(UserFacingError, ValueError):
+class StagingRefusedError(RefusedError):
     """The upload as a whole cannot be staged. ``message`` says why, the page
     heading it *... was not staged*; ``remedy`` says how to fix it and always
     ends by saying nothing was kept (UI doc §4)."""

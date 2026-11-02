@@ -4030,7 +4030,7 @@ export interface components {
      * ProposalResolutionPatch
      * @description ``PATCH /api/listings/{name}/proposal/resolution``: the sections to
      *     record, on the proposal generated at ``generated_at`` -- a regeneration
-     *     that landed meanwhile is a different proposal, and is a 409. ``pending``
+     *     that landed meanwhile is a different proposal, and is a 412. ``pending``
      *     reopens a section.
      */
     ProposalResolutionPatch: {
@@ -4460,7 +4460,7 @@ export interface components {
     };
     /**
      * ShopSaveRefusal
-     * @description A 409 (``conflict``: reload, then edit again) or a 422 (``invalid``:
+     * @description A 412 (``conflict``: reload, then edit again) or a 422 (``invalid``:
      *     each refused dotted shop.yaml key to its reason). Nothing was written.
      */
     ShopSaveRefusal: {
@@ -5049,8 +5049,8 @@ export interface operations {
           "application/json": components["schemas"]["WorkspaceSettingsResponse"];
         };
       };
-      /** @description Conflict */
-      409: {
+      /** @description Precondition Failed */
+      412: {
         headers: {
           [name: string]: unknown;
         };
@@ -5142,8 +5142,8 @@ export interface operations {
           "application/json": components["schemas"]["ShopSettingsResponse"];
         };
       };
-      /** @description Conflict */
-      409: {
+      /** @description Precondition Failed */
+      412: {
         headers: {
           [name: string]: unknown;
         };
@@ -6979,7 +6979,7 @@ export interface operations {
         content?: never;
       };
       /** @description The proposal was regenerated since the page read it */
-      409: {
+      412: {
         headers: {
           [name: string]: unknown;
         };

@@ -29,13 +29,13 @@ from etsy_listings.core.application.preparation.models import (
     placement_key,
 )
 from etsy_listings.core.application.preparation.store import Store
-from etsy_listings.core.errors import UserFacingError
+from etsy_listings.core.errors import ConflictError, UserFacingError
 from etsy_listings.core.preparation.artifacts import Artifacts, PreparationInputs
 from etsy_listings.core.preparation.runtime import Capability, Runtime
 from etsy_listings.core.render.config import MarigoldRenderer
 from etsy_listings.core.workspace import Workspace
 from etsy_listings.core.workspace.calibration import (
-    CalibrationConflictError,
+    CalibrationChangedError,
     CalibrationStore,
     json_bytes,
 )
@@ -47,7 +47,7 @@ MAX_EVENT_WAIT_S = 30
 MAX_REQUEST_ID_LENGTH = 256
 
 
-class PreparationRefusedError(ValueError):
+class PreparationRefusedError(ConflictError, ValueError):
     """Actionable refusal without any inference or installation side effect."""
 
 
@@ -170,7 +170,7 @@ class Preparations:
             return known
         calibration = self.calibration.read(template)
         if calibration.revision != request.config_revision:
-            raise CalibrationConflictError("Calibration changed before preparation submission")
+            raise CalibrationChangedError("Calibration changed before preparation submission")
         if not isinstance(calibration.config.renderer, MarigoldRenderer):
             raise PreparationRefusedError("Select Marigold before preparing this template")
         snapshot = self._snapshot(submission)
@@ -196,7 +196,7 @@ class Preparations:
             return known, False
         calibration = self.calibration.read(template)
         if calibration.revision != request.config_revision:
-            raise CalibrationConflictError("Calibration changed during runtime inspection")
+            raise CalibrationChangedError("Calibration changed during runtime inspection")
         snapshot = self._snapshot(submission)
         joined = self._join(submission, snapshot)
         if joined is not None:

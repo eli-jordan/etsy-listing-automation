@@ -27,6 +27,7 @@ from etsy_listings.core.preparation.numerics import (
     plan_crop,
 )
 from etsy_listings.core.preparation.predictions import (
+    PredictionError,
     cache_path,
     read_prediction,
     validate_prediction_file,
@@ -192,7 +193,7 @@ class EvidenceReader:
         )
 
         if self._evidence_key(value, inputs) != key:
-            raise ValueError("Prediction files changed while loading evidence")
+            raise PredictionError("Prediction files changed while loading evidence")
         _retain_evidence(key, result)
         return result
 

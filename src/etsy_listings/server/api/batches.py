@@ -6,16 +6,18 @@ AI queue -- cancel, resume, retry.
 The operations are :mod:`etsy_listings.core.application.batch_staging`'s and
 :mod:`~etsy_listings.core.application.batch_workflow`'s (module-structure
 plan, PR 7). This module decodes the multipart upload into ``Upload``
-streams, supplies the AI coordinator's batch queue -- which also says whether
-AI could run -- and decides only what each answer is on the wire:
+streams and supplies the AI coordinator's batch queue (which also says
+whether AI could run). The refusals reach the wire through the app's one
+refusal table (``app.py``'s ``REFUSAL_STATUS``):
 
 * An upload refused before staging is a ``422`` whose ``detail`` is the
-  sentence and the remedy (`StagingRefusal`), with nothing on disk.
+  sentence and the remedy (`StagingRefusal`), with nothing on disk -- the one
+  refusal this module answers itself, for its body.
 * A session that cannot be confirmed yet is a ``409`` with the sentence, and
   nothing is created. So is one whose AI could not run (spec, *Design
   validation*), which the staging detail already says as ``ai_blocked``.
 * An id nobody holds -- a session, a batch or a row -- is a ``404``. An id
-  that is not a single path segment is the app-wide ``400``.
+  that is not a single path segment is a ``400``.
 
 Both stores are the app's (`app.state`). A confirm and an editor's create of
 the same name wait for each other on the listing's document lock
@@ -35,21 +37,10 @@ from etsy_listings.core.application import batch_staging, batch_workflow
 from etsy_listings.core.application.ai.batch_queue import BatchQueue
 from etsy_listings.core.application.ai.registry import AiRunRegistry
 from etsy_listings.core.application.batch_workflow import RecentBatch
-from etsy_listings.core.application.refusals import (
-    BatchMissingError,
-    BatchRowMissingError,
-    BatchRowNotReviewableError,
-    BatchRowUploadMissingError,
-    ListingTemplateMissingError,
-    NothingToRetryError,
-    StagedRowMissingError,
-    StagingMissingError,
-)
 from etsy_listings.core.batches import (
     Batch,
     BatchRecords,
     BatchRow,
-    ConfirmRefusedError,
     StagingRefusedError,
     StagingSession,
     Upload,
@@ -76,24 +67,6 @@ from etsy_listings.server.api.schemas import (
 from etsy_listings.server.api.thumbnails import thumbnail_response
 
 router = APIRouter(tags=["batches"])
-
-_MISSING = (
-    StagingMissingError,
-    StagedRowMissingError,
-    BatchMissingError,
-    BatchRowMissingError,
-    BatchRowUploadMissingError,
-    ListingTemplateMissingError,
-)
-_CONFLICTS = (ConfirmRefusedError, NothingToRetryError, BatchRowNotReviewableError)
-
-
-def _not_found(exc: Exception) -> HTTPException:
-    return HTTPException(status_code=404, detail=str(exc))
-
-
-def _conflict(exc: Exception) -> HTTPException:
-    return HTTPException(status_code=409, detail=str(exc))
 
 
 def _queue(request: Request) -> BatchQueue:
@@ -203,8 +176,6 @@ def create_staging(
             listing_template,
             received,
         )
-    except ListingTemplateMissingError as exc:
-        raise _not_found(exc) from exc
     except StagingRefusedError as exc:
         refusal = StagingRefusal(message=exc.message, remedy=exc.remedy)
         raise HTTPException(status_code=422, detail=refusal.model_dump()) from exc
@@ -216,12 +187,9 @@ def create_staging(
 @router.get("/api/staging/{session_id}", response_model=StagingDetail)
 def get_staging(request: Request, session_id: str) -> StagingDetail:
     """A reload reattaches here (spec, *Frozen staging*)."""
-    try:
-        session = batch_staging.read_staging(
-            app_state.workspace(request), app_state.staging_store(request), session_id
-        )
-    except StagingMissingError as exc:
-        raise _not_found(exc) from exc
+    session = batch_staging.read_staging(
+        app_state.workspace(request), app_state.staging_store(request), session_id
+    )
     return _staging_detail(request, session)
 
 
@@ -229,15 +197,12 @@ def get_staging(request: Request, session_id: str) -> StagingDetail:
 def patch_staging(request: Request, session_id: str, body: StagingPatch) -> StagingDetail:
     """Edit the label, type names, remove rows. Every edit moves the
     session's expiry to seven days from now."""
-    try:
-        session = batch_staging.edit_staging(
-            app_state.workspace(request),
-            app_state.staging_store(request),
-            session_id,
-            batch_staging.StagingEdit(label=body.label, names=body.names, remove=body.remove),
-        )
-    except _MISSING as exc:
-        raise _not_found(exc) from exc
+    session = batch_staging.edit_staging(
+        app_state.workspace(request),
+        app_state.staging_store(request),
+        session_id,
+        batch_staging.StagingEdit(label=body.label, names=body.names, remove=body.remove),
+    )
     return _staging_detail(request, session)
 
 
@@ -245,23 +210,17 @@ def patch_staging(request: Request, session_id: str, body: StagingPatch) -> Stag
 def cancel_staging(request: Request, session_id: str) -> Response:
     """Cancel staging: the uploads go at once. The seller's own files
     were never touched."""
-    try:
-        batch_staging.cancel_staging(
-            app_state.workspace(request), app_state.staging_store(request), session_id
-        )
-    except StagingMissingError as exc:
-        raise _not_found(exc) from exc
+    batch_staging.cancel_staging(
+        app_state.workspace(request), app_state.staging_store(request), session_id
+    )
     return Response(status_code=204)
 
 
 @router.get("/api/staging/{session_id}/rows/{row}/thumbnail")
 def staging_row_thumbnail(request: Request, session_id: str, row: str) -> Response:
-    try:
-        path = batch_staging.staged_upload(
-            app_state.workspace(request), app_state.staging_store(request), session_id, row
-        )
-    except _MISSING as exc:
-        raise _not_found(exc) from exc
+    path = batch_staging.staged_upload(
+        app_state.workspace(request), app_state.staging_store(request), session_id, row
+    )
     return thumbnail_response(path)
 
 
@@ -274,28 +233,20 @@ def confirm_staging(request: Request, session_id: str) -> BatchDetail:
     """Create N listings (UI doc §6). Repeating it -- a double click, a retry
     after a dropped response -- finishes the same batch rather than making a
     second one."""
-    try:
-        batch = batch_workflow.confirm_batch(
-            app_state.workspace(request),
-            BatchRecords(app_state.staging_store(request), app_state.batch_store(request)),
-            session_id,
-            queue=_queue(request),
-        )
-    except StagingMissingError as exc:
-        raise _not_found(exc) from exc
-    except ConfirmRefusedError as exc:
-        raise _conflict(exc) from exc
+    batch = batch_workflow.confirm_batch(
+        app_state.workspace(request),
+        BatchRecords(app_state.staging_store(request), app_state.batch_store(request)),
+        session_id,
+        queue=_queue(request),
+    )
     return _batch_detail(request, batch)
 
 
 @router.get("/api/batches/{batch_id}", response_model=BatchDetail)
 def get_batch(request: Request, batch_id: str) -> BatchDetail:
-    try:
-        batch = batch_workflow.read_batch(
-            app_state.workspace(request), app_state.batch_store(request), batch_id
-        )
-    except BatchMissingError as exc:
-        raise _not_found(exc) from exc
+    batch = batch_workflow.read_batch(
+        app_state.workspace(request), app_state.batch_store(request), batch_id
+    )
     return _batch_detail(request, batch)
 
 
@@ -307,33 +258,25 @@ def get_batch(request: Request, batch_id: str) -> BatchDetail:
 def retry_batch_row(request: Request, batch_id: str, row: str) -> BatchDetail:
     """Retry one row (UI doc §7): its creation, if that failed -- which
     queues it once it exists -- else its AI, keeping the saved brief."""
-    try:
-        batch = batch_workflow.retry_batch_row(
-            app_state.workspace(request),
-            BatchRecords(app_state.staging_store(request), app_state.batch_store(request)),
-            batch_id,
-            row,
-            queue=_queue(request),
-        )
-    except _MISSING as exc:
-        raise _not_found(exc) from exc
-    except _CONFLICTS as exc:
-        raise _conflict(exc) from exc
+    batch = batch_workflow.retry_batch_row(
+        app_state.workspace(request),
+        BatchRecords(app_state.staging_store(request), app_state.batch_store(request)),
+        batch_id,
+        row,
+        queue=_queue(request),
+    )
     return _batch_detail(request, batch)
 
 
 @router.post("/api/batches/{batch_id}/retry", response_model=BatchDetail)
 def retry_batch(request: Request, batch_id: str) -> BatchDetail:
     """**Retry N failed**: every row whose creation or AI failed."""
-    try:
-        batch = batch_workflow.retry_batch(
-            app_state.workspace(request),
-            BatchRecords(app_state.staging_store(request), app_state.batch_store(request)),
-            batch_id,
-            queue=_queue(request),
-        )
-    except BatchMissingError as exc:
-        raise _not_found(exc) from exc
+    batch = batch_workflow.retry_batch(
+        app_state.workspace(request),
+        BatchRecords(app_state.staging_store(request), app_state.batch_store(request)),
+        batch_id,
+        queue=_queue(request),
+    )
     return _batch_detail(request, batch)
 
 
@@ -341,30 +284,24 @@ def retry_batch(request: Request, batch_id: str) -> BatchDetail:
 def cancel_batch(request: Request, batch_id: str) -> BatchDetail:
     """**Cancel batch** (spec, *Cancellation and deletion*): queued rows are
     stopped and running ones asked to stop. Everything written stays."""
-    try:
-        batch = batch_workflow.cancel_batch(
-            app_state.workspace(request),
-            app_state.batch_store(request),
-            batch_id,
-            queue=_queue(request),
-        )
-    except BatchMissingError as exc:
-        raise _not_found(exc) from exc
+    batch = batch_workflow.cancel_batch(
+        app_state.workspace(request),
+        app_state.batch_store(request),
+        batch_id,
+        queue=_queue(request),
+    )
     return _batch_detail(request, batch)
 
 
 @router.post("/api/batches/{batch_id}/resume", response_model=BatchDetail)
 def resume_batch(request: Request, batch_id: str) -> BatchDetail:
     """**Resume**: stopped and cancelled rows join the queue again."""
-    try:
-        batch = batch_workflow.resume_batch(
-            app_state.workspace(request),
-            app_state.batch_store(request),
-            batch_id,
-            queue=_queue(request),
-        )
-    except BatchMissingError as exc:
-        raise _not_found(exc) from exc
+    batch = batch_workflow.resume_batch(
+        app_state.workspace(request),
+        app_state.batch_store(request),
+        batch_id,
+        queue=_queue(request),
+    )
     return _batch_detail(request, batch)
 
 
@@ -420,12 +357,9 @@ def rename_batch(request: Request, batch_id: str, body: BatchPatch) -> BatchDeta
     """Rename the batch (UI doc §7): the label only, so its id -- and every
     link to it -- stays. A blank label keeps the one it had, as staging's
     does."""
-    try:
-        batch = batch_workflow.rename_batch(
-            app_state.workspace(request), app_state.batch_store(request), batch_id, body.label
-        )
-    except BatchMissingError as exc:
-        raise _not_found(exc) from exc
+    batch = batch_workflow.rename_batch(
+        app_state.workspace(request), app_state.batch_store(request), batch_id, body.label
+    )
     return _batch_detail(request, batch)
 
 
@@ -433,15 +367,12 @@ def rename_batch(request: Request, batch_id: str, body: BatchPatch) -> BatchDeta
 def delete_batch(request: Request, batch_id: str) -> Response:
     """Delete batch record (spec, *Cancellation and deletion*): its queued
     and running work is cancelled first, then only the record goes."""
-    try:
-        batch_workflow.delete_batch(
-            app_state.workspace(request),
-            app_state.batch_store(request),
-            batch_id,
-            queue=_queue(request),
-        )
-    except BatchMissingError as exc:
-        raise _not_found(exc) from exc
+    batch_workflow.delete_batch(
+        app_state.workspace(request),
+        app_state.batch_store(request),
+        batch_id,
+        queue=_queue(request),
+    )
     return Response(status_code=204)
 
 
@@ -453,18 +384,13 @@ def delete_batch(request: Request, batch_id: str) -> Response:
 def set_reviewed(request: Request, batch_id: str, row: str, body: ReviewedRequest) -> BatchDetail:
     """Mark reviewed / Mark needs review (spec, *Review workflow*). Refused
     for a row still queued or drafting, deleted, or never created."""
-    try:
-        batch = batch_workflow.mark_reviewed(
-            app_state.workspace(request),
-            app_state.batch_store(request),
-            batch_id,
-            row,
-            reviewed=body.reviewed,
-        )
-    except _MISSING as exc:
-        raise _not_found(exc) from exc
-    except BatchRowNotReviewableError as exc:
-        raise _conflict(exc) from exc
+    batch = batch_workflow.mark_reviewed(
+        app_state.workspace(request),
+        app_state.batch_store(request),
+        batch_id,
+        row,
+        reviewed=body.reviewed,
+    )
     return _batch_detail(request, batch)
 
 
@@ -473,12 +399,9 @@ def batch_row_thumbnail(request: Request, batch_id: str, row: str) -> Response:
     """A row that was never created has no listing design to show, so the
     summary shows the upload it was made from, kept beside the batch for
     Retry."""
-    try:
-        path = batch_workflow.batch_row_upload(
-            app_state.workspace(request), app_state.batch_store(request), batch_id, row
-        )
-    except _MISSING as exc:
-        raise _not_found(exc) from exc
+    path = batch_workflow.batch_row_upload(
+        app_state.workspace(request), app_state.batch_store(request), batch_id, row
+    )
     return thumbnail_response(path)
 
 

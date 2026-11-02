@@ -66,7 +66,7 @@ def test_save_refuses_wrong_kind_and_brush_outside_photo(workspace_root: Path) -
             headers={"If-Match": loaded.headers["etag"]},
             json={"request_id": "kind", "config": malformed},
         ).status_code
-        == 400
+        == 422
     )
     response = client.put(
         url,

@@ -23,8 +23,9 @@ def test_status_reports_reference_and_unavailable_masks_without_submitting(
     assert summaries["flat-lay-01"]["maps"]["can_render"] is True
     assert client.get("/api/preparation/jobs").json() == []
     assert client.get("/api/templates/flat-lay-01/mask").status_code == 409
-    assert client.get("/api/templates/colour-chart-01/mask").status_code == 400
-    assert client.get("/api/templates/flat-lay-01/placements/arbitrary/mask").status_code == 400
+    # A mask route for another kind of template names a mask it does not have.
+    assert client.get("/api/templates/colour-chart-01/mask").status_code == 409
+    assert client.get("/api/templates/flat-lay-01/placements/arbitrary/mask").status_code == 409
 
 
 def test_explicit_submission_reconnect_and_cancel_keep_one_durable_job(

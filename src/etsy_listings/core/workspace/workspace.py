@@ -109,8 +109,8 @@ class InvalidNameError(ValueError):
     workspace root in the first place.
     """
 
-    def __init__(self, name: str) -> None:
-        super().__init__(f"{name!r} is not a valid name: expected a single path segment")
+    def __init__(self, name: str, message: str | None = None) -> None:
+        super().__init__(message or f"{name!r} is not a valid name: expected a single path segment")
 
 
 def _segment(name: str) -> str:
@@ -127,7 +127,7 @@ class NotAMediaFileError(InvalidNameError):
     ``400`` like any other name it cannot use."""
 
     def __init__(self, path: str, directory: Path) -> None:
-        ValueError.__init__(self, f"{path!r} is not a media file in {directory.name}/")
+        super().__init__(path, f"{path!r} is not a media file in {directory.name}/")
 
 
 _MEDIA_EXTENSIONS: tuple[str, ...] = (*IMAGE_EXTENSIONS, *VIDEO_EXTENSIONS)
