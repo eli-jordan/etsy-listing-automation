@@ -31,7 +31,7 @@ photo an honest picture of the shirt the buyer receives.
 | Out of range | `plan` refuses. No clamping, no grandfathering: narrowing the limits makes existing out-of-range listings fail until edited. |
 | Printify | Unchanged. Positions are mockup-only. |
 | Listing templates and batches | Never carry positions. New listings start from the template boxes. |
-| Renderers | Photo warp and Marigold. Marigold depends on the padded-fit spike below; if it fails, Marigold templates refuse positions. |
+| Renderers | Photo warp and Marigold. Marigold positions are rendered with a direct fit per position (option B, chosen after the spike). |
 | Editing | Direct manipulation on the Images tab preview pane. |
 
 ## Listing file
@@ -76,7 +76,7 @@ the parts. It refuses, naming the listing and the key, when:
 4. the key names a placement ID the template does not have, or uses
    `placements:` on a template that is not `multiple` (or `bounding_box:` on one
    that is);
-5. the template is Marigold and the spike has not shipped Marigold support.
+5. the template is Marigold and Marigold positions have not shipped yet (until PR 7).
 
 Example messages:
 
@@ -107,10 +107,10 @@ template_positions:
   rotation: 15        # degrees either way
 ```
 
-The editor and `plan` enforce the same values. Changing them re-prepares
-Marigold templates (below), so this section does not save on blur like the
+The editor and `plan` enforce the same values. Widening them can require new
+Marigold inference (below), so this section does not save on blur like the
 rest of Admin: edits stay a draft, a note describes the effect, and
-**Review and save…** opens a confirmation naming the templates refitted and
+**Review and save…** opens a confirmation naming the templates that need inference and
 any listings that fall outside. Discard reverts the draft.
 
 ## Rendering
@@ -121,36 +121,50 @@ The listing box replaces the template box in the layer's `RenderConfig`. The
 render config is already hashed into the lockfile, so only scenes whose
 effective box changed re-render.
 
-### Marigold (option A)
+### Marigold (option B: a fit per position)
 
-Prepared maps store the artwork UV for each photo pixel (0 and 1 are the
-artwork edges), with zero visibility outside the quad. Option A fits each
-template's maps once over a **padded quad**: the template box grown to cover the
-largest box the current limits allow. A listing position becomes an affine
-transform on UV at composite time, and visibility is recomputed from the
-transformed UV. No per-listing preparation runs.
+The spike (below) rejected option A, fitting each template's maps once over a
+padded quad. Marigold positions instead get their **own maps**: a direct fit
+of the posed quad, the same fit a calibrator geometry change already runs,
+from preparation evidence that covers every allowed pose.
 
-- `PlacementInput.quad` records the padded quad, so adopting this re-prepares
-  every Marigold template once.
-- Padding follows the settings in both directions. Saving new limits refits
-  every Marigold template's maps in the background from its existing
-  preparation (the CPU rebuild a placement change already triggers; no model
-  inference). This is expected to be fast; the spike measures it. The
-  settings screen confirms before saving and names the templates affected.
-- The editor shows no progress for the refit. If `plan` runs before a
-  template's refit finishes, it waits for it rather than rendering against
-  maps fitted for the old limits.
-- The 1024px interactive composite and `_check_prepared_geometry` apply the
-  same UV transform.
+- **Evidence coverage.** A Marigold template's preparation evidence must cover
+  the *padded quad*: the template box grown to the largest box the current
+  limits allow. A template whose evidence does not cover it needs model
+  inference once (spike: 85–131 s per template on the seller's GPU). The
+  template's own published maps are unchanged.
+- **Per-position fit.** A listing position on a Marigold template is rendered
+  with maps fitted directly to its posed quad from that evidence (CPU only;
+  spike: 0.9–5.8 s per fit). Fits are durable, content-addressed artifacts
+  keyed by template, placement, evidence identity, posed quad and inference
+  settings, so listings with identical positions share one, and any fit can be
+  rebuilt from evidence. Fits no listing references are pruned with the cache.
+- **When fits run.** Saving a position queues its fit in the background. The
+  preview route and `plan`/apply wait for a missing or running fit rather than
+  render with the template's own maps; the editor shows its normal loading
+  treatment, never a progress card. The scene's render identity includes the
+  fit's numerical digest, so the lockfile changes only for affected scenes.
+- **Limits changes.** Narrowing the limits needs no new work. Widening them
+  beyond a template's evidence coverage queues inference for that template in
+  the background; existing fits stay valid because they are keyed by geometry.
+  The settings confirmation names the templates that need it and says it runs
+  the model once per template.
+- **Recalibration.** A template geometry change re-checks evidence coverage
+  for the new padded quad; positioned listings' fits are rebuilt against the
+  template's new evidence when it changes.
+- The 1024px interactive composite renders a posed box with its fit once ready
+  and with the editor's drag overlay until then.
+- Spec rule 5 (Marigold refused) is lifted once this ships.
 
-### Spike gate
+### Spike result
 
-Before any Marigold work, a spike fits real templates over padded quads at the
-default limits, times the refit from existing preparation, and compares composites at the limit extremes against a direct
-fit of the adjusted box. Padding that runs off the flat front of a garment is
-the expected failure. If quality does not hold, Marigold templates refuse
-positions (validation rule 5) and the padding and re-prepare work is not built.
-There is no per-listing refit fallback.
+The spike (`docs/research/template-positions-20261102/spike.md`, PR 1)
+fitted three live templates over padded quads at the default limits. Option A
+failed: on worn shirts the padded fit placed the artwork 23–60 px (99th
+percentile) from a direct fit, against a 2–11 px difference between two
+legitimate fits, and its evidence needed fresh inference anyway. On
+2026-11-02 the seller chose option B (above). Multiple-placement Marigold
+templates were not measured; none exists in the live workspace.
 
 ## Editor
 
@@ -188,11 +202,11 @@ and `template-positions-settings/` (round 3). Earlier rounds are archived as
 | `core/config/listing.py`, `listing_validation.py` | New field and refusals 1–5. |
 | `core/config/settings.py` | Limits section. |
 | `engine/stages/render.py` | Resolve the effective box per layer. |
-| `core/preparation/`, `render/material.py` | Padded fit, UV affine, staleness on settings change, background re-prepare (Marigold, after the spike). |
+| `core/preparation/`, `render/material.py` | Evidence coverage of the padded quad, per-position fits cached by geometry, background inference when limits widen (Marigold, option B). |
 | `application/prepared_previews.py`, server API | Previews render the saved position; regenerate the OpenAPI client for the new listing field. |
 | `src/ui` Images tab | Position mode, reusing `QuadEditor`/`quadGeometry`. |
 | Calibrator save | List listings holding positions for the template. |
-| Settings screen | Limits form with the re-prepare warning. |
+| Settings screen | Limits form with the inference warning. |
 
 ## Out of scope
 
