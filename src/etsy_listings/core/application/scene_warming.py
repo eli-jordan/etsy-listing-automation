@@ -20,6 +20,12 @@ name already queued keeps its place. A listing saved again while it is being
 warmed stops after the scene in hand and goes back on the queue, so the
 next pass reads the listing as it now stands.
 
+**Then it prunes.** At startup, and each time the queue drains, the warmer
+removes the position fits no listing's current position produces
+(:func:`~etsy_listings.core.application.position_fit_pruning.prune_position_fits`),
+so a position change prunes the fit it replaced once its new fit is stored.
+:meth:`SceneWarmer.wait_idle` waits for the prune too.
+
 A scene that cannot be composed -- a template not prepared, a photo or design
 missing, a listing that no longer loads -- is skipped: the preview endpoint
 reports the same refusal when the seller opens it.
@@ -34,6 +40,7 @@ from collections.abc import Callable
 
 from etsy_listings.core.application.listing_reads import listing_scenes
 from etsy_listings.core.application.mockup_templates import PreviewScene
+from etsy_listings.core.application.position_fit_pruning import prune_position_fits
 from etsy_listings.core.application.prepared_previews import photo_warp_preview, saved_scene
 from etsy_listings.core.config.listing import TemplateMediaEntry
 from etsy_listings.core.errors import UserFacingError
@@ -87,10 +94,12 @@ class SceneWarmer:
         *,
         scenes: Callable[[Workspace, str], list[Scene]] = gallery_scenes,
         warm: Callable[[Workspace, str, str, str | None], None] = warm_scene,
+        prune: Callable[[Workspace], object] = prune_position_fits,
     ) -> None:
         self._workspace = workspace
         self._scenes = scenes
         self._warm = warm
+        self._prune = prune
         self._wake = threading.Condition()
         self._queued: OrderedDict[str, None] = OrderedDict()
         self._stopping = False
@@ -99,6 +108,7 @@ class SceneWarmer:
         self._thread: threading.Thread | None = None
 
     def start(self) -> None:
+        self._idle.clear()  # until the startup prune is done
         self._thread = threading.Thread(target=self._loop, name="scene-warmer", daemon=True)
         self._thread.start()
 
@@ -127,6 +137,7 @@ class SceneWarmer:
         return self._idle.wait(timeout)
 
     def _loop(self) -> None:
+        self._settle()
         while True:
             with self._wake:
                 self._wake.wait_for(lambda: bool(self._queued) or self._stopping)
@@ -138,9 +149,20 @@ class SceneWarmer:
                 self._warm_listing(name)
             except Exception:
                 logger.exception("warming listing %r's scenes failed", name)
-            with self._wake:
-                if not self._queued:
-                    self._idle.set()
+            self._settle()
+
+    def _settle(self) -> None:
+        """Prune once the queue has drained, then report idle if it still has."""
+        with self._wake:
+            if self._queued:
+                return
+        try:
+            self._prune(self._workspace)
+        except Exception:
+            logger.exception("pruning position fits failed")
+        with self._wake:
+            if not self._queued:
+                self._idle.set()
 
     def _warm_listing(self, name: str) -> None:
         try:
