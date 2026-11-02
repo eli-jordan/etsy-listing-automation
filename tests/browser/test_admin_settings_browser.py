@@ -181,3 +181,54 @@ def test_raising_the_step_raises_the_run_limit_in_the_same_save(
     assert (limits.step_limit_minutes, limits.run_limit_minutes) == (10, 30)
     section.evaluate("node => node.scrollIntoView({block: 'start'})")
     capture(page, theme, "raised")
+
+
+def test_saving_narrower_template_limits_blocks_an_out_of_range_listing(
+    page,
+    expect,
+    calibrator_server: str,
+    workspace_root: Path,
+    theme: str,
+) -> None:
+    """Template positions PR 5: Template rendering's sliders stay a draft,
+    the confirmation names the listing the new limits block, Save writes
+    only the changed leaf, and the editor then reports the position."""
+    from etsy_listings.core.render.positions import Pose, compose
+
+    from tests.support.builders import FIXTURE_LISTING, edit_listing
+
+    workspace = Workspace.discover(root_override=workspace_root)
+    box = compose(workspace.load_template_config("flat-lay-01").bounding_box, Pose(scale=1.08))
+    edit_listing(
+        workspace_root,
+        template_positions={"flat-lay-01": {"bounding_box": [p.model_dump() for p in box]}},
+    )
+    open_settings(page, calibrator_server, theme)
+    page.get_by_role("link", name="Template rendering").click()
+    expect(page.get_by_role("region", name="Template positions")).to_be_visible()
+    capture(page, theme, "template-rendering")
+
+    largest = page.get_by_role("slider", name="Largest")
+    largest.focus()
+    for _ in range(2):  # 110% -> 100%, one 5% step each
+        largest.press("ArrowLeft")
+    largest.blur()
+    expect(page.get_by_text("100%", exact=True)).to_be_visible()
+    assert not workspace.settings_file().exists()
+
+    page.get_by_role("button", name="Review and save…").click()
+    dialog = page.get_by_role("dialog", name="Save new limits?")
+    expect(dialog).to_contain_text("Largest: 110% → 100%")
+    expect(dialog).to_contain_text(f"{FIXTURE_LISTING}; they will block deploying until edited")
+    capture(page, theme, "template-rendering-confirm")
+    with page.expect_response(is_save):
+        dialog.get_by_role("button", name="Save", exact=True).click()
+    expect(dialog).to_be_hidden()
+    expect(page.get_by_role("button", name="Review and save…")).to_be_disabled()
+    assert workspace.settings_file().read_text() == "template_positions:\n  scale:\n    max: 1\n"
+    assert Settings.load(workspace.settings_file()).template_positions.scale.max == 1.0
+
+    page.goto(f"{calibrator_server}/listings/{FIXTURE_LISTING}")
+    expect(page.locator(".issues")).to_contain_text(
+        "template_positions.flat-lay-01 scales the design to 1.08; the limit is 0.80–1.00"
+    )

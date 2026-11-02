@@ -81,6 +81,56 @@ def _windows_usn(path: Path) -> int | None:
         api.CloseHandle(handle)
 
 
+TreeVersion = tuple[tuple[str, int, int], ...]
+
+
+def tree_version(directory: Path) -> TreeVersion:
+    """A cache token for everything under ``directory``: each file's path,
+    size and modification time, from one stat-only walk.
+
+    Far cheaper than :func:`file_version` per file -- a scan of a few hundred
+    files costs milliseconds, where reading what they decide can cost a
+    second -- at the price of its guarantee: a same-size rewrite inside one
+    timestamp tick goes unseen. Use it only where an answer one such write
+    late is harmless and the reader that acts on it re-reads the files.
+    Symlinked directories are followed, once each, so a template aliased to
+    another's files still sees them change. A directory that is missing, or
+    an entry that vanishes mid-walk, simply contributes nothing.
+    """
+    found: list[tuple[str, int, int]] = []
+    visited: set[tuple[int, int]] = set()
+    pending = [directory]
+    while pending:
+        for entry in _unvisited_entries(pending.pop(), visited):
+            _version_entry(entry, found, pending)
+    return tuple(sorted(found))
+
+
+def _unvisited_entries(directory: Path, visited: set[tuple[int, int]]) -> list[os.DirEntry[str]]:
+    try:
+        stat = directory.stat()
+        if (stat.st_dev, stat.st_ino) in visited:
+            return []
+        visited.add((stat.st_dev, stat.st_ino))
+        with os.scandir(directory) as entries:
+            return list(entries)
+    except OSError:
+        return []
+
+
+def _version_entry(
+    entry: os.DirEntry[str], found: list[tuple[str, int, int]], pending: list[Path]
+) -> None:
+    try:
+        if entry.is_dir():
+            pending.append(Path(entry.path))
+            return
+        stat = entry.stat()
+    except OSError:
+        return
+    found.append((entry.path, stat.st_size, stat.st_mtime_ns))
+
+
 def file_version(path: Path) -> tuple[int | str, ...]:
     """Return a cache token that changes after a completed file modification."""
     stat = path.stat()

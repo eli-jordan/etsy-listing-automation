@@ -276,8 +276,16 @@ wherever pydantic itself does the dispatch (a FastAPI ``response_model``, a
 request body, a ``TypeAdapter``)."""
 
 
+LayerBoxes = Mapping[str | None, BoundingBox]
+"""A listing's boxes for one template's layers, keyed by placement ID, or by
+``None`` for a ``single`` or ``colour-matrix`` template's one layer (ADR-0058).
+A layer no key names keeps the template's box."""
+
+_NO_BOXES: LayerBoxes = {}
+
+
 def scene_layers(
-    template: AnyTemplate, colour: str | None
+    template: AnyTemplate, colour: str | None, boxes: LayerBoxes = _NO_BOXES
 ) -> list[tuple[str | None, RenderConfig]]:
     """``(depicted colour, render config)`` per layer of one scene, in paint
     order -- the colour each layer's artwork resolves by (A35, PRD 30).
@@ -287,14 +295,18 @@ def scene_layers(
     ``multiple`` scene one colour per placement. Here, beside the three
     shapes, because the render stage and the editor's scene preview both need
     it and a second copy is how the two would come to show different files.
+
+    ``boxes`` is the listing's saved position (spec *Rendering → Photo warp*):
+    the listing's box replaces the template's in that layer's config, which is
+    what the lockfile hashes, so only the scenes it moves render again.
     """
-    if isinstance(template, ColourMatrixTemplate):
-        # Same geometry in every colour's photo: a colour framed differently
-        # is a `single`-kind template instead, never a per-colour override.
-        return [(colour, template.render_config())]
-    if isinstance(template, SingleTemplate):
-        return [(template.colour, template.render_config())]
-    return [(p.colour, template.render_config_for(p)) for p in template.placements]
+    renderer = template.renderer
+    return [
+        (depicted, photo_warp_config(renderer, box))
+        for (depicted, _), box in zip(
+            scene_colours(template, colour), scene_boxes(template, boxes), strict=True
+        )
+    ]
 
 
 def scene_colours(template: AnyTemplate, colour: str | None) -> list[tuple[str | None, str | None]]:
@@ -307,14 +319,14 @@ def scene_colours(template: AnyTemplate, colour: str | None) -> list[tuple[str |
     return [(colour if isinstance(template, ColourMatrixTemplate) else template.colour, None)]
 
 
-def scene_boxes(template: AnyTemplate) -> list[BoundingBox]:
+def scene_boxes(template: AnyTemplate, boxes: LayerBoxes = _NO_BOXES) -> list[BoundingBox]:
     """Each layer's bounding box, in :func:`scene_layers`'s order, for any
-    renderer. Geometry is the template's own, so a prepared scene reads it
-    without building a Photo warp configuration it would never render
-    (ADR-0054)."""
+    renderer: the template's own, or the listing's where ``boxes`` names the
+    layer. A prepared scene reads it without building a Photo warp
+    configuration it would never render (ADR-0054)."""
     if isinstance(template, MultipleTemplate):
-        return [p.bounding_box for p in template.placements]
-    return [template.bounding_box]
+        return [boxes.get(p.id, p.bounding_box) for p in template.placements]
+    return [boxes.get(None, template.bounding_box)]
 
 
 TemplateConfig = Annotated[AnyTemplate, Field(discriminator="kind")]

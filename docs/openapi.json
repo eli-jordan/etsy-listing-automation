@@ -3115,6 +3115,27 @@
         "title": "ListingFailedEvent",
         "type": "object"
       },
+      "ListingOutsideBody": {
+        "properties": {
+          "listing": {
+            "title": "Listing",
+            "type": "string"
+          },
+          "positions": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Positions",
+            "type": "array"
+          }
+        },
+        "required": [
+          "listing",
+          "positions"
+        ],
+        "title": "ListingOutsideBody",
+        "type": "object"
+      },
       "ListingPlanRequest": {
         "additionalProperties": false,
         "properties": {
@@ -4905,6 +4926,28 @@
           }
         },
         "title": "PositionScaleLimits",
+        "type": "object"
+      },
+      "PositionedListingResponse": {
+        "description": "A listing holding its own position for a template (ADR-0058), which a\nrecalibration may put outside the limits. ``placements`` lists the\n``multiple`` placement IDs it positions; empty for one box.",
+        "properties": {
+          "listing": {
+            "title": "Listing",
+            "type": "string"
+          },
+          "placements": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Placements",
+            "type": "array"
+          }
+        },
+        "required": [
+          "listing",
+          "placements"
+        ],
+        "title": "PositionedListingResponse",
         "type": "object"
       },
       "PreparationJobResponse": {
@@ -7496,6 +7539,45 @@
         "title": "TemplatePhoto",
         "type": "object"
       },
+      "TemplatePositionImpactRequest": {
+        "properties": {
+          "limits": {
+            "additionalProperties": true,
+            "title": "Limits",
+            "type": "object"
+          }
+        },
+        "required": [
+          "limits"
+        ],
+        "title": "TemplatePositionImpactRequest",
+        "type": "object"
+      },
+      "TemplatePositionImpactResponse": {
+        "description": "What saving the candidate limits would change; nothing is written.",
+        "properties": {
+          "outside": {
+            "items": {
+              "$ref": "#/components/schemas/ListingOutsideBody"
+            },
+            "title": "Outside",
+            "type": "array"
+          },
+          "templates_needing_inference": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Templates Needing Inference",
+            "type": "array"
+          }
+        },
+        "required": [
+          "outside",
+          "templates_needing_inference"
+        ],
+        "title": "TemplatePositionImpactResponse",
+        "type": "object"
+      },
       "TemplatePositionLimits": {
         "additionalProperties": false,
         "description": "Mockup-only similarity limits; offsets are fractions of the box's rectified W and H.",
@@ -7918,6 +8000,18 @@
             ],
             "title": "Step Limit Minutes"
           },
+          "template_positions": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Template Positions"
+          },
           "weights": {
             "anyOf": [
               {
@@ -7993,8 +8087,7 @@
             "type": "integer"
           },
           "template_positions": {
-            "$ref": "#/components/schemas/TemplatePositionLimits",
-            "readOnly": true
+            "$ref": "#/components/schemas/TemplatePositionLimits"
           },
           "weights": {
             "additionalProperties": {
@@ -8159,6 +8252,48 @@
           }
         },
         "summary": "Model Catalogs",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/api/admin/settings/template-positions/impact": {
+      "post": {
+        "description": "A read for Settings' confirmation (template positions PR 5): who the\ncandidate limits would block, and which Marigold templates would need\nmodel inference to cover them.",
+        "operationId": "template_positions_impact_api_admin_settings_template_positions_impact_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TemplatePositionImpactRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TemplatePositionImpactResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SettingsSaveRefusal"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          }
+        },
+        "summary": "Template Positions Impact",
         "tags": [
           "admin"
         ]
@@ -12462,6 +12597,53 @@
         "summary": "Placement History",
         "tags": [
           "preparation"
+        ]
+      }
+    },
+    "/api/templates/{name}/positioned-listings": {
+      "get": {
+        "description": "The listings holding positions for this template, which the calibrator\nnames around a save (spec, *Recalibration*). Read only.",
+        "operationId": "get_positioned_listings_api_templates__name__positioned_listings_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/PositionedListingResponse"
+                  },
+                  "title": "Response Get Positioned Listings Api Templates  Name  Positioned Listings Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Positioned Listings",
+        "tags": [
+          "templates"
         ]
       }
     },

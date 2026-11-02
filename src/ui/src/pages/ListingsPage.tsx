@@ -11,6 +11,7 @@ import type { ListingStatus, ListingSummary } from "../types";
 import { BatchCandidateControl } from "./batchDeploy/BatchCandidateControl";
 import { candidateNames } from "./batchDeploy/batchDeployPresentation";
 import { TERMINAL_PHASES } from "./deploy/runPhases";
+import { lastLoadedListings, rememberLoadedListings } from "./loadedListings";
 import {
   deleteDetails,
   deleteLabel,
@@ -84,7 +85,9 @@ function unseenRunAction(run: WorkspaceRun): WorkspaceAction | null {
 }
 
 export function ListingsPage() {
-  const [listings, setListings] = useState<ListingSummary[]>([]);
+  /** `null` until the first load answers, so the empty-table message cannot
+   * flash before there is anything to say it about. */
+  const [listings, setListings] = useState<ListingSummary[] | null>(lastLoadedListings);
   const [workspaceRun, setWorkspaceRun] =
     useState<Awaited<ReturnType<typeof currentWorkspaceRun>>>(null);
   const [status, setStatus] = useState("");
@@ -96,6 +99,7 @@ export function ListingsPage() {
   const refresh = useCallback(() => {
     listListings()
       .then((loaded) => {
+        rememberLoadedListings(loaded);
         setListings(loaded);
         setStatus("");
       })
@@ -166,7 +170,7 @@ export function ListingsPage() {
 
   const rows = useMemo(
     () =>
-      listings
+      (listings ?? [])
         .filter((l) => filter === "all" || l.status === filter)
         .filter((l) => l.name.toLowerCase().includes(query.toLowerCase())),
     [listings, filter, query],
@@ -176,7 +180,7 @@ export function ListingsPage() {
     <div>
       <div className="page-head">
         <h1 className="page-head__title">Listings</h1>
-        <span className="page-head__meta">{rows.length} shown</span>
+        {listings !== null && <span className="page-head__meta">{rows.length} shown</span>}
         <div className="page-head__actions">
           {workspaceAction !== null && workspaceRun !== null && (
             <button
@@ -188,7 +192,7 @@ export function ListingsPage() {
             </button>
           )}
           <BatchCandidateControl
-            names={candidateNames(listings)}
+            names={candidateNames(listings ?? [])}
             onDeploy={() => void startBatchPlan()}
           />
           <button
@@ -306,7 +310,9 @@ export function ListingsPage() {
         </tbody>
       </table>
 
-      {rows.length === 0 && !status && <p className="text-muted">No listings match.</p>}
+      {listings !== null && rows.length === 0 && !status && (
+        <p className="text-muted">No listings match.</p>
+      )}
 
       {pendingDelete !== null && (
         <ConfirmDialog

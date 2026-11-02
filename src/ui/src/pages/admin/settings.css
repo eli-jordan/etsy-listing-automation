@@ -436,3 +436,42 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* Settings > Template rendering (template positions PR 5), from the
+   template-positions-settings mockup. */
+.tl-row {
+  display: grid;
+  grid-template-columns: 200px minmax(0, 1fr);
+  gap: var(--space-4);
+  align-items: center;
+  padding: var(--space-2) 0;
+  border-top: 1px solid var(--color-divider);
+}
+.tl-row__label {
+  display: grid;
+  gap: 2px;
+  font-weight: 600;
+}
+.tl-row__hint {
+  font-weight: 400;
+  font-size: 12px;
+  color: var(--color-neutral-600);
+}
+.tl-cost {
+  display: flex;
+  gap: var(--space-2);
+  align-items: flex-start;
+  margin-top: var(--space-3);
+  font-size: 13px;
+  color: var(--color-neutral-700);
+}
+.tl-cost svg {
+  flex: none;
+  margin-top: 2px;
+}
+.tl-foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  margin-top: var(--space-4);
+}
