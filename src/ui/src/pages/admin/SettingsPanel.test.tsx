@@ -226,6 +226,18 @@ it("keeps invalid file errors visible through failed rechecks, without default c
   expect(screen.getByRole("alert")).toHaveTextContent("settings.yaml");
 });
 
+it("shows the controls once a recheck reads the corrected file", async () => {
+  vi.mocked(api.getSettings)
+    .mockRejectedValueOnce(new Error("settings.yaml: batch_ai.concurrency must be at least 1"))
+    .mockResolvedValueOnce({ ...initial(), concurrency: 2 });
+  render(<SettingsPanel />);
+  await screen.findByRole("alert");
+  fireEvent.click(screen.getByRole("button", { name: "Check file again" }));
+  expect(await screen.findByRole("slider", { name: "Listings drafted at once" })).toHaveValue("2");
+  expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  expect(api.saveSettings).not.toHaveBeenCalled();
+});
+
 it("reload discards a refused edit even when the external file returned to its original revision", async () => {
   vi.mocked(api.saveSettings).mockResolvedValue({ kind: "conflict", message: "changed" });
   render(<SettingsPanel />);

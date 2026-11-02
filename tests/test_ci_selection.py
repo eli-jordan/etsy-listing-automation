@@ -100,6 +100,13 @@ CAPTURE_SCENES = {
     "test_capture_workbench_screenshot",
     "test_capture_approved_marigold_states",
 }
+# The Admin journeys run once, in light; their dark pass only feeds review
+# screenshots, so the `theme` fixture puts it under `capture` too.
+DARK = "[dark]"
+
+
+def _is_capture(name: str) -> bool:
+    return name in CAPTURE_SCENES or name.endswith(DARK)
 
 
 def _collected(root: Path, tmp_path: Path, *selection: str) -> set[str]:
@@ -137,16 +144,22 @@ def test_required_browser_selection_excludes_only_the_opt_in_captures(tmp_path: 
     default = _collected(root, tmp_path)
     everything = _collected(root, tmp_path, "-m", "browser or capture")
     assert required == default
-    assert not _names(required) & CAPTURE_SCENES
+    assert not any(_is_capture(name) for name in _names(required))
     # Real witnesses -- decoded PNGs, saved YAML, geometry -- stay required.
     assert "test_the_preview_sits_on_the_surface_tone" in _names(required)
     assert "test_the_marigold_toolbar_fits_its_bar_at_desktop_widths" in _names(required)
-    assert everything - required == {n for n in everything if _names({n}) <= CAPTURE_SCENES}
+    assert everything - required == {n for n in everything if _is_capture(_names({n}).pop())}
 
 
-def test_the_capture_marker_selects_exactly_the_six_scenes(tmp_path: Path) -> None:
+def test_the_capture_marker_selects_the_six_scenes_and_each_journey_s_dark_pass(
+    tmp_path: Path,
+) -> None:
     root = ROOT
-    assert _names(_collected(root, tmp_path, "-m", "capture")) == CAPTURE_SCENES
+    captured = _names(_collected(root, tmp_path, "-m", "capture"))
+    assert captured - {n for n in captured if n.endswith(DARK)} == CAPTURE_SCENES
+    light = {n for n in _names(_collected(root, tmp_path)) if n.endswith("[light]")}
+    assert light
+    assert {n.replace(DARK, "[light]") for n in captured if n.endswith(DARK)} == light
 
 
 def test_lint_runs_once_in_the_quality_job_and_the_test_matrix_only_tests() -> None:

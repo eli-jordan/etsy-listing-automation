@@ -44,6 +44,33 @@ def test_missing_settings_are_defaults_until_a_save(
     assert client.get("/api/admin/settings").json() == saved.json()
 
 
+def test_each_save_returns_the_revision_the_next_save_names(
+    client: TestClient, workspace_root: Path
+) -> None:
+    """The page threads revisions through its save queue: a missing file's
+    `absent`, then each answer's. A revision a save has replaced conflicts."""
+    path = Workspace.discover(root_override=workspace_root).settings_file()
+    first = client.patch(
+        "/api/admin/settings", json={"revision": "absent", "changes": {"concurrency": 2}}
+    )
+    assert first.status_code == 200
+    second = client.patch(
+        "/api/admin/settings",
+        json={"revision": first.json()["revision"], "changes": {"concurrency": 3}},
+    )
+    assert second.status_code == 200
+    assert second.json()["revision"] != first.json()["revision"]
+    written = path.read_bytes()
+
+    stale = client.patch(
+        "/api/admin/settings",
+        json={"revision": first.json()["revision"], "changes": {"concurrency": 4}},
+    )
+    assert stale.status_code == 412
+    assert path.read_bytes() == written
+    assert client.get("/api/admin/settings").json()["concurrency"] == 3
+
+
 def test_invalid_patch_and_external_comment_are_refused(
     client: TestClient, workspace_root: Path
 ) -> None:
