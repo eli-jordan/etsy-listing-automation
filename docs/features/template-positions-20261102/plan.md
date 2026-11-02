@@ -18,7 +18,7 @@ production components. Screenshots for comparison are in
 
 | Id | Decision |
 |---|---|
-| P1 | The Marigold spike is PR 1. Photo warp PRs build on it while the seller reviews its report. PR 7 (Marigold support) launches only after the seller records sign-off below; on a failed spike PR 7 is dropped and spec rule 5 stays permanently. |
+| P1 | The Marigold spike is PR 1. Photo warp PRs build beside it while the seller reviews its report. PR 7 (Marigold support) launches only after the seller records sign-off below. **Outcome 2026-11-02:** option A failed; the seller chose option B (a direct fit per position, cached by geometry) for PR 7. |
 | P2 | The spike runs on copies of real templates. The seller permitted copying template folders from the live workspace `C:\Users\Admin\iCloudDrive\naturally-inked-studio-workspace` (2026-11-02). Copy only `mockup-templates/<name>/` for the three templates named in PR 1, read-only, into a throwaway workspace under the delegate's scratch directory. Never write to, run commands in, or point `ETSY_LISTINGS_ROOT` at the live workspace. Commit no photo or composite to the repository. |
 | P3 | The calibrator save warning is in scope as its own small PR (PR 6). |
 | P4 | Split: spike; model and validation; Photo warp rendering; editor; Admin settings; calibrator warning; Marigold. |
@@ -39,10 +39,10 @@ preceding tip.
 | 4 | Position mode in the Listing Images editor | hard | `feat/positions-4-editor` | — |
 | 5 | Template rendering settings in Admin | standard | `feat/positions-5-settings` | — |
 | 6 | Calibrator warning for positioned listings | mechanical | `feat/positions-6-calibrator` | — |
-| 7 | Marigold positions (gated on PR 1 sign-off) | hard | `feat/positions-7-marigold` | — |
+| 7 | Marigold positions, a fit per position (option B) | hard | `feat/positions-7-marigold` | — |
 
-Spike sign-off: _not yet recorded_. The seller writes the date and verdict
-(pass / fail) here; the orchestrator does not launch PR 7 without it.
+Spike sign-off: **2026-11-02, option A fail; proceed with option B** (seller's
+decision after the PR 1 report). PR 7 implements option B.
 
 Size: aim under about 1,500 changed lines per PR, excluding regenerated
 OpenAPI/client files, goldens and lockfiles. A PR that cannot fit splits at a
@@ -177,8 +177,9 @@ Scope:
 - Template positions panel: four sliders, draft state, Discard, Review and
   save; the confirmation dialog with its focus and dismissal rules.
 - A read that, for candidate limits, names the listings whose positions would
-  fall outside and the Marigold templates that would refit (empty until
-  PR 7; the dialog omits the refit bullet when empty).
+  fall outside and the Marigold templates whose evidence would need inference
+  to cover the wider limits (empty until PR 7; the dialog omits that bullet
+  and uses the plain "Save new limits?" wording when empty).
 - Saving through the existing settings save (validated, revision-checked,
   source-preserving per ADR-0055).
 
@@ -198,27 +199,38 @@ before and after saving geometry. The calibrator never edits listings.
 Exit when a behaviour test proves the listing set (including placement-level
 entries), the note renders in the calibrator, and shared gates pass.
 
-### PR 7 — Marigold positions
+### PR 7 — Marigold positions, a fit per position (option B)
 
-Launch only after spike sign-off. Spec: *Rendering — Marigold (option A)*;
-interactions *Marigold templates*. The spike report's method is the starting
-point.
+Launches after the spike sign-off above and on a base containing PRs 3 and 5.
+Spec: *Rendering — Marigold (option B: a fit per position)*, *Spike result*;
+interactions *Marigold templates* and *Settings: Template rendering*. The
+spike harness (`scripts/spike_template_positions.py`) and report are the
+starting point: they already run padded-evidence inference and direct fits.
 
 Scope:
 
-- Padded quad in `PlacementInput` (template box grown to the settings limits);
-  composite applies the listing position as a UV affine and recomputes
-  visibility; the 1024px interactive composite and `_check_prepared_geometry`
-  apply the same transform.
-- Background refit of every Marigold template from existing preparation when
-  the limits change; `plan` and the preview route wait for an unfinished refit
-  rather than using maps for old limits. A one-time refit of existing
-  templates on upgrade.
-- Lift spec rule 5; PR 5's dialog lists Marigold templates to refit.
+- Evidence coverage: decide whether a template's preparation evidence covers
+  its padded quad (template box grown to the current limits); when it does
+  not, preparation runs inference for the padded quad, in the background, with
+  the existing preparation scheduling and leases (ADR-0054).
+- Per-position fits: a durable, content-addressed fit artifact keyed by
+  template, placement, evidence identity, posed quad and inference settings;
+  shared across listings; validated on load like published maps; pruned when
+  unreferenced. Fits queue when a position saves.
+- Render stage and scene-preview route: a positioned Marigold layer renders
+  with its fit; `plan`/apply and the preview wait for a missing or running fit
+  instead of using the template's maps. Render identity includes the fit
+  digest.
+- Limits changes: PR 5's candidate-limits read names the templates whose
+  evidence would need inference; saving queues it. Recalibration re-checks
+  coverage and rebuilds affected fits.
+- Lift spec rule 5.
 
-Exit when goldens prove a positioned Marigold scene within the spike's
-measured tolerance, behaviour tests prove refit-on-settings-change and the
-plan/preview wait, the upgrade refit is idempotent, and shared gates pass.
+Exit when goldens prove a positioned Marigold scene matches a direct fit of
+the posed quad, behaviour tests prove fit caching and sharing, the plan and
+preview waits, inference queued on widening and not on narrowing, and pruning;
+the settings dialog lists templates needing inference; and shared gates pass.
+Real-model inference stays out of CI: tests use the existing fake predictor.
 
 ## Shared gates
 
@@ -229,5 +241,5 @@ plan/preview wait, the upgrade refit is idempotent, and shared gates pass.
 | G3 | `npm run test:design` from `src/ui`. UI PRs build the SPA and run the relevant `pytest -m browser` cases. Mockup frames stay fixture-driven. |
 | G4 | After API shape changes regenerate `docs/openapi.json` and the typed client in the same commit. Core stays free of server/CLI imports; Import Linter passes. |
 | G5 | UI PRs compare against the frames and the interactions document: keyboard, focus, save/error states and both themes. |
-| G6 | No local e2e. After green CI run the GitHub e2e workflow (`gh workflow run e2e --ref <branch>`), one run at a time, and record its URL. Never use the live workspace except PR 1's read-only copy (P2). |
+| G6 | No local e2e. After green CI run the GitHub e2e workflow (`gh workflow run e2e --ref <branch>`), one run at a time, and record its URL; waived for PR 1 (no production code). Never use the live workspace except PR 1's read-only copy (P2). |
 | G7 | Update affected docs (spec, architecture, guides, ADR citations, `CONTEXT.md`) in the owning PR. Record deviations here. |

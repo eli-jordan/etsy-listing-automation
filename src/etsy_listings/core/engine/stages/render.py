@@ -665,12 +665,12 @@ def _check_template_inputs(
 ) -> Blocked | None:
     # ADR-0058/spec rule 5 must name unsupported positions before map readiness.
     if listing_cfg.template_positions:
-        blocked = check_template_positions(
-            listing_cfg,
-            templates.configs,
-            workspace.load_settings().template_positions,
-            name=listing,
-        )
+        # A broken settings.yaml is this stage refusing, never a raise (ADR-0053).
+        try:
+            limits = workspace.load_settings().template_positions
+        except ConfigLoadError as exc:
+            return Blocked(str(exc))
+        blocked = check_template_positions(listing_cfg, templates.configs, limits, name=listing)
         if blocked is not None:
             return blocked
     for name, config in templates.configs.items():

@@ -20,7 +20,7 @@ read gathers it once however many listings it describes.
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Protocol
@@ -416,19 +416,22 @@ def _check_inputs(
 ) -> CheckInputs:
     """``listing``'s check inputs; ``description`` is the one resolution the
     caller also shows, so its ref is read once."""
-    return CheckInputs(
+    inputs = CheckInputs(
         garment_profile=facts.garment_profile(listing.garment_profile),
         garment_profile_names=facts.garment_profile_names,
         templates=facts.templates,
         description_ref_error=str(description.error) if description.error is not None else None,
         videos=facts.videos(listing, listing_dir),
-        **(
-            {"template_position_limits": facts.template_position_limits()}
-            if listing.template_positions
-            else {}
-        ),
         listing_name=name,
     )
+    # Settings are read only for a positioned listing; a broken file becomes
+    # the listing's issue rather than a failed read.
+    if not listing.template_positions:
+        return inputs
+    limits = facts.template_position_limits()
+    if isinstance(limits, str):
+        return replace(inputs, template_position_limits_error=limits)
+    return replace(inputs, template_position_limits=limits)
 
 
 def _business_issues(
