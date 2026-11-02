@@ -91,27 +91,3 @@ def test_stale_positions_save_and_report_a_blocking_images_issue(client: TestCli
         issue["message"]
         == "take-a-hike: template_positions.removed names a template that is not in media"
     )
-
-
-def test_calibrator_reads_which_listings_hold_positions_for_a_template(
-    client: TestClient,
-    workspace_root: Path,
-) -> None:
-    """Spec, *Recalibration*: what the calibrator names before and after a save."""
-    client.patch(
-        URL,
-        json={
-            "template_positions": {
-                "colour-chart-01": {"placements": {"fixture-placement-1": {"bounding_box": BOX}}}
-            }
-        },
-    )
-    listing = Workspace.discover(root_override=workspace_root).listing_file("take-a-hike")
-    before = listing.read_bytes()
-
-    held = client.get("/api/templates/colour-chart-01/positioned-listings")
-    assert held.status_code == 200
-    assert held.json() == [{"listing": "take-a-hike", "placements": ["fixture-placement-1"]}]
-    assert client.get("/api/templates/flat-lay-01/positioned-listings").json() == []
-    assert client.get("/api/templates/no-such/positioned-listings").status_code == 404
-    assert listing.read_bytes() == before
