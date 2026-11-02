@@ -184,9 +184,9 @@ Recorded during PR 4:
 - Stale keys: a banner row under `template_positions` whose refusal is not a
   pose refusal (rules 3–5) offers **Remove**; pose refusals (rules 1–2) stay
   on the stage.
-- Open: ADR-0058 tilts in the box's unit frame, so on a non-square box a
-  tilt draws as a slight parallelogram in photo pixels rather than a rigid
-  turn. The editor follows the ADR; the render (PR 3) must too.
+- Tilt frame: first built in the box's unit frame, where a tilt shears a
+  non-square box. The seller chose a rigid rotation (ADR-0058 amendment,
+  2026-11-02); the editor's twin follows PR 2's rectified frame.
 
 ### PR 5 — Template rendering settings in Admin
 

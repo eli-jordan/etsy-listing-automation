@@ -1,15 +1,15 @@
 /**
  * A listing's template position as the editor's handles edit it: the
  * template box under a uniform scale, a tilt and a move, applied in the box's
- * own unit frame and mapped to photo pixels through the template homography
- * (ADR-0058).
+ * rectified frame (its unit square scaled by its mean side lengths, so a tilt
+ * is rigid) and mapped to photo pixels through the template homography
+ * (ADR-0058 and its 2026-11-02 amendment).
  *
  * A twin of `core/render/positions.py`, not an endpoint: the stage recomputes
  * the pose on every pointer move, and a request per frame would make the
  * handles lag the pointer. `pose.test.ts` runs the Python module's cases so
- * the two cannot drift. Offsets are fractions of the unit square; positive
- * rotation is clockwise in image coordinates, about the unit centre, before
- * the offset.
+ * the two cannot drift. Offsets are fractions of W and H; positive rotation
+ * is clockwise in image coordinates, about the box centre, before the offset.
  */
 
 export interface Point {
@@ -148,41 +148,65 @@ export function toPhoto(box: Quad, point: Point): Point {
 }
 
 /** `pose` applied to the unit square's corners. */
-function posed(pose: Pose): Quad {
+/** `(W, H)`: the box's mean top/bottom and left/right side lengths in photo
+ * pixels. Scaling the unit square by them gives the *rectified* frame, where
+ * a box keeps its real proportions and a tilt is a rigid rotation (ADR-0058
+ * amendment, 2026-11-02). */
+export function proportions(box: Quad): { w: number; h: number } {
+  const [tl, tr, br, bl] = box;
+  const length = (p: Point, q: Point) => Math.hypot(q.x - p.x, q.y - p.y);
+  const w = (length(tl, tr) + length(bl, br)) / 2;
+  const h = (length(tl, bl) + length(tr, br)) / 2;
+  if (!Number.isFinite(w) || !Number.isFinite(h) || w <= 0 || h <= 0) {
+    throw new Error("template box has no invertible homography");
+  }
+  return { w, h };
+}
+
+/** `pose` applied to the unit square's corners, through the rectified frame. */
+function posed(pose: Pose, size: { w: number; h: number }): Quad {
   const angle = (pose.rotation * Math.PI) / 180;
   const a = pose.scale * Math.cos(angle);
   const b = pose.scale * Math.sin(angle);
   return quadMap(UNIT, ({ x, y }) => {
-    const u = x - 0.5;
-    const v = y - 0.5;
-    return { x: u * a - v * b + 0.5 + pose.offsetX, y: u * b + v * a + 0.5 + pose.offsetY };
+    const u = (x - 0.5) * size.w;
+    const v = (y - 0.5) * size.h;
+    return {
+      x: (u * a - v * b) / size.w + 0.5 + pose.offsetX,
+      y: (u * b + v * a) / size.h + 0.5 + pose.offsetY,
+    };
   });
 }
 
 /** The four absolute corners `template_positions` stores for `pose`. */
 export function compose(box: Quad, pose: Pose): Quad {
-  return mapQuad(posed(pose), homography(box));
+  return mapQuad(posed(pose, proportions(box)), homography(box));
 }
 
-/** The least-squares similarity nearest `quad`, and how far its corners miss. */
+/** The least-squares similarity nearest `quad`, fitted in the rectified frame,
+ * and how far its corners miss in photo pixels. */
 export function decompose(box: Quad, quad: Quad): PoseFit {
+  const { w, h } = proportions(box);
   const target = mapQuad(quad, invert(homography(box)));
-  const cx = target.reduce((s, p) => s + p.x, 0) / 4;
-  const cy = target.reduce((s, p) => s + p.y, 0) / 4;
+  const cx = target.reduce((s, p) => s + (p.x - 0.5) * w, 0) / 4;
+  const cy = target.reduce((s, p) => s + (p.y - 0.5) * h, 0) / 4;
+  // The four centred corners have sum of squared distances W² + H².
+  const norm = w * w + h * h;
   let a = 0;
   let b = 0;
   quadMap(target, (point, index) => {
-    const sx = UNIT[index].x - 0.5;
-    const sy = UNIT[index].y - 0.5;
-    // The four unit corners have sum of squared distances 2.
-    a += (sx * (point.x - cx) + sy * (point.y - cy)) / 2;
-    b += (sx * (point.y - cy) - sy * (point.x - cx)) / 2;
+    const sx = (UNIT[index].x - 0.5) * w;
+    const sy = (UNIT[index].y - 0.5) * h;
+    const tx = (point.x - 0.5) * w - cx;
+    const ty = (point.y - 0.5) * h - cy;
+    a += (sx * tx + sy * ty) / norm;
+    b += (sx * ty - sy * tx) / norm;
     return point;
   });
   const pose: Pose = {
     scale: Math.hypot(a, b),
-    offsetX: cx - 0.5,
-    offsetY: cy - 0.5,
+    offsetX: cx / w,
+    offsetY: cy / h,
     rotation: (Math.atan2(b, a) * 180) / Math.PI,
   };
   const back = compose(box, pose);

@@ -251,10 +251,10 @@ describe("adjusting a position", () => {
     await adjust("folded · black");
     const handle = screen.getByLabelText("Drag to tilt");
     fireEvent.pointerDown(handle, { clientX: 200, clientY: 80, pointerId: 1, button: 0 });
-    // Unit (0.6, 0) from the centre: 11.31 degrees, rounded to 11.
+    // 20 px right of the centre and 150 px above it: 7.59 degrees, rounded to 8.
     fireEvent.pointerMove(handle, { clientX: 220, clientY: 100, pointerId: 1 });
     fireEvent.pointerUp(handle, { clientX: 220, clientY: 100, pointerId: 1 });
-    expect(savedPose(onUpdate, FOLDED_BOX, ["folded"]).rotation).toBeCloseTo(11, 6);
+    expect(savedPose(onUpdate, FOLDED_BOX, ["folded"]).rotation).toBeCloseTo(8, 6);
   });
 
   it("debounces arrow-key nudges into one save", async () => {

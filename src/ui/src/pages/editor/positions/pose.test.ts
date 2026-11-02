@@ -84,9 +84,10 @@ describe("pose maths in the template homography's frame", () => {
   });
 
   it("repairs a non-uniform stretch by fitting first", () => {
-    // Unit-frame x scale 1.2 and y scale 1 average to uniform scale 1.1.
+    // In the rectified 100 x 200 frame, x scale 1.2 and y scale 1 fit to uniform
+    // scale (50·60 + 100·100) / (50² + 100²) = 1.04: the long side dominates.
     const repaired = compose(FLAT, nearestAllowedPose(FLAT, STRETCHED, DEFAULTS));
-    expectCorners(repaired, quad([5, 10], [115, 10], [115, 230], [5, 230]));
+    expectCorners(repaired, quad([8, 16], [112, 16], [112, 224], [8, 224]));
   });
 
   it("refuses a singular template box as a geometry error", () => {
@@ -113,6 +114,26 @@ describe("pose maths in the template homography's frame", () => {
   ])("leaves a pose on the allowed boundary unchanged (%o)", (pose) => {
     const box = compose(BOX, pose);
     expectCorners(compose(BOX, nearestAllowedPose(BOX, box, DEFAULTS)), box);
+  });
+
+  it.each([15, -7.5, 30])("tilts a non-square box rigidly by %f degrees", (rotation) => {
+    // Seller decision 2026-11-02 (ADR-0058 amendment): tilt rotates the
+    // 100 x 200 box rigidly, never shearing it into a parallelogram.
+    const [tl, tr, br, bl] = compose(FLAT, { ...IDENTITY, rotation });
+    const side = (from: { x: number; y: number }, to: { x: number; y: number }) => ({
+      x: to.x - from.x,
+      y: to.y - from.y,
+    });
+    const sides = [side(tl, tr), side(tr, br), side(br, bl), side(bl, tl)] as const;
+    sides.forEach((first, index) => {
+      const second = sides[(index + 1) % 4] ?? first;
+      expect(first.x * second.x + first.y * second.y).toBeCloseTo(0, 8);
+    });
+    expect(Math.hypot(sides[0].x, sides[0].y)).toBeCloseTo(100, 8);
+    expect(Math.hypot(sides[1].x, sides[1].y)).toBeCloseTo(200, 8);
+    expect((tl.x + tr.x + br.x + bl.x) / 4).toBeCloseTo(60, 8);
+    expect((tl.y + tr.y + br.y + bl.y) / 4).toBeCloseTo(120, 8);
+    expect((Math.atan2(sides[0].y, sides[0].x) * 180) / Math.PI).toBeCloseTo(rotation, 8);
   });
 
   it("clamps each component on its own", () => {

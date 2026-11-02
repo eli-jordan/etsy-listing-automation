@@ -45,9 +45,10 @@ describe("handle gestures on the stage", () => {
   });
 
   it("tilts towards the pointer in whole degrees", () => {
-    // Unit (0.6, 0): atan2(-0.5, 0.1) + 90 = 11.31 degrees, clockwise.
-    expectPose(tilted(FLAT, IDENTITY, { x: 70, y: 20 }, LIMITS), { rotation: 11 });
-    expectPose(tilted(FLAT, IDENTITY, { x: 50, y: 20 }, LIMITS), { rotation: -11 });
+    // 10 px right of the centre, 100 px above it in the rectified 100 x 200
+    // frame: atan2(-100, 10) + 90 = 5.71 degrees, clockwise.
+    expectPose(tilted(FLAT, IDENTITY, { x: 70, y: 20 }, LIMITS), { rotation: 6 });
+    expectPose(tilted(FLAT, IDENTITY, { x: 50, y: 20 }, LIMITS), { rotation: -6 });
   });
 
   it("stops a tilt at the rotation limit", () => {
