@@ -17,8 +17,9 @@ already in hand).
 and ``nearest_allowed_pose(template_box, box, limits) -> Pose`` (ADR-0058).
 Import these directly from ``positions``. ``PositionLimits``/``ScaleLimits``
 are structural protocols; ``config.settings.TemplatePositionLimits`` satisfies
-them without making render depend on settings. Offsets are unit-frame fractions,
-rotation is clockwise degrees. Compose the nearest pose to get repair corners.
+them without making render depend on settings. Offsets are fractions of the box's
+rectified W and H; rotation is rigid, in clockwise degrees. Compose the nearest
+pose to get repair corners.
 """
 
 from etsy_listings.core.render.config import (

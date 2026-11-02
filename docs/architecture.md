@@ -820,8 +820,9 @@ later. Each traces to a decision.
 - **A listing's template position is absolute mockup geometry.**
   `config.template_positions` reuses `render.config.BoundingBox`; a single or
   colour-matrix template has one box, a multiple template a map by placement
-  ID. `render.positions` composes and fits similarities in the template's unit
-  frame through its homography, with a maximum photo-pixel corner residual.
+  ID. `render.positions` composes and fits similarities in the template box's
+  rectified frame (its unit square scaled to its mean side lengths, so a tilt
+  is a rigid rotation) through its homography, with a maximum photo-pixel corner residual.
   `config.listing_validation.check_template_positions` owns the refusals and
   receives the current templates and `Settings.template_positions` limits.
   Recalibration and limits edits never rewrite listing corners, and `plan`
