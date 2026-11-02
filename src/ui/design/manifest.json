@@ -50,6 +50,11 @@
       "description": "Full Marigold workflow with the selected floating Mask / Unmask dock and red exclusion overlay."
     },
     {
+      "name": "template-positions",
+      "title": "Template Positions",
+      "description": "Clickable prototype (round 3): Adjust position switch + handles + Reset, a multiple template, an out-of-limits entry, and Settings > Template rendering."
+    },
+    {
       "name": "marigold-box-controls",
       "title": "Archive · Design Box Options",
       "description": "Option A selected with icon and switch only; integrated into the full workflow."
@@ -367,6 +372,51 @@
     {
       "name": "template-cards",
       "frames": 2
+    },
+    {
+      "name": "template-positions",
+      "frames": 4,
+      "brief": "design/scenes/template-positions/_brief.md",
+      "title": "Template positions",
+      "description": "Template positions - a listing moves, resizes or tilts the design on one mockup template, within limits (round 3: clickable prototype, switch + handles + Reset only)",
+      "note": "**Template positions, round 3 — clickable prototype.** Press **P** and start at frame 1.\n\n- Flip **Adjust position** (frame 1 ↔ 2). On the stage: drag to move, pull a corner to resize, swing the round handle to tilt, arrow keys to nudge. Handles stop at the limits; nothing else reports them.\n- **Reset to template** removes the listing's position.\n- The **colour-pair** reel tile opens the multiple template (frame 3); the ivory tile comes back.\n- Frame 4 is a second entry point: a position left outside the limits by a recalibration.\n- Settings is its own flow: [5](goto:template-positions-settings/01-limits) → drag a slider → Review and save → [6](goto:template-positions-settings/02-confirm).\n- The composite is faked (artwork multiplied onto the photo). Earlier rounds: `template-positions-v1`, `-v2` on the Archive board."
+    },
+    {
+      "name": "template-positions-settings",
+      "frames": 2,
+      "brief": "design/scenes/template-positions-settings/_brief.md",
+      "title": "Template positions — settings",
+      "description": "Template positions settings - the limits every listing position is checked against, and the Marigold re-prepare a change triggers (round 2: Settings split into AI and Template rendering)"
+    },
+    {
+      "name": "template-positions-settings-v1",
+      "frames": 2,
+      "brief": "design/scenes/template-positions-settings-v1/_brief.md",
+      "title": "Template positions — settings · v1",
+      "description": "Template positions settings - the limits every listing position is checked against, and the Marigold re-prepare a change triggers (v1 snapshot: readout bar, single Settings section)"
+    },
+    {
+      "name": "template-positions-settings-v2",
+      "frames": 2,
+      "brief": "design/scenes/template-positions-settings-v2/_brief.md",
+      "title": "Template positions — settings · v2",
+      "description": "Template positions settings - the limits every listing position is checked against, and the Marigold re-prepare a change triggers (round 2: Settings split into AI and Template rendering)"
+    },
+    {
+      "name": "template-positions-v1",
+      "frames": 7,
+      "brief": "design/scenes/template-positions-v1/_brief.md",
+      "title": "Template positions · v1",
+      "description": "Template positions - a listing moves, resizes or tilts the design on one mockup template, within limits (v1 snapshot: readout bar, single Settings section)",
+      "note": "**Template positions, round 1.** Real editor head, issues banner and tabs. The locator and reel copy the app's markup with fixture photos. The stage is live: drag the box, pull a corner, swing the round handle, or use the arrow keys.\r\n\r\n- The composite is faked (artwork multiplied onto the photo). The real pane asks the preview route with the draft position.\r\n- **One decision to make:** [2A foot bar](goto:template-positions-v1/adjust/a-foot-bar) or [2B stage inspector](goto:template-positions-v1/adjust/b-inspector). Frames 3–5 use A. A keeps the whole design visible but shrinks the stage; B keeps the stage large but its card can cover the design's right edge.\r\n- The reel's small arrows badge marks entries whose template this listing positions.\r\n- Limits come from Settings: [7](goto:template-positions-settings-v1/01-limits), [8](goto:template-positions-settings-v1/02-confirm)."
+    },
+    {
+      "name": "template-positions-v2",
+      "frames": 6,
+      "brief": "design/scenes/template-positions-v2/_brief.md",
+      "title": "Template positions · v2",
+      "description": "Template positions - a listing moves, resizes or tilts the design on one mockup template, within limits (round 2: switch + handles, no readout)",
+      "note": "**Template positions, round 2.** Direction A won; the readout is gone. Real editor head, issues banner and tabs; locator and reel copy the app's markup with fixture photos. The stage is live: flip **Adjust position**, then drag the box, pull a corner, swing the round handle, or use the arrow keys.\r\n\r\n- The chip *is* the position readout (\"92% · up 6%\"); it tracks the drag.\r\n- A handle that stops at a limit turns amber and the note line says why ([3](goto:template-positions-v2/03-at-limit)).\r\n- No Done: like every editor field, the position saves as you go. Switch off to leave.\r\n- The composite is faked (artwork multiplied onto the photo).\r\n- Round 1 (foot bar with meters, and the B inspector) is on the Archive board as `template-positions-v1`."
     }
   ],
   "frames": [
@@ -3202,6 +3252,217 @@
       "title": "Today · 2fr/1fr/1fr strip",
       "viewport": "laptop",
       "description": "Baseline: square mockups forced into one wide and two skinny 128px tiles with object-fit: cover -- each shows a slice of the middle."
+    },
+    {
+      "id": "template-positions-settings-v1/01-limits",
+      "file": "design/scenes/template-positions-settings-v1/01-limits.tsx",
+      "kind": "tsx",
+      "scene": "template-positions-settings-v1",
+      "title": "7 · Settings — limits, edited · v1",
+      "viewport": "laptop",
+      "description": "Admin > Settings > Template positions with Largest raised to 120%: the cost line turns into a warning and saving goes through a review."
+    },
+    {
+      "id": "template-positions-settings-v1/02-confirm",
+      "file": "design/scenes/template-positions-settings-v1/02-confirm.tsx",
+      "kind": "tsx",
+      "scene": "template-positions-settings-v1",
+      "title": "8 · Settings — confirm re-prepare · v1",
+      "viewport": "laptop",
+      "description": "Saving new limits: what gets re-prepared, how long it takes, and which listings will fail plan until edited."
+    },
+    {
+      "id": "template-positions-settings-v2/01-limits",
+      "file": "design/scenes/template-positions-settings-v2/01-limits.tsx",
+      "kind": "tsx",
+      "scene": "template-positions-settings-v2",
+      "title": "7 · Settings — limits, edited · v2",
+      "viewport": "laptop",
+      "description": "Admin > Settings > Template rendering with Largest raised to 120%: the cost line turns into a warning and saving goes through a review."
+    },
+    {
+      "id": "template-positions-settings-v2/02-confirm",
+      "file": "design/scenes/template-positions-settings-v2/02-confirm.tsx",
+      "kind": "tsx",
+      "scene": "template-positions-settings-v2",
+      "title": "8 · Settings — confirm re-prepare · v2",
+      "viewport": "laptop",
+      "description": "Saving new limits: what gets re-prepared, how long it takes, and which listings will fail plan until edited."
+    },
+    {
+      "id": "template-positions-settings/01-limits",
+      "file": "design/scenes/template-positions-settings/01-limits.tsx",
+      "kind": "tsx",
+      "scene": "template-positions-settings",
+      "title": "5 · Settings — Template rendering",
+      "viewport": "laptop",
+      "description": "Prototype start for Settings: drag a slider and the note turns into a warning; Review and save opens the confirmation."
+    },
+    {
+      "id": "template-positions-settings/02-confirm",
+      "file": "design/scenes/template-positions-settings/02-confirm.tsx",
+      "kind": "tsx",
+      "scene": "template-positions-settings",
+      "title": "6 · Settings — confirm",
+      "viewport": "laptop",
+      "description": "Saving new limits: which Marigold templates get their maps refitted, and whether any saved position falls outside."
+    },
+    {
+      "id": "template-positions-v1/01-selected",
+      "file": "design/scenes/template-positions-v1/01-selected.tsx",
+      "kind": "tsx",
+      "scene": "template-positions-v1",
+      "title": "1 · Entry with a custom position · v1",
+      "viewport": "laptop",
+      "description": "Images tab with a cc1717-folded entry selected: the chip says this listing positions the design; Adjust position opens Position mode."
+    },
+    {
+      "id": "template-positions-v1/03-at-limit",
+      "file": "design/scenes/template-positions-v1/03-at-limit.tsx",
+      "kind": "tsx",
+      "scene": "template-positions-v1",
+      "title": "3 · Dragged to the size limit · v1",
+      "viewport": "laptop",
+      "description": "The corner handle stopped at 110%: Size reads 'at limit' in words and the meter turns amber. Shown in direction A."
+    },
+    {
+      "id": "template-positions-v1/04-multiple",
+      "file": "design/scenes/template-positions-v1/04-multiple.tsx",
+      "kind": "tsx",
+      "scene": "template-positions-v1",
+      "title": "4 · Multiple template — per placement · v1",
+      "viewport": "laptop",
+      "description": "cc1717-colour-pair has two placements; each is positioned on its own. The other renders dimmed and is click-to-select."
+    },
+    {
+      "id": "template-positions-v1/05-out-of-range",
+      "file": "design/scenes/template-positions-v1/05-out-of-range.tsx",
+      "kind": "tsx",
+      "scene": "template-positions-v1",
+      "title": "5 · Position outside the limits · v1",
+      "viewport": "laptop",
+      "description": "cc1717-folded was recalibrated, so this listing's stored box now sits 11% left of it. Plan refuses; the editor offers to pull it back in."
+    },
+    {
+      "id": "template-positions-v1/06-repreparing",
+      "file": "design/scenes/template-positions-v1/06-repreparing.tsx",
+      "kind": "tsx",
+      "scene": "template-positions-v1",
+      "title": "6 · Marigold template re-preparing · v1",
+      "viewport": "laptop",
+      "description": "The position limits changed, so cc1717-folded is re-preparing in the background. The saved position stands; its preview and deploy wait."
+    },
+    {
+      "id": "template-positions-v1/adjust/a-foot-bar",
+      "file": "design/scenes/template-positions-v1/adjust/a-foot-bar.tsx",
+      "kind": "tsx",
+      "scene": "template-positions-v1",
+      "title": "2A · Position mode — foot bar · v1",
+      "viewport": "laptop",
+      "description": "Direction A: handles on the stage, and the preview foot turns into a bar with size, offset and tilt against their limits.",
+      "variantGroup": "template-positions-v1/adjust",
+      "variant": "a"
+    },
+    {
+      "id": "template-positions-v1/adjust/b-inspector",
+      "file": "design/scenes/template-positions-v1/adjust/b-inspector.tsx",
+      "kind": "tsx",
+      "scene": "template-positions-v1",
+      "title": "2B · Position mode — stage inspector · v1",
+      "viewport": "laptop",
+      "description": "Direction B: handles on the stage plus a small inspector card pinned to its corner; the foot keeps the title and scope note.",
+      "variantGroup": "template-positions-v1/adjust",
+      "variant": "b"
+    },
+    {
+      "id": "template-positions-v2/01-selected",
+      "file": "design/scenes/template-positions-v2/01-selected.tsx",
+      "kind": "tsx",
+      "scene": "template-positions-v2",
+      "title": "1 · Entry with a custom position · v2",
+      "viewport": "laptop",
+      "description": "Images tab with a cc1717-folded entry selected: the chip shows this listing's position; the Adjust position switch turns the handles on."
+    },
+    {
+      "id": "template-positions-v2/02-adjusting",
+      "file": "design/scenes/template-positions-v2/02-adjusting.tsx",
+      "kind": "tsx",
+      "scene": "template-positions-v2",
+      "title": "2 · Adjusting the position · v2",
+      "viewport": "laptop",
+      "description": "Switch on: drag to move, a corner to resize, the top handle to tilt. The chip tracks the drag; the dashed box is the template's own."
+    },
+    {
+      "id": "template-positions-v2/03-at-limit",
+      "file": "design/scenes/template-positions-v2/03-at-limit.tsx",
+      "kind": "tsx",
+      "scene": "template-positions-v2",
+      "title": "3 · Dragged to the size limit · v2",
+      "viewport": "laptop",
+      "description": "The corner handle stopped at the largest size: handles turn amber and the note line says why it won't grow further."
+    },
+    {
+      "id": "template-positions-v2/04-multiple",
+      "file": "design/scenes/template-positions-v2/04-multiple.tsx",
+      "kind": "tsx",
+      "scene": "template-positions-v2",
+      "title": "4 · Multiple template — per placement · v2",
+      "viewport": "laptop",
+      "description": "cc1717-colour-pair has two placements, each positioned on its own. Click the dimmed box to switch placement."
+    },
+    {
+      "id": "template-positions-v2/05-out-of-range",
+      "file": "design/scenes/template-positions-v2/05-out-of-range.tsx",
+      "kind": "tsx",
+      "scene": "template-positions-v2",
+      "title": "5 · Position outside the limits · v2",
+      "viewport": "laptop",
+      "description": "cc1717-folded was recalibrated, so this listing's stored box now sits 11% left of it. Plan refuses; the foot offers to pull it back in."
+    },
+    {
+      "id": "template-positions-v2/06-repreparing",
+      "file": "design/scenes/template-positions-v2/06-repreparing.tsx",
+      "kind": "tsx",
+      "scene": "template-positions-v2",
+      "title": "6 · Marigold template re-preparing · v2",
+      "viewport": "laptop",
+      "description": "The position limits changed, so cc1717-folded is re-preparing in the background. The saved position stands; preview, adjusting and deploy wait."
+    },
+    {
+      "id": "template-positions/01-selected",
+      "file": "design/scenes/template-positions/01-selected.tsx",
+      "kind": "tsx",
+      "scene": "template-positions",
+      "title": "1 · Entry selected",
+      "viewport": "laptop",
+      "description": "Prototype start: a cc1717-folded entry previews at this listing's position. Flip Adjust position to edit; click the colour-pair tile for a multiple template."
+    },
+    {
+      "id": "template-positions/02-adjusting",
+      "file": "design/scenes/template-positions/02-adjusting.tsx",
+      "kind": "tsx",
+      "scene": "template-positions",
+      "title": "2 · Adjusting the position",
+      "viewport": "laptop",
+      "description": "Switch on: drag to move, a corner to resize, the top handle to tilt; handles stop at the limits. Reset to template removes the listing's position."
+    },
+    {
+      "id": "template-positions/03-multiple",
+      "file": "design/scenes/template-positions/03-multiple.tsx",
+      "kind": "tsx",
+      "scene": "template-positions",
+      "title": "3 · Multiple template — per placement",
+      "viewport": "laptop",
+      "description": "cc1717-colour-pair has two placements, each positioned on its own; click the dimmed box to switch. The ivory tile goes back to frame 1."
+    },
+    {
+      "id": "template-positions/04-out-of-range",
+      "file": "design/scenes/template-positions/04-out-of-range.tsx",
+      "kind": "tsx",
+      "scene": "template-positions",
+      "title": "4 · Position outside the limits",
+      "viewport": "laptop",
+      "description": "Second entry point: cc1717-folded was recalibrated and this listing's box now falls outside the limits. Fit within limits or Reset to template both resolve it."
     }
   ]
 }

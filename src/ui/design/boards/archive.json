@@ -159,6 +159,38 @@
       },
       [
         "admin-shop-v1"
+      ],
+      [
+        {
+          "space": 4
+        }
+      ],
+      [
+        "template-positions-v1"
+      ],
+      [
+        {
+          "space": 4
+        }
+      ],
+      [
+        "template-positions-settings-v1"
+      ],
+      [
+        {
+          "space": 4
+        }
+      ],
+      [
+        "template-positions-v2"
+      ],
+      [
+        {
+          "space": 4
+        }
+      ],
+      [
+        "template-positions-settings-v2"
       ]
     ],
     "scenes": {
@@ -519,6 +551,46 @@
             "defaults-custom/d-revised",
             "settings/d-revised",
             "settings-market/d-revised"
+          ]
+        ]
+      },
+      "template-positions-v1": {
+        "rows": [
+          [
+            "01-selected",
+            "adjust",
+            "03-at-limit",
+            "04-multiple",
+            "05-out-of-range",
+            "06-repreparing"
+          ]
+        ]
+      },
+      "template-positions-settings-v1": {
+        "rows": [
+          [
+            "01-limits",
+            "02-confirm"
+          ]
+        ]
+      },
+      "template-positions-v2": {
+        "rows": [
+          [
+            "01-selected",
+            "02-adjusting",
+            "03-at-limit",
+            "04-multiple",
+            "05-out-of-range",
+            "06-repreparing"
+          ]
+        ]
+      },
+      "template-positions-settings-v2": {
+        "rows": [
+          [
+            "01-limits",
+            "02-confirm"
           ]
         ]
       }
@@ -1164,6 +1236,74 @@
     },
     {
       "frame": "admin-shop-v1/settings-market/d-revised"
+    },
+    {
+      "key": "tpv1_01-selected",
+      "frame": "template-positions-v1/01-selected"
+    },
+    {
+      "key": "tpv1_adjust_a-foot-bar",
+      "frame": "template-positions-v1/adjust/a-foot-bar"
+    },
+    {
+      "key": "tpv1_adjust_b-inspector",
+      "frame": "template-positions-v1/adjust/b-inspector"
+    },
+    {
+      "key": "tpv1_03-at-limit",
+      "frame": "template-positions-v1/03-at-limit"
+    },
+    {
+      "key": "tpv1_04-multiple",
+      "frame": "template-positions-v1/04-multiple"
+    },
+    {
+      "key": "tpv1_05-out-of-range",
+      "frame": "template-positions-v1/05-out-of-range"
+    },
+    {
+      "key": "tpv1_06-repreparing",
+      "frame": "template-positions-v1/06-repreparing"
+    },
+    {
+      "key": "tpsv1_01-limits",
+      "frame": "template-positions-settings-v1/01-limits"
+    },
+    {
+      "key": "tpsv1_02-confirm",
+      "frame": "template-positions-settings-v1/02-confirm"
+    },
+    {
+      "key": "tpv2_01-selected",
+      "frame": "template-positions-v2/01-selected"
+    },
+    {
+      "key": "tpv2_02-adjusting",
+      "frame": "template-positions-v2/02-adjusting"
+    },
+    {
+      "key": "tpv2_03-at-limit",
+      "frame": "template-positions-v2/03-at-limit"
+    },
+    {
+      "key": "tpv2_04-multiple",
+      "frame": "template-positions-v2/04-multiple"
+    },
+    {
+      "key": "tpv2_05-out-of-range",
+      "frame": "template-positions-v2/05-out-of-range"
+    },
+    {
+      "key": "tpv2_06-repreparing",
+      "frame": "template-positions-v2/06-repreparing"
+    },
+    {
+      "key": "tpsv2_01-limits",
+      "frame": "template-positions-settings-v2/01-limits"
+    },
+    {
+      "key": "tpsv2_02-confirm",
+      "frame": "template-positions-settings-v2/02-confirm"
     }
   ]
 }

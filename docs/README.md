@@ -40,6 +40,7 @@ identify the start of the work, not its release date.
 | Test suite quality | [Spec](features/test-suite-quality-20261003/spec.md) | [Preserved interactions](features/test-suite-quality-20261003/interactions.md) | [Plan](features/test-suite-quality-20261003/plan.md) |
 | Admin page | Agreed requirements in plan | [Interactions and screenshots](features/admin-page-20261030/interactions.md) | [Plan](features/admin-page-20261030/plan.md), [runtime](features/admin-page-20261030/audit-runtime-fixes.md) and [state](features/admin-page-20261030/audit-state-fixes.md) audit fixes |
 | Static analysis | [Spec](features/static-analysis-20261031/spec.md) | — | [Plan](features/static-analysis-20261031/plan.md) |
+| Per-listing template positions | [Spec](features/template-positions-20261102/spec.md) | [Interactions](features/template-positions-20261102/interactions.md) | [Plan](features/template-positions-20261102/plan.md) |
 
 Test suite quality also keeps an [audit-to-delivery map](features/test-suite-quality-20261003/coverage-map.md)
 and an [execution record](features/test-suite-quality-20261003/execution.md)
