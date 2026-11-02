@@ -129,7 +129,7 @@ The repo is `/home/Admin/code/etsy-listing-automation` in cygwin, `C:\cygwin64\h
 - OpenCV and Pillow are **pinned to exact versions**: renders are hashed and compared to goldens, and a bump that shifts output bytes re-uploads every listing's images. Do not loosen the pins.
 - Check Typer and Click compatibility together when changing either. Current
   constraints and resolved versions live in `pyproject.toml` and `uv.lock`.
-- Node (any current LTS) is only needed for frontend work, not for installing the package.
+- Node 24 is only needed for frontend work, not for installing the package. CI pins it: Node 26 (the LTS since late 2026) ships its own global `localStorage`, which shadows jsdom's, so the Vitest `dom` tests that use it fail there. Move the pin only after those tests pass on the newer Node.
 </important>
 
 <important if="you are adding or changing engine stages, hashing, rendering, workspace paths, credentials or clients, or prompts">

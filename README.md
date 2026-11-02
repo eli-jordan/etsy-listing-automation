@@ -26,7 +26,7 @@ uv sync
 This installs runtime and dev dependencies into `.venv/` and the
 `etsy-listings` CLI in editable mode.
 
-Frontend development also needs Node.js (any current LTS):
+Frontend development also needs Node.js 24 (Node 26's built-in `localStorage` breaks the jsdom tests):
 
 ```bash
 cd src/ui
