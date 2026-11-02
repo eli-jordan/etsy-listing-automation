@@ -166,6 +166,28 @@ tests drive move/resize/tilt/nudge/reset and the out-of-limits fix against a
 real server, mockup-vs-app screenshots for frames 1–4 are in the PR, and
 shared gates pass.
 
+Recorded during PR 4:
+
+- Pose maths: a TypeScript twin (`src/ui/src/pages/editor/positions/pose.ts`),
+  not an endpoint, because the stage recomputes the pose on every pointer
+  move. Its tests run `test_positions.py`'s cases; the browser tests read
+  what the editor wrote back through the Python `decompose` and the server's
+  issues.
+- Saved preview: scene-preview URLs carry a signature of each template's
+  position as of the last server response (captured when `modified_at`
+  moves), so the composite is fetched again once a save lands.
+- Stored corners are rounded to micro-pixels, unless rounding would push a
+  pose clamped to a limit past it; then they are stored unrounded.
+- Deviation: the foot keeps **Remove from listing** while the switch is off
+  and hides it while adjusting. The frames omit it; removing it would drop an
+  existing control.
+- Stale keys: a banner row under `template_positions` whose refusal is not a
+  pose refusal (rules 3–5) offers **Remove**; pose refusals (rules 1–2) stay
+  on the stage.
+- Open: ADR-0058 tilts in the box's unit frame, so on a non-square box a
+  tilt draws as a slight parallelogram in photo pixels rather than a rigid
+  turn. The editor follows the ADR; the render (PR 3) must too.
+
 ### PR 5 — Template rendering settings in Admin
 
 Interactions: *Settings: Template rendering*. Frames 5–6.

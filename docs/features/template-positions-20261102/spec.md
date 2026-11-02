@@ -189,7 +189,7 @@ and `template-positions-settings/` (round 3). Earlier rounds are archived as
 | `engine/stages/render.py` | Resolve the effective box per layer. |
 | `core/preparation/`, `render/material.py` | Padded fit, UV affine, staleness on settings change, background re-prepare (Marigold, after the spike). |
 | `application/prepared_previews.py`, server API | Previews render the saved position; regenerate the OpenAPI client for the new listing field. |
-| `src/ui` Images tab | Position mode, reusing `QuadEditor`/`quadGeometry`. |
+| `src/ui` Images tab | Position mode, with a TypeScript twin of the pose maths (`pages/editor/positions/`); `QuadEditor`/`quadGeometry` edit free quads and are not reused. |
 | Calibrator save | List listings holding positions for the template. |
 | Settings screen | Limits form with the re-prepare warning. |
 
