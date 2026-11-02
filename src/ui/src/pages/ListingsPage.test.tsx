@@ -6,6 +6,7 @@ import * as runsApi from "../api/runs";
 import type { ListingDetail, ListingSummary } from "../types";
 import { runSummary } from "../test/helpers";
 import { ListingsPage } from "./ListingsPage";
+import { forgetLoadedListings } from "./loadedListings";
 
 function EditorStub() {
   const { name } = useParams();
@@ -51,6 +52,7 @@ function renderPage() {
 
 afterEach(() => {
   vi.restoreAllMocks();
+  forgetLoadedListings();
 });
 
 beforeEach(() => {
@@ -324,6 +326,39 @@ describe("ListingsPage", () => {
     fireEvent.click(await screen.findByRole("button", { name: "take-a-hike" }));
 
     await waitFor(() => expect(screen.getByText("editor for take-a-hike")).toBeInTheDocument());
+  });
+
+  it("says nothing about an empty table until the list has loaded", async () => {
+    let answer: (listings: ListingSummary[]) => void = () => {};
+    vi.spyOn(listingsApi, "listListings").mockReturnValue(
+      new Promise((resolve) => {
+        answer = resolve;
+      }),
+    );
+    renderPage();
+
+    expect(screen.queryByText("No listings match.")).not.toBeInTheDocument();
+    expect(screen.queryByText(/shown$/)).not.toBeInTheDocument();
+
+    answer([]);
+    expect(await screen.findByText("No listings match.")).toBeInTheDocument();
+    expect(screen.getByText("0 shown")).toBeInTheDocument();
+  });
+
+  it("draws the last loaded list at once on returning, then refreshes it", async () => {
+    vi.spyOn(listingsApi, "listListings").mockResolvedValue([summary({ name: "take-a-hike" })]);
+    const first = renderPage();
+    await findRowLink("take-a-hike");
+    first.unmount();
+
+    vi.spyOn(listingsApi, "listListings").mockResolvedValue([
+      summary({ name: "take-a-hike" }),
+      summary({ name: "wildflower-crew" }),
+    ]);
+    renderPage();
+
+    expect(queryRowLink("take-a-hike")).toBeInTheDocument();
+    expect(await findRowLink("wildflower-crew")).toBeInTheDocument();
   });
 
   it("reports a status message when the list fails to load", async () => {
