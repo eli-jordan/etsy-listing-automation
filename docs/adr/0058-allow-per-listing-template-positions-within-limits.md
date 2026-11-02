@@ -28,3 +28,14 @@ splits model/validation, rendering and editing into separate PRs (P4). Marigold
 positions remain refused until PR 7 follows spike sign-off (P1); this work adds
 no real-shop e2e cases (P5). Edits retain listing source through ADR-0055's
 existing document owner.
+
+## Amendment (2026-11-02): tilt is a rigid rotation
+
+Seller decision 2026-11-02. A pose applied in the unit square shears a
+non-square box into a parallelogram when tilted, unlike the approved prototype.
+The pose is therefore applied in the box's *rectified frame*: the template
+quad's unit-square parameterisation scaled by `(W, H)`, the mean lengths of its
+top/bottom and left/right sides in photo pixels. Uniform scale and rotation act
+about the centre of that frame, offsets are fractions of W and H, and the result
+is mapped through the template homography. Fitting, the residual and Fit within
+limits use the same frame. The unit-frame wording above is superseded by this.
