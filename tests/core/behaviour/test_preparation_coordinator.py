@@ -188,7 +188,7 @@ def test_save_reconciliation_rebuilds_covered_inputs_without_worker_or_installat
     coordinator.close()
     assert result.phase == "completed", result.error
     assert len(runtime.workers[0].calls) == calls
-    assert result.result["generation_id"] != first.result["generation_id"]
+    assert result.result.generation_id != first.result.generation_id
 
 
 def test_save_without_covered_evidence_waits_for_explicit_prepare(workspace_root):
@@ -555,11 +555,11 @@ def test_cleanup_preserves_last_complete_predictions_failed_retry_and_active_ren
         )
         result = wait_terminal(coordinator, retry.id)
         assert result.phase == "completed", result.error
-        assert result.result["generation_id"] != leased.manifest.generation_id
+        assert result.result.generation_id != leased.manifest.generation_id
         removed = coordinator.cleanup("shirt")
         assert removed["generations"] == []
     removed = coordinator.cleanup("shirt")
-    assert removed["generations"] == [first.result["generation_id"]]
+    assert removed["generations"] == [first.result.generation_id]
     coordinator.close()
 
 

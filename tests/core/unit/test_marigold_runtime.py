@@ -155,3 +155,29 @@ def test_malformed_installation_pointers_are_actionable_and_repairable(tmp_path)
         assert repaired.available
         assert runtime.inspect().installation_id == repaired.installation_id
         assert runtime.selection("1.0.0", installation_id=selected.installation_id).available
+
+
+def test_installation_pointers_keep_their_indented_json(tmp_path):
+    from etsy_listings.core.preparation.runtime import Capability
+
+    class Installer:
+        def install(self, target, weights, version):
+            (target / "python.exe").write_bytes(b"valid")
+            return Capability(True, None, engine_version=version, python=str(target / "python.exe"))
+
+        def inspect(self, target, weights, version):
+            return Capability(True, None, engine_version=version, python=str(target / "python.exe"))
+
+        verify = inspect
+
+    runtime = Runtime(home=tmp_path, installer=Installer())
+    selected = runtime.setup()
+    expected = (
+        "{\n"
+        '  "schema_version": 1,\n'
+        '  "engine_version": "1.0.0",\n'
+        f'  "installation_id": "{selected.installation_id}"\n'
+        "}\n"
+    ).encode()
+    assert (runtime.root / "current.json").read_bytes() == expected
+    assert (runtime.root / "runtimes" / "1.0.0" / "current.json").read_bytes() == expected

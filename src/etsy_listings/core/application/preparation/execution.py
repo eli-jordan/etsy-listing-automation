@@ -25,12 +25,14 @@ from etsy_listings.core.application.preparation.models import (
     CropEvidence,
     Job,
     Prediction,
+    Publication,
     placement_key,
 )
 from etsy_listings.core.preparation.artifacts import (
     PlacementArtifact,
     PlacementInput,
     PreparationInputs,
+    Provenance,
     PublishOptions,
     StalePreparationError,
     arrays_of,
@@ -199,17 +201,17 @@ class Execution:
             if self.geometry(current) != self.geometry(job.snapshot):
                 return False
             with self.owner.artifacts.acquire(job.template, job.snapshot) as acquired:
-                if acquired.manifest.provenance.get("job_id") != job.id:
+                if acquired.manifest.provenance.job_id != job.id:
                     return False
                 self.write(
                     identity,
                     phase="completed",
                     step="publication",
                     placements_completed=len(job.snapshot.placements),
-                    result={
-                        "generation_id": acquired.manifest.generation_id,
-                        "content_digest": acquired.manifest.content_digest,
-                    },
+                    result=Publication(
+                        generation_id=acquired.manifest.generation_id,
+                        content_digest=acquired.manifest.content_digest,
+                    ),
                 )
                 return True
         except (ValueError, OSError):
@@ -519,12 +521,12 @@ class Execution:
     def _checkpointed_maps(self, job: Job, placement: PlacementInput) -> MaterialMaps | None:
         """Maps an earlier attempt already fitted and checkpointed, if valid."""
         record = job.cpu_checkpoints.get(placement_key(placement.id))
-        if not record:
+        if record is None:
             return None
         with suppress(ValueError, OSError):
             return read_maps(
                 self._maps_archive(job.id, placement),
-                PlacementArtifact.model_validate(record),
+                record,
                 (job.snapshot.photo.width, job.snapshot.photo.height),
             )
         return None
@@ -582,7 +584,7 @@ class Execution:
             identity,
             cpu_checkpoints={
                 **latest.cpu_checkpoints,
-                placement_key(placement.id): descriptor.model_dump(mode="json"),
+                placement_key(placement.id): descriptor,
             },
             placements_completed=completed,
         )
@@ -605,11 +607,11 @@ class Execution:
             maps,
             current_inputs=current_inputs,
             options=PublishOptions(
-                provenance={
-                    "job_id": job.id,
-                    "engine_version": job.engine_version,
-                    "installation_id": job.installation_id,
-                },
+                provenance=Provenance(
+                    job_id=job.id,
+                    engine_version=job.engine_version,
+                    installation_id=job.installation_id,
+                ),
                 checkpoint=lambda step: self.owner.checkpoint(identity, step),
                 copy_maps=False,
             ),
@@ -617,10 +619,9 @@ class Execution:
         self.write(
             identity,
             phase="completed",
-            result={
-                "generation_id": manifest.generation_id,
-                "content_digest": manifest.content_digest,
-            },
+            result=Publication(
+                generation_id=manifest.generation_id, content_digest=manifest.content_digest
+            ),
             placements_completed=len(maps),
         )
 

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import hashlib
-import json
 import threading
 from collections import OrderedDict
 from dataclasses import asdict
@@ -13,7 +12,12 @@ from uuid import uuid4
 
 import numpy as np
 
-from etsy_listings.core.application.preparation.models import CropEvidence, Job, placement_key
+from etsy_listings.core.application.preparation.models import (
+    CropEvidence,
+    Job,
+    PredictionPointer,
+    placement_key,
+)
 from etsy_listings.core.preparation.artifacts import PreparationInputs
 from etsy_listings.core.preparation.numerics import (
     Crop,
@@ -130,15 +134,21 @@ class EvidenceReader:
                     break
         return selected
 
-    def current(self, template: str) -> tuple[CropEvidence, ...]:
+    def pointer(self, template: str) -> PredictionPointer | None:
+        """The template's current prediction set; None when it has none or
+        its pointer is unreadable."""
+        path = self.workspace.preparation_prediction_current(template)
         try:
-            value = json.loads(self.workspace.preparation_prediction_current(template).read_bytes())
-            if value["schema_version"] != 1:
-                return ()
-            self.workspace.preparation_prediction_set(template, value["id"])
-            return tuple(CropEvidence.model_validate(v) for v in value["evidence"])
-        except (OSError, ValueError, KeyError, TypeError):
-            return ()
+            pointer = PredictionPointer.model_validate_json(path.read_bytes())
+            # Refuses a set ID that is not one path segment, as ValueError.
+            self.workspace.preparation_prediction_set(template, pointer.id)
+        except (OSError, ValueError):
+            return None
+        return pointer
+
+    def current(self, template: str) -> tuple[CropEvidence, ...]:
+        pointer = self.pointer(template)
+        return () if pointer is None else pointer.evidence
 
     def candidates(self, template: str, jobs: list[Job]) -> tuple[CropEvidence, ...]:
         return (

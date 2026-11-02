@@ -149,7 +149,10 @@ def history_response(request: Request, name: str, placement_id: str | None) -> M
     return MaskHistoryResponse(
         checksum=mask.checksum,
         undo_count=mask.undo_count,
-        strokes=[MaskHistoryStroke.model_validate(stroke) for stroke in strokes],
+        strokes=[
+            MaskHistoryStroke(before=stroke.before, operation=stroke.operation)
+            for stroke in strokes
+        ],
     )
 
 

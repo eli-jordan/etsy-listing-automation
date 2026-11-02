@@ -163,7 +163,7 @@ def editor_preview(
             if len(selected) != len(boxes):
                 raise PreparationRequiredError("Prepare the template to cover this placement")
             files, _ = store.apply_masks(name, config, mask_edits)
-            photo = original.photo.model_dump()
+            size = (original.photo.width, original.photo.height)
             mask_bytes = {
                 key: files.get(workspace.template_mask_file(name, key))
                 or store.mask(name, key).edited
@@ -173,7 +173,7 @@ def editor_preview(
                 key: np.asarray(
                     store.decode_mask(
                         mask_bytes[key],
-                        photo,
+                        size,
                     ),
                     dtype=np.float32,
                 )

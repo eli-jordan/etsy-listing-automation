@@ -53,6 +53,7 @@ from etsy_listings.core.workspace.workspace import (
     DescriptionResolution,
     InvalidNameError,
     InvalidRefError,
+    MaskSource,
     PathEscapesWorkspaceError,
     ScenePhoto,
     Workspace,
@@ -63,6 +64,8 @@ __all__ = [  # noqa: RUF022 -- grouped by topic, not alphabetically
     "Workspace",
     "DescriptionResolution",
     "ScenePhoto",
+    # Which durable mask file `Workspace.template_mask_file` names.
+    "MaskSource",
     # What a listing check reads off the tree, gathered once per request.
     "WorkspaceFacts",
     # One loaded template as that check sees it, for a stage that has the config.

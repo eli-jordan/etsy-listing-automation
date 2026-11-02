@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
-import json
 import threading
 import uuid
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Protocol
+from typing import Literal, Protocol
+
+from pydantic import BaseModel, ConfigDict, ValidationError
 
 from etsy_listings.core.preparation.worker_client import WarmWorker
 from etsy_listings.core.workspace.atomic import write_json_atomic
@@ -57,6 +58,23 @@ class Capability:
         return self.available and self.engine_version != self.required_engine
 
 
+class InstallationPointer(BaseModel):
+    """``current.json``: the installation selected for an engine version, both
+    globally and per engine."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+    schema_version: Literal[1]
+    engine_version: str
+    installation_id: str
+
+
+def _read_pointer(path: Path) -> InstallationPointer:
+    try:
+        return InstallationPointer.model_validate_json(path.read_bytes())
+    except ValidationError as exc:
+        raise SetupError("Invalid installation pointer") from exc
+
+
 class Installer(Protocol):
     def install(self, target: Path, weights: Path, version: str) -> Capability: ...
     def inspect(self, target: Path, weights: Path, version: str) -> Capability: ...
@@ -95,13 +113,9 @@ class Runtime:
         """``verify`` forces the full integrity check; otherwise the installer may
         answer from file stamps recorded by the last one."""
         try:
-            current = json.loads((self.root / "current.json").read_text(encoding="utf-8"))
-            if not isinstance(current, dict) or current.get("schema_version") != 1:
-                _setup_failed("Unsupported installation pointer schema")
+            current = _read_pointer(self.root / "current.json")
             return self.selection(
-                current["engine_version"],
-                installation_id=current["installation_id"],
-                verify=verify,
+                current.engine_version, installation_id=current.installation_id, verify=verify
             )
         except FileNotFoundError:
             return Capability(
@@ -122,14 +136,9 @@ class Runtime:
         """Persist both IDs per job. A repair never redirects its selected files."""
         _segment(version)
         if installation_id is None:
-            pointer = json.loads(
-                (self.root / "runtimes" / version / "current.json").read_text(encoding="utf-8")
-            )
-            if not isinstance(pointer, dict) or pointer.get("schema_version") != 1:
-                raise SetupError("Invalid installation pointer schema")
-            installation_id = pointer.get("installation_id")
-            if not isinstance(installation_id, str):
-                raise SetupError("Invalid installation ID")
+            installation_id = _read_pointer(
+                self.root / "runtimes" / version / "current.json"
+            ).installation_id
         _segment(installation_id)
         target = self.root / "runtimes" / version / installation_id
         if not target.resolve().is_relative_to((self.root / "runtimes").resolve()):
@@ -172,7 +181,7 @@ class Runtime:
             installation_id = uuid.uuid4().hex
             engine = self.root / "runtimes" / self.engine_version
             report = self._install(engine, installation_id)
-            pointer = self._pointer(installation_id)
+            pointer = self._pointer(installation_id).model_dump()
             write_json_atomic(engine / "current.json", pointer)
             write_json_atomic(self.root / "current.json", pointer)
             return report
@@ -182,9 +191,10 @@ class Runtime:
         if one exists; None when a new one must be installed."""
         try:
             existing = self.selection(self.engine_version, verify=True)
-            if existing.available:
+            if existing.available and existing.installation_id is not None:
                 write_json_atomic(
-                    self.root / "current.json", self._pointer(existing.installation_id)
+                    self.root / "current.json",
+                    self._pointer(existing.installation_id).model_dump(),
                 )
                 return existing
         except (OSError, ValueError, KeyError, SetupError):
@@ -213,9 +223,7 @@ class Runtime:
             raise
         return report
 
-    def _pointer(self, installation_id: str | None) -> dict[str, object]:
-        return {
-            "schema_version": 1,
-            "engine_version": self.engine_version,
-            "installation_id": installation_id,
-        }
+    def _pointer(self, installation_id: str) -> InstallationPointer:
+        return InstallationPointer(
+            schema_version=1, engine_version=self.engine_version, installation_id=installation_id
+        )

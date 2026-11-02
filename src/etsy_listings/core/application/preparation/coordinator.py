@@ -7,7 +7,6 @@ single executor lane; installation inspection never runs on their event loop.
 from __future__ import annotations
 
 import hashlib
-import json
 import time
 from collections.abc import Callable
 from concurrent.futures import Future, ThreadPoolExecutor
@@ -491,12 +490,11 @@ class Preparations:
             ]
             removed_sets = self._remove_prediction_sets(template, current, referenced_paths)
             removed_work = self._remove_work(template, jobs, replacement_order, referenced_paths)
-            generations = _active_generations(template, jobs)
             removed_maps: list[str] = []
             # An unreadable pointer cannot identify the last valid generation.
             # Preserve every generation, but allow explicit preparation to repair it.
             with suppress(ValueError, OSError):
-                removed_maps = self.artifacts.cleanup(template, retained_generations=generations)
+                removed_maps = self.artifacts.cleanup(template)
         return {"prediction_sets": removed_sets, "work": removed_work, "generations": removed_maps}
 
     def _retire_references(self, template: str, jobs: list[Job], replacement_order: int) -> None:
@@ -512,22 +510,16 @@ class Preparations:
         """The current prediction set, and the order of the job that wrote it
         when it is a complete replacement (0 otherwise): failed and cancelled
         jobs before that one no longer need their evidence."""
-        current = set()
+        pointer = self.execution.evidence.pointer(template)
+        if pointer is None:
+            return set(), 0
         try:
-            pointer = json.loads(
-                self.workspace.preparation_prediction_current(template).read_bytes()
-            )
-            self.workspace.preparation_prediction_set(template, pointer["id"])
-            current.add(pointer["id"])
-            replacement_inputs = PreparationInputs.model_validate(pointer["inputs"])
-            values = self.execution.evidence.current(template)
-            if len(self.execution.evidence.select(replacement_inputs, values)) == len(
-                replacement_inputs.placements
-            ):
-                return current, pointer["job_order"]
-        except (OSError, ValueError, TypeError, KeyError):
-            pass
-        return current, 0
+            selected = self.execution.evidence.select(pointer.inputs, pointer.evidence)
+        except (OSError, ValueError):
+            return {pointer.id}, 0
+        if len(selected) == len(pointer.inputs.placements):
+            return {pointer.id}, pointer.job_order
+        return {pointer.id}, 0
 
     def _remove_prediction_sets(
         self, template: str, current: set[str], referenced_paths: list[Path]
@@ -622,15 +614,3 @@ def _retired(job: Job, replacement_order: int) -> bool:
     return job.phase in {"completed", "superseded"} or (
         job.phase in {"failed", "cancelled"} and job.order < replacement_order
     )
-
-
-def _active_generations(template: str, jobs: list[Job]) -> set[str]:
-    """Map generations that active jobs of ``template`` have published."""
-    return {
-        j.result["generation_id"]
-        for j in jobs
-        if j.template == template
-        and j.phase not in TERMINAL
-        and j.result
-        and "generation_id" in j.result
-    }

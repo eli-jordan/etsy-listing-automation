@@ -660,9 +660,9 @@ def test_repeated_photo_identity_tracks_replaced_pixels(workspace_root) -> None:
     first = store.photo_identity("example", config)
     assert store.photo_identity("example", config) == first
     path = store.workspace.template_main_photo("example", config)
-    Image.new("RGB", (first["width"], first["height"]), (21, 37, 83)).save(path)
+    Image.new("RGB", first.size, (21, 37, 83)).save(path)
     second = store.photo_identity("example", config)
-    assert second["pixels"] != first["pixels"]
+    assert second.pixels != first.pixels
     assert store.photo_identity("example", config) == second
 
 

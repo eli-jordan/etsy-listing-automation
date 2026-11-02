@@ -19,7 +19,7 @@ from typing import TYPE_CHECKING, Annotated, Any, Literal, NoReturn, cast
 
 import yaml
 from PIL import Image, ImageDraw
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from etsy_listings.core.errors import UserFacingError
 from etsy_listings.core.render.config import (
@@ -36,9 +36,13 @@ from etsy_listings.core.workspace.trees import remove_tree
 from etsy_listings.core.workspace.yaml_source import edit_yaml_bytes
 
 if TYPE_CHECKING:
-    from etsy_listings.core.workspace import Workspace
+    from etsy_listings.core.workspace import MaskSource, Workspace
 
 MAX_MASK_EDIT_BYTES = 2_000_000
+_MASKS: tuple[MaskSource, ...] = ("automatic", "edited")
+_MASK_FILES: tuple[MaskSource, ...] = (*_MASKS, "metadata")
+# What an edit leaves beside the automatic baseline; alone, they need repair.
+_EDITED_FILES: tuple[MaskSource, ...] = ("edited", "metadata")
 
 
 def digest(data: bytes) -> str:
@@ -49,26 +53,92 @@ def json_bytes(value: object) -> bytes:
     return json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False).encode("utf-8")
 
 
+class _Record(BaseModel):
+    """A durable JSON record. Each is written as ``json_bytes`` of its JSON
+    dump, so its fields are exactly the keys the file has always held."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+
+class MainPhotoIdentity(_Record):
+    """The main photo a template's masks belong to: its filename, size and
+    decoded RGB pixels. Enters the calibration revision as dumped."""
+
+    file: str
+    width: int
+    height: int
+    conversion: Literal["pillow-rgb-v1"]
+    pixels: str
+
+    @property
+    def size(self) -> tuple[int, int]:
+        return self.width, self.height
+
+
+class MaskMetadata(_Record):
+    """``_renderer/masks/metadata.json``: binds one placement's automatic and
+    edited masks to the main photo they were drawn on."""
+
+    schema_version: Literal[1]
+    photo: MainPhotoIdentity
+    algorithm_version: str
+    automatic_checksum: str
+    edited_checksum: str
+
+
+class SaveReceipt(_Record):
+    """The last save, so a retried request answers as the first did.
+    ``config`` stays the raw template document: it is parsed only on replay,
+    so a receipt from an older template format never blocks a new save."""
+
+    request_id: str
+    digest: str
+    revision: str
+    config: dict[str, Any]
+    main_photo: str
+
+
+class StagedFile(_Record):
+    """One destination of a calibration transaction, its staged payload and
+    backup, each relative to its own directory."""
+
+    destination: str
+    payload: str
+    checksum: str
+    backup: str
+
+
+class TransactionManifest(_Record):
+    """``calibration-transaction/manifest.json``. Durable ``commit_intent``
+    means roll every file forward; recovery marks it ``complete`` before
+    removing the transaction, a key absent until then."""
+
+    schema_version: Literal[1]
+    commit_intent: bool = False
+    files: tuple[StagedFile, ...]
+    complete: bool = Field(default=False, exclude_if=lambda complete: not complete)
+
+
 @lru_cache(maxsize=128)
-def _photo_identity(path: Path, _stamp: tuple[int | str, ...]) -> dict[str, Any]:
+def _photo_identity(path: Path, _stamp: tuple[int | str, ...]) -> MainPhotoIdentity:
     # ``_stamp`` is read by lru_cache only: a changed photo is a new cache key.
     with Image.open(path) as image:
         pixels = image.convert("RGB")
-        return {
-            "file": path.name,
-            "width": pixels.width,
-            "height": pixels.height,
-            "conversion": "pillow-rgb-v1",
-            "pixels": digest(pixels.tobytes()),
-        }
+        return MainPhotoIdentity(
+            file=path.name,
+            width=pixels.width,
+            height=pixels.height,
+            conversion="pillow-rgb-v1",
+            pixels=digest(pixels.tobytes()),
+        )
 
 
 @lru_cache(maxsize=256)
-def _validate_mask(data: bytes, width: int, height: int) -> None:
+def _validate_mask(data: bytes, size: tuple[int, int]) -> None:
     # Bounded by entries AND payload size at the caller. Keep compressed mask
     # bytes only, never decoded photo-sized images. Content keys detect damage.
     with Image.open(BytesIO(data)) as image:
-        if image.format != "PNG" or image.mode != "L" or image.size != (width, height):
+        if image.format != "PNG" or image.mode != "L" or image.size != size:
             raise ValueError("Mask must be a full-photo grayscale PNG")
         image.load()
 
@@ -113,6 +183,20 @@ class Reset(BaseModel):
 MaskOperation = Annotated[Stroke | Undo | Reset, Field(discriminator="type")]
 
 
+class BrushStroke(_Record):
+    """One Undo step: the base64 PNG mask before ``operation`` painted it."""
+
+    before: str
+    operation: Stroke
+
+
+class BrushHistory(_Record):
+    """The cached Undo history of the edited mask whose digest is ``checksum``."""
+
+    checksum: str
+    strokes: tuple[BrushStroke, ...]
+
+
 class MaskEdit(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
     placement_id: PlacementId | None = None
@@ -150,19 +234,27 @@ def _damaged(message: str) -> NoReturn:
     raise ValueError(message)
 
 
+_DAMAGED_MASK = "Saved mask is damaged; repair or explicitly reset its baseline"
+
+
+def _mask_metadata(path: Path) -> MaskMetadata:
+    try:
+        return MaskMetadata.model_validate_json(path.read_bytes())
+    except (OSError, ValidationError) as exc:
+        raise CalibrationRepairRequiredError(_DAMAGED_MASK) from exc
+
+
 def _replayed(receipt_path: Path, request_id: str, request_digest: str) -> Calibration | None:
     """The calibration a save with this request id already produced, so a
     retried request answers as the first did; None for a new request."""
     if not receipt_path.is_file():
         return None
-    receipt = json.loads(receipt_path.read_bytes())
-    if receipt["request_id"] != request_id:
+    receipt = SaveReceipt.model_validate_json(receipt_path.read_bytes())
+    if receipt.request_id != request_id:
         return None
-    if receipt["digest"] != request_digest:
+    if receipt.digest != request_digest:
         raise CalibrationConflictError("Save request ID was reused with different content")
-    return Calibration(
-        load_template_config(receipt["config"]), receipt["revision"], receipt["main_photo"]
-    )
+    return Calibration(load_template_config(receipt.config), receipt.revision, receipt.main_photo)
 
 
 def _renderer_settings(path: Path, current: AnyTemplate, config: AnyTemplate) -> bytes:
@@ -239,13 +331,13 @@ class CalibrationStore:
             revision = self.revision(name, config, files)
             settings_path = self.workspace.template_renderer_settings_file(name)
             files[settings_path] = _renderer_settings(settings_path, current.config, config)
-            receipt = {
-                "request_id": request_id,
-                "digest": request_digest,
-                "revision": revision,
-                "config": dump_template_config(config),
-                "main_photo": current.main_photo,
-            }
+            receipt = SaveReceipt(
+                request_id=request_id,
+                digest=request_digest,
+                revision=revision,
+                config=dump_template_config(config),
+                main_photo=current.main_photo,
+            )
             self.commit(
                 name,
                 {
@@ -253,18 +345,18 @@ class CalibrationStore:
                     self.workspace.template_config_file(name): self.config_bytes(
                         name, config, before=current.config
                     ),
-                    receipt_path: json_bytes(receipt),
+                    receipt_path: json_bytes(receipt.model_dump(mode="json")),
                 },
             )
             # A crash after the durable commit may lose Undo, never the mask.
             for path, history in histories.items():
-                write_json_atomic(path, history)
+                write_json_atomic(path, history.model_dump(mode="json"))
             return self.read(name)
 
-    def photo_identity(self, name: str, config: AnyTemplate) -> dict[str, Any]:
+    def photo_identity(self, name: str, config: AnyTemplate) -> MainPhotoIdentity:
         path = self.workspace.template_main_photo(name, config)
         stamp = file_version(path)
-        return _photo_identity(path.resolve(), stamp).copy()
+        return _photo_identity(path.resolve(), stamp)
 
     def placement_ids(self, config: AnyTemplate) -> list[str | None]:
         return [p.id for p in config.placements] if isinstance(config, MultipleTemplate) else [None]
@@ -273,18 +365,23 @@ class CalibrationStore:
         self, name: str, config: AnyTemplate, files: dict[Path, bytes] | None = None
     ) -> str:
         files = files or {}
-        masks = []
-        for placement_id in sorted(self.placement_ids(config), key=lambda value: value or ""):
-            checksums = {}
-            for source in ("automatic", "edited"):
-                path = self.workspace.template_mask_file(name, placement_id, source=source)
-                checksums[source] = _checksum(path, files)
-            masks.append({"id": placement_id, **checksums})
+        masks = [
+            {
+                "id": placement_id,
+                **{
+                    source: _checksum(
+                        self.workspace.template_mask_file(name, placement_id, source=source), files
+                    )
+                    for source in _MASKS
+                },
+            }
+            for placement_id in sorted(self.placement_ids(config), key=lambda value: value or "")
+        ]
         return digest(
             json_bytes(
                 {
                     "config": dump_template_config(config),
-                    "photo": self.photo_identity(name, config),
+                    "photo": self.photo_identity(name, config).model_dump(mode="json"),
                     "masks": masks,
                 }
             )
@@ -329,66 +426,57 @@ class CalibrationStore:
                 raise MaskUnavailableError("Mask placement does not belong to this template kind")
             paths = {
                 source: self.workspace.template_mask_file(name, placement_id, source=source)
-                for source in ("automatic", "edited", "metadata")
+                for source in _MASK_FILES
             }
             if not all(path.is_file() for path in paths.values()):
                 raise MaskUnavailableError(
                     "Prepare the template first to create its automatic mask"
                 )
             automatic, edited = paths["automatic"].read_bytes(), paths["edited"].read_bytes()
-
-            def damaged(message: str) -> None:
-                # S01 TRY301: the handler wraps this as a repair refusal.
-                raise ValueError(message)
-
+            metadata = _mask_metadata(paths["metadata"])
+            if metadata.photo != self.photo_identity(name, calibration.config):
+                raise MaskPhotoMismatchError(
+                    "Main photo changed; explicitly reset masks for this photo"
+                )
             try:
-                metadata = json.loads(paths["metadata"].read_bytes())
-                if metadata["schema_version"] != 1:
-                    damaged("unsupported mask metadata schema")
-                if metadata["photo"] != self.photo_identity(name, calibration.config):
-                    raise MaskPhotoMismatchError(
-                        "Main photo changed; explicitly reset masks for this photo"
-                    )
-                if metadata["automatic_checksum"] != digest(automatic) or metadata[
-                    "edited_checksum"
-                ] != digest(edited):
-                    damaged("mask checksum mismatch")
-                self.validate_mask(automatic, metadata["photo"])
-                self.validate_mask(edited, metadata["photo"])
-            except (OSError, ValueError, KeyError, TypeError) as exc:
-                raise CalibrationRepairRequiredError(
-                    "Saved mask is damaged; repair or explicitly reset its baseline"
-                ) from exc
+                if metadata.automatic_checksum != digest(automatic) or (
+                    metadata.edited_checksum != digest(edited)
+                ):
+                    _damaged("mask checksum mismatch")
+                self.validate_mask(automatic, metadata.photo.size)
+                self.validate_mask(edited, metadata.photo.size)
+            except (OSError, ValueError) as exc:
+                raise CalibrationRepairRequiredError(_DAMAGED_MASK) from exc
             history = self.history(name, placement_id, digest(edited))
             return SavedMask(automatic, edited, digest(edited), len(history))
 
-    def history(self, name: str, placement_id: str | None, checksum: str) -> list[dict[str, Any]]:
+    def history(self, name: str, placement_id: str | None, checksum: str) -> list[BrushStroke]:
+        """The Undo steps cached for the edited mask ``checksum``; none when
+        the cache is missing, damaged or belongs to another mask."""
         path = self.workspace.template_brush_history(name, placement_id)
         try:
-            history = json.loads(path.read_bytes())
-            if history["checksum"] != checksum or not isinstance(history["strokes"], list):
-                return []
-            photo = self.photo_identity(name, self.workspace.load_template_config(name))
-            for entry in history["strokes"]:
-                Stroke.model_validate(entry["operation"])
-                self.validate_mask(base64.b64decode(entry["before"], validate=True), photo)
-            return cast(list[dict[str, Any]], history["strokes"])
-        except (OSError, ValueError, KeyError, TypeError):
+            history = BrushHistory.model_validate_json(path.read_bytes())
+        except (OSError, ValidationError):
             return []
+        if history.checksum != checksum:
+            return []
+        try:
+            size = self.photo_identity(name, self.workspace.load_template_config(name)).size
+            for entry in history.strokes:
+                self.validate_mask(base64.b64decode(entry.before, validate=True), size)
+        except (OSError, ValueError):
+            return []
+        return list(history.strokes)
 
-    def validate_mask(self, data: bytes, photo: dict[str, Any]) -> None:
+    def validate_mask(self, data: bytes, size: tuple[int, int]) -> None:
         if len(data) <= 64 * 1024:
-            _validate_mask(data, photo["width"], photo["height"])
+            _validate_mask(data, size)
         else:
-            self.decode_mask(data, photo)
+            self.decode_mask(data, size)
 
-    def decode_mask(self, data: bytes, photo: dict[str, Any]) -> Image.Image:
+    def decode_mask(self, data: bytes, size: tuple[int, int]) -> Image.Image:
         with Image.open(BytesIO(data)) as image:
-            if (
-                image.format != "PNG"
-                or image.mode != "L"
-                or image.size != (photo["width"], photo["height"])
-            ):
+            if image.format != "PNG" or image.mode != "L" or image.size != size:
                 raise ValueError("Mask must be a full-photo grayscale PNG")
             image.load()
             return cast(Image.Image, image.copy())
@@ -417,7 +505,7 @@ class CalibrationStore:
             if placement_id not in self.placement_ids(current.config):
                 raise MaskUnavailableError("Mask placement does not belong to this template kind")
             photo = self.photo_identity(name, current.config)
-            self.decode_mask(data, photo)
+            self.decode_mask(data, photo.size)
             automatic_path = self.workspace.template_mask_file(
                 name, placement_id, source="automatic"
             )
@@ -428,18 +516,18 @@ class CalibrationStore:
                     return current
             elif any(
                 self.workspace.template_mask_file(name, placement_id, source=source).exists()
-                for source in ("edited", "metadata")
+                for source in _EDITED_FILES
             ):
                 raise CalibrationRepairRequiredError(
                     "Automatic baseline is missing; repair it before rebuilding masks"
                 )
-            metadata = {
-                "schema_version": 1,
-                "photo": photo,
-                "algorithm_version": algorithm_version,
-                "automatic_checksum": digest(data),
-                "edited_checksum": digest(data),
-            }
+            metadata = MaskMetadata(
+                schema_version=1,
+                photo=photo,
+                algorithm_version=algorithm_version,
+                automatic_checksum=digest(data),
+                edited_checksum=digest(data),
+            )
             self.commit(
                 name,
                 {
@@ -447,7 +535,7 @@ class CalibrationStore:
                     self.workspace.template_mask_file(name, placement_id): data,
                     self.workspace.template_mask_file(
                         name, placement_id, source="metadata"
-                    ): json_bytes(metadata),
+                    ): json_bytes(metadata.model_dump(mode="json")),
                 },
             )
             self.workspace.template_brush_history(name, placement_id).unlink(missing_ok=True)
@@ -469,9 +557,9 @@ class CalibrationStore:
 
     def apply_masks(
         self, name: str, config: AnyTemplate, edits: list[MaskEdit]
-    ) -> tuple[dict[Path, bytes], dict[Path, object]]:
+    ) -> tuple[dict[Path, bytes], dict[Path, BrushHistory]]:
         files: dict[Path, bytes] = {}
-        histories: dict[Path, object] = {}
+        histories: dict[Path, BrushHistory] = {}
         if len(json_bytes([edit.model_dump(mode="json") for edit in edits])) > MAX_MASK_EDIT_BYTES:
             raise ValueError("Mask edit request is too large")
         ids = [edit.placement_id for edit in edits]
@@ -485,7 +573,7 @@ class CalibrationStore:
             histories[self.workspace.template_brush_history(name, edit.placement_id)] = history
         return files, histories
 
-    def _apply_edit(self, name: str, edit: MaskEdit) -> tuple[dict[Path, bytes], object]:
+    def _apply_edit(self, name: str, edit: MaskEdit) -> tuple[dict[Path, bytes], BrushHistory]:
         """One placement's edited mask and metadata files, and its new brush
         history."""
         mask = self.mask(name, edit.placement_id)
@@ -493,43 +581,39 @@ class CalibrationStore:
         metadata_path = self.workspace.template_mask_file(
             name, edit.placement_id, source="metadata"
         )
-        metadata = json.loads(metadata_path.read_bytes())
+        metadata = _mask_metadata(metadata_path)
+        size = metadata.photo.size
         data = mask.edited
         for operation in edit.operations:
             if isinstance(operation, Reset):
                 data, history = mask.automatic, []
             elif isinstance(operation, Undo):
-                data = self._undone(history, metadata["photo"])
+                data = self._undone(history, size)
             else:
-                data = self._stroked(data, operation, history, metadata["photo"])
-        metadata["edited_checksum"] = digest(data)
+                data = self._stroked(data, operation, history, size)
+        metadata = metadata.model_copy(update={"edited_checksum": digest(data)})
         files = {
             self.workspace.template_mask_file(name, edit.placement_id): data,
-            metadata_path: json_bytes(metadata),
+            metadata_path: json_bytes(metadata.model_dump(mode="json")),
         }
-        return files, {"checksum": digest(data), "strokes": history}
+        return files, BrushHistory(checksum=digest(data), strokes=tuple(history))
 
-    def _undone(self, history: list[dict[str, Any]], photo: dict[str, Any]) -> bytes:
+    def _undone(self, history: list[BrushStroke], size: tuple[int, int]) -> bytes:
         """The mask before the last stroke, popped off ``history``."""
         if not history:
             raise MaskUnavailableError("Undo brush stroke unavailable; cached history was lost")
-        data = base64.b64decode(history.pop()["before"], validate=True)
-        self.decode_mask(data, photo)
+        data = base64.b64decode(history.pop().before, validate=True)
+        self.decode_mask(data, size)
         return data
 
     def _stroked(
-        self, data: bytes, stroke: Stroke, history: list[dict[str, Any]], photo: dict[str, Any]
+        self, data: bytes, stroke: Stroke, history: list[BrushStroke], size: tuple[int, int]
     ) -> bytes:
         """``data`` with ``stroke`` painted on, recorded in ``history``."""
-        image = self.decode_mask(data, photo)
+        image = self.decode_mask(data, size)
         if any(x < 0 or y < 0 or x >= image.width or y >= image.height for x, y in stroke.points):
             raise ValueError("Brush coordinates must be within the main photo")
-        history.append(
-            {
-                "before": base64.b64encode(data).decode("ascii"),
-                "operation": stroke.model_dump(mode="json"),
-            }
-        )
+        history.append(BrushStroke(before=base64.b64encode(data).decode("ascii"), operation=stroke))
         draw = ImageDraw.Draw(image)
         fill = 0 if stroke.mode == "mask" else 255
         radius = stroke.diameter_px / 2
@@ -574,8 +658,8 @@ class CalibrationStore:
     def write_durable(self, path: Path, data: bytes) -> None:
         write_bytes_atomic(path, data, durable=True)
 
-    def write_durable_json(self, path: Path, value: object) -> None:
-        self.write_durable(path, json_bytes(value))
+    def write_manifest(self, path: Path, manifest: TransactionManifest) -> None:
+        self.write_durable(path, json_bytes(manifest.model_dump(mode="json")))
 
     def commit(self, name: str, files: dict[Path, bytes]) -> None:
         """Stage all payloads and backups before durable intent. ADR-0054.
@@ -597,34 +681,31 @@ class CalibrationStore:
                 if path.is_file():
                     self.write_durable(transaction / backup, path.read_bytes())
                 entries.append(
-                    {
-                        "destination": relative,
-                        "payload": payload,
-                        "checksum": digest(data),
-                        "backup": backup,
-                    }
+                    StagedFile(
+                        destination=relative, payload=payload, checksum=digest(data), backup=backup
+                    )
                 )
-            self.write_durable_json(
+            self.write_manifest(
                 transaction / "manifest.json",
-                {"schema_version": 1, "commit_intent": True, "files": entries},
+                TransactionManifest(schema_version=1, commit_intent=True, files=tuple(entries)),
             )
             self.recover(name)
             if transaction.exists():
                 remove_tree(transaction)
 
     def _staged_payload(
-        self, name: str, transaction: Path, entry: dict[str, Any]
+        self, name: str, transaction: Path, entry: StagedFile
     ) -> tuple[Path, bytes, str]:
         """One manifest entry's destination, payload and checksum, each path
         confined to its directory and the payload checked against it."""
-        target = self.workspace.resolve(entry["destination"], self.workspace.template_dir(name))
+        target = self.workspace.resolve(entry.destination, self.workspace.template_dir(name))
         target.relative_to(self.workspace.template_dir(name).resolve())
-        payload = self.workspace.resolve(entry["payload"], transaction)
+        payload = self.workspace.resolve(entry.payload, transaction)
         payload.relative_to(transaction.resolve())
         data = payload.read_bytes()
-        if digest(data) != entry["checksum"]:
+        if digest(data) != entry.checksum:
             _damaged("transaction checksum mismatch")
-        return target, data, entry["checksum"]
+        return target, data, entry.checksum
 
     def _roll_forward(self, target: Path, data: bytes, checksum: str) -> None:
         if not target.is_file() or digest(target.read_bytes()) != checksum:
@@ -644,22 +725,22 @@ class CalibrationStore:
                 remove_tree(transaction)
                 return
 
+            # A ValidationError is a ValueError: an unreadable manifest, an
+            # escaping path and a payload checksum all need the same repair.
             try:
-                manifest = json.loads(manifest_path.read_bytes())
-                if manifest["schema_version"] != 1:
-                    _damaged("unsupported transaction schema")
-                if not manifest.get("commit_intent"):
+                manifest = TransactionManifest.model_validate_json(manifest_path.read_bytes())
+                if not manifest.commit_intent:
                     remove_tree(transaction)
                     return
                 payloads = [
-                    self._staged_payload(name, transaction, entry) for entry in manifest["files"]
+                    self._staged_payload(name, transaction, entry) for entry in manifest.files
                 ]
-            except (OSError, ValueError, KeyError, TypeError) as exc:
+            except (OSError, ValueError) as exc:
                 raise CalibrationRepairRequiredError(
                     "Damaged calibration transaction; repair saved recovery payloads"
                 ) from exc
             # Validate the whole set before replacing even one destination.
             for target, data, checksum in payloads:
                 self._roll_forward(target, data, checksum)
-            self.write_durable_json(manifest_path, {**manifest, "complete": True})
+            self.write_manifest(manifest_path, manifest.model_copy(update={"complete": True}))
             remove_tree(transaction)

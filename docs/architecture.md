@@ -334,6 +334,10 @@ replaces destinations and verifies checksums before cleanup. Missing intent mean
 discard staging; durable intent means roll forward the entire validated payload
 set. Damaged recovery data blocks reading with a repair explanation. Saved request
 receipts deduplicate exact retries and reject reused IDs with different content.
+Every durable JSON record here and in preparation (mask metadata, brush history,
+receipts, transaction manifests, map and prediction pointers, job journals, runtime
+pointers) is a frozen pydantic model read with `model_validate_json`; its JSON dump
+is the file, byte for byte, so no reader indexes a dict by key.
 The revision covers effective config, resolved main-photo pixels and filename,
 and saved mask checksums. It excludes inactive renderer settings and brush history.
 Config GET returns that revision as its ETag. The required save envelope and
