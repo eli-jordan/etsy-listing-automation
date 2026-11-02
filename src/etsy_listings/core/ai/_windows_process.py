@@ -8,6 +8,7 @@ to stdio. No process-name matching, descendant snapshot or helper is needed.
 from __future__ import annotations
 
 import ctypes as c
+import msvcrt
 import os
 import subprocess
 import time
@@ -126,10 +127,29 @@ def _checked(ok: object) -> None:
         raise c.__dict__["WinError"](c.__dict__["get_last_error"]())
 
 
+_KILL_ON_JOB_CLOSE = 0x2000
+"""No breakaway flags: nothing the CLI starts can leave the job."""
+_EXTENDED_LIMIT_INFORMATION = 9
+_BASIC_ACCOUNTING_INFORMATION = 1
+_ATTRIBUTE_HANDLE_LIST = 0x20002
+_ATTRIBUTE_JOB_LIST = 0x2000D
+_USE_STD_HANDLES = 0x100
+_EXTENDED_STARTUPINFO_PRESENT = 0x80000
+_NO_WINDOW = 0x8000000
+_WAIT_TIMEOUT = 258
+_INHERITABLE = True
+"""Only the three stdio handles, and HANDLE_LIST confines inheritance to them."""
+
+
+def _pipe(fds: set[int]) -> tuple[int, int]:
+    """A new pipe, both ends recorded in ``fds`` until handed to a stream."""
+    read, write = os.pipe()
+    fds.update((read, write))
+    return read, write
+
+
 class WindowsProcess:
     def __init__(self, argv: Sequence[str], cwd: Path) -> None:
-        import msvcrt
-
         command_line, directory = subprocess.list2cmdline(argv), str(cwd)
         if "\x00" in command_line or "\x00" in directory:
             raise ValueError("embedded null byte")
@@ -140,17 +160,10 @@ class WindowsProcess:
         self.streams: list[TextIO] = []
         fds: set[int] = set()
         try:
-            limits = _ExtendedLimits()
-            limits.basic.flags = 0x2000  # KILL_ON_JOB_CLOSE; no breakaway flags.
-            _checked(
-                self.api.SetInformationJobObject(self.job, 9, c.byref(limits), c.sizeof(limits))
-            )
-            stdin_read, stdin_write = os.pipe()
-            fds.update((stdin_read, stdin_write))
-            stdout_read, stdout_write = os.pipe()
-            fds.update((stdout_read, stdout_write))
-            stderr_read, stderr_write = os.pipe()
-            fds.update((stderr_read, stderr_write))
+            self._limit_job()
+            stdin_read, stdin_write = _pipe(fds)
+            stdout_read, stdout_write = _pipe(fds)
+            stderr_read, stderr_write = _pipe(fds)
             handles = (w.HANDLE * 3)(
                 *(
                     msvcrt.__dict__["get_osfhandle"](fd)
@@ -158,49 +171,8 @@ class WindowsProcess:
                 )
             )
             for handle in handles:
-                os.__dict__["set_handle_inheritable"](cast(int, handle), True)
-            size = c.c_size_t()
-            self.api.InitializeProcThreadAttributeList(None, 2, 0, c.byref(size))
-            attributes = c.create_string_buffer(size.value)
-            _checked(self.api.InitializeProcThreadAttributeList(attributes, 2, 0, c.byref(size)))
-            try:
-                jobs = (w.HANDLE * 1)(self.job)
-                _checked(
-                    self.api.UpdateProcThreadAttribute(
-                        attributes, 0, 0x20002, handles, c.sizeof(handles), None, None
-                    )
-                )
-                _checked(
-                    self.api.UpdateProcThreadAttribute(
-                        attributes, 0, 0x2000D, jobs, c.sizeof(jobs), None, None
-                    )
-                )
-                startup = _StartupEx()
-                startup.startup.size = c.sizeof(startup)
-                startup.startup.flags = 0x100  # STARTF_USESTDHANDLES
-                startup.startup.stdin, startup.startup.stdout, startup.startup.stderr = handles
-                startup.attributes = c.cast(attributes, c.c_void_p)
-                info = _ProcessInfo()
-                command = c.create_unicode_buffer(command_line)
-                _checked(
-                    self.api.CreateProcessW(
-                        None,
-                        command,
-                        None,
-                        None,
-                        True,
-                        0x80000 | 0x8000000,
-                        None,
-                        directory,
-                        c.byref(startup),
-                        c.byref(info),
-                    )
-                )
-                self.handle = info.process
-                self.api.CloseHandle(info.thread)
-                self.pid = info.pid
-            finally:
-                self.api.DeleteProcThreadAttributeList(attributes)
+                os.__dict__["set_handle_inheritable"](cast(int, handle), _INHERITABLE)
+            self._create(command_line, directory, handles)
             for fd, mode in ((stdin_write, "w"), (stdout_read, "r"), (stderr_read, "r")):
                 stream = cast(TextIO, os.fdopen(fd, mode, encoding="utf-8", errors="replace"))
                 self.streams.append(stream)
@@ -215,10 +187,63 @@ class WindowsProcess:
             for fd in fds:
                 os.close(fd)
 
+    def _limit_job(self) -> None:
+        limits = _ExtendedLimits()
+        limits.basic.flags = _KILL_ON_JOB_CLOSE
+        _checked(
+            self.api.SetInformationJobObject(
+                self.job, _EXTENDED_LIMIT_INFORMATION, c.byref(limits), c.sizeof(limits)
+            )
+        )
+
+    def _create(self, command_line: str, directory: str, handles: Any) -> None:
+        """Start the command already in the job, inheriting only ``handles``."""
+        size = c.c_size_t()
+        self.api.InitializeProcThreadAttributeList(None, 2, 0, c.byref(size))
+        attributes = c.create_string_buffer(size.value)
+        _checked(self.api.InitializeProcThreadAttributeList(attributes, 2, 0, c.byref(size)))
+        try:
+            jobs = (w.HANDLE * 1)(self.job)
+            for attribute, value in (
+                (_ATTRIBUTE_HANDLE_LIST, handles),
+                (_ATTRIBUTE_JOB_LIST, jobs),
+            ):
+                _checked(
+                    self.api.UpdateProcThreadAttribute(
+                        attributes, 0, attribute, value, c.sizeof(value), None, None
+                    )
+                )
+            startup = _StartupEx()
+            startup.startup.size = c.sizeof(startup)
+            startup.startup.flags = _USE_STD_HANDLES
+            startup.startup.stdin, startup.startup.stdout, startup.startup.stderr = handles
+            startup.attributes = c.cast(attributes, c.c_void_p)
+            info = _ProcessInfo()
+            command = c.create_unicode_buffer(command_line)
+            _checked(
+                self.api.CreateProcessW(
+                    None,
+                    command,
+                    None,
+                    None,
+                    _INHERITABLE,
+                    _EXTENDED_STARTUPINFO_PRESENT | _NO_WINDOW,
+                    None,
+                    directory,
+                    c.byref(startup),
+                    c.byref(info),
+                )
+            )
+            self.handle = info.process
+            self.api.CloseHandle(info.thread)
+            self.pid = info.pid
+        finally:
+            self.api.DeleteProcThreadAttributeList(attributes)
+
     @property
     def exited(self) -> bool:
         result = self.api.WaitForSingleObject(self.handle, 0)
-        if result == 258:
+        if result == _WAIT_TIMEOUT:
             return False
         _checked(result == 0)
         return True
@@ -232,7 +257,11 @@ class WindowsProcess:
         while True:
             _checked(
                 self.api.QueryInformationJobObject(
-                    self.job, 1, c.byref(accounting), c.sizeof(accounting), None
+                    self.job,
+                    _BASIC_ACCOUNTING_INFORMATION,
+                    c.byref(accounting),
+                    c.sizeof(accounting),
+                    None,
                 )
             )
             if accounting.active == 0:
@@ -243,7 +272,7 @@ class WindowsProcess:
             time.sleep(min(0.01, remaining))
         timeout = max(0.0, until - time.monotonic())
         result = self.api.WaitForSingleObject(self.handle, max(0, int(timeout * 1000)))
-        if result == 258:
+        if result == _WAIT_TIMEOUT:
             raise subprocess.TimeoutExpired("managed process", timeout)
         _checked(result == 0)
         code = w.DWORD()

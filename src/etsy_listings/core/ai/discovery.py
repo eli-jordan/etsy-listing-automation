@@ -141,7 +141,7 @@ class ModelDiscovery:
 
 def _claude() -> ProviderCatalog:
     return ProviderCatalog(
-        models=tuple(ModelChoice(id=id, label=id) for id in CLAUDE_MODELS),
+        models=tuple(ModelChoice(id=model, label=model) for model in CLAUDE_MODELS),
         efforts=CLAUDE_EFFORTS,
     )
 
@@ -160,8 +160,12 @@ def _discover(name: str, deadline: Deadline, cancel: threading.Event) -> Provide
         raise ValueError("discovery failed")
     if name == "codex":
         return _codex(json.loads(result.stdout))
+    return _grok(result.stdout)
+
+
+def _grok(stdout: str) -> ProviderCatalog:
     # Grok 1.0.70: prose preamble, then 'Available models:' with * / - rows.
-    _, marker, rows = result.stdout.partition("Available models:")
+    _, marker, rows = stdout.partition("Available models:")
     if not marker:
         raise ValueError("unrecognized Grok catalog")
     models = tuple(
@@ -174,7 +178,7 @@ def _discover(name: str, deadline: Deadline, cancel: threading.Event) -> Provide
     return ProviderCatalog(models=models, efforts=GROK_EFFORTS)
 
 
-def _codex(raw: Any) -> ProviderCatalog:  # noqa: ANN401 - untrusted CLI JSON
+def _codex(raw: Any) -> ProviderCatalog:  # untrusted CLI JSON
     # Codex 0.166.0: models[].slug/display_name/supported_reasoning_levels[].effort.
     models = tuple(
         ModelChoice(

@@ -229,25 +229,31 @@ def _seller_text(stdout: str, stderr: str) -> tuple[str, int | None, bool]:
         return "", None, False
     envelope = _envelope(primary)
     if envelope is not None:
-        sentence = _sentence(envelope)
-        status = _api_status(envelope)
-        error = envelope.get("error")
-        # Only the vendor's error object is trusted. Generated text and
-        # unrelated telemetry may legitimately mention this code.
-        model_missing = isinstance(error, dict) and any(
-            error.get(key) == "model_not_found" for key in ("type", "code")
-        )
-        if sentence:
-            return _as_sentence(sentence), status, model_missing
-        if model_missing:
-            return "The selected model was not found.", status, True
-        if status in _AUTH_OR_LIMIT_STATUS:
-            return f"HTTP {status}", status, False
-        return primary, status, False
+        return _envelope_text(envelope, primary)
     failure = _failure_lines(primary)
     if failure:
         return _as_sentence(failure), None, False
     return primary, None, False
+
+
+def _envelope_text(envelope: dict[str, Any], primary: str) -> tuple[str, int | None, bool]:
+    """`_seller_text` for a CLI's JSON envelope: its sentence, else a
+    missing-model or HTTP status line, else the envelope as written."""
+    sentence = _sentence(envelope)
+    status = _api_status(envelope)
+    error = envelope.get("error")
+    # Only the vendor's error object is trusted. Generated text and
+    # unrelated telemetry may legitimately mention this code.
+    model_missing = isinstance(error, dict) and any(
+        error.get(key) == "model_not_found" for key in ("type", "code")
+    )
+    if sentence:
+        return _as_sentence(sentence), status, model_missing
+    if model_missing:
+        return "The selected model was not found.", status, True
+    if status in _AUTH_OR_LIMIT_STATUS:
+        return f"HTTP {status}", status, False
+    return primary, status, False
 
 
 def _failure_lines(text: str) -> str | None:
