@@ -277,7 +277,11 @@ def test_a_codex_patch_has_every_file_it_touches_checked(scratch: Path) -> None:
 @pytest.mark.parametrize(
     ("config", "tools", "gate"),
     [
-        (".claude/settings.json", {"Bash", "Edit", "Write"}, "scripts/agent_lint_launch.sh"),
+        (
+            ".claude/settings.json",
+            {"Bash", "PowerShell", "Edit", "Write"},
+            "scripts/agent_lint_gate.py",
+        ),
         (".codex/hooks.json", {"Bash", "apply_patch", "Edit", "Write"}, "agent_lint_gate.py"),
     ],
 )
@@ -334,11 +338,191 @@ GATE_CASES = [
     ("uv run ruff format .", False),
     ("bash -lc 'rm -rf build'", False),
     ('powershell.exe -Command "Set-Content x.py a"', False),
+    # Redirects: only into a scratch location, never the repository.
+    ("cat > /tmp/pr-body.md <<'EOF'\nFixes a -> b\nEOF", True),
+    ("gh pr view 1 > /dev/null 2>&1 && echo ok", True),
+    ("git diff > $TMP/a.diff", True),
+    ("git diff > C:/cygwin64/tmp/a.diff", True),
+    ("git diff > C:/Users/Admin/AppData/Local/Temp/a.diff", True),
+    ("git diff >> /tmp/a.diff", True),
+    ("git diff > a.diff", False),
+    ("echo x >src/x.py", False),
+    ('echo x > "src/x.py"', False),
+    ("git diff > /tmp/../repo/src/x.py", False),
+    ("echo x > /tmp/checkout/src/x.py", False),
+    ("echo x > /tmp/$name", False),
+    ("echo x > /tmp/*", False),
+    ("TMP=src; git diff > $TMP/x.py", False),
+    ("echo x &> src/x.py", False),
+    ("echo x 2> src/err.log", False),
+    ('rg -n "a > b" src', True),
+    # Heredocs: the body is data; the command reading it must still be read-only.
+    ("cat > /tmp/x <<EOF\nhello\nEOF\nrm src/a.py", False),
+    ("cat > /tmp/x <<'EOF'\n$(rm src/a.py)\nEOF", True),
+    ("cat > /tmp/x <<EOF\n$(rm src/a.py)\nEOF", False),
+    ("cat > /tmp/x <<EOF\n`rm src/a.py`\nEOF", False),
+    ("cat <<'EOF' > src/x.py\nprint(1)\nEOF", False),
+    ("cat > /tmp/x <<'EOF'\nnever closed", False),
+    ("python - <<'EOF'\nprint(1)\nEOF", False),
+    ("uv run python - <<'EOF'\nprint(1)\nEOF", False),
+    (".venv/Scripts/python.exe - <<'EOF'\nprint(1)\nEOF", False),
+    ("node - <<'EOF'\nconsole.log(1)\nEOF", False),
+    ("gh pr create --title t --body-file - <<'EOF'\nbody > x\nEOF", True),
+    # Flags that write only for some tools.
+    ("rg -i foo src", True),
+    ("grep -i foo src", True),
+    ("perl -i -pe 's/a/b/' src/x.py", False),
+    ("sort -u names.txt", True),
+    ("sort -o names.txt names.txt", False),
+    ("npm test -- -u", False),
+    ("grep -o 'def [a-z_]*' src/x.py", True),
+    ("uv run ruff check --output-format concise src", True),
+    ("npx eslint --output-file report.txt src", False),
+    ("git diff --output=src/x.py", False),
+    ("rg --pre 'rm -rf src' foo", False),
+    ("find . -name '*.py' -execdir rm {} +", False),
+    ("find . -okdir rm {} +", False),
+    # sed and awk only read unless their script writes or runs something.
+    ("sed -n '1,80p' src/x.py", True),
+    ("sed -n '/^def /p;$p' src/x.py | head", True),
+    ("sed -n 's/a/b/w src/y.py' src/x.py", False),
+    ("sed -n '1e rm src/x.py' src/x.py", False),
+    ("sed 's/a/b/' src/x.py", False),
+    ("awk '{print $1}' src/x.py", True),
+    ("awk '{print > \"src/y.py\"}' src/x.py", False),
+    ("awk 'BEGIN{system(\"rm src/x.py\")}'", False),
+    # git: staging, commits and pushes leave the working tree's files as they are.
+    ("git add src/x.py && git commit -m 'a > b' && git push", True),
+    ("git -c safe.directory=* status", True),
+    ("git -c core.symlinks=false -c 'safe.directory=C:/x' log -1", True),
+    ("/usr/bin/git -c color.ui=never diff", True),
+    ("'C:/Program Files/Git/cmd/git.exe' status", True),
+    ("git -c core.pager='rm src/x.py' log", False),
+    ("git -c diff.external=./wipe.sh diff", False),
+    ("git stash pop", False),
+    ("git restore src/x.py", False),
+    ("git pull", False),
+    ("git merge origin/main", False),
+    ("git rebase main", False),
+    ("git reset --hard", False),
+    ("git clean -fd", False),
+    ("git apply fix.patch", False),
+    ("git cherry-pick abc", False),
+    ("git mv a.py b.py", False),
+    ("git switch main", False),
+    ("git grep -O'rm -rf src' foo", False),
+    ("git grep 'a\nb' -O'rm -rf src' foo", False),
+    ("GIT_PAGER='rm src/x.py\n' git log", False),
+    # GitHub-only commands; checkout and merge change the tree.
+    ("gh pr edit 1 --body-file /tmp/b.md", True),
+    ("gh pr comment 1 --body 'ok'", True),
+    ("gh pr review 1 --approve", True),
+    ("gh workflow run ci.yml && gh workflow list", True),
+    ("gh run rerun 123 --failed", True),
+    ("gh pr checkout 1", False),
+    ("gh pr merge 1 --squash", False),
+    ("gh run download 123", False),
+    # Environment: assignments, but not the variables that run commands.
+    ("unset ETSY_LISTINGS_ROOT && uv run pytest -q", True),
+    ("export FOO=bar; git status", True),
+    ("PYTHONPATH=src uv run pytest -q", True),
+    ("GIT_PAGER='rm src/x.py' git log", False),
+    ("export GIT_EXTERNAL_DIFF=./wipe.sh; git diff", False),
+    ("env rm src/x.py", False),
+    ("env | grep PATH", True),
+    # Nested shells are unwrapped, however deep.
+    ("C:/cygwin64/bin/zsh.exe -lc 'cd /x && git status'", True),
+    ("/c/cygwin64/bin/zsh.exe -l -c 'cd /x && sed -n 1,5p a.py'", True),
+    ("C:\\cygwin64\\bin\\zsh.exe -lc 'git log -1'", True),
+    ("exec C:/cygwin64/bin/zsh.exe -lc 'git status'", True),
+    ("zsh.exe --no-login -c 'git status'", True),
+    ("bash -c \"zsh -lc 'git status'\"", True),
+    ("C:/cygwin64/bin/zsh.exe -lc 'git status && rm src/x.py'", False),
+    ("bash -c \"zsh -lc 'rm src/x.py'\"", False),
+    ("zsh -lc 'git status' 'rm src/x.py'", False),
+    ("bash -c 'git status'; rm src/x.py", False),
+    # Process tools, a build outside the source tree; loops and scripts.
+    ("ps -ef | grep vite", True),
+    ("ps -W && netstat -ano && tasklist", True),
+    ("npm run build", True),
+    ("npm run format", False),
+    ("npm run gen:api", False),
+    ("for f in src/*.py; do echo $f; done", False),
+    ("( rm src/x.py )", False),
+    ("{ rm src/x.py; }", False),
+    # A single & runs the next command too, in every shell.
+    ("echo a & python -c \"open('src/x.py','w').write(1)\"", False),
+    ("ls & rm src/x.py", False),
+    ("echo hi & py -3 -c \"open('prs.txt','w').write('ok')\" & echo done", False),
+    ("uv run pytest -q 2>&1 >/dev/null", True),
+    ("echo x >&2", True),
+    ("echo x &>/dev/null", True),
+    # A substitution runs its command, which must be read-only too.
+    ("echo $(python -c \"open('src/x.py','w')\")", False),
+    ("echo `rm src/x.py`", False),
+    ("cat <(rm src/x.py)", False),
+    ("diff <(git show HEAD:a.py) >(rm src/x.py)", False),
+    ("git status && echo $(git checkout -- src)", False),
+    ('echo "$(rm src/x.py)"', False),
+    ("git log --oneline -1 $(git merge-base origin/main HEAD)", True),
+    ("diff <(git show HEAD:src/a.py) src/a.py", True),
+    ("echo '$(rm src/x.py)'", True),
+    # Quoting: an escaped quote or separator is not what it looks like.
+    ("echo \\'; rm src/x.py; echo \\'", False),
+    ("echo 'a; rm src/x.py'", True),
+    ('echo "unterminated', False),
+    ("echo a # ; rm src/x.py", True),
+    ("echo a#; rm src/x.py", False),
+    # A Bash payload may be Codex's PowerShell, where a backslash escapes nothing.
+    ('echo "a\\"; rm src/x.py; echo "b"', False),
+    ('echo "\\$(rm src/x.py)"', False),
+    ("rg -n 'a\\|b' src", True),
+    ("echo '‘; rm src/x.py; ‘'", False),
+    ("curl http://x/a.py –OutFile src/a.py", False),
+    ("Sort-Object { rm src/x.py }", False),
+    ('echo `"; rm src/x.py; echo `"', False),
+    ("echo ${HOME} $HOME", True),
+    ('grep -n "a\\|b" src', True),
+    # Subshells, and prefixes that run the rest of the segment.
+    ("(cd src/ui && npm run build) > /tmp/build.log 2>&1", True),
+    ("(cd src/ui && npm run format)", False),
+    ("env -u ETSY_LISTINGS_ROOT uv run pytest -q", True),
+    ("env -u X rm src/x.py", False),
+    ("timeout 60 gh run watch 1", True),
+    ("timeout 60 rm src/x.py", False),
+    ("export PATH=/usr/local/bin:/usr/bin:$PATH; git status", True),
+    ("export PATH=./evil:$PATH; git status", False),
+    ("GIT_PAGER=cat GIT_OPTIONAL_LOCKS=0 git log -1", True),
+    ("git config core.autocrlf", True),
+    ("git config core.pager 'rm src/x.py'", False),
+    # curl reads unless it saves what it fetches.
+    ('curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:8007/', True),
+    ("curl -sO http://x/a.py", False),
+    ("curl -s http://x/a.py -o src/a.py", False),
+    ("curl -s --output-dir src -O http://x/a.py", False),
+]
+
+# The same rules, read as PowerShell reads a command: Claude Code's PowerShell tool.
+POWERSHELL_GATE_CASES = [
+    ("Get-ChildItem src | Select-Object -First 5", True),
+    ("Get-Content src/x.py -TotalCount 20", True),
+    ("git status; git log -1", True),
+    ("& 'C:/cygwin64/bin/zsh.exe' -lc 'cd /x && git status'", True),
+    ("git diff 2>$null", True),
+    ("Set-Content src/x.py 'a'", False),
+    ("Get-Content a.py | Out-File src/x.py", False),
+    ("git status > src/x.txt", False),
+    ("echo a\\; Remove-Item src/x.py", False),
+    ('Write-Output `"; Remove-Item src/x.py', False),
+    ("Write-Output $(Remove-Item src/x.py)", False),
+    ("& { Remove-Item src/x.py }", False),
+    ("& 'C:/cygwin64/bin/zsh.exe' -lc 'rm src/x.py'", False),
+    ('powershell -Command "rm src/x.py"', False),
 ]
 
 
-def shell_command(command: str) -> dict[str, object]:
-    return {"tool_name": "Bash", "tool_input": {"command": command}, "cwd": str(ROOT)}
+def shell_command(command: str, tool: str = "Bash") -> dict[str, object]:
+    return {"tool_name": tool, "tool_input": {"command": command}, "cwd": str(ROOT)}
 
 
 @pytest.mark.parametrize(("command", "read_only"), GATE_CASES)
@@ -350,6 +534,19 @@ def test_the_gate_skips_only_commands_that_cannot_write(command: str, *, read_on
         sys.path.remove(str(GATE.parent))
 
     assert agent_lint_gate.is_read_only(command) is read_only
+
+
+@pytest.mark.parametrize(("command", "read_only"), POWERSHELL_GATE_CASES)
+def test_the_gate_reads_a_powershell_command_as_powershell_does(
+    command: str, *, read_only: bool
+) -> None:
+    sys.path.insert(0, str(GATE.parent))
+    try:
+        import agent_lint_gate
+    finally:
+        sys.path.remove(str(GATE.parent))
+
+    assert agent_lint_gate.is_read_only(command, powershell=True) is read_only
 
 
 def test_the_gate_reads_the_command_as_text_and_refuses_escapes_it_cannot_decode() -> None:
@@ -365,7 +562,7 @@ def test_the_gate_reads_the_command_as_text_and_refuses_escapes_it_cannot_decode
         ">", "\\u003e"
     )
 
-    assert agent_lint_gate.shell_command(quoted) == 'grep -n "a b" src'
+    assert agent_lint_gate.shell_command(quoted) == ('grep -n "a b" src', False)
     assert agent_lint_gate.shell_command(escaped) is None
     assert agent_lint_gate.shell_command(json.dumps(edited(ROOT / "x.py"))) is None
 
@@ -428,18 +625,37 @@ def test_a_missing_git_skips_the_git_checks_instead_of_crashing(scratch: Path) -
     assert "F821" in result.stderr
 
 
-def test_the_claude_launcher_hands_each_payload_to_the_gate(
-    scratch: Path, state: dict[str, str]
+@pytest.mark.skipif(os.name != "nt", reason="the Claude settings command starts the Windows venv")
+@pytest.mark.parametrize("agent", ["Claude Code", "Grok"])
+def test_the_claude_settings_command_runs_in_each_agents_shell(
+    agent: str, scratch: Path, state: dict[str, str]
 ) -> None:
-    bash = git_bash()
-    if bash is None:
-        pytest.skip("no bash to source the Claude Code launcher")
+    # Claude Code runs a hook command through Git Bash; Grok reads the same
+    # .claude/settings.json and runs it through PowerShell, with
+    # $CLAUDE_PROJECT_DIR a PowerShell variable and the `&` call operator put
+    # in front of a command that opens with a quoted program path. A bash-only
+    # command fails there, and a failed hook does not block, so Grok would get
+    # no lint.
+    hooks = json.loads((ROOT / ".claude" / "settings.json").read_text())["hooks"]
+    command = hooks["PostToolUse"][0]["hooks"][0]["command"]
+    if agent == "Claude Code":
+        bash = git_bash()
+        if bash is None:
+            pytest.skip("no Git Bash")
+        argv = [bash, "-c", command]
+    else:
+        argv = [
+            "powershell.exe",
+            "-NoProfile",
+            "-Command",
+            f"$CLAUDE_PROJECT_DIR = '{ROOT}'; & {command}",
+        ]
     source = scratch / "launched.py"
     source.write_text("print(missing)\n")
 
     def launch(payload: dict[str, object]) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
-            [bash, "-c", '. "$CLAUDE_PROJECT_DIR/scripts/agent_lint_launch.sh" edit'],
+            argv,
             input=json.dumps(payload),
             capture_output=True,
             text=True,
@@ -513,6 +729,24 @@ def test_the_gate_skips_a_read_only_command_and_checks_one_that_writes(
 
     skipped = run_mode("edit", shell_command("git status"), script=GATE, **state)
     checked = run_mode("edit", shell_command("python make_it.py"), script=GATE, **state)
+
+    assert skipped.returncode == 0, skipped.stderr
+    assert checked.returncode == 2
+    assert "written.py:1:" in checked.stderr
+
+
+@pytest.mark.parametrize("tool", ["PowerShell", "run_terminal_command"])
+def test_a_powershell_or_grok_shell_command_is_gated_and_checked_as_a_shell_command(
+    tool: str, scratch: Path, state: dict[str, str]
+) -> None:
+    # Claude Code's PowerShell tool and Grok's terminal tool write files no
+    # edit reports.
+    (scratch / "written.py").write_text("print(missing)\n")
+
+    read = shell_command("Get-ChildItem src | Select-Object -First 3", tool=tool)
+    write = shell_command("Set-Content written.py 'print(missing)'", tool=tool)
+    skipped = run_mode("edit", read, script=GATE, **state)
+    checked = run_mode("edit", write, script=GATE, **state)
 
     assert skipped.returncode == 0, skipped.stderr
     assert checked.returncode == 2
