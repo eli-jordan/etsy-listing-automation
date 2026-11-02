@@ -22,7 +22,7 @@ def configured(workspace_root: Path):
 
 
 @pytest.mark.parametrize(
-    "source,key",
+    ("source", "key"),
     [
         (b"ai:\n  step_limit_minutes: 99\n", "ai.step_limit_minutes"),
         (b"ai:\n  run_limit_minutes: 5\n", "ai.run_limit_minutes"),

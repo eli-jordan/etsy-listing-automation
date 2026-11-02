@@ -17,7 +17,7 @@ pytestmark = pytest.mark.browser
 
 
 @pytest.fixture
-def expect(browser_type):  # noqa: ANN001, ANN201 - optional Playwright after prerequisite check
+def expect(browser_type):
     from playwright.sync_api import expect as playwright_expect
 
     return playwright_expect
@@ -38,21 +38,21 @@ def theme(request: pytest.FixtureRequest) -> str:
     return str(request.param)
 
 
-def capture(page, theme: str, state: str) -> None:  # noqa: ANN001
+def capture(page, theme: str, state: str) -> None:
     if directory := os.environ.get("ADMIN_SETTINGS_SCREENSHOT_DIR"):
         target = Path(directory)
         target.mkdir(parents=True, exist_ok=True)
         page.screenshot(path=str(target / f"app-{state}-{theme}.png"))
 
 
-def open_settings(page, base: str, theme: str) -> None:  # noqa: ANN001
+def open_settings(page, base: str, theme: str) -> None:
     page.set_viewport_size({"width": 1280, "height": 800})
     page.emulate_media(color_scheme=theme)
     page.goto(f"{base}/admin")
     page.get_by_role("link", name="Settings settings.yaml").click()
 
 
-def is_save(response) -> bool:  # noqa: ANN001
+def is_save(response) -> bool:
     return response.url.endswith("/api/admin/settings") and response.request.method == "PATCH"
 
 
@@ -61,7 +61,7 @@ def test_reviewed_market_values_load_without_rewriting_relative_weights(
     expect,
     calibrator_server: str,
     workspace_root: Path,
-    theme: str,  # noqa: ANN001
+    theme: str,
 ) -> None:
     path = Workspace.discover(root_override=workspace_root).settings_file()
     source = (
@@ -86,7 +86,7 @@ def test_keyboard_edits_and_reset_persist_only_completed_changes(
     expect,
     calibrator_server: str,
     workspace_root: Path,
-    theme: str,  # noqa: ANN001
+    theme: str,
 ) -> None:
     path = Workspace.discover(root_override=workspace_root).settings_file()
     open_settings(page, calibrator_server, theme)
@@ -118,7 +118,7 @@ def test_relative_zero_shares_are_display_only_until_a_completed_pointer_edit(
     expect,
     calibrator_server: str,
     workspace_root: Path,
-    theme: str,  # noqa: ANN001
+    theme: str,
 ) -> None:
     path = Workspace.discover(root_override=workspace_root).settings_file()
     source = (
@@ -155,7 +155,7 @@ def test_conflict_keeps_the_external_file_and_reload_discards_the_refused_edit(
     expect,
     calibrator_server: str,
     workspace_root: Path,
-    theme: str,  # noqa: ANN001
+    theme: str,
 ) -> None:
     path = Workspace.discover(root_override=workspace_root).settings_file()
     path.write_bytes(b"batch_ai:\n  concurrency: 2\n")
@@ -184,7 +184,7 @@ def test_invalid_file_rechecks_and_failed_saves_keep_the_edit_for_retry(
     expect,
     calibrator_server: str,
     workspace_root: Path,
-    theme: str,  # noqa: ANN001
+    theme: str,
 ) -> None:
     path = Workspace.discover(root_override=workspace_root).settings_file()
     path.write_bytes(b"batch_ai:\n  concurrency: 0\n")
@@ -199,7 +199,7 @@ def test_invalid_file_rechecks_and_failed_saves_keep_the_edit_for_retry(
     slider = page.get_by_role("slider", name="Listings drafted at once")
     expect(slider).to_have_value("2")
 
-    def fail_patch(route) -> None:  # noqa: ANN001
+    def fail_patch(route) -> None:
         if route.request.method == "PATCH":
             route.fulfill(
                 status=503, content_type="application/json", body='{"detail":"disk unavailable"}'
@@ -225,7 +225,7 @@ def test_rapid_actions_use_the_revision_returned_by_the_previous_save(
     expect,
     calibrator_server: str,
     workspace_root: Path,
-    theme: str,  # noqa: ANN001
+    theme: str,
 ) -> None:
     open_settings(page, calibrator_server, theme)
     slider = page.get_by_role("slider", name="Listings drafted at once")
@@ -233,7 +233,7 @@ def test_rapid_actions_use_the_revision_returned_by_the_previous_save(
     held = []
     revisions: list[str] = []
 
-    def hold_first(route) -> None:  # noqa: ANN001
+    def hold_first(route) -> None:
         if route.request.method != "PATCH":
             route.continue_()
             return
@@ -272,7 +272,7 @@ def test_raising_the_step_raises_the_run_limit_in_the_same_save(
     expect,
     calibrator_server: str,
     workspace_root: Path,
-    theme: str,  # noqa: ANN001
+    theme: str,
 ) -> None:
     """ADR-0057 through the built page: the floor, the raise and one write."""
     path = Workspace.discover(root_override=workspace_root).settings_file()

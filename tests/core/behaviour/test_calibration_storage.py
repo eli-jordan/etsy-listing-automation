@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 import pytest
 from PIL import Image
@@ -689,8 +690,8 @@ def _hand_calibrated(root: Path) -> tuple[CalibrationStore, Path]:
 
 
 def _with_texture(store: CalibrationStore, texture: float) -> AnyTemplate:
-    dumped = dump_template_config(store.read("example").config)
-    dumped["renderer"]["config"]["appearance"]["fabric_texture"] = texture  # type: ignore[index]
+    dumped: dict[str, Any] = dump_template_config(store.read("example").config)
+    dumped["renderer"]["config"]["appearance"]["fabric_texture"] = texture
     return load_template_config(dumped)
 
 

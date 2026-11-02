@@ -54,7 +54,8 @@ def test_normal_or_error_exit_cleans_descendants_without_spending_the_deadline(
         )
         assert result.returncode == returncode
         assert "synthetic" in result.stdout
-        assert not result.timed_out and not result.cancelled
+        assert not result.timed_out
+        assert not result.cancelled
         assert time.monotonic() - tree.started < 6
         tree.assert_clean()
 
@@ -73,7 +74,8 @@ def test_cancellation_after_launcher_exit_cleans_children_and_readers(tmp_path):
             deadline=Deadline.starting_now(seconds=15),
             cancel_event=CancelAfterExit(),
         )
-        assert result.cancelled and not result.timed_out
+        assert result.cancelled
+        assert not result.timed_out
         tree.assert_clean()
 
 
@@ -89,7 +91,8 @@ def test_timeout_after_launcher_exit_preserves_output_and_cleans_children(tmp_pa
             input_text="",
             deadline=Deadline.starting_now(seconds=15, clock=clock),
         )
-        assert result.timed_out and not result.cancelled
+        assert result.timed_out
+        assert not result.cancelled
         assert result.returncode == 0
         assert "synthetic" in result.stdout
         tree.assert_clean()

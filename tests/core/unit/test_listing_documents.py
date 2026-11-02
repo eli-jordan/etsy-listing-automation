@@ -306,7 +306,7 @@ class TestSourcePreservation:
 
     @pytest.mark.parametrize("nested", [False, True], ids=["brief", "nested-title"])
     def test_in_place_callback_changes_are_persisted(
-        self, documents: ListingDocuments, hand_edited: Path, nested: bool
+        self, documents: ListingDocuments, hand_edited: Path, *, nested: bool
     ) -> None:
         def change(raw: Document) -> Document:
             if nested:

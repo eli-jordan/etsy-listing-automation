@@ -13,6 +13,7 @@ import os
 from datetime import UTC, datetime
 from io import BytesIO
 from pathlib import Path
+from typing import Any
 
 import pytest
 import yaml
@@ -412,9 +413,9 @@ def test_a_batch_creates_every_row_against_the_shop_it_started_with(
     real = creation._create
     currencies: list[str] = []
 
-    def create(workspace: Workspace, *args: object, **kwargs: object) -> object:
+    def create(workspace: Workspace, *args: Any, **kwargs: Any) -> Any:
         currencies.append(workspace.defaults.etsy.currency)
-        row = real(workspace, *args, **kwargs)  # type: ignore[arg-type]
+        row = real(workspace, *args, **kwargs)
         if len(currencies) == 1:
             live.defaults = Defaults.model_validate(
                 {

@@ -100,7 +100,7 @@ def test_provider_rows_include_omitted_providers_and_save_preferences(client: Te
 @pytest.mark.parametrize("ending", [b"", b"\n"], ids=["bare-eof", "final-newline"])
 @pytest.mark.parametrize("insert", [False, True], ids=["reorder", "insert-after-eof-row"])
 def test_http_provider_rows_at_eof_can_move_or_gain_a_sibling(
-    client: TestClient, workspace_root: Path, newline: bytes, ending: bytes, insert: bool
+    client: TestClient, workspace_root: Path, newline: bytes, ending: bytes, *, insert: bool
 ) -> None:
     path = Workspace.discover(root_override=workspace_root).settings_file()
     source = b"# preferences\nai:\n  providers:\n  - name: codex\n  - name: grok" + ending

@@ -586,7 +586,7 @@ def test_the_watchdog_stops_the_run_at_its_configured_limit_and_says_so(chain: C
     _limits(chain, step=2, run=7)
     chain.provider.gate("seo")
     run = chain.start(draft_brief=False)
-    wait_for(lambda: chain.provider.started["seo"].is_set())
+    wait_for(chain.provider.started["seo"].is_set)
 
     chain.clock.now = 7 * 60 - 1
     assert not _becomes(run, lambda: run.finished, timeout=0.1)

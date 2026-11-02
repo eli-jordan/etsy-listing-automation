@@ -388,7 +388,8 @@ def test_an_etsy_lookup_failure_leaves_the_printify_list_and_writes_nothing(
     lookups = shop_settings.shop_lookups(workspace, etsy=FailingEtsy(), catalog=CATALOG)
 
     assert not lookups.etsy.available
-    assert lookups.etsy.problem is not None and "Etsy is down" in lookups.etsy.problem
+    assert lookups.etsy.problem is not None
+    assert "Etsy is down" in lookups.etsy.problem
     assert lookups.etsy.shipping_profiles == ()
     assert lookups.printify.available
     assert shop_bytes(workspace) == original
@@ -412,7 +413,8 @@ def test_etsy_lists_wait_for_a_configured_shop(workspace_root: Path) -> None:
     lookups = shop_settings.shop_lookups(workspace, etsy=etsy, catalog=CATALOG)
 
     assert not lookups.etsy.available
-    assert lookups.etsy.problem is not None and "etsy-listings setup" in lookups.etsy.problem
+    assert lookups.etsy.problem is not None
+    assert "etsy-listings setup" in lookups.etsy.problem
     assert etsy.shipping_profile_calls == 0
 
 
@@ -523,4 +525,5 @@ def test_a_printify_shop_the_token_cannot_see_is_a_lookup_problem(workspace_root
     )
 
     assert rows.printify.state == "lookup_failed"
-    assert rows.printify.problem is not None and "28819281" in rows.printify.problem
+    assert rows.printify.problem is not None
+    assert "28819281" in rows.printify.problem

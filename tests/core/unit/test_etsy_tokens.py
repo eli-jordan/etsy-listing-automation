@@ -310,7 +310,8 @@ def test_a_rotation_held_past_the_wait_is_a_retryable_refusal(
 
     message = str(refused.value)
     assert "still refreshing" in message
-    assert "12345678." not in message and "sign in" not in message
+    assert "12345678." not in message
+    assert "sign in" not in message
     assert grant.rotations == 1
 
 

@@ -43,7 +43,7 @@ def test_factory_captures_order_and_preferences_until_next_call(workspace_root: 
 )
 @pytest.mark.parametrize("repair", [None, RepairContext("{}", ("missing brief",))])
 def test_preferences_reach_every_task_and_repair_argv(
-    module, adapter, flags, monkeypatch, tmp_path, repair
+    module, adapter, flags, *, monkeypatch, tmp_path, repair
 ):
     calls = []
     monkeypatch.setattr(cli_support.shutil, "which", lambda name: name)

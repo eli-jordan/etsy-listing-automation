@@ -198,7 +198,7 @@ def test_invalid_settings_refuse_dispatch_instead_of_using_a_default(q: Queue) -
     """Admin config-validation rule: a broken file is never a default limit."""
     q.workspace.settings_file().write_text("batch_ai:\n  concurency: 2\n", encoding="utf-8")
     batch = q.confirm(*_designs("night-hike-club"))
-    with pytest.raises(ConfigLoadError, match="batch_ai.concurency"):
+    with pytest.raises(ConfigLoadError, match=r"batch_ai\.concurency"):
         q.queue.concurrency()
     q.queue.start()
     q.idle()

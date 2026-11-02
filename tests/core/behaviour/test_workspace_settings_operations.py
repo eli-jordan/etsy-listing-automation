@@ -414,7 +414,7 @@ def test_provider_reorder_does_not_materialize_untouched_optional_defaults(
 @pytest.mark.parametrize("insert", [False, True], ids=["reorder", "insert-after-eof-row"])
 @pytest.mark.parametrize("ending", ["", "\n"], ids=["bare-eof", "final-newline"])
 def test_provider_rows_at_eof_can_move_or_gain_a_sibling(
-    workspace: Workspace, newline: str, insert: bool, ending: str
+    workspace: Workspace, newline: str, *, insert: bool, ending: str
 ) -> None:
     header = "# Keep preferences\nbatch_ai: {concurrency: 2} # untouched\nai:\n  providers:\n"
     codex = "  - name: codex # account default\n"

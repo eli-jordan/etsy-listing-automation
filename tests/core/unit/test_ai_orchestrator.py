@@ -191,7 +191,7 @@ def test_default_budget_allows_a_slow_response_and_shares_remaining_time_with_re
     original_generate = codex.generate
     remaining: list[float] = []
 
-    def generate(task, deadline, *, repair=None, cancel_event=None):  # noqa: ANN001, ANN202
+    def generate(task, deadline, *, repair=None, cancel_event=None):
         nonlocal now
         remaining.append(deadline.remaining_seconds())
         now += 61.0
@@ -375,7 +375,7 @@ class _Timed(FakeAiProvider):
         self.script = script
         self.remaining: list[float] = []
 
-    def generate(self, task, deadline, *, repair=None, cancel_event=None):  # noqa: ANN001, ANN201
+    def generate(self, task, deadline, *, repair=None, cancel_event=None):
         self.remaining.append(deadline.remaining_seconds())
         minutes, outcome = self.script.pop(0)
         self.clock.now += minutes * 60
@@ -467,7 +467,7 @@ def test_a_provider_that_runs_out_its_step_is_reported_with_the_configured_limit
     codex = _Timed("codex", clock, [(3, ProviderTimeoutError("codex"))])
     claude = _Timed("claude", clock, [])
 
-    with pytest.raises(SeoDeadlineExceededError, match="codex: .*3-minute step limit"):
+    with pytest.raises(SeoDeadlineExceededError, match=r"codex: .*3-minute step limit"):
         orchestrator.generate_proposal(
             _request(), _PROMPT, [codex, claude], budget=_budget(clock, step=3, run=20)
         )
