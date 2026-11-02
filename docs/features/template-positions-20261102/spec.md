@@ -1,6 +1,7 @@
 # Per-listing template positions
 
-Status: agreed, not implemented. Started 2026-11-02 from a design interview.
+Status: agreed; Marigold positions (option B) implemented in PR 7. Started
+2026-11-02 from a design interview.
 This specification owns the requirements under the
 [documentation authority rules](../../README.md#documentation-authority).
 The [interactions document](interactions.md) records UI behaviour and maps it to the
@@ -76,7 +77,8 @@ the parts. It refuses, naming the listing and the key, when:
 4. the key names a placement ID the template does not have, or uses
    `placements:` on a template that is not `multiple` (or `bounding_box:` on one
    that is);
-5. the template is Marigold and Marigold positions have not shipped yet (until PR 7).
+5. *(lifted by PR 7)* the template is Marigold and Marigold positions have not
+   shipped yet.
 
 Example messages:
 
@@ -154,7 +156,10 @@ from preparation evidence that covers every allowed pose.
   template's new evidence when it changes.
 - The 1024px interactive composite renders a posed box with its fit once ready
   and with the editor's drag overlay until then.
-- Spec rule 5 (Marigold refused) is lifted once this ships.
+- Spec rule 5 (Marigold refused) is lifted (PR 7).
+- Coverage inference is a preparation job that infers only the padded quad's
+  crop and publishes no maps. PR 7 queues it when a position is saved on a
+  template whose evidence falls short; `plan` refuses until it finishes.
 
 ### Spike result
 
