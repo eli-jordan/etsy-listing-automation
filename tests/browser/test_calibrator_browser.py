@@ -858,3 +858,45 @@ class TestKindPickerCreatesEachKind:
         # `multiple` is a chart: one photo with several garments in it, so it
         # is exactly the single-photo case and must stay offered.
         expect(page.locator('.kind-picker input[value="multiple"]')).to_be_enabled()
+
+
+# --- listings holding positions (spec, Recalibration) -------------------
+
+
+def test_the_calibrator_names_positioned_listings_and_leaves_them_alone(
+    page, workspace_root: Path
+) -> None:
+    """Saving geometry may put a listing's own position outside the limits, so
+    the calibrator names those listings around the save, and never edits one."""
+    box = [{"x": 150, "y": 130}, {"x": 340, "y": 120}, {"x": 350, "y": 390}, {"x": 140, "y": 400}]
+    listing = workspace_root / "listings" / "take-a-hike" / "listing.yaml"
+    document = yaml.safe_load(listing.read_text(encoding="utf-8"))
+    document["template_positions"] = {
+        COLOUR_MATRIX_TEMPLATE: {"bounding_box": box},
+        MULTIPLE_TEMPLATE: {"placements": {"fixture-placement-1": {"bounding_box": box}}},
+    }
+    listing.write_text(yaml.safe_dump(document), encoding="utf-8")
+    written = listing.read_bytes()
+    page.reload()
+
+    _select_template(page, MULTIPLE_TEMPLATE)
+    note = page.get_by_role("note")
+    note.filter(has_text="take-a-hike (fixture-placement-1)").wait_for()
+
+    _select_template(page, COLOUR_MATRIX_TEMPLATE)
+    page.wait_for_selector(HANDLE)
+    note.filter(
+        has_text="1 listing holds its own position on this template: take-a-hike."
+    ).wait_for()
+    handle = page.locator(HANDLE).first.bounding_box()
+    assert handle is not None
+    save_log = TrafficLog(page, "/config")
+    page.mouse.move(handle["x"] + handle["width"] / 2, handle["y"] + handle["height"] / 2)
+    page.mouse.down()
+    page.mouse.move(handle["x"] + 40, handle["y"] + 30, steps=5)
+    page.mouse.up()
+    save_log.wait_for(lambda r: _method(r) == "PUT" and r.status == 200)
+
+    page.get_by_text("Saved a moment ago").wait_for()
+    assert "take-a-hike" in note.inner_text()
+    assert listing.read_bytes() == written

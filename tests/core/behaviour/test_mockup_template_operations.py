@@ -19,11 +19,13 @@ from PIL import Image
 
 from etsy_listings.core.application.mockup_templates import (
     LazyMaps,
+    PositionedListing,
     PreviewGeometry,
     assign_kind,
     colour_report,
     compose_preview,
     list_templates,
+    positioned_listings,
     read_config,
     save_config,
     saved_preview,
@@ -447,3 +449,69 @@ class TestPhotosAndSwatch:
             TemplatePhotoMissingError, match="no photo for 'flat-lay-01' colour 'nope'"
         ):
             template_swatch(workspace, "flat-lay-01", "nope", photo=load_template_base)
+
+
+# ------------------------------------------------- listings holding positions
+
+_POSITION = {
+    "bounding_box": [{"x": 0, "y": 0}, {"x": 9, "y": 0}, {"x": 9, "y": 9}, {"x": 0, "y": 9}]
+}
+
+
+def _positioned(workspace: Workspace, name: str, positions: object, **extra: object) -> None:
+    """A copy of the fixture listing holding ``positions``, as the editor writes them."""
+    import yaml
+
+    document = yaml.safe_load(workspace.listing_file("take-a-hike").read_text(encoding="utf-8"))
+    document.update(template_positions=positions, **extra)
+    path = workspace.listing_file(name)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(yaml.safe_dump(document), encoding="utf-8")
+
+
+def test_positioned_listings_name_each_listing_and_its_placements(workspace):
+    """Spec, *Recalibration*: the calibrator lists the listings holding positions
+    for the template it saves -- one box, or the placements of a multiple chart."""
+    _positioned(workspace, "boxed", {"flat-lay-01": _POSITION})
+    _positioned(
+        workspace,
+        "charted",
+        {
+            "colour-chart-01": {
+                "placements": {"fixture-placement-2": _POSITION, "fixture-placement-1": _POSITION}
+            },
+            "flat-lay-01": _POSITION,
+        },
+    )
+    _positioned(workspace, "elsewhere", {"colour-chart-01": {"placements": {"x": _POSITION}}})
+    _positioned(workspace, "gone", {"flat-lay-01": _POSITION}, lifecycle="deleted")
+
+    assert positioned_listings(workspace, "flat-lay-01") == [
+        PositionedListing(listing="boxed", placements=()),
+        PositionedListing(listing="charted", placements=()),
+    ]
+    assert positioned_listings(workspace, "colour-chart-01") == [
+        PositionedListing(
+            listing="charted", placements=("fixture-placement-1", "fixture-placement-2")
+        ),
+        PositionedListing(listing="elsewhere", placements=("x",)),
+    ]
+
+
+def test_positioned_listings_read_only_what_they_can_and_write_nothing(workspace):
+    """A listing the editor would refuse elsewhere still names its positions; one
+    that cannot be read at all is not the calibrator's to report."""
+    _positioned(workspace, "boxed", {"flat-lay-01": _POSITION}, garment_profile=None)
+    broken = workspace.listing_file("broken")
+    broken.parent.mkdir(parents=True)
+    broken.write_text("template_positions: [unclosed", encoding="utf-8")
+    before = {p: p.read_bytes() for p in (workspace.root / "listings").rglob("*") if p.is_file()}
+
+    assert positioned_listings(workspace, "flat-lay-01") == [
+        PositionedListing(listing="boxed", placements=())
+    ]
+    assert positioned_listings(workspace, "colour-chart-01") == []
+    after = {p: p.read_bytes() for p in (workspace.root / "listings").rglob("*") if p.is_file()}
+    assert after == before
+    with pytest.raises(TemplateMissingError):
+        positioned_listings(workspace, "no-such-template")
