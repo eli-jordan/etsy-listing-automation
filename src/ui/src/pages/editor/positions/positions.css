@@ -25,6 +25,17 @@
   object-fit: contain;
 }
 
+/* A light band under the dashed outlines, so they read on a dark garment
+   as well as a light one. */
+.tp-halo {
+  fill: none;
+  stroke: var(--color-bg);
+  stroke-opacity: 0.7;
+  stroke-width: 3.5;
+  vector-effect: non-scaling-stroke;
+  pointer-events: none;
+}
+
 .tp-ghost {
   fill: none;
   stroke: var(--color-text);

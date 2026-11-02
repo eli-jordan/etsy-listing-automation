@@ -120,7 +120,10 @@ export function PositionStage({ positioning, picture, title, artwork }: Props) {
         <Overlay layer={active} artwork={artwork} size={size} />
       )}
       {positioning.ghost && active !== undefined && (
-        <polygon className="tp-ghost" points={points(active.box)} />
+        <>
+          <polygon className="tp-halo" points={points(active.box)} />
+          <polygon className="tp-ghost" points={points(active.box)} />
+        </>
       )}
       {layers.map((layer) =>
         layer.id === selected ? (
@@ -234,6 +237,7 @@ function Other({
   const label = layer.placement ?? layer.id;
   return (
     <g>
+      <polygon className="tp-halo" points={points(corners)} />
       <polygon
         className="tp-box tp-box--off"
         points={points(corners)}
