@@ -106,6 +106,16 @@ def _map(points: NDArray[np.float64], matrix: NDArray[np.float64]) -> NDArray[np
     return result
 
 
+def _corners(points: NDArray[np.float64]) -> BoundingBox:
+    """Four mapped points as TL, TR, BR, BL corners."""
+    return (
+        Point(x=points[0, 0], y=points[0, 1]),
+        Point(x=points[1, 0], y=points[1, 1]),
+        Point(x=points[2, 0], y=points[2, 1]),
+        Point(x=points[3, 0], y=points[3, 1]),
+    )
+
+
 def compose(template_box: BoundingBox, pose: Pose) -> BoundingBox:
     """Apply ``pose`` in the rectified frame, then the template homography;
     return TL, TR, BR, BL."""
@@ -116,12 +126,7 @@ def compose(template_box: BoundingBox, pose: Pose) -> BoundingBox:
     rectified = ((_unit() - 0.5) * size) @ np.array([[a, b], [-b, a]])
     rectified += (pose.offset_x, pose.offset_y) * size
     points = _map(rectified / size + 0.5, homography)
-    return (
-        Point(x=points[0, 0], y=points[0, 1]),
-        Point(x=points[1, 0], y=points[1, 1]),
-        Point(x=points[2, 0], y=points[2, 1]),
-        Point(x=points[3, 0], y=points[3, 1]),
-    )
+    return _corners(points)
 
 
 def decompose(template_box: BoundingBox, box: BoundingBox) -> PoseFit:
@@ -174,12 +179,7 @@ def padded_box(template_box: BoundingBox, limits: PositionLimits) -> BoundingBox
     half_y = scale * (width / height * sin(angle) + cos(angle)) / 2 + offset
     unit = (_unit() - 0.5) * (2 * half_x, 2 * half_y) + 0.5
     points = _map(unit, _homography(template_box))
-    return (
-        Point(x=points[0, 0], y=points[0, 1]),
-        Point(x=points[1, 0], y=points[1, 1]),
-        Point(x=points[2, 0], y=points[2, 1]),
-        Point(x=points[3, 0], y=points[3, 1]),
-    )
+    return _corners(points)
 
 
 def clamp_pose(pose: Pose, limits: PositionLimits) -> Pose:
