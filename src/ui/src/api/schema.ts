@@ -2258,6 +2258,16 @@ export interface components {
       /** File */
       file: string;
     };
+    /** BoxPosition */
+    BoxPosition: {
+      /** Bounding Box */
+      bounding_box: [
+        components["schemas"]["Point"],
+        components["schemas"]["Point"],
+        components["schemas"]["Point"],
+        components["schemas"]["Point"],
+      ];
+    };
     /**
      * CalibrationSaveRequest
      * @description A single recoverable calibration transaction under ADR-0054.
@@ -3017,6 +3027,11 @@ export interface components {
         | "pending-retire"
         | "inactive"
         | "expired";
+      /** Template Positions */
+      template_positions?: {
+        [key: string]:
+          components["schemas"]["BoxPosition"] | components["schemas"]["PlacementPositions"];
+      } | null;
     };
     /**
      * ListingFailedEvent
@@ -3679,6 +3694,13 @@ export interface components {
       colour: string;
       /** Id */
       id: string;
+    };
+    /** PlacementPositions */
+    PlacementPositions: {
+      /** Placements */
+      placements: {
+        [key: string]: components["schemas"]["BoxPosition"];
+      };
     };
     /** PlanDTO */
     PlanDTO: {

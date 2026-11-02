@@ -266,7 +266,7 @@ def listing_row(
             workspace,
             workspace.listing_dir(name),
             listing,
-            _check_inputs(facts, listing, workspace.listing_dir(name), description),
+            _check_inputs(facts, listing, workspace.listing_dir(name), description, name=name),
             published=published,
         ),
         gestures=listing_gestures(
@@ -348,7 +348,7 @@ def _describe(
         workspace,
         listing_dir,
         listing,
-        _check_inputs(facts, listing, listing_dir, description),
+        _check_inputs(facts, listing, listing_dir, description, name=context.name),
         published=context.published,
     )
     plan_name, resolved_prices = pricing_summary(
@@ -380,6 +380,8 @@ def _check_inputs(
     listing: Listing,
     listing_dir: Path,
     description: DescriptionResolution,
+    *,
+    name: str,
 ) -> CheckInputs:
     """``listing``'s check inputs; ``description`` is the one resolution the
     caller also shows, so its ref is read once."""
@@ -389,6 +391,12 @@ def _check_inputs(
         templates=facts.templates,
         description_ref_error=str(description.error) if description.error is not None else None,
         videos=facts.videos(listing, listing_dir),
+        **(
+            {"template_position_limits": facts.template_position_limits()}
+            if listing.template_positions
+            else {}
+        ),
+        listing_name=name,
     )
 
 

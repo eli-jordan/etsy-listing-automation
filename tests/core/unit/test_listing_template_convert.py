@@ -114,10 +114,12 @@ class TestWhatIsCopied:
     def test_design_brief_artwork_copy_and_lifecycle_are_left_behind(
         self, workspace: Workspace
     ) -> None:
+        box = workspace.load_template_config("flat-lay-01").bounding_box
         edit_listing(
             workspace.root,
             design={"default": "designs/take-a-hike.png", "black": "designs/take-a-hike.png"},
             lifecycle="retired",
+            template_positions={"flat-lay-01": {"bounding_box": [p.model_dump() for p in box]}},
             etsy={
                 "title": "Take A Hike Tee",
                 "tags": ["hiking"],
@@ -128,7 +130,7 @@ class TestWhatIsCopied:
         assert _blocks(_save(workspace, "heavyweight-tee")) == []
 
         saved = _saved(workspace, "heavyweight-tee")
-        for field in ("design", "brief", "artwork", "lifecycle"):
+        for field in ("design", "brief", "artwork", "lifecycle", "template_positions"):
             assert field not in saved
         etsy = saved.get("etsy", {})
         assert "title" not in etsy

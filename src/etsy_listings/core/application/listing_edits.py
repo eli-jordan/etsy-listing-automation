@@ -66,13 +66,14 @@ def _merge(base: Document, patch: Mapping[str, Any]) -> Document:
     on), and a shallow overwrite there would let one tab's autosave silently
     erase whatever the last edit wrote to a sibling field. ``lifecycle:
     null`` deletes the key (Un-retire, Cancel) rather than writing
-    ``active``."""
+    ``active``. ``template_positions: null`` removes that optional key on Reset
+    as well (ADR-0058)."""
     merged = dict(base)
     for key, value in patch.items():
         if key == "etsy" and isinstance(value, dict) and isinstance(merged.get("etsy"), dict):
             merged["etsy"] = {**merged["etsy"], **value}
-        elif key == "lifecycle" and value is None:
-            merged.pop("lifecycle", None)
+        elif key in {"lifecycle", "template_positions"} and value is None:
+            merged.pop(key, None)
         else:
             merged[key] = value
     return merged

@@ -43,7 +43,9 @@ from etsy_listings.core.config.garment_profile import GarmentProfile
 from etsy_listings.core.config.listing import EtsyListingConfig, Listing
 from etsy_listings.core.config.listing_validation import Issue, TemplateInfo
 from etsy_listings.core.config.media import ProbeFailure, VideoFacts
+from etsy_listings.core.config.settings import TemplatePositionLimits
 from etsy_listings.core.engine.stage import Blocked
+from etsy_listings.core.render.config import AnyTemplate
 from etsy_listings.core.workspace.common_copy import CommonCopyError
 
 
@@ -158,3 +160,13 @@ def check_render_photo(template: str, colour: str | None, path: Path) -> Blocked
 
 def check_prepared_maps(template: str, error: str | None) -> Blocked | None:
     return _refuse(rules.check_prepared_maps(template, error))
+
+
+def check_template_positions(
+    listing: Listing,
+    templates: Mapping[str, AnyTemplate],
+    limits: TemplatePositionLimits,
+    *,
+    name: str,
+) -> Blocked | None:
+    return _refuse(rules.check_template_positions(listing, templates, limits, name=name))

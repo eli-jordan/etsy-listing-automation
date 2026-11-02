@@ -10,6 +10,15 @@ product exists; callers own opening files and handing over arrays.
 is render geometry and render settings from top to bottom. ``Workspace`` is
 what reads and writes it (``load_template_config`` here only parses data
 already in hand).
+
+``positions`` exposes ``Pose(scale=1, offset_x=0, offset_y=0, rotation=0)``,
+``PoseFit(pose, residual_pixels)``, ``compose(template_box, pose) -> BoundingBox``,
+``decompose(template_box, box) -> PoseFit``, ``clamp_pose(pose, limits) -> Pose``
+and ``nearest_allowed_pose(template_box, box, limits) -> Pose`` (ADR-0058).
+Import these directly from ``positions``. ``PositionLimits``/``ScaleLimits``
+are structural protocols; ``config.settings.TemplatePositionLimits`` satisfies
+them without making render depend on settings. Offsets are unit-frame fractions,
+rotation is clockwise degrees. Compose the nearest pose to get repair corners.
 """
 
 from etsy_listings.core.render.config import (

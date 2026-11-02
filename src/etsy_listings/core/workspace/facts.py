@@ -48,6 +48,7 @@ from etsy_listings.core.config.garment_profile import GarmentProfile
 from etsy_listings.core.config.listing import Listing
 from etsy_listings.core.config.listing_validation import TemplateInfo
 from etsy_listings.core.config.media import ProbeFailure, VideoFacts, media_kind
+from etsy_listings.core.config.settings import TemplatePositionLimits
 from etsy_listings.core.render.config import (
     AnyTemplate,
     ColourMatrixTemplate,
@@ -72,6 +73,13 @@ class WorkspaceFacts:
         self.templates = templates
         self._profiles: dict[str, GarmentProfile | None] = {}
         self._probes: dict[Path, VideoFacts | ProbeFailure] = {}
+        self._position_limits: TemplatePositionLimits | None = None
+
+    def template_position_limits(self) -> TemplatePositionLimits:
+        """Limits read once, on demand: unpositioned listings need no settings."""
+        if self._position_limits is None:
+            self._position_limits = self._workspace.load_settings().template_positions
+        return self._position_limits
 
     @classmethod
     def gather(cls, workspace: Workspace) -> WorkspaceFacts:
@@ -183,4 +191,4 @@ def template_info(workspace: Workspace, name: str, config: AnyTemplate) -> Templ
         colours = frozenset(p.colour for p in config.placements if p.colour)
     else:
         colours = frozenset({config.colour}) if config.colour else frozenset()
-    return TemplateInfo(kind=config.kind, colours=colours)
+    return TemplateInfo(kind=config.kind, colours=colours, config=config)

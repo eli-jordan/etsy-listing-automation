@@ -2,7 +2,8 @@
 
 It holds market scoring weights (features/market-seo-20260924/spec.md,
 *Scoring*), the batch AI queue's limit (ADR-0048), the ordered AI provider
-preferences (ADR-0056) and the AI time limits (ADR-0057)::
+preferences (ADR-0056), AI time limits (ADR-0057) and mockup position
+limits (ADR-0058)::
 
     market_seo:
       weights:
@@ -14,6 +15,10 @@ preferences (ADR-0056) and the AI time limits (ADR-0057)::
       providers: [{name: codex}, {name: claude}, {name: grok}]
       step_limit_minutes: 5
       run_limit_minutes: 20
+    template_positions:
+      scale: {min: 0.80, max: 1.10}
+      offset: 0.10
+      rotation: 15
 
 Everything is optional. A missing file, section or key falls back to the
 spec's defaults -- :class:`~etsy_listings.core.market.models.MarketWeights` owns
@@ -167,16 +172,37 @@ def run_floor_minutes(providers: tuple[AiProviderSettings, ...], step_minutes: i
     return max(MIN_RUN_LIMIT_MINUTES, enabled * step_minutes)
 
 
+class PositionScaleLimits(BaseModel):
+    """Interactions' slider ranges guarantee min <= identity <= max (ADR-0058)."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    min: float = Field(0.80, ge=0.50, le=1.0, allow_inf_nan=False)
+    max: float = Field(1.10, ge=1.0, le=1.50, allow_inf_nan=False)
+
+
+class TemplatePositionLimits(BaseModel):
+    """Mockup-only similarity limits; fractions in the template's unit frame."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    scale: PositionScaleLimits = Field(default_factory=PositionScaleLimits)
+    offset: float = Field(0.10, ge=0, le=0.25, allow_inf_nan=False)
+    rotation: float = Field(15, ge=0, le=30, allow_inf_nan=False)
+
+
 class Settings(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     market_seo: MarketSeoSettings = Field(default_factory=MarketSeoSettings)
     batch_ai: BatchAiSettings = Field(default_factory=BatchAiSettings)
     ai: AiSettings = Field(default_factory=AiSettings)
+    template_positions: TemplatePositionLimits = Field(default_factory=TemplatePositionLimits)
 
     _market_seo_absent = field_validator("market_seo", mode="before")(_absent_is_empty)
     _batch_ai_absent = field_validator("batch_ai", mode="before")(_absent_is_empty)
     _ai_absent = field_validator("ai", mode="before")(_absent_is_empty)
+    _positions_absent = field_validator("template_positions", mode="before")(_absent_is_empty)
 
     @classmethod
     def load(cls, path: Path) -> Settings:
