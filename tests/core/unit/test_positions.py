@@ -91,9 +91,10 @@ def test_nearest_allowed_pose_repairs_nonuniform_stretch_by_fitting_first() -> N
             {"x": 0, "y": 220},
         ]
     )
-    # Unit-frame x scale 1.2 and y scale 1 average to uniform scale 1.1.
+    # In the rectified 100 x 200 frame, x scale 1.2 and y scale 1 fit to uniform
+    # scale (50·60 + 100·100) / (50² + 100²) = 1.04: the long side dominates.
     repaired = compose(FLAT, nearest_allowed_pose(FLAT, stretched, TemplatePositionLimits()))
-    np.testing.assert_allclose(pixels(repaired), [(5, 10), (115, 10), (115, 230), (5, 230)])
+    np.testing.assert_allclose(pixels(repaired), [(8, 16), (112, 16), (112, 224), (8, 224)])
 
 
 def test_singular_template_is_a_geometry_error() -> None:
@@ -125,3 +126,21 @@ def test_nearest_pose_leaves_allowed_boundary_unchanged(pose: Pose) -> None:
     box = compose(BOX, pose)
     nearest = nearest_allowed_pose(BOX, box, TemplatePositionLimits())
     np.testing.assert_allclose(pixels(compose(BOX, nearest)), pixels(box), atol=1e-7)
+
+
+@pytest.mark.parametrize("rotation", [15, -7.5, 30])
+def test_tilt_on_a_non_square_box_is_a_rigid_rotation(rotation: float) -> None:
+    # Seller decision 2026-11-02 (ADR-0058 amendment): tilt rotates the
+    # 100 x 200 box rigidly, never shearing it into a parallelogram.
+    corners = np.array(pixels(compose(FLAT, Pose(rotation=rotation))))
+    sides = [corners[(i + 1) % 4] - corners[i] for i in range(4)]
+    for first, second in zip(sides, sides[1:] + sides[:1], strict=True):
+        assert abs(np.dot(first, second)) < 1e-8 * np.linalg.norm(first) * np.linalg.norm(second)
+    assert np.linalg.norm(corners[2] - corners[0]) == pytest.approx(
+        np.linalg.norm(corners[3] - corners[1])
+    )
+    assert np.linalg.norm(sides[0]) == pytest.approx(100)
+    assert np.linalg.norm(sides[1]) == pytest.approx(200)
+    np.testing.assert_allclose(corners.mean(axis=0), (60, 120))
+    angle = np.degrees(np.arctan2(sides[0][1], sides[0][0]))
+    assert angle == pytest.approx(rotation)
