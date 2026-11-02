@@ -87,7 +87,7 @@ def write_yaml_atomic(
     document: object,
     *,
     new: Callable[[], str],
-    before: Any = UNSET,  # noqa: ANN401 -- any YAML value
+    before: Any = UNSET,  # any YAML value
     durable: bool = False,
 ) -> bool:
     """Make the YAML file at ``path`` read as ``document``; whether it was

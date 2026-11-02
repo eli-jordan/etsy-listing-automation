@@ -25,7 +25,9 @@ from __future__ import annotations
 
 import codecs
 import io
-from collections.abc import Callable, Mapping
+from collections import deque
+from collections.abc import Callable, Iterable, Iterator, Mapping
+from dataclasses import dataclass
 from typing import Any
 
 import yaml
@@ -91,19 +93,27 @@ def edit_yaml(
     Reordering those rows moves their original source, including comments.
     """
     try:
-        current = yaml.safe_load(source)
-        wanted = _plain(after)
-        target = wanted if before is UNSET else _merge(current, _plain(before), wanted)
-        if _same(current, target):
-            return source
-        edited = _Editor(source, sequence_keys=sequence_keys).edit(current, target)
-        if not _same(yaml.safe_load(edited), target):
-            raise UneditableYamlError(
-                "the edited text would not read back as the intended document"
-            )
-        return edited
+        return _edited(source, after, before=before, sequence_keys=sequence_keys)
     except (yaml.YAMLError, RoundTripYamlError) as exc:
         raise UneditableYamlError(f"YAML source could not be edited safely: {exc}") from exc
+
+
+def _edited(
+    source: str,
+    after: object,
+    *,
+    before: object,
+    sequence_keys: Mapping[tuple[str, ...], str] | None,
+) -> str:
+    current = yaml.safe_load(source)
+    wanted = _plain(after)
+    target = wanted if before is UNSET else _merge(current, _plain(before), wanted)
+    if _same(current, target):
+        return source
+    edited = _Editor(source, sequence_keys=sequence_keys).edit(current, target)
+    if not _same(yaml.safe_load(edited), target):
+        raise UneditableYamlError("the edited text would not read back as the intended document")
+    return edited
 
 
 # ------------------------------------------------------------------ values
@@ -135,17 +145,24 @@ def _merge(source: Any, before: Any, after: Any) -> Any:
     """``source`` with the changes from ``before`` to ``after`` applied."""
     if _same(before, after):
         return source
-    if not (isinstance(source, dict) and isinstance(before, dict) and isinstance(after, dict)):
+    if not all(isinstance(value, dict) for value in (source, before, after)):
         return after
     result = {key: value for key, value in source.items() if key in after or key not in before}
     for key, value in after.items():
-        if key in before and _same(before[key], value):
-            continue
-        if key in before and key in result:
-            result[key] = _merge(result[key], before[key], value)
-        else:
-            result = _insert_after_predecessor(result, key, value, order=list(after))
+        if not (key in before and _same(before[key], value)):
+            result = _merge_key(result, before, key, value, order=list(after))
     return result
+
+
+def _merge_key(
+    result: dict[Any, Any], before: dict[Any, Any], key: Any, value: Any, *, order: list[Any]
+) -> dict[Any, Any]:
+    """``result`` with ``key`` changed to ``value``: merged where the source
+    still holds it, else placed by ``order``."""
+    if key in before and key in result:
+        result[key] = _merge(result[key], before[key], value)
+        return result
+    return _insert_after_predecessor(result, key, value, order=order)
 
 
 def _insert_after_predecessor(
@@ -181,6 +198,61 @@ class _InPlaceRefusedError(Exception):
 Replace = Callable[[Any], None]
 
 
+@dataclass(frozen=True)
+class _Rows:
+    """A block sequence's items, where each one's dash is, and the dashes' column."""
+
+    items: list[Node]
+    dashes: list[int]
+    column: int
+
+
+def _common_ends(old: list[Any], new: list[Any]) -> tuple[int, int]:
+    """How many leading and trailing items ``old`` and ``new`` share."""
+    shortest = min(len(old), len(new))
+    prefix = 0
+    while prefix < shortest and _same(old[prefix], new[prefix]):
+        prefix += 1
+    suffix = 0
+    while suffix < shortest - prefix and _same(old[-1 - suffix], new[-1 - suffix]):
+        suffix += 1
+    return prefix, suffix
+
+
+def _children(node: Node) -> list[Node]:
+    """What `_Editor._detect_indentation` looks inside next: every sequence
+    item, and a block mapping's values. A flow mapping is not entered."""
+    if isinstance(node, SequenceNode):
+        return list(node.value)
+    if isinstance(node, MappingNode) and not _is_flow(node):
+        return [value for _, value in node.value]
+    return []
+
+
+def _nested_blocks_in(root: Node) -> Iterator[tuple[Node, Node]]:
+    """Every `_nested_blocks` entry under ``root``, breadth first."""
+    pending = deque([root])
+    while pending:
+        node = pending.popleft()
+        pending.extend(_children(node))
+        yield from _nested_blocks(node)
+
+
+def _first(values: Iterable[int | None]) -> int | None:
+    return next((value for value in values if value is not None), None)
+
+
+def _nested_blocks(node: Node) -> list[tuple[Node, Node]]:
+    """A block mapping's entries whose value is itself a non-empty block."""
+    if not isinstance(node, MappingNode) or _is_flow(node):
+        return []
+    return [
+        (key, value)
+        for key, value in node.value
+        if not (isinstance(value, ScalarNode) or _is_flow(value) or not value.value)
+    ]
+
+
 class _Editor:
     def __init__(
         self, source: str, *, sequence_keys: Mapping[tuple[str, ...], str] | None = None
@@ -197,18 +269,21 @@ class _Editor:
         if self.root is not None:
             self._detect_indentation(self.root)
             for path, key in (sequence_keys or {}).items():
-                node = self.root
-                for part in path:
-                    if not isinstance(node, MappingNode):
-                        break
-                    child = next(
-                        (value for name, value in node.value if self._key(name) == part), None
-                    )
-                    if child is None:
-                        break
-                    node = child
-                else:
+                node = self._node_at(self.root, path)
+                if node is not None:
                     self.sequence_keys[id(node)] = key
+
+    def _node_at(self, root: Node, path: tuple[str, ...]) -> Node | None:
+        """The node under ``root`` at mapping keys ``path``, if there is one."""
+        node = root
+        for part in path:
+            if not isinstance(node, MappingNode):
+                return None
+            child = next((value for name, value in node.value if self._key(name) == part), None)
+            if child is None:
+                return None
+            node = child
+        return node
 
     def edit(self, current: Any, target: Any) -> str:
         if self.root is None:
@@ -235,17 +310,7 @@ class _Editor:
         if _same(old, new):
             return
         try:
-            if isinstance(node, MappingNode) and isinstance(old, dict) and isinstance(new, dict):
-                if node.flow_style:
-                    self._edit_flow_mapping(node, old, new)
-                else:
-                    self._edit_block_mapping(node, old, new)
-                return
-            if isinstance(node, SequenceNode) and isinstance(old, list) and isinstance(new, list):
-                if node.flow_style:
-                    self._edit_flow_sequence(node, old, new)
-                else:
-                    self._edit_block_sequence(node, old, new)
+            if self._edit_collection(node, old, new):
                 return
         except _InPlaceRefusedError:
             pass
@@ -253,6 +318,19 @@ class _Editor:
             self._flow_replacer(node)(new)  # a flow collection stays one
         else:
             replace(self._styled(node, new))
+
+    def _edit_collection(self, node: Node, old: Any, new: Any) -> bool:
+        """Edit a mapping or sequence entry by entry; False when ``node`` and
+        the values are not the same kind of collection."""
+        if isinstance(node, MappingNode) and isinstance(old, dict) and isinstance(new, dict):
+            mapping = self._edit_flow_mapping if node.flow_style else self._edit_block_mapping
+            mapping(node, old, new)
+            return True
+        if isinstance(node, SequenceNode) and isinstance(old, list) and isinstance(new, list):
+            sequence = self._edit_flow_sequence if node.flow_style else self._edit_block_sequence
+            sequence(node, old, new)
+            return True
+        return False
 
     def _key(self, node: Node) -> Any:
         """A key as the reader reads it. Read by PyYAML from its own text,
@@ -297,8 +375,7 @@ class _Editor:
             raise _InPlaceRefusedError
         for key, key_node, value_node in entries:
             if key not in new:
-                start = self._line_start(key_node.start_mark.index)
-                self._splice(start, self._line_after(self._content_end(value_node)), "")
+                self._remove_lines(key_node.start_mark.index, value_node)
             else:
                 self._edit(
                     value_node,
@@ -306,6 +383,16 @@ class _Editor:
                     new[key],
                     self._map_value_replacer(key_node, value_node, column),
                 )
+        self._insert_keys(entries, old, new, column)
+
+    def _insert_keys(
+        self,
+        entries: list[tuple[Any, Node, Node]],
+        old: dict[Any, Any],
+        new: dict[Any, Any],
+        column: int,
+    ) -> None:
+        """Each key ``new`` adds, after the nearest kept key before it."""
         ends = {key: self._content_end(value_node) for key, _, value_node in entries}
         order = list(new)
         for position, key in enumerate(order):
@@ -318,54 +405,45 @@ class _Editor:
             else:
                 self._insert_lines_before(entries[0][1].start_mark.index, lines, column)
 
+    def _remove_lines(self, first: int, last: Node) -> None:
+        """Remove the whole lines from ``first`` to the end of ``last``'s content."""
+        start = self._line_start(first)
+        self._splice(start, self._line_after(self._content_end(last)), "")
+
     def _edit_block_sequence(self, node: SequenceNode, old: list[Any], new: list[Any]) -> None:
         items: list[Node] = list(node.value)
         if not new or not items:
             raise _InPlaceRefusedError
         dashes = [self._dash(item) for item in items]
-        column = dashes[0] - self._line_start(dashes[0])
+        rows = _Rows(items, dashes, dashes[0] - self._line_start(dashes[0]))
         key = self.sequence_keys.get(id(node))
         if key is not None:
-            self._edit_named_sequence(items, dashes, column, old, new, key)
+            self._edit_named_sequence(rows, old, new, key)
             return
-        prefix = 0
-        while prefix < min(len(old), len(new)) and _same(old[prefix], new[prefix]):
-            prefix += 1
-        suffix = 0
-        while suffix < min(len(old), len(new)) - prefix and _same(
-            old[-1 - suffix], new[-1 - suffix]
-        ):
-            suffix += 1
+        prefix, suffix = _common_ends(old, new)
         changed_old = range(prefix, len(old) - suffix)
         changed_new = new[prefix : len(new) - suffix]
         paired = min(len(changed_old), len(changed_new))
         removed = list(changed_old)[paired:]
         if any(not self._starts_its_line(dashes[index]) for index in removed):
             raise _InPlaceRefusedError
-        for offset in range(paired):
-            index = prefix + offset
+        for index in range(prefix, prefix + paired):
             self._edit(items[index], old[index], new[index], self._item_replacer(items[index]))
         for index in removed:
-            start = self._line_start(dashes[index])
-            self._splice(start, self._line_after(self._content_end(items[index])), "")
-        added = changed_new[paired:]
-        last_kept = prefix + paired - 1
+            self._remove_lines(dashes[index], items[index])
+        self._insert_items(rows, changed_new[paired:], last_kept=prefix + paired - 1)
+
+    def _insert_items(self, rows: _Rows, added: list[Any], *, last_kept: int) -> None:
+        """``added`` after the last kept item, or before the first when none was kept."""
         for value in added:
             lines = self._render_item(value).split("\n")
             if last_kept >= 0:
-                self._insert_lines_after(self._content_end(items[last_kept]), lines, column)
+                end = self._content_end(rows.items[last_kept])
+                self._insert_lines_after(end, lines, rows.column)
             else:
-                self._insert_lines_before(dashes[0], lines, column)
+                self._insert_lines_before(rows.dashes[0], lines, rows.column)
 
-    def _edit_named_sequence(
-        self,
-        items: list[Node],
-        dashes: list[int],
-        column: int,
-        old: list[Any],
-        new: list[Any],
-        key: str,
-    ) -> None:
+    def _edit_named_sequence(self, rows: _Rows, old: list[Any], new: list[Any], key: str) -> None:
         """ADR-0056 providers have a stable name. An index is not their
         identity: changing names in place would attach comments to another CLI.
         Only owners declaring that identity opt into moving source rows.
@@ -373,8 +451,8 @@ class _Editor:
         names = [row[key] for row in old]
         if len(set(names)) != len(names):
             raise UneditableYamlError("duplicate identities in an ordered sequence")
-        starts = [self._line_start(dash) for dash in dashes]
-        end = self._line_after(self._content_end(items[-1]))
+        starts = [self._line_start(dash) for dash in rows.dashes]
+        end = self._line_after(self._content_end(rows.items[-1]))
         ends = [*starts[1:], end]
         fragments = {
             name: (row, self.source[start:stop])
@@ -386,16 +464,19 @@ class _Editor:
             # another row. Only insert that necessary line boundary.
             if replacement and not replacement.endswith("\n"):
                 replacement += self.newline
-            if row[key] in fragments:
-                original, source = fragments[row[key]]
-                replacement += edit_yaml(source, [row], before=[original])
-            else:
-                rendered = self._lines(self._render_item(row), indent=column)
-                replacement += " " * column + rendered.replace("\n", self.newline) + self.newline
+            replacement += self._named_row(row, fragments.get(row[key]), rows.column)
         if end == len(self.source) and not self.source.endswith("\n"):
             replacement = replacement.removesuffix(self.newline)
         # Existing fragments already carry their exact line endings.
         self.edits.append((starts[0], end, len(self.edits), replacement))
+
+    def _named_row(self, row: Any, fragment: tuple[Any, str] | None, column: int) -> str:
+        """``row``'s text: its old source edited when it had one, else rendered."""
+        if fragment is not None:
+            original, source = fragment
+            return edit_yaml(source, [row], before=[original])
+        rendered = self._lines(self._render_item(row), indent=column)
+        return " " * column + rendered.replace("\n", self.newline) + self.newline
 
     # -- replacing one node
 
@@ -415,30 +496,33 @@ class _Editor:
             rendered = self._lines(self._render({"k": new}), indent=column)
             remainder = rendered[len("k:") :]
             colon = self.source.index(":", key_node.end_mark.index)
-            end = self._content_end(value_node)
-            starts_later = "\n" in self.source[colon : value_node.start_mark.index]
-            if (
-                isinstance(value_node, ScalarNode)
-                and value_node.style is None
-                and not (value_node.value)
-            ):  # an empty value: `key:` and nothing after it
-                self._splice(colon + 1, colon + 1, remainder)
-            elif starts_later and remainder.startswith("\n"):
-                start = self._line_start(value_node.start_mark.index)
-                self._splice(start, end, remainder[1:])
-            elif starts_later:
-                # The old block's last line goes whole, comment and all.
-                line_end = self.source.find("\n", end)
-                end = len(self.source) if line_end < 0 else line_end
-                if self.source[end - 1 : end] == "\r":
-                    end -= 1
-                self._splice(colon + 1, end, remainder)
-            elif remainder.startswith("\n"):
-                self._splice(colon + 1, end, remainder)
-            else:
-                self._splice(value_node.start_mark.index, end, remainder.lstrip(" "))
+            self._splice(*self._map_value_span(colon, value_node, remainder))
 
         return replace
+
+    def _map_value_span(self, colon: int, value_node: Node, remainder: str) -> tuple[int, int, str]:
+        """Where a mapping value's new text ``remainder`` goes, and what it is."""
+        end = self._content_end(value_node)
+        if isinstance(value_node, ScalarNode) and value_node.style is None and not value_node.value:
+            return colon + 1, colon + 1, remainder  # an empty value: `key:` and nothing after it
+        if "\n" in self.source[colon : value_node.start_mark.index]:
+            return self._later_value_span(colon, value_node, end, remainder)
+        if remainder.startswith("\n"):
+            return colon + 1, end, remainder
+        return value_node.start_mark.index, end, remainder.lstrip(" ")
+
+    def _later_value_span(
+        self, colon: int, value_node: Node, end: int, remainder: str
+    ) -> tuple[int, int, str]:
+        """`_map_value_span` for a value that starts on a line after its key."""
+        if remainder.startswith("\n"):
+            return self._line_start(value_node.start_mark.index), end, remainder[1:]
+        # The old block's last line goes whole, comment and all.
+        line_end = self.source.find("\n", end)
+        end = len(self.source) if line_end < 0 else line_end
+        if self.source[end - 1 : end] == "\r":
+            end -= 1
+        return colon + 1, end, remainder
 
     def _item_replacer(self, item: Node) -> Replace:
         def replace(new: Any) -> None:
@@ -561,31 +645,26 @@ class _Editor:
         """Match the file's own nesting for anything new: the first nested
         mapping gives the mapping indent, the first sequence under a key
         whether its dashes are indented."""
-        found_mapping = found_sequence = False
-        pending: list[Node] = [root]
-        while pending and not (found_mapping and found_sequence):
-            node = pending.pop(0)
-            if not isinstance(node, MappingNode) or _is_flow(node):
-                if isinstance(node, SequenceNode):
-                    pending.extend(node.value)
-                continue
-            for key_node, value_node in node.value:
-                pending.append(value_node)
-                if (
-                    isinstance(value_node, ScalarNode)
-                    or _is_flow(value_node)
-                    or not value_node.value
-                ):
-                    continue
-                if isinstance(value_node, MappingNode) and not found_mapping:
-                    indent = value_node.value[0][0].start_mark.column - key_node.start_mark.column
-                    if indent > 0:
-                        self.mapping_indent, found_mapping = indent, True
-                if isinstance(value_node, SequenceNode) and not found_sequence:
-                    try:
-                        dash = self._dash(value_node.value[0])
-                    except _InPlaceRefusedError:
-                        continue
-                    offset = dash - self._line_start(dash) - key_node.start_mark.column
-                    if offset >= 0:
-                        self.sequence_offset, found_sequence = offset, True
+        indent = _first(self._mapping_indent(key, value) for key, value in _nested_blocks_in(root))
+        if indent is not None:
+            self.mapping_indent = indent
+        offset = _first(self._sequence_offset(key, value) for key, value in _nested_blocks_in(root))
+        if offset is not None:
+            self.sequence_offset = offset
+
+    @staticmethod
+    def _mapping_indent(key_node: Node, value_node: Node) -> int | None:
+        if not isinstance(value_node, MappingNode):
+            return None
+        indent = int(value_node.value[0][0].start_mark.column - key_node.start_mark.column)
+        return indent if indent > 0 else None
+
+    def _sequence_offset(self, key_node: Node, value_node: Node) -> int | None:
+        if not isinstance(value_node, SequenceNode):
+            return None
+        try:
+            dash = self._dash(value_node.value[0])
+        except _InPlaceRefusedError:
+            return None
+        offset = int(dash - self._line_start(dash) - key_node.start_mark.column)
+        return offset if offset >= 0 else None
