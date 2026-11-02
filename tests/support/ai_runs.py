@@ -117,6 +117,8 @@ class ChainProvider:
     tasks: list[ProviderTask] = field(default_factory=list, init=False)
     repairs: list[RepairContext | None] = field(default_factory=list, init=False)
     cancelled: list[Task] = field(default_factory=list, init=False)
+    remaining: list[tuple[Task, float]] = field(default_factory=list, init=False)
+    """Each call's step deadline, as seconds left when the call began."""
     started: defaultdict[Task, threading.Event] = field(
         default_factory=lambda: defaultdict(threading.Event), init=False
     )
@@ -142,6 +144,7 @@ class ChainProvider:
         self.calls.append(kind)
         self.tasks.append(task)
         self.repairs.append(repair)
+        self.remaining.append((kind, deadline.remaining_seconds()))
         self.started[kind].set()
         gate = self.gates.get(kind)
         held_until = time.monotonic() + GATE_TIMEOUT

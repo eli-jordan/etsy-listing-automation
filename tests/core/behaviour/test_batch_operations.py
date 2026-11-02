@@ -112,7 +112,7 @@ def _queue(workspace: Workspace, batches: BatchStore) -> BatchQueue:
         workspace,
         proposals=ProposalStore(workspace),
         batches=batches,
-        providers=lambda _workspace: [ChainProvider()],
+        providers=lambda _workspace, _ai: [ChainProvider()],
         market_client=lambda _workspace: market,
     ).queue
 
@@ -584,7 +584,7 @@ class TestSteerAndKeep:
             workspace,
             proposals=ProposalStore(workspace),
             batches=batches,
-            providers=lambda _workspace: [provider],
+            providers=lambda _workspace, _ai: [provider],
             market_client=lambda _workspace: market,
         )
         ai.start()

@@ -286,7 +286,7 @@ def test_runs_execute_one_at_a_time_in_the_order_queued_after_yielding_ai_work(
         workspace,
         proposals=ProposalStore(workspace),
         batches=BatchStore(workspace),
-        providers=lambda _workspace: [],
+        providers=lambda _workspace, _ai: [],
         market_client=lambda _workspace: None,
     )
     held: list[tuple[bool, bool]] = []

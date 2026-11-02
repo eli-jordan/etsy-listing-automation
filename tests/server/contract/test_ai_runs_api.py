@@ -64,7 +64,7 @@ def _client(
     app = create_app(
         workspace,
         context_factory=_context_factory,
-        seo_provider_factory=lambda _workspace: [provider],
+        seo_provider_factory=lambda _workspace, _ai: [provider],
         market_client_factory=lambda _workspace: market,
     )
     with TestClient(app) as client:

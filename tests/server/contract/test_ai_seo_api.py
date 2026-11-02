@@ -42,7 +42,7 @@ def _unready_provider(name: str, reason: str) -> FakeAiProvider:
 @contextmanager
 def _client(workspace_root: Path, providers: list[AiProvider]) -> Iterator[TestClient]:
     workspace = Workspace.discover(root_override=workspace_root)
-    app = create_app(workspace, seo_provider_factory=lambda _workspace: providers)
+    app = create_app(workspace, seo_provider_factory=lambda _workspace, _ai: providers)
     with TestClient(app) as test_client:
         yield test_client
 

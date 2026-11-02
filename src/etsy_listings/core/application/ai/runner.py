@@ -18,8 +18,14 @@ behind it (or it behind a deploy). The threads are daemons, and
 :meth:`AiRunner.shutdown` cancels every active run, so neither a server
 stopping nor a test suite ending waits on a provider.
 
+**Limits.** A run captures its providers and ``settings.yaml``'s AI time
+limits before its thread starts (ADR-0056, ADR-0057), and keeps them: an
+edit affects the next run. One :class:`~etsy_listings.core.ai.models.RunBudget`
+covers every task, fallback and market search in the run; each provider
+tried gets a fresh step from it.
+
 **Stopping.** Each run has one cancel event. ``DELETE`` sets it, the
-watchdog sets it after :data:`RUN_LIMIT_SECONDS`, and shutdown sets it. It
+watchdog sets it when the run's budget runs out, and shutdown sets it. It
 is handed to every provider call, which kills the subprocess tree, and to
 ``research``, which starts no new Etsy call; the chain also checks it
 between steps. What was written before it was set -- a brief, a snapshot --
@@ -46,6 +52,7 @@ from etsy_listings.core.ai.brief import BriefRequest
 from etsy_listings.core.ai.errors import ProviderCancelledError, SeoGenerationError
 from etsy_listings.core.ai.listing_inputs import ListingAiInputs, PreparedSeo
 from etsy_listings.core.ai.market_queries import MarketQueriesRequest
+from etsy_listings.core.ai.models import AiLimits, Deadline, RunBudget
 from etsy_listings.core.ai.orchestrator import (
     generate_brief,
     generate_market_queries,
@@ -82,17 +89,26 @@ from etsy_listings.core.workspace.workspace import Workspace
 
 logger = logging.getLogger(__name__)
 
-RUN_LIMIT_SECONDS = 180.0
-"""The whole run's cap (features/market-seo-20260924/spec.md, *Failures*). Each provider call keeps
-its own 60 seconds; market search has no limit of its own."""
-
-TIMEOUT_MESSAGE = "The AI run took longer than 3 minutes, so it was stopped. Try again."
 KEPT_BRIEF = "You wrote the brief, so it was kept"
 KEPT_OWN_BRIEF = "You wrote the brief meanwhile, so yours was kept"
 NO_COMPARABLES = "No comparable listings found, even with filters relaxed"
 NOT_STARTED = "Not started"
 CANCELLED = "Cancelled"
 NO_ETSY_KEY = "no Etsy API key is configured; run `etsy-listings setup`"
+
+
+def timeout_message(run_minutes: int) -> str:
+    """What a run the watchdog stopped fails with, naming its own limit."""
+    return f"The AI run took longer than {run_minutes} minutes, so it was stopped. Try again."
+
+
+@dataclass(frozen=True)
+class _Captured:
+    """What a run captured before its thread started and keeps to the end
+    (ADR-0056, ADR-0057): the provider adapters and the run's budget."""
+
+    providers: Sequence[AiProvider]
+    budget: RunBudget
 
 
 class _StoppedError(Exception):
@@ -117,7 +133,6 @@ class AiRunner:
     proposals: ProposalStore
     now: Callable[[], datetime] = field(default=lambda: datetime.now(UTC))
     monotonic: Callable[[], float] = time.monotonic
-    limit_seconds: float = RUN_LIMIT_SECONDS
     watch_interval: float = 0.5
     _threads: list[threading.Thread] = field(default_factory=list, init=False, repr=False)
     _threads_lock: threading.Lock = field(default_factory=threading.Lock, init=False, repr=False)
@@ -125,10 +140,29 @@ class AiRunner:
     def start(self, run: AiRun) -> None:
         """Run the chain on a new daemon thread, with its watchdog."""
         started = self.monotonic()
+        # ADR-0056/0057: capture before scheduling, not after the thread gets
+        # CPU. Every task, repair and fallback keeps these adapters and limits.
+        try:
+            # One read: limits and providers from the same revision (ADR-0057).
+            ai = self.workspace.load_settings().ai
+            limits = AiLimits.of(ai)
+            providers = tuple(self.providers(self.workspace, ai))
+        except UserFacingError as exc:
+            self._end_failed(run, str(exc))
+            return
+        except Exception:
+            logger.exception("AI run %s could not capture its providers", run.id)
+            self._end_failed(run, INTERNAL_ERROR_MESSAGE)
+            return
+        budget = RunBudget(
+            limits, Deadline(deadline_at=started + limits.run_seconds, clock=self.monotonic)
+        )
         threads = [
-            threading.Thread(target=self._execute, args=(run,), name=f"ai-run-{run.id}"),
             threading.Thread(
-                target=self._watch, args=(run, started), name=f"ai-run-watchdog-{run.id}"
+                target=self._execute, args=(run, providers, budget), name=f"ai-run-{run.id}"
+            ),
+            threading.Thread(
+                target=self._watch, args=(run, budget), name=f"ai-run-watchdog-{run.id}"
             ),
         ]
         with self._threads_lock:
@@ -150,22 +184,22 @@ class AiRunner:
 
     # ------------------------------------------------------------ the thread
 
-    def _watch(self, run: AiRun, started: float) -> None:
+    def _watch(self, run: AiRun, budget: RunBudget) -> None:
         while not run.cancel_event.wait(self.watch_interval):
             if run.finished:
                 return
-            if self.monotonic() - started >= self.limit_seconds:
+            if budget.deadline.expired:
                 run.request_stop("timeout")
                 return
 
-    def _execute(self, run: AiRun) -> None:
+    def _execute(self, run: AiRun, providers: Sequence[AiProvider], budget: RunBudget) -> None:
         try:
-            self._chain(run)
+            self._chain(run, _Captured(providers, budget))
         except (_StoppedError, ProviderCancelledError, ResearchCancelledError):
-            self._end_stopped(run)
+            self._end_stopped(run, budget)
         except Exception as exc:
             if run.cancel_event.is_set():
-                self._end_stopped(run)
+                self._end_stopped(run, budget)
             elif isinstance(exc, SeoGenerationError | UserFacingError):
                 self._end_failed(run, str(exc))
             else:
@@ -186,9 +220,9 @@ class AiRunner:
                 run.step(step, "pending", NOT_STARTED)
         run.finish("failed", message)
 
-    def _end_stopped(self, run: AiRun) -> None:
+    def _end_stopped(self, run: AiRun, budget: RunBudget) -> None:
         if run.stop_reason == "timeout":
-            self._end_failed(run, TIMEOUT_MESSAGE)
+            self._end_failed(run, timeout_message(budget.limits.run_minutes))
             return
         active = run.active_step
         for step in STEP_IDS:
@@ -207,19 +241,18 @@ class AiRunner:
     def _load(self, run: AiRun, *, market_block: str = "") -> PreparedSeo:
         return ListingAiInputs.read(self.workspace, run.listing).prepare(market_block=market_block)
 
-    def _chain(self, run: AiRun) -> None:
+    def _chain(self, run: AiRun, captured: _Captured) -> None:
         # A batch run can be asked to stop before its thread starts (Cancel
         # batch landing just after the queue claimed the row, ADR-0048).
         self._check(run)
         inputs = self._load(run)
-        providers = self.providers(self.workspace)
         drafting = run.draft_brief and not inputs.request.brief.strip()
 
         brief_only = run.origin == "batch"
         _plan_steps(run, drafting=drafting, brief_only=brief_only)
 
         if drafting:
-            self._draft_brief(run, inputs.request.design_image, providers)
+            self._draft_brief(run, inputs.request.design_image, captured)
 
         if brief_only:
             self._check(run)
@@ -228,16 +261,17 @@ class AiRunner:
 
         if drafting:
             inputs = self._load(run)
-        result, snapshot = self._research_market(run, inputs, providers)
-        self._propose(run, result, snapshot, providers)
+        result, snapshot = self._research_market(run, inputs, captured)
+        self._propose(run, result, snapshot, captured)
         run.finish("done")
 
-    def _draft_brief(self, run: AiRun, design: Path, providers: Sequence[AiProvider]) -> None:
+    def _draft_brief(self, run: AiRun, design: Path, captured: _Captured) -> None:
         run.step("brief", "active", f"Reading {design.name}")
         drafted = generate_brief(
             BriefRequest(design_image=design),
             _read_prompt(self.workspace.brief_prompt_file()),
-            providers,
+            captured.providers,
+            budget=captured.budget,
             cancel_event=run.cancel_event,
         )
         self._check(run)
@@ -250,7 +284,7 @@ class AiRunner:
         )
 
     def _research_market(
-        self, run: AiRun, inputs: PreparedSeo, providers: Sequence[AiProvider]
+        self, run: AiRun, inputs: PreparedSeo, captured: _Captured
     ) -> tuple[MarketResult, market_snapshot.MarketSnapshot]:
         """Choose searches from the brief, score Etsy's comparables and save
         the snapshot with the listing."""
@@ -265,7 +299,8 @@ class AiRunner:
                 design_image=inputs.request.design_image,
             ),
             _read_prompt(workspace.market_queries_prompt_file()),
-            providers,
+            captured.providers,
+            budget=captured.budget,
             cancel_event=run.cancel_event,
         ).queries
         self._check(run)
@@ -305,7 +340,7 @@ class AiRunner:
         run: AiRun,
         result: MarketResult,
         snapshot: market_snapshot.MarketSnapshot,
-        providers: Sequence[AiProvider],
+        captured: _Captured,
     ) -> None:
         """Generate the SEO proposal from the market data and cache it."""
         workspace = self.workspace
@@ -320,7 +355,8 @@ class AiRunner:
         proposal = generate_proposal(
             inputs.request,
             _read_prompt(workspace.seo_prompt_file()),
-            providers,
+            captured.providers,
+            budget=captured.budget,
             cancel_event=run.cancel_event,
         )
         self._check(run)

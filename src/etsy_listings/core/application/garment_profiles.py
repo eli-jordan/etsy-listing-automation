@@ -21,6 +21,7 @@ from etsy_listings.core.clients.printify.resolve import normalise
 from etsy_listings.core.config.errors import ConfigLoadError
 from etsy_listings.core.config.garment_profile import BlueprintRef, GarmentProfile, PrintArea
 from etsy_listings.core.config.slug import ColourExceptions, slug_map, slugify
+from etsy_listings.core.workspace.atomic import write_bytes_atomic
 from etsy_listings.core.workspace.workspace import Workspace
 
 DEFAULT_PLACEHOLDER = "front"
@@ -137,15 +138,13 @@ def write_garment_profile_if_absent(
     workspace: Workspace, slug: str, garment_profile: GarmentProfile
 ) -> bool:
     """Returns True if a new garment profile was written, False if one already
-    existed and was left untouched."""
+    existed and was left untouched -- not rewritten, not even replaced, since
+    the seller may have edited it by hand (ADR-0055)."""
     path = workspace.garment_profile_file(slug)
     if path.is_file():
         return False
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(
-        yaml.safe_dump(garment_profile.model_dump(mode="json"), sort_keys=False),
-        encoding="utf-8",
-    )
+    text = yaml.safe_dump(garment_profile.model_dump(mode="json"), sort_keys=False)
+    write_bytes_atomic(path, text.encode("utf-8"))
     return True
 
 

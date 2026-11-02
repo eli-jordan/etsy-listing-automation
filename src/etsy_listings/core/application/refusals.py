@@ -303,3 +303,49 @@ class ReviewedPlanRefusedError(UserFacingError, ValueError):
     """ADR-0042: a workspace apply names exactly the listings and plan
     fingerprints of a ready workspace plan the seller reviewed, or it is not
     queued. The message says which part did not hold."""
+
+
+# --------------------------------------------------------------------- shop
+#
+# The Admin page's Shop tab (Admin plan, PR 3). Both are raised: nothing was
+# written, and the page keeps the seller's edit visible with the reason.
+
+
+class ShopRevisionConflictError(UserFacingError, RuntimeError):
+    """``shop.yaml`` changed since the page read it; the seller reloads."""
+
+    def __init__(self) -> None:
+        super().__init__("shop.yaml changed on disk since this page loaded it. Reload to continue.")
+
+
+class InvalidShopEditError(UserFacingError, ValueError):
+    """The edited ``shop.yaml`` would not load: each refused dotted key to
+    the reason, as ``field_errors_of`` names a listing's."""
+
+    def __init__(self, field_errors: dict[str, str]) -> None:
+        super().__init__("; ".join(f"{key}: {message}" for key, message in field_errors.items()))
+        self.field_errors = field_errors
+
+
+# ----------------------------------------------------------------- settings
+#
+# The Admin page's Settings tab (Admin plan, PR 4): the same two refusals for
+# settings.yaml, which has its own revision.
+
+
+class SettingsRevisionConflictError(UserFacingError, RuntimeError):
+    """``settings.yaml`` changed since the page read it; the seller reloads."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            "settings.yaml changed on disk since this page loaded it. Reload to continue."
+        )
+
+
+class InvalidSettingsEditError(UserFacingError, ValueError):
+    """The edited ``settings.yaml`` would not load: each refused dotted key
+    to the reason."""
+
+    def __init__(self, field_errors: dict[str, str]) -> None:
+        super().__init__("; ".join(f"{key}: {message}" for key, message in field_errors.items()))
+        self.field_errors = field_errors

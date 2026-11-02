@@ -30,7 +30,7 @@ from collections.abc import Callable, Iterable
 from pathlib import Path
 
 from etsy_listings.core import connections
-from etsy_listings.core.clients.etsy.tokens import EtsyAuthError
+from etsy_listings.core.clients.etsy.tokens import EtsyAuthError, EtsyRefreshBusyError
 from etsy_listings.core.clients.etsy.transport import EtsyApiError
 from etsy_listings.core.config.secrets import MissingCredentialError
 from etsy_listings.core.engine.status import is_live_etsy_state
@@ -96,7 +96,7 @@ def _fetch(root: Path, listing_ids: list[int]) -> dict[int, str | None]:
         return absent
     try:
         states = client.listing_states(listing_ids)
-    except (EtsyApiError, EtsyAuthError, MissingCredentialError):
+    except (EtsyApiError, EtsyAuthError, EtsyRefreshBusyError, MissingCredentialError):
         return absent
     return {**absent, **states}
 

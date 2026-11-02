@@ -1,11 +1,20 @@
-"""The Codex-then-Claude chain, one same-provider output repair, and the
-shared 60-second request deadline (AI SEO implementation plan, PR4, item 3;
+"""The captured provider chain (ADR-0056), one same-provider output repair, and the
+run's step and run budgets (ADR-0057; AI SEO implementation plan, PR4, item 3;
 the "Timeout and retries" and "Provider adapters" decisions).
 
 This is the "orchestration service" the runtime design diagram and
 `ai/providers.py`'s own docstring describe: it owns retry classification,
-fallback order, the shared deadline, and turning a provider's raw text into
-a validated result -- none of that is an adapter's job. It is driven
+fallback order, the time budgets, and turning a provider's raw text into
+a validated result -- none of that is an adapter's job.
+
+Budgets (ADR-0057). A run hands every task one `RunBudget`. Each provider
+tried gets a fresh step deadline from it, which its first attempt and its
+one repair share; a step never outlasts the whole run. A provider that runs
+out its step still ends the task as "Try again": only a recognised
+availability failure moves on, and the next provider's allowance is then a
+fresh one rather than whatever the previous provider left.
+
+It is driven
 entirely against the `AiProvider` protocol, so it works identically whether
 handed `FakeAiProvider` doubles (every test in this module) or the real
 `CodexProvider`/`ClaudeProvider` adapters.
@@ -30,7 +39,7 @@ Classification summary (implementation plan, "Timeout and retries"):
   repaired identically.
 - Anything else -- the repaired response is still invalid, the repair call
   itself could not even reach the provider, an unrecognised process error,
-  or the deadline expiring -- surfaces as "Try again"
+  or a step or run deadline expiring -- surfaces as "Try again"
   ( :class:`~etsy_listings.core.ai.errors.SeoTryAgainError`). None of these retry
   a second provider; the settled plan only permits fallback on the first,
   recognised-unavailable failure.
@@ -54,6 +63,7 @@ from etsy_listings.core.ai.brief import (
     validate_brief,
 )
 from etsy_listings.core.ai.errors import (
+    ProviderTimeoutError,
     ProviderUnavailableError,
     SeoAllProvidersUnavailableError,
     SeoDeadlineExceededError,
@@ -71,17 +81,13 @@ from etsy_listings.core.ai.models import (
     ProviderTask,
     RawProviderResult,
     RepairContext,
+    RunBudget,
     SeoProposal,
     SeoRequest,
 )
 from etsy_listings.core.ai.prompt import build_seo_task
 from etsy_listings.core.ai.providers import AiProvider
 from etsy_listings.core.ai.validation import ProposalValidationError, validate_proposal
-
-_DEFAULT_SECONDS = 60.0
-"""The settled whole-request budget: provider call, one same-provider
-repair, and the permitted Codex-to-Claude fallback all share this one
-`Deadline` (implementation plan, "Timeout and retries")."""
 
 
 class _MalformedError(Exception):
@@ -129,35 +135,49 @@ def _market_queries_decoder(raw_output: str) -> MarketQueries:
         raise _MalformedError(exc.reasons) from exc
 
 
+def _out_of_time(provider_name: str, budget: RunBudget, what: str) -> SeoDeadlineExceededError:
+    """Name the limit that ran out, in the seller's configured minutes
+    (ADR-0057). A step clipped by the run deadline ran out the run."""
+    if budget.deadline.expired:
+        limit = f"{budget.limits.run_minutes}-minute run limit"
+    else:
+        limit = f"{budget.limits.step_minutes}-minute step limit"
+    return SeoDeadlineExceededError(f"{provider_name}: {what} the {limit}")
+
+
 @dataclass(frozen=True)
 class _Run[Result]:
     """One task's inputs, shared by every provider that :func:`run_task` tries."""
 
     task: ProviderTask
     decode: Callable[[str], Result]
-    deadline: Deadline
+    budget: RunBudget
     cancel_event: threading.Event | None
 
-    def resolve(self, provider: AiProvider, raw: RawProviderResult) -> Result:
-        """``raw`` decoded, or decoded after one same-provider repair."""
+    def resolve(self, provider: AiProvider, raw: RawProviderResult, step: Deadline) -> Result:
+        """``raw`` decoded, or decoded after one same-provider repair within ``step``."""
         try:
             return self.decode(raw.raw_output)
         except _MalformedError as first_error:
-            if self.deadline.expired:
-                raise SeoDeadlineExceededError(
-                    f"{raw.provider}: the shared deadline expired before a same-provider "
-                    f"repair could be attempted"
+            if step.expired:
+                raise _out_of_time(
+                    raw.provider, self.budget, "no time was left for a repair within"
                 ) from first_error
 
             try:
+                # ADR-0057: the repair spends what is left of the same step.
                 repaired = provider.generate(
                     self.task,
-                    self.deadline,
+                    step,
                     repair=RepairContext(
                         prior_raw_output=raw.raw_output, reasons=first_error.reasons
                     ),
                     cancel_event=self.cancel_event,
                 )
+            except ProviderTimeoutError as timed_out:
+                raise _out_of_time(
+                    raw.provider, self.budget, "the repair did not finish within"
+                ) from timed_out
             except ProviderUnavailableError as repair_error:
                 raise SeoTryAgainError(
                     f"{raw.provider} became unavailable during its repair attempt: {repair_error}"
@@ -176,12 +196,17 @@ def run_task[Result](
     decode: Callable[[str], Result],
     providers: Sequence[AiProvider],
     *,
-    deadline: Deadline | None = None,
+    budget: RunBudget | None = None,
     cancel_event: threading.Event | None = None,
 ) -> Result:
-    """Try ``providers`` in order -- Codex, then Claude, then Grok -- against
-    ``task``, within one shared ``deadline`` (a fresh 60-second one is
-    started if none is given).
+    """Try captured ``providers`` in their workspace order (ADR-0056) against
+    ``task``, within ``budget`` (ADR-0057). Without one, the task is a run of
+    its own under the default limits.
+
+    Each provider gets a fresh step deadline from ``budget`` for its attempt
+    and its one repair, clipped to what is left of the run. A run's later
+    tasks pass the same ``budget``, so they start with what earlier tasks
+    and market research left.
 
     ``decode`` takes raw provider text and returns a validated result,
     raising `_MalformedError` for anything in between -- the only thing this
@@ -207,22 +232,26 @@ def run_task[Result](
     plan surfaces as "Try again", and lets a
     `~etsy_listings.core.ai.errors.ProviderCancelledError` propagate untouched.
     """
-    if deadline is None:
-        deadline = Deadline.starting_now(seconds=_DEFAULT_SECONDS)
-    run = _Run(task, decode, deadline, cancel_event)
+    if budget is None:
+        budget = RunBudget.starting_now()
+    run = _Run(task, decode, budget, cancel_event)
 
     unavailable_reasons: list[str] = []
     for provider in providers:
-        if deadline.expired:
+        if budget.deadline.expired:
             raise SeoDeadlineExceededError(
-                "the shared deadline expired before every configured provider could be tried"
+                f"the {budget.limits.run_minutes}-minute run limit was reached before "
+                f"every configured provider could be tried"
             )
+        step = budget.step()
         try:
-            raw = provider.generate(task, deadline, cancel_event=cancel_event)
+            raw = provider.generate(task, step, cancel_event=cancel_event)
+        except ProviderTimeoutError as exc:
+            raise _out_of_time(exc.provider, budget, "did not finish within") from exc
         except ProviderUnavailableError as exc:
             unavailable_reasons.append(str(exc))
             continue
-        return run.resolve(provider, raw)
+        return run.resolve(provider, raw, step)
 
     raise SeoAllProvidersUnavailableError(unavailable_reasons)
 
@@ -232,7 +261,7 @@ def generate_proposal(
     seller_prompt: str,
     providers: Sequence[AiProvider],
     *,
-    deadline: Deadline | None = None,
+    budget: RunBudget | None = None,
     cancel_event: threading.Event | None = None,
 ) -> SeoProposal:
     """One complete SEO proposal for ``request``, using the seller's own
@@ -247,7 +276,7 @@ def generate_proposal(
         build_seo_task(seller_prompt, request),
         _seo_decoder,
         providers,
-        deadline=deadline,
+        budget=budget,
         cancel_event=cancel_event,
     )
 
@@ -257,13 +286,13 @@ def generate_brief(
     seller_prompt: str,
     providers: Sequence[AiProvider],
     *,
-    deadline: Deadline | None = None,
+    budget: RunBudget | None = None,
     cancel_event: threading.Event | None = None,
 ) -> DesignBrief:
     """One drafted listing brief for ``request``, using the seller's own
     ``prompts/brief.md`` text.
 
-    Shares every rule above, including the 60-second budget -- a brief is a
+    Shares every rule above, including the run's step limit -- a brief is a
     much smaller ask than a proposal, but it is the same kind of ask, and
     giving it its own timeout would mean two numbers to keep in agreement for
     no behaviour anyone wanted.
@@ -272,7 +301,7 @@ def generate_brief(
         build_brief_task(seller_prompt, request),
         _brief_decoder,
         providers,
-        deadline=deadline,
+        budget=budget,
         cancel_event=cancel_event,
     )
 
@@ -282,21 +311,21 @@ def generate_market_queries(
     seller_prompt: str,
     providers: Sequence[AiProvider],
     *,
-    deadline: Deadline | None = None,
+    budget: RunBudget | None = None,
     cancel_event: threading.Event | None = None,
 ) -> MarketQueries:
     """Three buyer search queries for ``request``, using the seller's own
     ``prompts/market-queries.md`` text (features/market-seo-20260924/spec.md, *Query extraction*).
 
-    The third task over the same chain: Codex, then Claude, then Grok on a
-    recognised unavailable failure, one same-provider repair, and its own 60 seconds
-    (ADR-0003's deadline applies to each provider call of an AI run on its own).
+    The third task over the same captured chain (ADR-0056) on a
+    recognised unavailable failure, one same-provider repair, and the run's
+    step and run budgets (ADR-0057).
     Never cached -- a second request is free to try different queries.
     """
     return run_task(
         build_market_queries_task(seller_prompt, request),
         _market_queries_decoder,
         providers,
-        deadline=deadline,
+        budget=budget,
         cancel_event=cancel_event,
     )

@@ -1,4 +1,4 @@
-<!-- marver:managed 936e23236da0775ab07c3834e74601a98752b2823e49fef14d6e7782faac5cd0 - edit freely: init preserves your edits and stages upstream updates at design/.local/latest/ for you to merge. Delete this line to detach this file from updates entirely. -->
+<!-- marver:managed 3aabf1daf2afb7a4e922569cea750c9ede802984c9d5eff0ba829bd9fa805885 - edit freely: init preserves your edits and stages upstream updates at design/.local/latest/ for you to merge. Delete this line to detach this file from updates entirely. -->
 
 # Boards - curated canvases and publishing
 

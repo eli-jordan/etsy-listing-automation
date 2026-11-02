@@ -1,85 +1,43 @@
-"""Cross-platform subprocess-tree launch and cleanup for the local CLI
-adapters (AI SEO implementation plan, PR4, item 5: "process-tree cleanup for
-timeouts, cancellation, and request disconnects").
+"""Own a CLI's processes and pipes until every captured stream is drained.
 
-Both the Codex and Claude adapters shell out to a coding-agent CLI that may
-itself spawn helper processes. A plain `subprocess.run(..., timeout=...)`
-only reaps the direct child on a timeout -- any grandchild is left running.
-`run_managed` instead launches the child in its own process group/session
-( :func:`_new_process_group_kwargs`) so the whole tree can be killed as one
-unit ( :func:`_kill_process_tree`), and races that kill against three
-independent stop conditions rather than one:
-
-- the shared request `Deadline` expiring (a timeout),
-- an external `threading.Event` being set (cancellation -- the editor was
-  left, or a browser disconnect PR5's API layer detected), and
-- the child simply finishing on its own.
-
-Only the last one is not a kill. Every adapter call goes through this one
-function so "what gets terminated, and how" lives in exactly one place
-rather than being reimplemented per provider.
+Windows uses an atomically assigned kill-on-close job. POSIX reserves a new
+session's leader until group termination, observing exit without reaping it.
+Cleanup never depends on finding a live launcher or scanning descendant PIDs.
+Adapters and discovery share this owner and know no platform-specific policy.
 """
 
 from __future__ import annotations
 
 import contextlib
-import os
-import signal
 import subprocess
 import sys
 import threading
+import time
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Literal, TextIO
 
 from etsy_listings.core.ai.models import Deadline
 
+# Chosen once, at import: the other platform's module is never imported.
+if sys.platform == "win32":
+    from etsy_listings.core.ai._windows_process import WindowsProcess as _OwnedProcess
+else:
+    from etsy_listings.core.ai._posix_process import PosixProcess as _OwnedProcess
+
 POLL_INTERVAL = 0.05
-"""How often the polling loop below wakes up to check the deadline and the
-cancellation event. Small enough that a 60-second deadline is honoured to
-within a fraction of a second; large enough not to spin the CPU. Read at each
-call rather than bound as a default, so a test can shorten it."""
-
+"""How often the wait loop checks the deadline, cancellation and exit. Read at
+each call rather than bound as a default, so a test can shorten it."""
 _REAP_TIMEOUT = 5.0
-"""How long `run_managed` waits for the worker thread to notice a kill and
-return, once `_kill_process_tree` has been asked to end the child. A real
-process dies from SIGKILL/`taskkill /F` almost immediately; this is a ceiling
-against a pathological case, not the expected wait."""
-
-_SIGKILL = getattr(signal, "SIGKILL", 9)
-"""`signal.SIGKILL` does not exist in Python's `signal` module on Windows --
-referencing it there raises `AttributeError` even though this module only
-ever *calls* it on the POSIX branch below. Resolved once, defensively, with
-`os.kill`'s own numeric fallback (9), so importing this module never depends
-on which platform it happens to run on."""
-
-_CREATE_NEW_PROCESS_GROUP = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0x00000200)
-"""Mirrors `_SIGKILL`'s reasoning for the opposite platform:
-`subprocess.CREATE_NEW_PROCESS_GROUP` does not exist on POSIX. `0x00000200`
-is that flag's own documented numeric value on Windows, used only as a
-fallback that is never actually reached there."""
 
 
 class CliProcessError(RuntimeError):
-    """The child process could not even be started -- the executable is
-    missing, not executable, or the OS refused to launch it. Distinct from a
-    process that started and then exited non-zero, which is a normal,
-    classifiable `ProcessResult`, not this exception."""
+    """A command could not be launched, safely owned, or cleaned up."""
 
 
 @dataclass(frozen=True)
 class ProcessResult:
-    """What happened when a managed subprocess ran to completion, timed out,
-    or was cancelled.
-
-    ``returncode`` is `None` only if the process could not be reaped after a
-    kill (should not happen on a real OS, but a caller must not assume it is
-    always an int). ``stdout``/``stderr`` hold whatever was captured before a
-    kill interrupted `communicate()` -- possibly empty, never partial-decoded
-    garbage, since `subprocess` reads text incrementally as valid text.
-    """
-
     returncode: int | None
     stdout: str
     stderr: str
@@ -87,95 +45,41 @@ class ProcessResult:
     cancelled: bool
 
 
-def _new_process_group_kwargs() -> dict[str, Any]:
-    """The `subprocess.Popen` kwarg that puts the child in its own process
-    group (POSIX) or process group (Windows), so `_kill_process_tree` can
-    terminate it and everything it spawned without also touching this
-    process's own group."""
-    if sys.platform == "win32":
-        return {"creationflags": _CREATE_NEW_PROCESS_GROUP}
-    return {"start_new_session": True}
-
-
-def _posix_children(pids: list[str]) -> dict[int, list[int]]:
-    children_of: dict[int, list[int]] = {}
-    for entry in pids:
-        ppid = _posix_ppid(entry)
-        if ppid is not None:
-            children_of.setdefault(ppid, []).append(int(entry))
-    return children_of
-
-
-def _posix_ppid(pid: str) -> int | None:
-    """``pid``'s parent, or None once it has exited."""
-    try:
-        stat = Path("/proc", pid, "stat").read_text()
-    except OSError:
-        return None
-    # The 2nd field (`comm`) is parenthesised and may itself contain
-    # spaces/parens, so only the 3rd field onward is safe to split on
-    # whitespace; PPid is the first of those.
-    fields_after_comm = stat.rsplit(")", 1)[-1].split()
-    return int(fields_after_comm[1])
-
-
-def _posix_descendant_pids(pid: int) -> list[int]:
-    """Every live descendant of ``pid``, found by walking `/proc`'s PPID
-    links rather than trusting process-group signal delivery alone.
-
-    `killpg` assumes every descendant is still a member of the group it was
-    forked into -- true by POSIX semantics, but some sandboxed/containerized
-    kernels have a registration race where a grandchild forked moments
-    before the kill is not yet visible to the group-wide signal delivery
-    path, so the group kill reaches the direct child but misses it. Reading
-    `/proc` directly for "whose PPid is this" sidesteps that: it is the same
-    ancestry `taskkill /T` (below) already reads on Windows via a different
-    API. Returns ``[]`` on a kernel with no `/proc` (e.g. macOS) -- `killpg`
-    is the only path there.
-    """
-    try:
-        pids = [entry.name for entry in Path("/proc").iterdir() if entry.name.isdigit()]
-    except OSError:
-        return []
-    children_of = _posix_children(pids)
-    descendants: list[int] = []
-    frontier = [pid]
-    while frontier:
-        frontier = [child for parent in frontier for child in children_of.get(parent, [])]
-        descendants.extend(frontier)
-    return descendants
-
-
-def _kill_process_tree(proc: subprocess.Popen[str]) -> None:
-    """Best-effort termination of ``proc`` and its whole process tree.
-
-    Windows has no `killpg` equivalent for an arbitrary `Popen`; `taskkill
-    /T /F` (terminate the tree, forcefully) against the process group leader
-    it was launched into ( :func:`_new_process_group_kwargs`) is the
-    documented way to reach children a coding-agent CLI spawned. POSIX kills
-    the whole process group with `SIGKILL` via the same group, *and* SIGKILLs
-    each descendant `/proc` still reports individually
-    ( :func:`_posix_descendant_pids`), since the group kill alone can race a
-    freshly-forked grandchild on some sandboxed kernels. Either path also
-    calls `proc.kill()` directly, both as a fallback if the tree kill could
-    not find the process (already exited) and because it is what marks
-    `Popen` itself as reaped.
-    """
-    if sys.platform == "win32":
-        subprocess.run(
-            ["taskkill", "/T", "/F", "/PID", str(proc.pid)],
-            capture_output=True,
-            check=False,
+class _Capture:
+    def __init__(self, stdin: TextIO, stdout: TextIO, stderr: TextIO, text: str) -> None:
+        self.stdin, self.stdout, self.stderr, self.text = stdin, stdout, stderr, text
+        self.output: dict[str, str] = {}
+        self.errors: list[Exception] = []
+        self.worker = threading.Thread(
+            target=self._communicate, name="ai-process-pipes", daemon=True
         )
-    else:
-        descendants = _posix_descendant_pids(proc.pid)
-        with contextlib.suppress(ProcessLookupError):
-            os.killpg(os.getpgid(proc.pid), _SIGKILL)
-        for pid in descendants:
-            with contextlib.suppress(ProcessLookupError):
-                os.kill(pid, _SIGKILL)
-    with contextlib.suppress(Exception):
-        proc.kill()
+
+    def _read(self, name: str, stream: TextIO) -> None:
+        try:
+            self.output[name] = stream.read()
+        except (OSError, ValueError) as exc:
+            self.errors.append(exc)
+        finally:
+            stream.close()
+
+    def _communicate(self) -> None:
+        readers = [
+            threading.Thread(
+                target=self._read, args=(name, stream), name=f"ai-process-{name}", daemon=True
+            )
+            for name, stream in (("stdout", self.stdout), ("stderr", self.stderr))
+        ]
+        for reader in readers:
+            reader.start()
+        try:
+            self.stdin.write(self.text)
+        except (OSError, ValueError) as exc:
+            self.errors.append(exc)
+        finally:
+            with contextlib.suppress(OSError):
+                self.stdin.close()
+        for reader in readers:
+            reader.join()
 
 
 def run_managed(
@@ -186,64 +90,81 @@ def run_managed(
     deadline: Deadline,
     cancel_event: threading.Event | None = None,
 ) -> ProcessResult:
-    """Launch ``argv`` as a managed child process, write ``input_text`` to
-    its stdin, and wait for it to finish, the shared ``deadline`` to expire,
-    or ``cancel_event`` to be set -- whichever comes first.
+    """Run a command within its deadline and cancellation signal.
 
-    A caller (a `SeoProvider` adapter) never has to reason about process
-    groups, `taskkill` vs `killpg`, or how to race a blocking `communicate()`
-    against an external stop signal; it gets back one `ProcessResult` and
-    classifies ``timed_out``/``cancelled``/``returncode`` into whatever
-    provider-specific error it raises.
+    Normal/error completion also ends remaining descendants. Exit is observed
+    separately from pipe EOF: an exited launcher cannot abandon pipe readers.
+    The five-second cleanup allowance covers termination, drain and reaping.
     """
     try:
-        proc = subprocess.Popen(
-            list(argv),
-            cwd=str(cwd),
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            # UTF-8 both ways, not the locale's code page: the CLIs speak
-            # UTF-8, and a prompt carrying Etsy titles verbatim (the market
-            # block) holds characters cp1252 cannot encode -- which failed the
-            # write and ended the call as "exited None". Undecodable output is
-            # replaced rather than raised; it is validated downstream anyway.
-            encoding="utf-8",
-            errors="replace",
-            **_new_process_group_kwargs(),
-        )
+        scope = _OwnedProcess(argv, cwd)
     except OSError as exc:
-        raise CliProcessError(f"could not start {list(argv)!r}: {exc}") from exc
+        raise CliProcessError(f"could not start and own {list(argv)!r}: {exc}") from exc
 
-    captured: dict[str, str] = {}
-
-    def _communicate() -> None:
-        stdout, stderr = proc.communicate(input=input_text)
-        captured["stdout"] = stdout
-        captured["stderr"] = stderr
-
-    worker = threading.Thread(target=_communicate, daemon=True)
-    worker.start()
-
-    timed_out = False
-    cancelled = False
-    while worker.is_alive():
-        if cancel_event is not None and cancel_event.is_set():
-            cancelled = True
-            break
-        if deadline.expired:
-            timed_out = True
-            break
-        worker.join(timeout=POLL_INTERVAL)
-
-    if timed_out or cancelled:
-        _kill_process_tree(proc)
-        worker.join(timeout=_REAP_TIMEOUT)
-
+    capture = _Capture(scope.stdin, scope.stdout, scope.stderr, input_text)
+    try:
+        capture.worker.start()
+        ending = _wait(scope, capture, deadline, cancel_event)
+    finally:
+        code = _clean_up(scope, capture)
+    timed_out, cancelled = ending == "timed_out", ending == "cancelled"
+    if capture.errors and not (timed_out or cancelled):
+        errors = [error for error in capture.errors if not isinstance(error, BrokenPipeError)]
+        if errors:
+            raise CliProcessError(f"managed process I/O failed: {errors[0]}")
     return ProcessResult(
-        returncode=proc.poll(),
-        stdout=captured.get("stdout", ""),
-        stderr=captured.get("stderr", ""),
-        timed_out=timed_out,
-        cancelled=cancelled,
+        code,
+        capture.output.get("stdout", ""),
+        capture.output.get("stderr", ""),
+        timed_out,
+        cancelled,
     )
+
+
+type _Ending = Literal["exited", "timed_out", "cancelled"]
+
+
+def _wait(
+    scope: _OwnedProcess,
+    capture: _Capture,
+    deadline: Deadline,
+    cancel_event: threading.Event | None,
+) -> _Ending:
+    """Poll until the command exits, its deadline passes or it is cancelled."""
+    idle = cancel_event or threading.Event()
+    while (ending := _ending(scope, deadline, cancel_event)) is None:
+        if capture.worker.is_alive():
+            capture.worker.join(POLL_INTERVAL)
+        else:
+            idle.wait(POLL_INTERVAL)
+    return ending
+
+
+def _ending(
+    scope: _OwnedProcess, deadline: Deadline, cancel_event: threading.Event | None
+) -> _Ending | None:
+    """Why waiting is over, checked in this order, or None to keep waiting."""
+    if cancel_event is not None and cancel_event.is_set():
+        return "cancelled"
+    if deadline.expired:
+        return "timed_out"
+    return "exited" if scope.exited else None
+
+
+def _clean_up(scope: _OwnedProcess, capture: _Capture) -> int:
+    """End every owned process and drain the pipes, within the cleanup
+    allowance; the exit code once reaped."""
+    reap_at = time.monotonic() + _REAP_TIMEOUT
+    try:
+        scope.kill()
+        if capture.worker.ident is not None:
+            capture.worker.join(max(0.0, reap_at - time.monotonic()))
+        if capture.worker.is_alive():
+            raise CliProcessError(
+                "managed process pipe readers did not stop within cleanup allowance"
+            )
+        return scope.wait(max(0.0, reap_at - time.monotonic()))
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        raise CliProcessError(f"could not clean up managed processes: {exc}") from exc
+    finally:
+        scope.close()

@@ -9,6 +9,7 @@ sequencing, defaults and cancellation are ``test_setup_command.py``'s.
 
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -27,6 +28,8 @@ from etsy_listings.core.config.secrets import (
 )
 from etsy_listings.core.workspace import layout
 from etsy_listings.core.workspace.workspace import Workspace
+
+from tests.support.source_files import crlf, identity
 
 ANSWERS = workspace_setup.SetupAnswers(
     printify_shop_id=28819281,
@@ -110,6 +113,57 @@ def test_saving_keeps_what_setup_never_asked_about(tmp_path: Path) -> None:
     written = yaml.safe_load((tmp_path / layout.SHOP_FILE).read_text(encoding="utf-8"))
     assert written["etsy"]["shop_id"] == 7
     assert written["etsy"]["listing_defaults"]["materials"] == ["cotton"]
+
+
+HAND_EDITED_SHOP = """# My shop. Notes below are mine.
+printify:
+  shop_name: TakeAHikeTees
+  shop_id: 28819281   # from the Printify dashboard
+etsy:
+  shop_name: 'TakeAHikeTees'
+  shop_id: 7
+  currency: NOK
+  listing_defaults:
+    who_made: someone_else
+    when_made: made_to_order
+    is_supply: false
+    renewal: manual   # I renew by hand
+    materials: [cotton]
+"""
+
+
+def test_rerunning_setup_changes_only_the_answers_that_differ(tmp_path: Path) -> None:
+    """ADR-0055: the seller's comments, quotes, flow lists and CRLF stay."""
+    path = tmp_path / layout.SHOP_FILE
+    path.write_bytes(crlf(HAND_EDITED_SHOP).encode("utf-8"))
+    answers = replace(ANSWERS, printify_shop_id=99, renewal="auto")
+
+    workspace_setup.save_setup(
+        tmp_path,
+        printify_token="tok",
+        answers=answers,
+        existing=workspace_setup.read_shop_document(tmp_path),
+    )
+
+    expected = HAND_EDITED_SHOP.replace("shop_id: 28819281", "shop_id: 99").replace(
+        "renewal: manual", "renewal: auto"
+    )
+    assert path.read_bytes() == crlf(expected).encode("utf-8")
+
+
+def test_rerunning_setup_with_the_same_answers_leaves_shop_yaml_alone(tmp_path: Path) -> None:
+    path = tmp_path / layout.SHOP_FILE
+    path.write_bytes(crlf(HAND_EDITED_SHOP).encode("utf-8"))
+    before = identity(path)
+
+    workspace_setup.save_setup(
+        tmp_path,
+        printify_token="tok",
+        answers=ANSWERS,
+        existing=workspace_setup.read_shop_document(tmp_path),
+    )
+
+    assert identity(path) == before
 
 
 # ------------------------------------------------------------- shop discovery

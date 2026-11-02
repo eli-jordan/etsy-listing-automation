@@ -41,7 +41,7 @@ from etsy_listings.core.config.slug import ColourExceptions
 from etsy_listings.core.render.config import AnyTemplate, PlacementId
 from etsy_listings.core.render.config import load_template_config as parse_template_config
 from etsy_listings.core.workspace import layout
-from etsy_listings.core.workspace.atomic import read_bytes_retrying, write_bytes_atomic
+from etsy_listings.core.workspace.atomic import read_bytes_retrying, write_yaml_atomic
 from etsy_listings.core.workspace.calibration import (
     CalibrationRepairRequiredError,
     CalibrationStore,
@@ -53,6 +53,7 @@ from etsy_listings.core.workspace.common_copy import (
 )
 from etsy_listings.core.workspace.trees import remove_tree
 from etsy_listings.core.workspace.userpath import to_native_path
+from etsy_listings.core.workspace.yaml_source import UNSET
 
 
 class WorkspaceNotFoundError(FileNotFoundError):
@@ -213,6 +214,16 @@ class Workspace:
     def __init__(self, root: Path, defaults: Defaults) -> None:
         self.root = root
         self.defaults = defaults
+
+    def snapshot(self) -> Workspace:
+        """This workspace with the ``shop.yaml`` it holds now, for one run.
+
+        The Admin page's save replaces ``defaults`` on the server's workspace
+        (``shop_settings.edit_shop``). A run that reads ``defaults`` from
+        the snapshot it took at its start keeps one shop throughout, and
+        the next run takes the edit. Everything else is the same root.
+        """
+        return Workspace(self.root, self.defaults)
 
     def browser_storage_id(self) -> str:
         """Stable workspace identity without exposing its absolute path to the UI.
@@ -440,11 +451,26 @@ class Workspace:
         """Write ``template.yaml``, atomically. Defaults are left out, so
         the file says only what the seller set -- as a hand-written listing
         does. Whether the document is complete enough to write is the
-        caller's question, not the file's."""
+        caller's question, not the file's.
+
+        An existing file keeps its text: only the values that differ between
+        the template it holds and ``document`` are edited in (ADR-0055), so
+        ``349 NOK`` is not rewritten because the model reads it differently.
+        A file that no longer loads is edited against what it reads as."""
+        path = self.listing_template_file(template)
         dumped = document.model_dump(mode="json", exclude_defaults=True)
-        write_bytes_atomic(
-            self.listing_template_file(template),
-            yaml.safe_dump(dumped, sort_keys=False, allow_unicode=True).encode("utf-8"),
+        before: object = UNSET
+        try:
+            current = self.load_listing_template(template)
+        except ConfigLoadError:
+            pass
+        else:
+            before = current.model_dump(mode="json", exclude_defaults=True)
+        write_yaml_atomic(
+            path,
+            dumped,
+            before=before,
+            new=lambda: yaml.safe_dump(dumped, sort_keys=False, allow_unicode=True),
         )
 
     def resolve_frozen_template_ref(self, ref: str, *, frozen_dir: Path) -> Path:

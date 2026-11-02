@@ -152,8 +152,8 @@ def test_a_file_that_is_not_a_mapping_names_the_file(workspace: Workspace, text:
 
 class TestBatchAi:
     """``batch_ai.concurrency``: how many batch rows draft at once, across
-    every batch (spec, *Batch AI queue*; ADR-0048). No settings UI in the first
-    version, so the file is the only way to change it."""
+    every batch (spec, *Batch AI queue*; ADR-0048), from 1 to 8 (Admin plan,
+    *Settings*: the Admin page's slider covers the whole range)."""
 
     def test_the_default_is_one_at_a_time(self, workspace: Workspace) -> None:
         assert workspace.load_settings().batch_ai.concurrency == 1
@@ -167,13 +167,19 @@ class TestBatchAi:
         _write(workspace, "batch_ai:\n  concurrency: 3\n")
         assert workspace.load_settings().batch_ai.concurrency == 3
 
+    def test_eight_is_the_highest_limit(self, workspace: Workspace) -> None:
+        _write(workspace, "batch_ai:\n  concurrency: 8\n")
+        assert workspace.load_settings().batch_ai.concurrency == 8
+
     @pytest.mark.parametrize(
         ("text", "key"),
         [
             ("batch_ai:\n  concurrency: 0\n", "batch_ai.concurrency"),
+            ("batch_ai:\n  concurrency: 9\n", "batch_ai.concurrency"),
+            ("batch_ai:\n  concurrency: 2.5\n", "batch_ai.concurrency"),
             ("batch_ai:\n  concurency: 2\n", "batch_ai.concurency"),
         ],
-        ids=["zero", "misspelt"],
+        ids=["zero", "above-eight", "fractional", "misspelt"],
     )
     def test_an_invalid_limit_names_the_key(
         self, workspace: Workspace, text: str, key: str
@@ -184,3 +190,102 @@ class TestBatchAi:
             workspace.load_settings()
 
         assert f"{key}:" in str(caught.value)
+
+
+def test_ai_defaults_and_ordered_preferences(workspace: Workspace) -> None:
+    assert [p.name for p in workspace.load_settings().ai.providers] == ["codex", "claude", "grok"]
+    _write(
+        workspace,
+        "ai:\n  providers:\n    - name: grok\n      model: retired-model\n"
+        "      effort: retired-effort\n    - name: codex\n      enabled: false\n",
+    )
+    providers = workspace.load_settings().ai.providers
+    assert [(p.name, p.enabled, p.model, p.effort) for p in providers] == [
+        ("grok", True, "retired-model", "retired-effort"),
+        ("codex", False, None, None),
+    ]
+
+
+@pytest.mark.parametrize(
+    ("yaml", "key"),
+    [
+        ("providers: []", "ai.providers"),
+        ("providers: [{name: codex, enabled: false}]", "ai.providers"),
+        ("providers: [{name: codex}, {name: codex}]", "ai.providers"),
+        ("providers: [{name: unknown}]", "ai.providers.0.name"),
+        ("providers: [{name: codex, tier: fast}]", "ai.providers.0.tier"),
+        ("provider: []", "ai.provider"),
+    ],
+)
+def test_ai_refusals_name_file_and_dotted_key(workspace: Workspace, yaml: str, key: str) -> None:
+    path = _write(workspace, "ai:\n  " + yaml + "\n")
+    with pytest.raises(ConfigLoadError) as caught:
+        workspace.load_settings()
+    assert str(path) in str(caught.value)
+    assert key + ":" in str(caught.value)
+
+
+class TestAiTimeLimits:
+    """``ai.step_limit_minutes`` and ``ai.run_limit_minutes`` (ADR-0057)."""
+
+    def test_the_defaults_are_five_and_twenty_minutes(self, workspace: Workspace) -> None:
+        ai = workspace.load_settings().ai
+        assert (ai.step_limit_minutes, ai.run_limit_minutes) == (5, 20)
+
+    @pytest.mark.parametrize(
+        ("step", "run"),
+        [(1, 5), (15, 60), (1, 60)],
+    )
+    def test_both_range_boundaries_load(self, workspace: Workspace, step: int, run: int) -> None:
+        _write(
+            workspace,
+            "ai:\n  providers: [{name: codex}]\n"
+            f"  step_limit_minutes: {step}\n  run_limit_minutes: {run}\n",
+        )
+        ai = workspace.load_settings().ai
+        assert (ai.step_limit_minutes, ai.run_limit_minutes) == (step, run)
+
+    def test_three_providers_at_fifteen_minutes_fit_at_forty_five(
+        self, workspace: Workspace
+    ) -> None:
+        _write(workspace, "ai:\n  step_limit_minutes: 15\n  run_limit_minutes: 45\n")
+        assert workspace.load_settings().ai.run_limit_minutes == 45
+
+    def test_disabled_providers_do_not_count_towards_the_floor(self, workspace: Workspace) -> None:
+        _write(
+            workspace,
+            "ai:\n  providers: [{name: codex}, {name: claude, enabled: false}]\n"
+            "  step_limit_minutes: 10\n  run_limit_minutes: 10\n",
+        )
+        assert workspace.load_settings().ai.run_limit_minutes == 10
+
+    @pytest.mark.parametrize(
+        ("yaml", "key"),
+        [
+            ("step_limit_minutes: 0", "ai.step_limit_minutes"),
+            ("step_limit_minutes: 16", "ai.step_limit_minutes"),
+            ("step_limit_minutes: 2.5", "ai.step_limit_minutes"),
+            ("run_limit_minutes: 4", "ai.run_limit_minutes"),
+            ("run_limit_minutes: 61", "ai.run_limit_minutes"),
+            ("run_limit_minutes: 20.5", "ai.run_limit_minutes"),
+            # The default chain is three providers: 3 x 10 > 20.
+            ("step_limit_minutes: 10", "ai.run_limit_minutes"),
+            ("step_limit_minutes: 7\n  run_limit_minutes: 20", "ai.run_limit_minutes"),
+        ],
+    )
+    def test_out_of_range_or_below_the_floor_refuses_to_load(
+        self, workspace: Workspace, yaml: str, key: str
+    ) -> None:
+        path = _write(workspace, "ai:\n  " + yaml + "\n")
+        with pytest.raises(ConfigLoadError) as caught:
+            workspace.load_settings()
+        assert str(path) in str(caught.value)
+        assert key + ":" in str(caught.value)
+
+    def test_the_floor_refusal_says_what_the_run_limit_must_reach(
+        self, workspace: Workspace
+    ) -> None:
+        _write(workspace, "ai:\n  step_limit_minutes: 10\n  run_limit_minutes: 20\n")
+        with pytest.raises(ConfigLoadError) as caught:
+            workspace.load_settings()
+        assert "at least 30" in str(caught.value)

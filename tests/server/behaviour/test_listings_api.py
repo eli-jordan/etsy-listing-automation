@@ -21,6 +21,7 @@ from PIL import Image
 from etsy_listings.core import connections
 from etsy_listings.core.clients.etsy.fakes import FakeEtsyListingClient, FakeEtsyShopClient
 from etsy_listings.core.clients.etsy.models import ShopSection
+from etsy_listings.core.clients.etsy.tokens import EtsyRefreshBusyError
 from etsy_listings.core.engine.lock import Lockfile
 from etsy_listings.core.workspace.workspace import Workspace
 from etsy_listings.server.api import etsystate
@@ -1173,6 +1174,38 @@ class TestEtsySections:
         assert [(section.shop_section_id, section.title) for section in etsy.created_sections] == [
             (2, "Trail Gear")
         ]
+
+    def test_refresh_busy_lists_sections_as_unavailable(
+        self, workspace_root: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        class BusyShop(FakeEtsyShopClient):
+            def shop_sections(self, shop_id: int) -> list[ShopSection]:
+                raise EtsyRefreshBusyError("Refresh still running. Try again shortly.")
+
+        set_etsy_shop_id(workspace_root, 12345678)
+        monkeypatch.setattr(connections, "etsy_shop_client", lambda root: BusyShop())
+        sectioned = TestClient(create_app(Workspace.discover(root_override=workspace_root)))
+        response = sectioned.get("/api/etsy/sections")
+        assert response.status_code == 200
+        assert response.json() == {"available": False, "sections": []}
+
+    def test_refresh_busy_creation_is_retryable_without_sign_in(
+        self, workspace_root: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        message = "Refresh still running. Try again shortly."
+
+        class BusyListing(FakeEtsyListingClient):
+            def create_shop_section(self, shop_id: int, title: str) -> ShopSection:
+                raise EtsyRefreshBusyError(message)
+
+        etsy = BusyListing()
+        set_etsy_shop_id(workspace_root, 12345678)
+        monkeypatch.setattr(connections, "etsy_listing_client", lambda root: etsy)
+        sectioned = TestClient(create_app(Workspace.discover(root_override=workspace_root)))
+        response = sectioned.post("/api/etsy/sections", json={"title": "Trail Gear"})
+        assert response.status_code == 503
+        assert response.json() == {"detail": message}
+        assert etsy.created_sections == []
 
 
 class TestLifecycle:

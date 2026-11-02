@@ -15,6 +15,7 @@ function renderAt(path: string) {
           <Route path="/templates" element={<p>templates content</p>} />
           <Route path="/listing-templates" element={<p>listing templates content</p>} />
           <Route path="/listing-templates/new" element={<p>new listing template</p>} />
+          <Route path="/admin" element={<p>admin content</p>} />
         </Route>
       </Routes>
     </MemoryRouter>,
@@ -76,7 +77,13 @@ describe("AppShell", () => {
   it("puts Listing Templates between Listings and Mockup Templates", () => {
     renderAt("/");
     const names = screen.getAllByRole("link").map((link) => link.textContent);
-    expect(names).toEqual(["Dashboard", "Listings", "Listing Templates", "Mockup Templates"]);
+    expect(names).toEqual([
+      "Dashboard",
+      "Listings",
+      "Listing Templates",
+      "Mockup Templates",
+      "Admin",
+    ]);
   });
 
   it("keeps Listing Templates, and only it, active while naming a new one", () => {
@@ -91,5 +98,15 @@ describe("AppShell", () => {
   it("marks Mockup Templates active on /templates", () => {
     renderAt("/templates");
     expect(screen.getByRole("link", { name: /Mockup Templates/ })).toHaveClass("nav-item--active");
+  });
+
+  it("replaces the Setup placeholder with Admin at /admin", () => {
+    /* Admin plan, PR 3: the sidebar's bottom entry opens /admin. */
+    renderAt("/admin");
+    const admin = screen.getByRole("link", { name: "Admin" });
+    expect(admin).toHaveAttribute("href", "/admin");
+    expect(admin).toHaveClass("nav-item--active");
+    expect(screen.getByText("admin content")).toBeInTheDocument();
+    expect(screen.queryByText("Setup")).not.toBeInTheDocument();
   });
 });
