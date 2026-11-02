@@ -22,7 +22,7 @@ from dataclasses import dataclass
 from PIL import Image
 
 from etsy_listings.core.render.config import RenderConfig
-from etsy_listings.core.render.passes import displace, export_many, shade, warp
+from etsy_listings.core.render.passes import displace, export_many, print_bounds, shade, warp
 from etsy_listings.core.render.types import RGB, RGBA, FloatMap
 
 
@@ -63,4 +63,12 @@ def _shaded(layer: RGBA, cfg: RenderConfig, luminance: FloatMap | None) -> RGBA:
         return layer
     if luminance is None:
         raise ValueError("shade is enabled but no luminance map was provided")
-    return shade(layer, cfg.shade, luminance)
+    # Shade only where the layer prints. Outside, alpha is zero and
+    # export_many takes none of the layer's colour, so leaving it unshaded
+    # changes no output pixel and saves float work over the whole photo.
+    region = print_bounds(layer)
+    if region is None:
+        return layer
+    shaded = layer.copy()
+    shaded[region] = shade(layer[region], cfg.shade, luminance[region])
+    return shaded
