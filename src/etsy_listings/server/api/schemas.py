@@ -1106,8 +1106,9 @@ class TemplatePositionImpactResponse(BaseModel):
     """What saving the candidate limits would change; nothing is written."""
 
     outside: list[ListingOutsideBody]
-    refit: list[str]
-    """Marigold templates a save would refit; empty until Marigold positions ship."""
+    templates_needing_inference: list[str]
+    """Marigold templates whose preparation evidence would need model inference
+    to cover the wider limits; empty until Marigold positions ship (PR 7)."""
 
 
 class ConnectionRowBody(BaseModel):

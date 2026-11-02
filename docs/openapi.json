@@ -7541,17 +7541,17 @@
             "title": "Outside",
             "type": "array"
           },
-          "refit": {
+          "templates_needing_inference": {
             "items": {
               "type": "string"
             },
-            "title": "Refit",
+            "title": "Templates Needing Inference",
             "type": "array"
           }
         },
         "required": [
           "outside",
-          "refit"
+          "templates_needing_inference"
         ],
         "title": "TemplatePositionImpactResponse",
         "type": "object"
@@ -8237,7 +8237,7 @@
     },
     "/api/admin/settings/template-positions/impact": {
       "post": {
-        "description": "A read for Settings' confirmation (template positions PR 5): who the\ncandidate limits would block, and which Marigold templates would refit.",
+        "description": "A read for Settings' confirmation (template positions PR 5): who the\ncandidate limits would block, and which Marigold templates would need\nmodel inference to cover them.",
         "operationId": "template_positions_impact_api_admin_settings_template_positions_impact_post",
         "requestBody": {
           "content": {

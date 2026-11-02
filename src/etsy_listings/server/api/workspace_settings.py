@@ -103,7 +103,8 @@ def template_positions_impact(
     request: Request, body: TemplatePositionImpactRequest
 ) -> TemplatePositionImpactResponse | JSONResponse:
     """A read for Settings' confirmation (template positions PR 5): who the
-    candidate limits would block, and which Marigold templates would refit."""
+    candidate limits would block, and which Marigold templates would need
+    model inference to cover them."""
     try:
         limits = template_position_impact.candidate_limits(body.limits)
     except InvalidSettingsEditError as exc:
@@ -114,7 +115,7 @@ def template_positions_impact(
             ListingOutsideBody(listing=row.listing, positions=list(row.positions))
             for row in impact.outside
         ],
-        refit=list(impact.refit),
+        templates_needing_inference=list(impact.templates_needing_inference),
     )
 
 

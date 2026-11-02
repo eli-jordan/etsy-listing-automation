@@ -51,7 +51,8 @@ export interface paths {
     /**
      * Template Positions Impact
      * @description A read for Settings' confirmation (template positions PR 5): who the
-     *     candidate limits would block, and which Marigold templates would refit.
+     *     candidate limits would block, and which Marigold templates would need
+     *     model inference to cover them.
      */
     post: operations["template_positions_impact_api_admin_settings_template_positions_impact_post"];
     delete?: never;
@@ -4891,8 +4892,8 @@ export interface components {
     TemplatePositionImpactResponse: {
       /** Outside */
       outside: components["schemas"]["ListingOutsideBody"][];
-      /** Refit */
-      refit: string[];
+      /** Templates Needing Inference */
+      templates_needing_inference: string[];
     };
     /**
      * TemplatePositionLimits

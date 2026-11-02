@@ -4,7 +4,7 @@ The limits save through the settings PATCH like every other key: validated as
 a whole ``Settings``, revision-checked, and written as splices that keep the
 seller's source (ADR-0055). The impact read answers the confirmation's
 question before anything is written: which saved positions the candidate
-limits would block, and which Marigold templates would refit.
+limits would block, and which Marigold templates would need inference.
 """
 
 from pathlib import Path
@@ -130,13 +130,16 @@ def test_impact_names_listings_the_candidate_limits_would_block(
 ) -> None:
     position_listing(workspace, Pose(scale=1.08, rotation=12))
 
-    assert client.post(IMPACT, json={"limits": DEFAULTS}).json() == {"outside": [], "refit": []}
+    assert client.post(IMPACT, json={"limits": DEFAULTS}).json() == {
+        "outside": [],
+        "templates_needing_inference": [],
+    }
     narrowed = client.post(IMPACT, json={"limits": limits(largest=1.05, rotation=10)})
 
     assert narrowed.status_code == 200
     assert narrowed.json() == {
         "outside": [{"listing": FIXTURE_LISTING, "positions": [f"template_positions.{TEMPLATE}"]}],
-        "refit": [],
+        "templates_needing_inference": [],
     }
     assert not workspace.settings_file().exists()
 

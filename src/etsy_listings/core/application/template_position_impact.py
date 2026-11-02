@@ -1,6 +1,6 @@
 """What saving candidate template position limits would change, before it is
 saved: the question Settings' confirmation answers (template positions PR 5;
-interactions, *Settings: Template rendering*).
+interactions, *Settings: Template rendering*; option B, spec *Marigold*).
 
 Two lists, read off the workspace as it is now and writing nothing:
 
@@ -8,9 +8,10 @@ Two lists, read off the workspace as it is now and writing nothing:
   refuse on scale, offset or rotation, with the refused keys
   (``listing_validation.positions_outside_limits``). Listings already blocked
   for another reason, or that do not load, are not listed.
-- ``refit``: the Marigold templates whose maps a save would refit. Empty
-  while spec rule 5 refuses Marigold positions; PR 7 pads Marigold maps to the
-  limits and fills it with every Marigold template.
+- ``templates_needing_inference``: the Marigold templates whose preparation
+  evidence would need model inference to cover the wider limits. Empty while
+  spec rule 5 refuses Marigold positions; PR 7 fills it. Narrowing never adds
+  to it.
 """
 
 from __future__ import annotations
@@ -38,7 +39,7 @@ class ListingOutside:
 @dataclass(frozen=True)
 class LimitsImpact:
     outside: tuple[ListingOutside, ...]
-    refit: tuple[str, ...]
+    templates_needing_inference: tuple[str, ...]
     """Marigold template names; empty until Marigold positions ship (PR 7)."""
 
 
@@ -52,7 +53,7 @@ def candidate_limits(limits: Mapping[str, object]) -> TemplatePositionLimits:
 
 
 def template_position_impact(workspace: Workspace, limits: TemplatePositionLimits) -> LimitsImpact:
-    """Who ``limits`` would block, and what they would refit."""
+    """Who ``limits`` would block, and which templates would need inference."""
     templates = _TemplateCache(workspace)
     outside = []
     for name in workspace.listing_names():
@@ -67,7 +68,7 @@ def template_position_impact(workspace: Workspace, limits: TemplatePositionLimit
         )
         if keys:
             outside.append(ListingOutside(name, tuple(keys)))
-    return LimitsImpact(outside=tuple(outside), refit=())
+    return LimitsImpact(outside=tuple(outside), templates_needing_inference=())
 
 
 class _TemplateCache:
