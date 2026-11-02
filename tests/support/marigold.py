@@ -338,3 +338,43 @@ def listing_with_marigold(workspace_root, *, prepare=False):
             "shirt", inputs, {None: material_maps((64, 64))}, current_inputs=lambda: inputs
         )
     return workspace, workspace.load_listing(FIXTURE_LISTING)
+
+
+def prepare_template(workspace, name="shirt", *, runtime=None):
+    """Run ``name``'s explicit preparation with the controlled predictor and
+    wait for it: real crops, retained evidence, fitting and publication."""
+    import time
+
+    from etsy_listings.core.application.preparation.coordinator import (
+        PreparationRequest,
+        Preparations,
+    )
+    from etsy_listings.core.workspace.calibration import CalibrationStore
+
+    coordinator = Preparations(workspace, runtime=runtime or PreparationRuntime())
+    coordinator.start()
+    try:
+        revision = CalibrationStore(workspace).read(name).revision
+        job = coordinator.submit(
+            name, PreparationRequest(config_revision=revision, request_id=f"prepare-{name}")
+        )
+        deadline = time.monotonic() + 60
+        while coordinator.status(job.id).phase not in {"completed", "failed", "cancelled"}:
+            assert time.monotonic() < deadline, "preparation did not finish"
+            coordinator.events(
+                job.id, after=coordinator.status(job.id).last_event_sequence, wait=0.2
+            )
+        finished = coordinator.status(job.id)
+        assert finished.phase == "completed", finished.error
+        return finished
+    finally:
+        coordinator.close()
+
+
+def listing_with_prepared_marigold(workspace_root):
+    """:func:`listing_with_marigold`'s listing, its ``shirt`` template prepared
+    through the real queue, so it has evidence a position fit can use. The
+    64px photo's crop is the whole photo: every padded quad is covered."""
+    workspace, _ = listing_with_marigold(workspace_root)
+    prepare_template(workspace)
+    return workspace

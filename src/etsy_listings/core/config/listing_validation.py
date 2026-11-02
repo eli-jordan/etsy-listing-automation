@@ -844,9 +844,6 @@ def _position_problems(
     template: AnyTemplate,
     limits: TemplatePositionLimits,
 ) -> list[tuple[str, str]]:
-    # Spec rule 5 stays until PR 7; preparation is not permission to position Marigold.
-    if template.renderer.type == "marigold":
-        return [(key, "Marigold positions are not supported yet")]
     if isinstance(template, MultipleTemplate):
         if not isinstance(position, PlacementPositions):
             return [(key, "uses bounding_box on a multiple template; use placements instead")]
@@ -866,7 +863,9 @@ def check_template_positions(
     *,
     name: str = "",
 ) -> list[Issue]:
-    """Spec Validation 1–5, pure and read against current geometry (ADR-0058).
+    """Spec Validation 1–4, pure and read against current geometry (ADR-0058).
+    Rule 5 (Marigold refused) is lifted: Marigold positions render with a fit
+    per position (option B).
 
     Limits arrive from the caller. Refuse rather than clamp; absolute corners
     remain unchanged after recalibration or a limits edit. ``name`` labels a saved
@@ -899,7 +898,7 @@ def positions_outside_limits(
     What a limits change would newly block, for Settings' confirmation
     (template positions PR 5). A position refused whatever the limits -- not
     a similarity, a template missing from ``media`` or unavailable, a stale
-    placement, a Marigold template while rule 5 stands -- is not listed: the
+    placement -- is not listed: the
     listing is blocked already and new limits change nothing about it.
     """
     referenced = {
@@ -925,9 +924,7 @@ def _positioned_boxes(
     key: str, position: BoxPosition | PlacementPositions, template: AnyTemplate
 ) -> list[tuple[str, BoundingBox, BoundingBox]]:
     """Each well-formed position under ``key`` with its template box. A
-    shape mismatch, a stale placement or a Marigold template yields none."""
-    if template.renderer.type == "marigold":
-        return []
+    shape mismatch or a stale placement yields none."""
     if isinstance(template, MultipleTemplate):
         if not isinstance(position, PlacementPositions):
             return []

@@ -205,7 +205,11 @@ class PreparedRender:
     appearance: MarigoldAppearance
     identity: str
     map_content: str
-    """The accepted generation's content digest, recorded in the recipe."""
+    """The accepted generation's content digest, recorded in the recipe --
+    combined with each position fit's digest when the listing positions a
+    layer (option B), so only positioned scenes' lockfiles change."""
+    boxes: LayerBoxes = field(default_factory=dict)
+    """The listing's saved position, which ``apply()`` leases the fits for."""
 
 
 SceneRender = PhotoWarpRender | PreparedRender
@@ -562,13 +566,15 @@ def _scene_render(
                 base=load_template_base(photo),
                 layers=_prepared_layers(layers, load_design),
                 appearance=appearance,
+                boxes=ref.boxes,
             ),
         ) as scene:
             return PreparedRender(
                 inputs=scene.inputs,
                 appearance=appearance,
                 identity=scene.identity,
-                map_content=scene.manifest.content_digest,
+                map_content=scene.map_content,
+                boxes=ref.boxes,
             )
     except ArtifactError as exc:
         return Blocked(str(exc))
@@ -663,7 +669,8 @@ def _load_templates(
 def _check_template_inputs(
     workspace: Workspace, listing: str, listing_cfg: Listing, templates: _Templates
 ) -> Blocked | None:
-    # ADR-0058/spec rule 5 must name unsupported positions before map readiness.
+    # ADR-0058: name refused positions before map readiness, which a fix to
+    # the listing would not change.
     if listing_cfg.template_positions:
         blocked = check_template_positions(
             listing_cfg,
@@ -1168,6 +1175,7 @@ class RenderStage(Stage[RenderDesired, RenderApplied, RenderLive]):
                     base=load_template_base(work.base_image),
                     layers=_prepared_layers(work.layers, load_design),
                     appearance=render.appearance,
+                    boxes=render.boxes,
                 ),
                 expected=render.inputs,
             ) as scene:

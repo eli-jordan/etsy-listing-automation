@@ -118,7 +118,7 @@ def test_listing_health_check_includes_positions_with_the_supplied_limits(
 
 
 def shape_case(case: str, box):
-    renderer = {"type": "marigold" if case == "marigold" else "photo-warp"}
+    renderer = {"type": "marigold" if case.startswith("marigold") else "photo-warp"}
     template = {"kind": "single", "bounding_box": box, "renderer": renderer}
     position = {TEMPLATE: {"bounding_box": box}}
     if case == "shear":
@@ -146,7 +146,6 @@ def shape_case(case: str, box):
         ("stale-placement", "placements.gone names a placement that no longer exists"),
         ("placements-on-single", "placements on a single template"),
         ("box-on-multiple", "bounding_box on a multiple template"),
-        ("marigold", "Marigold positions are not supported yet"),
     ],
 )
 def test_shape_and_membership_refuse_in_validation_and_plan(
@@ -165,3 +164,26 @@ def test_shape_and_membership_refuse_in_validation_and_plan(
     )
     assert message in issues[0].message
     assert_plan_refuses(ctx, issues[0].message)
+
+
+def test_marigold_positions_validate_like_photo_warp_ones(workspace_root: Path) -> None:
+    """Spec rule 5 is lifted (option B): a Marigold position is refused only
+    for what refuses any position, and a limits change lists it."""
+    from etsy_listings.core.config.listing_validation import positions_outside_limits
+
+    ctx = a_context(workspace_root)
+    original = ctx.workspace.load_template_config(TEMPLATE)
+    config, _ = shape_case("marigold", [point.model_dump() for point in original.bounding_box])
+    box = compose(config.bounding_box, Pose(scale=1.05, rotation=10))
+    edit_listing(
+        workspace_root,
+        media=[{"template": TEMPLATE}],
+        template_positions={TEMPLATE: {"bounding_box": [point.model_dump() for point in box]}},
+    )
+    listing = ctx.workspace.load_listing(FIXTURE_LISTING)
+    assert check_template_positions(listing, {TEMPLATE: config}, TemplatePositionLimits()) == []
+    narrow = TemplatePositionLimits.model_validate({"rotation": 5})
+    assert "rotation 10" in check_template_positions(listing, {TEMPLATE: config}, narrow)[0].message
+    assert positions_outside_limits(listing, {TEMPLATE: config}, narrow) == [
+        f"template_positions.{TEMPLATE}"
+    ]
