@@ -368,6 +368,29 @@ describe("a stored position outside the limits", () => {
     expect(await adjustSwitch()).toHaveAttribute("aria-checked", "true");
   });
 
+  it("stays in Position mode once a nudge brings it within limits", async () => {
+    const { onUpdate, rerender } = mount(
+      detail({ template_positions: { folded: { bounding_box: stale } } }),
+    );
+    await selectTile("folded · black");
+    const box = await screen.findByRole("button", { name: /position — drag to move/ });
+    vi.useFakeTimers();
+    fireEvent.keyDown(box, { key: "ArrowRight" });
+    // The draft must not unmount the box under the keyboard mid-gesture.
+    expect(document.contains(box)).toBe(true);
+    act(() => vi.advanceTimersByTime(400));
+    const saved = onUpdate.mock.lastCall?.[0] as {
+      template_positions: ListingDetail["template_positions"];
+    };
+    rerender(detail({ template_positions: saved.template_positions ?? null }));
+
+    expect(screen.getByRole("switch", { name: "Adjust position" })).toHaveAttribute(
+      "aria-checked",
+      "true",
+    );
+    expect(document.querySelector(".tp-box--invalid")).toBeNull();
+  });
+
   it("says so when the box is not a plain move, resize or tilt", async () => {
     const skewed = [...FOLDED_BOX] as unknown as Quad[number][];
     skewed[2] = { x: 330, y: 400 };

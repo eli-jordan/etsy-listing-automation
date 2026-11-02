@@ -366,20 +366,22 @@ export function usePositioning(args: Args): Positioning | null {
   if (template === null || ready === null) return null;
   const name = template;
   const bounds = ready.limits;
-  const layers = withDraft(
-    layersOf(ready.config, name, detail.template_positions, bounds),
-    gestures.draft,
-    name,
-  );
+  const stored = layersOf(ready.config, name, detail.template_positions, bounds);
+  const layers = withDraft(stored, gestures.draft, name);
   const layer = selectionOf(layers, chosen, name);
   if (layer === undefined) return null;
-  const on = adjust?.pane === pane ? adjust.on : layers.some((l) => l.invalid !== null);
+  // Opened on by a refused *stored* box: a draft that looks valid must not
+  // switch the mode off under the pointer or the keyboard.
+  const on = adjust?.pane === pane ? adjust.on : stored.some((l) => l.invalid !== null);
 
   // `detail` as of this render. A nudge's save runs from the render of its
   // last key press, so it builds on the positions shown then.
   function write(positions: Positions | null) {
     onUpdate({ template_positions: positions });
     setEdited(name);
+    // Writes happen only in Position mode. Pin it, so a pane that opened on
+    // because its stored box was refused stays on once the box is fixed.
+    setAdjust({ pane, on: true });
     onFlush?.();
   }
 
@@ -393,7 +395,7 @@ export function usePositioning(args: Args): Positioning | null {
     positionSignature(detail.template_positions?.[name]) !== positionSignature(saved?.[name]);
   const unseen = edited === name && loadedSrc !== picture;
   const colours = detail.media.filter((e) => typeof e !== "string" && e.template === name).length;
-  const stored = layer.invalid === null ? null : layer.stored;
+  const refused = layer.invalid === null ? null : layer.stored;
 
   return {
     on,
@@ -408,10 +410,9 @@ export function usePositioning(args: Args): Positioning | null {
       write(withoutPosition(detail.template_positions, name, layer.placement));
     }),
     fit:
-      on && stored !== null
+      on && refused !== null
         ? () => {
-            commit(layer, nearestAllowedPose(layer.box, stored, bounds));
-            setAdjust({ pane, on: true });
+            commit(layer, nearestAllowedPose(layer.box, refused, bounds));
           }
         : null,
     ghost: on && !isIdentity(layer.pose),

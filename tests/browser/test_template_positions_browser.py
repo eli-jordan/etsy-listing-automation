@@ -181,6 +181,38 @@ def test_fit_within_limits_repairs_a_refused_position(page: Any, workspace_root:
     assert _position_issues(page) == []
 
 
+def test_a_keyboard_repair_keeps_position_mode_and_focus(page: Any, workspace_root: Path) -> None:
+    """A refused box opens in Position mode; nudging it back within the limits
+    must not switch the mode off or drop keyboard focus mid-edit (G5)."""
+    stale = compose(
+        _template_box(workspace_root), Pose(scale=1.0, offset_x=-0.11, offset_y=0.0, rotation=0.0)
+    )
+    _write_positions(workspace_root, {TEMPLATE: {"bounding_box": _corners(stale)}})
+
+    _open_images(page)
+    switch = page.get_by_role("switch", name="Adjust position")
+    switch.focus()
+    for _ in range(10):
+        page.keyboard.press("Shift+Tab")
+        if (page.evaluate("document.activeElement.getAttribute('aria-label')") or "").startswith(
+            "Design position"
+        ):
+            break
+    assert page.evaluate("document.activeElement.matches(':focus-visible')")
+    page.keyboard.press("ArrowRight")
+    _wait_for(
+        page,
+        workspace_root,
+        _positioned(workspace_root, lambda p: p.offset_x == pytest.approx(-0.1)),
+    )
+    page.wait_for_timeout(300)
+    assert switch.get_attribute("aria-checked") == "true"
+    assert (page.evaluate("document.activeElement.getAttribute('aria-label')") or "").startswith(
+        "Design position"
+    )
+    assert _position_issues(page) == []
+
+
 def test_a_stale_key_is_removed_from_its_issue_row(page: Any, workspace_root: Path) -> None:
     other = TypeAdapter(BoundingBox).validate_python(
         [{"x": 10, "y": 20}, {"x": 110, "y": 20}, {"x": 110, "y": 220}, {"x": 10, "y": 220}]
