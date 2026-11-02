@@ -50,9 +50,12 @@ load like published maps; a plan or preview waits for a missing or running fit
 and never renders the template's own maps for a positioned layer.
 
 ADR-0054 runs model inference only for explicit authoring. Saving a Marigold
-position, and confirming wider limits in Settings, are such explicit requests:
+position, confirming wider limits in Settings, and saving the geometry of a
+template a listing positions are such explicit requests:
 each may queue a *coverage* job that infers the padded quad's crop through the
 existing preparation queue and leases. A coverage job retains its evidence after
 the template's own, publishes no maps, and so leaves the template's generation
 unchanged. `plan` and apply never queue inference; they refuse until coverage
-exists.
+exists. Only templates some listing positions are covered: wider limits never
+queue inference for a template no listing has moved, since saving a position
+there queues it then.

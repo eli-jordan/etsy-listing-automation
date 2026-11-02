@@ -140,20 +140,25 @@ from preparation evidence that covers every allowed pose.
   spike: 0.9–5.8 s per fit). Fits are durable, content-addressed artifacts
   keyed by template, placement, evidence identity, posed quad and inference
   settings, so listings with identical positions share one, and any fit can be
-  rebuilt from evidence. Fits no listing references are pruned with the cache.
+  rebuilt from evidence. Fits no listing references are pruned with the cache:
+  at server startup and whenever background scene warming finishes, never
+  while a fit is being written or used.
 - **When fits run.** Saving a position queues its fit in the background. The
   preview route and `plan`/apply wait for a missing or running fit rather than
   render with the template's own maps; the editor shows its normal loading
   treatment, never a progress card. The scene's render identity includes the
   fit's numerical digest, so the lockfile changes only for affected scenes.
 - **Limits changes.** Narrowing the limits needs no new work. Widening them
-  beyond a template's evidence coverage queues inference for that template in
-  the background; existing fits stay valid because they are keyed by geometry.
+  beyond the evidence coverage of a template some listing positions queues
+  inference for that template in the background; a template no listing has
+  moved waits until a position is saved on it. Existing fits stay valid
+  because they are keyed by geometry.
   The settings confirmation names the templates that need it and says it runs
   the model once per template.
-- **Recalibration.** A template geometry change re-checks evidence coverage
-  for the new padded quad; positioned listings' fits are rebuilt against the
-  template's new evidence when it changes.
+- **Recalibration.** Saving the geometry of a template a listing positions
+  re-checks evidence coverage for the new padded quad and queues inference
+  when it falls short; positioned listings' fits are rebuilt on demand against
+  the template's new geometry and evidence, and the old ones are pruned.
 - The 1024px interactive composite renders a posed box with its fit once ready
   and with the editor's drag overlay until then.
 - Spec rule 5 (Marigold refused) is lifted (PR 7).

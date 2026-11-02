@@ -40,6 +40,7 @@ preceding tip.
 | 5 | Template rendering settings in Admin | standard | `feat/positions-5-settings` | — |
 | 6 | Calibrator warning for positioned listings | mechanical | `feat/positions-6-calibrator` | — |
 | 7 | Marigold positions, a fit per position (option B) | hard | `feat/positions-7-marigold` | — |
+| 7b | Marigold upkeep: limits, recalibration and pruning | standard | `feat/positions-7b-marigold-upkeep` | — |
 
 Spike sign-off: **2026-11-02, option A fail; proceed with option B** (seller's
 decision after the PR 1 report). PR 7 implements option B.
@@ -231,6 +232,39 @@ the posed quad, behaviour tests prove fit caching and sharing, the plan and
 preview waits, inference queued on widening and not on narrowing, and pruning;
 the settings dialog lists templates needing inference; and shared gates pass.
 Real-model inference stays out of CI: tests use the existing fake predictor.
+
+**Split (2026-11-02).** PR 7 outgrew the size budget and split at the
+coverage seam the orchestrator agreed. PR 7 ships coverage jobs, per-position
+fits, rendering and the position-save queue. PR 7b, stacked on it, carries the
+deferred limits, recalibration and pruning items below; the exit conditions
+above span both.
+
+### PR 7b — Marigold upkeep: limits, recalibration and pruning
+
+Based on PR 7's tip. Spec: *Marigold (option B)* (*Limits changes*,
+*Recalibration*, pruning); interactions *Settings: Template rendering*.
+
+Scope:
+
+- PR 5's impact read fills `templates_needing_inference`: each template a
+  listing positions whose evidence misses its padded quad under the candidate
+  limits. Limits that widen no axis list nothing.
+- The settings PATCH queues the same coverage inference after the response
+  when the limits widen; narrowing queues nothing.
+- A calibration save of a positioned template re-checks coverage and queues it
+  when short; old fits are keyed by geometry, so they refit on demand.
+- Pruning: fits no listing's current position produces against the template's
+  current evidence are removed at startup and when scene warming drains,
+  sparing fits being written, leased by a scene, or stored after the scan began.
+- PR 5's dialog already renders the non-empty list; no UI change.
+
+Deviation: only *positioned* templates are covered on widening (ADR-0058
+amendment). Inference costs about two minutes per template, and a template no
+listing has moved gets it when a position is first saved there.
+
+Exit when behaviour tests prove the impact read and the queue on widening and
+not on narrowing, the recalibration re-check, and pruning that removes only
+unreferenced fits and spares leased ones; and shared gates pass.
 
 ## Shared gates
 
