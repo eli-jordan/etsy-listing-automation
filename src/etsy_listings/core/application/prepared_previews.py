@@ -228,11 +228,14 @@ def prepared_preview(
         if cached is not None:
             png, identity, generation_id = cached
             return PreparedPreview(png, identity, generation_id, saved.revision)
-        base, _ = PIXEL_DIGESTS.decode_photo(path)
+        base, photo_pixels = PIXEL_DIGESTS.decode_photo(path)
         layers = _layers(sources)
     try:
         with lease_scene(
-            workspace, name, Composition(base, layers, appearance), expected=inputs
+            workspace,
+            name,
+            Composition(base, layers, appearance, photo_pixels=photo_pixels),
+            expected=inputs,
         ) as scene:
             return PreparedPreview(
                 scene.encoded(cache), scene.identity, scene.manifest.generation_id, saved.revision
@@ -293,10 +296,13 @@ def _layer_sources(
 
 
 def _layers(sources: list[tuple[Path, str | None]]) -> list[PreparedLayer]:
-    decoded: dict[Path, RGBA] = {}
+    """Each layer's decoded design with the digest the decode already
+    named it by, so composing does not hash it again."""
+    decoded: dict[Path, tuple[RGBA, str]] = {}
     layers = []
     for path, placement in sources:
         if path not in decoded:
-            decoded[path], _ = PIXEL_DIGESTS.decode_design(path)
-        layers.append(PreparedLayer(decoded[path], placement))
+            decoded[path] = PIXEL_DIGESTS.decode_design(path)
+        artwork, digest = decoded[path]
+        layers.append(PreparedLayer(artwork, placement, digest))
     return layers

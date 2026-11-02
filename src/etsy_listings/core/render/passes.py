@@ -10,7 +10,7 @@ greps this module for the ones that aren't.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 
 import cv2
 import numpy as np
@@ -136,11 +136,44 @@ def export_many(base: RGB, print_layers: Sequence[RGBA]) -> Image.Image:
     one-layer case is byte-identical to it, and why
     ``test_export_many_with_one_layer_matches_export`` pins that. :func:`export`
     is kept as the two-operand statement of the same rule: it is the definition
-    this function is checked against, and dropping it would drop the check."""
-    composite = base[..., :3].astype(np.float32)
-    for layer in print_layers:
-        layer_rgb = layer[..., :3].astype(np.float32)
-        alpha = layer[..., 3:4].astype(np.float32) / 255.0
-        composite = composite * (1 - alpha) + layer_rgb * alpha
-    composite_u8 = np.clip(composite + 0.5, 0, 255).astype(np.uint8)
-    return Image.fromarray(composite_u8, mode="RGB")
+    this function is checked against, and dropping it would drop the check.
+
+    The fold runs only over the rectangle where some layer prints. Outside it
+    every alpha is zero, so the whole-canvas fold would be ``base * 1 +
+    rgb * 0`` then ``+ 0.5`` and truncate: ``base`` exactly. A print covers
+    about a third of a photo, and the float work over the rest was most of
+    this pass's time."""
+    result = np.array(base[..., :3], dtype=np.uint8)
+    region = _union(print_bounds(layer) for layer in print_layers)
+    if region is not None:
+        composite = result[region].astype(np.float32)
+        for layer in print_layers:
+            layer_rgb = layer[region][..., :3].astype(np.float32)
+            alpha = layer[region][..., 3:4].astype(np.float32) / 255.0
+            composite = composite * (1 - alpha) + layer_rgb * alpha
+        result[region] = np.clip(composite + 0.5, 0, 255).astype(np.uint8)
+    return Image.fromarray(result, mode="RGB")
+
+
+Region = tuple[slice, slice]
+"""Rows, then columns, of a canvas."""
+
+
+def print_bounds(layer: RGBA) -> Region | None:
+    """The smallest rectangle holding every pixel ``layer`` prints (alpha
+    above zero); ``None`` when it prints none."""
+    x, y, width, height = cv2.boundingRect(np.ascontiguousarray(layer[..., 3]))
+    if width == 0 or height == 0:
+        return None
+    return slice(y, y + height), slice(x, x + width)
+
+
+def _union(regions: Iterable[Region | None]) -> Region | None:
+    present = [region for region in regions if region is not None]
+    if not present:
+        return None
+    rows, columns = zip(*present, strict=True)
+    return (
+        slice(min(r.start for r in rows), max(r.stop for r in rows)),
+        slice(min(c.start for c in columns), max(c.stop for c in columns)),
+    )
