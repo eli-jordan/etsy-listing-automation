@@ -182,7 +182,7 @@ class PositionScaleLimits(BaseModel):
 
 
 class TemplatePositionLimits(BaseModel):
-    """Mockup-only similarity limits; fractions in the template's unit frame."""
+    """Mockup-only similarity limits; offsets are fractions of the box's rectified W and H."""
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
