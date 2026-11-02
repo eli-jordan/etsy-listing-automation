@@ -3,8 +3,8 @@
 Claude Code and Grok (`.claude/settings.json`) and Codex (`.codex/hooks.json`)
 run this after every edit and every shell command, with the hook payload on
 stdin, behind a gate that ends the hook at once after a shell command that
-cannot have written a file (scripts/agent_lint_gate.py, which Claude Code and
-Grok start through scripts/agent_lint_launch.sh). For each changed source file it
+cannot have written a file (scripts/agent_lint_gate.py, which every agent
+starts). For each changed source file it
 applies safe fixes, then reports what is left on stderr with exit 2, which
 every agent feeds back to the model. Exit 0 means clean, or nothing to check.
 
@@ -58,6 +58,8 @@ PYTHON_SUFFIXES = {".py", ".pyi"}
 TYPESCRIPT_SUFFIXES = {".ts", ".tsx"}
 SOURCE_SUFFIXES = PYTHON_SUFFIXES | TYPESCRIPT_SUFFIXES
 UI = ROOT / "src" / "ui"
+# Claude Code's PowerShell tool and Grok's terminal tool write files too.
+SHELL_TOOLS = ("Bash", "PowerShell", "run_terminal_command")
 
 
 def _edited_paths(payload: dict[str, object]) -> list[Path]:
@@ -604,7 +606,7 @@ def pre_commit(paths: list[Path]) -> int:
 def run(mode: str, payload: dict[str, object]) -> int:
     """One hook event. The gates call this once they have read the payload."""
     if mode == "edit":
-        return shell() if payload.get("tool_name") == "Bash" else edit(payload)
+        return shell() if payload.get("tool_name") in SHELL_TOOLS else edit(payload)
     handlers = {
         "shell": shell,
         "snapshot": snapshot,

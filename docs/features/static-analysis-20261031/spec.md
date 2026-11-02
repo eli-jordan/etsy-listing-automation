@@ -104,10 +104,20 @@ script or a formatter writes files no edit tool reports. Two configs call it,
 both through the same gate, `scripts/agent_lint_gate.py`, run as `python -S`:
 
 - `.claude/settings.json`: Claude Code `PostToolUse` matching
-  `Edit|Write|Bash`. Grok Build reads this file too and maps Claude's tool
-  names. The command sources `scripts/agent_lint_launch.sh` into the hook's
-  own bash (no second shell), which only picks `.venv`'s Python, or `uv run`
-  without one, and starts the gate.
+  `Edit|Write|Bash|PowerShell`: Claude's PowerShell tool writes files as its
+  Bash tool does. Grok Build reads this file too, maps Claude's tool names
+  and sends its terminal tool as `run_terminal_command`, which the gate reads
+  as a shell command. Claude Code runs the command through Git Bash, but Grok
+  runs it through PowerShell on Windows, so it has to read the same in both:
+  `"$CLAUDE_PROJECT_DIR/.venv/Scripts/python.exe" -S
+  "$CLAUDE_PROJECT_DIR/scripts/agent_lint_gate.py" <mode>; exit $LASTEXITCODE`.
+  Grok defines `$CLAUDE_PROJECT_DIR` in PowerShell and puts the call operator
+  in front of the quoted program; in bash the unset `$LASTEXITCODE` leaves
+  `exit` with the gate's status. A bash-only command fails under Grok, and a
+  failed hook does not block, so Grok would get no lint at all. The command
+  needs the worktree's `.venv`, which `scripts/setup_worktree.py` creates;
+  without it the hook fails open. Grok runs a project's hooks only in a folder
+  its folder trust covers.
 - `.codex/hooks.json`: Codex `PostToolUse` matching
   `Bash|apply_patch|Edit|Write`. Codex runs hook commands through the
   session's shell, which on Windows is always PowerShell (started with
@@ -118,17 +128,67 @@ both through the same gate, `scripts/agent_lint_gate.py`, run as `python -S`:
   `-Command` otherwise reports any failing program as exit 1 and Codex feeds
   findings back only on exit 2.
 
-**The gate.** After a shell command, the gate decides from
-`scripts/agent_lint_rules.txt` whether the command could have written a file:
-every segment between `&&`, `||`, `;` and `|` must match a read-only `allow`
-rule, and no `deny` rule (`>`, `tee`, `-i`, `--fix`, `--write`, `-u`,
-`-delete`, …) may match. A read-only command ends the hook at once. The gate
-imports only `os`, `re` and `sys` and reads the payload as text, since `json`
-alone would cost more than the rest of the decision. A command that may have
-written, an edit or a session event falls through to the full hook in the
-same process. A second gate in bash builtins, sourced by Claude's hook, was
-tried and measured about 0.05s faster for Claude and Grok; one implementation of the
-rules was judged worth more.
+**The gate.** After a shell command (`Bash`, or Claude's `PowerShell`), the
+gate decides from `scripts/agent_lint_rules.txt` whether the command could
+have written a source file. It splits the line as its shell would: quotes and
+escapes are honoured, and `&&`, `||`, `;`, `|`, a bare `&` (which runs the next
+command in every shell) and newlines separate commands. Every command the
+line runs is judged: each segment, each `$(...)`, backtick and `<(...)`
+substitution, each `( ... )` subshell, and the script of a nested shell
+(`zsh -lc '...'`, `& 'C:/cygwin64/bin/zsh.exe' -lc '...'`,
+`powershell -Command ...`), however deep. Each must match a read-only `allow`
+rule and no `deny` rule, after its leading `VAR=value` assignments and
+prefixes (`exec`, `env -u X`, `timeout 60`) are dropped and its program is
+reduced to its name (`/usr/bin/git` is `git`). A redirect is read-only only
+into a scratch location (`/dev/null`, `/tmp/...`, `$TMP/...`, cygwin's
+`tmp`, `AppData/Local/Temp`) and not onto a source file. A heredoc body is
+data, unless its delimiter is unquoted and it substitutes. Tool-specific
+denies keep `rg -i`, `sort -u` and `grep -o` read-only while `sed -i`,
+`npx vitest -u` and `sort -o` fall through. Anything the reader does not
+follow falls through: an open quote, a `for` loop, a PowerShell script
+block or expression, an assignment to a variable that runs commands
+(`GIT_PAGER`, `PATH` beyond the system directories).
+
+Codex and Grok report commands their PowerShell ran as `Bash`, so a `Bash`
+command must also read the same in both shells. A backslash escape of a
+quote, separator or `$`, a backtick, a `{...}` block, or a curly quote or
+dash (PowerShell reads `’` as `'` and `–` as `-`) falls through.
+
+A read-only command ends the hook at once. The gate imports only `os`, `re`
+and `sys` and reads the payload as text, since `json` alone would cost more
+than the rest of the decision. A command that may have written, an edit or a
+session event falls through to the full hook in the same process. A second
+gate in bash builtins, sourced by Claude's hook, was tried and measured about
+0.05s faster for Claude and Grok; one implementation of the rules was judged
+worth more.
+
+**The gate's evidence.** Measured on 2026-11-02 by replaying the gate over
+every T3 turn with git checkpoints before and after (769 turns,
+7,676 shell commands): a source file that changed in a turn without
+an edit naming it was written by a shell command, and must have been caught
+by one that fell through. A second, held-out sample of 717 transcript turns
+(13,399 commands, no checkpoints) had every skipped command checked by a
+deliberately paranoid write detector, and each hit reviewed by hand.
+
+| | Before | After |
+|---|---|---|
+| Replay: shell writes missed, of 136 | 1 | 2 |
+| Replay: read-only turns' commands skipped, Claude / Codex / Grok | 15% / 25% / 0% | 55% / 61% / 0% |
+| Held-out: skipped, Claude / Codex / Grok | 27% / 25% / 13% | 67% / 63% / 36% |
+| Held-out: skipped commands that could write | 1 | 0 |
+| Held-out: Claude PowerShell commands not hooked | 728 | 0 |
+
+Both replay misses are writes by another process during read-only
+commands: a background `scripts/check.sh` (`ruff format .`) still running
+from the turn before, and a nested worktree changed during a `gh search`. No
+gate can see those, and the old gate caught the first only because `sed -n`
+fell through. Grok's 19 replay commands are all multi-line PowerShell
+scripts with loops and script blocks, which rightly fall through. The
+held-out write that the old gate skipped was
+`echo a & py -3 -c "open(...,'w')..." & echo done`, split only at `&&`. What
+still falls through is mostly real work: `uv run python` and `node -`
+scripts, `sed -i`, Grok's PowerShell scripts, `for` loops and heredoc
+scripts.
 
 **What changed.** An edit names its files. A shell command does not, so the
 hook keeps a snapshot of the working tree's dirty source files by content hash
