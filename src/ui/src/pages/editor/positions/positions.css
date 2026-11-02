@@ -160,14 +160,17 @@
 
 /* ---- Reel badge ---- */
 
+/* Bottom-right, as in the frames, but stacked above the tile's remove ×,
+   which owns the corner itself, and so clear of the first tile's "Etsy
+   thumbnail" band. */
 .tp-tile-badge {
   position: absolute;
-  right: 4px;
-  bottom: 4px;
+  right: 5px;
+  bottom: 28px;
   display: grid;
   place-items: center;
-  width: 20px;
-  height: 20px;
+  width: 19px;
+  height: 19px;
   border-radius: 50%;
   background: var(--color-bg);
   color: var(--color-accent-700);
