@@ -10,12 +10,17 @@ from dataclasses import replace
 from pathlib import Path
 
 from etsy_listings.core.engine.stages.render import (
+    PhotoWarpRender,
+    PreparedRender,
     RenderDesired,
+    RenderStage,
     ResolvedLayer,
     SceneWork,
     scene_hash,
 )
-from etsy_listings.core.render.config import Point, RenderConfig
+from etsy_listings.core.render.config import MarigoldAppearance, Point, RenderConfig
+
+from tests.support.marigold import preparation_inputs
 
 SQUARE_BOX = (
     Point(x=0.0, y=0.0),
@@ -32,7 +37,10 @@ def _work(
 ) -> SceneWork:
     key = f"{template}/{colour}" if colour is not None else template
     layer = ResolvedLayer(
-        colour=colour, design=Path("designs/design.png"), design_hash=design_hash, cfg=cfg
+        colour=colour,
+        design=Path("designs/design.png"),
+        design_hash=design_hash,
+        bounding_box=SQUARE_BOX,
     )
     return SceneWork(
         key=key,
@@ -44,6 +52,7 @@ def _work(
         map_key=colour or template,
         layers=(layer,),
         output=Path(f".cache/renders/listing/{template}/{colour or 'scene'}.png"),
+        render=PhotoWarpRender(configs=(cfg,)),
     )
 
 
@@ -123,18 +132,49 @@ def test_scene_hash_is_independent_of_an_unrelated_templates_yaml() -> None:
     assert scene_hash(changed, back) != scene_hash(desired, back)
 
 
+def test_photo_warp_recipe_and_hashes_are_pinned() -> None:
+    """Values ``main`` produced before the scene renderer became a tagged
+    variant. ``recipe()`` is every lockfile's ``scene_config``: drift here
+    makes every listing plan a re-render, so these are never recomputed."""
+    work = _work(template="flat-lay-01", colour="black", design_hash="sha256:aaa")
+    desired = _desired(
+        (work,),
+        template_hash={"flat-lay-01": "sha256:ttt"},
+        base_hash={"flat-lay-01/black": "sha256:bbb"},
+    )
+
+    assert work.recipe() == {
+        "template": "flat-lay-01",
+        "kind": "colour-matrix",
+        "layers": [
+            {
+                "colour": "black",
+                "design_hash": "sha256:aaa",
+                "render_config": (
+                    '{"bounding_box":[{"x":0.0,"y":0.0},{"x":100.0,"y":0.0},'
+                    '{"x":100.0,"y":100.0},{"x":0.0,"y":100.0}],'
+                    '"displace":{"enabled":false,"strength":0.0},'
+                    '"shade":{"blend":"soft-light","enabled":true,"opacity":0.6}}'
+                ),
+            }
+        ],
+    }
+    assert scene_hash(desired, work) == (
+        "sha256:3a463d2467d2bb6046218d0948607692d62ce6b9a64831c86d6890d8b39c8c33"
+    )
+    assert RenderStage().review_hash(desired) == (
+        "sha256:b71a417e128495b972cf4aa6d745c2f5665da7fdfa32891e9cb22aeb3947409b"
+    )
+
+
 def test_scene_hash_changes_when_its_own_render_config_changes() -> None:
     work = _work(template="flat-lay-01", colour="black", design_hash="sha256:aaa")
-    other_cfg_work = replace(
-        work,
-        layers=(
-            replace(
-                work.layers[0],
-                cfg=RenderConfig(
-                    bounding_box=SQUARE_BOX,
-                    shade=work.layers[0].cfg.shade.model_copy(update={"opacity": 0.9}),
-                ),
-            ),
+    other_cfg_work = _work(
+        template="flat-lay-01",
+        colour="black",
+        design_hash="sha256:aaa",
+        cfg=RenderConfig(
+            bounding_box=SQUARE_BOX, shade=CFG.shade.model_copy(update={"opacity": 0.9})
         ),
     )
     hashes = {
@@ -145,3 +185,51 @@ def test_scene_hash_changes_when_its_own_render_config_changes() -> None:
     changed_desired = _desired((other_cfg_work,), **hashes)
 
     assert scene_hash(desired, work) != scene_hash(changed_desired, other_cfg_work)
+
+
+def _prepared(*, template: str, design_hash: str) -> SceneWork:
+    work = _work(template=template, colour=None, design_hash=design_hash)
+    return replace(
+        work,
+        layers=(replace(work.layers[0], placement_id="left"),),
+        render=PreparedRender(
+            inputs=preparation_inputs(),
+            appearance=MarigoldAppearance(print_shine=0.5),
+            identity="sha256:prepared",
+            map_content="m" * 64,
+        ),
+    )
+
+
+def test_prepared_recipe_and_mixed_gallery_hashes_are_pinned() -> None:
+    """A prepared scene hashes as its pixel identity, and one prepared scene
+    switches the whole gallery's input hash to per-scene identities -- values
+    pinned from ``main`` before the scene renderer became a tagged variant."""
+    photo_warp = _work(template="flat-lay-01", colour="black", design_hash="sha256:aaa")
+    prepared = _prepared(template="shirt", design_hash="sha256:ccc")
+    desired = _desired(
+        (photo_warp, prepared),
+        template_hash={"flat-lay-01": "sha256:ttt", "shirt": "sha256:sss"},
+        base_hash={"flat-lay-01/black": "sha256:bbb", "shirt": "sha256:base"},
+    )
+
+    assert prepared.recipe() == {
+        "template": "shirt",
+        "kind": "single",
+        "renderer": "marigold",
+        "map_content": "m" * 64,
+        "appearance": {
+            "lighting_source": "estimated",
+            "lighting_strength": 1.0,
+            "fabric_texture": 0.25,
+            "print_shine": 0.5,
+        },
+        "layers": [{"placement_id": "left", "design_hash": "sha256:ccc", "colour": None}],
+    }
+    assert scene_hash(desired, prepared) == "sha256:prepared"
+    assert scene_hash(desired, photo_warp) == (
+        "sha256:3a463d2467d2bb6046218d0948607692d62ce6b9a64831c86d6890d8b39c8c33"
+    )
+    assert RenderStage().review_hash(desired) == (
+        "sha256:333858fd0b66b639b1865ee516b659f51594514446ed1c103420d10937edfc74"
+    )

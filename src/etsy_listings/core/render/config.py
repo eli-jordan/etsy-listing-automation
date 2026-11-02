@@ -305,6 +305,16 @@ def scene_colours(template: AnyTemplate, colour: str | None) -> list[tuple[str |
     return [(colour if isinstance(template, ColourMatrixTemplate) else template.colour, None)]
 
 
+def scene_boxes(template: AnyTemplate) -> list[BoundingBox]:
+    """Each layer's bounding box, in :func:`scene_layers`'s order, for any
+    renderer. Geometry is the template's own, so a prepared scene reads it
+    without building a Photo warp configuration it would never render
+    (ADR-0054)."""
+    if isinstance(template, MultipleTemplate):
+        return [p.bounding_box for p in template.placements]
+    return [template.bounding_box]
+
+
 TemplateConfig = Annotated[AnyTemplate, Field(discriminator="kind")]
 """``mockup-templates/{name}/template.yaml``, written by the calibrator. A
 discriminated union, not a wrapping model -- the file *is* one of the three

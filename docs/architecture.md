@@ -1164,6 +1164,14 @@ shared with authoring previews. YAML formatting, inactive settings, generation
 names and inference provenance do not enter that identity. Photo warp keeps its
 existing byte hashes and composition pipeline.
 
+Each planned scene carries its renderer as one tagged value: `PhotoWarpRender`
+holds the per-layer frozen `RenderConfig`s, and `PreparedRender` holds the
+leased preparation inputs, appearance, scene identity and map content. The
+recipe, scene hash, preview and apply each match on it once. Neither shape has
+optional fields that only matter for the other renderer, so a scene cannot
+half-describe both renderers. A prepared scene takes only placement geometry
+from the template, for its swatches, and never builds a Photo warp configuration.
+
 Plan, apply and every preview compose through `preparation.scenes.lease_scene`,
 which reads saved inputs, acquires one immutable generation for the target photo
 and names the scene identity in one place. `application.prepared_previews.saved_scene`
