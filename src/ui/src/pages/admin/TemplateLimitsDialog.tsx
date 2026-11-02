@@ -1,11 +1,10 @@
-import { WarningOctagonIcon } from "@phosphor-icons/react/dist/csr/WarningOctagon";
-import { XIcon } from "@phosphor-icons/react/dist/csr/X";
 import { useEffect, useRef, useState } from "react";
 import {
   getTemplatePositionImpact,
   type TemplatePositionImpact,
 } from "../../api/workspaceSettings";
 import { type LimitDraft, ROWS, toLimits } from "./templateLimits";
+import { AlarmHeader } from "./AlarmHeader";
 import { useModalKeys } from "./useModalKeys";
 
 type Impact =
@@ -83,22 +82,17 @@ export function TemplateLimitsDialog({
         aria-modal="true"
         aria-labelledby="tl-confirm"
       >
-        <div className="sp-modal__alarm">
-          <WarningOctagonIcon size={40} weight="fill" />
-          <div>
-            <h2 id="tl-confirm">
-              {inference.length > 0 ? `Refit ${templates(inference.length)}?` : "Save new limits?"}
-            </h2>
-            <p>
-              {inference.length > 0
-                ? "It runs in the background. You can keep working."
-                : "Listings are checked against them the next time they render or deploy."}
-            </p>
-          </div>
-          <button type="button" className="sp-modal__close" aria-label="Cancel" onClick={onCancel}>
-            <XIcon size={16} />
-          </button>
-        </div>
+        <AlarmHeader
+          titleId="tl-confirm"
+          title={
+            inference.length > 0 ? `Refit ${templates(inference.length)}?` : "Save new limits?"
+          }
+          onCancel={onCancel}
+        >
+          {inference.length > 0
+            ? "It runs in the background. You can keep working."
+            : "Listings are checked against them the next time they render or deploy."}
+        </AlarmHeader>
         <div className="sa-modal__body">
           <ul className="sp-modal__facts">
             <li>

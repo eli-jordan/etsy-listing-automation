@@ -1,8 +1,7 @@
 import { CheckIcon } from "@phosphor-icons/react/dist/csr/Check";
-import { WarningOctagonIcon } from "@phosphor-icons/react/dist/csr/WarningOctagon";
-import { XIcon } from "@phosphor-icons/react/dist/csr/X";
 import { useEffect, useRef, useState } from "react";
 import type { ShopSettings } from "../../api/shop";
+import { AlarmHeader } from "./AlarmHeader";
 import { useModalKeys } from "./useModalKeys";
 
 /**
@@ -61,16 +60,13 @@ export function CurrencyDialog({
         aria-modal="true"
         aria-labelledby="sp-cur-title"
       >
-        <div className="sp-modal__alarm">
-          <WarningOctagonIcon size={40} weight="fill" />
-          <div>
-            <h2 id="sp-cur-title">Changing currency converts nothing</h2>
-            <p>Read this before you change it. It can't be undone automatically.</p>
-          </div>
-          <button type="button" className="sp-modal__close" aria-label="Cancel" onClick={onCancel}>
-            <XIcon size={16} />
-          </button>
-        </div>
+        <AlarmHeader
+          titleId="sp-cur-title"
+          title="Changing currency converts nothing"
+          onCancel={onCancel}
+        >
+          Read this before you change it. It can't be undone automatically.
+        </AlarmHeader>
         <div className="sa-modal__body">
           <ul className="sp-modal__facts">
             <li>
