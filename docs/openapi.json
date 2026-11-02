@@ -4885,6 +4885,28 @@
         "title": "Point",
         "type": "object"
       },
+      "PositionScaleLimits": {
+        "additionalProperties": false,
+        "description": "Interactions' slider ranges guarantee min <= identity <= max (ADR-0058).",
+        "properties": {
+          "max": {
+            "default": 1.1,
+            "maximum": 1.5,
+            "minimum": 1.0,
+            "title": "Max",
+            "type": "number"
+          },
+          "min": {
+            "default": 0.8,
+            "maximum": 1.0,
+            "minimum": 0.5,
+            "title": "Min",
+            "type": "number"
+          }
+        },
+        "title": "PositionScaleLimits",
+        "type": "object"
+      },
       "PreparationJobResponse": {
         "properties": {
           "config_revision": {
@@ -7474,6 +7496,31 @@
         "title": "TemplatePhoto",
         "type": "object"
       },
+      "TemplatePositionLimits": {
+        "additionalProperties": false,
+        "description": "Mockup-only similarity limits; fractions in the template's unit frame.",
+        "properties": {
+          "offset": {
+            "default": 0.1,
+            "maximum": 0.25,
+            "minimum": 0.0,
+            "title": "Offset",
+            "type": "number"
+          },
+          "rotation": {
+            "default": 15,
+            "maximum": 30.0,
+            "minimum": 0.0,
+            "title": "Rotation",
+            "type": "number"
+          },
+          "scale": {
+            "$ref": "#/components/schemas/PositionScaleLimits"
+          }
+        },
+        "title": "TemplatePositionLimits",
+        "type": "object"
+      },
       "TemplateSummary": {
         "properties": {
           "colours": {
@@ -7945,6 +7992,10 @@
             "title": "Step Limit Minutes",
             "type": "integer"
           },
+          "template_positions": {
+            "$ref": "#/components/schemas/TemplatePositionLimits",
+            "readOnly": true
+          },
           "weights": {
             "additionalProperties": {
               "type": "number"
@@ -7955,6 +8006,7 @@
         },
         "required": [
           "revision",
+          "template_positions",
           "concurrency",
           "weights",
           "default_weights",

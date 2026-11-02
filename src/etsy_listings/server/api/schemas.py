@@ -39,7 +39,7 @@ from etsy_listings.core.batches import AiState
 from etsy_listings.core.config.listing import Listing
 from etsy_listings.core.config.listing_template import ListingTemplate
 from etsy_listings.core.config.media import MediaEntry, MediaKind
-from etsy_listings.core.config.settings import AiProviderSettings
+from etsy_listings.core.config.settings import AiProviderSettings, TemplatePositionLimits
 
 # ``draft``/``deployed``/``live``/``dirty``, imported rather than restated:
 # the lifecycle rule is the engine's (the UI's badge and Phase 6's `status`
@@ -1055,6 +1055,8 @@ class ShopSaveRefusal(BaseModel):
 
 class WorkspaceSettingsResponse(BaseModel):
     revision: str
+    template_positions: TemplatePositionLimits = Field(json_schema_extra={"readOnly": True})
+    """Current limits, including defaults; editing belongs to template positions PR 5."""
     concurrency: int
     weights: dict[str, float]
     """Relative weights, normalized only for display by the page."""

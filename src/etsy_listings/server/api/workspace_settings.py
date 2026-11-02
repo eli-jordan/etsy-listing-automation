@@ -29,6 +29,7 @@ def model_catalogs(request: Request, *, refresh: bool = False) -> ModelCatalogs:
 def _response(view: workspace_settings.SettingsView) -> WorkspaceSettingsResponse:
     return WorkspaceSettingsResponse(
         revision=view.revision,
+        template_positions=view.settings.template_positions,
         concurrency=view.settings.batch_ai.concurrency,
         weights=view.settings.market_seo.weights.model_dump(),
         default_weights=workspace_settings.default_weights(),

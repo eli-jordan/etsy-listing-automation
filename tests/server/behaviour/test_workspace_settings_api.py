@@ -236,3 +236,45 @@ def test_time_limits_read_save_together_and_refuse_a_run_below_the_floor(
     assert saved.status_code == 200
     assert (saved.json()["step_limit_minutes"], saved.json()["run_limit_minutes"]) == (10, 30)
     assert path.read_text() == "ai:\n  step_limit_minutes: 10\n  run_limit_minutes: 30\n"
+
+
+@pytest.mark.parametrize(
+    ("source", "expected"),
+    [
+        (None, {"scale": {"min": 0.8, "max": 1.1}, "offset": 0.1, "rotation": 15}),
+        (
+            b"template_positions:\n  scale: {min: 0.65, max: 1.35}\n"
+            b"  offset: 0.17\n  rotation: 23\n",
+            {"scale": {"min": 0.65, "max": 1.35}, "offset": 0.17, "rotation": 23},
+        ),
+    ],
+    ids=["defaults", "stored-limits"],
+)
+def test_settings_get_exposes_template_position_limits_without_writing(
+    client: TestClient,
+    workspace_root: Path,
+    source: bytes | None,
+    expected: dict[str, object],
+) -> None:
+    path = Workspace.discover(root_override=workspace_root).settings_file()
+    if source is not None:
+        path.write_bytes(source)
+    before = identity(path) if source is not None else None
+    response = client.get("/api/admin/settings")
+    assert response.status_code == 200
+    assert response.json()["template_positions"] == expected
+    if source is None:
+        assert not path.exists()
+    else:
+        assert path.read_bytes() == source
+        assert identity(path) == before
+
+
+def test_settings_patch_does_not_accept_template_position_edits(client: TestClient) -> None:
+    initial = client.get("/api/admin/settings").json()
+    refused = client.patch(
+        "/api/admin/settings",
+        json={"revision": initial["revision"], "changes": {"template_positions": {"offset": 0.2}}},
+    )
+    assert refused.status_code == 422
+    assert client.get("/api/admin/settings").json() == initial

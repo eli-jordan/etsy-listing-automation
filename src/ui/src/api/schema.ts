@@ -3803,6 +3803,22 @@ export interface components {
       /** Y */
       y: number;
     };
+    /**
+     * PositionScaleLimits
+     * @description Interactions' slider ranges guarantee min <= identity <= max (ADR-0058).
+     */
+    PositionScaleLimits: {
+      /**
+       * Max
+       * @default 1.1
+       */
+      max: number;
+      /**
+       * Min
+       * @default 0.8
+       */
+      min: number;
+    };
     /** PreparationJobResponse */
     PreparationJobResponse: {
       /** Config Revision */
@@ -4833,6 +4849,23 @@ export interface components {
       /** File */
       file: string;
     };
+    /**
+     * TemplatePositionLimits
+     * @description Mockup-only similarity limits; fractions in the template's unit frame.
+     */
+    TemplatePositionLimits: {
+      /**
+       * Offset
+       * @default 0.1
+       */
+      offset: number;
+      /**
+       * Rotation
+       * @default 15
+       */
+      rotation: number;
+      scale?: components["schemas"]["PositionScaleLimits"];
+    };
     /** TemplateSummary */
     TemplateSummary: {
       /** Colours */
@@ -5003,6 +5036,7 @@ export interface components {
       run_limit_minutes: number;
       /** Step Limit Minutes */
       step_limit_minutes: number;
+      readonly template_positions: components["schemas"]["TemplatePositionLimits"];
       /** Weights */
       weights: {
         [key: string]: number;
