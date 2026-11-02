@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { DotsSixVerticalIcon } from "@phosphor-icons/react";
+import { DotsSixVerticalIcon } from "@phosphor-icons/react/dist/csr/DotsSixVertical";
 import { WarningIcon } from "@phosphor-icons/react/dist/csr/Warning";
 import {
   getModelCatalogs,
