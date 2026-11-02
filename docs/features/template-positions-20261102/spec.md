@@ -64,8 +64,9 @@ through `listing_documents`.
 ## Validation
 
 `plan` decomposes each stored box against the current template box: map both
-into the template box's own unit frame through the template homography, fit a
-similarity (uniform scale, translation, rotation), and check the residual and
+into the template box's own rectified frame through the template homography
+(its unit square scaled to the box's mean side lengths, so a tilt is a rigid
+rotation; ADR-0058 amendment), fit a similarity (uniform scale, translation, rotation), and check the residual and
 the parts. It refuses, naming the listing and the key, when:
 
 1. the box is not a similarity of the template box (corner residual above about

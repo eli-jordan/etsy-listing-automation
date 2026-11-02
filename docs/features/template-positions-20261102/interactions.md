@@ -220,8 +220,8 @@ action needs; a lighter header is acceptable if the implementer has one to hand.
 
 - **Geometry in the box's own frame.** The prototype's templates have
   axis-aligned boxes, so it moves, scales and tilts in photo pixels. Production
-  boxes are arbitrary quads: apply the pose in the template box's unit frame
-  and map through the template homography, as the spec's *Validation* section
+  boxes are arbitrary quads: apply the pose in the template box's rectified
+  frame (unit square scaled to its mean side lengths, so tilt stays rigid) and map through the template homography, as the spec's *Validation* section
   describes. Handles are drawn at the mapped corners. The real
   `src/ui/src/components/quadGeometry.ts` helpers (`moved`, `nudged`,
   `scaledAbout`) edit free quads for the calibrator and are not the right
