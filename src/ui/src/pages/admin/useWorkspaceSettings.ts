@@ -22,7 +22,8 @@ const clears = (key: string, changes: SettingsChanges) =>
   (key.startsWith("ai.providers") && "providers" in changes) ||
   (key === "ai.step_limit_minutes" && "step_limit_minutes" in changes) ||
   (key === "ai.run_limit_minutes" && "run_limit_minutes" in changes) ||
-  (key.startsWith("market_seo") && "weights" in changes);
+  (key.startsWith("market_seo") && "weights" in changes) ||
+  (key.startsWith("template_positions") && "template_positions" in changes);
 
 /** settings.yaml's revision and save queue (`useSaveQueue`), independent of
  * Shop. Responses advance the revision without replacing newer local edits:
@@ -48,6 +49,12 @@ export function useWorkspaceSettings() {
     [enqueue],
   );
   const retry = useCallback(() => void resend().catch(() => undefined), [resend]);
+  // A confirmed save (template limits) reports its own failure and retries
+  // only through its own button, like the currency dialog (`retain: false`).
+  const confirmSave = useCallback(
+    (changes: SettingsChanges) => enqueue(changes, { retain: false }),
+    [enqueue],
+  );
 
   return {
     settings,
@@ -57,6 +64,7 @@ export function useWorkspaceSettings() {
     loadError,
     reload,
     save,
+    confirmSave,
     retry,
     locked: queue.locked,
   };

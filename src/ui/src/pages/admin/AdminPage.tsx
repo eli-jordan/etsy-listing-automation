@@ -9,18 +9,22 @@ import { ConnectedShops } from "./ConnectedShops";
 import { CurrencyDialog } from "./CurrencyDialog";
 import type { InfoState } from "./Info";
 import { ListingDefaults } from "./ListingDefaults";
-import { SettingsPanel } from "./SettingsPanel";
+import { type SettingsSection, SettingsPanel } from "./SettingsPanel";
 import { useShopLookups } from "./useShopLookups";
 import { type SaveStatus, useShopSettings } from "./useShopSettings";
 import "./admin.css";
 
-type Section = "connected" | "defaults" | "settings";
+type Section = "connected" | "defaults" | "settings" | "rendering";
+const SETTINGS: Record<SettingsSection, Section> = { ai: "settings", rendering: "rendering" };
+const isSettings = (section: Section) => section === "settings" || section === "rendering";
 
 /**
  * `/admin` (Admin plan, PR 3): the Shop tab's Connected shops and Listing
  * defaults, from the approved `admin-shop` prototype. The section is page
  * state, not a URL parameter, and both panels stay mounted so switching
- * never discards a pending edit. Settings owns a separate file/save queue.
+ * never discards a pending edit. Settings owns a separate file/save queue;
+ * its AI and Template rendering subsections (template positions PR 5) are
+ * page state too, and opening Settings selects AI.
  */
 export function AdminPage() {
   const [section, setSection] = useState<Section>("connected");
@@ -82,12 +86,12 @@ export function AdminPage() {
         <h1 className="page-head__title">Admin</h1>
         <span className="page-head__meta">Changes save when you leave a field</span>
         <div className="page-head__actions">
-          {section !== "settings" && (
+          {!isSettings(section) && (
             <SaveIndicator status={settings.status} onRetry={() => void settings.retry()} />
           )}
         </div>
       </div>
-      {section !== "settings" && settings.status.kind === "conflict" && (
+      {!isSettings(section) && settings.status.kind === "conflict" && (
         <div className="adm-warn sp-conflict" role="alert">
           <WarningIcon size={18} />
           <span>
@@ -106,7 +110,7 @@ export function AdminPage() {
       <div className="adm-body">
         <Nav section={section} onPick={setSection} />
         <div>
-          {section !== "settings" && settings.loadError !== null && (
+          {!isSettings(section) && settings.loadError !== null && (
             <div className="adm-warn" role="alert">
               <WarningIcon size={18} />
               <span>{settings.loadError}</span>
@@ -146,8 +150,8 @@ export function AdminPage() {
               />
             )}
           </div>
-          <div hidden={section !== "settings"}>
-            <SettingsPanel />
+          <div hidden={!isSettings(section)}>
+            <SettingsPanel section={section === "rendering" ? "rendering" : "ai"} />
           </div>
         </div>
       </div>
@@ -200,7 +204,7 @@ function Nav({ section, onPick }: { section: Section; onPick: (s: Section) => vo
     <nav className="adm-sections adm-sections--described" aria-label="Admin sections">
       <a
         href="#shop"
-        className={`adm-sections__item${section !== "settings" ? " adm-sections__item--active" : ""}`}
+        className={`adm-sections__item${!isSettings(section) ? " adm-sections__item--active" : ""}`}
         onClick={(e) => {
           e.preventDefault();
           onPick("connected");
@@ -214,26 +218,10 @@ function Nav({ section, onPick }: { section: Section; onPick: (s: Section) => vo
           <span className="adm-sections__hint">shop.yaml</span>
         </span>
       </a>
-      <div className="s-subnav">
-        {sub.map((s) => (
-          <a
-            key={s.id}
-            href={`#${s.id}`}
-            className={s.id === section ? "s-subnav__item is-active" : "s-subnav__item"}
-            aria-current={s.id === section ? "page" : undefined}
-            onClick={(e) => {
-              e.preventDefault();
-              onPick(s.id);
-            }}
-          >
-            {s.label}
-          </a>
-        ))}
-      </div>
+      <SubNav items={sub} section={section} onPick={onPick} />
       <a
         href="#settings"
-        aria-current={section === "settings" ? "page" : undefined}
-        className={`adm-sections__item${section === "settings" ? " adm-sections__item--active" : ""}`}
+        className={`adm-sections__item${isSettings(section) ? " adm-sections__item--active" : ""}`}
         onClick={(event) => {
           event.preventDefault();
           onPick("settings");
@@ -247,6 +235,43 @@ function Nav({ section, onPick }: { section: Section; onPick: (s: Section) => vo
           <span className="adm-sections__hint">settings.yaml</span>
         </span>
       </a>
+      <SubNav
+        items={[
+          { id: SETTINGS.ai, label: "AI" },
+          { id: SETTINGS.rendering, label: "Template rendering" },
+        ]}
+        section={section}
+        onPick={onPick}
+      />
     </nav>
+  );
+}
+
+function SubNav({
+  items,
+  section,
+  onPick,
+}: {
+  items: { id: Section; label: string }[];
+  section: Section;
+  onPick: (s: Section) => void;
+}) {
+  return (
+    <div className="s-subnav">
+      {items.map((s) => (
+        <a
+          key={s.id}
+          href={`#${s.id}`}
+          className={s.id === section ? "s-subnav__item is-active" : "s-subnav__item"}
+          aria-current={s.id === section ? "page" : undefined}
+          onClick={(e) => {
+            e.preventDefault();
+            onPick(s.id);
+          }}
+        >
+          {s.label}
+        </a>
+      ))}
+    </div>
   );
 }

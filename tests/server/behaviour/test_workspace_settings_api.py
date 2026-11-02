@@ -268,13 +268,3 @@ def test_settings_get_exposes_template_position_limits_without_writing(
     else:
         assert path.read_bytes() == source
         assert identity(path) == before
-
-
-def test_settings_patch_does_not_accept_template_position_edits(client: TestClient) -> None:
-    initial = client.get("/api/admin/settings").json()
-    refused = client.patch(
-        "/api/admin/settings",
-        json={"revision": initial["revision"], "changes": {"template_positions": {"offset": 0.2}}},
-    )
-    assert refused.status_code == 422
-    assert client.get("/api/admin/settings").json() == initial

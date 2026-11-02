@@ -41,3 +41,19 @@ export async function saveSettings(
     return { kind: "invalid", message: refusal.message, fieldErrors: refusal.field_errors ?? {} };
   throw new Error("Could not save settings.yaml");
 }
+
+export type TemplatePositionLimits = WorkspaceSettings["template_positions"];
+export type TemplatePositionImpact = components["schemas"]["TemplatePositionImpactResponse"];
+
+/** Who candidate limits would block, and which Marigold templates a save
+ * would refit (template positions PR 5). Writes nothing. */
+export async function getTemplatePositionImpact(
+  limits: TemplatePositionLimits,
+): Promise<TemplatePositionImpact> {
+  const { data, error } = await api.POST("/api/admin/settings/template-positions/impact", {
+    body: { limits },
+  });
+  if (data) return data;
+  const refusal = error as Refusal | undefined;
+  throw new Error(refusal?.message ?? "Could not check saved positions");
+}

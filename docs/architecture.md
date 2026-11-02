@@ -616,6 +616,16 @@ An absent file uses defaults without creating it; invalid files refuse to load
 or dispatch batch work. The page serializes saves and adopts returned revisions;
 a conflict requires reload and never reapplies an old patch automatically.
 
+Settings has two subsections, AI and Template rendering. Template position
+limits save through the same PATCH, but only from a confirmation, never on
+blur: the page sends the whole `template_positions` section and only the
+leaves that differ from the file are written. Before saving, the confirmation
+reads `POST /api/admin/settings/template-positions/impact`
+(`core/application/template_position_impact.py`), which lists the listings
+whose saved positions the candidate limits would refuse and the Marigold
+templates that would need model inference to cover them (empty until template
+positions PR 7). Nothing is written by that read (ADR-0058).
+
 Shop and Settings share one client save queue, `pages/admin/useSaveQueue.ts`:
 revision progression, per-key acknowledgement, failure retention, Retry and
 conflict stopping. A key stays failed until a later save of that key succeeds

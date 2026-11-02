@@ -182,6 +182,35 @@ describe("Admin page shell", () => {
     expect(screen.getByRole("slider", { name: "Listings drafted at once" })).toHaveValue("4");
     expect(settingsApi.getSettings).toHaveBeenCalledTimes(1);
   });
+
+  it("splits Settings into AI and Template rendering, keeping a limits draft", async () => {
+    render(<AdminPage />);
+    await screen.findByRole("heading", { name: "Connected shops" });
+    fireEvent.click(screen.getByRole("link", { name: /Settings/ }));
+    expect(await screen.findByRole("link", { name: "AI" })).toHaveAttribute("aria-current", "page");
+    expect(await screen.findByRole("slider", { name: "Listings drafted at once" })).toBeVisible();
+    expect(screen.queryByRole("region", { name: "Template positions" })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("link", { name: "Template rendering" }));
+    expect(screen.getByRole("link", { name: "Template rendering" })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+    expect(screen.getByRole("region", { name: "Template positions" })).toBeVisible();
+    expect(
+      screen.queryByRole("slider", { name: "Listings drafted at once" }),
+    ).not.toBeInTheDocument();
+    fireEvent.change(screen.getByRole("slider", { name: "Tilt" }), { target: { value: "20" } });
+
+    fireEvent.click(screen.getByRole("link", { name: "AI" }));
+    fireEvent.click(screen.getByRole("link", { name: "Template rendering" }));
+    expect(screen.getByRole("slider", { name: "Tilt" })).toHaveValue("20");
+    expect(window.location.hash).toBe("");
+
+    fireEvent.click(screen.getByRole("link", { name: /Shop shop.yaml/ }));
+    fireEvent.click(screen.getByRole("link", { name: /Settings/ }));
+    expect(screen.getByRole("link", { name: "AI" })).toHaveAttribute("aria-current", "page");
+  });
 });
 
 describe("Connected shops", () => {
