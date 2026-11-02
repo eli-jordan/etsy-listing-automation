@@ -82,6 +82,7 @@ from etsy_listings.core.engine.stages.gates import (
     check_render_photo,
     check_render_template,
     check_scene_colour,
+    check_template_positions,
     resolved_design,
 )
 from etsy_listings.core.preparation.artifacts import ArtifactError, PreparationInputs
@@ -634,10 +635,6 @@ def _load_template(workspace: Workspace, template_name: str) -> tuple[AnyTemplat
         config = workspace.load_template_config(template_name)
     except ConfigLoadError as exc:
         return Blocked(str(exc))
-    maps = template_readiness(workspace, template_name, config)
-    blocked = check_prepared_maps(template_name, None if maps.can_render else maps.message)
-    if blocked is not None:
-        return blocked
     return config, digest
 
 
@@ -653,6 +650,27 @@ def _load_templates(
             return loaded
         templates.configs[template_name], templates.hashes[template_name] = loaded
     return templates
+
+
+def _check_template_inputs(
+    workspace: Workspace, listing: str, listing_cfg: Listing, templates: _Templates
+) -> Blocked | None:
+    # ADR-0058/spec rule 5 must name unsupported positions before map readiness.
+    if listing_cfg.template_positions:
+        # A broken settings.yaml is this stage refusing, never a raise (ADR-0053).
+        try:
+            limits = workspace.load_settings().template_positions
+        except ConfigLoadError as exc:
+            return Blocked(str(exc))
+        blocked = check_template_positions(listing_cfg, templates.configs, limits, name=listing)
+        if blocked is not None:
+            return blocked
+    for name, config in templates.configs.items():
+        maps = template_readiness(workspace, name, config)
+        blocked = check_prepared_maps(name, None if maps.can_render else maps.message)
+        if blocked is not None:
+            return blocked
+    return None
 
 
 class _DesignFiles:
@@ -867,6 +885,10 @@ class RenderStage(Stage[RenderDesired, RenderApplied, RenderLive]):
         templates = _load_templates(workspace, referenced)
         if isinstance(templates, Blocked):
             return templates
+
+        blocked = _check_template_inputs(workspace, listing, listing_cfg, templates)
+        if blocked is not None:
+            return blocked
 
         # ADR-0053: every depicted colour must resolve before anything is hashed,
         # and a failure is this stage refusing, never a raise.

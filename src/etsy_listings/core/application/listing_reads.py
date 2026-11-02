@@ -22,7 +22,7 @@ from __future__ import annotations
 import time
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Protocol
@@ -299,7 +299,7 @@ def listing_row(
     # Probing the listing's videos is almost all of what assembling the
     # check inputs costs; the profile it also reads is memoised in `facts`.
     with timer.phase("videos"):
-        inputs = _check_inputs(facts, listing, listing_dir, description)
+        inputs = _check_inputs(facts, listing, listing_dir, description, name=name)
     with timer.phase("checks"):
         issues = _business_issues(workspace, listing_dir, listing, inputs, published=published)
     return ListingRow(
@@ -386,7 +386,7 @@ def _describe(
         workspace,
         listing_dir,
         listing,
-        _check_inputs(facts, listing, listing_dir, description),
+        _check_inputs(facts, listing, listing_dir, description, name=context.name),
         published=context.published,
     )
     plan_name, resolved_prices = pricing_summary(
@@ -418,16 +418,27 @@ def _check_inputs(
     listing: Listing,
     listing_dir: Path,
     description: DescriptionResolution,
+    *,
+    name: str,
 ) -> CheckInputs:
     """``listing``'s check inputs; ``description`` is the one resolution the
     caller also shows, so its ref is read once."""
-    return CheckInputs(
+    inputs = CheckInputs(
         garment_profile=facts.garment_profile(listing.garment_profile),
         garment_profile_names=facts.garment_profile_names,
         templates=facts.templates,
         description_ref_error=str(description.error) if description.error is not None else None,
         videos=facts.videos(listing, listing_dir),
+        listing_name=name,
     )
+    # Settings are read only for a positioned listing; a broken file becomes
+    # the listing's issue rather than a failed read.
+    if not listing.template_positions:
+        return inputs
+    limits = facts.template_position_limits()
+    if isinstance(limits, str):
+        return replace(inputs, template_position_limits_error=limits)
+    return replace(inputs, template_position_limits=limits)
 
 
 def _business_issues(

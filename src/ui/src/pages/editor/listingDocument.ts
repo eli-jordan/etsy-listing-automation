@@ -24,5 +24,6 @@ export function listingDocument(detail: ListingDetail): Record<string, unknown> 
     price_overrides: detail.price_overrides,
     etsy: detail.etsy,
     media: detail.media,
+    template_positions: detail.template_positions,
   };
 }

@@ -2258,6 +2258,16 @@ export interface components {
       /** File */
       file: string;
     };
+    /** BoxPosition */
+    BoxPosition: {
+      /** Bounding Box */
+      bounding_box: [
+        components["schemas"]["Point"],
+        components["schemas"]["Point"],
+        components["schemas"]["Point"],
+        components["schemas"]["Point"],
+      ];
+    };
     /**
      * CalibrationSaveRequest
      * @description A single recoverable calibration transaction under ADR-0054.
@@ -3017,6 +3027,11 @@ export interface components {
         | "pending-retire"
         | "inactive"
         | "expired";
+      /** Template Positions */
+      template_positions?: {
+        [key: string]:
+          components["schemas"]["BoxPosition"] | components["schemas"]["PlacementPositions"];
+      } | null;
     };
     /**
      * ListingFailedEvent
@@ -3680,6 +3695,13 @@ export interface components {
       /** Id */
       id: string;
     };
+    /** PlacementPositions */
+    PlacementPositions: {
+      /** Placements */
+      placements: {
+        [key: string]: components["schemas"]["BoxPosition"];
+      };
+    };
     /** PlanDTO */
     PlanDTO: {
       /** Etsy Listing Id */
@@ -3780,6 +3802,22 @@ export interface components {
       x: number;
       /** Y */
       y: number;
+    };
+    /**
+     * PositionScaleLimits
+     * @description Interactions' slider ranges guarantee min <= identity <= max (ADR-0058).
+     */
+    PositionScaleLimits: {
+      /**
+       * Max
+       * @default 1.1
+       */
+      max: number;
+      /**
+       * Min
+       * @default 0.8
+       */
+      min: number;
     };
     /** PreparationJobResponse */
     PreparationJobResponse: {
@@ -4811,6 +4849,23 @@ export interface components {
       /** File */
       file: string;
     };
+    /**
+     * TemplatePositionLimits
+     * @description Mockup-only similarity limits; offsets are fractions of the box's rectified W and H.
+     */
+    TemplatePositionLimits: {
+      /**
+       * Offset
+       * @default 0.1
+       */
+      offset: number;
+      /**
+       * Rotation
+       * @default 15
+       */
+      rotation: number;
+      scale?: components["schemas"]["PositionScaleLimits"];
+    };
     /** TemplateSummary */
     TemplateSummary: {
       /** Colours */
@@ -4981,6 +5036,7 @@ export interface components {
       run_limit_minutes: number;
       /** Step Limit Minutes */
       step_limit_minutes: number;
+      readonly template_positions: components["schemas"]["TemplatePositionLimits"];
       /** Weights */
       weights: {
         [key: string]: number;

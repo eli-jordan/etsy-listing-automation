@@ -38,6 +38,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, replace
+from dataclasses import field as dataclass_field
 from pathlib import Path
 from types import MappingProxyType
 from typing import Literal
@@ -57,6 +58,10 @@ from etsy_listings.core.config.garment_profile import GarmentProfile
 from etsy_listings.core.config.listing import Listing, TemplateMediaEntry
 from etsy_listings.core.config.listing_template import ListingTemplate
 from etsy_listings.core.config.media import ProbeFailure, VideoFacts
+from etsy_listings.core.config.settings import TemplatePositionLimits
+from etsy_listings.core.config.template_positions import BoxPosition, PlacementPositions
+from etsy_listings.core.render.config import AnyTemplate, BoundingBox, MultipleTemplate
+from etsy_listings.core.render.positions import decompose
 
 Severity = Literal["block", "warn", "info"]
 """``info`` is a note about what Etsy will do, not a problem with the listing
@@ -94,6 +99,7 @@ class TemplateInfo:
     kind: Literal["colour-matrix", "multiple", "single"]
     colours: frozenset[str]
     preparation_error: str | None = None
+    config: AnyTemplate | None = None
 
 
 _GARMENT_PROFILE_WHERE = "Variants › Garment profile"
@@ -765,6 +771,110 @@ def check_listing_yaml_present(*, present: bool) -> list[Issue]:
     return [Issue("block", "details", _LIFECYCLE_WHERE, MISSING_LISTING_YAML)]
 
 
+_POSITION_RESIDUAL_PIXELS = 1.0
+_POSITION_ROUNDOFF = 1e-8
+
+
+def _box_position_problems(
+    template_box: BoundingBox, box: BoundingBox, limits: TemplatePositionLimits
+) -> list[str]:
+    try:
+        fit = decompose(template_box, box)
+    except ValueError:
+        return ["is not a plain move, resize or tilt of the template's box"]
+    if fit.residual_pixels > _POSITION_RESIDUAL_PIXELS + _POSITION_ROUNDOFF:
+        return ["is not a plain move, resize or tilt of the template's box"]
+    pose = fit.pose
+    problems = []
+    if (
+        not limits.scale.min - _POSITION_ROUNDOFF
+        <= pose.scale
+        <= limits.scale.max + _POSITION_ROUNDOFF
+    ):
+        problems.append(
+            f"scales the design to {pose.scale:.2f}; the limit is "
+            f"{limits.scale.min:.2f}–{limits.scale.max:.2f}"
+        )
+    for axis, value in (("horizontal", pose.offset_x), ("vertical", pose.offset_y)):
+        if abs(value) > limits.offset + _POSITION_ROUNDOFF:
+            problems.append(f"has {axis} offset {value:.0%}; the limit is ±{limits.offset:.0%}")
+    if abs(pose.rotation) > limits.rotation + _POSITION_ROUNDOFF:
+        problems.append(f"has rotation {pose.rotation:g}°; the limit is ±{limits.rotation:g}°")
+    return problems
+
+
+def _placement_position_problems(
+    key: str,
+    position: PlacementPositions,
+    template: MultipleTemplate,
+    limits: TemplatePositionLimits,
+) -> list[tuple[str, str]]:
+    boxes = {placement.id: placement.bounding_box for placement in template.placements}
+    problems = []
+    for placement_id, placement in position.placements.items():
+        path = f"{key}.placements.{placement_id}"
+        if placement_id not in boxes:
+            problems.append((path, "names a placement that no longer exists"))
+        else:
+            problems.extend(
+                (path, problem)
+                for problem in _box_position_problems(
+                    boxes[placement_id], placement.bounding_box, limits
+                )
+            )
+    return problems
+
+
+def _position_problems(
+    key: str,
+    position: BoxPosition | PlacementPositions,
+    template: AnyTemplate,
+    limits: TemplatePositionLimits,
+) -> list[tuple[str, str]]:
+    # Spec rule 5 stays until PR 7; preparation is not permission to position Marigold.
+    if template.renderer.type == "marigold":
+        return [(key, "Marigold positions are not supported yet")]
+    if isinstance(template, MultipleTemplate):
+        if not isinstance(position, PlacementPositions):
+            return [(key, "uses bounding_box on a multiple template; use placements instead")]
+        return _placement_position_problems(key, position, template, limits)
+    if not isinstance(position, BoxPosition):
+        return [(key, f"uses placements on a {template.kind} template; use bounding_box instead")]
+    return [
+        (key, problem)
+        for problem in _box_position_problems(template.bounding_box, position.bounding_box, limits)
+    ]
+
+
+def check_template_positions(
+    listing: Listing,
+    templates: Mapping[str, AnyTemplate],
+    limits: TemplatePositionLimits,
+    *,
+    name: str = "",
+) -> list[Issue]:
+    """Spec Validation 1–5, pure and read against current geometry (ADR-0058).
+
+    Limits arrive from the caller. Refuse rather than clamp; absolute corners
+    remain unchanged after recalibration or a limits edit. ``name`` labels a saved
+    listing's refusal; unnamed editor drafts omit the prefix.
+    """
+    referenced = {
+        entry.template for entry in listing.media if isinstance(entry, TemplateMediaEntry)
+    }
+    problems = []
+    for template_name, position in (listing.template_positions or {}).items():
+        key = f"template_positions.{template_name}"
+        if template_name not in referenced:
+            problems.append((key, "names a template that is not in media"))
+        elif template_name not in templates:
+            problems.append((key, "names a template whose configuration is unavailable"))
+        else:
+            problems.extend(_position_problems(key, position, templates[template_name], limits))
+    prefix = f"{name}: " if name else ""
+    return [Issue("block", "images", key, f"{prefix}{key} {problem}") for key, problem in problems]
+
+
 @dataclass(frozen=True)
 class CheckInputs:
     """What :func:`check_listing` and :func:`check_listing_template` need from
@@ -790,6 +900,26 @@ class CheckInputs:
     templates: Mapping[str, TemplateInfo]
     description_ref_error: str | None = None
     videos: Mapping[str, VideoFacts | ProbeFailure] = MappingProxyType({})
+    template_position_limits: TemplatePositionLimits = dataclass_field(
+        default_factory=TemplatePositionLimits
+    )
+    template_position_limits_error: str | None = None
+    """The caller's failed ``settings.yaml`` read; positions are then refused
+    with it rather than checked against defaults."""
+    listing_name: str = ""
+
+
+def _check_positions(listing: Listing, inputs: CheckInputs) -> list[Issue]:
+    if listing.template_positions and inputs.template_position_limits_error is not None:
+        return [
+            Issue("block", "images", "template_positions", inputs.template_position_limits_error)
+        ]
+    return check_template_positions(
+        listing,
+        {name: info.config for name, info in inputs.templates.items() if info.config is not None},
+        inputs.template_position_limits,
+        name=inputs.listing_name,
+    )
 
 
 def check_listing(
@@ -817,6 +947,7 @@ def check_listing(
         issues += _check_printify_variant_limit(listing, garment_profile)
     issues += _check_template_kind_colour_match(listing, templates)
     issues += _check_variation_images(listing)
+    issues += _check_positions(listing, inputs)
     for name in dict.fromkeys(
         entry.template for entry in listing.media if isinstance(entry, TemplateMediaEntry)
     ):

@@ -21,6 +21,10 @@ import type {
 
 export class ListingsApiError extends Error {}
 
+// openapi-fetch's Readable widens the nested bounding_box tuples to arrays.
+// ListingDetail responses are validated by the server as exactly four corners,
+// so restore the generated type at these response boundaries (as calibrator.ts does).
+
 export async function listListings(): Promise<ListingSummary[]> {
   const { data, error } = await api.GET("/api/listings");
   if (error || !data) throw new ListingsApiError("could not load listings");
@@ -32,7 +36,7 @@ export async function getListing(name: string): Promise<ListingDetail> {
     params: { path: { name } },
   });
   if (error || !data) throw new ListingsApiError(`could not load listing ${name}`);
-  return data;
+  return data as ListingDetail;
 }
 
 /** The same, but `null` on a 404 rather than a thrown error -- what the
@@ -44,7 +48,7 @@ export async function tryGetListing(name: string): Promise<ListingDetail | null>
   });
   if (response.status === 404) return null;
   if (error || !data) throw new ListingsApiError(`could not load listing ${name}`);
-  return data;
+  return data as ListingDetail;
 }
 
 /** A partial `listing.yaml` document -- merged server-side, one level deep on
@@ -61,7 +65,7 @@ export async function patchListing(
     body: patch,
   });
   if (error || !data) throw new ListingsApiError(`could not save listing ${name}`);
-  return data;
+  return data as ListingDetail;
 }
 
 /** The empty document `+ New listing` opens the editor on: nothing chosen, an
@@ -71,7 +75,7 @@ export async function patchListing(
 export async function getListingDraft(): Promise<ListingDetail> {
   const { data, error } = await api.GET("/api/listing-draft");
   if (error || !data) throw new ListingsApiError("could not start a new listing");
-  return data;
+  return data as ListingDetail;
 }
 
 /** The same, for a candidate the editor has since edited -- recomputed issues
@@ -83,7 +87,7 @@ export async function describeListingDraft(
 ): Promise<ListingDetail> {
   const { data, error } = await api.POST("/api/listing-draft", { body: { document } });
   if (error || !data) throw new ListingsApiError("could not check the draft");
-  return data;
+  return data as ListingDetail;
 }
 
 /** Naming a listing is what creates it. Resolves for a document the server
@@ -94,7 +98,7 @@ export async function describeListingDraft(
 export async function createListing(body: CreateListingRequest): Promise<ListingDetail> {
   const { data, error } = await api.POST("/api/listings", { body });
   if (error || !data) throw new ListingsApiError("could not create listing");
-  return data;
+  return data as ListingDetail;
 }
 
 /** Move a listing to a new name, directory and render cache together.
@@ -121,7 +125,7 @@ export async function renameListing(name: string, newName: string): Promise<List
     body: { new_name: newName },
   });
   if (error || !data) throw new ListingsApiError(`could not rename ${name} to ${newName}`);
-  return data;
+  return data as ListingDetail;
 }
 
 export async function listGarmentProfiles(): Promise<GarmentProfileSummary[]> {

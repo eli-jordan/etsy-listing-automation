@@ -31,6 +31,7 @@ from etsy_listings.core.config.media import MediaEntry as MediaEntry
 from etsy_listings.core.config.media import TemplateMediaEntry as TemplateMediaEntry
 from etsy_listings.core.config.money import Money, PriceField, require_currency
 from etsy_listings.core.config.pricing_plan import PricingPlan
+from etsy_listings.core.config.template_positions import TemplatePositions
 
 EMPTY_DRAFT: Final[dict[str, Any]] = {
     "garment_profile": "",
@@ -287,6 +288,8 @@ class Listing(BaseModel):
     price_overrides: dict[str, dict[str, PriceField]] = {}
     etsy: EtsyListingConfig = EtsyListingConfig()
     media: list[MediaEntry]
+    template_positions: TemplatePositions | None = None
+    """Absolute photo corners for mockups only (ADR-0058). Absent means template geometry."""
     lifecycle: Literal["retired", "deleted", "renew"] | None = None
     """Desired end-of-life. Omitted on a working listing, including
     after Un-retire. ``plan`` never writes this key; wrong verb is ``Blocked``,

@@ -15,6 +15,7 @@ const DEFAULTS = {
 };
 const initial = (weights = DEFAULTS): WorkspaceSettings => ({
   revision: "s1",
+  template_positions: { scale: { min: 0.8, max: 1.1 }, offset: 0.1, rotation: 15 },
   concurrency: 1,
   providers: [
     { name: "codex", enabled: true },

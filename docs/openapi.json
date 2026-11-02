@@ -1171,6 +1171,36 @@
         "title": "Body_upload_listing_design_api_listing_designs_post",
         "type": "object"
       },
+      "BoxPosition": {
+        "additionalProperties": false,
+        "properties": {
+          "bounding_box": {
+            "maxItems": 4,
+            "minItems": 4,
+            "prefixItems": [
+              {
+                "$ref": "#/components/schemas/Point"
+              },
+              {
+                "$ref": "#/components/schemas/Point"
+              },
+              {
+                "$ref": "#/components/schemas/Point"
+              },
+              {
+                "$ref": "#/components/schemas/Point"
+              }
+            ],
+            "title": "Bounding Box",
+            "type": "array"
+          }
+        },
+        "required": [
+          "bounding_box"
+        ],
+        "title": "BoxPosition",
+        "type": "object"
+      },
       "CalibrationSaveRequest": {
         "additionalProperties": false,
         "description": "A single recoverable calibration transaction under ADR-0054.",
@@ -3009,6 +3039,27 @@
             ],
             "title": "Status",
             "type": "string"
+          },
+          "template_positions": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/BoxPosition"
+                    },
+                    {
+                      "$ref": "#/components/schemas/PlacementPositions"
+                    }
+                  ]
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Template Positions"
           }
         },
         "required": [
@@ -4542,6 +4593,23 @@
         "title": "Placement",
         "type": "object"
       },
+      "PlacementPositions": {
+        "additionalProperties": false,
+        "properties": {
+          "placements": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/BoxPosition"
+            },
+            "title": "Placements",
+            "type": "object"
+          }
+        },
+        "required": [
+          "placements"
+        ],
+        "title": "PlacementPositions",
+        "type": "object"
+      },
       "PlanDTO": {
         "properties": {
           "etsy_listing_id": {
@@ -4815,6 +4883,28 @@
           "y"
         ],
         "title": "Point",
+        "type": "object"
+      },
+      "PositionScaleLimits": {
+        "additionalProperties": false,
+        "description": "Interactions' slider ranges guarantee min <= identity <= max (ADR-0058).",
+        "properties": {
+          "max": {
+            "default": 1.1,
+            "maximum": 1.5,
+            "minimum": 1.0,
+            "title": "Max",
+            "type": "number"
+          },
+          "min": {
+            "default": 0.8,
+            "maximum": 1.0,
+            "minimum": 0.5,
+            "title": "Min",
+            "type": "number"
+          }
+        },
+        "title": "PositionScaleLimits",
         "type": "object"
       },
       "PreparationJobResponse": {
@@ -7406,6 +7496,31 @@
         "title": "TemplatePhoto",
         "type": "object"
       },
+      "TemplatePositionLimits": {
+        "additionalProperties": false,
+        "description": "Mockup-only similarity limits; offsets are fractions of the box's rectified W and H.",
+        "properties": {
+          "offset": {
+            "default": 0.1,
+            "maximum": 0.25,
+            "minimum": 0.0,
+            "title": "Offset",
+            "type": "number"
+          },
+          "rotation": {
+            "default": 15,
+            "maximum": 30.0,
+            "minimum": 0.0,
+            "title": "Rotation",
+            "type": "number"
+          },
+          "scale": {
+            "$ref": "#/components/schemas/PositionScaleLimits"
+          }
+        },
+        "title": "TemplatePositionLimits",
+        "type": "object"
+      },
       "TemplateSummary": {
         "properties": {
           "colours": {
@@ -7877,6 +7992,10 @@
             "title": "Step Limit Minutes",
             "type": "integer"
           },
+          "template_positions": {
+            "$ref": "#/components/schemas/TemplatePositionLimits",
+            "readOnly": true
+          },
           "weights": {
             "additionalProperties": {
               "type": "number"
@@ -7887,6 +8006,7 @@
         },
         "required": [
           "revision",
+          "template_positions",
           "concurrency",
           "weights",
           "default_weights",
