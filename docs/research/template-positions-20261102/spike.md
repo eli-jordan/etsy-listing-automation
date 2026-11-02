@@ -109,6 +109,19 @@ the stored predictions, so everything after inference is deterministic.
 
 Correctness check: with zero padding (limits 1.0–1.0, 0%, 0°), option A
 reproduces the direct fit exactly (0.00 px shift on all three templates).
+The padding diagnostic below produces this check.
+
+A second script,
+[`scripts/spike_template_positions_diag.py`](../../../scripts/spike_template_positions_diag.py),
+reuses the harness's helpers and stored evidence. At the template's own box,
+it measures how the misregistration grows with the padding (none, tiny, half
+and the default limits) and how much is left after removing the best-fit
+global affine between the two UV fields.
+
+| Numbers in this report | Produced by | Output |
+| --- | --- | --- |
+| Timings, evidence coverage, noise floor and identity table, per-pose tables, worst shifts, pictures | `spike_template_positions.py` | `<out>/results.json`, `<out>/*.png` |
+| Zero-padding check; half-limit shift (37 and 31 px); shift after a global affine (7–11 px); garment cover of the half-limit quad (97–100%) | `spike_template_positions_diag.py` | `<out>/diagnostic.json` |
 
 ## Timings
 
@@ -247,8 +260,9 @@ design (and an `-anchored` twin), 162 in all.
   stay 96–100% on garment. The misregistration is therefore not the print
   running off the shirt. It is the padded fit's single surface being shaped by
   cloth the print never touches.
-- **It is not only off-garment cloth.** A diagnostic run, not part of the
-  harness, padded to half the default limits, where the padded quad stays
+- **It is not only off-garment cloth.** The padding diagnostic
+  (`scripts/spike_template_positions_diag.py`) padded to half the default
+  limits, where the padded quad stays
   97–100% on garment. Shift p99 at identity was already 37 px (man) and 31 px
   (woman), against 3.4 px for the hanging shirt. The 49 × 49 fitting mesh
   spreads over a 1.55× larger area, so it is coarser over the print. It also
@@ -289,6 +303,35 @@ design (and an `-anchored` twin), 162 in all.
 If the seller fails the spike, the plan already applies: PR 7 is dropped and
 validation rule 5 (Marigold templates refuse positions) stays.
 
+**The seller's three realistic paths.** This matters more than it might seem:
+7 of the seller's 8 live templates are Marigold.
+
+- **(a) Accept the fail.** Spec rule 5 stays, and Marigold templates never take
+  positions. Positions then apply to the single Photo warp template.
+- **(b) Re-scope to the corner-anchored variant.** It costs four UV samples per
+  composite and no extra fitting. Measured against the noise floor, two fits
+  of the same box that differ by 2.0 px (flat) and 8.5–11.2 px (worn) p99:
+  - shift p99 is at most 4.7 px on the flat shirt;
+  - shift p99 is 7–25 px on the worn shirts, between about the floor and
+    roughly double it;
+  - tone p99 is 17–41 ΔE on the worn shirts, against a floor of 12–21.
+
+  It still needs the one-off padded-evidence inference per template, and it
+  would need a spec change and the seller's judgement by eye.
+- **(c) Revisit option B (previously declined).** This is a per-listing direct
+  fit of the adjusted box, cached by geometry.
+  - It matches a direct fit by construction.
+  - It costs 0.9–5.8 s per positioned scene on the CPU (measured direct fit),
+    plus publishing the maps, about 2.9 s per placement.
+  - Each fit reruns only when that listing's position or the template changes.
+  - Every Marigold template still needs the one-off inference on a
+    padded-evidence crop (85–131 s each on this GPU), so that any allowed pose
+    is covered without further inference.
+  - Its costs are per-listing map storage and the fit time on first render
+    after a position edit.
+
+This report does not choose between them.
+
 **Possible re-scope, for the seller to decide, not recommended as is.** The
 anchored affine (four UV samples at the posed corners) is cheap. It brings
 the flat template within 5 px everywhere and the worn templates to 7–25 px,
@@ -310,4 +353,9 @@ needs its own sign-off; this report does not establish it.
    absolute path, and a deep temp directory exceeded the 260-character path
    limit.
 
-Output: `results.json` (every number above) and the PNGs, in `--out`.
+5. Then run `uv run python scripts/spike_template_positions_diag.py` with the
+   same `--workspace` and `--out`.
+
+Output, in `--out`: `results.json` and the PNGs from the harness, and
+`diagnostic.json` from the diagnostic. The table under [Method](#method) says
+which file holds which number.
