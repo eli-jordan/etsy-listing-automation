@@ -85,6 +85,9 @@ import names the module it depends on. Public interfaces:
     ``prepared_preview`` composes through ``preparation.scenes.lease_scene``,
     the render stage's own path, returning a canonical scene identity for
     promotion.
+``position_coverage``
+    ``cover_listing_positions``: queue the Marigold coverage inference a
+    saved listing's positions need (option B), through ``Preparations.cover``.
 ``scene_warming``
     ``SceneWarmer``: one thread composing a saved listing's gallery scenes
     into the scene cache ahead of the Listing Images tab, through

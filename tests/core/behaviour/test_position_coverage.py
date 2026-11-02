@@ -7,32 +7,14 @@ from __future__ import annotations
 
 import time
 
-from PIL import Image, ImageDraw
-
 from etsy_listings.core.application.preparation.coordinator import Preparations
 from etsy_listings.core.config.settings import TemplatePositionLimits
 from etsy_listings.core.preparation.artifacts import Artifacts
 from etsy_listings.core.preparation.position_fits import PositionFits, padded_quads
-from etsy_listings.core.render import load_template_config
-from etsy_listings.core.workspace import Workspace
 
-from tests.support.marigold import PreparationRuntime, prepare_template
+from tests.support.marigold import PreparationRuntime, prepare_template, small_print
 
 WIDER = TemplatePositionLimits.model_validate({"scale": {"max": 1.25}, "rotation": 25})
-
-
-def small_print(workspace_root, name="tee") -> Workspace:
-    """A 128px photo whose 32px box's own crop stops well short of the
-    padded quad, so positions need coverage inference."""
-    workspace = Workspace.discover(root_override=workspace_root)
-    workspace.template_dir(name).mkdir()
-    photo = Image.new("RGB", (128, 128), "white")
-    ImageDraw.Draw(photo).rectangle((24, 24, 103, 103), fill="navy")
-    photo.save(workspace.template_scene_image(name))
-    box = [{"x": x, "y": y} for x, y in [(48, 48), (80, 48), (80, 80), (48, 80)]]
-    config = {"kind": "single", "bounding_box": box, "renderer": {"type": "marigold"}}
-    workspace.save_template_config(name, load_template_config(config))
-    return workspace
 
 
 def covered(workspace, name, limits) -> bool:

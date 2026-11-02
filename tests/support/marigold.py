@@ -378,3 +378,22 @@ def listing_with_prepared_marigold(workspace_root):
     workspace, _ = listing_with_marigold(workspace_root)
     prepare_template(workspace)
     return workspace
+
+
+def small_print(workspace_root, name="tee"):
+    """A 128px photo whose 32px box's own crop stops well short of the
+    padded quad, so positions need coverage inference."""
+    from PIL import Image, ImageDraw
+
+    from etsy_listings.core.render import load_template_config
+    from etsy_listings.core.workspace import Workspace
+
+    workspace = Workspace.discover(root_override=workspace_root)
+    workspace.template_dir(name).mkdir()
+    photo = Image.new("RGB", (128, 128), "white")
+    ImageDraw.Draw(photo).rectangle((24, 24, 103, 103), fill="navy")
+    photo.save(workspace.template_scene_image(name))
+    box = [{"x": x, "y": y} for x, y in [(48, 48), (80, 48), (80, 80), (48, 80)]]
+    config = {"kind": "single", "bounding_box": box, "renderer": {"type": "marigold"}}
+    workspace.save_template_config(name, load_template_config(config))
+    return workspace

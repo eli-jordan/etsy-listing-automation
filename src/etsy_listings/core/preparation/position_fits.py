@@ -206,8 +206,9 @@ class PositionFits:
             evidence = selected.get(placement_key(placement.id))
             if evidence is None:
                 raise PositionCoverageError(
-                    f"Mockup template '{template}' needs its preparation to cover listing "
-                    "positions; prepare it again (Marigold infers once per template)"
+                    f"Mockup template '{template}' needs Marigold inference to cover listing "
+                    "positions.\nSaving the position queues it in the background; plan "
+                    "again once that preparation finishes."
                 )
             requests[placement.id] = FitRequest(
                 FitInputs(
