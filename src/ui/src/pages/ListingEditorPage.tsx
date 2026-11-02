@@ -532,6 +532,7 @@ export function ListingEditorShell(props: ShellProps) {
         <ImagesTab
           detail={detail}
           onUpdate={update}
+          onFlush={flush}
           {...(artwork === undefined ? {} : { artwork })}
           {...(owner === undefined ? {} : { owner })}
         />

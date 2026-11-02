@@ -1,0 +1,175 @@
+/* Position mode on the Listing Images preview (interactions: *Adjusting*).
+   Copied from design/scenes/template-positions/_positions.css; semantic
+   tokens only, so both themes carry it. */
+
+.tp-stage {
+  display: block;
+  width: auto;
+  height: 100%;
+  max-width: 100%;
+  touch-action: none;
+  border-radius: var(--radius-md);
+}
+
+/* The draft while a gesture is unsaved: the artwork flat on the box,
+   multiplied into the cloth, until the saved composite replaces it. */
+.tp-overlay {
+  mix-blend-mode: multiply;
+  opacity: 0.92;
+  pointer-events: none;
+}
+.tp-overlay img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.tp-ghost {
+  fill: none;
+  stroke: var(--color-text);
+  stroke-opacity: 0.45;
+  stroke-width: 1.25;
+  stroke-dasharray: 4 4;
+  vector-effect: non-scaling-stroke;
+  pointer-events: none;
+}
+
+.tp-box {
+  fill: transparent;
+  stroke-width: 1.5;
+  vector-effect: non-scaling-stroke;
+}
+.tp-box--on {
+  stroke: var(--color-accent);
+  cursor: move;
+}
+.tp-box--on:focus-visible {
+  outline: none;
+  stroke-width: 3;
+}
+.tp-box--off {
+  stroke: var(--color-text);
+  stroke-opacity: 0.35;
+  stroke-dasharray: 3 3;
+  cursor: pointer;
+}
+.tp-box--off:hover,
+.tp-box--off:focus-visible {
+  outline: none;
+  stroke-opacity: 0.7;
+  fill: color-mix(in srgb, var(--color-accent) 8%, transparent);
+}
+.tp-box--invalid {
+  stroke: var(--color-danger);
+  stroke-dasharray: none;
+}
+
+.tp-stem {
+  stroke: var(--color-accent);
+  stroke-width: 1.5;
+  vector-effect: non-scaling-stroke;
+  pointer-events: none;
+}
+.tp-handle {
+  fill: var(--color-bg);
+  stroke: var(--color-accent);
+  stroke-width: 1.5;
+  vector-effect: non-scaling-stroke;
+}
+.tp-handle--scale {
+  cursor: nwse-resize;
+}
+.tp-handle--rotate {
+  cursor: grab;
+}
+.tp-handle:hover {
+  fill: var(--color-accent);
+}
+.tp-tag {
+  fill: var(--color-text);
+  font-family: var(--font-body);
+  font-weight: 600;
+  paint-order: stroke;
+  stroke: var(--color-bg);
+  stroke-width: 3px;
+  pointer-events: none;
+}
+
+/* ---- Foot: title and path on the left, truncating; the position controls
+   stay together on the right and never wrap apart. ---- */
+
+.tp-foot {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: 34px;
+}
+.tp-foot .preview-meta {
+  flex: 1;
+  min-width: 0;
+}
+.tp-foot .preview-meta__path {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tp-controls {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex: none;
+}
+.tp-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: 13px;
+  color: var(--color-neutral-700);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.tp-note {
+  font-size: 12px;
+  color: var(--color-neutral-600);
+}
+.tp-note--warn {
+  color: var(--color-warning-ink);
+  font-weight: 600;
+}
+.tp-link {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 13px;
+  color: var(--color-accent-700);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.tp-link:hover {
+  color: var(--color-text);
+}
+.tp-link:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+/* ---- Reel badge ---- */
+
+.tp-tile-badge {
+  position: absolute;
+  right: 4px;
+  bottom: 4px;
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--color-bg);
+  color: var(--color-accent-700);
+  box-shadow: var(--shadow-sm);
+}

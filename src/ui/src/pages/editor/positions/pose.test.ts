@@ -21,9 +21,9 @@ const STRETCHED = quad([0, 20], [120, 20], [120, 220], [0, 220]);
 const DEFAULTS: Limits = { scale: { min: 0.8, max: 1.1 }, offset: 0.1, rotation: 15 };
 
 function expectCorners(actual: Quad, expected: Quad, digits = 7) {
-  actual.forEach((point, index) => {
-    expect(point.x).toBeCloseTo(expected[index].x, digits);
-    expect(point.y).toBeCloseTo(expected[index].y, digits);
+  ([0, 1, 2, 3] as const).forEach((index) => {
+    expect(actual[index].x).toBeCloseTo(expected[index].x, digits);
+    expect(actual[index].y).toBeCloseTo(expected[index].y, digits);
   });
 }
 
