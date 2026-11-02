@@ -49,6 +49,7 @@ from etsy_listings.core.render.config import (
     BoundingBox,
     ColourMatrixTemplate,
     DisplaceConfig,
+    LayerBoxes,
     MultipleTemplate,
     PhotoWarpRenderer,
     Point,
@@ -489,7 +490,12 @@ def unsaved_preview(
 
 
 def saved_preview(
-    workspace: Workspace, name: str, *, colour: str | None, design: LayerDesign
+    workspace: Workspace,
+    name: str,
+    *,
+    colour: str | None,
+    design: LayerDesign,
+    boxes: LayerBoxes | None = None,
 ) -> PreviewScene:
     """The saved geometry, as the render stage composites it -- the listing
     editors' read-only preview. ``colour`` picks the photo of a
@@ -497,10 +503,12 @@ def saved_preview(
 
     ``design`` is asked once per layer, with the colour that layer depicts
     (:func:`~etsy_listings.core.render.config.scene_layers`, the render
-    stage's own pairing), before the photo is looked for."""
+    stage's own pairing), before the photo is looked for. ``boxes`` is the
+    listing's saved position for this template (ADR-0058), so the preview
+    shows the box the render stage renders at."""
     config = _load_config(workspace, name)
     depicted = colour if isinstance(config, ColourMatrixTemplate) else None
-    pairs = scene_layers(config, depicted)
+    pairs = scene_layers(config, depicted, boxes or {})
     designs = tuple(design(layer_colour) for layer_colour, _ in pairs)
     return _scene(workspace, name, depicted, tuple(cfg for _, cfg in pairs), designs)
 

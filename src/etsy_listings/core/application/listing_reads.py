@@ -41,6 +41,7 @@ from etsy_listings.core.config.listing_validation import (
 )
 from etsy_listings.core.config.money import Money
 from etsy_listings.core.config.pricing_plan import PricingPlan
+from etsy_listings.core.config.template_positions import TemplatePositions, layer_boxes
 from etsy_listings.core.engine.status import (
     ListingGesture,
     ListingStatus,
@@ -49,6 +50,7 @@ from etsy_listings.core.engine.status import (
     remote_ids,
     workspace_listing_status,
 )
+from etsy_listings.core.render.config import LayerBoxes
 from etsy_listings.core.workspace.facts import WorkspaceFacts
 from etsy_listings.core.workspace.listing_documents import ListingDocuments
 from etsy_listings.core.workspace.workspace import DescriptionResolution, InvalidRefError, Workspace
@@ -152,6 +154,32 @@ def read_listing(workspace: Workspace, name: str, *, etsy_states: EtsyStates) ->
     )
 
 
+@dataclass(frozen=True)
+class ListingScenes:
+    """What a listing's saved scene previews read from the listing, loaded
+    once: which file each layer prints and where it prints (A35, ADR-0058)."""
+
+    artwork: Callable[[str | None], Path | None]
+    """:func:`scene_artwork`'s answer."""
+    positions: TemplatePositions | None
+
+    def boxes(self, template: str) -> LayerBoxes:
+        """The listing's saved boxes for ``template``'s layers -- the preview
+        shows the *saved* position, as the render stage renders it."""
+        return layer_boxes(self.positions, template)
+
+
+def listing_scenes(workspace: Workspace, name: str) -> ListingScenes:
+    """Listing ``name`` as *saved*, for its scene previews. Refusals are
+    :func:`scene_artwork`'s."""
+    if not ListingDocuments(workspace).exists(name):
+        raise ListingMissingError(name)
+    listing = workspace.load_listing(name)
+    return ListingScenes(
+        artwork=_artwork(workspace, name, listing), positions=listing.template_positions
+    )
+
+
 def scene_artwork(workspace: Workspace, name: str) -> Callable[[str | None], Path | None]:
     """Which file a scene layer depicting a colour prints, in listing
     ``name`` as *saved* (A35) -- the editor's scene preview, so the editor
@@ -163,9 +191,12 @@ def scene_artwork(workspace: Workspace, name: str) -> Callable[[str | None], Pat
     rest of the scene is still worth judging. Raises :class:`ListingMissingError`
     without a ``listing.yaml``, and ``ConfigLoadError`` when it does not load.
     """
-    if not ListingDocuments(workspace).exists(name):
-        raise ListingMissingError(name)
-    listing = workspace.load_listing(name)
+    return listing_scenes(workspace, name).artwork
+
+
+def _artwork(
+    workspace: Workspace, name: str, listing: Listing
+) -> Callable[[str | None], Path | None]:
     profile = WorkspaceFacts.for_files(workspace).garment_profile(listing.garment_profile)
     tones = profile.colors if profile is not None else {}
     listing_dir = workspace.listing_dir(name)

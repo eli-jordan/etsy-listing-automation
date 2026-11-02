@@ -36,6 +36,7 @@ from etsy_listings.core.preparation.scenes import Composition, PreparedLayer, le
 from etsy_listings.core.render import (
     AnyTemplate,
     ColourMatrixTemplate,
+    LayerBoxes,
     MarigoldAppearance,
     MarigoldRenderer,
     MultipleTemplate,
@@ -65,17 +66,24 @@ class PreparedPreview:
 
 
 def saved_scene(
-    workspace: Workspace, name: str, *, colour: str | None, design: LayerDesign
+    workspace: Workspace,
+    name: str,
+    *,
+    colour: str | None,
+    design: LayerDesign,
+    boxes: LayerBoxes | None = None,
 ) -> PreviewScene | PreparedPreview:
     """``name``'s saved scene with ``design`` asked once per layer, as
     :func:`~etsy_listings.core.application.mockup_templates.saved_preview`
     asks it. Photo warp returns the scene for the host to composite from its
-    image memo; Marigold returns the composed image. Refusals:
+    image memo, at the listing's ``boxes`` where it holds a position;
+    Marigold returns the composed image and takes no position, since spec
+    rule 5 refuses one until Marigold positions land. Refusals:
     :class:`TemplateMissingError`, :class:`TemplateConfigMissingError`,
     :class:`TemplatePhotoMissingError`, :class:`PreparationRequiredError`."""
     if isinstance(read_config(workspace, name).config.renderer, MarigoldRenderer):
         return prepared_preview(workspace, name, config=None, colour=colour, design=design)
-    return saved_preview(workspace, name, colour=colour, design=design)
+    return saved_preview(workspace, name, colour=colour, design=design, boxes=boxes)
 
 
 @dataclass(frozen=True)

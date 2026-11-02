@@ -48,8 +48,8 @@ from etsy_listings.core.application.listing_reads import (
     ListingView,
     describe_draft,
     listing_row,
+    listing_scenes,
     read_listing,
-    scene_artwork,
 )
 from etsy_listings.core.application.listing_reads import (
     list_listings as listing_rows,
@@ -395,17 +395,25 @@ def scene_preview(
 
     A layer that resolves to nothing is left bare rather than failing the
     picture (:func:`~etsy_listings.core.application.listing_reads.scene_artwork`).
+    Each layer prints at the listing's *saved* position where it holds one
+    (ADR-0058), so a landed position save is the composite the render writes.
     ``v`` is ignored; the editor sends a signature of the saved design so a
     landed save is a new URL and the browser fetches it again.
     """
     workspace, colour, scale = target.workspace, query.colour, query.scale
     try:
-        artwork = scene_artwork(workspace, target.name)
+        listing = listing_scenes(workspace, target.name)
     except ConfigLoadError as exc:
         raise HTTPException(
             status_code=404, detail=f"listing {target.name!r} does not load"
         ) from exc
-    scene = saved_scene(workspace, template, colour=colour, design=artwork)
+    scene = saved_scene(
+        workspace,
+        template,
+        colour=colour,
+        design=listing.artwork,
+        boxes=listing.boxes(template),
+    )
     return render_preview_response(
         scene, scale, workspace=workspace, if_none_match=request.headers.get("if-none-match")
     )
