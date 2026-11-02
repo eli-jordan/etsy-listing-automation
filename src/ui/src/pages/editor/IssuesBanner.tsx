@@ -1,4 +1,5 @@
 import type { Issue, IssueTab } from "../../types";
+import { removablePosition } from "./positions/document";
 
 /**
  * The validation banner above the tab strip (phase 5), from the mockup's
@@ -42,6 +43,10 @@ interface Props {
    * *Prevents deploying*. */
   subject?: "listing" | "listing-template";
   when?: string;
+  /** Removes a `template_positions` key no stage can show -- a template not
+   * in `media:`, a placement that is gone (interactions, *Position outside
+   * the limits*). Absent, those rows offer the usual jump. */
+  onRemovePosition?: (template: string, placement: string | null) => void;
 }
 
 function summarise(issues: Issue[], subject: Props["subject"]): string {
@@ -86,6 +91,7 @@ export function IssuesBanner({
   onJumpTo,
   subject = "listing",
   when = "Checked against this listing’s own configuration",
+  onRemovePosition,
 }: Props) {
   const visible = issues.filter((issue) => issue.severity !== "info");
   if (visible.length === 0) return null;
@@ -110,21 +116,54 @@ export function IssuesBanner({
               )}
             </span>
           </span>
-          {onJumpTo !== undefined &&
-            (issue.tab === activeTab ? (
-              <span className="issue__fix issue__fix--here">Below</span>
-            ) : (
-              <button
-                type="button"
-                className="issue__fix"
-                aria-label={`Fix: ${issue.message}`}
-                onClick={() => onJumpTo(issue.tab)}
-              >
-                Fix &rarr;
-              </button>
-            ))}
+          <RowAction
+            issue={issue}
+            activeTab={activeTab}
+            onJumpTo={onJumpTo}
+            onRemovePosition={onRemovePosition}
+          />
         </div>
       ))}
     </div>
+  );
+}
+
+/** A row's one action: remove a stale position key, "Below" on the open
+ * tab, or a jump to the tab that fixes it. */
+function RowAction({
+  issue,
+  activeTab,
+  onJumpTo,
+  onRemovePosition,
+}: {
+  issue: Issue;
+  activeTab: IssueTab | undefined;
+  onJumpTo: Props["onJumpTo"];
+  onRemovePosition: Props["onRemovePosition"];
+}) {
+  const target = removablePosition(issue);
+  if (onRemovePosition !== undefined && target !== null) {
+    return (
+      <button
+        type="button"
+        className="issue__fix"
+        aria-label={`Remove ${issue.where}`}
+        onClick={() => onRemovePosition(target.template, target.placement)}
+      >
+        Remove
+      </button>
+    );
+  }
+  if (onJumpTo === undefined) return null;
+  if (issue.tab === activeTab) return <span className="issue__fix issue__fix--here">Below</span>;
+  return (
+    <button
+      type="button"
+      className="issue__fix"
+      aria-label={`Fix: ${issue.message}`}
+      onClick={() => onJumpTo(issue.tab)}
+    >
+      Fix &rarr;
+    </button>
   );
 }

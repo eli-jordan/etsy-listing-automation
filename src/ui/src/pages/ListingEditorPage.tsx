@@ -18,6 +18,7 @@ import { DEFAULT_PREVIEW, type PreviewDesign, previewArtwork } from "./editor/pr
 import { DetailsTab } from "./editor/DetailsTab";
 import { PricingTab } from "./editor/PricingTab";
 import { IssuesBanner } from "./editor/IssuesBanner";
+import { withoutPosition } from "./editor/positions/document";
 import { BackToBatch, ListingActions } from "./editor/ListingActions";
 import { ImagesTab } from "./editor/ImagesTab";
 import { metaFor } from "./editor/saveMeta";
@@ -394,13 +395,24 @@ function ShellIssues({
   issues,
   tab,
   onJumpTo,
+  onRemovePosition,
 }: {
   template: boolean;
   issues: ListingDetail["issues"];
   tab: Tab;
   onJumpTo: (tab: Tab) => void;
+  onRemovePosition?: (template: string, placement: string | null) => void;
 }) {
-  if (!template) return <IssuesBanner issues={issues} activeTab={tab} onJumpTo={onJumpTo} />;
+  if (!template) {
+    return (
+      <IssuesBanner
+        issues={issues}
+        activeTab={tab}
+        onJumpTo={onJumpTo}
+        {...(onRemovePosition === undefined ? {} : { onRemovePosition })}
+      />
+    );
+  }
   // A block is what stops the save; warnings alone stop
   // nothing, so they are not told the file is being held back.
   const blocked = issues.some((issue) => issue.severity === "block");
@@ -476,7 +488,19 @@ export function ListingEditorShell(props: ShellProps) {
         )}
       {head}
 
-      <ShellIssues template={template} issues={detail.issues} tab={tab} onJumpTo={pickTab} />
+      <ShellIssues
+        template={template}
+        issues={detail.issues}
+        tab={tab}
+        onJumpTo={pickTab}
+        onRemovePosition={(name, placement) => {
+          // An explicit action, so it saves now rather than after the debounce.
+          update({
+            template_positions: withoutPosition(detail.template_positions, name, placement),
+          });
+          flush();
+        }}
+      />
 
       {/* Above the tabs, not inside one: the artwork is what both Variants
           (which colours suit it) and Listing Images (which mockups show it)

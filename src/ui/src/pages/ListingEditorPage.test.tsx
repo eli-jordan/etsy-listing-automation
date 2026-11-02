@@ -312,6 +312,58 @@ describe("ListingEditorPage", () => {
     expect(screen.getAllByText("Prevents deploying")).toHaveLength(1);
   });
 
+  it("removes a template position no stage can show from its banner row", async () => {
+    /* Interactions, *Position outside the limits*: a key naming a template
+       not in `media:` has no stage to fix it on, so its row removes it. */
+    const box = [
+      { x: 10, y: 20 },
+      { x: 110, y: 20 },
+      { x: 110, y: 220 },
+      { x: 10, y: 220 },
+    ] as [
+      { x: number; y: number },
+      { x: number; y: number },
+      { x: number; y: number },
+      { x: number; y: number },
+    ];
+    vi.spyOn(listingsApi, "getListing").mockResolvedValue(
+      detail({
+        template_positions: { "old-scene": { bounding_box: box }, kept: { bounding_box: box } },
+        issues: [
+          {
+            severity: "block",
+            tab: "images",
+            where: "template_positions.old-scene",
+            message:
+              "take-a-hike: template_positions.old-scene names a template that is not in media",
+          },
+          {
+            severity: "block",
+            tab: "images",
+            where: "template_positions.kept",
+            message: "take-a-hike: template_positions.kept has rotation 18°; the limit is ±15°",
+          },
+        ],
+      }),
+    );
+    const patchSpy = vi.spyOn(listingsApi, "patchListing").mockResolvedValue(detail());
+    renderAt("/listings/take-a-hike");
+
+    const remove = await screen.findByRole("button", {
+      name: "Remove template_positions.old-scene",
+    });
+    expect(
+      screen.queryByRole("button", { name: "Remove template_positions.kept" }),
+    ).not.toBeInTheDocument();
+    fireEvent.click(remove);
+
+    await waitFor(() =>
+      expect(patchSpy).toHaveBeenCalledWith("take-a-hike", {
+        template_positions: { kept: { bounding_box: box } },
+      }),
+    );
+  });
+
   it("counts warnings in the summary alongside the blocks", async () => {
     /* Reporting only the blocks left a one-item summary sitting above three
        issues, two of which it never mentioned. */
