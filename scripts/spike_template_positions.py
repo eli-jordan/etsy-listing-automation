@@ -217,6 +217,26 @@ def uv_affine(frame: BoxFrame, limits: Limits, pose: Pose) -> NDArray[np.float64
     return cast(NDArray[np.float64], frame.pose_to_unit(pose) @ padded_to_frame)
 
 
+def anchored_affine(maps: MaterialMaps, corners: NDArray[np.float32]) -> NDArray[np.float64]:
+    """Padded-map UV -> posed-box UV, anchored like ``flatten`` anchors its own
+    frame: the least-squares affine taking the padded UV sampled at the posed
+    box's four photo corners to the unit square's corners. Corrects the
+    padded fit's frame drift at the cost of four samples per composite."""
+    left, top = maps.origin
+    local = (corners - np.array([left, top], np.float32)).reshape(1, 4, 2)
+    sampled = cv2.remap(
+        maps.material,
+        local[..., 0],
+        local[..., 1],
+        cv2.INTER_LINEAR,
+        borderMode=cv2.BORDER_REPLICATE,
+    ).reshape(4, 2)
+    unit = np.array([[0, 0], [1, 0], [1, 1], [0, 1]], np.float64)
+    design = np.hstack([sampled.astype(np.float64), np.ones((4, 1))])
+    affine: NDArray[np.float64] = np.linalg.lstsq(design, unit, rcond=None)[0].T
+    return affine
+
+
 def apply_position(
     maps: MaterialMaps, affine: NDArray[np.float64], *, renormalise: bool
 ) -> MaterialMaps:
@@ -592,11 +612,15 @@ def run_pose(context: Context, pose: Pose) -> dict[str, Any]:
     with timed(timings, "uv_affine"):
         option_a = apply_position(context.padded, affine, renormalise=False)
     renormalised = apply_position(context.padded, affine, renormalise=True)
+    anchored = apply_position(
+        context.padded, anchored_affine(context.padded, box), renormalise=False
+    )
     posed_size = (frame.width * pose.scale, frame.height * pose.scale)
     result: dict[str, Any] = {
         "pose": pose.__dict__,
         "garment_cover": garment_cover(template.mask, box),
         "displacement": displacement(direct, option_a, posed_size),
+        "displacement_anchored": displacement(direct, anchored, posed_size),
         "timings": timings,
         "designs": {},
     }
@@ -608,11 +632,14 @@ def run_pose(context: Context, pose: Pose) -> dict[str, Any]:
             compose(template, design, option_a, composite_times)
         candidate = compose(template, design, option_a, composite_times)
         renorm = compose(template, design, renormalised, [])
+        anchor = compose(template, design, anchored, [])
+        anchor_metrics, anchor_delta, _ = difference(template.base, reference, anchor)
         metrics, delta, _ = difference(template.base, reference, candidate)
         renorm_metrics, _, _ = difference(template.base, reference, renorm)
         result["designs"][design.name] = {
             "option_a": metrics,
             "option_a_renormalised": renorm_metrics,
+            "option_a_anchored": anchor_metrics,
             "composite_seconds_median": statistics.median(composite_times),
         }
         name = f"{template.name}-{pose.name}-{design.name}.png"
@@ -622,11 +649,18 @@ def run_pose(context: Context, pose: Pose) -> dict[str, Any]:
             (reference, candidate, delta),
             ("direct fit", "padded + UV affine", f"dE76 0-{HEAT_RANGE:g}"),
         )
+        side_by_side(
+            context.out / f"{template.name}-{pose.name}-{design.name}-anchored.png",
+            region,
+            (reference, anchor, anchor_delta),
+            ("direct fit", "padded + anchored affine", f"dE76 0-{HEAT_RANGE:g}"),
+        )
         print(
             f"  {pose.name:18s} {design.name:6s} dE mean {metrics['mean']:.2f} "
             f"p99 {metrics['p99']:.2f} tone p99 {metrics['tone_p99']:.2f} "
             f"(renorm {renorm_metrics['tone_p99']:.2f}) "
-            f"shift p99 {result['displacement']['p99_px']:.2f}px",
+            f"shift p99 {result['displacement']['p99_px']:.2f}px "
+            f"anchored {result['displacement_anchored']['p99_px']:.2f}px",
             flush=True,
         )
     return result
