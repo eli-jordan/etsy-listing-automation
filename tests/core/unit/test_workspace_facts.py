@@ -14,6 +14,9 @@ import pytest
 
 from etsy_listings.core.config.listing import Listing, TemplateMediaEntry
 from etsy_listings.core.config.media import ProbeFailure, VideoFacts
+from etsy_listings.core.preparation import readiness
+from etsy_listings.core.preparation.readiness import Readiness
+from etsy_listings.core.render.config import AnyTemplate
 from etsy_listings.core.workspace import facts as facts_module
 from etsy_listings.core.workspace.facts import WorkspaceFacts
 from etsy_listings.core.workspace.workspace import Workspace
@@ -126,6 +129,33 @@ class TestTemplates:
         assert "uncalibrated-one" not in facts.templates
         assert facts.templates, "the calibrated ones are still there"
 
+    def test_a_template_is_read_once_across_requests_until_its_files_change(
+        self, workspace_root: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Readiness cost the listings table up to a second a load; it is
+        read again only for the template whose directory changed."""
+        read: list[str] = []
+        real = readiness.template_readiness
+
+        def counting(workspace: Workspace, name: str, config: AnyTemplate) -> Readiness:
+            read.append(name)
+            return real(workspace, name, config)
+
+        monkeypatch.setattr(readiness, "template_readiness", counting)
+        workspace = Workspace.discover(root_override=workspace_root)
+        first = WorkspaceFacts.gather(workspace).templates
+        once = sorted(read)
+        assert once, "the fixture workspace has calibrated templates"
+
+        assert WorkspaceFacts.gather(workspace).templates == first
+        assert sorted(read) == once
+
+        changed = once[0]
+        (workspace.template_dir(changed) / "notes.txt").write_text("x", encoding="utf-8")
+        WorkspaceFacts.gather(workspace)
+
+        assert sorted(read) == sorted([*once, changed])
+
 
 VIDEOS = Path(__file__).parents[2] / "fixtures" / "video"
 
@@ -191,6 +221,33 @@ class TestVideos:
             facts.videos(listing, workspace.listing_dir(name))
 
         assert len(probed) == 1
+
+    def test_a_clip_is_probed_once_across_requests_until_it_changes(
+        self, workspace: Workspace, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        probed: list[Path] = []
+        real = facts_module.probe_video
+
+        def counting(path: Path) -> VideoFacts | ProbeFailure:
+            probed.append(path)
+            return real(path)
+
+        monkeypatch.setattr(facts_module, "probe_video", counting)
+        thumb = TemplateMediaEntry(template="flat-lay-01", colour="black")
+        listing = _video_listing(workspace, [thumb, "common-media/size-guide.mp4"])
+        listing_dir = workspace.listing_dir("take-a-hike")
+
+        WorkspaceFacts.gather(workspace).videos(listing, listing_dir)
+        WorkspaceFacts.gather(workspace).videos(listing, listing_dir)
+        assert len(probed) == 1
+
+        shared = workspace.root / "common-media" / "size-guide.mp4"
+        shutil.copy(VIDEOS / "with-audio-3s-512.mp4", shared)
+        [clip] = WorkspaceFacts.gather(workspace).videos(listing, listing_dir).values()
+
+        assert len(probed) == 2
+        assert isinstance(clip, VideoFacts)
+        assert clip.has_audio is True
 
     def test_a_missing_clip_is_a_probe_failure(self, workspace: Workspace) -> None:
         thumb = TemplateMediaEntry(template="flat-lay-01", colour="black")
