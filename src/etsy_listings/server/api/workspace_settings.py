@@ -128,7 +128,17 @@ def template_positions_impact(
         limits = template_position_impact.candidate_limits(body.limits)
     except InvalidSettingsEditError as exc:
         return _invalid(exc)
-    impact = template_position_impact.template_position_impact(request.app.state.workspace, limits)
+    try:
+        impact = template_position_impact.template_position_impact(
+            request.app.state.workspace, limits
+        )
+    except ConfigLoadError as exc:
+        # An unreadable settings.yaml is refused naming the file and key, as
+        # listings report it (a51ec1f4), never a server error.
+        return JSONResponse(
+            status_code=422,
+            content=SettingsSaveRefusal(kind="invalid", message=str(exc)).model_dump(),
+        )
     return TemplatePositionImpactResponse(
         outside=[
             ListingOutsideBody(listing=row.listing, positions=list(row.positions))

@@ -55,7 +55,8 @@ def candidate_limits(limits: Mapping[str, object]) -> TemplatePositionLimits:
 
 
 def template_position_impact(workspace: Workspace, limits: TemplatePositionLimits) -> LimitsImpact:
-    """Who ``limits`` would block, and which templates would need inference."""
+    """Who ``limits`` would block, and which templates would need inference.
+    Raises :class:`ConfigLoadError` when the saved ``settings.yaml`` does not load."""
     templates = _TemplateCache(workspace)
     outside = []
     for name in workspace.listing_names():

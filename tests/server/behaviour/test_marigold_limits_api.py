@@ -108,3 +108,18 @@ def test_recalibrating_a_positioned_template_queues_coverage_for_its_new_box(
 
     assert saved.status_code == 200, saved.text
     assert [kind for _, kind in _queued(app)].count("coverage") == coverage
+
+
+def test_impact_refuses_cleanly_when_settings_do_not_load(workspace: Workspace):
+    """The unreadable-settings refusal PR 2 gives listings (naming the file and
+    the key), not a server error."""
+    workspace.settings_file().write_bytes(b"template_positions:\n  rotation: lots\n")
+    client = TestClient(create_app(workspace, preparation_runtime=PreparationRuntime()))
+
+    refused = client.post(IMPACT, json={"limits": WIDER})
+
+    assert refused.status_code == 422, refused.text
+    body = refused.json()
+    assert body["kind"] == "invalid"
+    assert "settings.yaml" in body["message"]
+    assert "template_positions.rotation" in body["message"]
