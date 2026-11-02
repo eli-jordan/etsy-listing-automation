@@ -20,6 +20,12 @@ arrives as the page shows it: whole percentages for all six metrics
 totalling exactly 100. The file may still hold relative weights written by
 hand; the page normalises those for display only, and they are rewritten as
 percentages when the seller next edits a share.
+
+``template_positions`` (ADR-0058) arrives as the whole limits section the
+page's draft holds, saved only from its confirmation (template positions PR 5).
+Each leaf is written only where it differs from what the file reads as now, so
+a default stays implicit and an untouched spelling stays as the seller wrote
+it (ADR-0055).
 """
 
 from __future__ import annotations
@@ -54,10 +60,18 @@ WEIGHTS = "market_seo.weights"
 PROVIDERS = "ai.providers"
 STEP_LIMIT = "ai.step_limit_minutes"
 RUN_LIMIT = "ai.run_limit_minutes"
+TEMPLATE_POSITIONS = "template_positions"
 _WHOLE = 100
 """Percent: what the page's six shares total."""
 
-EDITABLE_KEYS: tuple[str, ...] = (CONCURRENCY, WEIGHTS, PROVIDERS, STEP_LIMIT, RUN_LIMIT)
+EDITABLE_KEYS: tuple[str, ...] = (
+    CONCURRENCY,
+    WEIGHTS,
+    PROVIDERS,
+    STEP_LIMIT,
+    RUN_LIMIT,
+    TEMPLATE_POSITIONS,
+)
 """One save may carry several keys. The page couples a provider enable or a
 larger step limit with the run-limit increase it needs, so no written file
 breaks ADR-0057's floor; nothing here raises the run limit on its own."""
@@ -100,6 +114,8 @@ def edit_settings(
     }
     if WEIGHTS in changes and (problem := _percentage_problem(changes[WEIGHTS])):
         refused[WEIGHTS] = problem
+    if TEMPLATE_POSITIONS in changes and not isinstance(changes[TEMPLATE_POSITIONS], Mapping):
+        refused[TEMPLATE_POSITIONS] = "give the limits as scale, offset and rotation"
     if refused:
         raise InvalidSettingsEditError(refused)
 
@@ -124,7 +140,7 @@ def _edited(path: Path, source: bytes, changes: Mapping[str, object]) -> tuple[b
     raw = _document(path, source)
     original = _validated(raw)
     candidate: dict[str, Any] = copy.deepcopy(raw)
-    for key, value in changes.items():
+    for key, value in _leaf_changes(changes, original).items():
         node, leaf = parent_of(candidate, key)
         node[leaf] = copy.deepcopy(dict(value) if isinstance(value, Mapping) else value)
     validated = _validated(candidate)
@@ -137,6 +153,48 @@ def _edited(path: Path, source: bytes, changes: Mapping[str, object]) -> tuple[b
             {"__root__": f"{path}: {exc}. Edit this value in the file, then reload Settings."}
         ) from exc
     return edited, validated
+
+
+def _leaf_changes(changes: Mapping[str, object], original: Settings) -> dict[str, object]:
+    """``changes`` with the limits section split into the leaves it changes.
+
+    Every other key is written whole, as before. A leaf the file does not
+    hold yet is unknown here and written, so validation can name it.
+    """
+    result = {key: value for key, value in changes.items() if key != TEMPLATE_POSITIONS}
+    section = changes.get(TEMPLATE_POSITIONS)
+    if isinstance(section, Mapping):
+        current = original.template_positions.model_dump()
+        result.update(
+            (f"{TEMPLATE_POSITIONS}.{path}", value)
+            for path, value in _leaves(section)
+            if _at(current, path) != value
+        )
+    return result
+
+
+def _leaves(mapping: Mapping[str, object], prefix: str = "") -> list[tuple[str, object]]:
+    """Each non-mapping value under ``mapping``, by dotted path."""
+    leaves: list[tuple[str, object]] = []
+    for key, value in mapping.items():
+        path = f"{prefix}{key}"
+        if isinstance(value, Mapping) and value:
+            leaves += _leaves(value, f"{path}.")
+        else:
+            leaves.append((path, value))
+    return leaves
+
+
+_MISSING = object()
+
+
+def _at(document: object, path: str) -> object:
+    """The value at dotted ``path``, or a sentinel equal to nothing."""
+    for part in path.split("."):
+        if not isinstance(document, Mapping) or part not in document:
+            return _MISSING
+        document = document[part]
+    return document
 
 
 def _retain_provider_source(

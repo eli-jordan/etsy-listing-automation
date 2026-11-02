@@ -4,9 +4,15 @@ import { useWorkspaceSettings } from "./useWorkspaceSettings";
 import type { SaveStatus } from "./useSaveQueue";
 import { MarketWeights } from "./MarketWeights";
 import { AiSettingsSections } from "./AiTimeLimits";
+import { TemplatePositions } from "./TemplatePositions";
 import "./settings.css";
 
-export function SettingsPanel() {
+export type SettingsSection = "ai" | "rendering";
+
+/** settings.yaml's two subsections (template positions PR 5): AI, the
+ * original panels in their order, and Template rendering. Both stay mounted
+ * so switching keeps drafts; they share one file, status and save queue. */
+export function SettingsPanel({ section = "ai" }: { section?: SettingsSection }) {
   const state = useWorkspaceSettings();
   const { settings, status } = state;
   if (state.loadError)
@@ -52,7 +58,7 @@ export function SettingsPanel() {
           Retry save
         </button>
       )}
-      <fieldset disabled={state.locked} className="settings-fields">
+      <fieldset disabled={state.locked} className="settings-fields" hidden={section !== "ai"}>
         <AiSettingsSections
           key={`ai-${state.loadedVersion}`}
           providers={settings.providers}
@@ -83,6 +89,18 @@ export function SettingsPanel() {
               {key}: {message}
             </p>
           ))}
+      </fieldset>
+      <fieldset
+        disabled={state.locked}
+        className="settings-fields"
+        hidden={section !== "rendering"}
+      >
+        <TemplatePositions
+          key={`positions-${state.loadedVersion}`}
+          limits={settings.template_positions}
+          active={section === "rendering"}
+          onConfirm={state.confirmSave}
+        />
       </fieldset>
     </div>
   );

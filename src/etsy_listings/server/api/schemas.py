@@ -1055,8 +1055,8 @@ class ShopSaveRefusal(BaseModel):
 
 class WorkspaceSettingsResponse(BaseModel):
     revision: str
-    template_positions: TemplatePositionLimits = Field(json_schema_extra={"readOnly": True})
-    """Current limits, including defaults; editing belongs to template positions PR 5."""
+    template_positions: TemplatePositionLimits
+    """Current limits, including defaults (ADR-0058)."""
     concurrency: int
     weights: dict[str, float]
     """Relative weights, normalized only for display by the page."""
@@ -1076,6 +1076,8 @@ class WorkspaceSettingsChanges(BaseModel):
     providers: list[dict[str, Any]] | None = None
     step_limit_minutes: int | float | None = None
     run_limit_minutes: int | float | None = None
+    template_positions: dict[str, Any] | None = None
+    """The whole limits section; only the leaves it changes are written."""
 
 
 class WorkspaceSettingsPatch(BaseModel):
@@ -1087,6 +1089,26 @@ class SettingsSaveRefusal(BaseModel):
     kind: Literal["conflict", "invalid"]
     message: str
     field_errors: dict[str, str] = Field(default_factory=dict)
+
+
+class TemplatePositionImpactRequest(BaseModel):
+    limits: dict[str, Any]
+    """Candidate limits, shaped as ``template_positions`` in settings.yaml."""
+
+
+class ListingOutsideBody(BaseModel):
+    listing: str
+    positions: list[str]
+    """Dotted ``template_positions`` keys the candidate limits would refuse."""
+
+
+class TemplatePositionImpactResponse(BaseModel):
+    """What saving the candidate limits would change; nothing is written."""
+
+    outside: list[ListingOutsideBody]
+    templates_needing_inference: list[str]
+    """Marigold templates whose preparation evidence would need model inference
+    to cover the wider limits; empty until Marigold positions ship (PR 7)."""
 
 
 class ConnectionRowBody(BaseModel):
