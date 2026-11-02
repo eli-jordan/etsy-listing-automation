@@ -32,6 +32,18 @@ Two different costs, so two different strategies:
   listings, and opening it once per row would be the four-hundred-parses
   mistake again, with FFmpeg doing the parsing.
 
+Two of those answers also outlive the request, because the listings table
+asks for them on every visit and they rarely change. Measured on an
+18-listing, 9-template shop, the catalogue cost 0.4-1.2s of every table load
+and the video probes 0.1-1.2s:
+
+* **A template's entry is kept until a file in its directory changes**
+  (:func:`~etsy_listings.core.workspace.file_version.tree_version`, a stat
+  walk of a few milliseconds). Readiness is advisory here -- a listing issue
+  -- and the render stage asks it again from the files before it acts.
+* **A video's probe is kept until the file changes**
+  (:func:`~etsy_listings.core.workspace.file_version.file_version`).
+
 It holds the `Workspace` rather than copying paths out of it: reading is
 `Workspace`'s job, and a snapshot that resolved its own paths would be a
 second place that knows the layout.
@@ -41,8 +53,10 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import replace
+from functools import partial
 from pathlib import Path
 
+from etsy_listings.core.bounded_cache import BoundedCache
 from etsy_listings.core.config.errors import ConfigLoadError
 from etsy_listings.core.config.garment_profile import GarmentProfile
 from etsy_listings.core.config.listing import Listing
@@ -54,8 +68,21 @@ from etsy_listings.core.render.config import (
     ColourMatrixTemplate,
     MultipleTemplate,
 )
+from etsy_listings.core.workspace.file_version import TreeVersion, file_version, tree_version
 from etsy_listings.core.workspace.video import probe_video
 from etsy_listings.core.workspace.workspace import InvalidNameError, InvalidRefError, Workspace
+
+_TEMPLATE_INFO: BoundedCache[tuple[str, str, TreeVersion], tuple[TemplateInfo | None]] = (
+    BoundedCache(256)
+)
+"""(workspace root, template, its directory's version) -> its entry, or
+``None`` for one that will not load. Boxed in a tuple because the cache reads
+a bare ``None`` as a miss."""
+
+_PROBES: BoundedCache[tuple[str, tuple[int | str, ...]], VideoFacts | ProbeFailure] = BoundedCache(
+    512
+)
+"""(path, file version) -> its probe."""
 
 
 class WorkspaceFacts:
@@ -153,7 +180,7 @@ class WorkspaceFacts:
         template directory, or the files Save as listing template is about to
         copy."""
         if path not in self._probes:
-            self._probes[path] = probe_video(path)
+            self._probes[path] = _remembered_probe(path)
         return self._probes[path]
 
     def _load_garment_profile(self, name: str) -> GarmentProfile | None:
@@ -169,21 +196,42 @@ def _template_info_map(workspace: Workspace) -> dict[str, TemplateInfo]:
     against and is silently skipped, the same as a template name that has
     since been renamed or deleted from under a listing."""
     result: dict[str, TemplateInfo] = {}
+    root = str(workspace.root).casefold()
     for name in workspace.template_names():
-        try:
-            config = workspace.load_template_config(name)
-        except ConfigLoadError:
-            continue
-        info = template_info(workspace, name, config)
-        from etsy_listings.core.preparation.readiness import (  # noqa: PLC0415 -- cycle: readiness imports core.workspace
-            template_readiness,
-        )
-
-        maps = template_readiness(workspace, name, config)
-        if not maps.can_render:
-            info = replace(info, preparation_error=maps.message)
-        result[name] = info
+        key = (root, name, tree_version(workspace.template_dir(name)))
+        (info,) = _TEMPLATE_INFO.get_or_compute(key, partial(_read_template_info, workspace, name))
+        if info is not None:
+            result[name] = info
     return result
+
+
+def _read_template_info(workspace: Workspace, name: str) -> tuple[TemplateInfo | None]:
+    """One template's entry, read from its files: ``None`` for one whose
+    config will not load."""
+    try:
+        config = workspace.load_template_config(name)
+    except ConfigLoadError:
+        return (None,)
+    info = template_info(workspace, name, config)
+    from etsy_listings.core.preparation.readiness import (  # noqa: PLC0415 -- cycle: readiness imports core.workspace
+        template_readiness,
+    )
+
+    maps = template_readiness(workspace, name, config)
+    if not maps.can_render:
+        info = replace(info, preparation_error=maps.message)
+    return (info,)
+
+
+def _remembered_probe(path: Path) -> VideoFacts | ProbeFailure:
+    """``path``'s probe, kept across requests until the file changes. A file
+    that cannot be versioned (gone, unreadable) is probed afresh, so its
+    failure says why."""
+    try:
+        version = file_version(path)
+    except OSError:
+        return probe_video(path)
+    return _PROBES.get_or_compute((str(path).casefold(), version), partial(probe_video, path))
 
 
 def template_info(workspace: Workspace, name: str, config: AnyTemplate) -> TemplateInfo:

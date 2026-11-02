@@ -19,7 +19,9 @@ read gathers it once however many listings it describes.
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping, Sequence
+import time
+from collections.abc import Callable, Iterator, Mapping, Sequence
+from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from pathlib import Path
@@ -213,19 +215,49 @@ def describe_draft(workspace: Workspace, document: Mapping[str, Any]) -> Listing
     )
 
 
-def list_listings(workspace: Workspace, *, etsy_states: EtsyStates) -> list[ListingRow]:
+class PhaseTimer:
+    """Wall-clock time per named phase of one read, summed over every entry
+    into the phase -- so a per-row phase reports the whole table's cost of
+    it, not the last row's.
+
+    For finding where a slow listings table spends its time: the server
+    answers with these as a ``Server-Timing`` header, which the browser's
+    network panel draws with nothing else to install.
+    """
+
+    def __init__(self, clock: Callable[[], float] = time.perf_counter) -> None:
+        self._clock = clock
+        self.seconds: dict[str, float] = {}
+
+    @contextmanager
+    def phase(self, name: str) -> Iterator[None]:
+        start = self._clock()
+        try:
+            yield
+        finally:
+            self.seconds[name] = self.seconds.get(name, 0.0) + self._clock() - start
+
+
+def list_listings(
+    workspace: Workspace, *, etsy_states: EtsyStates, timer: PhaseTimer | None = None
+) -> list[ListingRow]:
     """Every listing, with Etsy asked **once** for the whole table rather
-    than once per row."""
-    facts = WorkspaceFacts.gather(workspace)
-    names = workspace.listing_names()
-    ids = {name: remote_ids(workspace, name)[0] for name in names}
-    states = etsy_states([i for i in ids.values() if i is not None])
+    than once per row. ``timer``, when given, is told where the time went."""
+    timer = timer if timer is not None else PhaseTimer()
+    with timer.phase("catalogue"):
+        facts = WorkspaceFacts.gather(workspace)
+    with timer.phase("ids"):
+        names = workspace.listing_names()
+        ids = {name: remote_ids(workspace, name)[0] for name in names}
+    with timer.phase("etsy"):
+        states = etsy_states([i for i in ids.values() if i is not None])
     return [
         listing_row(
             workspace,
             name,
             etsy_state=states.get(listing_id) if (listing_id := ids[name]) is not None else None,
             facts=facts,
+            timer=timer,
         )
         for name in names
     ]
@@ -237,10 +269,12 @@ def listing_row(
     *,
     etsy_state: str | None,
     facts: WorkspaceFacts | None = None,
+    timer: PhaseTimer | None = None,
 ) -> ListingRow:
     """One table row, for a caller that already knows the listing's Etsy
     state -- the table, and a delete answering with the row it left."""
     facts = facts if facts is not None else WorkspaceFacts.gather(workspace)
+    timer = timer if timer is not None else PhaseTimer()
     etsy_listing_id, printify_product_id = remote_ids(workspace, name)
     published = is_live_etsy_state(etsy_state)
     if not ListingDocuments(workspace).exists(name):
@@ -253,22 +287,26 @@ def listing_row(
             etsy_listing_id=etsy_listing_id,
             printify_product_id=printify_product_id,
         )
-    listing = workspace.load_listing(name)
+    with timer.phase("load"):
+        listing = workspace.load_listing(name)
+        description = workspace.resolve_description(listing.etsy.description)
     published = published if etsy_listing_id is not None else False
-    description = workspace.resolve_description(listing.etsy.description)
+    listing_dir = workspace.listing_dir(name)
+    with timer.phase("status"):
+        status = workspace_listing_status(
+            workspace, name, live=published, lifecycle=listing.lifecycle, etsy_state=etsy_state
+        )
+    # Probing the listing's videos is almost all of what assembling the
+    # check inputs costs; the profile it also reads is memoised in `facts`.
+    with timer.phase("videos"):
+        inputs = _check_inputs(facts, listing, listing_dir, description, name=name)
+    with timer.phase("checks"):
+        issues = _business_issues(workspace, listing_dir, listing, inputs, published=published)
     return ListingRow(
         name=name,
         listing=listing,
-        status=workspace_listing_status(
-            workspace, name, live=published, lifecycle=listing.lifecycle, etsy_state=etsy_state
-        ),
-        issues=_business_issues(
-            workspace,
-            workspace.listing_dir(name),
-            listing,
-            _check_inputs(facts, listing, workspace.listing_dir(name), description, name=name),
-            published=published,
-        ),
+        status=status,
+        issues=issues,
         gestures=listing_gestures(
             lifecycle=listing.lifecycle, etsy_state=etsy_state, published=published
         ),
