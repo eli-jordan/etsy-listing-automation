@@ -177,3 +177,19 @@ tail. Combining the bounded cache and solver-boundary cooperation with automatic
 readiness deferral measured twelve real-artwork geometry edits below one second,
 maximum 0.816 seconds. The full mask/geometry and idle/overlap matrix still must
 validate the implementation. Neither raster nor artwork resolution is reduced.
+
+## Amendment, 2026-11-02: photo warp encodes at level one
+
+Photo warp now uses PNG compression level one as well, superseding "Photo warp
+retains level six" above. On the seller's 2048px folded-shirt photograph the
+level-six encode took 1.94 seconds of a 2.98-second cold Variants preview; level
+one took 0.30 seconds for a file 11 percent larger (5.3 to 5.9 MB). Decoded
+pixels are identical. The Variants stage shows every colour of the garment
+profile's preview template one click at a time, so per-colour latency costs the
+seller more than the extra bytes do.
+
+The level stays in the photo-warp scene identity, so scenes cached at level six
+are never served as level-one scenes; they age out of the scene cache. The
+render stage's scene hash does not include the level, so no listing is marked
+stale and nothing is re-uploaded. A render written later for another reason
+carries the new bytes.
