@@ -37,7 +37,7 @@ tests/ core/ server/ cli/ by owner, then layer (unit, golden, behaviour, contrac
   doubles in tests/support/; project-wide build/CI tests (packaging, CI selection, OpenAPI export, import contracts,
   protected test imports) directly in tests/
 docs/ guides/, features/<topic>-YYYYMMDD/, adr/, reference/, research/, history/, architecture.md
-scripts/ agent_lint.py (lint hook) + agent_lint_gate.py and agent_lint_rules.txt (its gate) + agent_lint_launch.sh (starts it for Claude/Grok), frontend_gate.py, setup_worktree.py (T3 worktree setup), generate_test_assets.py
+scripts/ agent_lint.py (lint hook) + agent_lint_gate.py and agent_lint_rules.txt (its gate), frontend_gate.py, setup_worktree.py (T3 worktree setup), generate_test_assets.py
 .githooks/ pre-commit (the lint backstop for every commit)
 ```
 

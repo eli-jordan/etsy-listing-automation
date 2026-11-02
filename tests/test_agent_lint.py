@@ -280,7 +280,7 @@ def test_a_codex_patch_has_every_file_it_touches_checked(scratch: Path) -> None:
         (
             ".claude/settings.json",
             {"Bash", "PowerShell", "Edit", "Write"},
-            "scripts/agent_lint_launch.sh",
+            "scripts/agent_lint_gate.py",
         ),
         (".codex/hooks.json", {"Bash", "apply_patch", "Edit", "Write"}, "agent_lint_gate.py"),
     ],
@@ -625,18 +625,37 @@ def test_a_missing_git_skips_the_git_checks_instead_of_crashing(scratch: Path) -
     assert "F821" in result.stderr
 
 
-def test_the_claude_launcher_hands_each_payload_to_the_gate(
-    scratch: Path, state: dict[str, str]
+@pytest.mark.skipif(os.name != "nt", reason="the Claude settings command starts the Windows venv")
+@pytest.mark.parametrize("agent", ["Claude Code", "Grok"])
+def test_the_claude_settings_command_runs_in_each_agents_shell(
+    agent: str, scratch: Path, state: dict[str, str]
 ) -> None:
-    bash = git_bash()
-    if bash is None:
-        pytest.skip("no bash to source the Claude Code launcher")
+    # Claude Code runs a hook command through Git Bash; Grok reads the same
+    # .claude/settings.json and runs it through PowerShell, with
+    # $CLAUDE_PROJECT_DIR a PowerShell variable and the `&` call operator put
+    # in front of a command that opens with a quoted program path. A bash-only
+    # command fails there, and a failed hook does not block, so Grok would get
+    # no lint.
+    hooks = json.loads((ROOT / ".claude" / "settings.json").read_text())["hooks"]
+    command = hooks["PostToolUse"][0]["hooks"][0]["command"]
+    if agent == "Claude Code":
+        bash = git_bash()
+        if bash is None:
+            pytest.skip("no Git Bash")
+        argv = [bash, "-c", command]
+    else:
+        argv = [
+            "powershell.exe",
+            "-NoProfile",
+            "-Command",
+            f"$CLAUDE_PROJECT_DIR = '{ROOT}'; & {command}",
+        ]
     source = scratch / "launched.py"
     source.write_text("print(missing)\n")
 
     def launch(payload: dict[str, object]) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
-            [bash, "-c", '. "$CLAUDE_PROJECT_DIR/scripts/agent_lint_launch.sh" edit'],
+            argv,
             input=json.dumps(payload),
             capture_output=True,
             text=True,
@@ -716,14 +735,16 @@ def test_the_gate_skips_a_read_only_command_and_checks_one_that_writes(
     assert "written.py:1:" in checked.stderr
 
 
-def test_a_powershell_tool_command_is_gated_and_checked_as_a_shell_command(
-    scratch: Path, state: dict[str, str]
+@pytest.mark.parametrize("tool", ["PowerShell", "run_terminal_command"])
+def test_a_powershell_or_grok_shell_command_is_gated_and_checked_as_a_shell_command(
+    tool: str, scratch: Path, state: dict[str, str]
 ) -> None:
-    # Claude Code's PowerShell tool writes files no edit reports.
+    # Claude Code's PowerShell tool and Grok's terminal tool write files no
+    # edit reports.
     (scratch / "written.py").write_text("print(missing)\n")
 
-    read = shell_command("Get-ChildItem src | Select-Object -First 3", tool="PowerShell")
-    write = shell_command("Set-Content written.py 'print(missing)'", tool="PowerShell")
+    read = shell_command("Get-ChildItem src | Select-Object -First 3", tool=tool)
+    write = shell_command("Set-Content written.py 'print(missing)'", tool=tool)
     skipped = run_mode("edit", read, script=GATE, **state)
     checked = run_mode("edit", write, script=GATE, **state)
 

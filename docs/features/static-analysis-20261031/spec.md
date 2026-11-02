@@ -105,10 +105,19 @@ both through the same gate, `scripts/agent_lint_gate.py`, run as `python -S`:
 
 - `.claude/settings.json`: Claude Code `PostToolUse` matching
   `Edit|Write|Bash|PowerShell`: Claude's PowerShell tool writes files as its
-  Bash tool does. Grok Build reads this file too and maps Claude's tool
-  names. The command sources `scripts/agent_lint_launch.sh` into the hook's
-  own bash (no second shell), which only picks `.venv`'s Python, or `uv run`
-  without one, and starts the gate.
+  Bash tool does. Grok Build reads this file too, maps Claude's tool names
+  and sends its terminal tool as `run_terminal_command`, which the gate reads
+  as a shell command. Claude Code runs the command through Git Bash, but Grok
+  runs it through PowerShell on Windows, so it has to read the same in both:
+  `"$CLAUDE_PROJECT_DIR/.venv/Scripts/python.exe" -S
+  "$CLAUDE_PROJECT_DIR/scripts/agent_lint_gate.py" <mode>; exit $LASTEXITCODE`.
+  Grok defines `$CLAUDE_PROJECT_DIR` in PowerShell and puts the call operator
+  in front of the quoted program; in bash the unset `$LASTEXITCODE` leaves
+  `exit` with the gate's status. A bash-only command fails under Grok, and a
+  failed hook does not block, so Grok would get no lint at all. The command
+  needs the worktree's `.venv`, which `scripts/setup_worktree.py` creates;
+  without it the hook fails open. Grok runs a project's hooks only in a folder
+  its folder trust covers.
 - `.codex/hooks.json`: Codex `PostToolUse` matching
   `Bash|apply_patch|Edit|Write`. Codex runs hook commands through the
   session's shell, which on Windows is always PowerShell (started with

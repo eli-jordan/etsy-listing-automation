@@ -1,8 +1,7 @@
 """Skip the agent lint hook after shell commands that cannot have written a file (spec S06).
 
-Every agent's hook starts here: Claude Code and Grok through
-scripts/agent_lint_launch.sh, Codex directly from its session shell
-(PowerShell on Windows). It runs as
+Every agent's hook starts here, called directly: Claude Code from Git Bash,
+Grok and Codex from PowerShell on Windows. It runs as
 `python -S` and, to decide fast, imports nothing but `os`, `re` and `sys` and
 reads the payload as text: `json` alone would cost more than the rest of the
 decision. The rules are scripts/agent_lint_rules.txt. A command that may have
@@ -25,7 +24,9 @@ import re
 import sys
 
 RULES = os.path.join(os.path.dirname(os.path.abspath(__file__)), "agent_lint_rules.txt")
-SHELL_TOOL = re.compile(r'"tool_name"\s*:\s*"(Bash|PowerShell)"')
+# Grok's terminal tool runs PowerShell on Windows and bash elsewhere: it is
+# read as Bash, which already requires a command to read the same in both.
+SHELL_TOOL = re.compile(r'"tool_name"\s*:\s*"(Bash|PowerShell|run_terminal_command)"')
 COMMAND_FIELD = re.compile(r'"command"\s*:\s*"((?:[^"\\]|\\.)*)"')
 JSON_ESCAPE = re.compile(r"\\(.)", re.DOTALL)
 JSON_CHARACTERS = {"n": "\n", "t": "\t", "r": "\r", "b": "\b", "f": "\f"}
