@@ -9,7 +9,7 @@ from pathlib import Path
 from uuid import uuid4
 
 from etsy_listings.core.application.preparation.evidence_reader import EvidenceReader
-from etsy_listings.core.application.preparation.models import CropEvidence
+from etsy_listings.core.application.preparation.models import CropEvidence, PredictionPointer
 from etsy_listings.core.preparation.artifacts import PreparationInputs
 from etsy_listings.core.workspace.atomic import write_bytes_atomic
 from etsy_listings.core.workspace.calibration import CalibrationStore, json_bytes
@@ -47,23 +47,22 @@ class EvidenceStore(EvidenceReader):
                         )
                     )
                 retained.append(value.model_copy(update={"predictions": tuple(predictions)}))
-            document = {
-                "schema_version": 1,
-                "id": identity,
-                "job_order": job_order,
-                "inputs": inputs.model_dump(mode="json"),
-                "evidence": [v.model_dump(mode="json") for v in retained],
-            }
+            pointer = PredictionPointer(
+                schema_version=1,
+                id=identity,
+                job_order=job_order,
+                inputs=inputs,
+                evidence=tuple(retained),
+            )
             for value in retained:
                 if not self.valid(value):
                     raise ValueError("Invalid retained prediction replacement")
-            write_bytes_atomic(directory / "manifest.json", json_bytes(document), durable=True)
+            document = json_bytes(pointer.model_dump(mode="json"))
+            write_bytes_atomic(directory / "manifest.json", document, durable=True)
             checkpoint("predictions_validated")
             with CalibrationStore(self.workspace).lock(template):
                 write_bytes_atomic(
-                    self.workspace.preparation_prediction_current(template),
-                    json_bytes(document),
-                    durable=True,
+                    self.workspace.preparation_prediction_current(template), document, durable=True
                 )
             checkpoint("predictions_pointer")
             return tuple(retained)

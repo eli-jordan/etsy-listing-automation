@@ -10,7 +10,7 @@ arrive as arguments, so discovery runs against fakes with no network.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
@@ -69,20 +69,20 @@ class EtsyAccess:
     user_id: int | None
 
 
-def etsy_access(root: Path) -> EtsyAccess | None:
+def etsy_access(root: Path, shop_client: Callable[[Path], EtsyShopClient]) -> EtsyAccess | None:
     """Etsy access from what the workspace has stored, or ``None`` when it
     holds no app key pair -- which is every workspace before ``auth etsy``,
     and must not stop ``setup`` from writing one.
 
-    The client is ``connections``' shop client, as for every other Etsy
-    caller: discovery's calls are unscoped, and that client adds the bearer
-    only when someone has signed in -- which is what makes ``shop_by_owner``
-    possible.
+    ``shop_client`` builds the client; the CLI passes ``connections``' shop
+    client, the one every other Etsy caller gets. Discovery's calls are
+    unscoped, and that client adds the bearer only when someone has signed
+    in -- which is what makes ``shop_by_owner`` possible.
     """
     if connections.etsy_app_key(root) is None:
         return None
     tokens = connections.etsy_token_store(root).load()
-    return EtsyAccess(connections.etsy_shop_client(root), tokens.user_id if tokens else None)
+    return EtsyAccess(shop_client(root), tokens.user_id if tokens else None)
 
 
 def exact_shop_match(candidates: Sequence[EtsyShop], name: str) -> EtsyShop | None:

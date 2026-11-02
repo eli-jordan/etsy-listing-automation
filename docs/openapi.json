@@ -5462,7 +5462,7 @@
         "type": "object"
       },
       "ProposalResolutionPatch": {
-        "description": "``PATCH /api/listings/{name}/proposal/resolution``: the sections to\nrecord, on the proposal generated at ``generated_at`` -- a regeneration\nthat landed meanwhile is a different proposal, and is a 409. ``pending``\nreopens a section.",
+        "description": "``PATCH /api/listings/{name}/proposal/resolution``: the sections to\nrecord, on the proposal generated at ``generated_at`` -- a regeneration\nthat landed meanwhile is a different proposal, and is a 412. ``pending``\nreopens a section.",
         "properties": {
           "generated_at": {
             "format": "date-time",
@@ -6557,7 +6557,7 @@
         "type": "object"
       },
       "ShopSaveRefusal": {
-        "description": "A 409 (``conflict``: reload, then edit again) or a 422 (``invalid``:\neach refused dotted shop.yaml key to its reason). Nothing was written.",
+        "description": "A 412 (``conflict``: reload, then edit again) or a 422 (``invalid``:\neach refused dotted shop.yaml key to its reason). Nothing was written.",
         "properties": {
           "field_errors": {
             "additionalProperties": {
@@ -7974,7 +7974,7 @@
             },
             "description": "Successful Response"
           },
-          "409": {
+          "412": {
             "content": {
               "application/json": {
                 "schema": {
@@ -7982,7 +7982,7 @@
                 }
               }
             },
-            "description": "Conflict"
+            "description": "Precondition Failed"
           },
           "422": {
             "content": {
@@ -8087,7 +8087,7 @@
             },
             "description": "Successful Response"
           },
-          "409": {
+          "412": {
             "content": {
               "application/json": {
                 "schema": {
@@ -8095,7 +8095,7 @@
                 }
               }
             },
-            "description": "Conflict"
+            "description": "Precondition Failed"
           },
           "422": {
             "content": {
@@ -10570,7 +10570,7 @@
           "404": {
             "description": "No such listing, or no proposal cached for it"
           },
-          "409": {
+          "412": {
             "description": "The proposal was regenerated since the page read it"
           },
           "422": {

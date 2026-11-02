@@ -36,6 +36,7 @@ from etsy_listings.core.workspace.workspace import Workspace
 
 from tests.support.ai_runs import DRAFTED_BRIEF, ChainProvider, seed_prompts, seeded_market
 from tests.support.batches import a_listing_template, png
+from tests.support.clients import FakeClients
 
 pytestmark = pytest.mark.browser
 
@@ -50,7 +51,7 @@ def app_options(workspace_root: Path) -> dict[str, Any]:
     market = seeded_market()
     return {
         "seo_provider_factory": lambda _workspace, _ai: [provider],
-        "market_client_factory": lambda _workspace: market,
+        "clients": FakeClients(etsy_market=market).factories(),
     }
 
 

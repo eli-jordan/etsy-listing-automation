@@ -17,6 +17,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path, PureWindowsPath
+from typing import Literal
 
 import yaml
 from pydantic import TypeAdapter, ValidationError
@@ -108,8 +109,8 @@ class InvalidNameError(ValueError):
     workspace root in the first place.
     """
 
-    def __init__(self, name: str) -> None:
-        super().__init__(f"{name!r} is not a valid name: expected a single path segment")
+    def __init__(self, name: str, message: str | None = None) -> None:
+        super().__init__(message or f"{name!r} is not a valid name: expected a single path segment")
 
 
 def _segment(name: str) -> str:
@@ -126,7 +127,7 @@ class NotAMediaFileError(InvalidNameError):
     ``400`` like any other name it cannot use."""
 
     def __init__(self, path: str, directory: Path) -> None:
-        ValueError.__init__(self, f"{path!r} is not a media file in {directory.name}/")
+        super().__init__(path, f"{path!r} is not a media file in {directory.name}/")
 
 
 _MEDIA_EXTENSIONS: tuple[str, ...] = (*IMAGE_EXTENSIONS, *VIDEO_EXTENSIONS)
@@ -199,6 +200,17 @@ _SCENE_STEM = "scene"
 """The fixed filename a ``multiple``/``single``-kind template's one photo
 takes. Named once because two accessors turn on it: the scene image itself,
 and :meth:`Workspace.template_photos`, which is everything *but* it."""
+
+
+MaskSource = Literal["automatic", "edited", "metadata"]
+"""Which of a placement's durable mask files: the generated baseline, the
+seller's edited mask, or the metadata binding both to the main photo."""
+
+_MASK_FILES: Mapping[MaskSource, str] = {
+    "automatic": layout.AUTOMATIC_MASK_FILE,
+    "edited": layout.EDITED_MASK_FILE,
+    "metadata": layout.MASK_METADATA_FILE,
+}
 
 
 @dataclass(frozen=True)
@@ -956,16 +968,9 @@ class Workspace:
         return self.resolve(directory.relative_to(self.root).as_posix(), self.root)
 
     def template_mask_file(
-        self, template: str, placement_id: str | None = None, *, source: str = "edited"
+        self, template: str, placement_id: str | None = None, *, source: MaskSource = "edited"
     ) -> Path:
-        if source not in ("automatic", "edited", "metadata"):
-            raise ValueError("Unknown mask source")
-        filename = {
-            "automatic": layout.AUTOMATIC_MASK_FILE,
-            "edited": layout.EDITED_MASK_FILE,
-            "metadata": layout.MASK_METADATA_FILE,
-        }[source]
-        return self.template_mask_dir(template, placement_id) / filename
+        return self.template_mask_dir(template, placement_id) / _MASK_FILES[source]
 
     def template_brush_history(self, template: str, placement_id: str | None = None) -> Path:
         # Validate both names through the durable location's accessor.

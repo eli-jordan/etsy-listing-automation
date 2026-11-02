@@ -54,7 +54,7 @@ def read_settings(request: Request) -> WorkspaceSettingsResponse:
 @router.patch(
     "",
     response_model=WorkspaceSettingsResponse,
-    responses={409: {"model": SettingsSaveRefusal}, 422: {"model": SettingsSaveRefusal}},
+    responses={412: {"model": SettingsSaveRefusal}, 422: {"model": SettingsSaveRefusal}},
 )
 def edit_settings(
     request: Request, body: WorkspaceSettingsPatch
@@ -77,7 +77,7 @@ def edit_settings(
         )
     except SettingsRevisionConflictError as exc:
         return JSONResponse(
-            status_code=409,
+            status_code=412,
             content=SettingsSaveRefusal(kind="conflict", message=str(exc)).model_dump(),
         )
     except InvalidSettingsEditError as exc:

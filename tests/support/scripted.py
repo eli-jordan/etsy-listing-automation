@@ -78,18 +78,29 @@ class Scripted:
             return answer.pop(0) if len(answer) > 1 else answer[0]
         return answer
 
-    def text(self, message: str, *, default: str = "") -> str | None:
+    def text(
+        self, message: str, *, default: str = "", host: prompts.PromptHost | None = None
+    ) -> str | None:
         """``None`` is what a real prompt returns when the user cancels, so
         that is what it means here too -- not "fall back to the default"."""
         self.defaults_offered[message] = default
         answer = self._answer(message)
         return None if answer is None else str(answer)
 
-    def confirm(self, message: str, *, default: bool = False) -> bool | None:
+    def confirm(
+        self, message: str, *, default: bool = False, host: prompts.PromptHost | None = None
+    ) -> bool | None:
         answer = self._answer(message)
         return None if answer is None else bool(answer)
 
-    def choose(self, message: str, rows: Sequence[str], *, marker_hint: str = "") -> str | None:
+    def choose(
+        self,
+        message: str,
+        rows: Sequence[str],
+        *,
+        marker_hint: str = "",
+        host: prompts.PromptHost | None = None,
+    ) -> str | None:
         listed = list(rows)
         self.rows_offered[message] = listed
         wanted = self._answer(message)

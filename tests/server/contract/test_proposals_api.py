@@ -33,6 +33,7 @@ from tests.support.ai_runs import (
     wait_for,
 )
 from tests.support.builders import FIXTURE_LISTING as LISTING
+from tests.support.clients import FakeClients
 
 PROPOSAL = f"/api/listings/{LISTING}/proposal"
 RESOLUTION = f"{PROPOSAL}/resolution"
@@ -62,7 +63,7 @@ def ai_client(workspace: Workspace, provider: ChainProvider) -> Iterator[TestCli
     app = create_app(
         workspace,
         seo_provider_factory=lambda _workspace, _ai: [provider],
-        market_client_factory=lambda _workspace: market,
+        clients=FakeClients(etsy_market=market).factories(),
     )
     with TestClient(app) as test_client:
         yield test_client
@@ -178,13 +179,13 @@ def test_a_section_can_be_reopened(client: TestClient, workspace: Workspace) -> 
     assert _resolve(client, generated_at, lead="pending").json()["resolution"]["lead"] == "pending"
 
 
-def test_resolving_a_regenerated_proposal_is_409(client: TestClient, workspace: Workspace) -> None:
+def test_resolving_a_regenerated_proposal_is_412(client: TestClient, workspace: Workspace) -> None:
     first = _saved(workspace)
     _saved(workspace, generated_at=TODAY + timedelta(minutes=5))
 
     response = _resolve(client, first, title="accepted")
 
-    assert response.status_code == 409
+    assert response.status_code == 412
     assert client.get(PROPOSAL).json()["resolution"]["title"] == "pending"
 
 

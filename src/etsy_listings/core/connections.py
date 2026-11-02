@@ -148,24 +148,38 @@ def _etsy_app_key_source(root: Path) -> Callable[[], EtsyAppKey]:
     return app_key
 
 
-def etsy_transport(root: Path) -> EtsyTransport:
-    """Resolve the app key and signed-in bearer on each request."""
-    return EtsyTransport(_etsy_app_key_source(root), bearer=etsy_token_store(root).access_token)
+def etsy_transport(
+    root: Path, *, http: httpx.Client | None = None, oauth: OAuthFactory = OAuthClient
+) -> EtsyTransport:
+    """Resolve the app key and signed-in bearer on each request.
+
+    ``http`` and ``oauth`` replace the sockets for Etsy's API and its token
+    endpoint, for a test that keeps this wiring and scripts only the network.
+    """
+    return EtsyTransport(
+        _etsy_app_key_source(root),
+        bearer=etsy_token_store(root, oauth=oauth).access_token,
+        client=http,
+    )
 
 
-def etsy_listing_client(root: Path) -> EtsyListingClient:
+def etsy_listing_client(
+    root: Path, *, http: httpx.Client | None = None, oauth: OAuthFactory = OAuthClient
+) -> EtsyListingClient:
     """Build the listing connection without demanding credentials."""
-    return HttpEtsyListingClient(etsy_transport(root))
+    return HttpEtsyListingClient(etsy_transport(root, http=http, oauth=oauth))
 
 
-def etsy_shop_client(root: Path) -> EtsyShopClient:
+def etsy_shop_client(
+    root: Path, *, http: httpx.Client | None = None, oauth: OAuthFactory = OAuthClient
+) -> EtsyShopClient:
     """Unscoped lookups, adding a bearer only if one exists at request time."""
-    store = etsy_token_store(root)
+    store = etsy_token_store(root, oauth=oauth)
 
     def bearer() -> str | None:
         return store.access_token() if store.load() is not None else None
 
-    return HttpEtsyShopClient(EtsyTransport(_etsy_app_key_source(root), bearer=bearer))
+    return HttpEtsyShopClient(EtsyTransport(_etsy_app_key_source(root), bearer=bearer, client=http))
 
 
 def etsy_market_client(root: Path, *, http: httpx.Client | None = None) -> EtsyMarketClient:

@@ -90,10 +90,11 @@ from etsy_listings.core.preparation.scene_cache import SceneCache, photo_digest,
 from etsy_listings.core.preparation.scenes import Composition, PreparedLayer, lease_scene
 from etsy_listings.core.render.config import (
     AnyTemplate,
+    BoundingBox,
     MarigoldAppearance,
-    MarigoldRenderer,
     PhotoWarpRenderer,
     RenderConfig,
+    scene_boxes,
     scene_colours,
     scene_layers,
 )
@@ -164,10 +165,45 @@ class ResolvedLayer:
     """The design file's content hash -- the layer's design identity (ADR-0053).
     Not its ref and not a ``design:`` key, so a renamed file or a reshaped
     map that prints the same bytes hashes the same."""
-    cfg: RenderConfig
-    # Prepared scenes use only this geometry for swatches. Their material
-    # passes consume accepted maps and scene appearance, never Photo warp.
+    bounding_box: BoundingBox
+    """Where the layer prints on the photo, whichever renderer draws it: the
+    swatch every scene samples, and Photo warp's homography target."""
     placement_id: str | None = None
+
+
+@dataclass(frozen=True)
+class PhotoWarpRender:
+    """A scene the pure Photo warp passes draw: one frozen
+    :class:`RenderConfig` per layer, in paint order, which is all of the
+    template that decides its pixels besides the photo and artwork."""
+
+    configs: tuple[RenderConfig, ...]
+
+    @property
+    def wants_height(self) -> bool:
+        return any(cfg.displace.enabled for cfg in self.configs)
+
+    @property
+    def wants_luminance(self) -> bool:
+        return any(cfg.shade.enabled for cfg in self.configs)
+
+
+@dataclass(frozen=True)
+class PreparedRender:
+    """A scene drawn from the template's accepted durable maps (ADR-0054), as
+    ``desired()`` leased them. ``identity`` is the pixel identity computed from
+    the decoded photo, artwork, maps and appearance; ``apply()`` leases again
+    and refuses when it no longer matches."""
+
+    inputs: PreparationInputs
+    appearance: MarigoldAppearance
+    identity: str
+    map_content: str
+    """The accepted generation's content digest, recorded in the recipe."""
+
+
+SceneRender = PhotoWarpRender | PreparedRender
+"""How one scene's pixels are made: the template's renderer, resolved."""
 
 
 @dataclass(frozen=True)
@@ -199,18 +235,7 @@ class SceneWork:
     template name otherwise (one photo, one map)."""
     layers: tuple[ResolvedLayer, ...]
     output: Path
-    preparation: PreparationInputs | None = None
-    appearance: MarigoldAppearance | None = None
-    render_identity: str | None = None
-    map_content: str | None = None
-
-    @property
-    def wants_height(self) -> bool:
-        return any(layer.cfg.displace.enabled for layer in self.layers)
-
-    @property
-    def wants_luminance(self) -> bool:
-        return any(layer.cfg.shade.enabled for layer in self.layers)
+    render: SceneRender
 
     def recipe(self) -> dict[str, object]:
         """The part of this scene that decides its pixels, for the input hash.
@@ -222,35 +247,40 @@ class SceneWork:
         enters: a path is not a hash. Prepared scenes record accepted map
         content and appearance here; their canonical pixel identity also
         contains ordered artwork and the target photo (ADR-0054).
+
+        Every lockfile records this as ``scene_config``, so its shape and key
+        order are fixed: a changed byte re-renders every listing.
         """
-        if self.appearance is not None:
-            return {
-                "template": self.template,
-                "kind": self.kind,
-                "renderer": "marigold",
-                "map_content": self.map_content,
-                "appearance": self.appearance.model_dump(mode="json"),
-                "layers": [
-                    {
-                        "placement_id": layer.placement_id,
-                        "design_hash": layer.design_hash,
-                        "colour": layer.colour,
-                    }
-                    for layer in self.layers
-                ],
-            }
-        return {
-            "template": self.template,
-            "kind": self.kind,
-            "layers": [
-                {
-                    "colour": layer.colour,
-                    "design_hash": layer.design_hash,
-                    "render_config": layer.cfg.canonical_json(),
+        match self.render:
+            case PreparedRender(appearance=appearance, map_content=map_content):
+                return {
+                    "template": self.template,
+                    "kind": self.kind,
+                    "renderer": "marigold",
+                    "map_content": map_content,
+                    "appearance": appearance.model_dump(mode="json"),
+                    "layers": [
+                        {
+                            "placement_id": layer.placement_id,
+                            "design_hash": layer.design_hash,
+                            "colour": layer.colour,
+                        }
+                        for layer in self.layers
+                    ],
                 }
-                for layer in self.layers
-            ],
-        }
+            case PhotoWarpRender(configs=configs):
+                return {
+                    "template": self.template,
+                    "kind": self.kind,
+                    "layers": [
+                        {
+                            "colour": layer.colour,
+                            "design_hash": layer.design_hash,
+                            "render_config": cfg.canonical_json(),
+                        }
+                        for layer, cfg in zip(self.layers, configs, strict=True)
+                    ],
+                }
 
     def inputs(self, relative: Callable[[Path], str]) -> tuple[str, ...]:
         """The files this scene reads: its designs (deduped, in layer order),
@@ -328,15 +358,17 @@ def scene_hash(desired: RenderDesired, work: SceneWork) -> str:
     :class:`RenderDesired` and two :class:`SceneWork` values by hand and
     changes one scene's inputs without touching the other's hash.
     """
-    if work.render_identity is not None:
-        return work.render_identity
-    return canonical_hash(
-        _scene_payload(
-            work,
-            template_hash=desired.template_hash,
-            base_hash=desired.base_hash,
-        )
-    )
+    match work.render:
+        case PreparedRender(identity=identity):
+            return identity
+        case PhotoWarpRender():
+            return canonical_hash(
+                _scene_payload(
+                    work,
+                    template_hash=desired.template_hash,
+                    base_hash=desired.base_hash,
+                )
+            )
 
 
 def _hash_token(digest: str) -> str:
@@ -455,20 +487,13 @@ refusal when that colour resolves to no file."""
 
 def _layer_specs(
     template_cfg: AnyTemplate, colour: str | None
-) -> list[tuple[str | None, str | None, RenderConfig]]:
-    """``(depicted colour, placement ID, render config)`` per layer, in paint
-    order. A prepared scene takes only each layer's geometry from the config,
-    since its material passes consume accepted maps, never Photo warp
-    (ADR-0054)."""
-    geometry = template_cfg
-    if isinstance(template_cfg.renderer, MarigoldRenderer):
-        geometry = template_cfg.model_copy(
-            update={"renderer": PhotoWarpRenderer(type="photo-warp")}
-        )
+) -> list[tuple[str | None, str | None, BoundingBox]]:
+    """``(depicted colour, placement ID, bounding box)`` per layer, in paint
+    order -- the template's own geometry, whichever renderer draws it."""
     return [
-        (depicted, placement, cfg)
-        for (depicted, placement), (_, cfg) in zip(
-            scene_colours(template_cfg, colour), scene_layers(geometry, colour), strict=True
+        (depicted, placement, box)
+        for (depicted, placement), box in zip(
+            scene_colours(template_cfg, colour), scene_boxes(template_cfg), strict=True
         )
     ]
 
@@ -489,6 +514,57 @@ class _SceneRef:
     colour: str | None
 
 
+def _resolve_layers(ref: _SceneRef, design_for: DesignFor) -> list[ResolvedLayer] | Blocked:
+    layers = []
+    for layer_colour, placement_id, box in _layer_specs(ref.template_cfg, ref.colour):
+        design = design_for(layer_colour, ref.template_name)
+        if isinstance(design, Blocked):
+            return design
+        path, digest = design
+        layers.append(
+            ResolvedLayer(
+                colour=layer_colour,
+                design=path,
+                design_hash=digest,
+                bounding_box=box,
+                placement_id=placement_id,
+            )
+        )
+    return layers
+
+
+def _scene_render(
+    workspace: Workspace, ref: _SceneRef, photo: Path, layers: Sequence[ResolvedLayer]
+) -> SceneRender | Blocked:
+    """The template's renderer, resolved for this scene. A prepared scene
+    leases its accepted maps now, so the plan records the pixel identity
+    ``apply()`` must reproduce (ADR-0054)."""
+    renderer = ref.template_cfg.renderer
+    if isinstance(renderer, PhotoWarpRenderer):
+        return PhotoWarpRender(
+            configs=tuple(cfg for _, cfg in scene_layers(ref.template_cfg, ref.colour))
+        )
+    appearance = renderer.config.appearance
+    try:
+        with lease_scene(
+            workspace,
+            ref.template_name,
+            Composition(
+                base=load_template_base(photo),
+                layers=_prepared_layers(layers, load_design),
+                appearance=appearance,
+            ),
+        ) as scene:
+            return PreparedRender(
+                inputs=scene.inputs,
+                appearance=appearance,
+                identity=scene.identity,
+                map_content=scene.manifest.content_digest,
+            )
+    except ArtifactError as exc:
+        return Blocked(str(exc))
+
+
 def _resolve_scene(
     *,
     workspace: Workspace,
@@ -496,8 +572,8 @@ def _resolve_scene(
     design_for: DesignFor,
     ref: _SceneRef,
 ) -> SceneWork | Blocked:
-    template_name, template_cfg, colour = ref.template_name, ref.template_cfg, ref.colour
-    kind = template_cfg.kind
+    template_name, colour = ref.template_name, ref.colour
+    kind = ref.template_cfg.kind
     blocked = check_scene_colour(template_name, kind, colour)
     if blocked is not None:
         return blocked
@@ -507,43 +583,12 @@ def _resolve_scene(
     if blocked is not None:
         return blocked
 
-    layers = []
-    for layer_colour, placement_id, cfg in _layer_specs(template_cfg, colour):
-        design = design_for(layer_colour, template_name)
-        if isinstance(design, Blocked):
-            return design
-        path, digest = design
-        layers.append(
-            ResolvedLayer(
-                colour=layer_colour,
-                design=path,
-                design_hash=digest,
-                cfg=cfg,
-                placement_id=placement_id,
-            )
-        )
-
-    preparation = None
-    appearance = None
-    identity = None
-    map_content = None
-    if isinstance(template_cfg.renderer, MarigoldRenderer):
-        appearance = template_cfg.renderer.config.appearance
-        try:
-            with lease_scene(
-                workspace,
-                template_name,
-                Composition(
-                    base=load_template_base(photo.path),
-                    layers=_prepared_layers(layers, load_design),
-                    appearance=appearance,
-                ),
-            ) as scene:
-                preparation = scene.inputs
-                map_content = scene.manifest.content_digest
-                identity = scene.identity
-        except ArtifactError as exc:
-            return Blocked(str(exc))
+    layers = _resolve_layers(ref, design_for)
+    if isinstance(layers, Blocked):
+        return layers
+    render = _scene_render(workspace, ref, photo.path, layers)
+    if isinstance(render, Blocked):
+        return render
     return SceneWork(
         key=_scene_key(template_name, colour),
         template=template_name,
@@ -554,10 +599,7 @@ def _resolve_scene(
         map_key=photo.map_key,
         layers=tuple(layers),
         output=workspace.render_file(listing, template_name, colour),
-        preparation=preparation,
-        appearance=appearance,
-        render_identity=identity,
-        map_content=map_content,
+        render=render,
     )
 
 
@@ -760,6 +802,44 @@ class _PreviewBatch:
                     future.result()
                     self._mark_ready(work)
                 submitter.submit(len(finished))
+
+
+@dataclass
+class _PhotoWarpWriter:
+    """Writes Photo warp scenes for one preview job or one whole apply.
+    ``designs`` memoises decoded artwork and its pixel identity across the
+    scenes it writes; the identity is computed from the arrays composed."""
+
+    workspace: Workspace
+    designs: dict[Path, tuple[RGBA, str]] = field(default_factory=dict)
+
+    def write(self, work: SceneWork, render: PhotoWarpRender, target: Path, base: RGB) -> None:
+        """Write a photo-warp scene from the scene cache, else compose and
+        store it."""
+        designs = self.designs
+        for layer in work.layers:
+            if layer.design not in designs:
+                pixels = load_design(layer.design)
+                designs[layer.design] = (pixels, artwork_identity(pixels))
+        layers = list(zip(work.layers, render.configs, strict=True))
+        identity = photo_warp_scene_identity(
+            photo_pixels=photo_digest(base),
+            layers=[(cfg, designs[layer.design][1]) for layer, cfg in layers],
+        )
+
+        def compose() -> bytes:
+            map_cache = DerivedMapCache(self.workspace.template_derived_dir(work.template))
+            image = render_scene(
+                base,
+                [Layer(design=designs[layer.design][0], cfg=cfg) for layer, cfg in layers],
+                height=map_cache.height(work.map_key, base) if render.wants_height else None,
+                luminance=(
+                    map_cache.luminance(work.map_key, base) if render.wants_luminance else None
+                ),
+            )
+            return encode_png(image, compression=PHOTO_WARP_PNG_COMPRESSION)
+
+        write_atomic(target, SceneCache(self.workspace).get_or_compose(identity, compose))
 
 
 class RenderStage(Stage[RenderDesired, RenderApplied, RenderLive]):
@@ -1005,52 +1085,42 @@ class RenderStage(Stage[RenderDesired, RenderApplied, RenderLive]):
     @staticmethod
     def _render_preview(workspace: Workspace, work: SceneWork, target: Path) -> None:
         """Render one preview job with caches local to its worker."""
-        if work.preparation is not None:
-            RenderStage._render_prepared(workspace, work, target)
-            return
-        RenderStage._render_photo_warp(
-            workspace, work, target, load_template_base(work.base_image), {}
-        )
+        match work.render:
+            case PreparedRender() as prepared:
+                RenderStage._render_prepared(workspace, work, prepared, target)
+            case PhotoWarpRender() as photo_warp:
+                _PhotoWarpWriter(workspace).write(
+                    work, photo_warp, target, load_template_base(work.base_image)
+                )
 
     @staticmethod
-    def _render_photo_warp(
-        workspace: Workspace,
-        work: SceneWork,
-        target: Path,
-        base: RGB,
-        designs: dict[Path, tuple[RGBA, str]],
+    def _write_scene(
+        work: SceneWork, preview: Path, base: RGB, photo_warp: _PhotoWarpWriter
     ) -> None:
-        """Write a photo-warp scene from the scene cache, else compose and
-        store it. ``designs`` memoises decoded artwork and its pixel identity
-        across scenes; the identity is computed from the arrays composed."""
-        for layer in work.layers:
-            if layer.design not in designs:
-                pixels = load_design(layer.design)
-                designs[layer.design] = (pixels, artwork_identity(pixels))
-        identity = photo_warp_scene_identity(
-            photo_pixels=photo_digest(base),
-            layers=[(layer.cfg, designs[layer.design][1]) for layer in work.layers],
-        )
-
-        def compose() -> bytes:
-            map_cache = DerivedMapCache(workspace.template_derived_dir(work.template))
-            image = render_scene(
-                base,
-                [Layer(design=designs[layer.design][0], cfg=layer.cfg) for layer in work.layers],
-                height=map_cache.height(work.map_key, base) if work.wants_height else None,
-                luminance=map_cache.luminance(work.map_key, base) if work.wants_luminance else None,
-            )
-            return encode_png(image, compression=PHOTO_WARP_PNG_COMPRESSION)
-
-        write_atomic(target, SceneCache(workspace).get_or_compose(identity, compose))
+        """Write one scene's render output for :meth:`apply`."""
+        match work.render:
+            case PreparedRender() as prepared:
+                RenderStage._render_prepared(
+                    photo_warp.workspace, work, prepared, work.output, preview=preview
+                )
+            case PhotoWarpRender() if preview.is_file():
+                # Promotion: the same bytes a fresh render would
+                # produce, already sitting there from an earlier `preview()`
+                # call. Keep the preview addressable while this apply is in
+                # progress: a refreshed deploy page still points at it.
+                _copy_preview(preview, work.output)
+            case PhotoWarpRender() as render:
+                photo_warp.write(work, render, work.output, base)
 
     @staticmethod
     def _render_prepared(
-        workspace: Workspace, work: SceneWork, target: Path, *, preview: Path | None = None
+        workspace: Workspace,
+        work: SceneWork,
+        render: PreparedRender,
+        target: Path,
+        *,
+        preview: Path | None = None,
     ) -> None:
-        assert work.preparation is not None
-        assert work.appearance is not None
-
         def inputs_changed() -> None:
             # S01 TRY301: the stage turns this into a block; the raise stays out of its try.
             raise ArtifactError("Render inputs changed; plan the listing again")
@@ -1062,11 +1132,11 @@ class RenderStage(Stage[RenderDesired, RenderApplied, RenderLive]):
                 Composition(
                     base=load_template_base(work.base_image),
                     layers=_prepared_layers(work.layers, load_design),
-                    appearance=work.appearance,
+                    appearance=render.appearance,
                 ),
-                expected=work.preparation,
+                expected=render.inputs,
             ) as scene:
-                if scene.identity != work.render_identity:
+                if scene.identity != render.identity:
                     inputs_changed()
                 if preview is not None and preview.is_file():
                     _copy_preview(preview, target)
@@ -1127,7 +1197,7 @@ class RenderStage(Stage[RenderDesired, RenderApplied, RenderLive]):
         hash is no longer current.
         """
         workspace = ctx.workspace
-        design_cache: dict[Path, tuple[RGBA, str]] = {}
+        photo_warp = _PhotoWarpWriter(workspace)
         outputs: dict[str, str] = {}
 
         for work in desired.works:
@@ -1135,20 +1205,11 @@ class RenderStage(Stage[RenderDesired, RenderApplied, RenderLive]):
             preview_path = workspace.preview_file(
                 desired.listing, work.template, work.colour, _hash_token(scene_hash(desired, work))
             )
-            if work.preparation is not None:
-                self._render_prepared(workspace, work, work.output, preview=preview_path)
-            elif preview_path.is_file():
-                # Promotion: the same bytes a fresh render would
-                # produce, already sitting there from an earlier `preview()`
-                # call. Keep the preview addressable while this apply is in
-                # progress: a refreshed deploy page still points at it.
-                _copy_preview(preview_path, work.output)
-            else:
-                self._render_photo_warp(workspace, work, work.output, base, design_cache)
+            self._write_scene(work, preview_path, base, photo_warp)
             outputs[desired.relative(work.output)] = hash_file(work.output)
 
             swatches: tuple[Swatch, ...] = tuple(
-                sample_swatch(base, layer.cfg.bounding_box) for layer in work.layers
+                sample_swatch(base, layer.bounding_box) for layer in work.layers
             )
             ctx.emit(f"rendered {work.key}", swatches=swatches)
 
@@ -1175,7 +1236,7 @@ class RenderStage(Stage[RenderDesired, RenderApplied, RenderLive]):
         artwork, target pixels and appearance. Mixed galleries retain each
         scene's own identity. No clock, runtime or provenance enters either.
         """
-        if any(work.render_identity is not None for work in desired.works):
+        if any(isinstance(work.render, PreparedRender) for work in desired.works):
             return canonical_hash(
                 {"scenes": {work.key: scene_hash(desired, work) for work in desired.works}}
             )

@@ -21,7 +21,6 @@ import hashlib
 import re
 import uuid
 from collections.abc import Iterable, Iterator
-from contextlib import nullcontext
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path, PurePosixPath
@@ -34,8 +33,8 @@ from etsy_listings.core.batches.records import StagingRow, StagingSession, Stagi
 from etsy_listings.core.config.errors import ConfigLoadError
 from etsy_listings.core.config.listing_validation import check_design_resolution
 from etsy_listings.core.config.slug import slugify
-from etsy_listings.core.errors import UserFacingError
-from etsy_listings.core.listing_templates import FrozenListingTemplate, TemplateLock
+from etsy_listings.core.errors import RefusedError
+from etsy_listings.core.listing_templates import FrozenListingTemplate
 from etsy_listings.core.workspace.atomic import read_bytes_retrying
 from etsy_listings.core.workspace.trees import remove_tree
 from etsy_listings.core.workspace.workspace import Workspace
@@ -51,7 +50,7 @@ _CHUNK = 1024 * 1024
 _UNDO = "Nothing was uploaded or changed."
 
 
-class StagingRefusedError(UserFacingError, ValueError):
+class StagingRefusedError(RefusedError):
     """The upload as a whole cannot be staged. ``message`` says why, the page
     heading it *... was not staged*; ``remedy`` says how to fix it and always
     ends by saying nothing was kept (UI doc §4)."""
@@ -233,7 +232,6 @@ def stage_pngs(
     uploads: Iterable[Upload],
     *,
     now: datetime | None = None,
-    template_lock: TemplateLock = lambda _: nullcontext(),
 ) -> StagingSession:
     """Stage ``uploads`` against ``listing_template``, or raise
     :class:`StagingRefusedError` with nothing left on disk.
@@ -247,7 +245,7 @@ def stage_pngs(
     directory = workspace.staging_dir(session)
     try:
         frozen = FrozenListingTemplate.capture(
-            workspace, listing_template, workspace.staging_template_dir(session), lock=template_lock
+            workspace, listing_template, workspace.staging_template_dir(session)
         )
         template = frozen.template
         try:

@@ -26,7 +26,7 @@ from pathlib import Path
 
 from etsy_listings.core.config.listing_template import ListingTemplate
 from etsy_listings.core.config.listing_validation import Issue
-from etsy_listings.core.errors import UserFacingError
+from etsy_listings.core.errors import ConflictError, UserFacingError
 from etsy_listings.core.listing_templates.check import check_listing_template_files
 from etsy_listings.core.workspace import layout
 from etsy_listings.core.workspace.facts import WorkspaceFacts
@@ -46,7 +46,7 @@ class UnreadableAssetError(UserFacingError, ValueError):
         super().__init__(f"{ref} cannot be copied into the listing template: {detail}")
 
 
-class ListingTemplateExistsError(UserFacingError, ValueError):
+class ListingTemplateExistsError(ConflictError, ValueError):
     def __init__(self, name: str) -> None:
         self.name = name
         super().__init__(f"a listing template already exists named {name!r}")

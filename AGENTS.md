@@ -12,7 +12,8 @@ requirements, guides, research and decisions.
 src/etsy_listings/
   core/ transport-independent backend; no FastAPI, Typer or terminal/prompt imports
     workspace/ root discovery, path resolution, the only code that knows the directory layout;
-      listing_documents.py is the only way to read/edit/write listing.yaml, and owns each listing's lock
+      locks.py the process-wide keyed locks (listing, mockup-template, listing-template);
+      listing_documents.py is the only way to read/edit/write listing.yaml, and takes each listing's lock
     config/ pydantic models, Money, slugs, listing_validation.py (every local refusal),
       artwork.py (ADR-0053: which file each garment colour prints; every reader asks it)
     engine/ Stage protocol, Change vocabulary, lockfile, plan/apply/run, lifecycle, stages/
@@ -25,7 +26,7 @@ src/etsy_listings/
     batches/ staging, naming, archive inspection and ordinary listing creation
     application/ operations shared by server and CLI, one module per workflow, no re-exports: listing reads, edits,
       creation, rename/delete, pricing plans; calibrator (mockup_templates), listing-template library, batch staging
-      and workflow; the wizards' credentials, workspace_setup, shop_discovery, garment_profiles; workspace_locks (templates);
+      and workflow; the wizards' credentials, workspace_setup, shop_discovery, garment_profiles;
       deploy/ (Deployments) and ai/ (AiCoordinator) run coordinators; dependencies.py host seams; refusals.py
     listing_artifacts.py moves/removes everything keyed by a listing name (dir, renders, previews, snapshot, proposal)
     connections.py errors.py client wiring, UserFacingError
@@ -61,7 +62,7 @@ uv run pytest --cov # coverage, enforcing the 85% branch floor
 uv run pytest --cov --cov-report=html # then open htmlcov/index.html
 uv run pytest -m e2e # env-gated e2e layer (real shop, see Testing)
 uv run pytest -m browser # playwright browser tests (opt-in captures excluded)
-uv run pytest -m capture # opt-in: calibrator (tests/browser/_screenshots/ or $CALIBRATOR_SCREENSHOT_DIR) and Marigold ($MARIGOLD_SCREENSHOT_DIR) review screenshots
+uv run pytest -m capture # opt-in: calibrator (tests/browser/_screenshots/ or $CALIBRATOR_SCREENSHOT_DIR) and Marigold ($MARIGOLD_SCREENSHOT_DIR) review screenshots, and the Admin journeys' dark pass ($ADMIN_SHOP|SETTINGS|PROVIDERS_SCREENSHOT_DIR; -m "browser or capture" for both themes)
 uv run pytest -m "not browser and not e2e" # hermetic layers (e.g. no chromium installed)
 uv run playwright install chromium # one-off, enables the browser layer
 uv run pytest --update-goldens # regenerate render goldens
@@ -118,7 +119,7 @@ The repo is `/home/Admin/code/etsy-listing-automation` in cygwin, `C:\cygwin64\h
 
 - `--root` / `ETSY_LISTINGS_ROOT` accept cygwin paths and translate them (`core/workspace/userpath.py`), so `--root` is declared `str`, not `Path`. Any new CLI option taking a user path needs the same treatment.
 - The cygwin pty is not a Windows console. prompt_toolkit cannot prompt (`NoConsoleScreenBufferError`), so all interactive prompts go through `cli/prompts.py`'s plain-`input()` fallback — never call questionary directly. `isatty()` is False and the encoding is cp1252; `terminal.adopt_declared_encoding()` trusts `LANG`, `FORCE_COLOR` opts colour back in.
-- A cygwin-only binary (e.g. `fzf`, a shebang script) is invisible to `shutil.which`. `cli/prompts.py` falls back to cygwin's `sh.exe`; any new external-command dependency needs the same two-step lookup.
+- A cygwin-only binary (e.g. `fzf`, a shebang script) is invisible to `shutil.which`. `cli/prompts.py` falls back to cygwin's `sh.exe`; any new external-command dependency needs the same two-step lookup. Find and run commands through an injected `core/ai/host.py` `CliHost`/`CommandHost`, not `shutil`/`subprocess` directly.
 - `core.fileMode` is false in this repo. Leave it; do not commit mode-only changes. `LF → CRLF` warnings are noise.
 - Synced workspaces (Google Drive) mark directories read-only and Windows then refuses `os.rmdir`. Use `remove_tree` (`core/workspace/trees.py`), not `shutil.rmtree`, for any tree this tool owns.
 </important>
@@ -128,7 +129,7 @@ The repo is `/home/Admin/code/etsy-listing-automation` in cygwin, `C:\cygwin64\h
 - OpenCV and Pillow are **pinned to exact versions**: renders are hashed and compared to goldens, and a bump that shifts output bytes re-uploads every listing's images. Do not loosen the pins.
 - Check Typer and Click compatibility together when changing either. Current
   constraints and resolved versions live in `pyproject.toml` and `uv.lock`.
-- Node (any current LTS) is only needed for frontend work, not for installing the package.
+- Node 24 is only needed for frontend work, not for installing the package. CI pins it: Node 26 (the LTS since late 2026) ships its own global `localStorage`, which shadows jsdom's, so the Vitest `dom` tests that use it fail there. Move the pin only after those tests pass on the newer Node.
 </important>
 
 <important if="you are adding or changing engine stages, hashing, rendering, workspace paths, credentials or clients, or prompts">
@@ -141,7 +142,7 @@ Read the **Invariants** section of [docs/architecture.md](docs/architecture.md) 
 Layers (`ADR-0010`): unit, golden (per-pass and end-to-end renders), behaviour (in-memory fake clients), browser (`-m browser`, playwright over the built SPA), contract (cassette replay through real httpx), e2e (`-m e2e`), plus Vitest for the frontend.
 
 - Use a **fake** to test behaviour and a **cassette** to test payload shape; do not ask either to do the other's job.
-- A test file has one subject. Shared doubles live in `tests/support/` (`builders`, `scripted`, `doubles`, `http`) — look there before writing another `fake_run` closure.
+- A test file has one subject. Shared doubles live in `tests/support/` (`builders`, `scripted`, `doubles`, `http`, `cli_host`) — look there before writing another `fake_run` closure; `cli_host.ScriptedCliHost` stands in for every `which`/`subprocess` call.
 - Golden failures should name the guilty render pass. Regenerate with `--update-goldens` only after looking at the diff.
 - No real design files or photography in the repo; `scripts/generate_test_assets.py` generates deterministic synthetic assets.
 - The browser layer runs in a normal `pytest` but skips if playwright, chromium or `src/ui/dist` is missing. Assert through observable effects (decoded PNG size, the `template.yaml` Save wrote), not internal state.
@@ -158,7 +159,7 @@ E2E_REAL_AI=1 ETSY_LISTINGS_ROOT=/path/to/workspace uv run pytest -m e2e tests/e
 ETSY_LISTINGS_ROOT=/path/to/workspace uv run pytest -m e2e tests/e2e/test_phase3_publish_e2e.py::test_the_full_cycle_from_nothing_to_a_media_complete_draft # the Phase 3 journey alone
 ```
 
-Run it locally before merging rather than iterating through CI. `gh workflow run e2e --ref <branch>` re-runs just that workflow. If CI's Etsy sign-in goes stale (refresh tokens rotate on use), run `etsy-listings auth etsy` locally and update the `ETSY_TOKENS_JSON` secret.
+Before merging, run it on GitHub Actions, not locally: once CI is green, `gh workflow run e2e --ref <branch>` and wait for it to pass. Run one e2e workflow at a time: Etsy rotates the refresh token on every use, so two concurrent runs race and the loser fails with `invalid_grant`. If CI's Etsy sign-in goes stale (refresh tokens rotate on use), run `etsy-listings auth etsy` locally and update the `ETSY_TOKENS_JSON` secret.
 </important>
 
 <important if="you are adding code that changes test coverage, or a coverage gate fails">

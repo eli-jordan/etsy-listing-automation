@@ -7,7 +7,7 @@ plan, PR 8).
 GET /api/listings/{name}/ai-seo/readiness -> SeoReadinessResponse
 GET /api/listings/{name}/market -> MarketSnapshot | 404
 GET /api/listings/{name}/proposal -> ListingProposal | 404
-PATCH /api/listings/{name}/proposal/resolution -> ListingProposal | 404 | 409
+PATCH /api/listings/{name}/proposal/resolution -> ListingProposal | 404 | 412
 ```
 
 Generation itself is an AI run (``core/application/ai/``, served by
@@ -34,9 +34,6 @@ from etsy_listings.core.application.ai.listing_proposals import (
 from etsy_listings.core.application.refusals import (
     ListingDeployingError,
     ListingDraftingInBatchError,
-    ListingMissingError,
-    ProposalMissingError,
-    ProposalReplacedError,
 )
 from etsy_listings.core.market import snapshot as market_snapshot
 from etsy_listings.core.market.snapshot import MarketSnapshot
@@ -107,10 +104,7 @@ def get_listing_proposal(
     proposals*), with which sections were resolved and whether it has gone
     stale. Written by every AI run before it announces the proposal, so a
     reload, a server restart or a batch run all find it here."""
-    try:
-        return read_proposal(target.workspace, _proposals(request), target.name)
-    except (ListingMissingError, ProposalMissingError) as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return read_proposal(target.workspace, _proposals(request), target.name)
 
 
 @router.patch(
@@ -118,7 +112,7 @@ def get_listing_proposal(
     response_model=ListingProposal,
     responses={
         404: {"description": "No such listing, or no proposal cached for it"},
-        409: {"description": "The proposal was regenerated since the page read it"},
+        412: {"description": "The proposal was regenerated since the page read it"},
     },
 )
 def resolve_listing_proposal(
@@ -132,16 +126,11 @@ def resolve_listing_proposal(
     records only that the section was dealt with. Under the listing's write
     lock, so a delete or rename cannot land between the read and the write
     and leave a record behind for a listing that is gone."""
-    try:
-        return resolve_proposal(
-            target.workspace,
-            _proposals(request),
-            target.name,
-            ProposalResolution(
-                generated_at=body.generated_at, title=body.title, tags=body.tags, lead=body.lead
-            ),
-        )
-    except (ListingMissingError, ProposalMissingError) as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
-    except ProposalReplacedError as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return resolve_proposal(
+        target.workspace,
+        _proposals(request),
+        target.name,
+        ProposalResolution(
+            generated_at=body.generated_at, title=body.title, tags=body.tags, lead=body.lead
+        ),
+    )

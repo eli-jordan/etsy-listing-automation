@@ -93,8 +93,10 @@ Publication registers an owner before exposing staging, writes and validates the
 complete set, moves the immutable directory and replaces the current pointer
 under the template lock. Failure before that pointer preserves its predecessor.
 Reader leases hold one generation through rendering. Cleanup protects current
-maps, active publishers/readers and durable job references supplied by the
-coordinator. Workspace owns all directory conventions and Windows-safe removal.
+maps and active publishers/readers. A job's journal does not retain a generation:
+a job records its publication only once it completes, by which time the generation
+is either current or replaced, and an interrupted publisher finds its generation
+through the current pointer. Workspace owns all directory conventions and Windows-safe removal.
 Interrupted unreferenced staging and generations can be cleaned after restart.
 
 Explicit `saved_inputs(reset_masks_for_photo=True)` captures zero mask identity

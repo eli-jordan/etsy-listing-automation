@@ -23,6 +23,7 @@ from etsy_listings.server.api.app import create_app
 
 from tests.support.ai_runs import ChainProvider, proposal_payload, seed_prompts, seeded_market
 from tests.support.builders import FIXTURE_LISTING as LISTING
+from tests.support.clients import FakeClients
 
 PROPOSAL = f"/api/listings/{LISTING}/proposal"
 
@@ -33,7 +34,7 @@ def _server(root: Path, provider: ChainProvider) -> Iterator[TestClient]:
     app = create_app(
         Workspace.discover(root_override=root),
         seo_provider_factory=lambda _workspace, _ai: [provider],
-        market_client_factory=lambda _workspace: market,
+        clients=FakeClients(etsy_market=market).factories(),
     )
     with TestClient(app) as client:
         yield client

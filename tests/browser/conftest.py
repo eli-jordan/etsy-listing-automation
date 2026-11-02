@@ -88,6 +88,15 @@ def app_options() -> dict[str, Any]:
     return {}
 
 
+@pytest.fixture(params=["light", pytest.param("dark", marks=pytest.mark.capture)])
+def theme(request: pytest.FixtureRequest) -> str:
+    """The Admin journeys' colour scheme. The theme changes nothing a journey
+    asserts, so required runs prove the wiring once, in light. The dark pass
+    exists only for the review screenshots `ADMIN_*_SCREENSHOT_DIR` asks for,
+    so it is opt-in under `capture`; `-m "browser or capture"` runs both."""
+    return str(request.param)
+
+
 @pytest.fixture
 def calibrator_server(
     workspace_root: Path, prerequisite_missing, app_options: dict[str, Any]

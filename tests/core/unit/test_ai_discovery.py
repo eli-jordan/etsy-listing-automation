@@ -11,16 +11,13 @@ from tests.support.gates import GATE_TIMEOUT, Gate, workers
 
 
 @pytest.fixture
-def cli(monkeypatch):
-    cli = ModelCli()
-    monkeypatch.setattr("etsy_listings.core.ai.discovery.shutil.which", lambda name: name)
-    monkeypatch.setattr("etsy_listings.core.ai.discovery.run_managed", cli)
-    return cli
+def cli():
+    return ModelCli()
 
 
 def test_discovery_reads_catalogs_once_until_expiry_or_refresh(cli):
     now = [0.0]
-    discovery = ModelDiscovery(monotonic=lambda: now[0])
+    discovery = ModelDiscovery(monotonic=lambda: now[0], host=cli.host)
     first = discovery.read()
     assert [m.id for m in first.providers["codex"].models] == ["sol"]
     assert first.providers["codex"].models[0].efforts == ("high",)
@@ -44,7 +41,7 @@ def test_discovery_reads_catalogs_once_until_expiry_or_refresh(cli):
 
 def test_failure_retains_last_catalog_and_is_cached(cli):
     now = [0.0]
-    discovery = ModelDiscovery(monotonic=lambda: now[0])
+    discovery = ModelDiscovery(monotonic=lambda: now[0], host=cli.host)
     discovery.read()
     now[0] = 1800
     cli.failure = True
@@ -61,7 +58,7 @@ def test_failure_retains_last_catalog_and_is_cached(cli):
 )
 def test_changed_or_malformed_cli_formats_are_advisory_failures(cli, output):
     cli.codex = cli.grok = output
-    catalog = ModelDiscovery().read()
+    catalog = ModelDiscovery(host=cli.host).read()
     assert catalog.providers["codex"].problem
     assert catalog.providers["grok"].problem
 
@@ -73,13 +70,13 @@ def test_the_refresh_budget_is_shared_by_all_probes(cli):
         now[0] = 16.0
 
     cli.during = spend_budget
-    catalog = ModelDiscovery(monotonic=lambda: now[0]).read()
+    catalog = ModelDiscovery(monotonic=lambda: now[0], host=cli.host).read()
     assert cli.calls == [["codex", "debug", "models"]]
     assert catalog.providers["grok"].problem
 
 
 def test_busy_refresh_reads_keep_successful_choices_without_waiting_on_a_probe(cli):
-    discovery = ModelDiscovery()
+    discovery = ModelDiscovery(host=cli.host)
     first = discovery.read()
     gate = Gate("refresh")
     cli.during = lambda deadline, cancel: gate.hold()
@@ -105,7 +102,7 @@ def test_construction_starts_no_thread_and_stop_cancels_the_started_probe(cli):
 
     cli.during = until_cancelled
     before = set(threading.enumerate())
-    discovery = ModelDiscovery()
+    discovery = ModelDiscovery(host=cli.host)
     assert set(threading.enumerate()) == before
     assert cli.calls == []
     discovery.start()
@@ -127,7 +124,7 @@ def test_construction_starts_no_thread_and_stop_cancels_the_started_probe(cli):
 def test_shutdown_wait_is_bounded_even_if_a_process_substitute_ignores_cancellation(cli):
     gate = Gate("uncooperative external process")
     cli.during = lambda deadline, cancel: gate.hold()
-    discovery = ModelDiscovery()
+    discovery = ModelDiscovery(host=cli.host)
     discovery.start()
     try:
         gate.wait_entered()

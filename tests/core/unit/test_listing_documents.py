@@ -210,37 +210,8 @@ class TestWrite:
 
 
 class TestLock:
-    def test_every_documents_over_one_workspace_shares_the_lock(self, workspace_root: Path) -> None:
-        """The engine, the editor and batch creation each make their own."""
-        one = ListingDocuments(Workspace.discover(root_override=workspace_root))
-        other = ListingDocuments(Workspace.discover(root_override=workspace_root))
-        entered = threading.Event()
-
-        def take() -> None:
-            with other.lock(NAME):
-                entered.set()
-
-        with one.lock(NAME):
-            waiting = threading.Thread(target=take)
-            waiting.start()
-            assert not entered.wait(0.2)
-        waiting.join(timeout=5)
-        assert entered.is_set()
-
-    def test_names_differing_only_in_case_share_a_lock(self, documents: ListingDocuments) -> None:
-        """Windows makes them one directory."""
-        entered = threading.Event()
-
-        def take() -> None:
-            with documents.lock(NAME.upper()):
-                entered.set()
-
-        with documents.lock(NAME):
-            waiting = threading.Thread(target=take)
-            waiting.start()
-            assert not entered.wait(0.2)
-        waiting.join(timeout=5)
-        assert entered.is_set()
+    """Scope, case and name checks are the keyed locks' own
+    (``test_workspace_locks.py``)."""
 
     def test_a_holder_may_take_it_again(self, documents: ListingDocuments) -> None:
         """A rename holds the lock and moves the proposal, whose store takes
@@ -249,10 +220,6 @@ class TestLock:
             documents.edit(NAME, lambda raw: {**raw, "brief": "Nested."})
 
         assert documents.read(NAME)["brief"] == "Nested."
-
-    def test_refuses_a_name_that_is_not_a_path_segment(self, documents: ListingDocuments) -> None:
-        with pytest.raises(InvalidNameError), documents.lock("../escape"):
-            pass
 
 
 HAND_EDITED = """\

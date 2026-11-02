@@ -18,10 +18,11 @@ its proposal record (``ai/proposals.py``), its market snapshot write and its
 rename or removal (``listing_artifacts.py``). There is one lock per listing,
 so there is no order between two kinds of lock to get wrong. The locks are
 reentrant, so an operation that holds a listing's lock can call another that
-takes it. They are process-wide and keyed by the resolved workspace root, so
-every :class:`ListingDocuments` over one workspace shares them and one is
-cheap to make. They do not cover a second process, such as the CLI running
-beside the UI server, which nothing in the tool has ever guarded.
+takes it. They are the ``listing`` domain of :mod:`.locks`, process-wide and
+keyed by the resolved directory, so every :class:`ListingDocuments` over one
+workspace shares them and one is cheap to make. They do not cover a second
+process, such as the CLI running beside the UI server, which nothing in the
+tool has ever guarded.
 
 Two questions about a name have two answers, and each is answered only here.
 :meth:`ListingDocuments.exists` asks whether there is a document to read or
@@ -34,16 +35,16 @@ inherit another listing's remote ids.
 from __future__ import annotations
 
 import copy
-import threading
 from collections.abc import Callable, Iterator, Mapping
-from contextlib import ExitStack, contextmanager
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
 import yaml
 
 from etsy_listings.core.config.listing import Listing, canonical_document
-from etsy_listings.core.errors import UserFacingError
+from etsy_listings.core.errors import ConflictError, MissingError
+from etsy_listings.core.workspace import locks
 from etsy_listings.core.workspace.atomic import read_bytes_retrying, write_yaml_atomic
 from etsy_listings.core.workspace.workspace import Workspace
 
@@ -52,7 +53,7 @@ Document = dict[str, Any]
 :class:`Listing`. An edit must keep the keys it does not understand."""
 
 
-class ListingMissingError(UserFacingError, LookupError):
+class ListingMissingError(MissingError):
     """There is no ``listing.yaml`` by this name. Either there never was, or
     a rename or delete holding the listing's lock moved it first."""
 
@@ -61,17 +62,13 @@ class ListingMissingError(UserFacingError, LookupError):
         self.name = name
 
 
-class ListingNameTakenError(UserFacingError, ValueError):
+class ListingNameTakenError(ConflictError, ValueError):
     """A create or rename named a listing directory that already exists,
     with or without a ``listing.yaml`` in it."""
 
     def __init__(self, name: str) -> None:
         super().__init__(f"a listing already exists named {name!r}")
         self.name = name
-
-
-_GUARD = threading.Lock()
-_LOCKS: dict[tuple[str, str], threading.RLock] = {}
 
 
 class ListingDocuments:
@@ -92,14 +89,7 @@ class ListingDocuments:
         a single path segment raises ``InvalidNameError`` before any lock is
         taken.
         """
-        for each in (name, *more):
-            self._workspace.listing_dir(each)
-        root = str(self._workspace.root.resolve())
-        with ExitStack() as stack:
-            for key in sorted({key.casefold() for key in (name, *more)}):
-                with _GUARD:
-                    lock = _LOCKS.setdefault((root, key), threading.RLock())
-                stack.enter_context(lock)
+        with locks.hold(self._workspace, "listing", name, *more):
             yield
 
     def exists(self, name: str) -> bool:

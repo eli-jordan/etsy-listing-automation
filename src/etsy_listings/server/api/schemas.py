@@ -846,7 +846,7 @@ class SeoReadinessResponse(BaseModel):
 class ProposalResolutionPatch(BaseModel):
     """``PATCH /api/listings/{name}/proposal/resolution``: the sections to
     record, on the proposal generated at ``generated_at`` -- a regeneration
-    that landed meanwhile is a different proposal, and is a 409. ``pending``
+    that landed meanwhile is a different proposal, and is a 412. ``pending``
     reopens a section."""
 
     generated_at: datetime
@@ -1045,7 +1045,7 @@ class ShopPatchRequest(BaseModel):
 
 
 class ShopSaveRefusal(BaseModel):
-    """A 409 (``conflict``: reload, then edit again) or a 422 (``invalid``:
+    """A 412 (``conflict``: reload, then edit again) or a 422 (``invalid``:
     each refused dotted shop.yaml key to its reason). Nothing was written."""
 
     kind: Literal["conflict", "invalid"]

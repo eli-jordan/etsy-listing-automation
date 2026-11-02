@@ -32,6 +32,11 @@ Two modules, one job each.
     response, and a retryable status on a GET otherwise spends the policy's
     full backoff before an assertion that never needed to wait.
 
+``clients``
+    :class:`FakeClients`, the in-memory fakes behind ``create_app``'s
+    ``clients=`` seam. Routes build their Etsy and Printify clients through
+    it, so a test passes fakes there instead of patching ``connections``.
+
 Withheld deliberately: no builder for ``tests/core/unit/test_lock.py``. That file
 tests :class:`Lockfile` itself, and a unit test of a type should construct it
 directly -- routing it through a builder would mean the thing under test and

@@ -61,7 +61,6 @@ from etsy_listings.core.ai.models import (
     ProviderReadiness,
     RawProviderResult,
 )
-from etsy_listings.core.ai.process import run_managed
 
 PROVIDER_NAME = "claude"
 
@@ -99,7 +98,7 @@ class ClaudeProvider(cli_support.LocalCliProvider):
 
     @override
     def _check_authenticated(self) -> ProviderReadiness | None:
-        result = cli_support.auth_probe(self.binary, "auth")
+        result = cli_support.auth_probe(self.host, self.binary, "auth")
         if isinstance(result, ProviderReadiness):
             return result
         try:
@@ -117,7 +116,7 @@ class ClaudeProvider(cli_support.LocalCliProvider):
     def _check_capability(self) -> ProviderReadiness | None:
         # A local help probe checks advertised flags without spending a generation call.
         return cli_support.check_capability(
-            self.binary, ("-p", "--help"), _REQUIRED_HELP_FLAGS, "read-only/no-session"
+            self.host, self.binary, ("-p", "--help"), _REQUIRED_HELP_FLAGS, "read-only/no-session"
         )
 
     @override
@@ -144,7 +143,7 @@ class ClaudeProvider(cli_support.LocalCliProvider):
         if self.effort is not None:
             argv += ["--effort", self.effort]
 
-        result = run_managed(
+        result = self.host.run_managed(
             argv,
             cwd=self.workspace_root,
             input_text=prompt_text,

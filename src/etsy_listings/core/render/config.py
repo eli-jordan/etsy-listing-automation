@@ -25,6 +25,8 @@ from typing import Annotated, Any, Literal
 
 from pydantic import AfterValidator, BaseModel, ConfigDict, Field, TypeAdapter, model_validator
 
+from etsy_listings.core.errors import ConflictError
+
 
 class Point(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -131,7 +133,7 @@ AnyRenderer = PhotoWarpRenderer | MarigoldRenderer
 Renderer = Annotated[AnyRenderer, Field(discriminator="type")]
 
 
-class PreparationRequiredError(ValueError):
+class PreparationRequiredError(ConflictError, ValueError):
     """ADR-0054 forbids rendering Marigold through Photo warp."""
 
 
@@ -303,6 +305,16 @@ def scene_colours(template: AnyTemplate, colour: str | None) -> list[tuple[str |
     if isinstance(template, MultipleTemplate):
         return [(p.colour, p.id) for p in template.placements]
     return [(colour if isinstance(template, ColourMatrixTemplate) else template.colour, None)]
+
+
+def scene_boxes(template: AnyTemplate) -> list[BoundingBox]:
+    """Each layer's bounding box, in :func:`scene_layers`'s order, for any
+    renderer. Geometry is the template's own, so a prepared scene reads it
+    without building a Photo warp configuration it would never render
+    (ADR-0054)."""
+    if isinstance(template, MultipleTemplate):
+        return [p.bounding_box for p in template.placements]
+    return [template.bounding_box]
 
 
 TemplateConfig = Annotated[AnyTemplate, Field(discriminator="kind")]

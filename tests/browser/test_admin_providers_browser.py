@@ -62,11 +62,6 @@ def expect(browser_type):
     return playwright_expect
 
 
-@pytest.fixture(params=["light", "dark"])
-def theme(request: pytest.FixtureRequest) -> str:
-    return str(request.param)
-
-
 def capture(page, theme: str, state: str) -> None:
     if directory := os.environ.get("ADMIN_PROVIDERS_SCREENSHOT_DIR"):
         target = Path(directory)

@@ -31,6 +31,7 @@ from etsy_listings.server.api.app import create_app
 from tests.support.ai_runs import ChainProvider, seed_prompts, seeded_market, wait_for
 from tests.support.batches import LISTING_TEMPLATE, a_listing_template, png
 from tests.support.builders import a_context
+from tests.support.clients import FakeClients
 
 
 @pytest.fixture
@@ -53,7 +54,7 @@ def client(workspace: Workspace, provider: ChainProvider) -> Iterator[TestClient
     app = create_app(
         workspace,
         seo_provider_factory=lambda _workspace, _ai: [provider],
-        market_client_factory=lambda _workspace: market,
+        clients=FakeClients(etsy_market=market).factories(),
     )
     with TestClient(app) as client:
         yield client

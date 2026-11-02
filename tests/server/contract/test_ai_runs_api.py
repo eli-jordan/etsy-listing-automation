@@ -3,7 +3,7 @@ status codes, payloads, SSE framing and replay, reattaching, cancelling,
 and that an AI run never waits on the plan/apply worker.
 
 ``create_app`` is given the two injection seams, ``seo_provider_factory``
-and ``market_client_factory``, wired to a
+and ``clients`` (its ``etsy_market``), wired to a
 :class:`~tests.support.ai_runs.ChainProvider` and the in-memory Etsy market.
 The chain's own step sequences are ``test_ai_runner.py``'s; this file checks
 they reach the wire.
@@ -42,6 +42,7 @@ from tests.support.ai_runs import (
 )
 from tests.support.builders import FIXTURE_LISTING as LISTING
 from tests.support.builders import copy_listing, edit_listing
+from tests.support.clients import FakeClients
 
 
 def _context_factory(workspace: Workspace, on_event: EventSink | None) -> RunContext:
@@ -65,7 +66,7 @@ def _client(
         workspace,
         context_factory=_context_factory,
         seo_provider_factory=lambda _workspace, _ai: [provider],
-        market_client_factory=lambda _workspace: market,
+        clients=FakeClients(etsy_market=market).factories(),
     )
     with TestClient(app) as client:
         yield client

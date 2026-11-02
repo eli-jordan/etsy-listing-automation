@@ -7,24 +7,32 @@ names, paths and diagnostic provenance do not enter the content digest.
 from __future__ import annotations
 
 import hashlib
-import json
 import math
 import os
 import threading
 import weakref
 import zipfile
-from collections import OrderedDict
 from collections.abc import Callable, Iterator, Mapping
 from contextlib import ExitStack, contextmanager, suppress
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from types import MappingProxyType
-from typing import Any, ClassVar, Literal
+from typing import Annotated, Any, ClassVar, Literal
 from uuid import uuid4
 
 import numpy as np
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import (
+    BaseModel,
+    BeforeValidator,
+    ConfigDict,
+    Field,
+    SerializerFunctionWrapHandler,
+    ValidationError,
+    model_serializer,
+    model_validator,
+)
 
+from etsy_listings.core.bounded_cache import BoundedCache
 from etsy_listings.core.render.config import (
     AnyTemplate,
     BoundingBox,
@@ -43,7 +51,7 @@ from etsy_listings.core.workspace.calibration import (
 )
 from etsy_listings.core.workspace.file_version import file_version
 
-SCHEMA = 2
+SCHEMA: Literal[2] = 2
 MAX_PIXELS = 32 * 1024 * 1024
 MAX_DIMENSION = 8192
 MAX_POINTER_BYTES = 64 * 1024
@@ -194,14 +202,61 @@ class PlacementArtifact(Record):
     arrays: dict[str, ArrayDescriptor]
 
 
+def _exact_schema(value: object) -> object:
+    # JSON ``true`` and ``1.0`` are not schema 1.
+    if type(value) is not int:
+        raise ValueError("Map schema version must be an integer")
+    return value
+
+
+MapSchema = Annotated[Literal[1, 2], BeforeValidator(_exact_schema)]
+
+
+class MapPointer(Record):
+    """``_renderer/maps/current.json``: the accepted generation and the
+    checksum its manifest must have."""
+
+    schema_version: MapSchema
+    generation_id: str
+    manifest_checksum: str
+
+
+class Provenance(BaseModel):
+    """Who published a generation: diagnostics only, never numerical identity.
+
+    Unknown keys are ignored, so a diagnostic cannot invalidate a generation
+    whose numerical content is sound."""
+
+    model_config = ConfigDict(frozen=True, extra="ignore")
+    job_id: str | None = None
+    engine_version: str | None = None
+    installation_id: str | None = None
+
+    @model_serializer(mode="wrap")
+    def _recorded(self, handler: SerializerFunctionWrapHandler) -> dict[str, object]:
+        # Only the keys the publisher recorded, so a generation published
+        # without provenance still records ``{}``.
+        dumped: dict[str, object] = handler(self)
+        return {key: value for key, value in dumped.items() if key in self.model_fields_set}
+
+
 class Manifest(Record):
-    schema_version: Literal[1, 2] = 2
+    schema_version: MapSchema
     generation_id: PlacementId
     preparation_inputs: PreparationInputs
     semantics: dict[str, str]
     placements: tuple[PlacementArtifact, ...]
-    provenance: dict[str, Any] = Field(default_factory=dict)
+    provenance: Provenance = Field(default_factory=Provenance)
     content_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+
+_UNSUPPORTED = "Unsupported map schema; migrate or prepare the template again"
+
+
+def _unsupported(exc: ValidationError) -> bool:
+    """Whether ``exc`` refuses a record's schema version, which this version
+    cannot read, rather than the rest of its shape."""
+    return any(error["loc"] == ("schema_version",) for error in exc.errors())
 
 
 @dataclass(frozen=True)
@@ -477,49 +532,18 @@ def _check_payload(
 _READERS: dict[tuple[str, str], int] = {}
 
 
+def _maps_bytes(maps: Mapping[str | None, MaterialMaps]) -> int:
+    return sum(a.nbytes for m in maps.values() for a in arrays_of(m).values())
+
+
 # Cache validation proofs, never arrays. A status poll must not decompress and
 # hash hundreds of MiB while holding the calibration lock. Immutable generation
 # files are revalidated after replacement, writes, removal or process restart.
-_VALIDATED: OrderedDict[tuple[Any, ...], None] = OrderedDict()
-_VALIDATED_LOCK = threading.Lock()
-_VALIDATED_LIMIT = 128
+_VALIDATED: BoundedCache[tuple[Any, ...], bool] = BoundedCache(128)
 MAP_CACHE_BYTES = 512 * 1024 * 1024
-_MAPS: OrderedDict[tuple[Any, ...], tuple[Mapping[str | None, MaterialMaps], int]] = OrderedDict()
-
-
-class _MapBudget:
-    """Bytes retained by ``_MAPS``. A holder, so the cache can update it without ``global``."""
-
-    used = 0
-
-
-def _remember_maps(
-    signature: tuple[Any, ...],
-    maps: Mapping[str | None, MaterialMaps],
-    *,
-    previous: tuple[Any, ...] | None = None,
-) -> None:
-    size = sum(a.nbytes for m in maps.values() for a in arrays_of(m).values())
-    with _VALIDATED_LOCK:
-        for key in (signature, previous):
-            if key is not None and key in _MAPS:
-                _, removed = _MAPS.pop(key)
-                _MapBudget.used -= removed
-        if size > MAP_CACHE_BYTES:
-            return
-        while _MAPS and _MapBudget.used + size > MAP_CACHE_BYTES:
-            _, (_, removed) = _MAPS.popitem(last=False)
-            _MapBudget.used -= removed
-        _MAPS[signature] = maps, size
-        _MapBudget.used += size
-
-
-def _remember_validation(signature: tuple[Any, ...]) -> None:
-    with _VALIDATED_LOCK:
-        _VALIDATED[signature] = None
-        _VALIDATED.move_to_end(signature)
-        while len(_VALIDATED) > _VALIDATED_LIMIT:
-            _VALIDATED.popitem(last=False)
+_MAPS: BoundedCache[tuple[Any, ...], Mapping[str | None, MaterialMaps]] = BoundedCache(
+    MAP_CACHE_BYTES, size=_maps_bytes
+)
 
 
 def _no_checkpoint(_step: str) -> None:
@@ -535,7 +559,7 @@ class PublishOptions:
     coordinator uses it after freezing its private maps, and ordinary callers
     keep the default independent input snapshot."""
 
-    provenance: dict[str, Any] | None = None
+    provenance: Provenance = field(default_factory=Provenance)
     checkpoint: Callable[[str], None] = _no_checkpoint
     copy_maps: bool = True
 
@@ -552,7 +576,8 @@ class Artifacts:
     """One complete set in, one leased immutable set out.
 
     Template locks serialize pointer changes and reader ownership in the
-    single-server workspace model. Cleanup callers supply durable job references.
+    single-server workspace model. Cleanup keeps the current generation and
+    every one a publisher or reader has leased.
     """
 
     def __init__(self, workspace: Workspace) -> None:
@@ -595,27 +620,25 @@ class Artifacts:
                 if not _READERS[key]:
                     del _READERS[key]
 
-    def _pointer(self, name: str) -> dict[str, Any]:
+    def _pointer(self, name: str) -> MapPointer:
         path = self.workspace.template_map_current(name)
         if path.stat().st_size > MAX_POINTER_BYTES:
             raise ArtifactError("Invalid current map pointer")
-        value = json.loads(path.read_bytes())
-        if not isinstance(value, dict) or set(value) != {
-            "schema_version",
-            "generation_id",
-            "manifest_checksum",
-        }:
-            raise ArtifactError("Invalid current map pointer")
-        if type(value["schema_version"]) is not int or value["schema_version"] not in (1, SCHEMA):
-            raise UnsupportedSchemaError(
-                "Unsupported map schema; migrate or prepare the template again"
-            )
-        if not isinstance(value["generation_id"], str) or not isinstance(
-            value["manifest_checksum"], str
-        ):
-            raise ArtifactError("Invalid current map pointer; prepare the template again")
-        self.workspace.template_map_generation_dir(name, value["generation_id"])
-        return value
+        try:
+            pointer = MapPointer.model_validate_json(path.read_bytes())
+        except ValidationError as exc:
+            # A pointer missing or adding a key is damaged, whatever its schema.
+            reshaped = any(e["type"] in ("missing", "extra_forbidden") for e in exc.errors())
+            if _unsupported(exc) and not reshaped:
+                raise UnsupportedSchemaError(_UNSUPPORTED) from exc
+            raise ArtifactError("Invalid current map pointer; prepare the template again") from exc
+        self.workspace.template_map_generation_dir(name, pointer.generation_id)
+        return pointer
+
+    def _current(self, name: str) -> tuple[MapPointer, Manifest]:
+        """The current pointer and the validated manifest it names."""
+        pointer = self._pointer(name)
+        return pointer, self._read_manifest(name, pointer.generation_id, pointer.manifest_checksum)
 
     def _read_manifest(
         self, name: str, generation: str, checksum: str, *, staging: bool = False
@@ -623,16 +646,12 @@ class Artifacts:
         path = self.workspace.template_map_manifest(name, generation, staging=staging)
         if path.stat().st_size > 1024 * 1024 or file_checksum(path) != checksum:
             raise ArtifactError("Prepared manifest checksum mismatch")
-        document = json.loads(path.read_bytes())
-        if not isinstance(document, dict):
-            raise ArtifactError("Invalid prepared manifest; prepare the template again")
-        if type(document.get("schema_version")) is not int or document.get(
-            "schema_version"
-        ) not in (1, SCHEMA):
-            raise UnsupportedSchemaError(
-                "Unsupported map schema; migrate or prepare the template again"
-            )
-        manifest = Manifest.model_validate(document)
+        try:
+            manifest = Manifest.model_validate_json(path.read_bytes())
+        except ValidationError as exc:
+            if _unsupported(exc):
+                raise UnsupportedSchemaError(_UNSUPPORTED) from exc
+            raise ArtifactError("Invalid prepared manifest; prepare the template again") from exc
         if manifest.generation_id != generation or manifest.semantics != SEMANTICS:
             raise UnsupportedSchemaError("Unsupported map coordinate semantics")
         ids = [p.id for p in manifest.placements]
@@ -666,19 +685,14 @@ class Artifacts:
         """
         try:
             with self.calibration.lock(name):
-                pointer = self._pointer(name)
-                generation, checksum = pointer["generation_id"], pointer["manifest_checksum"]
-                manifest = self._read_manifest(name, generation, checksum)
+                pointer, manifest = self._current(name)
+                generation, checksum = pointer.generation_id, pointer.manifest_checksum
                 self._check_inputs(manifest, inputs, target_size)
                 signature = self._signature(name, manifest, checksum)
-                with _VALIDATED_LOCK:
-                    validated = signature in _VALIDATED
-                    if validated:
-                        _VALIDATED.move_to_end(signature)
-                if not validated:
+                if _VALIDATED.get(signature) is None:
                     manifest = self._load(name, generation, checksum).manifest
                 return manifest
-        except (OSError, ValueError, KeyError, TypeError) as exc:
+        except (OSError, ValueError) as exc:
             if isinstance(exc, ArtifactError):
                 raise
             raise ArtifactError("Invalid prepared generation; prepare the template again") from exc
@@ -707,11 +721,9 @@ class Artifacts:
     ) -> Acquired:
         manifest = self._read_manifest(name, generation, checksum, staging=staging)
         signature = self._signature(name, manifest, checksum, staging=staging)
-        with _VALIDATED_LOCK:
-            cached = _MAPS.get(signature)
-            if cached is not None:
-                _MAPS.move_to_end(signature)
-                return Acquired(manifest, cached[0])
+        cached = _MAPS.get(signature)
+        if cached is not None:
+            return Acquired(manifest, cached)
         if (
             sum(
                 math.prod(descriptor.shape) * 4
@@ -735,9 +747,9 @@ class Artifacts:
             raise ArtifactError("Prepared generation numerical identity mismatch")
         if self._signature(name, manifest, checksum, staging=staging) != signature:
             raise ArtifactError("Prepared files changed during validation")
-        _remember_validation(signature)
+        _VALIDATED.put(signature, value=True)
         frozen = MappingProxyType(maps)
-        _remember_maps(signature, frozen)
+        _MAPS.put(signature, frozen)
         return Acquired(manifest, frozen)
 
     def _read_placement(
@@ -800,7 +812,9 @@ class Artifacts:
                 for placement_id in ids
             )
             return PreparationInputs(
-                photo=PhotoIdentity.model_validate(self.calibration.photo_identity(name, config)),
+                photo=PhotoIdentity.model_validate(
+                    self.calibration.photo_identity(name, config).model_dump()
+                ),
                 placements=placements,
                 inference=config.renderer.config.inference,
             )
@@ -809,11 +823,8 @@ class Artifacts:
         """Each placement's evidence identity in the current generation; none
         when there is no readable generation."""
         try:
-            pointer = self._pointer(name)
-            manifest = self._read_manifest(
-                name, pointer["generation_id"], pointer["manifest_checksum"]
-            )
-        except (OSError, ValueError, KeyError, TypeError):
+            _, manifest = self._current(name)
+        except (OSError, ValueError):
             return {}
         return {p.id: p.evidence for p in manifest.preparation_inputs.placements}
 
@@ -832,9 +843,9 @@ class Artifacts:
     def _has_mask(self, name: str, placement_id: str | None, *, reset: bool) -> bool:
         if self.workspace.template_mask_file(name, placement_id).exists():
             return True
-        return reset and any(
-            self.workspace.template_mask_file(name, placement_id, source=source).exists()
-            for source in ("automatic", "metadata")
+        return reset and (
+            self.workspace.template_mask_file(name, placement_id, source="automatic").exists()
+            or self.workspace.template_mask_file(name, placement_id, source="metadata").exists()
         )
 
     def publish(
@@ -892,11 +903,12 @@ class Artifacts:
                 )
             )
         manifest = Manifest(
+            schema_version=SCHEMA,
             generation_id=generation,
             preparation_inputs=inputs,
             semantics=SEMANTICS,
             placements=tuple(entries),
-            provenance=provenance or {},
+            provenance=provenance,
             content_digest=_descriptor_digest(
                 {p.id: p.arrays for p in entries}, extents={p.id: p.extent for p in entries}
             ),
@@ -918,18 +930,16 @@ class Artifacts:
             final.parent.mkdir(parents=True, exist_ok=True)
             staging.rename(final)
             final_signature = self._signature(name, manifest, checksum)
-            _remember_validation(final_signature)
-            _remember_maps(final_signature, validated.maps, previous=staging_signature)
+            _VALIDATED.put(final_signature, value=True)
+            _MAPS.discard(staging_signature)
+            _MAPS.put(final_signature, validated.maps)
             checkpoint("generation")
+            pointer = MapPointer(
+                schema_version=SCHEMA, generation_id=generation, manifest_checksum=checksum
+            )
             write_bytes_atomic(
                 self.workspace.template_map_current(name),
-                json_bytes(
-                    {
-                        "schema_version": SCHEMA,
-                        "generation_id": generation,
-                        "manifest_checksum": checksum,
-                    }
-                ),
+                json_bytes(pointer.model_dump(mode="json")),
                 durable=True,
             )
             checkpoint("pointer")
@@ -949,10 +959,7 @@ class Artifacts:
             reused: dict[str | None, MaterialMaps] = {}
             try:
                 with self.calibration.lock(name):
-                    pointer = self._pointer(name)
-                    manifest = self._read_manifest(
-                        name, pointer["generation_id"], pointer["manifest_checksum"]
-                    )
+                    _, manifest = self._current(name)
                     accepted = manifest.preparation_inputs
                     unchanged: set[str | None] = set()
                     if (
@@ -966,7 +973,7 @@ class Artifacts:
                 if unchanged:
                     acquired = lease.enter_context(self.acquire(name, accepted))
                     reused = {key: acquired.maps[key].cropped_to_visibility() for key in unchanged}
-            except (OSError, ValueError, KeyError, TypeError):
+            except (OSError, ValueError):
                 pass
             yield MappingProxyType(reused)
 
@@ -976,20 +983,18 @@ class Artifacts:
     ) -> Iterator[Acquired]:
         try:
             with self.calibration.lock(name):
-                pointer = self._pointer(name)
-                generation = pointer["generation_id"]
-                key = self._key(name, generation)
+                pointer, manifest = self._current(name)
+                key = self._key(name, pointer.generation_id)
                 _READERS[key] = _READERS.get(key, 0) + 1
-        except (OSError, ValueError, KeyError, TypeError) as exc:
+        except (OSError, ValueError) as exc:
             if isinstance(exc, ArtifactError):
                 raise
             raise ArtifactError("Invalid prepared generation; prepare the template again") from exc
         try:
             try:
-                manifest = self._read_manifest(name, generation, pointer["manifest_checksum"])
                 self._check_inputs(manifest, inputs, target_size)
-                acquired = self._load(name, generation, pointer["manifest_checksum"])
-            except (OSError, ValueError, KeyError, TypeError) as exc:
+                acquired = self._load(name, pointer.generation_id, pointer.manifest_checksum)
+            except (OSError, ValueError) as exc:
                 if isinstance(exc, ArtifactError):
                     raise
                 raise ArtifactError(
@@ -1021,12 +1026,10 @@ class Artifacts:
     ) -> ReadinessReason:
         """The first relevant change since the accepted, immutable inputs."""
         try:
-            pointer = self._pointer(name)
-            accepted = self._read_manifest(
-                name, pointer["generation_id"], pointer["manifest_checksum"]
-            ).preparation_inputs
-        except (OSError, ValueError, KeyError, TypeError):
+            _, manifest = self._current(name)
+        except (OSError, ValueError):
             return exc.reason
+        accepted = manifest.preparation_inputs
         if accepted.photo != inputs.photo:
             return "photo_changed"
         if accepted.inference != inputs.inference:
@@ -1035,13 +1038,13 @@ class Artifacts:
             return "mask_changed"
         return exc.reason
 
-    def cleanup(self, name: str, *, retained_generations: set[str] | None = None) -> list[str]:
-        """Remove unreferenced generations; caller supplies all persisted job refs."""
+    def cleanup(self, name: str) -> list[str]:
+        """Remove every generation that is neither current nor leased."""
         removed = []
         with self.calibration.lock(name):
-            keep = set(retained_generations or ())
+            keep: set[str] = set()
             with suppress(FileNotFoundError):
-                keep.add(self._pointer(name)["generation_id"])
+                keep.add(self._pointer(name).generation_id)
             for staging in (False, True):
                 for generation in self.workspace.template_map_generations(name, staging=staging):
                     if generation in keep or _READERS.get(self._key(name, generation), 0):

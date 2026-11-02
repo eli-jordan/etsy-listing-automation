@@ -38,7 +38,7 @@ from etsy_listings.core.batches.records import Batch, BatchRow, BatchStore, Stag
 from etsy_listings.core.batches.staging import review, taken_for, workspace_names
 from etsy_listings.core.config.errors import ConfigLoadError
 from etsy_listings.core.config.listing_template import ListingTemplate
-from etsy_listings.core.errors import UserFacingError
+from etsy_listings.core.errors import ConflictError, UserFacingError
 from etsy_listings.core.listing_templates import FrozenListingTemplate
 from etsy_listings.core.workspace import layout
 from etsy_listings.core.workspace.atomic import write_bytes_atomic
@@ -47,7 +47,7 @@ from etsy_listings.core.workspace.listing_documents import ListingDocuments
 from etsy_listings.core.workspace.workspace import Workspace
 
 
-class ConfirmRefusedError(UserFacingError, ValueError):
+class ConfirmRefusedError(ConflictError, ValueError):
     """The session cannot become a batch yet, and nothing was written."""
 
 

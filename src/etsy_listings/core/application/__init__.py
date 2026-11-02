@@ -121,11 +121,6 @@ import names the module it depends on. Public interfaces:
     ``ReviewedPlanRefusedError``; the Shop tab's ``ShopRevisionConflictError`` and
     ``InvalidShopEditError``; the Settings tab's ``SettingsRevisionConflictError`` and
     ``InvalidSettingsEditError``.
-``workspace_locks``
-    ``WorkspaceLocks``: the per-listing-template write locks every
-    template check-then-write holds, one instance per application runtime;
-    ``mockup_template(workspace, name)`` uses calibration storage's independent
-    process-wide template lock for saved calibration and map publication.
 ``deploy``
     Deployment runs -- registry, FIFO executor and their event log; see the
     subpackage's own initialiser.
@@ -139,8 +134,10 @@ import names the module it depends on. Public interfaces:
 ``dependencies``
     The seams a host fills: ``EtsyStates`` (the UI process's Etsy state memo,
     which stays in the server), ``ContextFactory`` (a deployment run's
-    engine context) and ``MarketClientFactory`` / ``default_market_client``
-    (the AI runs' Etsy market client).
+    engine context), ``MarketClientFactory`` / ``default_market_client``
+    (the AI runs' Etsy market client) and ``ClientFactories`` /
+    ``DEFAULT_CLIENTS`` (every vendor client the server builds, that market
+    client among them).
 
 Every module above is public. The implementation-only modules are inside
 ``deploy`` (``executor``, ``review``) and ``ai`` (``runner``), named in

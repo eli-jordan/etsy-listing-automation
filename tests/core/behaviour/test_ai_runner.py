@@ -16,12 +16,12 @@ import json
 import shutil
 import threading
 from collections.abc import Callable, Iterator
+from functools import partial
 from pathlib import Path
 
 import pytest
 import yaml
 
-from etsy_listings.core.ai import cli_support, codex
 from etsy_listings.core.ai.errors import SeoTryAgainError
 from etsy_listings.core.ai.models import ProviderTask
 from etsy_listings.core.ai.process import ProcessResult
@@ -50,6 +50,7 @@ from tests.support.ai_runs import (
 )
 from tests.support.builders import FIXTURE_LISTING as LISTING
 from tests.support.builders import edit_listing, set_etsy_shop_id
+from tests.support.cli_host import ScriptedCliHost
 
 SELLER_BRIEF = "The seller's own words about the sunset design."
 
@@ -806,12 +807,11 @@ def test_provider_configuration_is_captured_before_the_run_thread_starts(chain: 
 
 @pytest.mark.parametrize("origin", ["manual", "batch"])
 def test_run_tasks_and_repairs_keep_preferences_and_the_next_run_sees_edits(
-    chain: Chain, monkeypatch: pytest.MonkeyPatch, origin
+    chain: Chain, origin
 ) -> None:
     edit_listing(chain.workspace.root, LISTING, brief="")
     settings = chain.workspace.settings_file()
     settings.write_text("ai:\n  providers: [{name: codex, model: old, effort: high}]\n")
-    chain.runner.providers = default_ai_providers
     chain.provider.answers["brief"] = ["{}", json.dumps({"brief": DRAFTED_BRIEF})]
     models = []
 
@@ -828,8 +828,8 @@ def test_run_tasks_and_repairs_keep_preferences_and_the_next_run_sees_edits(
         raw = chain.provider.generate(task, kwargs["deadline"])
         return ProcessResult(0, raw.raw_output, "", False, False)
 
-    monkeypatch.setattr(cli_support.shutil, "which", lambda name: name)
-    monkeypatch.setattr(codex, "run_managed", execute)
+    host = ScriptedCliHost(installed={"codex": "codex"}, managed={(): execute})
+    chain.runner.providers = partial(default_ai_providers, host=host)
     run = chain.registry.create(LISTING, draft_brief=True, origin=origin)
     assert isinstance(run, AiRun)
     chain.runner.start(run)

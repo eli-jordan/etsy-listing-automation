@@ -13,6 +13,8 @@ from typing import Any
 from etsy_listings.core.ai.models import Deadline
 from etsy_listings.core.ai.process import ProcessResult
 
+from tests.support.cli_host import ScriptedCliHost
+
 CODEX_MODELS = json.dumps(
     {
         "models": [
@@ -52,6 +54,12 @@ class ModelCli:
             timed_out=self.failure,
             cancelled=cancel_event.is_set(),
         )
+
+    @property
+    def host(self) -> ScriptedCliHost:
+        """A machine with both catalog CLIs on PATH under their own names,
+        every managed run answered by this catalog."""
+        return ScriptedCliHost(installed={"codex": "codex", "grok": "grok"}, managed={(): self})
 
 
 def local_cli(root: Path, script: str) -> Path:

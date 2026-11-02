@@ -153,7 +153,10 @@ def test_duplicate_save_returns_exact_response_and_conflicts_cannot_overwrite(
 ) -> None:
     import pytest
 
-    from etsy_listings.core.workspace.calibration import CalibrationConflictError
+    from etsy_listings.core.workspace.calibration import (
+        CalibrationChangedError,
+        CalibrationRequestReusedError,
+    )
 
     store = make_store(workspace_root)
     before = store.read("example")
@@ -168,11 +171,48 @@ def test_duplicate_save_returns_exact_response_and_conflicts_cannot_overwrite(
         {**before.config.model_dump(mode="json"), "renderer": {"type": "photo-warp", "config": {}}}
     )
     after = store.save("example", updated, expected_revision=result.revision, request_id="new")
-    with pytest.raises(CalibrationConflictError):
+    # An old revision is stale; the last request ID with other content is a reuse.
+    with pytest.raises(CalibrationChangedError):
         store.save("example", before.config, expected_revision=before.revision, request_id="same")
-    with pytest.raises(CalibrationConflictError):
+    with pytest.raises(CalibrationRequestReusedError):
         store.save("example", before.config, expected_revision=before.revision, request_id="new")
     assert store.read("example") == after
+
+
+def test_mask_edits_no_mask_could_take_are_refused_and_write_nothing(
+    workspace_root: Path,
+) -> None:
+    from io import BytesIO
+
+    from etsy_listings.core.workspace.calibration import (
+        MaskEdit,
+        MaskEditRefusedError,
+        Stroke,
+    )
+
+    store = make_store(workspace_root)
+    automatic = BytesIO()
+    Image.new("L", (32, 32), 255).save(automatic, format="PNG")
+    saved = store.install_automatic(
+        "example",
+        AutomaticMask(automatic.getvalue(), algorithm_version="test-v1"),
+        expected_revision=store.read("example").revision,
+    )
+    stroke = Stroke(type="stroke", mode="mask", diameter_px=8, points=[(16, 16)])
+    outside = Stroke(type="stroke", mode="mask", diameter_px=8, points=[(64, 16)])
+    for edits in (
+        [MaskEdit(operations=[outside])],
+        [MaskEdit(operations=[stroke]), MaskEdit(operations=[stroke])],
+    ):
+        with pytest.raises(MaskEditRefusedError):
+            store.save(
+                "example",
+                saved.config,
+                expected_revision=saved.revision,
+                request_id="refused",
+                mask_edits=edits,
+            )
+    assert store.read("example") == saved
 
 
 def test_fresh_baseline_refresh_preserves_manual_corrections(workspace_root: Path) -> None:
@@ -500,7 +540,7 @@ def test_concurrent_saves_share_one_template_lock_and_one_revision_wins(
 ) -> None:
     from concurrent.futures import ThreadPoolExecutor
 
-    from etsy_listings.core.workspace.calibration import CalibrationConflictError
+    from etsy_listings.core.workspace.calibration import CalibrationChangedError
 
     store = make_store(workspace_root)
     before = store.read("example")
@@ -517,7 +557,7 @@ def test_concurrent_saves_share_one_template_lock_and_one_revision_wins(
             return other.save(
                 "example", config, expected_revision=before.revision, request_id=f"save-{opacity}"
             ).revision
-        except CalibrationConflictError:
+        except CalibrationChangedError:
             return "conflict"
 
     with ThreadPoolExecutor(max_workers=2) as executor:
@@ -590,7 +630,7 @@ def test_template_alias_saves_share_canonical_directory_lock(workspace_root: Pat
     from concurrent.futures import ThreadPoolExecutor
     from threading import Event
 
-    from etsy_listings.core.workspace.calibration import CalibrationConflictError
+    from etsy_listings.core.workspace.calibration import CalibrationChangedError
 
     store = make_store(workspace_root)
     alias = store.workspace.template_dir("alias")
@@ -605,7 +645,7 @@ def test_template_alias_saves_share_canonical_directory_lock(workspace_root: Pat
         started.set()
         try:
             store.save("alias", config, expected_revision=before.revision, request_id="alias-save")
-        except CalibrationConflictError:
+        except CalibrationChangedError:
             return "conflict"
         else:
             return "saved"
@@ -660,9 +700,9 @@ def test_repeated_photo_identity_tracks_replaced_pixels(workspace_root) -> None:
     first = store.photo_identity("example", config)
     assert store.photo_identity("example", config) == first
     path = store.workspace.template_main_photo("example", config)
-    Image.new("RGB", (first["width"], first["height"]), (21, 37, 83)).save(path)
+    Image.new("RGB", first.size, (21, 37, 83)).save(path)
     second = store.photo_identity("example", config)
-    assert second["pixels"] != first["pixels"]
+    assert second.pixels != first.pixels
     assert store.photo_identity("example", config) == second
 
 

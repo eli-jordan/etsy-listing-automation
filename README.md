@@ -26,7 +26,7 @@ uv sync
 This installs runtime and dev dependencies into `.venv/` and the
 `etsy-listings` CLI in editable mode.
 
-Frontend development also needs Node.js (any current LTS):
+Frontend development also needs Node.js 24 (Node 26's built-in `localStorage` breaks the jsdom tests):
 
 ```bash
 cd src/ui
@@ -198,12 +198,17 @@ uv run playwright install chromium
 cd src/ui && npm run build
 ```
 
-The six **capture** cases write review screenshots rather than asserting
+The six **capture** scenes write review screenshots rather than asserting
 anything, so no selection runs them unless `-m` names `capture`. The five
 calibrator scenes in `tests/browser/test_calibrator_design.py` write to
 `tests/browser/_screenshots/` (gitignored), or to `CALIBRATOR_SCREENSHOT_DIR`.
 The Marigold journey in `tests/browser/test_marigold_screenshots.py` writes its
 nine states to `MARIGOLD_SCREENSHOT_DIR`, or to a pytest temporary directory.
+The Admin journeys (`tests/browser/test_admin_*_browser.py`) run once, in the
+light theme; their dark pass repeats the light pass's assertions and only
+adds screenshots, so it is a `capture` case too. Set `ADMIN_SHOP_SCREENSHOT_DIR`,
+`ADMIN_SETTINGS_SCREENSHOT_DIR` or `ADMIN_PROVIDERS_SCREENSHOT_DIR` and run
+`-m "browser or capture"` to write both themes.
 
 The **e2e layer** talks to the real Printify and Etsy shops and is never part of
 a default run. It needs `PRINTIFY_API_TOKEN`, or `ETSY_LISTINGS_ROOT` pointing at

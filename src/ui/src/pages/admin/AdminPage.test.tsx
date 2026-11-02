@@ -854,6 +854,8 @@ describe("Listing defaults", () => {
     expect(renewal).toHaveValue("manual");
   });
 
+  // Admin audit Q1: what reaches shop.yaml when an older save's answer
+  // arrives after a newer choice.
   it("keeps a newer queued choice while the older save is answered", async () => {
     const server = fileServer();
     const answerAuto = server.hold();
@@ -872,6 +874,7 @@ describe("Listing defaults", () => {
     expect(renewal).toHaveValue("manual");
   });
 
+  // Admin audit Q2: one field's save fails while a sibling's succeeds.
   it("keeps a failed field unsaved through a sibling's success until it is retried", async () => {
     const server = fileServer();
     server.failNext("network down");
@@ -1065,6 +1068,34 @@ describe("Listing defaults", () => {
     expect(server.file().listing_defaults.shipping_profile).toBe("Printify UK standard");
   });
 
+  it("keeps a failed draft through a lookup refresh that drops the saved choice", async () => {
+    const server = fileServer();
+    server.failNext("network down");
+    await openDefaults();
+    const shipping = screen.getByLabelText("Shipping profile");
+    shipping.focus();
+    fireEvent.change(shipping, { target: { value: "Printify EU standard" } });
+    shipping.blur();
+    expect(await screen.findByText("network down")).toBeInTheDocument();
+
+    const offered = lookups();
+    getLookups.mockResolvedValueOnce({
+      ...offered,
+      etsy: { ...offered.etsy, shipping_profiles: [] },
+    });
+    await act(async () => {
+      window.dispatchEvent(new Event("focus"));
+    });
+
+    expect(
+      await screen.findByText(/Printify US standard is not in the list Etsy returned/),
+    ).toBeInTheDocument();
+    expect(shipping).toHaveValue("Printify EU standard");
+    expect(screen.getByRole("button", { name: "Retry save" })).toBeInTheDocument();
+    expect(save).toHaveBeenCalledTimes(1);
+    expect(server.file().listing_defaults.shipping_profile).toBe("Printify US standard");
+  });
+
   it("keeps a choice made while Use it is pending and saves it after", async () => {
     const server = fileServer();
     await openDefaults();
@@ -1085,6 +1116,8 @@ describe("Listing defaults", () => {
     expect(shipping).toHaveValue("Printify EU standard");
   });
 
+  // The retry carries auto; choosing manual meanwhile is a change from what
+  // the file will hold, so it is saved after the retry lands.
   it("saves a choice made while a retry is pending, after the retry lands", async () => {
     const server = fileServer();
     server.failNext("network down");

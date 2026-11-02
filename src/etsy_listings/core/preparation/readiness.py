@@ -107,10 +107,9 @@ def _map_readiness(
         manifest = artifacts.inspect(name, inputs)
     except ArtifactError:
         return artifacts.readiness(name, inputs), None
-    engine = manifest.provenance.get("engine_version")
     return (
         Readiness("ready", content_digest=manifest.content_digest),
-        engine if isinstance(engine, str) else None,
+        manifest.provenance.engine_version,
     )
 
 

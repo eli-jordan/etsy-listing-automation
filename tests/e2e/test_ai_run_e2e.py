@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Callable, Sequence
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -14,6 +15,7 @@ from etsy_listings.core.ai.brief import default_brief_prompt_text
 from etsy_listings.core.ai.market_queries import default_market_queries_prompt_text
 from etsy_listings.core.ai.prompt import default_seo_prompt_text
 from etsy_listings.core.ai.providers import AiProvider
+from etsy_listings.core.application.dependencies import DEFAULT_CLIENTS
 from etsy_listings.core.market.snapshot import load as load_market_snapshot
 from etsy_listings.core.workspace.workspace import Workspace
 from etsy_listings.server.api.app import create_app
@@ -77,8 +79,11 @@ def test_full_ai_run_drafts_brief_researches_market_and_proposes_seo(
     app = create_app(
         workspace,
         seo_provider_factory=ai_providers,
-        market_client_factory=lambda _workspace: connections.etsy_market_client(
-            etsy_market_workspace.root
+        clients=replace(
+            DEFAULT_CLIENTS,
+            etsy_market=lambda _workspace: connections.etsy_market_client(
+                etsy_market_workspace.root
+            ),
         ),
     )
 

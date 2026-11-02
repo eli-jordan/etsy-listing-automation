@@ -15,7 +15,7 @@ from dataclasses import dataclass
 
 from pydantic import RootModel
 
-from etsy_listings.core.errors import UserFacingError
+from etsy_listings.core.errors import RefusedError
 
 _NON_ALNUM = re.compile(r"[^a-z0-9]+")
 
@@ -41,7 +41,7 @@ class SlugCollision:
     names: tuple[str, ...]
 
 
-class SlugCollisionError(UserFacingError, ValueError):
+class SlugCollisionError(RefusedError):
     def __init__(self, collisions: list[SlugCollision]) -> None:
         self.collisions = collisions
         lines = [f"  '{c.slug}' <- {', '.join(sorted(c.names))}" for c in collisions]

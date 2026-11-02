@@ -35,6 +35,7 @@ Versions here describe this checkout, not the latest vendor releases.
 | CLI and documents | Typer (locked 0.27.2, Click 8.5.0 transitively), pydantic v2 (2.13.5), pydantic-settings and PyYAML; questionary is used only through `cli/prompts.py` with a plain-input fallback |
 | HTTP clients | httpx (0.28.1); vendor protocols and shared retry policy, without vendor SDKs |
 | Images | `opencv-python-headless==4.10.0.84`, `pillow==10.4.0`, and NumPy (locked 2.5.2, currently supplied transitively by OpenCV); pure numerical passes plus explicit I/O/cache adapters |
+| In-process caches | cachetools (`>=7,<8`, locked 7.2.8) supplies the size-accounted LRU eviction behind `core/bounded_cache.py`, which adds the lock and the oversize rule; `types-cachetools` types it for strict mypy |
 | Videos | PyAV (`av>=15`, locked 18.1.0) probes streams, dimensions and duration; the tool uploads original video bytes rather than encoding them |
 | Web server | FastAPI (0.141.1), python-multipart and uvicorn; `ui` runs the application under uvicorn in the foreground and the user opens the printed URL in any browser |
 | Frontend | React/React DOM 19, React Router 7, Phosphor icons and openapi-fetch; TypeScript 5 and Vite 8 build the SPA; openapi-typescript generates `src/ui/src/api/schema.ts` from `docs/openapi.json` (ADR-0011) |
@@ -110,10 +111,10 @@ package never drags in OpenCV, FastAPI or Typer to reach one name.
 | Module | Owns | Boundary |
 |---|---|---|
 | `cli` | Typer commands, terminal presentation of engine reports (`cli/render.py`), command options, prompts and the `auth`/`setup`/`new` wizards' question order (`cli/auth.py`, `cli/setup.py`, `cli/new.py`, with `cli/credentials.py` and `cli/pickers.py`) | Uses engine reports rather than computing a second diff; wizards call core operations for every decision and write; only `cli/ui.py` imports the server, and only `server.hosting` |
-| `server` | FastAPI routing and wire schemas (`server/api/`), HTTP status mapping, SSE framing, reconnect and disconnect polling, request-serving caches (`imagecache`, `etsystate`, thumbnails), static SPA serving and app startup/shutdown (`server/hosting.py`, the lifespan in `server/api/app.py`) | Constructs one of each core coordinator, store and lock set per process and starts and stops them; decides no workflow rule itself |
-| `core/application` | Operations shared by server and CLI: listing reads, edits, creation, rename/delete and pricing plans; the wizards' reusable operations (credentials, workspace setup, shop discovery, garment profiles); mockup-template calibration and preview scenes; listing-template library; batch staging and workflow; per-listing-template write locks; deployment runs (`deploy/`); AI runs, batch AI queue, readiness and proposals (`ai/`); host-supplied seams (`dependencies.py`) and typed refusals (`refusals.py`) | Owns the records that follow a listing or listing template, and locking around listing-template writes; listing documents and listing-keyed files are edited only through `core/workspace/listing_documents.py` and `core/listing_artifacts.py`; answers with results or typed refusals, never status codes or terminal text; constructing a coordinator starts no thread; takes decoded images and upload streams, never request objects or caches |
+| `server` | FastAPI routing and wire schemas (`server/api/`), the one refusal-to-status table (`REFUSAL_STATUS` in `server/api/app.py`), SSE framing, reconnect and disconnect polling, request-serving caches (`imagecache`, `etsystate`, thumbnails), static SPA serving and app startup/shutdown (`server/hosting.py`, the lifespan in `server/api/app.py`) | Constructs one of each core coordinator and store per process and starts and stops them; decides no workflow rule itself |
+| `core/application` | Operations shared by server and CLI: listing reads, edits, creation, rename/delete and pricing plans; the wizards' reusable operations (credentials, workspace setup, shop discovery, garment profiles); mockup-template calibration and preview scenes; listing-template library; batch staging and workflow; deployment runs (`deploy/`); AI runs, batch AI queue, readiness and proposals (`ai/`); host-supplied seams (`dependencies.py`) and typed refusals (`refusals.py`) | Owns the records that follow a listing or listing template, and holds a listing template's lock around each of its check-then-writes; listing documents and listing-keyed files are edited only through `core/workspace/listing_documents.py` and `core/listing_artifacts.py`; answers with results or typed refusals, never status codes or terminal text; constructing a coordinator starts no thread; takes decoded images and upload streams, never request objects or caches |
 | `core/engine` | Stage protocol, comparison, lockfile, lifecycle, runs, previews and status | Stages return values; the engine decides execution and records progress |
-| `core/workspace` | Root discovery, layout, reference resolution, file loading, atomic writes, in-place YAML edits (ADR-0055), video probes, Cygwin path translation and request facts; `listing_documents.py` is the one reader and writer of `listing.yaml` and holds each listing's process-wide lock | Owns workspace layout and containment; callers may do I/O on paths it supplies, except `listing.yaml`, which every writer edits through `ListingDocuments` |
+| `core/workspace` | Root discovery, layout, reference resolution, file loading, atomic writes, in-place YAML edits (ADR-0055), video probes, Cygwin path translation and request facts; `locks.py`, the process-wide keyed locks for listings, mockup templates and listing templates; `listing_documents.py` is the one reader and writer of `listing.yaml` and takes each listing's lock | Owns workspace layout and containment; callers may do I/O on paths it supplies, except `listing.yaml`, which every writer edits through `ListingDocuments` |
 | `core/listing_artifacts.py` | Moving and removing everything keyed by a listing's name: its directory, render cache, previews, market snapshot and cached proposal | One list serves rename, wipe and a pending delete; every operation holds the listing's lock. Batch rows and AI runs stay with `core/application/listing_identity.py` |
 | `core/render` | Configuration and pure image passes | No workspace knowledge; callers supply images and geometry |
 | `core/clients` | Typed protocols, transports, Printify catalog/product and Etsy APIs, OAuth tokens and fakes | Shared transport per vendor; separate caller authority through protocols |
@@ -122,7 +123,8 @@ package never drags in OpenCV, FastAPI or Typer to reach one name.
 | `core/listing_templates` | Template conversion and frozen document/assets/timestamp capture | Capture occurs under the template write lock before upload; shared references are revalidated at confirm and retry |
 | `core/market` | Comparable-listing research, scoring and evidence snapshots | Read-only Etsy data informs wording rather than product facts |
 | `core/batches` | Upload validation, archive inspection, staging, name allocation and idempotent local creation | Creates ordinary listings; AI dispatch belongs to `application/ai` |
-| `core/connections.py`, `core/errors.py` | Client and `RunContext` construction; `UserFacingError` | See the credential invariant below |
+| `core/bounded_cache.py` | `BoundedCache`: the one thread-safe least-recently-used cache, bounded by total `size(value)` (bytes, or entries without a size function), behind every in-process cache of decoded arrays, validation proofs and pixel digests | Locks only bookkeeping, never `get_or_compute`'s computation; an item larger than the whole budget is served, never kept, and evicts nothing; a replaced key counts only its new size |
+| `core/connections.py`, `core/errors.py` | Client and `RunContext` construction; `UserFacingError` and the refusal categories (`MissingError`, `ConflictError`, `StaleError`, `RefusedError`) | See the credential invariant below; core names a refusal's category, never its status code |
 
 Three boundaries carry most of the weight. Only `core/workspace` knows the
 data tree, including how to enumerate it. Only `core/engine` computes
@@ -130,15 +132,44 @@ deployment changes and folds a run's lockfile. Render passes are pure, so
 input hashes and golden images describe deterministic work shared by
 calibration and deployment.
 
+A core refusal reaches HTTP through one seam. Each refusal class inherits a
+category from `core/errors.py` (missing, conflict, stale or refused), and
+`server/api/app.py` registers one exception handler per category: `404`,
+`409`, `412` and `422`, with `InvalidNameError` and the reserved listing
+template name as `400`. Routes let refusals through rather than translating
+them. A route catches one only to answer with a richer body (a staging
+refusal's remedy, an AI run's reason, the Admin page's field errors), at the
+status its category already has. Per-router mappings had drifted: a missing
+test design was a `400` while every other missing thing was a `404`, and a
+calibration conflict was a `409` or a `412` depending on its message text. A
+category in core keeps ADR-0052's rule that core knows no transport, where a
+status code on each class would not. `ConfigLoadError` has no category yet: a
+document that does not load means different things to different routes, which
+still answer it themselves.
+
 ### Clients, credentials and prompts
 
 `core/connections.py` builds clients and `RunContext`. Printify tokens and Etsy
 bearers resolve at request time, but the Etsy app key pair is read during
-construction to decide whether an optional client exists. The server injects
-`connections.run_context` into `Deployments` as an
-`application.dependencies.ContextFactory`, and the AI coordinator receives
-its market client through `MarketClientFactory`; tests pass factories wired
-to the in-memory fakes.
+construction to decide whether an optional client exists. Nothing in the
+server calls `connections` for a client. `create_app` takes
+`connections.run_context` as `Deployments`' `ContextFactory`, and an
+`application.dependencies.ClientFactories` for every other client: the Etsy
+listing and shop clients, the Printify product and catalog clients, and the AI
+coordinator's market client. It keeps that record on `app.state`, and routes
+read it through `app_state.clients`. `DEFAULT_CLIENTS` holds `connections`'
+own factories and is what `ui` serves with. Core operations that need a client
+take its factory as an argument, as setup's `shop_discovery.etsy_access` takes
+the shop client, and the CLI passes `connections`' factory itself.
+
+Tests pass fakes through the same seams instead of patching `connections`.
+`tests/support/clients.py`'s `FakeClients` builds a `ClientFactories` over the
+in-memory fakes, and the `fake_clients` fixture gives every layer one; a test
+that needs `connections`' real token handling over a scripted network passes
+`http=` and `oauth=` to its Etsy factories. A record of factories beat a
+module-level patch because a patch silently reaches every caller of the
+module, including ones the test never meant to fake, and stops working once a
+caller holds the function rather than the module.
 
 `core/application/credentials.py` owns finding, verifying and storing a
 credential and both halves of the Etsy grant around the browser step;
@@ -146,6 +177,23 @@ credential and both halves of the Etsy grant around the browser step;
 `cli/prompts.py` chooses the terminal backend and handles cancellation;
 `cli/terminal.py` is a standard-library leaf for encoding and presentation.
 None of the three CLI modules is importable from core.
+
+Local commands are reached through one injected host, `core/ai/host.py`.
+`CommandHost` finds a command (`which`) and runs it to completion (`run`);
+`CliHost` adds `run_managed`, the process-tree owner in `ai/process.py`.
+`LOCAL_CLI_HOST` is the machine itself, through `shutil.which`,
+`subprocess.run` and `run_managed`, adding no policy of its own. The Codex,
+Claude and Grok adapters take it as their `host` field, `default_ai_providers`
+passes one through to every adapter it builds, and `ModelDiscovery` takes one
+at construction. `cli/prompts.py` wraps a `CommandHost` in a `PromptHost`
+with the rest of what choosing a backend asks: whether this is Windows,
+whether prompt_toolkit can draw, and how a plain line is read. Its two-step
+fzf lookup (`shutil.which`, then cygwin's `sh.exe` beside `cygpath`) asks
+that host, so a cygwin-only fzf is found exactly as before. Every function
+defaults to this machine, so wizards and the server pass nothing. Tests
+describe a machine with `tests/support/cli_host.py.ScriptedCliHost`, an
+argv-prefix table that records each call, rather than patching `shutil` and
+`subprocess` in each module that uses them.
 
 Template configuration reads still open the current UTF-8 bytes, with existing
 calibration lock scopes unchanged. A bounded content-keyed cache reuses parsing for documents up
@@ -320,10 +368,10 @@ including mixed-format preview bodies. Multiple placements require safe, unique
 IDs; production creation uses UUIDs and geometry, recolouring and reorder preserve
 them. Single and colour-matrix placements use `None` internally.
 
-`workspace.calibration.CalibrationStore` holds a process-wide reentrant lock per
-validated, canonical mockup-template directory. In-workspace aliases share that
-lock; aliases outside the workspace are refused before IO. This is independent of the listing-template lock
-domain. All template-config writers use its recoverable transaction. Server
+`workspace.calibration.CalibrationStore` holds the mockup-template lock of
+`core/workspace/locks.py` per validated, canonical template directory. In-workspace
+aliases share that lock; aliases outside the workspace are refused before IO. It is
+a separate domain from the listing and listing-template locks. All template-config writers use its recoverable transaction. Server
 operations recover before reading; the direct Workspace loader takes the same
 lock and refuses an active transaction, so a CLI cannot roll forward a live server
 save. One server per workspace remains the ownership assumption.
@@ -334,6 +382,10 @@ replaces destinations and verifies checksums before cleanup. Missing intent mean
 discard staging; durable intent means roll forward the entire validated payload
 set. Damaged recovery data blocks reading with a repair explanation. Saved request
 receipts deduplicate exact retries and reject reused IDs with different content.
+Every durable JSON record here and in preparation (mask metadata, brush history,
+receipts, transaction manifests, map and prediction pointers, job journals, runtime
+pointers) is a frozen pydantic model read with `model_validate_json`; its JSON dump
+is the file, byte for byte, so no reader indexes a dict by key.
 The revision covers effective config, resolved main-photo pixels and filename,
 and saved mask checksums. It excludes inactive renderer settings and brush history.
 Config GET returns that revision as its ETag. The required save envelope and
@@ -393,7 +445,8 @@ Two consequences worth knowing:
   nothing on screen looking wrong.
 - **`server/api/imagecache.py` memoises what the loop re-reads** — the decoded
   photo at each size, the decoded design, and the derived maps — keyed on path
-  and mtime, bounded by total bytes rather than entry count. It is request-serving
+  and mtime, bounded by total bytes rather than entry count (a
+  `core/bounded_cache.BoundedCache`, 384 MiB). It is request-serving
   infrastructure, so it sits in `server`, not in `core/render/io.py` or the
   calibrator operation: the render stage reads each file once per run and
   needs no cache, and giving it one would put mutable process state under the
@@ -403,7 +456,7 @@ Two consequences worth knowing:
 
 `etsy-listings ui` runs `cli/ui.py`, which opens the workspace and calls
 `server.hosting.serve`; that runs `create_app(workspace)` under uvicorn on the
-main thread, which owns Ctrl-C. `create_app` constructs one `WorkspaceLocks`,
+main thread, which owns Ctrl-C. `create_app` constructs one
 `ProposalStore`, staging and batch store, `AiCoordinator`
 (`core/application/ai`: run registry, runner and batch queue) and
 `Deployments` (`core/application/deploy`: registry, FIFO executor and review
@@ -519,11 +572,11 @@ AI, and holds those names against new AI until deployment ends (ADR-0050).
 
 The SPA's `/admin` route owns Shop navigation and serializes blur saves against
 `GET` and `PATCH /api/admin/shop`. Separate `/connections` and `/lookups` reads
-use the existing client factories. `core/application/shop_settings.py` owns
-whole-document validation, configured-identity retention and the editable key
-set. `core/workspace/revisions.py` owns exact-byte hashes and a per-path process
+build their clients through the app's `ClientFactories` (`app_state.clients`).
+`core/application/shop_settings.py` owns whole-document validation,
+configured-identity retention and the editable key set. `core/workspace/revisions.py` owns exact-byte hashes and a per-path process
 lock around read, revision comparison, validation and atomic replace. A stale
-revision refuses with 409; invalid values refuse with field errors and 422.
+revision refuses with 412; invalid values refuse with field errors and 422.
 Semantic no-ops leave the source bytes and file untouched, per ADR-0055.
 
 A successful save replaces the server workspace's defaults inside the same
@@ -601,10 +654,10 @@ edit saves whole percentages. The server returns the model's Reset defaults.
 ### Process-local limitations
 
 These are preserved deliberately; the restructure moved them into core without
-changing them. The listing document locks (`ListingDocuments.lock`) serialize
-every `listing.yaml` edit, proposal record write and listing rename or removal,
-including the engine's, and `WorkspaceLocks` serializes listing-template writes,
-inside one process only. Etsy token rotation is serialized per resolved token
+changing them. The keyed locks of `core/workspace/locks.py` work inside one
+process only: through `ListingDocuments.lock` they serialize every `listing.yaml`
+edit, proposal record write and listing rename or removal, including the engine's,
+and they serialize listing-template writes and mockup-template saves. Etsy token rotation is serialized per resolved token
 file across every `TokenStore` in the process, so concurrent Admin requests
 rotate an expired grant once; across processes only the `invalid_grant`
 re-read protects it. Deployment and AI registries hold runs in
@@ -824,6 +877,16 @@ later. Each traces to a decision.
   there is no lock order to get wrong. "Is there a listing?" (`exists`) and
   "may a new listing take this name?" (`is_free`) are answered there and
   nowhere else.
+- **A lock on something the workspace keys by name comes from
+  `core/workspace/locks.py`.** `hold(workspace, domain, *names)` covers the
+  three domains, `listing`, `mockup-template` and `listing-template`, with one
+  rule set: reentrant, keyed by the resolved and casefolded directory the name
+  becomes (so per workspace root, case-insensitive, and shared by in-workspace
+  aliases), several names taken in sorted order, and a bad name or escaping
+  directory refused before anything is held. One module rather than one dict
+  per owner, because the three copies had drifted: the listing-template lock
+  was not reentrant and was scoped to an instance the server had to pass to
+  every operation, so a caller that forgot to pass it took no lock at all.
 - **A write to existing workspace YAML edits it in place.** Listings, listing
   templates, mockup `template.yaml` and setup's `shop.yaml` are changed through
   `core/workspace/yaml_source.py` (directly or via `atomic.write_yaml_atomic`):
@@ -843,8 +906,10 @@ later. Each traces to a decision.
   still `plan`. Etsy app keys, bearers and Printify tokens are lazy sources;
   the explicit `etsy_app_key` availability query is reserved for
   readiness/setup operations; setup's shop discovery uses that query to decide
-  whether to look, then reads through `etsy_shop_client` like every other
-  caller.
+  whether to look, then reads through the `etsy_shop_client` the CLI passes it,
+  like every other caller. The server reaches these factories only through
+  the `ClientFactories` `create_app` was given, which a real host fills with
+  them.
 - **A credential is found, verified and stored through
   `core/application/credentials.py`, and captured through `cli/credentials.py`.**
   Where it already lives (environment, then the workspace `.env`) and how to
@@ -1079,7 +1144,11 @@ cancellation and close intent. Per-solve cooperation does not write journal
 records or change solver arithmetic. Each phase retains full revision checks.
 A single active solve is not preempted; inference dispatch remains independent.
 Validated decoded evidence shares a fixed 384 MiB cache budget, with file-version
-checks retained before reuse.
+checks retained before reuse. Validated generation maps share 512 MiB
+(`MAP_CACHE_BYTES`), editor composite maps 64 MiB, and generation validation
+proofs 128 entries. Each is a `core/bounded_cache.BoundedCache`, so every one
+evicts least-recently-used first and serves, without keeping, a set larger
+than its whole budget.
 
 `preparation.artifacts.Artifacts` owns validated generation publication, readiness,
 acquisition and reference-aware cleanup. Workspace derives every durable path and
@@ -1149,6 +1218,14 @@ identities, target photo pixels and appearance. Its Marigold scene identity is
 shared with authoring previews. YAML formatting, inactive settings, generation
 names and inference provenance do not enter that identity. Photo warp keeps its
 existing byte hashes and composition pipeline.
+
+Each planned scene carries its renderer as one tagged value: `PhotoWarpRender`
+holds the per-layer frozen `RenderConfig`s, and `PreparedRender` holds the
+leased preparation inputs, appearance, scene identity and map content. The
+recipe, scene hash, preview and apply each match on it once. Neither shape has
+optional fields that only matter for the other renderer, so a scene cannot
+half-describe both renderers. A prepared scene takes only placement geometry
+from the template, for its swatches, and never builds a Photo warp configuration.
 
 Plan, apply and every preview compose through `preparation.scenes.lease_scene`,
 which reads saved inputs, acquires one immutable generation for the target photo

@@ -33,7 +33,7 @@ describe("shop api", () => {
 
   it("tells a conflict, field errors and a failure apart", async () => {
     vi.spyOn(api, "PATCH").mockResolvedValueOnce(
-      answer(409, undefined, { kind: "conflict", message: "changed", field_errors: {} }),
+      answer(412, undefined, { kind: "conflict", message: "changed", field_errors: {} }),
     );
     await expect(saveShop("r1", {})).resolves.toEqual({ kind: "conflict", message: "changed" });
 

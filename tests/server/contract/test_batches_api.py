@@ -28,6 +28,7 @@ from etsy_listings.server.api.app import create_app
 
 from tests.support.ai_runs import ChainProvider, seed_prompts, seeded_market, wait_for
 from tests.support.batches import LISTING_TEMPLATE, a_listing_template, png, uploads
+from tests.support.clients import FakeClients
 
 
 @pytest.fixture
@@ -48,7 +49,7 @@ def _app(workspace: Workspace, provider: ChainProvider, *, market: bool = True) 
     return create_app(
         workspace,
         seo_provider_factory=lambda _workspace, _ai: [provider],
-        market_client_factory=lambda _workspace: etsy,
+        clients=FakeClients(etsy_market=etsy).factories(),
     )
 
 

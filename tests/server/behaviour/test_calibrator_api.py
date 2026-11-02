@@ -297,15 +297,16 @@ class TestDesignLibrary:
         assert response.status_code == 200
         assert response.headers["content-type"] == "image/png"
 
-    def test_an_unknown_design_is_a_400_not_a_crash(self, client: TestClient) -> None:
-        """The id now comes from a list the client fetched, so a stale one is a
-        client error rather than a KeyError escaping as a 500."""
+    def test_an_unknown_design_is_a_404_not_a_crash(self, client: TestClient) -> None:
+        """The id now comes from a list the client fetched, so a stale one is
+        missing, like any other unknown id, rather than a KeyError escaping as
+        a 500."""
         config = client.get("/api/templates/flat-lay-01/config").json()
         response = client.post(
             "/api/templates/flat-lay-01/preview",
             json={**config, "colour": "black", "design": "no-such-design"},
         )
-        assert response.status_code == 400
+        assert response.status_code == 404
         assert "no-such-design" in response.json()["detail"]
 
     def test_a_test_design_has_a_thumbnail_to_pick_it_by(self, client: TestClient) -> None:
@@ -321,20 +322,20 @@ class TestDesignLibrary:
         assert bundled.status_code == 200
         assert bundled.headers["content-type"] == "image/png"
         assert uploaded.status_code == 200
-        assert client.get("/api/designs/no-such-design/thumbnail").status_code == 400
+        assert client.get("/api/designs/no-such-design/thumbnail").status_code == 404
 
     def test_upload_rejects_a_name_that_escapes_the_workspace(self, client: TestClient) -> None:
         response = client.post(
             "/api/designs",
             files={"file": ("../../evil.png", self._png_bytes(), "image/png")},
         )
-        assert response.status_code == 400
+        assert response.status_code == 422
 
     def test_upload_rejects_a_file_that_is_not_an_image(self, client: TestClient) -> None:
         response = client.post(
             "/api/designs", files={"file": ("notes.txt", b"not a png", "text/plain")}
         )
-        assert response.status_code == 400
+        assert response.status_code == 422
 
 
 def _png(colour: tuple[int, int, int] = (200, 60, 60)) -> bytes:
@@ -390,7 +391,7 @@ class TestAssigningAKind:
         is a mistake worth reporting rather than silently keeping one."""
         _template_folder(workspace_root, "fresh", "a.png", "b.png")
         response = client.post("/api/templates/fresh/kind", json={"kind": "single"})
-        assert response.status_code == 400
+        assert response.status_code == 422
         assert "one photo" in response.json()["detail"]
 
     def test_assigning_a_kind_to_an_empty_folder_is_refused(
@@ -400,7 +401,7 @@ class TestAssigningAKind:
         beats writing a config for a scene that does not exist."""
         _template_folder(workspace_root, "empty")
         response = client.post("/api/templates/empty/kind", json={"kind": "single"})
-        assert response.status_code == 400
+        assert response.status_code == 422
         assert "no photos" in response.json()["detail"]
 
     def test_assigning_a_kind_to_an_already_configured_template_is_refused(
@@ -552,7 +553,7 @@ class TestDesignPreview:
         )
         assert both.status_code == 422
         assert neither.status_code == 422
-        assert unknown.status_code == 400
+        assert unknown.status_code == 404
 
     def test_unknown_design_404s(self, client: TestClient) -> None:
         response = client.get(
@@ -741,7 +742,7 @@ def test_preview_wrong_body_shape_for_kind_is_rejected(client: TestClient) -> No
             ],
         },
     )
-    assert response.status_code == 400
+    assert response.status_code == 422
     assert response.json()["detail"] == "expected a multiple preview body"
 
 
@@ -873,7 +874,7 @@ class TestFilenamesBecomeColourSlugs:
         self._messy_set(workspace_root, "Heather Grey.png", "Heather-Grey.png")
 
         response = client.post("/api/templates/messy/kind", json={"kind": "colour-matrix"})
-        assert response.status_code == 400
+        assert response.status_code == 422
         assert "heather-grey" in response.json()["detail"]
 
 

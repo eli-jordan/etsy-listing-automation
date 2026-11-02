@@ -38,9 +38,10 @@ from etsy_listings.core.application.refusals import (
     ListingTemplateSourceRefusedError,
     ReservedListingTemplateNameError,
 )
-from etsy_listings.core.application.workspace_locks import WorkspaceLocks
 from etsy_listings.core.batches import Batch, BatchRecords, BatchStore, StagingStore, stage_pngs
 from etsy_listings.core.listing_templates import ListingTemplateExistsError
+from etsy_listings.core.workspace import locks
+from etsy_listings.core.workspace.locks import LockDomain
 from etsy_listings.core.workspace.workspace import InvalidNameError, Workspace
 
 from tests.support.batches import png, small_print_area, uploads
@@ -68,16 +69,10 @@ def workspace(workspace_root: Path) -> Workspace:
     return Workspace.discover(root_override=workspace_root)
 
 
-@pytest.fixture
-def locks() -> WorkspaceLocks:
-    return WorkspaceLocks()
-
-
 def _create(
     workspace: Workspace,
     name: str = NAME,
     *,
-    locks: WorkspaceLocks | None = None,
     document: dict[str, Any] | None = None,
     **source: str,
 ) -> TemplateSave:
@@ -89,7 +84,6 @@ def _create(
             template=source.get("from_template"),
         ),
         document=document,
-        locks=locks or WorkspaceLocks(),
     )
 
 
@@ -161,7 +155,7 @@ class TestCreate:
         with pytest.raises(ListingTemplateSourceRefusedError, match="exactly one"):
             _create(workspace, from_listing=FIXTURE_LISTING, from_template=NAME)
         with pytest.raises(ListingTemplateSourceRefusedError, match="exactly one"):
-            create_listing_template(workspace, NAME, DraftOrigin(), locks=WorkspaceLocks())
+            create_listing_template(workspace, NAME, DraftOrigin())
 
     def test_an_unusable_or_reserved_name_is_refused_before_any_source_is_read(
         self, workspace: Workspace
@@ -286,7 +280,7 @@ class TestDraftAndRead:
 
 class TestEdit:
     def test_an_incomplete_document_is_not_saved_and_the_file_is_untouched(
-        self, workspace: Workspace, locks: WorkspaceLocks
+        self, workspace: Workspace
     ) -> None:
         _create(workspace)
         before = workspace.listing_template_file(NAME).read_bytes()
@@ -295,36 +289,28 @@ class TestEdit:
             workspace,
             NAME,
             {**_document(workspace), "colors": [], "media": ["common-media/size-guide.png"]},
-            locks=locks,
         )
 
         assert not outcome.saved
         assert outcome.issues[0].where == "Variants › Colours"
         assert workspace.listing_template_file(NAME).read_bytes() == before
 
-    def test_a_malformed_document_is_not_saved(
-        self, workspace: Workspace, locks: WorkspaceLocks
-    ) -> None:
+    def test_a_malformed_document_is_not_saved(self, workspace: Workspace) -> None:
         _create(workspace)
         before = workspace.listing_template_file(NAME).read_bytes()
 
-        outcome = edit_listing_template(
-            workspace, NAME, {**_document(workspace), "brief": "no"}, locks=locks
-        )
+        outcome = edit_listing_template(workspace, NAME, {**_document(workspace), "brief": "no"})
 
         assert not outcome.saved
         assert "brief" in outcome.field_errors
         assert workspace.listing_template_file(NAME).read_bytes() == before
 
-    def test_a_complete_document_is_written_and_answered(
-        self, workspace: Workspace, locks: WorkspaceLocks
-    ) -> None:
+    def test_a_complete_document_is_written_and_answered(self, workspace: Workspace) -> None:
         _create(workspace)
         outcome = edit_listing_template(
             workspace,
             NAME,
             {**_document(workspace), "colors": ["black"], "media": [BLACK]},
-            locks=locks,
         )
         assert outcome.saved
         assert outcome.template is not None
@@ -332,7 +318,7 @@ class TestEdit:
         assert workspace.load_listing_template(NAME).colors == ["black"]
 
     def test_an_edit_changes_only_the_edited_value_in_the_seller_s_text(
-        self, workspace: Workspace, locks: WorkspaceLocks
+        self, workspace: Workspace
     ) -> None:
         """ADR-0055: the document posted carries every default, but the file
         gains only what the seller changed."""
@@ -341,7 +327,7 @@ class TestEdit:
         path.write_bytes(crlf(HAND_EDITED_TEMPLATE).encode("utf-8"))
 
         outcome = edit_listing_template(
-            workspace, NAME, {**_document(workspace), "colors": ["black", "moss"]}, locks=locks
+            workspace, NAME, {**_document(workspace), "colors": ["black", "moss"]}
         )
 
         assert outcome.saved
@@ -351,30 +337,26 @@ class TestEdit:
         assert path.read_bytes() == crlf(expected).encode("utf-8")
 
     def test_saving_the_document_unchanged_leaves_the_file_alone(
-        self, workspace: Workspace, locks: WorkspaceLocks
+        self, workspace: Workspace
     ) -> None:
         _create(workspace)
         path = workspace.listing_template_file(NAME)
         path.write_bytes(crlf(HAND_EDITED_TEMPLATE).encode("utf-8"))
         before = identity(path)
 
-        outcome = edit_listing_template(workspace, NAME, _document(workspace), locks=locks)
+        outcome = edit_listing_template(workspace, NAME, _document(workspace))
 
         assert outcome.saved
         assert identity(path) == before
 
-    def test_a_missing_template_is_refused(
-        self, workspace: Workspace, locks: WorkspaceLocks
-    ) -> None:
+    def test_a_missing_template_is_refused(self, workspace: Workspace) -> None:
         with pytest.raises(ListingTemplateMissingError):
-            edit_listing_template(workspace, "gone", {}, locks=locks)
+            edit_listing_template(workspace, "gone", {})
         assert not workspace.listing_template_dir("gone").exists()
 
 
 class TestRenameAndDelete:
-    def test_rename_moves_the_template_and_its_own_files(
-        self, workspace: Workspace, locks: WorkspaceLocks
-    ) -> None:
+    def test_rename_moves_the_template_and_its_own_files(self, workspace: Workspace) -> None:
         _local_picture(workspace)
         _create(workspace)
 
@@ -382,7 +364,6 @@ class TestRenameAndDelete:
             workspace,
             NAME,
             "everyday-tee",
-            locks=locks,
             records=BatchRecords(StagingStore(workspace), BatchStore(workspace)),
         )
 
@@ -392,7 +373,7 @@ class TestRenameAndDelete:
         ).is_file()
 
     def test_batches_and_staging_made_from_it_follow_by_name_and_keep_their_frozen_copy(
-        self, workspace: Workspace, locks: WorkspaceLocks
+        self, workspace: Workspace
     ) -> None:
         _create(workspace)
         batches, staging = BatchStore(workspace), StagingStore(workspace)
@@ -401,7 +382,7 @@ class TestRenameAndDelete:
         session = stage_pngs(staging, NAME, uploads(("night-hike.png", png(1))))
 
         rename_listing_template(
-            workspace, NAME, "everyday-tee", locks=locks, records=BatchRecords(staging, batches)
+            workspace, NAME, "everyday-tee", records=BatchRecords(staging, batches)
         )
 
         record = batches.load("b1")
@@ -412,69 +393,70 @@ class TestRenameAndDelete:
         assert staged is not None
         assert staged.listing_template == "everyday-tee"
 
-    def test_a_taken_name_is_refused_and_nothing_moves(
-        self, workspace: Workspace, locks: WorkspaceLocks
-    ) -> None:
+    def test_a_taken_name_is_refused_and_nothing_moves(self, workspace: Workspace) -> None:
         _create(workspace)
         _create(workspace, "everyday-tee", from_template=NAME)
 
         with pytest.raises(ListingTemplateExistsError):
-            _rename(workspace, NAME, "everyday-tee", locks)
+            _rename(workspace, NAME, "everyday-tee")
         assert workspace.listing_template_names() == ["everyday-tee", NAME]
 
-    def test_the_same_name_changes_nothing(
-        self, workspace: Workspace, locks: WorkspaceLocks
-    ) -> None:
+    def test_the_same_name_changes_nothing(self, workspace: Workspace) -> None:
         _create(workspace)
-        _rename(workspace, NAME, NAME, locks)
+        _rename(workspace, NAME, NAME)
         assert workspace.listing_template_names() == [NAME]
 
-    def test_bad_names_and_missing_templates_are_refused(
-        self, workspace: Workspace, locks: WorkspaceLocks
-    ) -> None:
+    def test_bad_names_and_missing_templates_are_refused(self, workspace: Workspace) -> None:
         _create(workspace)
         with pytest.raises(InvalidNameError):
-            _rename(workspace, NAME, "../escape", locks)
+            _rename(workspace, NAME, "../escape")
         with pytest.raises(ReservedListingTemplateNameError):
-            _rename(workspace, NAME, "draft", locks)
+            _rename(workspace, NAME, "draft")
         with pytest.raises(ListingTemplateMissingError):
-            _rename(workspace, "gone", "x", locks)
+            _rename(workspace, "gone", "x")
 
     def test_delete_removes_the_template_whatever_was_made_from_it(
-        self, workspace: Workspace, locks: WorkspaceLocks
+        self, workspace: Workspace
     ) -> None:
         _create(workspace)
         BatchStore(workspace).save(_batch(NAME))
 
-        delete_listing_template(workspace, NAME, locks=locks)
+        delete_listing_template(workspace, NAME)
 
         assert not workspace.listing_template_dir(NAME).exists()
         with pytest.raises(ListingTemplateMissingError):
-            delete_listing_template(workspace, NAME, locks=locks)
+            delete_listing_template(workspace, NAME)
 
 
 # ------------------------------------------------------- competing writes
 
 
-class _GatedLocks(WorkspaceLocks):
-    """The process's template locks, with the first one taken held at a gate."""
+class _TemplateGate(LockGate):
+    """The process's listing-template locks, with the first one taken once
+    :attr:`armed` held at a gate. Setup before that, and every other domain's
+    locks, pass straight through."""
 
-    def __init__(self, gate: LockGate) -> None:
-        super().__init__()
-        self._gate = gate
-
-    def listing_template(self, name: str, *more: str) -> AbstractContextManager[None]:
-        real = super().listing_template
-        return self._gate.around(lambda: real(name, *more))
+    armed = False
 
 
 @pytest.fixture
-def template_lock() -> LockGate:
-    return LockGate("the template")
+def template_lock(monkeypatch: pytest.MonkeyPatch) -> _TemplateGate:
+    gate = _TemplateGate("the template")
+    real = locks.hold
+
+    def gated(
+        workspace: Workspace, domain: LockDomain, name: str, *more: str
+    ) -> AbstractContextManager[None]:
+        if domain != "listing-template" or not gate.armed:
+            return real(workspace, domain, name, *more)
+        return gate.around(lambda: real(workspace, domain, name, *more))
+
+    monkeypatch.setattr(locks, "hold", gated)
+    return gate
 
 
 def _contend(
-    gate: LockGate, holder: Callable[[], object], contender: Callable[[], object]
+    gate: _TemplateGate, holder: Callable[[], object], contender: Callable[[], object]
 ) -> tuple[object, object]:
     """Run ``holder`` until it holds the lock, then ``contender``; check the
     contender waits outside, release, and return both outcomes (a refusal in
@@ -489,6 +471,7 @@ def _contend(
 
         return outcome
 
+    gate.armed = True
     with workers(gate) as start:
         first = start("holder", refused(holder))
         gate.held.wait_entered()
@@ -500,17 +483,16 @@ def _contend(
 
 class TestCompetingWrites:
     def test_an_edit_queued_behind_a_rename_finds_the_template_gone(
-        self, workspace: Workspace, template_lock: LockGate
+        self, workspace: Workspace, template_lock: _TemplateGate
     ) -> None:
         """It must not write a fresh ``template.yaml`` under the old name."""
         _create(workspace)
         document = {**_document(workspace), "colors": ["black"], "media": [BLACK]}
-        locks = _GatedLocks(template_lock)
 
         rename, edit = _contend(
             template_lock,
-            lambda: _rename(workspace, NAME, "everyday-tee", locks),
-            lambda: edit_listing_template(workspace, NAME, document, locks=locks),
+            lambda: _rename(workspace, NAME, "everyday-tee"),
+            lambda: edit_listing_template(workspace, NAME, document),
         )
 
         assert rename is None
@@ -519,15 +501,14 @@ class TestCompetingWrites:
         assert len(workspace.load_listing_template("everyday-tee").colors) == 4
 
     def test_a_create_and_a_rename_to_the_same_name_do_not_both_win(
-        self, workspace: Workspace, template_lock: LockGate
+        self, workspace: Workspace, template_lock: _TemplateGate
     ) -> None:
         _create(workspace)
-        locks = _GatedLocks(template_lock)
 
         rename, create = _contend(
             template_lock,
-            lambda: _rename(workspace, NAME, "everyday-tee", locks),
-            lambda: _create(workspace, "everyday-tee", locks=locks, from_template=NAME),
+            lambda: _rename(workspace, NAME, "everyday-tee"),
+            lambda: _create(workspace, "everyday-tee", from_template=NAME),
         )
 
         assert rename is None
@@ -535,14 +516,13 @@ class TestCompetingWrites:
         assert workspace.listing_template_names() == ["everyday-tee"]
 
     def test_two_creates_of_one_name_write_it_once(
-        self, workspace: Workspace, template_lock: LockGate
+        self, workspace: Workspace, template_lock: _TemplateGate
     ) -> None:
-        locks = _GatedLocks(template_lock)
 
         first, second = _contend(
             template_lock,
-            lambda: _create(workspace, locks=locks),
-            lambda: _create(workspace, locks=locks),
+            lambda: _create(workspace),
+            lambda: _create(workspace),
         )
 
         assert isinstance(first, TemplateSave)
@@ -551,12 +531,11 @@ class TestCompetingWrites:
         assert workspace.listing_template_names() == [NAME]
 
 
-def _rename(workspace: Workspace, old: str, new: str, locks: WorkspaceLocks) -> None:
+def _rename(workspace: Workspace, old: str, new: str) -> None:
     rename_listing_template(
         workspace,
         old,
         new,
-        locks=locks,
         records=BatchRecords(StagingStore(workspace), BatchStore(workspace)),
     )
 

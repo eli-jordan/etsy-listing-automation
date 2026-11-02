@@ -48,6 +48,7 @@ from tests.support.ai_runs import (
 )
 from tests.support.batches import LISTING_TEMPLATE, a_listing_template, png, uploads
 from tests.support.builders import edit_listing
+from tests.support.clients import FakeClients
 
 CREATED = datetime(2026, 9, 27, 11, 42, tzinfo=UTC)
 
@@ -427,7 +428,7 @@ def test_a_row_running_when_the_server_stops_reruns_after_a_restart(
             create_app(
                 workspace,
                 seo_provider_factory=lambda _workspace, _ai: [provider],
-                market_client_factory=lambda _workspace: market,
+                clients=FakeClients(etsy_market=market).factories(),
             )
         )
 

@@ -13,14 +13,10 @@ from tests.support.ai_processes import ModelCli
 from tests.support.gates import GATE_TIMEOUT, Gate, workers
 
 
-def test_startup_serves_health_while_advisory_discovery_is_blocked(
-    workspace_root: Path, monkeypatch
-) -> None:
+def test_startup_serves_health_while_advisory_discovery_is_blocked(workspace_root: Path) -> None:
     gate = Gate("discovery process")
     cli = ModelCli(during=lambda deadline, cancel: gate.hold())
-    monkeypatch.setattr("etsy_listings.core.ai.discovery.shutil.which", lambda name: name)
-    monkeypatch.setattr("etsy_listings.core.ai.discovery.run_managed", cli)
-    discovery = ModelDiscovery()
+    discovery = ModelDiscovery(host=cli.host)
     workspace = Workspace.discover(root_override=workspace_root)
     app = create_app(workspace)
     app.state.model_discovery = discovery
@@ -47,7 +43,7 @@ def test_startup_serves_health_while_advisory_discovery_is_blocked(
 
 
 def test_lifespan_shutdown_cancels_discovery_and_http_reads_keep_saved_preferences(
-    workspace_root: Path, monkeypatch
+    workspace_root: Path,
 ) -> None:
     entered, stopped = threading.Event(), threading.Event()
 
@@ -57,12 +53,12 @@ def test_lifespan_shutdown_cancels_discovery_and_http_reads_keep_saved_preferenc
         stopped.set()
 
     cli = ModelCli(during=until_cancelled)
-    monkeypatch.setattr("etsy_listings.core.ai.discovery.shutil.which", lambda name: name)
-    monkeypatch.setattr("etsy_listings.core.ai.discovery.run_managed", cli)
     workspace = Workspace.discover(root_override=workspace_root)
     source = b"ai:\n  providers: [{name: codex, model: saved-old-model}]\n"
     workspace.settings_file().write_bytes(source)
-    with TestClient(create_app(workspace)) as client:
+    app = create_app(workspace)
+    app.state.model_discovery = ModelDiscovery(host=cli.host)
+    with TestClient(app) as client:
         assert entered.wait(GATE_TIMEOUT)
         initial = client.get("/api/admin/settings").json()
         for url in ("/api/admin/settings/models", "/api/admin/settings/models?refresh=true"):

@@ -3,7 +3,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from etsy_listings.core.preparation.artifacts import Artifacts, PublishOptions
+from etsy_listings.core.preparation.artifacts import Artifacts, Provenance, PublishOptions
 from etsy_listings.core.workspace import Workspace
 
 from tests.support.marigold import material_maps, preparation_inputs
@@ -85,14 +85,14 @@ def test_generation_identity_ignores_provenance_storage_names_and_placement_orde
         first_inputs,
         maps,
         current_inputs=lambda: first_inputs,
-        options=PublishOptions(provenance={"seconds": 1}),
+        options=PublishOptions(provenance=Provenance(job_id="first")),
     )
     second = store.publish(
         "shirt",
         reverse_inputs,
         maps,
         current_inputs=lambda: reverse_inputs,
-        options=PublishOptions(provenance={"seconds": 99, "engine": "new"}),
+        options=PublishOptions(provenance=Provenance(job_id="second", engine_version="new")),
     )
     assert first.generation_id != second.generation_id
     assert first.content_digest == second.content_digest
@@ -100,7 +100,7 @@ def test_generation_identity_ignores_provenance_storage_names_and_placement_orde
     assert store.readiness("shirt", first_inputs).can_render
 
 
-def test_old_generation_is_retained_by_alias_readers_and_durable_job_references(
+def test_old_generation_is_retained_by_alias_readers(
     workspace_root,
 ) -> None:
     workspace = Workspace.discover(root_override=workspace_root)
@@ -114,7 +114,6 @@ def test_old_generation_is_retained_by_alias_readers_and_durable_job_references(
         )
         assert store.cleanup("shirt") == []
         assert acquired.manifest.generation_id == first.generation_id
-    assert store.cleanup("shirt", retained_generations={first.generation_id}) == []
     assert store.cleanup("shirt") == [first.generation_id]
     assert second.generation_id in workspace.template_map_generations("shirt")
 
@@ -767,3 +766,27 @@ def test_reusing_maps_does_not_hold_template_lock_during_archive_read(
             resume.set()
         reader.result()
         snapshot.result()
+
+
+@pytest.mark.parametrize(
+    ("change", "reason"),
+    [
+        ({"schema_version": 3}, "unsupported_schema"),
+        ({"schema_version": True}, "unsupported_schema"),
+        ({"schema_version": 2.0}, "unsupported_schema"),
+        ({"schema_version": 3, "extra": 1}, "invalid_artifact"),
+        ({"generation_id": 7}, "invalid_artifact"),
+    ],
+)
+def test_a_current_pointer_refuses_its_schema_apart_from_its_shape(
+    workspace_root, change, reason
+) -> None:
+    import json
+
+    store = Artifacts(Workspace.discover(root_override=workspace_root))
+    inputs = preparation_inputs()
+    store.publish("shirt", inputs, {None: material_maps()}, current_inputs=lambda: inputs)
+    path = store.workspace.template_map_current("shirt")
+    path.write_text(json.dumps({**json.loads(path.read_bytes()), **change}), encoding="utf-8")
+    readiness = store.readiness("shirt", inputs)
+    assert (readiness.state, readiness.reason) == ("out_of_date", reason)

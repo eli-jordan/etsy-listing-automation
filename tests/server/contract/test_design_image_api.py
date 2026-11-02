@@ -17,4 +17,4 @@ def test_original_design_retains_alpha_and_full_resolution(workspace_root: Path)
     image = Image.open(BytesIO(response.content))
     assert image.mode == "RGBA"
     assert min(image.size) > 160
-    assert client.get("/api/designs/nonexistent/image").status_code == 400
+    assert client.get("/api/designs/nonexistent/image").status_code == 404

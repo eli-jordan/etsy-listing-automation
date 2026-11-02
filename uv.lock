@@ -68,6 +68,15 @@ wheels = [
 ]
 
 [[package]]
+name = "cachetools"
+version = "7.2.8"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/93/6f/faa5e0606769105e70e0478031a8f9a6b729e329f42ce2462585c6d9aa52/cachetools-7.2.8.tar.gz", hash = "sha256:3f9b146b2160975da273e7c23ec882f3996b65df608150d52083c07de0682075", size = 47821, upload-time = "2026-10-31T21:37:51.986Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/0c/35/2fb720060bb278759da35f2076fab1af4e9d66e3add080e6b40d6e25ba48/cachetools-7.2.8-py3-none-any.whl", hash = "sha256:09b04a85741d0019b3fb7d02b7ee9933a422fa6923af92a0fd63b893b695830c", size = 19646, upload-time = "2026-10-31T21:37:50.278Z" },
+]
+
+[[package]]
 name = "certifi"
 version = "2026.7.22"
 source = { registry = "https://pypi.org/simple" }
@@ -263,6 +272,7 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "av" },
+    { name = "cachetools" },
     { name = "fastapi" },
     { name = "httpx" },
     { name = "opencv-python-headless" },
@@ -287,6 +297,7 @@ dev = [
     { name = "pytest" },
     { name = "pytest-cov" },
     { name = "ruff" },
+    { name = "types-cachetools" },
     { name = "types-pyyaml" },
     { name = "vulture" },
 ]
@@ -294,6 +305,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "av", specifier = ">=15" },
+    { name = "cachetools", specifier = ">=7,<8" },
     { name = "fastapi", specifier = ">=0.118,<1" },
     { name = "httpx", specifier = ">=0.28,<1" },
     { name = "opencv-python-headless", specifier = "==4.10.0.84" },
@@ -318,6 +330,7 @@ dev = [
     { name = "pytest", specifier = ">=8.2,<10" },
     { name = "pytest-cov", specifier = ">=6.0,<8" },
     { name = "ruff", specifier = ">=0.14,<1" },
+    { name = "types-cachetools", specifier = ">=7,<8" },
     { name = "types-pyyaml" },
     { name = "vulture", specifier = ">=2.14,<3" },
 ]
@@ -1268,6 +1281,15 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/16/f7/57713ba479fd405eb76de31404b2c744c289e336b2d999511ebf51e496f7/typer-0.27.2.tar.gz", hash = "sha256:269b7eb9d3c202ca84b4bc9618cb04ebb43d3d4d1e567e4c768607232c05f945", size = 204045, upload-time = "2026-08-28T10:26:55.046Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/dc/bf/205d0004930ede8f542fb58f601526fccf4ae7626075ca1e6c4de5d3d652/typer-0.27.2-py3-none-any.whl", hash = "sha256:b3a5fc4342d5fc8fda8fc3010b1cf117e9249aab7fae800c2eff62fd3842d97d", size = 123130, upload-time = "2026-08-28T10:26:53.752Z" },
+]
+
+[[package]]
+name = "types-cachetools"
+version = "7.0.0.20260713"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/34/64/66d7efdb36ecf6826aca5415e59fe2df96e97d24157147e53acfbe8dda11/types_cachetools-7.0.0.20260713.tar.gz", hash = "sha256:f1acf079e9c66a81e096a897ef0b261a82117cf856834e37b4bd0c9a116a076a", size = 10199, upload-time = "2026-07-13T05:22:21.845Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/0e/c7/d3525c9dbdc1be7786bad46655ef051b6e7993f656d304719ec40079c91c/types_cachetools-7.0.0.20260713-py3-none-any.whl", hash = "sha256:6db9bcc7a3840d39e91c04117d85a9d0937eacc9d14d12a873e2b01a2d24a71d", size = 9615, upload-time = "2026-07-13T05:22:20.76Z" },
 ]
 
 [[package]]

@@ -3,9 +3,6 @@
 from __future__ import annotations
 
 import hashlib
-import json
-import threading
-from collections import OrderedDict
 from dataclasses import asdict
 from pathlib import Path
 from typing import Any
@@ -13,7 +10,13 @@ from uuid import uuid4
 
 import numpy as np
 
-from etsy_listings.core.application.preparation.models import CropEvidence, Job, placement_key
+from etsy_listings.core.application.preparation.models import (
+    CropEvidence,
+    Job,
+    PredictionPointer,
+    placement_key,
+)
+from etsy_listings.core.bounded_cache import BoundedCache
 from etsy_listings.core.preparation.artifacts import PreparationInputs
 from etsy_listings.core.preparation.numerics import (
     Crop,
@@ -23,6 +26,7 @@ from etsy_listings.core.preparation.numerics import (
     plan_crop,
 )
 from etsy_listings.core.preparation.predictions import (
+    PredictionError,
     cache_path,
     read_prediction,
     validate_prediction_file,
@@ -63,32 +67,12 @@ def crop_of(value: CropEvidence, inputs: PreparationInputs) -> Crop:
 
 # A real two-scene edit/rebuild working set is about 262 MiB. Retaining it
 # avoids archive decoding during warm edits while keeping ownership bounded.
-_EVIDENCE_BUDGET = 384 * 1024 * 1024
-_EVIDENCE_LOCK = threading.Lock()
-_EVIDENCE: OrderedDict[tuple[Any, ...], tuple[Evidence, int]] = OrderedDict()
-
-
-class _EvidenceBudget:
-    """Bytes retained by ``_EVIDENCE``. A holder, so the cache can update it without ``global``."""
-
-    used = 0
-
-
-def _retain_evidence(key: tuple[Any, ...], value: Evidence) -> None:
-    size = sum(
+_EVIDENCE: BoundedCache[tuple[Any, ...], Evidence] = BoundedCache(
+    384 * 1024 * 1024,
+    size=lambda value: sum(
         a.nbytes for a in (value.normals, value.shading, value.albedo, value.residual, value.depth)
-    )
-    with _EVIDENCE_LOCK:
-        old = _EVIDENCE.pop(key, None)
-        if old is not None:
-            _EvidenceBudget.used -= old[1]
-        if size > _EVIDENCE_BUDGET:
-            return
-        while _EVIDENCE and _EvidenceBudget.used + size > _EVIDENCE_BUDGET:
-            _, (_, removed) = _EVIDENCE.popitem(last=False)
-            _EvidenceBudget.used -= removed
-        _EVIDENCE[key] = value, size
-        _EvidenceBudget.used += size
+    ),
+)
 
 
 class EvidenceReader:
@@ -130,15 +114,21 @@ class EvidenceReader:
                     break
         return selected
 
-    def current(self, template: str) -> tuple[CropEvidence, ...]:
+    def pointer(self, template: str) -> PredictionPointer | None:
+        """The template's current prediction set; None when it has none or
+        its pointer is unreadable."""
+        path = self.workspace.preparation_prediction_current(template)
         try:
-            value = json.loads(self.workspace.preparation_prediction_current(template).read_bytes())
-            if value["schema_version"] != 1:
-                return ()
-            self.workspace.preparation_prediction_set(template, value["id"])
-            return tuple(CropEvidence.model_validate(v) for v in value["evidence"])
-        except (OSError, ValueError, KeyError, TypeError):
-            return ()
+            pointer = PredictionPointer.model_validate_json(path.read_bytes())
+            # Refuses a set ID that is not one path segment, as ValueError.
+            self.workspace.preparation_prediction_set(template, pointer.id)
+        except (OSError, ValueError):
+            return None
+        return pointer
+
+    def current(self, template: str) -> tuple[CropEvidence, ...]:
+        pointer = self.pointer(template)
+        return () if pointer is None else pointer.evidence
 
     def candidates(self, template: str, jobs: list[Job]) -> tuple[CropEvidence, ...]:
         return (
@@ -157,11 +147,9 @@ class EvidenceReader:
 
     def load(self, value: CropEvidence, inputs: PreparationInputs) -> Evidence:
         key = self._evidence_key(value, inputs)
-        with _EVIDENCE_LOCK:
-            cached = _EVIDENCE.get(key)
-            if cached is not None:
-                _EVIDENCE.move_to_end(key)
-                return cached[0]
+        cached = _EVIDENCE.get(key)
+        if cached is not None:
+            return cached
         arrays = {
             p.role: read_prediction(
                 self.path(p.path), role=p.role, checksum=p.checksum, size=value.size
@@ -182,8 +170,8 @@ class EvidenceReader:
         )
 
         if self._evidence_key(value, inputs) != key:
-            raise ValueError("Prediction files changed while loading evidence")
-        _retain_evidence(key, result)
+            raise PredictionError("Prediction files changed while loading evidence")
+        _EVIDENCE.put(key, result)
         return result
 
     def _evidence_key(self, value: CropEvidence, inputs: PreparationInputs) -> tuple[Any, ...]:

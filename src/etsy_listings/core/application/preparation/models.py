@@ -1,11 +1,11 @@
 """Persisted job and event contract under ADR-0054."""
 
 import hashlib
-from typing import Any, Literal
+from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 
-from etsy_listings.core.preparation.artifacts import PreparationInputs
+from etsy_listings.core.preparation.artifacts import PlacementArtifact, PreparationInputs
 from etsy_listings.core.workspace.calibration import json_bytes
 
 Phase = Literal["queued", "running", "cancelling", "cancelled", "superseded", "failed", "completed"]
@@ -48,6 +48,24 @@ class CropEvidence(Record):
         ).hexdigest()
 
 
+class PredictionPointer(Record):
+    """A retained prediction set's ``manifest.json``, written again as the
+    template's current pointer once the complete set is validated."""
+
+    schema_version: Literal[1]
+    id: str
+    job_order: int
+    inputs: PreparationInputs
+    evidence: tuple[CropEvidence, ...]
+
+
+class Publication(Record):
+    """The generation a completed job published."""
+
+    generation_id: str
+    content_digest: str
+
+
 class Job(Record):
     schema_version: Literal[1] = 1
     id: str
@@ -71,11 +89,27 @@ class Job(Record):
     evidence: tuple[CropEvidence, ...] = ()
     placement_evidence: dict[str, str] = Field(default_factory=dict)
     planned_masks: dict[str, str] = Field(default_factory=dict)
-    cpu_checkpoints: dict[str, Any] = Field(default_factory=dict)
+    cpu_checkpoints: dict[str, PlacementArtifact] = Field(default_factory=dict)
     placements_completed: int = 0
-    result: dict[str, str] | None = None
+    result: Publication | None = None
     error: str | None = None
     events: tuple[Event, ...] = ()
+
+    @field_validator("cpu_checkpoints", mode="before")
+    @classmethod
+    def _drop_damaged_checkpoints(cls, value: object) -> object:
+        # A checkpoint only saves refitting its placement, so one that no
+        # longer validates is dropped and refitted rather than making the
+        # whole journal unreadable.
+        if not isinstance(value, dict):
+            return value
+        kept: dict[str, PlacementArtifact] = {}
+        for key, record in value.items():
+            try:
+                kept[key] = PlacementArtifact.model_validate(record)
+            except ValidationError:
+                continue
+        return kept
 
     @property
     def last_event_sequence(self) -> int:

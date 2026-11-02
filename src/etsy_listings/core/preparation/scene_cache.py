@@ -22,13 +22,13 @@ import os
 import re
 import tempfile
 import threading
-from collections import OrderedDict
 from collections.abc import Callable, Iterator
 from pathlib import Path
 from typing import TypeVar
 
 import numpy as np
 
+from etsy_listings.core.bounded_cache import BoundedCache
 from etsy_listings.core.render import load_design, load_template_base
 from etsy_listings.core.render.identity import artwork_identity
 from etsy_listings.core.render.types import RGB, RGBA
@@ -153,11 +153,9 @@ class PixelDigests:
     the one read after, so a write racing the decode is never recorded."""
 
     def __init__(self, maxsize: int = 1024) -> None:
-        self._maxsize = maxsize
-        self._known: OrderedDict[tuple[str, Path], tuple[tuple[int | str, ...], str]] = (
-            OrderedDict()
+        self._known: BoundedCache[tuple[str, Path], tuple[tuple[int | str, ...], str]] = (
+            BoundedCache(maxsize)
         )
-        self._lock = threading.Lock()
 
     def photo(self, path: Path) -> str | None:
         return self._recall("photo", path)
@@ -182,13 +180,10 @@ class PixelDigests:
             stamp = file_version(path)
         except OSError:
             return None
-        key = (kind, path.resolve())
-        with self._lock:
-            known = self._known.get(key)
-            if known is None or known[0] != stamp:
-                return None
-            self._known.move_to_end(key)
-            return known[1]
+        known = self._known.get((kind, path.resolve()))
+        if known is None or known[0] != stamp:
+            return None
+        return known[1]
 
     def _decode(
         self,
@@ -201,12 +196,7 @@ class PixelDigests:
         pixels = load(path)
         value = digest(pixels)
         if file_version(path) == before:
-            key = (kind, path.resolve())
-            with self._lock:
-                self._known[key] = (before, value)
-                self._known.move_to_end(key)
-                while len(self._known) > self._maxsize:
-                    self._known.popitem(last=False)
+            self._known.put((kind, path.resolve()), (before, value))
         return pixels, value
 
 

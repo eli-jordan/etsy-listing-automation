@@ -39,7 +39,6 @@ from etsy_listings.core.application.deploy.deployments import Deployments
 from etsy_listings.core.application.deploy.events import TERMINAL_PHASES
 from etsy_listings.core.application.deploy.registry import ListingApply, ListingPlan, Run
 from etsy_listings.core.application.refusals import ListingDeployingError
-from etsy_listings.core.application.workspace_locks import WorkspaceLocks
 from etsy_listings.core.batches import BatchRecords, BatchStore, StagingStore
 from etsy_listings.core.clients.printify.fakes import FakeCatalogClient
 from etsy_listings.core.engine.context import EventSink, RunContext
@@ -72,11 +71,10 @@ class Deploys:
 
 class Host:
     """What the UI server holds for one workspace: one of each store and
-    lock, and the two coordinators."""
+    the two coordinators."""
 
     def __init__(self, workspace: Workspace, provider: ChainProvider, deploys: Deploys) -> None:
         self.workspace = workspace
-        self.locks = WorkspaceLocks()
         self.staging = StagingStore(workspace)
         self.batches = BatchStore(workspace)
         market = seeded_market()
@@ -91,9 +89,7 @@ class Host:
 
     def batch(self, *names: str) -> str:
         files = [(f"{name}.png", png(i + 1)) for i, name in enumerate(names)]
-        session = batch_staging.stage_upload(
-            self.staging, LISTING_TEMPLATE, uploads(*files), locks=self.locks
-        )
+        session = batch_staging.stage_upload(self.staging, LISTING_TEMPLATE, uploads(*files))
         batch = batch_workflow.confirm_batch(
             self.workspace,
             BatchRecords(self.staging, self.batches),

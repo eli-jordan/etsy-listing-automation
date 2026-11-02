@@ -31,16 +31,15 @@ whoever asks next.
 
 from __future__ import annotations
 
-import threading
-from collections import OrderedDict
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, TypeVar
+from typing import Any, TypeVar, cast
 
 import numpy as np
 from PIL import Image
 
+from etsy_listings.core.bounded_cache import BoundedCache
 from etsy_listings.core.render import prepare_material_artwork
 from etsy_listings.core.render.io import DesignValidationError, load_design
 from etsy_listings.core.render.maps import DerivedMapCache
@@ -92,61 +91,8 @@ class ScaledBase:
     keying anything derived from it."""
 
 
-class _ArrayCache:
-    """A least-recently-used cache bounded by the total ``nbytes`` it holds.
-
-    Deliberately not ``functools.lru_cache``: that counts entries, and one
-    full-size design array is worth fifty editor-scale bases.
-
-    Locked, because FastAPI runs ``def`` endpoints on a thread pool and two
-    previews can therefore be in flight at once. The lock is held for the
-    bookkeeping only, never across ``compute()`` -- decoding a 20-megapixel
-    PNG under a mutex would serialise exactly the requests this exists to make
-    cheap. Two threads may therefore decode the same image once each; the
-    loser's copy is dropped, so every caller still gets the *same* array back
-    and the byte accounting counts it once.
-    """
-
-    def __init__(self, budget_bytes: int) -> None:
-        self._budget = budget_bytes
-        self._entries: OrderedDict[object, np.ndarray[Any, Any]] = OrderedDict()
-        self._held = 0
-        self._lock = threading.Lock()
-
-    def get(self, key: object, compute: Callable[[], _Array]) -> _Array:
-        with self._lock:
-            cached = self._entries.get(key)
-            if cached is not None:
-                self._entries.move_to_end(key)
-                return cached  # type: ignore[return-value]
-
-        value = compute()
-        value.flags.writeable = False
-
-        with self._lock:
-            raced = self._entries.get(key)
-            if raced is not None:
-                self._entries.move_to_end(key)
-                return raced  # type: ignore[return-value]
-            # An array bigger than the whole budget is served without being
-            # stored -- caching it would evict everything and then itself.
-            if value.nbytes <= self._budget:
-                self._entries[key] = value
-                self._held += value.nbytes
-                while self._held > self._budget:
-                    _, evicted = self._entries.popitem(last=False)
-                    self._held -= evicted.nbytes
-        return value
-
-    @property
-    def held_bytes(self) -> int:
-        with self._lock:
-            return self._held
-
-    def clear(self) -> None:
-        with self._lock:
-            self._entries.clear()
-            self._held = 0
+def _nbytes(value: np.ndarray[Any, Any]) -> int:
+    return int(value.nbytes)
 
 
 def _stamp(path: Path) -> tuple[int | str, ...]:
@@ -167,7 +113,19 @@ class PreviewImages:
     """
 
     def __init__(self, budget_bytes: int = CACHE_BUDGET_BYTES) -> None:
-        self._cache = _ArrayCache(budget_bytes)
+        # Budgeted in bytes, not entries: one full-size design array is worth
+        # fifty editor-scale bases.
+        self._cache: BoundedCache[object, np.ndarray[Any, Any]] = BoundedCache(
+            budget_bytes, size=_nbytes
+        )
+
+    def _get(self, key: object, compute: Callable[[], _Array]) -> _Array:
+        def frozen() -> _Array:
+            value = compute()
+            value.flags.writeable = False
+            return value
+
+        return cast("_Array", self._cache.get_or_compute(key, frozen))
 
     def base(self, path: Path, max_edge: int | None = None) -> ScaledBase:
         """The mockup photo to composite over, downscaled to ``max_edge`` if
@@ -192,7 +150,7 @@ class PreviewImages:
                 array: RGB = np.array(rgb, dtype=np.uint8)
             return array
 
-        image = self._cache.get(("base", str(path), stamp, target), decode)
+        image = self._get(("base", str(path), stamp, target), decode)
         return ScaledBase(
             image=image,
             size=true_size,
@@ -223,7 +181,7 @@ class PreviewImages:
                 array: RGBA = np.array(image, dtype=np.uint8)
                 return array
 
-        return self._cache.get(("design", str(path), _stamp(path), max_edge), decode)
+        return self._get(("design", str(path), _stamp(path), max_edge), decode)
 
     def material_design(self, path: Path, max_edge: int) -> tuple[RGBA, FloatMap]:
         """Retain exact linear artwork samples under the same total byte budget.
@@ -238,7 +196,7 @@ class PreviewImages:
                 break
         else:
             raise OSError("Artwork changed repeatedly while reading preview samples; retry")
-        packed = self._cache.get(
+        packed = self._get(
             ("material-design", str(path), stamp, max_edge),
             lambda: prepare_material_artwork(design),
         )
@@ -267,11 +225,11 @@ class PreviewImages:
         pixel plus an ``np.load`` of a float32 map the same size as the photo.
         Once per drag that is invisible; five times a second it is not.
         """
-        return self._cache.get(("map", kind, map_key, base.token), compute)
+        return self._get(("map", kind, map_key, base.token), compute)
 
     @property
     def held_bytes(self) -> int:
-        return self._cache.held_bytes
+        return self._cache.held
 
     def clear(self) -> None:
         self._cache.clear()

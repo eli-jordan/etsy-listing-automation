@@ -35,7 +35,7 @@ export async function saveSettings(
   });
   if (data) return { kind: "saved", settings: data };
   const refusal = error as Refusal | undefined;
-  if (response.status === 409 && refusal?.kind === "conflict")
+  if (response.status === 412 && refusal?.kind === "conflict")
     return { kind: "conflict", message: refusal.message };
   if (response.status === 422 && refusal?.kind === "invalid")
     return { kind: "invalid", message: refusal.message, fieldErrors: refusal.field_errors ?? {} };

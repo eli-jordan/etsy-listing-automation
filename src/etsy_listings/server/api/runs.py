@@ -53,7 +53,6 @@ from etsy_listings.core.application.deploy.registry import (
     WorkspaceApply,
     WorkspacePlan,
 )
-from etsy_listings.core.application.refusals import ReviewedPlanRefusedError
 from etsy_listings.core.workspace.workspace import Workspace
 from etsy_listings.server.api.schemas import (
     ApplyRunDetail,
@@ -145,10 +144,7 @@ def create_run(request: Request, body: CreateRunRequest) -> RunSummary | JSONRes
         assert isinstance(body, WorkspaceApplyRequest)  # closed request union
         command = WorkspaceApply(tuple(body.listings), body.expect, body.reviewed_run_id)
 
-    try:
-        result = _deployments(request).submit(command)
-    except ReviewedPlanRefusedError as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    result = _deployments(request).submit(command)
     if isinstance(result, Conflict):
         return JSONResponse(status_code=409, content={"active_run": result.active_run})
     return _summary(result)

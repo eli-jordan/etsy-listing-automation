@@ -31,3 +31,37 @@ whatever an internal exception happens to say -- a connection string, a
 stack frame's local, a secret interpolated into an f-string. One constant so
 every place that turns "not a UserFacingError" into a client-visible message
 says the same thing, rather than each guessing its own wording."""
+
+
+# ---------------------------------------------------------------- refusals
+#
+# What kind of "no" a refusal is, so that each adapter decides once what each
+# kind becomes -- the HTTP app has one table of category to status
+# (``server/api/app.py``), and no route reads a message to decide. Core names
+# categories, never status codes (ADR-0052). A refusal inherits exactly one,
+# including one an adapter answers with its own body (an AI run's reason, a
+# staging refusal's remedy), so its status still agrees with its category.
+# ``workspace.InvalidNameError`` stays its own refusal: a name that is not a
+# path segment is a security boundary (ADR-0013), not a user message.
+
+
+class MissingError(UserFacingError, LookupError):
+    """What the request names is not there: never was, or something removed
+    or moved it first."""
+
+
+class ConflictError(UserFacingError):
+    """The request is well formed, but what the workspace holds now forbids
+    it: a name already taken, a row with nothing to retry, a template that
+    must be prepared first."""
+
+
+class StaleError(UserFacingError):
+    """The request was made against a revision of something that has since
+    changed; the caller reloads and asks again. Nothing was written."""
+
+
+class RefusedError(UserFacingError, ValueError):
+    """The request's own content cannot be taken, whatever the workspace
+    holds: a file that is not an image, a kind the photos cannot be, mask
+    strokes outside the photo."""

@@ -14,7 +14,9 @@ from pathlib import Path
 import pytest
 
 from etsy_listings.core.clients.etsy.fakes import FakeEtsyListingClient
+from etsy_listings.core.clients.etsy.listings import EtsyListingClient
 from etsy_listings.core.clients.etsy.tokens import EtsyAuthError, EtsyRefreshBusyError
+from etsy_listings.core.config.secrets import MissingCredentialError
 from etsy_listings.server.api import etsystate
 
 
@@ -35,103 +37,88 @@ def _clean() -> None:
     etsystate.forget()
 
 
-def install(monkeypatch: pytest.MonkeyPatch, client: object | None) -> None:
-    monkeypatch.setattr(etsystate.connections, "etsy_listing_client", lambda _root: client)
-
-
 ROOT = Path("/workspace")
 
 
-def test_asks_once_and_answers_the_rest_from_the_memo(monkeypatch: pytest.MonkeyPatch) -> None:
-    fake = Counting({111: "active", 222: "draft"})
-    install(monkeypatch, fake)
+def live(client: EtsyListingClient, listing_ids: list[int], at: float) -> set[int]:
+    """Which of ``listing_ids`` the memo reports live at ``at``, asking ``client``."""
+    return etsystate.live_listing_ids(
+        ROOT, listing_ids, client_for=lambda _root: client, now=lambda: at
+    )
 
-    first = etsystate.live_listing_ids(ROOT, [111, 222], now=lambda: 0.0)
-    second = etsystate.live_listing_ids(ROOT, [111, 222], now=lambda: 1.0)
+
+def test_asks_once_and_answers_the_rest_from_the_memo() -> None:
+    fake = Counting({111: "active", 222: "draft"})
+
+    first = live(fake, [111, 222], at=0.0)
+    second = live(fake, [111, 222], at=1.0)
 
     assert first == second == {111}
     assert fake.calls == 1
 
 
-def test_re_asks_once_the_memo_has_expired(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_re_asks_once_the_memo_has_expired() -> None:
     """A listing published in another tab is badged `deployed` for at most
     this long, which is the whole cost of the memo."""
     fake = Counting({111: "draft"})
-    install(monkeypatch, fake)
 
-    assert etsystate.live_listing_ids(ROOT, [111], now=lambda: 0.0) == set()
+    assert live(fake, [111], at=0.0) == set()
     fake.seed_listing(111, state="active")
     later = etsystate.TTL_SECONDS + 1
 
-    assert etsystate.live_listing_ids(ROOT, [111], now=lambda: later) == {111}
+    assert live(fake, [111], at=later) == {111}
     assert fake.calls == 2
 
 
-def test_only_the_ids_it_has_no_answer_for_are_fetched(monkeypatch: pytest.MonkeyPatch) -> None:
-    fake = Counting({111: "active", 222: "active"})
-    install(monkeypatch, fake)
+def test_only_the_ids_it_has_no_answer_for_are_fetched() -> None:
     asked: list[list[int]] = []
-    original = fake.listing_states
 
-    def record(listing_ids: Sequence[int]) -> dict[int, str]:
-        asked.append(list(listing_ids))
-        return original(listing_ids)
+    class Recording(Counting):
+        def listing_states(self, listing_ids: Sequence[int]) -> dict[int, str]:
+            asked.append(list(listing_ids))
+            return super().listing_states(listing_ids)
 
-    monkeypatch.setattr(fake, "listing_states", record)
+    fake = Recording({111: "active", 222: "active"})
 
-    etsystate.live_listing_ids(ROOT, [111], now=lambda: 0.0)
-    etsystate.live_listing_ids(ROOT, [111, 222], now=lambda: 1.0)
+    live(fake, [111], at=0.0)
+    live(fake, [111, 222], at=1.0)
 
     assert asked == [[111], [222]]
 
 
-def test_an_id_etsy_never_answered_for_is_remembered_as_not_live(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_an_id_etsy_never_answered_for_is_remembered_as_not_live() -> None:
     """A listing deleted on Etsy must not re-ask every time the table is
     drawn -- "no answer" is an answer worth keeping for the TTL."""
     fake = Counting({})
-    install(monkeypatch, fake)
 
-    assert etsystate.live_listing_ids(ROOT, [999], now=lambda: 0.0) == set()
-    assert etsystate.live_listing_ids(ROOT, [999], now=lambda: 1.0) == set()
+    assert live(fake, [999], at=0.0) == set()
+    assert live(fake, [999], at=1.0) == set()
     assert fake.calls == 1
 
 
-def test_no_ids_asks_nothing(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_no_ids_asks_nothing() -> None:
     fake = Counting({})
-    install(monkeypatch, fake)
 
-    assert etsystate.live_listing_ids(ROOT, [], now=lambda: 0.0) == set()
+    assert live(fake, [], at=0.0) == set()
     assert fake.calls == 0
-
-
-def test_a_workspace_with_no_etsy_credentials_reports_nothing_live(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """An ordinary state well short of Phase 3: the listings page must still
-    open, with every listing reported as not-live."""
-    install(monkeypatch, None)
-
-    assert etsystate.live_listing_ids(ROOT, [111], now=lambda: 0.0) == set()
 
 
 @pytest.mark.parametrize(
     "failure",
     [
+        MissingCredentialError("ETSY_KEYSTRING", ROOT / ".env", "read Etsy", "Run `auth etsy`."),
         EtsyAuthError("No Etsy tokens."),
         EtsyRefreshBusyError("Refresh still running. Try again shortly."),
     ],
-    ids=["signed-out", "refresh-busy"],
+    ids=["no-credentials", "signed-out", "refresh-busy"],
 )
-def test_an_etsy_read_failure_is_silence_not_a_500(
-    monkeypatch: pytest.MonkeyPatch,
-    failure: Exception,
-) -> None:
-    class Expired(FakeEtsyListingClient):
+def test_an_etsy_read_failure_is_silence_not_a_500(failure: Exception) -> None:
+    """A workspace with no Etsy credentials is an ordinary state well short
+    of Phase 3: the listings page must still open, with every listing
+    reported as not-live."""
+
+    class Failing(FakeEtsyListingClient):
         def listing_states(self, listing_ids: Sequence[int]) -> dict[int, str]:
             raise failure
 
-    install(monkeypatch, Expired())
-
-    assert etsystate.live_listing_ids(ROOT, [111], now=lambda: 0.0) == set()
+    assert live(Failing(), [111], at=0.0) == set()

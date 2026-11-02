@@ -50,13 +50,15 @@ step and run budgets (ADR-0057) are shared, which is what `ProviderTask` exists 
   Private ``_windows_process``/``_posix_process`` implement ownership; callers
   never select a platform mechanism or manage child identities.
 - ``cli_support`` -- the shared local CLI provider contract, readiness probes and outcome decoding.
+- ``host`` -- ``CliHost``/``CommandHost``, how adapters, discovery and the CLI's
+  prompt backends find and run commands, and ``LOCAL_CLI_HOST``, this machine.
+  Imported directly, not re-exported.
 
 `core/application/ai/` coordinates this package into runs, readiness and
 proposal operations; `server/api/airuns.py` and `server/api/seo.py` serve
 those over HTTP. CI never invokes a
-real provider binary: every adapter test replaces the
-subprocess layer with a double, and every orchestrator test runs against
-`FakeAiProvider`.
+real provider binary: every adapter test builds its provider on a scripted
+``CliHost``, and every orchestrator test runs against `FakeAiProvider`.
 """
 
 from __future__ import annotations

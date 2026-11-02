@@ -3,7 +3,7 @@
 from etsy_listings.core.config.listing_validation import CheckInputs, check_listing
 from etsy_listings.core.engine import build_plan
 from etsy_listings.core.engine.stages.render import RenderStage
-from etsy_listings.core.preparation.artifacts import Artifacts, PublishOptions
+from etsy_listings.core.preparation.artifacts import Artifacts, Provenance, PublishOptions
 from etsy_listings.core.workspace import WorkspaceFacts
 from etsy_listings.core.workspace.listing_documents import ListingDocuments
 
@@ -124,7 +124,7 @@ def test_compatible_map_republication_and_cache_deletion_keep_render_identity(wo
         {None: material_maps((64, 64))},
         current_inputs=lambda: inputs,
         options=PublishOptions(
-            provenance={"engine_version": "compatible-new", "timestamp": "tomorrow"}
+            provenance=Provenance(engine_version="compatible-new", installation_id="tomorrow")
         ),
     )
     again = build_plan(ctx, FIXTURE_LISTING, first, (stage,))
@@ -321,6 +321,7 @@ def test_one_missing_multiple_archive_blocks_the_whole_listing(workspace_root):
 
 def test_shared_colour_scenes_use_each_target_photo_without_inference(workspace_root):
     from etsy_listings.core.engine import execute
+    from etsy_listings.core.engine.stages.render import PreparedRender
     from etsy_listings.core.render import (
         MaterialLayer,
         encode_png,
@@ -358,14 +359,19 @@ def test_shared_colour_scenes_use_each_target_photo_without_inference(workspace_
     stage = RenderStage()
     desired = stage.desired(ctx, FIXTURE_LISTING, None)
     execute(ctx, build_plan(ctx, FIXTURE_LISTING, a_lock(), (stage,)), a_lock())
+    renders = [work.render for work in desired.works]
     for work in desired.works:
+        assert isinstance(work.render, PreparedRender)
         expected = render_marigold_scene(
             load_template_base(work.base_image),
             [MaterialLayer(load_design(work.layers[0].design), maps)],
-            appearance=work.appearance,
+            appearance=work.render.appearance,
         )
         assert work.output.read_bytes() == encode_png(expected, compression=1)
-    assert desired.works[0].render_identity != desired.works[1].render_identity
+    first, second = renders
+    assert isinstance(first, PreparedRender)
+    assert isinstance(second, PreparedRender)
+    assert first.identity != second.identity
 
 
 def test_unprepared_reference_can_be_saved_as_reusable_listing_template(workspace_root):
@@ -373,14 +379,12 @@ def test_unprepared_reference_can_be_saved_as_reusable_listing_template(workspac
         DraftOrigin,
         create_listing_template,
     )
-    from etsy_listings.core.application.workspace_locks import WorkspaceLocks
 
     workspace, _ = listing_with_marigold(workspace_root)
     result = create_listing_template(
         workspace,
         "ready-for-artwork",
         DraftOrigin(listing=FIXTURE_LISTING),
-        locks=WorkspaceLocks(),
     )
     assert result.saved
     assert workspace.load_listing_template("ready-for-artwork").media[0].template == "shirt"

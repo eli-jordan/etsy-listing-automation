@@ -23,10 +23,15 @@ through ``ListingDocuments`` for its lock, retrying read and atomic replace,
 and for the one answer to "is there a listing?" and "is this name free?".
 It is imported from its own module, as ``atomic`` is, rather than from here.
 
+:mod:`~etsy_listings.core.workspace.locks` is every name-keyed lock in the
+process: ``hold(workspace, domain, *names)`` for a listing, a mockup template or
+a listing template. It too is imported from its own module.
+
 ``calibration.CalibrationStore`` owns mockup-template read/save recovery,
 revision conflicts, save receipts, inactive renderer selection and durable mask
-operations. Its template lock is process-wide and separate from listing-template
-locks. ``Workspace.load_template_config`` takes that lock but refuses an active
+operations. Its template lock is the ``mockup-template`` domain of
+:mod:`~etsy_listings.core.workspace.locks`, separate from the listing and
+listing-template domains. ``Workspace.load_template_config`` takes that lock but refuses an active
 transaction, so concurrent CLI reads never recover a live server save. Server
 operations read through the store, which recovers interrupted transactions first.
 Mask PNGs and transactions are template assets; only stroke Undo is cached.
@@ -48,6 +53,7 @@ from etsy_listings.core.workspace.workspace import (
     DescriptionResolution,
     InvalidNameError,
     InvalidRefError,
+    MaskSource,
     PathEscapesWorkspaceError,
     ScenePhoto,
     Workspace,
@@ -58,6 +64,8 @@ __all__ = [  # noqa: RUF022 -- grouped by topic, not alphabetically
     "Workspace",
     "DescriptionResolution",
     "ScenePhoto",
+    # Which durable mask file `Workspace.template_mask_file` names.
+    "MaskSource",
     # What a listing check reads off the tree, gathered once per request.
     "WorkspaceFacts",
     # One loaded template as that check sees it, for a stage that has the config.

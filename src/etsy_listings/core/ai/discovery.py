@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import json
 import re
-import shutil
 import threading
 import time
 from collections.abc import Callable
@@ -17,8 +16,9 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from etsy_listings.core.ai.host import LOCAL_CLI_HOST, CliHost
 from etsy_listings.core.ai.models import Deadline
-from etsy_listings.core.ai.process import CliProcessError, run_managed
+from etsy_listings.core.ai.process import CliProcessError
 from etsy_listings.core.config.settings import ProviderName
 
 CACHE_SECONDS = 30 * 60
@@ -53,10 +53,17 @@ class ModelDiscovery:
     A failure is cached too, preventing repeated probes on every page read.
     Explicit Refresh retries immediately. Last successful choices survive a
     failure, marked with its problem; saved choices belong to settings alone.
+
+    ``host`` is where the CLIs are found and run. ``None`` is this machine,
+    read when the owner is constructed rather than bound as a default, so
+    host tests can make every server's discovery hermetic at once.
     """
 
-    def __init__(self, *, monotonic: Callable[[], float] = time.monotonic) -> None:
+    def __init__(
+        self, *, monotonic: Callable[[], float] = time.monotonic, host: CliHost | None = None
+    ) -> None:
         self._monotonic = monotonic
+        self._host = LOCAL_CLI_HOST if host is None else host
         self._expires = 0.0
         self._cached: ModelCatalogs | None = None
         self._lock = threading.Lock()
@@ -100,7 +107,7 @@ class ModelDiscovery:
             deadline = Deadline.starting_now(seconds=REFRESH_SECONDS, clock=self._monotonic)
             for name in ("codex", "grok"):
                 try:
-                    catalogs[name] = _discover(name, deadline, self._cancel)
+                    catalogs[name] = _discover(self._host, name, deadline, self._cancel)
                 except (
                     OSError,
                     CliProcessError,
@@ -146,14 +153,16 @@ def _claude() -> ProviderCatalog:
     )
 
 
-def _discover(name: str, deadline: Deadline, cancel: threading.Event) -> ProviderCatalog:
+def _discover(
+    host: CliHost, name: str, deadline: Deadline, cancel: threading.Event
+) -> ProviderCatalog:
     if deadline.expired or cancel.is_set():
         raise ValueError("discovery budget exhausted or discovery stopped")
-    binary = shutil.which(name)
+    binary = host.which(name)
     if binary is None:
         raise OSError(f"{name} was not found")
     argv = [binary, "debug", "models"] if name == "codex" else [binary, "models"]
-    result = run_managed(
+    result = host.run_managed(
         argv, cwd=Path.cwd(), input_text="", deadline=deadline, cancel_event=cancel
     )
     if result.timed_out or result.cancelled or result.returncode != 0:

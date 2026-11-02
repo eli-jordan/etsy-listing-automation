@@ -7,7 +7,7 @@ cache, and (for one test) the real Printify desired-document builder
 all agree, end to end, in a real browser against a real running app.
 
 Every test drives ``create_app(seo_provider_factory=...,
-market_client_factory=...)`` with :class:`~tests.support.ai_runs.ChainProvider`
+clients=...)`` with :class:`~tests.support.ai_runs.ChainProvider`
 (which answers the brief, query and proposal tasks apart) or small local
 doubles, and the in-memory Etsy market. No test here ever shells out to a
 real Codex or Claude CLI (PR4's own rule: CI stays fake-provider-only).
@@ -57,6 +57,7 @@ from etsy_listings.server.api.app import FRONTEND_DIST, create_app
 from tests.support.ai_runs import DRAFTED_BRIEF, ChainProvider, seed_snapshot, seeded_market
 from tests.support.builders import FIXTURE_LISTING as LISTING
 from tests.support.builders import edit_listing, write_design
+from tests.support.clients import FakeClients
 from tests.support.server import stop_server
 
 pytestmark = pytest.mark.browser
@@ -244,7 +245,7 @@ def _seo_server(
 ) -> Iterator[str]:
     """The real app -- built SPA served by FastAPI, exactly as `etsy-listings
     ui` runs it -- over `create_app(seo_provider_factory=...,
-    market_client_factory=...)`, so a test drives AI Mode's readiness and its
+    clients=...)`, so a test drives AI Mode's readiness and its
     AI runs against doubles instead of a real Codex or Claude CLI, and the
     in-memory Etsy market (three comparable listings unless ``market`` says
     otherwise) instead of Etsy."""
@@ -258,7 +259,7 @@ def _seo_server(
     etsy_market = market if market is not None else seeded_market()
     kwargs: dict[str, Any] = {
         "seo_provider_factory": lambda _workspace, _ai: providers,
-        "market_client_factory": lambda _workspace: etsy_market,
+        "clients": FakeClients(etsy_market=etsy_market).factories(),
     }
     app = create_app(workspace, **kwargs)
     config = uvicorn.Config(app, host="127.0.0.1", port=port, log_level="warning")
@@ -375,7 +376,11 @@ def test_full_workflow_independent_title_tags_and_lead_acceptance(
         tags_drawer.wait_for(state="visible")  # untouched by the title drawer closing
         assert page.locator("#details-title").input_value() == "Retro Sunset Hike Tee"
 
-        _assert_tag_choices(page, tags_drawer)
+        # -- Tags: Accept best 13 replaces the collection and closes the
+        # drawer. The 13-tag cap and one-by-one toggles are Vitest's
+        # (AiTagsDrawer.test.tsx, useAiSeoMode.test.ts) --
+        tags_drawer.get_by_role("button", name="Accept best 13").click()
+        tags_drawer.wait_for(state="hidden")
 
         # -- Lead: Reject all leaves the field untouched --
         lead_drawer.get_by_role("button", name="Reject all").click()
@@ -394,50 +399,6 @@ def test_full_workflow_independent_title_tags_and_lead_acceptance(
         }
         ai_mode.wait_for(state="visible")
         assert ai_mode.is_enabled()
-
-
-def _assert_tag_choices(page, tags_drawer) -> None:
-    """Tags toggle one by one up to the 13-tag cap, and Accept best 13 then
-    replaces the whole collection and closes the drawer."""
-    # -- Tags: individual toggle, both directions --
-    first_tag = tags_drawer.get_by_role("button", name="+ tag0", exact=True)
-    first_tag.click()
-    page.locator(".chips .chip", has_text="tag0").wait_for(state="visible")
-    tags_drawer.get_by_role("button", name="✓ tag0", exact=True).wait_for(state="visible")
-    tags_drawer.get_by_role("button", name="✓ tag0", exact=True).click()
-    page.locator(".chips .chip", has_text="tag0").wait_for(state="hidden")
-    tags_drawer.get_by_role("button", name="+ tag0", exact=True).wait_for(state="visible")
-
-    # -- The 13-tag cap: select every "Best 13" suggestion, then prove
-    # a "More options" one is disabled, then free a slot --
-    for i in range(13):
-        tags_drawer.get_by_role("button", name=f"+ tag{i}", exact=True).click()
-    tags_drawer.get_by_text("13 of 13 tags selected").wait_for(state="visible")
-    more_option = tags_drawer.get_by_role("button", name="+ tag13", exact=True)
-    assert more_option.get_attribute("aria-disabled") == "true"
-    more_option.click(force=True)
-    page.locator(".chips .chip", has_text="tag13").wait_for(state="hidden")  # no-op
-
-    tags_drawer.get_by_role("button", name="✓ tag0", exact=True).click()
-    tags_drawer.get_by_text("12 of 13 tags selected").wait_for(state="visible")
-    more_option = tags_drawer.get_by_role("button", name="+ tag13", exact=True)
-    assert more_option.get_attribute("aria-disabled") == "false"
-    more_option.click()
-    page.locator(".chips .chip", has_text="tag13").wait_for(state="visible")
-    tags_drawer.get_by_text("13 of 13 tags selected").wait_for(state="visible")
-
-    # -- Accept best 13 replaces the whole collection wholesale,
-    # regardless of the manual toggles just made, and closes the
-    # drawer --
-    tags_drawer.get_by_role("button", name="Accept best 13").click()
-    tags_drawer.wait_for(state="hidden")
-    chips = page.locator(".chips .chip")
-    assert chips.count() == 13
-    for i in range(13):
-        assert chips.filter(has_text=re.compile(rf"^tag{i}\D*$")).count() == 1, i
-    # `tag13` was individually toggled on above and then wholesale
-    # replaced by Accept best 13 -- it must not survive.
-    assert chips.filter(has_text=re.compile(r"^tag13\D*$")).count() == 0
 
 
 def _assert_autosaved(page, workspace_root: Path) -> None:

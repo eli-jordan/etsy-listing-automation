@@ -25,7 +25,6 @@ from etsy_listings.core.application.refusals import (
     StagedRowMissingError,
     StagingMissingError,
 )
-from etsy_listings.core.application.workspace_locks import WorkspaceLocks
 from etsy_listings.core.batches import (
     StagingSession,
     StagingStore,
@@ -41,7 +40,6 @@ def stage_upload(
     listing_template: str,
     uploads: Iterable[Upload],
     *,
-    locks: WorkspaceLocks,
     now: datetime | None = None,
 ) -> StagingSession:
     """Stage one ZIP or loose PNGs against ``listing_template``.
@@ -54,9 +52,7 @@ def stage_upload(
     """
     if not staging.workspace.listing_template_file(listing_template).is_file():
         raise ListingTemplateMissingError(listing_template)
-    return stage_pngs(
-        staging, listing_template, uploads, now=now, template_lock=locks.listing_template
-    )
+    return stage_pngs(staging, listing_template, uploads, now=now)
 
 
 def read_staging(workspace: Workspace, staging: StagingStore, session_id: str) -> StagingSession:

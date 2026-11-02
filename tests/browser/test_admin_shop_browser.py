@@ -1,26 +1,28 @@
 """Admin Shop autosave through the built SPA, real API and fixture shop.yaml.
 
-Admin audit Q1 and Q2: what reaches ``shop.yaml`` when an older save's
-answer arrives after a newer choice, and when one field's save fails while
-a sibling's succeeds. Each test asserts the file the page wrote, not only
-what the page shows.
+Wiring only: a choice and a Retry made on the page reach ``shop.yaml``, and
+Use it writes what Etsy's refreshed lookups newly offer. Each test asserts
+the file the page wrote, not only what the page shows. The save queue's
+ordering and failure rules (admin audit Q1 and Q2) are Vitest's:
+``useSaveQueue.test.ts`` and ``AdminPage.test.tsx``. Revisions and conflicts
+are ``tests/server/behaviour/test_shop_api.py``'s.
 """
 
 from __future__ import annotations
 
 import os
 from pathlib import Path
+from typing import Any
 
 import pytest
 
-from etsy_listings.core import connections
-from etsy_listings.core.clients.etsy.fakes import FakeEtsyListingClient, FakeEtsyShopClient
+from etsy_listings.core.clients.etsy.fakes import FakeEtsyListingClient
 from etsy_listings.core.clients.etsy.models import ShippingProfile
-from etsy_listings.core.clients.printify.fakes import FakeCatalogClient, FakePrintifyClient
 from etsy_listings.core.config.defaults import Defaults
 from etsy_listings.core.workspace import layout
 
 from tests.support.builders import set_etsy_shop_id
+from tests.support.clients import FakeClients
 
 pytestmark = pytest.mark.browser
 
@@ -32,19 +34,10 @@ def expect(browser_type):
     return playwright_expect
 
 
-@pytest.fixture(autouse=True)
-def fake_connections(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(connections, "etsy_shop_client", lambda root: FakeEtsyShopClient())
-    monkeypatch.setattr(connections, "etsy_listing_client", lambda root: FakeEtsyListingClient())
-    monkeypatch.setattr(connections, "printify_client", lambda workspace: FakePrintifyClient())
-    monkeypatch.setattr(
-        connections, "catalog_client", lambda workspace: FakeCatalogClient([], {}, {})
-    )
-
-
-@pytest.fixture(params=["light", "dark"])
-def theme(request: pytest.FixtureRequest) -> str:
-    return str(request.param)
+@pytest.fixture
+def app_options(fake_clients: FakeClients) -> dict[str, Any]:
+    """Serve the app with in-memory Etsy and Printify clients."""
+    return {"clients": fake_clients.factories()}
 
 
 def capture(page, theme: str, state: str) -> None:
@@ -76,41 +69,16 @@ def on_disk(root: Path) -> Defaults:
     return Defaults.load(root / layout.SHOP_FILE)
 
 
-def test_a_newer_queued_choice_survives_the_older_answer(
-    page,
-    expect,
-    calibrator_server: str,
-    workspace_root: Path,
-    theme: str,
-) -> None:
-    open_defaults(page, calibrator_server, theme)
-    renewal = page.get_by_role("combobox", name="Renewal")
-    expect(renewal).to_have_value("manual")
-    held = []
-
-    def hold_first(route) -> None:
-        if route.request.method == "PATCH" and not held:
-            held.append(route)
-        else:
-            route.continue_()
-
-    page.route("**/api/admin/shop", hold_first)
-    choose(renewal, "auto")
-    expect(page.locator(".page-head__actions [role=status]")).to_contain_text("Saving")
-    choose(renewal, "manual")
-    first = held[0].fetch()
-    with page.expect_response(
-        lambda r: is_save(r) and r.request.post_data_json["changes"] == {"renewal": "manual"}
-    ):
-        held[0].fulfill(response=first)
-        expect(renewal).to_have_value("manual")
-    expect(page.get_by_text("Saved", exact=True)).to_be_visible()
-    expect(renewal).to_have_value("manual")
-    assert on_disk(workspace_root).etsy.listing_defaults.renewal == "manual"
-    capture(page, theme, "rapid")
+def fail_every_save(route) -> None:
+    if route.request.method == "PATCH":
+        route.fulfill(
+            status=503, content_type="application/json", body='{"detail":"disk unavailable"}'
+        )
+    else:
+        route.continue_()
 
 
-def test_a_failed_field_stays_unsaved_through_a_sibling_success_until_retried(
+def test_a_choice_and_a_retried_failure_reach_shop_yaml(
     page,
     expect,
     calibrator_server: str,
@@ -122,129 +90,27 @@ def test_a_failed_field_stays_unsaved_through_a_sibling_success_until_retried(
     expect(renewal).to_have_value("manual")
     capture(page, theme, "default")
 
-    def fail_renewal(route) -> None:
-        if route.request.method == "PATCH" and "renewal" in route.request.post_data_json["changes"]:
-            route.fulfill(
-                status=503, content_type="application/json", body='{"detail":"disk unavailable"}'
-            )
-        else:
-            route.continue_()
+    with page.expect_response(is_save):
+        choose(page.get_by_role("combobox", name="Who made it"), "collective")
+    expect(page.get_by_text("Saved", exact=True)).to_be_visible()
+    assert on_disk(workspace_root).etsy.listing_defaults.who_made == "collective"
 
-    page.route("**/api/admin/shop", fail_renewal)
+    page.route("**/api/admin/shop", fail_every_save)
     choose(renewal, "auto")
     retry = page.get_by_role("button", name="Retry save")
     expect(retry).to_be_visible()
-
-    who = page.get_by_role("combobox", name="Who made it")
-    with page.expect_response(is_save):
-        choose(who, "collective")
-    assert on_disk(workspace_root).etsy.listing_defaults.who_made == "collective"
     assert on_disk(workspace_root).etsy.listing_defaults.renewal == "manual"
-    expect(retry).to_be_visible()
-    expect(page.get_by_text("Saved", exact=True)).to_have_count(0)
-    expect(renewal).to_have_value("auto")
     capture(page, theme, "failed")
 
-    page.unroute("**/api/admin/shop", fail_renewal)
+    page.unroute("**/api/admin/shop", fail_every_save)
     with page.expect_response(is_save) as retried:
         retry.click()
     assert retried.value.request.post_data_json["changes"] == {"renewal": "auto"}
     expect(page.get_by_text("Saved", exact=True)).to_be_visible()
     expect(retry).to_have_count(0)
-    assert on_disk(workspace_root).etsy.listing_defaults.renewal == "auto"
-    assert on_disk(workspace_root).etsy.listing_defaults.who_made == "collective"
+    defaults = on_disk(workspace_root).etsy.listing_defaults
+    assert (defaults.renewal, defaults.who_made) == ("auto", "collective")
     capture(page, theme, "retried")
-
-
-def test_a_choice_made_while_retry_is_pending_reaches_the_file(
-    page,
-    expect,
-    calibrator_server: str,
-    workspace_root: Path,
-    theme: str,
-) -> None:
-    """The retry carries auto; choosing manual meanwhile is a change from
-    what the file will hold, so it is saved after the retry lands."""
-    open_defaults(page, calibrator_server, theme)
-    renewal = page.get_by_role("combobox", name="Renewal")
-    expect(renewal).to_have_value("manual")
-    attempts: list[dict[str, object]] = []
-    held = []
-
-    def fail_then_hold(route) -> None:
-        if route.request.method != "PATCH":
-            route.continue_()
-            return
-        attempts.append(route.request.post_data_json["changes"])
-        if len(attempts) == 1:
-            route.fulfill(
-                status=503, content_type="application/json", body='{"detail":"disk unavailable"}'
-            )
-        elif len(attempts) == 2:
-            held.append(route)
-        else:
-            route.continue_()
-
-    page.route("**/api/admin/shop", fail_then_hold)
-    choose(renewal, "auto")
-    retry = page.get_by_role("button", name="Retry save")
-    expect(retry).to_be_visible()
-    retry.click()
-    expect(page.locator(".page-head__actions [role=status]")).to_contain_text("Saving")
-    choose(renewal, "manual")
-    assert len(attempts) == 2
-    with page.expect_response(lambda r: is_save(r) and len(attempts) == 3):
-        held[0].continue_()
-    expect(page.get_by_text("Saved", exact=True)).to_be_visible()
-    assert attempts == [{"renewal": "auto"}, {"renewal": "auto"}, {"renewal": "manual"}]
-    assert on_disk(workspace_root).etsy.listing_defaults.renewal == "manual"
-    expect(renewal).to_have_value("manual")
-
-
-def test_an_abandoned_failure_is_not_restored_by_a_siblings_retry(
-    page,
-    expect,
-    calibrator_server: str,
-    workspace_root: Path,
-    theme: str,
-) -> None:
-    open_defaults(page, calibrator_server, theme)
-    renewal = page.get_by_role("combobox", name="Renewal")
-    attempts: list[dict[str, object]] = []
-
-    def fail_first_two(route) -> None:
-        if route.request.method != "PATCH":
-            route.continue_()
-            return
-        attempts.append(route.request.post_data_json["changes"])
-        if len(attempts) <= 2:
-            route.fulfill(
-                status=503, content_type="application/json", body='{"detail":"disk unavailable"}'
-            )
-        else:
-            route.continue_()
-
-    page.route("**/api/admin/shop", fail_first_two)
-    choose(renewal, "auto")
-    retry = page.get_by_role("button", name="Retry save")
-    expect(retry).to_be_visible()
-    choose(renewal, "manual")
-    expect(retry).to_have_count(0)
-    assert attempts == [{"renewal": "auto"}]
-
-    choose(page.get_by_role("combobox", name="Who made it"), "collective")
-    expect(retry).to_be_visible()
-    with page.expect_response(is_save):
-        retry.click()
-    expect(page.get_by_text("Saved", exact=True)).to_be_visible()
-    expect(renewal).to_have_value("manual")
-    assert attempts == [
-        {"renewal": "auto"},
-        {"who_made": "collective"},
-        {"who_made": "collective"},
-    ]
-    assert on_disk(workspace_root).etsy.listing_defaults.renewal == "manual"
-    assert on_disk(workspace_root).etsy.listing_defaults.who_made == "collective"
 
 
 @pytest.fixture
@@ -254,60 +120,7 @@ def etsy_shop(workspace_root: Path) -> None:
     set_etsy_shop_id(workspace_root, 51007712)
 
 
-def test_an_unchanged_pod_choice_abandons_failed_custom_values(
-    page,
-    expect,
-    calibrator_server: str,
-    workspace_root: Path,
-    theme: str,
-) -> None:
-    open_defaults(page, calibrator_server, theme)
-    pod = page.get_by_role("radio", name="Print on demand")
-    if pod.get_attribute("aria-checked") != "true":
-        with page.expect_response(is_save):
-            pod.click()
-    page.get_by_role("radio", name="Custom").click()
-    attempts: list[dict[str, object]] = []
-
-    def fail_first_two(route) -> None:
-        if route.request.method != "PATCH":
-            route.continue_()
-            return
-        attempts.append(route.request.post_data_json["changes"])
-        if len(attempts) <= 2:
-            route.fulfill(
-                status=503, content_type="application/json", body='{"detail":"disk unavailable"}'
-            )
-        else:
-            route.continue_()
-
-    page.route("**/api/admin/shop", fail_first_two)
-    choose(page.get_by_role("combobox", name="Who made it"), "i_did")
-    retry = page.get_by_role("button", name="Retry save")
-    expect(retry).to_be_visible()
-    pod.click()
-    expect(retry).to_have_count(0)
-    assert attempts == [{"who_made": "i_did"}]
-
-    choose(page.get_by_role("combobox", name="Renewal"), "auto")
-    expect(retry).to_be_visible()
-    with page.expect_response(is_save):
-        retry.click()
-    expect(page.get_by_text("Saved", exact=True)).to_be_visible()
-    assert attempts == [
-        {"who_made": "i_did"},
-        {"renewal": "auto"},
-        {"renewal": "auto"},
-    ]
-    defaults = on_disk(workspace_root).etsy.listing_defaults
-    assert (defaults.who_made, defaults.when_made, defaults.is_supply) == (
-        "someone_else",
-        "made_to_order",
-        False,
-    )
-
-
-def test_use_it_replaces_a_failed_draft_with_what_it_wrote(
+def test_use_it_writes_the_profile_a_lookup_refresh_newly_offers(
     *,
     etsy_shop: None,
     page,
@@ -315,66 +128,31 @@ def test_use_it_replaces_a_failed_draft_with_what_it_wrote(
     calibrator_server: str,
     workspace_root: Path,
     theme: str,
-    monkeypatch: pytest.MonkeyPatch,
+    fake_clients: FakeClients,
 ) -> None:
     titles = ["Printify US standard", "Printify EU standard"]
-    monkeypatch.setattr(
-        connections,
-        "etsy_listing_client",
-        lambda root: FakeEtsyListingClient(
-            shipping_profiles=[
-                ShippingProfile(shipping_profile_id=n, title=t) for n, t in enumerate(titles)
-            ]
-        ),
-    )
+
+    class Profiles(FakeEtsyListingClient):
+        """Etsy's profiles as ``titles`` holds them when the page asks."""
+
+        def shipping_profiles(self, shop_id: int) -> list[ShippingProfile]:
+            return [ShippingProfile(shipping_profile_id=n, title=t) for n, t in enumerate(titles)]
+
+    fake_clients.etsy_listing = Profiles()
     open_defaults(page, calibrator_server, theme)
     shipping = page.get_by_role("combobox", name="Shipping profile")
     expect(shipping).to_be_enabled()
-    if shipping.input_value() != "Printify US standard":
-        with page.expect_response(is_save):
-            choose(shipping, "Printify US standard")
-    attempts: list[dict[str, object]] = []
 
-    def fail_first(route) -> None:
-        if route.request.method != "PATCH":
-            route.continue_()
-            return
-        attempts.append(route.request.post_data_json["changes"])
-        if len(attempts) == 1:
-            route.fulfill(
-                status=503, content_type="application/json", body='{"detail":"disk unavailable"}'
-            )
-        else:
-            route.continue_()
-
-    page.route("**/api/admin/shop", fail_first)
-    choose(shipping, "Printify EU standard")
-    expect(page.get_by_role("button", name="Retry save")).to_be_visible()
-
-    # A list refresh must not replace the refused draft with a saved option.
-    titles.clear()
+    # Returning to the page re-reads Etsy's lists through the real endpoint.
+    titles.append("Printify UK standard")
     with page.expect_response(lambda r: r.url.endswith("/api/admin/shop/lookups")):
         page.evaluate("window.dispatchEvent(new Event('focus'))")
-    expect(page.locator(".sp-missing").filter(has_text="Printify US standard")).to_be_visible()
-    expect(shipping).to_have_value("Printify EU standard")
-    expect(shipping.locator("option:checked")).to_have_text("Printify EU standard")
-    assert attempts == [{"shipping_profile": "Printify EU standard"}]
-    assert on_disk(workspace_root).etsy.listing_defaults.shipping_profile == "Printify US standard"
-
-    titles.append("Printify UK standard")
-    page.evaluate("window.dispatchEvent(new Event('focus'))")
-    with page.expect_response(is_save):
+    with page.expect_response(is_save) as saved:
         page.get_by_role("button", name="Use it").click()
+    assert saved.value.request.post_data_json["changes"] == {
+        "shipping_profile": "Printify UK standard"
+    }
     expect(page.get_by_text("Saved", exact=True)).to_be_visible()
     expect(shipping).to_have_value("Printify UK standard")
     assert on_disk(workspace_root).etsy.listing_defaults.shipping_profile == "Printify UK standard"
-
-    shipping.focus()
-    shipping.blur()
-    page.get_by_role("combobox", name="Renewal").focus()
-    expect(page.get_by_role("button", name="Retry save")).to_have_count(0)
-    assert attempts == [
-        {"shipping_profile": "Printify EU standard"},
-        {"shipping_profile": "Printify UK standard"},
-    ]
-    assert on_disk(workspace_root).etsy.listing_defaults.shipping_profile == "Printify UK standard"
+    capture(page, theme, "use-it")
