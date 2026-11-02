@@ -2,6 +2,7 @@
 
 from random import Random
 
+import cv2
 import numpy as np
 import pytest
 from pydantic import TypeAdapter
@@ -144,3 +145,56 @@ def test_tilt_on_a_non_square_box_is_a_rigid_rotation(rotation: float) -> None:
     np.testing.assert_allclose(corners.mean(axis=0), (60, 120))
     angle = np.degrees(np.arctan2(sides[0][1], sides[0][0]))
     assert angle == pytest.approx(rotation)
+
+
+def _inside(quad: BoundingBox, points: list[tuple[float, float]]) -> bool:
+    # Extreme poses touch the padded edge; allow float32 rounding there.
+    contour = np.array(pixels(quad), np.float32)
+    return all(cv2.pointPolygonTest(contour, point, measureDist=True) >= -1e-3 for point in points)
+
+
+@pytest.mark.parametrize("box", [BOX, FLAT])
+def test_the_padded_box_holds_every_pose_the_limits_allow(box: BoundingBox) -> None:
+    from etsy_listings.core.render.positions import padded_box
+
+    limits = TemplatePositionLimits.model_validate(
+        {"scale": {"min": 0.8, "max": 1.1}, "offset": 0.1, "rotation": 15}
+    )
+    padded = padded_box(box, limits)
+    random = Random(7)
+    extremes = [
+        Pose(scale=1.1, offset_x=sx * 0.1, offset_y=sy * 0.1, rotation=sr * 15)
+        for sx in (-1, 1)
+        for sy in (-1, 1)
+        for sr in (-1, 1)
+    ]
+    poses = extremes + [
+        Pose(
+            scale=random.uniform(0.8, 1.1),
+            offset_x=random.uniform(-0.1, 0.1),
+            offset_y=random.uniform(-0.1, 0.1),
+            rotation=random.uniform(-15, 15),
+        )
+        for _ in range(200)
+    ]
+    for pose in poses:
+        assert _inside(padded, pixels(compose(box, pose))), pose
+    # Tight: the extreme corners touch the padded edge.
+    contour = np.array(pixels(padded), np.float32)
+    nearest = min(
+        abs(cv2.pointPolygonTest(contour, point, measureDist=True))
+        for pose in extremes
+        for point in pixels(compose(box, pose))
+    )
+    assert nearest < 1e-2
+
+
+def test_narrower_limits_pad_less() -> None:
+    from etsy_listings.core.render.positions import padded_box
+
+    wide = TemplatePositionLimits.model_validate({"offset": 0.2, "rotation": 30})
+    narrow = TemplatePositionLimits.model_validate(
+        {"scale": {"min": 0.9, "max": 1.0}, "offset": 0.05, "rotation": 5}
+    )
+    assert _inside(padded_box(BOX, wide), pixels(padded_box(BOX, narrow)))
+    assert not _inside(padded_box(BOX, narrow), pixels(padded_box(BOX, wide)))

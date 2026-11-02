@@ -155,6 +155,33 @@ def decompose(template_box: BoundingBox, box: BoundingBox) -> PoseFit:
     return PoseFit(pose, residual)
 
 
+def padded_box(template_box: BoundingBox, limits: PositionLimits) -> BoundingBox:
+    """The smallest rectified-frame rectangle holding every pose ``limits``
+    allow, mapped to photo corners: the *padded quad* a Marigold template's
+    evidence must cover before any listing position on it can be fitted (spec
+    *Rendering -> Marigold (option B)*, *Evidence coverage*).
+
+    A ``W`` by ``H`` box at the largest scale ``s`` and tilt ``t`` reaches
+    ``s * (W cos t + H sin t) / 2`` across and ``s * (W sin t + H cos t) / 2``
+    down from its centre, plus the offset limit on each axis. The settings cap
+    tilt at 30 degrees, where both sums still grow, so the largest tilt is the
+    worst.
+    """
+    width, height = _proportions(template_box)
+    angle = radians(limits.rotation)
+    scale, offset = limits.scale.max, limits.offset
+    half_x = scale * (cos(angle) + height / width * sin(angle)) / 2 + offset
+    half_y = scale * (width / height * sin(angle) + cos(angle)) / 2 + offset
+    unit = (_unit() - 0.5) * (2 * half_x, 2 * half_y) + 0.5
+    points = _map(unit, _homography(template_box))
+    return (
+        Point(x=points[0, 0], y=points[0, 1]),
+        Point(x=points[1, 0], y=points[1, 1]),
+        Point(x=points[2, 0], y=points[2, 1]),
+        Point(x=points[3, 0], y=points[3, 1]),
+    )
+
+
 def clamp_pose(pose: Pose, limits: PositionLimits) -> Pose:
     """Clamp each fitted component. Only explicit editor repair calls this."""
     return Pose(
