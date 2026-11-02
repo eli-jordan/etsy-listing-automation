@@ -146,6 +146,18 @@ def positioned_quads(config: AnyTemplate, boxes: LayerBoxes) -> dict[str | None,
     return {key: box for key, box in boxes.items() if key in own and box != own[key]}
 
 
+def padded_quads(
+    config: AnyTemplate, limits: PositionLimits
+) -> dict[str | None, BoundingBox] | None:
+    """Each layer's padded quad under ``limits`` (:func:`padded_box`): what
+    its evidence must cover for any allowed position to be fitted. ``None``
+    when one crosses the homography's horizon and no evidence ever can."""
+    try:
+        return {key: padded_box(box, limits) for key, box in template_boxes(config).items()}
+    except ValueError:
+        return None
+
+
 def _quad(box: BoundingBox) -> tuple[tuple[float, float], ...]:
     return tuple((point.x, point.y) for point in box)
 
@@ -208,16 +220,12 @@ class PositionFits:
             )
         return requests
 
-    def covers(self, template: str, inputs: PreparationInputs, limits: PositionLimits) -> bool:
-        """Whether the template's current evidence covers every placement's
-        padded quad under ``limits`` (spec, *Evidence coverage*)."""
-        config = self.calibration.config(template)
-        own = template_boxes(config)
-        try:
-            padded = {key: padded_box(box, limits) for key, box in own.items()}
-        except ValueError:
-            return False  # a pose past the homography's horizon: never coverable
-        posed = _with_quads(inputs, padded)
+    def covers(
+        self, template: str, inputs: PreparationInputs, quads: Mapping[str | None, BoundingBox]
+    ) -> bool:
+        """Whether the template's current evidence covers every one of
+        ``quads`` (its :func:`padded_quads`; spec, *Evidence coverage*)."""
+        posed = _with_quads(inputs, quads)
         selected = self.evidence.select(posed, self.evidence.current(template))
         return len(selected) == len(posed.placements)
 

@@ -1152,6 +1152,8 @@ export interface paths {
      *
      *     A layer that resolves to nothing is left bare rather than failing the
      *     picture (:func:`~etsy_listings.core.application.listing_reads.scene_artwork`).
+     *     Each layer prints at the listing's *saved* position where it holds one
+     *     (ADR-0058), so a landed position save is the composite the render writes.
      *     ``v`` is ignored; the editor sends a signature of the saved design so a
      *     landed save is a new URL and the browser fetches it again.
      */
@@ -3864,7 +3866,7 @@ export interface components {
        * Kind
        * @enum {string}
        */
-      kind: "prepare" | "rebuild";
+      kind: "prepare" | "rebuild" | "coverage";
       /** Last Event Sequence */
       last_event_sequence: number;
       /**

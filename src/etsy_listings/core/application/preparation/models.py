@@ -9,6 +9,7 @@ from etsy_listings.core.preparation.evidence_reader import CropEvidence
 
 Phase = Literal["queued", "running", "cancelling", "cancelled", "superseded", "failed", "completed"]
 Action = Literal["prepare", "prepare_again", "retry"]
+Quad = tuple[tuple[float, float], tuple[float, float], tuple[float, float], tuple[float, float]]
 TERMINAL = {"cancelled", "superseded", "failed", "completed"}
 
 
@@ -43,7 +44,9 @@ class Job(Record):
     request_digest: str
     receipts: dict[str, str] = Field(default_factory=dict)
     action: Action
-    kind: Literal["prepare", "rebuild"]
+    kind: Literal["prepare", "rebuild", "coverage"]
+    """``coverage`` infers evidence for listing positions only and publishes
+    no maps (option B, spec *Evidence coverage*)."""
     config_revision: str
     snapshot: PreparationInputs
     engine_version: str | None = None
@@ -57,6 +60,8 @@ class Job(Record):
     evidence: tuple[CropEvidence, ...] = ()
     placement_evidence: dict[str, str] = Field(default_factory=dict)
     planned_masks: dict[str, str] = Field(default_factory=dict)
+    coverage: dict[str, Quad] = Field(default_factory=dict)
+    """A coverage job's padded quad per placement key: the crops it infers."""
     cpu_checkpoints: dict[str, PlacementArtifact] = Field(default_factory=dict)
     placements_completed: int = 0
     result: Publication | None = None
