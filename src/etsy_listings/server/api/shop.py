@@ -19,7 +19,7 @@ from etsy_listings.core.application import shop_settings
 from etsy_listings.core.application.refusals import InvalidShopEditError, ShopRevisionConflictError
 from etsy_listings.core.config.currencies import OFFERED_CURRENCIES
 from etsy_listings.core.config.errors import ConfigLoadError
-from etsy_listings.core.workspace.workspace import Workspace
+from etsy_listings.server.api import app_state
 from etsy_listings.server.api.schemas import (
     ConnectionRowBody,
     CurrencyOption,
@@ -42,11 +42,6 @@ _CHANGE_KEYS = {
     "preferred_print_provider": "printify.preferred_print_provider",
 }
 """Request field to shop.yaml key; every other field is a listing default."""
-
-
-def _workspace(request: Request) -> Workspace:
-    workspace: Workspace = request.app.state.workspace
-    return workspace
 
 
 def _response(view: shop_settings.ShopView) -> ShopSettingsResponse:
@@ -75,7 +70,7 @@ def _response(view: shop_settings.ShopView) -> ShopSettingsResponse:
 @router.get("", response_model=ShopSettingsResponse)
 def read_shop(request: Request) -> ShopSettingsResponse:
     try:
-        return _response(shop_settings.read_shop(_workspace(request)))
+        return _response(shop_settings.read_shop(app_state.workspace(request)))
     except ConfigLoadError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
@@ -93,7 +88,7 @@ def edit_shop(request: Request, body: ShopPatchRequest) -> ShopSettingsResponse 
     }
     try:
         view = shop_settings.edit_shop(
-            _workspace(request), expected_revision=body.revision, changes=changes
+            app_state.workspace(request), expected_revision=body.revision, changes=changes
         )
     except ShopRevisionConflictError as exc:
         return _refusal(409, ShopSaveRefusal(kind="conflict", message=str(exc)))
@@ -109,7 +104,7 @@ def _refusal(status: int, refusal: ShopSaveRefusal) -> JSONResponse:
 
 @router.get("/connections", response_model=ShopConnectionsResponse)
 def read_connections(request: Request) -> ShopConnectionsResponse:
-    workspace = _workspace(request)
+    workspace = app_state.workspace(request)
     rows = shop_settings.shop_connections(
         workspace,
         etsy=connections.etsy_shop_client(workspace.root),
@@ -125,7 +120,7 @@ def read_connections(request: Request) -> ShopConnectionsResponse:
 def read_lookups(request: Request) -> ShopLookupsResponse:
     """Fresh on every call: the page asks again when its window regains
     focus or the seller retries (ADR-0033 forbids a disk cache for Etsy's)."""
-    workspace = _workspace(request)
+    workspace = app_state.workspace(request)
     lookups = shop_settings.shop_lookups(
         workspace,
         etsy=connections.etsy_listing_client(workspace.root),

@@ -121,11 +121,6 @@ import names the module it depends on. Public interfaces:
     ``ReviewedPlanRefusedError``; the Shop tab's ``ShopRevisionConflictError`` and
     ``InvalidShopEditError``; the Settings tab's ``SettingsRevisionConflictError`` and
     ``InvalidSettingsEditError``.
-``workspace_locks``
-    ``WorkspaceLocks``: the per-listing-template write locks every
-    template check-then-write holds, one instance per application runtime;
-    ``mockup_template(workspace, name)`` uses calibration storage's independent
-    process-wide template lock for saved calibration and map publication.
 ``deploy``
     Deployment runs -- registry, FIFO executor and their event log; see the
     subpackage's own initialiser.

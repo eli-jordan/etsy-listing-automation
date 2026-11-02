@@ -31,7 +31,6 @@ from etsy_listings.core.application.deploy.deployments import Deployments
 from etsy_listings.core.application.preparation.coordinator import Preparations
 from etsy_listings.core.application.preparation.dependencies import PreparationRuntime
 from etsy_listings.core.application.scene_warming import SceneWarmer
-from etsy_listings.core.application.workspace_locks import WorkspaceLocks
 from etsy_listings.core.batches import BatchStore, StagingStore
 from etsy_listings.core.workspace.workspace import InvalidNameError, Workspace
 from etsy_listings.server.api.airuns import router as ai_runs_router
@@ -68,11 +67,10 @@ def create_app(
     market_client_factory: MarketClientFactory = default_market_client,
     preparation_runtime: PreparationRuntime | None = None,
 ) -> FastAPI:
-    # One of each per process, so their locks mean something: the listing
-    # template write locks, and the cache records' stores. Listing locks
-    # need no instance; every `ListingDocuments` over one workspace shares them.
+    # One of each per process, so their locks mean something: the cache
+    # records' stores. Listing, mockup-template and listing-template locks need
+    # no instance; `core/workspace/locks.py` keys them by workspace root.
     preparations = Preparations(workspace, runtime=preparation_runtime)
-    locks = WorkspaceLocks()
     proposal_store = ProposalStore(workspace)
     staging_store = StagingStore(workspace)
     batch_store = BatchStore(workspace)
@@ -136,9 +134,6 @@ def create_app(
     # nothing to do with running a run -- reaching through `deployments` for
     # it would couple that endpoint to deployment's own shape for no reason.
     app.state.context_factory = context_factory
-    # Held around every check-then-write of a listing template
-    # (`listing_templates.py`, batch staging); `workspace_locks.py` says why.
-    app.state.workspace_locks = locks
     # AI runs (features/market-seo-20260924/spec.md, *AI runs*) and the
     # batch AI queue (ADR-0048): a thread per run, never `deployments`.
     app.state.ai = ai

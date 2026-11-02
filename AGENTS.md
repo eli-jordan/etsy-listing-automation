@@ -12,7 +12,8 @@ requirements, guides, research and decisions.
 src/etsy_listings/
   core/ transport-independent backend; no FastAPI, Typer or terminal/prompt imports
     workspace/ root discovery, path resolution, the only code that knows the directory layout;
-      listing_documents.py is the only way to read/edit/write listing.yaml, and owns each listing's lock
+      locks.py the process-wide keyed locks (listing, mockup-template, listing-template);
+      listing_documents.py is the only way to read/edit/write listing.yaml, and takes each listing's lock
     config/ pydantic models, Money, slugs, listing_validation.py (every local refusal),
       artwork.py (ADR-0053: which file each garment colour prints; every reader asks it)
     engine/ Stage protocol, Change vocabulary, lockfile, plan/apply/run, lifecycle, stages/
@@ -25,7 +26,7 @@ src/etsy_listings/
     batches/ staging, naming, archive inspection and ordinary listing creation
     application/ operations shared by server and CLI, one module per workflow, no re-exports: listing reads, edits,
       creation, rename/delete, pricing plans; calibrator (mockup_templates), listing-template library, batch staging
-      and workflow; the wizards' credentials, workspace_setup, shop_discovery, garment_profiles; workspace_locks (templates);
+      and workflow; the wizards' credentials, workspace_setup, shop_discovery, garment_profiles;
       deploy/ (Deployments) and ai/ (AiCoordinator) run coordinators; dependencies.py host seams; refusals.py
     listing_artifacts.py moves/removes everything keyed by a listing name (dir, renders, previews, snapshot, proposal)
     connections.py errors.py client wiring, UserFacingError

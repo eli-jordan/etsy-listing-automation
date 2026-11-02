@@ -30,6 +30,8 @@ from etsy_listings.core.batches import (
     stage_pngs,
 )
 from etsy_listings.core.config.defaults import Defaults
+from etsy_listings.core.workspace import locks
+from etsy_listings.core.workspace.locks import LockDomain
 from etsy_listings.core.workspace.workspace import Workspace
 
 from tests.support.batches import LOCAL_PICTURE, a_listing_template, png, uploads
@@ -264,7 +266,11 @@ class TestFailureAndRetry:
 
 class TestFrozenTemplate:
     def test_capture_observes_the_template_lock_but_upload_does_not_hold_it(
-        self, workspace: Workspace, staging: StagingStore, batches: BatchStore
+        self,
+        workspace: Workspace,
+        staging: StagingStore,
+        batches: BatchStore,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         locked = False
         acquired: list[str] = []
@@ -277,17 +283,26 @@ class TestFrozenTemplate:
         asset_ref = next(ref for ref in changed["media"] if isinstance(ref, str))
         asset = workspace.resolve_template_ref(asset_ref, template="heavyweight-tee")
 
+        real = locks.hold
+
         @contextlib.contextmanager
-        def template_lock(name: str):
+        def template_lock(at: Workspace, domain: LockDomain, name: str, *more: str):
             nonlocal locked
+            if domain != "listing-template":
+                with real(at, domain, name, *more):
+                    yield
+                return
             acquired.append(name)
-            locked = True
-            path.write_text(yaml.safe_dump(changed), encoding="utf-8")
-            asset.write_bytes(png(99))
-            try:
-                yield
-            finally:
-                locked = False
+            with real(at, domain, name, *more):
+                locked = True
+                path.write_text(yaml.safe_dump(changed), encoding="utf-8")
+                asset.write_bytes(png(99))
+                try:
+                    yield
+                finally:
+                    locked = False
+
+        monkeypatch.setattr(locks, "hold", template_lock)
 
         class UploadOutsideLock(BytesIO):
             def read(self, size: int = -1) -> bytes:
@@ -299,7 +314,6 @@ class TestFrozenTemplate:
             staging,
             "heavyweight-tee",
             [Upload(DESIGNS[0][0], UploadOutsideLock(DESIGNS[0][1]))],
-            template_lock=template_lock,
             now=NOW,
         )
         batch = _confirm(workspace, staging, batches, session.id)

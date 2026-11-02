@@ -68,7 +68,6 @@ from etsy_listings.core.application.refusals import (
     PublishedListingDeletionError,
 )
 from etsy_listings.core.application.scene_warming import SceneWarmer
-from etsy_listings.core.batches import BatchStore
 from etsy_listings.core.clients.etsy.tokens import EtsyAuthError, EtsyRefreshBusyError
 from etsy_listings.core.clients.etsy.transport import EtsyApiError
 from etsy_listings.core.config.artwork import representative
@@ -82,6 +81,7 @@ from etsy_listings.core.workspace.common_copy import CommonCopyError
 from etsy_listings.core.workspace.facts import WorkspaceFacts
 from etsy_listings.core.workspace.listing_documents import ListingDocuments
 from etsy_listings.core.workspace.workspace import Workspace
+from etsy_listings.server.api import app_state
 from etsy_listings.server.api.editor_projections import garment_fields, wire_prices
 from etsy_listings.server.api.etsystate import etsy_states
 from etsy_listings.server.api.schemas import (
@@ -113,16 +113,6 @@ router = APIRouter(prefix="/api/listings", tags=["listings"])
 # designs are not listings), so they get their own router rather than being
 # force-fit under "/api/listings".
 support_router = APIRouter(tags=["listings-support"])
-
-
-def _workspace(request: Request) -> Workspace:
-    workspace: Workspace = request.app.state.workspace
-    return workspace
-
-
-def _batch_store(request: Request) -> BatchStore:
-    store: BatchStore = request.app.state.batch_store
-    return store
 
 
 def _ai_runs(request: Request) -> AiRunRegistry:
@@ -161,7 +151,7 @@ def _require_listing(workspace: Workspace, name: str) -> None:
 def target(request: Request, name: str) -> Target:
     """404 before the handler runs for a listing that is not there. The
     operations re-check under the listing's lock once they hold it."""
-    workspace = _workspace(request)
+    workspace = app_state.workspace(request)
     _require_listing(workspace, name)
     return Target(workspace=workspace, name=name)
 
@@ -258,7 +248,7 @@ def _describe_draft(workspace: Workspace, document: Mapping[str, Any]) -> Listin
 def list_listings(request: Request) -> list[ListingSummary]:
     """Every listing, with its status resolved in **one** Etsy round trip for
     the whole table rather than one per row."""
-    workspace = _workspace(request)
+    workspace = app_state.workspace(request)
     return [_summary(row) for row in listing_rows(workspace, etsy_states=_etsy_states(workspace))]
 
 
@@ -276,7 +266,7 @@ def patch_listing(
     ``field_errors`` beside the listing as it still is."""
     workspace, name = target.workspace, target.name
     try:
-        refused = edit_listing(workspace, name, body, batches=_batch_store(request))
+        refused = edit_listing(workspace, name, body, batches=app_state.batch_store(request))
     except ListingMissingError as exc:
         raise _not_found(exc) from exc
     if refused is None:
@@ -300,7 +290,7 @@ def delete_listing(
         deletion = delete(
             workspace,
             name,
-            batches=_batch_store(request),
+            batches=app_state.batch_store(request),
             ai_runs=_ai_runs(request),
             etsy_states=_etsy_states(workspace),
         )
@@ -323,7 +313,7 @@ def create_listing(request: Request, body: CreateListingRequest) -> ListingDetai
     status codes instead -- not a single path segment is the 400, and
     already taken (the directory, not just ``listing.yaml``) is a 409.
     """
-    workspace = _workspace(request)
+    workspace = app_state.workspace(request)
     try:
         refused = create(workspace, body.name, body.document)
     except ListingNameTakenError as exc:
@@ -350,7 +340,7 @@ def rename_listing(
             target.workspace,
             target.name,
             body.new_name,
-            batches=_batch_store(request),
+            batches=app_state.batch_store(request),
             ai_runs=_ai_runs(request),
         )
     except ListingMissingError as exc:
@@ -467,7 +457,7 @@ def listing_draft(request: Request) -> ListingDetail:
     ``name`` comes back empty, which is exactly the state the editor refuses to
     save in.
     """
-    return _describe_draft(_workspace(request), EMPTY_DRAFT)
+    return _describe_draft(app_state.workspace(request), EMPTY_DRAFT)
 
 
 @support_router.post("/api/listing-draft", response_model=ListingDetail)
@@ -480,12 +470,12 @@ def describe_listing_draft(request: Request, body: DraftListingRequest) -> Listi
     colours were picked a minute ago -- and the banner is the only way an
     unsaved listing can be told what it is still missing.
     """
-    return _describe_draft(_workspace(request), body.document)
+    return _describe_draft(app_state.workspace(request), body.document)
 
 
 @support_router.get("/api/garment-profiles", response_model=list[GarmentProfileSummary])
 def list_garment_profiles(request: Request) -> list[GarmentProfileSummary]:
-    facts = WorkspaceFacts.gather(_workspace(request))
+    facts = WorkspaceFacts.gather(app_state.workspace(request))
     result = []
     for name in facts.garment_profile_names:
         profile = facts.garment_profile(name)
@@ -511,7 +501,7 @@ def list_pricing_plans(request: Request, garment_profile: str = "") -> list[Pric
     yet has nothing to be compatible *with*: asking with an empty name says that
     honestly, and the editor then drops the "different garment" note rather than
     labelling every plan as differing from a garment nobody picked."""
-    workspace = _workspace(request)
+    workspace = app_state.workspace(request)
     options = pricing_plan_options(load_candidate_pricing_plans(workspace), garment_profile)
     return [
         PricingPlanSummary(
@@ -531,7 +521,7 @@ def list_etsy_sections(request: Request) -> EtsySectionsResponse:
     app key pair -- both ordinary states short of `setup`/`auth etsy`, where
     the frontend falls back to a plain text field. An available empty list is
     different: it lets a configured shop create its first section."""
-    workspace = _workspace(request)
+    workspace = app_state.workspace(request)
     shop_id = workspace.defaults.etsy.shop_id
     if shop_id is None:
         return EtsySectionsResponse(available=False, sections=[])
@@ -556,7 +546,7 @@ def create_etsy_section(request: Request, body: CreateEtsySectionRequest) -> Ets
     the signed-in Etsy client. The listing document is updated separately by
     the editor's normal autosave after this returns successfully.
     """
-    workspace = _workspace(request)
+    workspace = app_state.workspace(request)
     shop_id = workspace.defaults.etsy.shop_id
     if shop_id is None:
         raise HTTPException(
@@ -592,7 +582,7 @@ def list_common_copy(request: Request) -> list[CommonCopySummary]:
     `Workspace.resolve_description` -- this is only the list of things one
     could newly pick.)
     """
-    workspace = _workspace(request)
+    workspace = app_state.workspace(request)
     summaries: list[CommonCopySummary] = []
     for path in workspace.common_copy_files():
         ref = f"{layout.COMMON_COPY_DIR}/{path.name}"
@@ -606,7 +596,7 @@ def list_common_copy(request: Request) -> list[CommonCopySummary]:
 
 @support_router.get("/api/workspace", response_model=WorkspaceSummary)
 def get_workspace(request: Request) -> WorkspaceSummary:
-    workspace = _workspace(request)
+    workspace = app_state.workspace(request)
     return WorkspaceSummary(
         shop_name=workspace.defaults.etsy.shop_name,
         storage_id=workspace.browser_storage_id(),
@@ -615,7 +605,7 @@ def get_workspace(request: Request) -> WorkspaceSummary:
 
 @support_router.get("/api/listing-designs", response_model=list[ListingDesignSummary])
 def list_listing_designs(request: Request) -> list[ListingDesignSummary]:
-    workspace = _workspace(request)
+    workspace = app_state.workspace(request)
     return [
         ListingDesignSummary(name=path.stem, file=f"designs/{path.name}")
         for path in workspace.design_files()
@@ -630,7 +620,7 @@ async def upload_listing_design(request: Request, file: UploadFile) -> ListingDe
     overwriting what another listing may print."""
     payload = await file.read()
     try:
-        name = save_listing_design(_workspace(request), file.filename or "", payload)
+        name = save_listing_design(app_state.workspace(request), file.filename or "", payload)
     except ListingDesignUploadRefusedError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return ListingDesignSummary(name=name, file=f"designs/{name}.png")
@@ -649,7 +639,7 @@ def listing_design_thumbnail(request: Request, name: str) -> Response:
     An unusable *name* needs nothing here: ``InvalidNameError`` out of
     ``design_file`` becomes a 400 through the app-wide handler in ``app.py``.
     """
-    workspace = _workspace(request)
+    workspace = app_state.workspace(request)
     path = workspace.design_file(name)
     if not path.is_file():
         raise HTTPException(status_code=404, detail=f"no design {name!r}")

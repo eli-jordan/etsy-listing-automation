@@ -25,6 +25,7 @@ from etsy_listings.core.application.refusals import (
     DesignUploadRefusedError,
 )
 from etsy_listings.core.workspace.workspace import Workspace
+from etsy_listings.server.api import app_state
 from etsy_listings.server.api.schemas import DesignSummary
 from etsy_listings.server.api.thumbnails import thumbnail_response
 
@@ -47,11 +48,6 @@ BUNDLED_LABELS: dict[str, str] = {
 from a menu while looking at a photograph."""
 
 
-def _workspace(request: Request) -> Workspace:
-    workspace: Workspace = request.app.state.workspace
-    return workspace
-
-
 def resolve_design(workspace: Workspace, design: str) -> Path:
     """Turn an id from the library into a file on disk.
 
@@ -70,7 +66,7 @@ def resolve_design(workspace: Workspace, design: str) -> Path:
 
 @router.get("", response_model=list[DesignSummary])
 def list_designs(request: Request) -> list[DesignSummary]:
-    workspace = _workspace(request)
+    workspace = app_state.workspace(request)
     bundled = [
         DesignSummary(id=design_id, label=BUNDLED_LABELS[design_id], source="bundled")
         for design_id in BUNDLED_DESIGNS
@@ -86,14 +82,14 @@ def list_designs(request: Request) -> list[DesignSummary]:
 def design_thumbnail(request: Request, design: str) -> Response:
     """A test design, small: what the listing-template editor's
     preview-design row shows beside *Preview design: …* (UI doc §3)."""
-    return thumbnail_response(resolve_design(_workspace(request), design))
+    return thumbnail_response(resolve_design(app_state.workspace(request), design))
 
 
 @router.post("", response_model=DesignSummary)
 async def upload_design(request: Request, file: UploadFile) -> DesignSummary:
     payload = await file.read()
     try:
-        design = save_uploaded_design(_workspace(request), file.filename or "", payload)
+        design = save_uploaded_design(app_state.workspace(request), file.filename or "", payload)
     except DesignUploadRefusedError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return DesignSummary(id=design, label=design, source="upload")
@@ -102,7 +98,7 @@ async def upload_design(request: Request, file: UploadFile) -> DesignSummary:
 @router.get("/{design}/image")
 def design_image(request: Request, design: str) -> Response:
     """Original RGBA artwork for responsive local placement, without rendering."""
-    path = resolve_design(_workspace(request), design)
+    path = resolve_design(app_state.workspace(request), design)
     return Response(
         path.read_bytes(), media_type="image/png", headers={"Cache-Control": "no-cache"}
     )

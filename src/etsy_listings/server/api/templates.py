@@ -75,6 +75,7 @@ from etsy_listings.core.render.config import AnyTemplate, PreparationRequiredErr
 from etsy_listings.core.render.io import encode_png
 from etsy_listings.core.workspace.calibration import CalibrationConflictError
 from etsy_listings.core.workspace.workspace import Workspace
+from etsy_listings.server.api import app_state
 from etsy_listings.server.api.designs import resolve_design
 from etsy_listings.server.api.imagecache import (
     EDITOR_MAX_EDGE,
@@ -97,11 +98,6 @@ from etsy_listings.server.api.thumbnails import thumbnail_response
 router = APIRouter(prefix="/api/templates", tags=["templates"])
 
 
-def _workspace(request: Request) -> Workspace:
-    workspace: Workspace = request.app.state.workspace
-    return workspace
-
-
 @dataclass(frozen=True)
 class Target:
     """A template that exists, and the workspace it lives in -- a 404 before
@@ -113,7 +109,7 @@ class Target:
 
 
 def target(request: Request, name: str) -> Target:
-    workspace = _workspace(request)
+    workspace = app_state.workspace(request)
     try:
         require_template(workspace, name)
     except TemplateMissingError as exc:
@@ -145,7 +141,7 @@ def _summary(overview: TemplateOverview) -> TemplateSummary:
 
 @router.get("", response_model=list[TemplateSummary])
 def list_templates(request: Request) -> list[TemplateSummary]:
-    workspace = _workspace(request)
+    workspace = app_state.workspace(request)
     summaries = []
     for overview in calibration.list_templates(workspace):
         summary = _summary(overview)

@@ -24,7 +24,7 @@ from fastapi.responses import FileResponse, Response
 
 from etsy_listings.core.config.media import media_kind
 from etsy_listings.core.workspace.listing_documents import ListingDocuments
-from etsy_listings.core.workspace.workspace import Workspace
+from etsy_listings.server.api import app_state
 from etsy_listings.server.api.schemas import MediaFileSummary
 from etsy_listings.server.api.thumbnails import thumbnail_response
 
@@ -41,11 +41,6 @@ _MEDIA_TYPES = {
 `mimetypes`, which on Windows reads the registry and may not know ``.mov``."""
 
 
-def _workspace(request: Request) -> Workspace:
-    workspace: Workspace = request.app.state.workspace
-    return workspace
-
-
 @router.get("/api/common-media", response_model=list[MediaFileSummary])
 def list_common_media(request: Request) -> list[MediaFileSummary]:
     """The *Shared* group: files every listing can use -- a sizing chart,
@@ -55,7 +50,7 @@ def list_common_media(request: Request) -> list[MediaFileSummary]:
     printed, ``test-designs/`` is calibration targets, and these are finished
     files uploaded to Etsy as-is, never rendered onto a garment.
     """
-    workspace = _workspace(request)
+    workspace = app_state.workspace(request)
     shared = workspace.common_media_dir()
     rows: list[MediaFileSummary] = []
     for path in workspace.common_media_files():
@@ -66,7 +61,7 @@ def list_common_media(request: Request) -> list[MediaFileSummary]:
 
 @router.get("/api/common-media/{name:path}/thumbnail")
 def common_media_thumbnail(request: Request, name: str) -> Response:
-    return _thumbnail(_existing(_workspace(request).common_media_file(name), name))
+    return _thumbnail(_existing(app_state.workspace(request).common_media_file(name), name))
 
 
 @router.get("/api/common-media/{name:path}/file")
@@ -74,7 +69,7 @@ def common_media_file(request: Request, name: str) -> FileResponse:
     """The shared file at its own size, for the preview pane and the
     lightbox -- the bytes as they sit on disk, which are exactly what Etsy
     would receive."""
-    return _file(_existing(_workspace(request).common_media_file(name), name))
+    return _file(_existing(app_state.workspace(request).common_media_file(name), name))
 
 
 @router.get("/api/listings/{listing}/media-files", response_model=list[MediaFileSummary])
@@ -83,7 +78,7 @@ def list_listing_media_files(request: Request, listing: str) -> list[MediaFileSu
     ``./`` ref that names it. A ``404`` for a listing that does not
     exist, rather than an empty group that would look like one with nothing
     in it."""
-    workspace = _workspace(request)
+    workspace = app_state.workspace(request)
     if not ListingDocuments(workspace).exists(listing):
         raise HTTPException(status_code=404, detail=f"no listing {listing!r}")
     directory = workspace.listing_dir(listing)
@@ -103,12 +98,14 @@ def list_listing_media_files(request: Request, listing: str) -> list[MediaFileSu
 
 @router.get("/api/listings/{listing}/media-files/{path:path}/thumbnail")
 def listing_media_thumbnail(request: Request, listing: str, path: str) -> Response:
-    return _thumbnail(_existing(_workspace(request).listing_media_file(listing, path), path))
+    return _thumbnail(
+        _existing(app_state.workspace(request).listing_media_file(listing, path), path)
+    )
 
 
 @router.get("/api/listings/{listing}/media-files/{path:path}/file")
 def listing_media_file(request: Request, listing: str, path: str) -> FileResponse:
-    return _file(_existing(_workspace(request).listing_media_file(listing, path), path))
+    return _file(_existing(app_state.workspace(request).listing_media_file(listing, path), path))
 
 
 @router.get("/api/listing-templates/{template}/media-files", response_model=list[MediaFileSummary])
@@ -116,7 +113,7 @@ def list_listing_template_media_files(request: Request, template: str) -> list[M
     """The *This template* group (UI doc, *Existing components the template
     editor needs*): the listing template's own files, each with the ``./``
     ref that names it from ``template.yaml``. Scoped to ``assets/``."""
-    workspace = _workspace(request)
+    workspace = app_state.workspace(request)
     if not workspace.listing_template_file(template).is_file():
         raise HTTPException(status_code=404, detail=f"no listing template {template!r}")
     directory = workspace.listing_template_dir(template)
@@ -139,13 +136,13 @@ def listing_template_media_thumbnail(request: Request, template: str, path: str)
     """A listing template's own file (its ``./`` root, ADR-0047) -- the pictures on
     its card. The same boundary as a listing's: the directory also holds
     ``template.yaml``."""
-    workspace = _workspace(request)
+    workspace = app_state.workspace(request)
     return _thumbnail(_existing(workspace.listing_template_media_file(template, path), path))
 
 
 @router.get("/api/listing-templates/{template}/media-files/{path:path}/file")
 def listing_template_media_file(request: Request, template: str, path: str) -> FileResponse:
-    workspace = _workspace(request)
+    workspace = app_state.workspace(request)
     return _file(_existing(workspace.listing_template_media_file(template, path), path))
 
 

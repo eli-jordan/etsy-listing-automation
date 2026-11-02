@@ -64,7 +64,6 @@ from etsy_listings.core.application.refusals import (
     StagedRowMissingError,
     StagingMissingError,
 )
-from etsy_listings.core.application.workspace_locks import WorkspaceLocks
 from etsy_listings.core.batches import (
     Batch,
     BatchRecords,
@@ -76,6 +75,7 @@ from etsy_listings.core.batches import (
     Upload,
 )
 from etsy_listings.core.batches import staging as staging_module
+from etsy_listings.core.workspace import locks
 from etsy_listings.core.workspace.facts import WorkspaceFacts
 from etsy_listings.core.workspace.workspace import InvalidNameError, Workspace
 
@@ -139,11 +139,6 @@ def batches(workspace: Workspace) -> BatchStore:
 
 
 @pytest.fixture
-def locks() -> WorkspaceLocks:
-    return WorkspaceLocks()
-
-
-@pytest.fixture
 def queue(workspace: Workspace, batches: BatchStore) -> BatchQueue:
     """The queue under test, unwoken until the operation under test."""
     return _queue(workspace, batches)
@@ -152,7 +147,7 @@ def queue(workspace: Workspace, batches: BatchStore) -> BatchQueue:
 def _stage(
     workspace: Workspace, staging: StagingStore, *files: tuple[str, bytes]
 ) -> StagingSession:
-    return stage_upload(staging, LISTING_TEMPLATE, uploads(*files), locks=WorkspaceLocks())
+    return stage_upload(staging, LISTING_TEMPLATE, uploads(*files))
 
 
 def _confirm(
@@ -198,7 +193,7 @@ class TestStage:
         self, workspace: Workspace, staging: StagingStore
     ) -> None:
         with pytest.raises(ListingTemplateMissingError):
-            stage_upload(staging, "nope", uploads(("a.png", png(1))), locks=WorkspaceLocks())
+            stage_upload(staging, "nope", uploads(("a.png", png(1))))
         assert workspace.staging_ids() == []
 
     def test_the_design_and_size_limits_still_refuse_with_nothing_on_disk(
@@ -225,21 +220,20 @@ class TestStage:
         assert workspace.staging_ids() == []
 
     def test_the_template_is_frozen_under_its_write_lock(
-        self, workspace: Workspace, staging: StagingStore, locks: WorkspaceLocks
+        self, workspace: Workspace, staging: StagingStore
     ) -> None:
         """Capture waits for an edit holding the template's lock, so a batch
         never freezes a half-written template, and freezes what it wrote."""
         path = workspace.listing_template_file(LISTING_TEMPLATE)
         document = yaml.safe_load(path.read_text(encoding="utf-8"))
         staged: list[StagingSession] = []
-        with locks.listing_template(LISTING_TEMPLATE):
+        with locks.hold(workspace, "listing-template", LISTING_TEMPLATE):
             worker = threading.Thread(
                 target=lambda: staged.append(
                     stage_upload(
                         staging,
                         LISTING_TEMPLATE,
                         uploads(("a.png", png(1))),
-                        locks=locks,
                     )
                 )
             )
@@ -686,7 +680,6 @@ class TestReads:
             staging,
             LISTING_TEMPLATE,
             [Upload("d.png", BytesIO(png(4)))],
-            locks=WorkspaceLocks(),
             now=datetime.now(UTC) - timedelta(days=8),
         )
 

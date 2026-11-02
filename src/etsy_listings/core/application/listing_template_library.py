@@ -39,7 +39,6 @@ from etsy_listings.core.application.refusals import (
     ReservedListingTemplateNameError,
     field_errors_of,
 )
-from etsy_listings.core.application.workspace_locks import WorkspaceLocks
 from etsy_listings.core.batches import BatchRecords, BatchStore
 from etsy_listings.core.config.description import DescriptionConfig
 from etsy_listings.core.config.errors import ConfigLoadError
@@ -54,6 +53,7 @@ from etsy_listings.core.listing_templates import (
     draft_issues,
     template_issues,
 )
+from etsy_listings.core.workspace import locks
 from etsy_listings.core.workspace.facts import WorkspaceFacts
 from etsy_listings.core.workspace.listing_documents import ListingDocuments
 from etsy_listings.core.workspace.workspace import Workspace
@@ -207,7 +207,6 @@ def create_listing_template(
     origin: DraftOrigin,
     *,
     document: Mapping[str, Any] | None = None,
-    locks: WorkspaceLocks,
 ) -> TemplateSave:
     """Naming the draft is what writes it (UI doc §1).
 
@@ -229,7 +228,7 @@ def create_listing_template(
         except ValidationError as exc:
             return TemplateSave(saved=False, issues=[], field_errors=field_errors_of(exc))
     facts = WorkspaceFacts.gather(workspace)
-    with locks.listing_template(name):
+    with locks.hold(workspace, "listing-template", name):
         issues = conversion.save(workspace, name, draft, facts=facts)
     if _blocked(issues):
         return TemplateSave(saved=False, issues=issues)
@@ -237,13 +236,13 @@ def create_listing_template(
 
 
 def edit_listing_template(
-    workspace: Workspace, name: str, document: Mapping[str, Any], *, locks: WorkspaceLocks
+    workspace: Workspace, name: str, document: Mapping[str, Any]
 ) -> TemplateSave:
     """Write the whole ``document`` as listing template ``name``, only if it
     is complete (template completeness). :class:`ListingTemplateMissingError`
     when there is none, before or after waiting for its lock."""
     facts = WorkspaceFacts.gather(workspace)
-    with locks.listing_template(name):
+    with locks.hold(workspace, "listing-template", name):
         _require(workspace, name)
         try:
             template = ListingTemplate.model_validate(
@@ -263,7 +262,6 @@ def rename_listing_template(
     old: str,
     new: str,
     *,
-    locks: WorkspaceLocks,
     records: BatchRecords,
 ) -> None:
     """Move a listing template, whole, to ``new``. Its name is its
@@ -281,7 +279,7 @@ def rename_listing_template(
     destination = workspace.listing_template_dir(new)
     if new == RESERVED_NAME:
         raise ReservedListingTemplateNameError(new)
-    with locks.listing_template(old, new):
+    with locks.hold(workspace, "listing-template", old, new):
         _require(workspace, old)
         if new == old:
             return
@@ -291,11 +289,11 @@ def rename_listing_template(
         records.rename_listing_template(old, new)
 
 
-def delete_listing_template(workspace: Workspace, name: str, *, locks: WorkspaceLocks) -> None:
+def delete_listing_template(workspace: Workspace, name: str) -> None:
     """Allowed whatever was made from it: batches keep their own frozen
     copy, and a listing never had a link to it (spec, *Completeness and
     editing*)."""
-    with locks.listing_template(name):
+    with locks.hold(workspace, "listing-template", name):
         _require(workspace, name)
         workspace.remove_listing_template(name)
 

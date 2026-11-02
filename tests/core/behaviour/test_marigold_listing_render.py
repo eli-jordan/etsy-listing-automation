@@ -373,14 +373,12 @@ def test_unprepared_reference_can_be_saved_as_reusable_listing_template(workspac
         DraftOrigin,
         create_listing_template,
     )
-    from etsy_listings.core.application.workspace_locks import WorkspaceLocks
 
     workspace, _ = listing_with_marigold(workspace_root)
     result = create_listing_template(
         workspace,
         "ready-for-artwork",
         DraftOrigin(listing=FIXTURE_LISTING),
-        locks=WorkspaceLocks(),
     )
     assert result.saved
     assert workspace.load_listing_template("ready-for-artwork").media[0].template == "shirt"

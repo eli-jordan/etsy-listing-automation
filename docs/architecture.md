@@ -110,10 +110,10 @@ package never drags in OpenCV, FastAPI or Typer to reach one name.
 | Module | Owns | Boundary |
 |---|---|---|
 | `cli` | Typer commands, terminal presentation of engine reports (`cli/render.py`), command options, prompts and the `auth`/`setup`/`new` wizards' question order (`cli/auth.py`, `cli/setup.py`, `cli/new.py`, with `cli/credentials.py` and `cli/pickers.py`) | Uses engine reports rather than computing a second diff; wizards call core operations for every decision and write; only `cli/ui.py` imports the server, and only `server.hosting` |
-| `server` | FastAPI routing and wire schemas (`server/api/`), HTTP status mapping, SSE framing, reconnect and disconnect polling, request-serving caches (`imagecache`, `etsystate`, thumbnails), static SPA serving and app startup/shutdown (`server/hosting.py`, the lifespan in `server/api/app.py`) | Constructs one of each core coordinator, store and lock set per process and starts and stops them; decides no workflow rule itself |
-| `core/application` | Operations shared by server and CLI: listing reads, edits, creation, rename/delete and pricing plans; the wizards' reusable operations (credentials, workspace setup, shop discovery, garment profiles); mockup-template calibration and preview scenes; listing-template library; batch staging and workflow; per-listing-template write locks; deployment runs (`deploy/`); AI runs, batch AI queue, readiness and proposals (`ai/`); host-supplied seams (`dependencies.py`) and typed refusals (`refusals.py`) | Owns the records that follow a listing or listing template, and locking around listing-template writes; listing documents and listing-keyed files are edited only through `core/workspace/listing_documents.py` and `core/listing_artifacts.py`; answers with results or typed refusals, never status codes or terminal text; constructing a coordinator starts no thread; takes decoded images and upload streams, never request objects or caches |
+| `server` | FastAPI routing and wire schemas (`server/api/`), HTTP status mapping, SSE framing, reconnect and disconnect polling, request-serving caches (`imagecache`, `etsystate`, thumbnails), static SPA serving and app startup/shutdown (`server/hosting.py`, the lifespan in `server/api/app.py`) | Constructs one of each core coordinator and store per process and starts and stops them; decides no workflow rule itself |
+| `core/application` | Operations shared by server and CLI: listing reads, edits, creation, rename/delete and pricing plans; the wizards' reusable operations (credentials, workspace setup, shop discovery, garment profiles); mockup-template calibration and preview scenes; listing-template library; batch staging and workflow; deployment runs (`deploy/`); AI runs, batch AI queue, readiness and proposals (`ai/`); host-supplied seams (`dependencies.py`) and typed refusals (`refusals.py`) | Owns the records that follow a listing or listing template, and holds a listing template's lock around each of its check-then-writes; listing documents and listing-keyed files are edited only through `core/workspace/listing_documents.py` and `core/listing_artifacts.py`; answers with results or typed refusals, never status codes or terminal text; constructing a coordinator starts no thread; takes decoded images and upload streams, never request objects or caches |
 | `core/engine` | Stage protocol, comparison, lockfile, lifecycle, runs, previews and status | Stages return values; the engine decides execution and records progress |
-| `core/workspace` | Root discovery, layout, reference resolution, file loading, atomic writes, in-place YAML edits (ADR-0055), video probes, Cygwin path translation and request facts; `listing_documents.py` is the one reader and writer of `listing.yaml` and holds each listing's process-wide lock | Owns workspace layout and containment; callers may do I/O on paths it supplies, except `listing.yaml`, which every writer edits through `ListingDocuments` |
+| `core/workspace` | Root discovery, layout, reference resolution, file loading, atomic writes, in-place YAML edits (ADR-0055), video probes, Cygwin path translation and request facts; `locks.py`, the process-wide keyed locks for listings, mockup templates and listing templates; `listing_documents.py` is the one reader and writer of `listing.yaml` and takes each listing's lock | Owns workspace layout and containment; callers may do I/O on paths it supplies, except `listing.yaml`, which every writer edits through `ListingDocuments` |
 | `core/listing_artifacts.py` | Moving and removing everything keyed by a listing's name: its directory, render cache, previews, market snapshot and cached proposal | One list serves rename, wipe and a pending delete; every operation holds the listing's lock. Batch rows and AI runs stay with `core/application/listing_identity.py` |
 | `core/render` | Configuration and pure image passes | No workspace knowledge; callers supply images and geometry |
 | `core/clients` | Typed protocols, transports, Printify catalog/product and Etsy APIs, OAuth tokens and fakes | Shared transport per vendor; separate caller authority through protocols |
@@ -320,10 +320,10 @@ including mixed-format preview bodies. Multiple placements require safe, unique
 IDs; production creation uses UUIDs and geometry, recolouring and reorder preserve
 them. Single and colour-matrix placements use `None` internally.
 
-`workspace.calibration.CalibrationStore` holds a process-wide reentrant lock per
-validated, canonical mockup-template directory. In-workspace aliases share that
-lock; aliases outside the workspace are refused before IO. This is independent of the listing-template lock
-domain. All template-config writers use its recoverable transaction. Server
+`workspace.calibration.CalibrationStore` holds the mockup-template lock of
+`core/workspace/locks.py` per validated, canonical template directory. In-workspace
+aliases share that lock; aliases outside the workspace are refused before IO. It is
+a separate domain from the listing and listing-template locks. All template-config writers use its recoverable transaction. Server
 operations recover before reading; the direct Workspace loader takes the same
 lock and refuses an active transaction, so a CLI cannot roll forward a live server
 save. One server per workspace remains the ownership assumption.
@@ -403,7 +403,7 @@ Two consequences worth knowing:
 
 `etsy-listings ui` runs `cli/ui.py`, which opens the workspace and calls
 `server.hosting.serve`; that runs `create_app(workspace)` under uvicorn on the
-main thread, which owns Ctrl-C. `create_app` constructs one `WorkspaceLocks`,
+main thread, which owns Ctrl-C. `create_app` constructs one
 `ProposalStore`, staging and batch store, `AiCoordinator`
 (`core/application/ai`: run registry, runner and batch queue) and
 `Deployments` (`core/application/deploy`: registry, FIFO executor and review
@@ -601,10 +601,10 @@ edit saves whole percentages. The server returns the model's Reset defaults.
 ### Process-local limitations
 
 These are preserved deliberately; the restructure moved them into core without
-changing them. The listing document locks (`ListingDocuments.lock`) serialize
-every `listing.yaml` edit, proposal record write and listing rename or removal,
-including the engine's, and `WorkspaceLocks` serializes listing-template writes,
-inside one process only. Etsy token rotation is serialized per resolved token
+changing them. The keyed locks of `core/workspace/locks.py` work inside one
+process only: through `ListingDocuments.lock` they serialize every `listing.yaml`
+edit, proposal record write and listing rename or removal, including the engine's,
+and they serialize listing-template writes and mockup-template saves. Etsy token rotation is serialized per resolved token
 file across every `TokenStore` in the process, so concurrent Admin requests
 rotate an expired grant once; across processes only the `invalid_grant`
 re-read protects it. Deployment and AI registries hold runs in
@@ -824,6 +824,16 @@ later. Each traces to a decision.
   there is no lock order to get wrong. "Is there a listing?" (`exists`) and
   "may a new listing take this name?" (`is_free`) are answered there and
   nowhere else.
+- **A lock on something the workspace keys by name comes from
+  `core/workspace/locks.py`.** `hold(workspace, domain, *names)` covers the
+  three domains, `listing`, `mockup-template` and `listing-template`, with one
+  rule set: reentrant, keyed by the resolved and casefolded directory the name
+  becomes (so per workspace root, case-insensitive, and shared by in-workspace
+  aliases), several names taken in sorted order, and a bad name or escaping
+  directory refused before anything is held. One module rather than one dict
+  per owner, because the three copies had drifted: the listing-template lock
+  was not reentrant and was scoped to an instance the server had to pass to
+  every operation, so a caller that forgot to pass it took no lock at all.
 - **A write to existing workspace YAML edits it in place.** Listings, listing
   templates, mockup `template.yaml` and setup's `shop.yaml` are changed through
   `core/workspace/yaml_source.py` (directly or via `atomic.write_yaml_atomic`):

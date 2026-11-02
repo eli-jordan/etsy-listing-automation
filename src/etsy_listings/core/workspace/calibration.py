@@ -9,7 +9,6 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
-import threading
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -30,6 +29,7 @@ from etsy_listings.core.render.config import (
     dump_template_config,
     load_template_config,
 )
+from etsy_listings.core.workspace import locks
 from etsy_listings.core.workspace.atomic import write_bytes_atomic, write_json_atomic
 from etsy_listings.core.workspace.file_version import file_version
 from etsy_listings.core.workspace.trees import remove_tree
@@ -38,8 +38,6 @@ from etsy_listings.core.workspace.yaml_source import edit_yaml_bytes
 if TYPE_CHECKING:
     from etsy_listings.core.workspace import Workspace
 
-_GUARD = threading.Lock()
-_LOCKS: dict[str, threading.RLock] = {}
 MAX_MASK_EDIT_BYTES = 2_000_000
 
 
@@ -189,14 +187,10 @@ class CalibrationStore:
 
     @contextmanager
     def lock(self, name: str) -> Iterator[None]:
-        directory = self.workspace.template_dir(name)
-        resolved = self.workspace.resolve(
-            directory.relative_to(self.workspace.root).as_posix(), self.workspace.root
-        )
-        key = str(resolved).casefold()
-        with _GUARD:
-            lock = _LOCKS.setdefault(key, threading.RLock())
-        with lock:
+        """ADR-0054: the ``mockup-template`` domain of :mod:`.locks`, shared by
+        calibration saves and map publication. An in-workspace alias shares
+        its target's lock; one outside the workspace is refused."""
+        with locks.hold(self.workspace, "mockup-template", name):
             yield
 
     def config(self, name: str) -> AnyTemplate:

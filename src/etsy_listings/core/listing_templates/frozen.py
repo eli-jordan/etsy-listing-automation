@@ -9,8 +9,7 @@ protocol for locating frozen content.
 from __future__ import annotations
 
 import shutil
-from collections.abc import Callable, Mapping
-from contextlib import AbstractContextManager, nullcontext
+from collections.abc import Mapping
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from pathlib import Path
@@ -20,14 +19,9 @@ from etsy_listings.core.config.listing_template import ListingTemplate
 from etsy_listings.core.config.listing_validation import Issue
 from etsy_listings.core.listing_templates.check import check_listing_template_files
 from etsy_listings.core.listing_templates.convert import AssetCopy, owned_refs
+from etsy_listings.core.workspace import locks
 from etsy_listings.core.workspace.facts import WorkspaceFacts
 from etsy_listings.core.workspace.workspace import Workspace
-
-TemplateLock = Callable[[str], AbstractContextManager[object]]
-
-
-def _unlocked(_: str) -> AbstractContextManager[object]:
-    return nullcontext()
 
 
 @dataclass(frozen=True)
@@ -38,16 +32,14 @@ class FrozenListingTemplate:
     saved_at: datetime
 
     @classmethod
-    def capture(
-        cls, workspace: Workspace, name: str, directory: Path, *, lock: TemplateLock = _unlocked
-    ) -> FrozenListingTemplate:
+    def capture(cls, workspace: Workspace, name: str, directory: Path) -> FrozenListingTemplate:
         """Capture under the same lock as template edits, rename and delete.
 
         The lock covers only content capture, never the design upload.
         No record or listing is created here; the caller owns cleanup if
         receiving or saving its staging session fails.
         """
-        with lock(name):
+        with locks.hold(workspace, "listing-template", name):
             template = workspace.load_listing_template(name)
             saved_at = datetime.fromtimestamp(
                 workspace.listing_template_file(name).stat().st_mtime, tz=UTC

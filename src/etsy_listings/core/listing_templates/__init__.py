@@ -25,11 +25,10 @@ from etsy_listings.core.listing_templates.convert import (
     owned_refs,
     save,
 )
-from etsy_listings.core.listing_templates.frozen import FrozenListingTemplate, TemplateLock
+from etsy_listings.core.listing_templates.frozen import FrozenListingTemplate
 
 __all__ = [  # noqa: RUF022 -- grouped by topic, not alphabetically
     "FrozenListingTemplate",
-    "TemplateLock",
     # A draft: the document, and the files it will own.
     "ListingTemplateDraft",
     "AssetCopy",
