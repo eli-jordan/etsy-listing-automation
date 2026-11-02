@@ -114,6 +114,27 @@ describe("VariantsTab's preview", () => {
     );
   });
 
+  it("preloads every colour's stage picture, so clicking through colours does not wait", async () => {
+    /* Each colour is a full-size render the first time; fetching them all
+       into the browser's cache while the seller looks at the first means
+       the next click is a local decode. */
+    const fetch = vi.fn<(url: string) => Promise<Response>>(() =>
+      Promise.resolve(new Response("png")),
+    );
+    vi.stubGlobal("fetch", fetch);
+    renderWithFlatLay({
+      design: { default: "designs/take-a-hike.png" },
+      design_content_hash: "abc",
+    });
+
+    await waitFor(() => expect(fetch).toHaveBeenCalledTimes(2));
+    expect(fetch.mock.calls.map(([url]) => url)).toEqual([
+      "/api/listings/take-a-hike/scene-preview?template=flat-lay-01&colour=black&v=abc",
+      "/api/listings/take-a-hike/scene-preview?template=flat-lay-01&colour=ivory&v=abc",
+    ]);
+    vi.unstubAllGlobals();
+  });
+
   it("asks for each colour's scene, so a light/dark pair is never a bare photo", async () => {
     /* Spec, *Previews*: the stage must not fall back to a bare garment just
        because the listing has two base files. The server resolves each

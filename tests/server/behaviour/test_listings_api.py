@@ -165,6 +165,23 @@ class TestListListings:
         assert row["colour_count"] == 4
         assert row["status"] == "draft"
 
+    def test_says_where_the_time_went_in_a_server_timing_header(self, client: TestClient) -> None:
+        """A slow table is diagnosed from the browser's network panel, so the
+        answer names every phase it timed, each in milliseconds."""
+        header = client.get("/api/listings").headers["Server-Timing"]
+        phases = dict(entry.split(";dur=") for entry in header.split(", "))
+        assert set(phases) == {
+            "catalogue",
+            "ids",
+            "etsy",
+            "load",
+            "status",
+            "videos",
+            "checks",
+            "total",
+        }
+        assert all(float(ms) >= 0 for ms in phases.values())
+
     def test_a_row_names_the_design_its_thumbnail_is_addressed_by(self, client: TestClient) -> None:
         """The table shows the artwork, so a row has to carry the name
         `GET /api/listing-designs/{name}/thumbnail` takes -- the stem, not

@@ -8,7 +8,7 @@ so without it a keystroke burst in the editor would be a round trip apiece.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from pathlib import Path
 
 import pytest
@@ -122,3 +122,111 @@ def test_an_etsy_read_failure_is_silence_not_a_500(failure: Exception) -> None:
             raise failure
 
     assert live(Failing(), [111], at=0.0) == set()
+
+
+class Deferred:
+    """A `Background` that keeps the refresh until the test runs it."""
+
+    def __init__(self) -> None:
+        self.pending: list[Callable[[], None]] = []
+
+    def __call__(self, work: Callable[[], None]) -> None:
+        self.pending.append(work)
+
+    def run(self) -> None:
+        work, self.pending = self.pending, []
+        for item in work:
+            item()
+
+
+def drawn(
+    client: EtsyListingClient, listing_ids: list[int], at: float, background: Deferred
+) -> dict[int, str | None]:
+    """What the listings table draws at ``at`` (``stale_ok``)."""
+    return etsystate.etsy_states(
+        ROOT,
+        listing_ids,
+        client_for=lambda _root: client,
+        now=lambda: at,
+        stale_ok=True,
+        background=background,
+    )
+
+
+class TestTheTableDoesNotWaitForARefresh:
+    def test_an_expired_answer_is_drawn_and_refreshed_behind_the_read(self) -> None:
+        fake = Counting({111: "draft"})
+        later = Deferred()
+        drawn(fake, [111], at=0.0, background=later)
+        fake.seed_listing(111, state="active")
+
+        expired = etsystate.TTL_SECONDS + 1
+        assert drawn(fake, [111], at=expired, background=later) == {111: "draft"}
+        assert fake.calls == 1
+
+        later.run()
+        assert fake.calls == 2
+        assert drawn(fake, [111], at=expired + 1, background=later) == {111: "active"}
+
+    def test_one_refresh_however_often_the_table_is_polled(self) -> None:
+        fake = Counting({111: "draft"})
+        later = Deferred()
+        drawn(fake, [111], at=0.0, background=later)
+
+        for tick in range(3):
+            drawn(fake, [111], at=etsystate.TTL_SECONDS + tick, background=later)
+
+        assert len(later.pending) == 1
+
+    def test_an_answer_past_the_stale_limit_is_waited_for(self) -> None:
+        """A page opened after a long gap never draws an hour-old badge."""
+        fake = Counting({111: "draft"})
+        later = Deferred()
+        drawn(fake, [111], at=0.0, background=later)
+        fake.seed_listing(111, state="active")
+
+        assert drawn(fake, [111], at=etsystate.STALE_SECONDS + 1, background=later) == {
+            111: "active"
+        }
+        assert later.pending == []
+
+    def test_a_new_id_is_fetched_now_with_the_stale_ones_in_the_same_request(self) -> None:
+        asked: list[list[int]] = []
+
+        class Recording(Counting):
+            def listing_states(self, listing_ids: Sequence[int]) -> dict[int, str]:
+                asked.append(list(listing_ids))
+                return super().listing_states(listing_ids)
+
+        fake = Recording({111: "draft", 222: "active"})
+        later = Deferred()
+        drawn(fake, [111], at=0.0, background=later)
+
+        drawn(fake, [111, 222], at=etsystate.TTL_SECONDS + 1, background=later)
+
+        assert asked == [[111], [111, 222]]
+        assert later.pending == []
+
+    def test_a_failed_refresh_keeps_the_answer_it_was_refreshing(self) -> None:
+        fake = Counting({111: "active"})
+        later = Deferred()
+        drawn(fake, [111], at=0.0, background=later)
+
+        class Failing(FakeEtsyListingClient):
+            def listing_states(self, listing_ids: Sequence[int]) -> dict[int, str]:
+                raise EtsyRefreshBusyError("Refresh still running. Try again shortly.")
+
+        expired = etsystate.TTL_SECONDS + 1
+        drawn(Failing(), [111], at=expired, background=later)
+        later.run()
+
+        assert drawn(fake, [111], at=expired + 1, background=later) == {111: "active"}
+
+    def test_a_caller_that_decides_still_waits_once_the_ttl_has_passed(self) -> None:
+        """The published-deletion refusal must not act on a ten-minute-old
+        "draft"."""
+        fake = Counting({111: "draft"})
+        drawn(fake, [111], at=0.0, background=Deferred())
+        fake.seed_listing(111, state="active")
+
+        assert live(fake, [111], at=etsystate.TTL_SECONDS + 1) == {111}
