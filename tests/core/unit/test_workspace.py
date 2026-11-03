@@ -102,6 +102,23 @@ def test_resolve_rejects_unc_path(workspace_root: Path) -> None:
         ws.resolve("\\\\server\\share\\file.txt", relative_to=ws.root)
 
 
+@pytest.mark.skipif(os.name != "nt", reason="the extended-length prefix exists only on Windows")
+def test_resolve_accepts_a_path_windows_returns_in_extended_length_form(
+    workspace_root: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # ntpath.realpath keeps the `\\?\` prefix when its two lookups of a path
+    # disagree -- a directory another thread creates in between, or a path
+    # past MAX_PATH -- so a path inside a plain-form root can come back
+    # prefixed. It is still inside the workspace.
+    ws = Workspace.discover(root_override=workspace_root)
+    plain_resolve = Path.resolve
+    monkeypatch.setattr(Path, "resolve", lambda self: Path("\\\\?\\" + str(plain_resolve(self))))
+
+    resolved = ws.resolve("mockup-templates/flat-lay-01/_renderer/masks", relative_to=ws.root)
+
+    assert resolved == ws.root / "mockup-templates" / "flat-lay-01" / "_renderer" / "masks"
+
+
 @pytest.mark.skipif(os.name != "nt", reason="symlink escape test targets Windows path semantics")
 def test_resolve_rejects_symlink_escape(workspace_root: Path, tmp_path: Path) -> None:
     outside = tmp_path / "outside"

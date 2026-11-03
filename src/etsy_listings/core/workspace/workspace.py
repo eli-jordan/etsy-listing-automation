@@ -196,6 +196,26 @@ def _looks_like_windows_absolute(ref: str) -> bool:
     return p.drive != "" or ref.startswith(("\\\\", "//"))
 
 
+_EXTENDED_LENGTH_PREFIX = "\\\\?\\"
+
+
+def _without_extended_length_prefix(path: Path) -> Path:
+    """``C:\\x`` for ``\\\\?\\C:\\x``, so a resolved path compares with the root.
+
+    ``Path.resolve`` on Windows can keep the extended-length prefix: past
+    MAX_PATH, or when its two lookups of a path disagree because another
+    thread created a directory in between. The root resolved without it,
+    so ``relative_to`` would report a path inside the workspace as an
+    escape. ``\\\\?\\UNC\\`` network paths keep their prefix.
+    """
+    text = str(path)
+    if text.startswith(_EXTENDED_LENGTH_PREFIX) and not text.startswith(
+        _EXTENDED_LENGTH_PREFIX + "UNC\\"
+    ):
+        return Path(text[len(_EXTENDED_LENGTH_PREFIX) :])
+    return path
+
+
 _SCENE_STEM = "scene"
 """The fixed filename a ``multiple``/``single``-kind template's one photo
 takes. Named once because two accessors turn on it: the scene image itself,
@@ -293,7 +313,7 @@ class Workspace:
         if Path(ref).is_absolute() or _looks_like_windows_absolute(ref):
             raise PathEscapesWorkspaceError(ref, self.root)
 
-        candidate = (relative_to / ref).resolve()
+        candidate = _without_extended_length_prefix((relative_to / ref).resolve())
         try:
             candidate.relative_to(self.root)
         except ValueError as exc:
