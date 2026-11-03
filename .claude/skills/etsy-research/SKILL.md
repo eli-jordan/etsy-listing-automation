@@ -24,7 +24,11 @@ Research that needs those labels starts in the browser to build the listing set,
    - `order=date_desc` for newest first. Omit `order` for relevance, which favours listings that already sell and is usually what research wants.
    - Base: `https://www.etsy.com/search?…`.
 3. **Extract the cards.** Pass the contents of [extract_search_cards.js](extract_search_cards.js) as the `text` of `javascript_tool`. The tool keeps only about the first 1,000 characters of a result and withholds anything containing a URL query string, so the script returns compact text: a header line with the query, page, order, filters and card count, then one token per card in page order, made of the listing ID plus flag letters (`a` ad, `B` Bestseller, `P` Popular now, `S` Star Seller, `E` Etsy's Pick). Recommendation carousels are left out. Save each page's output, unchanged, to its own `.txt` file. If the header says `part=1/2`, run the script again with `PART = 2`.
-4. **Keep the pace human.** The user's Chrome is signed in to their seller account, so a flag for automated traffic would land on the shop. Wait a few seconds between pages, keep to a handful of pages per search (around 20 page loads in a session), and stop if Etsy shows a verification check: tell the user rather than solving it. Close the tab when done.
+4. **Keep the pace human.** The user's Chrome is signed in to their seller account, so a flag for automated traffic would land on the shop.
+   - **Load each page in a fresh tab:** open the new tab, then close the previous one.
+   - **Wait 20–60 seconds, varied, between page loads.** Six loads 4 seconds apart got the network restricted for a few minutes.
+   - **When the extractor returns `blocked:`** (Etsy's "Access is temporarily restricted" page or a verification check), stop loading pages. Never solve or work around the check. For a multi-page run, use the scheduled-retry backoff in [etsy-research-proven-mockups](../etsy-research-proven-mockups/SKILL.md) step 3 (its `sample_plan.py`). Otherwise tell the user.
+   - Close the tab when done.
 5. **Fill in from the API.** `listings/batch listing_ids=…` (up to 100 IDs per call, `includes=Images,Shop`) for titles, tags, favourites, taxonomy and full-size image URLs (`url_fullxfull`); `shops/SHOP_ID` for review average, review count and sales.
 6. **Filter out off-topic hits.** Etsy's filters are loose: a Christmas + Star Seller search still returns band tees and quilts. Drop them by title, tags or `taxonomy_id` before analysis.
 

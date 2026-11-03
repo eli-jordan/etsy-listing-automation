@@ -10,13 +10,20 @@
 // as "Because you viewed" are left out). Each token is a listing ID followed by
 // flags: a = ad, B = Bestseller, P = Popular now, S = Star Seller badge,
 // E = Etsy's Pick. When the header says part=1/2, run again with PART = 2.
+// It returns a line starting "blocked:" when Etsy shows its access restriction
+// or a verification check instead of results.
 (() => {
   const PART = 1;
   const PER_PART = 70;
   const p = new URLSearchParams(location.search);
   const filters = ["is_star_seller", "is_best_seller"].filter((f) => p.get(f) === "true");
+  const body = document.body ? document.body.innerText : "";
+  const challenge = document.querySelector('iframe[src*="captcha"], iframe[src*="datadome"]');
+  if (challenge || /temporarily restricted|unusual activity|verification required/i.test(body)) {
+    return "blocked: Etsy is restricting access or showing a verification check";
+  }
   const grid = document.querySelector("[data-search-results]");
-  if (!grid) return "error: no search results grid on this page";
+  if (!grid) return "error: no search results grid on this page (not loaded yet, or no results)";
   const flags = [
     ["Bestseller", "B"],
     ["Popular now", "P"],

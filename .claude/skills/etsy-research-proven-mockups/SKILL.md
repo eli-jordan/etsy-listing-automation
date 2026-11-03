@@ -19,16 +19,40 @@ Write 3–10 search queries a buyer in that niche would type, covering its main 
 
 ## 3. Sample the search pages
 
-Create a run directory, `C:\Users\Admin\Downloads\etsy-mockup-research\<topic-slug>-<YYYY-MM-DD>\`, with a `pages\` folder inside.
+Each query gets two pages, newest first: one filtered to Star Sellers (`is_star_seller=true`) and one to Bestsellers (`is_best_seller=true`). Etsy restricts access for a few minutes when searches come too fast, so pages load one at a time, each in a fresh tab, with jittered waits. [sample_plan.py](sample_plan.py) holds the plan, picks the waits and works out retries. A page counts as done once its file exists, so a run resumes wherever it stopped.
 
-For each query, load two pages in one Chrome tab, newest first:
+**Plan** (skip when `RUN_DIR\plan.json` already exists, i.e. on a resume). The run directory is `C:\Users\Admin\Downloads\etsy-mockup-research\<topic-slug>-<YYYY-MM-DD>\`:
 
+```bash
+uv run python .claude/skills/etsy-research-proven-mockups/sample_plan.py plan RUN_DIR "query 1" "query 2" ...
 ```
-https://www.etsy.com/search?q=<query>&explicit=1&is_star_seller=true&order=date_desc
-https://www.etsy.com/search?q=<query>&explicit=1&is_best_seller=true&order=date_desc
-```
 
-On each page, run [extract_search_cards.js](../etsy-research/extract_search_cards.js) with `javascript_tool` and save its text output, unchanged, to `pages\NN-<query-slug>-<star|best>.txt`. If the header says `part=1/2`, run it again with `PART = 2` and append the second line. Batch the pages with `browser_batch` (navigate, extract, wait 4 seconds, next) and keep to the etsy-research pacing rules. With 10 queries that's 20 page loads, the session maximum. Close the tab when done.
+**Loop over the pages:**
+
+1. Run `sample_plan.py next RUN_DIR`. It prints `{"done": true}`, which means go to step 4, or the next page: `file`, `url`, `wait_before` and `wait_after_load` (lists of seconds, each at most 10).
+2. Open a fresh tab with `tabs_create_mcp`, then close the previous page's tab, if any. Opening first keeps the tab group alive. Call `tabs_context_mcp` with `createIfEmpty` once at the start of the session.
+3. In one `browser_batch` on the new tab:
+   - a `computer` `wait` for each `wait_before` entry
+   - `navigate` to `url`
+   - a `wait` for each `wait_after_load` entry
+   - `javascript_tool` with the contents of [extract_search_cards.js](../etsy-research/extract_search_cards.js)
+4. Act on the extractor's output:
+   - **Header plus listing IDs:** save it, unchanged, to `file`. If the header says `part=1/2`, run the extractor again with `PART = 2` and append that line too.
+   - **`error: no search results grid`:** wait 10 seconds and extract again. If it still fails, take a screenshot. A normal page with zero results is done: save the single line `count=0`. Anything else, stop and tell the user.
+   - **`blocked:`:** Etsy has restricted access. Follow the block steps below.
+5. Repeat.
+
+**On a block:** close the tab, then run `sample_plan.py blocked RUN_DIR`.
+- **It prints `retry`, `minutes` and `run_at`:** schedule a one-off continuation with T3's `schedule_task`:
+  - `schedule: {type: "once", runAt: <run_at>}`
+  - `bindToCurrentThread: true`
+  - title `Resume Etsy mockup sampling`
+  - prompt: `Resume the etsy-research-proven-mockups run in <RUN_DIR>: invoke the etsy-research-proven-mockups skill and continue from step 3. The plan already exists.`
+
+  Tell the user the retry number and time, then end the turn. The script backs off 15 → 20 → 30 → 45 minutes, each with ±20% jitter, while no page succeeds between blocks, and starts over at 15 once one does.
+- **It prints `abort`:** the 45-minute retry was blocked too. Stop. Tell the user how many pages are saved, and offer to analyse those or to resume later with `next`.
+
+A scheduled continuation is a new session, so load the Chrome tools again first. Once `next` prints `done`, carry on through steps 4–7 in the same run.
 
 ## 4. Fetch listings and images
 
