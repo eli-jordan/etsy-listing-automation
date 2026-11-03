@@ -53,3 +53,33 @@ def test_a_covered_position_is_fitted_in_the_background(workspace_root: Path):
 
     assert len(workspace.position_fits()) == 1
     assert [job.kind for job in app.state.preparations.list_jobs()] == ["prepare"]
+
+
+def test_the_server_prunes_fits_at_startup_and_after_warming(workspace_root: Path):
+    """A fit nothing references goes at startup; the fit a position change
+    replaced goes once the warmer has fitted the new one."""
+    workspace = listing_with_prepared_marigold(workspace_root)
+    workspace.position_fit("0" * 64).mkdir(parents=True)
+    app = create_app(workspace, preparation_runtime=PreparationRuntime())
+    with TestClient(app) as client:
+        assert app.state.scene_warmer.wait_idle(timeout=30)
+        assert workspace.position_fits() == []
+
+        client.patch(URL, json={"template_positions": _position(workspace, "shirt")})
+        assert app.state.scene_warmer.wait_idle(timeout=30)
+        (first,) = workspace.position_fits()
+        moved = compose(
+            workspace.load_template_config("shirt").bounding_box, Pose(scale=0.9, rotation=-7)
+        )
+        client.patch(
+            URL,
+            json={
+                "template_positions": {
+                    "shirt": {"bounding_box": [point.model_dump() for point in moved]}
+                }
+            },
+        )
+        assert app.state.scene_warmer.wait_idle(timeout=30)
+
+    (second,) = workspace.position_fits()
+    assert second != first

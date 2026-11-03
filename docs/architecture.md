@@ -1286,6 +1286,14 @@ combines the generation digest with each fit's digest, so only positioned
 scenes' lockfile entries change. Evidence that misses a posed quad refuses;
 `Preparations.cover` queues a *coverage* job that infers only the padded quad's
 crop, retains it after the template's own evidence and publishes no maps.
+`application.position_coverage` decides when: saving a position, saving limits
+that widen an axis (for every template a listing positions; the Settings
+impact read names the same templates), and a calibration save of a positioned
+template. Narrowing queues nothing. `application.position_fit_pruning` removes
+fits no listing's current position produces against the template's current
+evidence; the scene warmer runs it at startup and whenever its queue drains,
+sparing fits being written, leased by `lease_scene`, or stored after the scan
+began.
 
 Every full-size scene of either renderer, previewed or applied, is kept in
 `preparation.scene_cache.SceneCache` (`.cache/scenes/`), named by its pixel

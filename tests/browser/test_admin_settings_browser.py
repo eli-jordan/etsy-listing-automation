@@ -232,3 +232,41 @@ def test_saving_narrower_template_limits_blocks_an_out_of_range_listing(
     expect(page.locator(".issues")).to_contain_text(
         "template_positions.flat-lay-01 scales the design to 1.08; the limit is 0.80–1.00"
     )
+
+
+def test_widening_template_limits_names_the_marigold_template_to_refit(
+    page,
+    expect,
+    calibrator_server: str,
+    workspace_root: Path,
+    theme: str,
+) -> None:
+    """Template positions PR 7b: a widened draft's confirmation names the
+    positioned Marigold template whose evidence must grow, and reads
+    "Refit 1 Marigold template?" / "Save and refit"."""
+    from etsy_listings.core.render.positions import Pose, compose
+
+    from tests.support.builders import edit_listing
+    from tests.support.marigold import covered_small_print
+
+    workspace = covered_small_print(workspace_root)
+    box = compose(workspace.load_template_config("tee").bounding_box, Pose(rotation=5))
+    edit_listing(
+        workspace_root,
+        media=[{"template": "tee"}],
+        template_positions={"tee": {"bounding_box": [p.model_dump() for p in box]}},
+    )
+    open_settings(page, calibrator_server, theme)
+    page.get_by_role("link", name="Template rendering").click()
+    tilt = page.get_by_role("slider", name="Tilt")
+    tilt.focus()
+    for _ in range(5):  # 15° -> 20°
+        tilt.press("ArrowRight")
+    tilt.blur()
+
+    page.get_by_role("button", name="Review and save…").click()
+    dialog = page.get_by_role("dialog", name="Refit 1 Marigold template?")
+    expect(dialog).to_contain_text("Tilt: 15° → 20°")
+    expect(dialog).to_contain_text("tee needs its preparation extended")
+    expect(dialog.get_by_role("button", name="Save and refit")).to_be_enabled()
+    capture(page, theme, "template-rendering-refit")

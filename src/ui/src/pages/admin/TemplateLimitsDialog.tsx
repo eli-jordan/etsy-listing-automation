@@ -88,8 +88,9 @@ export function TemplateLimitsDialog({
             {inference.length > 0 && (
               <>
                 {" "}
-                {listed(inference)} need their preparation extended to cover the wider limits; the
-                Marigold model runs once per template in the background.
+                {listed(inference)} {inference.length === 1 ? "needs its" : "need their"}{" "}
+                preparation extended to cover the wider limits; the Marigold model runs once per
+                template in the background.
               </>
             )}
           </li>

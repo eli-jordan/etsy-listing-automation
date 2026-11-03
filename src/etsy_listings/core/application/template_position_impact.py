@@ -9,9 +9,10 @@ Two lists, read off the workspace as it is now and writing nothing:
   (``listing_validation.positions_outside_limits``). Listings already blocked
   for another reason, or that do not load, are not listed.
 - ``templates_needing_inference``: the Marigold templates whose preparation
-  evidence would need model inference to cover the wider limits. Empty while
-  spec rule 5 refuses Marigold positions; PR 7 fills it. Narrowing never adds
-  to it.
+  evidence would need model inference to cover the wider limits: those a
+  listing positions whose evidence misses the candidate padded quad
+  (``position_coverage.templates_needing_coverage``, PR 7b). Saving them
+  queues that inference; narrowing never adds to it.
 """
 
 from __future__ import annotations
@@ -21,6 +22,7 @@ from dataclasses import dataclass
 
 from pydantic import ValidationError
 
+from etsy_listings.core.application.position_coverage import templates_needing_coverage
 from etsy_listings.core.application.refusals import InvalidSettingsEditError, field_errors_of
 from etsy_listings.core.config.errors import ConfigLoadError
 from etsy_listings.core.config.listing_validation import positions_outside_limits
@@ -40,7 +42,7 @@ class ListingOutside:
 class LimitsImpact:
     outside: tuple[ListingOutside, ...]
     templates_needing_inference: tuple[str, ...]
-    """Marigold template names; empty until Marigold positions ship (PR 7)."""
+    """Marigold template names, sorted; empty unless the limits widen."""
 
 
 def candidate_limits(limits: Mapping[str, object]) -> TemplatePositionLimits:
@@ -53,7 +55,8 @@ def candidate_limits(limits: Mapping[str, object]) -> TemplatePositionLimits:
 
 
 def template_position_impact(workspace: Workspace, limits: TemplatePositionLimits) -> LimitsImpact:
-    """Who ``limits`` would block, and which templates would need inference."""
+    """Who ``limits`` would block, and which templates would need inference.
+    Raises :class:`ConfigLoadError` when the saved ``settings.yaml`` does not load."""
     templates = _TemplateCache(workspace)
     outside = []
     for name in workspace.listing_names():
@@ -68,7 +71,11 @@ def template_position_impact(workspace: Workspace, limits: TemplatePositionLimit
         )
         if keys:
             outside.append(ListingOutside(name, tuple(keys)))
-    return LimitsImpact(outside=tuple(outside), templates_needing_inference=())
+    saved = workspace.load_settings().template_positions
+    return LimitsImpact(
+        outside=tuple(outside),
+        templates_needing_inference=tuple(templates_needing_coverage(workspace, limits, saved)),
+    )
 
 
 class _TemplateCache:

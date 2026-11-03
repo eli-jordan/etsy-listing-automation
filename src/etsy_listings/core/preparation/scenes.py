@@ -174,6 +174,7 @@ def lease_scene(
             )
             config = artifacts.calibration.config(template)
             requests = fits.requests(template, inputs, positioned_quads(config, composition.boxes))
+        lease.enter_context(fits.lease(request.key for request in requests.values()))
         positioned = {key: fits.ensure(request) for key, request in requests.items()}
         maps = {**acquired.maps, **{key: fit.maps for key, fit in positioned.items()}}
         map_content = scene_map_content(acquired.manifest.content_digest, positioned)

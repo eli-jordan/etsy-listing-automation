@@ -146,6 +146,18 @@ it("names the Marigold templates that need inference when the read lists any", a
   expect(within(dialog).getByRole("button", { name: "Save and refit" })).toBeEnabled();
 });
 
+it("names a single Marigold template in the singular", async () => {
+  vi.mocked(api.getTemplatePositionImpact).mockResolvedValue({
+    outside: [],
+    templates_needing_inference: ["cc1717-folded"],
+  });
+  await panel();
+  fireEvent.change(largest(), { target: { value: "120" } });
+  fireEvent.click(review());
+  const dialog = await screen.findByRole("dialog", { name: "Refit 1 Marigold template?" });
+  expect(dialog).toHaveTextContent("cc1717-folded needs its preparation extended");
+});
+
 it.each([
   [
     "Keep current limits",

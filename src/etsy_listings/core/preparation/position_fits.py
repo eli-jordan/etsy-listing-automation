@@ -20,8 +20,10 @@ from __future__ import annotations
 
 import hashlib
 import threading
-from collections.abc import Collection, Mapping
-from contextlib import suppress
+import time
+from collections import Counter
+from collections.abc import Collection, Iterable, Iterator, Mapping
+from contextlib import contextmanager, suppress
 from dataclasses import dataclass
 from io import BytesIO
 from pathlib import Path
@@ -176,6 +178,8 @@ def _with_quads(
 _GUARD = threading.Lock()
 _LOCKS: dict[tuple[str, str], threading.Lock] = {}
 _WRITING: set[str] = set()
+# Fits a scene is fitting or composing with; prune leaves them alone.
+_LEASED: Counter[str] = Counter()
 # Validated fits, as the generation reader keeps its maps (ADR-0054).
 _FITS: BoundedCache[tuple[Any, ...], PositionFit] = BoundedCache(
     256 * 1024 * 1024,
@@ -229,6 +233,22 @@ class PositionFits:
         posed = _with_quads(inputs, quads)
         selected = self.evidence.select(posed, self.evidence.current(template))
         return len(selected) == len(posed.placements)
+
+    @contextmanager
+    def lease(self, keys: Iterable[str]) -> Iterator[None]:
+        """Hold the fits named by ``keys`` against :meth:`prune` until exit,
+        whether or not they exist yet."""
+        held = list(keys)
+        with _GUARD:
+            _LEASED.update(held)
+        try:
+            yield
+        finally:
+            with _GUARD:
+                _LEASED.subtract(held)
+                for key in held:
+                    if _LEASED[key] <= 0:
+                        del _LEASED[key]
 
     def read(self, request: FitRequest) -> PositionFit | None:
         """The stored fit, validated, or ``None`` when it is missing or invalid."""
@@ -343,15 +363,30 @@ class PositionFits:
         maps = read_maps(directory / _ARCHIVE, record.artifact, (photo.width, photo.height))
         return PositionFit(maps, numerical_digest({record.artifact.id: maps}))
 
-    def prune(self, keep: Collection[str]) -> list[str]:
+    def prune(self, keep: Collection[str], *, since: float | None = None) -> list[str]:
         """Remove every stored fit whose key is not in ``keep``, and any
-        abandoned staging directory; fits being written are left alone."""
+        abandoned staging directory. Fits being written or leased are left
+        alone, and so is any entry modified at or after ``since`` -- when
+        ``keep`` was computed -- since a position saved meanwhile may need it."""
         removed = []
-        with _GUARD:
-            writing = set(_WRITING)
         for name in self.workspace.position_fits():
-            if name in keep or name in writing:
+            with _GUARD:
+                busy = name in _WRITING or name in _LEASED
+            if name in keep or busy or self._modified_since(name, since):
                 continue
             self.workspace.remove_position_fit(name)
             removed.append(name)
         return removed
+
+    def _modified_since(self, name: str, since: float | None) -> bool:
+        if since is None:
+            return False
+        try:
+            return self.workspace.position_fit(name).stat().st_mtime >= since
+        except OSError:
+            return True
+
+
+def scan_started() -> float:
+    """A ``since`` for :meth:`PositionFits.prune`, taken before its ``keep``."""
+    return time.time()
