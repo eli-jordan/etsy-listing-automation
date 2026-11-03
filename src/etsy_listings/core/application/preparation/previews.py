@@ -11,10 +11,13 @@ import numpy as np
 from PIL import Image
 
 from etsy_listings.core.application.preparation.activity import interactive
-from etsy_listings.core.application.preparation.evidence_reader import EvidenceReader
-from etsy_listings.core.application.preparation.models import CropEvidence, placement_key
 from etsy_listings.core.bounded_cache import BoundedCache
 from etsy_listings.core.preparation.artifacts import Artifacts, PlacementInput
+from etsy_listings.core.preparation.evidence_reader import (
+    CropEvidence,
+    EvidenceReader,
+    placement_key,
+)
 from etsy_listings.core.preparation.numerics import Placement, prepare
 from etsy_listings.core.render import (
     AnyTemplate,

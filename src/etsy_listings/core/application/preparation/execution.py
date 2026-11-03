@@ -21,13 +21,7 @@ from etsy_listings.core.application.preparation.dependencies import (
     PreparationRuntime,
 )
 from etsy_listings.core.application.preparation.evidence import EvidenceStore
-from etsy_listings.core.application.preparation.models import (
-    CropEvidence,
-    Job,
-    Prediction,
-    Publication,
-    placement_key,
-)
+from etsy_listings.core.application.preparation.models import Job, Publication
 from etsy_listings.core.preparation.artifacts import (
     PlacementArtifact,
     PlacementInput,
@@ -40,6 +34,7 @@ from etsy_listings.core.preparation.artifacts import (
     file_checksum,
     read_maps,
 )
+from etsy_listings.core.preparation.evidence_reader import CropEvidence, Prediction, placement_key
 from etsy_listings.core.preparation.numerics import (
     Cooperation,
     Placement,
@@ -175,11 +170,7 @@ class Execution:
                     or hashlib.sha256(pixels.tobytes()).hexdigest() != job.snapshot.photo.pixels
                 ):
                     invalid_photo()
-            if lane == "gpu":
-                self.infer(identity)
-                self.write(identity, step="cpu_queued")
-            else:
-                self.build(identity)
+            self._work(identity, lane, job)
         except StoppedError as exc:
             self.write(identity, phase=exc.phase)
         except StalePreparationError:
@@ -191,6 +182,17 @@ class Execution:
                 phase="cancelled" if latest.cancel_intent else "failed",
                 error=str(exc) or type(exc).__name__,
             )
+
+    def _work(self, identity: str, lane: str, job: Job) -> None:
+        """The lane's phase of ``job``: inference on the GPU lane, fitting and
+        publication on the CPU lane; a coverage job only infers."""
+        if lane == "gpu" and job.kind == "coverage":
+            self.cover(identity)
+        elif lane == "gpu":
+            self.infer(identity)
+            self.write(identity, step="cpu_queued")
+        else:
+            self.build(identity)
 
     def finalize_published(self, identity: str) -> bool:
         job = self.owner.status(identity)
@@ -255,6 +257,34 @@ class Execution:
             }
         )
         self.write(identity, evidence=retained, placement_evidence=assignments, snapshot=inputs)
+
+    def cover(self, identity: str) -> None:
+        """Infer evidence covering each padded quad, then retain it after the
+        template's current evidence, which so stays the first choice for the
+        template's own maps: those are not refitted (spec *Evidence coverage*)."""
+        job = self.owner.status(identity)
+        current = self.evidence.current(job.template)
+        padded = job.snapshot.model_copy(
+            update={
+                "placements": tuple(
+                    p.model_copy(update={"quad": job.coverage[placement_key(p.id)]})
+                    for p in job.snapshot.placements
+                )
+            }
+        )
+        run = _InferenceRun(job, list(job.evidence), current)
+        for placement in padded.placements:
+            self.safe(identity, "loading_models")
+            selected = self.evidence.select(padded, run.known).get(placement_key(placement.id))
+            run.keep(selected if selected is not None else self._infer_crop(run, placement))
+        retained = self.evidence.retain(
+            job.template,
+            job.snapshot,
+            tuple({v.id: v for v in (*current, *run.values)}.values()),
+            job_order=job.order,
+            checkpoint=lambda step: self.owner.checkpoint(identity, step),
+        )
+        self.write(identity, evidence=retained, phase="completed", step="coverage")
 
     def _infer_crop(self, run: _InferenceRun, placement: PlacementInput) -> CropEvidence:
         """Evidence for a placement no existing crop covers: plan its crop (or

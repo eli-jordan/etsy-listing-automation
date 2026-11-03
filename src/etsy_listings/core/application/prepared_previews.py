@@ -12,7 +12,7 @@ again finds it there without decoding the photo or a design, when
 every file's pixels.
 """
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -30,6 +30,12 @@ from etsy_listings.core.application.refusals import (
     TemplatePreviewKindMismatchError,
 )
 from etsy_listings.core.preparation.artifacts import ArtifactError, Artifacts, PreparationInputs
+from etsy_listings.core.preparation.position_fits import (
+    FitRequest,
+    PositionFits,
+    positioned_quads,
+    scene_map_content,
+)
 from etsy_listings.core.preparation.readiness import template_readiness
 from etsy_listings.core.preparation.scene_cache import PIXEL_DIGESTS, SceneCache
 from etsy_listings.core.preparation.scenes import Composition, PreparedLayer, lease_scene
@@ -76,13 +82,13 @@ def saved_scene(
     """``name``'s saved scene with ``design`` asked once per layer, as
     :func:`~etsy_listings.core.application.mockup_templates.saved_preview`
     asks it. Photo warp returns the scene for the host to composite from its
-    image memo, at the listing's ``boxes`` where it holds a position;
-    Marigold returns the composed image and takes no position, since spec
-    rule 5 refuses one until Marigold positions land. Refusals:
+    image memo; Marigold returns the composed image. Either renders at the
+    listing's ``boxes`` where it holds a position -- Marigold with a fit of
+    each posed quad, waiting for one being fitted (option B). Refusals:
     :class:`TemplateMissingError`, :class:`TemplateConfigMissingError`,
     :class:`TemplatePhotoMissingError`, :class:`PreparationRequiredError`."""
     if isinstance(read_config(workspace, name).config.renderer, MarigoldRenderer):
-        return prepared_preview(workspace, name, config=None, colour=colour, design=design)
+        return _prepared_preview(workspace, name, None, _Layers(colour, design, boxes or {}))
     return saved_preview(workspace, name, colour=colour, design=design, boxes=boxes)
 
 
@@ -201,6 +207,24 @@ def prepared_preview(
     ``None``), which must match the saved, prepared inputs. ``design`` is
     asked once per layer with the colour it depicts; a layer with no file is
     left bare."""
+    return _prepared_preview(workspace, name, config, _Layers(colour, design, {}))
+
+
+@dataclass(frozen=True)
+class _Layers:
+    """What a scene paints: the colour it depicts, each layer's design, and
+    the listing's saved position (ADR-0058). A layer ``boxes`` positions shows
+    its position fit, never the template's maps (option B)."""
+
+    colour: str | None
+    design: LayerDesign
+    boxes: LayerBoxes
+
+
+def _prepared_preview(
+    workspace: Workspace, name: str, config: AnyTemplate | None, painted: _Layers
+) -> PreparedPreview:
+    colour, design, boxes = painted.colour, painted.design, painted.boxes
     require_template(workspace, name)
     store = CalibrationStore(workspace)
     artifacts = Artifacts(workspace)
@@ -222,7 +246,12 @@ def prepared_preview(
         appearance = renderer.config.appearance
         cache = SceneCache(workspace)
         try:
-            cached = _cached(workspace, name, inputs, cache, _SceneFiles(path, sources, appearance))
+            fits = PositionFits(workspace).requests(
+                name, inputs, positioned_quads(saved.config, boxes)
+            )
+            cached = _cached(
+                workspace, name, inputs, cache, _SceneFiles(path, sources, appearance, fits)
+            )
         except ArtifactError as exc:
             raise PreparationRequiredError(str(exc)) from exc
         if cached is not None:
@@ -234,7 +263,7 @@ def prepared_preview(
         with lease_scene(
             workspace,
             name,
-            Composition(base, layers, appearance, photo_pixels=photo_pixels),
+            Composition(base, layers, appearance, photo_pixels=photo_pixels, boxes=boxes),
             expected=inputs,
         ) as scene:
             return PreparedPreview(
@@ -252,6 +281,9 @@ class _SceneFiles:
     photo: Path
     sources: list[tuple[Path, str | None]]
     appearance: MarigoldAppearance
+    fits: Mapping[str | None, FitRequest]
+    """The positioned layers' fits; a scene whose fit is not stored yet is
+    not looked up, but leased, which fits it."""
 
 
 def _cached(
@@ -270,9 +302,15 @@ def _cached(
     artwork = [PIXEL_DIGESTS.design(path) for path, _ in sources]
     if photo_pixels is None or None in artwork:
         return None
+    stored = PositionFits(workspace)
+    fits = {key: stored.read(request) for key, request in files.fits.items()}
+    if None in fits.values():
+        return None
     manifest = Artifacts(workspace).inspect(name, inputs)
     identity = prepared_scene_identity(
-        map_content=manifest.content_digest,
+        map_content=scene_map_content(
+            manifest.content_digest, {k: v for k, v in fits.items() if v is not None}
+        ),
         placement_ids=[placement for _, placement in sources],
         artwork_digests=[digest for digest in artwork if digest is not None],
         photo_pixels=photo_pixels,

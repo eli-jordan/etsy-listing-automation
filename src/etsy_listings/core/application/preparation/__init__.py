@@ -8,7 +8,7 @@ executor; neither capability inspection nor numerical work belongs on an async
 HTTP event loop. start also reconciles saves interrupted before job creation.
 
 previews.editor_preview is the revision-bound transient editor operation.
-It uses evidence_reader.EvidenceReader for validated retained evidence without
+It uses core.preparation.evidence_reader.EvidenceReader for validated retained evidence without
 publishing maps or invoking models. Prediction publication remains job-owned.
 activity scopes foreground priority to a workspace at CPU phase and solver boundaries.
 """

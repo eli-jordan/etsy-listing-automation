@@ -20,19 +20,15 @@ from etsy_listings.core.application.preparation.dependencies import (
     PreparationRuntime,
 )
 from etsy_listings.core.application.preparation.execution import Execution, StoppedError, WorkerSlot
-from etsy_listings.core.application.preparation.models import (
-    TERMINAL,
-    Action,
-    CropEvidence,
-    Event,
-    Job,
-    placement_key,
-)
+from etsy_listings.core.application.preparation.models import TERMINAL, Action, Event, Job, Quad
 from etsy_listings.core.application.preparation.store import Store
 from etsy_listings.core.errors import ConflictError, UserFacingError
 from etsy_listings.core.preparation.artifacts import Artifacts, PreparationInputs
+from etsy_listings.core.preparation.evidence_reader import CropEvidence, placement_key
+from etsy_listings.core.preparation.position_fits import PositionFits, padded_quads
 from etsy_listings.core.preparation.runtime import Capability, Runtime
 from etsy_listings.core.render.config import MarigoldRenderer
+from etsy_listings.core.render.positions import PositionLimits
 from etsy_listings.core.workspace import Workspace
 from etsy_listings.core.workspace.calibration import (
     CalibrationChangedError,
@@ -249,6 +245,7 @@ class Preparations:
         for job in self.store.jobs():
             if (
                 job.template == submission.template
+                and job.kind != "coverage"
                 and job.phase not in TERMINAL
                 and job.reset_masks_for_photo == submission.reset_masks_for_photo
                 and (
@@ -281,7 +278,9 @@ class Preparations:
         return job
 
     def _requires_retry(self, template: str, inputs: PreparationInputs, jobs: list[Job]) -> bool:
-        latest = next((job for job in reversed(jobs) if job.template == template), None)
+        latest = next(
+            (j for j in reversed(jobs) if j.template == template and j.kind != "coverage"), None
+        )
         return (
             latest is not None
             and latest.phase in {"failed", "cancelled"}
@@ -362,6 +361,84 @@ class Preparations:
         self.execution.capture(job)
         return self.store.write(job), True
 
+    def cover(self, template: str, limits: PositionLimits) -> Job | None:
+        """Queue background inference so ``template``'s evidence covers every
+        listing position ``limits`` allow (spec *Rendering -> Marigold (option
+        B)*, *Evidence coverage*): the job already doing so, a new one, or
+        None when it is covered, not Marigold, or no worker is installed.
+
+        Callers queue it for an explicit seller action -- saving a position on
+        the template, widening the limits, or saving its geometry -- which
+        ADR-0058 records as authority for this inference (ADR-0054)."""
+        with self.calibration.lock(template), self.store.condition:
+            planned = self._planned_coverage(template, limits)
+            if planned is None or isinstance(planned, Job):
+                return planned
+        # Never hold a template or journal lock while inspecting the runtime.
+        selected = self.runtime.inspect()
+        if not selected.available or not selected.engine_version or not selected.installation_id:
+            return None
+        with self.calibration.lock(template), self.store.condition:
+            planned = self._planned_coverage(template, limits)
+            if planned is None or isinstance(planned, Job):
+                return planned
+            revision, inputs, quads = planned
+            now = time.time()
+            identity = uuid4().hex
+            job = Job(
+                id=identity,
+                order=max((j.order for j in self.store.jobs()), default=0) + 1,
+                template=template,
+                request_id="coverage-" + identity,
+                request_digest=inputs.identity(),
+                action="prepare",
+                kind="coverage",
+                config_revision=revision,
+                snapshot=inputs,
+                engine_version=selected.engine_version,
+                installation_id=selected.installation_id,
+                created=now,
+                updated=now,
+                coverage=quads,
+            )
+            self.execution.capture(job)
+            job = self.store.write(job)
+        self._schedule()
+        return job
+
+    def _planned_coverage(
+        self, template: str, limits: PositionLimits
+    ) -> tuple[str, PreparationInputs, dict[str, Quad]] | Job | None:
+        """Under the template and journal locks: the active coverage job for
+        the same padded quads, what a new one would infer, or None when
+        nothing need be inferred."""
+        calibration = self.calibration.read(template)
+        if not isinstance(calibration.config.renderer, MarigoldRenderer):
+            return None
+        padded = padded_quads(calibration.config, limits)
+        inputs = self.artifacts.saved_inputs(template)
+        if padded is None or PositionFits(self.workspace).covers(template, inputs, padded):
+            return None
+        quads: dict[str, Quad] = {
+            placement_key(key): (
+                (box[0].x, box[0].y),
+                (box[1].x, box[1].y),
+                (box[2].x, box[2].y),
+                (box[3].x, box[3].y),
+            )
+            for key, box in padded.items()
+        }
+        for job in self.store.jobs():
+            if (
+                job.template == template
+                and job.kind == "coverage"
+                and job.phase not in TERMINAL
+                and job.coverage == quads
+                and self.execution.geometry(job.snapshot) == self.execution.geometry(inputs)
+            ):
+                return job
+        return calibration.revision, inputs, quads
+
     def recover(self) -> None:
         for job in self.store.jobs():
             if job.phase in TERMINAL:
@@ -417,7 +494,7 @@ class Preparations:
         """Walk the template's active jobs in order: return the first already
         fitting ``inputs``, superseding idle rebuilds of other inputs before it."""
         for job in jobs:
-            if job.template != template or job.phase in TERMINAL:
+            if job.template != template or job.phase in TERMINAL or job.kind == "coverage":
                 continue
             if self.execution.geometry(job.snapshot) == self.execution.geometry(inputs):
                 return job

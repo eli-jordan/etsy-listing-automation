@@ -33,7 +33,15 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, UploadFile
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    HTTPException,
+    Query,
+    Request,
+    UploadFile,
+)
 from fastapi.responses import Response
 
 from etsy_listings.core.application.ai.registry import AiRunRegistry
@@ -55,6 +63,7 @@ from etsy_listings.core.application.listing_reads import (
 from etsy_listings.core.application.listing_reads import (
     list_listings as listing_rows,
 )
+from etsy_listings.core.application.position_coverage import cover_listing_positions
 from etsy_listings.core.application.prepared_previews import saved_scene
 from etsy_listings.core.application.pricing_plans import (
     load_candidate_pricing_plans,
@@ -264,15 +273,22 @@ def get_listing(target: Annotated[Target, Depends(target)], request: Request) ->
 
 @router.patch("/{name}", response_model=ListingDetail)
 def patch_listing(
-    target: Annotated[Target, Depends(target)], body: dict[str, Any], request: Request
+    target: Annotated[Target, Depends(target)],
+    body: dict[str, Any],
+    request: Request,
+    background: BackgroundTasks,
 ) -> ListingDetail:
     """Merge the editor's slice into ``listing.yaml``. A merged document
     that will not validate writes nothing and answers 200 with
-    ``field_errors`` beside the listing as it still is."""
+    ``field_errors`` beside the listing as it still is. Saved positions
+    queue any Marigold coverage inference they need after the response, since
+    finding the installed worker can take seconds (option B)."""
     workspace, name = target.workspace, target.name
     refused = edit_listing(workspace, name, body, batches=app_state.batch_store(request))
     if refused is None:
         _warm_scenes(request, name)
+        if "template_positions" in body:
+            background.add_task(cover_listing_positions, request.app.state.preparations, name)
     return _detail(request, name, field_errors=refused.field_errors if refused else None)
 
 

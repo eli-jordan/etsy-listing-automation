@@ -16,7 +16,9 @@ editor status, listing checks, engine refusals and the catalogue
 (catalog_readiness), without consulting inference runtime or cache;
 saved_preparation_facts adds the prepared engine for authoring status.
 scenes.lease_scene is the one path from accepted maps to a composed scene and
-its identity, shared by the render stage and every preview. Neither
+its identity, shared by the render stage and every preview. evidence_reader
+reads a template's retained prediction sets (CropEvidence) without models, for
+jobs and for listing position fits alike. Neither
 artifact loading nor numerical preparation depends on the installed runtime.
 Importing this package never starts workers or loads torch.
 """

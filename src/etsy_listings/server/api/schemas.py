@@ -930,7 +930,7 @@ class PreparationJobResponse(BaseModel):
     config_revision: str
     id: str
     template: str
-    kind: Literal["prepare", "rebuild"]
+    kind: Literal["prepare", "rebuild", "coverage"]
     phase: Phase
     step: str
     elapsed: float

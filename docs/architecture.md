@@ -1274,6 +1274,19 @@ artwork, photos or maps cannot authorize stale promotion. Output file hashes
 remain the separate upload axis. Cache removal recreates rendered images from
 durable assets without model installation or inference.
 
+A layer the listing positions on a Marigold template (ADR-0058, option B) is
+drawn by `lease_scene` with a position fit from `preparation.position_fits`:
+maps fitted directly to the posed quad from the template's retained evidence
+(`preparation.evidence_reader`), stored content-addressed under
+`.cache/position-fits/<key>/` and validated on load. The key digests template,
+placement, posed quad, mask, evidence identity, photo and inference settings, so
+listings with the same position share a fit. A per-fit lock makes plan and
+previews wait for a fit another caller is running. The scene's map identity
+combines the generation digest with each fit's digest, so only positioned
+scenes' lockfile entries change. Evidence that misses a posed quad refuses;
+`Preparations.cover` queues a *coverage* job that infers only the padded quad's
+crop, retains it after the template's own evidence and publishes no maps.
+
 Every full-size scene of either renderer, previewed or applied, is kept in
 `preparation.scene_cache.SceneCache` (`.cache/scenes/`), named by its pixel
 identity (`prepared_scene_identity`, or `photo_warp_scene_identity`: photo

@@ -571,6 +571,17 @@ class Workspace:
     def remove_prediction_set(self, template: str, identity: str) -> None:
         remove_tree(self.preparation_prediction_set(template, identity))
 
+    def position_fit(self, key: str) -> Path:
+        """One listing position's content-addressed Marigold fit (option B),
+        a directory named by its key; rebuildable, so it lives in the cache."""
+        return self.cache("position-fits", _segment(key))
+
+    def position_fits(self) -> list[str]:
+        return self._cache_entries("position-fits", directories=True)
+
+    def remove_position_fit(self, key: str) -> None:
+        remove_tree(self.position_fit(key))
+
     def design_ref(self, design: str) -> str:
         """The workspace-rooted ref ``listing.yaml`` names ``designs/<design>.png``
         by -- what batch creation writes into every listing it makes

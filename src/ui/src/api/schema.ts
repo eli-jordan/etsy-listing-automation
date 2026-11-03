@@ -842,6 +842,9 @@ export interface paths {
      * List Listings
      * @description Every listing, with its status resolved in **one** Etsy round trip for
      *     the whole table rather than one per row.
+     *
+     *     Answers with a ``Server-Timing`` header saying where the time went, so a
+     *     slow table can be read off the browser's network panel.
      */
     get: operations["list_listings_api_listings_get"];
     put?: never;
@@ -946,7 +949,9 @@ export interface paths {
      * Patch Listing
      * @description Merge the editor's slice into ``listing.yaml``. A merged document
      *     that will not validate writes nothing and answers 200 with
-     *     ``field_errors`` beside the listing as it still is.
+     *     ``field_errors`` beside the listing as it still is. Saved positions
+     *     queue any Marigold coverage inference they need after the response, since
+     *     finding the installed worker can take seconds (option B).
      */
     patch: operations["patch_listing_api_listings__name__patch"];
     trace?: never;
@@ -1152,6 +1157,8 @@ export interface paths {
      *
      *     A layer that resolves to nothing is left bare rather than failing the
      *     picture (:func:`~etsy_listings.core.application.listing_reads.scene_artwork`).
+     *     Each layer prints at the listing's *saved* position where it holds one
+     *     (ADR-0058), so a landed position save is the composite the render writes.
      *     ``v`` is ignored; the editor sends a signature of the saved design so a
      *     landed save is a new URL and the browser fetches it again.
      */
@@ -3897,7 +3904,7 @@ export interface components {
        * Kind
        * @enum {string}
        */
-      kind: "prepare" | "rebuild";
+      kind: "prepare" | "rebuild" | "coverage";
       /** Last Event Sequence */
       last_event_sequence: number;
       /**

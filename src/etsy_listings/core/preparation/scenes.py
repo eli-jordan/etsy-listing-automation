@@ -9,7 +9,7 @@ identity a plan records is the identity apply and a preview compute.
 import threading
 from collections.abc import Iterator, Mapping, Sequence
 from contextlib import ExitStack, contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from PIL import Image
 
@@ -20,8 +20,13 @@ from etsy_listings.core.preparation.artifacts import (
     PreparationInputs,
     StalePreparationError,
 )
+from etsy_listings.core.preparation.position_fits import (
+    PositionFits,
+    positioned_quads,
+    scene_map_content,
+)
 from etsy_listings.core.preparation.scene_cache import SceneCache, photo_digest
-from etsy_listings.core.render.config import MarigoldAppearance
+from etsy_listings.core.render.config import LayerBoxes, MarigoldAppearance
 from etsy_listings.core.render.identity import artwork_identity, prepared_scene_identity
 from etsy_listings.core.render.io import MARIGOLD_PNG_COMPRESSION, encode_png
 from etsy_listings.core.render.material import (
@@ -83,6 +88,9 @@ class PreparedScene:
     inputs: PreparationInputs
     """The saved pixel-affecting inputs the generation was acquired for."""
     manifest: Manifest
+    map_content: str
+    """The generation's content digest, combined with each position fit's
+    when a layer is positioned (:func:`scene_map_content`)."""
     identity: str
     """:func:`prepared_scene_identity` of exactly what :meth:`render` composes."""
     base: RGB
@@ -127,6 +135,9 @@ class Composition:
     appearance: MarigoldAppearance
     photo_pixels: str | None = None
     """``photo_digest(base)`` when the caller already computed it."""
+    boxes: LayerBoxes = field(default_factory=dict)
+    """The listing's saved position for this template (ADR-0058). A layer it
+    moves renders with its own position fit, never the template's maps."""
 
 
 @contextmanager
@@ -145,9 +156,14 @@ def lease_scene(
     plan, or a preview before it decoded its images); saved inputs that have
     since changed refuse with :class:`StalePreparationError`. Every refusal is an
     :class:`~etsy_listings.core.preparation.artifacts.ArtifactError`.
+
+    A layer ``composition.boxes`` positions is drawn with its position fit,
+    fitted first -- or awaited, when another caller is fitting it -- and never
+    with the template's maps (spec *Rendering -> Marigold (option B)*).
     """
     base, layers, appearance = composition.base, composition.layers, composition.appearance
     artifacts = Artifacts(workspace)
+    fits = PositionFits(workspace)
     with ExitStack() as lease:
         with artifacts.calibration.lock(template):
             inputs = artifacts.saved_inputs(template)
@@ -156,24 +172,30 @@ def lease_scene(
             acquired = lease.enter_context(
                 artifacts.acquire(template, inputs, target_size=(base.shape[1], base.shape[0]))
             )
+            config = artifacts.calibration.config(template)
+            requests = fits.requests(template, inputs, positioned_quads(config, composition.boxes))
+        positioned = {key: fits.ensure(request) for key, request in requests.items()}
+        maps = {**acquired.maps, **{key: fit.maps for key, fit in positioned.items()}}
+        map_content = scene_map_content(acquired.manifest.content_digest, positioned)
         digests = tuple(
             layer.digest if layer.digest is not None else artwork_identity(layer.artwork)
             for layer in layers
         )
         identity = prepared_scene_identity(
-            map_content=acquired.manifest.content_digest,
+            map_content=map_content,
             placement_ids=[layer.placement_id for layer in layers],
             artwork_digests=list(digests),
             photo_pixels=composition.photo_pixels or photo_digest(base),
             appearance=appearance,
         )
         yield PreparedScene(
-            inputs,
-            acquired.manifest,
-            identity,
-            base,
-            tuple(layers),
-            appearance,
-            acquired.maps,
-            digests,
+            inputs=inputs,
+            manifest=acquired.manifest,
+            map_content=map_content,
+            identity=identity,
+            base=base,
+            layers=tuple(layers),
+            appearance=appearance,
+            maps=maps,
+            digests=digests,
         )

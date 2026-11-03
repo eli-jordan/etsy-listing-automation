@@ -4989,7 +4989,8 @@
           "kind": {
             "enum": [
               "prepare",
-              "rebuild"
+              "rebuild",
+              "coverage"
             ],
             "title": "Kind",
             "type": "string"
@@ -10116,7 +10117,7 @@
     },
     "/api/listings": {
       "get": {
-        "description": "Every listing, with its status resolved in **one** Etsy round trip for\nthe whole table rather than one per row.",
+        "description": "Every listing, with its status resolved in **one** Etsy round trip for\nthe whole table rather than one per row.\n\nAnswers with a ``Server-Timing`` header saying where the time went, so a\nslow table can be read off the browser's network panel.",
         "operationId": "list_listings_api_listings_get",
         "responses": {
           "200": {
@@ -10406,7 +10407,7 @@
         ]
       },
       "patch": {
-        "description": "Merge the editor's slice into ``listing.yaml``. A merged document\nthat will not validate writes nothing and answers 200 with\n``field_errors`` beside the listing as it still is.",
+        "description": "Merge the editor's slice into ``listing.yaml``. A merged document\nthat will not validate writes nothing and answers 200 with\n``field_errors`` beside the listing as it still is. Saved positions\nqueue any Marigold coverage inference they need after the response, since\nfinding the installed worker can take seconds (option B).",
         "operationId": "patch_listing_api_listings__name__patch",
         "parameters": [
           {
@@ -10900,7 +10901,7 @@
     },
     "/api/listings/{name}/scene-preview": {
       "get": {
-        "description": "One of this listing's scenes, each layer printing the file its depicted\ncolour resolves to in the *saved* listing (A35) -- the Variants stage and\nevery Listing Images picture, multi-colour scenes included (spec:\n*Previews*). Resolved here rather than from a design name in the URL,\nbecause the editor showing one file while Printify prints another is the\nthing a single resolver exists to prevent.\n\nA layer that resolves to nothing is left bare rather than failing the\npicture (:func:`~etsy_listings.core.application.listing_reads.scene_artwork`).\n``v`` is ignored; the editor sends a signature of the saved design so a\nlanded save is a new URL and the browser fetches it again.",
+        "description": "One of this listing's scenes, each layer printing the file its depicted\ncolour resolves to in the *saved* listing (A35) -- the Variants stage and\nevery Listing Images picture, multi-colour scenes included (spec:\n*Previews*). Resolved here rather than from a design name in the URL,\nbecause the editor showing one file while Printify prints another is the\nthing a single resolver exists to prevent.\n\nA layer that resolves to nothing is left bare rather than failing the\npicture (:func:`~etsy_listings.core.application.listing_reads.scene_artwork`).\nEach layer prints at the listing's *saved* position where it holds one\n(ADR-0058), so a landed position save is the composite the render writes.\n``v`` is ignored; the editor sends a signature of the saved design so a\nlanded save is a new URL and the browser fetches it again.",
         "operationId": "scene_preview_api_listings__name__scene_preview_get",
         "parameters": [
           {
