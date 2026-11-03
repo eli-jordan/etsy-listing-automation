@@ -47,6 +47,10 @@ from etsy_listings.core.application.deploy.events import (
     RunScope,
 )
 
+_WAKE = ""
+"""Queued by :meth:`RunRegistry.wake`; never a run id (ids are non-empty),
+so :meth:`RunRegistry.drain_and_cancel` finds no run for it and skips it."""
+
 
 @dataclass(frozen=True)
 class ListingPlan:
@@ -324,12 +328,18 @@ class RunRegistry:
 
     def dequeue(self, *, timeout: float) -> str | None:
         """The next queued run id, for the executor's worker thread. ``None``
-        on a timeout, which is what lets that thread notice a stop flag
-        without blocking on this forever."""
+        on a timeout or a :meth:`wake`, which is what lets that thread notice
+        a stop flag without blocking on this forever."""
         try:
-            return self._queue.get(timeout=timeout)
+            run_id = self._queue.get(timeout=timeout)
         except queue.Empty:
             return None
+        return None if run_id == _WAKE else run_id
+
+    def wake(self) -> None:
+        """Return the worker's current or next :meth:`dequeue` at once, so a
+        stop is noticed now rather than when the poll times out."""
+        self._queue.put(_WAKE)
 
     def drain_and_cancel(self) -> None:
         """Every run still sitting in the queue reaches a legal terminal state

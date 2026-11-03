@@ -106,6 +106,7 @@ class RunExecutor:
         """
         self._stop.set()
         self.registry.drain_and_cancel()
+        self.registry.wake()
         if self._thread is not None:
             self._thread.join()
 

@@ -62,6 +62,42 @@ def test_python_ci_collects_only_hermetic_layers(tmp_path: Path) -> None:
     assert "tests/browser/" not in selected
 
 
+def test_both_python_legs_select_the_same_tests_and_only_ubuntu_measures_coverage() -> None:
+    # Windows runs `test-ci` without coverage, for speed; it must not also
+    # drift onto a different selection.
+    workflow = yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text())
+    legs = {
+        step["if"]: shlex.split(_poe_command(step["run"].split()[3]))
+        for step in workflow["jobs"]["python"]["steps"]
+        if step.get("run", "").startswith("uv run poe test")
+    }
+    linux, windows = legs["runner.os == 'Linux'"], legs["runner.os == 'Windows'"]
+    assert "--cov" in linux
+    assert [arg for arg in linux if not arg.startswith("--cov")] == windows
+
+
+def test_the_windows_shards_together_run_the_whole_selection() -> None:
+    # `--shard i/N` runs one Nth; a matrix missing a shard, or a count that
+    # disagrees with it, would silently skip tests.
+    workflow = yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text())
+    job = workflow["jobs"]["python"]
+    run = next(
+        step["run"]
+        for step in job["steps"]
+        if step.get("if") == "runner.os == 'Windows'" and "poe test" in step.get("run", "")
+    )
+    count = int(run.split("--shard ")[1].split("/")[1])
+    shards = sorted(
+        leg["shard"]
+        for leg in job["strategy"]["matrix"]["include"]
+        if leg["os"] == "windows-latest"
+    )
+    assert shards == list(range(1, count + 1))
+    # The ruleset's required check keeps its name through the gate job.
+    assert workflow["jobs"]["windows"]["name"] == "python (windows-latest)"
+    assert workflow["jobs"]["windows"]["needs"] == ["python"]
+
+
 def _npm_scripts(command: str) -> list[str]:
     words = shlex.split(command.replace("&&", " && ").replace("(", " ").replace(")", " "))
     return [

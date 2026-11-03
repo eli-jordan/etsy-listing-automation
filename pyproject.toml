@@ -65,6 +65,7 @@ dev = [
     "vulture>=2.14,<3",
     "complexipy>=8.0,<9",
     "types-cachetools>=7,<8",
+    "pytest-xdist>=3.6,<4",
 ]
 
 # Every check is defined once, here (spec S09). `uv run poe check` is what you
@@ -103,18 +104,33 @@ lint = ["format-check", "ruff", "mypy", "imports", "complexity", "dead-code", "d
 # missing, which costs about a point; the 85% floor (`fail_under`, below) has
 # the headroom to pass either way. The opt-in `capture` screenshots are
 # deselected by tests/conftest.py, as in CI's browser job.
-test = "pytest --cov --cov-report=term-missing --cov-report=html"
+#
+# Every suite task runs under pytest-xdist: `-n auto` starts one worker per
+# core and `worksteal` hands a long test's neighbours to idle workers, which
+# matters because a few tests (agent lint, Marigold preview detail) run for
+# 20-50s each. Serially the hermetic layers took ~13 min on a 10-core machine;
+# in parallel, with coverage, ~3.5 min. pytest-cov combines the workers'
+# data, so the floor is judged on the whole run. Tests must therefore not
+# share mutable state across files: use tmp_path and _free_port(), as the
+# fixtures in tests/conftest.py and tests/browser/conftest.py do. A plain
+# `pytest <file>` stays serial, since workers cost more than they save there.
+test = "pytest -n auto --dist worksteal --cov --cov-report=term-missing --cov-report=html"
 # The CI matrix: an explicit -m replaces addopts, excluding browser and e2e.
 # That leaves unit, golden, behaviour and contract, under the same floor.
-test-ci = "pytest -m 'not browser and not e2e' --cov --cov-report=term-missing"
-test-browser = "pytest -m browser"
+test-ci = "pytest -m 'not browser and not e2e' -n auto --dist worksteal --cov --cov-report=term-missing"
+# CI's windows leg: the same selection, without coverage (ci.yml says why).
+test-ci-nocov = "pytest -m 'not browser and not e2e' -n auto --dist worksteal"
+test-browser = "pytest -m browser -n auto --dist worksteal"
 # `npm run format` writes, as `ruff format .` does; CI's frontend job runs
 # `format:check`. `test:design` runs the marver prototype frames' tests:
 # required, but a separate Vitest project outside production coverage.
 # Skipped, not failed, when npm is not on PATH.
 frontend = "python scripts/frontend_gate.py format lint typecheck test:coverage test:design"
 # Fix, then format (so a fix's output is formatted and E501 is judged on
-# formatted lines), then report what is left.
+# formatted lines), then report what is left. The gates run one after another
+# on purpose: `test` already keeps every core busy, so running lint and the
+# frontend beside it measured no faster (~6.5 min either way) and pushed the
+# slowest subprocess tests past their timeouts.
 check = ["fix", "format", "lint", "test", "frontend"]
 
 [tool.pytest.ini_options]
@@ -131,6 +147,12 @@ markers = [
     "capture: opt-in screenshot artifacts for human review; run only when -m names capture",
 ]
 addopts = "-m 'not e2e'"
+# Delete a passing test's tmp_path in its own teardown, keeping only failures'.
+# Most tests copy the fixture workspace there, so a full run leaves thousands
+# of files (~250 MB); the default policy keeps three runs of them and deletes
+# the oldest serially at the end of a later session. Per test, the deletion
+# is spread across the xdist workers and only failures stay on disk.
+tmp_path_retention_policy = "failed"
 
 [tool.coverage.run]
 source = ["src/etsy_listings"]

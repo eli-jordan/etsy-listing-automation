@@ -69,6 +69,29 @@ def executor(workspace_root: Path) -> RunExecutor:
     ex.stop()
 
 
+def test_stop_wakes_an_idle_worker_instead_of_waiting_out_its_poll(
+    workspace_root: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Every server shutdown (and every TestClient test) stops the executor.
+    # The worker's poll is stretched to a minute, so only a stop that wakes
+    # it returns within the join below.
+    import threading
+
+    registry = RunRegistry()
+    poll = registry.dequeue
+    monkeypatch.setattr(registry, "dequeue", lambda *, timeout: poll(timeout=60))
+    ex = RunExecutor(
+        workspace=Workspace.discover(root_override=workspace_root),
+        context_factory=_context_factory,
+        registry=registry,
+    )
+    ex.start()
+    stopping = threading.Thread(target=ex.stop, daemon=True)
+    stopping.start()
+    stopping.join(5)
+    assert not stopping.is_alive()
+
+
 def _create(executor: RunExecutor, kind: str, listings: list[str]) -> Run:
     command = ListingPlan(tuple(listings)) if kind == "plan" else ListingApply(tuple(listings), {})
     result = executor.registry.create(command)
