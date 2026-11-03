@@ -62,6 +62,20 @@ def test_python_ci_collects_only_hermetic_layers(tmp_path: Path) -> None:
     assert "tests/browser/" not in selected
 
 
+def test_both_python_legs_select_the_same_tests_and_only_ubuntu_measures_coverage() -> None:
+    # Windows runs `test-ci` without coverage, for speed; it must not also
+    # drift onto a different selection.
+    workflow = yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text())
+    legs = {
+        step["if"]: shlex.split(_poe_command(step["run"].split()[3]))
+        for step in workflow["jobs"]["python"]["steps"]
+        if step.get("run", "").startswith("uv run poe test")
+    }
+    linux, windows = legs["runner.os == 'Linux'"], legs["runner.os == 'Windows'"]
+    assert "--cov" in linux
+    assert [arg for arg in linux if not arg.startswith("--cov")] == windows
+
+
 def _npm_scripts(command: str) -> list[str]:
     words = shlex.split(command.replace("&&", " && ").replace("(", " ").replace(")", " "))
     return [

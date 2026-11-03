@@ -118,6 +118,8 @@ test = "pytest -n auto --dist worksteal --cov --cov-report=term-missing --cov-re
 # The CI matrix: an explicit -m replaces addopts, excluding browser and e2e.
 # That leaves unit, golden, behaviour and contract, under the same floor.
 test-ci = "pytest -m 'not browser and not e2e' -n auto --dist worksteal --cov --cov-report=term-missing"
+# CI's windows leg: the same selection, without coverage (ci.yml says why).
+test-ci-nocov = "pytest -m 'not browser and not e2e' -n auto --dist worksteal"
 test-browser = "pytest -m browser -n auto --dist worksteal"
 # `npm run format` writes, as `ruff format .` does; CI's frontend job runs
 # `format:check`. `test:design` runs the marver prototype frames' tests:

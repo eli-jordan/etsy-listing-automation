@@ -72,6 +72,16 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest]
     steps:
+      # Defender scans every file written, and the suite writes thousands (a
+      # fixture workspace copy per test, renders, npz predictions). The runner
+      # is a throwaway VM that runs only this repo's locked code. Not fatal:
+      # if an image ever refuses it, the job only runs slower.
+      - name: stop Defender's real-time scanning (windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        continue-on-error: true
+        run: Set-MpPreference -DisableRealtimeMonitoring $true
+
       - uses: actions/checkout@v7
 
       - uses: actions/setup-node@v7
@@ -124,7 +134,16 @@ jobs:
       # pyproject.toml, so this gate and a local `poe check` can never disagree
       # about the number.
       - name: pytest + coverage (branch, fail under 85%)
+        if: runner.os == 'Linux'
         run: uv run poe test-ci
+
+      # The same selection without coverage. Windows is here for the goldens
+      # and the Windows-only code paths, and the floor is a property of the
+      # suite, already enforced above; tracing every line cost Windows, the
+      # slowest job, more than it told us.
+      - name: pytest (no coverage)
+        if: runner.os == 'Windows'
+        run: uv run poe test-ci-nocov
 
   frontend:
     name: frontend
