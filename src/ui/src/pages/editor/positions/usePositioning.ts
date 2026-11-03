@@ -233,13 +233,13 @@ function dragged(d: Drag, box: Quad, point: Point, limits: Limits): Pose {
 }
 
 /** What the stage needs before it can show handles; `null` means no switch --
- * nothing loaded yet, no photo size, or a Marigold template (spec rule 5). */
+ * nothing loaded yet, or no photo size. Both renderers take positions. */
 function stageable(
   config: TemplateConfigState | null,
   limits: Limits | null,
   summary: TemplateSummary | undefined,
 ): { config: TemplateConfigState; limits: Limits; size: { w: number; h: number } } | null {
-  if (config === null || limits === null || config.renderer.type === "marigold") return null;
+  if (config === null || limits === null) return null;
   const w = summary?.width;
   const h = summary?.height;
   if (w == null || h == null) return null;
