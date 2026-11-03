@@ -10,6 +10,7 @@ import pytest
 
 from tests.support import scripted as scripted_prompts
 from tests.support.clients import FakeClients
+from tests.support.shards import Shard
 
 FIXTURE_WORKSPACE = Path(__file__).parent / "fixtures" / "workspace"
 
@@ -78,6 +79,12 @@ def pytest_addoption(parser: pytest.Parser) -> None:
         default=False,
         help="Regenerate golden render fixtures instead of comparing against them.",
     )
+    parser.addoption(
+        "--shard",
+        default=None,
+        metavar="INDEX/COUNT",
+        help="Run only this CI shard's share of the selection, e.g. 2/3 (tests/support/shards.py).",
+    )
 
 
 @pytest.fixture
@@ -87,18 +94,28 @@ def update_goldens(request: pytest.FixtureRequest) -> bool:
 
 
 def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
-    """Leave the opt-in `capture` scenes out unless `-m` asks for them.
+    """Leave the opt-in `capture` scenes out unless `-m` asks for them, then
+    keep only this run's `--shard`, when one is given.
 
-    They are browser tests by location, so a plain `-m browser` would otherwise
-    run them; but they only write review screenshots and assert nothing a
-    regression could break (T11). Naming the marker -- `-m capture` -- is the
-    one way in.
+    The capture scenes are browser tests by location, so a plain `-m browser`
+    would otherwise run them; but they only write review screenshots and
+    assert nothing a regression could break (T11). Naming the marker --
+    `-m capture` -- is the one way in.
     """
-    if "capture" in (config.getoption("markexpr") or ""):
-        return
-    kept = [item for item in items if item.get_closest_marker("capture") is None]
+    if "capture" not in (config.getoption("markexpr") or ""):
+        _keep(config, items, lambda item: item.get_closest_marker("capture") is None)
+    shard_option = config.getoption("--shard")
+    if shard_option:
+        shard = Shard.parse(shard_option)
+        _keep(config, items, lambda item: shard.owns(item.nodeid))
+
+
+def _keep(
+    config: pytest.Config, items: list[pytest.Item], wanted: Callable[[pytest.Item], bool]
+) -> None:
+    kept = [item for item in items if wanted(item)]
     if len(kept) != len(items):
-        config.hook.pytest_deselected(items=[i for i in items if i not in kept])
+        config.hook.pytest_deselected(items=[i for i in items if not wanted(i)])
         items[:] = kept
 
 

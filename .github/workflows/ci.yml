@@ -65,12 +65,21 @@ jobs:
     # the bytes come out the same everywhere. ubuntu is what proves that rather
     # than assuming it -- a golden that fails on one OS only is itself the
     # finding.
-    name: python (${{ matrix.os }})
+    #
+    # Windows runs about twice as slow as ubuntu on the same four cores, so
+    # its leg is split into three shards (`--shard`, tests/support/shards.py),
+    # each its own job. The required `python (windows-latest)` check is the
+    # `windows` gate below.
+    name: python (${{ matrix.label }})
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        include:
+          - { os: ubuntu-latest, label: ubuntu-latest }
+          - { os: windows-latest, label: windows-latest 1/3, shard: 1 }
+          - { os: windows-latest, label: windows-latest 2/3, shard: 2 }
+          - { os: windows-latest, label: windows-latest 3/3, shard: 3 }
     steps:
       # Defender scans every file written, and the suite writes thousands (a
       # fixture workspace copy per test, renders, npz predictions). The runner
@@ -143,7 +152,20 @@ jobs:
       # slowest job, more than it told us.
       - name: pytest (no coverage)
         if: runner.os == 'Windows'
-        run: uv run poe test-ci-nocov
+        run: uv run poe test-ci-nocov --shard ${{ matrix.shard }}/3
+
+  windows:
+    # The branch ruleset requires a check named `python (windows-latest)`;
+    # the shards report under their own names, so this job carries it. It
+    # follows the whole python matrix, so it also fails when ubuntu does,
+    # which blocks the same merges that ubuntu's own required check does.
+    name: python (windows-latest)
+    needs: [python]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: every python leg passed
+        run: test "${{ needs.python.result }}" = success
 
   frontend:
     name: frontend
