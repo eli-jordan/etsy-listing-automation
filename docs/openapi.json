@@ -4928,6 +4928,28 @@
         "title": "PositionScaleLimits",
         "type": "object"
       },
+      "PositionedListingResponse": {
+        "description": "A listing holding its own position for a template (ADR-0058), which a\nrecalibration may put outside the limits. ``placements`` lists the\n``multiple`` placement IDs it positions; empty for one box.",
+        "properties": {
+          "listing": {
+            "title": "Listing",
+            "type": "string"
+          },
+          "placements": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Placements",
+            "type": "array"
+          }
+        },
+        "required": [
+          "listing",
+          "placements"
+        ],
+        "title": "PositionedListingResponse",
+        "type": "object"
+      },
       "PreparationJobResponse": {
         "properties": {
           "config_revision": {
@@ -10096,7 +10118,7 @@
     },
     "/api/listings": {
       "get": {
-        "description": "Every listing, with its status resolved in **one** Etsy round trip for\nthe whole table rather than one per row.",
+        "description": "Every listing, with its status resolved in **one** Etsy round trip for\nthe whole table rather than one per row.\n\nAnswers with a ``Server-Timing`` header saying where the time went, so a\nslow table can be read off the browser's network panel.",
         "operationId": "list_listings_api_listings_get",
         "responses": {
           "200": {
@@ -12577,6 +12599,53 @@
         "summary": "Placement History",
         "tags": [
           "preparation"
+        ]
+      }
+    },
+    "/api/templates/{name}/positioned-listings": {
+      "get": {
+        "description": "The listings holding positions for this template, which the calibrator\nnames around a save (spec, *Recalibration*). Read only.",
+        "operationId": "get_positioned_listings_api_templates__name__positioned_listings_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/PositionedListingResponse"
+                  },
+                  "title": "Response Get Positioned Listings Api Templates  Name  Positioned Listings Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Positioned Listings",
+        "tags": [
+          "templates"
         ]
       }
     },

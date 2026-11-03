@@ -24,6 +24,7 @@ from etsy_listings.core.render import (
     render_scene,
 )
 from etsy_listings.core.render.config import BoundingBox
+from etsy_listings.core.render.identity import PHOTO_WARP_PNG_COMPRESSION
 from etsy_listings.core.workspace.workspace import Workspace
 
 
@@ -58,7 +59,10 @@ def expected_scene(
     base = load_template_base(workspace.scene_photo(template, colour).path)
     layers = [Layer(design=load_design(root / files[c]), cfg=cfg) for c, cfg in specs if c in files]
     assert not any(cfg.displace.enabled for _, cfg in specs)
-    return encode_png(render_scene(base, layers, luminance=luminance_map(base)))
+    return encode_png(
+        render_scene(base, layers, luminance=luminance_map(base)),
+        compression=PHOTO_WARP_PNG_COMPRESSION,
+    )
 
 
 def _box(boxes: Mapping[str | None, BoundingBox], key: str | None) -> dict[str, BoundingBox]:

@@ -967,7 +967,23 @@ class CheckInputs:
     template_position_limits: TemplatePositionLimits = dataclass_field(
         default_factory=TemplatePositionLimits
     )
+    template_position_limits_error: str | None = None
+    """The caller's failed ``settings.yaml`` read; positions are then refused
+    with it rather than checked against defaults."""
     listing_name: str = ""
+
+
+def _check_positions(listing: Listing, inputs: CheckInputs) -> list[Issue]:
+    if listing.template_positions and inputs.template_position_limits_error is not None:
+        return [
+            Issue("block", "images", "template_positions", inputs.template_position_limits_error)
+        ]
+    return check_template_positions(
+        listing,
+        {name: info.config for name, info in inputs.templates.items() if info.config is not None},
+        inputs.template_position_limits,
+        name=inputs.listing_name,
+    )
 
 
 def check_listing(
@@ -995,12 +1011,7 @@ def check_listing(
         issues += _check_printify_variant_limit(listing, garment_profile)
     issues += _check_template_kind_colour_match(listing, templates)
     issues += _check_variation_images(listing)
-    issues += check_template_positions(
-        listing,
-        {name: info.config for name, info in templates.items() if info.config is not None},
-        inputs.template_position_limits,
-        name=inputs.listing_name,
-    )
+    issues += _check_positions(listing, inputs)
     for name in dict.fromkeys(
         entry.template for entry in listing.media if isinstance(entry, TemplateMediaEntry)
     ):

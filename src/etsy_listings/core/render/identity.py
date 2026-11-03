@@ -65,8 +65,10 @@ def prepared_scene_identity(
     )
 
 
-PHOTO_WARP_PNG_COMPRESSION = 6
-"""What the render stage and full-size previews encode photo warp with."""
+PHOTO_WARP_PNG_COMPRESSION = 1
+"""What the render stage and full-size previews encode photo warp with: level
+one, as Marigold, because level six took two thirds of a cold preview
+(ADR-0054, 2026-11-02 amendment)."""
 
 
 def photo_warp_scene_identity(

@@ -14,7 +14,8 @@ import names the module it depends on. Public interfaces:
 
 ``listing_reads``
     ``read_listing``, ``describe_draft`` -> ``ListingView``;
-    ``list_listings``, ``listing_row`` -> ``ListingRow``; ``pricing_summary``
+    ``list_listings``, ``listing_row`` -> ``ListingRow``, timed through
+    ``PhaseTimer``; ``pricing_summary``
     (shared with listing templates) -> ``PricedSize``; ``Priced``.
 ``listing_edits``
     ``edit_listing``: an editor save's patch merged into ``listing.yaml``.

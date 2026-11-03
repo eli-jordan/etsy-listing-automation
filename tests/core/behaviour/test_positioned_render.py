@@ -8,7 +8,9 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import numpy as np
 import pytest
+from PIL import Image
 
 from etsy_listings.core.engine.apply import execute
 from etsy_listings.core.engine.context import Event
@@ -152,3 +154,29 @@ def test_the_swatch_keeps_sampling_the_templates_own_box(workspace_root: Path) -
 
     assert len(swatches(after)) == len(MEDIA)
     assert swatches(after) == swatches(before)
+
+
+def test_moving_one_placement_leaves_the_other_placements_pixels_alone(
+    workspace_root: Path,
+) -> None:
+    """Compares the chart's right half before and after moving
+    ``fixture-placement-1``. That half holds ``fixture-placement-2`` (x 614-836
+    of 960), and placement 1 (x 134-356) cannot reach it at the default limits
+    (scale ≤ 1.10, offset ±10%, tilt ±15°), so every pixel there must be
+    unchanged while the left half moves."""
+    edit_listing(workspace_root, media=MEDIA)
+    lock = _apply(workspace_root)
+    workspace = a_context(workspace_root).workspace
+    with Image.open(workspace.render_file(LISTING, CHART, None)) as image:
+        before = np.asarray(image.convert("RGB"))
+
+    placement = _placement_box(workspace_root, Pose(scale=1.1, offset_x=0.1, rotation=15))
+    edit_listing(workspace_root, template_positions=_positions(placement=placement))
+    _apply(workspace_root, lock)
+    with Image.open(workspace.render_file(LISTING, CHART, None)) as image:
+        after = np.asarray(image.convert("RGB"))
+
+    half = before.shape[1] // 2
+    assert max(point.x for point in placement) < half
+    assert np.array_equal(after[:, half:], before[:, half:])
+    assert not np.array_equal(after[:, :half], before[:, :half])

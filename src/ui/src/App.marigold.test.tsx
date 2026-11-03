@@ -31,6 +31,7 @@ beforeEach(() => {
     },
   ]);
   vi.spyOn(calibrator, "listDesigns").mockResolvedValue([]);
+  vi.spyOn(calibrator, "getPositionedListings").mockResolvedValue([]);
   vi.spyOn(calibrator, "renderPreview").mockResolvedValue("blob:preview");
   vi.spyOn(calibrator, "getTemplateConfig").mockResolvedValue({
     config: { ...SINGLE, renderer: PHOTOWARP },

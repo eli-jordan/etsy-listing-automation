@@ -356,6 +356,9 @@ describe("Currency", () => {
       expect(screen.getByRole("button", { name: "Change currency…" })).toHaveFocus();
       expect(save).not.toHaveBeenCalled();
     },
+    // Twenty real Tab presses take about 2s alone and pass 5s under the full
+    // parallel suite on a loaded Windows host. The assertions are unchanged.
+    15_000,
   );
 });
 

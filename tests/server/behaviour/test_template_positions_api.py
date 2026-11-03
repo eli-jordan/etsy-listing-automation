@@ -91,3 +91,21 @@ def test_stale_positions_save_and_report_a_blocking_images_issue(client: TestCli
         issue["message"]
         == "take-a-hike: template_positions.removed names a template that is not in media"
     )
+
+
+def test_unreadable_settings_are_a_listing_issue_not_a_failed_read(
+    client: TestClient, workspace_root: Path
+) -> None:
+    workspace = Workspace.discover(root_override=workspace_root)
+    workspace.listing_file("take-a-hike").write_bytes(SOURCE.encode())
+    client.patch(URL, json={"template_positions": {"flat-lay-01": {"bounding_box": BOX}}})
+    workspace.settings_file().write_bytes(b"template_positions:\n  rotation: lots\n")
+
+    detail = client.get(URL)
+    assert detail.status_code == 200
+    blocking = [i for i in detail.json()["issues"] if i["severity"] == "block"]
+    assert any(
+        "settings.yaml" in i["message"] and "template_positions.rotation" in i["message"]
+        for i in blocking
+    )
+    assert client.get("/api/listings").status_code == 200

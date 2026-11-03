@@ -54,6 +54,7 @@ from etsy_listings.core.application.listing_identity import rename_listing as re
 from etsy_listings.core.application.listing_reads import (
     ListingRow,
     ListingView,
+    PhaseTimer,
     describe_draft,
     listing_row,
     listing_scenes,
@@ -131,14 +132,16 @@ def _warm_scenes(request: Request, name: str) -> None:
     warmer.request(name)
 
 
-def _etsy_states(request: Request) -> EtsyStates:
+def _etsy_states(request: Request, *, stale_ok: bool = False) -> EtsyStates:
     """Etsy's listing states through the process's short memo
-    (``etsystate.py``), so an autosave burst costs one round trip."""
+    (``etsystate.py``), so an autosave burst costs one round trip.
+    ``stale_ok`` is for a read that only draws the states -- the table --
+    never one that decides on them."""
     workspace = app_state.workspace(request)
     client_for = app_state.clients(request).etsy_listing
 
     def lookup(listing_ids: Sequence[int]) -> Mapping[int, str | None]:
-        return etsy_states(workspace.root, listing_ids, client_for=client_for)
+        return etsy_states(workspace.root, listing_ids, client_for=client_for, stale_ok=stale_ok)
 
     return lookup
 
@@ -241,11 +244,26 @@ def _describe_draft(workspace: Workspace, document: Mapping[str, Any]) -> Listin
 
 
 @router.get("", response_model=list[ListingSummary])
-def list_listings(request: Request) -> list[ListingSummary]:
+def list_listings(request: Request, response: Response) -> list[ListingSummary]:
     """Every listing, with its status resolved in **one** Etsy round trip for
-    the whole table rather than one per row."""
+    the whole table rather than one per row.
+
+    Answers with a ``Server-Timing`` header saying where the time went, so a
+    slow table can be read off the browser's network panel."""
     workspace = app_state.workspace(request)
-    return [_summary(row) for row in listing_rows(workspace, etsy_states=_etsy_states(request))]
+    timer = PhaseTimer()
+    with timer.phase("total"):
+        rows = listing_rows(
+            workspace, etsy_states=_etsy_states(request, stale_ok=True), timer=timer
+        )
+        summaries = [_summary(row) for row in rows]
+    response.headers["Server-Timing"] = server_timing(timer.seconds)
+    return summaries
+
+
+def server_timing(seconds: Mapping[str, float]) -> str:
+    """``seconds`` as a ``Server-Timing`` header value, in milliseconds."""
+    return ", ".join(f"{name};dur={value * 1000:.1f}" for name, value in seconds.items())
 
 
 @router.get("/{name}", response_model=ListingDetail)
