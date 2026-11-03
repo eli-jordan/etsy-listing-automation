@@ -13,6 +13,8 @@ Follow the [etsy-research](../etsy-research/SKILL.md) skill for the mechanics th
 
 Get the niche from the user's request ("Christmas tees", "teacher sweatshirts", "dog mom shirts"). If they gave none, ask before doing anything else.
 
+Note the garment too: "tees" or "t-shirts" means `tshirt`, "sweatshirts" means `sweatshirt`, "hoodies" means `hoodie`. Step 5 keeps only images of that garment. Sellers often lead a tee listing with a sweatshirt photo, so without the filter a tee run returns mostly sweatshirt mockups. Use no filter only when the user names no garment.
+
 ## 2. Queries
 
 Write 3–10 search queries a buyer in that niche would type, covering its main angles without near-repeats: for Christmas tees, `christmas tee`, `christmas shirt`, `funny christmas shirt`, `retro christmas t-shirt`, `family christmas shirts`. Name the garment in each query so results stay on it. Avoid the word "vintage": Etsy rewrites such queries into its Vintage category (real items 20+ years old, no mockups). Use "retro" instead. Reaching 20 mockups usually takes 8–10 queries; a 2-query test gave 9 real mockups. Use fewer only for a narrow niche. Show the list to the user in one line and continue.
@@ -66,16 +68,21 @@ It looks every listing up through the API and drops digital downloads. It record
 ## 5. Group and rank
 
 ```bash
-uv run --script .claude/skills/etsy-research-proven-mockups/cluster_mockups.py cluster RUN_DIR
+uv run --script .claude/skills/etsy-research-proven-mockups/cluster_mockups.py cluster RUN_DIR \
+  --garment tshirt \
+  --exclude-templates "C:/Users/Admin/iCloudDrive/naturally-inked-studio-workspace/mockup-templates"
 ```
 
-The script has its own dependencies (torch, open_clip, OpenCV); the first run installs them. It:
+Always pass `--exclude-templates`: the user wants mockups they don't own yet. The script has its own dependencies (torch, open_clip, OpenCV); the first run installs them. It:
 
 1. collapses repeats of one photo inside a listing (colour variants, re-crops) into one image, which roughly halves the comparisons;
 2. drops size charts, colour charts (including grids of one design in many shirt colours), font and thread pickers, and order-instruction cards, by CLIP zero-shot labels. About a quarter of all images go;
-3. finds each image's look-alikes in other shops with CLIP, the chest blurred so the printed design doesn't drive the match;
-4. confirms each pair with SIFT keypoints outside the chest under a crop/zoom/shift model, so a match means the same photo, not just a similar scene;
-5. keeps groups that span 2+ shops and ranks them by score.
+3. with `--garment`, drops images whose CLIP garment label (`tshirt`, `sweatshirt`, `hoodie`, `long-sleeve`, `baby`, `other`) differs. On the Christmas run this removed about a third of the remaining images, nearly all sweatshirts and hoodies;
+4. finds each image's look-alikes in other shops with CLIP, the chest blurred so the printed design doesn't drive the match;
+5. confirms each pair with SIFT keypoints outside the chest under a crop/zoom/shift model, so a match means the same photo, not just a similar scene;
+6. keeps groups that span 2+ shops;
+7. with `--exclude-templates`, compares each group against two colour variants of every template folder, using the same CLIP-then-SIFT check. Matching groups go to `owned-templates.json`, and the script prints them as `excluded, already a workspace template`;
+8. ranks what's left by score.
 
 **Scoring.** Each listing gets a performance score:
 
@@ -93,12 +100,15 @@ It prints the ranking (score, shops, listings, favourites, views, Bestsellers, P
 - `clusters\overview.jpg`: one tile per group, labelled `#N score S Xsh Yli`
 - `clusters\NN.jpg`: each group's members by listing score, labelled shop, listing score and favourites
 - `clusters\dropped-charts.jpg`: what the chart filter removed
+- `clusters\dropped-garments.jpg`: what the garment filter removed, each image labelled with its garment
 
 ## 6. Review the groups
 
 The script finds and ranks the groups; you decide which are real mockups. Glance at `dropped-charts.jpg` first: if it shows a model or flat-lay photo, the filter removed a mockup, so tell the user. Then read `overview.jpg` and each candidate's `NN.jpg` in ranked order until 20 groups pass:
 
-- **Drop non-mockups the filter missed:** charts, care cards, "how to order" graphics, text-only images.
+- **Check the filter sheets:** if `dropped-garments.jpg` shows the requested garment, the filter removed real mockups, so tell the user.
+- **Drop non-mockups the filters missed:** charts, care cards, "how to order" graphics, text-only images, and the wrong garment (a sweatshirt flat lay can still slip through).
+- **Drop design matches:** the same printed design on different photos can match through the design itself. Every member should share the background, model and pose.
 - **Drop wrong members:** a member from the same photoshoot but a different pose or framing is a different photo. If removing it leaves fewer than 2 shops, drop the group. If it held the group's best listing, the group's real rank is lower.
 - **Merge** groups that are the same photo the script split, and add up their scores.
 - **Name** each group by what a buyer sees: model, pose, garment colour, props, setting, e.g. "Woman cross-legged in a pepper tee and jeans, white sneakers".
@@ -121,5 +131,7 @@ Write `RUN_DIR\final\README.md` with one row per mockup, in ranked order:
 - total favourites and views
 - Bestseller and Popular-now counts
 - the listing URLs (from `clusters.json`)
+
+Add a section listing the excluded templates from `owned-templates.json`, with their shop and listing counts, so the user can see which of their own mockups are proven too.
 
 Then reply to the user with the run folder path, the ranked table, and two images per mockup from different shops, embedded with Markdown image syntax and absolute paths.

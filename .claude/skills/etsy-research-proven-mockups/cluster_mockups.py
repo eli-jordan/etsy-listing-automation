@@ -72,6 +72,36 @@ PHOTO_PROMPTS = (
     "a close-up photo of a printed graphic t-shirt",
 )
 CHART_PROBABILITY = 0.5
+# Zero-shot garment labels for --garment; an image takes the label of its best-matching prompt.
+GARMENT_PROMPTS = {
+    "tshirt": (
+        "a photo of a person wearing a short sleeve t-shirt",
+        "a flat lay photo of a short sleeve t-shirt",
+        "a folded short sleeve t-shirt",
+        "a short sleeve t-shirt on a hanger",
+        "several short sleeve t-shirts laid out together",
+        "a photo of a woman wearing an oversized short sleeve t-shirt",
+        "a photo of a child wearing a short sleeve t-shirt",
+    ),
+    "sweatshirt": (
+        "a photo of a person wearing a long sleeve crewneck sweatshirt",
+        "a flat lay photo of a crewneck sweatshirt with long sleeves",
+    ),
+    "hoodie": ("a photo of a person wearing a hoodie", "a flat lay photo of a hoodie"),
+    "long-sleeve": ("a photo of a person wearing a thin long sleeve t-shirt",),
+    # No tank-top or child-shirt labels: on test data both captured adult tees.
+    "baby": ("a baby bodysuit onesie",),
+    "other": (
+        "a photo of a mug",
+        "a photo of a tote bag",
+        "a photo of a hat",
+        "a photo of jewelry",
+    ),
+}
+TEMPLATE_SAMPLES = 2  # colour variants compared per template folder
+TEMPLATE_WIDTH = 570  # match the listing images' analysis size
+TEMPLATE_MEMBERS = 8  # members per cluster compared against templates
+MIN_TEMPLATE_SIMILARITY = 0.7  # blank templates sit further from printed listings in CLIP
 # Ranking. A listing scores log10(1+favourites) + VIEWS_WEIGHT*log10(1+views), plus
 # bonuses for the Bestseller and Popular-now badges; a mockup scores the sum over its
 # listings, so both how many listings use it and how well they perform count.
@@ -191,6 +221,63 @@ def is_chart(clip: Clip, paths: list[Path]) -> np.ndarray:
     probs = np.exp(logits - logits.max(axis=1, keepdims=True))
     probs /= probs.sum(axis=1, keepdims=True)
     return probs[:, : len(CHART_PROMPTS)].sum(axis=1) > CHART_PROBABILITY
+
+
+def garment_labels(clip: Clip, paths: list[Path]) -> list[str]:
+    """Each image's garment, by its best-matching GARMENT_PROMPTS prompt."""
+    names = [name for name, prompts in GARMENT_PROMPTS.items() for _ in prompts]
+    prompts = tuple(p for group in GARMENT_PROMPTS.values() for p in group)
+    best = (clip.images(paths, blur_chest=False) @ clip.texts(prompts).T).argmax(axis=1)
+    return [names[i] for i in best]
+
+
+def keep_garment(
+    clip: Clip, variants: list[list[int]], paths: list[Path], garment: str
+) -> tuple[list[list[int]], list[tuple[int, str]]]:
+    """Split off groups whose representative shows another garment."""
+    labels = garment_labels(clip, [paths[group[0]] for group in variants])
+    kept = [group for group, label in zip(variants, labels, strict=True) if label == garment]
+    dropped = [
+        (group[0], label) for group, label in zip(variants, labels, strict=True) if label != garment
+    ]
+    return kept, dropped
+
+
+def template_samples(templates: Path, run: Path) -> list[tuple[str, Path]]:
+    """A few colour variants per template folder, resized to the analysis width."""
+    out_dir = run / "templates"
+    out_dir.mkdir(exist_ok=True)
+    samples = []
+    for folder in sorted(p for p in templates.iterdir() if p.is_dir()):
+        for source in sorted(folder.glob("*.png"))[:TEMPLATE_SAMPLES]:
+            target = out_dir / f"{folder.name}__{source.stem}.jpg"
+            if not target.exists():
+                image = Image.open(source).convert("RGB")
+                image.thumbnail((TEMPLATE_WIDTH, TEMPLATE_WIDTH * 3))
+                image.save(target, quality=90)
+            samples.append((folder.name, target))
+    return samples
+
+
+def match_templates(
+    clusters: list[dict[str, Any]], run: Path, templates: Path, clip: Clip, matcher: Matcher
+) -> None:
+    """Set cluster["template"] to the workspace template a cluster's photo already is."""
+    samples = template_samples(templates, run)
+    if not samples:
+        return
+    sample_vectors = clip.images([path for _, path in samples], blur_chest=True)
+    for item in clusters:
+        members = [run / m["file"] for m in item["members"][:TEMPLATE_MEMBERS]]
+        similarity = clip.images(members, blur_chest=True) @ sample_vectors.T
+        item["template"] = next(
+            (
+                samples[t][0]
+                for m, t in zip(*np.nonzero(similarity >= MIN_TEMPLATE_SIMILARITY), strict=True)
+                if matcher.inliers(members[m], samples[t][1]) >= MIN_INLIERS
+            ),
+            None,
+        )
 
 
 def collapse_listings(images: list[Image_], paths: list[Path], matcher: Matcher) -> list[list[int]]:
@@ -315,8 +402,6 @@ def _sheet(tiles: list[Image.Image], columns: int, dest: Path) -> None:
 def write_sheets(run: Path, clusters: list[dict[str, Any]]) -> None:
     out = run / "clusters"
     out.mkdir(exist_ok=True)
-    for old in out.glob("*.jpg"):
-        old.unlink()
     for item in clusters:
         members = sorted(item["members"], key=lambda m: -m["listing_score"])[:24]
         tiles = [
@@ -335,11 +420,11 @@ def write_sheets(run: Path, clusters: list[dict[str, Any]]) -> None:
         _sheet(overview, 8, out / "overview.jpg")
 
 
-def write_dropped_sheet(run: Path, dropped: list[Image_]) -> None:
-    """One sheet of the images the chart filter removed, for spot-checking it."""
-    tiles = [_tile(run / i["file"], f"{i['listing_id']} r{i['rank']}") for i in dropped[:96]]
+def write_dropped_sheet(run: Path, dropped: list[tuple[Image_, str]], name: str) -> None:
+    """One sheet of the images a filter removed, for spot-checking it."""
+    tiles = [_tile(run / i["file"], f"{label} {i['listing_id']}") for i, label in dropped[:96]]
     if tiles:
-        _sheet(tiles, 12, run / "clusters" / "dropped-charts.jpg")
+        _sheet(tiles, 12, run / "clusters" / name)
 
 
 def drop_charts(
@@ -365,7 +450,41 @@ def verify(
     return joined, len(confirmed)
 
 
-def cluster(run: Path) -> None:
+def filter_images(
+    run: Path, images: list[Image_], variants: list[list[int]], clip: Clip, garment: str | None
+) -> list[list[int]]:
+    """Drop charts, then (with --garment) other garments; sheet what each filter removed."""
+    paths = [run / image["file"] for image in images]
+    (run / "clusters").mkdir(exist_ok=True)
+    for old in (run / "clusters").glob("*.jpg"):
+        old.unlink()
+    variants, charts = drop_charts(clip, variants, paths)
+    write_dropped_sheet(run, [(images[i], "chart") for i in charts], "dropped-charts.jpg")
+    sys.stdout.write(f"{len(charts)} size/colour charts and text cards dropped\n")
+    if garment:
+        variants, others = keep_garment(clip, variants, paths, garment)
+        dropped = [(images[i], label) for i, label in others]
+        write_dropped_sheet(run, dropped, "dropped-garments.jpg")
+        sys.stdout.write(f"{len(others)} images of garments other than {garment} dropped\n")
+    return variants
+
+
+def split_owned(
+    groups: list[dict[str, Any]],
+    run: Path,
+    templates: Path | None,
+    clip: Clip,
+    matcher: Matcher,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Keep 2+-shop groups; rank those the user has no template for, set aside those they do."""
+    groups = [c for c in groups if c["shops"] >= MIN_SHOPS]
+    if templates:
+        match_templates(groups, run, templates, clip, matcher)
+    owned = [c for c in groups if c.get("template")]
+    return rank([c for c in groups if not c.get("template")]), owned
+
+
+def cluster(run: Path, garment: str | None, templates: Path | None) -> None:
     images: list[Image_] = json.loads((run / "images.json").read_text(encoding="utf-8"))
     listing_rows = json.loads((run / "listings.json").read_text(encoding="utf-8"))
     listings = {item["listing_id"]: item for item in listing_rows}
@@ -376,8 +495,7 @@ def cluster(run: Path) -> None:
     sys.stdout.write(f"{len(images)} images -> {len(variants)} after within-listing dedupe\n")
 
     clip = Clip()
-    variants, dropped = drop_charts(clip, variants, paths)
-    sys.stdout.write(f"{len(dropped)} size/colour charts and text cards dropped\n")
+    variants = filter_images(run, images, variants, clip, garment)
 
     reps = [group[0] for group in variants]
     vectors = clip.images([paths[i] for i in reps], blur_chest=True)
@@ -385,18 +503,21 @@ def cluster(run: Path) -> None:
     sys.stdout.write(f"{len(pairs)} cross-shop candidate pairs\n")
 
     across, verified = verify(pairs, [paths[i] for i in reps], matcher)
-    clusters = rank(
-        [describe([variants[a] for a in group], images, listings) for group in across.groups()]
-    )
+    groups = [describe([variants[a] for a in group], images, listings) for group in across.groups()]
+    clusters, owned = split_owned(groups, run, templates, clip, matcher)
     write_sheets(run, clusters)
-    write_dropped_sheet(run, [images[i] for i in dropped])
     (run / "clusters.json").write_text(json.dumps(clusters, indent=1), encoding="utf-8")
+    (run / "owned-templates.json").write_text(json.dumps(owned, indent=1), encoding="utf-8")
     sys.stdout.write(f"{verified} verified pairs, {len(clusters)} clusters across 2+ shops\n")
+    for c in owned:
+        sys.stdout.write(
+            f"excluded, already a workspace template: {c['template']} ({c['shops']} shops)\n"
+        )
     report(clusters)
 
 
 def rank(clusters: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    kept = [c for c in clusters if c["shops"] >= MIN_SHOPS]
+    kept = list(clusters)
     kept.sort(key=lambda c: (-c["score"], -c["shops"]))
     for number, item in enumerate(kept, 1):
         item["cluster"] = number
@@ -438,7 +559,16 @@ def main() -> None:
         description=__doc__, formatter_class=argparse.RawTextHelpFormatter
     )
     sub = parser.add_subparsers(dest="command", required=True)
-    sub.add_parser("cluster").add_argument("run", type=Path)
+    group = sub.add_parser("cluster")
+    group.add_argument("run", type=Path)
+    group.add_argument(
+        "--garment", choices=sorted(GARMENT_PROMPTS), help="keep only images of this garment"
+    )
+    group.add_argument(
+        "--exclude-templates",
+        type=Path,
+        help="mockup-templates directory; groups matching a template there are set aside",
+    )
     get = sub.add_parser("download")
     get.add_argument("run", type=Path)
     get.add_argument("cluster", type=int)
@@ -446,7 +576,7 @@ def main() -> None:
     get.add_argument("--max", type=int, default=4, help="images to keep, one per listing")
     args = parser.parse_args()
     if args.command == "cluster":
-        cluster(args.run)
+        cluster(args.run, args.garment, args.exclude_templates)
     else:
         download(args.run, args.cluster, args.name, args.max)
 
