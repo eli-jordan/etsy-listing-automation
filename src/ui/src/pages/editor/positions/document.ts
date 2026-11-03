@@ -106,7 +106,7 @@ export function positionSignature(entry: Entry | undefined): string {
  * and Fit within limits repairs them. Every other refusal under
  * `template_positions` names a key no stage can show -- a template not in
  * `media:`, a placement that is gone, the wrong shape for the template's
- * kind, a Marigold template -- and its banner row removes the key instead. */
+ * kind -- and its banner row removes the key instead. */
 const POSE_REFUSAL =
   /\b(scales the design to|has (horizontal|vertical) offset|has rotation|is not a plain move)\b/;
 
