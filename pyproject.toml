@@ -147,6 +147,12 @@ markers = [
     "capture: opt-in screenshot artifacts for human review; run only when -m names capture",
 ]
 addopts = "-m 'not e2e'"
+# Delete a passing test's tmp_path in its own teardown, keeping only failures'.
+# Most tests copy the fixture workspace there, so a full run leaves ~30k
+# files; under the default policy each later session deletes an old run's
+# tree serially at exit, which cost ~16s of a local run on Windows. Per test,
+# the deletion is spread across the xdist workers instead.
+tmp_path_retention_policy = "failed"
 
 [tool.coverage.run]
 source = ["src/etsy_listings"]
