@@ -49,17 +49,18 @@ uv run --script .claude/skills/etsy-research-proven-mockups/cluster_mockups.py c
 The script has its own dependencies (torch, open_clip, OpenCV); the first run installs them. It:
 
 1. collapses repeats of one photo inside a listing (colour variants, re-crops) into one image, which roughly halves the comparisons;
-2. finds each image's look-alikes in other shops with CLIP, the chest blurred so the printed design doesn't drive the match;
-3. confirms each pair with SIFT keypoints outside the chest under a crop/zoom/shift model, so a match means the same photo, not just a similar scene;
-4. keeps groups that span 2+ shops and ranks them by shops, then listings, then favourites.
+2. drops size charts, colour charts (including grids of one design in many shirt colours), font and thread pickers, and order-instruction cards, by CLIP zero-shot labels. About a quarter of all images go, and the shared Bella+Canvas and Comfort Colors charts would otherwise top the ranking;
+3. finds each image's look-alikes in other shops with CLIP, the chest blurred so the printed design doesn't drive the match;
+4. confirms each pair with SIFT keypoints outside the chest under a crop/zoom/shift model, so a match means the same photo, not just a similar scene;
+5. keeps groups that span 2+ shops and ranks them by shops, then listings, then favourites.
 
-It prints the ranking and writes `clusters.json`, `clusters\overview.jpg` (one tile per group, labelled `#N Xsh Yli Zfav`) and `clusters\NN.jpg` (each group's members, labelled shop, favourites and image rank).
+It prints the ranking and writes `clusters.json`, `clusters\overview.jpg` (one tile per group, labelled `#N Xsh Yli Zfav`), `clusters\NN.jpg` (each group's members, labelled shop, favourites and image rank) and `clusters\dropped-charts.jpg` (what the chart filter removed).
 
 ## 6. Review the groups
 
-The script finds the groups; you decide which are real mockups. Read `overview.jpg`, then each candidate's `NN.jpg`, going down the ranking until 10–15 groups pass:
+The script finds the groups; you decide which are real mockups. Glance at `dropped-charts.jpg` first: if it shows a model or flat-lay photo, the filter removed a mockup, so tell the user. Then read `overview.jpg` and each candidate's `NN.jpg`, going down the ranking until 10–15 groups pass:
 
-- **Drop non-mockups:** size charts, colour charts, care cards, "how to order" graphics, text-only images. Shared Bella+Canvas and Comfort Colors charts always rank high.
+- **Drop non-mockups the filter missed:** charts, care cards, "how to order" graphics, text-only images.
 - **Drop wrong members:** a member from the same photoshoot but a different pose or framing is a different photo. If removing it leaves fewer than 2 shops, drop the group.
 - **Merge** groups that are the same photo the script split, and add up their counts.
 - **Name** each group by what a buyer sees: model, pose, garment colour, props, setting, e.g. "Woman cross-legged in a pepper tee and jeans, white sneakers".

@@ -54,6 +54,23 @@ KNN = 2
 SCALE_RANGE = (0.33, 3.0)  # crop/zoom allowed between two uses of one photo
 MIN_SHOPS = 2
 SIFT_FEATURES = 800
+# Zero-shot CLIP labels: images closer to a chart prompt than a photo prompt are dropped.
+CHART_PROMPTS = (
+    "a size chart table of garment measurements",
+    "a color chart of t-shirt color swatches with color names",
+    "a grid of blank t-shirts in many colors showing the color options",
+    "a text graphic with care instructions or how to order steps",
+)
+PHOTO_PROMPTS = (
+    "a photo of a woman wearing a t-shirt",
+    "a photo of a man wearing a t-shirt",
+    "a photo of a person wearing a sweatshirt",
+    "a flat lay photo of a t-shirt with props",
+    "a photo of a t-shirt hanging on a hanger",
+    "a photo of a family or couple wearing matching shirts",
+    "a close-up photo of a printed graphic t-shirt",
+)
+CHART_PROBABILITY = 0.5
 TILE = 220
 LABEL = 28
 
@@ -126,23 +143,46 @@ class Matcher:
         return int(mask.sum()) if SCALE_RANGE[0] < scale < SCALE_RANGE[1] else 0
 
 
-def embed(paths: list[Path]) -> np.ndarray:
-    model, _, preprocess = open_clip.create_model_and_transforms(
-        "ViT-B-32", pretrained="laion2b_s34b_b79k"
-    )
-    model.eval()
-    out = []
-    with torch.no_grad():
-        for start in range(0, len(paths), 64):
-            batch = []
-            for path in paths[start : start + 64]:
-                image = Image.open(path).convert("RGB")
-                box = chest_box(*image.size)
-                image.paste(image.crop(box).filter(ImageFilter.GaussianBlur(25)), box)
-                batch.append(preprocess(image))
-            vectors = model.encode_image(torch.stack(batch))
-            out.append(torch.nn.functional.normalize(vectors, dim=-1).numpy())
-    return np.concatenate(out)
+class Clip:
+    """CLIP ViT-B-32: image embeddings, and text embeddings for zero-shot labels."""
+
+    def __init__(self) -> None:
+        self.model, _, self.preprocess = open_clip.create_model_and_transforms(
+            "ViT-B-32", pretrained="laion2b_s34b_b79k"
+        )
+        self.model.eval()
+        self.tokenizer = open_clip.get_tokenizer("ViT-B-32")
+
+    def _load(self, path: Path, *, blur_chest: bool) -> torch.Tensor:
+        image = Image.open(path).convert("RGB")
+        if blur_chest:  # soften the printed design so scene, model and pose dominate
+            box = chest_box(*image.size)
+            image.paste(image.crop(box).filter(ImageFilter.GaussianBlur(25)), box)
+        return self.preprocess(image)
+
+    def images(self, paths: list[Path], *, blur_chest: bool) -> np.ndarray:
+        out = []
+        with torch.no_grad():
+            for start in range(0, len(paths), 64):
+                batch = [self._load(p, blur_chest=blur_chest) for p in paths[start : start + 64]]
+                vectors = self.model.encode_image(torch.stack(batch))
+                out.append(torch.nn.functional.normalize(vectors, dim=-1).numpy())
+        return np.concatenate(out)
+
+    def texts(self, prompts: tuple[str, ...]) -> np.ndarray:
+        with torch.no_grad():
+            vectors = self.model.encode_text(self.tokenizer(list(prompts)))
+        return torch.nn.functional.normalize(vectors, dim=-1).numpy()
+
+
+def is_chart(clip: Clip, paths: list[Path]) -> np.ndarray:
+    """True where an image reads as a size/colour chart or text card rather than a photo."""
+    vectors = clip.images(paths, blur_chest=False)
+    prompts = clip.texts(CHART_PROMPTS + PHOTO_PROMPTS)
+    logits = 100 * vectors @ prompts.T
+    probs = np.exp(logits - logits.max(axis=1, keepdims=True))
+    probs /= probs.sum(axis=1, keepdims=True)
+    return probs[:, : len(CHART_PROMPTS)].sum(axis=1) > CHART_PROBABILITY
 
 
 def collapse_listings(images: list[Image_], paths: list[Path], matcher: Matcher) -> list[list[int]]:
@@ -254,6 +294,23 @@ def write_sheets(run: Path, clusters: list[dict[str, Any]]) -> None:
         _sheet(overview, 8, out / "overview.jpg")
 
 
+def write_dropped_sheet(run: Path, dropped: list[Image_]) -> None:
+    """One sheet of the images the chart filter removed, for spot-checking it."""
+    tiles = [_tile(run / i["file"], f"{i['listing_id']} r{i['rank']}") for i in dropped[:96]]
+    if tiles:
+        _sheet(tiles, 12, run / "clusters" / "dropped-charts.jpg")
+
+
+def drop_charts(
+    clip: Clip, variants: list[list[int]], paths: list[Path]
+) -> tuple[list[list[int]], list[int]]:
+    """Split off groups whose representative is a chart or text card."""
+    charts = is_chart(clip, [paths[group[0]] for group in variants])
+    kept = [group for group, chart in zip(variants, charts, strict=True) if not chart]
+    dropped = [group[0] for group, chart in zip(variants, charts, strict=True) if chart]
+    return kept, dropped
+
+
 def verify(
     pairs: set[tuple[int, int]], paths: list[Path], matcher: Matcher
 ) -> tuple[UnionFind, int]:
@@ -277,8 +334,12 @@ def cluster(run: Path) -> None:
     variants = collapse_listings(images, paths, matcher)
     sys.stdout.write(f"{len(images)} images -> {len(variants)} after within-listing dedupe\n")
 
+    clip = Clip()
+    variants, dropped = drop_charts(clip, variants, paths)
+    sys.stdout.write(f"{len(dropped)} size/colour charts and text cards dropped\n")
+
     reps = [group[0] for group in variants]
-    vectors = embed([paths[i] for i in reps])
+    vectors = clip.images([paths[i] for i in reps], blur_chest=True)
     pairs = candidate_pairs(vectors, np.array([images[i]["shop_id"] for i in reps]))
     sys.stdout.write(f"{len(pairs)} cross-shop candidate pairs\n")
 
@@ -287,6 +348,7 @@ def cluster(run: Path) -> None:
         [describe([variants[a] for a in group], images, listings) for group in across.groups()]
     )
     write_sheets(run, clusters)
+    write_dropped_sheet(run, [images[i] for i in dropped])
     (run / "clusters.json").write_text(json.dumps(clusters, indent=1), encoding="utf-8")
     sys.stdout.write(f"{verified} verified pairs, {len(clusters)} clusters across 2+ shops\n")
     report(clusters)
