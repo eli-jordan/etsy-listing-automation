@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import re
 import sys
 import urllib.request
@@ -71,6 +72,13 @@ PHOTO_PROMPTS = (
     "a close-up photo of a printed graphic t-shirt",
 )
 CHART_PROBABILITY = 0.5
+# Ranking. A listing scores log10(1+favourites) + VIEWS_WEIGHT*log10(1+views), plus
+# bonuses for the Bestseller and Popular-now badges; a mockup scores the sum over its
+# listings, so both how many listings use it and how well they perform count.
+VIEWS_WEIGHT = 0.5
+BESTSELLER_BONUS = 1.0
+POPULAR_BONUS = 0.5
+SAME_SHOP_WEIGHT = 0.25  # one shop reusing its own mockup is weaker evidence
 TILE = 220
 LABEL = 28
 
@@ -233,8 +241,38 @@ def _member(group: list[int], images: list[Image_], listings: dict[int, dict[str
         "title": listing["title"],
         "listing_url": listing["url"],
         "num_favorers": listing["num_favorers"],
+        "views": listing.get("views", 0),
+        "listing_score": listing_score(listing),
         "variants": [images[v]["file"] for v in group],
     }
+
+
+def is_bestseller(listing: dict[str, Any]) -> bool:
+    """Badge on the card, or surfaced by the is_best_seller filter (cards show one badge only)."""
+    return "Bestseller" in listing["badges"] or _via("is_best_seller")(listing)
+
+
+def listing_score(listing: dict[str, Any]) -> float:
+    """How well one listing performs: favourites and views on a log scale, plus badges."""
+    return round(
+        math.log10(1 + listing["num_favorers"])
+        + VIEWS_WEIGHT * math.log10(1 + listing.get("views", 0))
+        + BESTSELLER_BONUS * is_bestseller(listing)
+        + POPULAR_BONUS * ("Popular now" in listing["badges"]),
+        2,
+    )
+
+
+def mockup_score(found: list[dict[str, Any]]) -> float:
+    """Sum of listing scores; each shop's best listing counts in full, its others at a discount."""
+    by_shop: dict[int, list[float]] = defaultdict(list)
+    for listing in found:
+        by_shop[listing["shop_id"]].append(listing_score(listing))
+    total = 0.0
+    for scores in by_shop.values():
+        best, *rest = sorted(scores, reverse=True)
+        total += best + SAME_SHOP_WEIGHT * sum(rest)
+    return round(total, 2)
 
 
 def describe(
@@ -243,10 +281,13 @@ def describe(
     reps = [images[group[0]] for group in members]
     found = [listings[i] for i in sorted({r["listing_id"] for r in reps})]
     return {
+        "score": mockup_score(found),
         "shops": len({r["shop_id"] for r in reps}),
         "listings": len(found),
         "favorers": sum(item["num_favorers"] for item in found),
-        "bestseller_badges": _count(found, lambda item: "Bestseller" in item["badges"]),
+        "views": sum(item.get("views", 0) for item in found),
+        "bestsellers": _count(found, is_bestseller),
+        "popular_now": _count(found, lambda item: "Popular now" in item["badges"]),
         "via_star_seller": _count(found, _via("is_star_seller")),
         "via_best_seller": _count(found, _via("is_best_seller")),
         "primary_image_uses": _count(reps, lambda r: r["rank"] == 1),
@@ -277,16 +318,16 @@ def write_sheets(run: Path, clusters: list[dict[str, Any]]) -> None:
     for old in out.glob("*.jpg"):
         old.unlink()
     for item in clusters:
-        members = sorted(item["members"], key=lambda m: -m["num_favorers"])[:24]
+        members = sorted(item["members"], key=lambda m: -m["listing_score"])[:24]
         tiles = [
-            _tile(run / m["file"], f"{m['shop_name']} {m['num_favorers']}fav r{m['rank']}")
+            _tile(run / m["file"], f"{m['shop_name']} s{m['listing_score']} {m['num_favorers']}fav")
             for m in members
         ]
         _sheet(tiles, 6, out / f"{item['cluster']:02d}.jpg")
     overview = [
         _tile(
             run / c["members"][0]["file"],
-            f"#{c['cluster']} {c['shops']}sh {c['listings']}li {c['favorers']}fav",
+            f"#{c['cluster']} score {c['score']} {c['shops']}sh {c['listings']}li",
         )
         for c in clusters[:48]
     ]
@@ -356,18 +397,19 @@ def cluster(run: Path) -> None:
 
 def rank(clusters: list[dict[str, Any]]) -> list[dict[str, Any]]:
     kept = [c for c in clusters if c["shops"] >= MIN_SHOPS]
-    kept.sort(key=lambda c: (-c["shops"], -c["listings"], -c["favorers"]))
+    kept.sort(key=lambda c: (-c["score"], -c["shops"]))
     for number, item in enumerate(kept, 1):
         item["cluster"] = number
     return kept
 
 
 def report(clusters: list[dict[str, Any]]) -> None:
-    sys.stdout.write("cluster shops listings favs bestseller primary\n")
+    sys.stdout.write("cluster score shops listings  favs   views bestsell popular primary\n")
     for c in clusters[:40]:
         sys.stdout.write(
-            f"{c['cluster']:>7} {c['shops']:>5} {c['listings']:>8} {c['favorers']:>4} "
-            f"{c['bestseller_badges']:>10} {c['primary_image_uses']:>7}\n"
+            f"{c['cluster']:>7} {c['score']:>5} {c['shops']:>5} {c['listings']:>8} "
+            f"{c['favorers']:>5} {c['views']:>7} {c['bestsellers']:>8} {c['popular_now']:>7} "
+            f"{c['primary_image_uses']:>7}\n"
         )
 
 

@@ -110,6 +110,7 @@ def main() -> None:
                 "title": item["title"],
                 "url": item["url"].split("?")[0],
                 "num_favorers": item.get("num_favorers", 0),
+                "views": item.get("views", 0),
                 "taxonomy_id": item.get("taxonomy_id"),
                 "tags": item.get("tags", []),
                 "shop_review_average": shop.get("review_average"),
