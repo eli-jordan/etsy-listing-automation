@@ -100,14 +100,20 @@ export function mediaKind(entry: MediaEntry): "image" | "video" {
 export interface SceneSource {
   listing: string;
   version: string;
+  /** A signature of each template's *saved* position (ADR-0058), added to
+   * that template's version so a landed position save is a new URL too. */
+  positions?: Readonly<Record<string, string>>;
 }
 
 export function sceneSource(
   listing: string,
   designVersion: string | null | undefined,
+  positions?: Readonly<Record<string, string>>,
 ): SceneSource | null {
   if (listing === "" || designVersion === null || designVersion === undefined) return null;
-  return { listing, version: designVersion };
+  return positions === undefined
+    ? { listing, version: designVersion }
+    : { listing, version: designVersion, positions };
 }
 
 /** What to call one entry, in a tile label, a lightbox caption or an aria-label. */
@@ -247,7 +253,9 @@ export function templatePicture(
   if (typeof artwork === "string" || "testDesign" in artwork) {
     return templateDesignPreviewUrl(template, artwork, colour);
   }
-  return listingScenePreviewUrl(artwork.listing, template, colour, artwork.version);
+  const position = artwork.positions?.[template];
+  const version = position ? `${artwork.version}.${position}` : artwork.version;
+  return listingScenePreviewUrl(artwork.listing, template, colour, version);
 }
 
 /**
