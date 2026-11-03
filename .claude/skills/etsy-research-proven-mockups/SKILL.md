@@ -15,7 +15,7 @@ Get the niche from the user's request ("Christmas tees", "teacher sweatshirts", 
 
 ## 2. Queries
 
-Write 3–10 search queries a buyer in that niche would type, covering its main angles without near-repeats: for Christmas tees, `christmas tee`, `christmas shirt`, `funny christmas shirt`, `retro christmas t-shirt`, `family christmas shirts`. Name the garment in each query so results stay on it. Reaching 20 mockups usually takes 8–10 queries; a 2-query test gave 9 real mockups. Use fewer only for a narrow niche. Show the list to the user in one line and continue.
+Write 3–10 search queries a buyer in that niche would type, covering its main angles without near-repeats: for Christmas tees, `christmas tee`, `christmas shirt`, `funny christmas shirt`, `retro christmas t-shirt`, `family christmas shirts`. Name the garment in each query so results stay on it. Avoid the word "vintage": Etsy rewrites such queries into its Vintage category (real items 20+ years old, no mockups). Use "retro" instead. Reaching 20 mockups usually takes 8–10 queries; a 2-query test gave 9 real mockups. Use fewer only for a narrow niche. Show the list to the user in one line and continue.
 
 ## 3. Sample the search pages
 
@@ -30,9 +30,8 @@ uv run python .claude/skills/etsy-research-proven-mockups/sample_plan.py plan RU
 **Loop over the pages:**
 
 1. Run `sample_plan.py next RUN_DIR`. It prints `{"done": true}`, which means go to step 4, or the next page: `file`, `url`, `wait_before` and `wait_after_load` (lists of seconds, each at most 10).
-2. Open a fresh tab with `tabs_create_mcp`, then close the previous page's tab, if any. Opening first keeps the tab group alive. Call `tabs_context_mcp` with `createIfEmpty` once at the start of the session.
-3. In one `browser_batch` on the new tab:
-   - a `computer` `wait` for each `wait_before` entry
+2. If a previous page's tab is open, run one `browser_batch` on it: a `computer` `wait` for each `wait_before` entry, then `tabs_close_mcp`. The Chrome tool can't wait on a blank new tab, so the wait happens in the old one. Closing the last tab removes the session's tab group. Skip the waits on the first page of a session.
+3. Get a fresh tab with `tabs_context_mcp` and `createIfEmpty: true`. Don't use `tabs_create_mcp` inside a batch: that tab lands outside the group and can't be used or closed. Then run one `browser_batch` on the new tab:
    - `navigate` to `url`
    - a `wait` for each `wait_after_load` entry
    - `javascript_tool` with the contents of [extract_search_cards.js](../etsy-research/extract_search_cards.js)
