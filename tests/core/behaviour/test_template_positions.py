@@ -187,3 +187,21 @@ def test_marigold_positions_validate_like_photo_warp_ones(workspace_root: Path) 
     assert positions_outside_limits(listing, {TEMPLATE: config}, narrow) == [
         f"template_positions.{TEMPLATE}"
     ]
+
+
+def test_unreadable_settings_refuse_a_positioned_listing_instead_of_raising(
+    workspace_root: Path,
+) -> None:
+    ctx = a_context(workspace_root)
+    template = ctx.workspace.load_template_config(TEMPLATE)
+    box = compose(template.bounding_box, Pose(scale=1.05))
+    edit_listing(
+        workspace_root,
+        template_positions={TEMPLATE: {"bounding_box": [point.model_dump() for point in box]}},
+    )
+    ctx.workspace.settings_file().write_bytes(b"template_positions:\n  rotation: lots\n")
+    planned = build_plan(ctx, FIXTURE_LISTING, a_lock(), STAGES)
+    render = next(stage for stage in planned.plan.stage_plans if stage.stage == "render")
+    assert render.blocked is not None
+    assert "settings.yaml" in render.blocked
+    assert "template_positions.rotation" in render.blocked

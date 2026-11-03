@@ -5,6 +5,7 @@ import { type Artwork, type MediaOwner, mediaKind, mediaLabel, pictureFor } from
 import type { MediaFileSummary, MediaEntry } from "../../types";
 import { MAX_IMAGES, MAX_VIDEOS, canReorder } from "./mediaEdits";
 import type { Focus } from "./focus";
+import { PositionGlyph } from "./positions/PositionControls";
 
 /**
  * The listing's gallery, in the order Etsy will show it, reorderable by drag.
@@ -38,6 +39,9 @@ interface Props {
   onRemove: (index: number) => void;
   onReorder: (from: number, to: number) => void;
   onFocus: (focus: Focus) => void;
+  /** Templates this listing positions (`template_positions:`): their tiles
+   * wear the badge, every colour of a colour-matrix one included. */
+  positioned?: ReadonlySet<string>;
 }
 
 export function MediaReel({
@@ -50,6 +54,7 @@ export function MediaReel({
   onRemove,
   onReorder,
   onFocus,
+  positioned,
 }: Props) {
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
@@ -100,6 +105,7 @@ export function MediaReel({
                 entry.template === swatchTemplate &&
                 entry.colour !== null
               }
+              positioned={typeof entry !== "string" && (positioned?.has(entry.template) ?? false)}
               state={[
                 selectedIndex === index ? "rtile--selected" : "",
                 dragIndex === index ? "rtile--dragging" : "",
@@ -135,6 +141,7 @@ interface TileProps {
   index: number;
   picture: string;
   suppliesSwatch: boolean;
+  positioned: boolean;
   state: string[];
   onDragStart: () => void;
   onDragOver: () => void;
@@ -151,6 +158,7 @@ function ReelTile({
   index,
   picture,
   suppliesSwatch,
+  positioned,
   state,
   onDragStart,
   onDragOver,
@@ -199,6 +207,14 @@ function ReelTile({
             <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
               <path d="M12 2l10 10-10 10L2 12z" />
             </svg>
+          </span>
+        )}
+        {positioned && (
+          <span
+            className="tp-tile-badge"
+            title="This listing positions the design on this template"
+          >
+            <PositionGlyph />
           </span>
         )}
         <span

@@ -4,8 +4,7 @@ import {
   type TemplatePositionImpact,
 } from "../../api/workspaceSettings";
 import { type LimitDraft, ROWS, toLimits } from "./templateLimits";
-import { AlarmHeader } from "./AlarmHeader";
-import { useModalKeys } from "./useModalKeys";
+import { AlarmDialog } from "./AlarmDialog";
 
 type Impact =
   | { kind: "loading" }
@@ -35,12 +34,10 @@ export function TemplateLimitsDialog({
   const [impact, setImpact] = useState<Impact>({ kind: "loading" });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const dialog = useRef<HTMLDivElement>(null);
   const keep = useRef<HTMLButtonElement>(null);
   const candidate = useRef(toLimits(draft));
 
   useEffect(() => keep.current?.focus(), []);
-  useModalKeys(dialog, onCancel);
   useEffect(() => {
     let active = true;
     getTemplatePositionImpact(candidate.current).then(
@@ -74,62 +71,52 @@ export function TemplateLimitsDialog({
   };
 
   return (
-    <div className="sa-scrim" onClick={(e) => e.target === e.currentTarget && onCancel()}>
-      <div
-        ref={dialog}
-        className="sa-modal sp-modal"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="tl-confirm"
-      >
-        <AlarmHeader
-          titleId="tl-confirm"
-          title={
-            inference.length > 0 ? `Refit ${templates(inference.length)}?` : "Save new limits?"
-          }
-          onCancel={onCancel}
-        >
-          {inference.length > 0
-            ? "It runs in the background. You can keep working."
-            : "Listings are checked against them the next time they render or deploy."}
-        </AlarmHeader>
-        <div className="sa-modal__body">
-          <ul className="sp-modal__facts">
-            <li>
-              <strong>{changes.join("; ")}.</strong>
-              {inference.length > 0 && (
-                <>
-                  {" "}
-                  {listed(inference)} need their preparation extended to cover the wider limits; the
-                  Marigold model runs once per template in the background.
-                </>
-              )}
-            </li>
-            <li>
-              <Outside impact={impact} />
-            </li>
-          </ul>
-          {error !== null && (
-            <p className="adm-error-text" role="alert">
-              {error}
-            </p>
-          )}
-        </div>
-        <div className="sa-modal__foot sd-foot">
-          <button ref={keep} type="button" className="btn btn-ghost" onClick={onCancel}>
-            Keep current limits
-          </button>
-          <button
-            type="button"
-            className="btn btn-primary"
-            disabled={busy || impact.kind === "loading"}
-            onClick={() => void confirm()}
-          >
-            {inference.length > 0 ? "Save and refit" : "Save"}
-          </button>
-        </div>
+    <AlarmDialog
+      titleId="tl-confirm"
+      title={inference.length > 0 ? `Refit ${templates(inference.length)}?` : "Save new limits?"}
+      lede={
+        inference.length > 0
+          ? "It runs in the background. You can keep working."
+          : "Listings are checked against them the next time they render or deploy."
+      }
+      onCancel={onCancel}
+    >
+      <div className="sa-modal__body">
+        <ul className="sp-modal__facts">
+          <li>
+            <strong>{changes.join("; ")}.</strong>
+            {inference.length > 0 && (
+              <>
+                {" "}
+                {listed(inference)} need their preparation extended to cover the wider limits; the
+                Marigold model runs once per template in the background.
+              </>
+            )}
+          </li>
+          <li>
+            <Outside impact={impact} />
+          </li>
+        </ul>
+        {error !== null && (
+          <p className="adm-error-text" role="alert">
+            {error}
+          </p>
+        )}
       </div>
-    </div>
+      <div className="sa-modal__foot sd-foot">
+        <button ref={keep} type="button" className="btn btn-ghost" onClick={onCancel}>
+          Keep current limits
+        </button>
+        <button
+          type="button"
+          className="btn btn-primary"
+          disabled={busy || impact.kind === "loading"}
+          onClick={() => void confirm()}
+        >
+          {inference.length > 0 ? "Save and refit" : "Save"}
+        </button>
+      </div>
+    </AlarmDialog>
   );
 }
 

@@ -100,6 +100,25 @@ describe("listTemplates", () => {
   });
 });
 
+describe("getPositionedListings", () => {
+  it("GETs the listings holding positions for the named template", async () => {
+    const held = [{ listing: "tote-bag", placements: ["back", "front"] }];
+    const { getPositionedListings } = await answering(200, held);
+
+    expect(await getPositionedListings("colour chart")).toEqual(held);
+    expect(await described(onlyRequest())).toMatchObject({
+      method: "GET",
+      path: "/api/templates/colour%20chart/positioned-listings",
+    });
+  });
+
+  it("throws CalibratorApiError when the read fails", async () => {
+    const { getPositionedListings, CalibratorApiError } = await answering(404, { detail: "no" });
+
+    await expect(getPositionedListings("gone")).rejects.toBeInstanceOf(CalibratorApiError);
+  });
+});
+
 describe("getTemplateConfig", () => {
   it("GETs the named template's config with its Last-Modified time and unquoted revision", async () => {
     const { getTemplateConfig } = await answering(200, CONFIG, {

@@ -3,6 +3,7 @@ import { listTemplates } from "./api/calibrator";
 import type { Preparation, Runtime } from "./api/preparation";
 import { InferenceSettings } from "./components/InferenceSettings";
 import { KindPicker } from "./components/KindPicker";
+import { PositionedListingsNote } from "./components/PositionedListingsNote";
 import { preparationLabel, marigoldMapsReady } from "./components/preparationLabel";
 import { RendererPanel } from "./components/RendererPanel";
 import { TemplateRail } from "./components/TemplateRail";
@@ -397,6 +398,12 @@ export function App() {
                 session.reload();
                 refreshTemplates(templateName);
               }}
+            />
+          )}
+          {templateName && session.load === "ready" && config && (
+            <PositionedListingsNote
+              templateName={templateName}
+              savedAt={save.kind === "saved" ? save.savedAt : null}
             />
           )}
           {templateName && session.load === "ready" && config && (

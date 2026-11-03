@@ -13,6 +13,7 @@ from dataclasses import dataclass, field
 
 from PIL import Image
 
+from etsy_listings.core.bounded_cache import BoundedCache
 from etsy_listings.core.preparation.artifacts import (
     Artifacts,
     Manifest,
@@ -28,8 +29,13 @@ from etsy_listings.core.preparation.scene_cache import SceneCache, photo_digest
 from etsy_listings.core.render.config import LayerBoxes, MarigoldAppearance
 from etsy_listings.core.render.identity import artwork_identity, prepared_scene_identity
 from etsy_listings.core.render.io import MARIGOLD_PNG_COMPRESSION, encode_png
-from etsy_listings.core.render.material import MaterialLayer, MaterialMaps, render_marigold_scene
-from etsy_listings.core.render.types import RGB, RGBA
+from etsy_listings.core.render.material import (
+    MaterialLayer,
+    MaterialMaps,
+    prepare_material_artwork,
+    render_marigold_scene,
+)
+from etsy_listings.core.render.types import RGB, RGBA, FloatMap
 from etsy_listings.core.workspace import Workspace
 
 MAX_CONCURRENT_RENDERS = 4
@@ -42,6 +48,27 @@ queue here, so four running together peak near 4 GB."""
 
 _RENDER_SLOTS = threading.BoundedSemaphore(MAX_CONCURRENT_RENDERS)
 
+PREMULTIPLIED_ARTWORK_BYTES = 768 * 1024**2
+"""Budget for designs' premultiplied linear samples, kept by artwork digest.
+
+Every colour of a scene, and every scene of a listing, composes the same
+design, and preparing its samples was about 0.7 seconds of each. One
+4200x4800 design's samples are 320 MB, so this keeps the two designs of a
+light/dark listing."""
+
+_PREMULTIPLIED: BoundedCache[str, FloatMap] = BoundedCache(
+    PREMULTIPLIED_ARTWORK_BYTES, size=lambda samples: samples.nbytes
+)
+
+
+def _premultiplied(artwork: RGBA, digest: str) -> FloatMap:
+    def prepare() -> FloatMap:
+        samples = prepare_material_artwork(artwork)
+        samples.flags.writeable = False  # shared by every composition reading it
+        return samples
+
+    return _PREMULTIPLIED.get_or_compute(digest, prepare)
+
 
 @dataclass(frozen=True)
 class PreparedLayer:
@@ -49,6 +76,9 @@ class PreparedLayer:
 
     artwork: RGBA
     placement_id: str | None = None
+    digest: str | None = None
+    """``artwork_identity(artwork)`` when the caller already computed it;
+    :func:`lease_scene` computes it otherwise."""
 
 
 @dataclass(frozen=True)
@@ -67,14 +97,21 @@ class PreparedScene:
     layers: tuple[PreparedLayer, ...]
     appearance: MarigoldAppearance
     maps: Mapping[str | None, MaterialMaps]
+    digests: tuple[str, ...]
+    """Each layer's ``artwork_identity``, in layer order."""
 
     def render(self) -> Image.Image:
         with _RENDER_SLOTS:
             return render_marigold_scene(
                 self.base,
                 [
-                    MaterialLayer(layer.artwork, self.maps[layer.placement_id], layer.placement_id)
-                    for layer in self.layers
+                    MaterialLayer(
+                        layer.artwork,
+                        self.maps[layer.placement_id],
+                        layer.placement_id,
+                        premultiplied=_premultiplied(layer.artwork, digest),
+                    )
+                    for layer, digest in zip(self.layers, self.digests, strict=True)
                 ],
                 appearance=self.appearance,
             )
@@ -96,6 +133,8 @@ class Composition:
     base: RGB
     layers: Sequence[PreparedLayer]
     appearance: MarigoldAppearance
+    photo_pixels: str | None = None
+    """``photo_digest(base)`` when the caller already computed it."""
     boxes: LayerBoxes = field(default_factory=dict)
     """The listing's saved position for this template (ADR-0058). A layer it
     moves renders with its own position fit, never the template's maps."""
@@ -120,7 +159,7 @@ def lease_scene(
 
     A layer ``composition.boxes`` positions is drawn with its position fit,
     fitted first -- or awaited, when another caller is fitting it -- and never
-    with the template's maps (spec *Rendering → Marigold (option B)*).
+    with the template's maps (spec *Rendering -> Marigold (option B)*).
     """
     base, layers, appearance = composition.base, composition.layers, composition.appearance
     artifacts = Artifacts(workspace)
@@ -138,13 +177,25 @@ def lease_scene(
         positioned = {key: fits.ensure(request) for key, request in requests.items()}
         maps = {**acquired.maps, **{key: fit.maps for key, fit in positioned.items()}}
         map_content = scene_map_content(acquired.manifest.content_digest, positioned)
+        digests = tuple(
+            layer.digest if layer.digest is not None else artwork_identity(layer.artwork)
+            for layer in layers
+        )
         identity = prepared_scene_identity(
             map_content=map_content,
             placement_ids=[layer.placement_id for layer in layers],
-            artwork_digests=[artwork_identity(layer.artwork) for layer in layers],
-            photo_pixels=photo_digest(base),
+            artwork_digests=list(digests),
+            photo_pixels=composition.photo_pixels or photo_digest(base),
             appearance=appearance,
         )
         yield PreparedScene(
-            inputs, acquired.manifest, map_content, identity, base, tuple(layers), appearance, maps
+            inputs=inputs,
+            manifest=acquired.manifest,
+            map_content=map_content,
+            identity=identity,
+            base=base,
+            layers=tuple(layers),
+            appearance=appearance,
+            maps=maps,
+            digests=digests,
         )

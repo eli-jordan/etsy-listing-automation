@@ -5,6 +5,7 @@ import {
   listingDesignThumbnailUrl,
   listListingDesigns,
 } from "../../api/listings";
+import { usePreloadedPictures } from "../../hooks/usePreloadedPictures";
 import { type Artwork, refName, sceneSource, templatePicture } from "../../media";
 import type {
   DesignMap,
@@ -156,6 +157,14 @@ export function VariantsTab({
   const ownArtwork = artwork === undefined;
   const scene = ownArtwork ? sceneSource(detail.name, detail.design_content_hash) : artwork;
   const tones: Record<string, Tone> = profile?.colors ?? {};
+
+  // Every colour's stage picture, fetched into the browser cache in list
+  // order while the seller looks at the first: each is a full-size render
+  // the first time, and judging which colours suit a design means clicking
+  // through most of them.
+  usePreloadedPictures(
+    template === null ? [] : colourNames.map((colour) => templatePicture(template, colour, scene)),
+  );
 
   // One request per colour, fired once the preview template and colour list
   // are known -- not per row-render, so scrolling or re-toggling a switch

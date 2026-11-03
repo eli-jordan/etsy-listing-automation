@@ -358,6 +358,14 @@ on disk — which is exactly the difference that makes it a preview.
 composites it from decoded images the server supplies out of its memo;
 encoding the frame as WebP or PNG is the server's.
 
+Listings may hold their own absolute position for a template (ADR-0058), so a
+recalibrated box never moves them; the next `plan` re-checks each against the
+limits. The calibrator therefore names those listings above its workbench, and
+reads the list again after each save: `positioned_listings()` in
+`application.mockup_templates`, served at
+`GET /api/templates/{name}/positioned-listings`. It reads raw listing documents
+and writes none.
+
 ### Renderer configuration and calibration recovery
 
 Templates require `renderer.type` and put active settings in `renderer.config`.

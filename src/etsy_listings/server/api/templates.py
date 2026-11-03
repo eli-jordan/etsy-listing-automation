@@ -42,6 +42,7 @@ from etsy_listings.core.application.mockup_templates import (
     PreviewScene,
     TemplateOverview,
     compose_preview,
+    positioned_listings,
     read_config,
     require_template,
     save_calibration,
@@ -83,6 +84,7 @@ from etsy_listings.server.api.schemas import (
     ColourReportRow,
     MapReadinessResponse,
     MultiplePreviewRequest,
+    PositionedListingResponse,
     PreviewRequest,
     SwatchResponse,
     TemplatePhoto,
@@ -495,6 +497,18 @@ def design_preview(
     return render_preview_response(
         scene, scale, workspace=workspace, if_none_match=request.headers.get("if-none-match")
     )
+
+
+@router.get("/{name}/positioned-listings", response_model=list[PositionedListingResponse])
+def get_positioned_listings(
+    template: Annotated[Target, Depends(target)],
+) -> list[PositionedListingResponse]:
+    """The listings holding positions for this template, which the calibrator
+    names around a save (spec, *Recalibration*). Read only."""
+    return [
+        PositionedListingResponse(listing=held.listing, placements=list(held.placements))
+        for held in positioned_listings(template.workspace, template.name)
+    ]
 
 
 @router.get("/{name}/swatch", response_model=SwatchResponse)
