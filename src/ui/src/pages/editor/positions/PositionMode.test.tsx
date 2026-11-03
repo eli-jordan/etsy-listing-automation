@@ -176,11 +176,28 @@ describe("the Adjust position switch", () => {
     expect(screen.queryByRole("button", { name: /position — drag to move/ })).toBeNull();
   });
 
-  it("is absent for a file ref and for a Marigold template", async () => {
+  it("is offered for a Marigold template too", async () => {
     mount();
     await selectTile("glossy");
-    await screen.findByText("glossy", { selector: ".preview-meta__title" });
-    expect(screen.queryByRole("switch", { name: "Adjust position" })).toBeNull();
+    expect(await adjustSwitch()).toHaveAttribute("aria-checked", "false");
+  });
+
+  it("is absent for a file ref", async () => {
+    vi.spyOn(listingsApi, "listCommonMedia").mockResolvedValue([
+      {
+        name: "size-chart.png",
+        file: "common-media/size-chart.png",
+        ref: "common-media/size-chart.png",
+        kind: "image",
+      },
+    ]);
+    mount();
+    await selectTile("folded · black");
+    await adjustSwitch();
+    await selectTile("size-chart");
+    await waitFor(() =>
+      expect(screen.queryByRole("switch", { name: "Adjust position" })).toBeNull(),
+    );
   });
 
   it("turns off when another reel tile is selected", async () => {
