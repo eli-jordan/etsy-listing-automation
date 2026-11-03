@@ -161,14 +161,14 @@ The checks are [poethepoet](https://poethepoet.natn.io/) tasks defined once in
 uv run poe format              # ruff format .
 uv run poe fix                 # ruff check --fix (never fails; `poe ruff` reports)
 uv run poe lint                # report only: format check, ruff, mypy, import contracts
-uv run poe test                # pytest with the branch-coverage gate
+uv run poe test                # pytest on every core (pytest-xdist) with the branch-coverage gate
 uv run poe frontend            # prettier, eslint, tsc, vitest + coverage, prototypes
 ```
 
 CI ([ci.yml](.github/workflows/ci.yml)) runs the same tasks on pull requests:
 `poe lint` once in its `quality` job, and the tests on Ubuntu and Windows.
 The Python coverage job explicitly excludes browser and e2e tests. A separate browser job runs on pull requests, pushes to `main`
-and manual runs after the other gates pass. The [e2e workflow](.github/workflows/e2e.yml)
+and manual runs, in parallel with the other gates. The [e2e workflow](.github/workflows/e2e.yml)
 uses real services and runs only on `main` or manually.
 
 ### Tests

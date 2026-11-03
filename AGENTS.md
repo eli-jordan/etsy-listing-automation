@@ -52,9 +52,9 @@ Run all of these in cygwin zsh from the repo root (see Environment).
 
 ```
 uv sync # install deps + create .venv
-uv run poe check # fix + format, then lint + typecheck + import contracts + test + coverage gate, Python and frontend
+uv run poe check # fix + format, then lint + typecheck + import contracts + test (parallel, xdist) + coverage gate, Python and frontend
 uv run poe lint # report-only lint (CI's quality job); `uv run poe` lists every task
-uv run pytest # full suite (excludes -m e2e by default)
+uv run pytest -n auto # full suite on every core (pytest-xdist; excludes -m e2e by default)
 uv run pytest tests/core/unit/test_money.py # one file
 uv run pytest tests/core/unit/test_money.py::test_parses_amount_and_currency # one test
 uv run pytest -k "currency" # by keyword
@@ -181,7 +181,7 @@ Before merging, run it on GitHub Actions, not locally: once CI is green, `gh wor
 
 <important if="you are changing CI workflows or the poe tasks in pyproject.toml">
 
-[ci.yml](.github/workflows/ci.yml): PRs, pushes to `main` and manual runs run `poe lint` (format-check, ruff, mypy, `lint-imports`, complexipy, Vulture, jscpd) once in the `quality` job, `poe test-ci` (`pytest -m "not browser and not e2e"` under the coverage floor) on ubuntu and windows, plus the frontend gate. A separate `pytest -m browser` job runs after those gates on all three triggers; the opt-in `capture` screenshots are deselected unless `-m` names them (`tests/conftest.py`), so neither CI nor `poe check` runs them. These jobs use no real shop APIs. [e2e.yml](.github/workflows/e2e.yml): `pytest -m e2e`, on push to `main` or manually. Windows is in the matrix because goldens were generated there; ubuntu proves the OpenCV/Pillow pins produce the same bytes. CI calls the poe tasks defined in `pyproject.toml` rather than listing commands, so a check is changed in one place; the frontend job, which has no Python, runs the npm scripts `poe frontend` runs (`tests/test_ci_selection.py` compares them).
+[ci.yml](.github/workflows/ci.yml): PRs, pushes to `main` and manual runs run `poe lint` (format-check, ruff, mypy, `lint-imports`, complexipy, Vulture, jscpd) once in the `quality` job, `poe test-ci` (`pytest -m "not browser and not e2e"` under the coverage floor) on ubuntu and windows, plus the frontend gate. A separate `pytest -m browser` job runs alongside them on all three triggers, and the jobs that need the built SPA restore `src/ui/dist` from a cache keyed on `src/ui`'s files; the opt-in `capture` screenshots are deselected unless `-m` names them (`tests/conftest.py`), so neither CI nor `poe check` runs them. These jobs use no real shop APIs. [e2e.yml](.github/workflows/e2e.yml): `pytest -m e2e`, on push to `main` or manually. Windows is in the matrix because goldens were generated there; ubuntu proves the OpenCV/Pillow pins produce the same bytes. CI calls the poe tasks defined in `pyproject.toml` rather than listing commands, so a check is changed in one place; the frontend job, which has no Python, runs the npm scripts `poe frontend` runs (`tests/test_ci_selection.py` compares them). The poe test tasks run under pytest-xdist (`-n auto --dist worksteal`), so a test must not share mutable state with another file's: use `tmp_path` and a free port, as the shared fixtures do. A one-file `uv run pytest` stays serial.
 </important>
 
 <important if="you are measuring or reducing code size">
