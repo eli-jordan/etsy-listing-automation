@@ -90,11 +90,26 @@ jobs:
           path: src/ui/dist
           key: spa-${{ runner.os }}-${{ hashFiles('src/ui/**') }}
 
+      # Restored after the SPA, whose key must hash src/ui without it. The
+      # suite needs these even when the SPA is cached: tests/test_agent_lint.py
+      # runs the real Prettier and ESLint. Keyed on everything `npm ci` reads.
+      - name: restore the frontend's node_modules
+        id: node-modules
+        uses: actions/cache@v6
+        with:
+          path: src/ui/node_modules
+          key: node-modules-${{ runner.os }}-node24-${{ hashFiles('src/ui/package-lock.json') }}
+
+      - name: install frontend tools (locked)
+        if: steps.node-modules.outputs.cache-hit != 'true'
+        working-directory: src/ui
+        run: npm ci
+
       # Editable sync reuses these assets; release wheels always rebuild.
       - name: build the calibrator frontend
         if: steps.spa.outputs.cache-hit != 'true'
         working-directory: src/ui
-        run: npm ci && npm run build
+        run: npm run build
 
       # Pinned exactly: setup-uv publishes no moving major tag past v7.
       - uses: astral-sh/setup-uv@v10.0.1

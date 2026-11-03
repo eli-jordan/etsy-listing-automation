@@ -576,8 +576,12 @@ def test_cleanup_preserves_last_complete_predictions_failed_retry_and_active_ren
 
 
 def test_edits_during_model_work_stop_remaining_calls_without_new_inference_authorization(
-    workspace_root,
+    workspace_root, monkeypatch
 ):
+    import threading
+
+    from etsy_listings.core.application.preparation.models import TERMINAL
+
     from tests.support.marigold import PreparationRuntime, PreparationWorker
 
     workspace = template(workspace_root)
@@ -592,11 +596,24 @@ def test_edits_during_model_work_stop_remaining_calls_without_new_inference_auth
             config_revision=CalibrationStore(workspace).read("shirt").revision, request_id="first"
         ),
     )
+    # The lane retires a superseded job's evidence in `cleanup` right after
+    # recording the phase, so hold that until the stopped job has been read;
+    # otherwise the read races the cleanup and sometimes sees none.
+    observed = threading.Event()
+    cleanup = coordinator.cleanup
+
+    def cleanup_once_observed(template_name):
+        if coordinator.status(job.id).phase in TERMINAL:
+            assert observed.wait(30)
+        return cleanup(template_name)
+
+    monkeypatch.setattr(coordinator, "cleanup", cleanup_once_observed)
     coordinator.start()
     assert worker.entered.wait(5)
     move_box(workspace, 1)
     worker.release.set()
     result = wait_terminal(coordinator, job.id)
+    observed.set()
     coordinator.close()
     assert result.phase == "superseded"
     assert [call[0] for call in worker.calls] == ["normals"]
