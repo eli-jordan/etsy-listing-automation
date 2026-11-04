@@ -1,0 +1,6 @@
+interface:
+  display_name: "Recolour mockup template"
+  short_description: "Generate the Comfort Colors 1717 colour set for a blank mockup photo"
+  default_prompt: "Use $create-mockup-template-cc1717 to generate the colour versions of this mockup photo."
+policy:
+  allow_implicit_invocation: false
