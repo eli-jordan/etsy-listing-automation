@@ -1,7 +1,7 @@
 """Comfort Colors 1717 recolour runs for a mockup template photo.
 
 prepare: check the source is 2048x2048, start a run directory and write one
-Codex brief per colour.
+brief per colour.
 assemble: turn the generated photos in out/ into an ingest-ready export
 (`{scene} - {Colour}.png` + `{scene} - {Colour} - Text.png`) and review sheets.
 
@@ -15,7 +15,6 @@ import argparse
 import json
 import re
 import shutil
-import subprocess
 import sys
 from dataclasses import dataclass
 from itertools import combinations
@@ -27,13 +26,8 @@ from PIL import Image, ImageDraw, ImageFont
 
 SKILL_DIR = Path(__file__).resolve().parent
 OVERLAY_DIR = SKILL_DIR / "overlays"
-BRIEF_TEMPLATE = SKILL_DIR / "codex-brief.md"
+BRIEF_TEMPLATE = SKILL_DIR / "recolour-brief.md"
 SIZE = 2048
-# The installed Upscayl app's engine and models. Standard was chosen over LANCZOS
-# and High Fidelity in the umbrella review (2026-11-04).
-UPSCAYL_DIR = Path(r"C:\Program Files\Upscayl\resources")
-UPSCAYL_MODEL = "upscayl-standard-4x"
-UPSCAYL_TRIES = 3  # Upscayl exits 0 with an all-black image when the GPU runs out of memory
 ANALYSIS_SIZE = 512
 CHANGE_THRESHOLD = 40  # max per-channel difference (0-255) that counts as changed
 # At ANALYSIS_SIZE: a 4px edge band is 16px at 2048; specks under 3px are noise.
@@ -209,15 +203,8 @@ def brief_path(run_dir: Path, colour: str) -> Path:
 
 
 def write_brief(run_dir: Path, colour: str, template: str) -> Path:
-    slug = slugify(colour)
-    brief = template.format(
-        colour=colour,
-        hex=COLOURS[colour],
-        source=run_dir / "source.png",
-        output=run_dir / "out" / f"{slug}.png",
-    )
-    path = run_dir / "briefs" / f"{slug}.md"
-    path.write_text(brief, encoding="utf-8")
+    path = brief_path(run_dir, colour)
+    path.write_text(template.format(colour=colour, hex=COLOURS[colour]), encoding="utf-8")
     return path
 
 
@@ -250,7 +237,7 @@ def prepare(args: argparse.Namespace) -> None:
     (run_dir / "run.json").write_text(json.dumps(meta, indent=2), encoding="utf-8")
     say(f"Run directory: {run_dir}")
     say("Pilot briefs:\n" + "\n".join(str(brief_path(run_dir, c)) for c in pilots))
-    say(f"{len(briefs) - len(pilots)} other briefs, launched after the pilot is approved.")
+    say(f"{len(briefs) - len(pilots)} other briefs, generated after the pilot is approved.")
 
 
 # --- assemble ------------------------------------------------------------
@@ -285,6 +272,18 @@ def check_square(path: Path) -> str | None:
     return None
 
 
+def size_problem(path: Path) -> str | None:
+    with Image.open(path) as image:
+        width, height = image.size
+    if (width, height) != (SIZE, SIZE):
+        return f"{path.name} is {width}x{height}, not {SIZE}x{SIZE}; regenerate it"
+    return None
+
+
+def photo_path(run_dir: Path, colour: str) -> Path:
+    return run_dir / "out" / f"{slugify(colour)}.png"
+
+
 def load_results(run_dir: Path, source: np.ndarray) -> tuple[list[Result], list[str]]:
     results: list[Result] = []
     problems: list[str] = []
@@ -293,7 +292,7 @@ def load_results(run_dir: Path, source: np.ndarray) -> tuple[list[Result], list[
         if not path.is_file():
             problems.append(f"{colour}: missing {path.name}")
             continue
-        problem = check_square(path)
+        problem = size_problem(path)
         if problem:
             problems.append(f"{colour}: {problem}")
             continue
@@ -339,43 +338,6 @@ def score(results: list[Result], reference: np.ndarray | None) -> None:
             result.measured = rgb_to_hex(np.median(result.pixels[garment], axis=0))
 
 
-def upscayl_binary() -> Path:
-    binary = UPSCAYL_DIR / "bin" / "upscayl-bin.exe"
-    if not binary.is_file():
-        raise SystemExit(f"Upscayl not found at {binary}; install Upscayl or pass --no-upscale.")
-    return binary
-
-
-def upscaled(run_dir: Path, path: Path) -> Path:
-    """The generator's photo, 4x upscaled with Upscayl Standard, cached beside out/.
-
-    A cached upscale older than its source photo (a redone colour) is rebuilt.
-    """
-    cache = run_dir / "upscaled" / path.name
-    if cache.is_file() and cache.stat().st_mtime >= path.stat().st_mtime:
-        return cache
-    cache.parent.mkdir(exist_ok=True)
-    command = [
-        str(upscayl_binary()),
-        *("-i", str(path), "-o", str(cache), "-s", "4", "-f", "png"),
-        *("-n", UPSCAYL_MODEL, "-m", str(UPSCAYL_DIR / "models")),
-    ]
-    for _ in range(UPSCAYL_TRIES):
-        subprocess.run(command, check=True, capture_output=True)
-        with Image.open(cache) as image:
-            if image.getbbox():
-                return cache
-    raise SystemExit(f"Upscayl returned a blank image for {path.name}; the GPU may be busy.")
-
-
-def full_size(run_dir: Path, path: Path, *, upscale: bool) -> Image.Image:
-    with Image.open(path) as image:
-        native = image.size == (SIZE, SIZE)
-    source = upscaled(run_dir, path) if upscale and not native else path
-    with Image.open(source) as image:
-        return image.convert("RGB").resize((SIZE, SIZE), Image.Resampling.LANCZOS)
-
-
 def shirt_alpha(reference: np.ndarray) -> np.ndarray:
     """The approved outline at full size, grown and feathered so the new shirt's
     edge blends into the source instead of cutting against it."""
@@ -392,7 +354,7 @@ def composite_shirt(source: np.ndarray, recolour: Image.Image, alpha: np.ndarray
     return Image.fromarray(np.clip(blended, 0, 255).astype(np.uint8))
 
 
-def export(run_dir: Path, scene: str, results: list[Result], *, upscale: bool) -> Path:
+def export(run_dir: Path, scene: str, results: list[Result]) -> Path:
     export_dir = run_dir / "export"
     if export_dir.exists():
         shutil.rmtree(export_dir)
@@ -401,9 +363,10 @@ def export(run_dir: Path, scene: str, results: list[Result], *, upscale: bool) -
     reference = load_reference(run_dir, SIZE)
     alpha = None if reference is None else shirt_alpha(reference)
     with Image.open(run_dir / "source.png") as image:
-        source = np.asarray(image.convert("RGB").resize((SIZE, SIZE)), np.float32)
+        source = np.asarray(image.convert("RGB"), np.float32)
     for result in results:
-        full = full_size(run_dir, result.path, upscale=upscale)
+        with Image.open(result.path) as image:
+            full = image.convert("RGB")
         if alpha is not None:
             full = composite_shirt(source, full, alpha)
         full.save(export_dir / f"{scene} - {result.colour}.png")
@@ -615,17 +578,26 @@ def ring_outside(patch: np.ndarray) -> np.ndarray:
     return grown.astype(bool) & ~patch
 
 
+def grain_level(pixels: np.ndarray) -> np.ndarray:
+    return cv2.GaussianBlur(np.abs(grain(pixels)).mean(axis=2), (0, 0), 6)
+
+
 def match_grain(cleaned: np.ndarray, original: np.ndarray, patches: list[np.ndarray]) -> np.ndarray:
-    """Top up each smooth generated patch with fine grain to the level of the
-    original around it; a smooth patch on grainy fabric reads as a shadow."""
+    """Bring each generated patch's fine grain, place by place, to the level of the
+    original around it. Excess grain traces the removed item; a smooth area reads as a
+    shadow on grainy fabric. Pixels outside the patch are left alone."""
     rng = np.random.default_rng(2026)
     result = cleaned.astype(np.float32)
     for patch in patches:
-        want = grain(original)[ring_outside(patch)].std()
-        have = grain(result)[patch].std()
+        target = float(np.median(grain_level(original)[ring_outside(patch)]))
+        soft = cv2.GaussianBlur(patch.astype(np.float32), (0, 0), 8)
+        inside = np.clip(2 * soft - 1, 0, 1) * patch
+        keep = np.minimum(target / np.maximum(grain_level(result), 1e-6), 1)
+        result -= grain(result) * ((1 - keep) * inside)[..., None]
         noise = cv2.GaussianBlur(rng.standard_normal((SIZE, SIZE)).astype(np.float32), (0, 0), 0.7)
-        noise *= np.sqrt(max(want**2 - have**2, 0)) / max(float(grain(noise).std()), 1e-6)
-        result += (noise * cv2.GaussianBlur(patch.astype(np.float32), (0, 0), 8))[..., None]
+        noise /= max(float(np.abs(grain(noise)).mean()), 1e-6)
+        missing = np.sqrt(np.maximum(target**2 - grain_level(result) ** 2, 0))
+        result += (noise * missing * inside)[..., None]
     return np.clip(result, 0, 255).astype(np.uint8)
 
 
@@ -715,8 +687,7 @@ def clean(args: argparse.Namespace) -> None:
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     original = load_square(Path(args.original))
-    generated_path = Path(args.generated)
-    generated = load_square(upscaled(out_dir, generated_path) if args.upscale else generated_path)
+    generated = load_square(Path(args.generated))
     patches = edited_patches(original, generated)
     if not patches:
         raise SystemExit("The generated image changed nothing large enough to be the edit.")
@@ -1139,7 +1110,7 @@ def tile_sheets(run_dir: Path, pilots: list[str], garment: np.ndarray) -> list[P
     full = []
     for path in paths:
         with Image.open(path) as image:
-            full.append(image.convert("RGB").resize((SIZE, SIZE), Image.Resampling.LANCZOS))
+            full.append(image.convert("RGB"))
     font = ImageFont.load_default(size=22)
     sheets = []
     for box in tile_boxes(garment):
@@ -1295,12 +1266,19 @@ def carry_notes(run_dir: Path, pilots: list[str]) -> None:
     say("\n".join(str(brief_path(run_dir, c)) for c in others))
 
 
+def check_pilot_photos(run_dir: Path, pilots: list[str]) -> None:
+    missing = [c for c in pilots if not photo_path(run_dir, c).is_file()]
+    if missing:
+        raise SystemExit(f"Pilot photos missing: {', '.join(missing)}")
+    wrong = [problem for c in pilots if (problem := size_problem(photo_path(run_dir, c)))]
+    if wrong:
+        raise SystemExit("\n".join(wrong))
+
+
 def pilot(args: argparse.Namespace) -> None:
     run_dir = Path(args.run_dir)
     pilots = run_meta(run_dir)["pilots"]
-    missing = [c for c in pilots if not (run_dir / "out" / f"{slugify(c)}.png").is_file()]
-    if missing:
-        raise SystemExit(f"Pilot photos missing: {', '.join(missing)}")
+    check_pilot_photos(run_dir, pilots)
     if args.reference and not args.approve:
         raise SystemExit("--reference only works with --approve.")
     if args.approve:
@@ -1483,7 +1461,7 @@ def assemble(args: argparse.Namespace) -> None:
     run_dir = Path(args.run_dir)
     scene = json.loads((run_dir / "run.json").read_text(encoding="utf-8"))["scene"]
     results, problems = measure(run_dir)
-    export_dir = export(run_dir, scene, results, upscale=args.upscale)
+    export_dir = export(run_dir, scene, results)
     sheets = review_sheets(run_dir, results, export_dir, scene)
     say(f"Export: {export_dir} ({len(results)} of {len(COLOURS)} colours)")
     say("Review sheets:\n" + "\n".join(str(p) for p in sheets))
@@ -1495,7 +1473,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     commands = parser.add_subparsers(dest="command", required=True)
 
-    prep = commands.add_parser("prepare", help="check the source and write the Codex briefs")
+    prep = commands.add_parser("prepare", help="check the source and write the briefs")
     prep.add_argument("source", help="the 2048x2048 source photo")
     prep.add_argument("--scene", required=True, help="scene name used in export filenames")
     prep.add_argument("--run-dir", required=True, help="new directory for this run")
@@ -1506,15 +1484,9 @@ def main() -> None:
 
     asm = commands.add_parser("assemble", help="build the export and review sheets from out/")
     asm.add_argument("run_dir")
-    asm.add_argument(
-        "--no-upscale",
-        dest="upscale",
-        action="store_false",
-        help="resize with LANCZOS only, skipping the Upscayl Standard 4x upscale",
-    )
     asm.set_defaults(func=assemble)
 
-    dft = commands.add_parser("drift", help="measure drift only: no upscale, export or sheets")
+    dft = commands.add_parser("drift", help="measure drift only: no export or sheets")
     dft.add_argument("run_dir")
     dft.set_defaults(func=drift)
 
@@ -1524,12 +1496,6 @@ def main() -> None:
     cln.add_argument("original", help="the photo as given, square")
     cln.add_argument("generated", help="the generator's edit of it, square")
     cln.add_argument("--out-dir", required=True, help="where cleaned.png and its review go")
-    cln.add_argument(
-        "--no-upscale",
-        dest="upscale",
-        action="store_false",
-        help="skip the Upscayl Standard 4x upscale of the generated image",
-    )
     cln.set_defaults(func=clean)
 
     plt = commands.add_parser(
