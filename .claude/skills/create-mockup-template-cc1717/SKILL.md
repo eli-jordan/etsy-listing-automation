@@ -1,6 +1,6 @@
 ---
 name: create-mockup-template-cc1717
-description: Generate the 33 Comfort Colors 1717 colour versions of one or more mockup photos with Codex delegates, cleaning off any design or labels first, then hand each export to ingest-mockup-templates.
+description: Generate the 33 Comfort Colors 1717 colour versions of one or more mockup photos with Nano Banana 2.1 2K, cleaning off any design or labels first, then hand each export to ingest-mockup-templates.
 disable-model-invocation: true
 ---
 
@@ -8,15 +8,20 @@ disable-model-invocation: true
 
 Turns one or many source mockup photos into the full Comfort Colors 1717 colour set, one recolour per garment colour. Each result is an export in the shape [ingest-mockup-templates](../ingest-mockup-templates/SKILL.md) reads.
 
-In the commands below, `recolour.py` means `uv run python .claude/skills/create-mockup-template-cc1717/recolour.py`, run from the repo root.
+In the commands below, `recolour.py` and `kie.py` mean `uv run python .claude/skills/create-mockup-template-cc1717/<script>`, run from the repo root.
 
-Every image generation is one T3 delegate per brief, on Codex `gpt-6.1-sol` at high effort.
+# Generating
+
+Every image is Nano Banana 2.1 at 2K. Its brief, minus `##` headings, is the whole prompt, so write anything you append as instructions to the generator, without scores.
+
+- **Kie.ai**, the default: `kie.py`, below. Regenerating means naming the slugs: with none, `kie.py colours` only fills in missing photos. A replaced photo stays in `out\` as `<slug>-roundN.keep`.
+- **Kittl**: when `kie.py` reports Kie.ai is out of credits, ask the user whether to switch. If so, check `kittl-get-token-balance` covers the images, at about 20 tokens each. Upload each input through `kittl-upload-image`'s presigned URL, then call `kittl-generate-media` with the 2K Nano Banana 2.1 model, `1:1`, and the upload as `referenceImages`, at most 10 at once. Download each result to the path `kie.py` would use, keeping any replaced photo the same way.
 
 # One or many source images
 
 Given one image, you are the coordinator.
 
-Given more than one, launch one coordinator delegate per image, at most 2 at once. Give each this file's path, and tell it to launch its own delegates, since a delegate starts none unless told to. Report a status table of all the images as coordinators report back. Coordinators hand back whatever needs the user: crops to approve, failed reviews and finished sheets.
+Given more than one, launch one coordinator delegate per image, at most 2 at once. Give each this file's path. Report a status table of all the images as coordinators report back. Coordinators hand back whatever needs the user: crops to approve, failed reviews, finished sheets and Kie.ai running out of credits. Ask about credits once, and pass the answer to every coordinator.
 
 # Process for one source image
 
@@ -32,21 +37,25 @@ Note the shirt's current colour for section 2.
 
 ### Cleaning a source
 
-Work in `C:\Users\Admin\Downloads\mockup-recolours\cleanup-<scene-slug>-<YYYY-MM-DD>\`, with the photo copied in as `original.<ext>`.
+Work in `CLEANUP_DIR`, `C:\Users\Admin\Downloads\mockup-recolours\cleanup-<scene-slug>-<YYYY-MM-DD>\`, with the photo copied in as `original.<ext>`.
 
-1. Write `brief.md` from [cleanup-brief.md](cleanup-brief.md). `{original}` is the full path of `original.<ext>`, `{output}` is the full path of `out\generated.png`, and `{removals}` is a bulleted list of each item and where it is ("the "IVORY" label in the top-left corner, white box included"; "the printed design on the shirt's chest, four candy apples with bows"). Launch a delegate on it.
+1. Write `brief.md` from [cleanup-brief.md](cleanup-brief.md). `{removals}` is a bulleted list of each item and where it is ("the "IVORY" label in the top-left corner, white box included"; "the printed design on the shirt's chest, four candy apples with bows"). Generate from it:
+
+   ```sh
+   kie.py edit CLEANUP_DIR/original.<ext> CLEANUP_DIR/brief.md CLEANUP_DIR/out/generated.png
+   ```
 
 2. Composite and check it:
 
    ```sh
-   recolour.py clean ORIGINAL GENERATED --out-dir CLEANUP_DIR
+   recolour.py clean CLEANUP_DIR/original.<ext> CLEANUP_DIR/out/generated.png --out-dir CLEANUP_DIR
    ```
 
-   It upscales the generated photo and blends only the removed items onto the original as patches, matching their tone and grain. Anything the generator merely redrew keeps the original's pixels. It writes `cleaned.png` and, per patch, `clean-patch-N.jpg`: original, cleaned, and cleaned at contrast x4. It exits non-zero and prints the reason when a patch fails a check.
+   It blends only the removed items onto the original as patches. It writes `cleaned.png` and, per patch, `clean-patch-N.jpg`: original, cleaned, and cleaned at contrast x4. It exits non-zero and prints the reason when a patch fails a check.
 
 3. Open every `clean-patch-N.jpg` and look for any trace of the removed items: a tint, an outline, a fleck, a shape in the x4 view. Then check `cleaned.png` whole: blank, with nothing else disturbed.
 
-4. On any failure, append a `## Review` section to `brief.md` naming what remains and where, relaunch the delegate, and repeat from step 2. After three failed rounds, stop and show the user the patch reviews.
+4. On any failure, append a `## Review` section to `brief.md` saying what to remove and where, regenerate, and repeat from step 2. After three failed rounds, stop and show the user the patch reviews.
 
 The passing `cleaned.png` is the source for the rest of the run.
 
@@ -60,17 +69,18 @@ recolour.py prepare SOURCE \
   [--source-colour White]
 ```
 
-It copies the source to `source.png`, writes one brief per colour to generate, `briefs\<colour-slug>.md`, each naming its output `out\<colour-slug>.png`, and prints two **pilot** briefs: White and Black.
+It copies the source to `source.png`, writes one brief per colour to generate, `briefs\<colour-slug>.md`, for the photo `out\<colour-slug>.png`, and prints two **pilot** briefs: White and Black.
 
 Pass `--source-colour` when the source shirt is already a palette colour. That colour gets no brief, and the source is copied to its `out\` file. If it's White, Ivory replaces White as a pilot. If it's Black, Pepper replaces Black.
 
 ## 3. Pilot
 
-A generator mistake repeats in every colour, so catch it in two photos first. You review the pilots yourself; the user is not asked.
+You review the pilots yourself; the user is not asked.
 
-Launch the two pilot briefs. When both are back, build the review:
+Generate the pilots and build the review:
 
 ```sh
+kie.py colours RUN_DIR PILOT_SLUG PILOT_SLUG
 recolour.py pilot RUN_DIR
 ```
 
@@ -90,7 +100,7 @@ Open every tile. The pilots pass only when each tile shows them matching the sou
 - **Everything else**: face, hair, hands, jewellery, other clothing, background and framing are unchanged, not just similar.
 - **The shirt**: blank, evenly the pilot colour, its folds and lighting following the source.
 
-On any discrepancy, append a `## Pilot review` section to the brief of each pilot that shows it, describing what is wrong and what the source shows there, in terms of this photo. Relaunch those pilots and repeat from the `pilot` command. After three failed rounds, stop and report the remaining discrepancies to the user with the tiles that show them.
+On any discrepancy, append a `## Pilot review` section to the brief of each pilot that shows it, saying what the source shows there, in terms of this photo. Regenerate those pilots and repeat from the `pilot` command. After three failed rounds, stop and report the remaining discrepancies to the user with the tiles that show them.
 
 ### Check the outline
 
@@ -115,11 +125,15 @@ recolour.py pilot RUN_DIR --approve
 
 With a corrected mask, add `--reference MASK.png`, then open `review\pilot\outline-manual.jpg` and check it the same way. A later plain `--approve` refuses to overwrite that mask, and a new `--reference` replaces it.
 
-Approving saves the outline as `garment-reference.png`, which `assemble` composites with and drift is measured against. It also copies every `## Pilot review` section into the other briefs.
+Approving saves the outline as `garment-reference.png`, which `assemble` composites with and drift is measured against. It also copies every `## Pilot review` section into the other briefs, so word them for any colour.
 
 ## 5. Generate the rest
 
-Launch every non-pilot brief, at most 10 at once, and keep a status table of the colours. The step is done when every delegate has reported back.
+```sh
+kie.py colours RUN_DIR
+```
+
+It lists any failures. Run it again for those.
 
 ## 6. Assemble and review
 
@@ -127,14 +141,14 @@ Launch every non-pilot brief, at most 10 at once, and keep a status table of the
 recolour.py assemble RUN_DIR
 ```
 
-It upscales each `out\` photo and composites the inside of the approved outline over the source, so everything outside the shirt keeps the source's pixels. It writes the composites to `export\` and tiles them into `review\sheet-NN.jpg`. Each cell shows the target swatch, a **measured** swatch (the median colour of the shirt area) and these figures, which are the verdict:
+It composites each `out\` photo, inside the approved outline, over the source, so everything outside the shirt keeps the source's pixels. It writes the composites to `export\` and tiles them into `review\sheet-NN.jpg`. Each cell shows the target swatch, a **measured** swatch (the median colour of the shirt area) and these figures, which are the verdict:
 
-- **Drift**: the percentage of the frame the raw recolour changed outside the shirt, ignoring a 16px band around it and isolated specks. The limit is 1%. Compositing hides these changes on the sheet, but past the limit the generator moved the scene, and the shirt may have moved with it, so the template's calibration won't fit that colour. A failure writes `review\drift-<colour>.png`, with the drift in magenta.
+- **Drift**: the percentage of the frame the raw recolour changed outside the shirt, ignoring a 16px band around it and isolated specks. The limit is 1%. A failure writes `review\drift-<colour>.png`, with the drift in magenta.
 - **Lighting** and **folds**: how well the shirt's shading follows the source or an approved pilot, whichever is nearest in brightness. The minimums are 0.5 lighting and 0.3 folds. A failure writes `review\shading-<colour>.png`, with the mismatch in cyan.
 
-It exits non-zero listing any colour that fails either check, or whose photo is missing or not square.
+It exits non-zero listing any colour that fails either check, or whose photo is missing or not 2048x2048.
 
-Retry each listed colour before review. A missing or non-square photo needs only a relaunch. For the others, open the map and append a `## Retry` section to the brief, naming the measured figure and what the map shows (a sleeve outline grew, hair shifted, the folds or the light on the shirt changed), and asking that everything but the shirt's colour stay identical to the source. Relaunch its delegate, then re-measure every colour without the upscale or export:
+Retry each listed colour before review. A missing or wrong-size photo needs only regenerating. For the others, open the map and append a `## Retry` section to the brief, saying what must match the source (the sleeve outline, the hair, the folds or the light on the shirt) and that everything but the shirt's colour stays identical to it. Regenerate it, then re-measure every colour without the export:
 
 ```sh
 recolour.py drift RUN_DIR
@@ -144,7 +158,7 @@ After three retries of one colour, stop retrying it and flag it, with its map, i
 
 Open every sheet yourself, then show them to the user with the colours worth a closer look: drift well above the rest, a measured swatch far from its target, patches of the old colour, or a print that appeared on the shirt. Measured swatches follow the photo's lighting, so compare them across colours, not to the hex alone. Then ask the user to pick one:
 
-- **redo** named colours, with what is wrong: append a `## Reviewer notes` section with their words to each of those briefs, relaunch only those delegates, and re-run `assemble` and this review.
+- **redo** named colours, with what is wrong: append a `## Reviewer notes` section with their words to each of those briefs, regenerate only those, and re-run `assemble` and this review.
 - **ingest** the set now.
 - **stop**, leaving the run directory for later.
 
@@ -152,4 +166,4 @@ Open every sheet yourself, then show them to the user with the colours worth a c
 
 On the user's go-ahead, follow [ingest-mockup-templates](../ingest-mockup-templates/SKILL.md) with `RUN_DIR\export` as the source. Finish with its report, plus the run directory and any colours the user accepted with known flaws.
 
-If the user provided multiple source images, then only propose the ingest when they are all complete. 
+If the user provided multiple source images, then only propose the ingest when they are all complete.

@@ -217,7 +217,7 @@ def test_an_existing_512px_reference_drives_drift_and_assemble(
     monkeypatch.setattr(recolour, "OVERLAY_DIR", overlays)
 
     recolour.drift(argparse.Namespace(run_dir=str(run_dir)))
-    recolour.assemble(argparse.Namespace(run_dir=str(run_dir), upscale=False))
+    recolour.assemble(argparse.Namespace(run_dir=str(run_dir)))
 
     report = json.loads((run_dir / "review" / "report.json").read_text(encoding="utf-8"))
     assert [row["drift_pct"] for row in report] == [0.0, 0.0]
@@ -227,6 +227,12 @@ def test_an_existing_512px_reference_drives_drift_and_assemble(
     assert exported[100, 100, 1] > 90  # outside the shirt: the source's background
     assert (run_dir / recolour.REFERENCE_MASK).read_bytes() == before
     assert (run_dir / "run.json").read_text(encoding="utf-8") == meta_before
+
+
+def test_pilot_refuses_a_photo_that_is_not_full_size(recolour: ModuleType, run_dir: Path) -> None:
+    Image.new("RGB", (1024, 1024)).save(run_dir / "out" / "white.png")
+    with pytest.raises(SystemExit, match=r"white\.png is 1024x1024"):
+        recolour.pilot(argparse.Namespace(run_dir=str(run_dir), approve=False, reference=None))
 
 
 def test_approve_with_a_reference_installs_it_and_records_it(

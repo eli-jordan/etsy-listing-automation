@@ -1,0 +1,1 @@
+Edit this photo. Recolour only the t-shirt to the Comfort Colors 1717 colour {colour}, hex {hex}. Keep everything else in the image exactly the same. Keep the shirt's outline exactly as in the source. Same framing as the source.
