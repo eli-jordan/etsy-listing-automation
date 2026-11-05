@@ -539,7 +539,7 @@ def small_removals(
         area
         for area, _ in edited_areas(change, CLEAN_FINE_BLUR)
         if not (area & covered).any() and removed(before, after, area)
-    ] + faint_removals(original, generated, covered)
+    ]
 
 
 def edited_patches(original: np.ndarray, generated: np.ndarray) -> list[np.ndarray]:
@@ -549,7 +549,10 @@ def edited_patches(original: np.ndarray, generated: np.ndarray) -> list[np.ndarr
     only when it is a removal; the rest is regeneration noise, such as a
     redrawn pendant. A removal joins a patch within CLEAN_REACH of it, as the
     scattered snowflakes and dots of a print do; one far from every patch is a
-    speck of hair or blanket the generator smoothed. A small edit that is not a
+    speck of hair or blanket the generator smoothed. A faint removal joins last
+    and in one pass, so it never extends a patch's reach: the colour pass finds
+    far more specks, and they would otherwise chain a patch across the frame.
+    A small edit that is not a
     removal, such as a redrawn pendant, is cut out of any patch it reaches
     into, so the photo keeps it whole."""
     change = np.abs(generated.astype(np.int16) - original).max(axis=2).astype(np.float32)
@@ -564,7 +567,11 @@ def edited_patches(original: np.ndarray, generated: np.ndarray) -> list[np.ndarr
         groups, patches = merge_overlapping(groups)
         small, joined = join_near(groups, patches, small)
         if not joined:
-            return [patch & ~keep for patch in patches]
+            break
+    covered = np.logical_or.reduce([np.zeros((SIZE, SIZE), bool), *groups])
+    join_near(groups, patches, faint_removals(original, generated, covered))
+    _, patches = merge_overlapping(groups)
+    return [patch & ~keep for patch in patches]
 
 
 def clone_patches(

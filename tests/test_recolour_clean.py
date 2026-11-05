@@ -89,3 +89,17 @@ def test_a_faint_item_far_from_the_patch_is_left_alone(recolour: ModuleType) -> 
 
     assert len(patches) == 1
     assert not patches[0][item].any()
+
+
+def test_a_faint_item_does_not_extend_the_reach_of_the_patch(recolour: ModuleType) -> None:
+    size = recolour.SIZE
+    near = bulb(size, (1000, 1290))
+    beyond = bulb(size, (1000, 1395))
+    original = with_print(fabric(size, 1))
+    original[near | beyond] = FAINT_PRINT
+
+    patches = recolour.edited_patches(original, fabric(size, 2))
+
+    assert len(patches) == 1
+    assert patches[0][near].all()
+    assert not patches[0][beyond].any()
