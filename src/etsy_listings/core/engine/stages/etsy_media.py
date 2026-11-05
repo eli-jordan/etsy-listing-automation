@@ -228,6 +228,38 @@ def _manifest_entry(
     )
 
 
+def renamed_media_refs(lock: Lockfile, old: str, new: str) -> Lockfile:
+    """``lock`` with this stage's refs to template ``old`` naming ``new``, or
+    ``lock`` itself when it holds none. Hashes and image ids stay: the images
+    on Etsy are the same images. A document that will not decode is left, and
+    costs the re-upload any undecodable document does."""
+    applied = lock.parse_applied_for(EtsyMediaStage.name, AppliedEtsyMedia)
+    if applied is None:
+        return lock
+
+    def follow(ref: str) -> str:
+        if ref == old:
+            return new
+        return f"{new}:{ref.removeprefix(f'{old}:')}" if ref.startswith(f"{old}:") else ref
+
+    followed = AppliedEtsyMedia(
+        manifest=tuple(
+            entry.model_copy(update={"ref": follow(entry.ref)}) for entry in applied.manifest
+        ),
+        variation_images={c: follow(ref) for c, ref in applied.variation_images.items()},
+    )
+    if followed == applied:
+        return lock
+    known: dict[str, int] = lock.remote.get(IMAGE_IDS_KEY) or {}
+    return lock.fold(
+        EtsyMediaStage.name,
+        StageApplyResult(
+            applied=followed.model_dump(mode="json"),
+            remote={IMAGE_IDS_KEY: {follow(ref): image for ref, image in known.items()}},
+        ),
+    )
+
+
 class EtsyMediaStage(Stage[EtsyMediaDesired, AppliedEtsyMedia, EtsyMediaLive]):
     name = "etsy_media"
     local = False

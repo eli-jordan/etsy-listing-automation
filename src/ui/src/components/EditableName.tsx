@@ -40,6 +40,11 @@ export interface EditableNameProps {
    * the seller is part-way through typing -- which `value` cannot show,
    * because an uncommitted name is not the listing's name. */
   onDraftChange?: (text: string) => void;
+  /** The element the name reads as. A page's title is its `h1`; the calibrator
+   * shows the template's name in a breadcrumb beneath one. */
+  as?: "h1" | "span";
+  titleClassName?: string;
+  inputClassName?: string;
 }
 
 export function EditableName({
@@ -50,6 +55,9 @@ export function EditableName({
   placeholder = "Name this listing…",
   label = "Listing name",
   onDraftChange,
+  as: Title = "h1",
+  titleClassName = "page-head__title",
+  inputClassName = "page-head__name",
 }: EditableNameProps) {
   const [opened, setOpened] = useState(false);
   const [text, setText] = useState(value);
@@ -88,8 +96,8 @@ export function EditableName({
 
   if (!editing) {
     return (
-      <h1
-        className="page-head__title"
+      <Title
+        className={titleClassName}
         title="Double-click to rename"
         tabIndex={0}
         onDoubleClick={() => setOpened(true)}
@@ -100,14 +108,14 @@ export function EditableName({
         }}
       >
         {value}
-      </h1>
+      </Title>
     );
   }
 
   return (
     <span className="page-head__name-edit">
       <input
-        className="input page-head__name"
+        className={`input ${inputClassName}`}
         type="text"
         aria-label={label}
         placeholder={placeholder}

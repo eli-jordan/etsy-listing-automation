@@ -101,6 +101,26 @@ export async function saveTemplateConfig(
 
 /** What each photo will be taken as if this becomes a colour-matrix set.
  * Reporting only -- ADR-0004 makes the filename the source of truth. */
+/** What followed a rename, as workspace-relative files. `unresolved` could not
+ * be read or written, and may still name the old template. */
+export interface TemplateRenameResult {
+  name: string;
+  updated: string[];
+  unresolved: string[];
+}
+
+/** Rejects with the server's sentence: a taken name, an unusable one, or a
+ * deploy or preparation that has to finish first. */
+export async function renameTemplate(name: string, newName: string): Promise<TemplateRenameResult> {
+  const { data, error } = await api.POST("/api/templates/{name}/rename", {
+    params: { path: { name } },
+    body: { new_name: newName },
+  });
+  if (data) return data;
+  const detail: unknown = error?.detail;
+  throw new CalibratorApiError(typeof detail === "string" ? detail : `could not rename ${name}`);
+}
+
 export async function getColourReport(name: string): Promise<ColourReportRow[]> {
   const { data, error } = await api.GET("/api/templates/{name}/colour-report", {
     params: { path: { name } },

@@ -107,6 +107,19 @@ class TemplateAlreadyCalibratedError(ConflictError, ValueError):
         self.name = name
 
 
+class TemplateNameTakenError(ConflictError, ValueError):
+    """A rename named a template directory that already exists. Names that
+    differ only in case count as taken, as Windows makes them one directory."""
+
+    def __init__(self, name: str) -> None:
+        super().__init__(f"a template already exists named {name!r}")
+        self.name = name
+
+
+class TemplateInUseError(ConflictError):
+    """Something is reading or writing the template, so it cannot move yet."""
+
+
 class TemplateKindRefusedError(RefusedError):
     """The folder's photos cannot be the kind asked for: none at all, or a
     set where a fixed scene takes exactly one."""

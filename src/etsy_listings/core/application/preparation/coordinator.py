@@ -22,6 +22,7 @@ from etsy_listings.core.application.preparation.dependencies import (
 from etsy_listings.core.application.preparation.execution import Execution, StoppedError, WorkerSlot
 from etsy_listings.core.application.preparation.models import TERMINAL, Action, Event, Job, Quad
 from etsy_listings.core.application.preparation.store import Store
+from etsy_listings.core.application.refusals import TemplateInUseError
 from etsy_listings.core.errors import ConflictError, UserFacingError
 from etsy_listings.core.preparation.artifacts import Artifacts, PreparationInputs
 from etsy_listings.core.preparation.evidence_reader import CropEvidence, placement_key
@@ -547,6 +548,21 @@ class Preparations:
             if job.phase in TERMINAL:
                 self.cleanup(job.template)
             self._schedule()
+
+    def rename_template(self, old: str, new: str, move: Callable[[], None]) -> None:
+        """Run ``move``, which moves the template's directory, and bring what
+        this queue keeps by the template's name along: its retained
+        predictions, and the job records the rail and a rebuild read them
+        through. Refuses, before ``move``, while a job for ``old`` is queued or
+        running, because it holds the old name and would fail part-way."""
+        with self.calibration.lock(old, new), self.store.condition:
+            jobs = [job for job in self.store.jobs() if job.template == old]
+            if any(job.phase not in TERMINAL for job in jobs):
+                raise TemplateInUseError(f"{old!r} is being prepared; rename it when that finishes")
+            move()
+            follow = self.execution.evidence.rehome(old, new)
+            for job in jobs:
+                self.store.write(job, template=new, evidence=tuple(map(follow, job.evidence)))
 
     def cleanup(self, template: str) -> dict[str, list[str]]:
         """Release terminal scratch, retaining cancelled/failed retry evidence."""

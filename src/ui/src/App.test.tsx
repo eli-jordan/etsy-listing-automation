@@ -406,3 +406,76 @@ it("keeps a newer template selection when an autosave catalog refresh arrives la
   await act(async () => refresh.resolve(rows));
   expect(header().getByText("second")).toBeInTheDocument();
 });
+
+describe("renaming the open template", () => {
+  function opened() {
+    vi.spyOn(calibrator, "listTemplates").mockResolvedValue([summary({ name: "flat-lay-01" })]);
+    vi.spyOn(calibrator, "getTemplateConfig").mockResolvedValue(null);
+  }
+
+  async function typeName(name: string) {
+    const title = await screen.findByTitle("Double-click to rename");
+    fireEvent.doubleClick(title);
+    const input = screen.getByLabelText("Template name");
+    fireEvent.change(input, { target: { value: name } });
+    fireEvent.keyDown(input, { key: "Enter" });
+  }
+
+  it("selects the new name and says what followed", async () => {
+    opened();
+    const rename = vi
+      .spyOn(calibrator, "renameTemplate")
+      .mockResolvedValue({ name: "tee", updated: ["listings/a/listing.yaml"], unresolved: [] });
+    render(<App />);
+    await typeName("tee");
+    vi.mocked(calibrator.listTemplates).mockResolvedValue([summary({ name: "tee" })]);
+
+    expect(await screen.findByText("Renamed · 1 file updated")).toBeInTheDocument();
+    expect(rename).toHaveBeenCalledWith("flat-lay-01", "tee");
+    expect(screen.getByTitle("Double-click to rename")).toHaveTextContent("tee");
+  });
+
+  it("selects the new name without waiting for the list to reload", async () => {
+    opened();
+    vi.spyOn(calibrator, "renameTemplate").mockResolvedValue({
+      name: "tee",
+      updated: [],
+      unresolved: [],
+    });
+    render(<App />);
+    await screen.findByTitle("Double-click to rename");
+    vi.mocked(calibrator.listTemplates).mockReturnValue(new Promise(() => {}));
+    await typeName("tee");
+
+    expect(await screen.findByText("Renamed")).toBeInTheDocument();
+    expect(screen.getByTitle("Double-click to rename")).toHaveTextContent("tee");
+  });
+
+  it("names the files it could not update", async () => {
+    opened();
+    vi.spyOn(calibrator, "renameTemplate").mockResolvedValue({
+      name: "tee",
+      updated: [],
+      unresolved: ["listings/a/listing.yaml"],
+    });
+    render(<App />);
+    await typeName("tee");
+    vi.mocked(calibrator.listTemplates).mockResolvedValue([summary({ name: "tee" })]);
+
+    expect(
+      await screen.findByText("Renamed. Check these by hand: listings/a/listing.yaml"),
+    ).toBeInTheDocument();
+  });
+
+  it("keeps the field open beside the server's refusal", async () => {
+    opened();
+    vi.spyOn(calibrator, "renameTemplate").mockRejectedValue(
+      new calibrator.CalibratorApiError("a template already exists named 'tee'"),
+    );
+    render(<App />);
+    await typeName("tee");
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("already exists");
+    expect(screen.getByLabelText("Template name")).toHaveValue("tee");
+  });
+});

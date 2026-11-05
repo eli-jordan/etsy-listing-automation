@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { listTemplates } from "./api/calibrator";
+import { EditableName } from "./components/EditableName";
+import { useTemplateRename, type TemplateRename } from "./hooks/useTemplateRename";
 import type { Preparation, Runtime } from "./api/preparation";
 import { InferenceSettings } from "./components/InferenceSettings";
 import { KindPicker } from "./components/KindPicker";
@@ -89,16 +91,27 @@ function TemplateCrumb({
   config,
   preparationStatus,
   statusClass,
+  rename,
 }: {
   selected: TemplateSummary;
   config: TemplateConfigState | null;
   preparationStatus: string;
   statusClass: string;
+  rename: TemplateRename;
 }) {
   return (
     <>
       <span className="app__crumb-sep">/</span>
-      <span className="app__crumb">{selected.name}</span>
+      <EditableName
+        value={selected.name}
+        onCommit={(next) => void rename.commit(next)}
+        error={rename.refusal}
+        busy={rename.busy}
+        label="Template name"
+        as="span"
+        titleClassName="app__crumb"
+        inputClassName="app__crumb-name"
+      />
       {config && config.renderer.type !== "marigold" && (
         <span className={selected.status === "calibrated" ? "tag tag-accent-2" : "tag tag-accent"}>
           {selected.status === "calibrated" ? "calibrated" : "needs calibration"}
@@ -108,6 +121,11 @@ function TemplateCrumb({
         <span className={"tag mg-status" + statusClass}>{preparationStatus}</span>
       )}
       <span className="app__meta">{templateMeta(selected, config)}</span>
+      {rename.note && (
+        <span className="app__meta" role="status">
+          {rename.note}
+        </span>
+      )}
     </>
   );
 }
@@ -260,6 +278,16 @@ export function App() {
 
   const session = useTemplateSession(templateName, { onCatalogChanged: refreshTemplates });
   const { config, preparation, preparing, save, update: setConfig, reloadPreparation } = session;
+  // Selected here rather than through `refreshTemplates(newName)`: a refresh
+  // already in flight would supersede that one and drop the selection, leaving
+  // the page on a name the new list does not hold.
+  const rename = useTemplateRename(templateName, session.flush, (newName) => {
+    setTemplates((current) =>
+      current.map((t) => (t.name === templateName ? { ...t, name: newName } : t)),
+    );
+    setTemplateName(newName);
+    refreshTemplates();
+  });
 
   const mapState = preparation?.maps.state;
   useEffect(() => {
@@ -357,6 +385,7 @@ export function App() {
             config={config}
             preparationStatus={preparationStatus}
             statusClass={marigoldStatusClass(preparing, preparation)}
+            rename={rename}
           />
         )}
 

@@ -732,6 +732,11 @@ later. Each traces to a decision.
   application and server code. The engine also exports `build_plan` /
   `execute` for callers owning an individual lockfile, without moving stage
   execution into those callers.
+- **A mockup template's name is a reference, so a rename moves every holder.**
+  `core/application/template_rename.py` owns the list: the directory, frozen
+  batch documents, listing templates, garment profiles, listings, their render
+  and preview caches, the preparation queue's records and the Etsy image refs
+  in each lockfile. A new place that stores a template's name joins that list.
 - **Only the lockfile merges a lockfile.** `Lockfile.fold()` owns the
   replace-versus-merge rules for all four axes, `applied_for()` owns the
   per-stage lookup and `parse_applied_for()` owns the decode. A stage returns

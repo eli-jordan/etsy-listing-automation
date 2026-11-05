@@ -16,6 +16,7 @@ from etsy_listings.core.preparation.evidence_reader import (
 )
 from etsy_listings.core.workspace.atomic import write_bytes_atomic
 from etsy_listings.core.workspace.calibration import CalibrationStore, json_bytes
+from etsy_listings.core.workspace.trees import remove_tree
 
 _PUBLISHERS: set[str] = set()
 _PUBLISHER_LOCK = threading.Lock()
@@ -69,6 +70,41 @@ class EvidenceStore(EvidenceReader):
                 )
             checkpoint("predictions_pointer")
             return tuple(retained)
+
+    def rehome(self, old: str, new: str) -> Callable[[CropEvidence], CropEvidence]:
+        """Move template ``old``'s retained predictions to ``new``, and answer
+        how a job's evidence follows them. A prediction's path spells its
+        template, in the pointer, in each set's manifest and in job records.
+        The caller holds both templates' locks."""
+        source = self.workspace.preparation_predictions_dir(old)
+        target = self.workspace.preparation_predictions_dir(new)
+        prefix = f"{source.relative_to(self.root).as_posix()}/"
+        moved = f"{target.relative_to(self.root).as_posix()}/"
+
+        def follow(value: CropEvidence) -> CropEvidence:
+            predictions = tuple(
+                p.model_copy(update={"path": moved + p.path.removeprefix(prefix)})
+                if p.path.startswith(prefix)
+                else p
+                for p in value.predictions
+            )
+            return value.model_copy(update={"predictions": predictions})
+
+        if source.is_dir():
+            if target.exists():
+                remove_tree(target)
+            source.replace(target)
+            self._rewrite_pointers(target, follow)
+        return follow
+
+    @staticmethod
+    def _rewrite_pointers(directory: Path, follow: Callable[[CropEvidence], CropEvidence]) -> None:
+        for path in (directory / "current.json", *directory.glob("sets/*/manifest.json")):
+            if path.is_file():
+                pointer = PredictionPointer.model_validate_json(path.read_bytes())
+                evidence = tuple(map(follow, pointer.evidence))
+                document = pointer.model_copy(update={"evidence": evidence}).model_dump(mode="json")
+                write_bytes_atomic(path, json_bytes(document), durable=True)
 
     @staticmethod
     @contextmanager

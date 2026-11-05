@@ -428,6 +428,13 @@ button:not([class]):active:not(:disabled) {
   font-size: 15px;
 }
 
+.app__crumb-name {
+  font-size: 15px;
+  font-weight: 600;
+  padding: 2px 8px;
+  min-width: 20ch;
+}
+
 .app__meta {
   font-size: 13px;
   color: color-mix(in srgb, var(--color-text) 55%, transparent);
