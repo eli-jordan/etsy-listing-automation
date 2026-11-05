@@ -14,12 +14,8 @@ Keep the shirt's outline exactly as in the source.
 Save the result as a square PNG at `{output}`, with the same framing as the source. 
 Keep the generator's resolution; the run's assemble step resizes it to 2048 x 2048.
 
-## Check before handing back
+## Hand back
 
-Open the result beside the source and confirm:
+Generate the image once and save it as your only file, whatever it looks like. The run's reviewer checks it against the source and relaunches this brief with notes when it needs another pass.
 
-- the whole shirt is {colour}, sleeves, collar and hem included, with no patches of the old colour;
-- nothing outside the shirt moved or changed: face, hands, pose, background and crop line up with the source;
-
-Regenerate when a check fails, up to three attempts in all, and keep the best. 
-Reply with one line: the output path, and any check the saved image still fails.
+Reply with one line: the output path.

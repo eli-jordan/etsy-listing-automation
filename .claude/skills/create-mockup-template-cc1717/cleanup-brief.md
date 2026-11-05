@@ -17,11 +17,8 @@ Keep the person, hair, skin, hands, jewellery, other clothing, background, light
 
 Save the result as a square PNG at `{output}`, with the same framing as the original. Keep the generator's resolution.
 
-## Check before handing back
+## Hand back
 
-Open the result beside the original and confirm:
+Generate the image once and save it as your only file, whatever it looks like. The run's reviewer checks it against the source and relaunches this brief with notes when it needs another pass.
 
-- nothing listed above remains, not even a faint outline, tint or edge where it was;
-- nothing else moved or changed.
-
-Regenerate when a check fails, up to three attempts in all, and keep the best. Reply with one line: the output path, and any check the saved image still fails.
+Reply with one line: the output path.
