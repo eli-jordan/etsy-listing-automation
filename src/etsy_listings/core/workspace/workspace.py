@@ -568,6 +568,9 @@ class Workspace:
         directory = self.cache("preparation", "work", _segment(job))
         return directory if file is None else directory / _segment(file)
 
+    def preparation_predictions_dir(self, template: str) -> Path:
+        return self.cache("preparation", "predictions", _segment(template))
+
     def preparation_prediction_current(self, template: str) -> Path:
         return self.cache("preparation", "predictions", _segment(template), "current.json")
 
@@ -1140,6 +1143,14 @@ class Workspace:
         ``colour`` -- exactly one output, nothing to disambiguate)."""
         filename = f"{_segment(colour)}.png" if colour is not None else "scene.png"
         return self.renders_dir(listing) / _segment(template) / filename
+
+    def listing_template_caches(self, listing: str, template: str) -> tuple[Path, Path]:
+        """What ``listing`` has cached for one mockup template: its renders
+        and its previews, which a rename of the template has to move."""
+        return (
+            self.renders_dir(listing) / _segment(template),
+            self.preview_dir(listing) / _segment(template),
+        )
 
     def catalog_cache_dir(self) -> Path:
         return self.cache(layout.CATALOG_DIR)

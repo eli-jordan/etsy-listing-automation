@@ -900,3 +900,18 @@ def test_the_calibrator_names_positioned_listings_and_leaves_them_alone(
     page.get_by_text("Saved a moment ago").wait_for()
     assert "take-a-hike" in note.inner_text()
     assert listing.read_bytes() == written
+
+
+def test_double_clicking_the_name_renames_the_template_and_its_listings(
+    page, workspace_root: Path
+) -> None:
+    from playwright.sync_api import expect
+
+    page.locator(".app__crumb").dblclick()
+    field = page.get_by_label("Template name")
+    field.fill("renamed-template")
+    field.press("Enter")
+
+    expect(page.locator(".app__crumb")).to_have_text("renamed-template")
+    expect(page.locator('[data-template="renamed-template"]')).to_be_visible()
+    assert (workspace_root / "mockup-templates" / "renamed-template" / "template.yaml").is_file()

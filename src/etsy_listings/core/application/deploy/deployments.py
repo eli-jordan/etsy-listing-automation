@@ -19,7 +19,7 @@ from collections.abc import Sequence
 
 from etsy_listings.core.application.ai.coordinator import AiCoordinator
 from etsy_listings.core.application.dependencies import ContextFactory
-from etsy_listings.core.application.deploy.events import RunScope
+from etsy_listings.core.application.deploy.events import TERMINAL_PHASES, RunScope
 from etsy_listings.core.application.deploy.executor import RunExecutor
 from etsy_listings.core.application.deploy.registry import (
     Conflict,
@@ -89,6 +89,10 @@ class Deployments:
 
     def get(self, run_id: str) -> Run | None:
         return self._registry.get(run_id)
+
+    def busy(self) -> bool:
+        """Whether any run is queued or in progress, on any listing."""
+        return any(run.phase not in TERMINAL_PHASES for run in self._registry.all_runs())
 
     def runs(self, *, listing: str | None = None, scope: RunScope | None = None) -> list[Run]:
         """Runs still remembered (ADR-0041's retention).

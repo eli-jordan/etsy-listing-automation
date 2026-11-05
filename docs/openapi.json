@@ -7604,6 +7604,36 @@
         "title": "TemplatePositionLimits",
         "type": "object"
       },
+      "TemplateRenameResponse": {
+        "description": "A mockup template's rename. ``updated`` and ``unresolved`` are\nworkspace-relative files: those now naming it, and those that could not be\nread or written and may still name the old one.",
+        "properties": {
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "unresolved": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Unresolved",
+            "type": "array"
+          },
+          "updated": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Updated",
+            "type": "array"
+          }
+        },
+        "required": [
+          "name",
+          "updated",
+          "unresolved"
+        ],
+        "title": "TemplateRenameResponse",
+        "type": "object"
+      },
       "TemplateSummary": {
         "properties": {
           "colours": {
@@ -12762,6 +12792,59 @@
           }
         },
         "summary": "Preview",
+        "tags": [
+          "templates"
+        ]
+      }
+    },
+    "/api/templates/{name}/rename": {
+      "post": {
+        "description": "Move a template, and everything naming it, to a new name\n(:mod:`~etsy_listings.core.application.template_rename`). A taken name, a\nrunning deploy or a preparing template is a ``409``; an unusable name is a\n``400``. POST for the reason a listing's rename is.",
+        "operationId": "rename_template_api_templates__name__rename_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RenameListingRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TemplateRenameResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Rename Template",
         "tags": [
           "templates"
         ]

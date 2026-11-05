@@ -27,9 +27,9 @@ destination requires a replacement request or clarification before overwriting.
 For replacement, inspect the existing photos and `template.yaml` first. Preserve
 the template directory's identity and the current photo filenames. The filename
 prefix can differ from the directory name, and configured photo exceptions can
-also matter. ADR-0004 explains photo resolution. Renaming a directory can break
-garment-profile `preview_template`, listing `media`, and `variation_images` refs;
-renaming templates or rewriting those refs is separate work.
+also matter. ADR-0004 explains photo resolution. Do not rename a template's
+directory by hand: that breaks every ref to it. Rename it in the calibrator, which
+moves the refs with it.
 
 ## Stage and inspect
 

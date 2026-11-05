@@ -107,6 +107,10 @@ drag or slider change debounces a request to the backend, which re-renders
 through the same pipeline `apply` uses — there is no approximate render path.
 "Save" writes `template.yaml`.
 
+Double-click a template's name in the breadcrumb to rename it. Listings, listing
+templates, garment profiles and batches follow, and nothing is re-uploaded to Etsy.
+Do not rename the folder by hand: that breaks every reference to it.
+
 Each editor has two views of the same template:
 
 - **Calibrate** — the draggable canvas, rendered downscaled (longest edge 900px)

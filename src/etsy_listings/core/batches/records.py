@@ -26,6 +26,7 @@ from typing import Any, Literal, Self
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
+from etsy_listings.core.config.template_refs import rename_template_refs
 from etsy_listings.core.workspace.atomic import read_bytes_retrying, write_json_atomic
 from etsy_listings.core.workspace.trees import remove_tree
 from etsy_listings.core.workspace.workspace import Workspace
@@ -245,6 +246,20 @@ class _Store[R: _Record]:
                 if record is not None and record.listing_template == old:
                     self.save(record.model_copy(update={"listing_template": new}))
 
+    def rename_mockup_template(self, old: str, new: str) -> None:
+        """A mockup template renamed: frozen documents naming ``old`` now say
+        ``new``. Unlike a listing template's rename this does touch the frozen
+        copy, because that copy points at a directory it does not own, and
+        confirming or retrying a batch makes listings from it."""
+        for record_id in self._ids():
+            with self.lock(record_id):
+                record = self.load(record_id)
+                renamed = (
+                    None if record is None else rename_template_refs(record.template, old, new)
+                )
+                if record is not None and renamed is not None:
+                    self.save(record.model_copy(update={"template": renamed}))
+
 
 class StagingStore(_Store[StagingSession]):
     def __init__(self, workspace: Workspace) -> None:
@@ -394,8 +409,8 @@ class BatchStore(_Store[Batch]):
 class BatchRecords:
     """The two records a batch moves through: its staging session, then the batch.
 
-    Confirming and retrying read both, and a listing template's rename
-    rewrites both, so the stores travel together.
+    Confirming and retrying read both, and a listing or mockup template's
+    rename rewrites both, so the stores travel together.
     """
 
     staging: StagingStore
@@ -404,3 +419,7 @@ class BatchRecords:
     def rename_listing_template(self, old: str, new: str) -> None:
         self.staging.rename_listing_template(old, new)
         self.batches.rename_listing_template(old, new)
+
+    def rename_mockup_template(self, old: str, new: str) -> None:
+        self.staging.rename_mockup_template(old, new)
+        self.batches.rename_mockup_template(old, new)

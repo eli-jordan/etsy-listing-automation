@@ -1715,6 +1715,29 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/templates/{name}/rename": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Rename Template
+     * @description Move a template, and everything naming it, to a new name
+     *     (:mod:`~etsy_listings.core.application.template_rename`). A taken name, a
+     *     running deploy or a preparing template is a ``409``; an unusable name is a
+     *     ``400``. POST for the reason a listing's rename is.
+     */
+    post: operations["rename_template_api_templates__name__rename_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/templates/{name}/swatch": {
     parameters: {
       query?: never;
@@ -4957,6 +4980,20 @@ export interface components {
        */
       rotation: number;
       scale?: components["schemas"]["PositionScaleLimits"];
+    };
+    /**
+     * TemplateRenameResponse
+     * @description A mockup template's rename. ``updated`` and ``unresolved`` are
+     *     workspace-relative files: those now naming it, and those that could not be
+     *     read or written and may still name the old one.
+     */
+    TemplateRenameResponse: {
+      /** Name */
+      name: string;
+      /** Unresolved */
+      unresolved: string[];
+      /** Updated */
+      updated: string[];
     };
     /** TemplateSummary */
     TemplateSummary: {
@@ -8314,6 +8351,41 @@ export interface operations {
         };
         content: {
           "application/json": unknown;
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  rename_template_api_templates__name__rename_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        name: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["RenameListingRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["TemplateRenameResponse"];
         };
       };
       /** @description Validation Error */

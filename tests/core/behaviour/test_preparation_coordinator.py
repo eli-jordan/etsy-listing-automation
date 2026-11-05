@@ -8,6 +8,7 @@ from etsy_listings.core.application.preparation.coordinator import (
     PreparationRequest,
     Preparations,
 )
+from etsy_listings.core.application.refusals import TemplateInUseError
 from etsy_listings.core.preparation.runtime import Capability
 from etsy_listings.core.render import load_template_config
 from etsy_listings.core.workspace import Workspace
@@ -172,9 +173,9 @@ def prepare_template(workspace_root):
     return workspace, runtime, coordinator, result
 
 
-def move_box(workspace, amount):
+def move_box(workspace, amount, template="shirt"):
     store = CalibrationStore(workspace)
-    current = store.read("shirt")
+    current = store.read(template)
     config = current.config.model_copy(
         update={
             "bounding_box": tuple(
@@ -184,7 +185,7 @@ def move_box(workspace, amount):
         }
     )
     return store.save(
-        "shirt", config, expected_revision=current.revision, request_id="move" + str(amount)
+        template, config, expected_revision=current.revision, request_id="move" + str(amount)
     )
 
 
@@ -1369,3 +1370,45 @@ def test_prepare_again_refits_fresh_predictions_even_when_geometry_matches(works
         assert sum(len(worker.calls) for worker in runtime.workers) == 6
     finally:
         coordinator.close()
+
+
+def test_a_rename_keeps_predictions_so_a_rebuild_still_needs_no_worker(workspace_root):
+    workspace, runtime, coordinator, _ = prepare_template(workspace_root)
+    source = workspace.template_dir("shirt")
+    coordinator.rename_template(
+        "shirt", "tee", lambda: source.rename(workspace.template_dir("tee"))
+    )
+
+    assert [job.template for job in coordinator.list_jobs()] == ["tee"]
+    assert not workspace.preparation_predictions_dir("shirt").exists()
+
+    calls = len(runtime.workers[0].calls)
+    runtime.capability = Capability(False, "Runtime removed")
+    move_box(workspace, 1, template="tee")
+    job = coordinator.reconcile_saved("tee")
+    assert job is not None
+    assert job.kind == "rebuild"
+    result = wait_terminal(coordinator, job.id)
+    coordinator.close()
+    assert result.phase == "completed", result.error
+    assert len(runtime.workers[0].calls) == calls
+
+
+def test_a_queued_job_refuses_a_rename_before_the_move(workspace_root):
+    from tests.support.marigold import PreparationRuntime
+
+    workspace = template(workspace_root)
+    coordinator = Preparations(workspace, runtime=PreparationRuntime())
+    coordinator.submit(
+        "shirt",
+        PreparationRequest(
+            config_revision=CalibrationStore(workspace).read("shirt").revision, request_id="queued"
+        ),
+    )
+    moved = []
+
+    with pytest.raises(TemplateInUseError):
+        coordinator.rename_template("shirt", "tee", lambda: moved.append(True))
+
+    assert moved == []
+    coordinator.close()

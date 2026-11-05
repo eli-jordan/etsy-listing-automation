@@ -101,6 +101,24 @@ describe("listTemplates", () => {
 });
 
 describe("getPositionedListings", () => {
+  it("POSTs a rename and returns what followed", async () => {
+    const result = { name: "tee", updated: ["listings/a/listing.yaml"], unresolved: [] };
+    const { renameTemplate } = await answering(200, result);
+
+    await expect(renameTemplate("flat-lay-01", "tee")).resolves.toEqual(result);
+
+    const request = onlyRequest();
+    expect(new URL(request.url).pathname).toBe("/api/templates/flat-lay-01/rename");
+    expect(await request.json()).toEqual({ new_name: "tee" });
+  });
+
+  it("rejects a rename with the server's sentence", async () => {
+    const detail = "A deploy is running; rename the template when it finishes";
+    const { renameTemplate } = await answering(409, { detail });
+
+    await expect(renameTemplate("flat-lay-01", "tee")).rejects.toThrow(detail);
+  });
+
   it("GETs the listings holding positions for the named template", async () => {
     const held = [{ listing: "tote-bag", placements: ["back", "front"] }];
     const { getPositionedListings } = await answering(200, held);

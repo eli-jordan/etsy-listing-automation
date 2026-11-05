@@ -289,11 +289,11 @@ class CalibrationStore:
         self.workspace = workspace
 
     @contextmanager
-    def lock(self, name: str) -> Iterator[None]:
+    def lock(self, name: str, *more: str) -> Iterator[None]:
         """ADR-0054: the ``mockup-template`` domain of :mod:`.locks`, shared by
         calibration saves and map publication. An in-workspace alias shares
         its target's lock; one outside the workspace is refused."""
-        with locks.hold(self.workspace, "mockup-template", name):
+        with locks.hold(self.workspace, "mockup-template", name, *more):
             yield
 
     def config(self, name: str) -> AnyTemplate:

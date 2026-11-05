@@ -900,3 +900,36 @@ def test_preview_rejects_mixed_old_settings(client: TestClient, old_field: str) 
         json={**config, "colour": "black", old_field: config["renderer"]["config"][old_field]},
     )
     assert response.status_code == 422
+
+
+def test_a_rename_moves_the_template_and_reports_what_followed(client: TestClient) -> None:
+    response = client.post("/api/templates/flat-lay-01/rename", json={"new_name": "cc1717-flat"})
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "name": "cc1717-flat",
+        "updated": [
+            "garment-profiles/comfort-colors-1717.yaml",
+            "listings/take-a-hike/listing.yaml",
+        ],
+        "unresolved": [],
+    }
+    assert client.get("/api/templates/cc1717-flat/config").status_code == 200
+    assert client.get("/api/templates/flat-lay-01/config").status_code == 404
+
+
+@pytest.mark.parametrize(
+    ("template", "new_name", "status"),
+    [
+        ("no-such-template", "anything", 404),
+        ("flat-lay-01", "colour-chart-01", 409),
+        ("flat-lay-01", "a:b", 400),
+    ],
+)
+def test_a_refused_rename_says_why(
+    client: TestClient, template: str, new_name: str, status: int
+) -> None:
+    response = client.post(f"/api/templates/{template}/rename", json={"new_name": new_name})
+
+    assert response.status_code == status
+    assert response.json()["detail"]

@@ -486,6 +486,16 @@ class RenameListingRequest(BaseModel):
     new_name: str
 
 
+class TemplateRenameResponse(BaseModel):
+    """A mockup template's rename. ``updated`` and ``unresolved`` are
+    workspace-relative files: those now naming it, and those that could not be
+    read or written and may still name the old one."""
+
+    name: str
+    updated: list[str]
+    unresolved: list[str]
+
+
 # ──────────────────────────────────────────────────────────────────────────
 # Listing templates (ADR-0047, template completeness). The detail reuses `ListingTemplate` directly,
 # as `ListingDetail` reuses `Listing`: the wire shape *is* template.yaml.

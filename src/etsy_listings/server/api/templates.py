@@ -35,6 +35,7 @@ from fastapi.responses import Response
 from PIL import Image
 
 from etsy_listings.core.application import mockup_templates as calibration
+from etsy_listings.core.application.deploy.deployments import Deployments
 from etsy_listings.core.application.mockup_templates import (
     CalibrationSave,
     LazyMaps,
@@ -64,6 +65,9 @@ from etsy_listings.core.application.prepared_previews import (
     prepared_preview,
     saved_scene,
 )
+from etsy_listings.core.application.template_rename import RenameHosts
+from etsy_listings.core.application.template_rename import rename_template as rename
+from etsy_listings.core.batches.records import BatchRecords
 from etsy_listings.core.config.errors import ConfigLoadError
 from etsy_listings.core.errors import UserFacingError
 from etsy_listings.core.preparation.artifacts import ArtifactError
@@ -88,8 +92,10 @@ from etsy_listings.server.api.schemas import (
     MultiplePreviewRequest,
     PositionedListingResponse,
     PreviewRequest,
+    RenameListingRequest,
     SwatchResponse,
     TemplatePhoto,
+    TemplateRenameResponse,
     TemplateSummary,
 )
 from etsy_listings.server.api.thumbnails import thumbnail_response
@@ -164,6 +170,30 @@ def list_templates(request: Request) -> list[TemplateSummary]:
                 summary.maps = MapReadinessResponse(**asdict(known), can_render=known.can_render)
         summaries.append(summary)
     return summaries
+
+
+@router.post("/{name}/rename", response_model=TemplateRenameResponse)
+def rename_template(
+    template: Annotated[Target, Depends(target)], body: RenameListingRequest, request: Request
+) -> TemplateRenameResponse:
+    """Move a template, and everything naming it, to a new name
+    (:mod:`~etsy_listings.core.application.template_rename`). A taken name, a
+    running deploy or a preparing template is a ``409``; an unusable name is a
+    ``400``. POST for the reason a listing's rename is."""
+    deployments: Deployments = request.app.state.deployments
+    done = rename(
+        template.workspace,
+        template.name,
+        body.new_name,
+        RenameHosts(
+            preparations=request.app.state.preparations,
+            records=BatchRecords(app_state.staging_store(request), app_state.batch_store(request)),
+            deploying=deployments.busy,
+        ),
+    )
+    return TemplateRenameResponse(
+        name=body.new_name, updated=list(done.updated), unresolved=list(done.unresolved)
+    )
 
 
 @router.get("/{name}/colour-report", response_model=list[ColourReportRow])

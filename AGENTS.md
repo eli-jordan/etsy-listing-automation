@@ -25,7 +25,7 @@ src/etsy_listings/
     listing_templates/ template conversion, validation and frozen content capture
     batches/ staging, naming, archive inspection and ordinary listing creation
     application/ operations shared by server and CLI, one module per workflow, no re-exports: listing reads, edits,
-      creation, rename/delete, pricing plans; calibrator (mockup_templates), listing-template library, batch staging
+      creation, rename/delete, pricing plans; calibrator (mockup_templates, template_rename), listing-template library, batch staging
       and workflow; the wizards' credentials, workspace_setup, shop_discovery, garment_profiles;
       deploy/ (Deployments) and ai/ (AiCoordinator) run coordinators; dependencies.py host seams; refusals.py
     listing_artifacts.py moves/removes everything keyed by a listing name (dir, renders, previews, snapshot, proposal)
