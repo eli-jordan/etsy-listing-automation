@@ -501,13 +501,17 @@ def edited_areas(
 
 
 def redrawn_items(
-    before: np.ndarray, after: np.ndarray, coarse: list[tuple[np.ndarray, int]]
+    original: np.ndarray, generated: np.ndarray, coarse: list[tuple[np.ndarray, int]]
 ) -> np.ndarray:
     """The edits that are not removals, each as its hull with a margin:
-    items the generator redrew, which the photo keeps as they were."""
+    items the generator redrew, which the photo keeps as they were. An edit
+    that lost its colour edges is a removal even when it kept its lightness
+    edges, because on a small item the fabric's grain counts as lightness edges."""
+    lightness = lightness_edges(original), lightness_edges(generated)
+    colour = colour_edges(original), colour_edges(generated)
     keep = np.zeros((SIZE, SIZE), np.uint8)
     for area, _ in coarse:
-        if not removed(before, after, area):
+        if not removed(*lightness, area) and not removed(*colour, area, CLEAN_FAINT_EDGES):
             cv2.fillConvexPoly(keep, cv2.convexHull(cv2.findNonZero(area.astype(np.uint8))), 1)
     return cv2.dilate(keep, np.ones((CLEAN_KEEP, CLEAN_KEEP), np.uint8)) > 0
 
@@ -561,7 +565,7 @@ def edited_patches(original: np.ndarray, generated: np.ndarray) -> list[np.ndarr
     groups = [
         area for area, size in coarse if size >= CLEAN_MIN_AREA and removed(before, after, area)
     ]
-    keep = redrawn_items(before, after, coarse)
+    keep = redrawn_items(original, generated, coarse)
     small = small_removals(original, generated, change, groups)
     while True:
         groups, patches = merge_overlapping(groups)
@@ -652,6 +656,13 @@ def colour_edges(pixels: np.ndarray) -> np.ndarray:
     return np.hypot(edge_strength(colour[..., 0]), edge_strength(colour[..., 1]))
 
 
+def spread(values: np.ndarray) -> float:
+    """The median absolute deviation, scaled to equal a standard deviation on
+    even noise. A few hard edges can't inflate it, as they can a standard
+    deviation: the band around a patch often holds hair, a seam or a necklace."""
+    return float(np.median(np.abs(values - np.median(values))) * 1.4826)
+
+
 def patch_checks(
     original: np.ndarray, generated: np.ndarray, cleaned: np.ndarray, patch: np.ndarray
 ) -> dict[str, float]:
@@ -667,7 +678,7 @@ def patch_checks(
     removed_shape = cv2.GaussianBlur((removed & patch).astype(np.float32), (0, 0), 3)
     return {
         "echo": float(np.corrcoef(edge_strength(lo)[core], edge_strength(lg)[core])[0, 1]),
-        "texture": float(grain(lc)[core].std() / grain(lc)[ring_outside(patch)].std()),
+        "texture": spread(grain(lc)[core]) / spread(grain(lc)[ring_outside(patch)]),
         "texture_shape": float(np.corrcoef(texture_map[around], removed_shape[around])[0, 1]),
     }
 
