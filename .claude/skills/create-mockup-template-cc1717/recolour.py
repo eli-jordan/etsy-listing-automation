@@ -5,7 +5,8 @@ Codex brief per colour.
 assemble: turn the generated photos in out/ into an ingest-ready export
 (`{scene} - {Colour}.png` + `{scene} - {Colour} - Text.png`) and review sheets.
 
-Run from the repo root: uv run python .claude/skills/recolour-mockup-template/recolour.py --help
+Run from the repo root:
+  uv run python .claude/skills/create-mockup-template-cc1717/recolour.py --help
 """
 
 from __future__ import annotations
@@ -17,6 +18,7 @@ import shutil
 import subprocess
 import sys
 from dataclasses import dataclass
+from itertools import combinations
 from pathlib import Path
 
 import cv2
@@ -31,6 +33,7 @@ SIZE = 2048
 # and High Fidelity in the umbrella review (2026-11-04).
 UPSCAYL_DIR = Path(r"C:\Program Files\Upscayl\resources")
 UPSCAYL_MODEL = "upscayl-standard-4x"
+UPSCAYL_TRIES = 3  # Upscayl exits 0 with an all-black image when the GPU runs out of memory
 ANALYSIS_SIZE = 512
 CHANGE_THRESHOLD = 40  # max per-channel difference (0-255) that counts as changed
 # At ANALYSIS_SIZE: a 4px edge band is 16px at 2048; specks under 3px are noise.
@@ -43,9 +46,54 @@ PILOT_LIGHT_CHOICES = ("White", "Ivory")
 PILOT_DARK_CHOICES = ("Black", "Pepper")
 PILOT_NOTES_HEADING = "## Pilot review"
 REFERENCE_MASK = "garment-reference.png"  # the approved pilot's shirt outline
+REVIEWED_MASK = "outline-mask.png"  # in review/pilot: the outline `--approve` installs
 TILE = 512  # pilot review tiles, at full 2048 resolution
 TILE_MARGIN = 128
 MIN_REGION_SHARE = 0.02  # outline regions under 2% of the largest are noise, not shirt
+# The automatic outline: a seed from the far pilot, then GrabCut on the source. Tested on
+# seven runs (2026-11-05). Bands are px at 2048, scaled to OUTLINE_WORK.
+OUTLINE_WORK = 1024
+OUTLINE_SCALE = OUTLINE_WORK / SIZE
+OUTLINE_ITERATIONS = 5
+SEED_CORE = 24  # the seed eroded by this samples the shirt's colours
+SEED_SPUR = 24  # opening that drops spurs of the seed before it becomes definite shirt
+DEFINITE_ERODE = 8  # definite shirt sits this far inside the opened seed
+GATE_OPEN = 3
+BOTH_MATCH_ERODE = 6  # the same, for pixels matching the shirt in the source and the far pilot
+PIECE_ERODE = 4  # the same, for small regions recovered outside the seed
+BACKGROUND_REACH = 32  # anything further than this from the seed is definite background
+NEAR_PILOT_CHANGE = 40  # a near-pilot change this strong is shirt whatever the colour gate says
+NEAR_PILOT_BLUR = 1.5  # at ANALYSIS_SIZE
+SHIRT_AB_SPREAD = 1.5  # colour gate: this many times the p90 ab distance of the shirt's core
+SHIRT_AB_RANGE = (8, 30)
+SOURCE_AB_FLOOR = 36  # the source side of "both match" is loose: fabric picks up warm bounce
+SOURCE_SHADOW_MARGIN = 16  # L below the shirt's p1 that still counts as shirt, in the source
+SOURCE_HIGHLIGHT_MARGIN = 8
+PILOT_L_MARGIN = 8
+# Small regions outside the seed, at ANALYSIS_SIZE: chest distance in L and ab.
+PIECE_CORE = 16
+PIECE_MIN_AREA = 30
+PIECE_MAX_L = 20
+HOLE_OPEN = 1  # at ANALYSIS_SIZE: holes the far pilot left alone, such as hair and pendants
+NOTCH_CLOSE = 12
+HOLE_MIN_AREA = 12
+CROP_MARGIN = 0.06  # GrabCut models the whole image given, so crop near the seed
+SLIVER_OPEN = 5
+KEEP_PIECE_AREA = 600  # smallest separate piece kept
+KEEP_PIECE_SEED = 0.5  # a separate piece must mostly lie in the seed
+KEEP_PIECE_DEFINITE = 0.1  # share of definite shirt that keeps a piece whatever its colour
+MAX_HOLE = 6000  # shirt-coloured holes under this are filled
+OUTLINE_SMOOTH = 3.0
+FULL_SIZE_SMOOTH = 1.5
+# Advice printed by the pilot review. Band spill: edge pixels wrong in both photos.
+SPILL_CORE = 64
+SPILL_BAND = 24
+SPILL_AB_FLOOR = 14
+SPILL_HIGHLIGHT_MARGIN = 8
+SPILL_PILOT_AB = 16
+SPILL_PILOT_L_MARGIN = 12
+MAX_BAND_SPILL_PCT = 16  # good outlines scored up to 15.2; 24px too big, about 31 and up
+DISAGREE_OPEN = 8  # px at 2048; thinner differences follow the edge and mean nothing
 # Shading inside the outline: lighting and folds must follow the source whatever the colour.
 SRGB_KNEE = 0.04045  # where the sRGB transfer curve stops being linear
 FABRIC_THRESHOLD = 60  # change from the source that marks fabric, not hair over it
@@ -60,6 +108,10 @@ SHIRT_FEATHER = 6
 CLEAN_CHANGE = 40  # blurred per-channel change that marks an edited area
 CLEAN_MIN_AREA = 4000  # px at 2048; smaller changes are regeneration noise, not an edit
 CLEAN_GROW = 32  # px each patch grows past the edited area's convex hull
+CLEAN_REACH = 64  # px from a patch within which a small removal is part of the same item
+CLEAN_FINE_BLUR = 2  # px; finds small removals that the edit blur averages away
+CLEAN_KEEP = 33  # px; the margin a redrawn item keeps around it
+CLEAN_REMOVED_EDGES = 0.5  # a removal keeps under this share of the original's edges
 CLEAN_PAD = 64
 CLEAN_RING = 41  # px band either side of a patch edge used to compare inside with outside
 MAX_ECHO_R = 0.2  # the cleaned patch still follows the removed item's edges
@@ -308,8 +360,12 @@ def upscaled(run_dir: Path, path: Path) -> Path:
         *("-i", str(path), "-o", str(cache), "-s", "4", "-f", "png"),
         *("-n", UPSCAYL_MODEL, "-m", str(UPSCAYL_DIR / "models")),
     ]
-    subprocess.run(command, check=True, capture_output=True)
-    return cache
+    for _ in range(UPSCAYL_TRIES):
+        subprocess.run(command, check=True, capture_output=True)
+        with Image.open(cache) as image:
+            if image.getbbox():
+                return cache
+    raise SystemExit(f"Upscayl returned a blank image for {path.name}; the GPU may be busy.")
 
 
 def full_size(run_dir: Path, path: Path, *, upscale: bool) -> Image.Image:
@@ -342,7 +398,7 @@ def export(run_dir: Path, scene: str, results: list[Result], *, upscale: bool) -
         shutil.rmtree(export_dir)
     export_dir.mkdir()
     shutil.copyfile(run_dir / "source.png", export_dir / f"{scene} - Source Image.png")
-    reference = load_reference(run_dir)
+    reference = load_reference(run_dir, SIZE)
     alpha = None if reference is None else shirt_alpha(reference)
     with Image.open(run_dir / "source.png") as image:
         source = np.asarray(image.convert("RGB").resize((SIZE, SIZE)), np.float32)
@@ -412,22 +468,119 @@ def load_square(path: Path) -> np.ndarray:
         return np.asarray(image.convert("RGB").resize((SIZE, SIZE), Image.Resampling.LANCZOS))
 
 
-def edited_patches(original: np.ndarray, generated: np.ndarray) -> list[np.ndarray]:
-    """One patch per area the generator edited: its convex hull, grown, so the
-    patch edge never traces the removed item's shape."""
-    change = np.abs(generated.astype(np.int16) - original).max(axis=2).astype(np.float32)
-    edited = (cv2.GaussianBlur(change, (0, 0), 6) > CLEAN_CHANGE).astype(np.uint8)
-    count, labels, stats, _ = cv2.connectedComponentsWithStats(edited)
+def hull_patch(area: np.ndarray) -> np.ndarray:
+    """The area's convex hull, grown, so the patch edge never traces the
+    removed item's shape."""
+    hull = np.zeros((SIZE, SIZE), np.uint8)
+    cv2.fillConvexPoly(hull, cv2.convexHull(cv2.findNonZero(area.astype(np.uint8))), 1)
     grow = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2 * CLEAN_GROW + 1,) * 2)
-    patches = []
-    for label in range(1, count):
-        if stats[label, cv2.CC_STAT_AREA] < CLEAN_MIN_AREA:
-            continue
-        hull = np.zeros((SIZE, SIZE), np.uint8)
-        points = cv2.findNonZero((labels == label).astype(np.uint8))
-        cv2.fillConvexPoly(hull, cv2.convexHull(points), 1)
-        patches.append(cv2.dilate(hull, grow) > 0)
-    return patches
+    return cv2.dilate(hull, grow) > 0
+
+
+def merge_overlapping(groups: list[np.ndarray]) -> tuple[list[np.ndarray], list[np.ndarray]]:
+    """Merge groups whose patches overlap, since a patch nested in another would
+    be blended and grained twice."""
+    patches = [hull_patch(group) for group in groups]
+    while pair := next(
+        (
+            (a, b)
+            for a, b in combinations(range(len(patches)), 2)
+            if (patches[a] & patches[b]).any()
+        ),
+        None,
+    ):
+        a, b = pair
+        groups[a] = groups[a] | groups.pop(b)
+        patches.pop(b)
+        patches[a] = hull_patch(groups[a])
+    return groups, patches
+
+
+def near_patch(patch: np.ndarray, small: list[np.ndarray]) -> list[int]:
+    """The small edits within CLEAN_REACH of the patch, or reaching into it."""
+    distance = cv2.distanceTransform((~patch).astype(np.uint8), cv2.DIST_L2, 5)
+    return [index for index, item in enumerate(small) if distance[item].min() <= CLEAN_REACH]
+
+
+def removed(original: np.ndarray, generated: np.ndarray, area: np.ndarray) -> bool:
+    """The generator left plain fabric where the original had detail: a
+    removed snowflake keeps almost none of its edges, while a redrawn pendant,
+    hair strand or wall drawing keeps them all or more."""
+    before = edge_strength(lab_lightness(original))[area].mean()
+    after = edge_strength(lab_lightness(generated))[area].mean()
+    return bool(after < CLEAN_REMOVED_EDGES * before)
+
+
+def join_near(
+    groups: list[np.ndarray], patches: list[np.ndarray], small: list[np.ndarray]
+) -> tuple[list[np.ndarray], bool]:
+    """Add to each group the small edits near its patch; return those left."""
+    taken: set[int] = set()
+    for group_index, patch in enumerate(patches):
+        near = [item for item in near_patch(patch, small) if item not in taken]
+        taken.update(near)
+        groups[group_index] = np.logical_or.reduce(
+            [groups[group_index], *(small[item] for item in near)]
+        )
+    return [item for index, item in enumerate(small) if index not in taken], bool(taken)
+
+
+def edited_areas(change: np.ndarray, blur: float) -> list[tuple[np.ndarray, int]]:
+    """Each connected area whose change, blurred, passes CLEAN_CHANGE, with its size."""
+    edited = (cv2.GaussianBlur(change, (0, 0), blur) > CLEAN_CHANGE).astype(np.uint8)
+    count, labels, stats, _ = cv2.connectedComponentsWithStats(edited)
+    return [(labels == label, int(stats[label, cv2.CC_STAT_AREA])) for label in range(1, count)]
+
+
+def redrawn_items(
+    original: np.ndarray, generated: np.ndarray, coarse: list[tuple[np.ndarray, int]]
+) -> np.ndarray:
+    """The edits that are not removals, each as its hull with a margin:
+    items the generator redrew, which the photo keeps as they were."""
+    keep = np.zeros((SIZE, SIZE), np.uint8)
+    for area, _ in coarse:
+        if not removed(original, generated, area):
+            cv2.fillConvexPoly(keep, cv2.convexHull(cv2.findNonZero(area.astype(np.uint8))), 1)
+    return cv2.dilate(keep, np.ones((CLEAN_KEEP, CLEAN_KEEP), np.uint8)) > 0
+
+
+def small_removals(
+    original: np.ndarray, generated: np.ndarray, change: np.ndarray, groups: list[np.ndarray]
+) -> list[np.ndarray]:
+    """The removals outside the large edits, found with less blur so a faint
+    dot of a print still shows."""
+    covered = np.logical_or.reduce([np.zeros((SIZE, SIZE), bool), *groups])
+    return [
+        area
+        for area, _ in edited_areas(change, CLEAN_FINE_BLUR)
+        if not (area & covered).any() and removed(original, generated, area)
+    ]
+
+
+def edited_patches(original: np.ndarray, generated: np.ndarray) -> list[np.ndarray]:
+    """One patch per area the generator edited. Edits large enough to be an
+    item anchor a patch, and overlapping patches merge. Small edits are found
+    with less blur, so a faint dot of a print still shows, and one counts
+    only when it is a removal; the rest is regeneration noise, such as a
+    redrawn pendant. A removal joins a patch within CLEAN_REACH of it, as the
+    scattered snowflakes and dots of a print do; one far from every patch is a
+    speck of hair or blanket the generator smoothed. A small edit that is not a
+    removal, such as a redrawn pendant, is cut out of any patch it reaches
+    into, so the photo keeps it whole."""
+    change = np.abs(generated.astype(np.int16) - original).max(axis=2).astype(np.float32)
+    coarse = edited_areas(change, 6)
+    groups = [
+        area
+        for area, size in coarse
+        if size >= CLEAN_MIN_AREA and removed(original, generated, area)
+    ]
+    keep = redrawn_items(original, generated, coarse)
+    small = small_removals(original, generated, change, groups)
+    while True:
+        groups, patches = merge_overlapping(groups)
+        small, joined = join_near(groups, patches, small)
+        if not joined:
+            return [patch & ~keep for patch in patches]
 
 
 def clone_patches(
@@ -471,7 +624,7 @@ def match_grain(cleaned: np.ndarray, original: np.ndarray, patches: list[np.ndar
         want = grain(original)[ring_outside(patch)].std()
         have = grain(result)[patch].std()
         noise = cv2.GaussianBlur(rng.standard_normal((SIZE, SIZE)).astype(np.float32), (0, 0), 0.7)
-        noise *= np.sqrt(max(want**2 - have**2, 0)) / max(float(noise.std()), 1e-6)
+        noise *= np.sqrt(max(want**2 - have**2, 0)) / max(float(grain(noise).std()), 1e-6)
         result += (noise * cv2.GaussianBlur(patch.astype(np.float32), (0, 0), 8))[..., None]
     return np.clip(result, 0, 255).astype(np.uint8)
 
@@ -603,13 +756,10 @@ def outline_colour(run_dir: Path, pilots: list[str]) -> str:
     return max(pilots, key=distance)
 
 
-def garment_outline(run_dir: Path, colour: str, size: int) -> np.ndarray:
-    """The shirt as `colour` recoloured it: the changed pixels, closed, keeping
-    only shirt-sized regions so stray changes (a light, jeans texture) drop out."""
-    source = load_rgb(run_dir / "source.png", size)
-    pixels = load_rgb(run_dir / "out" / f"{slugify(colour)}.png", size)
-    changed = (np.abs(pixels - source).max(axis=2) > CHANGE_THRESHOLD).astype(np.uint8)
-    closed = cv2.morphologyEx(changed, cv2.MORPH_CLOSE, np.ones((5, 5), np.uint8))
+def shirt_regions(changed: np.ndarray) -> np.ndarray:
+    """The changed pixels, closed, keeping only shirt-sized regions so stray changes
+    (a light, jeans texture) drop out."""
+    closed = cv2.morphologyEx(changed.astype(np.uint8), cv2.MORPH_CLOSE, np.ones((5, 5), np.uint8))
     count, labels, stats, _ = cv2.connectedComponentsWithStats(closed)
     if count < 2:  # noqa: PLR2004 -- label 0 is the background; nothing changed
         return np.zeros_like(closed, bool)
@@ -618,16 +768,339 @@ def garment_outline(run_dir: Path, colour: str, size: int) -> np.ndarray:
     return np.isin(labels, keep)
 
 
-def load_reference(run_dir: Path) -> np.ndarray | None:
-    path = run_dir / REFERENCE_MASK
-    if not path.is_file():
+def garment_outline(run_dir: Path, colour: str, size: int) -> np.ndarray:
+    """The shirt as `colour` recoloured it, from its changed pixels alone. It follows
+    whatever the generator painted, so it is only the fallback and the comparison for
+    shirt_outline."""
+    source = load_rgb(run_dir / "source.png", size)
+    pixels = load_rgb(run_dir / "out" / f"{slugify(colour)}.png", size)
+    return shirt_regions(np.abs(pixels - source).max(axis=2) > CHANGE_THRESHOLD)
+
+
+def disc(radius: float) -> np.ndarray:
+    side = 2 * max(1, round(radius)) + 1
+    return cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (side, side))
+
+
+def erode(mask: np.ndarray, radius: float) -> np.ndarray:
+    return cv2.erode(mask.astype(np.uint8), disc(radius)) > 0
+
+
+def dilate(mask: np.ndarray, radius: float) -> np.ndarray:
+    return cv2.dilate(mask.astype(np.uint8), disc(radius)) > 0
+
+
+def opened(mask: np.ndarray, radius: float) -> np.ndarray:
+    return cv2.morphologyEx(mask.astype(np.uint8), cv2.MORPH_OPEN, disc(radius)) > 0
+
+
+def at_size(pixels: np.ndarray, size: int) -> np.ndarray:
+    return cv2.resize(pixels, (size, size), interpolation=cv2.INTER_AREA)
+
+
+def mask_at(mask: np.ndarray, size: int) -> np.ndarray:
+    """A mask at another size, keeping its hard edge."""
+    if mask.shape[0] == size:
+        return mask
+    if mask.shape[0] < size:
+        return cv2.resize(mask.astype(np.uint8), (size, size), interpolation=cv2.INTER_NEAREST) > 0
+    return at_size(mask.astype(np.float32), size) >= 0.5  # noqa: PLR2004 -- half the pixels
+
+
+def lab_pixels(pixels: np.ndarray) -> np.ndarray:
+    return cv2.cvtColor(pixels.astype(np.float32) / 255, cv2.COLOR_RGB2LAB)
+
+
+def ab_distance(lab: np.ndarray, colour: np.ndarray) -> np.ndarray:
+    return np.hypot(lab[..., 1] - colour[1], lab[..., 2] - colour[2])
+
+
+def photo_change(source: np.ndarray, pilot_photo: np.ndarray) -> np.ndarray:
+    """Max per-channel difference at ANALYSIS_SIZE."""
+    before = at_size(source, ANALYSIS_SIZE).astype(np.float32)
+    return np.abs(before - at_size(pilot_photo, ANALYSIS_SIZE).astype(np.float32)).max(axis=2)
+
+
+def chest_colour(lab: np.ndarray, core: np.ndarray) -> np.ndarray:
+    """Median Lab of a disc at the shirt's deepest point, away from every edge."""
+    depth = cv2.distanceTransform(core.astype(np.uint8), cv2.DIST_L2, 5)
+    y, x = np.unravel_index(np.argmax(depth), depth.shape)
+    patch = np.zeros(core.shape, np.uint8)
+    cv2.circle(patch, (int(x), int(y)), max(4, int(depth[y, x] * 0.6)), 1, -1)
+    return np.median(lab[(patch > 0) & core], axis=0)
+
+
+def shirt_ab_limit(lab: np.ndarray, core: np.ndarray, colour: np.ndarray) -> float:
+    """The shirt's own colour spread: most of the fabric, shadows included, sits inside it."""
+    spread = SHIRT_AB_SPREAD * np.percentile(ab_distance(lab, colour)[core], 90)
+    return float(np.clip(spread, *SHIRT_AB_RANGE))
+
+
+def matches_chest(lab: np.ndarray, area: np.ndarray, chest: np.ndarray, limit: float) -> bool:
+    colour = np.median(lab[area], axis=0)
+    near_ab = float(np.hypot(*(colour - chest)[1:])) < limit
+    return near_ab and abs(float(colour[0] - chest[0])) < PIECE_MAX_L
+
+
+def small_pieces(source: np.ndarray, far: np.ndarray, seed: np.ndarray, limit: float) -> np.ndarray:
+    """Changed regions the seed's size filter dropped, at ANALYSIS_SIZE, kept where
+    the source and the far pilot both match their own chest colours."""
+    core = erode(seed, PIECE_CORE)
+    pieces = np.zeros_like(seed)
+    if not core.any():
+        return pieces
+    labs = [lab_pixels(at_size(photo, ANALYSIS_SIZE)) for photo in (source, far)]
+    chests = [np.median(lab[core], axis=0) for lab in labs]
+    changed = (photo_change(source, far) > CHANGE_THRESHOLD) & ~seed
+    count, labels, stats, _ = cv2.connectedComponentsWithStats(changed.astype(np.uint8))
+    for label in range(1, count):
+        if stats[label, cv2.CC_STAT_AREA] < PIECE_MIN_AREA:
+            continue
+        area = labels == label
+        photos = zip(labs, chests, strict=True)
+        if all(matches_chest(lab, area, chest, limit) for lab, chest in photos):
+            pieces |= area
+    return pieces
+
+
+def unchanged_holes(seed: np.ndarray) -> np.ndarray:
+    """At ANALYSIS_SIZE: what the far pilot left alone inside the shirt, in holes and
+    narrow notches, such as hair and pendants."""
+    filled = np.zeros(seed.shape, np.uint8)
+    contours, _ = cv2.findContours(
+        seed.astype(np.uint8), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
+    )
+    cv2.drawContours(filled, contours, -1, 1, -1)
+    closed = cv2.morphologyEx(seed.astype(np.uint8), cv2.MORPH_CLOSE, disc(NOTCH_CLOSE)) > 0
+    holes = opened(((filled > 0) | closed) & ~seed, HOLE_OPEN)
+    _, labels, stats, _ = cv2.connectedComponentsWithStats(holes.astype(np.uint8))
+    return np.isin(labels, 1 + np.flatnonzero(stats[1:, cv2.CC_STAT_AREA] >= HOLE_MIN_AREA))
+
+
+def matches_both_photos(
+    lab: np.ndarray, pilot_lab: np.ndarray, core: np.ndarray, limit: float
+) -> np.ndarray:
+    """The source plausibly shows the shirt and the far pilot painted its own shirt
+    colour. The source side is loose, and the pilot side does the rejecting."""
+    colour, pilot_colour = np.median(lab[core], axis=0), np.median(pilot_lab[core], axis=0)
+    dark, light = np.percentile(lab[..., 0][core], [1, 99])
+    pilot_dark, pilot_light = np.percentile(pilot_lab[..., 0][core], [1, 99])
+    source_ok = (
+        (ab_distance(lab, colour) < max(limit, SOURCE_AB_FLOOR))
+        & (lab[..., 0] > dark - SOURCE_SHADOW_MARGIN)
+        & (lab[..., 0] < light + SOURCE_HIGHLIGHT_MARGIN)
+    )
+    pilot_ok = (
+        (ab_distance(pilot_lab, pilot_colour) < shirt_ab_limit(pilot_lab, core, pilot_colour))
+        & (pilot_lab[..., 0] > pilot_dark - PILOT_L_MARGIN)
+        & (pilot_lab[..., 0] < pilot_light + PILOT_L_MARGIN)
+    )
+    return source_ok & pilot_ok
+
+
+def near_pilot_changed(source: np.ndarray, near: np.ndarray) -> np.ndarray:
+    change = cv2.GaussianBlur(photo_change(source, near), (0, 0), NEAR_PILOT_BLUR)
+    grown = cv2.resize(change, (OUTLINE_WORK,) * 2, interpolation=cv2.INTER_LINEAR)
+    return grown > NEAR_PILOT_CHANGE
+
+
+def definite_shirt(seed: np.ndarray, passes_gate: np.ndarray) -> np.ndarray:
+    """The seed, opened and eroded, where the colour gate passes. The gate only ever
+    takes pixels out of definite shirt: failing it never marks background."""
+    gated = opened(seed & passes_gate, GATE_OPEN * OUTLINE_SCALE)
+    return erode(opened(gated, SEED_SPUR * OUTLINE_SCALE), DEFINITE_ERODE * OUTLINE_SCALE)
+
+
+def run_grabcut(
+    image: np.ndarray, seed: np.ndarray, shirt: np.ndarray, background: np.ndarray
+) -> np.ndarray:
+    """Cut the source along its own edges. With a shirt and a background marked, the
+    crop always holds both, as cv2.grabCut needs."""
+    size = seed.shape[0]
+    markers = np.full(seed.shape, cv2.GC_PR_BGD, np.uint8)
+    markers[seed] = cv2.GC_PR_FGD
+    markers[shirt] = cv2.GC_FGD
+    markers[background] = cv2.GC_BGD
+    ys, xs = np.nonzero(~background)
+    pad = int(CROP_MARGIN * size)
+    rows = slice(max(ys.min() - pad, 0), min(ys.max() + pad, size))
+    columns = slice(max(xs.min() - pad, 0), min(xs.max() + pad, size))
+    crop = np.ascontiguousarray(markers[rows, columns])
+    cv2.setRNGSeed(1)  # GrabCut starts from k-means, so results repeat only with a fixed seed
+    cv2.grabCut(
+        np.ascontiguousarray(image[rows, columns, ::-1]),
+        crop,
+        None,
+        np.zeros((1, 65)),
+        np.zeros((1, 65)),
+        OUTLINE_ITERATIONS,
+        cv2.GC_INIT_WITH_MASK,
+    )
+    cut = np.zeros(seed.shape, bool)
+    cut[rows, columns] = (crop == cv2.GC_FGD) | (crop == cv2.GC_PR_FGD)
+    return cut
+
+
+def keep_shirt_pieces(
+    cut: np.ndarray, seed: np.ndarray, shirt: np.ndarray, off_chest: np.ndarray, limit: float
+) -> np.ndarray:
+    """The main body, plus separate pieces in the seed that match the shirt or hold
+    definite shirt."""
+    pieces = opened(cut, SLIVER_OPEN * OUTLINE_SCALE)
+    count, labels, stats, _ = cv2.connectedComponentsWithStats(pieces.astype(np.uint8))
+    if count < 2:  # noqa: PLR2004 -- label 0 is the background; nothing survived
+        return pieces
+    main = 1 + int(np.argmax(stats[1:, cv2.CC_STAT_AREA]))
+    keep = labels == main
+    smallest = KEEP_PIECE_AREA * OUTLINE_SCALE**2
+    for label in range(1, count):
+        if label == main or stats[label, cv2.CC_STAT_AREA] < smallest:
+            continue
+        piece = labels == label
+        looks_like_shirt = (
+            shirt[piece].mean() > KEEP_PIECE_DEFINITE or np.median(off_chest[piece]) < limit
+        )
+        if seed[piece].mean() > KEEP_PIECE_SEED and looks_like_shirt:
+            keep |= piece
+    return keep
+
+
+def fill_holes(keep: np.ndarray, off_chest: np.ndarray, limit: float) -> np.ndarray:
+    """Fill GrabCut's shirt-coloured pinholes, leaving pendants and hair out."""
+    count, labels, stats, _ = cv2.connectedComponentsWithStats(
+        (~keep).astype(np.uint8), connectivity=4
+    )
+    height, width = keep.shape
+    filled = keep.copy()
+    for label in range(1, count):
+        left, top, wide, tall, area = stats[label]
+        inside = left > 0 and top > 0 and left + wide < width and top + tall < height
+        if area > MAX_HOLE * OUTLINE_SCALE**2 or not inside:
+            continue
+        hole = labels == label
+        if np.median(off_chest[hole]) < limit:
+            filled |= hole
+    return filled
+
+
+def full_size_outline(mask: np.ndarray) -> np.ndarray:
+    half = 0.5  # a blurred mask's edge
+    smooth = cv2.GaussianBlur(mask.astype(np.float32), (0, 0), OUTLINE_SMOOTH * OUTLINE_SCALE)
+    grown = cv2.resize((smooth > half).astype(np.float32), (SIZE, SIZE))
+    return cv2.GaussianBlur(grown, (0, 0), FULL_SIZE_SMOOTH) > half
+
+
+def shirt_outline(source: np.ndarray, far: np.ndarray, near: np.ndarray) -> np.ndarray | None:
+    """The shirt at SIZE, cut along the source's own edges: the far pilot only seeds it,
+    so its fringe and spill don't reach the outline. `source`, `far` and `near` are SIZE
+    RGB, the pilots ordered by outline_colour. None when the seed holds no definite shirt
+    or background, which cv2.grabCut refuses."""
+    seed_small = shirt_regions(photo_change(source, far) > CHANGE_THRESHOLD)
+    seed = mask_at(seed_small, OUTLINE_WORK)
+    core = erode(seed, SEED_CORE * OUTLINE_SCALE)
+    if not core.any() or core.all():
         return None
+    image = at_size(source, OUTLINE_WORK)
+    lab = lab_pixels(image)
+    chest = chest_colour(lab, core)
+    limit = shirt_ab_limit(lab, core, chest)
+    off_chest = ab_distance(lab, chest)
+    pieces = mask_at(small_pieces(source, far, seed_small, limit), OUTLINE_WORK)
+    seed = seed | pieces
+
+    both = matches_both_photos(lab, lab_pixels(at_size(far, OUTLINE_WORK)), core, limit)
+    holes = mask_at(unchanged_holes(seed_small), OUTLINE_WORK)
+    shirt = ~holes & (
+        definite_shirt(seed, (off_chest < limit) | near_pilot_changed(source, near))
+        | erode(pieces, PIECE_ERODE * OUTLINE_SCALE)
+        | erode(opened(both & seed, GATE_OPEN * OUTLINE_SCALE), BOTH_MATCH_ERODE * OUTLINE_SCALE)
+    )
+    background = ~dilate(seed, BACKGROUND_REACH * OUTLINE_SCALE) | holes
+    if not shirt.any() or not background.any():
+        return None
+
+    cut = run_grabcut(image, seed, shirt, background)
+    kept = keep_shirt_pieces(cut, seed, shirt, off_chest, limit)
+    return full_size_outline(fill_holes(kept, off_chest, limit)) if kept.any() else None
+
+
+def automatic_outline(run_dir: Path, pilots: list[str]) -> np.ndarray:
+    """The shirt_outline of this run, or the changed-pixel outline when it has none."""
+    far = outline_colour(run_dir, pilots)
+    near = next(c for c in pilots if c != far)
+    outline = shirt_outline(
+        load_square(run_dir / "source.png"),
+        load_square(run_dir / "out" / f"{slugify(far)}.png"),
+        load_square(run_dir / "out" / f"{slugify(near)}.png"),
+    )
+    if outline is not None:
+        return outline
+    say("Outline: the seed holds no definite shirt or background; fell back to changed pixels.")
+    return mask_at(garment_outline(run_dir, far, ANALYSIS_SIZE), SIZE)
+
+
+def band_spill(outline: np.ndarray, source: np.ndarray, far: np.ndarray) -> float | None:
+    """Percent of the band just inside the outline's edge that looks wrong in both the
+    source and the far pilot: background the outline took in. None without a core."""
+    core = erode(outline, SPILL_CORE)
+    if not core.any():
+        return None
+    lab, pilot_lab = lab_pixels(source), lab_pixels(far)
+    colour, pilot_colour = np.median(lab[core], axis=0), np.median(pilot_lab[core], axis=0)
+    off_chest = ab_distance(lab, colour)
+    limit = max(SPILL_AB_FLOOR, SHIRT_AB_SPREAD * np.percentile(off_chest[core], 90))
+    light = np.percentile(lab[..., 0][core], 99)
+    pilot_dark, pilot_light = np.percentile(pilot_lab[..., 0][core], [1, 99])
+    wrong_in_source = (off_chest > limit) | (lab[..., 0] > light + SPILL_HIGHLIGHT_MARGIN)
+    wrong_in_pilot = (
+        (ab_distance(pilot_lab, pilot_colour) > SPILL_PILOT_AB)
+        | (pilot_lab[..., 0] < pilot_dark - SPILL_PILOT_L_MARGIN)
+        | (pilot_lab[..., 0] > pilot_light + SPILL_PILOT_L_MARGIN)
+    )
+    band = outline & ~erode(outline, SPILL_BAND)
+    return float((wrong_in_source & wrong_in_pilot)[band].mean() * 100)
+
+
+@dataclass
+class Disagreement:
+    box: tuple[int, int, int, int]  # left, top, right, bottom at SIZE
+    area: int
+    side: str  # the outline that holds the region: "old" or "new"
+
+
+def largest_disagreement(old: np.ndarray, new: np.ndarray) -> Disagreement | None:
+    """The largest region only one of the two outlines holds."""
+    differs = opened(old ^ new, DISAGREE_OPEN)
+    count, labels, stats, _ = cv2.connectedComponentsWithStats(differs.astype(np.uint8))
+    if count < 2:  # noqa: PLR2004 -- label 0 is the background; no region
+        return None
+    label = 1 + int(np.argmax(stats[1:, cv2.CC_STAT_AREA]))
+    left, top, width, height, area = (int(v) for v in stats[label])
+    side = "old" if old[labels == label].mean() > 0.5 else "new"  # noqa: PLR2004 -- majority
+    return Disagreement((left, top, left + width, top + height), area, side)
+
+
+def load_mask(path: Path, size: int) -> np.ndarray:
     with Image.open(path) as image:
-        return np.asarray(image.convert("L")) > 0
+        return mask_at(np.asarray(image.convert("L")) > 0, size)
 
 
-def outline_overlay(run_dir: Path, garment: np.ndarray) -> Path:
-    """The source with the pilot's shirt outline drawn on it in green."""
+def save_mask(mask: np.ndarray, path: Path) -> None:
+    Image.fromarray((mask * 255).astype(np.uint8)).save(path)
+
+
+def load_reference(run_dir: Path, size: int = ANALYSIS_SIZE) -> np.ndarray | None:
+    """The approved outline at `size`. References are saved at SIZE, and older runs'
+    at ANALYSIS_SIZE."""
+    path = run_dir / REFERENCE_MASK
+    return load_mask(path, size) if path.is_file() else None
+
+
+def outline_overlay(
+    run_dir: Path, garment: np.ndarray, name: str, disagreement: Disagreement | None
+) -> Path:
+    """The source with the shirt outline drawn on it in green, and the largest
+    disagreement with the old automatic outline boxed in magenta."""
     with Image.open(run_dir / "source.png") as image:
         canvas = np.array(image.convert("RGB"))
     scale = SIZE / garment.shape[0]
@@ -636,7 +1109,10 @@ def outline_overlay(run_dir: Path, garment: np.ndarray) -> Path:
     )
     scaled = [np.rint(c * scale).astype(np.int32) for c in contours]
     cv2.drawContours(canvas, scaled, -1, (0, 255, 0), 3)
-    path = run_dir / "review" / "pilot" / "outline.jpg"
+    if disagreement:
+        left, top, right, bottom = disagreement.box
+        cv2.rectangle(canvas, (left, top), (right, bottom), (255, 0, 255), 3)
+    path = run_dir / "review" / "pilot" / name
     Image.fromarray(canvas).save(path, quality=92)
     return path
 
@@ -689,10 +1165,47 @@ def pilot_review(run_dir: Path, pilots: list[str]) -> None:
     if pilot_dir.exists():
         shutil.rmtree(pilot_dir)
     pilot_dir.mkdir(parents=True)
-    garment = garment_outline(run_dir, outline_colour(run_dir, pilots), SIZE // 2)
-    say(f"Outline: {outline_overlay(run_dir, garment)}")
+    garment = automatic_outline(run_dir, pilots)
+    if not garment.any():
+        raise SystemExit("The outline pilot changed nothing; there is no shirt to outline.")
+    save_mask(garment, pilot_dir / REVIEWED_MASK)
+    far = outline_colour(run_dir, pilots)
+    old = mask_at(garment_outline(run_dir, far, ANALYSIS_SIZE), SIZE)
+    disagreement = largest_disagreement(old, garment)
+    say(f"Outline: {outline_overlay(run_dir, garment, 'outline.jpg', disagreement)}")
+    report_spill(run_dir, far, garment)
+    report_disagreement(disagreement)
     say("Tiles (source | " + " | ".join(pilots) + "):")
     say("\n".join(str(p) for p in tile_sheets(run_dir, pilots, garment)))
+
+
+def report_spill(run_dir: Path, far: str, garment: np.ndarray) -> None:
+    spill = band_spill(
+        garment,
+        load_square(run_dir / "source.png"),
+        load_square(run_dir / "out" / f"{slugify(far)}.png"),
+    )
+    if spill is None:
+        say("Band spill: not measured; the outline is too thin to have a core.")
+    elif spill >= MAX_BAND_SPILL_PCT:
+        say(
+            f"Band spill {spill:.1f}% is at or over {MAX_BAND_SPILL_PCT}%: "
+            "check the outline isn't too big."
+        )
+    else:
+        say(f"Band spill {spill:.1f}%.")
+
+
+def report_disagreement(disagreement: Disagreement | None) -> None:
+    if disagreement is None:
+        say("Largest disagreement with the old automatic outline: none.")
+        return
+    left, top, right, bottom = disagreement.box
+    say(
+        f"Largest disagreement with the old automatic outline: {disagreement.area}px at "
+        f"x{left}-{right} y{top}-{bottom}, only in the {disagreement.side} outline "
+        "(magenta box); check which is right."
+    )
 
 
 def pilot_notes(run_dir: Path, pilots: list[str]) -> list[str]:
@@ -707,10 +1220,69 @@ def pilot_notes(run_dir: Path, pilots: list[str]) -> list[str]:
     return notes
 
 
-def approve_pilot(run_dir: Path, pilots: list[str]) -> None:
-    """Freeze the reviewed outline and carry the pilot's guidance into every brief."""
-    reference = garment_outline(run_dir, outline_colour(run_dir, pilots), ANALYSIS_SIZE)
-    Image.fromarray((reference * 255).astype(np.uint8)).save(run_dir / REFERENCE_MASK)
+def reviewed_outline(run_dir: Path, pilots: list[str]) -> np.ndarray:
+    """The outline `pilot` showed, so what gets approved is what was reviewed."""
+    path = run_dir / "review" / "pilot" / REVIEWED_MASK
+    if not path.is_file():
+        raise SystemExit(f"No reviewed outline at {path}. Run `pilot` first and review it.")
+    photos = [run_dir / "source.png", *(run_dir / "out" / f"{slugify(c)}.png" for c in pilots)]
+    newer = [p.name for p in photos if p.stat().st_mtime > path.stat().st_mtime]
+    if newer:
+        raise SystemExit(f"{', '.join(newer)} changed since the review. Run `pilot` again.")
+    return load_mask(path, SIZE)
+
+
+def supplied_outline(path: Path) -> np.ndarray:
+    """A hand-corrected mask of any square size, at SIZE. Grey counts as shirt from half
+    brightness, so an anti-aliased mask keeps its line."""
+    if not path.is_file():
+        raise SystemExit(f"Outline mask not found: {path}")
+    with Image.open(path) as image:
+        if image.width != image.height:
+            raise SystemExit(f"{path.name} is {image.width}x{image.height}; it must be square.")
+        mask = mask_at(np.asarray(image.convert("L")) > 127, SIZE)  # noqa: PLR2004 -- half
+    if not mask.any():
+        raise SystemExit(f"{path.name} is empty: white marks the shirt, black the rest.")
+    if mask.all():
+        raise SystemExit(f"{path.name} covers the whole frame: white marks only the shirt.")
+    return mask
+
+
+def install_reference(run_dir: Path, reference: np.ndarray, kind: str) -> None:
+    """Save the outline. The record goes first, so a failure in between can't leave a
+    manual mask that a later `--approve` may overwrite."""
+    meta = run_meta(run_dir) | {"outline": kind}
+    (run_dir / "run.json").write_text(json.dumps(meta, indent=2), encoding="utf-8")
+    save_mask(reference, run_dir / REFERENCE_MASK)
+
+
+def approved_outline(
+    run_dir: Path, pilots: list[str], supplied: Path | None
+) -> tuple[np.ndarray, str]:
+    """The outline to install and its kind. A reference with no record counts as automatic."""
+    if supplied is not None:
+        return supplied_outline(supplied), "manual"
+    if (run_dir / REFERENCE_MASK).is_file() and run_meta(run_dir).get("outline") == "manual":
+        raise SystemExit(
+            f"{run_dir / REFERENCE_MASK} is a manual outline; `--approve` alone would "
+            "overwrite it. Pass `--approve --reference MASK` to replace it."
+        )
+    return reviewed_outline(run_dir, pilots), "automatic"
+
+
+def approve_pilot(run_dir: Path, pilots: list[str], supplied: Path | None) -> None:
+    """Freeze the outline, reviewed or supplied, and carry the pilot's guidance into
+    every brief."""
+    reference, kind = approved_outline(run_dir, pilots, supplied)
+    install_reference(run_dir, reference, kind)
+    if kind == "manual":
+        (run_dir / "review" / "pilot").mkdir(parents=True, exist_ok=True)
+        say(f"Outline: {outline_overlay(run_dir, reference, 'outline-manual.jpg', None)}")
+    say(f"Reference outline ({kind}): {run_dir / REFERENCE_MASK}")
+    carry_notes(run_dir, pilots)
+
+
+def carry_notes(run_dir: Path, pilots: list[str]) -> None:
     notes = pilot_notes(run_dir, pilots)
     others = [c for c in COLOURS if c not in pilots and brief_path(run_dir, c).is_file()]
     for colour in others:
@@ -719,7 +1291,6 @@ def approve_pilot(run_dir: Path, pilots: list[str]) -> None:
         missing = [note for note in notes if note not in text]
         if missing:
             path.write_text(text.rstrip() + "\n\n" + "\n\n".join(missing) + "\n", encoding="utf-8")
-    say(f"Reference outline: {run_dir / REFERENCE_MASK}")
     say(f"{len(notes)} pilot note(s) carried into {len(others)} briefs:")
     say("\n".join(str(brief_path(run_dir, c)) for c in others))
 
@@ -730,8 +1301,10 @@ def pilot(args: argparse.Namespace) -> None:
     missing = [c for c in pilots if not (run_dir / "out" / f"{slugify(c)}.png").is_file()]
     if missing:
         raise SystemExit(f"Pilot photos missing: {', '.join(missing)}")
+    if args.reference and not args.approve:
+        raise SystemExit("--reference only works with --approve.")
     if args.approve:
-        approve_pilot(run_dir, pilots)
+        approve_pilot(run_dir, pilots, Path(args.reference) if args.reference else None)
     else:
         pilot_review(run_dir, pilots)
 
@@ -966,7 +1539,12 @@ def main() -> None:
     plt.add_argument(
         "--approve",
         action="store_true",
-        help="freeze the pilot's outline as the reference and copy its notes into every brief",
+        help="freeze the reviewed outline as the reference and copy its notes into every brief",
+    )
+    plt.add_argument(
+        "--reference",
+        metavar="MASK",
+        help="with --approve: use this hand-corrected square mask, white on black, as the outline",
     )
     plt.set_defaults(func=pilot)
 
