@@ -16,8 +16,12 @@ from etsy_listings.core.application.mockup_templates import (
     TemplateOverview,
     list_templates,
 )
+from etsy_listings.core.engine.stage import Blocked
+from etsy_listings.core.engine.stages.render import RenderStage
 from etsy_listings.core.workspace import WorkspaceFacts
 from etsy_listings.core.workspace.workspace import Workspace
+
+from tests.support.builders import FIXTURE_LISTING, a_context
 
 DAMAGED = "flat-lay-01"
 HEALTHY = "colour-chart-01"
@@ -57,3 +61,13 @@ def test_gathering_facts_leaves_out_only_the_damaged_template(workspace: Workspa
 
     assert DAMAGED not in templates
     assert HEALTHY in templates
+
+
+def test_the_render_stage_refuses_a_template_needing_repair(workspace_root: Path) -> None:
+    ctx = a_context(workspace_root)
+    _damage_transaction(ctx.workspace, DAMAGED)
+
+    desired = RenderStage().desired(ctx, FIXTURE_LISTING, None)
+
+    assert isinstance(desired, Blocked)
+    assert "transaction" in desired.message
