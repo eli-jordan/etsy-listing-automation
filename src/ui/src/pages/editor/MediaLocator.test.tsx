@@ -133,6 +133,86 @@ describe("MediaLocator's template rows", () => {
   });
 });
 
+const box = () => screen.getByRole("combobox", { name: /Search templates/ });
+
+function typeInBox(text: string) {
+  fireEvent.change(box(), { target: { value: text } });
+}
+
+function pickLabel(label: string) {
+  fireEvent.click(box());
+  fireEvent.click(screen.getByRole("option", { name: new RegExp(`^${label}`) }));
+}
+
+function shownTemplates(): (string | null)[] {
+  return [...document.querySelectorAll(".loc-tmpl__name")].map((name) => name.textContent);
+}
+
+describe("MediaLocator's template search", () => {
+  const tree = template({ name: "woman-by-tree", labels: ["theme:christmas"] });
+  const fire = template({ name: "fireplace", labels: ["theme:christmas", "shot:flat lay"] });
+  const beach = template({ name: "beach-tree", labels: ["theme:summer"] });
+
+  it("opens on every template, with the filter empty", () => {
+    templatesLocator([tree, fire, beach]);
+
+    expect(screen.getByRole("status")).toHaveTextContent("3 of 3 templates");
+    expect(shownTemplates()).toEqual(["woman-by-tree", "fireplace", "beach-tree"]);
+  });
+
+  it("lists only what holds every pill, and says how many that leaves", () => {
+    templatesLocator([tree, fire, beach]);
+
+    pickLabel("theme:christmas");
+    expect(shownTemplates()).toEqual(["woman-by-tree", "fireplace"]);
+    expect(screen.getByRole("status")).toHaveTextContent("2 of 3 templates");
+
+    pickLabel("shot:flat lay");
+    expect(shownTemplates()).toEqual(["fireplace"]);
+    expect(screen.getByRole("status")).toHaveTextContent("1 of 3 templates");
+  });
+
+  it("narrows what the pills leave by title, not every template", () => {
+    templatesLocator([tree, fire, beach]);
+
+    pickLabel("theme:christmas");
+    typeInBox(" TREE ");
+
+    expect(shownTemplates()).toEqual(["woman-by-tree"]);
+    expect(screen.getByRole("status")).toHaveTextContent("1 of 3 templates");
+  });
+
+  it("does not search labels with plain text", () => {
+    templatesLocator([tree, beach]);
+
+    typeInBox("christmas");
+
+    expect(shownTemplates()).toEqual([]);
+    expect(screen.getByText("No template matches.")).toBeInTheDocument();
+  });
+
+  it("counts only the calibrated templates it lists", () => {
+    const draft = template({
+      name: "uncalibrated",
+      labels: ["theme:christmas", "theme:easter"],
+      status: "needs-calibration",
+    });
+    templatesLocator([tree, fire, beach, draft]);
+
+    expect(screen.getByRole("status")).toHaveTextContent("3 of 3 templates");
+
+    fireEvent.click(box());
+    expect(screen.getByRole("option", { name: /^theme:christmas/ })).toHaveTextContent(/2$/);
+    expect(screen.queryByRole("option", { name: /theme:easter/ })).not.toBeInTheDocument();
+  });
+
+  it("reads right with one template", () => {
+    templatesLocator([tree]);
+
+    expect(screen.getByRole("status")).toHaveTextContent(/^1 of 1 template$/);
+  });
+});
+
 describe("MediaLocator's file list", () => {
   it("groups the listing's own files before the shared ones without exposing ref roots", () => {
     locator();

@@ -1,4 +1,6 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
+import { holdsLabels } from "../../components/labelRules";
+import { LabelSearch } from "../../components/LabelSearch";
 import { MutedClip } from "../../components/MutedClip";
 import { useHoverPlay } from "../../hooks/useHoverPlay";
 import { mediaKind, pictureFor, type MediaOwner } from "../../media";
@@ -24,8 +26,8 @@ import { MAX_VIDEOS } from "./mediaEdits";
  * gallery; a video is drawn by a muted `<video>` from its own first
  * frame, carries its length, and plays on hover.
  *
- * Its own state is what it is *showing* (which half, the search, which template
- * is expanded). What a click *means* belongs to `mediaEdits`, and where the
+ * Its own state is what it is *showing* (which half, the search and its label
+ * pills, which template is expanded). What a click *means* belongs to `mediaEdits`, and where the
  * preview is pointing belongs to the tab, because the preview pane and the reel
  * both read it.
  */
@@ -143,10 +145,17 @@ export function MediaLocator({
     isNullableString,
   );
 
+  const [pills, setPills] = useState<string[]>([]);
+
+  // Calibrated only, here and in the box: it offers and counts what the locator
+  // can list (spec *Listing Images*).
+  const calibrated = useMemo(() => templates.filter((t) => t.status === "calibrated"), [templates]);
+  const labelLists = useMemo(() => calibrated.map((t) => t.labels), [calibrated]);
+  const term = query.trim().toLowerCase();
+  const filtered = calibrated.filter(
+    (t) => holdsLabels(t.labels, pills) && t.name.toLowerCase().includes(term),
+  );
   const needle = query.toLowerCase();
-  const filtered = templates
-    .filter((t) => t.status === "calibrated")
-    .filter((t) => t.name.toLowerCase().includes(needle));
   const matches = (a: MediaFileSummary) => a.name.toLowerCase().includes(needle);
   const listing = owner === undefined ? detail.name || null : owner;
   const groups = [
@@ -196,19 +205,36 @@ export function MediaLocator({
         ))}
       </div>
 
-      <div className="locator__search">
-        <svg viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <circle cx="11" cy="11" r="7" />
-          <path d="M20 20l-3.5-3.5" />
-        </svg>
-        <input
-          className="input"
-          type="text"
-          placeholder={mode === "templates" ? "Search templates…" : "Search files…"}
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-        />
-      </div>
+      {mode === "templates" && (
+        <>
+          <LabelSearch
+            items={labelLists}
+            on={pills}
+            onOn={setPills}
+            query={query}
+            onQuery={setQuery}
+          />
+          <div className="locator__result" role="status">
+            {`${filtered.length} of ${calibrated.length} template${calibrated.length === 1 ? "" : "s"}`}
+          </div>
+        </>
+      )}
+
+      {mode === "files" && (
+        <div className="locator__search">
+          <svg viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="11" cy="11" r="7" />
+            <path d="M20 20l-3.5-3.5" />
+          </svg>
+          <input
+            className="input"
+            type="text"
+            placeholder="Search files…"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+          />
+        </div>
+      )}
 
       {mode === "files" && (
         <div className="locator__list">
@@ -266,9 +292,7 @@ export function MediaLocator({
               actions={{ onToggleTemplate, onAddMissingColours, onToggleSwatchSource, onFocus }}
             />
           ))}
-          {filtered.length === 0 && (
-            <p className="locator__empty">No template matches that search.</p>
-          )}
+          {filtered.length === 0 && <p className="locator__empty">No template matches.</p>}
         </div>
       )}
     </div>
