@@ -1,5 +1,10 @@
 import { useEffect, useState, useSyncExternalStore } from "react";
-import { getTemplateConfig, saveTemplateConfig, TemplateConflictError } from "../api/calibrator";
+import {
+  CalibratorApiError,
+  getTemplateConfig,
+  saveTemplateConfig,
+  TemplateConflictError,
+} from "../api/calibrator";
 import {
   cancelPreparation,
   getPreparation,
@@ -32,6 +37,8 @@ export type PreparationAction = "prepare" | "prepare_again" | "retry";
 
 export interface TemplateSession {
   load: TemplateLoad;
+  /** Why the template could not be read, when the server said. */
+  loadError: string | null;
   /** The draft: the document as last read or saved, with every edit since. */
   config: TemplateConfigState | null;
   /** The document as this session last read or wrote it. */
@@ -114,6 +121,7 @@ function onlyLabelsDiffer(before: TemplateConfigState, after: TemplateConfigStat
 interface Doc {
   name: string;
   load: "loading" | "ready" | "error";
+  loadError: string | null;
   draft: TemplateConfigState | null;
   saved: TemplateConfigState | null;
   /** Sent as `If-Match`; advanced by every save and by an adopted baseline. */
@@ -139,6 +147,7 @@ interface SaveWanted {
 interface View {
   name: string | null;
   load: TemplateLoad;
+  loadError: string | null;
   config: TemplateConfigState | null;
   saved: TemplateConfigState | null;
   dirty: boolean;
@@ -367,6 +376,7 @@ class Session {
     const doc: Doc = {
       name,
       load: "loading",
+      loadError: null,
       draft: null,
       saved: null,
       revision: "",
@@ -406,9 +416,10 @@ class Session {
           doc.save = loaded ? { kind: "saved", savedAt: Date.parse(loaded.modifiedAt) } : IDLE;
           this.emit();
         },
-        () => {
+        (e: unknown) => {
           if (this.doc !== doc) return;
           doc.load = "error";
+          doc.loadError = e instanceof CalibratorApiError ? e.message : null;
           this.emit();
         },
       );
@@ -526,6 +537,7 @@ class Session {
     return {
       name: doc?.name ?? null,
       load: doc?.load ?? "none",
+      loadError: doc?.loadError ?? null,
       config: ready ? doc.draft : null,
       saved: ready ? doc.saved : null,
       dirty: doc ? isDirty(doc) : false,
@@ -573,6 +585,7 @@ export function useTemplateSession(
           ...stored,
           name,
           load: name === null ? "none" : "loading",
+          loadError: null,
           config: null,
           saved: null,
           dirty: false,
@@ -599,6 +612,7 @@ export function useTemplateSession(
 
   return {
     load: view.load,
+    loadError: view.loadError,
     config: view.config,
     saved: view.saved,
     dirty: view.dirty,

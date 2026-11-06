@@ -107,6 +107,19 @@ describe("the Labels bar", () => {
     expect(screen.queryByRole("group", { name: "Labels" })).not.toBeInTheDocument();
   });
 
+  it("says why a template cannot be read, rather than offering a kind", async () => {
+    vi.mocked(calibrator.getTemplateConfig).mockRejectedValue(
+      new calibrator.CalibratorApiError("needs repair: the last save did not finish"),
+    );
+
+    render(<App />);
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "needs repair: the last save did not finish",
+    );
+    expect(screen.queryByText("What kind of template is this?")).not.toBeInTheDocument();
+  });
+
   it("stays on show on both Calibrate and Preview", async () => {
     opening({ ...SINGLE, labels: ["cosy"] });
     render(<App />);
