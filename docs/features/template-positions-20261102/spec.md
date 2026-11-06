@@ -143,6 +143,12 @@ from preparation evidence that covers every allowed pose.
   rebuilt from evidence. Fits no listing references are pruned with the cache:
   at server startup and whenever background scene warming finishes, never
   while a fit is being written or used.
+- **When coverage runs.** A completed preparation queues the template's
+  coverage inference as a second job, so the template is ready for positions
+  before a seller adjusts one (ADR-0058, amendment *coverage belongs to
+  preparation*). `POST /api/preparation/coverage` queues it for every prepared
+  Marigold template on request. Saving a position still queues it when evidence
+  falls short.
 - **When fits run.** Saving a position queues its fit in the background. The
   preview route and `plan`/apply wait for a missing or running fit rather than
   render with the template's own maps; the editor shows its normal loading
@@ -163,8 +169,9 @@ from preparation evidence that covers every allowed pose.
   and with the editor's drag overlay until then.
 - Spec rule 5 (Marigold refused) is lifted (PR 7).
 - Coverage inference is a preparation job that infers only the padded quad's
-  crop and publishes no maps. PR 7 queues it when a position is saved on a
-  template whose evidence falls short; `plan` refuses until it finishes.
+  crop and publishes no maps. It follows a completed preparation, and saving a
+  position queues it when evidence still falls short; `plan` refuses until it
+  finishes.
 
 ### Spike result
 
