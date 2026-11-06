@@ -38,6 +38,7 @@ from etsy_listings.core.preparation.position_fits import PositionFits, padded_qu
 from etsy_listings.core.preparation.readiness import template_readiness
 from etsy_listings.core.render.config import MarigoldRenderer
 from etsy_listings.core.render.positions import PositionLimits
+from etsy_listings.core.workspace.template_state import template_state
 from etsy_listings.core.workspace.workspace import Workspace
 
 logger = logging.getLogger(__name__)
@@ -75,7 +76,7 @@ def needs_coverage(
     A template that cannot be read is not counted; ``plan`` reports it.
     ``verify=False`` takes the evidence files as sound, for a quick answer."""
     try:
-        config = workspace.load_template_config(template)
+        config = template_state(workspace, template).require()
         if not isinstance(config.renderer, MarigoldRenderer):
             return False
         padded = padded_quads(config, limits)
@@ -195,7 +196,7 @@ def cover_prepared_templates(preparations: Preparations) -> list[Job]:
 def _prepared(workspace: Workspace) -> Callable[[str], bool]:
     def prepared(template: str) -> bool:
         try:
-            config = workspace.load_template_config(template)
+            config = template_state(workspace, template).require()
             return (
                 isinstance(config.renderer, MarigoldRenderer)
                 and template_readiness(workspace, template, config).can_render

@@ -20,6 +20,12 @@ A listing's own position for artwork on one mockup template, or one placement
 within a template showing several garments. It changes the mockup only.
 _Avoid_: print placement, template calibration, per-colour position
 
+**Template state**:
+What a mockup template's saved files amount to: absent (no `template.yaml` yet),
+unreadable (one that will not load), needs repair (a calibration transaction
+stands in the way) or loaded.
+_Avoid_: calibration status, which the rail derives from a loaded config
+
 **Label**:
 Free-form text a seller tags a mockup template with, for finding it, such as
 `shot:flat lay`. The text before a colon is its group. A label exists only while

@@ -26,10 +26,13 @@ from etsy_listings.core.application.preparation.coordinator import (
 )
 from etsy_listings.core.application.preparation.models import TERMINAL, Event, Job
 from etsy_listings.core.application.preparation_views import preparation_view, read_mask
-from etsy_listings.core.config.errors import ConfigLoadError
 from etsy_listings.core.errors import ConflictError
 from etsy_listings.core.preparation.artifacts import ArtifactError
 from etsy_listings.core.workspace.calibration import CalibrationStore, SavedMask
+from etsy_listings.core.workspace.template_state import (
+    TemplateConfigMissingError,
+    TemplateConfigUnreadableError,
+)
 from etsy_listings.server.api.schemas import (
     CreatePreparationRequest,
     MapReadinessResponse,
@@ -76,7 +79,7 @@ def status(request: Request, name: str, response: Response) -> PreparationRespon
     preparations = coordinator(request)
     try:
         view = preparation_view(preparations, name)
-    except ConfigLoadError as exc:
+    except (TemplateConfigMissingError, TemplateConfigUnreadableError) as exc:
         # A template.yaml that does not load has no preparation to describe.
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     return PreparationResponse(
@@ -111,7 +114,7 @@ def jobs(
 def _read_mask(request: Request, name: str, placement_id: str | None) -> SavedMask:
     try:
         return read_mask(coordinator(request).workspace, name, placement_id)
-    except ConfigLoadError as exc:
+    except (TemplateConfigMissingError, TemplateConfigUnreadableError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
@@ -209,7 +212,7 @@ def submit(request: Request, body: CreatePreparationRequest) -> PreparationJobRe
         ) from exc
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
-    except (ArtifactError, ConfigLoadError) as exc:
+    except (ArtifactError, TemplateConfigMissingError, TemplateConfigUnreadableError) as exc:
         # The saved inputs cannot be read as preparation inputs.
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     return job_response(preparations, job)

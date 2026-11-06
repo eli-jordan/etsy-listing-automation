@@ -15,6 +15,7 @@ from fastapi.testclient import TestClient
 from httpx import Response
 
 from etsy_listings.core.render.positions import Pose, compose
+from etsy_listings.core.workspace.template_state import template_state
 from etsy_listings.core.workspace.workspace import Workspace
 from etsy_listings.server.api.app import create_app
 
@@ -135,7 +136,7 @@ def queued_kinds(app: FastAPI) -> list[str]:
 
 
 def position(workspace: Workspace, template: str) -> None:
-    box = compose(workspace.load_template_config(template).bounding_box, Pose(rotation=5))
+    box = compose(template_state(workspace, template).require().bounding_box, Pose(rotation=5))
     edit_listing(
         workspace.root,
         media=[{"template": template}],

@@ -16,8 +16,8 @@ from etsy_listings.core.application.listing_creation import (
     load_template_kind,
     validate_listing_stub,
 )
-from etsy_listings.core.config.errors import ConfigLoadError
 from etsy_listings.core.config.media import MAX_IMAGES
+from etsy_listings.core.workspace.template_state import TemplateConfigMissingError
 from etsy_listings.core.workspace.workspace import Workspace
 
 
@@ -115,5 +115,5 @@ def test_load_template_kind_reads_the_templates_own_file(workspace_root: Path) -
 def test_load_template_kind_names_an_uncalibrated_template(workspace_root: Path) -> None:
     (workspace_root / "mockup-templates" / "half-built").mkdir()
     workspace = Workspace.discover(root_override=workspace_root)
-    with pytest.raises(ConfigLoadError, match="template config not found"):
+    with pytest.raises(TemplateConfigMissingError, match=r"no template.yaml for 'half-built'"):
         load_template_kind(workspace, "half-built")

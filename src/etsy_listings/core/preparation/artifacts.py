@@ -792,7 +792,7 @@ class Artifacts:
         damaged/missing mask components; valid same-photo edits are retained.
         """
         with self.calibration.lock(name):
-            config = self.calibration.config(name)
+            config = self.calibration.state(name).require()
             if not isinstance(config.renderer, MarigoldRenderer):
                 raise ValueError(  # noqa: TRY004 -- callers record this ValueError as a bad template
                     "Prepared inputs require a Marigold template"

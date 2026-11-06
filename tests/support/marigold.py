@@ -3,6 +3,8 @@
 import sys
 from pathlib import Path
 
+from etsy_listings.core.workspace.calibration import CalibrationStore
+
 
 def controlled_worker(
     tmp_path: Path, *, delay: float = 0.1, idle: float = 300, hold: bool = False
@@ -315,7 +317,7 @@ def marigold_template(workspace_root, kind="single", name="shirt", renderer="mar
         ]
     else:
         config["bounding_box"] = box
-    workspace.save_template_config(name, load_template_config(config))
+    CalibrationStore(workspace).write_config(name, load_template_config(config))
     return workspace
 
 
@@ -395,7 +397,7 @@ def small_print(workspace_root, name="tee"):
     photo.save(workspace.template_scene_image(name))
     box = [{"x": x, "y": y} for x, y in [(48, 48), (80, 48), (80, 80), (48, 80)]]
     config = {"kind": "single", "bounding_box": box, "renderer": {"type": "marigold"}}
-    workspace.save_template_config(name, load_template_config(config))
+    CalibrationStore(workspace).write_config(name, load_template_config(config))
     return workspace
 
 

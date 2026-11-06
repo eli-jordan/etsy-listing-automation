@@ -70,7 +70,7 @@ def saved_preparation_facts(workspace: Workspace, name: str) -> SavedPreparation
 
 
 def _saved_facts(workspace: Workspace, store: CalibrationStore, name: str) -> SavedPreparationFacts:
-    config = store.config(name)
+    config = store.state(name).require()
     known = catalog_readiness(config)
     if known is not None:
         return SavedPreparationFacts(known)

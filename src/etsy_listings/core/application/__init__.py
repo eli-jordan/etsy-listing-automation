@@ -116,7 +116,9 @@ import names the module it depends on. Public interfaces:
 ``refusals``
     ``ListingMissingError``, ``ListingNameTakenError``, ``PublishedListingDeletionError``,
     ``InvalidListing``, ``field_errors_of``; the calibrator's ``Template*``
-    refusals, ``DesignUploadRefusedError``, ``CalibrationDesignMissingError``;
+    refusals (a template with no config to read refuses with its state's own,
+    from ``workspace.template_state``), ``DesignUploadRefusedError``,
+    ``CalibrationDesignMissingError``;
     ``ListingTemplateMissingError``, ``ReservedListingTemplateNameError``,
     ``ListingTemplateSourceRefusedError``; ``StagingMissingError``, ``StagedRowMissingError``,
     ``BatchMissingError``, ``BatchRowMissingError``, ``BatchRowUploadMissingError``,

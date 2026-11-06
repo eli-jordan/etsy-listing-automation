@@ -116,8 +116,8 @@ from etsy_listings.core.render.maps import DerivedMapCache
 from etsy_listings.core.render.pipeline import Layer, render_scene
 from etsy_listings.core.render.swatch import sample_swatch
 from etsy_listings.core.render.types import RGB, RGBA
-from etsy_listings.core.workspace.calibration import CalibrationRepairRequiredError
 from etsy_listings.core.workspace.facts import template_info
+from etsy_listings.core.workspace.template_state import TemplateLoaded, template_state
 from etsy_listings.core.workspace.workspace import Workspace
 from etsy_listings.core.workspace.yaml_source import without_top_level_key
 
@@ -658,11 +658,10 @@ def _load_template(workspace: Workspace, template_name: str) -> tuple[AnyTemplat
     if blocked is not None:
         return blocked
     digest = _template_hash(config_path)
-    try:
-        config = workspace.load_template_config(template_name)
-    except (ConfigLoadError, CalibrationRepairRequiredError) as exc:
-        return Blocked(str(exc))
-    return config, digest
+    state = template_state(workspace, template_name)
+    if not isinstance(state, TemplateLoaded):
+        return Blocked(state.reason)
+    return state.config, digest
 
 
 def _load_templates(

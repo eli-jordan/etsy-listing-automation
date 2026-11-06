@@ -69,7 +69,6 @@ from etsy_listings.core.application.prepared_previews import (
 from etsy_listings.core.application.template_rename import RenameHosts
 from etsy_listings.core.application.template_rename import rename_template as rename
 from etsy_listings.core.batches.records import BatchRecords
-from etsy_listings.core.config.errors import ConfigLoadError
 from etsy_listings.core.errors import UserFacingError
 from etsy_listings.core.preparation.artifacts import ArtifactError
 from etsy_listings.core.preparation.predictions import PredictionError
@@ -77,6 +76,10 @@ from etsy_listings.core.preparation.readiness import catalog_readiness
 from etsy_listings.core.render import MarigoldRenderer, load_template_config
 from etsy_listings.core.render.config import AnyTemplate, TemplateConfig
 from etsy_listings.core.render.io import encode_png
+from etsy_listings.core.workspace.template_state import (
+    TemplateConfigMissingError,
+    TemplateConfigUnreadableError,
+)
 from etsy_listings.core.workspace.workspace import Workspace
 from etsy_listings.server.api import app_state
 from etsy_listings.server.api.designs import resolve_design
@@ -158,16 +161,14 @@ def _summary(overview: TemplateOverview) -> TemplateSummary:
 
 @router.get("", response_model=list[TemplateSummary])
 def list_templates(request: Request) -> list[TemplateSummary]:
-    workspace = app_state.workspace(request)
     summaries = []
-    for overview in calibration.list_templates(workspace):
+    for overview in calibration.list_templates(app_state.workspace(request)):
         summary = _summary(overview)
-        if overview.kind is not None:
-            config = workspace.load_template_config(overview.name)
-            summary.renderer = config.renderer.type
+        if overview.config is not None:
+            summary.renderer = overview.config.renderer.type
             # Catalog reads metadata only. The selected status endpoint validates
             # maps; background client reads fill the other rows without blocking entry.
-            known = catalog_readiness(config)
+            known = catalog_readiness(overview.config)
             if known is not None:
                 summary.maps = MapReadinessResponse(**asdict(known), can_render=known.can_render)
         summaries.append(summary)
@@ -282,9 +283,9 @@ def put_config(
                 mask_edits=body.mask_edits,
             ),
         )
-    except ConfigLoadError as exc:
-        # The saved template.yaml does not load: not a refusal category,
-        # so this route keeps the answer it always gave.
+    except (TemplateConfigMissingError, TemplateConfigUnreadableError) as exc:
+        # The editor shows a 422's sentence. Its 409 means reload, which would
+        # not help a saved template.yaml that does not load.
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     if not saved.labels_only:
         _queue_preparation(template.name, after)

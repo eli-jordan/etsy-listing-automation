@@ -14,6 +14,8 @@ from etsy_listings.core.engine.plan import build_plan
 from etsy_listings.core.engine.stages import STAGES
 from etsy_listings.core.render.config import load_template_config
 from etsy_listings.core.render.positions import Pose, compose
+from etsy_listings.core.workspace.calibration import CalibrationStore
+from etsy_listings.core.workspace.template_state import template_state
 
 from tests.support.builders import FIXTURE_LISTING, a_context, a_lock, edit_listing
 
@@ -41,7 +43,7 @@ def test_limits_refuse_in_validation_and_plan(
     workspace_root: Path, pose: Pose, message: str
 ) -> None:
     ctx = a_context(workspace_root)
-    config = ctx.workspace.load_template_config(TEMPLATE)
+    config = template_state(ctx.workspace, TEMPLATE).require()
     box = compose(config.bounding_box, pose)
     position = {TEMPLATE: {"bounding_box": [point.model_dump() for point in box]}}
     edit_listing(workspace_root, template_positions=position)
@@ -60,7 +62,7 @@ def test_current_limits_and_recalibration_revalidate_without_rewriting_positions
     change: str,
 ) -> None:
     ctx = a_context(workspace_root)
-    template = ctx.workspace.load_template_config(TEMPLATE)
+    template = template_state(ctx.workspace, TEMPLATE).require()
     position = compose(template.bounding_box, Pose(scale=1.1))
     edit_listing(
         workspace_root,
@@ -74,14 +76,14 @@ def test_current_limits_and_recalibration_revalidate_without_rewriting_positions
     if change == "limits":
         ctx.workspace.settings_file().write_bytes(b"template_positions:\n  scale: {max: 1.0}\n")
     else:
-        ctx.workspace.save_template_config(
+        CalibrationStore(ctx.workspace).write_config(
             TEMPLATE,
             template.model_copy(
                 update={"bounding_box": compose(template.bounding_box, Pose(scale=2))}
             ),
         )
     listing = ctx.workspace.load_listing(FIXTURE_LISTING)
-    config = ctx.workspace.load_template_config(TEMPLATE)
+    config = template_state(ctx.workspace, TEMPLATE).require()
     issues = check_template_positions(
         listing,
         {TEMPLATE: config},
@@ -99,7 +101,7 @@ def test_listing_health_check_includes_positions_with_the_supplied_limits(
     from etsy_listings.core.workspace.facts import template_info
 
     ctx = a_context(workspace_root)
-    template = ctx.workspace.load_template_config(TEMPLATE)
+    template = template_state(ctx.workspace, TEMPLATE).require()
     box = compose(template.bounding_box, Pose(scale=1.1))
     edit_listing(
         workspace_root,
@@ -154,9 +156,9 @@ def test_shape_and_membership_refuse_in_validation_and_plan(
     message: str,
 ) -> None:
     ctx = a_context(workspace_root)
-    original = ctx.workspace.load_template_config(TEMPLATE)
+    original = template_state(ctx.workspace, TEMPLATE).require()
     config, position = shape_case(case, [point.model_dump() for point in original.bounding_box])
-    ctx.workspace.save_template_config(TEMPLATE, config)
+    CalibrationStore(ctx.workspace).write_config(TEMPLATE, config)
     edit_listing(workspace_root, media=[{"template": TEMPLATE}], template_positions=position)
     listing = ctx.workspace.load_listing(FIXTURE_LISTING)
     issues = check_template_positions(
@@ -172,7 +174,7 @@ def test_marigold_positions_validate_like_photo_warp_ones(workspace_root: Path) 
     from etsy_listings.core.config.listing_validation import positions_outside_limits
 
     ctx = a_context(workspace_root)
-    original = ctx.workspace.load_template_config(TEMPLATE)
+    original = template_state(ctx.workspace, TEMPLATE).require()
     config, _ = shape_case("marigold", [point.model_dump() for point in original.bounding_box])
     box = compose(config.bounding_box, Pose(scale=1.05, rotation=10))
     edit_listing(
@@ -193,7 +195,7 @@ def test_unreadable_settings_refuse_a_positioned_listing_instead_of_raising(
     workspace_root: Path,
 ) -> None:
     ctx = a_context(workspace_root)
-    template = ctx.workspace.load_template_config(TEMPLATE)
+    template = template_state(ctx.workspace, TEMPLATE).require()
     box = compose(template.bounding_box, Pose(scale=1.05))
     edit_listing(
         workspace_root,

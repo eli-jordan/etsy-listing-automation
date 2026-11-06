@@ -15,6 +15,7 @@ from etsy_listings.core.engine.apply import execute
 from etsy_listings.core.engine.plan import build_plan
 from etsy_listings.core.engine.stages import STAGES
 from etsy_listings.core.render.positions import Pose, compose
+from etsy_listings.core.workspace.template_state import template_state
 from etsy_listings.core.workspace.workspace import Workspace
 from etsy_listings.server.api.app import create_app
 
@@ -35,10 +36,10 @@ def client(workspace_root: Path) -> Iterator[TestClient]:
 def _positions(root: Path) -> tuple[dict[str, object], object, object]:
     workspace = Workspace.discover(root_override=root)
     flat = compose(
-        workspace.load_template_config("flat-lay-01").bounding_box,
+        template_state(workspace, "flat-lay-01").require().bounding_box,
         Pose(scale=0.9, offset_x=-0.06, rotation=10),
     )
-    chart = workspace.load_template_config("colour-chart-01")
+    chart = template_state(workspace, "colour-chart-01").require()
     placement = compose(chart.placements[1].bounding_box, Pose(scale=1.05, offset_y=0.04))
     positions = {
         "flat-lay-01": {"bounding_box": [p.model_dump() for p in flat]},

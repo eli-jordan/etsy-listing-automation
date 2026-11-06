@@ -16,6 +16,7 @@ from etsy_listings.core.config.settings import TemplatePositionLimits
 from etsy_listings.core.preparation.artifacts import Artifacts
 from etsy_listings.core.preparation.position_fits import PositionFits, padded_quads
 from etsy_listings.core.workspace.calibration import CalibrationStore
+from etsy_listings.core.workspace.template_state import template_state
 
 from tests.support.marigold import (
     PreparationRuntime,
@@ -30,7 +31,7 @@ WIDER = TemplatePositionLimits.model_validate({"scale": {"max": 1.25}, "rotation
 
 def covered(workspace, name, limits) -> bool:
     inputs = Artifacts(workspace).saved_inputs(name)
-    quads = padded_quads(workspace.load_template_config(name), limits)
+    quads = padded_quads(template_state(workspace, name).require(), limits)
     return quads is not None and PositionFits(workspace).covers(name, inputs, quads)
 
 

@@ -298,7 +298,8 @@ class PositionFits:
         inputs = request.inputs
         placement = inputs.placement
         with self.calibration.lock(inputs.template):
-            path = self.workspace.template_main_photo(inputs.template)
+            config = self.calibration.state(inputs.template).require()
+            path = self.workspace.template_main_photo(inputs.template, config)
             with Image.open(path) as photo:
                 base = np.array(photo.convert("RGB"), np.uint8)
             mask = self.calibration.mask(inputs.template, placement.id)

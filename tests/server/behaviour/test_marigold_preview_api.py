@@ -10,6 +10,7 @@ from PIL import Image
 from etsy_listings.core.preparation.artifacts import Artifacts
 from etsy_listings.core.render import load_template_config
 from etsy_listings.core.workspace import Workspace
+from etsy_listings.core.workspace.calibration import CalibrationStore
 from etsy_listings.server.api.app import create_app
 
 from tests.support.marigold import material_maps
@@ -33,7 +34,7 @@ def test_prepared_preview_is_full_quality_and_refuses_unsaved_geometry(
         ]
     else:
         config["bounding_box"] = box
-    workspace.save_template_config(name, load_template_config(config))
+    CalibrationStore(workspace).write_config(name, load_template_config(config))
     artifacts = Artifacts(workspace)
     inputs = artifacts.saved_inputs(name)
     maps = {placement.id: material_maps() for placement in inputs.placements}
@@ -95,7 +96,7 @@ def test_decoded_artwork_dimensions_are_part_of_preview_identity(workspace_root:
         "renderer": {"type": "marigold", "config": {}},
         "bounding_box": [{"x": x, "y": y} for x, y in [(0, 0), (15, 0), (15, 15), (0, 15)]],
     }
-    workspace.save_template_config(name, load_template_config(config))
+    CalibrationStore(workspace).write_config(name, load_template_config(config))
     artifacts = Artifacts(workspace)
     inputs = artifacts.saved_inputs(name)
     artifacts.publish(

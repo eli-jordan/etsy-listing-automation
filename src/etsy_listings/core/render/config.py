@@ -349,9 +349,9 @@ _TEMPLATE_CONFIG_ADAPTER: TypeAdapter[AnyTemplate] = TypeAdapter(TemplateConfig)
 
 
 def load_template_config(data: object) -> AnyTemplate:
-    """Parse already-read YAML/JSON data. The file-level read lives on
-    ``Workspace`` -- this half stays pure, so ``render`` still knows nothing
-    about where a workspace keeps its templates."""
+    """Parse already-read YAML/JSON data. The file-level read is
+    ``workspace.template_state`` -- this half stays pure, so ``render`` still
+    knows nothing about where a workspace keeps its templates."""
     return _TEMPLATE_CONFIG_ADAPTER.validate_python(data)
 
 

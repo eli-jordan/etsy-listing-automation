@@ -145,7 +145,8 @@ calibration conflict was a `409` or a `412` depending on its message text. A
 category in core keeps ADR-0052's rule that core knows no transport, where a
 status code on each class would not. `ConfigLoadError` has no category yet: a
 document that does not load means different things to different routes, which
-still answer it themselves.
+still answer it themselves. `template.yaml` is the exception, because
+`workspace.template_state` settles what its not loading means.
 
 ### Clients, credentials and prompts
 
@@ -400,10 +401,25 @@ them. Single and colour-matrix placements use `None` internally.
 `workspace.calibration.CalibrationStore` holds the mockup-template lock of
 `core/workspace/locks.py` per validated, canonical template directory. In-workspace
 aliases share that lock; aliases outside the workspace are refused before IO. It is
-a separate domain from the listing and listing-template locks. All template-config writers use its recoverable transaction. Server
-operations recover before reading; the direct Workspace loader takes the same
-lock and refuses an active transaction, so a CLI cannot roll forward a live server
-save. One server per workspace remains the ownership assumption.
+a separate domain from the listing and listing-template locks. All template-config writers use its recoverable transaction.
+
+`workspace.template_state` is the one way to ask what a template's saved state is.
+A folder is absent (no `template.yaml`), unreadable (one that will not load), in
+need of repair (a calibration transaction stands in the way) or loaded, and reading
+that never raises, so one bad template stays that template's problem: the rail
+lists it with its reason, a listing check skips it and the render stage answers
+`Blocked`. A caller names what it needs from the answer: `.config` to skip what
+will not load, `.reason` to report it, `.require()` for the config or the state's
+refusal. Those refusals carry categories (a missing config is `MissingError`, an
+unreadable one and a needed repair `ConflictError`); routes that answered a
+template which does not load with their own status keep it.
+
+The two reads differ in one thing, who may roll a transaction forward.
+`template_state(workspace, name)` is the observer's and writes nothing: a
+transaction reads as needing repair, so a CLI cannot finish a live server save.
+`CalibrationStore.state(name)` is the owner's, for server operations: it recovers
+an interrupted transaction first, and reports one it cannot trust as needing repair.
+One server per workspace remains the ownership assumption.
 
 A save validates its revision and ordered mask operations, stages payloads and
 backups in the template-owned `_renderer/calibration-transaction/`, flushes commit intent,

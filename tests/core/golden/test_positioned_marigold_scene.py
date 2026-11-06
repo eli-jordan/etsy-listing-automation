@@ -18,6 +18,7 @@ from etsy_listings.core.preparation.numerics import Placement, prepare
 from etsy_listings.core.render import MaterialLayer, load_design, render_marigold_scene
 from etsy_listings.core.render.positions import Pose, compose
 from etsy_listings.core.workspace.calibration import CalibrationStore
+from etsy_listings.core.workspace.template_state import template_state
 
 from tests.support.builders import FIXTURE_LISTING, a_context, a_lock, edit_listing
 from tests.support.marigold import listing_with_prepared_marigold
@@ -28,12 +29,16 @@ POSE = Pose(scale=0.9, offset_x=0.05, offset_y=-0.04, rotation=10)
 
 def _scene(workspace, quad, design):
     """The scene composed from maps fitted directly to ``quad``."""
-    base = np.array(Image.open(workspace.template_main_photo("shirt")).convert("RGB"))
+    base = np.array(
+        Image.open(
+            workspace.template_main_photo("shirt", template_state(workspace, "shirt").require())
+        ).convert("RGB")
+    )
     mask = np.array(Image.open(BytesIO(CalibrationStore(workspace).mask("shirt").edited)))
     reader = EvidenceReader(workspace)
     evidence = reader.load(reader.current("shirt")[0], reader.pointer("shirt").inputs)
     maps = prepare(base, Placement(quad, mask.astype(np.float32) / 255), evidence).maps
-    appearance = workspace.load_template_config("shirt").renderer.config.appearance
+    appearance = template_state(workspace, "shirt").require().renderer.config.appearance
     layers = [MaterialLayer(load_design(design), maps)]
     return render_marigold_scene(base, layers, appearance=appearance)
 
@@ -42,7 +47,7 @@ def test_a_positioned_marigold_scene_is_a_direct_fit_of_its_posed_quad(
     workspace_root, assert_matches_golden
 ):
     workspace = listing_with_prepared_marigold(workspace_root)
-    template = workspace.load_template_config("shirt")
+    template = template_state(workspace, "shirt").require()
     posed = compose(template.bounding_box, POSE)
     edit_listing(
         workspace_root,

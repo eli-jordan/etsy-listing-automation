@@ -1,11 +1,26 @@
-"""Template reads remain fresh and isolated when parsing is reused."""
+"""A template's state: what each one reads as, what a caller gets from it, and
+that reads stay fresh and isolated when parsing is reused."""
 
+import json
 import os
+from pathlib import Path
 
 import pytest
 
-from etsy_listings.core.config.errors import ConfigLoadError
+from etsy_listings.core.errors import ConflictError, MissingError
 from etsy_listings.core.render import MultipleTemplate
+from etsy_listings.core.workspace.calibration import CalibrationStore, digest
+from etsy_listings.core.workspace.template_state import (
+    CalibrationRepairRequiredError,
+    TemplateAbsent,
+    TemplateConfigMissingError,
+    TemplateConfigUnreadableError,
+    TemplateLoaded,
+    TemplateNeedsRepair,
+    TemplateUnreadable,
+    template_state,
+)
+from etsy_listings.core.workspace.workspace import Workspace
 
 from tests.support.marigold import marigold_template
 
@@ -18,11 +33,11 @@ def test_repeated_reads_do_not_share_mutable_placement_lists(workspace_root, pad
         path.write_text(
             "#" + "x" * padding + chr(10) + path.read_text(encoding="utf-8"), encoding="utf-8"
         )
-    first = workspace.load_template_config("shirt")
+    first = template_state(workspace, "shirt").require()
     assert isinstance(first, MultipleTemplate)
     count = len(first.placements)
     first.placements.pop()
-    second = workspace.load_template_config("shirt")
+    second = template_state(workspace, "shirt").require()
     assert isinstance(second, MultipleTemplate)
     assert len(second.placements) == count
 
@@ -31,30 +46,131 @@ def test_same_size_same_mtime_external_edit_is_read_and_invalidity_keeps_its_pat
     workspace = marigold_template(workspace_root)
     path = workspace.template_config_file("shirt")
     original = path.read_text(encoding="utf-8")
-    initial = workspace.load_template_config("shirt")
+    initial = template_state(workspace, "shirt").require()
     stamp = path.stat()
     changed = original.replace("fabric_texture: 0.25", "fabric_texture: 0.75")
     assert changed != original
     assert len(changed) == len(original)
     path.write_text(changed, encoding="utf-8")
     os.utime(path, ns=(stamp.st_atime_ns, stamp.st_mtime_ns))
-    current = workspace.load_template_config("shirt")
+    current = template_state(workspace, "shirt").require()
     assert current != initial
     assert current.renderer.config.appearance.fabric_texture == 0.75
     path.write_text(chr(10).join(["kind: single", "renderer: invalid"]), encoding="utf-8")
-    with pytest.raises(ConfigLoadError) as error:
-        workspace.load_template_config("shirt")
-    assert str(path) in str(error.value)
+    state = template_state(workspace, "shirt")
+    assert isinstance(state, TemplateUnreadable)
+    assert str(path) in state.reason
 
 
-def test_a_file_yaml_cannot_parse_is_a_load_error_naming_it(workspace_root):
-    """A hand edit makes this, and callers that skip an unloadable template
+def test_a_loaded_template_has_a_config_and_no_reason(workspace_root):
+    workspace = marigold_template(workspace_root)
+
+    state = template_state(workspace, "shirt")
+
+    assert isinstance(state, TemplateLoaded)
+    assert state.config == state.require()
+    assert state.reason is None
+
+
+def test_a_folder_with_no_file_is_absent_and_requiring_it_is_a_missing_refusal(workspace_root):
+    workspace = Workspace.discover(root_override=workspace_root)
+    workspace.template_dir("fresh").mkdir()
+
+    state = template_state(workspace, "fresh")
+
+    assert isinstance(state, TemplateAbsent)
+    assert state.config is None
+    assert "no template.yaml for 'fresh'" in state.reason
+    with pytest.raises(TemplateConfigMissingError) as refused:
+        state.require()
+    assert isinstance(refused.value, MissingError)
+
+
+@pytest.mark.parametrize(
+    ("content", "says"),
+    [
+        (b"kind: [unclosed", "not valid YAML"),
+        (b"kind: single\nrenderer: invalid\n", "invalid configuration"),
+        (b"", "invalid configuration"),
+        (b"\xff\xfe not utf-8", "cannot be read"),
+    ],
+)
+def test_a_file_that_will_not_load_is_unreadable_naming_it(workspace_root, content, says):
+    """A hand edit makes these, and callers that skip an unloadable template
     must not meet a bare parser error."""
     workspace = marigold_template(workspace_root)
     path = workspace.template_config_file("shirt")
-    path.write_text("kind: [unclosed", encoding="utf-8")
+    path.write_bytes(content)
 
-    with pytest.raises(ConfigLoadError, match="not valid YAML") as refused:
-        workspace.load_template_config("shirt")
+    state = template_state(workspace, "shirt")
 
-    assert refused.value.path == path
+    assert isinstance(state, TemplateUnreadable)
+    assert state.config is None
+    assert str(path) in state.reason
+    assert says in state.reason
+    with pytest.raises(TemplateConfigUnreadableError, match=says) as refused:
+        state.require()
+    assert isinstance(refused.value, ConflictError)
+
+
+def _interrupted_save(workspace: Workspace) -> Path:
+    """What a save leaves if the process dies after durable commit intent:
+    a whole transaction that would change ``template.yaml`` on roll forward."""
+    config = workspace.template_config_file("shirt")
+    transaction = workspace.template_calibration_transaction("shirt")
+    transaction.mkdir(parents=True)
+    payload = config.read_bytes()
+    (transaction / "payload-0").write_bytes(payload)
+    (transaction / "manifest.json").write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "commit_intent": True,
+                "files": [
+                    {
+                        "destination": "template.yaml",
+                        "payload": "payload-0",
+                        "checksum": digest(payload),
+                        "backup": "backup-0",
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    return transaction
+
+
+def test_the_observer_reads_a_transaction_as_needing_repair_and_leaves_it(workspace_root):
+    """The CLI's refusal: the transaction may be a live server save."""
+    workspace = marigold_template(workspace_root)
+    transaction = _interrupted_save(workspace)
+
+    state = template_state(workspace, "shirt")
+
+    assert isinstance(state, TemplateNeedsRepair)
+    assert transaction.exists()
+    with pytest.raises(CalibrationRepairRequiredError, match="retry after server recovery"):
+        state.require()
+
+
+def test_the_owner_rolls_an_interrupted_transaction_forward(workspace_root):
+    workspace = marigold_template(workspace_root)
+    transaction = _interrupted_save(workspace)
+
+    state = CalibrationStore(workspace).state("shirt")
+
+    assert isinstance(state, TemplateLoaded)
+    assert not transaction.exists()
+
+
+def test_the_owner_reads_a_transaction_it_cannot_trust_as_needing_repair(workspace_root):
+    workspace = marigold_template(workspace_root)
+    transaction = _interrupted_save(workspace)
+    (transaction / "payload-0").write_bytes(b"corrupted")
+
+    state = CalibrationStore(workspace).state("shirt")
+
+    assert isinstance(state, TemplateNeedsRepair)
+    assert "repair" in state.reason
+    assert transaction.exists()

@@ -37,7 +37,7 @@ def _store(root: Path) -> tuple[CalibrationStore, list[bytes]]:
     directory = workspace.template_dir("example")
     directory.mkdir(parents=True)
     Image.new("RGB", (32, 32), "white").save(directory / "scene.png")
-    workspace.save_template_config(
+    CalibrationStore(workspace).write_config(
         "example",
         load_template_config(
             {"kind": "single", "bounding_box": BOX, "renderer": {"type": "marigold", "config": {}}}
