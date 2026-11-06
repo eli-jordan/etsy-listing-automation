@@ -1,3 +1,4 @@
+import { MagnifyingGlassIcon } from "@phosphor-icons/react/dist/csr/MagnifyingGlass";
 import { useMemo, useState } from "react";
 import { holdsLabels } from "../../components/labelRules";
 import { LabelSearch } from "../../components/LabelSearch";
@@ -231,10 +232,7 @@ export function MediaLocator({
 
       {mode === "files" && (
         <div className="locator__search">
-          <svg viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <circle cx="11" cy="11" r="7" />
-            <path d="M20 20l-3.5-3.5" />
-          </svg>
+          <MagnifyingGlassIcon className="locator__glass" weight="bold" />
           <input
             className="input"
             type="text"

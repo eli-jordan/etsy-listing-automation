@@ -4546,6 +4546,17 @@ table.listings tbody tr:last-child td {
   pointer-events: none;
 }
 
+/* The search box's glass, so the two halves of the locator match. The rule above
+   stays for the frames that still draw their own stroked icon. */
+.locator__search .locator__glass {
+  left: 9px;
+  width: 15px;
+  height: 15px;
+  fill: currentColor;
+  stroke: none;
+  color: color-mix(in srgb, var(--color-text) 55%, transparent);
+}
+
 .locator__search .input {
   width: 100%;
   padding-left: 31px;
