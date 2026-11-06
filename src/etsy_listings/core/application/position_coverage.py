@@ -2,15 +2,17 @@
 
 A listing position on a Marigold template is fitted from evidence covering
 the template's padded quad (spec *Rendering → Marigold (option B: a fit per
-position)*, *Evidence coverage*). Three explicit seller actions queue coverage
-inference for a template whose evidence falls short (ADR-0058, amendment
-*Marigold positions and inference*):
+position)*, *Evidence coverage*). A finished preparation queues it itself
+(ADR-0058, amendment *coverage belongs to preparation*); these explicit seller
+actions queue it for a template whose evidence still falls short:
 
 - saving a position on it (:func:`cover_listing_positions`);
 - confirming wider limits in Settings (:func:`cover_widened_limits`), for the
   templates :func:`templates_needing_coverage` named in the confirmation;
 - saving its geometry in the calibrator while a listing positions it
   (:func:`cover_recalibrated`).
+- asking to catch every prepared template up
+  (:func:`cover_prepared_templates`).
 
 A covered template needs nothing here, since the scene warmer fits the
 position itself. Narrowing the limits queues nothing: evidence that reached
@@ -20,7 +22,7 @@ the wider padded quad reaches the narrower one (spec *Limits changes*).
 from __future__ import annotations
 
 import logging
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 
 from etsy_listings.core.application.preparation.coordinator import Preparations
 from etsy_listings.core.application.preparation.models import Job
@@ -28,6 +30,7 @@ from etsy_listings.core.config.errors import ConfigLoadError
 from etsy_listings.core.errors import UserFacingError
 from etsy_listings.core.preparation.artifacts import Artifacts
 from etsy_listings.core.preparation.position_fits import PositionFits, padded_quads
+from etsy_listings.core.preparation.readiness import template_readiness
 from etsy_listings.core.render.config import MarigoldRenderer
 from etsy_listings.core.render.positions import PositionLimits
 from etsy_listings.core.workspace.workspace import Workspace
@@ -129,6 +132,34 @@ def cover_recalibrated(preparations: Preparations, template: str) -> list[Job]:
         logger.debug("not covering recalibrated %r: %s", template, exc)
         return []
     return _cover(preparations, [template], limits)
+
+
+def cover_prepared_templates(preparations: Preparations) -> list[Job]:
+    """The coverage jobs queued or joined for every prepared Marigold
+    template at the workspace's current limits. A template not prepared yet
+    gets coverage when its preparation finishes."""
+    workspace = preparations.workspace
+    try:
+        limits = workspace.load_settings().template_positions
+    except _SKIPPED as exc:
+        logger.debug("not covering prepared templates: %s", exc)
+        return []
+    return _cover(preparations, filter(_prepared(workspace), workspace.template_names()), limits)
+
+
+def _prepared(workspace: Workspace) -> Callable[[str], bool]:
+    def prepared(template: str) -> bool:
+        try:
+            config = workspace.load_template_config(template)
+            return (
+                isinstance(config.renderer, MarigoldRenderer)
+                and template_readiness(workspace, template, config).can_render
+            )
+        except _SKIPPED as exc:
+            logger.debug("not reading %r's preparation: %s", template, exc)
+            return False
+
+    return prepared
 
 
 def _cover(

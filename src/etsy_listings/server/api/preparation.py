@@ -15,6 +15,7 @@ from fastapi.responses import Response
 from starlette.concurrency import run_in_threadpool
 from starlette.responses import StreamingResponse
 
+from etsy_listings.core.application.position_coverage import cover_prepared_templates
 from etsy_listings.core.application.preparation.coordinator import (
     PreparationRequest,
     Preparations,
@@ -207,6 +208,15 @@ def submit(request: Request, body: CreatePreparationRequest) -> PreparationJobRe
         # The saved inputs cannot be read as preparation inputs.
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     return job_response(preparations, job)
+
+
+@router.post("/preparation/coverage", status_code=202)
+def cover_prepared(request: Request) -> list[PreparationJobResponse]:
+    """Queue coverage for every prepared Marigold template that falls short:
+    the catch-up for templates prepared before preparation covered them
+    (ADR-0058, amendment *coverage belongs to preparation*)."""
+    preparations = coordinator(request)
+    return [job_response(preparations, job) for job in cover_prepared_templates(preparations)]
 
 
 def existing_job(preparations: Preparations, identity: str) -> Job:

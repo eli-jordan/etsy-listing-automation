@@ -11047,6 +11047,32 @@
         ]
       }
     },
+    "/api/preparation/coverage": {
+      "post": {
+        "description": "Queue coverage for every prepared Marigold template that falls short:\nthe catch-up for templates prepared before preparation covered them\n(ADR-0058, amendment *coverage belongs to preparation*).",
+        "operationId": "cover_prepared_api_preparation_coverage_post",
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/PreparationJobResponse"
+                  },
+                  "title": "Response Cover Prepared Api Preparation Coverage Post",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Cover Prepared",
+        "tags": [
+          "preparation"
+        ]
+      }
+    },
     "/api/preparation/jobs": {
       "get": {
         "operationId": "jobs_api_preparation_jobs_get",

@@ -108,3 +108,16 @@ def test_catalog_lists_metadata_without_decoding_calibration_or_maps(workspace_r
     assert rows["prepared-shirt"]["renderer"] == "marigold"
     assert rows["prepared-shirt"]["maps"] is None
     assert rows["flat-lay-01"]["maps"]["state"] == "not_required"
+
+
+def test_catching_up_queues_coverage_for_prepared_templates(workspace_root: Path) -> None:
+    from tests.support.marigold import PreparationRuntime, prepare_template, small_print
+
+    workspace = small_print(workspace_root)
+    prepare_template(workspace, "tee")
+    client = TestClient(create_app(workspace, preparation_runtime=PreparationRuntime()))
+
+    queued = client.post("/api/preparation/coverage")
+
+    assert queued.status_code == 202
+    assert [(job["template"], job["kind"]) for job in queued.json()] == [("tee", "coverage")]
