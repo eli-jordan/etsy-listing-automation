@@ -18,6 +18,7 @@ Screenshots for comparison are in [`screenshots/`](screenshots/).
 
 | Id | Decision |
 |---|---|
+| P0 | Every delegate runs on `claudeAgent` `claude-opus-5-5` with `fastMode` on, at the default medium effort, whatever the PR's difficulty. The seller ruled out Codex and Grok for this stack (2026-11-06). |
 | P1 | Split: labels in the template and out of rendering; the Labels bar; the search box on the rail; the search box on the listing. The first PR is backend only, because every later PR needs `labels` from the API and the rendering guarantee is the riskiest work. |
 | P2 | The Labels bar comes before search. Once it ships the seller can start tagging, and search has real data to test against. |
 | P3 | No new real-shop e2e cases. Labels change nothing sent to Etsy or Printify, and the existing GitHub e2e workflow covers deploys. |
@@ -36,6 +37,7 @@ placeholders in first.
 
 | PR | Title | Difficulty | Branch | Link |
 |---|---|---|---|---|
+| 0 | Stack base: docs and mockups | — | `feat/mockup-template-labels` | [#190](https://github.com/eli-jordan/etsy-listing-automation/pull/190) |
 | 1 | Template labels in the model, out of rendering | hard | `feat/labels-1-model` | — |
 | 2 | Labels bar on the Mockup Templates workbench | standard | `feat/labels-2-bar` | — |
 | 3 | Label search box on the rail | standard | `feat/labels-3-rail` | — |
@@ -157,23 +159,24 @@ Scope:
 
 - Replace the locator's template search in `MediaLocator` with the search box, and
   add the "5 of 16 templates" line. Files keeps its plain search.
-- Hold pills and text in `ListingEditorShell`, because `ImagesTab` unmounts on a tab
-  change, and reset them when the document changes. Pass them down through
-  `ImagesTab`.
+- Hold pills in `MediaLocator` with `useViewState`, as a new slot beside its mode,
+  query and open row, under the same `scope`. `LabelSearch` stays controlled, so the
+  locator passes both values in.
 - Switching to Files keeps the pills and clears the text.
 - Labels, counts and the total cover calibrated templates only.
 - Labels in place of the kind line in `LocatorTemplate`.
-- The listing template editor shares `ListingEditorShell`, so it gets all of this
-  with no separate work.
+- The listing template editor shares `MediaLocator` and its `scope`, so it gets all
+  of this with no separate work.
 - A short section in `docs/guides/getting-started.md` on labelling and finding
   templates.
 
 Exit when:
 
-- vitest covers the filter surviving a tab change, resetting on another listing,
-  the Files rules, and counts ignoring uncalibrated templates;
-- browser tests filter and add a colour on a listing, move to Pricing and back with
-  the filter intact, and do the same in the listing template editor;
+- vitest covers pills surviving a remount, staying separate per listing, a stored
+  value from an older build being ignored, the Files rules, and counts ignoring
+  uncalibrated templates;
+- browser tests filter and add a colour on a listing, move to Pricing and back and
+  refresh with the filter intact, and do the same in the listing template editor;
 - mockup-vs-app screenshots for all five frames are in the PR;
 - shared gates pass.
 

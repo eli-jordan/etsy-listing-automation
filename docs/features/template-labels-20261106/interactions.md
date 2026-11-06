@@ -133,8 +133,9 @@ The result line under the box reads "5 of 16 templates". The filter is always th
 seller's own, so there is no control for reaching filtered-out templates. Removing
 a pill brings them back.
 
-Pills and text survive moving to Pricing and back, and reset when the seller
-leaves the listing. Switching the panel to Files keeps the pills and clears the
+Pills and text live in the editor's view memory, like the locator's other state.
+They survive moving to Pricing and back, a refresh, and leaving and returning in the
+same browser tab, and each listing has its own. Switching the panel to Files keeps the pills and clears the
 text, and the pills are there on return. Rows show the template's labels, or "No
 labels", in place of the kind line. Hover, opening a row and the colour chips work
 as they do today.
@@ -184,10 +185,9 @@ must also be visible without hovering.
 The spec owns the backend: storage, the hash exception, the save and its tests.
 On the frontend:
 
-- **Filter state above the tab.** `ListingEditorShell` renders one tab at a time,
-  so `ImagesTab` unmounts on a tab change. Hold pills and text in the shell, reset
-  them when the listing changes, and pass them down through `ImagesTab` to
-  `MediaLocator`. Listing templates share the shell.
+- **Filter state in view memory.** `MediaLocator` already keeps its mode, query and
+  open row with `useViewState`. Add the pills as another slot under the same
+  `scope`, so listings and listing templates each keep their own.
 - **Saved labels, not the draft.** The Labels bar reads the session's saved config.
   The prototype's `stage` timer only imitates this.
 - **Save held by a preview.** The autosave can wait behind a pending preview, so a

@@ -147,10 +147,13 @@ listing's title was designed and dropped, because the seller found it annoying.
 The filter is therefore always the seller's own, and a result line reads "5 of
 16 templates".
 
-Pills and text are never saved, and nothing reaches `listing.yaml`. They survive
-moving between the editor's tabs and reset when the seller leaves the listing, so
-they must be held above the Images tab and keyed by listing. Switching the panel
-to Files keeps the pills and clears the text, as it clears the search today.
+Pills and text belong to the editor's view memory, beside the locator's mode, query
+and open row (`useViewState`, in `sessionStorage`, keyed by listing). Nothing
+reaches `listing.yaml`. They survive moving between tabs, a refresh, and leaving
+and returning in the same browser tab, and they go when the tab closes. The seller
+first asked for a reset on leaving the listing, then chose this once main had added
+view memory, so pills behave like everything else in the locator. Switching the
+panel to Files keeps the pills and clears the text, as it clears the search today.
 Files keeps its plain search.
 
 Counts and the "of N" total cover what the locator lists, which is calibrated
