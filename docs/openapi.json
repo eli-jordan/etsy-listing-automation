@@ -4906,6 +4906,24 @@
         "title": "Point",
         "type": "object"
       },
+      "PositionReadinessResponse": {
+        "properties": {
+          "preparing": {
+            "title": "Preparing",
+            "type": "boolean"
+          },
+          "ready": {
+            "title": "Ready",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ready",
+          "preparing"
+        ],
+        "title": "PositionReadinessResponse",
+        "type": "object"
+      },
       "PositionScaleLimits": {
         "additionalProperties": false,
         "description": "Interactions' slider ranges guarantee min <= identity <= max (ADR-0058).",
@@ -12213,6 +12231,98 @@
         "summary": "Put Config",
         "tags": [
           "templates"
+        ]
+      }
+    },
+    "/api/templates/{name}/coverage": {
+      "get": {
+        "description": "Whether the editor may adjust this template yet. Apart from the status\nabove, which the catalog reads for every template.",
+        "operationId": "coverage_api_templates__name__coverage_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PositionReadinessResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Coverage",
+        "tags": [
+          "preparation"
+        ]
+      },
+      "post": {
+        "description": "Queue this template's coverage, because a seller asked to adjust it\nand it falls short; null when it needs none or no worker is installed.",
+        "operationId": "cover_one_api_templates__name__coverage_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/PreparationJobResponse"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "title": "Response Cover One Api Templates  Name  Coverage Post"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Cover One",
+        "tags": [
+          "preparation"
         ]
       }
     },

@@ -115,6 +115,7 @@ export function PositionStage({ positioning, picture, title, artwork }: Props) {
         height={size.h}
         aria-label={title}
         onLoad={() => positioning.loaded(picture)}
+        onError={positioning.recheck}
       />
       {positioning.overlay && active !== undefined && artwork !== null && (
         <Overlay layer={active} artwork={artwork} size={size} />

@@ -227,6 +227,42 @@ export function ImagesTab({ detail, onUpdate, artwork, owner, onFlush }: Props) 
   );
 }
 
+/** The stage's picture, or what to say instead of a broken image: a positioned
+ * Marigold scene cannot render while its template is being prepared. It loads
+ * again by itself when preparation ends. */
+function StagePicture({
+  src,
+  alt,
+  positioning,
+}: {
+  src: string;
+  alt: string;
+  positioning: Positioning | null;
+}) {
+  const [failed, setFailed] = useState<string | null>(null);
+  const attempt = `${positioning?.attempt ?? 0}:${src}`;
+  if (failed === attempt) {
+    return (
+      <span className="image-placeholder">
+        {positioning?.waiting === true
+          ? "This picture will appear when preparation finishes"
+          : "This picture could not load"}
+      </span>
+    );
+  }
+  return (
+    <img
+      key={attempt}
+      src={src}
+      alt={alt}
+      onError={() => {
+        setFailed(attempt);
+        positioning?.recheck();
+      }}
+    />
+  );
+}
+
 /** The stage and its foot: the picture being judged, and -- for a template
  * entry this listing may position -- Position mode in place of it. */
 function PreviewPane({
@@ -288,7 +324,7 @@ function PreviewPane({
               if (view.reelIndex >= 0) onOpen(view.reelIndex);
             }}
           >
-            <img src={view.picture} alt={view.title} />
+            <StagePicture src={view.picture} alt={view.title} positioning={positioning} />
           </button>
         )}
       </div>
