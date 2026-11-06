@@ -45,3 +45,16 @@ def test_same_size_same_mtime_external_edit_is_read_and_invalidity_keeps_its_pat
     with pytest.raises(ConfigLoadError) as error:
         workspace.load_template_config("shirt")
     assert str(path) in str(error.value)
+
+
+def test_a_file_yaml_cannot_parse_is_a_load_error_naming_it(workspace_root):
+    """A hand edit makes this, and callers that skip an unloadable template
+    must not meet a bare parser error."""
+    workspace = marigold_template(workspace_root)
+    path = workspace.template_config_file("shirt")
+    path.write_text("kind: [unclosed", encoding="utf-8")
+
+    with pytest.raises(ConfigLoadError, match="not valid YAML") as refused:
+        workspace.load_template_config("shirt")
+
+    assert refused.value.path == path

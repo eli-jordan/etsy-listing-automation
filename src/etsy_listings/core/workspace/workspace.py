@@ -1287,6 +1287,8 @@ class Workspace:
             # Frozen template models can still contain mutable placement lists.
             # Never expose the retained parse object to a caller.
             return _parsed_template_config(text).model_copy(deep=True)
+        except yaml.YAMLError as exc:
+            raise ConfigLoadError(path, f"not valid YAML: {exc}") from exc
         except ValidationError as exc:
             raise format_validation_error(path, exc) from exc
 
