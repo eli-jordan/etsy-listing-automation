@@ -7,7 +7,7 @@ import { controlledClock } from "../test/clock";
 import { deferred, must } from "../test/helpers";
 import { MARIGOLD, READY, SINGLE } from "../test/marigold";
 import type { TemplateConfigState } from "../types";
-import { AUTOSAVE_DEBOUNCE_MS } from "./useAutosave";
+import { AUTOSAVE_DEBOUNCE_MS } from "./writeLoop";
 import { useTemplateRename } from "./useTemplateRename";
 import { useTemplateSession } from "./useTemplateSession";
 

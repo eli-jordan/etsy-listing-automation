@@ -2,14 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { createListing, describeListingDraft, patchListing, renameListing } from "../api/listings";
 import { listingDocument } from "../pages/editor/listingDocument";
 import type { Issue, ListingDetail } from "../types";
-
-/** How long the editor waits after the last edit before saving -- long
- * enough that a run of keystrokes in a text field collapses into one
- * request, short enough that "Saved a moment ago" reads as true. Also
- * flushed immediately on blur, on a tab switch and on unmount
- * (see `flush` below), so a save is never waiting on this timer alone. */
-export const AUTOSAVE_DEBOUNCE_MS = 800;
-
+import { AUTOSAVE_DEBOUNCE_MS } from "./writeLoop";
 export type Patch = Record<string, unknown>;
 
 /** Where the listing stands with the disk, as the page head reports it.

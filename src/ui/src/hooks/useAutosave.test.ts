@@ -2,7 +2,8 @@ import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as listingsApi from "../api/listings";
 import type { Issue, ListingDetail } from "../types";
-import { AUTOSAVE_DEBOUNCE_MS, type AutosaveTransport, useAutosave } from "./useAutosave";
+import { type AutosaveTransport, useAutosave } from "./useAutosave";
+import { AUTOSAVE_DEBOUNCE_MS } from "./writeLoop";
 import { deferred } from "../test/helpers";
 import { listingDetail } from "../test/listings";
 

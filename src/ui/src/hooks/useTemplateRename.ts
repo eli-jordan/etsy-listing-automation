@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { renameTemplate, type TemplateRenameResult } from "../api/calibrator";
 import type { NameRefusal } from "../components/EditableName";
-import type { Flushed } from "./useTemplateSession";
+import type { Settled } from "./writeLoop";
 
 function noteFor(result: TemplateRenameResult): string {
   if (result.unresolved.length > 0) {
@@ -29,7 +29,7 @@ export interface TemplateRename {
  */
 export function useTemplateRename(
   templateName: string | null,
-  flush: () => Promise<Flushed>,
+  flush: () => Promise<Settled>,
   onRenamed: (newName: string) => void,
 ): TemplateRename {
   const [busy, setBusy] = useState(false);
@@ -41,9 +41,9 @@ export function useTemplateRename(
     setBusy(true);
     setRefusal(null);
     try {
-      const flushed = await flush();
-      if (!flushed.written) {
-        setRefusal({ name: next, message: flushed.message });
+      const settled = await flush();
+      if (!settled.written) {
+        setRefusal({ name: next, message: settled.message });
         return;
       }
       const result = await renameTemplate(templateName, next);
