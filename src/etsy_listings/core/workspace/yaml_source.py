@@ -73,6 +73,22 @@ def edit_yaml_bytes(
     return source if edited is text else bom + edited.encode("utf-8")
 
 
+def without_top_level_key(source: bytes, key: str) -> bytes:
+    """``source`` with its top-level ``key`` taken out by the same text-preserving
+    edit that writes it, so removing what a save added gives back the bytes from
+    before. ``source`` itself when it has no such key, when it does not parse, or
+    when the key cannot be removed, such as a value shared through a YAML alias."""
+    if key.encode("utf-8") not in source:
+        return source
+    try:
+        document = yaml.safe_load(source)
+        if not isinstance(document, dict) or key not in document:
+            return source
+        return edit_yaml_bytes(source, {k: v for k, v in document.items() if k != key})
+    except (yaml.YAMLError, ValueError):
+        return source
+
+
 def edit_yaml(
     source: str,
     after: object,
