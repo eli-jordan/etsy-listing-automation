@@ -1,0 +1,70 @@
+{
+  "version": 1,
+  "name": "listing-template-filter",
+  "auto": false,
+  "layout": {
+    "rows": [
+      [
+        "listing-template-filter"
+      ]
+    ],
+    "scenes": {
+      "listing-template-filter": {
+        "rows": [
+          [
+            "opening",
+            "filtered",
+            "browse-labels",
+            "typing-label",
+            "narrowing-by-title"
+          ]
+        ]
+      }
+    }
+  },
+  "nodes": [
+    {
+      "key": "n_1138baml4f5sc",
+      "frame": "listing-template-filter/opening",
+      "x": 0,
+      "y": 968,
+      "w": 1280,
+      "h": 800
+    },
+    {
+      "key": "n_4rk7a3o08i7t",
+      "frame": "listing-template-filter/filtered",
+      "x": 404,
+      "y": 0,
+      "w": 1280,
+      "h": 800
+    },
+    {
+      "key": "n_85wm7w1gs1n8e",
+      "frame": "listing-template-filter/browse-labels",
+      "x": 1838,
+      "y": 0,
+      "w": 1280,
+      "h": 800
+    },
+    {
+      "key": "n_19uzjfwsixojy",
+      "frame": "listing-template-filter/typing-label",
+      "x": 3271,
+      "y": 0,
+      "w": 1280,
+      "h": 800
+    },
+    {
+      "key": "n_tftp4m1ub99as",
+      "frame": "listing-template-filter/narrowing-by-title",
+      "x": 4705,
+      "y": 0,
+      "w": 1280,
+      "h": 800
+    }
+  ],
+  "order": 8,
+  "title": "Find templates on a listing",
+  "description": "Labels are pills inside the listing's template search box, grouped by prefix in its dropdown; typed text narrows them by title. Matches the spec."
+}

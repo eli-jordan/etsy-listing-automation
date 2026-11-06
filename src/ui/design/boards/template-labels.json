@@ -1,0 +1,41 @@
+{
+  "version": 1,
+  "name": "template-labels",
+  "auto": false,
+  "order": 7,
+  "title": "Mockup template labels",
+  "description": "Tags are added on the workbench under the spec's rules, and the rail filters with the listing's search box. Matches the spec.",
+  "layout": {
+    "rows": [
+      [
+        "template-labels"
+      ]
+    ],
+    "scenes": {
+      "template-labels": {
+        "rows": [
+          [
+            "filtered",
+            "typing-label",
+            "labelling",
+            "labelling-refused"
+          ]
+        ]
+      }
+    }
+  },
+  "nodes": [
+    {
+      "frame": "template-labels/filtered"
+    },
+    {
+      "frame": "template-labels/typing-label"
+    },
+    {
+      "frame": "template-labels/labelling"
+    },
+    {
+      "frame": "template-labels/labelling-refused"
+    }
+  ]
+}

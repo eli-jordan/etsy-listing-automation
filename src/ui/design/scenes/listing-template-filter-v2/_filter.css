@@ -1,0 +1,389 @@
+/* Only what the three directions add to the Images tab. */
+.lf-icon {
+  width: 14px;
+  height: 14px;
+  flex: none;
+}
+
+.lf-muted {
+  color: color-mix(in srgb, var(--color-text) 60%, transparent);
+  font-variant-numeric: tabular-nums;
+}
+
+.lf-locator {
+  max-height: 640px;
+}
+
+.lf-tags {
+  display: block;
+  font-size: 11px;
+  color: var(--color-accent-700);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lf-tags--none {
+  color: color-mix(in srgb, var(--color-text) 50%, transparent);
+}
+
+.lf-pills {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.lf-link {
+  padding: 2px 4px;
+  border: none;
+  background: transparent;
+  font: 500 12px var(--font-body);
+  color: var(--color-accent-700);
+  cursor: pointer;
+}
+
+.lf-link:hover {
+  text-decoration: underline;
+}
+
+.lf-hidden {
+  margin: 0;
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--color-divider);
+  font-size: 12px;
+}
+
+.lf-preview {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-3);
+}
+
+.lf-preview img {
+  display: block;
+  width: 100%;
+  max-width: 340px;
+  aspect-ratio: 1;
+  object-fit: cover;
+  border-radius: var(--radius-md);
+}
+
+.lf-preview__name {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+/* — B — */
+.lf-browse {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-1);
+}
+
+.lf-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  padding: var(--space-6);
+  background: color-mix(in srgb, var(--color-neutral-900) 45%, transparent);
+}
+
+.lf-dialog {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  width: min(1080px, 100%);
+  max-height: 100%;
+  min-height: 0;
+  padding: var(--space-4);
+  border-radius: var(--radius-md);
+  background: var(--color-bg);
+  box-shadow: var(--shadow-lg);
+}
+
+.lf-dialog__head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.lf-dialog__head h2 {
+  margin: 0;
+  font-size: 20px;
+}
+
+.lf-dialog__search {
+  width: 240px;
+  margin-left: auto;
+}
+
+.lf-close {
+  display: inline-flex;
+  width: 30px;
+  height: 30px;
+  padding: 7px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text);
+  cursor: pointer;
+}
+
+.lf-close:hover {
+  background: color-mix(in srgb, var(--color-accent) 14%, transparent);
+}
+
+.lf-close svg {
+  width: 100%;
+  height: 100%;
+}
+
+.lf-dialog__body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 270px;
+  gap: var(--space-4);
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.lf-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  align-content: start;
+  gap: var(--space-3);
+  padding: 3px;
+  overflow-y: auto;
+}
+
+.lf-photo {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--space-1);
+  min-width: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  font: 500 12px var(--font-body);
+  color: var(--color-text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.lf-photo__face {
+  position: relative;
+  display: block;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  box-shadow: 0 0 0 1px var(--color-divider);
+}
+
+.lf-photo:hover .lf-photo__face {
+  box-shadow: 0 0 0 2px var(--color-accent);
+}
+
+.lf-photo--on .lf-photo__face {
+  box-shadow: 0 0 0 3px var(--color-accent);
+}
+
+.lf-photo__face img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: cover;
+}
+
+.lf-photo__count {
+  position: absolute;
+  left: 6px;
+  bottom: 6px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: var(--color-accent-2-200);
+  color: var(--color-accent-2-800);
+  font-size: 11px;
+}
+
+.lf-photo__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lf-side {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-2);
+  font-size: 13px;
+  overflow-y: auto;
+}
+
+.lf-side img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: cover;
+  border-radius: var(--radius-md);
+}
+
+.lf-dialog__foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--color-divider);
+  font-size: 13px;
+}
+
+/* — C — */
+.lf-suggest {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.lf-suggest__title {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.lf-suggest__why {
+  font-size: 12px;
+  color: color-mix(in srgb, var(--color-text) 65%, transparent);
+}
+
+.lf-suggest__pills {
+  margin-top: var(--space-1);
+}
+
+.lf-chip {
+  gap: var(--space-1);
+  padding-right: 4px;
+  border: 1px solid var(--color-divider);
+  font-size: 12px;
+}
+
+.lf-chip__x {
+  display: inline-flex;
+  width: 16px;
+  height: 16px;
+  padding: 3px;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.lf-chip__x:hover {
+  background: color-mix(in srgb, var(--color-accent) 20%, transparent);
+}
+
+.lf-chip__x svg {
+  width: 100%;
+  height: 100%;
+}
+
+.lf-anchor {
+  position: relative;
+}
+
+.lf-add {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 3px 10px;
+  border: 1px dashed var(--color-neutral-500);
+  border-radius: 999px;
+  background: transparent;
+  font: 500 12px var(--font-body);
+  color: var(--color-text);
+  cursor: pointer;
+}
+
+.lf-add:hover {
+  border-color: var(--color-accent);
+  color: var(--color-accent-700);
+}
+
+.lf-pop {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  min-width: 170px;
+  padding: var(--space-1);
+  border-radius: var(--radius-md);
+  background: var(--color-neutral-100);
+  box-shadow: var(--shadow-lg);
+}
+
+.lf-option {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: 6px var(--space-2);
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  font: 400 13px var(--font-body);
+  color: var(--color-text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.lf-option:hover {
+  background: color-mix(in srgb, var(--color-accent) 12%, transparent);
+}
+
+.lf-others {
+  flex: none;
+  padding: var(--space-2);
+  border: 1px dashed var(--color-neutral-500);
+  border-radius: var(--radius-md);
+  background: transparent;
+  font: 500 12px var(--font-body);
+  color: var(--color-text);
+  cursor: pointer;
+}
+
+.lf-others:hover {
+  border-color: var(--color-accent);
+  color: var(--color-accent-700);
+}
+
+/* A full list scrolls; its rows must not shrink to fit. */
+.lf-locator .loc-tmpl {
+  flex: none;
+}
+
+/* — Search that offers labels — */
+.lf-hints {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: 12px;
+}
+
+.lf-hints__lead {
+  margin-right: 2px;
+  color: color-mix(in srgb, var(--color-text) 70%, transparent);
+}
+
+.lf-group-empty {
+  margin: 0;
+  padding: var(--space-1) 0 var(--space-2);
+  font-size: 12px;
+  color: color-mix(in srgb, var(--color-text) 65%, transparent);
+}

@@ -191,6 +191,36 @@
       ],
       [
         "template-positions-settings-v2"
+      ],
+      {
+        "space": 4
+      },
+      [
+        "listing-template-filter-v1"
+      ],
+      {
+        "space": 4
+      },
+      [
+        "listing-template-filter-v2"
+      ],
+      {
+        "space": 4
+      },
+      [
+        "template-labels-v1"
+      ],
+      {
+        "space": 4
+      },
+      [
+        "listing-template-filter-v3"
+      ],
+      {
+        "space": 4
+      },
+      [
+        "template-labels-v2"
       ]
     ],
     "scenes": {
@@ -591,6 +621,56 @@
           [
             "01-limits",
             "02-confirm"
+          ]
+        ]
+      },
+      "listing-template-filter-v1": {
+        "rows": [
+          [
+            "a-locator-pills",
+            "b-browse-dialog",
+            "c-suggested"
+          ]
+        ]
+      },
+      "listing-template-filter-v2": {
+        "rows": [
+          [
+            "suggested",
+            "search-adds-label",
+            "search-swaps-label"
+          ]
+        ]
+      },
+      "template-labels-v1": {
+        "rows": [
+          [
+            "filter"
+          ],
+          {
+            "space": 3
+          },
+          [
+            "label"
+          ]
+        ]
+      },
+      "listing-template-filter-v3": {
+        "rows": [
+          [
+            "filtered",
+            "browse-labels",
+            "typing-label",
+            "narrowing-by-title"
+          ]
+        ]
+      },
+      "template-labels-v2": {
+        "rows": [
+          [
+            "filtered",
+            "typing-label",
+            "labelling"
           ]
         ]
       }
@@ -1304,6 +1384,63 @@
     {
       "key": "tpsv2_02-confirm",
       "frame": "template-positions-settings-v2/02-confirm"
+    },
+    {
+      "frame": "listing-template-filter-v1/a-locator-pills"
+    },
+    {
+      "frame": "listing-template-filter-v1/b-browse-dialog"
+    },
+    {
+      "frame": "listing-template-filter-v1/c-suggested"
+    },
+    {
+      "frame": "listing-template-filter-v2/suggested"
+    },
+    {
+      "frame": "listing-template-filter-v2/search-adds-label"
+    },
+    {
+      "frame": "listing-template-filter-v2/search-swaps-label"
+    },
+    {
+      "frame": "template-labels-v1/filter/a-rail"
+    },
+    {
+      "frame": "template-labels-v1/filter/b-library"
+    },
+    {
+      "frame": "template-labels-v1/filter/c-table"
+    },
+    {
+      "frame": "template-labels-v1/label/a-rail"
+    },
+    {
+      "frame": "template-labels-v1/label/b-library"
+    },
+    {
+      "frame": "template-labels-v1/label/c-table"
+    },
+    {
+      "frame": "listing-template-filter-v3/filtered"
+    },
+    {
+      "frame": "listing-template-filter-v3/browse-labels"
+    },
+    {
+      "frame": "listing-template-filter-v3/typing-label"
+    },
+    {
+      "frame": "listing-template-filter-v3/narrowing-by-title"
+    },
+    {
+      "frame": "template-labels-v2/filtered"
+    },
+    {
+      "frame": "template-labels-v2/typing-label"
+    },
+    {
+      "frame": "template-labels-v2/labelling"
     }
   ]
 }

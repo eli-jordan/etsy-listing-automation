@@ -50,6 +50,16 @@
       "description": "Full Marigold workflow with the selected floating Mask / Unmask dock and red exclusion overlay."
     },
     {
+      "name": "template-labels",
+      "title": "Mockup template labels",
+      "description": "Tags are added on the workbench under the spec's rules, and the rail filters with the listing's search box. Matches the spec."
+    },
+    {
+      "name": "listing-template-filter",
+      "title": "Find templates on a listing",
+      "description": "Labels are pills inside the listing's template search box, grouped by prefix in its dropdown; typed text narrows them by title. Matches the spec."
+    },
+    {
       "name": "template-positions",
       "title": "Template Positions",
       "description": "Clickable prototype (round 3): Adjust position switch + handles + Reset, a multiple template, an out-of-limits entry, and Settings > Template rendering."
@@ -260,6 +270,38 @@
       "frames": 5
     },
     {
+      "name": "listing-template-filter",
+      "frames": 5,
+      "brief": "design/scenes/listing-template-filter/_brief.md",
+      "title": "Find templates on a listing",
+      "description": "Find templates on a listing - labels are pills inside the template search box, and typed text narrows them by title (round 4, matches the spec)",
+      "note": "**Labels live in the search box.** It opens empty. Pills filter by label, and plain text narrows those results by title.\n\n- **Down arrow, Enter:** picks a label from the dropdown and makes it a pill.\n- **Enter with nothing highlighted:** keeps your text as a title search.\n- **Esc:** closes the dropdown.\n- **Backspace in an empty box:** removes the last pill.\n- Click the box to see every label, grouped by prefix.\n\nA label that would leave nothing says it replaces the current one. The listing is made up, and previews show the ivory photo without the design. Earlier rounds are on the Archive board."
+    },
+    {
+      "name": "listing-template-filter-v1",
+      "frames": 3,
+      "brief": "design/scenes/listing-template-filter-v1/_brief.md",
+      "title": "Find templates on a listing · v1",
+      "description": "Find templates on a listing - three ways to filter mockup templates in the Listing Images tab, using direction A's free-form tags (round 1: A, B and C side by side; C won)",
+      "note": "**Three ways to find templates on a listing.** All use the free-form tags you chose in direction A, so only tags in use appear. Each one works: filter, hover, open a template and click colours into the gallery.\n\n| | Where | Effort | Sees |\n|---|---|---|---|\n| A | In the locator | Click a pill | Small thumbnails |\n| B | Big dialog | Open it, click pills | Large photos |\n| C | In the locator | None if the title matches | Small thumbnails |\n\nThe listing is made up. Previews show the ivory photo for every colour, without the design."
+    },
+    {
+      "name": "listing-template-filter-v2",
+      "frames": 3,
+      "brief": "design/scenes/listing-template-filter-v2/_brief.md",
+      "title": "Find templates on a listing · v2",
+      "description": "Find templates on a listing - the Images tab opens on templates suited to the listing, and search offers matching labels (round 2: search above the filter, suggestion row beneath it)",
+      "note": "**C, with search back.** The list opens on templates that match the listing title. Search covers every template, by name and label, and offers any label it matches.\n\n- **Adds:** a label that narrows the list joins the filter.\n- **Swaps:** a label that would leave nothing replaces the filter, so you never land on an empty list.\n- Press **Enter** to take the first suggestion, **Esc** to clear the search.\n\nThe listing is made up. Previews show the ivory photo for every colour, without the design. A and B are on the Archive board."
+    },
+    {
+      "name": "listing-template-filter-v3",
+      "frames": 4,
+      "brief": "design/scenes/listing-template-filter-v3/_brief.md",
+      "title": "Find templates on a listing · v3",
+      "description": "Find templates on a listing - labels are pills inside the template search box, and typed text narrows them by title (round 3: title-based opening filter, dropped in the spec grilling)",
+      "note": "**Labels live in the search box.** Pills filter by label. Plain text narrows those results by title.\n\n- **Down arrow, Enter:** picks a label from the dropdown and makes it a pill.\n- **Enter with nothing highlighted:** keeps your text as a title search.\n- **Esc:** closes the dropdown.\n- **Backspace in an empty box:** removes the last pill.\n- Click the box to see every label.\n\nA label that would leave nothing says it replaces the current one. The listing is made up, and previews show the ivory photo without the design. Earlier rounds are on the Archive board."
+    },
+    {
       "name": "marigold",
       "frames": 10,
       "brief": "design/scenes/marigold/_brief.md",
@@ -372,6 +414,30 @@
     {
       "name": "template-cards",
       "frames": 2
+    },
+    {
+      "name": "template-labels",
+      "frames": 4,
+      "brief": "design/scenes/template-labels/_brief.md",
+      "title": "Mockup template labels",
+      "description": "Mockup template labels - free-form tags added on the workbench, and filtered from a rail search box shared with the listing (round 3, matches the spec)",
+      "note": "**Tags, with the listing's search box.** Add tags to a template from the bar above its photo, and filter the rail with the same box the listing uses.\n\nTags follow the rules in the spec, and a colon groups them in the dropdown. Chips change once the save lands. Labels are guesses from each photo. Earlier rounds are on the Archive board."
+    },
+    {
+      "name": "template-labels-v1",
+      "frames": 6,
+      "brief": "design/scenes/template-labels-v1/_brief.md",
+      "title": "Mockup template labels · v1",
+      "description": "Mockup template labels - three directions for labelling and filtering the template library (round 1: A, B and C side by side; A won)",
+      "note": "**Three ways to label and filter mockup templates.** Each direction differs in where you work and how labels are structured. Top row is filtering, bottom row is labelling. All six work: try the filters and edit labels.\n\n| | Where | Labels | Label many at once |\n|---|---|---|---|\n| A | Today's rail | Free-form tags | No |\n| B | New photo grid | Managed groups | Yes |\n| C | New table | One column per group | One cell at a time |\n\nPhotos are the 16 real templates. The labels are guesses from looking at each photo. No template has more than one person yet, so **Multiple people** shows 0."
+    },
+    {
+      "name": "template-labels-v2",
+      "frames": 3,
+      "brief": "design/scenes/template-labels-v2/_brief.md",
+      "title": "Mockup template labels · v2",
+      "description": "Mockup template labels - free-form tags added on the workbench, and filtered from a rail search box shared with the listing (round 2: plain tags, before prefixes and save rules)",
+      "note": "**Tags, with the listing's search box.** Add tags to a template from the bar above its photo. Filter the rail with the same box the listing uses: pills for labels, plain text for titles.\n\nNo template has more than one person yet, so nobody has a \"multiple people\" tag and it isn't offered. Labels are guesses from each photo. B and C are on the Archive board."
     },
     {
       "name": "template-positions",
@@ -2110,6 +2176,150 @@
       "description": "Single clickable prototype: AI Mode loads in place, then reveals title, lead, and ranked tag suggestions automatically."
     },
     {
+      "id": "listing-template-filter-v1/a-locator-pills",
+      "file": "design/scenes/listing-template-filter-v1/a-locator-pills.tsx",
+      "kind": "tsx",
+      "scene": "listing-template-filter-v1",
+      "note": "**A · Pills in the locator.** The same pills as the Mockup Templates rail, so there's one thing to learn. Each extra pill narrows the list.\n\nIf a filter hides a template already in the listing, a line below the list says so.\n\nTrade-off: thumbnails stay small, and the pills take space from a 340px column.",
+      "title": "A · Pills in the locator · v1",
+      "viewport": "laptop",
+      "description": "Tag pills under the locator's search, matching the Mockup Templates rail, with christmas on. Retired: C won because it needs no clicks when the title matches.",
+      "variantGroup": "listing-template-filter-v1",
+      "variant": "a"
+    },
+    {
+      "id": "listing-template-filter-v1/b-browse-dialog",
+      "file": "design/scenes/listing-template-filter-v1/b-browse-dialog.tsx",
+      "kind": "tsx",
+      "scene": "listing-template-filter-v1",
+      "note": "**B · Browse dialog.** For choosing by eye. Photos are large, and colours sit beside the chosen one. Close it and the normal locator is unchanged.\n\nTrade-off: one more step, and the dialog covers the gallery, so a count in the footer stands in for it.",
+      "title": "B · Browse dialog · v1",
+      "viewport": "laptop",
+      "description": "A large photo browser over the Images tab: tags on top, photos below, colours beside the chosen photo. Retired: C won because it needs no clicks when the title matches.",
+      "variantGroup": "listing-template-filter-v1",
+      "variant": "b"
+    },
+    {
+      "id": "listing-template-filter-v1/c-suggested",
+      "file": "design/scenes/listing-template-filter-v1/c-suggested.tsx",
+      "kind": "tsx",
+      "scene": "listing-template-filter-v1",
+      "note": "**C · Suggested for this listing.** The locator starts filtered by tags found in the listing's own title, so a Christmas tee opens on Christmas templates with no clicks. Everything else stays one click away.\n\nTrade-off: it only helps when the words match. \"Xmas\" in the title finds nothing unless we add synonyms, and a listing with no match opens on the full list.",
+      "title": "C · Suggested for this listing · v1",
+      "viewport": "laptop",
+      "description": "The locator starts filtered by tags found in the listing's own title, with the rest folded below. Chosen, before the search box came back.",
+      "variantGroup": "listing-template-filter-v1",
+      "variant": "c"
+    },
+    {
+      "id": "listing-template-filter-v2/search-adds-label",
+      "file": "design/scenes/listing-template-filter-v2/search-adds-label.tsx",
+      "kind": "tsx",
+      "scene": "listing-template-filter-v2",
+      "title": "Search offers a label to add · v2",
+      "viewport": "laptop",
+      "description": "Typing flat offers the flat lay label, which would narrow the christmas filter to one template. Superseded: labels moved into the search box."
+    },
+    {
+      "id": "listing-template-filter-v2/search-swaps-label",
+      "file": "design/scenes/listing-template-filter-v2/search-swaps-label.tsx",
+      "kind": "tsx",
+      "scene": "listing-template-filter-v2",
+      "title": "Search offers a label to swap · v2",
+      "viewport": "laptop",
+      "description": "Typing sum finds nothing under christmas, so summer is offered in its place and the matches show under Other templates. Superseded: labels moved into the search box."
+    },
+    {
+      "id": "listing-template-filter-v2/suggested",
+      "file": "design/scenes/listing-template-filter-v2/suggested.tsx",
+      "kind": "tsx",
+      "scene": "listing-template-filter-v2",
+      "title": "Suggested templates · v2",
+      "viewport": "laptop",
+      "description": "The Images tab as it opens: search on top, the christmas label from the listing title on, other templates folded. Superseded: labels moved into the search box."
+    },
+    {
+      "id": "listing-template-filter-v3/browse-labels",
+      "file": "design/scenes/listing-template-filter-v3/browse-labels.tsx",
+      "kind": "tsx",
+      "scene": "listing-template-filter-v3",
+      "title": "Every label on click · v3",
+      "viewport": "laptop",
+      "description": "Clicking the search box lists every other label with its count. Superseded by the spec grilling."
+    },
+    {
+      "id": "listing-template-filter-v3/filtered",
+      "file": "design/scenes/listing-template-filter-v3/filtered.tsx",
+      "kind": "tsx",
+      "scene": "listing-template-filter-v3",
+      "title": "Label pill in the search box · v3",
+      "viewport": "laptop",
+      "description": "The Images tab as it opens: christmas sits as a pill inside the search box, taken from the listing title. Superseded by the spec grilling."
+    },
+    {
+      "id": "listing-template-filter-v3/narrowing-by-title",
+      "file": "design/scenes/listing-template-filter-v3/narrowing-by-title.tsx",
+      "kind": "tsx",
+      "scene": "listing-template-filter-v3",
+      "title": "Text narrows the label · v3",
+      "viewport": "laptop",
+      "description": "The christmas pill plus the plain text tree: no label matches, so it stays text and narrows the five templates to two. Superseded by the spec grilling."
+    },
+    {
+      "id": "listing-template-filter-v3/typing-label",
+      "file": "design/scenes/listing-template-filter-v3/typing-label.tsx",
+      "kind": "tsx",
+      "scene": "listing-template-filter-v3",
+      "title": "Typing finds a label · v3",
+      "viewport": "laptop",
+      "description": "Typing CHR with no labels on: the dropdown offers christmas, highlighted by the down arrow. Superseded by the spec grilling."
+    },
+    {
+      "id": "listing-template-filter/browse-labels",
+      "file": "design/scenes/listing-template-filter/browse-labels.tsx",
+      "kind": "tsx",
+      "scene": "listing-template-filter",
+      "title": "Every label, grouped",
+      "viewport": "laptop",
+      "description": "Clicking the box lists every other label under its prefix, with plain tags under Other."
+    },
+    {
+      "id": "listing-template-filter/filtered",
+      "file": "design/scenes/listing-template-filter/filtered.tsx",
+      "kind": "tsx",
+      "scene": "listing-template-filter",
+      "title": "Label pill in the search box",
+      "viewport": "laptop",
+      "description": "The theme:christmas pill inside the search box, leaving five templates."
+    },
+    {
+      "id": "listing-template-filter/narrowing-by-title",
+      "file": "design/scenes/listing-template-filter/narrowing-by-title.tsx",
+      "kind": "tsx",
+      "scene": "listing-template-filter",
+      "title": "Text narrows the label",
+      "viewport": "laptop",
+      "description": "The theme:christmas pill plus the plain text tree: no label matches, so it stays text and narrows five templates to two."
+    },
+    {
+      "id": "listing-template-filter/opening",
+      "file": "design/scenes/listing-template-filter/opening.tsx",
+      "kind": "tsx",
+      "scene": "listing-template-filter",
+      "title": "Search box as it opens",
+      "viewport": "laptop",
+      "description": "The Images tab as it opens: an empty search box and all 16 templates, because the filter is always the seller's own choice."
+    },
+    {
+      "id": "listing-template-filter/typing-label",
+      "file": "design/scenes/listing-template-filter/typing-label.tsx",
+      "kind": "tsx",
+      "scene": "listing-template-filter",
+      "title": "Typing finds a label",
+      "viewport": "laptop",
+      "description": "Typing CHR with no pills: the dropdown offers theme:christmas, highlighted by the down arrow."
+    },
+    {
       "id": "marigold-box-controls/a-switch",
       "file": "design/scenes/marigold-box-controls/a-switch.tsx",
       "kind": "tsx",
@@ -3252,6 +3462,138 @@
       "title": "Today · 2fr/1fr/1fr strip",
       "viewport": "laptop",
       "description": "Baseline: square mockups forced into one wide and two skinny 128px tiles with object-fit: cover -- each shows a slice of the middle."
+    },
+    {
+      "id": "template-labels-v1/filter/a-rail",
+      "file": "design/scenes/template-labels-v1/filter/a-rail.tsx",
+      "kind": "tsx",
+      "scene": "template-labels-v1",
+      "note": "**A · Rail tags.** Smallest change. Type any tag you like, and the rail offers the tags that still have matches.\n\nEach extra pill narrows the list, so `christmas` + `flat lay` means both.\n\nTrade-off: free text drifts (\"xmas\" and \"christmas\" become two tags), and 228px of rail is tight once there are many tags.",
+      "title": "A · Rail tags: filtering · v1",
+      "viewport": "laptop",
+      "description": "Free-form tags as pills on today's rail, with Christmas on. The workbench stays exactly where it is. Chosen, before labels moved into the search box.",
+      "variantGroup": "template-labels-v1/filter",
+      "variant": "a"
+    },
+    {
+      "id": "template-labels-v1/filter/b-library",
+      "file": "design/scenes/template-labels-v1/filter/b-library.tsx",
+      "kind": "tsx",
+      "scene": "template-labels-v1",
+      "note": "**B · Photo library.** You recognise a mockup by looking at it, so the photos lead. The workbench becomes the page you open from here.\n\nTicks in one group widen the results (Female or Male). Ticks across groups narrow them (Female and Christmas). Counts show what each tick would give, and zero-result options are disabled.\n\nTrade-off: the biggest build, and it changes how the page opens. Opening a template from a tile isn't drawn: a click here selects it.",
+      "title": "B · Photo library: filtering · v1",
+      "viewport": "laptop",
+      "description": "The page opens on a photo grid with grouped label filters beside it, here Female and Christmas. Not chosen; A won.",
+      "variantGroup": "template-labels-v1/filter",
+      "variant": "b"
+    },
+    {
+      "id": "template-labels-v1/filter/c-table",
+      "file": "design/scenes/template-labels-v1/filter/c-table.tsx",
+      "kind": "tsx",
+      "scene": "template-labels-v1",
+      "note": "**C · Attribute table.** Each template has one Shot and one Model, and any number of Themes. Empty cells show what's still missing, and \"No model\" is different from \"not labelled yet\".\n\nSaved views turn common filters into one click. Change a filter and **Save view** appears.\n\nTrade-off: photos are small, so it's better for managing the library than for choosing by eye.",
+      "title": "C · Attribute table: filtering · v1",
+      "viewport": "laptop",
+      "description": "Every template a row and every label group a column, on the saved Christmas view with the Model filter open. Not chosen; A won.",
+      "variantGroup": "template-labels-v1/filter",
+      "variant": "c"
+    },
+    {
+      "id": "template-labels-v1/label/a-rail",
+      "file": "design/scenes/template-labels-v1/label/a-rail.tsx",
+      "kind": "tsx",
+      "scene": "template-labels-v1",
+      "title": "A · Rail tags: labelling · v1",
+      "viewport": "laptop",
+      "description": "Typing a new free-form tag on the open template, with suggestions and Create. One template at a time. Chosen, before labels moved into the search box.",
+      "variantGroup": "template-labels-v1/label",
+      "variant": "a"
+    },
+    {
+      "id": "template-labels-v1/label/b-library",
+      "file": "design/scenes/template-labels-v1/label/b-library.tsx",
+      "kind": "tsx",
+      "scene": "template-labels-v1",
+      "title": "B · Photo library: labelling · v1",
+      "viewport": "laptop",
+      "description": "Two unlabelled templates selected and labelled together from the bulk bar. A label only some of them hold shows a dash. Not chosen; A won.",
+      "variantGroup": "template-labels-v1/label",
+      "variant": "b"
+    },
+    {
+      "id": "template-labels-v1/label/c-table",
+      "file": "design/scenes/template-labels-v1/label/c-table.tsx",
+      "kind": "tsx",
+      "scene": "template-labels-v1",
+      "title": "C · Attribute table: labelling · v1",
+      "viewport": "laptop",
+      "description": "Filling a gap in place: the Needs labels view with one Model cell open. Not chosen; A won.",
+      "variantGroup": "template-labels-v1/label",
+      "variant": "c"
+    },
+    {
+      "id": "template-labels-v2/filtered",
+      "file": "design/scenes/template-labels-v2/filtered.tsx",
+      "kind": "tsx",
+      "scene": "template-labels-v2",
+      "title": "Rail filtered by a label · v2",
+      "viewport": "laptop",
+      "description": "The christmas pill inside the rail's search box, leaving five templates. Superseded by the spec grilling."
+    },
+    {
+      "id": "template-labels-v2/labelling",
+      "file": "design/scenes/template-labels-v2/labelling.tsx",
+      "kind": "tsx",
+      "scene": "template-labels-v2",
+      "title": "Tagging a template · v2",
+      "viewport": "laptop",
+      "description": "Typing a tag on the open template, with a suggestion and Create. Superseded by the spec grilling."
+    },
+    {
+      "id": "template-labels-v2/typing-label",
+      "file": "design/scenes/template-labels-v2/typing-label.tsx",
+      "kind": "tsx",
+      "scene": "template-labels-v2",
+      "title": "Rail search finds a label · v2",
+      "viewport": "laptop",
+      "description": "Typing CHR in the rail: the dropdown offers christmas, highlighted by the down arrow. Superseded by the spec grilling."
+    },
+    {
+      "id": "template-labels/filtered",
+      "file": "design/scenes/template-labels/filtered.tsx",
+      "kind": "tsx",
+      "scene": "template-labels",
+      "title": "Rail filtered by a label",
+      "viewport": "laptop",
+      "description": "The theme:christmas pill inside the rail's search box, leaving five templates."
+    },
+    {
+      "id": "template-labels/labelling",
+      "file": "design/scenes/template-labels/labelling.tsx",
+      "kind": "tsx",
+      "scene": "template-labels",
+      "title": "Tagging a template",
+      "viewport": "laptop",
+      "description": "Typing a tag on the open template, with a suggestion and Create. The chip appears once the save lands."
+    },
+    {
+      "id": "template-labels/labelling-refused",
+      "file": "design/scenes/template-labels/labelling-refused.tsx",
+      "kind": "tsx",
+      "scene": "template-labels",
+      "title": "A tag that cannot be saved",
+      "viewport": "laptop",
+      "description": "An invalid tag keeps the typed text and shows why in place of Create."
+    },
+    {
+      "id": "template-labels/typing-label",
+      "file": "design/scenes/template-labels/typing-label.tsx",
+      "kind": "tsx",
+      "scene": "template-labels",
+      "title": "Rail search finds a label",
+      "viewport": "laptop",
+      "description": "Typing CHR in the rail: the dropdown offers theme:christmas, highlighted by the down arrow."
     },
     {
       "id": "template-positions-settings-v1/01-limits",
