@@ -14,10 +14,13 @@ import pytest
 
 from etsy_listings.core.application.mockup_templates import (
     TemplateOverview,
+    assign_kind,
     list_templates,
+    read_config,
 )
 from etsy_listings.core.engine.stage import Blocked
 from etsy_listings.core.engine.stages.render import RenderStage
+from etsy_listings.core.errors import ConflictError
 from etsy_listings.core.workspace import WorkspaceFacts
 from etsy_listings.core.workspace.workspace import Workspace
 
@@ -71,3 +74,24 @@ def test_the_render_stage_refuses_a_template_needing_repair(workspace_root: Path
 
     assert isinstance(desired, Blocked)
     assert "transaction" in desired.message
+
+
+class TestATemplateFileThatWillNotParse:
+    @pytest.fixture(autouse=True)
+    def _broken(self, workspace: Workspace) -> None:
+        workspace.template_config_file(DAMAGED).write_text("kind: [unclosed", encoding="utf-8")
+
+    def test_it_is_not_listed_as_never_having_had_a_kind(self, workspace: Workspace) -> None:
+        rows = _rows(workspace)
+
+        assert rows[DAMAGED].has_config
+        assert "not valid YAML" in (rows[DAMAGED].status_reason or "")
+        assert rows[HEALTHY].calibrated
+
+    def test_reading_it_says_why_rather_than_that_it_is_missing(self, workspace: Workspace) -> None:
+        with pytest.raises(ConflictError, match="not valid YAML"):
+            read_config(workspace, DAMAGED)
+
+    def test_assigning_a_kind_refuses_with_the_same_reason(self, workspace: Workspace) -> None:
+        with pytest.raises(ConflictError, match="not valid YAML"):
+            assign_kind(workspace, DAMAGED, "single")

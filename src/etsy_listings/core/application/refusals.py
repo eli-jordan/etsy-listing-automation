@@ -98,6 +98,16 @@ class TemplateConfigMissingError(MissingError):
         self.name = name
 
 
+class TemplateConfigUnreadableError(ConflictError):
+    """The template has a ``template.yaml`` that does not load: a hand edit or
+    a damaged file, which is broken rather than absent. The reason is the
+    loader's, naming the file and what is wrong with it."""
+
+    def __init__(self, name: str, reason: str) -> None:
+        super().__init__(reason)
+        self.name = name
+
+
 class TemplateAlreadyCalibratedError(ConflictError, ValueError):
     """Kind decides the whole ``template.yaml`` shape, so assigning another
     would silently discard the calibration done in the old one's fields."""

@@ -38,6 +38,7 @@ from PIL import Image
 from etsy_listings.core.application.refusals import (
     TemplateAlreadyCalibratedError,
     TemplateConfigMissingError,
+    TemplateConfigUnreadableError,
     TemplateKindRefusedError,
     TemplateMissingError,
     TemplatePhotoMissingError,
@@ -45,6 +46,7 @@ from etsy_listings.core.application.refusals import (
 )
 from etsy_listings.core.config.errors import ConfigLoadError
 from etsy_listings.core.config.slug import slug_map
+from etsy_listings.core.errors import UserFacingError
 from etsy_listings.core.render.config import (
     AnyRenderer,
     AnyTemplate,
@@ -135,18 +137,14 @@ def _overview(workspace: Workspace, name: str) -> TemplateOverview:
         config = CalibrationStore(workspace).config(name)
     except CalibrationRepairRequiredError as exc:
         return _unloaded(name, (width, height), has_config=True, reason=f"needs repair: {exc}")
-    except ConfigLoadError:
+    except ConfigLoadError as exc:
+        if workspace.template_config_file(name).is_file():
+            return _unloaded(name, (width, height), has_config=True, reason=str(exc))
         return _unloaded(name, (width, height), has_config=False, reason="no kind set")
-    if isinstance(config, ColourMatrixTemplate):
-        colours = workspace.template_colours(name)
-    elif isinstance(config, MultipleTemplate):
-        colours = [p.colour for p in config.placements]
-    else:
-        colours = [config.colour] if config.colour is not None else []
     return TemplateOverview(
         name=name,
         kind=config.kind,
-        colours=colours,
+        colours=_colours(workspace, name, config),
         photos=_photos(workspace, name, config),
         has_config=True,
         status_reason=_status_reason(config),
@@ -154,6 +152,14 @@ def _overview(workspace: Workspace, name: str) -> TemplateOverview:
         height=height,
         labels=config.labels,
     )
+
+
+def _colours(workspace: Workspace, name: str, config: AnyTemplate) -> list[str]:
+    if isinstance(config, ColourMatrixTemplate):
+        return workspace.template_colours(name)
+    if isinstance(config, MultipleTemplate):
+        return [p.colour for p in config.placements]
+    return [config.colour] if config.colour is not None else []
 
 
 def _unloaded(
@@ -287,6 +293,7 @@ def assign_kind(workspace: Workspace, name: str, kind: TemplateKind) -> AnyTempl
     """
     require_template(workspace, name)
     if workspace.template_config_file(name).is_file():
+        _load_config(workspace, name)
         raise TemplateAlreadyCalibratedError(name)
     photos = workspace.template_photos(name)
     if not photos:
@@ -384,7 +391,7 @@ def read_config(workspace: Workspace, name: str) -> SavedConfig:
         try:
             saved = store.read(name)
         except ConfigLoadError as exc:
-            raise TemplateConfigMissingError(name) from exc
+            raise _load_refusal(workspace, name, exc) from exc
         modified_at = datetime.fromtimestamp(
             workspace.template_config_file(name).stat().st_mtime, tz=UTC
         )
@@ -510,7 +517,15 @@ def _load_config(workspace: Workspace, name: str) -> AnyTemplate:
     try:
         return CalibrationStore(workspace).config(name)
     except ConfigLoadError as exc:
-        raise TemplateConfigMissingError(name) from exc
+        raise _load_refusal(workspace, name, exc) from exc
+
+
+def _load_refusal(workspace: Workspace, name: str, exc: ConfigLoadError) -> UserFacingError:
+    """Which refusal a config that did not load is: a folder nobody has given
+    a kind is absent, and a file that is there and will not load is broken."""
+    if workspace.template_config_file(name).is_file():
+        return TemplateConfigUnreadableError(name, str(exc))
+    return TemplateConfigMissingError(name)
 
 
 # ---------------------------------------------------------------- previews

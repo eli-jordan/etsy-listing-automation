@@ -952,3 +952,15 @@ def test_one_template_needing_repair_does_not_take_the_list_down(
     by_name = {t["name"]: t for t in response.json()}
     assert "repair" in by_name["flat-lay-01"]["status_reason"]
     assert by_name["colour-chart-01"]["status"] == "calibrated"
+
+
+def test_a_template_file_that_will_not_parse_is_not_answered_as_missing(
+    client: TestClient, workspace_root: Path
+) -> None:
+    config = workspace_root / "mockup-templates" / "flat-lay-01" / "template.yaml"
+    config.write_text("kind: [unclosed", encoding="utf-8")
+
+    response = client.get("/api/templates/flat-lay-01/config")
+
+    assert response.status_code == 409
+    assert "not valid YAML" in response.json()["detail"]
