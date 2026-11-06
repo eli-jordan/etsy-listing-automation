@@ -8,6 +8,9 @@ import { afterEach, vi } from "vitest";
 // has already restored.
 afterEach(() => {
   cleanup();
+  // The editors remember their view here, and most fixtures share a listing
+  // name: one test's tab must not be where the next one opens.
+  sessionStorage.clear();
 });
 
 // jsdom doesn't implement object URLs; the calibrator creates one per

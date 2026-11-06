@@ -29,6 +29,45 @@ export type Focus =
   | { kind: "template"; template: string; colour: string | null }
   | { kind: "file"; asset: MediaFileSummary };
 
+/** A focus as a refresh remembers it: names only, because a file's summary
+ * is whatever the server lists next time. */
+export type FocusRef =
+  { kind: "template"; template: string; colour: string | null } | { kind: "file"; ref: string };
+
+export function focusRef(focus: Focus): FocusRef {
+  return focus.kind === "file" ? { kind: "file", ref: focus.asset.ref } : focus;
+}
+
+export function isFocusRef(value: unknown): value is FocusRef {
+  if (typeof value !== "object" || value === null) return false;
+  const ref = value as Record<string, unknown>;
+  if (ref.kind === "file") return typeof ref.ref === "string";
+  return (
+    ref.kind === "template" &&
+    typeof ref.template === "string" &&
+    (ref.colour === null || typeof ref.colour === "string")
+  );
+}
+
+/** The focus a remembered one names, or `null` while its template or file is
+ * not listed. That is both "not loaded yet" and "gone since": the first
+ * settles when the lists arrive, the second leaves the stage empty rather than
+ * pointing it at a picture that no longer exists. */
+export function restoreFocus(
+  ref: FocusRef | null,
+  templates: readonly TemplateSummary[],
+  files: readonly MediaFileSummary[],
+): Focus | null {
+  if (ref === null) return null;
+  if (ref.kind === "file") {
+    const asset = files.find((file) => file.ref === ref.ref);
+    return asset === undefined ? null : { kind: "file", asset };
+  }
+  const summary = templates.find((template) => template.name === ref.template);
+  if (summary === undefined) return null;
+  return ref.colour === null || summary.colours.includes(ref.colour) ? ref : null;
+}
+
 /** Everything the preview pane and its foot need, for one focus. */
 export interface FocusView {
   title: string;

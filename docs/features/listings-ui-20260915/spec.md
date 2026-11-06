@@ -338,6 +338,20 @@ Nothing remote is keyed by the name: both remote titles come from `etsy.title`
 and both ids from the lockfile, which moves with the directory. A rename
 therefore costs no remote write and produces no drift.
 
+### Amendment: a refresh keeps the editor's view
+
+Refreshing a saved listing or listing template comes back to what was on
+screen: the tab, the colour on the Variants stage, the picture in the Listing
+Images preview, the locator's half, search and open template, the lightbox and
+the scroll position. An opened listing starts from the same view for as long as the
+browser tab lives, because the view is kept per listing in `sessionStorage`
+(`pages/editor/editorView.ts`). It isn't in the URL because the preview follows
+the pointer, and a router navigation per hover is not worth a shareable link.
+
+A picture that has gone since leaves the stage empty. An unnamed draft keeps
+nothing, because refreshing one starts a new draft. Position mode and the
+listing template's preview design also start over.
+
 ## Architecture decisions
 
 - **Router**: introduce `react-router` (the only new frontend dependency this

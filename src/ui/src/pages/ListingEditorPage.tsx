@@ -24,6 +24,7 @@ import { ImagesTab } from "./editor/ImagesTab";
 import { metaFor } from "./editor/saveMeta";
 import { useListingBatch } from "./editor/useListingBatch";
 import { VariantsTab } from "./editor/VariantsTab";
+import { isNullableString, useViewScroll, useViewState, viewScope } from "./editor/editorView";
 
 /** Tabs container + issues banner + page head (phase 5).
  *
@@ -44,6 +45,10 @@ const TABS: { id: Tab; label: string }[] = [
   { id: "images", label: "Listing Images" },
   { id: "details", label: "Listing Details" },
 ];
+
+function isTab(value: unknown): value is Tab {
+  return TABS.some((t) => t.id === value);
+}
 
 function badgeFor(issues: Issue[], tab: Tab): { block: number; warn: number } {
   const scoped = issues.filter((i) => i.tab === tab);
@@ -435,7 +440,11 @@ export function ListingEditorShell(props: ShellProps) {
   const { detail, update, flush, head } = props;
   const template = props.kind === "listing-template";
   const aiSeo = props.kind === "listing-template" ? null : props.aiSeo;
-  const [tab, setTab] = useState<Tab>("variants");
+  // What a refresh comes back to. An unnamed draft has no scope: refreshing
+  // one starts a new draft, so there is nothing to come back to.
+  const scope = viewScope(template ? "listing-template" : "listing", detail.name);
+  const [tab, setTab] = useViewState<Tab>(scope, "tab", "variants", isTab);
+  useViewScroll(scope);
   /** Which base slot's Recent designs panel is open. Here, not in the strip,
    * so the card under the Variants stage can open one too (interactions
    * Part 2 §2). */
@@ -443,7 +452,12 @@ export function ListingEditorShell(props: ShellProps) {
   /** The colour on the Variants stage. Here, not in the tab, so the strip's
    * "Also printing their own design" names can preview one too -- and so
    * leaving Variants and coming back keeps the colour the seller chose. */
-  const [previewed, setPreviewed] = useState<string | null>(null);
+  const [previewed, setPreviewed] = useViewState<string | null>(
+    scope,
+    "previewed",
+    null,
+    isNullableString,
+  );
 
   function previewColour(colour: string) {
     setPreviewed(colour);

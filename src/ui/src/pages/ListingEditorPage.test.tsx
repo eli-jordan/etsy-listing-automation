@@ -1166,4 +1166,30 @@ describe("ListingEditorPage renaming", () => {
     expect(screen.queryByRole("button", { name: "Cancel" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Renew" })).not.toBeInTheDocument();
   });
+
+  it("stays on the tab it was on after a refresh", async () => {
+    vi.spyOn(listingsApi, "getListing").mockResolvedValue(detail());
+    const first = renderAt("/listings/take-a-hike");
+    fireEvent.click(await screen.findByText("Listing Images"));
+    expect(await screen.findByText("Add media")).toBeInTheDocument();
+    first.unmount();
+
+    renderAt("/listings/take-a-hike");
+
+    expect(await screen.findByText("Add media")).toBeInTheDocument();
+  });
+
+  it("opens another listing on Variants, not on the tab this one was left on", async () => {
+    vi.spyOn(listingsApi, "getListing").mockImplementation((name) =>
+      Promise.resolve(detail({ name })),
+    );
+    const first = renderAt("/listings/take-a-hike");
+    fireEvent.click(await screen.findByText("Listing Images"));
+    first.unmount();
+
+    renderAt("/listings/other-shirt");
+
+    await screen.findByRole("heading", { name: "other-shirt" });
+    expect(screen.queryByText("Add media")).not.toBeInTheDocument();
+  });
 });
