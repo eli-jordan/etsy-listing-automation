@@ -140,6 +140,10 @@
   white-space: nowrap;
   cursor: pointer;
 }
+.tp-switch--unavailable {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
 .tp-note {
   font-size: 12px;
   color: var(--color-neutral-600);

@@ -143,8 +143,15 @@ class EvidenceReader:
             return False
 
     def select(
-        self, inputs: PreparationInputs, candidates: tuple[CropEvidence, ...]
+        self,
+        inputs: PreparationInputs,
+        candidates: tuple[CropEvidence, ...],
+        *,
+        verify: bool = True,
     ) -> dict[str, CropEvidence]:
+        """The evidence covering each placement. ``verify=False`` skips reading
+        the prediction files, most of the cost: enough to ask how far evidence
+        reaches, never to use it."""
         identity = required_identity(inputs)
         selected = {}
         for placement in inputs.placements:
@@ -155,7 +162,7 @@ class EvidenceReader:
                     np.array(placement.quad, np.float32),
                     (inputs.photo.width, inputs.photo.height),
                     identity,
-                ) and self.valid(value):
+                ) and (not verify or self.valid(value)):
                     selected[placement_key(placement.id)] = value
                     break
         return selected

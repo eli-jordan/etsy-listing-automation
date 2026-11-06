@@ -672,7 +672,7 @@ def test_inference_setting_change_requires_prepare_and_missing_runtime_is_action
         coordinator.submit(
             "shirt", PreparationRequest(config_revision=saved.revision, request_id="changed")
         )
-    assert len(coordinator.list_jobs()) == 1
+    assert [j.kind for j in coordinator.list_jobs() if j.kind != "coverage"] == ["prepare"]
     coordinator.close()
 
 

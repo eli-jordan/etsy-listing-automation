@@ -2,6 +2,7 @@ import { act, fireEvent, render, screen, waitFor, within } from "@testing-librar
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as calibrator from "../../../api/calibrator";
 import * as listingsApi from "../../../api/listings";
+import * as preparationApi from "../../../api/preparation";
 import * as settingsApi from "../../../api/workspaceSettings";
 import { listingDetail } from "../../../test/listings";
 import type { ListingDetail, TemplateConfigState, TemplateSummary } from "../../../types";
@@ -222,6 +223,85 @@ describe("the Adjust position switch", () => {
     );
     const after = stagePicture();
     expect(after).not.toEqual(before);
+  });
+});
+
+describe("a Marigold template not ready for positions", () => {
+  const ready = { ready: true, preparing: false };
+  const preparing = { ready: false, preparing: true };
+  const uncovered = { ready: false, preparing: false };
+  const note = "This template is being prepared. Adjusting will be available soon.";
+
+  async function refusedSwitch() {
+    mount();
+    await selectTile("glossy");
+    const control = await adjustSwitch();
+    await waitFor(() => expect(control).toHaveAttribute("aria-disabled", "true"));
+    fireEvent.click(control);
+    return control;
+  }
+
+  it("stays off and says why while preparation is running", async () => {
+    vi.spyOn(preparationApi, "getPositionReadiness").mockResolvedValue(preparing);
+    const queue = vi.spyOn(preparationApi, "queueCoverage").mockResolvedValue(null);
+    const control = await refusedSwitch();
+    expect(await screen.findByText(note)).toBeInTheDocument();
+    expect(control).toHaveAttribute("aria-checked", "false");
+    expect(screen.queryByRole("button", { name: /position — drag to move/ })).toBeNull();
+    expect(queue).not.toHaveBeenCalled();
+  });
+
+  it("starts the preparation it is waiting for when nothing is running", async () => {
+    vi.spyOn(preparationApi, "getPositionReadiness").mockResolvedValue(uncovered);
+    const queue = vi
+      .spyOn(preparationApi, "queueCoverage")
+      .mockResolvedValue({ id: "job" } as preparationApi.PreparationJob);
+    await refusedSwitch();
+    expect(await screen.findByText(note)).toBeInTheDocument();
+    expect(queue).toHaveBeenCalledExactlyOnceWith("glossy");
+  });
+
+  it("says so when the preparation cannot start", async () => {
+    vi.spyOn(preparationApi, "getPositionReadiness").mockResolvedValue(uncovered);
+    vi.spyOn(preparationApi, "queueCoverage").mockResolvedValue(null);
+    await refusedSwitch();
+    expect(await screen.findByText(/could not start/)).toBeInTheDocument();
+  });
+
+  it("works again, with the note gone, once the template is ready", async () => {
+    const read = vi.spyOn(preparationApi, "getPositionReadiness").mockResolvedValue(preparing);
+    const control = await refusedSwitch();
+    await screen.findByText(note);
+    read.mockResolvedValue(ready);
+    await waitFor(() => expect(control).toHaveAttribute("aria-disabled", "false"), {
+      timeout: 5000,
+    });
+    expect(screen.queryByText(note)).toBeNull();
+    fireEvent.click(control);
+    expect(control).toHaveAttribute("aria-checked", "true");
+  }, 8000);
+
+  it("shows a placeholder for a picture it cannot load, then tries it again", async () => {
+    const read = vi.spyOn(preparationApi, "getPositionReadiness").mockResolvedValue(ready);
+    mount();
+    await selectTile("glossy");
+    await adjustSwitch();
+    read.mockResolvedValue(preparing);
+    fireEvent.error(must(document.querySelector(".preview-stage img")));
+    expect(
+      await screen.findByText("This picture will appear when preparation finishes"),
+    ).toBeInTheDocument();
+    read.mockResolvedValue(ready);
+    await waitFor(() => expect(stagePicture()).not.toBeNull(), { timeout: 5000 });
+  }, 8000);
+
+  it("says a picture could not load when nothing is being prepared", async () => {
+    vi.spyOn(preparationApi, "getPositionReadiness").mockResolvedValue(ready);
+    mount();
+    await selectTile("glossy");
+    await adjustSwitch();
+    fireEvent.error(must(document.querySelector(".preview-stage img")));
+    expect(await screen.findByText("This picture could not load")).toBeInTheDocument();
   });
 });
 

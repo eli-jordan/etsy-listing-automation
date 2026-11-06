@@ -15,6 +15,11 @@ from fastapi.responses import Response
 from starlette.concurrency import run_in_threadpool
 from starlette.responses import StreamingResponse
 
+from etsy_listings.core.application.position_coverage import (
+    cover_prepared_templates,
+    cover_template,
+    position_readiness,
+)
 from etsy_listings.core.application.preparation.coordinator import (
     PreparationRequest,
     Preparations,
@@ -31,6 +36,7 @@ from etsy_listings.server.api.schemas import (
     MarigoldRuntimeResponse,
     MaskHistoryResponse,
     MaskHistoryStroke,
+    PositionReadinessResponse,
     PreparationJobResponse,
     PreparationPlacementResponse,
     PreparationResponse,
@@ -207,6 +213,36 @@ def submit(request: Request, body: CreatePreparationRequest) -> PreparationJobRe
         # The saved inputs cannot be read as preparation inputs.
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     return job_response(preparations, job)
+
+
+@router.post("/preparation/coverage", status_code=202)
+def cover_prepared(request: Request) -> list[PreparationJobResponse]:
+    """Queue coverage for every prepared Marigold template that falls short:
+    the catch-up for templates prepared before preparation covered them
+    (ADR-0058, amendment *coverage belongs to preparation*)."""
+    preparations = coordinator(request)
+    return [job_response(preparations, job) for job in cover_prepared_templates(preparations)]
+
+
+@router.get("/templates/{name}/coverage")
+def coverage(request: Request, name: str, response: Response) -> PositionReadinessResponse:
+    """Whether the editor may adjust this template yet. Apart from the status
+    above, which the catalog reads for every template."""
+    response.headers["Cache-Control"] = "no-store"
+    preparations = coordinator(request)
+    preparations.workspace.template_dir(name)
+    readiness = position_readiness(preparations, name)
+    return PositionReadinessResponse(ready=readiness.ready, preparing=readiness.preparing)
+
+
+@router.post("/templates/{name}/coverage", status_code=202)
+def cover_one(request: Request, name: str) -> PreparationJobResponse | None:
+    """Queue this template's coverage, because a seller asked to adjust it
+    and it falls short; null when it needs none or no worker is installed."""
+    preparations = coordinator(request)
+    preparations.workspace.template_dir(name)
+    job = cover_template(preparations, name)
+    return job_response(preparations, job) if job is not None else None
 
 
 def existing_job(preparations: Preparations, identity: str) -> Job:

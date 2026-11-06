@@ -1194,6 +1194,28 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/preparation/coverage": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Cover Prepared
+     * @description Queue coverage for every prepared Marigold template that falls short:
+     *     the catch-up for templates prepared before preparation covered them
+     *     (ADR-0058, amendment *coverage belongs to preparation*).
+     */
+    post: operations["cover_prepared_api_preparation_coverage_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/preparation/jobs": {
     parameters: {
       query?: never;
@@ -1506,6 +1528,32 @@ export interface paths {
     /** Put Config */
     put: operations["put_config_api_templates__name__config_put"];
     post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/templates/{name}/coverage": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Coverage
+     * @description Whether the editor may adjust this template yet. Apart from the status
+     *     above, which the catalog reads for every template.
+     */
+    get: operations["coverage_api_templates__name__coverage_get"];
+    put?: never;
+    /**
+     * Cover One
+     * @description Queue this template's coverage, because a seller asked to adjust it
+     *     and it falls short; null when it needs none or no worker is installed.
+     */
+    post: operations["cover_one_api_templates__name__coverage_post"];
     delete?: never;
     options?: never;
     head?: never;
@@ -3888,6 +3936,13 @@ export interface components {
       x: number;
       /** Y */
       y: number;
+    };
+    /** PositionReadinessResponse */
+    PositionReadinessResponse: {
+      /** Preparing */
+      preparing: boolean;
+      /** Ready */
+      ready: boolean;
     };
     /**
      * PositionScaleLimits
@@ -7309,6 +7364,26 @@ export interface operations {
       };
     };
   };
+  cover_prepared_api_preparation_coverage_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      202: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PreparationJobResponse"][];
+        };
+      };
+    };
+  };
   jobs_api_preparation_jobs_get: {
     parameters: {
       query?: {
@@ -8012,6 +8087,68 @@ export interface operations {
             | components["schemas"]["ColourMatrixTemplate"]
             | components["schemas"]["MultipleTemplate"]
             | components["schemas"]["SingleTemplate"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  coverage_api_templates__name__coverage_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        name: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PositionReadinessResponse"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  cover_one_api_templates__name__coverage_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        name: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      202: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PreparationJobResponse"] | null;
         };
       };
       /** @description Validation Error */

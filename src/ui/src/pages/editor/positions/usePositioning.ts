@@ -23,6 +23,7 @@ import {
   nearestAllowedPose,
   withinLimits,
 } from "./pose";
+import { type PositionReadiness, usePositionReadiness } from "./usePositionReadiness";
 
 /**
  * Position mode's state for the one template entry the preview pane shows
@@ -57,6 +58,12 @@ export interface Layer {
 export interface Positioning {
   on: boolean;
   toggle: () => void;
+  /** The template cannot be adjusted yet, so the switch refuses to turn on. */
+  waiting: boolean;
+  /** Counts each time the template becomes ready, so a failed picture retries. */
+  attempt: number;
+  /** A picture failed: find out whether preparation is why. */
+  recheck: () => void;
   size: { w: number; h: number };
   layers: Layer[];
   selected: string;
@@ -351,10 +358,21 @@ function resetOf(layer: Layer, on: boolean, run: () => void): Positioning["reset
   };
 }
 
+/** The switch turns off freely, and on only for a template that is ready. */
+function toggled(on: boolean, readiness: PositionReadiness, flip: () => void) {
+  if (!on && readiness.waiting) readiness.refuse();
+  else flip();
+}
+
+function refusal(readiness: PositionReadiness): Positioning["note"] {
+  return readiness.note === null ? null : { text: readiness.note, warn: true };
+}
+
 export function usePositioning(args: Args): Positioning | null {
   const { detail, template, pane, summary, picture, saved, onUpdate, onFlush } = args;
   const limits = useLimits();
   const config = useConfig(template);
+  const readiness = usePositionReadiness(config?.renderer.type === "marigold" ? template : null);
   /** The switch, per pane: it belongs to the template it was turned on for. */
   const [adjust, setAdjust] = useState<{ pane: string; on: boolean } | null>(null);
   const [chosen, setChosen] = useState<{ template: string; id: string } | null>(null);
@@ -399,12 +417,15 @@ export function usePositioning(args: Args): Positioning | null {
 
   return {
     on,
-    toggle: () => setAdjust({ pane, on: !on }),
+    toggle: () => toggled(on, readiness, () => setAdjust({ pane, on: !on })),
+    waiting: readiness.waiting,
+    attempt: readiness.attempt,
+    recheck: readiness.recheck,
     size: ready.size,
     layers,
     selected: layer.id,
     select,
-    note: noteFor(layer, on, layers, ready.config, colours, name),
+    note: refusal(readiness) ?? noteFor(layer, on, layers, ready.config, colours, name),
     reset: resetOf(layer, on, () => {
       gestures.clear();
       write(withoutPosition(detail.template_positions, name, layer.placement));
