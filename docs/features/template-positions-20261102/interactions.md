@@ -158,9 +158,21 @@ show it on. Its banner row's action removes the stale key.
 Marigold positions use a fit per position (spec, *Marigold (option B)*). After
 a position saves, its fit runs in the background (spike: about 1–6 s). Until
 it is ready the stage keeps the drag overlay and then its normal loading
-treatment while the preview route waits; there is no progress card and the
-switch stays enabled. A limits change that needs new inference shows nothing
-in the editor either; previews of affected scenes simply wait.
+treatment while the preview route waits; there is no progress card.
+
+A template being prepared, or whose evidence does not cover its limits, cannot
+be adjusted yet. The switch looks unavailable and clicking it leaves it off, with
+a warning note in the foot: "This template is being prepared. Adjusting will be
+available soon." When nothing is running, that click also queues the template's
+coverage, because a seller asking to adjust is the explicit request inference
+needs, and without it "soon" would never come. If it cannot be queued, because no
+worker is installed, the note says so instead. The switch works again, and the
+note goes, as soon as the template is ready.
+
+A picture the preview route cannot serve never shows the browser's broken image.
+The stage shows a placeholder saying it will appear when preparation finishes,
+or that it could not load when nothing is being prepared, and loads the picture
+by itself once preparation ends.
 
 ## Settings: Template rendering
 

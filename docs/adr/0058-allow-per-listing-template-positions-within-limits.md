@@ -82,3 +82,10 @@ limits widened since. Saving a position still queues coverage when it falls
 short, as the safety net for the cases preparation does not reach: limits
 widened over a template no listing positions, and geometry rebuilt from existing
 evidence. `plan` and apply still never queue inference.
+
+For those same cases the editor refuses to enter Position mode until the template
+is ready, rather than letting a save start inference behind a broken preview. It
+reads `positions_ready` from the template's preparation status, and asking to
+adjust a template that falls short queues its coverage through
+`POST /api/templates/{name}/coverage`: that click is an explicit request for the
+inference, as saving a position was.
