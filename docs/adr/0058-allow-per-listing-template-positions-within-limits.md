@@ -85,7 +85,9 @@ evidence. `plan` and apply still never queue inference.
 
 For those same cases the editor refuses to enter Position mode until the template
 is ready, rather than letting a save start inference behind a broken preview. It
-reads `positions_ready` from the template's preparation status, and asking to
-adjust a template that falls short queues its coverage through
+reads `GET /api/templates/{name}/coverage`, kept out of the preparation status
+because the catalog reads that for every template: this read skips validating
+the prediction files, which is most of the cost, and queueing still validates
+them. Asking to adjust a template that falls short queues its coverage through
 `POST /api/templates/{name}/coverage`: that click is an explicit request for the
 inference, as saving a position was.
