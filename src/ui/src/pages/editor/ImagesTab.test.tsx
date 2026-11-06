@@ -832,3 +832,67 @@ describe("ImagesTab before any colours are chosen", () => {
     expect(onUpdate).not.toHaveBeenCalled();
   });
 });
+
+describe("ImagesTab after a refresh", () => {
+  const SIZING: MediaFileSummary = {
+    name: "sizing.png",
+    file: "common-media/sizing.png",
+    ref: "common-media/sizing.png",
+    kind: "image",
+  };
+
+  it("comes back to the template colour on the stage", async () => {
+    vi.spyOn(calibrator, "listTemplates").mockResolvedValue([summary({ name: "flat-lay-01" })]);
+    const first = render(<ImagesTab detail={detail()} onUpdate={vi.fn()} />);
+    fireEvent.click(await screen.findByText("flat-lay-01"));
+    fireEvent.mouseEnter(screen.getByRole("button", { name: "black" }));
+    expect(await screen.findByAltText("flat-lay-01 · black")).toBeInTheDocument();
+    first.unmount();
+
+    render(<ImagesTab detail={detail()} onUpdate={vi.fn()} />);
+
+    expect(await screen.findByAltText("flat-lay-01 · black")).toBeInTheDocument();
+    // The template it was expanded on, too: the chip is still there to hover.
+    expect(screen.getByRole("button", { name: "black" })).toBeInTheDocument();
+  });
+
+  it("comes back to a file, on the Files half of the locator", async () => {
+    vi.spyOn(calibrator, "listTemplates").mockResolvedValue([]);
+    vi.spyOn(listingsApi, "listCommonMedia").mockResolvedValue([SIZING]);
+    const first = render(<ImagesTab detail={detail()} onUpdate={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: "Files" }));
+    fireEvent.mouseEnter(await screen.findByRole("button", { name: "sizing.png" }));
+    first.unmount();
+
+    render(<ImagesTab detail={detail()} onUpdate={vi.fn()} />);
+
+    expect(await screen.findByAltText("sizing")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Files" })).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("leaves the stage empty when the picture has gone since", async () => {
+    vi.spyOn(calibrator, "listTemplates").mockResolvedValue([]);
+    sessionStorage.setItem(
+      "editor-view:listing:take-a-hike:focus",
+      JSON.stringify({ kind: "file", ref: "common-media/gone.png" }),
+    );
+
+    render(<ImagesTab detail={detail({ name: "take-a-hike" })} onUpdate={vi.fn()} />);
+
+    await waitFor(() => expect(calibrator.listTemplates).toHaveBeenCalled());
+    expect(screen.getByText("Point at something on the left")).toBeInTheDocument();
+  });
+
+  it("remembers nothing for an unnamed draft", async () => {
+    vi.spyOn(calibrator, "listTemplates").mockResolvedValue([summary({ name: "flat-lay-01" })]);
+    const first = render(<ImagesTab detail={detail({ name: "" })} onUpdate={vi.fn()} />);
+    fireEvent.click(await screen.findByText("flat-lay-01"));
+    fireEvent.mouseEnter(screen.getByRole("button", { name: "black" }));
+    first.unmount();
+
+    render(<ImagesTab detail={detail({ name: "" })} onUpdate={vi.fn()} />);
+
+    await screen.findByText("flat-lay-01");
+    expect(screen.getByText("Point at something on the left")).toBeInTheDocument();
+  });
+});

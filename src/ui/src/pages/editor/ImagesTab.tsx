@@ -20,7 +20,16 @@ import type { MediaFileSummary, ListingDetail, TemplateSummary } from "../../typ
 import { MediaLocator } from "./MediaLocator";
 import { MediaReel } from "./MediaReel";
 import { representative } from "./artwork";
-import { type Focus, type FocusView, viewFocus } from "./focus";
+import { isBoolean, isNullableNumber, useViewState, viewScope } from "./editorView";
+import {
+  type Focus,
+  type FocusRef,
+  type FocusView,
+  focusRef,
+  isFocusRef,
+  restoreFocus,
+  viewFocus,
+} from "./focus";
 import * as edits from "./mediaEdits";
 import { type Positions, positionSignature } from "./positions/document";
 import { PositionControls, PositionNote } from "./positions/PositionControls";
@@ -94,9 +103,34 @@ export function ImagesTab({ detail, onUpdate, artwork, owner, onFlush }: Props) 
   const [shared, setShared] = useState<MediaFileSummary[]>([]);
   const [local, setLocal] = useState<MediaFileSummary[]>([]);
   const [status, setStatus] = useState("");
-  const [focus, setFocus] = useState<Focus | null>(null);
-  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
-  const [actualSize, setActualSize] = useState(false);
+
+  const listing = mediaOwner(owner, detail.name);
+  const directory = ownDirectory(listing);
+  const directoryKind = directory?.kind ?? null;
+  const directoryName = directory?.name ?? null;
+  const scope = directory === null ? null : viewScope(directory.kind, directory.name);
+
+  /** What the seller pointed at since this tab opened. Until then the stage
+   * shows what a refresh remembered, once the lists can say it still exists. */
+  const [pointed, setPointed] = useState<Focus | null>(null);
+  const [remembered, setRemembered] = useViewState<FocusRef | null>(
+    scope,
+    "focus",
+    null,
+    isFocusRef,
+  );
+  const [lightboxIndex, setLightboxIndex] = useViewState<number | null>(
+    scope,
+    "lightbox",
+    null,
+    isNullableNumber,
+  );
+  const [actualSize, setActualSize] = useViewState(scope, "actual-size", false, isBoolean);
+
+  function pointAt(next: Focus) {
+    setPointed(next);
+    setRemembered(focusRef(next));
+  }
 
   useEffect(() => {
     listTemplates()
@@ -107,10 +141,6 @@ export function ImagesTab({ detail, onUpdate, artwork, owner, onFlush }: Props) 
       .catch(() => setStatus("failed to load shared files"));
   }, []);
 
-  const listing = mediaOwner(owner, detail.name);
-  const directory = ownDirectory(listing);
-  const directoryKind = directory?.kind ?? null;
-  const directoryName = directory?.name ?? null;
   useEffect(() => {
     if (directoryName === null) return;
     (directoryKind === "listing-template"
@@ -142,6 +172,8 @@ export function ImagesTab({ detail, onUpdate, artwork, owner, onFlush }: Props) 
     kind: mediaKind(entry),
   }));
 
+  const files = directory === null ? shared : [...local, ...shared];
+  const focus = pointed ?? restoreFocus(remembered, templates, files);
   const view = focus === null ? null : viewFocus(focus, detail, templates, scene, listing);
   // The reel highlights whatever the stage is showing, wherever the pointing
   // came from.
@@ -183,7 +215,8 @@ export function ImagesTab({ detail, onUpdate, artwork, owner, onFlush }: Props) 
         onToggleFile={(ref) => apply(edits.toggleFile(detail, ref))}
         onAddMissingColours={(template) => apply(edits.addEveryMissingColour(detail, template))}
         onToggleSwatchSource={(template) => apply(edits.toggleSwatchSource(detail, template))}
-        onFocus={setFocus}
+        onFocus={pointAt}
+        scope={scope}
       />
 
       <div className="images-right">
@@ -201,10 +234,10 @@ export function ImagesTab({ detail, onUpdate, artwork, owner, onFlush }: Props) 
           swatchTemplate={detail.etsy.variation_images ?? null}
           selectedIndex={selectedIndex}
           listing={listing}
-          files={directory === null ? shared : [...local, ...shared]}
+          files={files}
           onRemove={(index) => apply(edits.removeAt(detail, index))}
           onReorder={(from, to) => apply(edits.reorder(detail, from, to))}
-          onFocus={setFocus}
+          onFocus={pointAt}
           positioned={new Set(Object.keys(detail.template_positions ?? {}))}
         />
 

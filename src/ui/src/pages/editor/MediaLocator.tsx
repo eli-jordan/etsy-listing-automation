@@ -3,6 +3,7 @@ import { MutedClip } from "../../components/MutedClip";
 import { useHoverPlay } from "../../hooks/useHoverPlay";
 import { mediaKind, pictureFor, type MediaOwner } from "../../media";
 import type { ListingDetail, MediaFileSummary, TemplateSummary } from "../../types";
+import { isNullableString, isString, useViewState, type ViewScope } from "./editorView";
 import type { Focus } from "./focus";
 import { LocatorTemplate } from "./LocatorTemplate";
 import { MAX_VIDEOS } from "./mediaEdits";
@@ -45,10 +46,16 @@ interface Props {
    * template, whose group reads *This template* (UI doc, *Existing
    * components the template editor needs*). */
   owner?: MediaOwner | null;
+  /** Whose view a refresh comes back to, when there is one to come back to. */
+  scope?: ViewScope;
 }
 
 /** Which half of `media:` the locator is browsing. */
 type LocatorMode = "templates" | "files";
+
+function isLocatorMode(value: unknown): value is LocatorMode {
+  return value === "templates" || value === "files";
+}
 
 /** `0:06`, `1:15` -- a clip's length as the badge shows it. */
 function clipLength(seconds: number): string {
@@ -120,10 +127,21 @@ export function MediaLocator({
   onToggleSwatchSource,
   onFocus,
   owner,
+  scope = null,
 }: Props) {
-  const [mode, setMode] = useState<LocatorMode>("templates");
-  const [query, setQuery] = useState("");
-  const [openTemplate, setOpenTemplate] = useState<string | null>(null);
+  const [mode, setMode] = useViewState<LocatorMode>(
+    scope,
+    "locator-mode",
+    "templates",
+    isLocatorMode,
+  );
+  const [query, setQuery] = useViewState(scope, "locator-query", "", isString);
+  const [openTemplate, setOpenTemplate] = useViewState<string | null>(
+    scope,
+    "locator-template",
+    null,
+    isNullableString,
+  );
 
   const needle = query.toLowerCase();
   const filtered = templates

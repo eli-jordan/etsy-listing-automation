@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { MediaFileSummary, ListingDetail, MediaEntry, TemplateSummary } from "../../types";
-import { type Focus, viewFocus } from "./focus";
+import { type Focus, focusRef, isFocusRef, restoreFocus, viewFocus } from "./focus";
 
 /**
  * What the preview pane is pointing at.
@@ -119,5 +119,42 @@ describe("viewFocus, for what kind of thing it is", () => {
     const view = viewFocus({ kind: "file", asset: clip }, listing([]), [], null);
     expect(view.kind).toBe("video");
     expect(view.picture).toBe("/api/common-media/intro.mp4/file");
+  });
+});
+
+describe("a focus remembered across a refresh", () => {
+  it("keeps a file's ref and finds its summary again", () => {
+    const ref = focusRef({ kind: "file", asset: SIZING });
+    expect(ref).toEqual({ kind: "file", ref: SIZING.ref });
+    expect(restoreFocus(ref, [], [SIZING])).toEqual({ kind: "file", asset: SIZING });
+  });
+
+  it("finds a template and colour the lists still have", () => {
+    const ref = { kind: "template", template: "flat-lay-01", colour: "black" } as const;
+    expect(restoreFocus(ref, [FLAT_LAY], [])).toEqual(ref);
+  });
+
+  it("finds a template's fixed scene, which has no colour", () => {
+    const ref = { kind: "template", template: "flat-lay-01", colour: null } as const;
+    expect(restoreFocus(ref, [FLAT_LAY], [])).toEqual(ref);
+  });
+
+  it("restores nothing for what is not listed", () => {
+    const file = { kind: "file", ref: "common-media/gone.png" } as const;
+    const template = { kind: "template", template: "gone", colour: null } as const;
+    const colour = { kind: "template", template: "flat-lay-01", colour: "teal" } as const;
+    expect(restoreFocus(file, [FLAT_LAY], [SIZING])).toBeNull();
+    expect(restoreFocus(template, [FLAT_LAY], [SIZING])).toBeNull();
+    expect(restoreFocus(colour, [FLAT_LAY], [SIZING])).toBeNull();
+    expect(restoreFocus(null, [FLAT_LAY], [SIZING])).toBeNull();
+  });
+
+  it("accepts only the shapes it wrote", () => {
+    expect(isFocusRef({ kind: "file", ref: "a.png" })).toBe(true);
+    expect(isFocusRef({ kind: "template", template: "t", colour: null })).toBe(true);
+    expect(isFocusRef({ kind: "template", template: "t" })).toBe(false);
+    expect(isFocusRef({ kind: "file" })).toBe(false);
+    expect(isFocusRef("a.png")).toBe(false);
+    expect(isFocusRef(null)).toBe(false);
   });
 });
