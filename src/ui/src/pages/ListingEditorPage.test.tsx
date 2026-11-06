@@ -9,7 +9,7 @@ import { briefEvent, type FakeAiRuns, fakeAiRuns, stepEvent } from "../test/aiRu
 import type { DesignMap, ListingDetail } from "../types";
 import { ListingEditorPage } from "./ListingEditorPage";
 import { listingDetail } from "../test/listings";
-import { AUTOSAVE_DEBOUNCE_MS } from "../hooks/useAutosave";
+import { AUTOSAVE_DEBOUNCE_MS } from "../hooks/writeLoop";
 import { controlledClock } from "../test/clock";
 import { type Deferred, deferred, must } from "../test/helpers";
 

@@ -5,6 +5,7 @@ import { getListing, getListingDraft } from "../api/listings";
 import { EditableName } from "../components/EditableName";
 import { StatusTag } from "../components/StatusTag";
 import { useAutosave } from "../hooks/useAutosave";
+import type { Settled } from "../hooks/writeLoop";
 import { type MediaOwner, refName } from "../media";
 import type { DesignMap, Issue, IssueTab, ListingDetail } from "../types";
 import type { AiSeoMode } from "./editor/aiSeo/useAiSeoMode";
@@ -319,7 +320,7 @@ export function EditorHead({
   onBack: () => void;
   title: ReactNode;
   meta: ReactNode;
-  flush: () => Promise<void>;
+  flush: () => Promise<Settled>;
   /** What the editor is doing on its own right now, beside the meta line
    * (ADR-0003). `null` whenever nothing is running, which is most of the
    * time. */

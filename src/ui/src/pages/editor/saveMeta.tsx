@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import type { SaveState } from "../../hooks/useAutosave";
+import type { SaveState } from "../../hooks/listingAutosave";
 import { SavedChip } from "./SavedChip";
 
 /** What the editor's page head says about where this listing stands with the

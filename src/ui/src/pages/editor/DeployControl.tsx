@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { currentRun } from "../../api/runs";
 import type { RunSummary } from "../../types";
+import type { Settled } from "../../hooks/writeLoop";
 
 /**
  * The editor page-head's own control (docs/features/deploy-20260917/spec.md decision 8):
@@ -42,7 +43,7 @@ export function DeployControl({
   /** Drains any edit still waiting on the autosave debounce -- the same
    * flush a tab switch already triggers, so a plan started the instant
    * after typing reviews the listing just written, not the one before it. */
-  flush: () => Promise<void>;
+  flush: () => Promise<Settled>;
 }) {
   const navigate = useNavigate();
   const [run, setRun] = useState<RunSummary | null>(null);

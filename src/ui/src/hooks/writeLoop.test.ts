@@ -1,27 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { deferred, type Deferred } from "../test/helpers";
-import { AUTOSAVE_DEBOUNCE_MS, type Clock, type Settled, WRITTEN, WriteLoop } from "./writeLoop";
-
-/** A clock that moves only when told to. */
-class ManualClock implements Clock {
-  private now = 0;
-  private timers = new Set<{ at: number; run: () => void }>();
-
-  after = (ms: number, run: () => void) => {
-    const timer = { at: this.now + ms, run };
-    this.timers.add(timer);
-    return () => void this.timers.delete(timer);
-  };
-
-  advance(ms: number) {
-    this.now += ms;
-    for (const timer of [...this.timers]) {
-      if (timer.at > this.now) continue;
-      this.timers.delete(timer);
-      timer.run();
-    }
-  }
-}
+import { ManualClock, turns } from "../test/manualClock";
+import { AUTOSAVE_DEBOUNCE_MS, type Settled, WRITTEN, WriteLoop } from "./writeLoop";
 
 /** A disk reached over a transport whose every write the test answers. */
 function harness(options: { due?: () => void } = {}) {
@@ -62,11 +42,6 @@ function harness(options: { due?: () => void } = {}) {
 }
 
 const REFUSED: Settled = { written: false, message: "a colour is missing" };
-
-/** Lets everything already resolved run. */
-async function turns() {
-  for (let i = 0; i < 20; i++) await Promise.resolve();
-}
 
 async function hasSettled(promise: Promise<unknown>): Promise<boolean> {
   let settled = false;

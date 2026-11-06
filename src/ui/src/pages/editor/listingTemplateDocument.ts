@@ -3,7 +3,7 @@ import {
   putListingTemplate,
   renameListingTemplate,
 } from "../../api/listingTemplates";
-import type { AutosaveTransport, SaveOutcome } from "../../hooks/useAutosave";
+import type { AutosaveTransport, SaveOutcome } from "../../hooks/listingAutosave";
 import type {
   ListingDetail,
   ListingTemplateDetail,
