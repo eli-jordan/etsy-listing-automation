@@ -17,6 +17,7 @@ function summary(over: Partial<TemplateSummary> & { name: string }): TemplateSum
     colours: ["black", "white"],
     photos: [],
     has_config: true,
+    labels: [],
     status: "calibrated",
     status_reason: null,
     width: 480,

@@ -64,7 +64,7 @@ from etsy_listings.core.render.config import (
 from etsy_listings.core.render.pipeline import Layer, render_scene
 from etsy_listings.core.render.swatch import sample_swatch
 from etsy_listings.core.render.types import RGB, RGBA, FloatMap
-from etsy_listings.core.workspace.calibration import Calibration, CalibrationStore, MaskEdit
+from etsy_listings.core.workspace.calibration import CalibrationStore, MaskEdit
 from etsy_listings.core.workspace.listing_documents import ListingDocuments, ListingMissingError
 from etsy_listings.core.workspace.workspace import (
     AmbiguousColourSuffixError,
@@ -104,6 +104,7 @@ class TemplateOverview:
     height: int | None
     """The photo's **true** pixel size: the space ``template.yaml``'s boxes
     are in, which the editor's downscaled canvas cannot tell the client."""
+    labels: list[str]
 
     @property
     def calibrated(self) -> bool:
@@ -138,6 +139,7 @@ def _overview(workspace: Workspace, name: str) -> TemplateOverview:
             status_reason="no kind set",
             width=width,
             height=height,
+            labels=[],
         )
     if isinstance(config, ColourMatrixTemplate):
         colours = workspace.template_colours(name)
@@ -154,6 +156,7 @@ def _overview(workspace: Workspace, name: str) -> TemplateOverview:
         status_reason=_status_reason(config),
         width=width,
         height=height,
+        labels=config.labels,
     )
 
 
@@ -393,20 +396,48 @@ class CalibrationSave:
     mask_edits: list[MaskEdit] | None = None
 
 
-def save_calibration(workspace: Workspace, name: str, save: CalibrationSave) -> Calibration:
+@dataclass(frozen=True)
+class SavedCalibration:
+    """A committed calibrator save. ``labels_only`` says it changed labels and
+    nothing else, so no preparation work follows from it: a positioned
+    template short of coverage waits for a save that asks for inference, and
+    stale maps for a save that touches what they were built from (spec
+    *Keeping labels out of rendering*). A retry of such a save changes nothing
+    and answers False, as any save with no change does."""
+
+    config: AnyTemplate
+    revision: str
+    labels_only: bool
+
+
+def _without_labels(config: AnyTemplate) -> AnyTemplate:
+    return config.model_copy(update={"labels": []})
+
+
+def _only_labels_differ(before: AnyTemplate, after: AnyTemplate) -> bool:
+    return before.labels != after.labels and _without_labels(before) == _without_labels(after)
+
+
+def save_calibration(workspace: Workspace, name: str, save: CalibrationSave) -> SavedCalibration:
     """ADR-0054: configuration and flattened masks commit as one revision."""
     require_template(workspace, name)
     store = CalibrationStore(workspace)
     with store.lock(name):
-        if store.read(name).config.kind != save.config.kind:
+        before = store.read(name).config
+        if before.kind != save.config.kind:
             raise TemplateKindRefusedError("Template kind cannot be changed after calibration")
-        return store.save(
+        saved = store.save(
             name,
             save.config,
             expected_revision=save.expected_revision,
             request_id=save.request_id,
             mask_edits=save.mask_edits,
         )
+    return SavedCalibration(
+        saved.config,
+        saved.revision,
+        labels_only=not save.mask_edits and _only_labels_differ(before, saved.config),
+    )
 
 
 @dataclass(frozen=True)

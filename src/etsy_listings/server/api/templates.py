@@ -10,7 +10,8 @@ their refusals through to the app's one refusal table (``app.py``'s
 
 * A template, config or photo that is not there is a ``404``; a kind the
   photos cannot be, colliding colour slugs or preview geometry for another
-  kind is a ``422``; assigning a kind to a calibrated template is a ``409``.
+  kind or a new label breaking its rules is a ``422``; assigning a kind to a
+  calibrated template is a ``409``.
   A save against a calibration revision that has moved is a ``412``; a save
   request ID reused for different content is a ``409``. An unusable name is
   a ``400``.
@@ -151,6 +152,7 @@ def _summary(overview: TemplateOverview) -> TemplateSummary:
         status_reason=overview.status_reason,
         width=overview.width,
         height=overview.height,
+        labels=overview.labels,
     )
 
 
@@ -240,6 +242,18 @@ def photo(template: Annotated[Target, Depends(target)], colour: str | None = Non
     )
 
 
+def _queue_preparation(name: str, after: AfterSave) -> None:
+    """The preparation work a save of ``name`` starts."""
+    # Incomplete multiple geometry or missing evidence needs explicit Prepare.
+    # The committed Save succeeds; read-only readiness explains that refusal.
+    with suppress(UserFacingError, ValueError, OSError):
+        after.preparations.reconcile_saved(name)
+    # A positioned template's new padded quad may leave its evidence: saving
+    # its geometry is the explicit request ADR-0058 names (option B), queued
+    # after the response because finding the worker can take seconds.
+    after.background.add_task(cover_recalibrated, after.preparations, name)
+
+
 @router.get("/{name}/config", response_model=TemplateConfig)
 def get_config(template: Annotated[Target, Depends(target)], response: Response) -> AnyTemplate:
     saved = read_config(template.workspace, template.name)
@@ -272,14 +286,8 @@ def put_config(
         # The saved template.yaml does not load: not a refusal category,
         # so this route keeps the answer it always gave.
         raise HTTPException(status_code=422, detail=str(exc)) from exc
-    # Incomplete multiple geometry or missing evidence needs explicit Prepare.
-    # The committed Save succeeds; read-only readiness explains that refusal.
-    with suppress(UserFacingError, ValueError, OSError):
-        after.preparations.reconcile_saved(template.name)
-    # A positioned template's new padded quad may leave its evidence: saving
-    # its geometry is the explicit request ADR-0058 names (option B), queued
-    # after the response because finding the worker can take seconds.
-    after.background.add_task(cover_recalibrated, after.preparations, template.name)
+    if not saved.labels_only:
+        _queue_preparation(template.name, after)
     response.headers["ETag"] = f'"{saved.revision}"'
     return saved.config
 

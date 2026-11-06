@@ -90,6 +90,22 @@ Exit when:
   `template.yaml` (ADR-0055);
 - shared gates pass.
 
+Deviations recorded while building it:
+
+- `put_config` skips `reconcile_saved` and `cover_recalibrated` after a save that
+  changed only labels. The plan expected both to find nothing to do, but a
+  positioned template short of coverage, or one with stale maps and evidence in
+  hand, would have queued work. `save_calibration` reports `labels_only`; a save
+  with no change at all still reconciles as it always did, which keeps the
+  editor's Approve, which saves an unchanged draft on purpose.
+- The three preview request models take `labels`, because the client spreads a
+  whole config into the preview body and they forbid unknown keys.
+- The characters rule is ASCII, as in the prototype, so "letters" excludes `é`.
+  Rules are checked in the prototype's order: length, characters, colon. A blank
+  label takes the characters message.
+- `edit_yaml` now keeps a file's missing final newline when its last key goes.
+  Without it, a label added to such a file moved the hash.
+
 ### PR 2 — Labels bar on the Mockup Templates workbench
 
 Spec: *Saving*. Interactions: *Tagging a template*, *What the production

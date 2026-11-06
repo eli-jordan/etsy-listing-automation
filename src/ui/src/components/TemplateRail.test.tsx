@@ -13,6 +13,7 @@ function summary(over: Partial<TemplateSummary> & { name: string }): TemplateSum
     colours: [],
     photos: [],
     has_config: true,
+    labels: [],
     status: "calibrated",
     status_reason: null,
     ...over,
@@ -23,12 +24,14 @@ const NEEDS_KIND = summary({
   name: "boxy-tee",
   kind: null,
   has_config: false,
+  labels: [],
   status: "needs-calibration",
   status_reason: "no kind set",
 });
 const NEEDS_BOXES = summary({
   name: "tote",
   kind: "multiple",
+  labels: [],
   status: "needs-calibration",
   status_reason: "no boxes",
 });

@@ -168,6 +168,7 @@ describe("MarigoldEditor", () => {
   it("keeps stable placement IDs when duplicated, reordered and removed", () => {
     const config: TemplateConfigState = {
       kind: "multiple",
+      labels: [],
       colour_coverage: "exact",
       placements: [
         { id: "first", colour: "black", bounding_box: BOX },
@@ -203,7 +204,12 @@ describe("MarigoldEditor", () => {
   });
   it("browses colour photos when composition is unavailable without editing shared preparation", async () => {
     vi.mocked(calibrator.renderPreview).mockRejectedValue(new Error("Prepare first"));
-    const config = { kind: "colour-matrix" as const, bounding_box: BOX, renderer: MARIGOLD };
+    const config = {
+      kind: "colour-matrix" as const,
+      labels: [],
+      bounding_box: BOX,
+      renderer: MARIGOLD,
+    };
     const view = setup(config);
     expect(screen.queryByText(/Main photo/)).not.toBeInTheDocument();
     expect(screen.getByAltText("Rendered preview")).toHaveAttribute(
@@ -232,7 +238,12 @@ describe("MarigoldEditor", () => {
     vi.mocked(calibrator.renderPreview).mockImplementation(
       async (_name, body) => "blob:" + ("colour" in body ? body.colour : "scene"),
     );
-    const config = { kind: "colour-matrix" as const, bounding_box: BOX, renderer: MARIGOLD };
+    const config = {
+      kind: "colour-matrix" as const,
+      labels: [],
+      bounding_box: BOX,
+      renderer: MARIGOLD,
+    };
     const view = setup(config);
     await waitFor(() =>
       expect(screen.getByAltText("Rendered preview")).toHaveAttribute("src", "blob:black"),
@@ -264,7 +275,11 @@ describe("MarigoldEditor", () => {
   it.each([{ colours: [] }, { colours: ["black"] }])(
     "offers no colour choice for a set with $colours",
     ({ colours }) => {
-      setup({ kind: "colour-matrix", bounding_box: BOX, renderer: MARIGOLD }, READY, colours);
+      setup(
+        { kind: "colour-matrix", labels: [], bounding_box: BOX, renderer: MARIGOLD },
+        READY,
+        colours,
+      );
       expect(screen.queryByRole("combobox", { name: "Colour" })).not.toBeInTheDocument();
     },
   );
@@ -333,6 +348,7 @@ describe("MarigoldEditor", () => {
 it("has one drawing area and assigns a multiple mask stroke to the selected stable ID", () => {
   const config: TemplateConfigState = {
     kind: "multiple",
+    labels: [],
     colour_coverage: "exact",
     placements: [
       { id: "first", colour: "black", bounding_box: BOX },
@@ -377,6 +393,7 @@ it("refuses an automatic full preview from Photo warp not-required status", asyn
 it("keeps an interrupted stroke on its starting placement when selection changes", () => {
   const config: TemplateConfigState = {
     kind: "multiple",
+    labels: [],
     colour_coverage: "exact",
     placements: [
       { id: "first", colour: "black", bounding_box: BOX },

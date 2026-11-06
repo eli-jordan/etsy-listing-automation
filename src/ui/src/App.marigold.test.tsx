@@ -24,6 +24,7 @@ beforeEach(() => {
       colours: [],
       photos: [],
       has_config: true,
+      labels: [],
       status: "calibrated",
       status_reason: null,
       width: 400,

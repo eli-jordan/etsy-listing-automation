@@ -62,6 +62,7 @@ function onlyRequest(): Request {
 
 const CONFIG: PhotoWarpTemplate<ColourMatrixTemplate> = {
   kind: "colour-matrix",
+  labels: [],
   bounding_box: [
     { x: 0, y: 0 },
     { x: 100, y: 0 },

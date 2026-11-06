@@ -1251,7 +1251,7 @@
       },
       "ColourMatrixPreviewRequest": {
         "additionalProperties": false,
-        "description": "Disambiguated from the other two preview shapes by required fields\nalone (``colour`` here, ``placements`` on ``MultiplePreviewRequest``,\nneither on ``SinglePreviewRequest``) -- extra fields are ignored rather\nthan forbidden, since a natural client pattern is spreading a whole\n``GET.../config`` response (which includes ``kind``) into the body.",
+        "description": "Disambiguated from the other two preview shapes by required fields\nalone (``colour`` here, ``placements`` on ``MultiplePreviewRequest``,\nneither on ``SinglePreviewRequest``) -- extra fields are ignored rather\nthan forbidden, since a natural client pattern is spreading a whole\n``GET.../config`` response (which includes ``kind``) into the body. That\nis why all three take ``labels``, which no preview reads.",
         "properties": {
           "bounding_box": {
             "maxItems": 4,
@@ -1298,6 +1298,14 @@
             "default": "colour-matrix",
             "title": "Kind",
             "type": "string"
+          },
+          "labels": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Labels",
+            "type": "array"
           },
           "mask_edits": {
             "items": {
@@ -1363,6 +1371,14 @@
             "default": "colour-matrix",
             "title": "Kind",
             "type": "string"
+          },
+          "labels": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Labels",
+            "type": "array"
           },
           "renderer": {
             "discriminator": {
@@ -4334,6 +4350,14 @@
             "title": "Kind",
             "type": "string"
           },
+          "labels": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Labels",
+            "type": "array"
+          },
           "mask_edits": {
             "items": {
               "$ref": "#/components/schemas/MaskEdit"
@@ -4393,6 +4417,14 @@
             "default": "multiple",
             "title": "Kind",
             "type": "string"
+          },
+          "labels": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Labels",
+            "type": "array"
           },
           "placements": {
             "items": {
@@ -6847,6 +6879,14 @@
             "title": "Kind",
             "type": "string"
           },
+          "labels": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Labels",
+            "type": "array"
+          },
           "mask_edits": {
             "items": {
               "$ref": "#/components/schemas/MaskEdit"
@@ -6921,6 +6961,14 @@
             "default": "single",
             "title": "Kind",
             "type": "string"
+          },
+          "labels": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Labels",
+            "type": "array"
           },
           "renderer": {
             "discriminator": {
@@ -7691,6 +7739,14 @@
               }
             ],
             "title": "Kind"
+          },
+          "labels": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Labels",
+            "type": "array"
           },
           "maps": {
             "anyOf": [

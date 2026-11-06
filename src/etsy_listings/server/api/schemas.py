@@ -123,6 +123,9 @@ class TemplateSummary(BaseModel):
     size, and this is where the client learns what that is. Measuring the
     displayed image instead is the bug this field exists to make impossible:
     it would silently write every box a few times too small."""
+    labels: list[str] = []
+    """The seller's words for finding this template, as ``template.yaml`` holds
+    them; empty for a directory with no config yet."""
 
 
 class AssignKindRequest(BaseModel):
@@ -166,13 +169,15 @@ class ColourMatrixPreviewRequest(BaseModel):
     alone (``colour`` here, ``placements`` on ``MultiplePreviewRequest``,
     neither on ``SinglePreviewRequest``) -- extra fields are ignored rather
     than forbidden, since a natural client pattern is spreading a whole
-    ``GET.../config`` response (which includes ``kind``) into the body."""
+    ``GET.../config`` response (which includes ``kind``) into the body. That
+    is why all three take ``labels``, which no preview reads."""
 
     model_config = ConfigDict(extra="forbid")
     kind: Literal["colour-matrix"] = "colour-matrix"
     colour: str
     bounding_box: BoundingBox
     renderer: Renderer
+    labels: list[str] = []
     design: str = "bundled-grid"
     calibration_revision: str | None = None
     mask_edits: list[MaskEdit] = Field(default_factory=list, max_length=32)
@@ -184,6 +189,7 @@ class MultiplePreviewRequest(BaseModel):
     colour_coverage: Literal["exact", "subset"] = "exact"
     placements: list[Placement]
     renderer: Renderer
+    labels: list[str] = []
     design: str = "bundled-grid"
     calibration_revision: str | None = None
     mask_edits: list[MaskEdit] = Field(default_factory=list, max_length=32)
@@ -196,6 +202,7 @@ class SinglePreviewRequest(BaseModel):
     artwork: str | None = None
     bounding_box: BoundingBox
     renderer: Renderer
+    labels: list[str] = []
     design: str = "bundled-grid"
     calibration_revision: str | None = None
     mask_edits: list[MaskEdit] = Field(default_factory=list, max_length=32)

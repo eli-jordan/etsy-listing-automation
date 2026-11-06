@@ -41,9 +41,10 @@ const RIGHT = [
 const photoWarp = { type: "photo-warp" } as TemplateConfigState["renderer"];
 
 const CONFIGS: Record<string, TemplateConfigState> = {
-  folded: { kind: "colour-matrix", bounding_box: FOLDED_BOX, renderer: photoWarp },
+  folded: { kind: "colour-matrix", labels: [], bounding_box: FOLDED_BOX, renderer: photoWarp },
   pair: {
     kind: "multiple",
+    labels: [],
     colour_coverage: "exact",
     placements: [
       { id: "left-shirt", colour: "black", bounding_box: LEFT },
@@ -53,6 +54,7 @@ const CONFIGS: Record<string, TemplateConfigState> = {
   } as TemplateConfigState,
   glossy: {
     kind: "single",
+    labels: [],
     bounding_box: FOLDED_BOX,
     renderer: { type: "marigold" } as TemplateConfigState["renderer"],
   },
@@ -65,6 +67,7 @@ function summary(name: string, over: Partial<TemplateSummary> = {}): TemplateSum
     colours: ["black", "white"],
     photos: [],
     has_config: true,
+    labels: [],
     status: "calibrated",
     status_reason: null,
     width: W,

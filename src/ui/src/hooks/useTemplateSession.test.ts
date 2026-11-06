@@ -196,7 +196,7 @@ describe("useTemplateSession", () => {
     expect(result.current.dirty).toBe(true);
     // Same document, keys in another order: not an edit.
     const { renderer, bounding_box, kind } = PHOTO_WARP as typeof SINGLE;
-    act(() => result.current.update({ renderer, bounding_box, colour: null, kind }));
+    act(() => result.current.update({ renderer, bounding_box, colour: null, kind, labels: [] }));
     expect(result.current.dirty).toBe(false);
 
     await clock.advance(AUTOSAVE_DEBOUNCE_MS);

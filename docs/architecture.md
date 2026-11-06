@@ -289,7 +289,7 @@ resource has not yet been created; each stage interprets its own live type.
 ```mermaid
 graph TD
     Design["design bytes"] --> IH
-    Template["template.yaml + colour images"] --> IH
+    Template["template.yaml without labels + colour images"] --> IH
     Cfg["resolved RenderConfig per colour"] --> IH
     IH["<b>render input_hash</b><br/>canonical_hash(render input payload)"] --> Rerender{"re-render?"}
 
@@ -315,6 +315,22 @@ expose their input digest through the optional `review_hash` hook:
 design/photo/template-byte edits invalidate a reviewed apply even when action
 paths and reasons remain identical (ADR-0039). Preview completion and
 transient CDN URLs remain excluded from review identity.
+
+The template hash has one narrow exception to hashing a file's raw bytes.
+Hashing bytes is deliberate: it counts an edit a parser would round-trip away as
+a change. But a template's `labels:` are for finding it and never change a
+pixel, so the render stage hashes `template.yaml` with that top-level key removed,
+by the same text-preserving edit that writes it (ADR-0055). A file with no key
+hashes exactly as it always did, and removing a key the app wrote gives back the
+original bytes. When the key cannot be removed, such as a label another value
+shares through a YAML alias, the hash falls back to the raw bytes, and a label
+edit there costs one re-render. A seller's comment left beside a hand-written key
+can do the same, once. Nothing else in the file is exempt.
+
+The calibration revision is not a render hash (ADR-0054) and does cover labels,
+because it fences the whole saved document; nothing rendered may depend on it.
+`put_config` queues no preparation work for a save that changed only labels,
+since neither reconciling maps nor coverage inference can follow from one.
 
 ## The calibrator
 

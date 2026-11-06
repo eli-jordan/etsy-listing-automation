@@ -62,6 +62,7 @@ def test_list_templates_includes_a_directory_with_no_template_yaml(
         # against until one arrives.
         "width": None,
         "height": None,
+        "labels": [],
     }
 
 
