@@ -1037,6 +1037,41 @@ later. Each traces to a decision.
   (ADR-0019, ADR-0020). A bare number is a bug
   waiting to be a refund (ADR-0006).
 
+## Editor saves
+
+Every editor that autosaves a document writes through one module,
+`src/ui/src/hooks/writeLoop.ts`. It owns the 800ms debounce from the last edit,
+one write at a time, collapsing edits into the next write, holding an edit until
+it is written, and what a flush reports. A failed or refused edit stays held and
+goes with the next edit or flush; it never retries on its own. The loop has no
+React, no payload and no clock of its own: an owner gives it `send`, `merge` and
+`failed`, and its rules are tested in the Vitest `node` project with an in-memory
+transport and a manual clock.
+
+Two owners sit on it. `ListingAutosave` (`hooks/listingAutosave.ts`, bound by
+`useAutosave`) adds the listing editor's three states, unnamed, named but not on
+disk and on disk, chosen when a write goes, so an edit made during a create or
+rename is sent under the name it settled on. A listing template uses the same
+class through its own `AutosaveTransport`. A rename runs through the loop's
+`afterWrite`: it waits for any write out, drains under the old name, and runs
+only if that wrote, with no write going out during it. `useTemplateSession` keeps
+one loop per opening of a template. Its edit carries only whether a save is owed
+and whether it must go even with nothing changed, an approval; the draft is read
+when the write goes. Payload shape stays with the owners, and so does the
+preview hold, which answers the loop's `due` hook instead of flushing. A template
+switch or reload makes the next read wait for the old opening's writes.
+`pages/admin/useSaveQueue.ts` is a different model, acknowledging per key, and
+does not use the loop.
+
+A flush resolves once no write is out and answers `Settled`: `written`, or not
+with a message. It never rejects, because the debounce, a blur and an unmount
+have nowhere to send a rejection. Callers about to act on the file read the
+answer. Deploy, Create listing template, Back to batch and Clone stay on the page
+when an edit was not written, since each goes on to read a file without it, and
+the page head already says why. A template rename and a preparation refuse with
+the message. Delete waits for the flush and goes on regardless: an edit that
+would not save goes with the listing.
+
 ## Frontend build and asset distribution
 
 `src/ui` is a self-contained npm project: React source and colocated Vitest

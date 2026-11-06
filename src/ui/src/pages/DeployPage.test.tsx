@@ -529,3 +529,74 @@ describe("DeployPage: Apply", () => {
     );
   });
 });
+
+describe("DeployPage: when the connection fails", () => {
+  it("reattaches from the last event when a run's stream drops", async () => {
+    vi.spyOn(listingsApi, "getListing").mockResolvedValue(detail());
+    vi.spyOn(runsApi, "currentRun").mockResolvedValue(null);
+    vi.spyOn(runsApi, "createRun").mockResolvedValue({
+      kind: "created",
+      run: runSummary({ id: "run-1" }),
+    });
+    const events: RunEvent[] = [{ type: "phase", id: 7, phase: "planning" }];
+    vi.spyOn(runsApi, "getRun").mockResolvedValue(runDetail({ id: "run-1", events }));
+    const errors: ((error: unknown) => void)[] = [];
+    const open = vi.spyOn(runStreamModule, "openRunStream").mockImplementation((_id, options) => {
+      if (options.onError) errors.push(options.onError);
+      return { close: vi.fn() };
+    });
+
+    renderPage();
+    await waitFor(() => expect(open).toHaveBeenCalledTimes(1));
+    expect(errors).toHaveLength(1);
+    errors[0]?.(new Error("dropped"));
+
+    await waitFor(() => expect(open).toHaveBeenCalledTimes(2));
+    expect(open.mock.lastCall?.[1].lastEventId).toBe(7);
+  });
+
+  it("says so when the run cannot be looked up", async () => {
+    vi.spyOn(listingsApi, "getListing").mockResolvedValue(detail());
+    vi.spyOn(runsApi, "currentRun").mockRejectedValue(new runsApi.RunsApiError("down"));
+
+    renderPage();
+
+    expect(await screen.findByRole("status")).toHaveTextContent(/could not/i);
+  });
+
+  it("says so when a plan cannot be started", async () => {
+    vi.spyOn(listingsApi, "getListing").mockResolvedValue(detail());
+    vi.spyOn(runsApi, "currentRun").mockResolvedValue(null);
+    vi.spyOn(runsApi, "createRun").mockRejectedValue(new runsApi.RunsApiError("down"));
+
+    renderPage();
+
+    expect(await screen.findByRole("status")).toHaveTextContent(/could not start/i);
+  });
+
+  it("says so when an apply cannot be started, and offers Apply again", async () => {
+    vi.spyOn(listingsApi, "getListing").mockResolvedValue(detail());
+    vi.spyOn(runsApi, "currentRun").mockResolvedValue(null);
+    vi.spyOn(runsApi, "createRun")
+      .mockResolvedValueOnce({ kind: "created", run: runSummary({ id: "run-1" }) })
+      .mockRejectedValueOnce(new runsApi.RunsApiError("down"));
+    const handles = stubStream();
+    const user = userEvent.setup();
+
+    renderPage();
+    await waitFor(() => expect(handles).toHaveLength(1));
+    streamAt(handles, 0).onEvent({
+      type: "listing_planned",
+      id: 1,
+      listing: "take-a-hike",
+      plan: plan([stage({ stage: "render", will_run: true, reason: "changed" })]),
+      fingerprint: "fp-1",
+    });
+    streamAt(handles, 0).onEvent({ type: "phase", id: 2, phase: "ready" });
+    await user.click(await screen.findByRole("button", { name: "Apply" }));
+
+    expect(await screen.findByRole("status")).toHaveTextContent(/could not start the apply/i);
+    expect(screen.getByRole("button", { name: "Apply" })).toBeEnabled();
+    await waitFor(() => expect(runsApi.markRunSeen).toHaveBeenCalledWith("run-1"));
+  });
+});

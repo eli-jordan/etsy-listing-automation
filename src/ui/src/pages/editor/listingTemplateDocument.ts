@@ -3,7 +3,7 @@ import {
   putListingTemplate,
   renameListingTemplate,
 } from "../../api/listingTemplates";
-import type { AutosaveTransport, SaveOutcome } from "../../hooks/useAutosave";
+import type { AutosaveTransport, SaveOutcome } from "../../hooks/listingAutosave";
 import type {
   ListingDetail,
   ListingTemplateDetail,
@@ -99,7 +99,7 @@ function outcome(result: ListingTemplateSaveResult): SaveOutcome {
  * `PUT` of the whole document, the create that naming the draft is (from
  * `source`, carrying the edits made before it), and the rename. There is no
  * describing an unnamed one -- its issues are the draft's until it is
- * named. Build it once per source: the hook needs it stable. */
+ * named. */
 export function listingTemplateTransport(source: ListingTemplateSource | null): AutosaveTransport {
   return {
     document: listingTemplateDocument,
