@@ -256,6 +256,12 @@ Deviations recorded while building it:
   exactly as it was.
 - `.loc-tmpl__kind` stays in `index.css`, because the live `template-positions`
   frames still use it.
+- `LabelSearch.css` uses two-class selectors for the box and pill. The bundle puts
+  `index.css` after it, so `.input` and `.tag` were winning in the built app and
+  not on the canvas.
+- Files draws the box's phosphor glass, at the box's size and colour, so the two
+  halves of the locator match. `.locator__search svg` stays for frames that still
+  draw their own.
 
 ## Shared gates
 

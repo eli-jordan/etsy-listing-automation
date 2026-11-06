@@ -29,6 +29,8 @@ THREE_COLOURS = [
     {"template": LABELLED, "colour": colour} for colour in ("black", "blue-jean", "ivory")
 ]
 MOSS = {"template": LABELLED, "colour": "moss"}
+# A row's background is --color-neutral-100, the token the box asks for.
+_BACKGROUND = "row => getComputedStyle(row).backgroundColor"
 
 
 def _label_templates(root: Path) -> None:
@@ -151,3 +153,23 @@ def test_switching_to_files_keeps_the_pill_and_clears_the_text(page, workspace_r
     expect(page.get_by_role("button", name="Remove theme:christmas")).to_be_visible()
     expect(_box(page)).to_have_value("")
     expect(_result_line(page)).to_have_text("1 of 2 templates")
+
+
+def test_the_box_keeps_its_own_styles_over_the_apps_input_and_tag_rules(
+    page, workspace_root: Path
+) -> None:
+    """The bundle puts `index.css` after the component's stylesheet, which the
+    design canvas does not, so only a built page shows `.input` and `.tag` winning."""
+    _label_templates(workspace_root)
+    page.goto(page.url.rsplit("/", 1)[0] + "/listings/take-a-hike")
+    page.get_by_role("heading", name="take-a-hike").wait_for(state="visible")
+    _open_images(page)
+    _box(page).click()
+    page.get_by_role("option", name="theme:christmas").click()
+
+    box = page.locator(".label-search__box")
+    expect(box).to_have_css("padding-top", "4px")
+    expect(box).to_have_css(
+        "background-color", page.locator(".loc-tmpl").first.evaluate(_BACKGROUND)
+    )
+    expect(page.locator(".label-search__pill")).to_have_css("font-size", "12px")
