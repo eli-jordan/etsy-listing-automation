@@ -285,3 +285,7 @@ def test_adding_then_removing_a_last_key_gives_back_the_same_text() -> None:
 
     assert added == "kept: 1\nmore:\n- a"
     assert edit_yaml(added, {"kept": 1}) == source
+
+
+def test_replacing_the_only_key_of_a_file_with_no_final_newline() -> None:
+    assert edit_yaml("a: 1", {"b": 2}) == "b: 2\n"
