@@ -304,6 +304,52 @@ class TestTemplateRail:
         assert box.input_value() == ""
         assert _rail_pill(page, "theme:christmas").count() == 0
 
+    def test_a_long_hand_edited_pill_stays_inside_the_rail(
+        self, page, workspace_root: Path
+    ) -> None:
+        """A hand edit can pass the 30 characters a pill is sized for. It wraps
+        inside the 228px box, and its × keeps its size. The app's own `.input`
+        and `.tag` rules load after the box's, so this also proves its styles
+        win them in a real stylesheet order."""
+        long_label = "theme:averyveryverylonghandeditedlabelwithnospaces"
+        path = workspace_root / "mockup-templates" / COLOUR_MATRIX_TEMPLATE / "template.yaml"
+        with path.open("a", encoding="utf-8") as file:
+            file.write(f"labels: [{long_label}]\n")
+        page.reload()
+        box = page.get_by_role("combobox", name="Search templates")
+        box.click()
+        page.get_by_role("option", name=long_label).click()
+        _rail_pill(page, long_label).wait_for()
+
+        facts = page.evaluate(
+            """() => {
+              const box = document.querySelector('.label-search__box');
+              const pill = box.querySelector('.label-search__pill');
+              const x = pill.querySelector('.label-search__x');
+              const field = box.querySelector('.label-search__field');
+              const style = getComputedStyle(box);
+              return {
+                box: box.getBoundingClientRect().toJSON(),
+                pill: pill.getBoundingClientRect().toJSON(),
+                field: field.getBoundingClientRect().toJSON(),
+                x: x.getBoundingClientRect().toJSON(),
+                overflows: box.scrollWidth > box.clientWidth,
+                padding: style.paddingLeft,
+                background: style.backgroundColor,
+                pillFont: getComputedStyle(pill).fontSize,
+              };
+            }"""
+        )
+        assert facts["box"]["width"] == 228
+        assert not facts["overflows"]
+        assert facts["pill"]["right"] <= facts["box"]["right"]
+        assert facts["x"]["right"] <= facts["pill"]["right"]
+        assert facts["x"]["width"] == 16
+        assert facts["field"]["width"] >= 90
+        assert facts["padding"] == "8.8px"
+        assert facts["background"] == "rgb(249, 244, 237)"
+        assert facts["pillFont"] == "12px"
+
     def test_picking_a_row_loads_that_template(self, page) -> None:
         _select_template(page, COLOUR_MATRIX_TEMPLATE)
         page.wait_for_selector(COLOUR_SELECT)
