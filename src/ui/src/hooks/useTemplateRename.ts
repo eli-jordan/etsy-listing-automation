@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { renameTemplate, type TemplateRenameResult } from "../api/calibrator";
 import type { NameRefusal } from "../components/EditableName";
+import type { Flushed } from "./useTemplateSession";
 
 function noteFor(result: TemplateRenameResult): string {
   if (result.unresolved.length > 0) {
@@ -21,13 +22,14 @@ export interface TemplateRename {
 
 /**
  * Renaming the open template. Pending edits are saved first: an autosave that
- * fires after the move would name a template that has gone. `onRenamed` selects
+ * fires after the move would name a template that has gone, so a save that fails
+ * refuses the rename and the draft stays open. `onRenamed` selects
  * the new name, which is what closes the name field. An unsaved renderer switch
  * is kept in memory by name and does not follow; the saved template does.
  */
 export function useTemplateRename(
   templateName: string | null,
-  flush: () => Promise<void>,
+  flush: () => Promise<Flushed>,
   onRenamed: (newName: string) => void,
 ): TemplateRename {
   const [busy, setBusy] = useState(false);
@@ -39,7 +41,11 @@ export function useTemplateRename(
     setBusy(true);
     setRefusal(null);
     try {
-      await flush();
+      const flushed = await flush();
+      if (!flushed.written) {
+        setRefusal({ name: next, message: flushed.message });
+        return;
+      }
       const result = await renameTemplate(templateName, next);
       setNote({ template: result.name, message: noteFor(result) });
       onRenamed(result.name);

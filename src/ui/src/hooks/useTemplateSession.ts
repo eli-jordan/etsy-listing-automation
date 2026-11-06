@@ -30,6 +30,9 @@ export type TemplateLoad = "none" | "loading" | "ready" | "error";
 
 export type PreparationAction = "prepare" | "prepare_again" | "retry";
 
+/** Whether a flush left the draft on disk. */
+export type Flushed = { written: true } | { written: false; message: string };
+
 export interface TemplateSession {
   load: TemplateLoad;
   /** The draft: the document as last read or saved, with every edit since. */
@@ -64,8 +67,9 @@ export interface TemplateSession {
    * goes the moment it lands. */
   setPreviewPending: (pending: boolean) => void;
   /** Saves now, without waiting for the debounce. Never rejects: the outcome
-   * is in `save`. */
-  flush: () => Promise<void>;
+   * is in `save`, and in what it answers for a caller about to act on the
+   * file. */
+  flush: () => Promise<Flushed>;
   /** Writes the draft even when nothing changed. Approving from the Preview
    * tab is a save: calibration status is derived from template.yaml, so the
    * observable act of approving is the file being written. */
@@ -270,11 +274,17 @@ class Session {
     this.emit();
   };
 
-  flush = (): Promise<void> => {
+  flush = (): Promise<Flushed> => {
     const doc = this.doc;
-    if (!doc) return Promise.resolve();
+    if (!doc) return Promise.resolve({ written: true });
     this.clearTimer(doc);
-    return this.enqueue(doc).catch(() => {});
+    return this.enqueue(doc).then(
+      () => ({ written: true }),
+      (e: unknown) => ({
+        written: false,
+        message: e instanceof Error ? e.message : "Save failed",
+      }),
+    );
   };
 
   approve = (): Promise<void> => {
