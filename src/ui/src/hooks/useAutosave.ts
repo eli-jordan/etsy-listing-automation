@@ -306,9 +306,10 @@ export function useAutosave(
     [applyRefusal, applyResponse, candidate, onNamed, transport],
   );
 
-  /** One PATCH of `patch` to the listing on disk as `name`. */
+  /** One PATCH of `patch` to the listing on disk as `name`. Answers whether
+   * it was written; if not, the edit is pending again. */
   const sendPatch = useCallback(
-    async (name: string, patch: Patch): Promise<void> => {
+    async (name: string, patch: Patch): Promise<boolean> => {
       // Cleared only once the PATCH actually lands -- a rejection (dropped
       // connection, a 5xx) must leave the edit right where the next flush
       // (the next debounce, or the next `update()`, which merges onto
@@ -330,14 +331,15 @@ export function useAutosave(
           // A newer edit may already be waiting. Marking this one saved
           // would hide it until the next iteration starts.
           if (pending.current === null) setSave(saved());
-        } else {
-          // Not written: the values stay on screen and the edit stays
-          // pending, so the next edit sends it again -- which is the
-          // retry. Dropping it let that next edit save alone, and its
-          // response put the unwritten values back to the file's.
-          pending.current = mergePatch(patch, pending.current ?? {});
-          applyRefusal(outcome);
+          return true;
         }
+        // Not written: the values stay on screen and the edit stays
+        // pending, so the next edit sends it again -- which is the
+        // retry. Dropping it let that next edit save alone, and its
+        // response put the unwritten values back to the file's.
+        pending.current = mergePatch(patch, pending.current ?? {});
+        applyRefusal(outcome);
+        return false;
       } catch {
         // Swallowed, not rethrown: nothing that calls `flush()` (the
         // debounce timer, `onBlur`, unmount) is set up to catch it, and a
@@ -346,6 +348,7 @@ export function useAutosave(
         // caller would have to remember to handle.
         pending.current = mergePatch(patch, pending.current ?? {});
         setSave({ kind: "save-failed" });
+        return false;
       } finally {
         patching.current = false;
       }
@@ -439,6 +442,8 @@ export function useAutosave(
       if (next === savedName.current || naming.current !== null) return;
       clearTimer();
       setSave({ kind: "saving" });
+      /** The drain would not write: the listing stays where it is. */
+      let stopped = false;
       const run = async () => {
         if (savedName.current === null) {
           draftName.current = next;
@@ -447,17 +452,14 @@ export function useAutosave(
         }
         // Drain first: the old name still exists, so an edit already made has
         // somewhere to go. Anything typed from here lands in `pending` and is
-        // sent under the new name -- two fates, and no third.
+        // sent under the new name. An edit the drain cannot write stays
+        // pending and stops the rename: moving the file on would report a
+        // saved listing with the edit still not in it.
         const patch = pending.current;
-        pending.current = null;
         const sentWith = adopted.current;
-        if (patch !== null) {
-          const outcome = await transport.save(
-            savedName.current,
-            patch,
-            mergePatch(candidate(), patch),
-          );
-          if (outcome.saved) applyResponse(outcome.detail, sentWith);
+        if (patch !== null && !(await sendPatch(savedName.current, patch))) {
+          stopped = true;
+          return;
         }
         const fresh = await transport.rename(savedName.current, next);
         savedName.current = next;
@@ -472,12 +474,12 @@ export function useAutosave(
         .catch(() => setSave({ kind: "name-taken", name: next }))
         .finally(() => {
           naming.current = null;
-          if (pending.current !== null) {
+          if (pending.current !== null && !stopped) {
             timer.current = setTimeout(() => void flush(), AUTOSAVE_DEBOUNCE_MS);
           }
         });
     },
-    [applyResponse, candidate, clearTimer, create, flush, onNamed, transport],
+    [clearTimer, create, flush, onNamed, sendPatch, transport],
   );
 
   useEffect(() => {

@@ -860,3 +860,86 @@ describe("flush while a write is out", () => {
     expect(patch).toHaveBeenCalledWith("hike-away", { colors: ["white"] });
   });
 });
+
+describe("renaming with an edit the server will not write", () => {
+  function refusing(): ListingDetail {
+    return detail({ field_errors: { __root__: "media position 1 must be an image" } });
+  }
+
+  it("keeps a refused edit, and leaves the listing where it was", async () => {
+    const patch = vi
+      .spyOn(listingsApi, "patchListing")
+      .mockResolvedValueOnce(refusing())
+      .mockResolvedValueOnce(detail({ colors: ["white"] }));
+    const rename = vi.spyOn(listingsApi, "renameListing");
+    const onNamed = vi.fn();
+    const { result } = renderHook(() => useAutosave("take-a-hike", detail(), { onNamed }));
+
+    act(() => result.current.update({ colors: ["white"] }));
+    await act(async () => {
+      result.current.commitName("hike-away");
+      await vi.advanceTimersByTimeAsync(0);
+    });
+
+    expect(rename).not.toHaveBeenCalled();
+    expect(onNamed).not.toHaveBeenCalled();
+    expect(result.current.save).toEqual({
+      kind: "unsaved",
+      reason: "media position 1 must be an image",
+    });
+    expect(result.current.detail.colors).toEqual(["white"]);
+
+    await act(async () => {
+      await result.current.flush();
+    });
+    expect(patch).toHaveBeenLastCalledWith("take-a-hike", { colors: ["white"] });
+  });
+
+  it("keeps a listing template's held-incomplete edit", async () => {
+    const save = vi
+      .fn<AutosaveTransport["save"]>()
+      .mockResolvedValue({ saved: false, issues: [], field_errors: {} });
+    const rename = vi.fn<AutosaveTransport["rename"]>();
+    const transport: AutosaveTransport = {
+      document: (d) => ({ colors: d.colors }),
+      describe: null,
+      create: vi.fn(),
+      save,
+      rename,
+    };
+    const { result } = renderHook(() => useAutosave("heavyweight-tee", detail(), { transport }));
+
+    act(() => result.current.update({ colors: [] }));
+    await act(async () => {
+      result.current.commitName("midweight-tee");
+      await vi.advanceTimersByTimeAsync(0);
+    });
+
+    expect(rename).not.toHaveBeenCalled();
+    expect(result.current.detail.colors).toEqual([]);
+    expect(result.current.save).toEqual({ kind: "unsaved" });
+  });
+
+  it("keeps an edit whose save failed, and says the save failed", async () => {
+    const patch = vi
+      .spyOn(listingsApi, "patchListing")
+      .mockRejectedValueOnce(new listingsApi.ListingsApiError("500"))
+      .mockResolvedValueOnce(detail({ colors: ["white"] }));
+    const rename = vi.spyOn(listingsApi, "renameListing");
+    const { result } = renderHook(() => useAutosave("take-a-hike", detail()));
+
+    act(() => result.current.update({ colors: ["white"] }));
+    await act(async () => {
+      result.current.commitName("hike-away");
+      await vi.advanceTimersByTimeAsync(0);
+    });
+
+    expect(rename).not.toHaveBeenCalled();
+    expect(result.current.save).toEqual({ kind: "save-failed" });
+
+    await act(async () => {
+      await result.current.flush();
+    });
+    expect(patch).toHaveBeenLastCalledWith("take-a-hike", { colors: ["white"] });
+  });
+});
