@@ -411,7 +411,7 @@ class _Editor:
         insert added gives back the same bytes."""
         start = self._line_start(first)
         end = self._line_after(self._content_end(last))
-        if end == len(self.source) and not self.source.endswith("\n"):
+        if start > 0 and end == len(self.source) and not self.source.endswith("\n"):
             start -= 2 if self.source[:start].endswith("\r\n") else 1
         self._splice(start, end, "")
 
