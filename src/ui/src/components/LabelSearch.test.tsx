@@ -201,6 +201,12 @@ describe("what the dropdown offers", () => {
     expect(offered()).toEqual(["t:a2", "t:a1", "t:a-swap"]);
   });
 
+  it("ranks text starting the part after the colon ahead of a higher count", () => {
+    render(<Box items={[["theme:orchre"], ["theme:orchre"], ["Theme:Christmas"]]} />);
+    type("chr");
+    expect(offered()).toEqual(["Theme:Christmas", "theme:orchre"]);
+  });
+
   it("puts labels starting with the typed text ahead of a higher count", () => {
     render(<Box items={[["xab"], ["xab"], ["abx"]]} />);
     type("ab");

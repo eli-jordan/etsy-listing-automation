@@ -32,9 +32,13 @@ function distinctTags(items: string[][]): string[] {
 }
 
 /** Labels the typed text could mean, in their groups A to Z with plain tags last.
- * Within a group: narrowing ones first, then those starting with it, then by count. */
+ * Within a group: narrowing ones first, then those starting with it, as a whole or
+ * after the colon, then by count. */
 function optionsFor(items: string[][], term: string, on: string[]): Option[] {
-  const starts = (tag: string) => Number(tag.toLowerCase().startsWith(term));
+  const starts = (tag: string) => {
+    const text = tag.toLowerCase();
+    return Number(text.startsWith(term) || text.slice(text.indexOf(":") + 1).startsWith(term));
+  };
   return distinctTags(items)
     .filter((tag) => tag.toLowerCase().includes(term) && !holdsLabels(on, [tag]))
     .map((tag) => {

@@ -137,8 +137,8 @@ picking a label.
 
 The dropdown groups labels by prefix, A to Z, with plain labels under *Other*
 last. It shows no headings when no offered label has a prefix. Within a group,
-labels that narrow come first, then those starting with the typed text, then the
-highest count.
+labels that narrow come first, then those starting with the typed text, as a whole
+or after the colon, then the highest count.
 
 ### Listing Images
 

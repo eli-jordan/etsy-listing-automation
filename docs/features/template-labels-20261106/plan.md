@@ -201,8 +201,9 @@ Deviations recorded while building it:
   highlighted row scrolls into view. Down with nothing to offer highlights nothing.
   `aria-controls` names the listbox only while it exists, and the field gains
   `aria-autocomplete="list"`.
-- "Starting with the typed text" compares the whole label, as the prototype did, so
-  it decides order among plain labels and when the text reaches into a prefix.
+- "Starting with the typed text" also matches the text after the colon, where the
+  prototype compared the whole label only, so `chr` ranks `theme:christmas` first
+  within its group. The spec says so now.
 - `.template-rail__search` stays in `index.css`, because the live Marigold frames
   still use it.
 - The key handler split into a `keys` table for the app's lint rules, with no change
