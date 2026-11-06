@@ -5,7 +5,13 @@ import { MutedClip } from "../../components/MutedClip";
 import { useHoverPlay } from "../../hooks/useHoverPlay";
 import { mediaKind, pictureFor, type MediaOwner } from "../../media";
 import type { ListingDetail, MediaFileSummary, TemplateSummary } from "../../types";
-import { isNullableString, isString, useViewState, type ViewScope } from "./editorView";
+import {
+  isNullableString,
+  isString,
+  isStringList,
+  useViewState,
+  type ViewScope,
+} from "./editorView";
 import type { Focus } from "./focus";
 import { LocatorTemplate } from "./LocatorTemplate";
 import { MAX_VIDEOS } from "./mediaEdits";
@@ -145,7 +151,9 @@ export function MediaLocator({
     isNullableString,
   );
 
-  const [pills, setPills] = useState<string[]>([]);
+  // Not reconciled with the labels in use: a pill the templates have lost stays on
+  // show, because an empty list with no visible reason reads as a broken one.
+  const [pills, setPills] = useViewState<string[]>(scope, "locator-labels", [], isStringList);
 
   // Calibrated only, here and in the box: it offers and counts what the locator
   // can list (spec *Listing Images*).
@@ -194,7 +202,8 @@ export function MediaLocator({
             aria-pressed={mode === m}
             // The query is cleared on the way across: "flat" means nothing
             // in common-media/, and a list that looks empty because of a
-            // search you cannot see reads as a list with nothing in it.
+            // search you cannot see reads as a list with nothing in it. Pills
+            // stay: Files never shows them, and they are there on return.
             onClick={() => {
               setMode(m);
               setQuery("");
