@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import os
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -30,7 +31,7 @@ from etsy_listings.core.config.listing import Listing
 from etsy_listings.core.config.listing_template import ListingTemplate
 from etsy_listings.core.config.media import IMAGE_EXTENSIONS, VIDEO_EXTENSIONS
 from etsy_listings.core.config.pricing_plan import PricingPlan
-from etsy_listings.core.config.settings import Settings
+from etsy_listings.core.config.settings import Settings, SettingsProblem
 from etsy_listings.core.config.slug import ColourExceptions
 
 # `template.yaml` is render geometry and render settings from top to bottom, so
@@ -49,6 +50,8 @@ from etsy_listings.core.workspace.common_copy import (
 from etsy_listings.core.workspace.trees import remove_tree
 from etsy_listings.core.workspace.userpath import to_native_path
 from etsy_listings.core.workspace.yaml_source import UNSET
+
+logger = logging.getLogger(__name__)
 
 
 class WorkspaceNotFoundError(FileNotFoundError):
@@ -1234,11 +1237,37 @@ class Workspace:
         resolved. This method only owns "attach currency, wrap load errors"."""
         return PricingPlan.load(path, currency=self.defaults.etsy.currency)
 
-    def load_settings(self) -> Settings:
-        """``settings.yaml``, read on every call rather than at discovery:
-        a seller tuning weights while the UI runs gets them on the next
-        research, and a broken file fails only what reads it."""
+    def capture_settings(self) -> Settings:
+        """``settings.yaml`` for a run, which keeps what it captures to the end
+        (ADR-0056, ADR-0057): a broken file raises :class:`ConfigLoadError`,
+        and the run fails with its message.
+
+        This and its two siblings are the only reads of the file, each named
+        for what a broken one means to its caller. All read on every call
+        rather than at discovery: a seller tuning weights while the UI runs
+        gets them on the next research, and a broken file touches only what
+        reads it."""
         return Settings.load(self.settings_file())
+
+    def settings_or_problem(self) -> Settings | SettingsProblem:
+        """``settings.yaml``, or what is wrong with it, for a read whose answer
+        carries the problem: a stage's ``Blocked``, a listing's issue, a
+        refusal. Never raises for a broken file."""
+        try:
+            return self.capture_settings()
+        except ConfigLoadError as exc:
+            return SettingsProblem(str(exc))
+
+    def settings_if_readable(self, *, skipping: str) -> Settings | None:
+        """``settings.yaml``, or ``None`` having logged that ``skipping``, the
+        best-effort follow-up it was wanted for, will not happen. Whatever the
+        file holds up is reported by what reads it to act: ``plan`` and the
+        listing's issues."""
+        settings = self.settings_or_problem()
+        if isinstance(settings, SettingsProblem):
+            logger.warning("skipped %s: %s", skipping, settings.message)
+            return None
+        return settings
 
     def load_exceptions(self) -> ColourExceptions:
         return load_exceptions(self.exceptions_file())

@@ -62,7 +62,7 @@ from etsy_listings.core.config.garment_profile import GarmentProfile
 from etsy_listings.core.config.listing import Listing
 from etsy_listings.core.config.listing_validation import TemplateInfo
 from etsy_listings.core.config.media import ProbeFailure, VideoFacts, media_kind
-from etsy_listings.core.config.settings import TemplatePositionLimits
+from etsy_listings.core.config.settings import Settings, SettingsProblem
 from etsy_listings.core.render.config import (
     AnyTemplate,
     ColourMatrixTemplate,
@@ -101,18 +101,15 @@ class WorkspaceFacts:
         self.templates = templates
         self._profiles: dict[str, GarmentProfile | None] = {}
         self._probes: dict[Path, VideoFacts | ProbeFailure] = {}
-        self._position_limits: TemplatePositionLimits | str | None = None
+        self._settings: Settings | SettingsProblem | None = None
 
-    def template_position_limits(self) -> TemplatePositionLimits | str:
-        """Limits read once, on demand: unpositioned listings need no settings.
-        A broken ``settings.yaml`` is its error message, for the caller to
-        report as an issue rather than fail the read."""
-        if self._position_limits is None:
-            try:
-                self._position_limits = self._workspace.load_settings().template_positions
-            except ConfigLoadError as exc:
-                self._position_limits = str(exc)
-        return self._position_limits
+    def settings(self) -> Settings | SettingsProblem:
+        """``settings.yaml`` read once, on demand: unpositioned listings need
+        none. A broken file is a problem to report as an issue, not a failed
+        read."""
+        if self._settings is None:
+            self._settings = self._workspace.settings_or_problem()
+        return self._settings
 
     @classmethod
     def gather(cls, workspace: Workspace) -> WorkspaceFacts:

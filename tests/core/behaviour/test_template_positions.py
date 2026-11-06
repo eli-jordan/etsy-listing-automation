@@ -87,7 +87,7 @@ def test_current_limits_and_recalibration_revalidate_without_rewriting_positions
     issues = check_template_positions(
         listing,
         {TEMPLATE: config},
-        ctx.workspace.load_settings().template_positions,
+        ctx.workspace.capture_settings().template_positions,
         name=FIXTURE_LISTING,
     )
     assert "scales the design" in issues[0].message

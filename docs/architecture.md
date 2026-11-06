@@ -647,6 +647,17 @@ remain subject to ADR-0006 validation.
 
 ### Settings administration
 
+`settings.yaml` has three reads on `Workspace`, one per thing a broken file can mean,
+so a reader names its intent rather than deciding the policy. `capture_settings()`
+is a run's: it raises, and the run fails with the message; a run reads once, so its
+limits, providers and market weights share a revision (ADR-0057).
+`settings_or_problem()` answers `Settings | SettingsProblem` for a read whose answer
+carries the problem: the render stage's `Blocked`, a listing's issue, AI readiness,
+a route's refusal. `settings_if_readable(skipping=...)` is a best-effort follow-up's
+and logs what it skipped: queueing coverage, or the batch queue's dispatch, which has
+no slots until the file is fixed. `ConfigLoadError` keeps no category for this: the
+same broken file is all three.
+
 Admin's Settings tab reads and patches `settings.yaml` through
 `core/application/workspace_settings.py`. Its exact-byte revision is independent
 of `shop.yaml`. The shared workspace revision lock covers the read, revision

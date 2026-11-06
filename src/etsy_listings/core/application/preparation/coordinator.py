@@ -567,8 +567,13 @@ class Preparations:
         amendment *coverage belongs to preparation*). Queued while closing
         too: the job is durable and runs on the next start. A failure leaves
         saving a position to queue it."""
+        settings = self.workspace.settings_if_readable(
+            skipping=f"covering prepared template {template!r}"
+        )
+        if settings is None:
+            return
         try:
-            self.cover(template, self.workspace.load_settings().template_positions)
+            self.cover(template, settings.template_positions)
         except (UserFacingError, ValueError, OSError) as exc:
             logger.warning("not covering prepared template %r: %s", template, exc)
 

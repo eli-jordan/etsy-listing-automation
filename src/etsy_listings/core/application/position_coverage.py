@@ -108,9 +108,11 @@ def cover_listing_positions(preparations: Preparations, name: str) -> list[Job]:
     positions, at the workspace's current limits. A template that cannot be
     read or prepared is skipped: ``plan`` and the preview report it."""
     workspace = preparations.workspace
+    limits = _limits(workspace, f"covering listing {name!r}'s positions")
+    if limits is None:
+        return []
     try:
         positions = workspace.load_listing(name).template_positions or {}
-        limits = workspace.load_settings().template_positions
     except _SKIPPED as exc:
         logger.debug("not covering listing %r's positions: %s", name, exc)
         return []
@@ -135,12 +137,8 @@ def cover_recalibrated(preparations: Preparations, template: str) -> list[Job]:
     workspace = preparations.workspace
     if template not in positioned_templates(workspace):
         return []
-    try:
-        limits = workspace.load_settings().template_positions
-    except _SKIPPED as exc:
-        logger.debug("not covering recalibrated %r: %s", template, exc)
-        return []
-    return _cover(preparations, [template], limits)
+    limits = _limits(workspace, f"covering recalibrated {template!r}")
+    return [] if limits is None else _cover(preparations, [template], limits)
 
 
 @dataclass(frozen=True)
@@ -160,10 +158,8 @@ def position_readiness(preparations: Preparations, template: str) -> PositionRea
     if any(job.phase not in TERMINAL for job in jobs):
         return PositionReadiness(ready=False, preparing=True)
     workspace = preparations.workspace
-    try:
-        limits = workspace.load_settings().template_positions
-    except _SKIPPED as exc:
-        logger.debug("not checking %r's coverage: %s", template, exc)
+    limits = _limits(workspace, f"checking {template!r}'s coverage")
+    if limits is None:
         return PositionReadiness(ready=True, preparing=False)
     short = needs_coverage(workspace, template, limits, verify=False)
     return PositionReadiness(ready=not (short and _prepared(workspace)(template)), preparing=False)
@@ -172,12 +168,8 @@ def position_readiness(preparations: Preparations, template: str) -> PositionRea
 def cover_template(preparations: Preparations, template: str) -> Job | None:
     """The coverage job queued or joined for ``template``, which a seller
     asked to adjust; None when it needs none or no worker is installed."""
-    try:
-        limits = preparations.workspace.load_settings().template_positions
-    except _SKIPPED as exc:
-        logger.debug("not covering %r: %s", template, exc)
-        return None
-    return next(iter(_cover(preparations, [template], limits)), None)
+    limits = _limits(preparations.workspace, f"covering {template!r}")
+    return None if limits is None else next(iter(_cover(preparations, [template], limits)), None)
 
 
 def cover_prepared_templates(preparations: Preparations) -> list[Job]:
@@ -185,12 +177,15 @@ def cover_prepared_templates(preparations: Preparations) -> list[Job]:
     template at the workspace's current limits. A template not prepared yet
     gets coverage when its preparation finishes."""
     workspace = preparations.workspace
-    try:
-        limits = workspace.load_settings().template_positions
-    except _SKIPPED as exc:
-        logger.debug("not covering prepared templates: %s", exc)
+    limits = _limits(workspace, "covering prepared templates")
+    if limits is None:
         return []
     return _cover(preparations, filter(_prepared(workspace), workspace.template_names()), limits)
+
+
+def _limits(workspace: Workspace, skipping: str) -> PositionLimits | None:
+    settings = workspace.settings_if_readable(skipping=skipping)
+    return settings.template_positions if settings is not None else None
 
 
 def _prepared(workspace: Workspace) -> Callable[[str], bool]:
