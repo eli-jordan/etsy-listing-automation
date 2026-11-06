@@ -102,6 +102,19 @@ describe("TemplateRail", () => {
     expect(screen.queryByRole("button", { name: /Calibrate next/ })).not.toBeInTheDocument();
   });
 
+  it("lists a template's labels on its row", () => {
+    renderRail({ templates: [summary({ name: "tee", labels: ["theme:christmas", "cosy"] })] });
+
+    expect(screen.getByText("theme:christmas · cosy")).toBeInTheDocument();
+    expect(screen.queryByText("No labels")).not.toBeInTheDocument();
+  });
+
+  it("says when a template has no labels", () => {
+    renderRail({ templates: [summary({ name: "tee" })] });
+
+    expect(screen.getByText("No labels")).toBeInTheDocument();
+  });
+
   it("filters by name as you search", () => {
     renderRail();
     fireEvent.change(screen.getByLabelText("Search templates"), {

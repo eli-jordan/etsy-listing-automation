@@ -111,6 +111,11 @@ function Row({ template, selected, onSelect, preparationStatus }: RowProps) {
       <span className="template-rail__text">
         <span className="template-rail__name">{template.name}</span>
         <span className="template-rail__meta">{describe(template)}</span>
+        <span
+          className={`template-rail__labels${template.labels.length === 0 ? " template-rail__labels--none" : ""}`}
+        >
+          {template.labels.length > 0 ? template.labels.join(" · ") : "No labels"}
+        </span>
         {template.renderer === "marigold" && (
           <span
             className={`mg-rail-state${marigoldMapsReady(template.maps) ? " mg-rail-state--ready" : ""}`}

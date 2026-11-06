@@ -5,6 +5,7 @@ import { useTemplateRename, type TemplateRename } from "./hooks/useTemplateRenam
 import type { Preparation, Runtime } from "./api/preparation";
 import { InferenceSettings } from "./components/InferenceSettings";
 import { KindPicker } from "./components/KindPicker";
+import { LabelsBar } from "./components/LabelsBar";
 import { PositionedListingsNote } from "./components/PositionedListingsNote";
 import { preparationLabel, marigoldMapsReady } from "./components/preparationLabel";
 import { RendererPanel } from "./components/RendererPanel";
@@ -153,6 +154,14 @@ function SaveStatus({
   return catalogState === "error" ? "failed to load templates" : "";
 }
 
+/** Why the labels waiting to save have not, for beside the bar. A failed save
+ * of anything else says so in the header alone. */
+function labelFailure({ save, config, saved }: TemplateSession): string | null {
+  if (save.kind !== "failed" && save.kind !== "conflict") return null;
+  const waiting = JSON.stringify(config?.labels) !== JSON.stringify(saved?.labels);
+  return waiting ? save.message : null;
+}
+
 /** The workspace with no template open. Templates are folders in the
  * workspace, not something this page creates: the calibrator calibrates. */
 function CatalogStatus({ catalogState }: { catalogState: CatalogState }) {
@@ -197,6 +206,8 @@ function TemplateEditor({
         knownColours={knownColours}
         preparation={preparation}
         calibrationRevision={session.calibrationRevision}
+        calibrationLabels={session.calibrationLabels}
+        relabelledRevisions={session.relabelledRevisions}
         maskEdits={session.maskEdits}
         onMaskEdits={session.setMaskEdits}
         onPreviewPending={session.setPreviewPending}
@@ -363,6 +374,7 @@ export function App() {
     () => [...new Set(templates.flatMap((t) => t.colours))].filter(Boolean).sort(),
     [templates],
   );
+  const knownLabels = useMemo(() => templates.flatMap((t) => t.labels), [templates]);
   const isMarigold = config?.renderer.type === "marigold";
   const preparationStatus = preparing ? "Preparing" : preparationLabel(preparation);
 
@@ -433,6 +445,16 @@ export function App() {
             <PositionedListingsNote
               templateName={templateName}
               savedAt={save.kind === "saved" ? save.savedAt : null}
+            />
+          )}
+          {templateName && session.load === "ready" && config && (
+            <LabelsBar
+              key={templateName}
+              saved={session.saved?.labels ?? []}
+              draft={config.labels}
+              known={knownLabels}
+              failure={labelFailure(session)}
+              onChange={(labels) => setConfig({ ...config, labels })}
             />
           )}
           {templateName && session.load === "ready" && config && (
