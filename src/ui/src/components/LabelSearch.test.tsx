@@ -380,18 +380,3 @@ describe("keyboard and focus", () => {
     expect(scroll.mock.contexts.at(-1)).toBe(screen.getAllByRole("option")[0]);
   });
 });
-
-it("shows the state a frame asks for", () => {
-  render(
-    <LabelSearch
-      items={ITEMS}
-      on={[]}
-      onOn={vi.fn()}
-      query="chr"
-      onQuery={vi.fn()}
-      initialMenu
-      initialActive={0}
-    />,
-  );
-  expect(highlighted()).toEqual(["theme:christmas"]);
-});

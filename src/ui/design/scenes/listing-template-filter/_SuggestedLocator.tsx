@@ -12,15 +12,11 @@ export function SuggestedScreen({
   initialOpen = null,
   initialOn = [],
   initialQuery = "",
-  initialMenu = false,
-  initialActive = -1,
 }: {
   focus: string;
   initialOpen?: string | null;
   initialOn?: string[];
   initialQuery?: string;
-  initialMenu?: boolean;
-  initialActive?: number;
 }) {
   const picker = usePicker(focus);
   const [on, setOn] = useState(initialOn);
@@ -41,8 +37,6 @@ export function SuggestedScreen({
             onOn={setOn}
             query={query}
             onQuery={setQuery}
-            initialMenu={initialMenu}
-            initialActive={initialActive}
           />
 
           <div className="lf-result-line" role="status">
