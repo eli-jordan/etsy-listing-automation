@@ -3,7 +3,7 @@
 // them to its own list.
 import { XIcon } from "@phosphor-icons/react/dist/csr/X";
 import { Fragment, type KeyboardEvent, useEffect, useRef, useState } from "react";
-import "./_LabelSearch.css";
+import "./LabelSearch.css";
 
 interface Option {
   tag: string;
@@ -37,6 +37,12 @@ function optionsFor(items: string[][], term: string, on: string[]): Option[] {
         b.count - a.count ||
         a.tag.localeCompare(b.tag),
     );
+}
+
+/** The highlight after an arrow key: it wraps at both ends, and -1 is nothing yet. */
+function stepped(active: number, count: number, step: 1 | -1): number {
+  if (active < 0) return step === 1 ? 0 : count - 1;
+  return (active + step + count) % count;
 }
 
 /** The label with the typed part in bold. */
@@ -96,24 +102,27 @@ export function LabelSearch({
     setMenu(false);
     field.current?.focus();
   };
-  const onKey = (event: KeyboardEvent<HTMLInputElement>) => {
-    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
-      event.preventDefault();
-      if (!menuOpen) setMenu(true);
-      const last = options.length - 1;
-      setActive((a) =>
-        event.key === "ArrowDown" ? (a >= last ? 0 : a + 1) : a <= 0 ? last : a - 1,
-      );
-    } else if (event.key === "Enter") {
-      const option = menuOpen ? options[active] : undefined;
-      if (option) take(option);
-      else setMenu(false);
-    } else if (event.key === "Escape") {
+  const move = (event: KeyboardEvent, step: 1 | -1) => {
+    event.preventDefault();
+    if (!menuOpen) setMenu(true);
+    setActive((current) => stepped(current, options.length, step));
+  };
+  const confirm = () => {
+    const option = menuOpen ? options[active] : undefined;
+    if (option) take(option);
+    else setMenu(false);
+  };
+  const keys: Record<string, (event: KeyboardEvent) => void> = {
+    ArrowDown: (event) => move(event, 1),
+    ArrowUp: (event) => move(event, -1),
+    Enter: confirm,
+    Escape: () => {
       setMenu(false);
       setActive(-1);
-    } else if (event.key === "Backspace" && query === "" && on.length > 0) {
-      onOn(on.slice(0, -1));
-    }
+    },
+    Backspace: () => {
+      if (query === "" && on.length > 0) onOn(on.slice(0, -1));
+    },
   };
 
   return (
@@ -161,14 +170,19 @@ export function LabelSearch({
             setMenu(true);
             setActive(-1);
           }}
-          onKeyDown={onKey}
+          onKeyDown={(event) => keys[event.key]?.(event)}
         />
       </div>
       {menuOpen && (
-        <div className="label-search__menu" id="label-search-menu" role="listbox" aria-label="Labels">
+        <div
+          className="label-search__menu"
+          id="label-search-menu"
+          role="listbox"
+          aria-label="Labels"
+        >
           {options.map((option, index) => {
             const group = groupOf(option.tag);
-            const startsGroup = index === 0 || groupOf(options[index - 1]!.tag) !== group;
+            const startsGroup = index === 0 || groupOf(options[index - 1]?.tag ?? "") !== group;
             return (
               <Fragment key={option.tag}>
                 {grouped && startsGroup && (
@@ -185,7 +199,9 @@ export function LabelSearch({
                   onClick={() => take(option)}
                 >
                   <Marked tag={option.tag} term={term} />
-                  {option.swap && <span className="label-search__swap">replaces {on.join(", ")}</span>}
+                  {option.swap && (
+                    <span className="label-search__swap">replaces {on.join(", ")}</span>
+                  )}
                   <span className="label-search__count">{option.count}</span>
                 </div>
               </Fragment>

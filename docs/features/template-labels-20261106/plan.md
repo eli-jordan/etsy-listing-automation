@@ -10,7 +10,7 @@ The clickable source is two boards: **Find templates on a listing**
 and **Mockup template labels**
 ([`src/ui/design/scenes/template-labels/`](../../../src/ui/design/scenes/template-labels/)),
 with the shared box in
-[`src/ui/design/components/_LabelSearch.tsx`](../../../src/ui/design/components/_LabelSearch.tsx).
+[`src/ui/src/components/LabelSearch.tsx`](../../../src/ui/src/components/LabelSearch.tsx).
 Keep the frames fixture-driven; copy markup and styles into production components.
 Screenshots for comparison are in [`screenshots/`](screenshots/).
 

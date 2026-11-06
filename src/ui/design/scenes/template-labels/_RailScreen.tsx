@@ -5,7 +5,7 @@ import { PlusIcon } from "@phosphor-icons/react/dist/csr/Plus";
 import { XIcon } from "@phosphor-icons/react/dist/csr/X";
 import { useMemo, useRef, useState } from "react";
 import { ViewTabs, type View } from "../../../src/components/ViewTabs";
-import { LabelSearch } from "../../components/_LabelSearch";
+import { LabelSearch } from "../../../src/components/LabelSearch";
 import { asTag, type LabelTemplate, templates as fixtures } from "./_fixtures";
 
 const VISIBLE_ROWS = 7;

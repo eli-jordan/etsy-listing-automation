@@ -1,7 +1,7 @@
 // The Listing Images locator with the shared search box. It opens empty, and
 // the filter lasts until the seller leaves the listing. Nothing here is saved.
 import { useState } from "react";
-import { LabelSearch } from "../../components/_LabelSearch";
+import { LabelSearch } from "../../../src/components/LabelSearch";
 import { hasTags, type PickerTemplate, templates } from "./_fixtures";
 import { ImagesScreen, LocatorShell, TemplateRow, usePicker } from "./_ImagesScreen";
 
