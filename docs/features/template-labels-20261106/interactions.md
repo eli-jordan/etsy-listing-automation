@@ -61,7 +61,7 @@ Dropdown open
   Down / Up ──► moves the highlight through all groups, wrapping at both ends
   Enter on a highlight, or click ──► text clears, label becomes a pill
   Enter with no highlight ──► dropdown closes, text stays as a title search
-  Esc, or click outside ──► dropdown closes, text stays
+  Esc, Tab, or click outside ──► dropdown closes, highlight clears, text stays
 ```
 
 ## One search box
@@ -112,6 +112,15 @@ filters by title while the seller types, so `chr` shows only
 | Tab | Closes the dropdown and clears the highlight, and focus moves on. |
 | Backspace in an empty box | Removes the last pill. |
 | × on a pill | Removes that pill. Focus returns to the box. |
+
+**Keyboard and focus.** Closing the dropdown any way clears the highlight, so Enter
+cannot pick a row left over from before. Tab closes it so it does not stay over the
+list once focus has moved on. Backspace and × clear the highlight too, because what
+is on offer changes. The highlighted row scrolls into view inside the dropdown. Down
+with nothing to offer highlights nothing. The field is a combobox with
+`aria-autocomplete="list"`; `aria-controls` names the listbox and
+`aria-activedescendant` the highlighted row only while they exist, and ids come from
+`useId`.
 
 ![Clicking the box lists every other label under its group](screenshots/listing-labels.png)
 
