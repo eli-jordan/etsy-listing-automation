@@ -863,6 +863,59 @@ class TestKindPickerCreatesEachKind:
 # --- listings holding positions (spec, Recalibration) -------------------
 
 
+def _labels_bar(page):
+    return page.get_by_role("group", name="Labels")
+
+
+def test_a_label_added_and_removed_reaches_template_yaml_and_survives_a_reload(
+    page, workspace_root: Path
+) -> None:
+    """The chip waits for the save, the file holds what was saved, and removing
+    the last label takes the key out of the file again (spec *Storage*)."""
+    _select_template(page, COLOUR_MATRIX_TEMPLATE)
+    bar = _labels_bar(page)
+    saves = TrafficLog(page, "/config")
+
+    bar.get_by_role("button", name="Add label").click()
+    field = bar.get_by_role("textbox", name="Add a label")
+    field.fill("Road  Trip")
+    field.press("Enter")
+    saves.wait_for(lambda r: _method(r) == "PUT" and r.status == 200)
+    bar.get_by_text("road trip").wait_for()
+    assert bar.get_by_role("textbox", name="Add a label").count() == 0
+    assert bar.get_by_role("button", name="Add label").evaluate(
+        "button => button === document.activeElement"
+    )
+    assert _template_config(workspace_root, COLOUR_MATRIX_TEMPLATE)["labels"] == ["road trip"]
+    _rail_row(page, COLOUR_MATRIX_TEMPLATE).get_by_text("road trip").wait_for()
+
+    page.reload()
+    _select_template(page, COLOUR_MATRIX_TEMPLATE)
+    _labels_bar(page).get_by_text("road trip").wait_for()
+
+    saves = TrafficLog(page, "/config")
+    _labels_bar(page).get_by_role("button", name="Remove road trip").click()
+    saves.wait_for(lambda r: _method(r) == "PUT" and r.status == 200)
+    _labels_bar(page).get_by_text("road trip").wait_for(state="detached")
+    assert "labels" not in _template_config(workspace_root, COLOUR_MATRIX_TEMPLATE)
+
+
+def test_a_label_that_breaks_a_rule_explains_itself_and_sends_nothing(page) -> None:
+    _select_template(page, COLOUR_MATRIX_TEMPLATE)
+    bar = _labels_bar(page)
+    saves = TrafficLog(page, "/config")
+
+    bar.get_by_role("button", name="Add label").click()
+    field = bar.get_by_role("textbox", name="Add a label")
+    field.fill("xmas!")
+    field.press("Enter")
+
+    bar.get_by_text("Letters, numbers, spaces, hyphens and colons only").wait_for()
+    assert field.input_value() == "xmas!"
+    page.wait_for_timeout(1_000)
+    assert not [r for r in saves.entries if _method(r) == "PUT"]
+
+
 def test_the_calibrator_names_positioned_listings_and_leaves_them_alone(
     page, workspace_root: Path
 ) -> None:

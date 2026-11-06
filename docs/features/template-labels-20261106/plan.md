@@ -137,6 +137,29 @@ Exit when:
 - mockup-vs-app screenshots for both frames are in the PR;
 - shared gates pass.
 
+Deviations recorded while building it:
+
+- A label-only save leaves the revision an editor preview names where it is, so
+  the frame's request does not change and nothing re-fetches. The preview sends
+  that revision's labels, and `editor_preview` accepts it while the saved document
+  with those labels hashes to it. The session lists the revisions label saves moved
+  through, so preparation reporting one of them is not "waiting for calibration
+  status". No HTTP shape changed; only a docstring in the OpenAPI document did.
+- A label-only save does not read preparation again, since it rebuilds nothing.
+- The header reads "Saving…" from a label edit on, through the debounce and any
+  hold behind a preview. Other edits keep today's status until their save starts.
+  A failure or conflict stays on show through further edits.
+- A failed save shows beside the bar only when labels are waiting to save. A
+  failure of anything else stays in the header alone.
+- A refused save now shows the server's sentence, not "could not save
+  template.yaml".
+- Suggestions show the tidied form of a label, and leave out a hand-edited label
+  that would be refused on another template. Typing a label the template holds
+  offers no Create. The 10-label cap counts the draft, so an edit still waiting to
+  save counts.
+- The field's Enter is prevented. Left to run on, it clicked the Add label button
+  that focus returns to and opened the field again, which only a browser shows.
+
 ### PR 3 — Label search box on the rail
 
 Spec: *Search*, *Mockup Templates rail*. Interactions: *One search box*, *Picking a
