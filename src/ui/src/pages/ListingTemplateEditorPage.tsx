@@ -169,9 +169,13 @@ function ListingTemplateEditor({
   const saved = detail.name || name;
 
   function clone(template: string) {
-    void flush().then(() =>
-      navigate(`/listing-templates/new?from_template=${encodeURIComponent(template)}`),
-    );
+    // The clone is of the file, so an edit not in it would be left behind. The
+    // page head says why it stayed.
+    void flush().then((settled) => {
+      if (settled.written) {
+        navigate(`/listing-templates/new?from_template=${encodeURIComponent(template)}`);
+      }
+    });
   }
 
   function confirmDelete(template: string) {

@@ -1024,6 +1024,15 @@ switch or reload makes the next read wait for the old opening's writes.
 `pages/admin/useSaveQueue.ts` is a different model, acknowledging per key, and
 does not use the loop.
 
+A flush resolves once no write is out and answers `Settled`: `written`, or not
+with a message. It never rejects, because the debounce, a blur and an unmount
+have nowhere to send a rejection. Callers about to act on the file read the
+answer. Deploy, Create listing template, Back to batch and Clone stay on the page
+when an edit was not written, since each goes on to read a file without it, and
+the page head already says why. A template rename and a preparation refuse with
+the message. Delete waits for the flush and goes on regardless: an edit that
+would not save goes with the listing.
+
 ## Frontend build and asset distribution
 
 `src/ui` is a self-contained npm project: React source and colocated Vitest

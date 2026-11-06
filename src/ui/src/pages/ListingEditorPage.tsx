@@ -223,6 +223,16 @@ function ListingEditorPageContent({
     aiSeo.run.arm();
   }
 
+  /** Goes to `url` once the file holds what is on screen. Whatever is there
+   * reads the file, and this editor is the one place the edit still exists,
+   * so an edit that cannot be written keeps the seller here, where the page
+   * head says why. */
+  function whenWritten(url: string) {
+    void flush().then((settled) => {
+      if (settled.written) navigate(url);
+    });
+  }
+
   return (
     <ListingEditorShell
       detail={detail}
@@ -240,9 +250,7 @@ function ListingEditorPageContent({
               <BackToBatch
                 batch={fromBatch}
                 member={member}
-                onBack={(batch) =>
-                  void flush().then(() => navigate(`/batches/${encodeURIComponent(batch)}`))
-                }
+                onBack={(batch) => whenWritten(`/batches/${encodeURIComponent(batch)}`)}
               />
             )
           }
@@ -257,7 +265,7 @@ function ListingEditorPageContent({
                 update={update}
                 adopt={adopt}
                 flush={flush}
-                onCreateTemplate={() => void flush().then(() => navigate(saveAsUrl(detail.name)))}
+                onCreateTemplate={() => whenWritten(saveAsUrl(detail.name))}
                 onDeleted={() => navigate("/listings", { replace: true })}
               />
             )

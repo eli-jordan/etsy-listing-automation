@@ -128,6 +128,8 @@ export function ListingActions({
     setConfirming(false);
     setError("");
     try {
+      // Waited for, so no write crosses the delete. Whether it landed does not
+      // matter: an edit that would not save goes with the listing.
       await flush();
       const row = await deleteListing(name);
       if (row === null) {

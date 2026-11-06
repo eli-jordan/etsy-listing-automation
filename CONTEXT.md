@@ -15,6 +15,13 @@ A listing's `listing.yaml`, as written. It is edited only by reading it,
 changing it and writing it back, all under the listing's lock.
 _Avoid_: listing config, listing file
 
+**Settled**:
+What a save reports when the editor has stopped writing: no write is out, and
+either the file holds every edit made before it was asked or an edit is still
+held, with the reason. An edit is held until it is written, and is only ever
+sent again by the next edit or flush.
+_Avoid_: flushed, done (neither says whether the file holds the edit)
+
 **Template position**:
 A listing's own position for artwork on one mockup template, or one placement
 within a template showing several garments. It changes the mockup only.

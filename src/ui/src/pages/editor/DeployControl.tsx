@@ -42,7 +42,8 @@ export function DeployControl({
   name: string;
   /** Drains any edit still waiting on the autosave debounce -- the same
    * flush a tab switch already triggers, so a plan started the instant
-   * after typing reviews the listing just written, not the one before it. */
+   * after typing reviews the listing just written, not the one before it.
+   * Answers whether it was written. */
   flush: () => Promise<Settled>;
 }) {
   const navigate = useNavigate();
@@ -65,8 +66,10 @@ export function DeployControl({
   const deployUrl = `/listings/${encodeURIComponent(name)}/deploy`;
 
   async function startDeploy() {
-    await flush();
-    navigate(deployUrl);
+    const settled = await flush();
+    // A plan of the old file would review something the seller has moved on
+    // from. The page head already says why it stayed.
+    if (settled.written) navigate(deployUrl);
   }
 
   switch (pageHeadState(run)) {
