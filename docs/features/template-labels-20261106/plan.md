@@ -98,8 +98,9 @@ Deviations recorded while building it:
   hand, would have queued work. `save_calibration` reports `labels_only`; a save
   with no change at all still reconciles as it always did, which keeps the
   editor's Approve, which saves an unchanged draft on purpose.
-- The three preview request models take `labels`, because the client spreads a
-  whole config into the preview body and they forbid unknown keys.
+- The three preview request models take `labels`, so an editor preview can name
+  the labels of the revision it was drawn against (PR 2). The production editors
+  build their bodies from named fields, so nothing spreads a whole config here.
 - The characters rule is ASCII, as in the prototype, so "letters" excludes `é`.
   Rules are checked in the prototype's order: length, characters, colon. A blank
   label takes the characters message.
