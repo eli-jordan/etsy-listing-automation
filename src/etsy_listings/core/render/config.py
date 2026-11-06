@@ -14,6 +14,12 @@ redesign, see docs/features/multi-placement-rendering-20260903/spec.md):
   own ``bounding_box``. This is the one place per-item geometry exists, since
   that is the entire point of a chart.
 - ``single`` -- one photo, one garment.
+
+Every kind also holds ``labels``, the seller's words for finding it. They are
+the one thing in a template that is not render input: the render stage hashes
+the file without them, and any list of strings loads, because a bad label
+cannot affect a pixel. The app checks a new label when it saves it
+(:mod:`etsy_listings.core.config.template_labels`).
 """
 
 from __future__ import annotations
@@ -172,6 +178,7 @@ class ColourMatrixTemplate(BaseModel):
     kind: Literal["colour-matrix"] = "colour-matrix"
     bounding_box: BoundingBox
     renderer: Renderer
+    labels: list[str] = []
 
     def render_config(self) -> RenderConfig:
         return photo_warp_config(self.renderer, self.bounding_box)
@@ -231,6 +238,7 @@ class MultipleTemplate(BaseModel):
     use for one shop-wide chart reused across listings selling different
     subsets of the garment's colour range."""
     renderer: Renderer
+    labels: list[str] = []
 
     @model_validator(mode="after")
     def unique_ids(self) -> MultipleTemplate:
@@ -257,6 +265,7 @@ class SingleTemplate(BaseModel):
     cannot be used by a listing with light and dark designs."""
     bounding_box: BoundingBox
     renderer: Renderer
+    labels: list[str] = []
 
     @model_validator(mode="before")
     @classmethod
@@ -347,5 +356,11 @@ def load_template_config(data: object) -> AnyTemplate:
 
 
 def dump_template_config(config: AnyTemplate) -> dict[str, object]:
+    """``config`` as ``template.yaml`` holds it. No labels means no key: an empty
+    list here would change every calibration revision and write the key into
+    every new file, and removing a template's last label removes it from the
+    file."""
     result: dict[str, object] = _TEMPLATE_CONFIG_ADAPTER.dump_python(config, mode="json")
+    if not config.labels:
+        del result["labels"]
     return result

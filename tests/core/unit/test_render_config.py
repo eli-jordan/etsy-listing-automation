@@ -179,3 +179,47 @@ def test_single_template_colour_is_optional() -> None:
 def test_unknown_kind_is_rejected() -> None:
     with pytest.raises(ValidationError):
         load_template_config({"kind": "sometimes", "bounding_box": _box_dicts(SQUARE_BOX)})
+
+
+LABELLED_KINDS = [
+    {"kind": "single", "bounding_box": _box_dicts(SQUARE_BOX)},
+    {"kind": "colour-matrix", "bounding_box": _box_dicts(SQUARE_BOX)},
+    {
+        "kind": "multiple",
+        "placements": [{"id": "a", "colour": "Black", "bounding_box": _box_dicts(SQUARE_BOX)}],
+    },
+]
+
+
+def _template(shape: dict[str, object], **more: object) -> dict[str, object]:
+    return {**shape, "renderer": {"type": "photo-warp", "config": {}}, **more}
+
+
+@pytest.mark.parametrize("shape", LABELLED_KINDS, ids=lambda shape: str(shape["kind"]))
+def test_every_kind_holds_labels_and_dumps_them(shape: dict[str, object]) -> None:
+    template = load_template_config(_template(shape, labels=["theme:christmas", "cosy"]))
+
+    assert template.labels == ["theme:christmas", "cosy"]
+    assert dump_template_config(template)["labels"] == ["theme:christmas", "cosy"]
+
+
+@pytest.mark.parametrize("shape", LABELLED_KINDS, ids=lambda shape: str(shape["kind"]))
+def test_a_template_with_no_labels_dumps_no_key(shape: dict[str, object]) -> None:
+    """An empty list in the dump would change every calibration revision and
+    write the key into new files (spec *Storage*)."""
+    assert "labels" not in dump_template_config(load_template_config(_template(shape)))
+    assert "labels" not in dump_template_config(load_template_config(_template(shape, labels=[])))
+
+
+def test_a_label_breaking_the_save_rules_still_loads() -> None:
+    """A typo in a label cannot affect a pixel, so it must not stop a listing
+    rendering: the rules apply on save, never on load (spec *Storage*)."""
+    template = load_template_config(_template(LABELLED_KINDS[0], labels=["Bad_Label!", "x" * 99]))
+
+    assert template.labels == ["Bad_Label!", "x" * 99]
+
+
+@pytest.mark.parametrize("value", ["cosy", None, 7, {"theme": "christmas"}, ["cosy", 7], [None]])
+def test_labels_that_are_not_a_list_of_strings_fail_to_load(value: object) -> None:
+    with pytest.raises(ValidationError):
+        load_template_config(_template(LABELLED_KINDS[0], labels=value))
