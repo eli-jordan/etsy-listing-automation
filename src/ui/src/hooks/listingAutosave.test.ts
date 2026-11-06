@@ -557,19 +557,6 @@ describe("before the listing exists", () => {
     expect(view().save).toEqual({ kind: "name-taken", name: "take-a-hike" });
     expect(view().detail.colors).toEqual(["black"]);
   });
-
-  it("does not start a second create while one is out", async () => {
-    const answer = deferred<SaveOutcome>();
-    const create = vi.fn<AutosaveTransport["create"]>(() => answer.promise);
-    const { autosave } = editing(null, draft(), { create });
-
-    autosave.commitName("my-shirt");
-    autosave.commitName("my-other-shirt");
-    answer.resolve(written(detail({ name: "my-shirt" })));
-    await turns();
-
-    expect(create).toHaveBeenCalledTimes(1);
-  });
 });
 
 describe("renaming", () => {
@@ -668,6 +655,19 @@ describe("renaming", () => {
     await turns();
 
     expect(transport.rename).not.toHaveBeenCalled();
+  });
+
+  it("ignores a second name while the first is being settled", async () => {
+    const answer = deferred<ListingDetail>();
+    const rename = vi.fn<AutosaveTransport["rename"]>(() => answer.promise);
+    const { autosave } = editing("take-a-hike", detail(), { rename });
+
+    autosave.commitName("hike-away");
+    autosave.commitName("hike-further");
+    answer.resolve(detail({ name: "hike-away" }));
+    await turns();
+
+    expect(rename).toHaveBeenCalledTimes(1);
   });
 
   it("is stopped by an edit the server refuses, which stays", async () => {

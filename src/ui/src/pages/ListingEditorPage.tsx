@@ -130,7 +130,7 @@ export function ListingEditorPage() {
       // this whole subtree -- so the key only ever forced the *extra*
       // remount that naming a draft caused, where `handed` keeps `initial`
       // non-null. `useAutosave` handles a name change itself (`commitName`
-      // updates its own `savedName`, `detail` and `save` before `onNamed`
+      // updates its own name, `detail` and `save` before `onNamed`
       // fires), so that remount threw away state for nothing. It is not
       // nothing any more: ADR-0003's chain is armed when a design is attached,
       // which on a new listing is usually *before* it is named, and a

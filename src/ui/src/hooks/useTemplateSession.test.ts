@@ -279,6 +279,57 @@ describe("useTemplateSession", () => {
     expect(result.current.save.kind).toBe("saved");
   });
 
+  it("sends a failed approval again with the next flush, though nothing changed", async () => {
+    const { result } = await opened();
+    server.onPut = () => Response.json({ detail: "boom" }, { status: 500 });
+
+    await act(async () => {
+      await result.current.approve();
+    });
+    server.onPut = null;
+    await act(async () => {
+      await result.current.flush();
+    });
+
+    expect(server.puts).toHaveLength(2);
+    expect(result.current.save.kind).toBe("saved");
+  });
+
+  it("answers an approval that could not be written", async () => {
+    const { result } = await opened();
+    server.onPut = () => Response.json({ detail: "boom" }, { status: 500 });
+
+    let settled: unknown;
+    await act(async () => {
+      settled = await result.current.approve();
+    });
+
+    expect(settled).toEqual({ written: false, message: "could not save template.yaml" });
+  });
+
+  it("reads again on a reload only after a save in flight has landed", async () => {
+    const { result } = await opened();
+    const landed = deferred<undefined>();
+    server.onPut = async () => {
+      await landed.promise;
+      return undefined;
+    };
+    act(() => result.current.update(edited(PHOTO_WARP, 6)));
+    act(() => void result.current.flush());
+    await waitFor(() => expect(server.puts).toHaveLength(1));
+
+    server.log.length = 0;
+    act(() => result.current.reload());
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve));
+    });
+    expect(server.log).toEqual([]);
+
+    landed.resolve(undefined);
+    await waitFor(() => expect(result.current.load).toBe("ready"));
+    expect(result.current.config).toEqual(edited(PHOTO_WARP, 6));
+  });
+
   it("flushes a pending edit on a template switch, before reading the next template", async () => {
     const { result, rerender, onCatalogChanged } = await opened();
 
