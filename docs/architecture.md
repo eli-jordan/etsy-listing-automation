@@ -332,6 +332,11 @@ because it fences the whole saved document; nothing rendered may depend on it.
 `put_config` queues no preparation work for a save that changed only labels,
 since neither reconciling maps nor coverage inference can follow from one.
 
+An editor preview names the revision its draft was read at and sends that
+revision's labels. The server accepts it while the saved document, given those
+labels, hashes to that revision, so a label save neither refuses a frame in flight
+nor makes the client ask for a new one. Any other change still refuses it.
+
 ## The calibrator
 
 ```mermaid

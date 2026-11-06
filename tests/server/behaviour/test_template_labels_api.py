@@ -235,3 +235,55 @@ def test_a_label_save_is_allowed_while_a_preparation_job_waits(workspace_root: P
 
     assert saved.status_code == 200, saved.text
     assert jobs(app) == waiting
+
+
+def editor_preview(client: TestClient, template: str, body: dict[str, Any]) -> Response:
+    return client.post(f"/api/templates/{template}/preview?scale=editor", json=body)
+
+
+def test_an_editor_preview_outlives_a_label_save(workspace_root: Path) -> None:
+    """A preview names the revision its draft was read at, with that revision's
+    labels. A label save moves the revision but nothing a preview draws, so the
+    frame on screen, and one in flight as the save lands, stays good."""
+    workspace, template = prepared(workspace_root)
+    with TestClient(create_app(workspace, preparation_runtime=PreparationRuntime())) as client:
+        loaded = client.get(config_url(template))
+        body = {**loaded.json(), "calibration_revision": loaded.headers["etag"].strip('"')}
+        before = editor_preview(client, template, body)
+        assert before.status_code == 200, before.text
+
+        assert put_config(client, template, "one", labels=["cosy"]).status_code == 200
+        assert put_config(client, template, "two", labels=["cosy", "warm"]).status_code == 200
+
+        after = editor_preview(client, template, body)
+        assert after.status_code == 200, after.text
+        assert after.content == before.content
+
+
+def test_an_editor_preview_is_still_refused_after_any_other_save(workspace_root: Path) -> None:
+    workspace, template = prepared(workspace_root)
+    with TestClient(create_app(workspace, preparation_runtime=PreparationRuntime())) as client:
+        loaded = client.get(config_url(template))
+        body = {**loaded.json(), "calibration_revision": loaded.headers["etag"].strip('"')}
+
+        saved = put_config(client, template, bounding_box=moved(loaded.json()), labels=["cosy"])
+        assert saved.status_code == 200, saved.text
+
+        assert editor_preview(client, template, body).status_code == 409
+
+
+def test_an_editor_preview_naming_labels_its_revision_never_held_is_refused(
+    workspace_root: Path,
+) -> None:
+    workspace, template = prepared(workspace_root)
+    with TestClient(create_app(workspace, preparation_runtime=PreparationRuntime())) as client:
+        loaded = client.get(config_url(template))
+        body = {
+            **loaded.json(),
+            "labels": ["never held"],
+            "calibration_revision": loaded.headers["etag"].strip('"'),
+        }
+
+        assert put_config(client, template, labels=["cosy"]).status_code == 200
+
+        assert editor_preview(client, template, body).status_code == 409
