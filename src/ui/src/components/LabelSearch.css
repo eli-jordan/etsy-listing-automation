@@ -2,9 +2,9 @@
   position: relative;
 }
 
-/* `.input` and `.tag` load after this file and match with equal weight, so the box
-   and its pills name `.label-search` to win. */
-.label-search .label-search__box {
+/* Two classes throughout: the bundle puts index.css after this file, and its
+   .input and .tag would otherwise win at equal specificity. */
+.input.label-search__box {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -43,7 +43,7 @@
   color: var(--color-text);
 }
 
-.label-search .label-search__pill {
+.tag.label-search__pill {
   gap: var(--space-1);
   /* A hand-edited label can pass the 30 characters a pill is sized for. */
   max-width: 100%;

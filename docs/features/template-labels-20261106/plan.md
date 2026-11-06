@@ -208,6 +208,9 @@ Deviations recorded while building it:
   still use it.
 - The key handler split into a `keys` table for the app's lint rules, with no change
   in behaviour.
+- `LabelSearch.css` uses two-class selectors for the box and pill. The bundle puts
+  `index.css` after it, so `.input` and `.tag` were winning in the built app and not on
+  the canvas.
 
 ### PR 4 — Label search box on Listing Images
 
