@@ -193,6 +193,9 @@ export function useAutosave(
   const naming = useRef<Promise<void> | null>(null);
   /** The PATCH loop in flight, which a `flush` that defers to it waits for. */
   const patched = useRef<Promise<void>>(Promise.resolve());
+  /** The describe loop in flight, and whether a flush asked it to go again. */
+  const describing = useRef<Promise<void> | null>(null);
+  const describeAgain = useRef(false);
   /** A PATCH to the named listing is in flight. `update()` schedules a fresh
    * debounce on every edit, and `flush()` is also called directly on blur,
    * tab-switch and unmount -- any of those can land while the previous PATCH
@@ -402,10 +405,30 @@ export function useAutosave(
     // Not on disk and not named: describe the candidate so the issues banner
     // stays true. Nothing is written, so `pending` is not cleared -- it is what
     // the create will carry once a name arrives.
-    if (transport.describe === null) return;
-    const sentWith = adopted.current;
-    const fresh = await transport.describe(candidate());
-    applyResponse(fresh, sentWith);
+    const describe = transport.describe;
+    if (describe === null) return;
+    // One at a time, as for a PATCH: two out at once and the older answer can
+    // land last, showing issues for a document that has moved on.
+    if (describing.current !== null) {
+      describeAgain.current = true;
+      return describing.current;
+    }
+    const run = async () => {
+      do {
+        describeAgain.current = false;
+        const sentWith = adopted.current;
+        try {
+          applyResponse(await describe(candidate()), sentWith);
+        } catch {
+          // Nothing was to be written, so nothing is lost: the banner keeps
+          // what it last knew and the next edit describes again. Rethrowing
+          // would reject out of the `void flush()` calls that got here.
+        }
+      } while (describeAgain.current);
+      describing.current = null;
+    };
+    describing.current = run();
+    return describing.current;
   }, [applyResponse, candidate, create, transport]);
 
   const flush = useCallback(async (): Promise<void> => {

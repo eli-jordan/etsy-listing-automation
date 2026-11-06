@@ -943,3 +943,49 @@ describe("renaming with an edit the server will not write", () => {
     expect(patch).toHaveBeenLastCalledWith("take-a-hike", { colors: ["white"] });
   });
 });
+
+describe("describing an unnamed draft", () => {
+  const draft = () =>
+    detail({ name: "", garment_profile: "", design: {}, colors: [], prices: {}, media: [] });
+
+  it("does not reject when the description fails, and keeps the edit", async () => {
+    const describeDraft = vi
+      .spyOn(listingsApi, "describeListingDraft")
+      .mockRejectedValueOnce(new listingsApi.ListingsApiError("500"))
+      .mockResolvedValue(draft());
+    const { result, unmount } = renderHook(() => useAutosave(null, draft()));
+
+    act(() => result.current.update({ colors: ["black"] }));
+    await act(async () => {
+      await expect(result.current.flush()).resolves.not.toThrow();
+    });
+    await act(async () => {
+      await result.current.flush();
+    });
+
+    expect(describeDraft.mock.calls[1]?.[0]).toMatchObject({ colors: ["black"] });
+    unmount();
+  });
+
+  it("keeps one description in flight, so an older answer cannot land last", async () => {
+    const first = deferred<ListingDetail>();
+    const second = deferred<ListingDetail>();
+    const describeDraft = vi
+      .spyOn(listingsApi, "describeListingDraft")
+      .mockReturnValueOnce(first.promise)
+      .mockReturnValueOnce(second.promise);
+    const { result, unmount } = renderHook(() => useAutosave(null, draft()));
+
+    act(() => result.current.update({ colors: ["black"] }));
+    void result.current.flush();
+    act(() => result.current.update({ colors: ["white"] }));
+    void result.current.flush();
+
+    expect(describeDraft).toHaveBeenCalledTimes(1);
+    await act(async () => first.resolve(draft()));
+    expect(describeDraft).toHaveBeenCalledTimes(2);
+    expect(describeDraft.mock.calls[1]?.[0]).toMatchObject({ colors: ["white"] });
+    await act(async () => second.resolve(draft()));
+    unmount();
+  });
+});
