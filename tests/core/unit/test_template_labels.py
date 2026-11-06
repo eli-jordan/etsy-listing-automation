@@ -4,6 +4,9 @@ spec's words, which the Labels bar shows the seller."""
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 import pytest
 
 from etsy_listings.core.config.template_labels import (
@@ -110,3 +113,30 @@ def test_a_template_over_the_limit_by_hand_takes_no_new_label() -> None:
 
 def test_removing_every_label_saves_none() -> None:
     assert saved_labels([], held=["cosy"]) == []
+
+
+RULES = json.loads(
+    (Path(__file__).parents[2] / "fixtures" / "label_rules.json").read_text(encoding="utf-8")
+)
+
+
+@pytest.mark.parametrize(("typed", "saved"), RULES["saved"])
+def test_the_shared_cases_save_as_the_labels_bar_expects(typed: str, saved: str) -> None:
+    assert saved_labels([typed], held=[]) == [saved]
+
+
+@pytest.mark.parametrize(("typed", "message"), RULES["refused"])
+def test_the_shared_cases_refuse_as_the_labels_bar_expects(typed: str, message: str) -> None:
+    with pytest.raises(TemplateLabelRefusedError) as refused:
+        saved_labels([typed], held=[])
+
+    assert str(refused.value) == message
+
+
+def test_the_shared_cap_message_is_the_servers() -> None:
+    labels = [f"label {number}" for number in range(11)]
+
+    with pytest.raises(TemplateLabelRefusedError) as refused:
+        saved_labels(labels, held=[])
+
+    assert str(refused.value) == RULES["cap_message"]

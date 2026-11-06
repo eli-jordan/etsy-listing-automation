@@ -1,0 +1,64 @@
+{
+  "_comment": "One set of cases for the server's rules (core/config/template_labels.py) and the Labels bar's copy (src/ui/src/components/labelRules.ts), so the two cannot drift.",
+  "cap_message": "Templates hold up to 10 labels",
+  "saved": [
+    [
+      "Theme:Christmas",
+      "theme:christmas"
+    ],
+    [
+      "  flat lay  ",
+      "flat lay"
+    ],
+    [
+      "shot:flat   lay",
+      "shot:flat lay"
+    ],
+    [
+      "t-shirt",
+      "t-shirt"
+    ],
+    [
+      "2 for 1",
+      "2 for 1"
+    ],
+    [
+      "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    ]
+  ],
+  "refused": [
+    [
+      "xmas!",
+      "Letters, numbers, spaces, hyphens and colons only"
+    ],
+    [
+      "café",
+      "Letters, numbers, spaces, hyphens and colons only"
+    ],
+    [
+      "   ",
+      "Letters, numbers, spaces, hyphens and colons only"
+    ],
+    [
+      "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "Labels can be up to 30 characters"
+    ],
+    [
+      "a:b:c",
+      "Use one colon with text on both sides, like theme:christmas"
+    ],
+    [
+      "theme:",
+      "Use one colon with text on both sides, like theme:christmas"
+    ],
+    [
+      ":christmas",
+      "Use one colon with text on both sides, like theme:christmas"
+    ],
+    [
+      " : ",
+      "Use one colon with text on both sides, like theme:christmas"
+    ]
+  ]
+}
