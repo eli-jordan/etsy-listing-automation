@@ -243,6 +243,20 @@ Exit when:
 - mockup-vs-app screenshots for all five frames are in the PR;
 - shared gates pass.
 
+Deviations recorded while building it:
+
+- A remembered pill is not checked against the labels in use. One no calibrated
+  template holds any more stays on show with "No template matches.", so an empty
+  list has a visible reason and a way out. The box then marks every label as
+  replacing it.
+- The result line reads "1 of 1 template" when the total is one.
+- The empty message is the frame's "No template matches.", not "No template matches
+  that search."
+- Title search ignores outer spaces, as the rail's does. Files keeps its search
+  exactly as it was.
+- `.loc-tmpl__kind` stays in `index.css`, because the live `template-positions`
+  frames still use it.
+
 ## Shared gates
 
 | Gate | Exit condition |

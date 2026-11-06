@@ -1,5 +1,5 @@
-// The Listing Images locator with the shared search box. It opens empty, and
-// the filter lasts until the seller leaves the listing. Nothing here is saved.
+// The Listing Images locator with the shared search box. It opens empty. The app
+// keeps the filter in the editor's view memory; this frame holds it in state.
 import { useState } from "react";
 import { LabelSearch } from "../../../src/components/LabelSearch";
 import { hasTags, type PickerTemplate, templates } from "./_fixtures";
