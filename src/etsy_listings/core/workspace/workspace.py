@@ -796,7 +796,7 @@ class Workspace:
         The one place a common-copy file's bytes are read: `common_copy.py`'s
         :func:`~etsy_listings.core.workspace.common_copy.parse_common_copy` owns the
         parsing itself (pure, tested directly against string fixtures), and
-        this is the I/O around it -- the same split `load_template_config`
+        this is the I/O around it -- the same split `template_state`
         already draws between reading `template.yaml` and parsing it.
         """
         path = self.common_copy_file(ref)
