@@ -2,6 +2,8 @@ import { marigoldMapsReady } from "./preparationLabel";
 import type { PreparationJob } from "../api/preparation";
 import { useMemo, useState } from "react";
 import { templateThumbnailUrl } from "../api/calibrator";
+import { LabelSearch } from "./LabelSearch";
+import { holdsLabels } from "./labelRules";
 import type { TemplateKind, TemplateSummary } from "../types";
 
 /**
@@ -239,6 +241,7 @@ export function TemplateRail({
   selectedPreparationStatus,
 }: TemplateRailProps) {
   const marigold = templates.some((t) => t.renderer === "marigold");
+  const [pills, setPills] = useState<string[]>([]);
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState<StatusFilter>("all");
   const [kind, setKind] = useState<TemplateKind | null>(null);
@@ -251,16 +254,24 @@ export function TemplateRail({
   // narrow -- `outstanding.length > 0` in JSX does not narrow `outstanding[0]`.
   const nextUp = outstanding.find((template) => template.renderer !== "marigold") ?? null;
 
+  // Status and kind apply first, so the box's labels and counts cover only what
+  // they leave (spec *Mockup Templates rail*).
+  const filtered = useMemo(
+    () =>
+      templates.filter((t) => {
+        if (status === "needs" && !needsCalibration(t)) return false;
+        if (status === "done" && !isReady(t)) return false;
+        return !kind || t.kind === kind;
+      }),
+    [templates, status, kind],
+  );
+  const labelLists = useMemo(() => filtered.map((t) => t.labels), [filtered]);
   const shown = useMemo(() => {
     const term = search.trim().toLowerCase();
-    return templates.filter((t) => {
-      if (term && !t.name.toLowerCase().includes(term)) return false;
-      if (status === "needs" && !needsCalibration(t)) return false;
-      if (status === "done" && !isReady(t)) return false;
-      if (kind && t.kind !== kind) return false;
-      return true;
-    });
-  }, [templates, search, status, kind]);
+    return filtered.filter(
+      (t) => holdsLabels(t.labels, pills) && t.name.toLowerCase().includes(term),
+    );
+  }, [filtered, pills, search]);
 
   return (
     <nav className="template-rail" aria-label="Templates">
@@ -277,13 +288,12 @@ export function TemplateRail({
         </div>
       )}
 
-      <input
-        className="input template-rail__search"
-        type="search"
-        aria-label="Search templates"
-        placeholder="Search templates…"
-        value={search}
-        onChange={(e) => setSearch(e.target.value)}
+      <LabelSearch
+        items={labelLists}
+        on={pills}
+        onOn={setPills}
+        query={search}
+        onQuery={setSearch}
       />
 
       <div className="template-rail__filters">

@@ -22,3 +22,10 @@ export function labelRefusal(label: string): string | null {
   }
   return null;
 }
+
+/** Whether a template holds every pill. A hand-edited label keeps its case, so
+ * `Christmas` still counts as `christmas`. */
+export function holdsLabels(labels: string[], pills: string[]): boolean {
+  const held = new Set(labels.map((label) => label.toLowerCase()));
+  return pills.every((pill) => held.has(pill.toLowerCase()));
+}

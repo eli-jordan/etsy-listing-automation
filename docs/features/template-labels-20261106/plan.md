@@ -188,6 +188,26 @@ Exit when:
 - mockup-vs-app screenshots for both frames are in the PR;
 - shared gates pass.
 
+Deviations recorded while building it:
+
+- Matching ignores case everywhere, not only for the typed text. Two spellings of
+  one label are offered once, as first written, and count together; a pill matches
+  either spelling (`holdsLabels` in `labelRules.ts`, which callers filter with). A
+  hand-edited `Theme:` sits in the `theme` group, and a label with nothing before
+  its colon goes under Other.
+- The prototype's box needed finishing for G5. Every close clears the highlight, so
+  Enter after an outside click cannot pick a stale row. Tab closes the dropdown,
+  which would otherwise stay over the rail. A pill's × returns focus to the box. The
+  highlighted row scrolls into view. Down with nothing to offer highlights nothing.
+  `aria-controls` names the listbox only while it exists, and the field gains
+  `aria-autocomplete="list"`.
+- "Starting with the typed text" compares the whole label, as the prototype did, so
+  it decides order among plain labels and when the text reaches into a prefix.
+- `.template-rail__search` stays in `index.css`, because the live Marigold frames
+  still use it.
+- The key handler split into a `keys` table for the app's lint rules, with no change
+  in behaviour.
+
 ### PR 4 — Label search box on Listing Images
 
 Spec: *Search*, *Listing Images*. Interactions: *Listing Images*, *What the

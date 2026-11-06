@@ -2,7 +2,8 @@
 // narrows what they leave by title. The caller owns both values, and applies
 // them to its own list.
 import { XIcon } from "@phosphor-icons/react/dist/csr/X";
-import { Fragment, type KeyboardEvent, useEffect, useRef, useState } from "react";
+import { Fragment, type KeyboardEvent, useEffect, useId, useRef, useState } from "react";
+import { holdsLabels } from "./labelRules";
 import "./LabelSearch.css";
 
 interface Option {
@@ -12,28 +13,42 @@ interface Option {
   swap: boolean;
 }
 
-/** A tag's group: the text before its colon, or null for a plain tag. */
-const groupOf = (tag: string) => (tag.includes(":") ? tag.slice(0, tag.indexOf(":")) : null);
+/** A tag's group: the text before its colon, or null for a plain tag. Lower case,
+ * so a hand-edited `Theme:` sits with `theme:`; the heading capitalises it anyway. */
+function groupOf(tag: string): string | null {
+  const colon = tag.indexOf(":");
+  return colon > 0 ? tag.slice(0, colon).toLowerCase() : null;
+}
 
-const holdsAll = (tags: string[], on: string[]) => on.every((tag) => tags.includes(tag));
+/** Each label once, as first written: hand edits keep their case, and matching
+ * ignores it. */
+function distinctTags(items: string[][]): string[] {
+  const spellings = new Map<string, string>();
+  for (const tag of items.flat()) {
+    const key = tag.toLowerCase();
+    if (!spellings.has(key)) spellings.set(key, tag);
+  }
+  return [...spellings.values()];
+}
 
 /** Labels the typed text could mean, in their groups A to Z with plain tags last.
  * Within a group: narrowing ones first, then those starting with it, then by count. */
 function optionsFor(items: string[][], term: string, on: string[]): Option[] {
-  return [...new Set(items.flat())]
-    .filter((tag) => tag.includes(term) && !on.includes(tag))
+  const starts = (tag: string) => Number(tag.toLowerCase().startsWith(term));
+  return distinctTags(items)
+    .filter((tag) => tag.toLowerCase().includes(term) && !holdsLabels(on, [tag]))
     .map((tag) => {
-      const narrowed = items.filter((tags) => holdsAll(tags, [...on, tag])).length;
+      const narrowed = items.filter((tags) => holdsLabels(tags, [...on, tag])).length;
       return narrowed > 0
         ? { tag, count: narrowed, swap: false }
-        : { tag, count: items.filter((tags) => tags.includes(tag)).length, swap: true };
+        : { tag, count: items.filter((tags) => holdsLabels(tags, [tag])).length, swap: true };
     })
     .sort(
       (a, b) =>
         Number(groupOf(a.tag) === null) - Number(groupOf(b.tag) === null) ||
         (groupOf(a.tag) ?? "").localeCompare(groupOf(b.tag) ?? "") ||
         Number(a.swap) - Number(b.swap) ||
-        Number(b.tag.startsWith(term)) - Number(a.tag.startsWith(term)) ||
+        starts(b.tag) - starts(a.tag) ||
         b.count - a.count ||
         a.tag.localeCompare(b.tag),
     );
@@ -47,7 +62,7 @@ function stepped(active: number, count: number, step: 1 | -1): number {
 
 /** The label with the typed part in bold. */
 function Marked({ tag, term }: { tag: string; term: string }) {
-  const at = term ? tag.indexOf(term) : -1;
+  const at = term ? tag.toLowerCase().indexOf(term) : -1;
   if (at < 0) return <span>{tag}</span>;
   return (
     <span>
@@ -78,50 +93,69 @@ export function LabelSearch({
 }) {
   const [menu, setMenu] = useState(initialMenu);
   const [active, setActive] = useState(initialActive);
+  const id = useId();
   const box = useRef<HTMLDivElement>(null);
   const field = useRef<HTMLInputElement>(null);
+  const activeRow = useRef<HTMLDivElement>(null);
 
   // Outside clicks rather than blur: a click on an option must not close it first.
   useEffect(() => {
-    const close = (event: MouseEvent) => {
-      if (!box.current?.contains(event.target as Node)) setMenu(false);
+    const onDown = (event: MouseEvent) => {
+      if (box.current?.contains(event.target as Node)) return;
+      setMenu(false);
+      setActive(-1);
     };
-    document.addEventListener("mousedown", close);
-    return () => document.removeEventListener("mousedown", close);
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
   }, []);
 
   const term = query.trim().toLowerCase();
   const options = optionsFor(items, term, on);
   const menuOpen = menu && options.length > 0;
   const grouped = options.some((option) => groupOf(option.tag) !== null);
+  const menuId = `${id}-menu`;
+  const optionId = (index: number) => `${id}-option-${index}`;
+
+  // The menu scrolls, and arrow keys walk past what it shows.
+  useEffect(() => {
+    activeRow.current?.scrollIntoView({ block: "nearest" });
+  }, [active, menuOpen]);
+
+  // Nothing stays highlighted through a close: Enter must keep meaning "title
+  // search" until the seller presses an arrow key again (spec *Search*).
+  const close = () => {
+    setMenu(false);
+    setActive(-1);
+  };
 
   const take = (option: Option) => {
     onOn(option.swap ? [option.tag] : [...on, option.tag]);
     onQuery("");
-    setActive(-1);
-    setMenu(false);
+    close();
     field.current?.focus();
   };
   const move = (event: KeyboardEvent, step: 1 | -1) => {
     event.preventDefault();
-    if (!menuOpen) setMenu(true);
+    if (options.length === 0) return;
+    setMenu(true);
     setActive((current) => stepped(current, options.length, step));
   };
   const confirm = () => {
     const option = menuOpen ? options[active] : undefined;
     if (option) take(option);
-    else setMenu(false);
+    else close();
   };
   const keys: Record<string, (event: KeyboardEvent) => void> = {
     ArrowDown: (event) => move(event, 1),
     ArrowUp: (event) => move(event, -1),
     Enter: confirm,
-    Escape: () => {
-      setMenu(false);
-      setActive(-1);
-    },
+    Escape: close,
+    // An open menu would otherwise stay over the rail once focus has moved on.
+    Tab: close,
     Backspace: () => {
-      if (query === "" && on.length > 0) onOn(on.slice(0, -1));
+      if (query !== "" || on.length === 0) return;
+      onOn(on.slice(0, -1));
+      setActive(-1);
     },
   };
 
@@ -148,6 +182,9 @@ export function LabelSearch({
               onClick={(event) => {
                 event.stopPropagation();
                 onOn(on.filter((t) => t !== tag));
+                setActive(-1);
+                // The button is about to go, and focus would fall out of the page.
+                field.current?.focus();
               }}
             >
               <XIcon weight="bold" />
@@ -161,8 +198,9 @@ export function LabelSearch({
           role="combobox"
           aria-label="Search templates by title or label"
           aria-expanded={menuOpen}
-          aria-controls="label-search-menu"
-          aria-activedescendant={menuOpen && active >= 0 ? `label-search-${active}` : undefined}
+          aria-autocomplete="list"
+          aria-controls={menuOpen ? menuId : undefined}
+          aria-activedescendant={menuOpen && active >= 0 ? optionId(active) : undefined}
           placeholder={on.length > 0 ? "Search titles…" : "Search or add a label…"}
           value={query}
           onChange={(event) => {
@@ -174,12 +212,7 @@ export function LabelSearch({
         />
       </div>
       {menuOpen && (
-        <div
-          className="label-search__menu"
-          id="label-search-menu"
-          role="listbox"
-          aria-label="Labels"
-        >
+        <div className="label-search__menu" id={menuId} role="listbox" aria-label="Labels">
           {options.map((option, index) => {
             const group = groupOf(option.tag);
             const startsGroup = index === 0 || groupOf(options[index - 1]?.tag ?? "") !== group;
@@ -191,7 +224,8 @@ export function LabelSearch({
                   </div>
                 )}
                 <div
-                  id={`label-search-${index}`}
+                  id={optionId(index)}
+                  ref={index === active ? activeRow : undefined}
                   role="option"
                   aria-selected={index === active}
                   className={`label-search__item${index === active ? " label-search__item--active" : ""}`}
