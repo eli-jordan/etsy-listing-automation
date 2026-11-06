@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as listingsApi from "../api/listings";
 import type { Issue, ListingDetail } from "../types";
 import { AUTOSAVE_DEBOUNCE_MS, type AutosaveTransport, useAutosave } from "./useAutosave";
+import { deferred } from "../test/helpers";
 import { listingDetail } from "../test/listings";
 
 function detail(over: Partial<ListingDetail> = {}): ListingDetail {
@@ -788,5 +789,74 @@ describe("useAutosave with a transport that writes only complete documents", () 
       media: ["common-media/size.png"],
     });
     expect(result.current.save.kind).toBe("saved");
+  });
+});
+
+/** Whether `promise` has settled, with everything already due run first. */
+async function isSettled(promise: Promise<unknown>): Promise<boolean> {
+  let settled = false;
+  void promise.then(() => (settled = true));
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(0);
+  });
+  return settled;
+}
+
+describe("flush while a write is out", () => {
+  it("waits for a PATCH in flight to land", async () => {
+    const answer = deferred<ListingDetail>();
+    vi.spyOn(listingsApi, "patchListing").mockReturnValue(answer.promise);
+    const { result } = renderHook(() => useAutosave("take-a-hike", detail()));
+
+    act(() => result.current.update({ colors: ["white"] }));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(AUTOSAVE_DEBOUNCE_MS);
+    });
+    const flushed = result.current.flush();
+
+    expect(await isSettled(flushed)).toBe(false);
+    await act(async () => answer.resolve(detail()));
+    expect(await isSettled(flushed)).toBe(true);
+  });
+
+  it("waits for the edit that arrived behind a PATCH in flight", async () => {
+    const first = deferred<ListingDetail>();
+    const second = deferred<ListingDetail>();
+    const patch = vi
+      .spyOn(listingsApi, "patchListing")
+      .mockReturnValueOnce(first.promise)
+      .mockReturnValueOnce(second.promise);
+    const { result } = renderHook(() => useAutosave("take-a-hike", detail()));
+
+    act(() => result.current.update({ colors: ["white"] }));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(AUTOSAVE_DEBOUNCE_MS);
+    });
+    act(() => result.current.update({ brief: "x" }));
+    const flushed = result.current.flush();
+    await act(async () => first.resolve(detail()));
+
+    expect(patch).toHaveBeenCalledTimes(2);
+    expect(await isSettled(flushed)).toBe(false);
+    await act(async () => second.resolve(detail()));
+    expect(await isSettled(flushed)).toBe(true);
+  });
+
+  it("waits for a rename, then sends what is pending under the new name", async () => {
+    const renamed = deferred<ListingDetail>();
+    vi.spyOn(listingsApi, "renameListing").mockReturnValue(renamed.promise);
+    const patch = vi
+      .spyOn(listingsApi, "patchListing")
+      .mockResolvedValue(detail({ name: "hike-away" }));
+    const { result } = renderHook(() => useAutosave("take-a-hike", detail()));
+
+    act(() => result.current.commitName("hike-away"));
+    act(() => result.current.update({ colors: ["white"] }));
+    const flushed = result.current.flush();
+
+    expect(await isSettled(flushed)).toBe(false);
+    await act(async () => renamed.resolve(detail({ name: "hike-away" })));
+    expect(await isSettled(flushed)).toBe(true);
+    expect(patch).toHaveBeenCalledWith("hike-away", { colors: ["white"] });
   });
 });

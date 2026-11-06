@@ -186,10 +186,13 @@ export function useAutosave(
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   /** The name this listing is on disk under, or `null` while it is not. */
   const savedName = useRef<string | null>(name);
-  /** A create or rename is in flight: edits keep accumulating in `pending`,
-   * but nothing is sent, because the name they would be sent under is exactly
-   * what is being decided. */
-  const naming = useRef(false);
+  /** A create or rename in flight: edits keep accumulating in `pending`, but
+   * nothing is sent, because the name they would be sent under is exactly
+   * what is being decided. Resolves once that is settled, and `flush` waits
+   * for it. */
+  const naming = useRef<Promise<void> | null>(null);
+  /** The PATCH loop in flight, which a `flush` that defers to it waits for. */
+  const patched = useRef<Promise<void>>(Promise.resolve());
   /** A PATCH to the named listing is in flight. `update()` schedules a fresh
    * debounce on every edit, and `flush()` is also called directly on blur,
    * tab-switch and unmount -- any of those can land while the previous PATCH
@@ -358,20 +361,24 @@ export function useAutosave(
       // newer edit. Defer instead: the loop below re-checks `pending` once
       // the in-flight one settles, rather than firing a concurrent request.
       patchAgain.current = true;
-      return;
+      return patched.current;
     }
     // A loop, not recursion, so a deferred continuation (below) can pick up
     // whatever landed in `pending` while the previous PATCH was in flight,
     // one request at a time, without the function calling itself. The React
     // compiler cannot memoize a `useCallback` that calls itself.
-    for (;;) {
-      const patch = pending.current;
-      const currentName = savedName.current;
-      if (patch === null || currentName === null) return;
-      await sendPatch(currentName, patch);
-      if (!patchAgain.current) return;
-      patchAgain.current = false;
-    }
+    const drain = async () => {
+      for (;;) {
+        const patch = pending.current;
+        const currentName = savedName.current;
+        if (patch === null || currentName === null) return;
+        await sendPatch(currentName, patch);
+        if (!patchAgain.current) return;
+        patchAgain.current = false;
+      }
+    };
+    patched.current = drain();
+    return patched.current;
   }, [sendPatch]);
 
   /** What is pending for a listing not on disk yet. */
@@ -380,15 +387,13 @@ export function useAutosave(
     // document the server would not write, so it retries rather than settling
     // for a description of it.
     if (draftName.current !== "") {
-      naming.current = true;
-      try {
-        await create(draftName.current);
-      } catch {
-        setSave({ kind: "name-taken", name: draftName.current });
-      } finally {
-        naming.current = false;
-      }
-      return;
+      const retry = create(draftName.current)
+        .catch(() => setSave({ kind: "name-taken", name: draftName.current }))
+        .finally(() => {
+          naming.current = null;
+        });
+      naming.current = retry;
+      return retry;
     }
 
     // Not on disk and not named: describe the candidate so the issues banner
@@ -402,7 +407,13 @@ export function useAutosave(
 
   const flush = useCallback(async (): Promise<void> => {
     clearTimer();
-    if (naming.current) return;
+    // Resolving before the write lands would let a caller act on the file
+    // while it is still the old one. What naming left pending goes after it,
+    // under the name it settled on.
+    while (naming.current !== null) {
+      await naming.current;
+      clearTimer();
+    }
     if (savedName.current !== null) return patchNamed();
     if (pending.current === null) return;
     return describeOrCreate();
@@ -425,9 +436,8 @@ export function useAutosave(
 
   const commitName = useCallback(
     (next: string) => {
-      if (next === savedName.current || naming.current) return;
+      if (next === savedName.current || naming.current !== null) return;
       clearTimer();
-      naming.current = true;
       setSave({ kind: "saving" });
       const run = async () => {
         if (savedName.current === null) {
@@ -458,10 +468,10 @@ export function useAutosave(
         setSave(saved());
         onNamed?.(next, fresh);
       };
-      run()
+      naming.current = run()
         .catch(() => setSave({ kind: "name-taken", name: next }))
         .finally(() => {
-          naming.current = false;
+          naming.current = null;
           if (pending.current !== null) {
             timer.current = setTimeout(() => void flush(), AUTOSAVE_DEBOUNCE_MS);
           }
