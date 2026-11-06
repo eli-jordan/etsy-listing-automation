@@ -21,6 +21,7 @@ import yaml
 from PIL import Image, ImageDraw
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
+from etsy_listings.core.config.template_labels import saved_labels
 from etsy_listings.core.errors import ConflictError, RefusedError, StaleError
 from etsy_listings.core.render.config import (
     AnyTemplate,
@@ -338,6 +339,11 @@ class CalibrationStore:
                 return replayed
             if current.revision != expected_revision:
                 raise CalibrationChangedError("Calibration changed; reload before saving")
+            # After the replay and revision checks: a retry answers as the
+            # first save did, and a stale draft reloads before anything else.
+            # The digest above stays the request's own, as it was sent.
+            labels = saved_labels(config.labels, held=current.config.labels)
+            config = config.model_copy(update={"labels": labels})
             files, histories = self.apply_masks(name, config, mask_edits or [])
             revision = self.revision(name, config, files)
             settings_path = self.workspace.template_renderer_settings_file(name)
