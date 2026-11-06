@@ -2416,9 +2416,9 @@ export interface components {
      *     alone (``colour`` here, ``placements`` on ``MultiplePreviewRequest``,
      *     neither on ``SinglePreviewRequest``) -- extra fields are ignored rather
      *     than forbidden, since a natural client pattern is spreading a whole
-     *     ``GET.../config`` response (which includes ``kind``) into the body. That
-     *     is why all three take ``labels``; an editor preview also names with them
-     *     the labels of its ``calibration_revision``. None draws them.
+     *     ``GET.../config`` response (which includes ``kind``) into the body. All
+     *     three take ``labels`` because an editor preview names with them the labels
+     *     of its ``calibration_revision``. None draws them.
      */
     ColourMatrixPreviewRequest: {
       /** Bounding Box */
