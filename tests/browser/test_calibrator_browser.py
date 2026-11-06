@@ -173,6 +173,33 @@ def test_no_console_errors_on_load(page) -> None:
 # --- colour-matrix kind ------------------------------------------------
 
 
+def _rail_names(page) -> list[str]:
+    return page.locator(".template-rail__item").evaluate_all(
+        "rows => rows.map(r => r.dataset.template)"
+    )
+
+
+def _rail_pill(page, label: str):
+    """The pill's × in the rail; the Labels bar has a chip of the same name."""
+    rail = page.get_by_role("navigation", name="Templates")
+    return rail.get_by_role("button", name=f"Remove {label}")
+
+
+def _labelled_rail(page, workspace_root: Path):
+    """Labels the two fixture templates by hand, as the seller's file would hold
+    them, and returns the rail's search box once they have loaded."""
+    for template, label in (
+        (COLOUR_MATRIX_TEMPLATE, "theme:christmas"),
+        (MULTIPLE_TEMPLATE, "theme:summer"),
+    ):
+        path = workspace_root / "mockup-templates" / template / "template.yaml"
+        with path.open("a", encoding="utf-8") as file:
+            file.write(f"labels: [{label}]\n")
+    page.reload()
+    _rail_row(page, COLOUR_MATRIX_TEMPLATE).get_by_text("theme:christmas").wait_for()
+    return page.get_by_role("combobox", name="Search templates")
+
+
 class TestTemplateRail:
     """The rail is the template picker now, so the things worth proving in a
     real browser are that it lists the workspace, that its thumbnails are
@@ -224,6 +251,58 @@ class TestTemplateRail:
             "rows => rows.map(r => r.dataset.template)"
         )
         assert listed == [MULTIPLE_TEMPLATE]
+
+    def test_the_keyboard_alone_turns_typed_text_into_a_pill(
+        self, page, workspace_root: Path
+    ) -> None:
+        """Typing `CHR` is a title search until Down and Enter make it a label,
+        and focus never leaves the box (interactions *Picking a label*)."""
+        box = _labelled_rail(page, workspace_root)
+
+        box.focus()
+        page.keyboard.type("CHR")
+        menu = page.get_by_role("listbox", name="Labels")
+        menu.wait_for()
+        assert _rail_names(page) == []
+        assert box.get_attribute("aria-expanded") == "true"
+        assert box.get_attribute("aria-controls") == menu.get_attribute("id")
+        assert box.get_attribute("aria-activedescendant") is None
+
+        page.keyboard.press("ArrowDown")
+        option = menu.get_by_role("option")
+        assert option.get_attribute("aria-selected") == "true"
+        assert box.get_attribute("aria-activedescendant") == option.get_attribute("id")
+
+        page.keyboard.press("Enter")
+        _rail_pill(page, "theme:christmas").wait_for()
+        menu.wait_for(state="detached")
+        assert box.input_value() == ""
+        assert box.evaluate("field => field === document.activeElement")
+        assert _rail_names(page) == [COLOUR_MATRIX_TEMPLATE]
+
+        page.keyboard.press("Backspace")
+        _rail_pill(page, "theme:christmas").wait_for(state="detached")
+        assert _rail_names(page) == [MULTIPLE_TEMPLATE, COLOUR_MATRIX_TEMPLATE]
+
+    def test_the_filter_lasts_until_the_page_is_left(self, page, workspace_root: Path) -> None:
+        """Opening a template keeps the pills and text; leaving the page drops
+        them (spec *Mockup Templates rail*)."""
+        box = _labelled_rail(page, workspace_root)
+        box.click()
+        page.get_by_role("option", name="theme:christmas").click()
+        box.fill("flat")
+
+        _select_template(page, COLOUR_MATRIX_TEMPLATE)
+        page.wait_for_selector(COLOUR_SELECT)
+        assert box.input_value() == "flat"
+        assert _rail_pill(page, "theme:christmas").count() == 1
+
+        page.get_by_role("link", name="Listings", exact=True).click()
+        page.wait_for_selector(".template-rail", state="detached")
+        page.go_back()
+        page.wait_for_selector(".template-rail__item")
+        assert box.input_value() == ""
+        assert _rail_pill(page, "theme:christmas").count() == 0
 
     def test_picking_a_row_loads_that_template(self, page) -> None:
         _select_template(page, COLOUR_MATRIX_TEMPLATE)
