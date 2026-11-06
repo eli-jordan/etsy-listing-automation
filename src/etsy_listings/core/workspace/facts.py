@@ -68,6 +68,7 @@ from etsy_listings.core.render.config import (
     ColourMatrixTemplate,
     MultipleTemplate,
 )
+from etsy_listings.core.workspace.calibration import CalibrationRepairRequiredError
 from etsy_listings.core.workspace.file_version import TreeVersion, file_version, tree_version
 from etsy_listings.core.workspace.video import probe_video
 from etsy_listings.core.workspace.workspace import InvalidNameError, InvalidRefError, Workspace
@@ -207,10 +208,10 @@ def _template_info_map(workspace: Workspace) -> dict[str, TemplateInfo]:
 
 def _read_template_info(workspace: Workspace, name: str) -> tuple[TemplateInfo | None]:
     """One template's entry, read from its files: ``None`` for one whose
-    config will not load."""
+    config will not load or that needs repair, which the render stage names."""
     try:
         config = workspace.load_template_config(name)
-    except ConfigLoadError:
+    except (ConfigLoadError, CalibrationRepairRequiredError):
         return (None,)
     info = template_info(workspace, name, config)
     from etsy_listings.core.preparation.readiness import (  # noqa: PLC0415 -- cycle: readiness imports core.workspace

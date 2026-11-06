@@ -162,7 +162,7 @@ def list_templates(request: Request) -> list[TemplateSummary]:
     summaries = []
     for overview in calibration.list_templates(workspace):
         summary = _summary(overview)
-        if overview.has_config:
+        if overview.kind is not None:
             config = workspace.load_template_config(overview.name)
             summary.renderer = config.renderer.type
             # Catalog reads metadata only. The selected status endpoint validates

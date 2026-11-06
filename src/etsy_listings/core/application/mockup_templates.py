@@ -64,7 +64,11 @@ from etsy_listings.core.render.config import (
 from etsy_listings.core.render.pipeline import Layer, render_scene
 from etsy_listings.core.render.swatch import sample_swatch
 from etsy_listings.core.render.types import RGB, RGBA, FloatMap
-from etsy_listings.core.workspace.calibration import CalibrationStore, MaskEdit
+from etsy_listings.core.workspace.calibration import (
+    CalibrationRepairRequiredError,
+    CalibrationStore,
+    MaskEdit,
+)
 from etsy_listings.core.workspace.listing_documents import ListingDocuments, ListingMissingError
 from etsy_listings.core.workspace.workspace import (
     AmbiguousColourSuffixError,
@@ -129,18 +133,10 @@ def _overview(workspace: Workspace, name: str) -> TemplateOverview:
     width, height = _photo_size(workspace, name)
     try:
         config = CalibrationStore(workspace).config(name)
+    except CalibrationRepairRequiredError as exc:
+        return _unloaded(name, (width, height), has_config=True, reason=f"needs repair: {exc}")
     except ConfigLoadError:
-        return TemplateOverview(
-            name=name,
-            kind=None,
-            colours=[],
-            photos=[],
-            has_config=False,
-            status_reason="no kind set",
-            width=width,
-            height=height,
-            labels=[],
-        )
+        return _unloaded(name, (width, height), has_config=False, reason="no kind set")
     if isinstance(config, ColourMatrixTemplate):
         colours = workspace.template_colours(name)
     elif isinstance(config, MultipleTemplate):
@@ -160,6 +156,24 @@ def _overview(workspace: Workspace, name: str) -> TemplateOverview:
     )
 
 
+def _unloaded(
+    name: str, size: tuple[int | None, int | None], *, has_config: bool, reason: str
+) -> TemplateOverview:
+    """A row for a template with no config to describe it: the rail still
+    lists it, because that is how the seller reaches what fixes it."""
+    return TemplateOverview(
+        name=name,
+        kind=None,
+        colours=[],
+        photos=[],
+        has_config=has_config,
+        status_reason=reason,
+        width=size[0],
+        height=size[1],
+        labels=[],
+    )
+
+
 def _photo_size(workspace: Workspace, name: str) -> tuple[int | None, int | None]:
     """From the image header alone (``Image.open`` is lazy). An unreadable
     file answers ``None``: listing a template is how the seller reaches the
@@ -167,7 +181,7 @@ def _photo_size(workspace: Workspace, name: str) -> tuple[int | None, int | None
     photo: Path | None
     try:
         photo = workspace.template_main_photo(name, CalibrationStore(workspace).config(name))
-    except (ConfigLoadError, FileNotFoundError):
+    except (ConfigLoadError, CalibrationRepairRequiredError, FileNotFoundError):
         photo = workspace.template_preview_photo(name)
     if photo is None:
         return None, None
@@ -222,7 +236,7 @@ def template_photo(workspace: Workspace, name: str, colour: str | None) -> Path:
     if colour is None:
         try:
             source = workspace.template_main_photo(name, CalibrationStore(workspace).config(name))
-        except (ConfigLoadError, FileNotFoundError):
+        except (ConfigLoadError, CalibrationRepairRequiredError, FileNotFoundError):
             source = workspace.template_preview_photo(name)
     else:
         try:

@@ -28,6 +28,7 @@ from etsy_listings.core.config.errors import ConfigLoadError
 from etsy_listings.core.config.listing_validation import positions_outside_limits
 from etsy_listings.core.config.settings import Settings, TemplatePositionLimits
 from etsy_listings.core.render.config import AnyTemplate
+from etsy_listings.core.workspace.calibration import CalibrationRepairRequiredError
 from etsy_listings.core.workspace.workspace import Workspace
 
 
@@ -100,5 +101,5 @@ class _TemplateCache:
             return None
         try:
             return self._workspace.load_template_config(name)
-        except ConfigLoadError:
+        except (ConfigLoadError, CalibrationRepairRequiredError):
             return None
