@@ -226,12 +226,18 @@ class PositionFits:
         return requests
 
     def covers(
-        self, template: str, inputs: PreparationInputs, quads: Mapping[str | None, BoundingBox]
+        self,
+        template: str,
+        inputs: PreparationInputs,
+        quads: Mapping[str | None, BoundingBox],
+        *,
+        verify: bool = True,
     ) -> bool:
         """Whether the template's current evidence covers every one of
-        ``quads`` (its :func:`padded_quads`; spec, *Evidence coverage*)."""
+        ``quads`` (its :func:`padded_quads`; spec, *Evidence coverage*).
+        ``verify=False`` takes its files as sound, for a quick answer."""
         posed = _with_quads(inputs, quads)
-        selected = self.evidence.select(posed, self.evidence.current(template))
+        selected = self.evidence.select(posed, self.evidence.current(template), verify=verify)
         return len(selected) == len(posed.placements)
 
     @contextmanager

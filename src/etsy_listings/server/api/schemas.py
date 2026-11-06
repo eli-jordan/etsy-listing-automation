@@ -964,6 +964,11 @@ class PreparationResponse(BaseModel):
     prepared_engine: str | None
 
 
+class PositionReadinessResponse(BaseModel):
+    ready: bool
+    preparing: bool
+
+
 class CreatePreparationRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     template: str

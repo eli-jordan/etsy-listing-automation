@@ -108,3 +108,70 @@ def test_catalog_lists_metadata_without_decoding_calibration_or_maps(workspace_r
     assert rows["prepared-shirt"]["renderer"] == "marigold"
     assert rows["prepared-shirt"]["maps"] is None
     assert rows["flat-lay-01"]["maps"]["state"] == "not_required"
+
+
+def test_catching_up_queues_coverage_for_prepared_templates(workspace_root: Path) -> None:
+    from tests.support.marigold import PreparationRuntime, prepare_template, small_print
+
+    workspace = small_print(workspace_root)
+    prepare_template(workspace, "tee")
+    client = TestClient(create_app(workspace, preparation_runtime=PreparationRuntime()))
+
+    queued = client.post("/api/preparation/coverage")
+
+    assert queued.status_code == 202
+    assert [(job["template"], job["kind"]) for job in queued.json()] == [("tee", "coverage")]
+
+
+def test_coverage_says_when_a_prepared_template_cannot_take_positions_yet(
+    workspace_root: Path,
+) -> None:
+    from tests.support.marigold import PreparationRuntime, prepare_template, small_print
+
+    workspace = small_print(workspace_root)
+    prepare_template(workspace, "tee")
+    client = TestClient(create_app(workspace, preparation_runtime=PreparationRuntime()))
+
+    assert client.get("/api/templates/tee/coverage").json()["ready"] is False
+
+
+def test_an_unprepared_template_is_not_held_back_by_coverage(workspace_root: Path) -> None:
+    from tests.support.marigold import PreparationRuntime, small_print
+
+    workspace = small_print(workspace_root)
+    client = TestClient(create_app(workspace, preparation_runtime=PreparationRuntime()))
+
+    assert client.get("/api/templates/tee/coverage").json()["ready"] is True
+
+
+def test_a_template_with_a_job_under_way_is_preparing(workspace_root: Path) -> None:
+    from tests.support.marigold import PreparationRuntime, prepare_template, small_print
+
+    workspace = small_print(workspace_root)
+    prepare_template(workspace, "tee")
+    client = TestClient(create_app(workspace, preparation_runtime=PreparationRuntime()))
+    client.post("/api/templates/tee/coverage")
+
+    assert client.get("/api/templates/tee/coverage").json() == {"ready": False, "preparing": True}
+
+
+def test_asking_to_adjust_queues_coverage_and_answers_null_when_none_is_needed(
+    workspace_root: Path,
+) -> None:
+    from tests.support.marigold import (
+        PreparationRuntime,
+        marigold_template,
+        prepare_template,
+        small_print,
+    )
+
+    workspace = marigold_template(workspace_root)
+    prepare_template(workspace)
+    small_print(workspace_root)
+    prepare_template(workspace, "tee")
+    client = TestClient(create_app(workspace, preparation_runtime=PreparationRuntime()))
+
+    queued = client.post("/api/templates/tee/coverage")
+    assert queued.status_code == 202
+    assert (queued.json()["template"], queued.json()["kind"]) == ("tee", "coverage")
+    assert client.post("/api/templates/shirt/coverage").json() is None

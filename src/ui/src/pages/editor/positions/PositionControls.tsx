@@ -15,6 +15,8 @@ export function PositionControls({
   positioning: Positioning;
   children?: ReactNode;
 }) {
+  // Still clickable: the click is what says why, and what starts the wait's end.
+  const unavailable = positioning.waiting && !positioning.on;
   return (
     <span className="tp-controls">
       {positioning.fit !== null && (
@@ -38,8 +40,9 @@ export function PositionControls({
           type="button"
           role="switch"
           aria-checked={positioning.on}
+          aria-disabled={unavailable}
           aria-label="Adjust position"
-          className={positioning.on ? "switch switch--on" : "switch"}
+          className={switchClass(positioning.on, unavailable)}
           onClick={positioning.toggle}
         >
           <span className="switch__knob" />
@@ -47,6 +50,11 @@ export function PositionControls({
       </label>
     </span>
   );
+}
+
+function switchClass(on: boolean, unavailable: boolean): string {
+  if (on) return "switch switch--on";
+  return unavailable ? "switch tp-switch--unavailable" : "switch";
 }
 
 /** The foot's note line: the colour-matrix scope, the placement hint, or

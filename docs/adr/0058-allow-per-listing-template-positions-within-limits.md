@@ -59,3 +59,35 @@ unchanged. `plan` and apply never queue inference; they refuse until coverage
 exists. Only templates some listing positions are covered: wider limits never
 queue inference for a template no listing has moved, since saving a position
 there queues it then.
+
+## Amendment (2026-11-06): coverage belongs to preparation
+
+The 2026-11-02 amendment covered a template only once a listing positioned it,
+to spare inference on templates nobody moves. In use that put about two minutes
+of inference at the moment a seller first saved a position, in an editor that is
+expected to be fast, and the preview refused until it finished. A seller who
+adjusts designs across many templates spends that inference anyway.
+
+Asking to prepare a template is already an explicit request for inference, and
+preparation is where slow work, queueing and progress are expected. So a
+completed Prepare, Prepare again or Retry goes on to queue the template's
+coverage job, whether or not a listing positions it. It stays a second job rather
+than a larger crop in the first: the template's own maps must keep coming from
+its own crop, or preparing would change renders of listings that never moved
+anything. A CPU rebuild queues nothing, since it is not a request for inference.
+
+`POST /api/preparation/coverage` queues coverage for every prepared Marigold
+template at the seller's request, for templates prepared before this change or
+limits widened since. Saving a position still queues coverage when it falls
+short, as the safety net for the cases preparation does not reach: limits
+widened over a template no listing positions, and geometry rebuilt from existing
+evidence. `plan` and apply still never queue inference.
+
+For those same cases the editor refuses to enter Position mode until the template
+is ready, rather than letting a save start inference behind a broken preview. It
+reads `GET /api/templates/{name}/coverage`, kept out of the preparation status
+because the catalog reads that for every template: this read skips validating
+the prediction files, which is most of the cost, and queueing still validates
+them. Asking to adjust a template that falls short queues its coverage through
+`POST /api/templates/{name}/coverage`: that click is an explicit request for the
+inference, as saving a position was.

@@ -7,6 +7,7 @@ single executor lane; installation inspection never runs on their event loop.
 from __future__ import annotations
 
 import hashlib
+import logging
 import time
 from collections.abc import Callable
 from concurrent.futures import Future, ThreadPoolExecutor
@@ -36,6 +37,8 @@ from etsy_listings.core.workspace.calibration import (
     CalibrationStore,
     json_bytes,
 )
+
+logger = logging.getLogger(__name__)
 
 MAX_JOB_PAGE = 1000
 """The most jobs one :meth:`Preparations.list_jobs` page returns."""
@@ -547,7 +550,20 @@ class Preparations:
                 self.reconcile_saved(job.template)
             if job.phase in TERMINAL:
                 self.cleanup(job.template)
+            if job.kind == "prepare" and job.phase == "completed":
+                self._cover_prepared(job.template)
             self._schedule()
+
+    def _cover_prepared(self, template: str) -> None:
+        """Queue ``template``'s coverage now its preparation has finished, so
+        a seller's first position does not wait on inference (ADR-0058,
+        amendment *coverage belongs to preparation*). Queued while closing
+        too: the job is durable and runs on the next start. A failure leaves
+        saving a position to queue it."""
+        try:
+            self.cover(template, self.workspace.load_settings().template_positions)
+        except (UserFacingError, ValueError, OSError) as exc:
+            logger.warning("not covering prepared template %r: %s", template, exc)
 
     def rename_template(self, old: str, new: str, move: Callable[[], None]) -> None:
         """Run ``move``, which moves the template's directory, and bring what
