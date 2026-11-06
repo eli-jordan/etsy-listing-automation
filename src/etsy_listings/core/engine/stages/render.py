@@ -61,6 +61,7 @@ from functools import partial
 from pathlib import Path
 from typing import Literal, override
 
+import yaml
 from pydantic import BaseModel, ConfigDict
 
 from etsy_listings.core.config.errors import ConfigLoadError
@@ -72,6 +73,7 @@ from etsy_listings.core.engine.context import RunContext, Swatch
 from etsy_listings.core.engine.lock import (
     Lockfile,
     canonical_hash,
+    hash_bytes,
     hash_file,
     to_workspace_relative_posix,
 )
@@ -117,6 +119,7 @@ from etsy_listings.core.render.swatch import sample_swatch
 from etsy_listings.core.render.types import RGB, RGBA
 from etsy_listings.core.workspace.facts import template_info
 from etsy_listings.core.workspace.workspace import Workspace
+from etsy_listings.core.workspace.yaml_source import edit_yaml_bytes
 
 PREVIEW_WORKERS = 2
 """Maximum full-size preview renders in flight.
@@ -309,7 +312,7 @@ class RenderDesired:
     Absolute and machine-specific, so it never enters a hash -- see
     ``_input_hash``, which names the fields that do."""
     works: tuple[SceneWork, ...]  # first-seen media order, deduped
-    template_hash: dict[str, str]  # template name -> sha256 of its template.yaml
+    template_hash: dict[str, str]  # template name -> _template_hash of its template.yaml
     base_hash: dict[str, str]  # scene key -> sha256 of that scene's photo
     preview_exists: dict[str, bool] = field(default_factory=dict)
     """Scene key -> whether ``Workspace.preview_file`` already holds a preview
@@ -636,15 +639,44 @@ class _Templates:
     hashes: dict[str, str]
 
 
+def _without_labels(source: bytes) -> bytes:
+    """``source`` with its top-level ``labels`` key taken out by the same
+    text-preserving edit that writes it, so removing what a save added gives
+    back the bytes from before. ``source`` itself when it has no such key, or
+    when the key cannot be removed, such as a label another value shares
+    through a YAML alias: a label edit there costs one re-render and nothing
+    else, and a file that does not parse is refused by the load after this."""
+    if b"labels" not in source:
+        return source
+    try:
+        document = yaml.safe_load(source)
+        if not isinstance(document, dict) or "labels" not in document:
+            return source
+        return edit_yaml_bytes(source, {k: v for k, v in document.items() if k != "labels"})
+    except (yaml.YAMLError, ValueError):
+        return source
+
+
+def _template_hash(path: Path) -> str:
+    """The hash of ``template.yaml`` as render input: the file's own bytes, not
+    the re-serialised model. Hashing a normalised dump would miss an edit that
+    pydantic round-trips away, and the question here is "did the file change?".
+
+    Labels are the one exception (spec *Keeping labels out of rendering*): they
+    are for finding a template, and never change a pixel, so a label edit must
+    not mark every scene using it stale. A file with no ``labels`` key hashes
+    exactly as it always has, so nothing re-renders for this rule."""
+    source = path.read_bytes()
+    without_labels = _without_labels(source)
+    return hash_file(path) if without_labels is source else hash_bytes(without_labels)
+
+
 def _load_template(workspace: Workspace, template_name: str) -> tuple[AnyTemplate, str] | Blocked:
     config_path = workspace.template_config_file(template_name)
     blocked = check_render_template(template_name, config_path)
     if blocked is not None:
         return blocked
-    # The file's own bytes, not the re-serialised model: hashing a
-    # normalised dump would miss an edit that pydantic round-trips
-    # away, and the question here is "did the file change?".
-    digest = hash_file(config_path)
+    digest = _template_hash(config_path)
     try:
         config = workspace.load_template_config(template_name)
     except ConfigLoadError as exc:
