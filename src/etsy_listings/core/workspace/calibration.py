@@ -447,7 +447,8 @@ class CalibrationStore:
 
     def mask(self, name: str, placement_id: str | None = None) -> SavedMask:
         with self.lock(name):
-            config = self.state(name).require()
+            # An observer's read: preparation inputs ask this from `plan`.
+            config = template_state(self.workspace, name).require()
             if placement_id not in self.placement_ids(config):
                 raise MaskUnavailableError("Mask placement does not belong to this template kind")
             paths = {

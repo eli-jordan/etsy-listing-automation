@@ -1,15 +1,16 @@
 """A template's state: what each one reads as, what a caller gets from it, and
 that reads stay fresh and isolated when parsing is reused."""
 
-import json
 import os
-from pathlib import Path
+from contextlib import suppress
 
 import pytest
 
-from etsy_listings.core.errors import ConflictError, MissingError
+from etsy_listings.core.errors import ConflictError, MissingError, UserFacingError
+from etsy_listings.core.preparation.artifacts import Artifacts
+from etsy_listings.core.preparation.readiness import saved_preparation_facts
 from etsy_listings.core.render import MultipleTemplate
-from etsy_listings.core.workspace.calibration import CalibrationStore, digest
+from etsy_listings.core.workspace.calibration import CalibrationStore
 from etsy_listings.core.workspace.template_state import (
     CalibrationRepairRequiredError,
     TemplateAbsent,
@@ -22,7 +23,7 @@ from etsy_listings.core.workspace.template_state import (
 )
 from etsy_listings.core.workspace.workspace import Workspace
 
-from tests.support.marigold import marigold_template
+from tests.support.marigold import interrupted_save, marigold_template
 
 
 @pytest.mark.parametrize("padding", [0, 70_000])
@@ -113,38 +114,10 @@ def test_a_file_that_will_not_load_is_unreadable_naming_it(workspace_root, conte
     assert isinstance(refused.value, ConflictError)
 
 
-def _interrupted_save(workspace: Workspace) -> Path:
-    """What a save leaves if the process dies after durable commit intent:
-    a whole transaction that would change ``template.yaml`` on roll forward."""
-    config = workspace.template_config_file("shirt")
-    transaction = workspace.template_calibration_transaction("shirt")
-    transaction.mkdir(parents=True)
-    payload = config.read_bytes()
-    (transaction / "payload-0").write_bytes(payload)
-    (transaction / "manifest.json").write_text(
-        json.dumps(
-            {
-                "schema_version": 1,
-                "commit_intent": True,
-                "files": [
-                    {
-                        "destination": "template.yaml",
-                        "payload": "payload-0",
-                        "checksum": digest(payload),
-                        "backup": "backup-0",
-                    }
-                ],
-            }
-        ),
-        encoding="utf-8",
-    )
-    return transaction
-
-
 def test_the_observer_reads_a_transaction_as_needing_repair_and_leaves_it(workspace_root):
     """The CLI's refusal: the transaction may be a live server save."""
     workspace = marigold_template(workspace_root)
-    transaction = _interrupted_save(workspace)
+    transaction = interrupted_save(workspace)
 
     state = template_state(workspace, "shirt")
 
@@ -156,7 +129,7 @@ def test_the_observer_reads_a_transaction_as_needing_repair_and_leaves_it(worksp
 
 def test_the_owner_rolls_an_interrupted_transaction_forward(workspace_root):
     workspace = marigold_template(workspace_root)
-    transaction = _interrupted_save(workspace)
+    transaction = interrupted_save(workspace)
 
     state = CalibrationStore(workspace).state("shirt")
 
@@ -166,11 +139,36 @@ def test_the_owner_rolls_an_interrupted_transaction_forward(workspace_root):
 
 def test_the_owner_reads_a_transaction_it_cannot_trust_as_needing_repair(workspace_root):
     workspace = marigold_template(workspace_root)
-    transaction = _interrupted_save(workspace)
+    transaction = interrupted_save(workspace)
     (transaction / "payload-0").write_bytes(b"corrupted")
 
     state = CalibrationStore(workspace).state("shirt")
 
     assert isinstance(state, TemplateNeedsRepair)
     assert "repair" in state.reason
+    assert transaction.exists()
+
+
+def _prepared_inputs(workspace: Workspace) -> object:
+    return Artifacts(workspace).saved_inputs("shirt")
+
+
+def _saved_facts(workspace: Workspace) -> object:
+    return saved_preparation_facts(workspace, "shirt")
+
+
+def _saved_mask(workspace: Workspace) -> object:
+    return CalibrationStore(workspace).mask("shirt")
+
+
+@pytest.mark.parametrize("read", [_prepared_inputs, _saved_facts, _saved_mask])
+def test_what_the_engine_reads_never_finishes_a_transaction(workspace_root, read):
+    """``plan`` reaches these from the CLI, where the transaction may be a live
+    server save: they refuse or report it, and it stays."""
+    workspace = marigold_template(workspace_root)
+    transaction = interrupted_save(workspace)
+
+    with suppress(UserFacingError):
+        read(workspace)
+
     assert transaction.exists()

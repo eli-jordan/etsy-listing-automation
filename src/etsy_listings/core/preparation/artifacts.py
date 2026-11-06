@@ -50,6 +50,7 @@ from etsy_listings.core.workspace.calibration import (
     json_bytes,
 )
 from etsy_listings.core.workspace.file_version import file_version
+from etsy_listings.core.workspace.template_state import template_state
 
 SCHEMA: Literal[2] = 2
 MAX_PIXELS = 32 * 1024 * 1024
@@ -792,7 +793,7 @@ class Artifacts:
         damaged/missing mask components; valid same-photo edits are retained.
         """
         with self.calibration.lock(name):
-            config = self.calibration.state(name).require()
+            config = template_state(self.workspace, name).require()
             if not isinstance(config.renderer, MarigoldRenderer):
                 raise ValueError(  # noqa: TRY004 -- callers record this ValueError as a bad template
                     "Prepared inputs require a Marigold template"

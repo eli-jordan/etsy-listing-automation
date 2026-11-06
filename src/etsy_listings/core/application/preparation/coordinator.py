@@ -443,7 +443,14 @@ class Preparations:
                 return job
         return calibration.revision, inputs, quads
 
+    def _finish_interrupted_saves(self) -> None:
+        """This server owns the workspace, so what a crash left is its to
+        finish (``template_state``). After this a job's reads only observe."""
+        for name in self.workspace.template_names(include_uncalibrated=True):
+            self.calibration.state(name)
+
     def recover(self) -> None:
+        self._finish_interrupted_saves()
         for job in self.store.jobs():
             if job.phase in TERMINAL:
                 continue

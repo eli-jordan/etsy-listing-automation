@@ -15,6 +15,8 @@ from etsy_listings.core.workspace import Workspace
 from etsy_listings.core.workspace.calibration import CalibrationChangedError, CalibrationStore
 from etsy_listings.core.workspace.template_state import template_state
 
+from tests.support.marigold import interrupted_save
+
 
 class Runtime:
     def inspect(self):
@@ -36,6 +38,15 @@ def template(workspace_root, name="shirt"):
     )
     CalibrationStore(workspace).write_config(name, config)
     return workspace
+
+
+def test_starting_rolls_forward_what_a_crash_left_before_any_job_resumes(workspace_root):
+    workspace = template(workspace_root)
+    transaction = interrupted_save(workspace)
+
+    Preparations(workspace, runtime=Runtime()).recover()
+
+    assert not transaction.exists()
 
 
 def test_a_prepare_against_a_moved_revision_is_stale_and_queues_nothing(workspace_root):

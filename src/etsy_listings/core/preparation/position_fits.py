@@ -67,6 +67,7 @@ from etsy_listings.core.workspace import Workspace
 from etsy_listings.core.workspace.atomic import write_bytes_atomic
 from etsy_listings.core.workspace.calibration import CalibrationStore, json_bytes
 from etsy_listings.core.workspace.file_version import file_version
+from etsy_listings.core.workspace.template_state import template_state
 
 _RECORD = "fit.json"
 _ARCHIVE = "maps.npz"
@@ -298,7 +299,7 @@ class PositionFits:
         inputs = request.inputs
         placement = inputs.placement
         with self.calibration.lock(inputs.template):
-            config = self.calibration.state(inputs.template).require()
+            config = template_state(self.workspace, inputs.template).require()
             path = self.workspace.template_main_photo(inputs.template, config)
             with Image.open(path) as photo:
                 base = np.array(photo.convert("RGB"), np.uint8)

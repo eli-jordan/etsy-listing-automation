@@ -419,7 +419,10 @@ The two reads differ in one thing, who may roll a transaction forward.
 transaction reads as needing repair, so a CLI cannot finish a live server save.
 `CalibrationStore.state(name)` is the owner's, for server operations: it recovers
 an interrupted transaction first, and reports one it cannot trust as needing repair.
-One server per workspace remains the ownership assumption.
+Whatever `plan` can reach (the render stage, map readiness, `Artifacts.saved_inputs`,
+scene composition, `CalibrationStore.mask`) observes, wherever it runs. So
+`Preparations.recover` rolls every template forward when the server starts, before
+any job resumes. One server per workspace remains the ownership assumption.
 
 A save validates its revision and ordered mask operations, stages payloads and
 backups in the template-owned `_renderer/calibration-transaction/`, flushes commit intent,

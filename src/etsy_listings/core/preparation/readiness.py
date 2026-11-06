@@ -27,6 +27,7 @@ from etsy_listings.core.render.config import (
     PhotoWarpRenderer,
 )
 from etsy_listings.core.workspace.calibration import CalibrationStore, MaskPhotoMismatchError
+from etsy_listings.core.workspace.template_state import template_state
 from etsy_listings.core.workspace.workspace import Workspace
 
 __all__ = [
@@ -61,16 +62,15 @@ def template_readiness(workspace: Workspace, name: str, config: AnyTemplate) -> 
 
 def saved_preparation_facts(workspace: Workspace, name: str) -> SavedPreparationFacts:
     """Validate one fixed generation without prediction cache or model access."""
-    store = CalibrationStore(workspace)
-    with store.lock(name):
+    with CalibrationStore(workspace).lock(name):
         try:
-            return _saved_facts(workspace, store, name)
+            return _saved_facts(workspace, name)
         except (UserFacingError, ValueError, OSError) as exc:
             return SavedPreparationFacts(Readiness("out_of_date", _failure_reason(exc), str(exc)))
 
 
-def _saved_facts(workspace: Workspace, store: CalibrationStore, name: str) -> SavedPreparationFacts:
-    config = store.state(name).require()
+def _saved_facts(workspace: Workspace, name: str) -> SavedPreparationFacts:
+    config = template_state(workspace, name).require()
     known = catalog_readiness(config)
     if known is not None:
         return SavedPreparationFacts(known)

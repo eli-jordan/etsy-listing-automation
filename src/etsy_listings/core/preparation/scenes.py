@@ -37,6 +37,7 @@ from etsy_listings.core.render.material import (
 )
 from etsy_listings.core.render.types import RGB, RGBA, FloatMap
 from etsy_listings.core.workspace import Workspace
+from etsy_listings.core.workspace.template_state import template_state
 
 MAX_CONCURRENT_RENDERS = 4
 """Compositions that may run at once, across previews and the render stage.
@@ -172,7 +173,7 @@ def lease_scene(
             acquired = lease.enter_context(
                 artifacts.acquire(template, inputs, target_size=(base.shape[1], base.shape[0]))
             )
-            config = artifacts.calibration.state(template).require()
+            config = template_state(workspace, template).require()
             requests = fits.requests(template, inputs, positioned_quads(config, composition.boxes))
         lease.enter_context(fits.lease(request.key for request in requests.values()))
         positioned = {key: fits.ensure(request) for key, request in requests.items()}
