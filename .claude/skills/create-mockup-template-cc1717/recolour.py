@@ -100,12 +100,14 @@ SHIRT_GROW = 12  # px at 2048 the approved outline grows before blending a recol
 SHIRT_FEATHER = 6
 # Cleaning a source: the generator's edit replaces only the areas it changed.
 CLEAN_CHANGE = 40  # blurred per-channel change that marks an edited area
+CLEAN_CHROMA = 8  # blurred Lab colour change that marks a faint removal; fabric regenerates at 4
 CLEAN_MIN_AREA = 4000  # px at 2048; smaller changes are regeneration noise, not an edit
 CLEAN_GROW = 32  # px each patch grows past the edited area's convex hull
 CLEAN_REACH = 64  # px from a patch within which a small removal is part of the same item
 CLEAN_FINE_BLUR = 2  # px; finds small removals that the edit blur averages away
 CLEAN_KEEP = 33  # px; the margin a redrawn item keeps around it
 CLEAN_REMOVED_EDGES = 0.5  # a removal keeps under this share of the original's edges
+CLEAN_FAINT_EDGES = 0.7  # the same for colour edges: faint removals keep 0.5, redraws 1.0
 CLEAN_PAD = 64
 CLEAN_RING = 41  # px band either side of a patch edge used to compare inside with outside
 MAX_ECHO_R = 0.2  # the cleaned patch still follows the removed item's edges
@@ -465,13 +467,14 @@ def near_patch(patch: np.ndarray, small: list[np.ndarray]) -> list[int]:
     return [index for index, item in enumerate(small) if distance[item].min() <= CLEAN_REACH]
 
 
-def removed(original: np.ndarray, generated: np.ndarray, area: np.ndarray) -> bool:
+def removed(
+    before: np.ndarray, after: np.ndarray, area: np.ndarray, kept: float = CLEAN_REMOVED_EDGES
+) -> bool:
     """The generator left plain fabric where the original had detail: a
     removed snowflake keeps almost none of its edges, while a redrawn pendant,
-    hair strand or wall drawing keeps them all or more."""
-    before = edge_strength(lab_lightness(original))[area].mean()
-    after = edge_strength(lab_lightness(generated))[area].mean()
-    return bool(after < CLEAN_REMOVED_EDGES * before)
+    hair strand or wall drawing keeps them all or more. `before` and `after`
+    are the photos' edge maps."""
+    return bool(after[area].mean() < kept * before[area].mean())
 
 
 def join_near(
@@ -488,9 +491,11 @@ def join_near(
     return [item for index, item in enumerate(small) if index not in taken], bool(taken)
 
 
-def edited_areas(change: np.ndarray, blur: float) -> list[tuple[np.ndarray, int]]:
-    """Each connected area whose change, blurred, passes CLEAN_CHANGE, with its size."""
-    edited = (cv2.GaussianBlur(change, (0, 0), blur) > CLEAN_CHANGE).astype(np.uint8)
+def edited_areas(
+    change: np.ndarray, blur: float, threshold: float = CLEAN_CHANGE
+) -> list[tuple[np.ndarray, int]]:
+    """Each connected area whose change, blurred, passes `threshold`, with its size."""
+    edited = (cv2.GaussianBlur(change, (0, 0), blur) > threshold).astype(np.uint8)
     count, labels, stats, _ = cv2.connectedComponentsWithStats(edited)
     return [(labels == label, int(stats[label, cv2.CC_STAT_AREA])) for label in range(1, count)]
 
@@ -499,12 +504,32 @@ def redrawn_items(
     original: np.ndarray, generated: np.ndarray, coarse: list[tuple[np.ndarray, int]]
 ) -> np.ndarray:
     """The edits that are not removals, each as its hull with a margin:
-    items the generator redrew, which the photo keeps as they were."""
+    items the generator redrew, which the photo keeps as they were. An edit
+    that lost its colour edges is a removal even when it kept its lightness
+    edges, because on a small item the fabric's grain counts as lightness edges."""
+    lightness = lightness_edges(original), lightness_edges(generated)
+    colour = colour_edges(original), colour_edges(generated)
     keep = np.zeros((SIZE, SIZE), np.uint8)
     for area, _ in coarse:
-        if not removed(original, generated, area):
+        if not removed(*lightness, area) and not removed(*colour, area, CLEAN_FAINT_EDGES):
             cv2.fillConvexPoly(keep, cv2.convexHull(cv2.findNonZero(area.astype(np.uint8))), 1)
     return cv2.dilate(keep, np.ones((CLEAN_KEEP, CLEAN_KEEP), np.uint8)) > 0
+
+
+def faint_removals(
+    original: np.ndarray, generated: np.ndarray, covered: np.ndarray
+) -> list[np.ndarray]:
+    """The removals too close to the fabric to pass CLEAN_CHANGE, such as a red
+    bulb printed on a red shirt. Only colour tells them apart: they share the
+    fabric's lightness, so their lightness edges are the fabric's grain."""
+    difference = lab_colour(generated) - lab_colour(original)
+    change = np.where(covered, 0, np.sqrt((difference**2).sum(axis=2))).astype(np.float32)
+    before, after = colour_edges(original), colour_edges(generated)
+    return [
+        area
+        for area, _ in edited_areas(change, CLEAN_FINE_BLUR, CLEAN_CHROMA)
+        if removed(before, after, area, CLEAN_FAINT_EDGES)
+    ]
 
 
 def small_removals(
@@ -513,10 +538,11 @@ def small_removals(
     """The removals outside the large edits, found with less blur so a faint
     dot of a print still shows."""
     covered = np.logical_or.reduce([np.zeros((SIZE, SIZE), bool), *groups])
+    before, after = lightness_edges(original), lightness_edges(generated)
     return [
         area
         for area, _ in edited_areas(change, CLEAN_FINE_BLUR)
-        if not (area & covered).any() and removed(original, generated, area)
+        if not (area & covered).any() and removed(before, after, area)
     ]
 
 
@@ -527,15 +553,17 @@ def edited_patches(original: np.ndarray, generated: np.ndarray) -> list[np.ndarr
     only when it is a removal; the rest is regeneration noise, such as a
     redrawn pendant. A removal joins a patch within CLEAN_REACH of it, as the
     scattered snowflakes and dots of a print do; one far from every patch is a
-    speck of hair or blanket the generator smoothed. A small edit that is not a
+    speck of hair or blanket the generator smoothed. A faint removal joins last
+    and in one pass, so it never extends a patch's reach: the colour pass finds
+    far more specks, and they would otherwise chain a patch across the frame.
+    A small edit that is not a
     removal, such as a redrawn pendant, is cut out of any patch it reaches
     into, so the photo keeps it whole."""
     change = np.abs(generated.astype(np.int16) - original).max(axis=2).astype(np.float32)
     coarse = edited_areas(change, 6)
+    before, after = lightness_edges(original), lightness_edges(generated)
     groups = [
-        area
-        for area, size in coarse
-        if size >= CLEAN_MIN_AREA and removed(original, generated, area)
+        area for area, size in coarse if size >= CLEAN_MIN_AREA and removed(before, after, area)
     ]
     keep = redrawn_items(original, generated, coarse)
     small = small_removals(original, generated, change, groups)
@@ -543,7 +571,11 @@ def edited_patches(original: np.ndarray, generated: np.ndarray) -> list[np.ndarr
         groups, patches = merge_overlapping(groups)
         small, joined = join_near(groups, patches, small)
         if not joined:
-            return [patch & ~keep for patch in patches]
+            break
+    covered = np.logical_or.reduce([np.zeros((SIZE, SIZE), bool), *groups])
+    join_near(groups, patches, faint_removals(original, generated, covered))
+    _, patches = merge_overlapping(groups)
+    return [patch & ~keep for patch in patches]
 
 
 def clone_patches(
@@ -605,10 +637,30 @@ def lab_lightness(pixels: np.ndarray) -> np.ndarray:
     return cv2.cvtColor(pixels, cv2.COLOR_RGB2LAB)[..., 0].astype(np.float32) * 100 / 255
 
 
+def lab_colour(pixels: np.ndarray) -> np.ndarray:
+    return cv2.cvtColor(pixels, cv2.COLOR_RGB2LAB)[..., 1:].astype(np.float32)
+
+
 def edge_strength(values: np.ndarray) -> np.ndarray:
     gx = cv2.Sobel(values, cv2.CV_32F, 1, 0)
     gy = cv2.Sobel(values, cv2.CV_32F, 0, 1)
     return np.sqrt(gx**2 + gy**2)
+
+
+def lightness_edges(pixels: np.ndarray) -> np.ndarray:
+    return edge_strength(lab_lightness(pixels))
+
+
+def colour_edges(pixels: np.ndarray) -> np.ndarray:
+    colour = lab_colour(pixels)
+    return np.hypot(edge_strength(colour[..., 0]), edge_strength(colour[..., 1]))
+
+
+def spread(values: np.ndarray) -> float:
+    """The median absolute deviation, scaled to equal a standard deviation on
+    even noise. A few hard edges can't inflate it, as they can a standard
+    deviation: the band around a patch often holds hair, a seam or a necklace."""
+    return float(np.median(np.abs(values - np.median(values))) * 1.4826)
 
 
 def patch_checks(
@@ -626,7 +678,7 @@ def patch_checks(
     removed_shape = cv2.GaussianBlur((removed & patch).astype(np.float32), (0, 0), 3)
     return {
         "echo": float(np.corrcoef(edge_strength(lo)[core], edge_strength(lg)[core])[0, 1]),
-        "texture": float(grain(lc)[core].std() / grain(lc)[ring_outside(patch)].std()),
+        "texture": spread(grain(lc)[core]) / spread(grain(lc)[ring_outside(patch)]),
         "texture_shape": float(np.corrcoef(texture_map[around], removed_shape[around])[0, 1]),
     }
 
