@@ -66,7 +66,11 @@ def test_preview_is_promoted_only_while_actual_scene_identity_matches(workspace_
 
 
 def test_matching_preview_promotes_exact_bytes_without_composition(workspace_root, monkeypatch):
-    from etsy_listings.core.application.prepared_previews import prepared_preview
+    from etsy_listings.core.application.scene_previews import (
+        DISK_IMAGES,
+        SceneLayers,
+        saved_scene,
+    )
     from etsy_listings.core.engine.stages.render import scene_hash
     from etsy_listings.core.preparation import scenes
 
@@ -75,8 +79,12 @@ def test_matching_preview_promotes_exact_bytes_without_composition(workspace_roo
     stage = RenderStage()
     desired = stage.desired(ctx, FIXTURE_LISTING, None)
     work = desired.works[0]
-    authoring = prepared_preview(
-        workspace, "shirt", config=None, colour=None, design=lambda _colour: work.layers[0].design
+    authoring = saved_scene(
+        workspace,
+        "shirt",
+        SceneLayers(None, lambda _colour: work.layers[0].design),
+        size="full",
+        images=DISK_IMAGES,
     )
     assert authoring.render_identity == scene_hash(desired, work)
     stage.preview(ctx, desired, None)
@@ -140,7 +148,11 @@ def test_compatible_map_republication_and_cache_deletion_keep_render_identity(wo
 def test_multiple_placements_resolve_actual_artwork_and_preserve_paint_order(workspace_root):
     from PIL import Image
 
-    from etsy_listings.core.application.prepared_previews import prepared_preview
+    from etsy_listings.core.application.scene_previews import (
+        DISK_IMAGES,
+        SceneLayers,
+        saved_scene,
+    )
     from etsy_listings.core.engine import execute
     from etsy_listings.core.engine.stages.render import scene_hash
     from etsy_listings.core.render import (
@@ -189,8 +201,12 @@ def test_multiple_placements_resolve_actual_artwork_and_preserve_paint_order(wor
     stage = RenderStage()
     desired = stage.desired(ctx, FIXTURE_LISTING, None)
     work = desired.works[0]
-    authoring = prepared_preview(
-        workspace, "shirt", config=None, colour=None, design=lambda _colour: red
+    authoring = saved_scene(
+        workspace,
+        "shirt",
+        SceneLayers(None, lambda _colour: red),
+        size="full",
+        images=DISK_IMAGES,
     )
     assert scene_hash(desired, work) != authoring.render_identity
     first = execute(ctx, build_plan(ctx, FIXTURE_LISTING, a_lock(), (stage,)), a_lock())
@@ -236,7 +252,11 @@ def test_changed_geometry_after_review_cannot_promote_a_previous_preview(workspa
 def test_listing_preview_uses_the_same_missing_map_explanation(workspace_root):
     import pytest
 
-    from etsy_listings.core.application.prepared_previews import prepared_preview
+    from etsy_listings.core.application.scene_previews import (
+        DISK_IMAGES,
+        SceneLayers,
+        saved_scene,
+    )
     from etsy_listings.core.render import PreparationRequiredError
 
     workspace, _ = listing_with_marigold(workspace_root)
@@ -246,12 +266,12 @@ def test_listing_preview_uses_the_same_missing_map_explanation(workspace_root):
         .blocked
     )
     with pytest.raises(PreparationRequiredError) as error:
-        prepared_preview(
+        saved_scene(
             workspace,
             "shirt",
-            config=None,
-            colour=None,
-            design=lambda _colour: workspace.design_file("take-a-hike"),
+            SceneLayers(None, lambda _colour: workspace.design_file("take-a-hike")),
+            size="full",
+            images=DISK_IMAGES,
         )
     assert str(error.value) == refusal
 

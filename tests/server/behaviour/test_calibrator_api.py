@@ -13,7 +13,7 @@ from fastapi.testclient import TestClient
 from PIL import Image
 
 from etsy_listings.core.workspace.workspace import Workspace
-from etsy_listings.server.api import templates
+from etsy_listings.server.api import imagecache, templates
 from etsy_listings.server.api.app import create_app
 
 
@@ -632,7 +632,7 @@ class TestPreviewScale:
     def test_editor_scale_caps_the_longest_edge_and_comes_back_as_webp(
         self, client: TestClient, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        monkeypatch.setattr(templates, "EDITOR_MAX_EDGE", 240)
+        monkeypatch.setattr(imagecache, "EDITOR_MAX_EDGE", 240)
         config = client.get("/api/templates/colour-chart-01/config").json()
         response = client.post("/api/templates/colour-chart-01/preview?scale=editor", json=config)
         assert response.status_code == 200
@@ -660,7 +660,7 @@ class TestPreviewScale:
         outside a 120px one and the preview would come back as the bare
         garment -- which is what comparing against the photo catches.
         """
-        monkeypatch.setattr(templates, "EDITOR_MAX_EDGE", 120)
+        monkeypatch.setattr(imagecache, "EDITOR_MAX_EDGE", 120)
         width, height = self.CHART_SIZE
         config = client.get("/api/templates/colour-chart-01/config").json()
         config["placements"] = [

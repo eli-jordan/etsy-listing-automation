@@ -344,8 +344,8 @@ nor makes the client ask for a new one. Any other change still refuses it.
 graph LR
     Canvas["Calibrate tab<br/>quad handles + sliders"] -->|"POST /preview?scale=editor<br/>(debounced)"| API["server/api/templates.py"]
     Tab["Preview tab<br/><i>on demand</i>"] -->|"POST /preview?scale=full"| API
-    API --> Cache["server/api/imagecache.py<br/><i>decoded photo, linear artwork, maps</i>"]
-    Cache --> Op["core/application/mockup_templates.py<br/><i>scene choice and compositing</i>"]
+    API --> Op["core/application/scene_previews.py<br/><i>this scene at this size, either renderer</i>"]
+    Op -->|"decode"| Cache["server/api/imagecache.py<br/><i>decoded photo, linear artwork, maps</i>"]
     Op --> RenderPipe["core/render/pipeline.py<br/><i>the same code apply runs</i>"]
     RenderPipe -->|"frame"| API
     API -->|WebP| Canvas
@@ -377,8 +377,17 @@ what its derived maps cache under, and both composite through
 geometry comes from — the unsaved boxes under the user's cursor, not the file
 on disk — which is exactly the difference that makes it a preview.
 `application.mockup_templates` decides the scene (photo, layers, design) and
-composites it from decoded images the server supplies out of its memo;
-encoding the frame as WebP or PNG is the server's.
+composites it. `application.scene_previews` is what every picture asks: `saved_scene`
+and `draft_scene` take a size and a decoder (`SceneImages`) and answer with a
+finished picture for either renderer, a `RenderedScene` (the PNG the render stage
+writes, with its identity) or an editor-size `SceneFrame`. It owns whether a draft
+still matches what is saved, through the rules gathered in
+`application.preparation.previews`, and turns prepared files it cannot use into
+`PreparationRequiredError`. The decoder is a real seam: the server's memo
+(`server/api/imagecache.py`, request-serving state that stays out of core) and
+`DISK_IMAGES`, which the scene warmer uses. `server/api/scene_responses.py` turns a
+picture into a response: the WebP encoding of a frame, and the identity headers
+and `304` of a rendered scene.
 
 Listings may hold their own absolute position for a template (ADR-0058), so a
 recalibrated box never moves them; the next `plan` re-checks each against the
@@ -1321,7 +1330,7 @@ from the template, for its swatches, and never builds a Photo warp configuration
 
 Plan, apply and every preview compose through `preparation.scenes.lease_scene`,
 which reads saved inputs, acquires one immutable generation for the target photo
-and names the scene identity in one place. `application.prepared_previews.saved_scene`
+and names the scene identity in one place. `application.scene_previews.saved_scene`
 picks the renderer for the listing and listing-template previews, so no route
 does. Before composing
 or promoting a deployment preview, apply rechecks saved preparation inputs and

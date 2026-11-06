@@ -18,10 +18,9 @@ calibrator*): :func:`saved_preview` and :func:`unsaved_preview` say which
 photo, which derived maps and which layers a preview composites, from the
 saved ``template.yaml`` or from the unsaved geometry under the seller's
 cursor; :func:`compose_preview` composites them through ``render_scene``.
-The decoded images are the caller's to supply. The server holds a memo of
-them between the frames of a drag (``server/api/imagecache.py``), which is
-request-serving state and stays there; this module takes images and
-geometry, and asks for a derived map only when a layer uses it.
+The decoded images are the caller's to supply; this module takes images and
+geometry, and asks for a derived map only when a layer uses it. A finished
+picture of a scene is :mod:`~etsy_listings.core.application.scene_previews`'s.
 """
 
 from __future__ import annotations

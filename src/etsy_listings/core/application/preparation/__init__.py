@@ -7,7 +7,8 @@ only through Preparations. Hosts offload synchronous operations to their request
 executor; neither capability inspection nor numerical work belongs on an async
 HTTP event loop. start also reconciles saves interrupted before job creation.
 
-previews.editor_preview is the revision-bound transient editor operation.
+previews.editor_preview is the revision-bound transient editor operation, reached
+through application.scene_previews; previews also holds every rule a draft answers to.
 It uses core.preparation.evidence_reader.EvidenceReader for validated retained evidence without
 publishing maps or invoking models. Prediction publication remains job-owned.
 activity scopes foreground priority to a workspace at CPU phase and solver boundaries.
