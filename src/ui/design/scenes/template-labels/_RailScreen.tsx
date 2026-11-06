@@ -122,16 +122,12 @@ export function RailScreen({
   initialSelected,
   initialDraft,
   initialQuery = "",
-  initialMenu = false,
-  initialActive = -1,
 }: {
   initialOn?: string[];
   initialSelected: string;
   /** Set to open the add-a-label field already typed into. */
   initialDraft?: string;
   initialQuery?: string;
-  initialMenu?: boolean;
-  initialActive?: number;
 }) {
   const [tags, setTags] = useState(initialTags);
   const [on, setOn] = useState(initialOn);
@@ -203,8 +199,6 @@ export function RailScreen({
             onOn={setOn}
             query={query}
             onQuery={setQuery}
-            initialMenu={initialMenu}
-            initialActive={initialActive}
           />
           <div className="template-rail__filters">
             {(

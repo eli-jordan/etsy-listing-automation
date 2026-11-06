@@ -84,8 +84,6 @@ export function LabelSearch({
   onOn,
   query,
   onQuery,
-  initialMenu = false,
-  initialActive = -1,
 }: {
   /** Every searchable item's tags. */
   items: string[][];
@@ -93,11 +91,9 @@ export function LabelSearch({
   onOn: (next: string[]) => void;
   query: string;
   onQuery: (next: string) => void;
-  initialMenu?: boolean;
-  initialActive?: number;
 }) {
-  const [menu, setMenu] = useState(initialMenu);
-  const [active, setActive] = useState(initialActive);
+  const [menu, setMenu] = useState(false);
+  const [active, setActive] = useState(-1);
   const id = useId();
   const box = useRef<HTMLDivElement>(null);
   const field = useRef<HTMLInputElement>(null);

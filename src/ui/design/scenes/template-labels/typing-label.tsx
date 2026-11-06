@@ -1,3 +1,4 @@
+import { OpenLabelMenu } from "../../components/_OpenLabelMenu";
 import { RailScreen } from "./_RailScreen";
 
 export const meta = {
@@ -8,5 +9,12 @@ export const meta = {
 };
 
 export default function Frame() {
-  return <RailScreen initialSelected="cc1717-woman-by-christmas-tree" initialQuery="CHR" initialMenu initialActive={0} />;
+  return (
+    <OpenLabelMenu highlightFirst>
+      <RailScreen
+        initialSelected="cc1717-woman-by-christmas-tree"
+        initialQuery="CHR"
+      />
+    </OpenLabelMenu>
+  );
 }
