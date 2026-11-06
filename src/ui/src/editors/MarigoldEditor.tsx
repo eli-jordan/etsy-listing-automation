@@ -44,6 +44,8 @@ interface Props {
   preparation: Preparation | null;
   rendererControls: ReactNode;
   calibrationRevision?: string;
+  calibrationLabels?: string[];
+  relabelledRevisions?: string[];
   maskEdits: MaskEdit[];
   onMaskEdits: (edits: MaskEdit[]) => void;
   savedConfig: TemplateConfigState | null;
@@ -151,6 +153,8 @@ function PlacementOverlays({
   );
 }
 
+const NO_LABELS: string[] = [];
+
 export function MarigoldEditor({
   templateName,
   config,
@@ -163,6 +167,8 @@ export function MarigoldEditor({
   preparation,
   rendererControls,
   calibrationRevision,
+  calibrationLabels = NO_LABELS,
+  relabelledRevisions = NO_LABELS,
   maskEdits,
   onMaskEdits,
   savedConfig,
@@ -334,7 +340,7 @@ export function MarigoldEditor({
   const editorRevision = calibrationRevision || preparation?.config_revision || "";
   const editorPreview = usePreview(
     templateName,
-    editorPreviewRequest(config.kind, jobs, colour, editorRevision, maskEdits),
+    editorPreviewRequest(config.kind, jobs, colour, editorRevision, calibrationLabels, maskEdits),
     design,
     true,
     onPreviewPending,
@@ -360,7 +366,8 @@ export function MarigoldEditor({
   const unsavedMaps =
     marigoldMapInputs(config) !== marigoldMapInputs(savedConfig) || maskEdits.length > 0;
   const awaitingSavedRevision =
-    !!calibrationRevision && preparation?.config_revision !== calibrationRevision;
+    !!calibrationRevision &&
+    ![calibrationRevision, ...relabelledRevisions].includes(preparation?.config_revision ?? "");
   const blocked = previewBlocker({
     mapsReady: marigoldMapsReady(preparation?.maps),
     unsavedMaps,

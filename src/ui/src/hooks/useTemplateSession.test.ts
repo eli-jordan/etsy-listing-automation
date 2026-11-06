@@ -468,6 +468,110 @@ describe("useTemplateSession", () => {
     });
   });
 
+  describe("a label edit", () => {
+    const labelled = (labels: string[]) => ({ ...SINGLE, labels });
+
+    beforeEach(() => {
+      server.disk.set("tee", { config: SINGLE, revision: "r1" });
+    });
+
+    it("reaches saved only when the save lands, and quick edits land together", async () => {
+      const clock = controlledClock();
+      const { result, onCatalogChanged } = await opened();
+
+      act(() => result.current.update(labelled(["cosy"])));
+      act(() => result.current.update(labelled(["cosy", "warm"])));
+      expect(result.current.saved?.labels).toEqual([]);
+
+      await clock.advance(AUTOSAVE_DEBOUNCE_MS);
+      await waitFor(() => expect(result.current.saved?.labels).toEqual(["cosy", "warm"]));
+      expect(server.puts).toHaveLength(1);
+      expect(onCatalogChanged).toHaveBeenCalledWith("tee");
+    });
+
+    it("leaves what a preview names alone, and reads no preparation", async () => {
+      const clock = controlledClock();
+      const { result } = await opened();
+      await waitFor(() => expect(result.current.preparation).not.toBeNull());
+      const reads = () => server.log.filter((line) => line.endsWith("/preparation")).length;
+      const before = reads();
+
+      act(() => result.current.update(labelled(["cosy"])));
+      await clock.advance(AUTOSAVE_DEBOUNCE_MS);
+      await waitFor(() => expect(result.current.saved?.labels).toEqual(["cosy"]));
+      act(() => result.current.update(labelled(["cosy", "warm"])));
+      await clock.advance(AUTOSAVE_DEBOUNCE_MS);
+      await waitFor(() => expect(result.current.saved?.labels).toEqual(["cosy", "warm"]));
+
+      expect(result.current.calibrationRevision).toBe("r1");
+      expect(result.current.calibrationLabels).toEqual([]);
+      expect(result.current.relabelledRevisions).toEqual(["tee-w1", "tee-w2"]);
+      expect(reads()).toBe(before);
+    });
+
+    it("moves what a preview names once a save changes anything else", async () => {
+      const clock = controlledClock();
+      const { result } = await opened();
+      act(() => result.current.update(labelled(["cosy"])));
+      await clock.advance(AUTOSAVE_DEBOUNCE_MS);
+      await waitFor(() => expect(result.current.relabelledRevisions).toEqual(["tee-w1"]));
+
+      act(() => result.current.update(edited(labelled(["cosy"]), 9)));
+      await clock.advance(AUTOSAVE_DEBOUNCE_MS);
+
+      await waitFor(() => expect(result.current.calibrationRevision).toBe("tee-w2"));
+      expect(result.current.calibrationLabels).toEqual(["cosy"]);
+      expect(result.current.relabelledRevisions).toEqual([]);
+    });
+
+    it("reports saving from the edit on, however long a preview holds it", async () => {
+      const clock = controlledClock();
+      const { result } = await opened();
+
+      act(() => result.current.setPreviewPending(true));
+      act(() => result.current.update(labelled(["cosy"])));
+      expect(result.current.save.kind).toBe("saving");
+      await clock.advance(AUTOSAVE_DEBOUNCE_MS * 3);
+      expect(server.puts).toHaveLength(0);
+      expect(result.current.save.kind).toBe("saving");
+
+      act(() => result.current.setPreviewPending(false));
+      await waitFor(() => expect(result.current.save.kind).toBe("saved"));
+      expect(result.current.saved?.labels).toEqual(["cosy"]);
+    });
+
+    it("leaves saved as it was when the save fails, and the next save carries it", async () => {
+      const clock = controlledClock();
+      const { result } = await opened();
+      server.onPut = () => Response.json({ detail: "disk full" }, { status: 500 });
+
+      act(() => result.current.update(labelled(["cosy"])));
+      await clock.advance(AUTOSAVE_DEBOUNCE_MS);
+      await waitFor(() => expect(result.current.save.kind).toBe("failed"));
+      expect(result.current.saved?.labels).toEqual([]);
+      expect(result.current.config?.labels).toEqual(["cosy"]);
+
+      server.onPut = null;
+      act(() => result.current.update(labelled(["cosy", "warm"])));
+      expect(result.current.save.kind).toBe("failed");
+      await clock.advance(AUTOSAVE_DEBOUNCE_MS);
+      await waitFor(() => expect(result.current.saved?.labels).toEqual(["cosy", "warm"]));
+    });
+
+    it("keeps a conflict on show, since only a reload can clear it", async () => {
+      const clock = controlledClock();
+      const { result } = await opened();
+      server.disk.set("tee", { config: SINGLE, revision: "elsewhere" });
+
+      act(() => result.current.update(labelled(["cosy"])));
+      await clock.advance(AUTOSAVE_DEBOUNCE_MS);
+      await waitFor(() => expect(result.current.save.kind).toBe("conflict"));
+
+      act(() => result.current.update(labelled(["cosy", "warm"])));
+      expect(result.current.save.kind).toBe("conflict");
+    });
+  });
+
   describe("prepare", () => {
     it("saves the draft first, then queues the revision the server holds", async () => {
       const { result, onCatalogChanged } = await opened();

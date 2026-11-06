@@ -41,8 +41,16 @@ export interface TemplateSession {
   /** Mask strokes drawn but not yet committed by a save. */
   maskEdits: MaskEdit[];
   /** The revision a preview's `calibration_revision` names: the one this
-   * session last read or wrote, or the one its own preparation completed at. */
+   * session last read or wrote, or the one its own preparation completed at.
+   * A save that changed only labels leaves it where it is: nothing a preview
+   * draws moved, so asking for the frame again would be wasted work. */
   calibrationRevision: string;
+  /** The labels `calibrationRevision` was saved with, which a preview sends so
+   * the server can recognise that revision behind later label saves. */
+  calibrationLabels: string[];
+  /** The revisions label-only saves have moved the document to since
+   * `calibrationRevision`. Preparation reporting one of them is up to date. */
+  relabelledRevisions: string[];
   preparation: Preparation | null;
   preparationError: string;
   /** An explicit prepare or cancel request is outstanding. */
@@ -90,6 +98,15 @@ function sameConfig(left: TemplateConfigState, right: TemplateConfigState): bool
   return JSON.stringify(canonical(left)) === JSON.stringify(canonical(right));
 }
 
+function sameLabels(left: TemplateConfigState, right: TemplateConfigState): boolean {
+  return JSON.stringify(left.labels) === JSON.stringify(right.labels);
+}
+
+/** Whether going from `before` to `after` changes labels and nothing else. */
+function onlyLabelsDiffer(before: TemplateConfigState, after: TemplateConfigState): boolean {
+  return !sameLabels(before, after) && sameConfig({ ...before, labels: after.labels }, after);
+}
+
 /** One opening of one template. A switch or a reload makes a new one, so a
  * response for an old one is recognised by identity -- no name or sequence
  * guards -- and a save still in flight for it finishes against it. */
@@ -101,6 +118,8 @@ interface Doc {
   /** Sent as `If-Match`; advanced by every save and by an adopted baseline. */
   revision: string;
   fence: string;
+  fenceLabels: string[];
+  relabelled: string[];
   maskEdits: MaskEdit[];
   save: TemplateSaveState;
   previewPending: boolean;
@@ -118,6 +137,8 @@ interface View {
   save: TemplateSaveState;
   maskEdits: MaskEdit[];
   calibrationRevision: string;
+  calibrationLabels: string[];
+  relabelledRevisions: string[];
   previewPending: boolean;
   preparationVersion: number;
   preparing: boolean;
@@ -130,7 +151,9 @@ interface Connections {
 }
 
 const IDLE: TemplateSaveState = { kind: "idle" };
+const SAVING: TemplateSaveState = { kind: "saving" };
 const NO_EDITS: MaskEdit[] = [];
+const NO_LABELS: string[] = [];
 
 /** What a failed save says: a conflict asks for a reload, anything else is
  * a plain failure. */
@@ -145,6 +168,17 @@ function isDirty(doc: Doc): boolean {
     doc.saved !== null &&
     (!sameConfig(doc.draft, doc.saved) || doc.maskEdits.length > 0)
   );
+}
+
+/** The save state to show. A label edit changes nothing on screen until it
+ * saves, and a pending preview can hold that save for as long as it likes, so
+ * the wait reads as saving from the edit on. A failure stays until the next
+ * attempt, and a conflict until a reload. */
+function shownSave(doc: Doc): TemplateSaveState {
+  const waiting = doc.timer !== null || doc.due;
+  const labelled = doc.draft !== null && doc.saved !== null && !sameLabels(doc.draft, doc.saved);
+  const settled = doc.save.kind === "idle" || doc.save.kind === "saved";
+  return waiting && labelled && settled ? SAVING : doc.save;
 }
 
 /** The session's state outside React, so the save loop reads what is true
@@ -206,7 +240,7 @@ class Session {
       job.config_revision === preparation?.config_revision &&
       doc.fence !== job.config_revision
     ) {
-      doc.fence = job.config_revision;
+      this.fence(doc, job.config_revision);
       this.emit();
     }
   }
@@ -324,6 +358,8 @@ class Session {
       saved: null,
       revision: "",
       fence: "",
+      fenceLabels: NO_LABELS,
+      relabelled: [],
       maskEdits: NO_EDITS,
       save: IDLE,
       previewPending: false,
@@ -339,7 +375,8 @@ class Session {
           if (this.doc !== doc) return;
           doc.load = "ready";
           doc.draft = doc.saved = loaded?.config ?? null;
-          doc.revision = doc.fence = loaded?.revision ?? "";
+          doc.revision = loaded?.revision ?? "";
+          this.fence(doc, doc.revision);
           doc.save = loaded ? { kind: "saved", savedAt: Date.parse(loaded.modifiedAt) } : IDLE;
           this.emit();
         },
@@ -394,30 +431,39 @@ class Session {
     if (doc.load !== "ready" || doc.draft === null || (!always && !isDirty(doc))) return;
     const config = doc.draft;
     const edits = this.uncommitted(doc.maskEdits);
-    doc.save = { kind: "saving" };
+    doc.save = SAVING;
     this.emit();
     try {
       await this.adoptPreparedBaseline(doc);
       const result = await saveTemplateConfig(doc.name, config, edits, doc.revision);
       if (result.revision) doc.revision = result.revision;
-      for (const edit of edits) for (const op of edit.operations) this.committed.add(op);
-      doc.saved = config;
-      doc.maskEdits = this.uncommitted(doc.maskEdits);
-      doc.fence = doc.revision;
-      doc.save = { kind: "saved", savedAt: Date.now() };
-      const current = this.doc === doc;
-      // A save rebuilds CPU-side maps, so preparation is read again.
-      if (current) this.version += 1;
-      this.emit();
-      // Whether the template still needs calibration may have changed, and
-      // the rail is what shows that. Only the open template is reselected: a
-      // flushed one finishing late must not pull the rail back to it.
-      this.connections.onCatalogChanged?.(current ? doc.name : undefined);
+      this.landed(doc, config, edits);
     } catch (e) {
       doc.save = saveFailure(e);
       this.emit();
       throw e;
     }
+  }
+
+  /** `config` and `edits` are on disk at `doc.revision`. */
+  private landed(doc: Doc, config: TemplateConfigState, edits: MaskEdit[]) {
+    const relabelling =
+      edits.length === 0 && doc.saved !== null && onlyLabelsDiffer(doc.saved, config);
+    for (const edit of edits) for (const op of edit.operations) this.committed.add(op);
+    doc.saved = config;
+    doc.maskEdits = this.uncommitted(doc.maskEdits);
+    if (relabelling) doc.relabelled = [...doc.relabelled, doc.revision];
+    else this.fence(doc, doc.revision);
+    doc.save = { kind: "saved", savedAt: Date.now() };
+    const current = this.doc === doc;
+    // A save rebuilds CPU-side maps, so preparation is read again. A label
+    // save rebuilds nothing.
+    if (current && !relabelling) this.version += 1;
+    this.emit();
+    // Whether the template still needs calibration may have changed, and
+    // the rail is what shows that. Only the open template is reselected: a
+    // flushed one finishing late must not pull the rail back to it.
+    this.connections.onCatalogChanged?.(current ? doc.name : undefined);
   }
 
   /** A completed preparation this session queued rewrites template.yaml's
@@ -445,6 +491,13 @@ class Session {
     this.own.delete(job.id);
   }
 
+  /** Moves what a preview names to `revision`, which holds the saved labels. */
+  private fence(doc: Doc, revision: string) {
+    doc.fence = revision;
+    doc.fenceLabels = doc.saved?.labels ?? NO_LABELS;
+    doc.relabelled = [];
+  }
+
   private uncommitted(edits: MaskEdit[]): MaskEdit[] {
     const remaining = edits
       .map((edit) => ({
@@ -469,9 +522,11 @@ class Session {
       config: ready ? doc.draft : null,
       saved: ready ? doc.saved : null,
       dirty: doc ? isDirty(doc) : false,
-      save: doc?.save ?? IDLE,
+      save: doc ? shownSave(doc) : IDLE,
       maskEdits: doc?.maskEdits ?? NO_EDITS,
       calibrationRevision: doc?.fence ?? "",
+      calibrationLabels: doc?.fenceLabels ?? NO_LABELS,
+      relabelledRevisions: doc?.relabelled ?? [],
       previewPending: doc?.previewPending ?? false,
       preparationVersion: this.version,
       preparing: this.preparing,
@@ -517,6 +572,8 @@ export function useTemplateSession(
           save: IDLE,
           maskEdits: NO_EDITS,
           calibrationRevision: "",
+          calibrationLabels: NO_LABELS,
+          relabelledRevisions: [],
           previewPending: false,
         };
   const {
@@ -541,6 +598,8 @@ export function useTemplateSession(
     save: view.save,
     maskEdits: view.maskEdits,
     calibrationRevision: view.calibrationRevision,
+    calibrationLabels: view.calibrationLabels,
+    relabelledRevisions: view.relabelledRevisions,
     preparation,
     preparationError: view.actionError || mapError,
     preparing: view.preparing,
