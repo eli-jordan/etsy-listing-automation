@@ -174,6 +174,21 @@ describe("getTemplateConfig", () => {
 });
 
 describe("saveTemplateConfig", () => {
+  it("rejects a refused save with the server's sentence", async () => {
+    const detail = "Labels can be up to 30 characters";
+    const { saveTemplateConfig } = await answering(422, { detail });
+
+    await expect(saveTemplateConfig("tee", CONFIG, [], "sha256:read")).rejects.toThrow(detail);
+  });
+
+  it("keeps its own words when the refusal is not a sentence", async () => {
+    const { saveTemplateConfig } = await answering(422, { detail: [{ msg: "field required" }] });
+
+    await expect(saveTemplateConfig("tee", CONFIG, [], "sha256:read")).rejects.toThrow(
+      "could not save template.yaml",
+    );
+  });
+
   it("PUTs the config over the given revision with a request id, and returns the saved one", async () => {
     const saved = {
       ...CONFIG,
