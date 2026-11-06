@@ -269,3 +269,19 @@ def test_keys_read_as_the_workspace_reader_reads_them() -> None:
     edited = edit_yaml(source, {"points": [{"x": 0, "y": 5}, {"x": 1, "y": 2}]})
 
     assert edited == "points:\n- {x: 0, y: 5}\n- x: 1\n  y: 2\n"
+
+
+@pytest.mark.parametrize("newline", ["\n", "\r\n"])
+def test_a_file_without_a_final_newline_gains_none_when_its_last_key_goes(newline: str) -> None:
+    source = newline.join(["kept: 1", "gone:", "- a", "- b"])
+
+    assert edit_yaml(source, {"kept": 1}) == "kept: 1"
+
+
+def test_adding_then_removing_a_last_key_gives_back_the_same_text() -> None:
+    source = "kept: 1"
+
+    added = edit_yaml(source, {"kept": 1, "more": ["a"]})
+
+    assert added == "kept: 1\nmore:\n- a"
+    assert edit_yaml(added, {"kept": 1}) == source

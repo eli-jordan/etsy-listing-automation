@@ -406,9 +406,14 @@ class _Editor:
                 self._insert_lines_before(entries[0][1].start_mark.index, lines, column)
 
     def _remove_lines(self, first: int, last: Node) -> None:
-        """Remove the whole lines from ``first`` to the end of ``last``'s content."""
+        """Remove the whole lines from ``first`` to the end of ``last``'s content.
+        A file with no final newline keeps having none, so removing what an
+        insert added gives back the same bytes."""
         start = self._line_start(first)
-        self._splice(start, self._line_after(self._content_end(last)), "")
+        end = self._line_after(self._content_end(last))
+        if end == len(self.source) and not self.source.endswith("\n"):
+            start -= 2 if self.source[:start].endswith("\r\n") else 1
+        self._splice(start, end, "")
 
     def _edit_block_sequence(self, node: SequenceNode, old: list[Any], new: list[Any]) -> None:
         items: list[Node] = list(node.value)
