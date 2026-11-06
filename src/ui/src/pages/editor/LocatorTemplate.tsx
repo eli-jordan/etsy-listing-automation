@@ -13,13 +13,6 @@ interface TemplateActions {
   onFocus: (focus: Focus) => void;
 }
 
-function kindLabel(kind: TemplateSummary["kind"]): string {
-  if (kind === "colour-matrix") return "Colour matrix · one photo per colour";
-  if (kind === "multiple") return "Multiple · several garments in one photo";
-  if (kind === "single") return "Single · one fixed photo";
-  return "";
-}
-
 function entriesFor(detail: ListingDetail, template: string): number {
   return detail.media.filter((m) => typeof m !== "string" && m.template === template).length;
 }
@@ -294,7 +287,11 @@ export function LocatorTemplate({
         </span>
         <span className="loc-tmpl__text">
           <span className="loc-tmpl__name">{template.name}</span>
-          <span className="loc-tmpl__kind">{kindLabel(template.kind)}</span>
+          <span
+            className={`loc-tmpl__labels${template.labels.length === 0 ? " loc-tmpl__labels--none" : ""}`}
+          >
+            {template.labels.length > 0 ? template.labels.join(" · ") : "No labels"}
+          </span>
         </span>
         {inCount > 0 && <span className="loc-tmpl__count">{inCount} in listing</span>}
         <span className="loc-tmpl__caret" aria-hidden="true">

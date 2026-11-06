@@ -4635,6 +4635,19 @@ table.listings tbody tr:last-child td {
   color: color-mix(in srgb, var(--color-text) 52%, transparent);
 }
 
+.loc-tmpl__labels {
+  display: block;
+  font-size: 11px;
+  color: var(--color-accent-700);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.loc-tmpl__labels--none {
+  color: color-mix(in srgb, var(--color-text) 50%, transparent);
+}
+
 .loc-tmpl__count {
   font-size: 10px;
   font-weight: 700;

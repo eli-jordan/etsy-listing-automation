@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { MediaOwner } from "../../media";
-import type { ListingDetail, MediaFileSummary } from "../../types";
+import type { ListingDetail, MediaFileSummary, TemplateSummary } from "../../types";
 import { MediaLocator } from "./MediaLocator";
 
 /**
@@ -74,7 +74,64 @@ function group(label: RegExp): HTMLElement {
   return screen.getByRole("group", { name: label });
 }
 
-afterEach(() => vi.restoreAllMocks());
+function template(over: Partial<TemplateSummary> & { name: string }): TemplateSummary {
+  return {
+    kind: "single",
+    colours: [],
+    photos: [],
+    has_config: true,
+    labels: [],
+    status: "calibrated",
+    status_reason: null,
+    width: 480,
+    height: 576,
+    ...over,
+  };
+}
+
+/** The Mockup templates half, as a listing named by `scope` would open it. */
+function templatesLocator(templates: TemplateSummary[], scope: string | null = null) {
+  const detail = {
+    name: "take-a-hike",
+    media: [],
+    colors: ["black"],
+    etsy: { variation_images: null },
+  } as unknown as ListingDetail;
+  return render(
+    <MediaLocator
+      detail={detail}
+      templates={templates}
+      local={[BACK]}
+      shared={[SIZING]}
+      onToggleTemplate={vi.fn()}
+      onToggleFile={vi.fn()}
+      onAddMissingColours={vi.fn()}
+      onToggleSwatchSource={vi.fn()}
+      onFocus={vi.fn()}
+      scope={scope}
+    />,
+  );
+}
+
+afterEach(() => {
+  vi.restoreAllMocks();
+  sessionStorage.clear();
+});
+
+describe("MediaLocator's template rows", () => {
+  it("shows a template's labels in place of its kind", () => {
+    templatesLocator([template({ name: "tree", labels: ["theme:christmas", "shot:flat lay"] })]);
+
+    expect(screen.getByText("theme:christmas · shot:flat lay")).toBeInTheDocument();
+    expect(screen.queryByText(/one fixed photo/)).not.toBeInTheDocument();
+  });
+
+  it("says when a template has no labels", () => {
+    templatesLocator([template({ name: "tree" })]);
+
+    expect(screen.getByText("No labels")).toBeInTheDocument();
+  });
+});
 
 describe("MediaLocator's file list", () => {
   it("groups the listing's own files before the shared ones without exposing ref roots", () => {
