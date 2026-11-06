@@ -1,7 +1,7 @@
 # Mockup template labels implementation plan
 
 Written 2026-11-06 from the [specification](spec.md) and the approved
-[interactions document](interactions.md). Status: not started. This plan owns the
+[interactions document](interactions.md). Status: implemented, in review. This plan owns the
 delivery sequence; the spec owns requirements and the interactions document owns
 UI behaviour. Cite their sections rather than restating them.
 
@@ -38,10 +38,10 @@ placeholders in first.
 | PR | Title | Difficulty | Branch | Link |
 |---|---|---|---|---|
 | 0 | Stack base: docs and mockups | — | `feat/mockup-template-labels` | [#190](https://github.com/eli-jordan/etsy-listing-automation/pull/190) |
-| 1 | Template labels in the model, out of rendering | hard | `feat/labels-1-model` | — |
-| 2 | Labels bar on the Mockup Templates workbench | standard | `feat/labels-2-bar` | — |
-| 3 | Label search box on the rail | standard | `feat/labels-3-rail` | — |
-| 4 | Label search box on Listing Images | standard | `feat/labels-4-listing` | — |
+| 1 | Template labels in the model, out of rendering | hard | `feat/labels-1-model` | [#191](https://github.com/eli-jordan/etsy-listing-automation/pull/191) |
+| 2 | Labels bar on the Mockup Templates workbench | standard | `feat/labels-2-bar` | [#192](https://github.com/eli-jordan/etsy-listing-automation/pull/192) |
+| 3 | Label search box on the rail | standard | `feat/labels-3-rail` | [#193](https://github.com/eli-jordan/etsy-listing-automation/pull/193) |
+| 4 | Label search box on Listing Images | standard | `feat/labels-4-listing` | [#194](https://github.com/eli-jordan/etsy-listing-automation/pull/194) |
 
 Size: aim under about 1,500 changed lines per PR, excluding regenerated
 OpenAPI/client files and lockfiles. A PR that cannot fit splits at a seam the
