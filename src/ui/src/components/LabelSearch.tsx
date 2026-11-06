@@ -1,6 +1,7 @@
 // The search box both pages share: labels are pills inside it, and plain text
 // narrows what they leave by title. The caller owns both values, and applies
 // them to its own list.
+import { MagnifyingGlassIcon } from "@phosphor-icons/react/dist/csr/MagnifyingGlass";
 import { XIcon } from "@phosphor-icons/react/dist/csr/X";
 import { Fragment, type KeyboardEvent, useEffect, useId, useRef, useState } from "react";
 import { holdsLabels } from "./labelRules";
@@ -172,10 +173,7 @@ export function LabelSearch({
           setMenu(true);
         }}
       >
-        <svg viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <circle cx="11" cy="11" r="7" />
-          <path d="M20 20l-3.5-3.5" />
-        </svg>
+        <MagnifyingGlassIcon weight="bold" />
         {on.map((tag) => (
           <span key={tag} className="tag tag-accent label-search__pill">
             {tag}

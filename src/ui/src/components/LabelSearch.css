@@ -20,8 +20,7 @@
   width: 15px;
   height: 15px;
   flex: none;
-  fill: none;
-  stroke: color-mix(in srgb, var(--color-text) 55%, transparent);
+  color: color-mix(in srgb, var(--color-text) 55%, transparent);
 }
 
 .label-search__box:focus-within {
