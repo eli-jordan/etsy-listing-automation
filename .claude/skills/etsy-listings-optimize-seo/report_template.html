@@ -1,0 +1,425 @@
+<title>__TITLE__</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=Hanken+Grotesk:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a code-review diff of the shop. Each listing is a changeset, each tag swap a reviewable hunk. Colours come from garment-dyed shirts: pepper, moss, berry, butter, blue jean. */
+:root {
+  --bg: #f1f3ec; --panel: #fbfcf8; --ink: #23262a; --muted: #5a615b; --line: #d6dacf;
+  --moss: #3f5d35; --moss-soft: #e0e9d8; --on-moss: #ffffff;
+  --berry: #8a2a4d; --berry-soft: #f3dfe6; --on-berry: #ffffff;
+  --butter: #7a5a0c; --butter-soft: #f5e8bf; --jean: #2f5372; --jean-soft: #dde7ef;
+  --display: "Bricolage Grotesque", "Trebuchet MS", sans-serif;
+  --body: "Hanken Grotesk", "Segoe UI", system-ui, sans-serif;
+  --mono: "JetBrains Mono", Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #161917; --panel: #1f2320; --ink: #e9ece6; --muted: #a6aea7; --line: #363c37;
+  --moss: #9cc58a; --moss-soft: #2a3a26; --on-moss: #142011;
+  --berry: #eb9ab6; --berry-soft: #43222f; --on-berry: #2c0f1b;
+  --butter: #e6c76f; --butter-soft: #3d331a; --jean: #9cc0dd; --jean-soft: #223341; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #161917; --panel: #1f2320; --ink: #e9ece6; --muted: #a6aea7; --line: #363c37;
+  --moss: #9cc58a; --moss-soft: #2a3a26; --on-moss: #142011;
+  --berry: #eb9ab6; --berry-soft: #43222f; --on-berry: #2c0f1b;
+  --butter: #e6c76f; --butter-soft: #3d331a; --jean: #9cc0dd; --jean-soft: #223341; color-scheme: dark }
+* { box-sizing: border-box }
+body { background: var(--bg); color: var(--ink); font-family: var(--body); font-size: 16px; line-height: 1.5 }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--bg) }
+.wrap { max-width: 980px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 32px 64px }
+h1, h2, h3 { font-family: var(--display); line-height: 1.15; text-wrap: balance; margin: 0 }
+h1 { font-size: clamp(2rem, 5vw, 2.9rem); font-weight: 700 }
+h2 { font-size: 1.5rem; font-weight: 700 }
+h3 { font-size: 1.2rem; font-weight: 600 }
+p { margin: 0 }
+a { color: var(--jean) }
+.lede { max-width: 66ch; font-size: 1.1rem; margin-top: 12px }
+.meta { color: var(--muted); font-size: .9rem; margin-top: 8px }
+.stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-top: 24px }
+.stat { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 14px }
+.stat b { display: block; font-family: var(--display); font-size: 1.7rem; line-height: 1.1; font-variant-numeric: tabular-nums }
+.stat span { display: block; color: var(--muted); font-size: .86rem; margin-top: 6px }
+details.notes { margin-top: 20px; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 12px 16px }
+details.notes summary { cursor: pointer; font-weight: 600 }
+details.notes ul { margin: 10px 0 4px; padding-left: 20px; display: grid; gap: 6px; max-width: 72ch }
+.bar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--bg); border-bottom: 1px solid var(--line); margin-top: 24px; padding-block: 10px; display: flex; flex-wrap: wrap; gap: 10px; align-items: center }
+.progress { min-width: 0; flex: 1 1 200px }
+.progress .txt { font-size: .9rem; font-variant-numeric: tabular-nums }
+.track { height: 6px; background: var(--line); border-radius: 3px; overflow: hidden; margin-top: 4px; display: flex; gap: 2px }
+.track i { display: block; height: 100%; width: 0 }
+.track .a { background: var(--moss) } .track .r { background: var(--berry) }
+.filters { display: flex; flex-wrap: wrap; gap: 6px }
+button { font: inherit; color: inherit; cursor: pointer }
+button:focus-visible, a:focus-visible, summary:focus-visible { outline: 2px solid var(--jean); outline-offset: 2px }
+.chip { background: transparent; border: 1px solid var(--line); border-radius: 999px; padding: 4px 12px; font-size: .86rem }
+.chip[aria-pressed="true"] { background: var(--ink); color: var(--bg); border-color: var(--ink) }
+.copy { background: var(--ink); color: var(--bg); border: 1px solid var(--ink); border-radius: 6px; padding: 6px 14px; font-size: .9rem; font-weight: 600 }
+.saved { width: 100%; font-size: .8rem; color: var(--muted) }
+.listing { margin-top: 32px; background: var(--panel); border: 1px solid var(--line); border-radius: 6px }
+.lhead { display: grid; grid-template-columns: 84px minmax(0, 1fr) auto; gap: 14px; padding: 14px 16px; align-items: center; border-bottom: 1px solid var(--line) }
+.lhead img { width: 84px; height: 84px; object-fit: cover; border-radius: 4px; display: block }
+.lhead .sub { color: var(--muted); font-size: .86rem; margin-top: 2px; font-variant-numeric: tabular-nums }
+.bulk { display: flex; flex-direction: column; gap: 6px }
+.bulk button { background: transparent; border: 1px solid var(--line); border-radius: 6px; font-size: .82rem; padding: 4px 10px; white-space: nowrap }
+.hunk { padding: 14px 16px; border-bottom: 1px solid var(--line); display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px 16px; align-items: start }
+.hunk:last-of-type { border-bottom: 0 }
+.hunk[data-d="approve"] { background: var(--moss-soft) }
+.hunk[data-d="reject"] { background: var(--berry-soft) }
+.diff { font-family: var(--mono); font-size: .92rem; min-width: 0 }
+.line { display: grid; grid-template-columns: 1.3em minmax(0, 1fr); gap: 4px; overflow-wrap: anywhere }
+.line .sign { font-weight: 500 }
+.line.old .sign { color: var(--berry) } .line.new .sign { color: var(--moss) }
+.line.old .txt { color: var(--muted); text-decoration: line-through; text-decoration-thickness: 1px }
+.line.new .txt { font-weight: 500 }
+.nums { font-family: var(--body); font-size: .82rem; color: var(--muted); font-variant-numeric: tabular-nums; display: block; text-decoration: none }
+.why { grid-column: 1 / -1; font-size: .92rem; max-width: 72ch }
+.exp { color: var(--muted) }
+.badges { display: inline-flex; flex-wrap: wrap; gap: 4px; margin-left: 6px; vertical-align: middle }
+.badge { font-family: var(--body); font-size: .72rem; letter-spacing: .02em; padding: 1px 7px; border-radius: 3px; font-weight: 600; white-space: nowrap }
+.b-seasonal { background: var(--butter-soft); color: var(--butter) }
+.b-check { background: var(--jean-soft); color: var(--jean) }
+.b-risk { background: var(--berry-soft); color: var(--berry); border: 1px solid var(--berry) }
+.b-spike { background: transparent; color: var(--muted); border: 1px solid var(--line) }
+.b-title { background: var(--ink); color: var(--bg) }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden }
+.seg button { background: var(--panel); border: 0; padding: 6px 12px; font-size: .86rem; font-weight: 600 }
+.seg button + button { border-left: 1px solid var(--line) }
+.seg .yes[aria-pressed="true"] { background: var(--moss); color: var(--on-moss) }
+.seg .no[aria-pressed="true"] { background: var(--berry); color: var(--on-berry) }
+.keeps { padding: 12px 16px; font-size: .86rem; color: var(--muted); border-top: 1px solid var(--line) }
+.keeps code { font-family: var(--mono); font-size: .82rem; color: var(--ink); background: var(--bg); border-radius: 3px; padding: 1px 5px; white-space: nowrap; display: inline-block; margin: 2px 2px 0 0 }
+.legend, .boardwrap { margin-top: 24px; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 16px }
+.legend p, .sub2 { max-width: 72ch; font-size: .95rem; margin-top: 6px }
+.sub2 { color: var(--muted) }
+.legend dl { margin: 12px 0 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 20px }
+.legend dl div { display: grid; gap: 3px; min-width: 0 }
+.legend dt, .legend dd { margin: 0 } .legend dd { font-size: .9rem; color: var(--muted) }
+.tier { display: inline-block; font-family: var(--body); font-size: .72rem; letter-spacing: .02em; font-weight: 600; padding: 1px 7px; border-radius: 3px; white-space: nowrap }
+.t-sweet { background: var(--moss); color: var(--on-moss) } .t-small { background: var(--moss-soft); color: var(--moss) }
+.t-open { background: var(--jean-soft); color: var(--jean) } .t-busy { background: var(--butter-soft); color: var(--butter) }
+.t-crowded, .t-wrong { background: var(--berry-soft); color: var(--berry) } .t-design { background: transparent; color: var(--muted); border: 1px solid var(--line) }
+.scroll { overflow-x: auto; margin-top: 10px }
+table.board { border-collapse: collapse; width: 100%; font-size: .9rem; font-variant-numeric: tabular-nums }
+table.board th { text-align: left; font-weight: 600; font-size: .8rem; color: var(--muted); padding: 6px 10px 6px 0; border-bottom: 1px solid var(--line) }
+table.board td { padding: 6px 10px 6px 0; border-bottom: 1px solid var(--line) }
+table.board td:first-child { font-family: var(--mono); font-size: .86rem; white-space: nowrap }
+table.board .n { text-align: right }
+.notice { padding: 12px 16px; background: var(--butter-soft); color: var(--ink); font-size: .92rem; border-bottom: 1px solid var(--line) }
+section.other { margin-top: 40px }
+section.other ol { padding-left: 22px; display: grid; gap: 10px; max-width: 72ch; margin: 12px 0 0 }
+.empty { margin-top: 28px; color: var(--muted) }
+.find { margin: 10px 0 0; padding-left: 20px; display: grid; gap: 8px; max-width: 74ch; font-size: .95rem } .legend + .legend { margin-top: 16px } @media (max-width: 720px) {
+  .stats { grid-template-columns: repeat(2, minmax(0, 1fr)) }
+  .legend dl { grid-template-columns: minmax(0, 1fr) }
+  .lhead { grid-template-columns: 64px minmax(0, 1fr) }
+  .lhead img { width: 64px; height: 64px }
+  .bulk { grid-column: 1 / -1; flex-direction: row; flex-wrap: wrap }
+  .hunk { grid-template-columns: minmax(0, 1fr) }
+  .seg { justify-self: start }
+  .bar { position: static }
+}
+@media (prefers-reduced-motion: no-preference) { .hunk { transition: background-color .15s } }
+</style>
+
+<div class="wrap">
+  <h1>__HEADING__</h1>
+  <p class="meta">__META__</p>
+  <p class="lede">__LEDE__</p>
+  <div class="stats" id="stats"></div>
+
+  <div class="legend">
+    <h2>What the data shows</h2>
+    <ul class="find">__FINDINGS__</ul>
+  </div>
+
+  <div class="legend">
+    <h2>How each term is scored</h2>
+    <p>Shirt searches = eRank's average monthly searches × the share of Etsy's top 100 results that are shirts. Competing tees = T-shirt listings on Etsy matching the term. Reach adds up shirt searches across a listing's sweet-spot, small and busy tags. In Etsy autocomplete means Etsy itself offers the exact phrase, which confirms people search it but says nothing about how often.</p>
+    <dl>
+      <div><dt><span class="tier t-sweet">Sweet spot</span></dt><dd>30+ shirt searches a month, up to 12,000 tees. The target.</dd></div>
+      <div><dt><span class="tier t-small">Small niche</span></dt><dd>10 to 29 shirt searches, up to 5,000 tees. Real but modest.</dd></div>
+      <div><dt><span class="tier t-open">Open, unproven</span></dt><dd>Under 4,000 tees, with little or no measured demand. A cheap bet.</dd></div>
+      <div><dt><span class="tier t-busy">Busy</span></dt><dd>100+ shirt searches, up to 50,000 tees. Used only where the fit is exact.</dd></div>
+      <div><dt><span class="tier t-crowded">Crowded</span></dt><dd>Fails the test. I only suggest one if it clearly beats the old tag, marked Your call.</dd></div>
+      <div><dt><span class="tier t-crowded">Wrong audience</span></dt><dd>Real searches, but under 15% of the results are shirts.</dd></div>
+    </dl>
+  </div>
+
+  <div class="boardwrap">
+    <h2>Best niches I found</h2>
+    <p class="sub2">Suggested terms, ranked by shirt searches per competing tee. Peak is the highest month in eRank's history for the term, where it has one.</p>
+    <div class="scroll"><table class="board" id="board"><thead><tr><th>Term</th><th class="n">Shirt searches/mo</th><th class="n">Peak month</th><th class="n">Competing tees</th><th class="n">Results that are shirts</th><th class="n">Listings using it</th></tr></thead><tbody></tbody></table></div>
+  </div>
+
+  <details class="notes">
+    <summary>Where the numbers came from, and what they can't tell you</summary>
+    <ul>__NOTES__</ul>
+  </details>
+
+
+  <div class="bar">
+    <div class="progress">
+      <div class="txt" id="ptxt"></div>
+      <div class="track" aria-hidden="true"><i class="a" id="pa"></i><i class="r" id="pr"></i></div>
+    </div>
+    <div class="filters" role="group" aria-label="Filter changes">
+      <button class="chip" id="f-all" data-f="all" aria-pressed="true">All</button>
+      <button class="chip" id="f-open" data-f="open" aria-pressed="false">Undecided</button>
+      <button class="chip" id="f-call" data-f="call" aria-pressed="false">Your call</button>
+      <button class="chip" id="f-proven" data-f="proven" aria-pressed="false">Sweet spots</button>
+    </div>
+    <button class="copy" id="copy">Copy approved changes</button>
+    <div class="saved" id="saved" role="status">Connecting to saved decisions.</div>
+  </div>
+
+  <div id="list"></div>
+  <p class="empty" id="empty" hidden>Nothing left in this view.</p>
+
+  <section class="other">
+    <h2>Worth doing beyond titles and tags</h2>
+    <ol>__OTHER__</ol>
+  </section>
+
+  </section>
+</div>
+
+<script id="data" type="application/json">__DATA__</script>
+<script>
+(function () {
+  var D = JSON.parse(document.getElementById('data').textContent);
+  var L = D.listings, T = D.tot, B = D.board;
+  var KEY = '__KEY__';
+  var state = {}, filter = 'all', col = null, mode = 'local';
+  try { state = JSON.parse(localStorage.getItem(KEY) || '{}') || {}; } catch (e) { state = {}; }
+
+  function el(tag, cls, text) { var n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; return n; }
+  function fmt(n) { return Number(n).toLocaleString('en-US'); }
+  function median(a) { var s = a.slice().sort(function (x, y) { return x - y; }), m = s.length >> 1; return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; }
+  var TIERS = { sweet: 'Sweet spot', small: 'Small niche', open: 'Open, unproven', busy: 'Busy', crowded: 'Crowded', wrong: 'Wrong audience', design: 'Design term' };
+  function searches(m) {
+    if (!m || m.s === null || m.s === undefined) return 'no eRank data';
+    if (m.s === 0) return 'no measurable searches';
+    if (m.s === '<20') return 'under 20 searches';
+    return fmt(m.s) + ' searches/mo';
+  }
+  function peakOf(m) { return { v: m.peak || 0, w: m.peakMonth || '' }; }
+  function nums(m) {
+    var p = [searches(m)];
+    var k = peakOf(m);
+    if (k.v >= 100) p.push(fmt(k.v) + ' in ' + k.w);
+    if (m.last >= 100) p.push(fmt(m.last) + ' in ' + m.lastMonth);
+    if (m.tees !== null && m.tees !== undefined) { p.push(m.share + '% shirts'); p.push(fmt(m.tees) + ' competing tees'); }
+    else if (m.comp) p.push(fmt(m.comp) + ' listings on eRank');
+    if (m.confirmed === true) p.push('in Etsy autocomplete');
+    if (m.confirmed === false) p.push('not in Etsy autocomplete');
+    return p.join(' · ');
+  }
+  function count(o, keys) { return keys.reduce(function (s, k) { return s + (o[k] || 0); }, 0); }
+
+  function statsHtml() {
+    var box = document.getElementById('stats');
+    T.stats.forEach(function (s) { var d = el('div', 'stat'); d.appendChild(el('b', null, s[0])); d.appendChild(el('span', null, s[1])); box.appendChild(d); });
+    var tb = document.querySelector('#board tbody');
+    B.slice(0, 14).forEach(function (r) {
+      var tr = el('tr'); tr.appendChild(el('td', null, r.t));
+      tr.appendChild(el('td', 'n', '~' + fmt(r.est))); tr.appendChild(el('td', 'n', r.peak ? fmt(r.peak) : '-')); tr.appendChild(el('td', 'n', fmt(r.tees))); tr.appendChild(el('td', 'n', r.share + '%')); tr.appendChild(el('td', 'n', String(r.n)));
+      tb.appendChild(tr);
+    });
+  }
+
+  function seg(id) {
+    var w = el('div', 'seg'); w.setAttribute('role', 'group'); w.setAttribute('aria-label', 'Decision');
+    var y = el('button', 'yes', 'Approve'), n = el('button', 'no', 'Reject');
+    y.id = 'y-' + id; n.id = 'n-' + id; y.type = n.type = 'button';
+    y.addEventListener('click', function () { decide(id, state[id] === 'approve' ? null : 'approve'); });
+    n.addEventListener('click', function () { decide(id, state[id] === 'reject' ? null : 'reject'); });
+    w.appendChild(y); w.appendChild(n); return w;
+  }
+  function line(kind, text, numsText, badges) {
+    var d = el('div', 'line ' + kind);
+    d.appendChild(el('span', 'sign', kind === 'old' ? '-' : '+'));
+    var t = el('div');
+    var s = el('span', 'txt', text); t.appendChild(s);
+    if (badges && badges.length) { var b = el('span', 'badges'); badges.forEach(function (x) { b.appendChild(x[0].indexOf('tier-') === 0 ? el('span', 'tier t-' + x[0].slice(5), x[1]) : el('span', 'badge b-' + x[0], x[1])); }); t.appendChild(b); }
+    if (numsText) t.appendChild(el('span', 'nums', numsText));
+    d.appendChild(t); return d;
+  }
+  function expected(r) {
+    var b = r.b, k = peakOf(b), out;
+    var pk = k.v >= 100 ? ' It peaked at ' + fmt(k.v) + ' in ' + k.w + '.' : '';
+    if (b.tier === 'sweet') out = 'Expected: about ' + fmt(b.est) + ' shirt searches a month against ' + fmt(b.tees) + ' competing tees.' + pk;
+    else if (b.tier === 'small') out = 'Expected: a small niche, about ' + fmt(b.est) + ' shirt searches a month against ' + fmt(b.tees) + ' tees.' + pk;
+    else if (b.tier === 'busy') out = 'Expected: real demand of about ' + fmt(b.est) + ' shirt searches a month, with more competition than ideal.' + pk;
+    else if (b.tier === 'open') out = 'Expected: only ' + fmt(b.tees) + ' competing tees, but little measured traffic. A cheap bet.' + pk;
+    else if (b.tier === 'crowded') out = 'Expected: more search than the old tag, but this term fails your niche test.' + pk;
+    else out = 'Expected: a closer match for the design.';
+    return out;
+  }
+  function removal(r) {
+    if (!r.old || !r.a) return '';
+    var a = r.a, n = (a.tees !== null && a.tees !== undefined) ? fmt(a.tees) + ' competing tees' : '';
+    if (a.tier === 'wrong') return 'Only ' + a.share + '% of the top results for the old tag are shirts, so those shoppers want something else. ';
+    if (a.s === 0) return 'eRank measures no searches for the old tag' + (n ? ', with ' + n : '') + '. ';
+    if (a.s === null || a.s === undefined) return 'The old tag isn\'t in the eRank data I could reach' + (n ? ', and it has ' + n : '') + '. ';
+    if (a.s === '<20') return 'The old tag gets under 20 searches a month' + (n ? ' against ' + n : '') + '. ';
+    if (a.tier === 'crowded') return 'The old tag has volume, but ' + n + ' compete on it. ';
+    return '';
+  }
+
+  var hunks = [];
+  function render() {
+    var root = document.getElementById('list');
+    L.forEach(function (l) {
+      var s = el('article', 'listing'); s.id = 'l-' + l.id;
+      var h = el('div', 'lhead');
+      var img = el('img'); img.src = l.img; img.alt = 'Mockup of the ' + l.short + ' shirt'; h.appendChild(img);
+      var mid = el('div'); mid.appendChild(el('h3', null, l.short));
+      var af = l.after, verdict = (af.sweet || 0) > 0 ? 'Proven niche' : (af.small || 0) > 0 ? 'Small niche' : 'Unproven';
+      var vb = el('span', 'tier ' + (verdict === 'Proven niche' ? 't-sweet' : verdict === 'Small niche' ? 't-small' : 't-open'), verdict); vb.style.marginLeft = '8px'; mid.firstChild.appendChild(vb);
+      mid.appendChild(el('div', 'sub', l.state + ' · reach ' + fmt(l.reach0) + ' to ' + fmt(l.reach1) + ' shirt searches a month · after changes: ' + (af.sweet || 0) + ' sweet spot, ' + (af.small || 0) + ' small, ' + (af.busy || 0) + ' busy'));
+      if (l.url) { var a = el('a', null, 'Open on Etsy'); a.href = l.url; a.target = '_blank'; a.rel = 'noopener'; a.style.fontSize = '.86rem'; mid.appendChild(a); }
+      h.appendChild(mid);
+      var bk = el('div', 'bulk');
+      var by = el('button', null, 'Approve rest'), bn = el('button', null, 'Reject rest');
+      by.type = bn.type = 'button'; by.id = 'ba-' + l.id; bn.id = 'br-' + l.id;
+      by.addEventListener('click', function () { bulk(l, 'approve'); });
+      bn.addEventListener('click', function () { bulk(l, 'reject'); });
+      bk.appendChild(by); bk.appendChild(bn); h.appendChild(bk); s.appendChild(h);
+      if (l.notice) s.appendChild(el('div', 'notice', l.notice));
+
+      if (l.newTitle) {
+        var tid = l.id + '-title';
+        var th = el('div', 'hunk'); th.dataset.id = tid; th.dataset.kind = 'title';
+        var td = el('div', 'diff');
+        td.appendChild(line('old', l.oldTitle, null, [['title', 'Title']]));
+        td.appendChild(line('new', l.newTitle));
+        th.appendChild(td); th.appendChild(seg(tid));
+        th.appendChild(el('p', 'why', l.why + ' Uses ' + l.newLen + ' of 140 characters.'));
+        s.appendChild(th); hunks.push({ id: tid, node: th, l: l, flag: null });
+      } else {
+        var nt = el('div', 'keeps');
+        nt.appendChild(el('strong', null, 'Title stays: ')); nt.appendChild(document.createTextNode(l.oldTitle + '. ' + l.why));
+        s.appendChild(nt);
+      }
+
+      l.swaps.forEach(function (r) {
+        var x = el('div', 'hunk'); x.dataset.id = r.id;
+        var d = el('div', 'diff');
+        if (r.old) d.appendChild(line('old', r.old, nums(r.a)));
+        var badges = [[r.b.tier === 'wrong' ? 'crowded' : 'tier-' + r.b.tier, TIERS[r.b.tier]]];
+        if (r.flag === 'check') badges.push(['check', 'Your call']);
+        if (r.flag === 'risk') badges.push(['risk', 'IP risk']);
+        d.appendChild(line('new', r.new, nums(r.b), badges));
+        x.appendChild(d); x.appendChild(seg(r.id));
+        var w = el('p', 'why');
+        var text = removal(r) + (r.note ? r.note + ' ' : '');
+        if (text) w.appendChild(document.createTextNode(text));
+        w.appendChild(el('span', 'exp', expected(r)));
+        x.appendChild(w);
+        s.appendChild(x); hunks.push({ id: r.id, node: x, l: l, flag: r.flag, tier: r.b.tier });
+      });
+
+      var k = el('div', 'keeps'); k.appendChild(document.createTextNode('Staying as they are: '));
+      l.keep.forEach(function (t) { k.appendChild(el('code', null, t.t)); });
+      s.appendChild(k); root.appendChild(s);
+    });
+  }
+
+  function paint() {
+    var a = 0, r = 0;
+    hunks.forEach(function (h) {
+      var d = state[h.id] || '';
+      if (h.node.dataset.d !== d) { if (d) h.node.dataset.d = d; else delete h.node.dataset.d; }
+      document.getElementById('y-' + h.id).setAttribute('aria-pressed', d === 'approve');
+      document.getElementById('n-' + h.id).setAttribute('aria-pressed', d === 'reject');
+      if (d === 'approve') a++; else if (d === 'reject') r++;
+      var show = filter === 'all' || (filter === 'open' && !d) || (filter === 'call' && (h.flag === 'check' || h.flag === 'risk')) || (filter === 'proven' && h.tier === 'sweet');
+      h.node.hidden = !show;
+    });
+    var any = false;
+    L.forEach(function (l) {
+      var vis = hunks.some(function (h) { return h.l === l && !h.node.hidden; });
+      document.getElementById('l-' + l.id).hidden = !vis; any = any || vis;
+    });
+    document.getElementById('empty').hidden = any;
+    var n = hunks.length;
+    document.getElementById('ptxt').textContent = (a + r) + ' of ' + n + ' decided: ' + a + ' approved, ' + r + ' rejected';
+    document.getElementById('pa').style.width = (a / n * 100) + '%';
+    document.getElementById('pr').style.width = (r / n * 100) + '%';
+  }
+
+  function saveLocal() { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {} }
+  function note(t) { document.getElementById('saved').textContent = t; }
+  var queue = Promise.resolve();
+  function write(id, d) {
+    if (!col) return;
+    queue = queue.then(function () {
+      var ref = col.doc(id);
+      return d ? ref.set({ decision: d, at: new Date().toISOString() }) : ref.delete();
+    }).then(function () { note('Decisions saved. Claude can read them when you say you are done.'); })
+      .catch(function (e) { note('Could not save that change (' + (e && e.code || 'error') + '). It is kept in this browser only. Use Copy approved changes as a backup.'); });
+  }
+  function decide(id, d) {
+    if (d) state[id] = d; else delete state[id];
+    saveLocal(); paint(); write(id, d);
+  }
+  function bulk(l, d) {
+    hunks.forEach(function (h) { if (h.l === l && !state[h.id]) { state[h.id] = d; write(h.id, d); } });
+    saveLocal(); paint();
+  }
+
+  function report() {
+    var out = [];
+    L.forEach(function (l) {
+      var appr = l.swaps.filter(function (r) { return state[r.id] === 'approve'; });
+      var titleOk = state[l.id + '-title'] === 'approve';
+      if (!appr.length && !titleOk) return;
+      var tags = l.keep.map(function (t) { return t.t; });
+      l.swaps.forEach(function (r) { if (state[r.id] === 'approve') tags.push(r.new); else if (r.old) tags.push(r.old); });
+      out.push(l.short + ' (' + l.id + ', ' + l.state + ')');
+      out.push('Title: ' + (titleOk ? l.newTitle : l.oldTitle + ' [unchanged]'));
+      out.push('Tags: ' + tags.join(', '));
+      out.push('');
+    });
+    return out.length ? out.join('\n') : 'Nothing approved yet.';
+  }
+  document.getElementById('copy').addEventListener('click', function () {
+    var b = this, text = report();
+    function done(t) { b.textContent = t; setTimeout(function () { b.textContent = 'Copy approved changes'; }, 1800); }
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(function () { done('Copied'); }, function () { done('Copy failed'); });
+    else done('Copy failed');
+  });
+  document.querySelectorAll('.chip').forEach(function (c) {
+    c.addEventListener('click', function () {
+      filter = c.dataset.f;
+      document.querySelectorAll('.chip').forEach(function (o) { o.setAttribute('aria-pressed', o === c); });
+      paint();
+    });
+  });
+
+  statsHtml(); render(); paint();
+
+  (async function connect() {
+    var db = null;
+    try { db = window.claude && window.claude.use ? await window.claude.use('db') : null; } catch (e) { db = null; }
+    if (!db) { note('Decisions are saved in this browser only. Use Copy approved changes to pass them on.'); return; }
+    col = db.collection('decisions');
+    var timer = setTimeout(function () { note('Saved decisions can\'t be reached yet. You can keep working.'); }, 10000);
+    var seeded = false;
+    col.onSnapshot(function (snap) {
+      if (!snap.metadata.fromCache) { clearTimeout(timer); }
+      var remote = {};
+      snap.docs.forEach(function (d) { var b = d.data(); if (b && b.decision) remote[d.id] = b.decision; });
+      if (!seeded && !snap.metadata.fromCache) {
+        seeded = true;
+        Object.keys(state).forEach(function (id) { if (!remote[id]) { write(id, state[id]); remote[id] = state[id]; } });
+        note('Decisions save automatically. Claude can read them when you say you are done.');
+      }
+      if (seeded || Object.keys(remote).length) { state = remote; saveLocal(); paint(); }
+    }, function (e) {
+      clearTimeout(timer); col = null;
+      note('Saved decisions are unavailable (' + (e && e.code || 'error') + '). Your choices stay in this browser. Use Copy approved changes as a backup.');
+    });
+  })();
+})();
+</script>
