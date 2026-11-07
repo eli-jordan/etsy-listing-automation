@@ -145,7 +145,8 @@ calibration conflict was a `409` or a `412` depending on its message text. A
 category in core keeps ADR-0052's rule that core knows no transport, where a
 status code on each class would not. `ConfigLoadError` has no category yet: a
 document that does not load means different things to different routes, which
-still answer it themselves.
+still answer it themselves. `template.yaml` is the exception, because
+`workspace.template_state` settles what its not loading means.
 
 ### Clients, credentials and prompts
 
@@ -343,8 +344,8 @@ nor makes the client ask for a new one. Any other change still refuses it.
 graph LR
     Canvas["Calibrate tab<br/>quad handles + sliders"] -->|"POST /preview?scale=editor<br/>(debounced)"| API["server/api/templates.py"]
     Tab["Preview tab<br/><i>on demand</i>"] -->|"POST /preview?scale=full"| API
-    API --> Cache["server/api/imagecache.py<br/><i>decoded photo, linear artwork, maps</i>"]
-    Cache --> Op["core/application/mockup_templates.py<br/><i>scene choice and compositing</i>"]
+    API --> Op["core/application/scene_previews.py<br/><i>this scene at this size, either renderer</i>"]
+    Op -->|"decode"| Cache["server/api/imagecache.py<br/><i>decoded photo, linear artwork, maps</i>"]
     Op --> RenderPipe["core/render/pipeline.py<br/><i>the same code apply runs</i>"]
     RenderPipe -->|"frame"| API
     API -->|WebP| Canvas
@@ -376,8 +377,17 @@ what its derived maps cache under, and both composite through
 geometry comes from — the unsaved boxes under the user's cursor, not the file
 on disk — which is exactly the difference that makes it a preview.
 `application.mockup_templates` decides the scene (photo, layers, design) and
-composites it from decoded images the server supplies out of its memo;
-encoding the frame as WebP or PNG is the server's.
+composites it. `application.scene_previews` is what every picture asks: `saved_scene`
+and `draft_scene` take a size and a decoder (`SceneImages`) and answer with a
+finished picture for either renderer, a `RenderedScene` (the PNG the render stage
+writes, with its identity) or an editor-size `SceneFrame`. It owns whether a draft
+still matches what is saved, through the rules gathered in
+`application.preparation.previews`, and turns prepared files it cannot use into
+`PreparationRequiredError`. The decoder is a real seam: the server's memo
+(`server/api/imagecache.py`, request-serving state that stays out of core) and
+`DISK_IMAGES`, which the scene warmer uses. `server/api/scene_responses.py` turns a
+picture into a response: the WebP encoding of a frame, and the identity headers
+and `304` of a rendered scene.
 
 Listings may hold their own absolute position for a template (ADR-0058), so a
 recalibrated box never moves them; the next `plan` re-checks each against the
@@ -400,10 +410,28 @@ them. Single and colour-matrix placements use `None` internally.
 `workspace.calibration.CalibrationStore` holds the mockup-template lock of
 `core/workspace/locks.py` per validated, canonical template directory. In-workspace
 aliases share that lock; aliases outside the workspace are refused before IO. It is
-a separate domain from the listing and listing-template locks. All template-config writers use its recoverable transaction. Server
-operations recover before reading; the direct Workspace loader takes the same
-lock and refuses an active transaction, so a CLI cannot roll forward a live server
-save. One server per workspace remains the ownership assumption.
+a separate domain from the listing and listing-template locks. All template-config writers use its recoverable transaction.
+
+`workspace.template_state` is the one way to ask what a template's saved state is.
+A folder is absent (no `template.yaml`), unreadable (one that will not load), in
+need of repair (a calibration transaction stands in the way) or loaded, and reading
+that never raises, so one bad template stays that template's problem: the rail
+lists it with its reason, a listing check skips it and the render stage answers
+`Blocked`. A caller names what it needs from the answer: `.config` to skip what
+will not load, `.reason` to report it, `.require()` for the config or the state's
+refusal. Those refusals carry categories (a missing config is `MissingError`, an
+unreadable one and a needed repair `ConflictError`); routes that answered a
+template which does not load with their own status keep it.
+
+The two reads differ in one thing, who may roll a transaction forward.
+`template_state(workspace, name)` is the observer's and writes nothing: a
+transaction reads as needing repair, so a CLI cannot finish a live server save.
+`CalibrationStore.state(name)` is the owner's, for server operations: it recovers
+an interrupted transaction first, and reports one it cannot trust as needing repair.
+Whatever `plan` can reach (the render stage, map readiness, `Artifacts.saved_inputs`,
+scene composition, `CalibrationStore.mask`) observes, wherever it runs. So
+`Preparations.recover` rolls every template forward when the server starts, before
+any job resumes. One server per workspace remains the ownership assumption.
 
 A save validates its revision and ordered mask operations, stages payloads and
 backups in the template-owned `_renderer/calibration-transaction/`, flushes commit intent,
@@ -627,6 +655,17 @@ its existing currency and string-field compatibility; saved explicit prices
 remain subject to ADR-0006 validation.
 
 ### Settings administration
+
+`settings.yaml` has three reads on `Workspace`, one per thing a broken file can mean,
+so a reader names its intent rather than deciding the policy. `capture_settings()`
+is a run's: it raises, and the run fails with the message; a run reads once, so its
+limits, providers and market weights share a revision (ADR-0057).
+`settings_or_problem()` answers `Settings | SettingsProblem` for a read whose answer
+carries the problem: the render stage's `Blocked`, a listing's issue, AI readiness,
+a route's refusal. `settings_if_readable(skipping=...)` is a best-effort follow-up's
+and logs what it skipped: queueing coverage, or the batch queue's dispatch, which has
+no slots until the file is fixed. `ConfigLoadError` keeps no category for this: the
+same broken file is all three.
 
 Admin's Settings tab reads and patches `settings.yaml` through
 `core/application/workspace_settings.py`. Its exact-byte revision is independent
@@ -998,6 +1037,41 @@ later. Each traces to a decision.
   (ADR-0019, ADR-0020). A bare number is a bug
   waiting to be a refund (ADR-0006).
 
+## Editor saves
+
+Every editor that autosaves a document writes through one module,
+`src/ui/src/hooks/writeLoop.ts`. It owns the 800ms debounce from the last edit,
+one write at a time, collapsing edits into the next write, holding an edit until
+it is written, and what a flush reports. A failed or refused edit stays held and
+goes with the next edit or flush; it never retries on its own. The loop has no
+React, no payload and no clock of its own: an owner gives it `send`, `merge` and
+`failed`, and its rules are tested in the Vitest `node` project with an in-memory
+transport and a manual clock.
+
+Two owners sit on it. `ListingAutosave` (`hooks/listingAutosave.ts`, bound by
+`useAutosave`) adds the listing editor's three states, unnamed, named but not on
+disk and on disk, chosen when a write goes, so an edit made during a create or
+rename is sent under the name it settled on. A listing template uses the same
+class through its own `AutosaveTransport`. A rename runs through the loop's
+`afterWrite`: it waits for any write out, drains under the old name, and runs
+only if that wrote, with no write going out during it. `useTemplateSession` keeps
+one loop per opening of a template. Its edit carries only whether a save is owed
+and whether it must go even with nothing changed, an approval; the draft is read
+when the write goes. Payload shape stays with the owners, and so does the
+preview hold, which answers the loop's `due` hook instead of flushing. A template
+switch or reload makes the next read wait for the old opening's writes.
+`pages/admin/useSaveQueue.ts` is a different model, acknowledging per key, and
+does not use the loop.
+
+A flush resolves once no write is out and answers `Settled`: `written`, or not
+with a message. It never rejects, because the debounce, a blur and an unmount
+have nowhere to send a rejection. Callers about to act on the file read the
+answer. Deploy, Create listing template, Back to batch and Clone stay on the page
+when an edit was not written, since each goes on to read a file without it, and
+the page head already says why. A template rename and a preparation refuse with
+the message. Delete waits for the flush and goes on regardless: an edit that
+would not save goes with the listing.
+
 ## Frontend build and asset distribution
 
 `src/ui` is a self-contained npm project: React source and colocated Vitest
@@ -1291,7 +1365,7 @@ from the template, for its swatches, and never builds a Photo warp configuration
 
 Plan, apply and every preview compose through `preparation.scenes.lease_scene`,
 which reads saved inputs, acquires one immutable generation for the target photo
-and names the scene identity in one place. `application.prepared_previews.saved_scene`
+and names the scene identity in one place. `application.scene_previews.saved_scene`
 picks the renderer for the listing and listing-template previews, so no route
 does. Before composing
 or promoting a deployment preview, apply rechecks saved preparation inputs and

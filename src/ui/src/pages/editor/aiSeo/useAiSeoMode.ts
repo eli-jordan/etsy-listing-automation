@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { SaveState } from "../../../hooks/useAutosave";
+import type { SaveState } from "../../../hooks/listingAutosave";
 import { getSeoReadiness } from "../../../api/seo";
 import type { ListingDetail, ListingProposal } from "../../../types";
 import { representative } from "../artwork";

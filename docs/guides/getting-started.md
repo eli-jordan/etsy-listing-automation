@@ -264,6 +264,27 @@ Full schema and worked examples for all three kinds, plus how light/dark
 artwork resolves per colour, are in
 [docs/features/multi-placement-rendering-20260903/spec.md](../features/multi-placement-rendering-20260903/spec.md).
 
+### Label templates so you can find them
+
+Labels say what a template's photo shows, such as `shot:flat lay`, `model:female`
+or `theme:christmas`. They are for finding templates only: they never change a
+render, never reach Etsy and never appear in `plan`.
+
+Open a template in the calibrator and use **Add label** above the photo. The text
+before a colon is the label's group, which only decides where it sits in the
+search box's dropdown. A template holds up to 10 labels, saved in `template.yaml`
+with the rest of its settings.
+
+Find templates in the search box on the Mockup Templates rail, or under **Add
+media** on a listing's Images tab. Typing text that matches a label opens a
+dropdown: press Down and Enter, or click, to add the label as a pill. A template
+must hold every pill. Any text left in the box narrows the result by title, so
+Enter with nothing highlighted keeps it as a title search.
+
+On a listing the line under the box counts calibrated templates, such as "5 of 16
+templates". The filter stays while you move between tabs or refresh, and each
+listing and listing template keeps its own until the browser tab closes.
+
 ## 6. Add a garment profile and a listing
 
 A **garment profile** (`garment-profiles/<name>.yaml`) is the garment definition — blueprint,

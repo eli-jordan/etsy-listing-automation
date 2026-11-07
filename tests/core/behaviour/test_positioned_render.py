@@ -20,6 +20,7 @@ from etsy_listings.core.engine.stages import STAGES
 from etsy_listings.core.engine.stages.render import RenderStage
 from etsy_listings.core.render.config import BoundingBox
 from etsy_listings.core.render.positions import Pose, compose
+from etsy_listings.core.workspace.template_state import template_state
 
 from tests.support.builders import FIXTURE_LISTING as LISTING
 from tests.support.builders import a_context, a_lock, edit_listing
@@ -39,12 +40,12 @@ def _corners(box: BoundingBox) -> list[dict[str, float]]:
 
 
 def _flat_box(root: Path, pose: Pose) -> BoundingBox:
-    config = a_context(root).workspace.load_template_config(FLAT)
+    config = template_state(a_context(root).workspace, FLAT).require()
     return compose(config.bounding_box, pose)
 
 
 def _placement_box(root: Path, pose: Pose) -> BoundingBox:
-    config = a_context(root).workspace.load_template_config(CHART)
+    config = template_state(a_context(root).workspace, CHART).require()
     placement = next(p for p in config.placements if p.id == PLACEMENT)
     return compose(placement.bounding_box, pose)
 

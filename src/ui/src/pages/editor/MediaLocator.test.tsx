@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { MediaOwner } from "../../media";
-import type { ListingDetail, MediaFileSummary } from "../../types";
+import type { ListingDetail, MediaFileSummary, TemplateSummary } from "../../types";
 import { MediaLocator } from "./MediaLocator";
 
 /**
@@ -74,7 +74,282 @@ function group(label: RegExp): HTMLElement {
   return screen.getByRole("group", { name: label });
 }
 
-afterEach(() => vi.restoreAllMocks());
+function template(over: Partial<TemplateSummary> & { name: string }): TemplateSummary {
+  return {
+    kind: "single",
+    colours: [],
+    photos: [],
+    has_config: true,
+    labels: [],
+    status: "calibrated",
+    status_reason: null,
+    width: 480,
+    height: 576,
+    ...over,
+  };
+}
+
+/** The Mockup templates half, as a listing named by `scope` would open it. */
+function templatesLocator(templates: TemplateSummary[], scope: string | null = null) {
+  const detail = {
+    name: "take-a-hike",
+    media: [],
+    colors: ["black"],
+    etsy: { variation_images: null },
+  } as unknown as ListingDetail;
+  return render(
+    <MediaLocator
+      detail={detail}
+      templates={templates}
+      local={[BACK]}
+      shared={[SIZING]}
+      onToggleTemplate={vi.fn()}
+      onToggleFile={vi.fn()}
+      onAddMissingColours={vi.fn()}
+      onToggleSwatchSource={vi.fn()}
+      onFocus={vi.fn()}
+      scope={scope}
+    />,
+  );
+}
+
+afterEach(() => {
+  vi.restoreAllMocks();
+  sessionStorage.clear();
+});
+
+describe("MediaLocator's template rows", () => {
+  it("shows a template's labels in place of its kind", () => {
+    templatesLocator([template({ name: "tree", labels: ["theme:christmas", "shot:flat lay"] })]);
+
+    expect(screen.getByText("theme:christmas · shot:flat lay")).toBeInTheDocument();
+    expect(screen.queryByText(/one fixed photo/)).not.toBeInTheDocument();
+  });
+
+  it("says when a template has no labels", () => {
+    templatesLocator([template({ name: "tree" })]);
+
+    expect(screen.getByText("No labels")).toBeInTheDocument();
+  });
+});
+
+const box = () => screen.getByRole("combobox", { name: /Search templates/ });
+
+function typeInBox(text: string) {
+  fireEvent.change(box(), { target: { value: text } });
+}
+
+function pickLabel(label: string) {
+  fireEvent.click(box());
+  fireEvent.click(screen.getByRole("option", { name: new RegExp(`^${label}`) }));
+}
+
+function shownTemplates(): (string | null)[] {
+  return [...document.querySelectorAll(".loc-tmpl__name")].map((name) => name.textContent);
+}
+
+describe("MediaLocator's template search", () => {
+  const tree = template({ name: "woman-by-tree", labels: ["theme:christmas"] });
+  const fire = template({ name: "fireplace", labels: ["theme:christmas", "shot:flat lay"] });
+  const beach = template({ name: "beach-tree", labels: ["theme:summer"] });
+
+  it("opens on every template, with the filter empty", () => {
+    templatesLocator([tree, fire, beach]);
+
+    expect(screen.getByRole("status")).toHaveTextContent("3 of 3 templates");
+    expect(shownTemplates()).toEqual(["woman-by-tree", "fireplace", "beach-tree"]);
+  });
+
+  it("lists only what holds every pill, and says how many that leaves", () => {
+    templatesLocator([tree, fire, beach]);
+
+    pickLabel("theme:christmas");
+    expect(shownTemplates()).toEqual(["woman-by-tree", "fireplace"]);
+    expect(screen.getByRole("status")).toHaveTextContent("2 of 3 templates");
+
+    pickLabel("shot:flat lay");
+    expect(shownTemplates()).toEqual(["fireplace"]);
+    expect(screen.getByRole("status")).toHaveTextContent("1 of 3 templates");
+  });
+
+  it("narrows what the pills leave by title, not every template", () => {
+    templatesLocator([tree, fire, beach]);
+
+    pickLabel("theme:christmas");
+    typeInBox(" TREE ");
+
+    expect(shownTemplates()).toEqual(["woman-by-tree"]);
+    expect(screen.getByRole("status")).toHaveTextContent("1 of 3 templates");
+  });
+
+  it("does not search labels with plain text", () => {
+    templatesLocator([tree, beach]);
+
+    typeInBox("christmas");
+
+    expect(shownTemplates()).toEqual([]);
+    expect(screen.getByText("No template matches.")).toBeInTheDocument();
+  });
+
+  it("counts only the calibrated templates it lists", () => {
+    const draft = template({
+      name: "uncalibrated",
+      labels: ["theme:christmas", "theme:easter"],
+      status: "needs-calibration",
+    });
+    templatesLocator([tree, fire, beach, draft]);
+
+    expect(screen.getByRole("status")).toHaveTextContent("3 of 3 templates");
+
+    fireEvent.click(box());
+    expect(screen.getByRole("option", { name: /^theme:christmas/ })).toHaveTextContent(/2$/);
+    expect(screen.queryByRole("option", { name: /theme:easter/ })).not.toBeInTheDocument();
+  });
+
+  it("reads right with one template", () => {
+    templatesLocator([tree]);
+
+    expect(screen.getByRole("status")).toHaveTextContent(/^1 of 1 template$/);
+  });
+});
+
+describe("MediaLocator's label pills in view memory", () => {
+  const SCOPE = "listing:take-a-hike";
+  const tree = template({ name: "woman-by-tree", labels: ["theme:christmas"] });
+  const beach = template({ name: "beach", labels: ["theme:summer"] });
+
+  it("keeps the pills through a remount, as a move to Pricing and back causes", () => {
+    const first = templatesLocator([tree, beach], SCOPE);
+    pickLabel("theme:christmas");
+    first.unmount();
+
+    templatesLocator([tree, beach], SCOPE);
+
+    expect(screen.getByRole("button", { name: "Remove theme:christmas" })).toBeInTheDocument();
+    expect(shownTemplates()).toEqual(["woman-by-tree"]);
+    expect(screen.getByRole("status")).toHaveTextContent("1 of 2 templates");
+  });
+
+  it("keeps a removed pill removed", () => {
+    const first = templatesLocator([tree, beach], SCOPE);
+    pickLabel("theme:christmas");
+    fireEvent.click(screen.getByRole("button", { name: "Remove theme:christmas" }));
+    first.unmount();
+
+    templatesLocator([tree, beach], SCOPE);
+
+    expect(shownTemplates()).toEqual(["woman-by-tree", "beach"]);
+  });
+
+  it("keeps each listing's pills apart", () => {
+    const first = templatesLocator([tree, beach], SCOPE);
+    pickLabel("theme:christmas");
+    first.unmount();
+
+    const second = templatesLocator([tree, beach], "listing:santa-cookie-crew");
+    expect(screen.queryByRole("button", { name: /^Remove / })).not.toBeInTheDocument();
+    pickLabel("theme:summer");
+    second.unmount();
+
+    templatesLocator([tree, beach], SCOPE);
+    expect(screen.getByRole("button", { name: "Remove theme:christmas" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Remove theme:summer" })).not.toBeInTheDocument();
+  });
+
+  it("keeps a listing's pills apart from a listing template of the same name", () => {
+    const first = templatesLocator([tree, beach], SCOPE);
+    pickLabel("theme:christmas");
+    first.unmount();
+
+    templatesLocator([tree, beach], "listing-template:take-a-hike");
+
+    expect(screen.queryByRole("button", { name: /^Remove / })).not.toBeInTheDocument();
+  });
+
+  it.each([
+    ["a string", '"theme:christmas"'],
+    ["a list holding something else", '["theme:christmas", 3]'],
+    ["an object", '{"on": ["theme:christmas"]}'],
+    ["null", "null"],
+    ["text that is not JSON", "theme:christmas"],
+  ])("ignores %s left by an older build", (_name, stored) => {
+    sessionStorage.setItem(`editor-view:${SCOPE}:locator-labels`, stored);
+
+    templatesLocator([tree, beach], SCOPE);
+
+    expect(screen.queryByRole("button", { name: /^Remove / })).not.toBeInTheDocument();
+    expect(shownTemplates()).toEqual(["woman-by-tree", "beach"]);
+  });
+
+  it("keeps a pill no template holds any more, so the seller can see why the list is empty", () => {
+    const first = templatesLocator([tree, beach], SCOPE);
+    pickLabel("theme:christmas");
+    first.unmount();
+
+    templatesLocator([beach], SCOPE);
+
+    expect(screen.getByRole("button", { name: "Remove theme:christmas" })).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("0 of 1 template");
+    expect(screen.getByText("No template matches.")).toBeInTheDocument();
+  });
+});
+
+describe("MediaLocator's switch to Files", () => {
+  const tree = template({ name: "woman-by-tree", labels: ["theme:christmas"] });
+  const beach = template({ name: "beach", labels: ["theme:summer"] });
+  const files = () => screen.getByRole("button", { name: "Files" });
+  const mockups = () => screen.getByRole("button", { name: "Mockup templates" });
+
+  it("keeps the pills and clears the text", () => {
+    templatesLocator([tree, beach]);
+    pickLabel("theme:christmas");
+    typeInBox("tree");
+
+    fireEvent.click(files());
+    fireEvent.click(mockups());
+
+    expect(screen.getByRole("button", { name: "Remove theme:christmas" })).toBeInTheDocument();
+    expect(box()).toHaveValue("");
+    expect(shownTemplates()).toEqual(["woman-by-tree"]);
+  });
+
+  it("does not carry a file search back to the templates", () => {
+    templatesLocator([tree, beach]);
+    fireEvent.click(files());
+    fireEvent.change(screen.getByPlaceholderText("Search files…"), { target: { value: "back" } });
+
+    fireEvent.click(mockups());
+
+    expect(box()).toHaveValue("");
+    expect(shownTemplates()).toEqual(["woman-by-tree", "beach"]);
+  });
+
+  it("gives Files its plain search, with no pills, labels or result line", () => {
+    templatesLocator([tree, beach]);
+    pickLabel("theme:christmas");
+
+    fireEvent.click(files());
+
+    expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Remove / })).not.toBeInTheDocument();
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "shots/back.png" })).toBeInTheDocument();
+  });
+
+  it("comes back to Files with the pills still waiting after a remount", () => {
+    const scope = "listing:take-a-hike";
+    const first = templatesLocator([tree, beach], scope);
+    pickLabel("theme:christmas");
+    fireEvent.click(files());
+    first.unmount();
+
+    templatesLocator([tree, beach], scope);
+    expect(screen.getByPlaceholderText("Search files…")).toBeInTheDocument();
+
+    fireEvent.click(mockups());
+    expect(shownTemplates()).toEqual(["woman-by-tree"]);
+  });
+});
 
 describe("MediaLocator's file list", () => {
   it("groups the listing's own files before the shared ones without exposing ref roots", () => {

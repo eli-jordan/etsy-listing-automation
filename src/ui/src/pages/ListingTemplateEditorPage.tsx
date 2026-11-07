@@ -1,6 +1,6 @@
 import { CopySimpleIcon } from "@phosphor-icons/react/dist/csr/CopySimple";
 import { TrashIcon } from "@phosphor-icons/react/dist/csr/Trash";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import {
   deleteListingTemplate,
@@ -151,13 +151,9 @@ function ListingTemplateEditor({
   onBack: () => void;
   onNamed: (name: string, fresh: ListingDetail) => void;
 }) {
-  const sourceKey = source === null ? null : `${source.kind}:${source.name}`;
-  // Once per source: `useAutosave` needs a transport that keeps its identity.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const transport = useMemo(() => listingTemplateTransport(source), [sourceKey]);
   const [owner, setOwner] = useState(initial.owner);
   const { detail, update, flush, commitName, save } = useAutosave(name, initial.detail, {
-    transport,
+    transport: listingTemplateTransport(source),
     onNamed: (next, fresh) => {
       setOwner({ kind: "listing-template", name: next });
       onNamed(next, fresh);
@@ -173,9 +169,13 @@ function ListingTemplateEditor({
   const saved = detail.name || name;
 
   function clone(template: string) {
-    void flush().then(() =>
-      navigate(`/listing-templates/new?from_template=${encodeURIComponent(template)}`),
-    );
+    // The clone is of the file, so an edit not in it would be left behind. The
+    // page head says why it stayed.
+    void flush().then((settled) => {
+      if (settled.written) {
+        navigate(`/listing-templates/new?from_template=${encodeURIComponent(template)}`);
+      }
+    });
   }
 
   function confirmDelete(template: string) {

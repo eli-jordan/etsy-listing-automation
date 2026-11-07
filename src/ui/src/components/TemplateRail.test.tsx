@@ -117,7 +117,7 @@ describe("TemplateRail", () => {
 
   it("filters by name as you search", () => {
     renderRail();
-    fireEvent.change(screen.getByLabelText("Search templates"), {
+    fireEvent.change(screen.getByRole("combobox", { name: /Search templates/ }), {
       target: { value: "tee" },
     });
     expect(rowNames()).toEqual(["boxy-tee", "heather-tee"]);
@@ -178,7 +178,7 @@ describe("TemplateRail", () => {
 
   it("says so when a search matches nothing, rather than showing an empty rail", () => {
     renderRail();
-    fireEvent.change(screen.getByLabelText("Search templates"), {
+    fireEvent.change(screen.getByRole("combobox", { name: /Search templates/ }), {
       target: { value: "zzz" },
     });
     expect(screen.getByText("No templates match.")).toBeInTheDocument();
@@ -193,4 +193,99 @@ it("keeps unknown Marigold readiness out of ready and needs-map filters", () => 
   expect(screen.getByRole("button", { name: "Needs maps 0" })).toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "Ready 0" }));
   expect(rowNames()).toEqual([]);
+});
+
+describe("the rail's label search", () => {
+  const SNOW = summary({ name: "snow-tee", labels: ["theme:christmas", "model:female"] });
+  const TREE = summary({ name: "tree-tee", labels: ["theme:christmas"] });
+  const BEACH = summary({ name: "beach-tote", kind: "multiple", labels: ["theme:summer"] });
+  const WAITING = summary({
+    name: "elf-tee",
+    labels: ["theme:elves"],
+    status: "needs-calibration",
+    status_reason: "no boxes",
+  });
+  const LABELLED = [SNOW, TREE, BEACH, WAITING];
+
+  const box = () => screen.getByRole("combobox", { name: /Search templates/ });
+  const options = () => screen.queryAllByRole("option").map((o) => o.textContent);
+
+  function pick(label: string) {
+    fireEvent.click(box());
+    fireEvent.click(screen.getByRole("option", { name: new RegExp(label) }));
+  }
+
+  it("lists only the templates holding every pill", () => {
+    renderRail({ templates: LABELLED });
+    pick("theme:christmas");
+    expect(rowNames()).toEqual(["snow-tee", "tree-tee"]);
+    pick("model:female");
+    expect(rowNames()).toEqual(["snow-tee"]);
+  });
+
+  it("finds a hand-edited label whatever its case", () => {
+    const edited = summary({ name: "edited-tee", labels: ["Theme:Christmas"] });
+    renderRail({ templates: [...LABELLED, edited] });
+    pick("theme:christmas");
+    expect(rowNames()).toEqual(["snow-tee", "tree-tee", "edited-tee"]);
+  });
+
+  it("searches titles on top of the pills", () => {
+    renderRail({ templates: LABELLED });
+    pick("theme:christmas");
+    fireEvent.change(box(), { target: { value: "TREE" } });
+    expect(rowNames()).toEqual(["tree-tee"]);
+  });
+
+  it("searches names only: text in a label lists nothing by itself", () => {
+    renderRail({ templates: LABELLED });
+    fireEvent.change(box(), { target: { value: "christmas" } });
+    expect(rowNames()).toEqual([]);
+    expect(options()).toEqual(["theme:christmas2"]);
+  });
+
+  it("counts only what the status pill leaves", () => {
+    renderRail({ templates: LABELLED });
+    fireEvent.click(screen.getByRole("button", { name: "Needs calibration 1" }));
+    fireEvent.click(box());
+    expect(options()).toEqual(["theme:elves1"]);
+  });
+
+  it("counts only what the kind pill leaves", () => {
+    renderRail({ templates: LABELLED });
+    fireEvent.click(screen.getByRole("button", { name: "Colour Matrix" }));
+    fireEvent.click(box());
+    expect(options()).toEqual(["model:female1", "theme:christmas2", "theme:elves1"]);
+  });
+
+  it("keeps the pills and text through switching template and a catalog refresh", () => {
+    const onSelect = vi.fn();
+    const rail = (templates: TemplateSummary[], selected: string | null) => (
+      <TemplateRail templates={templates} selected={selected} onSelect={onSelect} />
+    );
+    const { rerender } = render(rail(LABELLED, null));
+    pick("theme:christmas");
+    fireEvent.change(box(), { target: { value: "snow" } });
+
+    rerender(rail(LABELLED, "snow-tee"));
+    rerender(rail([...LABELLED], "snow-tee"));
+
+    expect(screen.getByRole("button", { name: "Remove theme:christmas" })).toBeInTheDocument();
+    expect(box()).toHaveValue("snow");
+    expect(rowNames()).toEqual(["snow-tee"]);
+  });
+
+  it("starts empty again after leaving the page", () => {
+    const { unmount } = render(
+      <TemplateRail templates={LABELLED} selected={null} onSelect={vi.fn()} />,
+    );
+    pick("theme:christmas");
+    fireEvent.change(box(), { target: { value: "snow" } });
+    unmount();
+
+    renderRail({ templates: LABELLED });
+    expect(screen.queryByRole("button", { name: /^Remove / })).not.toBeInTheDocument();
+    expect(box()).toHaveValue("");
+    expect(rowNames()).toHaveLength(4);
+  });
 });

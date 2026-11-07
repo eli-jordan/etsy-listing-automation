@@ -760,7 +760,7 @@ def test_limits_and_providers_are_captured_from_one_read_of_settings_yaml(
         "ai:\n  providers: [{name: codex}]\n  step_limit_minutes: 2\n  run_limit_minutes: 7\n",
         encoding="utf-8",
     )
-    load = chain.workspace.load_settings
+    load = chain.workspace.capture_settings
     loads: list[object] = []
 
     def load_then_save():
@@ -774,7 +774,7 @@ def test_limits_and_providers_are_captured_from_one_read_of_settings_yaml(
         )
         return loaded
 
-    monkeypatch.setattr(chain.workspace, "load_settings", load_then_save)
+    monkeypatch.setattr(chain.workspace, "capture_settings", load_then_save)
     adapters = []
 
     def factory(workspace, ai):
@@ -788,6 +788,18 @@ def test_limits_and_providers_are_captured_from_one_read_of_settings_yaml(
     assert run.phase == "done"
     assert adapters == [["CodexProvider"]]
     assert chain.provider.remaining[0] == ("queries", 120.0)
+
+
+def test_a_settings_file_broken_mid_run_does_not_reach_its_research(chain: Chain) -> None:
+    """ADR-0057: a run keeps what it captured, market weights included, so a
+    save landing while it runs is for the next one."""
+    chain.provider.during["queries"] = lambda: chain.workspace.settings_file().write_text(
+        "market_seo: {weights: {nope: 1}}\n", encoding="utf-8"
+    )
+
+    run = chain.run(draft_brief=False)
+
+    assert run.phase == "done"
 
 
 def test_provider_configuration_is_captured_before_the_run_thread_starts(chain: Chain) -> None:

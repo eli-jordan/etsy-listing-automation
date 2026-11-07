@@ -23,6 +23,7 @@ from etsy_listings.core.preparation.artifacts import Artifacts
 from etsy_listings.core.preparation.readiness import template_readiness
 from etsy_listings.core.workspace import Workspace
 from etsy_listings.core.workspace.calibration import CalibrationStore
+from etsy_listings.core.workspace.template_state import template_state
 
 from tests.support.builders import FIXTURE_LISTING as LISTING
 from tests.support.builders import a_context, a_lock
@@ -129,14 +130,16 @@ def test_label_edits_leave_map_readiness_alone(
     workspace, template = prepared
     artifacts = Artifacts(workspace)
     inputs = artifacts.saved_inputs(template)
-    readiness = template_readiness(workspace, template, workspace.load_template_config(template))
+    readiness = template_readiness(
+        workspace, template, template_state(workspace, template).require()
+    )
     assert readiness.can_render
 
     for step, labels in enumerate(LABEL_EDITS):
         relabel(workspace, template, labels, step)
 
         assert artifacts.saved_inputs(template) == inputs
-        config = workspace.load_template_config(template)
+        config = template_state(workspace, template).require()
         assert template_readiness(workspace, template, config) == readiness
 
 

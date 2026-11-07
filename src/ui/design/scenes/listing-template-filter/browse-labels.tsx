@@ -1,3 +1,4 @@
+import { OpenLabelMenu } from "../../components/_OpenLabelMenu";
 import { SuggestedScreen } from "./_SuggestedLocator";
 
 export const meta = {
@@ -8,5 +9,12 @@ export const meta = {
 };
 
 export default function Frame() {
-  return <SuggestedScreen focus="cc1717-woman-by-christmas-tree" initialOn={["theme:christmas"]} initialMenu />;
+  return (
+    <OpenLabelMenu>
+      <SuggestedScreen
+        focus="cc1717-woman-by-christmas-tree"
+        initialOn={["theme:christmas"]}
+      />
+    </OpenLabelMenu>
+  );
 }

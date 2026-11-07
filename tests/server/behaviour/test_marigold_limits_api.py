@@ -14,6 +14,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from etsy_listings.core.render.positions import Pose, compose
+from etsy_listings.core.workspace.template_state import template_state
 from etsy_listings.core.workspace.workspace import Workspace
 from etsy_listings.server.api.app import create_app
 
@@ -28,7 +29,7 @@ NARROWER = {**DEFAULTS, "scale": {"min": 0.9, "max": 1.05}}
 
 
 def _position(workspace: Workspace, template: str) -> dict[str, object]:
-    box = compose(workspace.load_template_config(template).bounding_box, Pose(rotation=5))
+    box = compose(template_state(workspace, template).require().bounding_box, Pose(rotation=5))
     return {template: {"bounding_box": [point.model_dump() for point in box]}}
 
 

@@ -43,7 +43,7 @@ from etsy_listings.core.application.refusals import (
     ListingMissingError,
 )
 from etsy_listings.core.batches import BatchStore
-from etsy_listings.core.config.errors import ConfigLoadError
+from etsy_listings.core.config.settings import SettingsProblem
 from etsy_listings.core.workspace.listing_documents import ListingDocuments
 from etsy_listings.core.workspace.workspace import Workspace
 
@@ -151,10 +151,9 @@ class AiCoordinator:
 
     def _unready(self, listing: str, *, draft_brief: bool) -> str | None:
         saved = self._workspace.load_listing(listing)
-        try:
-            providers = current_providers(self._runner.providers, self._workspace)
-        except ConfigLoadError as exc:
-            return str(exc)
+        providers = current_providers(self._runner.providers, self._workspace)
+        if isinstance(providers, SettingsProblem):
+            return providers.message
         return unready_reason(
             self._workspace,
             saved,

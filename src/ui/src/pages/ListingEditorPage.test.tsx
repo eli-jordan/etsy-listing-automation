@@ -9,7 +9,7 @@ import { briefEvent, type FakeAiRuns, fakeAiRuns, stepEvent } from "../test/aiRu
 import type { DesignMap, ListingDetail } from "../types";
 import { ListingEditorPage } from "./ListingEditorPage";
 import { listingDetail } from "../test/listings";
-import { AUTOSAVE_DEBOUNCE_MS } from "../hooks/useAutosave";
+import { AUTOSAVE_DEBOUNCE_MS } from "../hooks/writeLoop";
 import { controlledClock } from "../test/clock";
 import { type Deferred, deferred, must } from "../test/helpers";
 
@@ -68,6 +68,60 @@ describe("ListingEditorPage", () => {
     expect(
       await screen.findByText("new listing template from ?from_listing=take-a-hike"),
     ).toBeInTheDocument();
+  });
+
+  describe("with an edit the server will not write", () => {
+    const REASON = "media position 1 must be an image";
+
+    async function editRefused() {
+      vi.spyOn(listingsApi, "patchListing").mockResolvedValue(
+        detail({ field_errors: { __root__: REASON } }),
+      );
+      fireEvent.click(await screen.findByText("Listing Details"));
+      fireEvent.change(await screen.findByLabelText("Title"), { target: { value: "Refused" } });
+    }
+
+    it("stays on the listing rather than make a template from the file without it", async () => {
+      vi.spyOn(listingsApi, "getListing").mockResolvedValue(detail());
+      renderAt("/listings/take-a-hike");
+      await editRefused();
+
+      fireEvent.click(await screen.findByRole("button", { name: "Create listing template" }));
+
+      expect(await screen.findByText(`Not saved — ${REASON}`)).toBeInTheDocument();
+      expect(screen.queryByText(/new listing template from/)).toBeNull();
+    });
+
+    it("stays on the listing rather than go back to the batch without it", async () => {
+      vi.spyOn(listingsApi, "getListing").mockResolvedValue(detail());
+      vi.spyOn(batchesApi, "getListingBatch").mockResolvedValue({
+        batch_id: "b1",
+        label: "heavyweight-tee · 27 Sep 11:42",
+        row_id: "r1",
+        reviewed: false,
+        reviewable: true,
+      });
+      renderAt("/listings/take-a-hike?batch=b1");
+      await editRefused();
+
+      fireEvent.click(await screen.findByRole("button", { name: "Back to batch" }));
+
+      expect(await screen.findByText(`Not saved — ${REASON}`)).toBeInTheDocument();
+      expect(screen.queryByText("batch summary")).toBeNull();
+    });
+
+    it("still deletes: the edit is going with the listing", async () => {
+      vi.spyOn(listingsApi, "getListing").mockResolvedValue(detail({ gestures: ["delete"] }));
+      const del = vi.spyOn(listingsApi, "deleteListing").mockResolvedValue(null);
+      renderAt("/listings/take-a-hike");
+      await editRefused();
+
+      fireEvent.click(await screen.findByRole("button", { name: "Delete" }));
+      fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Delete" }));
+
+      expect(await screen.findByText("listings page")).toBeInTheDocument();
+      expect(del).toHaveBeenCalledWith("take-a-hike");
+    });
   });
 
   describe("opened from a batch (UI doc §8)", () => {

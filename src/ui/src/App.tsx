@@ -427,7 +427,8 @@ export function App() {
           {templateName && session.load !== "ready" && (
             <p role={session.load === "error" ? "alert" : "status"}>
               {session.load === "error"
-                ? "Could not load template configuration. Reload to try again."
+                ? (session.loadError ??
+                  "Could not load template configuration. Reload to try again.")
                 : "Loading template..."}
             </p>
           )}

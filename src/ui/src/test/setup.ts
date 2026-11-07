@@ -18,6 +18,10 @@ afterEach(() => {
 globalThis.URL.createObjectURL = vi.fn(() => "blob:mock-url");
 globalThis.URL.revokeObjectURL = vi.fn();
 
+// jsdom has no layout, so nothing scrolls; the search box keeps its highlight in
+// view with this.
+Element.prototype.scrollIntoView = vi.fn();
+
 // jsdom implements neither `PointerEvent` nor pointer capture, and without
 // them a synthetic pointerdown arrives with no `button` at all -- so a handler
 // that (correctly) ignores anything but the primary button ignores everything,

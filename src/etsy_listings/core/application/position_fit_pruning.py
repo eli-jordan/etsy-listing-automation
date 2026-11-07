@@ -26,6 +26,7 @@ from etsy_listings.core.preparation.position_fits import (
     scan_started,
 )
 from etsy_listings.core.render.config import AnyTemplate, MarigoldRenderer
+from etsy_listings.core.workspace.template_state import template_state
 from etsy_listings.core.workspace.workspace import Workspace
 
 logger = logging.getLogger(__name__)
@@ -94,7 +95,7 @@ def _template(workspace: Workspace, name: str) -> tuple[AnyTemplate, Preparation
     """A Marigold template's config and saved inputs, or None when it is not
     Marigold or does not load (its listings then keep no fit)."""
     try:
-        config = workspace.load_template_config(name)
+        config = template_state(workspace, name).require()
         if not isinstance(config.renderer, MarigoldRenderer):
             return None
         return config, Artifacts(workspace).saved_inputs(name)

@@ -12,26 +12,26 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import os
 from collections.abc import Mapping
 from dataclasses import dataclass
-from functools import lru_cache
 from pathlib import Path, PureWindowsPath
 from typing import Literal
 
 import yaml
-from pydantic import TypeAdapter, ValidationError
+from pydantic import TypeAdapter
 
 from etsy_listings.core.config.defaults import Defaults
 from etsy_listings.core.config.description import DescriptionConfig, compose_description
-from etsy_listings.core.config.errors import ConfigLoadError, format_validation_error
+from etsy_listings.core.config.errors import ConfigLoadError
 from etsy_listings.core.config.exceptions import load_exceptions
 from etsy_listings.core.config.garment_profile import GarmentProfile
 from etsy_listings.core.config.listing import Listing
 from etsy_listings.core.config.listing_template import ListingTemplate
 from etsy_listings.core.config.media import IMAGE_EXTENSIONS, VIDEO_EXTENSIONS
 from etsy_listings.core.config.pricing_plan import PricingPlan
-from etsy_listings.core.config.settings import Settings
+from etsy_listings.core.config.settings import Settings, SettingsProblem
 from etsy_listings.core.config.slug import ColourExceptions
 
 # `template.yaml` is render geometry and render settings from top to bottom, so
@@ -40,13 +40,8 @@ from etsy_listings.core.config.slug import ColourExceptions
 # edge `load_listing` already has to `config`: the workspace knows where every
 # file lives, and asks whichever module owns a file's shape to parse it.
 from etsy_listings.core.render.config import AnyTemplate, PlacementId
-from etsy_listings.core.render.config import load_template_config as parse_template_config
 from etsy_listings.core.workspace import layout
 from etsy_listings.core.workspace.atomic import read_bytes_retrying, write_yaml_atomic
-from etsy_listings.core.workspace.calibration import (
-    CalibrationRepairRequiredError,
-    CalibrationStore,
-)
 from etsy_listings.core.workspace.common_copy import (
     CommonCopyDocument,
     CommonCopyError,
@@ -55,6 +50,8 @@ from etsy_listings.core.workspace.common_copy import (
 from etsy_listings.core.workspace.trees import remove_tree
 from etsy_listings.core.workspace.userpath import to_native_path
 from etsy_listings.core.workspace.yaml_source import UNSET
+
+logger = logging.getLogger(__name__)
 
 
 class WorkspaceNotFoundError(FileNotFoundError):
@@ -68,13 +65,6 @@ class WorkspaceNotFoundError(FileNotFoundError):
 class PathEscapesWorkspaceError(ValueError):
     def __init__(self, ref: str, root: Path) -> None:
         super().__init__(f"path {ref!r} escapes the workspace root ({root})")
-
-
-@lru_cache(maxsize=64)
-def _parsed_template_config(text: str) -> AnyTemplate:
-    # Key by actual contents, never timestamps. The reader still observes
-    # every external edit and transaction before reusing the parse result.
-    return parse_template_config(yaml.safe_load(text))
 
 
 class InvalidRefError(ConfigLoadError):
@@ -806,7 +796,7 @@ class Workspace:
         The one place a common-copy file's bytes are read: `common_copy.py`'s
         :func:`~etsy_listings.core.workspace.common_copy.parse_common_copy` owns the
         parsing itself (pure, tested directly against string fixtures), and
-        this is the I/O around it -- the same split `load_template_config`
+        this is the I/O around it -- the same split `template_state`
         already draws between reading `template.yaml` and parsing it.
         """
         path = self.common_copy_file(ref)
@@ -972,9 +962,8 @@ class Workspace:
     def template_config_file(self, template: str) -> Path:
         return self.template_dir(template) / layout.TEMPLATE_FILE
 
-    def template_main_photo(self, template: str, config: AnyTemplate | None = None) -> Path:
+    def template_main_photo(self, template: str, config: AnyTemplate) -> Path:
         """ADR-0054: ordinal first actual colour photo; fixed kinds use scene."""
-        config = config if config is not None else self.load_template_config(template)
         if config.kind == "colour-matrix":
             photos = sorted(self.template_photos(template), key=lambda photo: photo.name)
             if not photos:
@@ -1248,56 +1237,40 @@ class Workspace:
         resolved. This method only owns "attach currency, wrap load errors"."""
         return PricingPlan.load(path, currency=self.defaults.etsy.currency)
 
-    def load_settings(self) -> Settings:
-        """``settings.yaml``, read on every call rather than at discovery:
-        a seller tuning weights while the UI runs gets them on the next
-        research, and a broken file fails only what reads it."""
+    def capture_settings(self) -> Settings:
+        """``settings.yaml`` for a run, which keeps what it captures to the end
+        (ADR-0056, ADR-0057): a broken file raises :class:`ConfigLoadError`,
+        and the run fails with its message.
+
+        This and its two siblings are the only reads of the file, each named
+        for what a broken one means to its caller. All read on every call
+        rather than at discovery: a seller tuning weights while the UI runs
+        gets them on the next research, and a broken file touches only what
+        reads it."""
         return Settings.load(self.settings_file())
+
+    def settings_or_problem(self) -> Settings | SettingsProblem:
+        """``settings.yaml``, or what is wrong with it, for a read whose answer
+        carries the problem: a stage's ``Blocked``, a listing's issue, a
+        refusal. Never raises for a broken file."""
+        try:
+            return self.capture_settings()
+        except ConfigLoadError as exc:
+            return SettingsProblem(str(exc))
+
+    def settings_if_readable(self, *, skipping: str) -> Settings | None:
+        """``settings.yaml``, or ``None`` having logged that ``skipping``, the
+        best-effort follow-up it was wanted for, will not happen. Whatever the
+        file holds up is reported by what reads it to act: ``plan`` and the
+        listing's issues."""
+        settings = self.settings_or_problem()
+        if isinstance(settings, SettingsProblem):
+            logger.warning("skipped %s: %s", skipping, settings.message)
+            return None
+        return settings
 
     def load_exceptions(self) -> ColourExceptions:
         return load_exceptions(self.exceptions_file())
-
-    def load_template_config(self, template: str) -> AnyTemplate:
-
-        with CalibrationStore(self).lock(template):
-            return self._read_template_config(template)
-
-    def _read_template_config(self, template: str) -> AnyTemplate:
-        """One ``template.yaml``, parsed into whichever of the three kinds it is.
-
-        The read used to be open-coded at each of its four call sites -- the
-        render stage's ``desired`` and ``apply``, the calibrator's endpoints
-        and ``new``'s kind lookup -- each doing its own
-        ``yaml.safe_load(path.read_text(...))``. That is exactly the joining
-        of a layout that the layout accessors above exist to prevent, so it
-        lives here with ``load_listing`` and ``load_garment_profile``.
-        """
-
-        if self.template_calibration_transaction(template).exists():
-            raise CalibrationRepairRequiredError(
-                "Active calibration transaction; retry after server recovery"
-            )
-        path = self.template_config_file(template)
-        if not path.is_file():
-            raise ConfigLoadError(path, "template config not found -- calibrate it with `ui` first")
-        try:
-            text = path.read_text(encoding="utf-8")
-            if len(text.encode("utf-8")) > 64 * 1024:
-                return parse_template_config(yaml.safe_load(text))
-            # Frozen template models can still contain mutable placement lists.
-            # Never expose the retained parse object to a caller.
-            return _parsed_template_config(text).model_copy(deep=True)
-        except yaml.YAMLError as exc:
-            raise ConfigLoadError(path, f"not valid YAML: {exc}") from exc
-        except ValidationError as exc:
-            raise format_validation_error(path, exc) from exc
-
-    def save_template_config(self, template: str, config: AnyTemplate) -> None:
-        """Write ``template.yaml``. The calibrator is the only caller -- it is
-        what produces this file -- but the
-        path and the serialisation belong here, beside the read."""
-
-        CalibrationStore(self).write_config(template, config)
 
 
 def _prune_template_previews(directory: Path, keep: set[str] | None) -> None:

@@ -4546,10 +4546,26 @@ table.listings tbody tr:last-child td {
   pointer-events: none;
 }
 
+/* The search box's glass, so the two halves of the locator match. The rule above
+   stays for the frames that still draw their own stroked icon. */
+.locator__search .locator__glass {
+  left: 9px;
+  width: 15px;
+  height: 15px;
+  fill: currentColor;
+  stroke: none;
+  color: color-mix(in srgb, var(--color-text) 55%, transparent);
+}
+
 .locator__search .input {
   width: 100%;
   padding-left: 31px;
   background: var(--color-neutral-100);
+}
+
+.locator__result {
+  font-size: 12px;
+  color: color-mix(in srgb, var(--color-text) 65%, transparent);
 }
 
 .locator__list {
@@ -4633,6 +4649,19 @@ table.listings tbody tr:last-child td {
   display: block;
   font-size: 10px;
   color: color-mix(in srgb, var(--color-text) 52%, transparent);
+}
+
+.loc-tmpl__labels {
+  display: block;
+  font-size: 11px;
+  color: var(--color-accent-700);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.loc-tmpl__labels--none {
+  color: color-mix(in srgb, var(--color-text) 50%, transparent);
 }
 
 .loc-tmpl__count {

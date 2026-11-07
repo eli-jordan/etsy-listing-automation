@@ -12,7 +12,7 @@ The approved source is two boards. **Find templates on a listing** comes from
 and **Mockup template labels** from
 [`src/ui/design/scenes/template-labels/`](../../../src/ui/design/scenes/template-labels/).
 Both use the shared search box in
-[`src/ui/design/components/_LabelSearch.tsx`](../../../src/ui/design/components/_LabelSearch.tsx).
+[`src/ui/src/components/LabelSearch.tsx`](../../../src/ui/src/components/LabelSearch.tsx).
 Run `npx marver dev` from `src/ui`, open the printed URL and select a board.
 Every frame is live, so type in the search boxes directly. The
 `listing-template-filter-v1` to `-v3` and `template-labels-v1` and `-v2` scenes on
@@ -31,12 +31,12 @@ data and saves.
 
 | Element | Prototype implementation | Useful parts to copy |
 |---|---|---|
-| Search box with pills | [`_LabelSearch.tsx`](../../../src/ui/design/components/_LabelSearch.tsx), `LabelSearch` | The whole component. The caller owns `on` and `query` and applies them to its own list. Move it into `src/ui/src/components/`, because `src/` must not import from `design/`. |
-| Which labels the dropdown offers | `_LabelSearch.tsx`, `optionsFor`, `groupOf` | Matching, counts, the `swap` flag and the group and sort order. |
-| Group headings | `_LabelSearch.tsx`, the `grouped` and `startsGroup` values | A heading is drawn where the group changes, in the same flat list the arrow keys walk. |
-| Keyboard handling | `_LabelSearch.tsx`, `onKey` | Arrow wrap-around, Enter, Escape and Backspace. |
-| Dropdown closing | `_LabelSearch.tsx`, the `mousedown` effect | It closes on outside clicks, not on blur, so a click on an option still lands. |
-| Search box styles | [`_LabelSearch.css`](../../../src/ui/design/components/_LabelSearch.css) | Semantic tokens only. The `input.label-search__field` rule exists to cancel the app's global text-input styles. |
+| Search box with pills | [`LabelSearch.tsx`](../../../src/ui/src/components/LabelSearch.tsx), `LabelSearch` | The whole component. The caller owns `on` and `query` and applies them to its own list. |
+| Which labels the dropdown offers | `LabelSearch.tsx`, `optionsFor`, `groupOf` | Matching, counts, the `swap` flag and the group and sort order. |
+| Group headings | `LabelSearch.tsx`, the `grouped` and `startsGroup` values | A heading is drawn where the group changes, in the same flat list the arrow keys walk. |
+| Keyboard handling | `LabelSearch.tsx`, `keys` | Arrow wrap-around, Enter, Escape, Tab and Backspace. |
+| Dropdown closing | `LabelSearch.tsx`, the `mousedown` effect and `close` | It closes on outside clicks and Tab, not on blur, so a click on an option still lands. Every close clears the highlight. |
+| Search box styles | [`LabelSearch.css`](../../../src/ui/src/components/LabelSearch.css) | Semantic tokens only. The `input.label-search__field` rule exists to cancel the app's global text-input styles. |
 | Listing locator | [`_SuggestedLocator.tsx`](../../../src/ui/design/scenes/listing-template-filter/_SuggestedLocator.tsx), `SuggestedScreen` | The result line and how the box drives the list. Fold these into the real `MediaLocator`. |
 | Template row with labels | [`_ImagesScreen.tsx`](../../../src/ui/design/scenes/listing-template-filter/_ImagesScreen.tsx), `TemplateRow`, `.lf-tags` | The labels line. It replaces the kind line in the real `LocatorTemplate`. |
 | Images tab chrome | `_ImagesScreen.tsx`, `ImagesScreen`, `LocatorShell`, `usePicker` | **Do not copy.** These are static stand-ins for `ImagesTab`, `MediaLocator` and `MediaReel`. |
@@ -61,7 +61,7 @@ Dropdown open
   Down / Up ──► moves the highlight through all groups, wrapping at both ends
   Enter on a highlight, or click ──► text clears, label becomes a pill
   Enter with no highlight ──► dropdown closes, text stays as a title search
-  Esc, or click outside ──► dropdown closes, text stays
+  Esc, Tab, or click outside ──► dropdown closes, highlight clears, text stays
 ```
 
 ## One search box
@@ -109,8 +109,18 @@ filters by title while the seller types, so `chr` shows only
 | Enter with nothing highlighted | Closes the dropdown and keeps the text. |
 | Click a label | Same as Enter on it. |
 | Esc | Closes the dropdown and clears the highlight. The text stays. |
+| Tab | Closes the dropdown and clears the highlight, and focus moves on. |
 | Backspace in an empty box | Removes the last pill. |
-| × on a pill | Removes that pill. |
+| × on a pill | Removes that pill. Focus returns to the box. |
+
+**Keyboard and focus.** Closing the dropdown any way clears the highlight, so Enter
+cannot pick a row left over from before. Tab closes it so it does not stay over the
+list once focus has moved on. Backspace and × clear the highlight too, because what
+is on offer changes. The highlighted row scrolls into view inside the dropdown. Down
+with nothing to offer highlights nothing. The field is a combobox with
+`aria-autocomplete="list"`; `aria-controls` names the listbox and
+`aria-activedescendant` the highlighted row only while they exist, and ids come from
+`useId`.
 
 ![Clicking the box lists every other label under its group](screenshots/listing-labels.png)
 
@@ -196,10 +206,6 @@ On the frontend:
   and clear the text, as the spec says.
 - **Calibrated templates only.** The real locator lists calibrated templates, so
   its labels, counts and the "of N" total must cover those alone.
-- **Unique ids.** `label-search-menu` and `label-search-N` are fixed strings. Use
-  `useId` so two boxes can never collide.
-- **Hand-edited labels.** A label that breaks the rules still appears as written.
-  Compare case-insensitively, so `Christmas` written by hand is still found.
 - **Not prototyped:** save failure and conflict states, and dark-theme screenshots.
   The app's stylesheet has no dark theme, so the canvas renders these frames the
   same in both modes.

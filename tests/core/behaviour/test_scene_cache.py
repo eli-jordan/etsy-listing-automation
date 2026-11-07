@@ -8,7 +8,11 @@ from pathlib import Path
 import pytest
 from PIL import Image
 
-from etsy_listings.core.application.prepared_previews import prepared_preview
+from etsy_listings.core.application.scene_previews import (
+    DISK_IMAGES,
+    SceneLayers,
+    saved_scene,
+)
 from etsy_listings.core.engine import build_plan, execute
 from etsy_listings.core.engine.stages.render import RenderStage
 from etsy_listings.core.preparation import scenes
@@ -33,8 +37,12 @@ def compositions(monkeypatch) -> list[int]:
 
 
 def _preview(workspace, design: Path):
-    return prepared_preview(
-        workspace, "shirt", config=None, colour=None, design=lambda _colour: design
+    return saved_scene(
+        workspace,
+        "shirt",
+        SceneLayers(None, lambda _colour: design),
+        size="full",
+        images=DISK_IMAGES,
     )
 
 
@@ -149,17 +157,14 @@ def warps(monkeypatch) -> list[int]:
 
 def _warp_preview(workspace, colour: str = "black"):
     from etsy_listings.core.application.listing_reads import scene_artwork
-    from etsy_listings.core.application.mockup_templates import saved_preview
-    from etsy_listings.core.application.prepared_previews import photo_warp_preview
-    from etsy_listings.core.render import load_design, load_template_base
 
-    scene = saved_preview(
+    return saved_scene(
         workspace,
         "flat-lay-01",
-        colour=colour,
-        design=scene_artwork(workspace, FIXTURE_LISTING),
+        SceneLayers(colour, scene_artwork(workspace, FIXTURE_LISTING)),
+        size="full",
+        images=DISK_IMAGES,
     )
-    return photo_warp_preview(workspace, scene, base=load_template_base, design=load_design)
 
 
 def test_a_photo_warp_scene_viewed_again_is_not_composed_or_decoded(

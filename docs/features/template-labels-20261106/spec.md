@@ -1,6 +1,6 @@
 # Mockup template labels
 
-Status: not started. Started 2026-11-06.
+Status: implemented, in review. Started 2026-11-06.
 This specification owns the requirements under the
 [documentation authority rules](../../README.md#documentation-authority). The
 [interactions document](interactions.md) records the behaviour a screenshot
@@ -137,8 +137,8 @@ picking a label.
 
 The dropdown groups labels by prefix, A to Z, with plain labels under *Other*
 last. It shows no headings when no offered label has a prefix. Within a group,
-labels that narrow come first, then those starting with the typed text, then the
-highest count.
+labels that narrow come first, then those starting with the typed text, as a whole
+or after the colon, then the highest count.
 
 ### Listing Images
 

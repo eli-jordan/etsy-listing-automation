@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as listingsApi from "../../api/listings";
 import * as seoApi from "../../api/seo";
-import type { SaveState } from "../../hooks/useAutosave";
+import type { SaveState } from "../../hooks/listingAutosave";
 import {
   type FakeAiRuns,
   aiRunSummary,

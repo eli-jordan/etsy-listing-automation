@@ -7,8 +7,8 @@ suite meaningful. Nothing here knows a workspace, a listing or a Printify
 product exists; callers own opening files and handing over arrays.
 
 ``template.yaml``'s models live here too, rather than in ``config``: that file
-is render geometry and render settings from top to bottom. ``Workspace`` is
-what reads and writes it (``load_template_config`` here only parses data
+is render geometry and render settings from top to bottom. ``workspace.template_state``
+reads it and ``CalibrationStore`` writes it (``load_template_config`` here only parses data
 already in hand).
 
 ``positions`` exposes ``Pose(scale=1, offset_x=0, offset_y=0, rotation=0)``,

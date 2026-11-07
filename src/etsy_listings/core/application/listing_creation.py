@@ -21,6 +21,7 @@ from etsy_listings.core.config.errors import format_validation_error
 from etsy_listings.core.config.listing import Listing
 from etsy_listings.core.config.media import MAX_IMAGES
 from etsy_listings.core.workspace.listing_documents import ListingDocuments
+from etsy_listings.core.workspace.template_state import template_state
 from etsy_listings.core.workspace.workspace import Workspace
 
 
@@ -55,7 +56,7 @@ def load_template_kind(workspace: Workspace, template: str) -> str:
     and writing the wrong shape produces a listing that only fails later, at
     render time, with nothing pointing back at ``new``.
     """
-    return workspace.load_template_config(template).kind
+    return template_state(workspace, template).require().kind
 
 
 def build_media_entries(*, template: str, kind: str, colours: list[str]) -> list[dict[str, str]]:
