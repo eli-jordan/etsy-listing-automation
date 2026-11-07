@@ -27,7 +27,7 @@ from etsy_listings.core.ai.host import LOCAL_CLI_HOST, CliHost
 from etsy_listings.core.ai.providers import AiProvider
 from etsy_listings.core.config.artwork import representative
 from etsy_listings.core.config.listing import Listing
-from etsy_listings.core.config.settings import AiSettings
+from etsy_listings.core.config.settings import AiSettings, SettingsProblem
 from etsy_listings.core.workspace.facts import WorkspaceFacts
 from etsy_listings.core.workspace.workspace import Workspace
 
@@ -39,10 +39,15 @@ mid-session, for instance). A run passes the same load it takes its time
 limits from, so both come from one revision of ``settings.yaml`` (ADR-0057)."""
 
 
-def current_providers(factory: ProviderFactory, workspace: Workspace) -> Sequence[AiProvider]:
+def current_providers(
+    factory: ProviderFactory, workspace: Workspace
+) -> Sequence[AiProvider] | SettingsProblem:
     """``factory``'s providers for ``settings.yaml`` as it is now: for a
-    readiness check, which captures nothing."""
-    return factory(workspace, workspace.load_settings().ai)
+    readiness check, which captures nothing and reports a broken file."""
+    settings = workspace.settings_or_problem()
+    if isinstance(settings, SettingsProblem):
+        return settings
+    return factory(workspace, settings.ai)
 
 
 def default_ai_providers(

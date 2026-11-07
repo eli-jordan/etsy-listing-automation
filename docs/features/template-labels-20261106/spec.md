@@ -1,6 +1,6 @@
 # Mockup template labels
 
-Status: not started. Started 2026-11-06.
+Status: implemented, in review. Started 2026-11-06.
 This specification owns the requirements under the
 [documentation authority rules](../../README.md#documentation-authority). The
 [interactions document](interactions.md) records the behaviour a screenshot

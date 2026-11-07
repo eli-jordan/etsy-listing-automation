@@ -10,7 +10,6 @@ from pathlib import Path
 import pytest
 from PIL import Image
 
-from etsy_listings.core.config.errors import ConfigLoadError
 from etsy_listings.core.config.template_labels import TemplateLabelRefusedError
 from etsy_listings.core.render.config import AnyTemplate
 from etsy_listings.core.workspace import Workspace
@@ -18,6 +17,7 @@ from etsy_listings.core.workspace.calibration import (
     CalibrationChangedError,
     CalibrationStore,
 )
+from etsy_listings.core.workspace.template_state import TemplateConfigUnreadableError
 
 from tests.support.source_files import crlf
 
@@ -198,7 +198,7 @@ def test_a_hand_edited_label_does_not_stop_a_new_one_and_can_be_removed(
 def test_labels_that_are_not_a_list_fail_to_load(workspace_root: Path) -> None:
     store, _ = a_store(workspace_root, SOURCE + "labels: cosy\n")
 
-    with pytest.raises(ConfigLoadError, match="labels"):
+    with pytest.raises(TemplateConfigUnreadableError, match="labels"):
         store.read("example")
 
 

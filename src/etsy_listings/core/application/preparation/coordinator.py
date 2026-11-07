@@ -443,7 +443,14 @@ class Preparations:
                 return job
         return calibration.revision, inputs, quads
 
+    def _finish_interrupted_saves(self) -> None:
+        """This server owns the workspace, so what a crash left is its to
+        finish (``template_state``). After this a job's reads only observe."""
+        for name in self.workspace.template_names(include_uncalibrated=True):
+            self.calibration.state(name)
+
     def recover(self) -> None:
+        self._finish_interrupted_saves()
         for job in self.store.jobs():
             if job.phase in TERMINAL:
                 continue
@@ -560,8 +567,13 @@ class Preparations:
         amendment *coverage belongs to preparation*). Queued while closing
         too: the job is durable and runs on the next start. A failure leaves
         saving a position to queue it."""
+        settings = self.workspace.settings_if_readable(
+            skipping=f"covering prepared template {template!r}"
+        )
+        if settings is None:
+            return
         try:
-            self.cover(template, self.workspace.load_settings().template_positions)
+            self.cover(template, settings.template_positions)
         except (UserFacingError, ValueError, OSError) as exc:
             logger.warning("not covering prepared template %r: %s", template, exc)
 

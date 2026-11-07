@@ -36,7 +36,6 @@ from etsy_listings.core.application.mockup_templates import (
 )
 from etsy_listings.core.application.refusals import (
     TemplateAlreadyCalibratedError,
-    TemplateConfigMissingError,
     TemplateKindRefusedError,
     TemplateMissingError,
     TemplatePhotoMissingError,
@@ -52,6 +51,7 @@ from etsy_listings.core.render.config import (
     SingleTemplate,
 )
 from etsy_listings.core.render.io import load_design, load_template_base
+from etsy_listings.core.workspace.template_state import TemplateConfigMissingError
 from etsy_listings.core.workspace.workspace import InvalidNameError, Workspace
 
 BOX = (Point(x=0, y=0), Point(x=100, y=0), Point(x=100, y=100), Point(x=0, y=100))

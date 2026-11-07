@@ -9,6 +9,7 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 
 from etsy_listings.core.engine.stages.render import RenderStage, scene_hash
+from etsy_listings.core.workspace.template_state import template_state
 from etsy_listings.server.api.app import create_app
 
 from tests.support.builders import FIXTURE_LISTING, a_context
@@ -46,7 +47,7 @@ def _position(workspace) -> dict[str, object]:
     from etsy_listings.core.render.positions import Pose, compose
 
     box = compose(
-        workspace.load_template_config("shirt").bounding_box,
+        template_state(workspace, "shirt").require().bounding_box,
         Pose(scale=0.9, offset_x=0.05, rotation=8),
     )
     return {"shirt": {"bounding_box": [point.model_dump() for point in box]}}

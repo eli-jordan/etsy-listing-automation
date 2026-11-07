@@ -1,5 +1,10 @@
 import { useEffect, useState, useSyncExternalStore } from "react";
-import { getTemplateConfig, saveTemplateConfig, TemplateConflictError } from "../api/calibrator";
+import {
+  CalibratorApiError,
+  getTemplateConfig,
+  saveTemplateConfig,
+  TemplateConflictError,
+} from "../api/calibrator";
 import {
   cancelPreparation,
   getPreparation,
@@ -9,7 +14,7 @@ import {
   type Preparation,
 } from "../api/preparation";
 import type { TemplateConfigState } from "../types";
-import { AUTOSAVE_DEBOUNCE_MS } from "./useAutosave";
+import { WriteLoop, WRITTEN, type Settled } from "./writeLoop";
 import { usePreparation } from "./usePreparation";
 
 /** Where the open template stands with the disk, as the header reports it.
@@ -32,6 +37,8 @@ export type PreparationAction = "prepare" | "prepare_again" | "retry";
 
 export interface TemplateSession {
   load: TemplateLoad;
+  /** Why the template could not be read, when the server said. */
+  loadError: string | null;
   /** The draft: the document as last read or saved, with every edit since. */
   config: TemplateConfigState | null;
   /** The document as this session last read or wrote it. */
@@ -64,12 +71,13 @@ export interface TemplateSession {
    * goes the moment it lands. */
   setPreviewPending: (pending: boolean) => void;
   /** Saves now, without waiting for the debounce. Never rejects: the outcome
-   * is in `save`. */
-  flush: () => Promise<void>;
+   * is in `save`, and in what it answers for a caller about to act on the
+   * file. */
+  flush: () => Promise<Settled>;
   /** Writes the draft even when nothing changed. Approving from the Preview
    * tab is a save: calibration status is derived from template.yaml, so the
    * observable act of approving is the file being written. */
-  approve: () => Promise<void>;
+  approve: () => Promise<Settled>;
   /** Discards the draft and mask edits and reads template.yaml again -- after
    * a conflict, or once a kind has been assigned. */
   reload: () => void;
@@ -113,6 +121,7 @@ function onlyLabelsDiffer(before: TemplateConfigState, after: TemplateConfigStat
 interface Doc {
   name: string;
   load: "loading" | "ready" | "error";
+  loadError: string | null;
   draft: TemplateConfigState | null;
   saved: TemplateConfigState | null;
   /** Sent as `If-Match`; advanced by every save and by an adopted baseline. */
@@ -123,14 +132,22 @@ interface Doc {
   maskEdits: MaskEdit[];
   save: TemplateSaveState;
   previewPending: boolean;
-  timer: ReturnType<typeof setTimeout> | null;
+  /** This opening's saves. The draft is what is sent, read when it goes, so
+   * what the loop holds is only whether one is owed. */
+  loop: WriteLoop<SaveWanted>;
   /** The debounce ran out while held by a pending preview. */
   due: boolean;
+}
+
+/** `always` writes the draft even if nothing changed: an approval. */
+interface SaveWanted {
+  always: boolean;
 }
 
 interface View {
   name: string | null;
   load: TemplateLoad;
+  loadError: string | null;
   config: TemplateConfigState | null;
   saved: TemplateConfigState | null;
   dirty: boolean;
@@ -157,7 +174,7 @@ const NO_LABELS: string[] = [];
 
 /** What a failed save says: a conflict asks for a reload, anything else is
  * a plain failure. */
-function saveFailure(e: unknown): TemplateSaveState {
+function saveFailure(e: unknown): Extract<TemplateSaveState, { message: string }> {
   if (e instanceof TemplateConflictError) return { kind: "conflict", message: e.message };
   return { kind: "failed", message: e instanceof Error ? e.message : "Save failed" };
 }
@@ -175,7 +192,7 @@ function isDirty(doc: Doc): boolean {
  * the wait reads as saving from the edit on. A failure stays until the next
  * attempt, and a conflict until a reload. */
 function shownSave(doc: Doc): TemplateSaveState {
-  const waiting = doc.timer !== null || doc.due;
+  const waiting = doc.loop.armed || doc.due;
   const labelled = doc.draft !== null && doc.saved !== null && !sameLabels(doc.draft, doc.saved);
   const settled = doc.save.kind === "idle" || doc.save.kind === "saved";
   return waiting && labelled && settled ? SAVING : doc.save;
@@ -187,9 +204,9 @@ function shownSave(doc: Doc): TemplateSaveState {
 class Session {
   private doc: Doc | null = null;
   private listeners = new Set<() => void>();
-  /** Every save, one at a time and across templates: a flush on switch can
+  /** The saves of documents this session has left: a flush on switch can
    * still be in flight when the next template is read, and must land first. */
-  private writes: Promise<void> = Promise.resolve();
+  private leaving: Promise<unknown> = Promise.resolve();
   /** Operations are objects shared by successive draft snapshots, so an
    * editor handing back a list built before a save landed would otherwise
    * send its strokes twice. */
@@ -265,29 +282,31 @@ class Session {
     doc.previewPending = pending;
     if (doc.due && !this.held(doc)) {
       doc.due = false;
-      void this.enqueue(doc).catch(() => {});
+      void doc.loop.flush();
     }
     this.emit();
   };
 
-  flush = (): Promise<void> => {
+  flush = (): Promise<Settled> => {
     const doc = this.doc;
-    if (!doc) return Promise.resolve();
-    this.clearTimer(doc);
-    return this.enqueue(doc).catch(() => {});
+    if (!doc) return Promise.resolve(WRITTEN);
+    doc.due = false;
+    return doc.loop.flush();
   };
 
-  approve = (): Promise<void> => {
+  approve = (): Promise<Settled> => {
     const doc = this.doc;
-    if (!doc) return Promise.resolve();
-    this.clearTimer(doc);
-    return this.enqueue(doc, true).catch(() => {});
+    if (!doc) return Promise.resolve(WRITTEN);
+    doc.due = false;
+    doc.loop.edit({ always: true });
+    return doc.loop.flush();
   };
 
   reload = () => {
     const doc = this.doc;
     if (!doc) return;
-    this.clearTimer(doc);
+    doc.loop.discard();
+    this.leave(doc);
     this.doc = this.read(doc.name);
     this.emit();
   };
@@ -308,10 +327,13 @@ class Session {
         doc.maskEdits = doc.maskEdits.filter((edit) => !stale.has(edit.placement_id ?? null));
         this.emit();
       }
-      this.clearTimer(doc);
-      // Rejects if the save does: preparing an older revision than the one
-      // on screen would prepare the wrong thing.
-      await this.enqueue(doc);
+      // Preparing an older revision than the one on screen would prepare the
+      // wrong thing.
+      const settled = await this.flush();
+      if (!settled.written) {
+        this.actionError = settled.message;
+        return;
+      }
       const current = await getPreparation(doc.name);
       const submitted = await prepareTemplate({
         template: doc.name,
@@ -354,6 +376,7 @@ class Session {
     const doc: Doc = {
       name,
       load: "loading",
+      loadError: null,
       draft: null,
       saved: null,
       revision: "",
@@ -363,12 +386,25 @@ class Session {
       maskEdits: NO_EDITS,
       save: IDLE,
       previewPending: false,
-      timer: null,
+      loop: new WriteLoop<SaveWanted>({
+        send: (wanted) => this.send(doc, wanted.always),
+        merge: (older, newer) => ({ always: older.always || newer.always }),
+        failed: (e) => {
+          const failure = saveFailure(e);
+          doc.save = failure;
+          this.emit();
+          return failure.message;
+        },
+        due: () => {
+          if (this.held(doc)) doc.due = true;
+          else void doc.loop.flush();
+        },
+      }),
       due: false,
     };
     // After any save still in flight, or the read could describe the file
     // from before it.
-    void this.writes
+    void this.leaving
       .then(() => getTemplateConfig(name))
       .then(
         (loaded) => {
@@ -380,23 +416,19 @@ class Session {
           doc.save = loaded ? { kind: "saved", savedAt: Date.parse(loaded.modifiedAt) } : IDLE;
           this.emit();
         },
-        () => {
+        (e: unknown) => {
           if (this.doc !== doc) return;
           doc.load = "error";
+          doc.loadError = e instanceof CalibratorApiError ? e.message : null;
           this.emit();
         },
       );
     return doc;
   }
 
-  /** The same interval the listing editor uses, measured from the last edit. */
   private edited(doc: Doc) {
-    this.clearTimer(doc);
-    doc.timer = setTimeout(() => {
-      doc.timer = null;
-      if (this.held(doc)) doc.due = true;
-      else void this.enqueue(doc).catch(() => {});
-    }, AUTOSAVE_DEBOUNCE_MS);
+    doc.due = false;
+    doc.loop.edit({ always: false });
     this.emit();
   }
 
@@ -404,45 +436,31 @@ class Session {
     return doc.previewPending && doc.draft?.renderer.type === "marigold";
   }
 
-  private clearTimer(doc: Doc) {
-    if (doc.timer !== null) clearTimeout(doc.timer);
-    doc.timer = null;
-    doc.due = false;
-  }
-
   /** A switch flushes rather than drops: the edit was made, and the template
    * it was made to still exists. Not held by a preview: its editor is going. */
   private detach(doc: Doc) {
-    this.clearTimer(doc);
-    void this.enqueue(doc).catch(() => {});
+    doc.due = false;
+    this.leave(doc);
   }
 
-  /** Queues a save of `doc` behind any in flight. It reads the draft when it
-   * is sent, not when it is queued, so a burst of flushes collapses into the
-   * one request the latest draft needs, and a queued one finding nothing
-   * dirty sends nothing. */
-  private enqueue(doc: Doc, always = false): Promise<void> {
-    const run = this.writes.then(() => this.send(doc, always));
-    this.writes = run.catch(() => {});
-    return run;
+  /** The next read waits for `doc`'s writes. */
+  private leave(doc: Doc) {
+    this.leaving = Promise.all([this.leaving, doc.loop.flush()]);
   }
 
-  private async send(doc: Doc, always: boolean) {
-    if (doc.load !== "ready" || doc.draft === null || (!always && !isDirty(doc))) return;
+  /** Reads the draft now, not when the save was asked for, so it goes as the
+   * one request the latest draft needs, and an edit undone sends nothing. */
+  private async send(doc: Doc, always: boolean): Promise<Settled> {
+    if (doc.load !== "ready" || doc.draft === null || (!always && !isDirty(doc))) return WRITTEN;
     const config = doc.draft;
     const edits = this.uncommitted(doc.maskEdits);
     doc.save = SAVING;
     this.emit();
-    try {
-      await this.adoptPreparedBaseline(doc);
-      const result = await saveTemplateConfig(doc.name, config, edits, doc.revision);
-      if (result.revision) doc.revision = result.revision;
-      this.landed(doc, config, edits);
-    } catch (e) {
-      doc.save = saveFailure(e);
-      this.emit();
-      throw e;
-    }
+    await this.adoptPreparedBaseline(doc);
+    const result = await saveTemplateConfig(doc.name, config, edits, doc.revision);
+    if (result.revision) doc.revision = result.revision;
+    this.landed(doc, config, edits);
+    return WRITTEN;
   }
 
   /** `config` and `edits` are on disk at `doc.revision`. */
@@ -519,6 +537,7 @@ class Session {
     return {
       name: doc?.name ?? null,
       load: doc?.load ?? "none",
+      loadError: doc?.loadError ?? null,
       config: ready ? doc.draft : null,
       saved: ready ? doc.saved : null,
       dirty: doc ? isDirty(doc) : false,
@@ -541,12 +560,12 @@ class Session {
  * every save names, mask strokes awaiting commit, and the preparation that
  * follows a save.
  *
- * Autosave follows the listing editor's rules ({@link useAutosave}): a
+ * Saves go through the {@link WriteLoop} the listing editor's use too: a
  * debounce from the last edit, one request in flight at a time, and pending
- * edits flushed -- not dropped -- on a template switch and on unmount. It
- * does not share that hook's code: that one merges listing patches and moves
- * a listing through create and rename, this one PUTs a whole document over a
- * revision and can be held by a preview.
+ * edits flushed -- not dropped -- on a template switch and on unmount. What
+ * stays here is what differs: this PUTs a whole document over a revision, where
+ * a listing merges patches and moves through create and rename, and a preview
+ * can hold it.
  *
  * `onCatalogChanged` is told when a save or a queued preparation may have
  * changed the template list's facts, with the name to keep selected.
@@ -566,6 +585,7 @@ export function useTemplateSession(
           ...stored,
           name,
           load: name === null ? "none" : "loading",
+          loadError: null,
           config: null,
           saved: null,
           dirty: false,
@@ -592,6 +612,7 @@ export function useTemplateSession(
 
   return {
     load: view.load,
+    loadError: view.loadError,
     config: view.config,
     saved: view.saved,
     dirty: view.dirty,

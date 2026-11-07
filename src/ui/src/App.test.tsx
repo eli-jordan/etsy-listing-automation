@@ -3,7 +3,7 @@ import { act, fireEvent, render, screen, waitFor, within } from "@testing-librar
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "./App";
 import * as calibrator from "./api/calibrator";
-import { AUTOSAVE_DEBOUNCE_MS } from "./hooks/useAutosave";
+import { AUTOSAVE_DEBOUNCE_MS } from "./hooks/writeLoop";
 import { controlledClock } from "./test/clock";
 import { deferred } from "./test/helpers";
 import type { ColourMatrixTemplate, MultipleTemplate, TemplateSummary } from "./types";

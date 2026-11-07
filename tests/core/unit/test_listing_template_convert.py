@@ -26,6 +26,7 @@ from etsy_listings.core.listing_templates import (
     save,
 )
 from etsy_listings.core.workspace.facts import WorkspaceFacts
+from etsy_listings.core.workspace.template_state import template_state
 from etsy_listings.core.workspace.workspace import Workspace
 
 from tests.support.builders import FIXTURE_LISTING, edit_listing
@@ -114,7 +115,7 @@ class TestWhatIsCopied:
     def test_design_brief_artwork_copy_and_lifecycle_are_left_behind(
         self, workspace: Workspace
     ) -> None:
-        box = workspace.load_template_config("flat-lay-01").bounding_box
+        box = template_state(workspace, "flat-lay-01").require().bounding_box
         edit_listing(
             workspace.root,
             design={"default": "designs/take-a-hike.png", "black": "designs/take-a-hike.png"},

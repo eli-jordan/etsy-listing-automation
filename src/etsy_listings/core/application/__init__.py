@@ -80,12 +80,13 @@ import names the module it depends on. Public interfaces:
     ``compose_preview``, ``scaled``. Images arrive decoded from the caller.
 ``preparation_views``
     Read-only authoring readiness and per-placement mask access.
-``prepared_previews``
-    ``saved_scene`` is every saved-scene preview's entry point and picks the
-    renderer: a Photo warp ``PreviewScene`` or a ``PreparedPreview``.
-    ``prepared_preview`` composes through ``preparation.scenes.lease_scene``,
-    the render stage's own path, returning a canonical scene identity for
-    promotion.
+``scene_previews``
+    This scene at this size, for either renderer: ``saved_scene`` and
+    ``draft_scene`` -> ``ScenePicture``, a ``RenderedScene`` (the PNG the render
+    stage writes, with its identity) or an editor-size ``SceneFrame``. A
+    caller supplies ``SceneImages``, its decoder, or ``DISK_IMAGES``. Owns
+    whether a draft still matches what is saved, and refuses with
+    ``PreparationRequiredError`` when prepared files cannot be used.
 ``position_coverage``
     ``cover_listing_positions``: queue the Marigold coverage inference a
     saved listing's positions need (option B), through ``Preparations.cover``.
@@ -116,7 +117,9 @@ import names the module it depends on. Public interfaces:
 ``refusals``
     ``ListingMissingError``, ``ListingNameTakenError``, ``PublishedListingDeletionError``,
     ``InvalidListing``, ``field_errors_of``; the calibrator's ``Template*``
-    refusals, ``DesignUploadRefusedError``, ``CalibrationDesignMissingError``;
+    refusals (a template with no config to read refuses with its state's own,
+    from ``workspace.template_state``), ``DesignUploadRefusedError``,
+    ``CalibrationDesignMissingError``;
     ``ListingTemplateMissingError``, ``ReservedListingTemplateNameError``,
     ``ListingTemplateSourceRefusedError``; ``StagingMissingError``, ``StagedRowMissingError``,
     ``BatchMissingError``, ``BatchRowMissingError``, ``BatchRowUploadMissingError``,

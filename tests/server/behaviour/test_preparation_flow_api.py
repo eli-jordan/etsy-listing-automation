@@ -9,6 +9,7 @@ import pytest
 from fastapi.testclient import TestClient
 from PIL import Image
 
+from etsy_listings.core.workspace.template_state import template_state
 from etsy_listings.server.api.app import create_app
 
 from tests.support.marigold import PreparationRuntime, marigold_template
@@ -142,7 +143,7 @@ def test_changed_photo_requires_explicit_mask_reset_and_prepare(
         assert initial.status_code == 202
         wait_job(client, initial.json()["id"])
         calls = sum(len(worker.calls) for worker in runtime.workers)
-        photo = workspace.template_main_photo("shirt")
+        photo = workspace.template_main_photo("shirt", template_state(workspace, "shirt").require())
         with Image.open(photo) as source:
             changed = source.convert("RGB")
         changed.putpixel((30, 30), (17, 23, 41))

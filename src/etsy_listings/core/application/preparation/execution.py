@@ -110,7 +110,9 @@ class Execution:
         directory.mkdir(parents=True, exist_ok=True)
         write_bytes_atomic(
             workspace.preparation_work(job.id, "photo.png"),
-            workspace.template_main_photo(job.template).read_bytes(),
+            workspace.template_main_photo(
+                job.template, self.owner.calibration.state(job.template).require()
+            ).read_bytes(),
             durable=True,
         )
         for placement in job.snapshot.placements:

@@ -34,7 +34,7 @@ from etsy_listings.core.batches import (
     stage_pngs,
 )
 from etsy_listings.core.clients.etsy.fakes import FakeEtsyMarketClient
-from etsy_listings.core.config.errors import ConfigLoadError
+from etsy_listings.core.config.settings import SettingsProblem
 from etsy_listings.core.workspace.workspace import Workspace
 from etsy_listings.server.api.app import create_app
 
@@ -199,8 +199,9 @@ def test_invalid_settings_refuse_dispatch_instead_of_using_a_default(q: Queue) -
     """Admin config-validation rule: a broken file is never a default limit."""
     q.workspace.settings_file().write_text("batch_ai:\n  concurency: 2\n", encoding="utf-8")
     batch = q.confirm(*_designs("night-hike-club"))
-    with pytest.raises(ConfigLoadError, match=r"batch_ai\.concurency"):
-        q.queue.concurrency()
+    concurrency = q.queue.concurrency()
+    assert isinstance(concurrency, SettingsProblem)
+    assert "batch_ai.concurency" in concurrency.message
     q.queue.start()
     q.idle()
     assert q.batch_runs() == []

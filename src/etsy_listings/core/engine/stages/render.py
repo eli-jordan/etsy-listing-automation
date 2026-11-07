@@ -63,9 +63,9 @@ from typing import Literal, override
 
 from pydantic import BaseModel, ConfigDict
 
-from etsy_listings.core.config.errors import ConfigLoadError
 from etsy_listings.core.config.garment_profile import GarmentProfile
 from etsy_listings.core.config.listing import Listing, TemplateMediaEntry
+from etsy_listings.core.config.settings import SettingsProblem
 from etsy_listings.core.config.template_positions import layer_boxes
 from etsy_listings.core.engine.change import Action, Verdict
 from etsy_listings.core.engine.context import RunContext, Swatch
@@ -117,6 +117,7 @@ from etsy_listings.core.render.pipeline import Layer, render_scene
 from etsy_listings.core.render.swatch import sample_swatch
 from etsy_listings.core.render.types import RGB, RGBA
 from etsy_listings.core.workspace.facts import template_info
+from etsy_listings.core.workspace.template_state import TemplateLoaded, template_state
 from etsy_listings.core.workspace.workspace import Workspace
 from etsy_listings.core.workspace.yaml_source import without_top_level_key
 
@@ -657,11 +658,10 @@ def _load_template(workspace: Workspace, template_name: str) -> tuple[AnyTemplat
     if blocked is not None:
         return blocked
     digest = _template_hash(config_path)
-    try:
-        config = workspace.load_template_config(template_name)
-    except ConfigLoadError as exc:
-        return Blocked(str(exc))
-    return config, digest
+    state = template_state(workspace, template_name)
+    if not isinstance(state, TemplateLoaded):
+        return Blocked(state.reason)
+    return state.config, digest
 
 
 def _load_templates(
@@ -685,11 +685,12 @@ def _check_template_inputs(
     # the listing would not change.
     if listing_cfg.template_positions:
         # A broken settings.yaml is this stage refusing, never a raise (ADR-0053).
-        try:
-            limits = workspace.load_settings().template_positions
-        except ConfigLoadError as exc:
-            return Blocked(str(exc))
-        blocked = check_template_positions(listing_cfg, templates.configs, limits, name=listing)
+        settings = workspace.settings_or_problem()
+        if isinstance(settings, SettingsProblem):
+            return Blocked(settings.message)
+        blocked = check_template_positions(
+            listing_cfg, templates.configs, settings.template_positions, name=listing
+        )
         if blocked is not None:
             return blocked
     for name, config in templates.configs.items():

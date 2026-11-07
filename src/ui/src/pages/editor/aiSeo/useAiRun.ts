@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { cancelAiRun, findAiRun, openAiRunStream, startAiRun } from "../../../api/aiRuns";
 import type { EventStreamHandle } from "../../../api/sse";
-import type { SaveState } from "../../../hooks/useAutosave";
+import type { SaveState } from "../../../hooks/listingAutosave";
 import { representative } from "../artwork";
 import type {
   AiRunEvent,

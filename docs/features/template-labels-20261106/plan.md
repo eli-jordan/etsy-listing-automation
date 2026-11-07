@@ -1,7 +1,7 @@
 # Mockup template labels implementation plan
 
 Written 2026-11-06 from the [specification](spec.md) and the approved
-[interactions document](interactions.md). Status: not started. This plan owns the
+[interactions document](interactions.md). Status: implemented, in review. This plan owns the
 delivery sequence; the spec owns requirements and the interactions document owns
 UI behaviour. Cite their sections rather than restating them.
 
@@ -38,10 +38,10 @@ placeholders in first.
 | PR | Title | Difficulty | Branch | Link |
 |---|---|---|---|---|
 | 0 | Stack base: docs and mockups | — | `feat/mockup-template-labels` | [#190](https://github.com/eli-jordan/etsy-listing-automation/pull/190) |
-| 1 | Template labels in the model, out of rendering | hard | `feat/labels-1-model` | — |
-| 2 | Labels bar on the Mockup Templates workbench | standard | `feat/labels-2-bar` | — |
-| 3 | Label search box on the rail | standard | `feat/labels-3-rail` | — |
-| 4 | Label search box on Listing Images | standard | `feat/labels-4-listing` | — |
+| 1 | Template labels in the model, out of rendering | hard | `feat/labels-1-model` | [#191](https://github.com/eli-jordan/etsy-listing-automation/pull/191) |
+| 2 | Labels bar on the Mockup Templates workbench | standard | `feat/labels-2-bar` | [#192](https://github.com/eli-jordan/etsy-listing-automation/pull/192) |
+| 3 | Label search box on the rail | standard | `feat/labels-3-rail` | [#193](https://github.com/eli-jordan/etsy-listing-automation/pull/193) |
+| 4 | Label search box on Listing Images | standard | `feat/labels-4-listing` | [#194](https://github.com/eli-jordan/etsy-listing-automation/pull/194) |
 
 Size: aim under about 1,500 changed lines per PR, excluding regenerated
 OpenAPI/client files and lockfiles. A PR that cannot fit splits at a seam the
@@ -243,6 +243,26 @@ Exit when:
   refresh with the filter intact, and do the same in the listing template editor;
 - mockup-vs-app screenshots for all five frames are in the PR;
 - shared gates pass.
+
+Deviations recorded while building it:
+
+- A remembered pill is not checked against the labels in use. One no calibrated
+  template holds any more stays on show with "No template matches.", so an empty
+  list has a visible reason and a way out. The box then marks every label as
+  replacing it.
+- The result line reads "1 of 1 template" when the total is one.
+- The empty message is the frame's "No template matches.", not "No template matches
+  that search."
+- Title search ignores outer spaces, as the rail's does. Files keeps its search
+  exactly as it was.
+- `.loc-tmpl__kind` stays in `index.css`, because the live `template-positions`
+  frames still use it.
+- `LabelSearch.css` uses two-class selectors for the box and pill. The bundle puts
+  `index.css` after it, so `.input` and `.tag` were winning in the built app and
+  not on the canvas.
+- Files draws the box's phosphor glass, at the box's size and colour, so the two
+  halves of the locator match. `.locator__search svg` stays for frames that still
+  draw their own.
 
 ## Shared gates
 

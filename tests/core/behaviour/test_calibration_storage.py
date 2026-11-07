@@ -9,6 +9,7 @@ from PIL import Image
 from etsy_listings.core.render.config import AnyTemplate, dump_template_config, load_template_config
 from etsy_listings.core.workspace import Workspace
 from etsy_listings.core.workspace.calibration import AutomaticMask, CalibrationStore
+from etsy_listings.core.workspace.template_state import template_state
 
 from tests.support.source_files import crlf, identity
 
@@ -20,7 +21,7 @@ def make_store(root: Path) -> CalibrationStore:
     directory = workspace.template_dir("example")
     directory.mkdir(parents=True)
     Image.new("RGB", (32, 32), "white").save(directory / "scene.png")
-    workspace.save_template_config(
+    CalibrationStore(workspace).write_config(
         "example",
         load_template_config(
             {"kind": "single", "bounding_box": BOX, "renderer": {"type": "marigold", "config": {}}}
@@ -46,7 +47,7 @@ def test_interrupted_save_rolls_forward_and_cli_refuses_mixed_state(
 
     import pytest
 
-    from etsy_listings.core.workspace.calibration import CalibrationRepairRequiredError
+    from etsy_listings.core.workspace.template_state import CalibrationRepairRequiredError
 
     store = make_store(workspace_root)
     saved = store.read("example")
@@ -67,7 +68,7 @@ def test_interrupted_save_rolls_forward_and_cli_refuses_mixed_state(
                 "example", updated, expected_revision=saved.revision, request_id="interrupted"
             )
     with pytest.raises(CalibrationRepairRequiredError, match="transaction"):
-        store.workspace.load_template_config("example")
+        template_state(store.workspace, "example").require()
     restarted = CalibrationStore(store.workspace)
     assert restarted.read("example").config == updated
     assert (
@@ -298,7 +299,9 @@ def test_main_photo_change_refuses_mask_reuse_until_explicit_reset(workspace_roo
         AutomaticMask(png.getvalue(), algorithm_version="v1"),
         expected_revision=store.read("example").revision,
     )
-    Image.new("RGB", (32, 32), "black").save(store.workspace.template_main_photo("example"))
+    Image.new("RGB", (32, 32), "black").save(
+        store.workspace.template_main_photo("example", saved.config)
+    )
     changed = store.read("example")
     assert changed.revision != saved.revision
     with pytest.raises(MaskPhotoMismatchError, match="Main photo changed"):
@@ -336,7 +339,7 @@ def test_multiple_masks_follow_stable_ids_through_reorder(workspace_root: Path) 
             ],
         }
     )
-    store.workspace.save_template_config("example", config)
+    CalibrationStore(store.workspace).write_config("example", config)
     saved = store.read("example")
     for placement_id, value in [("left-shirt", 100), ("right-shirt", 200)]:
         png = BytesIO()
@@ -365,8 +368,11 @@ def test_colour_matrix_main_photo_uses_ordinal_actual_filename(workspace_root: P
     config = load_template_config(
         {"kind": "colour-matrix", "bounding_box": BOX, "renderer": {"type": "marigold"}}
     )
-    store.workspace.save_template_config("example", config)
-    assert store.workspace.template_main_photo("example").name == "Pepper.png"
+    CalibrationStore(store.workspace).write_config("example", config)
+    assert (
+        store.workspace.template_main_photo("example", store.state("example").require()).name
+        == "Pepper.png"
+    )
 
 
 @pytest.mark.parametrize(
@@ -460,7 +466,7 @@ def test_damaged_recovery_data_blocks_without_accepting_mixed_calibration(
     import json
     import os
 
-    from etsy_listings.core.workspace.calibration import CalibrationRepairRequiredError
+    from etsy_listings.core.workspace.template_state import CalibrationRepairRequiredError
 
     store = make_store(workspace_root)
     before = store.read("example")
@@ -696,7 +702,7 @@ def test_repeated_photo_identity_tracks_replaced_pixels(workspace_root) -> None:
     from PIL import Image
 
     store = make_store(workspace_root)
-    config = store.config("example")
+    config = store.state("example").require()
     first = store.photo_identity("example", config)
     assert store.photo_identity("example", config) == first
     path = store.workspace.template_main_photo("example", config)
@@ -748,7 +754,7 @@ def test_a_save_edits_only_the_changed_value_in_template_yaml(
         saved = store.read("example")
         store.save("example", updated, expected_revision=saved.revision, request_id="texture")
     else:
-        store.workspace.save_template_config("example", updated)
+        CalibrationStore(store.workspace).write_config("example", updated)
 
     expected = HAND_CALIBRATED.replace("fabric_texture: 0.25", "fabric_texture: 0.5")
     assert path.read_bytes() == crlf(expected).encode("utf-8")

@@ -130,6 +130,7 @@ interface Mounted {
   onUpdate: ReturnType<typeof vi.fn>;
   onFlush: ReturnType<typeof vi.fn>;
   rerender: (next: ListingDetail) => void;
+  unmount: () => void;
 }
 
 function mount(listing: ListingDetail = detail()): Mounted {
@@ -141,6 +142,7 @@ function mount(listing: ListingDetail = detail()): Mounted {
     onFlush,
     rerender: (next) =>
       view.rerender(<ImagesTab detail={next} onUpdate={onUpdate} onFlush={onFlush} />),
+    unmount: view.unmount,
   };
 }
 
@@ -370,6 +372,18 @@ describe("adjusting a position", () => {
     const pose = savedPose(onUpdate, FOLDED_BOX, ["folded"]);
     expect(pose.offsetX).toBeCloseTo(0.02, 6);
     expect(pose.offsetY).toBeCloseTo(0.05, 6);
+  });
+
+  it("saves a nudge still waiting out its debounce when the tab closes", async () => {
+    const { onUpdate, onFlush, unmount } = mount();
+    const box = await adjust("folded · black");
+    vi.useFakeTimers();
+    fireEvent.keyDown(box, { key: "ArrowRight" });
+    unmount();
+    act(() => vi.advanceTimersByTime(400));
+    expect(onUpdate).toHaveBeenCalledTimes(1);
+    expect(onFlush).toHaveBeenCalledTimes(1);
+    expect(savedPose(onUpdate, FOLDED_BOX, ["folded"]).offsetX).toBeCloseTo(0.01, 6);
   });
 
   it("writes the template's own box as no entry", async () => {

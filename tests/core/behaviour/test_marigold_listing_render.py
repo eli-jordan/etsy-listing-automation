@@ -5,7 +5,9 @@ from etsy_listings.core.engine import build_plan
 from etsy_listings.core.engine.stages.render import RenderStage
 from etsy_listings.core.preparation.artifacts import Artifacts, Provenance, PublishOptions
 from etsy_listings.core.workspace import WorkspaceFacts
+from etsy_listings.core.workspace.calibration import CalibrationStore
 from etsy_listings.core.workspace.listing_documents import ListingDocuments
+from etsy_listings.core.workspace.template_state import template_state
 
 from tests.support.builders import FIXTURE_LISTING, a_context, a_lock, edit_garment_profile
 from tests.support.marigold import listing_with_marigold, marigold_template, material_maps
@@ -64,7 +66,11 @@ def test_preview_is_promoted_only_while_actual_scene_identity_matches(workspace_
 
 
 def test_matching_preview_promotes_exact_bytes_without_composition(workspace_root, monkeypatch):
-    from etsy_listings.core.application.prepared_previews import prepared_preview
+    from etsy_listings.core.application.scene_previews import (
+        DISK_IMAGES,
+        SceneLayers,
+        saved_scene,
+    )
     from etsy_listings.core.engine.stages.render import scene_hash
     from etsy_listings.core.preparation import scenes
 
@@ -73,8 +79,12 @@ def test_matching_preview_promotes_exact_bytes_without_composition(workspace_roo
     stage = RenderStage()
     desired = stage.desired(ctx, FIXTURE_LISTING, None)
     work = desired.works[0]
-    authoring = prepared_preview(
-        workspace, "shirt", config=None, colour=None, design=lambda _colour: work.layers[0].design
+    authoring = saved_scene(
+        workspace,
+        "shirt",
+        SceneLayers(None, lambda _colour: work.layers[0].design),
+        size="full",
+        images=DISK_IMAGES,
     )
     assert authoring.render_identity == scene_hash(desired, work)
     stage.preview(ctx, desired, None)
@@ -96,11 +106,11 @@ def test_stale_geometry_blocks_every_required_scene_with_shared_refusal(workspac
     from etsy_listings.core.render import Point
 
     workspace, _listing = listing_with_marigold(workspace_root, prepare=True)
-    config = workspace.load_template_config("shirt")
+    config = template_state(workspace, "shirt").require()
     config = config.model_copy(
         update={"bounding_box": (Point(x=13, y=12), *config.bounding_box[1:])}
     )
-    workspace.save_template_config("shirt", config)
+    CalibrationStore(workspace).write_config("shirt", config)
     facts = WorkspaceFacts.gather(workspace)
     planned = build_plan(a_context(workspace_root), FIXTURE_LISTING, a_lock(), (RenderStage(),))
     refusal = planned.plan.stage_plans[0].blocked
@@ -138,7 +148,11 @@ def test_compatible_map_republication_and_cache_deletion_keep_render_identity(wo
 def test_multiple_placements_resolve_actual_artwork_and_preserve_paint_order(workspace_root):
     from PIL import Image
 
-    from etsy_listings.core.application.prepared_previews import prepared_preview
+    from etsy_listings.core.application.scene_previews import (
+        DISK_IMAGES,
+        SceneLayers,
+        saved_scene,
+    )
     from etsy_listings.core.engine import execute
     from etsy_listings.core.engine.stages.render import scene_hash
     from etsy_listings.core.render import (
@@ -150,13 +164,15 @@ def test_multiple_placements_resolve_actual_artwork_and_preserve_paint_order(wor
     )
 
     workspace = marigold_template(workspace_root, "multiple")
-    config = workspace.load_template_config("shirt")
+    config = template_state(workspace, "shirt").require()
     # A35: a placement's artwork is the file its colour resolves to.
     placements = [
         p.model_copy(update={"colour": colour})
         for p, colour in zip(config.placements, ["black", "ivory"], strict=True)
     ]
-    workspace.save_template_config("shirt", config.model_copy(update={"placements": placements}))
+    CalibrationStore(workspace).write_config(
+        "shirt", config.model_copy(update={"placements": placements})
+    )
     red = workspace.resolve("designs/red.png", workspace.root)
     blue = workspace.resolve("designs/blue.png", workspace.root)
     Image.new("RGBA", (16, 16), "red").save(red)
@@ -185,8 +201,12 @@ def test_multiple_placements_resolve_actual_artwork_and_preserve_paint_order(wor
     stage = RenderStage()
     desired = stage.desired(ctx, FIXTURE_LISTING, None)
     work = desired.works[0]
-    authoring = prepared_preview(
-        workspace, "shirt", config=None, colour=None, design=lambda _colour: red
+    authoring = saved_scene(
+        workspace,
+        "shirt",
+        SceneLayers(None, lambda _colour: red),
+        size="full",
+        images=DISK_IMAGES,
     )
     assert scene_hash(desired, work) != authoring.render_identity
     first = execute(ctx, build_plan(ctx, FIXTURE_LISTING, a_lock(), (stage,)), a_lock())
@@ -201,7 +221,7 @@ def test_multiple_placements_resolve_actual_artwork_and_preserve_paint_order(wor
     assert workspace.render_file(FIXTURE_LISTING, "shirt", None).read_bytes() == encode_png(
         expected, compression=1
     )
-    workspace.save_template_config(
+    CalibrationStore(workspace).write_config(
         "shirt", config.model_copy(update={"placements": placements[::-1]})
     )
     reversed_plan = build_plan(ctx, FIXTURE_LISTING, first, (stage,))
@@ -220,8 +240,8 @@ def test_changed_geometry_after_review_cannot_promote_a_previous_preview(workspa
     stage = RenderStage()
     desired = stage.desired(ctx, FIXTURE_LISTING, None)
     stage.preview(ctx, desired, None)
-    config = workspace.load_template_config("shirt")
-    workspace.save_template_config(
+    config = template_state(workspace, "shirt").require()
+    CalibrationStore(workspace).write_config(
         "shirt",
         config.model_copy(update={"bounding_box": (Point(x=13, y=12), *config.bounding_box[1:])}),
     )
@@ -232,7 +252,11 @@ def test_changed_geometry_after_review_cannot_promote_a_previous_preview(workspa
 def test_listing_preview_uses_the_same_missing_map_explanation(workspace_root):
     import pytest
 
-    from etsy_listings.core.application.prepared_previews import prepared_preview
+    from etsy_listings.core.application.scene_previews import (
+        DISK_IMAGES,
+        SceneLayers,
+        saved_scene,
+    )
     from etsy_listings.core.render import PreparationRequiredError
 
     workspace, _ = listing_with_marigold(workspace_root)
@@ -242,12 +266,12 @@ def test_listing_preview_uses_the_same_missing_map_explanation(workspace_root):
         .blocked
     )
     with pytest.raises(PreparationRequiredError) as error:
-        prepared_preview(
+        saved_scene(
             workspace,
             "shirt",
-            config=None,
-            colour=None,
-            design=lambda _colour: workspace.design_file("take-a-hike"),
+            SceneLayers(None, lambda _colour: workspace.design_file("take-a-hike")),
+            size="full",
+            images=DISK_IMAGES,
         )
     assert str(error.value) == refusal
 
@@ -269,12 +293,14 @@ def test_numerical_map_content_and_appearance_change_render_identity(workspace_r
     changed = stage.desired(ctx, FIXTURE_LISTING, None)
     assert scene_hash(original, original.works[0]) != scene_hash(changed, changed.works[0])
     assert build_plan(ctx, FIXTURE_LISTING, lock, (stage,)).plan.stage_plans[0].will_run
-    config = workspace.load_template_config("shirt")
+    config = template_state(workspace, "shirt").require()
     appearance = config.renderer.config.appearance.model_copy(update={"lighting_strength": 0.0})
     renderer = config.renderer.model_copy(
         update={"config": config.renderer.config.model_copy(update={"appearance": appearance})}
     )
-    workspace.save_template_config("shirt", config.model_copy(update={"renderer": renderer}))
+    CalibrationStore(workspace).write_config(
+        "shirt", config.model_copy(update={"renderer": renderer})
+    )
     painted = stage.desired(ctx, FIXTURE_LISTING, None)
     assert scene_hash(changed, changed.works[0]) != scene_hash(painted, painted.works[0])
 
@@ -298,7 +324,7 @@ def test_one_missing_multiple_archive_blocks_the_whole_listing(workspace_root):
     ListingDocuments(workspace).edit(
         FIXTURE_LISTING, lambda document: {**document, "media": [{"template": "shirt"}]}
     )
-    config = workspace.load_template_config("shirt")
+    config = template_state(workspace, "shirt").require()
     artifacts = Artifacts(workspace)
     inputs = artifacts.saved_inputs("shirt", evidence={p.id: "a" * 64 for p in config.placements})
     generation = artifacts.publish(

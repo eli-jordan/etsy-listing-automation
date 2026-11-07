@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "./App";
 import * as calibrator from "./api/calibrator";
 import * as prep from "./api/preparation";
-import { AUTOSAVE_DEBOUNCE_MS } from "./hooks/useAutosave";
+import { AUTOSAVE_DEBOUNCE_MS } from "./hooks/writeLoop";
 import { PREVIEW_DEBOUNCE_MS } from "./hooks/usePreview";
 import { controlledClock } from "./test/clock";
 import { deferred } from "./test/helpers";
@@ -105,6 +105,19 @@ describe("the Labels bar", () => {
 
     await screen.findByText("What kind of template is this?");
     expect(screen.queryByRole("group", { name: "Labels" })).not.toBeInTheDocument();
+  });
+
+  it("says why a template cannot be read, rather than offering a kind", async () => {
+    vi.mocked(calibrator.getTemplateConfig).mockRejectedValue(
+      new calibrator.CalibratorApiError("needs repair: the last save did not finish"),
+    );
+
+    render(<App />);
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "needs repair: the last save did not finish",
+    );
+    expect(screen.queryByText("What kind of template is this?")).not.toBeInTheDocument();
   });
 
   it("stays on show on both Calibrate and Preview", async () => {

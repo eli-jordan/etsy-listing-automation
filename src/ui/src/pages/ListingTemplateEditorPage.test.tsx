@@ -198,6 +198,22 @@ describe("ListingTemplateEditorPage, saved", () => {
     expect(router.state.location.search).toBe("?from_template=heavyweight-tee");
   });
 
+  it("stays on the template when a failed save would leave an edit out of the clone", async () => {
+    vi.spyOn(templatesApi, "getListingTemplate").mockResolvedValue(template());
+    const put = vi.spyOn(templatesApi, "putListingTemplate").mockRejectedValue(new Error("500"));
+    const { router } = renderAt("/listing-templates/heavyweight-tee");
+    await screen.findByRole("button", { name: "Clone" });
+    await editBody("An incomplete edit.");
+
+    fireEvent.click(screen.getByRole("button", { name: "Clone" }));
+
+    await waitFor(() => expect(put).toHaveBeenCalled());
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve));
+    });
+    expect(router.state.location.pathname).toBe("/listing-templates/heavyweight-tee");
+  });
+
   it("deletes the saved template after asking, and leaves for the templates page", async () => {
     vi.spyOn(templatesApi, "getListingTemplate").mockResolvedValue(template());
     const del = vi.spyOn(templatesApi, "deleteListingTemplate").mockResolvedValue();
