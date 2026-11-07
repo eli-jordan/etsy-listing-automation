@@ -108,11 +108,18 @@ behaves as for any other field. A position equal to the template's box is
 written as no entry.
 
 **Preview while dragging.** The real composite comes from the server
-(`GET /api/listings/{name}/scene-preview`), which renders the *saved* listing.
-During a drag, draw the handles and a flat overlay of the artwork at the draft
-pose (the prototype's `.tp-print` multiply layer is the reference). When the
-save lands, the preview URL changes with the saved signature and the real
-composite replaces the overlay. Never show the overlay with the switch off.
+(`GET /api/listings/{name}/scene-preview`), which renders the *saved* listing
+and can take seconds. So from a gesture's first move until the new composite
+has loaded, the stage draws the whole scene itself on a WebGL canvas: the bare
+photo, then each layer's artwork through its pose, at every pointer move. The
+old print is gone from the first frame. A print takes the garment's light: a
+Photo warp template by its own shade settings, a Marigold one approximately,
+and cut to the template's mask. Once the composite has loaded, the canvas fades
+over 160 ms, so the render's small differences (a Marigold print settling into
+the cloth) do not snap. Further gestures can begin at any time, and the canvas
+stays until the latest position's composite has loaded. Never show it with the
+switch off. Without WebGL, the stage draws the bare photo with the artwork flat
+on each box instead.
 
 ## Multiple templates
 
@@ -157,8 +164,8 @@ show it on. Its banner row's action removes the stale key.
 
 Marigold positions use a fit per position (spec, *Marigold (option B)*). After
 a position saves, its fit runs in the background (spike: about 1–6 s). Until
-it is ready the stage keeps the drag overlay and then its normal loading
-treatment while the preview route waits; there is no progress card.
+it is ready the stage keeps drawing the scene live while the preview route
+waits; there is no progress card.
 
 A template being prepared, or whose evidence does not cover its limits, cannot
 be adjusted yet. The switch looks unavailable and clicking it leaves it off, with
@@ -244,7 +251,7 @@ action needs; a lighter header is acceptable if the implementer has one to hand.
 - **Limits from settings.** The editor reads the limits from the workspace
   settings; the prototype hard-codes the defaults in `_fixtures.ts`.
 - **Real previews.** Replace the faked composite with the scene-preview route
-  and the drag overlay described above.
+  and the live scene described above.
 - **Real nav and saves** for Settings: fold `AdminNav` into the shipped `Nav`;
   the prototype's sliders save nothing and its counts are fixtures.
 - **Not prototyped:** the calibrator's save warning listing listings that hold

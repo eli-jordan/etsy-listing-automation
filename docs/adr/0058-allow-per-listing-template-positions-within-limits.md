@@ -60,6 +60,21 @@ exists. Only templates some listing positions are covered: wider limits never
 queue inference for a template no listing has moved, since saving a position
 there queues it then.
 
+## Amendment (2026-11-07): the editor draws a moving position itself
+
+A flat overlay on the saved composite left the old print in place under a
+thumbnail of the new one for the seconds a render takes, which made fine
+adjustment guesswork. Rendering faster cannot close that gap: a Marigold
+position needs its own fit. The stage therefore composes the scene in the
+browser with WebGL while a position is ahead of its composite, from the bare
+photo, each layer's artwork and, for Marigold, the template's mask.
+
+This puts a second, approximate compositor in the browser, which is only ever a
+stand-in. It never reaches a file, a hash or a lockfile; the server's composite
+replaces it as soon as it has loaded and stays the only picture `apply` writes.
+The artwork comes from `GET /api/listings/{name}/scene-artwork`, resolved on the
+server as the preview is, so the stand-in and the render print the same file.
+
 ## Amendment (2026-11-06): coverage belongs to preparation
 
 The 2026-11-02 amendment covered a template only once a listing positioned it,
