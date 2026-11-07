@@ -166,7 +166,7 @@ from preparation evidence that covers every allowed pose.
   when it falls short; positioned listings' fits are rebuilt on demand against
   the template's new geometry and evidence, and the old ones are pruned.
 - The 1024px interactive composite renders a posed box with its fit once ready
-  and with the editor's drag overlay until then.
+  and with the editor's live scene until then.
 - Spec rule 5 (Marigold refused) is lifted (PR 7).
 - Coverage inference is a preparation job that infers only the padded quad's
   crop and publishes no maps. It follows a completed preparation, and saving a
@@ -203,9 +203,10 @@ own switch control) for the selected template entry:
   clicking one selects it. Reset names the selected placement.
 - A stored position outside the limits shows a red box, a note and a
   **Fit within limits** action beside Reset.
-- During a drag the stage draws a flat overlay at the draft position; the
-  real composite from the existing scene-preview route replaces it once the
-  position saves on release (see [interactions](interactions.md#adjusting)).
+- From a gesture's first move the stage draws the scene itself, at the draft
+  position, on the GPU; the real composite from the existing scene-preview
+  route replaces it once the position has saved and that composite has loaded
+  (see [interactions](interactions.md#adjusting)).
 
 Mockups: a clickable prototype in `src/ui/design/scenes/template-positions/`
 and `template-positions-settings/` (round 3). Earlier rounds are archived as
@@ -220,7 +221,7 @@ and `template-positions-settings/` (round 3). Earlier rounds are archived as
 | `core/config/settings.py` | Limits section. |
 | `engine/stages/render.py` | Resolve the effective box per layer. |
 | `core/preparation/`, `render/material.py` | Evidence coverage of the padded quad, per-position fits cached by geometry, background inference when limits widen (Marigold, option B). |
-| `application/prepared_previews.py`, server API | Previews render the saved position; regenerate the OpenAPI client for the new listing field. |
+| `application/prepared_previews.py`, server API | Previews render the saved position; regenerate the OpenAPI client for the new listing field. `GET /api/listings/{name}/scene-artwork` serves a layer's file for the live scene. |
 | `src/ui` Images tab | Position mode, with a TypeScript twin of the pose maths (`pages/editor/positions/`); `QuadEditor`/`quadGeometry` edit free quads and are not reused. |
 | Calibrator save | List listings holding positions for the template. |
 | Settings screen | Limits form with the inference warning. |

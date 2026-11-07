@@ -11,18 +11,31 @@
   border-radius: var(--radius-md);
 }
 
-/* The draft while a gesture is unsaved: the artwork flat on the box,
-   multiplied into the cloth, until the saved composite replaces it. */
+/* The scene drawn live while the position is ahead of the composite. It
+   appears at once and fades, so the render's small differences do not snap. */
+.tp-live {
+  opacity: 0;
+  transition: opacity 160ms ease-out;
+  pointer-events: none;
+}
+.tp-live--on {
+  opacity: 1;
+  transition: none;
+}
+.tp-live canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* The same without a GPU: the artwork flat on the box. */
 .tp-overlay {
-  mix-blend-mode: multiply;
-  opacity: 0.92;
   pointer-events: none;
 }
 .tp-overlay img {
   display: block;
   width: 100%;
   height: 100%;
-  object-fit: contain;
 }
 
 /* A light band under the dashed outlines, so they read on a dark garment

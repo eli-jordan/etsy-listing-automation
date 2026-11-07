@@ -8,7 +8,11 @@ import { listingDetail } from "../../../test/listings";
 import type { ListingDetail, TemplateConfigState, TemplateSummary } from "../../../types";
 import { must } from "../../../test/helpers";
 import { ImagesTab } from "../ImagesTab";
+import { type LiveRenderer, createLiveRenderer } from "./liveRenderer";
 import { type Quad, compose, decompose } from "./pose";
+
+// jsdom has no WebGL. The shader itself runs in the browser layer.
+vi.mock("./liveRenderer", () => ({ createLiveRenderer: vi.fn() }));
 
 /**
  * Position mode on the Listing Images preview pane (interactions: *Entry and
@@ -38,7 +42,10 @@ const RIGHT = [
   { x: 280, y: 300 },
 ] as unknown as Quad;
 
-const photoWarp = { type: "photo-warp" } as TemplateConfigState["renderer"];
+const photoWarp = {
+  type: "photo-warp",
+  config: { shade: { enabled: true, blend: "soft-light", opacity: 0.6 } },
+} as TemplateConfigState["renderer"];
 
 const CONFIGS: Record<string, TemplateConfigState> = {
   folded: { kind: "colour-matrix", labels: [], bounding_box: FOLDED_BOX, renderer: photoWarp },
@@ -95,6 +102,7 @@ function detail(over: Partial<ListingDetail> = {}): ListingDetail {
 }
 
 beforeEach(() => {
+  vi.mocked(createLiveRenderer).mockReturnValue(null);
   vi.spyOn(listingsApi, "listCommonMedia").mockResolvedValue([]);
   vi.spyOn(listingsApi, "listListingMediaFiles").mockResolvedValue([]);
   vi.spyOn(calibrator, "listTemplates").mockResolvedValue([
@@ -415,6 +423,132 @@ describe("adjusting a position", () => {
     await adjustSwitch();
     expect(document.querySelector(".tp-overlay")).toBeNull();
     expect(screen.queryAllByLabelText("Drag to resize")).toHaveLength(0);
+  });
+});
+
+describe("the live scene", () => {
+  const stageImages = () =>
+    [...document.querySelectorAll(".tp-stage image")].map((i) => i.getAttribute("href") ?? "");
+  const liveShown = () => document.querySelector(".tp-live--on") !== null;
+
+  // jsdom has no `decode`, which is what keeps a real scene from loading here.
+  afterEach(() => Reflect.deleteProperty(HTMLImageElement.prototype, "decode"));
+
+  function gpu() {
+    const drawn: LiveRenderer = {
+      setPhoto: vi.fn(),
+      setLayer: vi.fn(),
+      clearLayers: vi.fn(),
+      resize: vi.fn(),
+      draw: vi.fn(),
+      dispose: vi.fn(),
+    };
+    vi.mocked(createLiveRenderer).mockReturnValue(drawn);
+    HTMLImageElement.prototype.decode = () => Promise.resolve();
+    return drawn;
+  }
+
+  /** Adjust mode with the pictures uploaded. */
+  async function adjustLive(drawn: LiveRenderer, label: string) {
+    const box = await adjust(label);
+    await waitFor(() => expect(drawn.setPhoto).toHaveBeenCalled());
+    return box;
+  }
+
+  function move(box: HTMLElement, x: number) {
+    fireEvent.pointerMove(box, { clientX: x, clientY: 250, pointerId: 1 });
+  }
+
+  it("without a GPU, draws the bare photo and the layer's artwork, not the old print", async () => {
+    mount();
+    const box = await adjust("folded · black");
+    fireEvent.pointerDown(box, { clientX: 200, clientY: 250, pointerId: 1, button: 0 });
+    move(box, 210);
+
+    expect(stageImages().some((href) => href.includes("/templates/folded/photo"))).toBe(true);
+    const artwork = document.querySelector(".tp-overlay img")?.getAttribute("src");
+    expect(artwork).toContain("/scene-artwork?");
+    expect(artwork).toContain("colour=black");
+  });
+
+  it("draws every move at once, and only once a position differs", async () => {
+    const drawn = gpu();
+    mount();
+    const box = await adjustLive(drawn, "folded · black");
+    fireEvent.pointerDown(box, { clientX: 200, clientY: 250, pointerId: 1, button: 0 });
+    expect(liveShown()).toBe(false);
+
+    move(box, 210);
+    expect(liveShown()).toBe(true);
+    const first = vi.mocked(drawn.draw).mock.lastCall?.[2][0]?.quad;
+    move(box, 215);
+    const second = vi.mocked(drawn.draw).mock.lastCall?.[2][0]?.quad;
+
+    expect(must(second)[0].x).toBeGreaterThan(must(first)[0].x);
+    expect(document.querySelector(".tp-overlay")).toBeNull();
+  });
+
+  it("stays until the saved composite has loaded, then gives way to it", async () => {
+    const drawn = gpu();
+    const { onUpdate, rerender } = mount();
+    const box = await adjustLive(drawn, "folded · black");
+    fireEvent.pointerDown(box, { clientX: 200, clientY: 250, pointerId: 1, button: 0 });
+    move(box, 215);
+    fireEvent.pointerUp(box, { clientX: 215, clientY: 250, pointerId: 1 });
+    const saved = onUpdate.mock.lastCall?.[0] as Pick<ListingDetail, "template_positions">;
+
+    // The optimistic document, then the response landing.
+    rerender(detail(saved));
+    expect(liveShown()).toBe(true);
+    rerender(detail({ ...saved, modified_at: "2026-09-17T10:05:00Z" }));
+    expect(liveShown()).toBe(true);
+
+    fireEvent.load(must(document.querySelector(".tp-stage image")));
+    expect(liveShown()).toBe(false);
+  });
+
+  it("prints a Photo warp template by its own shade, without masks", async () => {
+    const drawn = gpu();
+    mount();
+    const box = await adjustLive(drawn, "folded · black");
+    fireEvent.pointerDown(box, { clientX: 200, clientY: 250, pointerId: 1, button: 0 });
+    move(box, 210);
+
+    expect(vi.mocked(drawn.draw).mock.lastCall?.[1]).toEqual({
+      kind: "photo-warp",
+      blend: "soft-light",
+      opacity: 0.6,
+    });
+    expect(vi.mocked(drawn.setLayer).mock.lastCall?.[2]).toBeNull();
+  });
+
+  it("cuts a Marigold template's print to its mask", async () => {
+    const drawn = gpu();
+    vi.spyOn(preparationApi, "getPositionReadiness").mockResolvedValue({
+      ready: true,
+      preparing: false,
+    });
+    mount();
+    await adjustLive(drawn, "glossy");
+
+    expect(vi.mocked(drawn.setLayer).mock.lastCall?.[2]).not.toBeNull();
+  });
+
+  it("uploads each placement of a multiple template and draws them all", async () => {
+    const drawn = gpu();
+    mount();
+    const box = await adjustLive(drawn, "pair");
+    fireEvent.pointerDown(box, { clientX: 100, clientY: 200, pointerId: 1, button: 0 });
+    fireEvent.pointerMove(box, { clientX: 105, clientY: 200, pointerId: 1 });
+
+    expect(vi.mocked(drawn.setLayer).mock.calls.map(([id]) => id)).toEqual([
+      "left-shirt",
+      "right-shirt",
+    ]);
+    expect(vi.mocked(drawn.draw).mock.lastCall?.[2].map((layer) => layer.id)).toEqual([
+      "left-shirt",
+      "right-shirt",
+    ]);
   });
 });
 

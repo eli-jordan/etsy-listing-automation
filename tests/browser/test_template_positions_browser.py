@@ -11,16 +11,20 @@ reports for it (interactions: *Adjusting*, *Position outside the limits*).
 from __future__ import annotations
 
 from collections.abc import Callable
+from io import BytesIO
 from pathlib import Path
 from typing import Any
 
 import pytest
 import yaml
+from PIL import Image
 from pydantic import TypeAdapter
 
 from etsy_listings.core.config.settings import TemplatePositionLimits
 from etsy_listings.core.render.config import BoundingBox
 from etsy_listings.core.render.positions import Pose, compose, decompose
+
+from tests.support.builders import edit_listing
 
 pytestmark = pytest.mark.browser
 
@@ -155,6 +159,66 @@ def test_move_resize_tilt_nudge_and_reset(page: Any, workspace_root: Path) -> No
     page.get_by_role("button", name="Reset to template").click()
     _wait_for(page, workspace_root, lambda listing: "template_positions" not in listing)
     assert page.get_by_role("button", name="Reset to template").count() == 0
+
+
+def _stage_pixel(page: Any, x: float, y: float, size: tuple[int, int]) -> tuple[int, int, int]:
+    """The colour the stage shows at photo pixel ``(x, y)``."""
+    stage = page.locator(".tp-stage")
+    area = stage.bounding_box()
+    scale = area["width"] / size[0]
+    with Image.open(BytesIO(stage.screenshot())) as shot:
+        pixel = shot.convert("RGB").getpixel((round(x * scale), round(y * scale)))
+    return (pixel[0], pixel[1], pixel[2])
+
+
+def test_a_gesture_shows_its_position_while_the_render_is_still_coming(
+    page: Any, workspace_root: Path
+) -> None:
+    """The print leaves its old place the moment it moves, and the saved
+    composite takes over only once it has loaded (interactions: *Adjusting*)."""
+    Image.new("RGBA", (400, 400), (230, 20, 20, 255)).save(
+        workspace_root / "designs" / "solid-red.png"
+    )
+    edit_listing(workspace_root, design={"default": "designs/solid-red.png"})
+    _open_images(page)
+    page.get_by_role("switch", name="Adjust position").click()
+    box = page.get_by_role("button", name="Design position — drag to move, arrow keys to nudge")
+    box.wait_for(state="visible")
+    photo_path = workspace_root / "mockup-templates" / TEMPLATE / "black.png"
+    with Image.open(photo_path) as opened:
+        photo = opened.convert("RGB")
+    corners = _template_box(workspace_root)
+    left = min(p.x for p in corners)
+    right = max(p.x for p in corners)
+    middle = (min(p.y for p in corners) + max(p.y for p in corners)) / 2
+    vacated = (left + (right - left) * 0.05, middle)
+
+    held: list[Any] = []
+
+    def hold(route: Any) -> None:
+        held.append(route)
+
+    page.route("**/scene-preview**", hold)
+    _drag(page, box, 60, 0)
+    _wait_for(page, workspace_root, _positioned(workspace_root, lambda p: p.offset_x > 0))
+    for _ in range(50):
+        if held:
+            break
+        page.wait_for_timeout(100)
+    assert held, "the saved composite was never asked for"
+
+    shown = _stage_pixel(page, *vacated, photo.size)
+    bare = photo.getpixel((round(vacated[0]), round(vacated[1])))
+    assert max(abs(a - b) for a, b in zip(shown, bare, strict=True)) < 30
+    print_centre = _stage_pixel(
+        page, (left + right) / 2 + (right - left) * 0.05, middle, photo.size
+    )
+    assert print_centre[0] > 150 > print_centre[2]
+
+    for route in held:
+        route.continue_()
+    page.unroute("**/scene-preview**")
+    page.wait_for_function("!document.querySelector('.tp-live--on, .tp-overlay')")
 
 
 def test_fit_within_limits_repairs_a_refused_position(page: Any, workspace_root: Path) -> None:

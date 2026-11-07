@@ -1,11 +1,8 @@
 import { type ReactNode, useEffect, useState } from "react";
-import { listTemplates } from "../../api/calibrator";
-import {
-  listCommonMedia,
-  listListingMediaFiles,
-  listingDesignThumbnailUrl,
-} from "../../api/listings";
+import { listTemplates, templatePhotoUrl } from "../../api/calibrator";
+import { listCommonMedia, listListingMediaFiles, listingSceneArtworkUrl } from "../../api/listings";
 import { listListingTemplateMediaFiles } from "../../api/listingTemplates";
+import { maskUrl } from "../../api/preparation";
 import { Lightbox, type LightboxItem } from "../../components/Lightbox";
 import {
   type Artwork,
@@ -13,13 +10,11 @@ import {
   mediaKind,
   mediaLabel,
   pictureFor,
-  refName,
   sceneSource,
 } from "../../media";
 import type { MediaFileSummary, ListingDetail, TemplateSummary } from "../../types";
 import { MediaLocator } from "./MediaLocator";
 import { MediaReel } from "./MediaReel";
-import { representative } from "./artwork";
 import { isBoolean, isNullableNumber, useViewState, viewScope } from "./editorView";
 import {
   type Focus,
@@ -34,6 +29,7 @@ import * as edits from "./mediaEdits";
 import { type Positions, positionSignature } from "./positions/document";
 import { PositionControls, PositionNote } from "./positions/PositionControls";
 import { PositionStage } from "./positions/PositionStage";
+import type { LiveSource } from "./positions/useLiveScene";
 import {
   type Positioning,
   positionTarget,
@@ -223,7 +219,7 @@ export function ImagesTab({ detail, onUpdate, artwork, owner, onFlush }: Props) 
         <PreviewPane
           view={view}
           positioning={positioning}
-          artwork={overlayArtwork(detail)}
+          source={liveSource(detail, focus)}
           onOpen={setLightboxIndex}
           onToggle={toggleFocused}
         />
@@ -301,13 +297,13 @@ function StagePicture({
 function PreviewPane({
   view,
   positioning,
-  artwork,
+  source,
   onOpen,
   onToggle,
 }: {
   view: FocusView | null;
   positioning: Positioning | null;
-  artwork: string | null;
+  source: LiveSource | null;
   onOpen: (index: number) => void;
   onToggle: () => void;
 }) {
@@ -334,12 +330,12 @@ function PreviewPane({
             preload="metadata"
           />
         )}
-        {view?.kind === "image" && adjusting !== null && (
+        {view?.kind === "image" && adjusting !== null && source !== null && (
           <PositionStage
             positioning={adjusting}
             picture={view.picture}
             title={view.title}
-            artwork={artwork}
+            source={source}
           />
         )}
         {view?.kind === "image" && adjusting === null && (
@@ -409,10 +405,17 @@ function listingScene(detail: ListingDetail, saved: Positions | null | undefined
   return sceneSource(detail.name, detail.design_content_hash, signatures);
 }
 
-/** The listing's artwork, flat on the box while a position gesture is unsaved. */
-function overlayArtwork(detail: ListingDetail): string | null {
-  const design = representative(detail.design);
-  return design === null ? null : listingDesignThumbnailUrl(refName(design));
+/** What Position mode draws a template entry's scene from, live. */
+function liveSource(detail: ListingDetail, focus: Focus | null): LiveSource | null {
+  if (focus?.kind !== "template") return null;
+  const { template, colour } = focus;
+  const version = detail.design_content_hash ?? "";
+  return {
+    photo: templatePhotoUrl(template, colour),
+    artwork: (placement) =>
+      listingSceneArtworkUrl(detail.name, template, colour, placement, version),
+    mask: (placement) => maskUrl(template, placement),
+  };
 }
 
 /** The pane's own action, beside the position controls when the entry has them. */

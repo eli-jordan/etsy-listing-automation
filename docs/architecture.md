@@ -389,6 +389,12 @@ still matches what is saved, through the rules gathered in
 picture into a response: the WebP encoding of a frame, and the identity headers
 and `304` of a rendered scene.
 
+Position mode is the one place a browser composes a scene. While a listing's
+position is ahead of its composite, `pages/editor/positions/liveRenderer.ts` draws
+the photo and each layer's artwork with WebGL, so a gesture never waits on a
+render. `layer_artwork` resolves that artwork as `saved_scene` does. The picture is
+a stand-in that no hash, lockfile or file ever sees (ADR-0058).
+
 Listings may hold their own absolute position for a template (ADR-0058), so a
 recalibrated box never moves them; the next `plan` re-checks each against the
 limits. The calibrator therefore names those listings above its workbench, and

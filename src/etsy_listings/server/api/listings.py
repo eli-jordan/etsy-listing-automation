@@ -43,6 +43,7 @@ from fastapi import (
     UploadFile,
 )
 from fastapi.responses import Response
+from PIL import Image
 
 from etsy_listings.core.application.ai.registry import AiRunRegistry
 from etsy_listings.core.application.dependencies import ContextFactory, EtsyStates
@@ -72,7 +73,12 @@ from etsy_listings.core.application.pricing_plans import (
 from etsy_listings.core.application.refusals import (
     ListingMissingError,
 )
-from etsy_listings.core.application.scene_previews import SceneLayers, saved_scene
+from etsy_listings.core.application.scene_previews import (
+    SceneFrame,
+    SceneLayers,
+    layer_artwork,
+    saved_scene,
+)
 from etsy_listings.core.application.scene_warming import SceneWarmer
 from etsy_listings.core.clients.etsy.tokens import EtsyAuthError, EtsyRefreshBusyError
 from etsy_listings.core.clients.etsy.transport import EtsyApiError
@@ -90,7 +96,7 @@ from etsy_listings.core.workspace.workspace import Workspace
 from etsy_listings.server.api import app_state
 from etsy_listings.server.api.editor_projections import garment_fields, wire_prices
 from etsy_listings.server.api.etsystate import etsy_states
-from etsy_listings.server.api.imagecache import PREVIEW_IMAGES
+from etsy_listings.server.api.imagecache import LIVE_ARTWORK_EDGE, PREVIEW_IMAGES
 from etsy_listings.server.api.scene_responses import ScenePreviewQuery, scene_response
 from etsy_listings.server.api.schemas import (
     CommonCopySummary,
@@ -447,6 +453,32 @@ def scene_preview(
         images=PREVIEW_IMAGES,
     )
     return scene_response(picture, if_none_match=request.headers.get("if-none-match"))
+
+
+@router.get("/{name}/scene-artwork")
+def scene_artwork_picture(
+    target: Annotated[Target, Depends(target)],
+    template: str,
+    colour: str | None = None,
+    placement: str | None = None,
+) -> Response:
+    """The file one layer of this listing's scene prints, as the editor's live
+    Position mode draws it: downscaled and with its transparency, unlike a list
+    thumbnail. Resolved here for the reason :func:`scene_preview` is, so the
+    picture under a drag and the render that replaces it print the same file.
+    ``404`` for a layer left bare."""
+    workspace = target.workspace
+    try:
+        listing = listing_scenes(workspace, target.name)
+    except ConfigLoadError as exc:
+        raise HTTPException(
+            status_code=404, detail=f"listing {target.name!r} does not load"
+        ) from exc
+    path = layer_artwork(workspace, template, SceneLayers(colour, listing.artwork), placement)
+    if path is None:
+        raise HTTPException(status_code=404, detail="this layer prints nothing")
+    artwork = PREVIEW_IMAGES.design(path, max_edge=LIVE_ARTWORK_EDGE)
+    return scene_response(SceneFrame(Image.fromarray(artwork)))
 
 
 @support_router.get("/api/listing-draft", response_model=ListingDetail)

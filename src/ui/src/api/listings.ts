@@ -199,6 +199,21 @@ export function listingScenePreviewUrl(
   return `/api/listings/${encodeURIComponent(listing)}/scene-preview?${params.toString()}`;
 }
 
+/** The file one layer of a listing's scene prints, with its transparency and
+ * small enough to draw live. `version` is a cache-buster, as above. */
+export function listingSceneArtworkUrl(
+  listing: string,
+  template: string,
+  colour: string | null,
+  placement: string | null,
+  version: string,
+): string {
+  const params = new URLSearchParams({ template, v: version });
+  if (colour) params.set("colour", colour);
+  if (placement) params.set("placement", placement);
+  return `/api/listings/${encodeURIComponent(listing)}/scene-artwork?${params.toString()}`;
+}
+
 /** The shared asset's own picture, downscaled for a list. A URL, like the two
  * thumbnails above. `name` is its path under `common-media/`, extension and
  * all -- `MediaFileSummary.name`. */

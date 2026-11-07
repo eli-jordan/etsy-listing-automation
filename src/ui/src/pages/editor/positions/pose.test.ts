@@ -7,6 +7,8 @@ import {
   decompose,
   IDENTITY,
   nearestAllowedPose,
+  toPhoto,
+  unitFrame,
 } from "./pose";
 
 /** The cases of `tests/core/unit/test_positions.py`, case for case, so this
@@ -26,6 +28,16 @@ function expectCorners(actual: Quad, expected: Quad, digits = 7) {
     expect(actual[index].y).toBeCloseTo(expected[index].y, digits);
   });
 }
+
+describe("unitFrame", () => {
+  it("takes a quad's corners back onto the unit square", () => {
+    const [a, b, c, d, e, f, g, h, i] = unitFrame(BOX);
+    const point = toPhoto(BOX, { x: 0.25, y: 0.75 });
+    const w = g * point.x + h * point.y + i;
+    expect((a * point.x + b * point.y + c) / w).toBeCloseTo(0.25, 9);
+    expect((d * point.x + e * point.y + f) / w).toBeCloseTo(0.75, 9);
+  });
+});
 
 /** mulberry32: a seeded stream, for the round-trip cases. */
 function seeded(seed: number) {
