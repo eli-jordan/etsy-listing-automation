@@ -113,6 +113,10 @@ class FakePrintifyClient(PrintifyClient):
         self.updated: list[ProductSpec] = []
         self.deleted: list[str] = []
         self.published: list[tuple[str, dict[str, bool]]] = []
+        self.visible_at_publish: list[bool] = []
+        """The product's ``visible`` flag at each `publish` call, in order --
+        what the real Printify copies onto the Etsy listing's state."""
+        self.visibility_writes: list[tuple[str, bool]] = []
         self.publishing_failed_calls: list[str] = []
         self._next_product = 0
         self.publish_external: dict[str, ProductExternal] = {}
@@ -202,6 +206,13 @@ class FakePrintifyClient(PrintifyClient):
         self.deleted.append(product_id)
 
     @override
+    def set_visible(self, shop_id: int, product_id: str, *, visible: bool) -> None:
+        self.visibility_writes.append((product_id, visible))
+        product = self.products.get(product_id)
+        if product is not None:
+            self.products[product_id] = product.model_copy(update={"visible": visible})
+
+    @override
     def publish(self, shop_id: int, product_id: str, sync_flags: dict[str, bool]) -> None:
         """Fire-and-forget, like the real one: `is_locked` and `external` are
         set immediately here rather than after a poll, since the fake has no
@@ -212,6 +223,7 @@ class FakePrintifyClient(PrintifyClient):
         product = self.products.get(product_id)
         if product is None:
             return
+        self.visible_at_publish.append(product.visible)
         external = self.publish_external.get(product_id)
         self.products[product_id] = product.model_copy(
             update={"is_locked": external is None, "external": external}

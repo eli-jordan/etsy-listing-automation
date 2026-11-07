@@ -13,6 +13,7 @@ from pathlib import Path
 
 import pytest
 
+from etsy_listings.core.clients.etsy.fakes import FakeEtsyListingClient
 from etsy_listings.core.clients.printify.fakes import FakeCatalogClient, FakePrintifyClient
 from etsy_listings.core.clients.printify.models import ProductExternal, Shop
 from etsy_listings.core.engine.apply import execute
@@ -184,6 +185,67 @@ def test_a_changed_price_is_republished(root, catalog, printify) -> None:
     assert [product_id for product_id, _ in printify.published] == [FIRST_FAKE_PRODUCT_ID] * 2
     assert 39900 in printify.updated[0].variants.values()
     assert result.remote["etsy_listing_id"] == ETSY_LISTING_ID
+
+
+# ------------------------------------------------- visibility follows Etsy state
+
+
+def _republish_with_etsy_state(
+    root: Path, catalog: FakeCatalogClient, printify: FakePrintifyClient, state: str
+) -> Lockfile:
+    """First apply, then a price change republished while the Etsy listing
+    is in ``state``. Printify copies ``visible`` onto the listing at publish,
+    so ``visible_at_publish`` is what Etsy ends up showing."""
+    etsy = FakeEtsyListingClient()
+    ctx = a_context(root, catalog=catalog, printify=printify, etsy=etsy)
+    lock = _apply(ctx, a_lock())
+    etsy.seed_listing(ETSY_LISTING_ID, state=state)
+    edit_listing(root, prices=RAISED_PRICES)
+    return _apply(ctx, lock)
+
+
+def test_a_first_publish_stays_hidden_so_it_lands_as_a_draft(root, catalog, printify) -> None:
+    ctx = a_context(root, catalog=catalog, printify=printify, etsy=FakeEtsyListingClient())
+
+    _apply(ctx, a_lock())
+
+    assert printify.visible_at_publish == [False]
+    assert printify.visibility_writes == []
+
+
+def test_republishing_an_active_listing_publishes_it_visible(root, catalog, printify) -> None:
+    """The 2026-11-07 incident: a price change republished every live
+    listing with ``visible: false`` and Printify turned each one inactive."""
+    _republish_with_etsy_state(root, catalog, printify, "active")
+
+    assert printify.visible_at_publish == [False, True]
+
+
+def test_republishing_a_paused_listing_keeps_it_hidden(root, catalog, printify) -> None:
+    """Paused in Shop Manager: ``visible: true`` could switch it back on."""
+    _republish_with_etsy_state(root, catalog, printify, "inactive")
+
+    assert printify.visible_at_publish == [False, False]
+    assert printify.visibility_writes == []
+
+
+def test_republishing_a_draft_keeps_it_hidden(root, catalog, printify) -> None:
+    _republish_with_etsy_state(root, catalog, printify, "draft")
+
+    assert printify.visible_at_publish == [False, False]
+
+
+def test_a_listing_paused_after_being_made_visible_is_hidden_again(root, catalog, printify) -> None:
+    lock = _republish_with_etsy_state(root, catalog, printify, "active")
+    assert printify.products[FIRST_FAKE_PRODUCT_ID].visible
+
+    etsy = FakeEtsyListingClient()
+    etsy.seed_listing(ETSY_LISTING_ID, state="inactive")
+    ctx = a_context(root, catalog=catalog, printify=printify, etsy=etsy)
+    edit_listing(root, prices=dict.fromkeys(RAISED_PRICES, "449 NOK"))
+    _apply(ctx, lock)
+
+    assert printify.visible_at_publish[-1] is False
 
 
 # --------------------------------------------------------------------- timeout

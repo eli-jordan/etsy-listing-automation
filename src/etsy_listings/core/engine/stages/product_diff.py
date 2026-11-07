@@ -249,12 +249,6 @@ def _drift(was: AppliedProduct | None, live: Product | None) -> tuple[Drift, ...
     variants = _variants_drift(was.prices, live.enabled_variants())
     if variants is not None:
         found.append(variants)
-
-    if live.visible:
-        # The tripwire. Whether a publish lands as a draft is decided outside
-        # this tool, so a managed product turning visible is the only signal
-        # that something changed the setting that decides it.
-        found.append(Drift(path="visible", last_applied=False, live=True))
     return tuple(found)
 
 

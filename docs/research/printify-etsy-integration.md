@@ -310,6 +310,22 @@ and `/v1/shops/{id}/settings.json` both `404`; `GET /v1/shops.json` returns only
 and should not pretend to. `visible: false` is the guarantee; the shop setting
 is a second line of defence the user configures once, unobserved.
 
+### `visible` on a republish of a live listing (measured 2026-11-07)
+
+A price change republished every live listing with the product still
+`visible: false`, and Printify turned each **active** listing **inactive**
+(all 33 in the shop). Reproduced on one listing with the same sync flags
+(`variants: true`, everything else off):
+
+| Product `visible` | Etsy state before | After `publish.json` |
+|---|---|---|
+| `false` | `active` | `inactive` within ~8 s, held for 3 min |
+| `true` | `active` | `active`, held for 3 min |
+
+A `PUT` carrying only `{"visible": true}` changes nothing else. The `publish`
+stage now sets `visible` to `true` for a listing that is active on Etsy, and
+`false` for anything else, just before each publish.
+
 ### A draft is invisible to the default listing query
 
 `GET /v3/application/shops/{shop}/listings` returned `count: 0` with the draft
