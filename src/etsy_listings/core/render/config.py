@@ -342,16 +342,16 @@ TemplateConfig = Annotated[AnyTemplate, Field(discriminator="kind")]
 """``mockup-templates/{name}/template.yaml``, written by the calibrator. A
 discriminated union, not a wrapping model -- the file *is* one of the three
 shapes. Parse with :func:`load_template_config`; read one off disk with
-``Workspace.load_template_config``, which is the only thing that knows where
+``workspace.template_state``, the only reader that knows where
 the file lives."""
 
 _TEMPLATE_CONFIG_ADAPTER: TypeAdapter[AnyTemplate] = TypeAdapter(TemplateConfig)
 
 
 def load_template_config(data: object) -> AnyTemplate:
-    """Parse already-read YAML/JSON data. The file-level read lives on
-    ``Workspace`` -- this half stays pure, so ``render`` still knows nothing
-    about where a workspace keeps its templates."""
+    """Parse already-read YAML/JSON data. The file-level read is
+    ``workspace.template_state`` -- this half stays pure, so ``render`` still
+    knows nothing about where a workspace keeps its templates."""
     return _TEMPLATE_CONFIG_ADAPTER.validate_python(data)
 
 

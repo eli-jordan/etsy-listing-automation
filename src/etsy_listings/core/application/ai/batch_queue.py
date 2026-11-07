@@ -41,7 +41,7 @@ from etsy_listings.core.application.ai.readiness import (
 from etsy_listings.core.application.ai.registry import AiRun, AiRunRegistry
 from etsy_listings.core.application.ai.runner import AiRunner
 from etsy_listings.core.batches import RETRYABLE, AiState, AiStep, Batch, BatchRow, BatchStore
-from etsy_listings.core.config.errors import ConfigLoadError
+from etsy_listings.core.config.settings import SettingsProblem
 from etsy_listings.core.workspace.workspace import Workspace
 
 logger = logging.getLogger(__name__)
@@ -156,9 +156,10 @@ class BatchQueue:
 
     def _limit(self) -> int:
         # Invalid hand edits refuse dispatch; only an absent file uses the
-        # model defaults (Admin plan, config-validation rule). The dispatcher
-        # reports the failure and leaves queued rows and active runs alone.
-        return self._workspace.load_settings().batch_ai.concurrency
+        # model defaults (Admin plan, config-validation rule). No slots leaves
+        # queued rows and active runs alone until the file is fixed.
+        settings = self._workspace.settings_if_readable(skipping="dispatching batch rows")
+        return settings.batch_ai.concurrency if settings is not None else 0
 
     def _running(self) -> int:
         return sum(1 for run in self._registry.active() if run.origin == "batch")
@@ -333,18 +334,21 @@ class BatchQueue:
             after = self._last
         return queue_order(self._batches.all(), after)
 
-    def concurrency(self) -> int:
-        return self._limit()
+    def concurrency(self) -> int | SettingsProblem:
+        """The limit a batch's detail shows, or why there is none to show."""
+        settings = self._workspace.settings_or_problem()
+        if isinstance(settings, SettingsProblem):
+            return settings
+        return settings.batch_ai.concurrency
 
     def blocked(self) -> AiReadinessBlock | None:
         """Why a batch could not draft its briefs: the brief prompt or a
         ready provider is missing (spec, *Design validation*)."""
         workspace = self._workspace
-        try:
-            providers = current_providers(self._runner.providers, workspace)
-        except ConfigLoadError as exc:
+        providers = current_providers(self._runner.providers, workspace)
+        if isinstance(providers, SettingsProblem):
             return AiReadinessBlock(
-                message=str(exc),
+                message=providers.message,
                 remedy="Correct the named key in settings.yaml, then retry. Your staging is kept.",
             )
         return batch_blocked(workspace, providers)

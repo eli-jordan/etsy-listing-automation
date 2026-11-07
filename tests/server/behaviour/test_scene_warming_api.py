@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from etsy_listings.core.application import prepared_previews
+from etsy_listings.core.application import scene_previews
 from etsy_listings.core.application.scene_warming import SceneWarmer
 from etsy_listings.core.workspace.workspace import Workspace
 from etsy_listings.server.api.app import create_app
@@ -60,7 +60,7 @@ def test_the_preview_of_a_warmed_scene_composes_nothing(
     def refuse(*args: object, **kwargs: object) -> None:
         raise AssertionError("composed a scene the warmer had cached")
 
-    monkeypatch.setattr(prepared_previews, "compose_preview", refuse)
+    monkeypatch.setattr(scene_previews, "compose_preview", refuse)
     response = client.get(
         f"/api/listings/{FIXTURE_LISTING}/scene-preview",
         params={"template": "flat-lay-01", "colour": "moss"},

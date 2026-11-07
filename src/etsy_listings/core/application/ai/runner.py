@@ -70,6 +70,7 @@ from etsy_listings.core.application.ai.events import (
 from etsy_listings.core.application.ai.readiness import ProviderFactory
 from etsy_listings.core.application.ai.registry import AiRun, AiRunRegistry
 from etsy_listings.core.application.dependencies import MarketClientFactory
+from etsy_listings.core.config.market_weights import MarketWeights
 from etsy_listings.core.errors import INTERNAL_ERROR_MESSAGE, UserFacingError
 from etsy_listings.core.market import (
     MarketResearchError,
@@ -105,10 +106,12 @@ def timeout_message(run_minutes: int) -> str:
 @dataclass(frozen=True)
 class _Captured:
     """What a run captured before its thread started and keeps to the end
-    (ADR-0056, ADR-0057): the provider adapters and the run's budget."""
+    (ADR-0056, ADR-0057): the provider adapters, the run's budget and the
+    weights its research scores with, all from one read of ``settings.yaml``."""
 
     providers: Sequence[AiProvider]
     budget: RunBudget
+    weights: MarketWeights
 
 
 class _StoppedError(Exception):
@@ -143,10 +146,10 @@ class AiRunner:
         # ADR-0056/0057: capture before scheduling, not after the thread gets
         # CPU. Every task, repair and fallback keeps these adapters and limits.
         try:
-            # One read: limits and providers from the same revision (ADR-0057).
-            ai = self.workspace.load_settings().ai
-            limits = AiLimits.of(ai)
-            providers = tuple(self.providers(self.workspace, ai))
+            # One read: everything a run keeps from the same revision (ADR-0057).
+            settings = self.workspace.capture_settings()
+            limits = AiLimits.of(settings.ai)
+            providers = tuple(self.providers(self.workspace, settings.ai))
         except UserFacingError as exc:
             self._end_failed(run, str(exc))
             return
@@ -157,10 +160,9 @@ class AiRunner:
         budget = RunBudget(
             limits, Deadline(deadline_at=started + limits.run_seconds, clock=self.monotonic)
         )
+        captured = _Captured(providers, budget, settings.market_seo.weights)
         threads = [
-            threading.Thread(
-                target=self._execute, args=(run, providers, budget), name=f"ai-run-{run.id}"
-            ),
+            threading.Thread(target=self._execute, args=(run, captured), name=f"ai-run-{run.id}"),
             threading.Thread(
                 target=self._watch, args=(run, budget), name=f"ai-run-watchdog-{run.id}"
             ),
@@ -192,9 +194,10 @@ class AiRunner:
                 run.request_stop("timeout")
                 return
 
-    def _execute(self, run: AiRun, providers: Sequence[AiProvider], budget: RunBudget) -> None:
+    def _execute(self, run: AiRun, captured: _Captured) -> None:
+        budget = captured.budget
         try:
-            self._chain(run, _Captured(providers, budget))
+            self._chain(run, captured)
         except (_StoppedError, ProviderCancelledError, ResearchCancelledError):
             self._end_stopped(run, budget)
         except Exception as exc:
@@ -315,7 +318,7 @@ class AiRunner:
             CachedEtsyMarketClient.in_workspace(inner, workspace),
             today=self.now(),
             settings=ResearchSettings(
-                weights=workspace.load_settings().market_seo.weights,
+                weights=captured.weights,
                 own_shop_id=workspace.defaults.etsy.shop_id,
             ),
             cancel_event=run.cancel_event,

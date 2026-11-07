@@ -11,8 +11,9 @@ import numpy as np
 from PIL import Image
 
 from etsy_listings.core.application.preparation.activity import interactive
+from etsy_listings.core.application.refusals import TemplatePreviewKindMismatchError
 from etsy_listings.core.bounded_cache import BoundedCache
-from etsy_listings.core.preparation.artifacts import Artifacts, PlacementInput
+from etsy_listings.core.preparation.artifacts import Artifacts, PlacementInput, PreparationInputs
 from etsy_listings.core.preparation.evidence_reader import (
     CropEvidence,
     EvidenceReader,
@@ -70,6 +71,13 @@ class EditorDraft:
     colour: str | None = None
 
 
+# ------------------------------------- does a draft still match what is saved?
+#
+# Every rule a draft answers to, for the two pictures of one. A frame may show
+# unsaved geometry and masks, so it needs a draft of the same saved calibration.
+# A full-size scene is the prepared render, so what it asks for must be prepared.
+
+
 def _drawn_against(
     store: CalibrationStore, name: str, saved: Calibration, draft: EditorDraft
 ) -> bool:
@@ -99,6 +107,31 @@ def _previewable_renderer(
     ):
         raise PreparationRequiredError("Prepare changed inference settings before previewing")
     return config.renderer
+
+
+def prepared_renderer(saved: AnyTemplate, requested: AnyTemplate) -> MarigoldRenderer:
+    """The renderer of ``requested`` at full size: one with ``saved``'s kind,
+    and Marigold both as asked for and as saved."""
+    if requested.kind != saved.kind:
+        raise TemplatePreviewKindMismatchError(saved.kind)
+    if not isinstance(requested.renderer, MarigoldRenderer) or not isinstance(
+        saved.renderer, MarigoldRenderer
+    ):
+        raise PreparationRequiredError("Save the Marigold renderer selection before rendering")
+    return requested.renderer
+
+
+def check_prepared_geometry(
+    requested: AnyTemplate, renderer: MarigoldRenderer, inputs: PreparationInputs
+) -> None:
+    """Refuse a full-size scene of anything but the prepared geometry and
+    inference: its maps are only of those."""
+    quads = {key: tuple((p.x, p.y) for p in box) for key, box in _boxes(requested)}
+    expected = {p.id: p.quad for p in inputs.placements}
+    if quads != expected or renderer.config.inference != inputs.inference:
+        raise PreparationRequiredError(
+            "Save geometry and inference settings, then rebuild or prepare the template"
+        )
 
 
 def _boxes(config: AnyTemplate) -> list[tuple[str | None, BoundingBox]]:

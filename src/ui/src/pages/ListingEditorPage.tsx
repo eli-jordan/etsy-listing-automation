@@ -5,6 +5,7 @@ import { getListing, getListingDraft } from "../api/listings";
 import { EditableName } from "../components/EditableName";
 import { StatusTag } from "../components/StatusTag";
 import { useAutosave } from "../hooks/useAutosave";
+import type { Settled } from "../hooks/writeLoop";
 import { type MediaOwner, refName } from "../media";
 import type { DesignMap, Issue, IssueTab, ListingDetail } from "../types";
 import type { AiSeoMode } from "./editor/aiSeo/useAiSeoMode";
@@ -129,7 +130,7 @@ export function ListingEditorPage() {
       // this whole subtree -- so the key only ever forced the *extra*
       // remount that naming a draft caused, where `handed` keeps `initial`
       // non-null. `useAutosave` handles a name change itself (`commitName`
-      // updates its own `savedName`, `detail` and `save` before `onNamed`
+      // updates its own name, `detail` and `save` before `onNamed`
       // fires), so that remount threw away state for nothing. It is not
       // nothing any more: ADR-0003's chain is armed when a design is attached,
       // which on a new listing is usually *before* it is named, and a
@@ -222,6 +223,16 @@ function ListingEditorPageContent({
     aiSeo.run.arm();
   }
 
+  /** Goes to `url` once the file holds what is on screen. Whatever is there
+   * reads the file, and this editor is the one place the edit still exists,
+   * so an edit that cannot be written keeps the seller here, where the page
+   * head says why. */
+  function whenWritten(url: string) {
+    void flush().then((settled) => {
+      if (settled.written) navigate(url);
+    });
+  }
+
   return (
     <ListingEditorShell
       detail={detail}
@@ -239,9 +250,7 @@ function ListingEditorPageContent({
               <BackToBatch
                 batch={fromBatch}
                 member={member}
-                onBack={(batch) =>
-                  void flush().then(() => navigate(`/batches/${encodeURIComponent(batch)}`))
-                }
+                onBack={(batch) => whenWritten(`/batches/${encodeURIComponent(batch)}`)}
               />
             )
           }
@@ -256,7 +265,7 @@ function ListingEditorPageContent({
                 update={update}
                 adopt={adopt}
                 flush={flush}
-                onCreateTemplate={() => void flush().then(() => navigate(saveAsUrl(detail.name)))}
+                onCreateTemplate={() => whenWritten(saveAsUrl(detail.name))}
                 onDeleted={() => navigate("/listings", { replace: true })}
               />
             )
@@ -319,7 +328,7 @@ export function EditorHead({
   onBack: () => void;
   title: ReactNode;
   meta: ReactNode;
-  flush: () => Promise<void>;
+  flush: () => Promise<Settled>;
   /** What the editor is doing on its own right now, beside the meta line
    * (ADR-0003). `null` whenever nothing is running, which is most of the
    * time. */

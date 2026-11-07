@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -21,7 +21,7 @@ function summary(over: RunSummaryOverrides = {}): RunSummary {
   });
 }
 
-function renderControl(flush = vi.fn().mockResolvedValue(undefined)) {
+function renderControl(flush = vi.fn().mockResolvedValue({ written: true })) {
   return {
     flush,
     ...render(
@@ -105,5 +105,19 @@ describe("DeployControl", () => {
 
     expect(flush).toHaveBeenCalledOnce();
     await waitFor(() => expect(screen.getByText("deploy view")).toBeInTheDocument());
+  });
+
+  it("stays on the listing when the edit could not be written", async () => {
+    vi.spyOn(runsApi, "currentRun").mockResolvedValue(null);
+    const flush = vi.fn().mockResolvedValue({ written: false, message: "no" });
+    renderControl(flush);
+
+    await userEvent.click(await screen.findByRole("button", { name: /Deploy changes/ }));
+
+    await waitFor(() => expect(flush).toHaveBeenCalledOnce());
+    await act(async () => {
+      await flush.mock.results[0]?.value;
+    });
+    expect(screen.queryByText("deploy view")).toBeNull();
   });
 });

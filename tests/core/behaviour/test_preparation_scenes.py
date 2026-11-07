@@ -16,6 +16,8 @@ from etsy_listings.core.preparation.scene_cache import photo_digest
 from etsy_listings.core.preparation.scenes import Composition, PreparedLayer, lease_scene
 from etsy_listings.core.render import MarigoldAppearance, Point, load_template_base
 from etsy_listings.core.render.identity import artwork_identity
+from etsy_listings.core.workspace.calibration import CalibrationStore
+from etsy_listings.core.workspace.template_state import template_state
 
 from tests.support.marigold import listing_with_marigold
 
@@ -53,8 +55,8 @@ def test_identity_names_the_artwork_and_the_scene_renders_at_the_photo_size(
 def test_inputs_changed_since_they_were_read_refuse_as_stale(workspace_root) -> None:
     workspace, _ = listing_with_marigold(workspace_root, prepare=True)
     planned = Artifacts(workspace).saved_inputs("shirt")
-    config = workspace.load_template_config("shirt")
-    workspace.save_template_config(
+    config = template_state(workspace, "shirt").require()
+    CalibrationStore(workspace).write_config(
         "shirt",
         config.model_copy(update={"bounding_box": (Point(x=13, y=12), *config.bounding_box[1:])}),
     )
