@@ -10,6 +10,7 @@ const SPACE: [number, number] = [400, 200];
 
 const CONFIG: PhotoWarpTemplate<MultipleTemplate> = {
   kind: "multiple",
+  labels: [],
   colour_coverage: "exact",
   placements: [
     {

@@ -13,7 +13,8 @@ import { ActionDivider, ActionLink } from "../../components/ActionLink";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { OpenInMenu } from "../../components/OpenInMenu";
 import { hasOpenTargets } from "../../components/openOn";
-import type { Patch } from "../../hooks/useAutosave";
+import type { Patch } from "../../hooks/listingAutosave";
+import type { Settled } from "../../hooks/writeLoop";
 import type { ListingDetail } from "../../types";
 import {
   deleteDetails,
@@ -98,7 +99,7 @@ export function ListingActions({
   setMember: (member: ListingBatch) => void;
   update: (patch: Patch) => void;
   adopt: (patch: Patch) => void;
-  flush: () => Promise<void>;
+  flush: () => Promise<Settled>;
   onCreateTemplate: () => void;
   onDeleted: () => void;
 }) {
@@ -127,6 +128,8 @@ export function ListingActions({
     setConfirming(false);
     setError("");
     try {
+      // Waited for, so no write crosses the delete. Whether it landed does not
+      // matter: an edit that would not save goes with the listing.
       await flush();
       const row = await deleteListing(name);
       if (row === null) {

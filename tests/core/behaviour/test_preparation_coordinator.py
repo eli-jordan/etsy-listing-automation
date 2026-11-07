@@ -13,6 +13,9 @@ from etsy_listings.core.preparation.runtime import Capability
 from etsy_listings.core.render import load_template_config
 from etsy_listings.core.workspace import Workspace
 from etsy_listings.core.workspace.calibration import CalibrationChangedError, CalibrationStore
+from etsy_listings.core.workspace.template_state import template_state
+
+from tests.support.marigold import interrupted_save
 
 
 class Runtime:
@@ -33,8 +36,17 @@ def template(workspace_root, name="shirt"):
             "renderer": {"type": "marigold", "config": {}},
         }
     )
-    workspace.save_template_config(name, config)
+    CalibrationStore(workspace).write_config(name, config)
     return workspace
+
+
+def test_starting_rolls_forward_what_a_crash_left_before_any_job_resumes(workspace_root):
+    workspace = template(workspace_root)
+    transaction = interrupted_save(workspace)
+
+    Preparations(workspace, runtime=Runtime()).recover()
+
+    assert not transaction.exists()
 
 
 def test_a_prepare_against_a_moved_revision_is_stale_and_queues_nothing(workspace_root):
@@ -121,7 +133,7 @@ def test_explicit_preparation_publishes_every_required_placement(workspace_root,
     from tests.support.marigold import PreparationRuntime
 
     workspace = template(workspace_root)
-    config = workspace.load_template_config("shirt").model_dump(mode="json")
+    config = template_state(workspace, "shirt").require().model_dump(mode="json")
     config["kind"] = kind
     if kind == "colour-matrix":
         config.pop("colour", None)
@@ -134,7 +146,7 @@ def test_explicit_preparation_publishes_every_required_placement(workspace_root,
         config["placements"] = [
             {"id": key, "colour": "Navy", "bounding_box": box} for key in ["left", "right"]
         ]
-    workspace.save_template_config("shirt", load_template_config(config))
+    CalibrationStore(workspace).write_config("shirt", load_template_config(config))
     runtime = PreparationRuntime()
     coordinator = Preparations(workspace, runtime=runtime)
     job = coordinator.submit(
@@ -406,14 +418,14 @@ def test_restart_at_cpu_mask_and_publication_checkpoints_finishes_coherently(wor
 
 def multiple_template(workspace_root):
     workspace = template(workspace_root)
-    document = workspace.load_template_config("shirt").model_dump(mode="json")
+    document = template_state(workspace, "shirt").require().model_dump(mode="json")
     box = document.pop("bounding_box")
     document.pop("colour")
     document["kind"] = "multiple"
     document["placements"] = [
         {"id": key, "colour": "Navy", "bounding_box": box} for key in ["left", "right"]
     ]
-    workspace.save_template_config("shirt", load_template_config(document))
+    CalibrationStore(workspace).write_config("shirt", load_template_config(document))
     return workspace
 
 

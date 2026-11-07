@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { getListingProposal, resolveListingProposal } from "../../../api/seo";
-import type { SaveState } from "../../../hooks/useAutosave";
+import type { SaveState } from "../../../hooks/listingAutosave";
 import type {
   AiRunEvent,
   AiRunSummary,

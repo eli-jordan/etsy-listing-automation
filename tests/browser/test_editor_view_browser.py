@@ -14,9 +14,21 @@ from pathlib import Path
 
 import pytest
 
+from tests.support.marigold import wait_until
+
 pytestmark = pytest.mark.browser
 
 IMAGES = Path(__file__).parent.parent / "fixtures" / "workspace" / "designs"
+
+
+def _removed(path: Path) -> bool:
+    """Whether ``path`` could be deleted: Windows refuses while the server is
+    still streaming it to the page, which a busy machine makes likely."""
+    try:
+        path.unlink()
+    except PermissionError:
+        return False
+    return True
 
 
 def _open_listing(page) -> None:
@@ -151,7 +163,7 @@ def test_a_view_picture_that_has_gone_leaves_the_stage_empty(page, workspace_roo
     page.get_by_role("button", name="Files", exact=True).click()
     page.get_by_role("button", name="sizing.png").hover()
     page.locator(".preview-meta__title").wait_for(state="visible")
-    shared.unlink()
+    wait_until(lambda: _removed(shared), "the server letting go of the picture")
 
     page.reload()
 

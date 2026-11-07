@@ -24,6 +24,8 @@ import react from "@vitejs/plugin-react";
 //             a prototype is not production coverage.
 const NODE_TESTS = [
   "src/dates.test.ts",
+  "src/hooks/listingAutosave.test.ts",
+  "src/hooks/writeLoop.test.ts",
   "src/media.test.ts",
   "src/components/quadGeometry.test.ts",
   "src/pages/batchDeploy/batchDeployPresentation.test.ts",

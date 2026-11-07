@@ -147,21 +147,22 @@ describe("editorPreviewRequest", () => {
   const jobs = previewJobs(matrix, ["Red", "Blue"], "tee");
 
   it("previews the chosen colour at the calibration revision, with unsaved masks", () => {
-    expect(editorPreviewRequest("colour-matrix", jobs, "Blue", "r1", [])).toEqual({
+    expect(editorPreviewRequest("colour-matrix", jobs, "Blue", "r1", ["cosy"], [])).toEqual({
       ...jobs[1]?.body,
       calibration_revision: "r1",
+      labels: ["cosy"],
       mask_edits: [],
     });
   });
 
   it("previews the only job of other kinds", () => {
     const one = previewJobs(single, [], "tee");
-    expect(editorPreviewRequest("single", one, "", "r1", [])?.calibration_revision).toBe("r1");
+    expect(editorPreviewRequest("single", one, "", "r1", [], [])?.calibration_revision).toBe("r1");
   });
 
   it("asks for nothing without a revision or a body", () => {
-    expect(editorPreviewRequest("colour-matrix", jobs, "Blue", "", [])).toBeNull();
-    expect(editorPreviewRequest("colour-matrix", jobs, "Green", "r1", [])).toBeNull();
+    expect(editorPreviewRequest("colour-matrix", jobs, "Blue", "", [], [])).toBeNull();
+    expect(editorPreviewRequest("colour-matrix", jobs, "Green", "r1", [], [])).toBeNull();
   });
 });
 

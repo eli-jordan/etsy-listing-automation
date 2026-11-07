@@ -1,7 +1,7 @@
 # Mockup template labels implementation plan
 
 Written 2026-11-06 from the [specification](spec.md) and the approved
-[interactions document](interactions.md). Status: not started. This plan owns the
+[interactions document](interactions.md). Status: implemented, in review. This plan owns the
 delivery sequence; the spec owns requirements and the interactions document owns
 UI behaviour. Cite their sections rather than restating them.
 
@@ -10,7 +10,7 @@ The clickable source is two boards: **Find templates on a listing**
 and **Mockup template labels**
 ([`src/ui/design/scenes/template-labels/`](../../../src/ui/design/scenes/template-labels/)),
 with the shared box in
-[`src/ui/design/components/_LabelSearch.tsx`](../../../src/ui/design/components/_LabelSearch.tsx).
+[`src/ui/src/components/LabelSearch.tsx`](../../../src/ui/src/components/LabelSearch.tsx).
 Keep the frames fixture-driven; copy markup and styles into production components.
 Screenshots for comparison are in [`screenshots/`](screenshots/).
 
@@ -38,10 +38,10 @@ placeholders in first.
 | PR | Title | Difficulty | Branch | Link |
 |---|---|---|---|---|
 | 0 | Stack base: docs and mockups | — | `feat/mockup-template-labels` | [#190](https://github.com/eli-jordan/etsy-listing-automation/pull/190) |
-| 1 | Template labels in the model, out of rendering | hard | `feat/labels-1-model` | — |
-| 2 | Labels bar on the Mockup Templates workbench | standard | `feat/labels-2-bar` | — |
-| 3 | Label search box on the rail | standard | `feat/labels-3-rail` | — |
-| 4 | Label search box on Listing Images | standard | `feat/labels-4-listing` | — |
+| 1 | Template labels in the model, out of rendering | hard | `feat/labels-1-model` | [#191](https://github.com/eli-jordan/etsy-listing-automation/pull/191) |
+| 2 | Labels bar on the Mockup Templates workbench | standard | `feat/labels-2-bar` | [#192](https://github.com/eli-jordan/etsy-listing-automation/pull/192) |
+| 3 | Label search box on the rail | standard | `feat/labels-3-rail` | [#193](https://github.com/eli-jordan/etsy-listing-automation/pull/193) |
+| 4 | Label search box on Listing Images | standard | `feat/labels-4-listing` | [#194](https://github.com/eli-jordan/etsy-listing-automation/pull/194) |
 
 Size: aim under about 1,500 changed lines per PR, excluding regenerated
 OpenAPI/client files and lockfiles. A PR that cannot fit splits at a seam the
@@ -90,6 +90,23 @@ Exit when:
   `template.yaml` (ADR-0055);
 - shared gates pass.
 
+Deviations recorded while building it:
+
+- `put_config` skips `reconcile_saved` and `cover_recalibrated` after a save that
+  changed only labels. The plan expected both to find nothing to do, but a
+  positioned template short of coverage, or one with stale maps and evidence in
+  hand, would have queued work. `save_calibration` reports `labels_only`; a save
+  with no change at all still reconciles as it always did, which keeps the
+  editor's Approve, which saves an unchanged draft on purpose.
+- The three preview request models take `labels`, so an editor preview can name
+  the labels of the revision it was drawn against (PR 2). The production editors
+  build their bodies from named fields, so nothing spreads a whole config here.
+- The characters rule is ASCII, as in the prototype, so "letters" excludes `é`.
+  Rules are checked in the prototype's order: length, characters, colon. A blank
+  label takes the characters message.
+- `edit_yaml` now keeps a file's missing final newline when its last key goes.
+  Without it, a label added to such a file moved the hash.
+
 ### PR 2 — Labels bar on the Mockup Templates workbench
 
 Spec: *Saving*. Interactions: *Tagging a template*, *What the production
@@ -121,6 +138,29 @@ Exit when:
 - mockup-vs-app screenshots for both frames are in the PR;
 - shared gates pass.
 
+Deviations recorded while building it:
+
+- A label-only save leaves the revision an editor preview names where it is, so
+  the frame's request does not change and nothing re-fetches. The preview sends
+  that revision's labels, and `editor_preview` accepts it while the saved document
+  with those labels hashes to it. The session lists the revisions label saves moved
+  through, so preparation reporting one of them is not "waiting for calibration
+  status". No HTTP shape changed; only a docstring in the OpenAPI document did.
+- A label-only save does not read preparation again, since it rebuilds nothing.
+- The header reads "Saving…" from a label edit on, through the debounce and any
+  hold behind a preview. Other edits keep today's status until their save starts.
+  A failure or conflict stays on show through further edits.
+- A failed save shows beside the bar only when labels are waiting to save. A
+  failure of anything else stays in the header alone.
+- A refused save now shows the server's sentence, not "could not save
+  template.yaml".
+- Suggestions show the tidied form of a label, and leave out a hand-edited label
+  that would be refused on another template. Typing a label the template holds
+  offers no Create. The 10-label cap counts the draft, so an edit still waiting to
+  save counts.
+- The field's Enter is prevented. Left to run on, it clicked the Add label button
+  that focus returns to and opened the field again, which only a browser shows.
+
 ### PR 3 — Label search box on the rail
 
 Spec: *Search*, *Mockup Templates rail*. Interactions: *One search box*, *Picking a
@@ -148,6 +188,30 @@ Exit when:
   attributes;
 - mockup-vs-app screenshots for both frames are in the PR;
 - shared gates pass.
+
+Deviations recorded while building it:
+
+- Matching ignores case everywhere, not only for the typed text. Two spellings of
+  one label are offered once, as first written, and count together; a pill matches
+  either spelling (`holdsLabels` in `labelRules.ts`, which callers filter with). A
+  hand-edited `Theme:` sits in the `theme` group, and a label with nothing before
+  its colon goes under Other.
+- The prototype's box needed finishing for G5. Every close clears the highlight, so
+  Enter after an outside click cannot pick a stale row. Tab closes the dropdown,
+  which would otherwise stay over the rail. A pill's × returns focus to the box. The
+  highlighted row scrolls into view. Down with nothing to offer highlights nothing.
+  `aria-controls` names the listbox only while it exists, and the field gains
+  `aria-autocomplete="list"`.
+- "Starting with the typed text" also matches the text after the colon, where the
+  prototype compared the whole label only, so `chr` ranks `theme:christmas` first
+  within its group. The spec says so now.
+- `.template-rail__search` stays in `index.css`, because the live Marigold frames
+  still use it.
+- The key handler split into a `keys` table for the app's lint rules, with no change
+  in behaviour.
+- `LabelSearch.css` uses two-class selectors for the box and pill. The bundle puts
+  `index.css` after it, so `.input` and `.tag` were winning in the built app and not on
+  the canvas.
 
 ### PR 4 — Label search box on Listing Images
 
@@ -179,6 +243,26 @@ Exit when:
   refresh with the filter intact, and do the same in the listing template editor;
 - mockup-vs-app screenshots for all five frames are in the PR;
 - shared gates pass.
+
+Deviations recorded while building it:
+
+- A remembered pill is not checked against the labels in use. One no calibrated
+  template holds any more stays on show with "No template matches.", so an empty
+  list has a visible reason and a way out. The box then marks every label as
+  replacing it.
+- The result line reads "1 of 1 template" when the total is one.
+- The empty message is the frame's "No template matches.", not "No template matches
+  that search."
+- Title search ignores outer spaces, as the rail's does. Files keeps its search
+  exactly as it was.
+- `.loc-tmpl__kind` stays in `index.css`, because the live `template-positions`
+  frames still use it.
+- `LabelSearch.css` uses two-class selectors for the box and pill. The bundle puts
+  `index.css` after it, so `.input` and `.tag` were winning in the built app and
+  not on the canvas.
+- Files draws the box's phosphor glass, at the box's size and colour, so the two
+  halves of the locator match. `.locator__search svg` stays for frames that still
+  draw their own.
 
 ## Shared gates
 

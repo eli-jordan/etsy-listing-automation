@@ -2416,7 +2416,9 @@ export interface components {
      *     alone (``colour`` here, ``placements`` on ``MultiplePreviewRequest``,
      *     neither on ``SinglePreviewRequest``) -- extra fields are ignored rather
      *     than forbidden, since a natural client pattern is spreading a whole
-     *     ``GET.../config`` response (which includes ``kind``) into the body.
+     *     ``GET.../config`` response (which includes ``kind``) into the body. All
+     *     three take ``labels`` because an editor preview names with them the labels
+     *     of its ``calibration_revision``. None draws them.
      */
     ColourMatrixPreviewRequest: {
       /** Bounding Box */
@@ -2441,6 +2443,11 @@ export interface components {
        * @constant
        */
       kind: "colour-matrix";
+      /**
+       * Labels
+       * @default []
+       */
+      labels: string[];
       /** Mask Edits */
       mask_edits?: components["schemas"]["MaskEdit"][];
       /** Renderer */
@@ -2467,6 +2474,11 @@ export interface components {
        * @enum {string}
        */
       kind: "colour-matrix";
+      /**
+       * Labels
+       * @default []
+       */
+      labels: string[];
       /** Renderer */
       renderer:
         components["schemas"]["PhotoWarpRenderer"] | components["schemas"]["MarigoldRenderer"];
@@ -3696,6 +3708,11 @@ export interface components {
        * @constant
        */
       kind: "multiple";
+      /**
+       * Labels
+       * @default []
+       */
+      labels: string[];
       /** Mask Edits */
       mask_edits?: components["schemas"]["MaskEdit"][];
       /** Placements */
@@ -3722,6 +3739,11 @@ export interface components {
        * @enum {string}
        */
       kind: "multiple";
+      /**
+       * Labels
+       * @default []
+       */
+      labels: string[];
       /** Placements */
       placements: components["schemas"]["Placement"][];
       /** Renderer */
@@ -4705,6 +4727,11 @@ export interface components {
        * @constant
        */
       kind: "single";
+      /**
+       * Labels
+       * @default []
+       */
+      labels: string[];
       /** Mask Edits */
       mask_edits?: components["schemas"]["MaskEdit"][];
       /** Renderer */
@@ -4731,6 +4758,11 @@ export interface components {
        * @enum {string}
        */
       kind: "single";
+      /**
+       * Labels
+       * @default []
+       */
+      labels: string[];
       /** Renderer */
       renderer:
         components["schemas"]["PhotoWarpRenderer"] | components["schemas"]["MarigoldRenderer"];
@@ -5060,6 +5092,11 @@ export interface components {
       height?: number | null;
       /** Kind */
       kind: ("colour-matrix" | "multiple" | "single") | null;
+      /**
+       * Labels
+       * @default []
+       */
+      labels: string[];
       maps?: components["schemas"]["MapReadinessResponse"] | null;
       /** Name */
       name: string;

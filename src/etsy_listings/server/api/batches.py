@@ -49,6 +49,7 @@ from etsy_listings.core.batches import (
     standing,
 )
 from etsy_listings.core.config.errors import ConfigLoadError
+from etsy_listings.core.config.settings import SettingsProblem
 from etsy_listings.core.workspace.facts import WorkspaceFacts
 from etsy_listings.server.api import app_state
 from etsy_listings.server.api.schemas import (
@@ -114,10 +115,9 @@ def _steps(request: Request, row: BatchRow) -> list[WorkflowStep]:
 
 def _batch_detail(request: Request, batch: Batch) -> BatchDetail:
     queue = _queue(request)
-    try:
-        concurrency = queue.concurrency()
-    except ConfigLoadError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    concurrency = queue.concurrency()
+    if isinstance(concurrency, SettingsProblem):
+        raise HTTPException(status_code=422, detail=concurrency.message)
     positions = {slot: place for place, slot in enumerate(queue.order(), start=1)}
     workspace = app_state.workspace(request)
     facts = WorkspaceFacts.gather(workspace)

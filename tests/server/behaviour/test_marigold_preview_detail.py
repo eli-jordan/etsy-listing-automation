@@ -10,6 +10,7 @@ from PIL import Image, ImageDraw, ImageFont
 
 from etsy_listings.core.render import load_template_config
 from etsy_listings.core.workspace.calibration import AutomaticMask, CalibrationStore
+from etsy_listings.core.workspace.template_state import template_state
 from etsy_listings.server.api.app import create_app
 
 from tests.support.marigold import PreparationRuntime, marigold_template
@@ -79,7 +80,7 @@ def test_editor_resolves_fine_artwork_at_1024_without_changing_full_preview(
 def _full_photo_print(workspace, photo_size):
     """A flat, all-visible print over nearly the whole photo."""
     Image.new("RGB", photo_size, "navy").save(workspace.template_scene_image("shirt"))
-    config = workspace.load_template_config("shirt").model_dump(mode="json")
+    config = template_state(workspace, "shirt").require().model_dump(mode="json")
     # A nearly full-photo print exercises detail above the old artwork cap.
     config["bounding_box"] = [
         {"x": x, "y": y} for x, y in [(0, 0), (2046, 0), (2046, 2046), (0, 2046)]
@@ -89,7 +90,7 @@ def _full_photo_print(workspace, photo_size):
         "fabric_texture": 0,
         "print_shine": 0,
     }
-    workspace.save_template_config("shirt", load_template_config(config))
+    CalibrationStore(workspace).write_config("shirt", load_template_config(config))
     store = CalibrationStore(workspace)
     store.install_automatic(
         "shirt",

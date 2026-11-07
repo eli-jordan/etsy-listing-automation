@@ -83,12 +83,24 @@ export function DeployPage() {
   const seenRef = useRef<string | null>(null);
   const leavingRef = useRef(false);
   const applyStartRef = useRef<Promise<void> | null>(null);
+  const [status, setStatus] = useState("");
+  /** The run this page is following, so a reconnect answering after Back
+   * opens nothing. */
+  const activeRunRef = useRef<string | null>(null);
+  const reconnectRef = useRef<(id: string) => void>(() => {});
 
   const openStream = useCallback((id: string, lastEventId?: number) => {
     streamRef.current?.close();
+    activeRunRef.current = id;
     streamRef.current = openRunStream(id, {
       ...(lastEventId === undefined ? {} : { lastEventId }),
       onEvent: (event) => setState((s) => applyRunEvent(s, event)),
+      // `openEventStream` does not retry, so this is what keeps the page live.
+      onError: () => {
+        if (activeRunRef.current !== id) return;
+        setStatus("Connection lost. Reconnecting…");
+        reconnectRef.current(id);
+      },
     });
   }, []);
 
@@ -98,22 +110,40 @@ export function DeployPage() {
       setRunId(detail.id);
       setState(deployState(detail.events));
       const last = detail.events.at(-1);
-      openStream(detail.id, last?.id);
+      if (TERMINAL_PHASES.has(detail.phase)) streamRef.current?.close();
+      else openStream(detail.id, last?.id);
     },
     [openStream],
   );
 
+  useEffect(() => {
+    reconnectRef.current = (id) => {
+      reattachRun(id)
+        .then(() => setStatus(""))
+        .catch(() => {
+          if (activeRunRef.current === id) {
+            setStatus("Could not reconnect to this run. Go back and try again.");
+          }
+        });
+    };
+  }, [reattachRun]);
+
   const startFreshPlan = useCallback(async () => {
     leavingRef.current = false;
     setApplyRequested(false);
-    const result = await createRun({ kind: "plan", scope: "listings", listings: [name] });
-    if (result.kind === "conflict") {
-      await reattachRun(result.activeRun);
-      return;
+    setStatus("");
+    try {
+      const result = await createRun({ kind: "plan", scope: "listings", listings: [name] });
+      if (result.kind === "conflict") {
+        await reattachRun(result.activeRun);
+        return;
+      }
+      setState(initialDeployState);
+      setRunId(result.run.id);
+      openStream(result.run.id);
+    } catch {
+      setStatus("Could not start a plan. Go back and try again.");
     }
-    setState(initialDeployState);
-    setRunId(result.run.id);
-    openStream(result.run.id);
   }, [name, openStream, reattachRun]);
 
   // Reattach or start (decision 9).
@@ -125,29 +155,34 @@ export function DeployPage() {
       })
       .catch(() => {});
 
-    currentRun(name).then(async (run) => {
-      if (!current) return;
-      if (run !== null && !TERMINAL_PHASES.has(run.phase)) {
-        const detail = await getRun(run.id);
+    currentRun(name)
+      .then(async (run) => {
         if (!current) return;
-        setRunId(detail.id);
-        setState(deployState(detail.events));
-        const last = detail.events.at(-1);
-        openStream(detail.id, last?.id);
-        return;
-      }
-      if (run !== null && !run.seen) {
-        const detail = await getRun(run.id);
-        if (!current) return;
-        setRunId(detail.id);
-        setState(deployState(detail.events));
-        return;
-      }
-      await startFreshPlan();
-    });
+        if (run !== null && !TERMINAL_PHASES.has(run.phase)) {
+          const detail = await getRun(run.id);
+          if (!current) return;
+          setRunId(detail.id);
+          setState(deployState(detail.events));
+          const last = detail.events.at(-1);
+          openStream(detail.id, last?.id);
+          return;
+        }
+        if (run !== null && !run.seen) {
+          const detail = await getRun(run.id);
+          if (!current) return;
+          setRunId(detail.id);
+          setState(deployState(detail.events));
+          return;
+        }
+        await startFreshPlan();
+      })
+      .catch(() => {
+        if (current) setStatus("Could not check this listing's runs. Go back and try again.");
+      });
 
     return () => {
       current = false;
+      activeRunRef.current = null;
       streamRef.current?.close();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- `startFreshPlan`/`openStream` are stable for a given `name`, and re-running this on their identity would refetch on every render.
@@ -205,6 +240,7 @@ export function DeployPage() {
     // editor query the old (already-seen) plan and miss the new run forever.
     // Wait only for registration, not for the apply itself to finish.
     await applyStartRef.current;
+    activeRunRef.current = null;
     streamRef.current?.close();
     // Only a plan run still under review (queued/planning/planned/previewing)
     // is worth asking the registry to cancel. An `apply` in progress is
@@ -224,25 +260,30 @@ export function DeployPage() {
 
   async function handleApply() {
     if (state.fingerprint === null) return;
-    const result = await createRun({
-      kind: "apply",
-      scope: "listings",
-      listings: [name],
-      expect: { [name]: state.fingerprint },
-    });
-    if (result.kind === "conflict") {
-      await reattachRun(result.activeRun);
-      return;
+    try {
+      const result = await createRun({
+        kind: "apply",
+        scope: "listings",
+        listings: [name],
+        expect: { [name]: state.fingerprint },
+      });
+      if (result.kind === "conflict") {
+        await reattachRun(result.activeRun);
+        return;
+      }
+      // Keep the reviewed plan on screen while the apply run performs its
+      // required re-plan. The fresh listing_planned event will replace it.
+      setState((current) => ({
+        ...initialDeployState,
+        plan: current.plan,
+        fingerprint: current.fingerprint,
+      }));
+      setRunId(result.run.id);
+      openStream(result.run.id);
+    } catch {
+      setApplyRequested(false);
+      setStatus("Could not start the apply. Try again.");
     }
-    // Keep the reviewed plan on screen while the apply run performs its
-    // required re-plan. The fresh listing_planned event will replace it.
-    setState((current) => ({
-      ...initialDeployState,
-      plan: current.plan,
-      fingerprint: current.fingerprint,
-    }));
-    setRunId(result.run.id);
-    openStream(result.run.id);
   }
 
   function beginApply() {
@@ -299,8 +340,14 @@ export function DeployPage() {
         )}
       </div>
 
+      {status !== "" && (
+        <p className="app__status" role="status">
+          {status}
+        </p>
+      )}
+
       <div className="dv-stack">
-        {(phase === "queued" || phase === "planning") && (
+        {(phase === "queued" || phase === "planning") && status === "" && (
           <div className="dv-planning">
             <span className="dv-spinner" aria-hidden="true" />
             <div>

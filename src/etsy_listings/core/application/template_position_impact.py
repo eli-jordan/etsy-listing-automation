@@ -26,8 +26,13 @@ from etsy_listings.core.application.position_coverage import templates_needing_c
 from etsy_listings.core.application.refusals import InvalidSettingsEditError, field_errors_of
 from etsy_listings.core.config.errors import ConfigLoadError
 from etsy_listings.core.config.listing_validation import positions_outside_limits
-from etsy_listings.core.config.settings import Settings, TemplatePositionLimits
+from etsy_listings.core.config.settings import (
+    Settings,
+    SettingsProblem,
+    TemplatePositionLimits,
+)
 from etsy_listings.core.render.config import AnyTemplate
+from etsy_listings.core.workspace.template_state import template_state
 from etsy_listings.core.workspace.workspace import Workspace
 
 
@@ -54,9 +59,14 @@ def candidate_limits(limits: Mapping[str, object]) -> TemplatePositionLimits:
         raise InvalidSettingsEditError(field_errors_of(exc)) from exc
 
 
-def template_position_impact(workspace: Workspace, limits: TemplatePositionLimits) -> LimitsImpact:
-    """Who ``limits`` would block, and which templates would need inference.
-    Raises :class:`ConfigLoadError` when the saved ``settings.yaml`` does not load."""
+def template_position_impact(
+    workspace: Workspace, limits: TemplatePositionLimits
+) -> LimitsImpact | SettingsProblem:
+    """Who ``limits`` would block, and which templates would need inference, or
+    why that cannot be said: the saved ``settings.yaml`` they widen does not load."""
+    settings = workspace.settings_or_problem()
+    if isinstance(settings, SettingsProblem):
+        return settings
     templates = _TemplateCache(workspace)
     outside = []
     for name in workspace.listing_names():
@@ -71,10 +81,9 @@ def template_position_impact(workspace: Workspace, limits: TemplatePositionLimit
         )
         if keys:
             outside.append(ListingOutside(name, tuple(keys)))
-    saved = workspace.load_settings().template_positions
+    needing_inference = templates_needing_coverage(workspace, limits, settings.template_positions)
     return LimitsImpact(
-        outside=tuple(outside),
-        templates_needing_inference=tuple(templates_needing_coverage(workspace, limits, saved)),
+        outside=tuple(outside), templates_needing_inference=tuple(needing_inference)
     )
 
 
@@ -98,7 +107,4 @@ class _TemplateCache:
     def _load(self, name: str) -> AnyTemplate | None:
         if name not in self._available:
             return None
-        try:
-            return self._workspace.load_template_config(name)
-        except ConfigLoadError:
-            return None
+        return template_state(self._workspace, name).config

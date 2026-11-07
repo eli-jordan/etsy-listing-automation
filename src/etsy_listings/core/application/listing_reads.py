@@ -43,6 +43,7 @@ from etsy_listings.core.config.listing_validation import (
 )
 from etsy_listings.core.config.money import Money
 from etsy_listings.core.config.pricing_plan import PricingPlan
+from etsy_listings.core.config.settings import SettingsProblem
 from etsy_listings.core.config.template_positions import TemplatePositions, layer_boxes
 from etsy_listings.core.engine.status import (
     ListingGesture,
@@ -466,10 +467,10 @@ def _check_inputs(
     # the listing's issue rather than a failed read.
     if not listing.template_positions:
         return inputs
-    limits = facts.template_position_limits()
-    if isinstance(limits, str):
-        return replace(inputs, template_position_limits_error=limits)
-    return replace(inputs, template_position_limits=limits)
+    settings = facts.settings()
+    if isinstance(settings, SettingsProblem):
+        return replace(inputs, template_position_limits_error=settings.message)
+    return replace(inputs, template_position_limits=settings.template_positions)
 
 
 def _business_issues(

@@ -13,6 +13,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from etsy_listings.core.render.positions import Pose, compose
+from etsy_listings.core.workspace.template_state import template_state
 from etsy_listings.core.workspace.workspace import Workspace
 from etsy_listings.server.api.app import create_app
 
@@ -39,7 +40,7 @@ def limits(*, smallest=0.8, largest=1.1, offset=0.1, rotation=15) -> dict[str, o
 
 
 def position_listing(workspace: Workspace, pose: Pose) -> None:
-    box = compose(workspace.load_template_config(TEMPLATE).bounding_box, pose)
+    box = compose(template_state(workspace, TEMPLATE).require().bounding_box, pose)
     edit_listing(
         workspace.root,
         template_positions={TEMPLATE: {"bounding_box": [point.model_dump() for point in box]}},
@@ -166,7 +167,7 @@ def test_impact_refuses_limits_the_save_would_refuse(client: TestClient) -> None
 def test_impact_names_the_placement_of_a_multiple_template(
     client: TestClient, workspace: Workspace
 ) -> None:
-    chart = workspace.load_template_config("colour-chart-01")
+    chart = template_state(workspace, "colour-chart-01").require()
     boxes = {placement.id: placement.bounding_box for placement in chart.placements}
     edit_listing(
         workspace.root,

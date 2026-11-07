@@ -7,7 +7,8 @@ import { controlledClock } from "../test/clock";
 import { deferred, must } from "../test/helpers";
 import { MARIGOLD, READY, SINGLE } from "../test/marigold";
 import type { TemplateConfigState } from "../types";
-import { AUTOSAVE_DEBOUNCE_MS } from "./useAutosave";
+import { AUTOSAVE_DEBOUNCE_MS } from "./writeLoop";
+import { useTemplateRename } from "./useTemplateRename";
 import { useTemplateSession } from "./useTemplateSession";
 
 // Node requires absolute Request URLs; browsers resolve the app's relative paths.
@@ -83,9 +84,12 @@ class FakeServer {
       const path = decodeURIComponent(new URL(request.url).pathname);
       const config = /^\/api\/templates\/(.+)\/config$/.exec(path);
       const preparation = /^\/api\/templates\/(.+)\/preparation$/.exec(path);
+      const rename = /^\/api\/templates\/(.+)\/rename$/.exec(path);
       this.log.push(`${request.method} ${path}`);
       if (config && request.method === "GET") return this.read(must(config[1]));
       if (config && request.method === "PUT") return this.write(must(config[1]), request);
+      if (rename && request.method === "POST")
+        return Response.json({ name: "renamed-tee", updated: [], unresolved: [] });
       if (preparation)
         return Response.json({ ...this.preparation, template: must(preparation[1]) });
       if (request.method === "DELETE" && path === "/api/preparation/jobs/job-1")
@@ -196,7 +200,7 @@ describe("useTemplateSession", () => {
     expect(result.current.dirty).toBe(true);
     // Same document, keys in another order: not an edit.
     const { renderer, bounding_box, kind } = PHOTO_WARP as typeof SINGLE;
-    act(() => result.current.update({ renderer, bounding_box, colour: null, kind }));
+    act(() => result.current.update({ renderer, bounding_box, colour: null, kind, labels: [] }));
     expect(result.current.dirty).toBe(false);
 
     await clock.advance(AUTOSAVE_DEBOUNCE_MS);
@@ -237,13 +241,13 @@ describe("useTemplateSession", () => {
     };
 
     act(() => result.current.update(edited(PHOTO_WARP, 1)));
-    let inFlight!: Promise<void>;
+    let inFlight!: Promise<unknown>;
     act(() => {
       inFlight = result.current.flush();
     });
     await waitFor(() => expect(result.current.save.kind).toBe("saving"));
     act(() => result.current.update(edited(PHOTO_WARP, 2)));
-    let second!: Promise<void>;
+    let second!: Promise<unknown>;
     act(() => {
       second = result.current.flush();
     });
@@ -260,7 +264,9 @@ describe("useTemplateSession", () => {
   it("writes an unchanged document when approved, where a flush sends nothing", async () => {
     const { result } = await opened();
 
-    await act(() => result.current.flush());
+    await act(async () => {
+      await result.current.flush();
+    });
     expect(server.puts).toHaveLength(0);
     await act(() => result.current.approve());
 
@@ -271,6 +277,57 @@ describe("useTemplateSession", () => {
       }),
     ]);
     expect(result.current.save.kind).toBe("saved");
+  });
+
+  it("sends a failed approval again with the next flush, though nothing changed", async () => {
+    const { result } = await opened();
+    server.onPut = () => Response.json({ detail: "boom" }, { status: 500 });
+
+    await act(async () => {
+      await result.current.approve();
+    });
+    server.onPut = null;
+    await act(async () => {
+      await result.current.flush();
+    });
+
+    expect(server.puts).toHaveLength(2);
+    expect(result.current.save.kind).toBe("saved");
+  });
+
+  it("answers an approval that could not be written", async () => {
+    const { result } = await opened();
+    server.onPut = () => Response.json({ detail: "boom" }, { status: 500 });
+
+    let settled: unknown;
+    await act(async () => {
+      settled = await result.current.approve();
+    });
+
+    expect(settled).toEqual({ written: false, message: "could not save template.yaml" });
+  });
+
+  it("reads again on a reload only after a save in flight has landed", async () => {
+    const { result } = await opened();
+    const landed = deferred<undefined>();
+    server.onPut = async () => {
+      await landed.promise;
+      return undefined;
+    };
+    act(() => result.current.update(edited(PHOTO_WARP, 6)));
+    act(() => void result.current.flush());
+    await waitFor(() => expect(server.puts).toHaveLength(1));
+
+    server.log.length = 0;
+    act(() => result.current.reload());
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve));
+    });
+    expect(server.log).toEqual([]);
+
+    landed.resolve(undefined);
+    await waitFor(() => expect(result.current.load).toBe("ready"));
+    expect(result.current.config).toEqual(edited(PHOTO_WARP, 6));
   });
 
   it("flushes a pending edit on a template switch, before reading the next template", async () => {
@@ -333,7 +390,9 @@ describe("useTemplateSession", () => {
     server.onPut = () => Response.json({ detail: "superseded" }, { status: 409 });
 
     act(() => result.current.update(edited(PHOTO_WARP, 5)));
-    await act(() => result.current.flush());
+    await act(async () => {
+      await result.current.flush();
+    });
 
     expect(result.current.save.kind).toBe("conflict");
   });
@@ -343,7 +402,9 @@ describe("useTemplateSession", () => {
     server.onPut = () => Response.json({ detail: "boom" }, { status: 500 });
     act(() => result.current.update(edited(PHOTO_WARP, 6)));
 
-    await act(() => result.current.flush());
+    await act(async () => {
+      await result.current.flush();
+    });
     expect(result.current.save).toEqual({
       kind: "failed",
       message: "could not save template.yaml",
@@ -351,7 +412,9 @@ describe("useTemplateSession", () => {
     expect(result.current.dirty).toBe(true);
 
     server.onPut = null;
-    await act(() => result.current.flush());
+    await act(async () => {
+      await result.current.flush();
+    });
     expect(result.current.save.kind).toBe("saved");
     expect(server.puts.map((put) => put.ifMatch)).toEqual(['"r1"', '"r1"']);
   });
@@ -369,7 +432,7 @@ describe("useTemplateSession", () => {
 
       act(() => result.current.setMaskEdits([{ placement_id: null, operations: [one] }]));
       expect(result.current.dirty).toBe(true);
-      let inFlight!: Promise<void>;
+      let inFlight!: Promise<unknown>;
       act(() => {
         inFlight = result.current.flush();
       });
@@ -384,7 +447,9 @@ describe("useTemplateSession", () => {
       await waitFor(() =>
         expect(result.current.maskEdits).toEqual([{ placement_id: null, operations: [two] }]),
       );
-      await act(() => result.current.flush());
+      await act(async () => {
+        await result.current.flush();
+      });
 
       expect(server.puts.map((put) => put.body.mask_edits)).toEqual([
         [{ placement_id: null, operations: [one] }],
@@ -404,11 +469,15 @@ describe("useTemplateSession", () => {
       const edits: MaskEdit[] = [{ placement_id: null, operations: [stroke(1)] }];
       act(() => result.current.setMaskEdits(edits));
 
-      await act(() => result.current.flush());
+      await act(async () => {
+        await result.current.flush();
+      });
       expect(result.current.maskEdits).toEqual(edits);
 
       server.onPut = null;
-      await act(() => result.current.flush());
+      await act(async () => {
+        await result.current.flush();
+      });
       expect(server.puts.map((put) => put.body.mask_edits)).toEqual([edits, edits]);
       expect(result.current.maskEdits).toEqual([]);
     });
@@ -465,6 +534,110 @@ describe("useTemplateSession", () => {
       await clock.advance(AUTOSAVE_DEBOUNCE_MS);
 
       await waitFor(() => expect(server.puts).toHaveLength(1));
+    });
+  });
+
+  describe("a label edit", () => {
+    const labelled = (labels: string[]) => ({ ...SINGLE, labels });
+
+    beforeEach(() => {
+      server.disk.set("tee", { config: SINGLE, revision: "r1" });
+    });
+
+    it("reaches saved only when the save lands, and quick edits land together", async () => {
+      const clock = controlledClock();
+      const { result, onCatalogChanged } = await opened();
+
+      act(() => result.current.update(labelled(["cosy"])));
+      act(() => result.current.update(labelled(["cosy", "warm"])));
+      expect(result.current.saved?.labels).toEqual([]);
+
+      await clock.advance(AUTOSAVE_DEBOUNCE_MS);
+      await waitFor(() => expect(result.current.saved?.labels).toEqual(["cosy", "warm"]));
+      expect(server.puts).toHaveLength(1);
+      expect(onCatalogChanged).toHaveBeenCalledWith("tee");
+    });
+
+    it("leaves what a preview names alone, and reads no preparation", async () => {
+      const clock = controlledClock();
+      const { result } = await opened();
+      await waitFor(() => expect(result.current.preparation).not.toBeNull());
+      const reads = () => server.log.filter((line) => line.endsWith("/preparation")).length;
+      const before = reads();
+
+      act(() => result.current.update(labelled(["cosy"])));
+      await clock.advance(AUTOSAVE_DEBOUNCE_MS);
+      await waitFor(() => expect(result.current.saved?.labels).toEqual(["cosy"]));
+      act(() => result.current.update(labelled(["cosy", "warm"])));
+      await clock.advance(AUTOSAVE_DEBOUNCE_MS);
+      await waitFor(() => expect(result.current.saved?.labels).toEqual(["cosy", "warm"]));
+
+      expect(result.current.calibrationRevision).toBe("r1");
+      expect(result.current.calibrationLabels).toEqual([]);
+      expect(result.current.relabelledRevisions).toEqual(["tee-w1", "tee-w2"]);
+      expect(reads()).toBe(before);
+    });
+
+    it("moves what a preview names once a save changes anything else", async () => {
+      const clock = controlledClock();
+      const { result } = await opened();
+      act(() => result.current.update(labelled(["cosy"])));
+      await clock.advance(AUTOSAVE_DEBOUNCE_MS);
+      await waitFor(() => expect(result.current.relabelledRevisions).toEqual(["tee-w1"]));
+
+      act(() => result.current.update(edited(labelled(["cosy"]), 9)));
+      await clock.advance(AUTOSAVE_DEBOUNCE_MS);
+
+      await waitFor(() => expect(result.current.calibrationRevision).toBe("tee-w2"));
+      expect(result.current.calibrationLabels).toEqual(["cosy"]);
+      expect(result.current.relabelledRevisions).toEqual([]);
+    });
+
+    it("reports saving from the edit on, however long a preview holds it", async () => {
+      const clock = controlledClock();
+      const { result } = await opened();
+
+      act(() => result.current.setPreviewPending(true));
+      act(() => result.current.update(labelled(["cosy"])));
+      expect(result.current.save.kind).toBe("saving");
+      await clock.advance(AUTOSAVE_DEBOUNCE_MS * 3);
+      expect(server.puts).toHaveLength(0);
+      expect(result.current.save.kind).toBe("saving");
+
+      act(() => result.current.setPreviewPending(false));
+      await waitFor(() => expect(result.current.save.kind).toBe("saved"));
+      expect(result.current.saved?.labels).toEqual(["cosy"]);
+    });
+
+    it("leaves saved as it was when the save fails, and the next save carries it", async () => {
+      const clock = controlledClock();
+      const { result } = await opened();
+      server.onPut = () => Response.json({ detail: "disk full" }, { status: 500 });
+
+      act(() => result.current.update(labelled(["cosy"])));
+      await clock.advance(AUTOSAVE_DEBOUNCE_MS);
+      await waitFor(() => expect(result.current.save.kind).toBe("failed"));
+      expect(result.current.saved?.labels).toEqual([]);
+      expect(result.current.config?.labels).toEqual(["cosy"]);
+
+      server.onPut = null;
+      act(() => result.current.update(labelled(["cosy", "warm"])));
+      expect(result.current.save.kind).toBe("failed");
+      await clock.advance(AUTOSAVE_DEBOUNCE_MS);
+      await waitFor(() => expect(result.current.saved?.labels).toEqual(["cosy", "warm"]));
+    });
+
+    it("keeps a conflict on show, since only a reload can clear it", async () => {
+      const clock = controlledClock();
+      const { result } = await opened();
+      server.disk.set("tee", { config: SINGLE, revision: "elsewhere" });
+
+      act(() => result.current.update(labelled(["cosy"])));
+      await clock.advance(AUTOSAVE_DEBOUNCE_MS);
+      await waitFor(() => expect(result.current.save.kind).toBe("conflict"));
+
+      act(() => result.current.update(labelled(["cosy", "warm"])));
+      expect(result.current.save.kind).toBe("conflict");
     });
   });
 
@@ -577,7 +750,9 @@ describe("useTemplateSession", () => {
       await waitFor(() => expect(result.current.calibrationRevision).toBe("prepared"));
 
       act(() => result.current.update(edited(PHOTO_WARP, 2)));
-      await act(() => result.current.flush());
+      await act(async () => {
+        await result.current.flush();
+      });
 
       expect(result.current.save.kind).toBe("saved");
       expect(server.puts.at(-1)?.ifMatch).toBe('"prepared"');
@@ -587,7 +762,9 @@ describe("useTemplateSession", () => {
       const { result } = await preparedAndCompleted(edited(PHOTO_WARP, 9));
 
       act(() => result.current.update(edited(PHOTO_WARP, 2)));
-      await act(() => result.current.flush());
+      await act(async () => {
+        await result.current.flush();
+      });
 
       expect(server.puts.at(-1)?.ifMatch).toBe('"r1"');
       expect(result.current.save.kind).toBe("conflict");
@@ -606,8 +783,48 @@ describe("useTemplateSession", () => {
 
       expect(result.current.calibrationRevision).toBe("r1");
       act(() => result.current.update(edited(PHOTO_WARP, 2)));
-      await act(() => result.current.flush());
+      await act(async () => {
+        await result.current.flush();
+      });
       expect(result.current.save.kind).toBe("conflict");
     });
+  });
+});
+
+describe("useTemplateRename", () => {
+  function renaming(onRenamed = vi.fn()) {
+    const hook = renderHook(() => {
+      const session = useTemplateSession("tee");
+      return { session, rename: useTemplateRename("tee", session.flush, onRenamed) };
+    });
+    return { ...hook, onRenamed };
+  }
+
+  it("refuses the rename and keeps the draft when the save fails", async () => {
+    const { result, onRenamed } = renaming();
+    await waitFor(() => expect(result.current.session.load).toBe("ready"));
+    server.onPut = () => Response.json({ detail: "boom" }, { status: 500 });
+    act(() => result.current.session.update(edited(PHOTO_WARP, 6)));
+
+    await act(() => result.current.rename.commit("renamed-tee"));
+
+    expect(server.log).not.toContain("POST /api/templates/tee/rename");
+    expect(onRenamed).not.toHaveBeenCalled();
+    expect(result.current.rename.refusal).toEqual({
+      name: "renamed-tee",
+      message: "could not save template.yaml",
+    });
+    expect(result.current.session.config).toEqual(edited(PHOTO_WARP, 6));
+  });
+
+  it("renames once the save has landed", async () => {
+    const { result, onRenamed } = renaming();
+    await waitFor(() => expect(result.current.session.load).toBe("ready"));
+    act(() => result.current.session.update(edited(PHOTO_WARP, 6)));
+
+    await act(() => result.current.rename.commit("renamed-tee"));
+
+    expect(server.disk.get("tee")?.config).toEqual(edited(PHOTO_WARP, 6));
+    expect(onRenamed).toHaveBeenCalledWith("renamed-tee");
   });
 });

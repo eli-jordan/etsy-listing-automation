@@ -62,6 +62,7 @@ function onlyRequest(): Request {
 
 const CONFIG: PhotoWarpTemplate<ColourMatrixTemplate> = {
   kind: "colour-matrix",
+  labels: [],
   bounding_box: [
     { x: 0, y: 0 },
     { x: 100, y: 0 },
@@ -160,19 +161,44 @@ describe("getTemplateConfig", () => {
     await expect(getTemplateConfig("flat-lay-01")).rejects.toBeInstanceOf(CalibratorApiError);
   });
 
-  // Existing contract: every error answer reads as "no template.yaml yet",
-  // not only the 404 the server sends for one -- a 500 is not told apart.
-  it.each([404, 500])(
-    "returns null for a %i, as for a template with no template.yaml",
-    async (status) => {
-      const { getTemplateConfig } = await answering(status, { detail: "no" });
+  it("returns null for a 404, as for a template with no template.yaml", async () => {
+    const { getTemplateConfig } = await answering(404, { detail: "no" });
 
-      expect(await getTemplateConfig("brand-new")).toBeNull();
-    },
-  );
+    expect(await getTemplateConfig("brand-new")).toBeNull();
+  });
+
+  // Only a 404 means "no template.yaml yet": a template that needs repair or
+  // will not parse must not be offered a kind.
+  it("rejects with the server's sentence when a config cannot be read", async () => {
+    const detail = "needs repair: the last save did not finish";
+    const { getTemplateConfig } = await answering(409, { detail });
+
+    await expect(getTemplateConfig("flat-lay-01")).rejects.toThrow(detail);
+  });
+
+  it("does not show a server fault's detail", async () => {
+    const { getTemplateConfig } = await answering(500, { detail: "traceback" });
+
+    await expect(getTemplateConfig("flat-lay-01")).rejects.toThrow("could not read");
+  });
 });
 
 describe("saveTemplateConfig", () => {
+  it("rejects a refused save with the server's sentence", async () => {
+    const detail = "Labels can be up to 30 characters";
+    const { saveTemplateConfig } = await answering(422, { detail });
+
+    await expect(saveTemplateConfig("tee", CONFIG, [], "sha256:read")).rejects.toThrow(detail);
+  });
+
+  it("keeps its own words when the refusal is not a sentence", async () => {
+    const { saveTemplateConfig } = await answering(422, { detail: [{ msg: "field required" }] });
+
+    await expect(saveTemplateConfig("tee", CONFIG, [], "sha256:read")).rejects.toThrow(
+      "could not save template.yaml",
+    );
+  });
+
   it("PUTs the config over the given revision with a request id, and returns the saved one", async () => {
     const saved = {
       ...CONFIG,

@@ -13,6 +13,7 @@ import pytest
 
 from etsy_listings.core.config import MarketWeights
 from etsy_listings.core.config.errors import ConfigLoadError
+from etsy_listings.core.config.settings import Settings, SettingsProblem
 from etsy_listings.core.workspace.workspace import Workspace
 
 SPEC_DEFAULTS = {
@@ -37,7 +38,7 @@ def _write(workspace: Workspace, text: str) -> Path:
 
 
 def _weights(workspace: Workspace) -> dict[str, float]:
-    return workspace.load_settings().market_seo.weights.model_dump()
+    return workspace.capture_settings().market_seo.weights.model_dump()
 
 
 def test_the_file_sits_next_to_shop_yaml(workspace: Workspace) -> None:
@@ -47,7 +48,7 @@ def test_the_file_sits_next_to_shop_yaml(workspace: Workspace) -> None:
 def test_a_missing_file_gives_the_spec_defaults(workspace: Workspace) -> None:
     assert not workspace.settings_file().exists()
     assert _weights(workspace) == SPEC_DEFAULTS
-    assert workspace.load_settings().market_seo.weights == MarketWeights()
+    assert workspace.capture_settings().market_seo.weights == MarketWeights()
 
 
 @pytest.mark.parametrize(
@@ -129,7 +130,7 @@ def test_an_invalid_value_names_the_file_and_the_key(
     path = _write(workspace, text)
 
     with pytest.raises(ConfigLoadError) as caught:
-        workspace.load_settings()
+        workspace.capture_settings()
 
     assert str(path) in str(caught.value)
     assert f"{key}:" in str(caught.value)
@@ -145,7 +146,7 @@ def test_a_file_that_is_not_a_mapping_names_the_file(workspace: Workspace, text:
     path = _write(workspace, text)
 
     with pytest.raises(ConfigLoadError) as caught:
-        workspace.load_settings()
+        workspace.capture_settings()
 
     assert str(path) in str(caught.value)
 
@@ -156,20 +157,20 @@ class TestBatchAi:
     *Settings*: the Admin page's slider covers the whole range)."""
 
     def test_the_default_is_one_at_a_time(self, workspace: Workspace) -> None:
-        assert workspace.load_settings().batch_ai.concurrency == 1
+        assert workspace.capture_settings().batch_ai.concurrency == 1
 
     @pytest.mark.parametrize("text", ["batch_ai:\n", "market_seo:\n  weights:\n"])
     def test_an_empty_section_is_the_default(self, workspace: Workspace, text: str) -> None:
         _write(workspace, text)
-        assert workspace.load_settings().batch_ai.concurrency == 1
+        assert workspace.capture_settings().batch_ai.concurrency == 1
 
     def test_the_limit_is_read_from_the_file(self, workspace: Workspace) -> None:
         _write(workspace, "batch_ai:\n  concurrency: 3\n")
-        assert workspace.load_settings().batch_ai.concurrency == 3
+        assert workspace.capture_settings().batch_ai.concurrency == 3
 
     def test_eight_is_the_highest_limit(self, workspace: Workspace) -> None:
         _write(workspace, "batch_ai:\n  concurrency: 8\n")
-        assert workspace.load_settings().batch_ai.concurrency == 8
+        assert workspace.capture_settings().batch_ai.concurrency == 8
 
     @pytest.mark.parametrize(
         ("text", "key"),
@@ -187,19 +188,23 @@ class TestBatchAi:
         _write(workspace, text)
 
         with pytest.raises(ConfigLoadError) as caught:
-            workspace.load_settings()
+            workspace.capture_settings()
 
         assert f"{key}:" in str(caught.value)
 
 
 def test_ai_defaults_and_ordered_preferences(workspace: Workspace) -> None:
-    assert [p.name for p in workspace.load_settings().ai.providers] == ["codex", "claude", "grok"]
+    assert [p.name for p in workspace.capture_settings().ai.providers] == [
+        "codex",
+        "claude",
+        "grok",
+    ]
     _write(
         workspace,
         "ai:\n  providers:\n    - name: grok\n      model: retired-model\n"
         "      effort: retired-effort\n    - name: codex\n      enabled: false\n",
     )
-    providers = workspace.load_settings().ai.providers
+    providers = workspace.capture_settings().ai.providers
     assert [(p.name, p.enabled, p.model, p.effort) for p in providers] == [
         ("grok", True, "retired-model", "retired-effort"),
         ("codex", False, None, None),
@@ -220,7 +225,7 @@ def test_ai_defaults_and_ordered_preferences(workspace: Workspace) -> None:
 def test_ai_refusals_name_file_and_dotted_key(workspace: Workspace, yaml: str, key: str) -> None:
     path = _write(workspace, "ai:\n  " + yaml + "\n")
     with pytest.raises(ConfigLoadError) as caught:
-        workspace.load_settings()
+        workspace.capture_settings()
     assert str(path) in str(caught.value)
     assert key + ":" in str(caught.value)
 
@@ -229,7 +234,7 @@ class TestAiTimeLimits:
     """``ai.step_limit_minutes`` and ``ai.run_limit_minutes`` (ADR-0057)."""
 
     def test_the_defaults_are_five_and_twenty_minutes(self, workspace: Workspace) -> None:
-        ai = workspace.load_settings().ai
+        ai = workspace.capture_settings().ai
         assert (ai.step_limit_minutes, ai.run_limit_minutes) == (5, 20)
 
     @pytest.mark.parametrize(
@@ -242,14 +247,14 @@ class TestAiTimeLimits:
             "ai:\n  providers: [{name: codex}]\n"
             f"  step_limit_minutes: {step}\n  run_limit_minutes: {run}\n",
         )
-        ai = workspace.load_settings().ai
+        ai = workspace.capture_settings().ai
         assert (ai.step_limit_minutes, ai.run_limit_minutes) == (step, run)
 
     def test_three_providers_at_fifteen_minutes_fit_at_forty_five(
         self, workspace: Workspace
     ) -> None:
         _write(workspace, "ai:\n  step_limit_minutes: 15\n  run_limit_minutes: 45\n")
-        assert workspace.load_settings().ai.run_limit_minutes == 45
+        assert workspace.capture_settings().ai.run_limit_minutes == 45
 
     def test_disabled_providers_do_not_count_towards_the_floor(self, workspace: Workspace) -> None:
         _write(
@@ -257,7 +262,7 @@ class TestAiTimeLimits:
             "ai:\n  providers: [{name: codex}, {name: claude, enabled: false}]\n"
             "  step_limit_minutes: 10\n  run_limit_minutes: 10\n",
         )
-        assert workspace.load_settings().ai.run_limit_minutes == 10
+        assert workspace.capture_settings().ai.run_limit_minutes == 10
 
     @pytest.mark.parametrize(
         ("yaml", "key"),
@@ -278,7 +283,7 @@ class TestAiTimeLimits:
     ) -> None:
         path = _write(workspace, "ai:\n  " + yaml + "\n")
         with pytest.raises(ConfigLoadError) as caught:
-            workspace.load_settings()
+            workspace.capture_settings()
         assert str(path) in str(caught.value)
         assert key + ":" in str(caught.value)
 
@@ -287,5 +292,45 @@ class TestAiTimeLimits:
     ) -> None:
         _write(workspace, "ai:\n  step_limit_minutes: 10\n  run_limit_minutes: 20\n")
         with pytest.raises(ConfigLoadError) as caught:
-            workspace.load_settings()
+            workspace.capture_settings()
         assert "at least 30" in str(caught.value)
+
+
+BROKEN_FILES = [b"batch_ai: {concurency: 2}\n", b"batch_ai: [unclosed", b"\xff\xfe not utf-8"]
+
+
+class TestABrokenFileMeansWhatTheReadSaysItMeans:
+    """``settings.yaml`` broken every way a hand edit breaks it, through the
+    three reads a caller chooses between by intent."""
+
+    @pytest.fixture(params=BROKEN_FILES)
+    def broken(self, workspace: Workspace, request: pytest.FixtureRequest) -> Path:
+        path = workspace.settings_file()
+        path.write_bytes(request.param)
+        return path
+
+    def test_capturing_it_for_a_run_raises(self, workspace: Workspace, broken: Path) -> None:
+        with pytest.raises(ConfigLoadError) as caught:
+            workspace.capture_settings()
+
+        assert str(broken) in str(caught.value)
+
+    def test_a_read_that_reports_gets_the_problem(self, workspace: Workspace, broken: Path) -> None:
+        problem = workspace.settings_or_problem()
+
+        assert isinstance(problem, SettingsProblem)
+        assert str(broken) in problem.message
+
+    def test_a_follow_up_that_may_skip_gets_nothing_and_it_is_logged(
+        self, workspace: Workspace, broken: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        assert workspace.settings_if_readable(skipping="covering a template") is None
+
+        assert "skipped covering a template" in caplog.text
+        assert str(broken) in caplog.text
+
+
+def test_with_no_broken_file_every_read_answers_the_settings(workspace: Workspace) -> None:
+    assert workspace.capture_settings() == Settings()
+    assert workspace.settings_or_problem() == Settings()
+    assert workspace.settings_if_readable(skipping="anything") == Settings()

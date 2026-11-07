@@ -58,6 +58,7 @@ describe("the default kind follows the photo count", () => {
     vi.spyOn(calibrator, "getColourReport").mockResolvedValue(ONE_PHOTO);
     const assignSpy = vi.spyOn(calibrator, "assignKind").mockResolvedValue({
       kind: "single",
+      labels: [],
       colour: null,
       bounding_box: [
         { x: 0, y: 0 },
@@ -147,6 +148,7 @@ describe("KindPicker", () => {
   it("assigns the chosen kind and reports it upward", async () => {
     const assignSpy = vi.spyOn(calibrator, "assignKind").mockResolvedValue({
       kind: "colour-matrix",
+      labels: [],
       bounding_box: [
         { x: 0, y: 0 },
         { x: 1, y: 0 },
@@ -171,6 +173,7 @@ describe("KindPicker", () => {
   it("assigns whichever kind is actually selected", async () => {
     const assignSpy = vi.spyOn(calibrator, "assignKind").mockResolvedValue({
       kind: "multiple",
+      labels: [],
       colour_coverage: "exact",
       placements: [],
       renderer: {

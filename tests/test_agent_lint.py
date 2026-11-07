@@ -14,6 +14,10 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 HOOK = ROOT / "scripts" / "agent_lint.py"
+HOOK_TIMEOUT_S = 300
+"""Only for a hook that hangs. Type-aware ESLint takes about 45s cold on its own,
+and `poe test` runs it beside the browser layer on every core, where it passed
+120s."""
 
 
 @pytest.fixture
@@ -33,7 +37,7 @@ def run_hook(payload: dict[str, object], **env: str) -> subprocess.CompletedProc
         capture_output=True,
         text=True,
         env={**os.environ, **env},
-        timeout=120,
+        timeout=HOOK_TIMEOUT_S,
         check=False,
     )
 

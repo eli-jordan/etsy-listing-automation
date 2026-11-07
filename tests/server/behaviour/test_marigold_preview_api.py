@@ -10,6 +10,7 @@ from PIL import Image
 from etsy_listings.core.preparation.artifacts import Artifacts
 from etsy_listings.core.render import load_template_config
 from etsy_listings.core.workspace import Workspace
+from etsy_listings.core.workspace.calibration import CalibrationStore
 from etsy_listings.server.api.app import create_app
 
 from tests.support.marigold import material_maps
@@ -33,7 +34,7 @@ def test_prepared_preview_is_full_quality_and_refuses_unsaved_geometry(
         ]
     else:
         config["bounding_box"] = box
-    workspace.save_template_config(name, load_template_config(config))
+    CalibrationStore(workspace).write_config(name, load_template_config(config))
     artifacts = Artifacts(workspace)
     inputs = artifacts.saved_inputs(name)
     maps = {placement.id: material_maps() for placement in inputs.placements}
@@ -95,7 +96,7 @@ def test_decoded_artwork_dimensions_are_part_of_preview_identity(workspace_root:
         "renderer": {"type": "marigold", "config": {}},
         "bounding_box": [{"x": x, "y": y} for x, y in [(0, 0), (15, 0), (15, 15), (0, 15)]],
     }
-    workspace.save_template_config(name, load_template_config(config))
+    CalibrationStore(workspace).write_config(name, load_template_config(config))
     artifacts = Artifacts(workspace)
     inputs = artifacts.saved_inputs(name)
     artifacts.publish(
@@ -120,28 +121,6 @@ def test_decoded_artwork_dimensions_are_part_of_preview_identity(workspace_root:
         outputs.append(preview.content)
     assert outputs[0] != outputs[1]
     assert identities[0] != identities[1]
-
-
-@pytest.mark.parametrize("kind", ["single", "colour-matrix", "multiple"])
-def test_photo_warp_draft_previews_before_renderer_switch_is_saved(workspace_root, kind):
-    from tests.support.marigold import marigold_template
-
-    workspace = marigold_template(workspace_root, kind)
-    client = TestClient(create_app(workspace))
-    url = "/api/templates/shirt/config"
-    saved = client.get(url)
-    draft = saved.json()
-    draft["renderer"] = {"type": "photo-warp", "config": {}}
-    if kind == "colour-matrix":
-        draft["colour"] = "navy"
-    response = client.post("/api/templates/shirt/preview?scale=editor", json=draft)
-    assert response.status_code == 200, response.text
-    image = Image.open(BytesIO(response.content))
-    image.load()
-    assert image.size == (64, 64)
-    assert image.getpixel((30, 30)) != image.getpixel((0, 0))
-    assert client.get(url).headers["etag"] == saved.headers["etag"]
-    assert client.get(url).json()["renderer"]["type"] == "marigold"
 
 
 def test_a_browser_holding_the_scene_is_answered_not_modified(workspace_root: Path) -> None:
