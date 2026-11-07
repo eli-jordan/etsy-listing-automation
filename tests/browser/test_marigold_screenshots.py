@@ -13,6 +13,8 @@ from PIL import Image
 
 from etsy_listings.core.render import load_template_config
 from etsy_listings.core.workspace import Workspace
+from etsy_listings.core.workspace.calibration import CalibrationStore
+from etsy_listings.core.workspace.template_state import template_state
 from etsy_listings.core.workspace.trees import remove_tree
 
 from tests.support.marigold import PreparationRuntime, PreparationWorker, marigold_template
@@ -54,12 +56,12 @@ def app_options(workspace_root: Path, preparation_runtime):
         remove_tree(workspace.template_dir(name))
     for name, kind in [("hanging-on-fence", "colour-matrix"), ("two-shirt-scene", "multiple")]:
         marigold_template(workspace_root, kind, name=name)
-        config = workspace.load_template_config(name).model_dump(mode="json")
+        config = template_state(workspace, name).require().model_dump(mode="json")
         boxes = replace_photos(workspace.template_dir(name), kind)
         targets = config["placements"] if kind == "multiple" else [config]
         for target, box in zip(targets, boxes, strict=True):
             target["bounding_box"] = [{"x": x, "y": y} for x, y in box]
-        workspace.save_template_config(name, load_template_config(config))
+        CalibrationStore(workspace).write_config(name, load_template_config(config))
     return {"preparation_runtime": preparation_runtime}
 
 

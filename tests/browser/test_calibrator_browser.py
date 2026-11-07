@@ -173,6 +173,33 @@ def test_no_console_errors_on_load(page) -> None:
 # --- colour-matrix kind ------------------------------------------------
 
 
+def _rail_names(page) -> list[str]:
+    return page.locator(".template-rail__item").evaluate_all(
+        "rows => rows.map(r => r.dataset.template)"
+    )
+
+
+def _rail_pill(page, label: str):
+    """The pill's × in the rail; the Labels bar has a chip of the same name."""
+    rail = page.get_by_role("navigation", name="Templates")
+    return rail.get_by_role("button", name=f"Remove {label}")
+
+
+def _labelled_rail(page, workspace_root: Path):
+    """Labels the two fixture templates by hand, as the seller's file would hold
+    them, and returns the rail's search box once they have loaded."""
+    for template, label in (
+        (COLOUR_MATRIX_TEMPLATE, "theme:christmas"),
+        (MULTIPLE_TEMPLATE, "theme:summer"),
+    ):
+        path = workspace_root / "mockup-templates" / template / "template.yaml"
+        with path.open("a", encoding="utf-8") as file:
+            file.write(f"labels: [{label}]\n")
+    page.reload()
+    _rail_row(page, COLOUR_MATRIX_TEMPLATE).get_by_text("theme:christmas").wait_for()
+    return page.get_by_role("combobox", name="Search templates")
+
+
 class TestTemplateRail:
     """The rail is the template picker now, so the things worth proving in a
     real browser are that it lists the workspace, that its thumbnails are
@@ -224,6 +251,104 @@ class TestTemplateRail:
             "rows => rows.map(r => r.dataset.template)"
         )
         assert listed == [MULTIPLE_TEMPLATE]
+
+    def test_the_keyboard_alone_turns_typed_text_into_a_pill(
+        self, page, workspace_root: Path
+    ) -> None:
+        """Typing `CHR` is a title search until Down and Enter make it a label,
+        and focus never leaves the box (interactions *Picking a label*)."""
+        box = _labelled_rail(page, workspace_root)
+
+        box.focus()
+        page.keyboard.type("CHR")
+        menu = page.get_by_role("listbox", name="Labels")
+        menu.wait_for()
+        assert _rail_names(page) == []
+        assert box.get_attribute("aria-expanded") == "true"
+        assert box.get_attribute("aria-controls") == menu.get_attribute("id")
+        assert box.get_attribute("aria-activedescendant") is None
+
+        page.keyboard.press("ArrowDown")
+        option = menu.get_by_role("option")
+        assert option.get_attribute("aria-selected") == "true"
+        assert box.get_attribute("aria-activedescendant") == option.get_attribute("id")
+
+        page.keyboard.press("Enter")
+        _rail_pill(page, "theme:christmas").wait_for()
+        menu.wait_for(state="detached")
+        assert box.input_value() == ""
+        assert box.evaluate("field => field === document.activeElement")
+        assert _rail_names(page) == [COLOUR_MATRIX_TEMPLATE]
+
+        page.keyboard.press("Backspace")
+        _rail_pill(page, "theme:christmas").wait_for(state="detached")
+        assert _rail_names(page) == [MULTIPLE_TEMPLATE, COLOUR_MATRIX_TEMPLATE]
+
+    def test_the_filter_lasts_until_the_page_is_left(self, page, workspace_root: Path) -> None:
+        """Opening a template keeps the pills and text; leaving the page drops
+        them (spec *Mockup Templates rail*)."""
+        box = _labelled_rail(page, workspace_root)
+        box.click()
+        page.get_by_role("option", name="theme:christmas").click()
+        box.fill("flat")
+
+        _select_template(page, COLOUR_MATRIX_TEMPLATE)
+        page.wait_for_selector(COLOUR_SELECT)
+        assert box.input_value() == "flat"
+        assert _rail_pill(page, "theme:christmas").count() == 1
+
+        page.get_by_role("link", name="Listings", exact=True).click()
+        page.wait_for_selector(".template-rail", state="detached")
+        page.go_back()
+        page.wait_for_selector(".template-rail__item")
+        assert box.input_value() == ""
+        assert _rail_pill(page, "theme:christmas").count() == 0
+
+    def test_a_long_hand_edited_pill_stays_inside_the_rail(
+        self, page, workspace_root: Path
+    ) -> None:
+        """A hand edit can pass the 30 characters a pill is sized for. It wraps
+        inside the 228px box, and its × keeps its size. The app's own `.input`
+        and `.tag` rules load after the box's, so this also proves its styles
+        win them in a real stylesheet order."""
+        long_label = "theme:averyveryverylonghandeditedlabelwithnospaces"
+        path = workspace_root / "mockup-templates" / COLOUR_MATRIX_TEMPLATE / "template.yaml"
+        with path.open("a", encoding="utf-8") as file:
+            file.write(f"labels: [{long_label}]\n")
+        page.reload()
+        box = page.get_by_role("combobox", name="Search templates")
+        box.click()
+        page.get_by_role("option", name=long_label).click()
+        _rail_pill(page, long_label).wait_for()
+
+        facts = page.evaluate(
+            """() => {
+              const box = document.querySelector('.label-search__box');
+              const pill = box.querySelector('.label-search__pill');
+              const x = pill.querySelector('.label-search__x');
+              const field = box.querySelector('.label-search__field');
+              const style = getComputedStyle(box);
+              return {
+                box: box.getBoundingClientRect().toJSON(),
+                pill: pill.getBoundingClientRect().toJSON(),
+                field: field.getBoundingClientRect().toJSON(),
+                x: x.getBoundingClientRect().toJSON(),
+                overflows: box.scrollWidth > box.clientWidth,
+                padding: style.paddingLeft,
+                background: style.backgroundColor,
+                pillFont: getComputedStyle(pill).fontSize,
+              };
+            }"""
+        )
+        assert facts["box"]["width"] == 228
+        assert not facts["overflows"]
+        assert facts["pill"]["right"] <= facts["box"]["right"]
+        assert facts["x"]["right"] <= facts["pill"]["right"]
+        assert facts["x"]["width"] == 16
+        assert facts["field"]["width"] >= 90
+        assert facts["padding"] == "8.8px"
+        assert facts["background"] == "rgb(249, 244, 237)"
+        assert facts["pillFont"] == "12px"
 
     def test_picking_a_row_loads_that_template(self, page) -> None:
         _select_template(page, COLOUR_MATRIX_TEMPLATE)
@@ -861,6 +986,59 @@ class TestKindPickerCreatesEachKind:
 
 
 # --- listings holding positions (spec, Recalibration) -------------------
+
+
+def _labels_bar(page):
+    return page.get_by_role("group", name="Labels")
+
+
+def test_a_label_added_and_removed_reaches_template_yaml_and_survives_a_reload(
+    page, workspace_root: Path
+) -> None:
+    """The chip waits for the save, the file holds what was saved, and removing
+    the last label takes the key out of the file again (spec *Storage*)."""
+    _select_template(page, COLOUR_MATRIX_TEMPLATE)
+    bar = _labels_bar(page)
+    saves = TrafficLog(page, "/config")
+
+    bar.get_by_role("button", name="Add label").click()
+    field = bar.get_by_role("textbox", name="Add a label")
+    field.fill("Road  Trip")
+    field.press("Enter")
+    saves.wait_for(lambda r: _method(r) == "PUT" and r.status == 200)
+    bar.get_by_text("road trip").wait_for()
+    assert bar.get_by_role("textbox", name="Add a label").count() == 0
+    assert bar.get_by_role("button", name="Add label").evaluate(
+        "button => button === document.activeElement"
+    )
+    assert _template_config(workspace_root, COLOUR_MATRIX_TEMPLATE)["labels"] == ["road trip"]
+    _rail_row(page, COLOUR_MATRIX_TEMPLATE).get_by_text("road trip").wait_for()
+
+    page.reload()
+    _select_template(page, COLOUR_MATRIX_TEMPLATE)
+    _labels_bar(page).get_by_text("road trip").wait_for()
+
+    saves = TrafficLog(page, "/config")
+    _labels_bar(page).get_by_role("button", name="Remove road trip").click()
+    saves.wait_for(lambda r: _method(r) == "PUT" and r.status == 200)
+    _labels_bar(page).get_by_text("road trip").wait_for(state="detached")
+    assert "labels" not in _template_config(workspace_root, COLOUR_MATRIX_TEMPLATE)
+
+
+def test_a_label_that_breaks_a_rule_explains_itself_and_sends_nothing(page) -> None:
+    _select_template(page, COLOUR_MATRIX_TEMPLATE)
+    bar = _labels_bar(page)
+    saves = TrafficLog(page, "/config")
+
+    bar.get_by_role("button", name="Add label").click()
+    field = bar.get_by_role("textbox", name="Add a label")
+    field.fill("xmas!")
+    field.press("Enter")
+
+    bar.get_by_text("Letters, numbers, spaces, hyphens and colons only").wait_for()
+    assert field.input_value() == "xmas!"
+    page.wait_for_timeout(1_000)
+    assert not [r for r in saves.entries if _method(r) == "PUT"]
 
 
 def test_the_calibrator_names_positioned_listings_and_leaves_them_alone(

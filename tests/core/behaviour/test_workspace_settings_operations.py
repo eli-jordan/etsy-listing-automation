@@ -144,7 +144,7 @@ def test_the_first_save_creates_the_file_with_only_the_edited_key(workspace: Wor
     assert settings_path(workspace).read_text(encoding="utf-8") == "batch_ai:\n  concurrency: 3\n"
     assert saved.revision == content_revision(settings_path(workspace).read_bytes())
     assert saved.settings.batch_ai.concurrency == 3
-    assert workspace.load_settings().batch_ai.concurrency == 3
+    assert workspace.capture_settings().batch_ai.concurrency == 3
 
 
 def test_a_save_changes_only_its_value_and_keeps_every_other_byte(
@@ -258,7 +258,7 @@ def test_a_file_created_since_the_missing_read_is_a_conflict(workspace: Workspac
             workspace, expected_revision=view.revision, changes={"batch_ai.concurrency": 2}
         )
 
-    assert workspace.load_settings().batch_ai.concurrency == 6
+    assert workspace.capture_settings().batch_ai.concurrency == 6
 
 
 @pytest.mark.parametrize(
@@ -438,7 +438,7 @@ def test_provider_rows_at_eof_can_move_or_gain_a_sibling(
     )
     assert path.read_bytes() == (expected + ending).replace("\n", newline).encode()
     assert [p.name for p in saved.settings.ai.providers] == [row["name"] for row in rows]
-    assert workspace.load_settings() == saved.settings
+    assert workspace.capture_settings() == saved.settings
     before = identity(path)
     again = workspace_settings.edit_settings(
         workspace, expected_revision=saved.revision, changes={"ai.providers": rows}

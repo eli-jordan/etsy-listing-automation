@@ -291,10 +291,14 @@ function useGestures() {
   const [dragging, setDragging] = useState(false);
   const drag = useRef<Drag | null>(null);
   const draftRef = useRef<Draft | null>(null);
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const nudging = useRef<{ timer: ReturnType<typeof setTimeout>; save: () => void } | null>(null);
+  // Saved now rather than dropped: a tab switch unmounts this, and the editor
+  // that takes the edit outlives it, or still flushes when it does not.
   useEffect(
     () => () => {
-      if (timer.current !== null) clearTimeout(timer.current);
+      if (nudging.current === null) return;
+      clearTimeout(nudging.current.timer);
+      nudging.current.save();
     },
     [],
   );
@@ -337,11 +341,12 @@ function useGestures() {
         const next = nudged(target.pose, key, shift, ctx.limits);
         if (next === null) return false;
         setDraftPose({ template: ctx.name, id: target.id, pose: next });
-        if (timer.current !== null) clearTimeout(timer.current);
-        timer.current = setTimeout(() => {
-          timer.current = null;
+        if (nudging.current !== null) clearTimeout(nudging.current.timer);
+        const save = () => {
+          nudging.current = null;
           ctx.commit(target, next);
-        }, NUDGE_DEBOUNCE_MS);
+        };
+        nudging.current = { timer: setTimeout(save, NUDGE_DEBOUNCE_MS), save };
         return true;
       },
     };

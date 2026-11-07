@@ -1,7 +1,10 @@
 """Controlled subprocess inference at the worker's model boundary."""
 
+import json
 import sys
 from pathlib import Path
+
+from etsy_listings.core.workspace.calibration import CalibrationStore, digest
 
 
 def controlled_worker(
@@ -315,8 +318,28 @@ def marigold_template(workspace_root, kind="single", name="shirt", renderer="mar
         ]
     else:
         config["bounding_box"] = box
-    workspace.save_template_config(name, load_template_config(config))
+    CalibrationStore(workspace).write_config(name, load_template_config(config))
     return workspace
+
+
+def interrupted_save(workspace, name="shirt") -> Path:
+    """What a save leaves if the process dies after durable commit intent: a
+    whole transaction, which any reader must treat as maybe still live."""
+    payload = workspace.template_config_file(name).read_bytes()
+    transaction = workspace.template_calibration_transaction(name)
+    transaction.mkdir(parents=True)
+    (transaction / "payload-0").write_bytes(payload)
+    staged = {
+        "destination": "template.yaml",
+        "payload": "payload-0",
+        "checksum": digest(payload),
+        "backup": "backup-0",
+    }
+    (transaction / "manifest.json").write_text(
+        json.dumps({"schema_version": 1, "commit_intent": True, "files": [staged]}),
+        encoding="utf-8",
+    )
+    return transaction
 
 
 def listing_with_marigold(workspace_root, *, prepare=False):
@@ -395,7 +418,7 @@ def small_print(workspace_root, name="tee"):
     photo.save(workspace.template_scene_image(name))
     box = [{"x": x, "y": y} for x, y in [(48, 48), (80, 48), (80, 80), (48, 80)]]
     config = {"kind": "single", "bounding_box": box, "renderer": {"type": "marigold"}}
-    workspace.save_template_config(name, load_template_config(config))
+    CalibrationStore(workspace).write_config(name, load_template_config(config))
     return workspace
 
 

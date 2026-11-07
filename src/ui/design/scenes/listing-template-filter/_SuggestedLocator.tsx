@@ -1,7 +1,7 @@
-// The Listing Images locator with the shared search box. It opens empty, and
-// the filter lasts until the seller leaves the listing. Nothing here is saved.
+// The Listing Images locator with the shared search box. It opens empty. The app
+// keeps the filter in the editor's view memory; this frame holds it in state.
 import { useState } from "react";
-import { LabelSearch } from "../../components/_LabelSearch";
+import { LabelSearch } from "../../../src/components/LabelSearch";
 import { hasTags, type PickerTemplate, templates } from "./_fixtures";
 import { ImagesScreen, LocatorShell, TemplateRow, usePicker } from "./_ImagesScreen";
 
@@ -12,15 +12,11 @@ export function SuggestedScreen({
   initialOpen = null,
   initialOn = [],
   initialQuery = "",
-  initialMenu = false,
-  initialActive = -1,
 }: {
   focus: string;
   initialOpen?: string | null;
   initialOn?: string[];
   initialQuery?: string;
-  initialMenu?: boolean;
-  initialActive?: number;
 }) {
   const picker = usePicker(focus);
   const [on, setOn] = useState(initialOn);
@@ -41,8 +37,6 @@ export function SuggestedScreen({
             onOn={setOn}
             query={query}
             onQuery={setQuery}
-            initialMenu={initialMenu}
-            initialActive={initialActive}
           />
 
           <div className="lf-result-line" role="status">

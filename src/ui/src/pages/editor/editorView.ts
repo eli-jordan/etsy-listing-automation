@@ -23,6 +23,10 @@ export function isString(value: unknown): value is string {
   return typeof value === "string";
 }
 
+export function isStringList(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every(isString);
+}
+
 export function isNullableString(value: unknown): value is string | null {
   return value === null || typeof value === "string";
 }

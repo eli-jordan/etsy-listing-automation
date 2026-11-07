@@ -1251,7 +1251,7 @@
       },
       "ColourMatrixPreviewRequest": {
         "additionalProperties": false,
-        "description": "Disambiguated from the other two preview shapes by required fields\nalone (``colour`` here, ``placements`` on ``MultiplePreviewRequest``,\nneither on ``SinglePreviewRequest``) -- extra fields are ignored rather\nthan forbidden, since a natural client pattern is spreading a whole\n``GET.../config`` response (which includes ``kind``) into the body. That\nis why all three take ``labels``, which no preview reads.",
+        "description": "Disambiguated from the other two preview shapes by required fields\nalone (``colour`` here, ``placements`` on ``MultiplePreviewRequest``,\nneither on ``SinglePreviewRequest``) -- extra fields are ignored rather\nthan forbidden, since a natural client pattern is spreading a whole\n``GET.../config`` response (which includes ``kind``) into the body. All\nthree take ``labels`` because an editor preview names with them the labels\nof its ``calibration_revision``. None draws them.",
         "properties": {
           "bounding_box": {
             "maxItems": 4,

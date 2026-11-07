@@ -11,6 +11,8 @@ import pytest
 from etsy_listings.core.engine.apply import execute
 from etsy_listings.core.engine.plan import build_plan
 from etsy_listings.core.engine.stages import STAGES
+from etsy_listings.core.workspace.calibration import CalibrationStore
+from etsy_listings.core.workspace.template_state import template_state
 
 from tests.support.builders import FIXTURE_LISTING as LISTING
 from tests.support.builders import a_context, a_lock
@@ -176,8 +178,8 @@ def test_marigold_configuration_blocks_plan_without_photo_warp_fallback(
     from etsy_listings.core.render.config import load_template_config
 
     ctx = a_context(workspace_root)
-    saved = ctx.workspace.load_template_config("flat-lay-01")
-    ctx.workspace.save_template_config(
+    saved = template_state(ctx.workspace, "flat-lay-01").require()
+    CalibrationStore(ctx.workspace).write_config(
         "flat-lay-01",
         load_template_config(
             {**saved.model_dump(mode="json"), "renderer": {"type": "marigold", "config": {}}}

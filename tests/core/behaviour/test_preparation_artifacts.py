@@ -5,6 +5,7 @@ import pytest
 
 from etsy_listings.core.preparation.artifacts import Artifacts, Provenance, PublishOptions
 from etsy_listings.core.workspace import Workspace
+from etsy_listings.core.workspace.calibration import CalibrationStore
 
 from tests.support.marigold import material_maps, preparation_inputs
 
@@ -194,7 +195,7 @@ def test_saved_readiness_reuses_durable_evidence_identity_without_runtime_or_cac
             "renderer": {"type": "marigold", "config": {}},
         }
     )
-    workspace.save_template_config("shirt", config)
+    CalibrationStore(workspace).write_config("shirt", config)
     store = Artifacts(workspace)
     inputs = store.saved_inputs("shirt", evidence={None: "c" * 64})
     store.publish("shirt", inputs, {None: material_maps()}, current_inputs=lambda: inputs)
@@ -209,7 +210,7 @@ def test_saved_readiness_reuses_durable_evidence_identity_without_runtime_or_cac
             )
         }
     )
-    workspace.save_template_config("shirt", changed)
+    CalibrationStore(workspace).write_config("shirt", changed)
     assert store.readiness("shirt", store.saved_inputs("shirt")).reason == "placement_changed"
 
 
@@ -460,7 +461,7 @@ def test_explicit_photo_reset_capture_only_bypasses_photo_mismatch(workspace_roo
     workspace.template_dir("shirt").mkdir()
     photo = workspace.template_scene_image("shirt")
     Image.new("RGB", (16, 16), "navy").save(photo)
-    workspace.save_template_config(
+    CalibrationStore(workspace).write_config(
         "shirt",
         load_template_config(
             {

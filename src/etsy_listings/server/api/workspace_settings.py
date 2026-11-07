@@ -1,7 +1,5 @@
 """Settings reads and revision-checked saves (Admin plan PR 4, ADR-0055)."""
 
-from contextlib import suppress
-
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Request
 from fastapi.responses import JSONResponse
 
@@ -13,7 +11,7 @@ from etsy_listings.core.application.refusals import (
     SettingsRevisionConflictError,
 )
 from etsy_listings.core.config.errors import ConfigLoadError
-from etsy_listings.core.config.settings import PROVIDER_NAMES, AiProviderSettings
+from etsy_listings.core.config.settings import PROVIDER_NAMES, AiProviderSettings, SettingsProblem
 from etsy_listings.server.api.schemas import (
     ListingOutsideBody,
     SettingsSaveRefusal,
@@ -84,8 +82,8 @@ def edit_settings(
     workspace = request.app.state.workspace
     before = None
     if workspace_settings.TEMPLATE_POSITIONS in changes:
-        with suppress(ConfigLoadError):
-            before = workspace.load_settings().template_positions
+        saved = workspace.settings_if_readable(skipping="comparing saved position limits")
+        before = saved.template_positions if saved is not None else None
     try:
         view = workspace_settings.edit_settings(
             workspace,
@@ -128,16 +126,13 @@ def template_positions_impact(
         limits = template_position_impact.candidate_limits(body.limits)
     except InvalidSettingsEditError as exc:
         return _invalid(exc)
-    try:
-        impact = template_position_impact.template_position_impact(
-            request.app.state.workspace, limits
-        )
-    except ConfigLoadError as exc:
+    impact = template_position_impact.template_position_impact(request.app.state.workspace, limits)
+    if isinstance(impact, SettingsProblem):
         # An unreadable settings.yaml is refused naming the file and key, as
         # listings report it (a51ec1f4), never a server error.
         return JSONResponse(
             status_code=422,
-            content=SettingsSaveRefusal(kind="invalid", message=str(exc)).model_dump(),
+            content=SettingsSaveRefusal(kind="invalid", message=impact.message).model_dump(),
         )
     return TemplatePositionImpactResponse(
         outside=[

@@ -64,7 +64,6 @@ from etsy_listings.core.application.listing_reads import (
     list_listings as listing_rows,
 )
 from etsy_listings.core.application.position_coverage import cover_listing_positions
-from etsy_listings.core.application.prepared_previews import saved_scene
 from etsy_listings.core.application.pricing_plans import (
     load_candidate_pricing_plans,
     pricing_plan_options,
@@ -73,6 +72,7 @@ from etsy_listings.core.application.pricing_plans import (
 from etsy_listings.core.application.refusals import (
     ListingMissingError,
 )
+from etsy_listings.core.application.scene_previews import SceneLayers, saved_scene
 from etsy_listings.core.application.scene_warming import SceneWarmer
 from etsy_listings.core.clients.etsy.tokens import EtsyAuthError, EtsyRefreshBusyError
 from etsy_listings.core.clients.etsy.transport import EtsyApiError
@@ -90,6 +90,8 @@ from etsy_listings.core.workspace.workspace import Workspace
 from etsy_listings.server.api import app_state
 from etsy_listings.server.api.editor_projections import garment_fields, wire_prices
 from etsy_listings.server.api.etsystate import etsy_states
+from etsy_listings.server.api.imagecache import PREVIEW_IMAGES
+from etsy_listings.server.api.scene_responses import ScenePreviewQuery, scene_response
 from etsy_listings.server.api.schemas import (
     CommonCopySummary,
     CreateEtsySectionRequest,
@@ -105,10 +107,6 @@ from etsy_listings.server.api.schemas import (
     PricingPlanSummary,
     RenameListingRequest,
     WorkspaceSummary,
-)
-from etsy_listings.server.api.templates import (
-    ScenePreviewQuery,
-    render_preview_response,
 )
 from etsy_listings.server.api.thumbnails import thumbnail_response
 
@@ -441,16 +439,14 @@ def scene_preview(
         raise HTTPException(
             status_code=404, detail=f"listing {target.name!r} does not load"
         ) from exc
-    scene = saved_scene(
+    picture = saved_scene(
         workspace,
         template,
-        colour=colour,
-        design=listing.artwork,
-        boxes=listing.boxes(template),
+        SceneLayers(colour, listing.artwork, listing.boxes(template)),
+        size=scale,
+        images=PREVIEW_IMAGES,
     )
-    return render_preview_response(
-        scene, scale, workspace=workspace, if_none_match=request.headers.get("if-none-match")
-    )
+    return scene_response(picture, if_none_match=request.headers.get("if-none-match"))
 
 
 @support_router.get("/api/listing-draft", response_model=ListingDetail)

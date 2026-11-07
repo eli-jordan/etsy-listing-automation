@@ -2,7 +2,9 @@
   position: relative;
 }
 
-.label-search__box {
+/* Two classes throughout: the bundle puts index.css after this file, and its
+   .input and .tag would otherwise win at equal specificity. */
+.input.label-search__box {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -18,8 +20,7 @@
   width: 15px;
   height: 15px;
   flex: none;
-  fill: none;
-  stroke: color-mix(in srgb, var(--color-text) 55%, transparent);
+  color: color-mix(in srgb, var(--color-text) 55%, transparent);
 }
 
 .label-search__box:focus-within {
@@ -42,8 +43,11 @@
   color: var(--color-text);
 }
 
-.label-search__pill {
+.tag.label-search__pill {
   gap: var(--space-1);
+  /* A hand-edited label can pass the 30 characters a pill is sized for. */
+  max-width: 100%;
+  overflow-wrap: anywhere;
   padding-right: 4px;
   border: 1px solid var(--color-divider);
   font-size: 12px;
@@ -51,6 +55,7 @@
 
 .label-search__x {
   display: inline-flex;
+  flex: none;
   width: 16px;
   height: 16px;
   padding: 3px;
