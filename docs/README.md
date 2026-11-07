@@ -42,6 +42,7 @@ identify the start of the work, not its release date.
 | Static analysis | [Spec](features/static-analysis-20261031/spec.md) | — | [Plan](features/static-analysis-20261031/plan.md) |
 | Mockup template rename | [Spec](features/template-rename-20261105/spec.md) | | |
 | Per-listing template positions | [Spec](features/template-positions-20261102/spec.md) | [Interactions](features/template-positions-20261102/interactions.md) | [Plan](features/template-positions-20261102/plan.md) |
+| Mockup template labels | [Spec](features/template-labels-20261106/spec.md) | [Interactions](features/template-labels-20261106/interactions.md) | [Plan](features/template-labels-20261106/plan.md) |
 
 Test suite quality also keeps an [audit-to-delivery map](features/test-suite-quality-20261003/coverage-map.md)
 and an [execution record](features/test-suite-quality-20261003/execution.md)

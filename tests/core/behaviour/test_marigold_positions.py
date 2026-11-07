@@ -15,6 +15,7 @@ from etsy_listings.core.engine.stage import Blocked
 from etsy_listings.core.engine.stages.render import RenderStage
 from etsy_listings.core.preparation import position_fits
 from etsy_listings.core.render.positions import Pose, compose
+from etsy_listings.core.workspace.template_state import template_state
 
 from tests.support.builders import FIXTURE_LISTING, a_context, a_lock, copy_listing, edit_listing
 from tests.support.marigold import listing_with_marigold, listing_with_prepared_marigold
@@ -23,7 +24,7 @@ POSE = Pose(scale=0.9, offset_x=0.05, offset_y=-0.04, rotation=10)
 
 
 def position(workspace, pose: Pose = POSE) -> dict[str, object]:
-    box = compose(workspace.load_template_config("shirt").bounding_box, pose)
+    box = compose(template_state(workspace, "shirt").require().bounding_box, pose)
     return {"shirt": {"bounding_box": [point.model_dump() for point in box]}}
 
 

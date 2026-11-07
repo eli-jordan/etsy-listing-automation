@@ -22,6 +22,7 @@ from etsy_listings.core.clients.etsy.fakes import FakeEtsyListingClient, FakeEts
 from etsy_listings.core.clients.etsy.models import ShopSection
 from etsy_listings.core.clients.etsy.tokens import EtsyRefreshBusyError
 from etsy_listings.core.engine.lock import Lockfile
+from etsy_listings.core.workspace import facts
 from etsy_listings.core.workspace.workspace import Workspace
 from etsy_listings.server.api import etsystate
 from etsy_listings.server.api.app import create_app
@@ -640,13 +641,13 @@ class TestListingStatus:
         """
         copy_listing(workspace_root, "second-listing")
         parsed: list[str] = []
-        real = Workspace.load_template_config
+        real = facts.template_state
 
-        def counting(self: Workspace, template: str) -> object:
+        def counting(workspace: Workspace, template: str) -> object:
             parsed.append(template)
-            return real(self, template)
+            return real(workspace, template)
 
-        monkeypatch.setattr(Workspace, "load_template_config", counting)
+        monkeypatch.setattr(facts, "template_state", counting)
 
         rows = client.get("/api/listings").json()
 

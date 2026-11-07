@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { currentRun } from "../../api/runs";
 import type { RunSummary } from "../../types";
+import type { Settled } from "../../hooks/writeLoop";
 
 /**
  * The editor page-head's own control (docs/features/deploy-20260917/spec.md decision 8):
@@ -41,8 +42,9 @@ export function DeployControl({
   name: string;
   /** Drains any edit still waiting on the autosave debounce -- the same
    * flush a tab switch already triggers, so a plan started the instant
-   * after typing reviews the listing just written, not the one before it. */
-  flush: () => Promise<void>;
+   * after typing reviews the listing just written, not the one before it.
+   * Answers whether it was written. */
+  flush: () => Promise<Settled>;
 }) {
   const navigate = useNavigate();
   const [run, setRun] = useState<RunSummary | null>(null);
@@ -64,8 +66,10 @@ export function DeployControl({
   const deployUrl = `/listings/${encodeURIComponent(name)}/deploy`;
 
   async function startDeploy() {
-    await flush();
-    navigate(deployUrl);
+    const settled = await flush();
+    // A plan of the old file would review something the seller has moved on
+    // from. The page head already says why it stayed.
+    if (settled.written) navigate(deployUrl);
   }
 
   switch (pageHeadState(run)) {

@@ -10,6 +10,7 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 
 from etsy_listings.core.render.positions import Pose, compose
+from etsy_listings.core.workspace.template_state import template_state
 from etsy_listings.server.api.app import create_app
 
 from tests.support.builders import FIXTURE_LISTING, edit_listing
@@ -25,7 +26,7 @@ URL = f"/api/listings/{FIXTURE_LISTING}"
 
 def _position(workspace, template: str) -> dict[str, object]:
     box = compose(
-        workspace.load_template_config(template).bounding_box, Pose(scale=0.95, rotation=5)
+        template_state(workspace, template).require().bounding_box, Pose(scale=0.95, rotation=5)
     )
     return {template: {"bounding_box": [point.model_dump() for point in box]}}
 
@@ -69,7 +70,7 @@ def test_the_server_prunes_fits_at_startup_and_after_warming(workspace_root: Pat
         assert app.state.scene_warmer.wait_idle(timeout=30)
         (first,) = workspace.position_fits()
         moved = compose(
-            workspace.load_template_config("shirt").bounding_box, Pose(scale=0.9, rotation=-7)
+            template_state(workspace, "shirt").require().bounding_box, Pose(scale=0.9, rotation=-7)
         )
         client.patch(
             URL,

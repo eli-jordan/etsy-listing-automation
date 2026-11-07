@@ -13,6 +13,7 @@ const row = (name: string): TemplateSummary => ({
   colours: [],
   photos: [],
   has_config: true,
+  labels: [],
   status: "calibrated",
   status_reason: null,
 });

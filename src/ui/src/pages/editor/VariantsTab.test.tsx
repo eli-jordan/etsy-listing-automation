@@ -28,6 +28,7 @@ function template(over: Partial<TemplateSummary> & { name: string }): TemplateSu
     colours: ["black", "ivory"],
     photos: [],
     has_config: true,
+    labels: [],
     status: "calibrated",
     status_reason: null,
     width: 480,

@@ -59,7 +59,12 @@ def hash_file(path: Path) -> str:
     digest is two chances for the prefix to differ and every listing to show a
     diff.
     """
-    return f"sha256:{hashlib.sha256(path.read_bytes()).hexdigest()}"
+    return hash_bytes(path.read_bytes())
+
+
+def hash_bytes(data: bytes) -> str:
+    """:func:`hash_file`'s answer for bytes already in hand."""
+    return f"sha256:{hashlib.sha256(data).hexdigest()}"
 
 
 def canonical_hash(applied: dict[str, Any]) -> str:

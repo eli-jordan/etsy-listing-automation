@@ -63,15 +63,16 @@ from typing import Literal, override
 
 from pydantic import BaseModel, ConfigDict
 
-from etsy_listings.core.config.errors import ConfigLoadError
 from etsy_listings.core.config.garment_profile import GarmentProfile
 from etsy_listings.core.config.listing import Listing, TemplateMediaEntry
+from etsy_listings.core.config.settings import SettingsProblem
 from etsy_listings.core.config.template_positions import layer_boxes
 from etsy_listings.core.engine.change import Action, Verdict
 from etsy_listings.core.engine.context import RunContext, Swatch
 from etsy_listings.core.engine.lock import (
     Lockfile,
     canonical_hash,
+    hash_bytes,
     hash_file,
     to_workspace_relative_posix,
 )
@@ -116,7 +117,9 @@ from etsy_listings.core.render.pipeline import Layer, render_scene
 from etsy_listings.core.render.swatch import sample_swatch
 from etsy_listings.core.render.types import RGB, RGBA
 from etsy_listings.core.workspace.facts import template_info
+from etsy_listings.core.workspace.template_state import TemplateLoaded, template_state
 from etsy_listings.core.workspace.workspace import Workspace
+from etsy_listings.core.workspace.yaml_source import without_top_level_key
 
 PREVIEW_WORKERS = 2
 """Maximum full-size preview renders in flight.
@@ -309,7 +312,7 @@ class RenderDesired:
     Absolute and machine-specific, so it never enters a hash -- see
     ``_input_hash``, which names the fields that do."""
     works: tuple[SceneWork, ...]  # first-seen media order, deduped
-    template_hash: dict[str, str]  # template name -> sha256 of its template.yaml
+    template_hash: dict[str, str]  # template name -> _template_hash of its template.yaml
     base_hash: dict[str, str]  # scene key -> sha256 of that scene's photo
     preview_exists: dict[str, bool] = field(default_factory=dict)
     """Scene key -> whether ``Workspace.preview_file`` already holds a preview
@@ -636,20 +639,29 @@ class _Templates:
     hashes: dict[str, str]
 
 
+def _template_hash(path: Path) -> str:
+    """The hash of ``template.yaml`` as render input: the file's own bytes, not
+    the re-serialised model. Hashing a normalised dump would miss an edit that
+    pydantic round-trips away, and the question here is "did the file change?".
+
+    Labels are the one exception (spec *Keeping labels out of rendering*): they
+    are for finding a template, and never change a pixel, so a label edit must
+    not mark every scene using it stale. A file with no ``labels`` key hashes
+    exactly as it always has, so nothing re-renders for this rule. A key that
+    cannot be removed stays in, and a label edit there costs one re-render."""
+    return hash_bytes(without_top_level_key(path.read_bytes(), "labels"))
+
+
 def _load_template(workspace: Workspace, template_name: str) -> tuple[AnyTemplate, str] | Blocked:
     config_path = workspace.template_config_file(template_name)
     blocked = check_render_template(template_name, config_path)
     if blocked is not None:
         return blocked
-    # The file's own bytes, not the re-serialised model: hashing a
-    # normalised dump would miss an edit that pydantic round-trips
-    # away, and the question here is "did the file change?".
-    digest = hash_file(config_path)
-    try:
-        config = workspace.load_template_config(template_name)
-    except ConfigLoadError as exc:
-        return Blocked(str(exc))
-    return config, digest
+    digest = _template_hash(config_path)
+    state = template_state(workspace, template_name)
+    if not isinstance(state, TemplateLoaded):
+        return Blocked(state.reason)
+    return state.config, digest
 
 
 def _load_templates(
@@ -673,11 +685,12 @@ def _check_template_inputs(
     # the listing would not change.
     if listing_cfg.template_positions:
         # A broken settings.yaml is this stage refusing, never a raise (ADR-0053).
-        try:
-            limits = workspace.load_settings().template_positions
-        except ConfigLoadError as exc:
-            return Blocked(str(exc))
-        blocked = check_template_positions(listing_cfg, templates.configs, limits, name=listing)
+        settings = workspace.settings_or_problem()
+        if isinstance(settings, SettingsProblem):
+            return Blocked(settings.message)
+        blocked = check_template_positions(
+            listing_cfg, templates.configs, settings.template_positions, name=listing
+        )
         if blocked is not None:
             return blocked
     for name, config in templates.configs.items():

@@ -3,7 +3,7 @@ tab finds them in the scene cache rather than waiting seconds per picture.
 
 A save that leaves a listing with a template entry in ``media:`` asks
 :meth:`SceneWarmer.request` for that listing. One worker thread then takes
-each template entry through :func:`~etsy_listings.core.application.prepared_previews.saved_scene`
+each template entry through :func:`~etsy_listings.core.application.scene_previews.saved_scene`
 at full size -- the very path ``GET /api/listings/{name}/scene-preview``
 takes -- so what it stores is under the identity that endpoint looks up, and
 the render stage's too. Already-cached scenes cost a digest lookup.
@@ -39,12 +39,14 @@ from collections import OrderedDict
 from collections.abc import Callable
 
 from etsy_listings.core.application.listing_reads import listing_scenes
-from etsy_listings.core.application.mockup_templates import PreviewScene
 from etsy_listings.core.application.position_fit_pruning import prune_position_fits
-from etsy_listings.core.application.prepared_previews import photo_warp_preview, saved_scene
+from etsy_listings.core.application.scene_previews import (
+    DISK_IMAGES,
+    SceneLayers,
+    saved_scene,
+)
 from etsy_listings.core.config.listing import TemplateMediaEntry
 from etsy_listings.core.errors import UserFacingError
-from etsy_listings.core.render import load_design, load_template_base
 from etsy_listings.core.workspace.workspace import Workspace
 
 logger = logging.getLogger(__name__)
@@ -74,15 +76,13 @@ def warm_scene(workspace: Workspace, name: str, template: str, colour: str | Non
     or find it there, at the listing's saved position. Refusals are the
     preview endpoint's."""
     listing = listing_scenes(workspace, name)
-    scene = saved_scene(
+    saved_scene(
         workspace,
         template,
-        colour=colour,
-        design=listing.artwork,
-        boxes=listing.boxes(template),
+        SceneLayers(colour, listing.artwork, listing.boxes(template)),
+        size="full",
+        images=DISK_IMAGES,
     )
-    if isinstance(scene, PreviewScene):
-        photo_warp_preview(workspace, scene, base=load_template_base, design=load_design)
 
 
 class SceneWarmer:

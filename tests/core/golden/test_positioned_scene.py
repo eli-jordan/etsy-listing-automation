@@ -13,6 +13,7 @@ from etsy_listings.core.engine.apply import execute
 from etsy_listings.core.engine.plan import build_plan
 from etsy_listings.core.engine.stages import STAGES
 from etsy_listings.core.render.positions import Pose, compose
+from etsy_listings.core.workspace.template_state import template_state
 
 from tests.support.builders import FIXTURE_LISTING as LISTING
 from tests.support.builders import a_context, a_lock, edit_listing
@@ -23,8 +24,8 @@ GOLDENS = Path(__file__).parent / "goldens"
 @pytest.fixture
 def rendered(workspace_root: Path):
     workspace = a_context(workspace_root).workspace
-    flat = workspace.load_template_config("flat-lay-01")
-    chart = workspace.load_template_config("colour-chart-01")
+    flat = template_state(workspace, "flat-lay-01").require()
+    chart = template_state(workspace, "colour-chart-01").require()
     placement = next(p for p in chart.placements if p.id == "fixture-placement-1")
 
     def corners(box):

@@ -1,5 +1,10 @@
 import { useEffect, useState, useSyncExternalStore } from "react";
-import { getTemplateConfig, saveTemplateConfig, TemplateConflictError } from "../api/calibrator";
+import {
+  CalibratorApiError,
+  getTemplateConfig,
+  saveTemplateConfig,
+  TemplateConflictError,
+} from "../api/calibrator";
 import {
   cancelPreparation,
   getPreparation,
@@ -9,7 +14,7 @@ import {
   type Preparation,
 } from "../api/preparation";
 import type { TemplateConfigState } from "../types";
-import { AUTOSAVE_DEBOUNCE_MS } from "./useAutosave";
+import { WriteLoop, WRITTEN, type Settled } from "./writeLoop";
 import { usePreparation } from "./usePreparation";
 
 /** Where the open template stands with the disk, as the header reports it.
@@ -32,6 +37,8 @@ export type PreparationAction = "prepare" | "prepare_again" | "retry";
 
 export interface TemplateSession {
   load: TemplateLoad;
+  /** Why the template could not be read, when the server said. */
+  loadError: string | null;
   /** The draft: the document as last read or saved, with every edit since. */
   config: TemplateConfigState | null;
   /** The document as this session last read or wrote it. */
@@ -41,8 +48,16 @@ export interface TemplateSession {
   /** Mask strokes drawn but not yet committed by a save. */
   maskEdits: MaskEdit[];
   /** The revision a preview's `calibration_revision` names: the one this
-   * session last read or wrote, or the one its own preparation completed at. */
+   * session last read or wrote, or the one its own preparation completed at.
+   * A save that changed only labels leaves it where it is: nothing a preview
+   * draws moved, so asking for the frame again would be wasted work. */
   calibrationRevision: string;
+  /** The labels `calibrationRevision` was saved with, which a preview sends so
+   * the server can recognise that revision behind later label saves. */
+  calibrationLabels: string[];
+  /** The revisions label-only saves have moved the document to since
+   * `calibrationRevision`. Preparation reporting one of them is up to date. */
+  relabelledRevisions: string[];
   preparation: Preparation | null;
   preparationError: string;
   /** An explicit prepare or cancel request is outstanding. */
@@ -56,12 +71,13 @@ export interface TemplateSession {
    * goes the moment it lands. */
   setPreviewPending: (pending: boolean) => void;
   /** Saves now, without waiting for the debounce. Never rejects: the outcome
-   * is in `save`. */
-  flush: () => Promise<void>;
+   * is in `save`, and in what it answers for a caller about to act on the
+   * file. */
+  flush: () => Promise<Settled>;
   /** Writes the draft even when nothing changed. Approving from the Preview
    * tab is a save: calibration status is derived from template.yaml, so the
    * observable act of approving is the file being written. */
-  approve: () => Promise<void>;
+  approve: () => Promise<Settled>;
   /** Discards the draft and mask edits and reads template.yaml again -- after
    * a conflict, or once a kind has been assigned. */
   reload: () => void;
@@ -90,34 +106,56 @@ function sameConfig(left: TemplateConfigState, right: TemplateConfigState): bool
   return JSON.stringify(canonical(left)) === JSON.stringify(canonical(right));
 }
 
+function sameLabels(left: TemplateConfigState, right: TemplateConfigState): boolean {
+  return JSON.stringify(left.labels) === JSON.stringify(right.labels);
+}
+
+/** Whether going from `before` to `after` changes labels and nothing else. */
+function onlyLabelsDiffer(before: TemplateConfigState, after: TemplateConfigState): boolean {
+  return !sameLabels(before, after) && sameConfig({ ...before, labels: after.labels }, after);
+}
+
 /** One opening of one template. A switch or a reload makes a new one, so a
  * response for an old one is recognised by identity -- no name or sequence
  * guards -- and a save still in flight for it finishes against it. */
 interface Doc {
   name: string;
   load: "loading" | "ready" | "error";
+  loadError: string | null;
   draft: TemplateConfigState | null;
   saved: TemplateConfigState | null;
   /** Sent as `If-Match`; advanced by every save and by an adopted baseline. */
   revision: string;
   fence: string;
+  fenceLabels: string[];
+  relabelled: string[];
   maskEdits: MaskEdit[];
   save: TemplateSaveState;
   previewPending: boolean;
-  timer: ReturnType<typeof setTimeout> | null;
+  /** This opening's saves. The draft is what is sent, read when it goes, so
+   * what the loop holds is only whether one is owed. */
+  loop: WriteLoop<SaveWanted>;
   /** The debounce ran out while held by a pending preview. */
   due: boolean;
+}
+
+/** `always` writes the draft even if nothing changed: an approval. */
+interface SaveWanted {
+  always: boolean;
 }
 
 interface View {
   name: string | null;
   load: TemplateLoad;
+  loadError: string | null;
   config: TemplateConfigState | null;
   saved: TemplateConfigState | null;
   dirty: boolean;
   save: TemplateSaveState;
   maskEdits: MaskEdit[];
   calibrationRevision: string;
+  calibrationLabels: string[];
+  relabelledRevisions: string[];
   previewPending: boolean;
   preparationVersion: number;
   preparing: boolean;
@@ -130,11 +168,13 @@ interface Connections {
 }
 
 const IDLE: TemplateSaveState = { kind: "idle" };
+const SAVING: TemplateSaveState = { kind: "saving" };
 const NO_EDITS: MaskEdit[] = [];
+const NO_LABELS: string[] = [];
 
 /** What a failed save says: a conflict asks for a reload, anything else is
  * a plain failure. */
-function saveFailure(e: unknown): TemplateSaveState {
+function saveFailure(e: unknown): Extract<TemplateSaveState, { message: string }> {
   if (e instanceof TemplateConflictError) return { kind: "conflict", message: e.message };
   return { kind: "failed", message: e instanceof Error ? e.message : "Save failed" };
 }
@@ -147,15 +187,26 @@ function isDirty(doc: Doc): boolean {
   );
 }
 
+/** The save state to show. A label edit changes nothing on screen until it
+ * saves, and a pending preview can hold that save for as long as it likes, so
+ * the wait reads as saving from the edit on. A failure stays until the next
+ * attempt, and a conflict until a reload. */
+function shownSave(doc: Doc): TemplateSaveState {
+  const waiting = doc.loop.armed || doc.due;
+  const labelled = doc.draft !== null && doc.saved !== null && !sameLabels(doc.draft, doc.saved);
+  const settled = doc.save.kind === "idle" || doc.save.kind === "saved";
+  return waiting && labelled && settled ? SAVING : doc.save;
+}
+
 /** The session's state outside React, so the save loop reads what is true
  * now rather than what a render closed over. Every field is per instance:
  * two sessions (two tabs' worth, or two tests) share nothing. */
 class Session {
   private doc: Doc | null = null;
   private listeners = new Set<() => void>();
-  /** Every save, one at a time and across templates: a flush on switch can
+  /** The saves of documents this session has left: a flush on switch can
    * still be in flight when the next template is read, and must land first. */
-  private writes: Promise<void> = Promise.resolve();
+  private leaving: Promise<unknown> = Promise.resolve();
   /** Operations are objects shared by successive draft snapshots, so an
    * editor handing back a list built before a save landed would otherwise
    * send its strokes twice. */
@@ -206,7 +257,7 @@ class Session {
       job.config_revision === preparation?.config_revision &&
       doc.fence !== job.config_revision
     ) {
-      doc.fence = job.config_revision;
+      this.fence(doc, job.config_revision);
       this.emit();
     }
   }
@@ -231,29 +282,31 @@ class Session {
     doc.previewPending = pending;
     if (doc.due && !this.held(doc)) {
       doc.due = false;
-      void this.enqueue(doc).catch(() => {});
+      void doc.loop.flush();
     }
     this.emit();
   };
 
-  flush = (): Promise<void> => {
+  flush = (): Promise<Settled> => {
     const doc = this.doc;
-    if (!doc) return Promise.resolve();
-    this.clearTimer(doc);
-    return this.enqueue(doc).catch(() => {});
+    if (!doc) return Promise.resolve(WRITTEN);
+    doc.due = false;
+    return doc.loop.flush();
   };
 
-  approve = (): Promise<void> => {
+  approve = (): Promise<Settled> => {
     const doc = this.doc;
-    if (!doc) return Promise.resolve();
-    this.clearTimer(doc);
-    return this.enqueue(doc, true).catch(() => {});
+    if (!doc) return Promise.resolve(WRITTEN);
+    doc.due = false;
+    doc.loop.edit({ always: true });
+    return doc.loop.flush();
   };
 
   reload = () => {
     const doc = this.doc;
     if (!doc) return;
-    this.clearTimer(doc);
+    doc.loop.discard();
+    this.leave(doc);
     this.doc = this.read(doc.name);
     this.emit();
   };
@@ -274,10 +327,13 @@ class Session {
         doc.maskEdits = doc.maskEdits.filter((edit) => !stale.has(edit.placement_id ?? null));
         this.emit();
       }
-      this.clearTimer(doc);
-      // Rejects if the save does: preparing an older revision than the one
-      // on screen would prepare the wrong thing.
-      await this.enqueue(doc);
+      // Preparing an older revision than the one on screen would prepare the
+      // wrong thing.
+      const settled = await this.flush();
+      if (!settled.written) {
+        this.actionError = settled.message;
+        return;
+      }
       const current = await getPreparation(doc.name);
       const submitted = await prepareTemplate({
         template: doc.name,
@@ -320,46 +376,59 @@ class Session {
     const doc: Doc = {
       name,
       load: "loading",
+      loadError: null,
       draft: null,
       saved: null,
       revision: "",
       fence: "",
+      fenceLabels: NO_LABELS,
+      relabelled: [],
       maskEdits: NO_EDITS,
       save: IDLE,
       previewPending: false,
-      timer: null,
+      loop: new WriteLoop<SaveWanted>({
+        send: (wanted) => this.send(doc, wanted.always),
+        merge: (older, newer) => ({ always: older.always || newer.always }),
+        failed: (e) => {
+          const failure = saveFailure(e);
+          doc.save = failure;
+          this.emit();
+          return failure.message;
+        },
+        due: () => {
+          if (this.held(doc)) doc.due = true;
+          else void doc.loop.flush();
+        },
+      }),
       due: false,
     };
     // After any save still in flight, or the read could describe the file
     // from before it.
-    void this.writes
+    void this.leaving
       .then(() => getTemplateConfig(name))
       .then(
         (loaded) => {
           if (this.doc !== doc) return;
           doc.load = "ready";
           doc.draft = doc.saved = loaded?.config ?? null;
-          doc.revision = doc.fence = loaded?.revision ?? "";
+          doc.revision = loaded?.revision ?? "";
+          this.fence(doc, doc.revision);
           doc.save = loaded ? { kind: "saved", savedAt: Date.parse(loaded.modifiedAt) } : IDLE;
           this.emit();
         },
-        () => {
+        (e: unknown) => {
           if (this.doc !== doc) return;
           doc.load = "error";
+          doc.loadError = e instanceof CalibratorApiError ? e.message : null;
           this.emit();
         },
       );
     return doc;
   }
 
-  /** The same interval the listing editor uses, measured from the last edit. */
   private edited(doc: Doc) {
-    this.clearTimer(doc);
-    doc.timer = setTimeout(() => {
-      doc.timer = null;
-      if (this.held(doc)) doc.due = true;
-      else void this.enqueue(doc).catch(() => {});
-    }, AUTOSAVE_DEBOUNCE_MS);
+    doc.due = false;
+    doc.loop.edit({ always: false });
     this.emit();
   }
 
@@ -367,57 +436,52 @@ class Session {
     return doc.previewPending && doc.draft?.renderer.type === "marigold";
   }
 
-  private clearTimer(doc: Doc) {
-    if (doc.timer !== null) clearTimeout(doc.timer);
-    doc.timer = null;
-    doc.due = false;
-  }
-
   /** A switch flushes rather than drops: the edit was made, and the template
    * it was made to still exists. Not held by a preview: its editor is going. */
   private detach(doc: Doc) {
-    this.clearTimer(doc);
-    void this.enqueue(doc).catch(() => {});
+    doc.due = false;
+    this.leave(doc);
   }
 
-  /** Queues a save of `doc` behind any in flight. It reads the draft when it
-   * is sent, not when it is queued, so a burst of flushes collapses into the
-   * one request the latest draft needs, and a queued one finding nothing
-   * dirty sends nothing. */
-  private enqueue(doc: Doc, always = false): Promise<void> {
-    const run = this.writes.then(() => this.send(doc, always));
-    this.writes = run.catch(() => {});
-    return run;
+  /** The next read waits for `doc`'s writes. */
+  private leave(doc: Doc) {
+    this.leaving = Promise.all([this.leaving, doc.loop.flush()]);
   }
 
-  private async send(doc: Doc, always: boolean) {
-    if (doc.load !== "ready" || doc.draft === null || (!always && !isDirty(doc))) return;
+  /** Reads the draft now, not when the save was asked for, so it goes as the
+   * one request the latest draft needs, and an edit undone sends nothing. */
+  private async send(doc: Doc, always: boolean): Promise<Settled> {
+    if (doc.load !== "ready" || doc.draft === null || (!always && !isDirty(doc))) return WRITTEN;
     const config = doc.draft;
     const edits = this.uncommitted(doc.maskEdits);
-    doc.save = { kind: "saving" };
+    doc.save = SAVING;
     this.emit();
-    try {
-      await this.adoptPreparedBaseline(doc);
-      const result = await saveTemplateConfig(doc.name, config, edits, doc.revision);
-      if (result.revision) doc.revision = result.revision;
-      for (const edit of edits) for (const op of edit.operations) this.committed.add(op);
-      doc.saved = config;
-      doc.maskEdits = this.uncommitted(doc.maskEdits);
-      doc.fence = doc.revision;
-      doc.save = { kind: "saved", savedAt: Date.now() };
-      const current = this.doc === doc;
-      // A save rebuilds CPU-side maps, so preparation is read again.
-      if (current) this.version += 1;
-      this.emit();
-      // Whether the template still needs calibration may have changed, and
-      // the rail is what shows that. Only the open template is reselected: a
-      // flushed one finishing late must not pull the rail back to it.
-      this.connections.onCatalogChanged?.(current ? doc.name : undefined);
-    } catch (e) {
-      doc.save = saveFailure(e);
-      this.emit();
-      throw e;
-    }
+    await this.adoptPreparedBaseline(doc);
+    const result = await saveTemplateConfig(doc.name, config, edits, doc.revision);
+    if (result.revision) doc.revision = result.revision;
+    this.landed(doc, config, edits);
+    return WRITTEN;
+  }
+
+  /** `config` and `edits` are on disk at `doc.revision`. */
+  private landed(doc: Doc, config: TemplateConfigState, edits: MaskEdit[]) {
+    const relabelling =
+      edits.length === 0 && doc.saved !== null && onlyLabelsDiffer(doc.saved, config);
+    for (const edit of edits) for (const op of edit.operations) this.committed.add(op);
+    doc.saved = config;
+    doc.maskEdits = this.uncommitted(doc.maskEdits);
+    if (relabelling) doc.relabelled = [...doc.relabelled, doc.revision];
+    else this.fence(doc, doc.revision);
+    doc.save = { kind: "saved", savedAt: Date.now() };
+    const current = this.doc === doc;
+    // A save rebuilds CPU-side maps, so preparation is read again. A label
+    // save rebuilds nothing.
+    if (current && !relabelling) this.version += 1;
+    this.emit();
+    // Whether the template still needs calibration may have changed, and
+    // the rail is what shows that. Only the open template is reselected: a
+    // flushed one finishing late must not pull the rail back to it.
+    this.connections.onCatalogChanged?.(current ? doc.name : undefined);
   }
 
   /** A completed preparation this session queued rewrites template.yaml's
@@ -445,6 +509,13 @@ class Session {
     this.own.delete(job.id);
   }
 
+  /** Moves what a preview names to `revision`, which holds the saved labels. */
+  private fence(doc: Doc, revision: string) {
+    doc.fence = revision;
+    doc.fenceLabels = doc.saved?.labels ?? NO_LABELS;
+    doc.relabelled = [];
+  }
+
   private uncommitted(edits: MaskEdit[]): MaskEdit[] {
     const remaining = edits
       .map((edit) => ({
@@ -466,12 +537,15 @@ class Session {
     return {
       name: doc?.name ?? null,
       load: doc?.load ?? "none",
+      loadError: doc?.loadError ?? null,
       config: ready ? doc.draft : null,
       saved: ready ? doc.saved : null,
       dirty: doc ? isDirty(doc) : false,
-      save: doc?.save ?? IDLE,
+      save: doc ? shownSave(doc) : IDLE,
       maskEdits: doc?.maskEdits ?? NO_EDITS,
       calibrationRevision: doc?.fence ?? "",
+      calibrationLabels: doc?.fenceLabels ?? NO_LABELS,
+      relabelledRevisions: doc?.relabelled ?? [],
       previewPending: doc?.previewPending ?? false,
       preparationVersion: this.version,
       preparing: this.preparing,
@@ -486,12 +560,12 @@ class Session {
  * every save names, mask strokes awaiting commit, and the preparation that
  * follows a save.
  *
- * Autosave follows the listing editor's rules ({@link useAutosave}): a
+ * Saves go through the {@link WriteLoop} the listing editor's use too: a
  * debounce from the last edit, one request in flight at a time, and pending
- * edits flushed -- not dropped -- on a template switch and on unmount. It
- * does not share that hook's code: that one merges listing patches and moves
- * a listing through create and rename, this one PUTs a whole document over a
- * revision and can be held by a preview.
+ * edits flushed -- not dropped -- on a template switch and on unmount. What
+ * stays here is what differs: this PUTs a whole document over a revision, where
+ * a listing merges patches and moves through create and rename, and a preview
+ * can hold it.
  *
  * `onCatalogChanged` is told when a save or a queued preparation may have
  * changed the template list's facts, with the name to keep selected.
@@ -511,12 +585,15 @@ export function useTemplateSession(
           ...stored,
           name,
           load: name === null ? "none" : "loading",
+          loadError: null,
           config: null,
           saved: null,
           dirty: false,
           save: IDLE,
           maskEdits: NO_EDITS,
           calibrationRevision: "",
+          calibrationLabels: NO_LABELS,
+          relabelledRevisions: [],
           previewPending: false,
         };
   const {
@@ -535,12 +612,15 @@ export function useTemplateSession(
 
   return {
     load: view.load,
+    loadError: view.loadError,
     config: view.config,
     saved: view.saved,
     dirty: view.dirty,
     save: view.save,
     maskEdits: view.maskEdits,
     calibrationRevision: view.calibrationRevision,
+    calibrationLabels: view.calibrationLabels,
+    relabelledRevisions: view.relabelledRevisions,
     preparation,
     preparationError: view.actionError || mapError,
     preparing: view.preparing,

@@ -25,6 +25,7 @@ from etsy_listings.core.render import (
 )
 from etsy_listings.core.render.config import BoundingBox
 from etsy_listings.core.render.identity import PHOTO_WARP_PNG_COMPRESSION
+from etsy_listings.core.workspace.template_state import template_state
 from etsy_listings.core.workspace.workspace import Workspace
 
 
@@ -43,7 +44,7 @@ def expected_scene(
     for a single or colour-matrix template), as the test writes it."""
     moved = boxes or {}
     workspace = Workspace.discover(root_override=root)
-    config = workspace.load_template_config(template)
+    config = template_state(workspace, template).require()
     if isinstance(config, MultipleTemplate):
         specs = [
             (p.colour, config.render_config_for(p).model_copy(update=_box(moved, p.id)))

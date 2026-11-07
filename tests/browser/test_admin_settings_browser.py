@@ -16,6 +16,7 @@ from typing import Any
 import pytest
 
 from etsy_listings.core.config.settings import Settings
+from etsy_listings.core.workspace.template_state import template_state
 from etsy_listings.core.workspace.workspace import Workspace
 
 from tests.support.clients import FakeClients
@@ -198,7 +199,7 @@ def test_saving_narrower_template_limits_blocks_an_out_of_range_listing(
     from tests.support.builders import FIXTURE_LISTING, edit_listing
 
     workspace = Workspace.discover(root_override=workspace_root)
-    box = compose(workspace.load_template_config("flat-lay-01").bounding_box, Pose(scale=1.08))
+    box = compose(template_state(workspace, "flat-lay-01").require().bounding_box, Pose(scale=1.08))
     edit_listing(
         workspace_root,
         template_positions={"flat-lay-01": {"bounding_box": [p.model_dump() for p in box]}},
@@ -250,7 +251,7 @@ def test_widening_template_limits_names_the_marigold_template_to_refit(
     from tests.support.marigold import covered_small_print
 
     workspace = covered_small_print(workspace_root)
-    box = compose(workspace.load_template_config("tee").bounding_box, Pose(rotation=5))
+    box = compose(template_state(workspace, "tee").require().bounding_box, Pose(rotation=5))
     edit_listing(
         workspace_root,
         media=[{"template": "tee"}],

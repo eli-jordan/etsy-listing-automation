@@ -33,20 +33,22 @@ export function previewJobs(
 }
 
 /** The editor canvas's own preview: the job for the chosen colour (the only
- * job, for other kinds) at the calibration revision, with the unsaved mask
- * strokes. `null` until there is a revision and a job to show. */
+ * job, for other kinds) at the calibration revision and that revision's
+ * labels, with the unsaved mask strokes. `null` until there is a revision and
+ * a job to show. */
 export function editorPreviewRequest(
   kind: TemplateConfigState["kind"],
   jobs: PreviewJob[],
   colour: string,
   revision: string,
+  labels: string[],
   maskEdits: MaskEdit[],
 ) {
   if (!revision) return null;
   const body =
     kind === "colour-matrix" ? jobs.find((job) => job.id === colour)?.body : jobs[0]?.body;
   if (!body) return null;
-  return { ...body, calibration_revision: revision, mask_edits: maskEdits };
+  return { ...body, calibration_revision: revision, labels, mask_edits: maskEdits };
 }
 
 /** The parts of a template that Marigold's prepared maps depend on, as a

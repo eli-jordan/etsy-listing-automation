@@ -16,6 +16,7 @@ import { EditorShell } from "./EditorShell";
 
 const CONFIG: PhotoWarpTemplate<PhotoWarpTemplate<SingleTemplate>> = {
   kind: "single",
+  labels: [],
   colour: null,
   bounding_box: [
     { x: 0, y: 0 },
@@ -114,6 +115,7 @@ describe("EditorShell", () => {
     expect(onChange).toHaveBeenCalledWith(
       expect.objectContaining({
         kind: "single",
+        labels: [],
         renderer: expect.objectContaining({
           config: expect.objectContaining({ displace: expect.objectContaining({ enabled: true }) }),
         }),

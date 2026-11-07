@@ -13,9 +13,14 @@ of their own.
 
 So: ask for ``workspace.lock_file(name)``, never join
 ``listings/<name>/state.lock.json``. The same goes for reading -- ``load_listing``,
-``load_garment_profile``, ``load_pricing_plan``, ``load_template_config`` and
-``load_exceptions`` are how the tree's files are opened, so no caller writes
-its own ``yaml.safe_load`` against a path it assembled.
+``load_garment_profile``, ``load_pricing_plan`` and ``load_exceptions`` are how
+the tree's files are opened, so no caller writes its own ``yaml.safe_load``
+against a path it assembled.
+
+Reading ``template.yaml`` has one module of its own,
+:mod:`~etsy_listings.core.workspace.template_state`: ``template_state`` tells
+absent, unreadable, needs repair and loaded apart, and a caller names what it
+needs from the answer. It is imported from its own module, as ``atomic`` is.
 
 Writing ``listing.yaml`` has one module of its own,
 :mod:`~etsy_listings.core.workspace.listing_documents`. Every writer goes
@@ -27,13 +32,15 @@ It is imported from its own module, as ``atomic`` is, rather than from here.
 process: ``hold(workspace, domain, *names)`` for a listing, a mockup template or
 a listing template. It too is imported from its own module.
 
-``calibration.CalibrationStore`` owns mockup-template read/save recovery,
+``calibration.CalibrationStore`` owns mockup-template writes, recovery,
 revision conflicts, save receipts, inactive renderer selection and durable mask
 operations. Its template lock is the ``mockup-template`` domain of
 :mod:`~etsy_listings.core.workspace.locks`, separate from the listing and
-listing-template domains. ``Workspace.load_template_config`` takes that lock but refuses an active
-transaction, so concurrent CLI reads never recover a live server save. Server
-operations read through the store, which recovers interrupted transactions first.
+listing-template domains. ``template_state`` takes that lock and reads a
+transaction as needing repair, so concurrent CLI reads never recover a live
+server save. Server operations read through ``CalibrationStore.state``, which
+recovers interrupted transactions first. ``Workspace`` knows neither: the store
+depends on it, never the reverse.
 Mask PNGs and transactions are template assets; only stroke Undo is cached.
 This module deliberately does not re-export the store or its edit models.
 

@@ -8,6 +8,8 @@ from pathlib import Path
 import pytest
 from PIL import Image, ImageChops
 
+from etsy_listings.core.workspace.template_state import template_state
+
 from tests.support.marigold import PreparationRuntime, PreparationWorker, marigold_template
 
 pytestmark = pytest.mark.browser
@@ -217,7 +219,9 @@ def test_changed_photo_recovers_only_after_explicit_reset_and_prepare(
     assert all(placement["mask_available"] for placement in prepared["placements"])
     calls = sum(len(worker.calls) for worker in preparation_runtime.workers)
     workspace = Workspace.discover(root_override=workspace_root)
-    photo = workspace.template_main_photo("marigold-shirt")
+    photo = workspace.template_main_photo(
+        "marigold-shirt", template_state(workspace, "marigold-shirt").require()
+    )
     with Image.open(photo) as source:
         changed = source.convert("RGB")
     changed.putpixel((30, 30), (17, 23, 41))

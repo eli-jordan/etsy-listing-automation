@@ -18,10 +18,9 @@ calibrator*): :func:`saved_preview` and :func:`unsaved_preview` say which
 photo, which derived maps and which layers a preview composites, from the
 saved ``template.yaml`` or from the unsaved geometry under the seller's
 cursor; :func:`compose_preview` composites them through ``render_scene``.
-The decoded images are the caller's to supply. The server holds a memo of
-them between the frames of a drag (``server/api/imagecache.py``), which is
-request-serving state and stays there; this module takes images and
-geometry, and asks for a derived map only when a layer uses it.
+The decoded images are the caller's to supply; this module takes images and
+geometry, and asks for a derived map only when a layer uses it. A finished
+picture of a scene is :mod:`~etsy_listings.core.application.scene_previews`'s.
 """
 
 from __future__ import annotations
@@ -37,13 +36,11 @@ from PIL import Image
 
 from etsy_listings.core.application.refusals import (
     TemplateAlreadyCalibratedError,
-    TemplateConfigMissingError,
     TemplateKindRefusedError,
     TemplateMissingError,
     TemplatePhotoMissingError,
     TemplatePreviewKindMismatchError,
 )
-from etsy_listings.core.config.errors import ConfigLoadError
 from etsy_listings.core.config.slug import slug_map
 from etsy_listings.core.render.config import (
     AnyRenderer,
@@ -64,8 +61,14 @@ from etsy_listings.core.render.config import (
 from etsy_listings.core.render.pipeline import Layer, render_scene
 from etsy_listings.core.render.swatch import sample_swatch
 from etsy_listings.core.render.types import RGB, RGBA, FloatMap
-from etsy_listings.core.workspace.calibration import Calibration, CalibrationStore, MaskEdit
+from etsy_listings.core.workspace.calibration import CalibrationStore, MaskEdit
 from etsy_listings.core.workspace.listing_documents import ListingDocuments, ListingMissingError
+from etsy_listings.core.workspace.template_state import (
+    TemplateAbsent,
+    TemplateLoaded,
+    TemplateNeedsRepair,
+    TemplateState,
+)
 from etsy_listings.core.workspace.workspace import (
     AmbiguousColourSuffixError,
     ScenePhoto,
@@ -104,6 +107,9 @@ class TemplateOverview:
     height: int | None
     """The photo's **true** pixel size: the space ``template.yaml``'s boxes
     are in, which the editor's downscaled canvas cannot tell the client."""
+    labels: list[str]
+    config: AnyTemplate | None = None
+    """What was read to make this row, or ``None`` for one that did not load."""
 
     @property
     def calibrated(self) -> bool:
@@ -125,47 +131,67 @@ def list_templates(workspace: Workspace) -> list[TemplateOverview]:
 
 
 def _overview(workspace: Workspace, name: str) -> TemplateOverview:
-    width, height = _photo_size(workspace, name)
-    try:
-        config = CalibrationStore(workspace).config(name)
-    except ConfigLoadError:
+    state = CalibrationStore(workspace).state(name)
+    width, height = _photo_size(_stand_in_photo(workspace, name, state))
+    if not isinstance(state, TemplateLoaded):
         return TemplateOverview(
             name=name,
             kind=None,
             colours=[],
             photos=[],
-            has_config=False,
-            status_reason="no kind set",
+            has_config=not isinstance(state, TemplateAbsent),
+            status_reason=_not_loaded_reason(state),
             width=width,
             height=height,
+            labels=[],
         )
-    if isinstance(config, ColourMatrixTemplate):
-        colours = workspace.template_colours(name)
-    elif isinstance(config, MultipleTemplate):
-        colours = [p.colour for p in config.placements]
-    else:
-        colours = [config.colour] if config.colour is not None else []
+    config = state.config
     return TemplateOverview(
         name=name,
         kind=config.kind,
-        colours=colours,
+        colours=_colours(workspace, name, config),
         photos=_photos(workspace, name, config),
         has_config=True,
         status_reason=_status_reason(config),
         width=width,
         height=height,
+        labels=config.labels,
+        config=config,
     )
 
 
-def _photo_size(workspace: Workspace, name: str) -> tuple[int | None, int | None]:
-    """From the image header alone (``Image.open`` is lazy). An unreadable
-    file answers ``None``: listing a template is how the seller reaches the
-    UI that fixes it."""
-    photo: Path | None
+def _colours(workspace: Workspace, name: str, config: AnyTemplate) -> list[str]:
+    if isinstance(config, ColourMatrixTemplate):
+        return workspace.template_colours(name)
+    if isinstance(config, MultipleTemplate):
+        return [p.colour for p in config.placements]
+    return [config.colour] if config.colour is not None else []
+
+
+def _not_loaded_reason(state: TemplateState) -> str | None:
+    """The rail's words for a template with no config to describe it."""
+    if isinstance(state, TemplateAbsent):
+        return "no kind set"
+    if isinstance(state, TemplateNeedsRepair):
+        return f"needs repair: {state.reason}"
+    return state.reason
+
+
+def _stand_in_photo(workspace: Workspace, name: str, state: TemplateState) -> Path | None:
+    """The photo that stands for the template: its main photo while it loads
+    and has one, else whichever the folder offers, since listing a template is
+    how the seller reaches the UI that fixes it."""
+    if state.config is None:
+        return workspace.template_preview_photo(name)
     try:
-        photo = workspace.template_main_photo(name, CalibrationStore(workspace).config(name))
-    except (ConfigLoadError, FileNotFoundError):
-        photo = workspace.template_preview_photo(name)
+        return workspace.template_main_photo(name, state.config)
+    except FileNotFoundError:
+        return workspace.template_preview_photo(name)
+
+
+def _photo_size(photo: Path | None) -> tuple[int | None, int | None]:
+    """From the image header alone (``Image.open`` is lazy). An unreadable
+    file answers ``None``."""
     if photo is None:
         return None, None
     try:
@@ -217,10 +243,7 @@ def template_photo(workspace: Workspace, name: str, colour: str | None) -> Path:
     require_template(workspace, name)
     source: Path | None
     if colour is None:
-        try:
-            source = workspace.template_main_photo(name, CalibrationStore(workspace).config(name))
-        except (ConfigLoadError, FileNotFoundError):
-            source = workspace.template_preview_photo(name)
+        source = _stand_in_photo(workspace, name, CalibrationStore(workspace).state(name))
     else:
         try:
             source = workspace.template_base_image(name, colour)
@@ -269,7 +292,9 @@ def assign_kind(workspace: Workspace, name: str, kind: TemplateKind) -> AnyTempl
     photos, or a set for a fixed scene) and ``SlugCollisionError``.
     """
     require_template(workspace, name)
-    if workspace.template_config_file(name).is_file():
+    state = CalibrationStore(workspace).state(name)
+    if not isinstance(state, TemplateAbsent):
+        state.require()
         raise TemplateAlreadyCalibratedError(name)
     photos = workspace.template_photos(name)
     if not photos:
@@ -301,7 +326,7 @@ def assign_kind(workspace: Workspace, name: str, kind: TemplateKind) -> AnyTempl
                 renderer=PhotoWarpRenderer(type="photo-warp"), bounding_box=_default_box(size)
             )
         )
-    workspace.save_template_config(name, config)
+    CalibrationStore(workspace).write_config(name, config)
     return config
 
 
@@ -359,15 +384,12 @@ class SavedConfig:
 
 def read_config(workspace: Workspace, name: str) -> SavedConfig:
     """The template's ``template.yaml`` and when it was last written.
-    :class:`TemplateConfigMissingError` for one with no config yet -- loaded
-    before its file is stat()ed, so that is a refusal, not an ``OSError``."""
+    Read before its file is stat()ed, so a template with no config to read
+    answers its state's refusal, not an ``OSError``."""
     require_template(workspace, name)
     store = CalibrationStore(workspace)
     with store.lock(name):
-        try:
-            saved = store.read(name)
-        except ConfigLoadError as exc:
-            raise TemplateConfigMissingError(name) from exc
+        saved = store.read(name)
         modified_at = datetime.fromtimestamp(
             workspace.template_config_file(name).stat().st_mtime, tz=UTC
         )
@@ -378,7 +400,7 @@ def save_config(workspace: Workspace, name: str, config: AnyTemplate) -> None:
     """Write ``config`` as the template's ``template.yaml``. The calibrator
     saves the whole document, whichever kind it is."""
     require_template(workspace, name)
-    workspace.save_template_config(name, config)
+    CalibrationStore(workspace).write_config(name, config)
 
 
 @dataclass(frozen=True)
@@ -393,20 +415,48 @@ class CalibrationSave:
     mask_edits: list[MaskEdit] | None = None
 
 
-def save_calibration(workspace: Workspace, name: str, save: CalibrationSave) -> Calibration:
+@dataclass(frozen=True)
+class SavedCalibration:
+    """A committed calibrator save. ``labels_only`` says it changed labels and
+    nothing else, so no preparation work follows from it: a positioned
+    template short of coverage waits for a save that asks for inference, and
+    stale maps for a save that touches what they were built from (spec
+    *Keeping labels out of rendering*). A retry of such a save changes nothing
+    and answers False, as any save with no change does."""
+
+    config: AnyTemplate
+    revision: str
+    labels_only: bool
+
+
+def _without_labels(config: AnyTemplate) -> AnyTemplate:
+    return config.model_copy(update={"labels": []})
+
+
+def _only_labels_differ(before: AnyTemplate, after: AnyTemplate) -> bool:
+    return before.labels != after.labels and _without_labels(before) == _without_labels(after)
+
+
+def save_calibration(workspace: Workspace, name: str, save: CalibrationSave) -> SavedCalibration:
     """ADR-0054: configuration and flattened masks commit as one revision."""
     require_template(workspace, name)
     store = CalibrationStore(workspace)
     with store.lock(name):
-        if store.read(name).config.kind != save.config.kind:
+        before = store.read(name).config
+        if before.kind != save.config.kind:
             raise TemplateKindRefusedError("Template kind cannot be changed after calibration")
-        return store.save(
+        saved = store.save(
             name,
             save.config,
             expected_revision=save.expected_revision,
             request_id=save.request_id,
             mask_edits=save.mask_edits,
         )
+    return SavedCalibration(
+        saved.config,
+        saved.revision,
+        labels_only=not save.mask_edits and _only_labels_differ(before, saved.config),
+    )
 
 
 @dataclass(frozen=True)
@@ -462,10 +512,7 @@ def _held_position(document: dict[str, object], template: str) -> tuple[str, ...
 
 def _load_config(workspace: Workspace, name: str) -> AnyTemplate:
     require_template(workspace, name)
-    try:
-        return CalibrationStore(workspace).config(name)
-    except ConfigLoadError as exc:
-        raise TemplateConfigMissingError(name) from exc
+    return CalibrationStore(workspace).state(name).require()
 
 
 # ---------------------------------------------------------------- previews
@@ -517,7 +564,7 @@ def unsaved_preview(
     ``design`` resolves the one file every layer composites -- a calibrator
     test design, whose library is the caller's -- and may refuse; it is asked
     after the kind check and before the photo is looked for.
-    Refusals: :class:`TemplateMissingError`, :class:`TemplateConfigMissingError`,
+    Refusals: :class:`TemplateMissingError`, the template state's own,
     :class:`TemplatePhotoMissingError`."""
     config = _load_config(workspace, name)
     # Authoring previews use the explicit draft renderer before autosave.

@@ -33,6 +33,7 @@ largely written by ``setup``; these are the seller's own knobs.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
 
@@ -191,6 +192,14 @@ class TemplatePositionLimits(BaseModel):
     rotation: float = Field(15, ge=0, le=30, allow_inf_nan=False)
 
 
+@dataclass(frozen=True)
+class SettingsProblem:
+    """Why ``settings.yaml`` will not load, for a read that reports it rather
+    than raising: the message names the file and the dotted key."""
+
+    message: str
+
+
 class Settings(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
@@ -210,7 +219,11 @@ class Settings(BaseModel):
         are :class:`ConfigLoadError`, naming the file and the dotted key."""
         if not path.is_file():
             return cls()
-        return cls.from_text(path, path.read_text(encoding="utf-8"))
+        try:
+            text = path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError) as exc:
+            raise ConfigLoadError(path, f"cannot be read: {exc}") from exc
+        return cls.from_text(path, text)
 
     @classmethod
     def from_text(cls, path: Path, text: str) -> Settings:

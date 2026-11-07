@@ -5,6 +5,8 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 
 from etsy_listings.core.workspace import Workspace
+from etsy_listings.core.workspace.calibration import CalibrationStore
+from etsy_listings.core.workspace.template_state import template_state
 from etsy_listings.server.api.app import create_app
 
 
@@ -36,9 +38,9 @@ def test_explicit_submission_reconnect_and_cancel_keep_one_durable_job(
     from tests.support.marigold import PreparationRuntime
 
     workspace = Workspace.discover(root_override=workspace_root)
-    config = workspace.load_template_config("flat-lay-01").model_dump(mode="json")
+    config = template_state(workspace, "flat-lay-01").require().model_dump(mode="json")
     config["renderer"] = {"type": "marigold", "config": {}}
-    workspace.save_template_config("flat-lay-01", load_template_config(config))
+    CalibrationStore(workspace).write_config("flat-lay-01", load_template_config(config))
     runtime = PreparationRuntime()
     client = TestClient(create_app(workspace, preparation_runtime=runtime))
     state = client.get("/api/templates/flat-lay-01/preparation").json()

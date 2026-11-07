@@ -63,7 +63,14 @@ export async function getTemplateConfig(name: string): Promise<TemplateConfigDoc
     cache: "no-store",
     params: { path: { name } },
   });
-  if (error) return null;
+  if (error) {
+    // Only a 404 means no template.yaml yet. A template that needs repair or
+    // will not parse has one, and must not be offered a kind.
+    if (response.status === 404) return null;
+    const detail: unknown = error.detail;
+    const refused = response.status === 409 && typeof detail === "string";
+    throw new CalibratorApiError(refused ? detail : `could not read the config for ${name}`);
+  }
   const modifiedAt = response.headers.get("Last-Modified");
   if (modifiedAt === null) throw new CalibratorApiError("template config has no modification time");
   return {
@@ -94,7 +101,11 @@ export async function saveTemplateConfig(
   });
   if (error) {
     if (response?.status === 409 || response?.status === 412) throw new TemplateConflictError();
-    throw new CalibratorApiError("could not save template.yaml");
+    // A refusal names its rule. A validation error's detail is a list, and a
+    // server fault's is not for the seller.
+    const detail: unknown = error.detail;
+    const refused = response?.status === 422 && typeof detail === "string";
+    throw new CalibratorApiError(refused ? detail : "could not save template.yaml");
   }
   return { config: data as unknown as TemplateConfigState, revision: revisionOf(response) };
 }
@@ -244,7 +255,12 @@ export async function getPositionedListings(name: string): Promise<PositionedLis
   return data;
 }
 
-type PreviewBody = { calibration_revision?: string; mask_edits?: MaskEdit[] } & (
+type PreviewBody = {
+  calibration_revision?: string;
+  /** The labels `calibration_revision` was saved with. */
+  labels?: string[];
+  mask_edits?: MaskEdit[];
+} & (
   | { colour: string; bounding_box: BoundingBox; renderer: Renderer }
   | { placements: Placement[]; renderer: Renderer }
   | { bounding_box: BoundingBox; renderer: Renderer }

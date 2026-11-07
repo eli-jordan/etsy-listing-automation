@@ -21,6 +21,7 @@ import yaml
 from PIL import Image, ImageDraw
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
+from etsy_listings.core.config.template_labels import saved_labels
 from etsy_listings.core.errors import ConflictError, RefusedError, StaleError
 from etsy_listings.core.render.config import (
     AnyTemplate,
@@ -32,6 +33,13 @@ from etsy_listings.core.render.config import (
 from etsy_listings.core.workspace import locks
 from etsy_listings.core.workspace.atomic import write_bytes_atomic, write_json_atomic
 from etsy_listings.core.workspace.file_version import file_version
+from etsy_listings.core.workspace.template_state import (
+    CalibrationRepairRequiredError,
+    TemplateAbsent,
+    TemplateNeedsRepair,
+    TemplateState,
+    template_state,
+)
 from etsy_listings.core.workspace.trees import remove_tree
 from etsy_listings.core.workspace.yaml_source import edit_yaml_bytes
 
@@ -141,10 +149,6 @@ def _validate_mask(data: bytes, size: tuple[int, int]) -> None:
         if image.format != "PNG" or image.mode != "L" or image.size != size:
             raise ValueError("Mask must be a full-photo grayscale PNG")
         image.load()
-
-
-class CalibrationRepairRequiredError(ConflictError):
-    """A calibration transaction is active or its recovery payload is damaged."""
 
 
 class CalibrationChangedError(StaleError):
@@ -296,16 +300,22 @@ class CalibrationStore:
         with locks.hold(self.workspace, "mockup-template", name, *more):
             yield
 
-    def config(self, name: str) -> AnyTemplate:
-        """Recover and load under the lock without decoding a photo for a revision."""
+    def state(self, name: str) -> TemplateState:
+        """The owner's read (see :mod:`.template_state`): an interrupted
+        transaction is rolled forward first, and one that cannot be trusted
+        reads as needing repair."""
         with self.lock(name):
-            self.recover(name)
-            return self.workspace.load_template_config(name)
+            try:
+                self._recover(name)
+            except CalibrationRepairRequiredError as exc:
+                return TemplateNeedsRepair(str(exc))
+            return template_state(self.workspace, name)
 
     def read(self, name: str) -> Calibration:
+        """:meth:`state`'s config with its revision, which decodes the photo;
+        the state's refusal when there is none."""
         with self.lock(name):
-            self.recover(name)
-            config = self.workspace.load_template_config(name)
+            config = self.state(name).require()
             return Calibration(
                 config,
                 self.revision(name, config),
@@ -338,6 +348,11 @@ class CalibrationStore:
                 return replayed
             if current.revision != expected_revision:
                 raise CalibrationChangedError("Calibration changed; reload before saving")
+            # After the replay and revision checks: a retry answers as the
+            # first save did, and a stale draft reloads before anything else.
+            # The digest above stays the request's own, as it was sent.
+            labels = saved_labels(config.labels, held=current.config.labels)
+            config = config.model_copy(update={"labels": labels})
             files, histories = self.apply_masks(name, config, mask_edits or [])
             revision = self.revision(name, config, files)
             settings_path = self.workspace.template_renderer_settings_file(name)
@@ -432,8 +447,9 @@ class CalibrationStore:
 
     def mask(self, name: str, placement_id: str | None = None) -> SavedMask:
         with self.lock(name):
-            calibration = self.read(name)
-            if placement_id not in self.placement_ids(calibration.config):
+            # An observer's read: preparation inputs ask this from `plan`.
+            config = template_state(self.workspace, name).require()
+            if placement_id not in self.placement_ids(config):
                 raise MaskUnavailableError("Mask placement does not belong to this template kind")
             paths = {
                 source: self.workspace.template_mask_file(name, placement_id, source=source)
@@ -445,7 +461,7 @@ class CalibrationStore:
                 )
             automatic, edited = paths["automatic"].read_bytes(), paths["edited"].read_bytes()
             metadata = _mask_metadata(paths["metadata"])
-            if metadata.photo != self.photo_identity(name, calibration.config):
+            if metadata.photo != self.photo_identity(name, config):
                 raise MaskPhotoMismatchError(
                     "Main photo changed; explicitly reset masks for this photo"
                 )
@@ -471,8 +487,11 @@ class CalibrationStore:
             return []
         if history.checksum != checksum:
             return []
+        config = template_state(self.workspace, name).config
+        if config is None:
+            return []
         try:
-            size = self.photo_identity(name, self.workspace.load_template_config(name)).size
+            size = self.photo_identity(name, config).size
             for entry in history.strokes:
                 self.validate_mask(base64.b64decode(entry.before, validate=True), size)
         except (OSError, ValueError):
@@ -637,11 +656,11 @@ class CalibrationStore:
         """Initial assignment and trusted local writers still use recovery storage."""
         with self.lock(name):
             self.workspace.template_dir(name).mkdir(parents=True, exist_ok=True)
-            self.recover(name)
+            state = self.state(name)
+            old = None if isinstance(state, TemplateAbsent) else state.require()
             path = self.workspace.template_renderer_settings_file(name)
             settings = json.loads(path.read_bytes()) if path.is_file() else {}
             config_path = self.workspace.template_config_file(name)
-            old = self.workspace.load_template_config(name) if config_path.is_file() else None
             if old is not None:
                 settings[old.renderer.type] = old.renderer.config.model_dump(mode="json")
             settings[config.renderer.type] = config.renderer.config.model_dump(mode="json")
@@ -680,7 +699,7 @@ class CalibrationStore:
         """
 
         with self.lock(name):
-            self.recover(name)
+            self._recover(name)
             transaction = self.workspace.template_calibration_transaction(name)
             transaction.mkdir(parents=True)
             entries = []
@@ -700,7 +719,7 @@ class CalibrationStore:
                 transaction / "manifest.json",
                 TransactionManifest(schema_version=1, commit_intent=True, files=tuple(entries)),
             )
-            self.recover(name)
+            self._recover(name)
             if transaction.exists():
                 remove_tree(transaction)
 
@@ -724,7 +743,7 @@ class CalibrationStore:
         if digest(target.read_bytes()) != checksum:
             raise CalibrationRepairRequiredError("Calibration transaction verification failed")
 
-    def recover(self, name: str) -> None:
+    def _recover(self, name: str) -> None:
         """Server-side recovery, always under the shared template lock."""
 
         with self.lock(name):

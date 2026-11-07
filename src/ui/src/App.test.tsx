@@ -3,13 +3,14 @@ import { act, fireEvent, render, screen, waitFor, within } from "@testing-librar
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "./App";
 import * as calibrator from "./api/calibrator";
-import { AUTOSAVE_DEBOUNCE_MS } from "./hooks/useAutosave";
+import { AUTOSAVE_DEBOUNCE_MS } from "./hooks/writeLoop";
 import { controlledClock } from "./test/clock";
 import { deferred } from "./test/helpers";
 import type { ColourMatrixTemplate, MultipleTemplate, TemplateSummary } from "./types";
 
 const COLOUR_MATRIX: PhotoWarpTemplate<ColourMatrixTemplate> = {
   kind: "colour-matrix",
+  labels: [],
   bounding_box: [
     { x: 0, y: 0 },
     { x: 100, y: 0 },
@@ -27,6 +28,7 @@ const COLOUR_MATRIX: PhotoWarpTemplate<ColourMatrixTemplate> = {
 
 const MULTIPLE: PhotoWarpTemplate<MultipleTemplate> = {
   kind: "multiple",
+  labels: [],
   colour_coverage: "exact",
   placements: [],
   renderer: {
@@ -54,6 +56,7 @@ function summary(over: Partial<TemplateSummary> & { name: string }): TemplateSum
     colours: ["black", "moss"],
     photos: [],
     has_config: true,
+    labels: [],
     status: "calibrated",
     status_reason: null,
     ...over,
@@ -171,6 +174,7 @@ describe("App", () => {
         kind: null,
         colours: [],
         has_config: false,
+        labels: [],
         status: "needs-calibration",
         status_reason: "no kind set",
       }),

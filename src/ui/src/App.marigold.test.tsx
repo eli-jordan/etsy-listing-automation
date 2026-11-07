@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "./App";
 import * as calibrator from "./api/calibrator";
 import * as prep from "./api/preparation";
-import { AUTOSAVE_DEBOUNCE_MS } from "./hooks/useAutosave";
+import { AUTOSAVE_DEBOUNCE_MS } from "./hooks/writeLoop";
 import { PREVIEW_DEBOUNCE_MS } from "./hooks/usePreview";
 import { controlledClock } from "./test/clock";
 import { deferred } from "./test/helpers";
@@ -24,6 +24,7 @@ beforeEach(() => {
       colours: [],
       photos: [],
       has_config: true,
+      labels: [],
       status: "calibrated",
       status_reason: null,
       width: 400,

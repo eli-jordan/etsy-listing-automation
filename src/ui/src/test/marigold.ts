@@ -20,6 +20,7 @@ export const BOX: BoundingBox = [
 ];
 export const SINGLE: SingleTemplate = {
   kind: "single",
+  labels: [],
   colour: null,
   bounding_box: BOX,
   renderer: MARIGOLD,

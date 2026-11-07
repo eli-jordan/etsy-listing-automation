@@ -37,7 +37,7 @@ def _template(root: Path) -> Workspace:
     ImageDraw.Draw(photo).rectangle((8, 8, 55, 55), fill="navy")
     photo.save(workspace.template_scene_image("shirt"))
     box = [{"x": x, "y": y} for x, y in [(12, 12), (51, 12), (51, 51), (12, 51)]]
-    workspace.save_template_config(
+    CalibrationStore(workspace).write_config(
         "shirt",
         load_template_config(
             {"kind": "single", "bounding_box": box, "renderer": {"type": "marigold", "config": {}}}

@@ -32,6 +32,7 @@ const FLAT_LAY: TemplateSummary = {
     { colour: "ivory", file: "mockup-templates/flat-lay-01/ivory.png" },
   ],
   has_config: true,
+  labels: [],
   status: "calibrated",
   status_reason: null,
 };

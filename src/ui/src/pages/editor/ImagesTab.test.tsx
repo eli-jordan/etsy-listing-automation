@@ -17,6 +17,7 @@ function summary(over: Partial<TemplateSummary> & { name: string }): TemplateSum
     colours: ["black", "white"],
     photos: [],
     has_config: true,
+    labels: [],
     status: "calibrated",
     status_reason: null,
     width: 480,
@@ -620,7 +621,7 @@ describe("ImagesTab's search", () => {
     render(<ImagesTab detail={detail()} onUpdate={vi.fn()} />);
     await screen.findByText("flat-lay-01");
 
-    fireEvent.change(screen.getByPlaceholderText("Search templates…"), {
+    fireEvent.change(screen.getByRole("combobox", { name: /Search templates/ }), {
       target: { value: "detail" },
     });
     expect(screen.queryByText("flat-lay-01")).not.toBeInTheDocument();

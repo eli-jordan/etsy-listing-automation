@@ -17,6 +17,7 @@ const FLAT_LAY: TemplateSummary = {
   colours: ["black"],
   photos: [{ colour: "black", file: "mockup-templates/flat-lay-01/black.png" }],
   has_config: true,
+  labels: [],
   status: "calibrated",
   status_reason: null,
 };

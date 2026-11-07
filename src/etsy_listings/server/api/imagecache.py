@@ -39,6 +39,9 @@ from typing import Any, TypeVar, cast
 import numpy as np
 from PIL import Image
 
+from etsy_listings.core.application.mockup_templates import LazyMaps, PreviewScene
+from etsy_listings.core.application.preparation.previews import EDITOR_ARTWORK_EDGE
+from etsy_listings.core.application.scene_previews import EditorCanvas
 from etsy_listings.core.bounded_cache import BoundedCache
 from etsy_listings.core.render import prepare_material_artwork
 from etsy_listings.core.render.io import DesignValidationError, load_design
@@ -201,6 +204,26 @@ class PreviewImages:
             lambda: prepare_material_artwork(design),
         )
         return design, packed
+
+    def photo(self, path: Path) -> RGB:
+        return self.base(path).image
+
+    def canvas(self, scene: PreviewScene) -> EditorCanvas:
+        """``scene``'s photo at :data:`EDITOR_MAX_EDGE`, with its derived maps
+        at that size: a drag is a burst of requests for all of them."""
+        base = self.base(scene.photo.path, EDITOR_MAX_EDGE)
+        directory, key = scene.derived_dir, scene.photo.map_key
+        return EditorCanvas(
+            base.image,
+            base.scale,
+            LazyMaps(
+                height=lambda: self.height(directory, key, base),
+                luminance=lambda: self.luminance(directory, key, base),
+            ),
+        )
+
+    def artwork(self, path: Path) -> tuple[RGBA, FloatMap]:
+        return self.material_design(path, EDITOR_ARTWORK_EDGE)
 
     def height(self, derived_dir: Path, map_key: str, base: ScaledBase) -> FloatMap:
         cache = DerivedMapCache(derived_dir)

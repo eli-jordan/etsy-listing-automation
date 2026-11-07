@@ -1,0 +1,156 @@
+/* Only what the three directions add: everything else is the app's own
+   classes from src/index.css. */
+.tl-icon {
+  width: 14px;
+  height: 14px;
+  flex: none;
+}
+
+.tl-add {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 3px 10px;
+  border: 1px dashed var(--color-neutral-500);
+  border-radius: 999px;
+  background: transparent;
+  font: 500 12px var(--font-body);
+  color: var(--color-text);
+  cursor: pointer;
+}
+
+.tl-add:hover {
+  border-color: var(--color-accent);
+  color: var(--color-accent-700);
+}
+
+.tl-chip {
+  gap: var(--space-1);
+  padding-right: 4px;
+  border: 1px solid var(--color-divider);
+  font-size: 12px;
+}
+
+.tl-chip__x {
+  display: inline-flex;
+  width: 16px;
+  height: 16px;
+  padding: 3px;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.tl-chip__x:hover {
+  background: color-mix(in srgb, var(--color-accent) 20%, transparent);
+}
+
+.tl-chip__x svg {
+  width: 100%;
+  height: 100%;
+}
+
+/* A floating list; one shape for every direction's menus. */
+.tl-pop {
+  position: absolute;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  min-width: 190px;
+  padding: var(--space-1);
+  border-radius: var(--radius-md);
+  background: var(--color-neutral-100);
+  box-shadow: var(--shadow-lg);
+}
+
+.tl-option {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  padding: 6px var(--space-2);
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  font: 400 13px var(--font-body);
+  color: var(--color-text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.tl-option:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--color-accent) 12%, transparent);
+}
+
+/* — A: the rail — */
+.tl-app {
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+.tl-rail-tags {
+  font-size: 10.5px;
+  color: var(--color-accent-700);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tl-rail-tags--none {
+  color: color-mix(in srgb, var(--color-text) 45%, transparent);
+  font-style: italic;
+}
+
+.tl-labelbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 34px;
+  margin-bottom: var(--space-3);
+}
+
+.tl-labelbar__title {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.tl-combo {
+  position: relative;
+}
+
+.tl-combo__input {
+  width: 200px;
+  padding-block: 4px;
+  font-size: 13px;
+}
+
+.tl-combo__list {
+  top: calc(100% + 4px);
+  left: 0;
+  width: 220px;
+}
+
+.tl-photo {
+  display: block;
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: cover;
+}
+
+.tl-stub {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-bottom: var(--space-2);
+  border-bottom: 1px solid var(--color-divider);
+  font-size: 13px;
+}
+
+/* The app centres button contents; these read as rows of text. */
+.tl-shell .template-rail__item,
+.tl-option {
+  justify-content: flex-start;
+}
