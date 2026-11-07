@@ -589,10 +589,9 @@ def test_a_title_changed_in_printify_is_reported_as_drift(root, catalog, printif
     assert any("title" in d.path for d in stage_plan.drift)
 
 
-def test_a_product_that_came_back_visible_is_reported(root, catalog, printify) -> None:
-    """The tripwire. Whether a publish lands as a draft is decided outside
-    this tool, so a managed product turning visible is the one signal that
-    something changed the setting that matters."""
+def test_a_visible_product_is_not_drift(root, catalog, printify) -> None:
+    """`publish` sets ``visible: true`` on every live listing's product, so
+    finding it set is the normal state, not something to report."""
     ctx = _ctx(root, catalog, printify)
     lock = _apply(ctx, a_lock())
     live = printify.products["fake-product-1"]
@@ -600,7 +599,7 @@ def test_a_product_that_came_back_visible_is_reported(root, catalog, printify) -
 
     stage_plan = _stage_plan(ctx, lock)
 
-    assert any("visible" in d.path for d in stage_plan.drift)
+    assert not any("visible" in d.path for d in stage_plan.drift)
 
 
 # ------------------------------------------------------- missing cells (46)

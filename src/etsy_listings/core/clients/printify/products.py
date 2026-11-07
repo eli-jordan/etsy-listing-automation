@@ -163,6 +163,12 @@ class HttpPrintifyClient(PrintifyClient):
                 return
             raise
 
+    def set_visible(self, shop_id: int, product_id: str, *, visible: bool) -> None:
+        # A PUT carrying only `visible` leaves everything else alone (measured).
+        self._transport.request(
+            "PUT", f"/v1/shops/{shop_id}/products/{product_id}.json", json={"visible": visible}
+        )
+
     def publish(self, shop_id: int, product_id: str, sync_flags: dict[str, bool]) -> None:
         self._transport.request(
             "POST", f"/v1/shops/{shop_id}/products/{product_id}/publish.json", json=sync_flags

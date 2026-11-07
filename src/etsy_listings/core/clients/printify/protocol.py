@@ -91,6 +91,15 @@ class PrintifyClient(Protocol):
         """Remove the product. Idempotent: already gone is success, not an error."""
         ...
 
+    def set_visible(self, shop_id: int, product_id: str, *, visible: bool) -> None:
+        """Set the product's ``visible`` flag, nothing else.
+
+        Printify's publish copies this onto the Etsy listing: ``false``
+        publishes a new listing as a draft and turns an active one inactive,
+        ``true`` keeps an active one active (measured 2026-11-07, see
+        docs/research/printify-etsy-integration.md)."""
+        ...
+
     def publish(self, shop_id: int, product_id: str, sync_flags: dict[str, bool]) -> None:
         """Ask Printify to push this product to its connected sales channel.
 

@@ -16,6 +16,13 @@ shape this stage:
   own profile (risk 13), but it is still sent, because a hint that sometimes
   works is better than no hint (decision 7) -- the `etsy_listing` stage is
   what actually re-asserts the shipping profile.
+- **Printify copies the product's ``visible`` flag onto the Etsy listing.**
+  ``false`` lands a first publish as a draft, but it also turns an *active*
+  listing inactive on every republish; ``true`` keeps it active (measured
+  2026-11-07, after a price change deactivated every live listing). So
+  ``apply`` sets ``visible`` to match the listing's current Etsy state just
+  before it publishes: ``true`` only for an ``active`` listing, so a draft
+  stays a draft and a listing paused in Shop Manager stays paused.
 - **A retail price below Printify's cost is a `400`.** ``variants[].cost``
   only exists on a product that already exists, which is exactly what
   ``read_live`` has in hand by the time ``plan`` runs -- so the check lives in
@@ -44,7 +51,7 @@ from etsy_listings.core.engine.change import Drift, Verdict
 from etsy_listings.core.engine.context import RunContext
 from etsy_listings.core.engine.lock import Lockfile
 from etsy_listings.core.engine.stage import Blocked, Stage, StageApplyResult
-from etsy_listings.core.engine.stages.etsy_target import ETSY_LISTING_ID_KEY
+from etsy_listings.core.engine.stages.etsy_target import ETSY_LISTING_ID_KEY, etsy_listing_id
 from etsy_listings.core.engine.stages.gates import (
     check_copy_is_concrete,
     check_garment_profile_chosen,
@@ -326,6 +333,7 @@ class PublishStage(Stage[PublishDesired, PublishApplied, PublishLive]):
         if not product_id:
             raise PublishWithoutProductError
 
+        _match_etsy_visibility(ctx, client, shop_id, str(product_id), lock)
         ctx.emit(f"publishing product {product_id}")
         client.publish(shop_id, str(product_id), desired.sync_flags)
         product = self._poll_until_unlocked(client, shop_id, str(product_id))
@@ -357,6 +365,30 @@ class PublishStage(Stage[PublishDesired, PublishApplied, PublishLive]):
                 return None
             self._sleep(delay)
             delay = min(delay * 2, POLL_MAX_DELAY)
+
+
+def _match_etsy_visibility(
+    ctx: RunContext, client: PrintifyClient, shop_id: int, product_id: str, lock: Lockfile
+) -> None:
+    """Make ``visible`` say what the Etsy listing is now, because the publish
+    about to happen copies it back onto Etsy. Read at apply time, not in
+    ``read_live``: a listing activated in Shop Manager between plan and apply
+    must not be deactivated by the plan's stale picture.
+
+    With no Etsy listing yet (a first publish) the product keeps the
+    ``visible: false`` it was created with, so it lands as a draft."""
+    listing_id = etsy_listing_id(lock)
+    if listing_id is None or ctx.etsy is None:
+        return
+    listing = ctx.etsy.get_listing(listing_id)
+    if listing is None:
+        return
+    visible = listing.state == "active"
+    product = client.get_product(shop_id, product_id)
+    if product is None or product.visible == visible:
+        return
+    ctx.emit(f"setting product {product_id} visible={str(visible).lower()} to match Etsy")
+    client.set_visible(shop_id, product_id, visible=visible)
 
 
 def _shop_id(ctx: RunContext) -> int:

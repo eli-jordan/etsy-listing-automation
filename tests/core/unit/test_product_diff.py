@@ -266,12 +266,13 @@ def test_an_edit_in_printify_is_drift_not_a_change() -> None:
     )
 
 
-def test_a_visible_product_is_the_tripwire() -> None:
+def test_a_visible_product_is_not_drift() -> None:
+    """`publish` sets ``visible: true`` on a live listing's product."""
     desired = _desired()
 
     comparison = compare(desired, desired.applied(), _live(desired, visible=True))
 
-    assert Drift(path="visible", last_applied=False, live=True) in comparison.drift
+    assert comparison.drift == ()
 
 
 def test_no_live_product_is_no_drift() -> None:

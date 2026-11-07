@@ -291,9 +291,9 @@ class Product(BaseModel):
     variants: tuple[ProductVariant, ...] = ()
     print_areas: tuple[PrintAreaSpec, ...] = ()
     visible: bool = True
-    """Kept as a tripwire. A product this tool manages coming back visible
-    means something outside it changed the one setting that decides whether a
-    publish is reviewable."""
+    """Printify copies this onto the Etsy listing at publish: created
+    ``false`` so a first publish lands as a draft, then set by the `publish`
+    stage to match the listing's Etsy state before every republish."""
     is_locked: bool = False
     is_deleted: bool = False
     external: ProductExternal | None = None

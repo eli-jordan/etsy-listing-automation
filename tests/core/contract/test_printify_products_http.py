@@ -527,6 +527,24 @@ def test_delete_still_raises_for_a_validation_error_that_is_not_the_wrong_shop()
 # --------------------------------------------------------------------- publish
 
 
+def test_set_visible_puts_only_the_flag() -> None:
+    seen: dict = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["method"] = request.method
+        seen["path"] = request.url.path
+        seen["body"] = httpx.Response(200, content=request.read()).json()
+        return httpx.Response(200, json=PRODUCT_PAYLOAD)
+
+    _client(handler).set_visible(SHOP_ID, PRODUCT_ID, visible=True)
+
+    assert (seen["method"], seen["path"]) == (
+        "PUT",
+        f"/v1/shops/{SHOP_ID}/products/{PRODUCT_ID}.json",
+    )
+    assert seen["body"] == {"visible": True}
+
+
 def test_publish_posts_the_sync_flags() -> None:
     seen: dict = {}
 
