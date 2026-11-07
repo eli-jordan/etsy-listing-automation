@@ -11004,6 +11004,88 @@
         ]
       }
     },
+    "/api/listings/{name}/scene-artwork": {
+      "get": {
+        "description": "The file one layer of this listing's scene prints, as the editor's live\nPosition mode draws it: downscaled and with its transparency, unlike a list\nthumbnail. Resolved here for the reason :func:`scene_preview` is, so the\npicture under a drag and the render that replaces it print the same file.\n``404`` for a layer left bare.",
+        "operationId": "scene_artwork_picture_api_listings__name__scene_artwork_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "template",
+            "required": true,
+            "schema": {
+              "title": "Template",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "colour",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Colour"
+            }
+          },
+          {
+            "in": "query",
+            "name": "placement",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Placement"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Scene Artwork Picture",
+        "tags": [
+          "listings"
+        ]
+      }
+    },
     "/api/listings/{name}/scene-preview": {
       "get": {
         "description": "One of this listing's scenes, each layer printing the file its depicted\ncolour resolves to in the *saved* listing (A35) -- the Variants stage and\nevery Listing Images picture, multi-colour scenes included (spec:\n*Previews*). Resolved here rather than from a design name in the URL,\nbecause the editor showing one file while Printify prints another is the\nthing a single resolver exists to prevent.\n\nA layer that resolves to nothing is left bare rather than failing the\npicture (:func:`~etsy_listings.core.application.listing_reads.scene_artwork`).\nEach layer prints at the listing's *saved* position where it holds one\n(ADR-0058), so a landed position save is the composite the render writes.\n``v`` is ignored; the editor sends a signature of the saved design so a\nlanded save is a new URL and the browser fetches it again.",

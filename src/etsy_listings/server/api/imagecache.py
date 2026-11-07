@@ -49,6 +49,11 @@ from etsy_listings.core.render.maps import DerivedMapCache
 from etsy_listings.core.render.types import RGB, RGBA, FloatMap
 from etsy_listings.core.workspace.file_version import file_version
 
+LIVE_ARTWORK_EDGE = 1024
+"""Longest edge of the artwork Position mode draws in the browser. A print
+fills about a third of a stage under 1000 screen pixels, so this stays sharp on
+a HiDPI screen; the source can be a hundred megapixels."""
+
 EDITOR_MAX_EDGE = 900
 """Longest edge, in px, that the editor's canvas renders at.
 

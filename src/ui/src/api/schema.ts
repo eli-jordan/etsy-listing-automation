@@ -1145,6 +1145,30 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/listings/{name}/scene-artwork": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Scene Artwork Picture
+     * @description The file one layer of this listing's scene prints, as the editor's live
+     *     Position mode draws it: downscaled and with its transparency, unlike a list
+     *     thumbnail. Resolved here for the reason :func:`scene_preview` is, so the
+     *     picture under a drag and the render that replaces it print the same file.
+     *     ``404`` for a layer left bare.
+     */
+    get: operations["scene_artwork_picture_api_listings__name__scene_artwork_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/listings/{name}/scene-preview": {
     parameters: {
       query?: never;
@@ -7332,6 +7356,41 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["ListingDetail"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  scene_artwork_picture_api_listings__name__scene_artwork_get: {
+    parameters: {
+      query: {
+        template: string;
+        colour?: string | null;
+        placement?: string | null;
+      };
+      header?: never;
+      path: {
+        name: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": unknown;
         };
       };
       /** @description Validation Error */

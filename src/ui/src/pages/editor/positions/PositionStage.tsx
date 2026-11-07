@@ -1,12 +1,15 @@
 import { type KeyboardEvent, type PointerEvent, useLayoutEffect, useRef, useState } from "react";
 import { type Point, type Quad, compose, homography, toPhoto } from "./pose";
+import { type LiveSource, useLiveScene } from "./useLiveScene";
 import type { Gesture, Layer, Positioning } from "./usePositioning";
 
 /**
  * The preview stage in Position mode: the saved composite, the handles for
  * the selected box, the other placements dimmed, the template's box as a
- * ghost, and -- while a gesture is unsaved -- the artwork flat on the draft
- * box. Copied from the prototype's `PositionStage`
+ * ghost, and -- while the position is ahead of the composite -- the whole scene
+ * drawn live over it, so nothing waits on a render. The composite underneath
+ * loads unseen, and the live scene fades once it has. Copied from the
+ * prototype's `PositionStage`
  * (`design/scenes/template-positions/_PositionStage.tsx`), except that every
  * box is the template's quad under the pose through its homography, so
  * handles sit on the mapped corners rather than an axis-aligned rectangle.
@@ -17,8 +20,8 @@ interface Props {
   /** The saved composite. */
   picture: string;
   title: string;
-  /** The listing's artwork, for the draft overlay; `null` draws none. */
-  artwork: string | null;
+  /** The pictures the live scene is drawn from. */
+  source: LiveSource;
 }
 
 /** Handle half-size and tilt-stem length, in screen pixels. */
@@ -58,9 +61,10 @@ function stemOf(layer: Layer, corners: Quad, k: number) {
   return { top, end: { x: top.x + (dx / length) * STEM * k, y: top.y + (dy / length) * STEM * k } };
 }
 
-export function PositionStage({ positioning, picture, title, artwork }: Props) {
-  const { size, layers, selected } = positioning;
+export function PositionStage({ positioning, picture, title, source }: Props) {
+  const { size, layers, selected, live } = positioning;
   const svg = useRef<SVGSVGElement>(null);
+  const canvas = useRef<HTMLCanvasElement>(null);
   /** Photo pixels per screen pixel, so handles keep their screen size. */
   const [k, setK] = useState(size.w / 480);
 
@@ -97,6 +101,19 @@ export function PositionStage({ positioning, picture, title, artwork }: Props) {
   }
 
   const active = layers.find((l) => l.id === selected);
+  const drawn = useLiveScene(canvas, {
+    source,
+    look: positioning.look,
+    layers: layers.map((layer) => ({
+      id: layer.id,
+      placement: layer.placement,
+      quad: safeCompose(layer),
+      box: layer.box,
+    })),
+    size,
+    backing: backingOf(size, k),
+    visible: live,
+  });
 
   return (
     <svg
@@ -117,9 +134,16 @@ export function PositionStage({ positioning, picture, title, artwork }: Props) {
         onLoad={() => positioning.loaded(picture)}
         onError={positioning.recheck}
       />
-      {positioning.overlay && active !== undefined && artwork !== null && (
-        <Overlay layer={active} artwork={artwork} size={size} />
-      )}
+      {live && !drawn && <Flat layers={layers} source={source} size={size} />}
+      <foreignObject
+        x={0}
+        y={0}
+        width={size.w}
+        height={size.h}
+        className={live && drawn ? "tp-live tp-live--on" : "tp-live"}
+      >
+        <canvas ref={canvas} />
+      </foreignObject>
       {positioning.ghost && active !== undefined && (
         <>
           <polygon className="tp-halo" points={points(active.box)} />
@@ -137,7 +161,40 @@ export function PositionStage({ positioning, picture, title, artwork }: Props) {
   );
 }
 
-function Overlay({
+/** The canvas's size for a stage of `k` photo pixels per screen pixel: sharp on
+ * this screen, and never more pixels than the photo has. */
+function backingOf(size: { w: number; h: number }, k: number) {
+  const ratio = Math.min(1, window.devicePixelRatio / k);
+  return { width: Math.round(size.w * ratio), height: Math.round(size.h * ratio) };
+}
+
+/** The live scene without a GPU, or before its pictures arrive: the bare photo
+ * with each layer's artwork flat on its box. */
+function Flat({
+  layers,
+  source,
+  size,
+}: {
+  layers: Layer[];
+  source: LiveSource;
+  size: { w: number; h: number };
+}) {
+  return (
+    <>
+      <image href={source.photo} width={size.w} height={size.h} />
+      {layers.map((layer) => (
+        <FlatPrint
+          key={layer.id}
+          layer={layer}
+          artwork={source.artwork(layer.placement)}
+          size={size}
+        />
+      ))}
+    </>
+  );
+}
+
+function FlatPrint({
   layer,
   artwork,
   size,
@@ -147,8 +204,6 @@ function Overlay({
   size: { w: number; h: number };
 }) {
   const corners = safeCompose(layer);
-  // The element's own aspect is the template box's, so `contain` keeps the
-  // artwork's proportions roughly as the render fits it.
   const w = Math.hypot(layer.box[1].x - layer.box[0].x, layer.box[1].y - layer.box[0].y) || 1;
   const h = Math.hypot(layer.box[3].x - layer.box[0].x, layer.box[3].y - layer.box[0].y) || 1;
   return (

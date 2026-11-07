@@ -228,6 +228,21 @@ def saved_scene(
     return _photo_warp(workspace, scene, size, images)
 
 
+def layer_artwork(
+    workspace: Workspace, name: str, layers: SceneLayers, placement: str | None
+) -> Path | None:
+    """The file :func:`saved_scene` prints on ``placement``'s layer, for an
+    editor drawing that layer itself: ``None`` for a layer left bare, or a
+    placement the template does not have. Refusals: :class:`TemplateMissingError`
+    and the template state's own."""
+    require_template(workspace, name)
+    config = CalibrationStore(workspace).state(name).require()
+    for depicted, layer in scene_colours(config, layers.colour):
+        if layer == placement:
+            return layers.design(depicted)
+    return None
+
+
 def draft_scene(
     workspace: Workspace,
     name: str,

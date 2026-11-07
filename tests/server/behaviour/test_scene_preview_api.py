@@ -15,11 +15,14 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+import yaml
 from fastapi.testclient import TestClient
+from httpx import Response
 from PIL import Image
 
 from etsy_listings.core.workspace.workspace import Workspace
 from etsy_listings.server.api.app import create_app
+from etsy_listings.server.api.imagecache import LIVE_ARTWORK_EDGE
 
 from tests.support.builders import FIXTURE_LISTING as LISTING
 from tests.support.builders import edit_garment_profile, edit_listing
@@ -192,3 +195,83 @@ class TestRefusals:
         with Image.open(workspace_root / "mockup-templates" / "flat-lay-01" / "black.png") as photo:
             assert size == photo.size
         assert np.asarray(Image.open(BytesIO(png))).ndim == 3
+
+
+class TestSceneArtwork:
+    """``GET .../scene-artwork``: the file a layer prints, for Position mode to
+    draw itself, resolved as the scene preview resolves it."""
+
+    def _get(self, client: TestClient, **params: str) -> Response:
+        return client.get(f"/api/listings/{LISTING}/scene-artwork", params=params)
+
+    def _colour(self, response: Response) -> tuple[int, ...]:
+        assert response.status_code == 200, response.text
+        assert response.headers["content-type"] == "image/webp"
+        with Image.open(BytesIO(response.content)) as image:
+            return tuple(image.convert("RGBA").getpixel((10, 10)))
+
+    def test_a_colour_gets_the_file_its_tone_slot_prints(
+        self, workspace_root: Path, client: TestClient
+    ) -> None:
+        light = _design(workspace_root, "dark-ink", (200, 30, 30))
+        dark = _design(workspace_root, "light-ink", (30, 30, 200))
+        edit_listing(workspace_root, design={"on-light": light, "on-dark": dark})
+
+        ivory = self._colour(self._get(client, template="flat-lay-01", colour="ivory"))
+        black = self._colour(self._get(client, template="flat-lay-01", colour="black"))
+
+        assert ivory[0] > ivory[2]
+        assert black[2] > black[0]
+
+    def test_each_placement_gets_its_own_file(
+        self, workspace_root: Path, client: TestClient
+    ) -> None:
+        edit_garment_profile(
+            workspace_root,
+            PROFILE,
+            colors={"black": "dark", "blue-jean": "dark", "ivory": "light", "moss": "light"},
+        )
+        light = _design(workspace_root, "dark-ink", (200, 30, 30))
+        dark = _design(workspace_root, "light-ink", (30, 30, 200))
+        edit_listing(workspace_root, design={"on-light": light, "on-dark": dark})
+        config = yaml.safe_load(
+            (workspace_root / "mockup-templates" / "colour-chart-01" / "template.yaml").read_text(
+                encoding="utf-8"
+            )
+        )
+        by_colour = {p["colour"]: p["id"] for p in config["placements"]}
+
+        moss = self._colour(
+            self._get(client, template="colour-chart-01", placement=by_colour["moss"])
+        )
+        black = self._colour(
+            self._get(client, template="colour-chart-01", placement=by_colour["black"])
+        )
+
+        assert moss[0] > moss[2]
+        assert black[2] > black[0]
+
+    def test_it_keeps_transparency_and_never_exceeds_the_live_edge(
+        self, workspace_root: Path, client: TestClient
+    ) -> None:
+        path = workspace_root / "designs" / "large.png"
+        Image.new("RGBA", (LIVE_ARTWORK_EDGE * 2, LIVE_ARTWORK_EDGE), (0, 0, 0, 0)).save(path)
+        edit_listing(workspace_root, design={"default": "designs/large.png"})
+
+        response = self._get(client, template="flat-lay-01", colour="black")
+
+        assert self._colour(response)[3] == 0
+        with Image.open(BytesIO(response.content)) as image:
+            assert image.size == (LIVE_ARTWORK_EDGE, LIVE_ARTWORK_EDGE // 2)
+
+    def test_a_layer_that_prints_nothing_is_not_found(
+        self, workspace_root: Path, client: TestClient
+    ) -> None:
+        edit_listing(workspace_root, design={"default": None})
+
+        assert self._get(client, template="flat-lay-01", colour="black").status_code == 404
+
+    def test_a_placement_the_template_does_not_have_is_not_found(self, client: TestClient) -> None:
+        response = self._get(client, template="colour-chart-01", placement="nowhere")
+
+        assert response.status_code == 404

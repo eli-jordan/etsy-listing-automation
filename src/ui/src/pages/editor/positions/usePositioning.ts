@@ -11,6 +11,7 @@ import {
   withoutPosition,
 } from "./document";
 import { moved, nudged, resized, tilted } from "./gestures";
+import type { LiveLook } from "./liveRenderer";
 import {
   IDENTITY,
   type Limits,
@@ -33,8 +34,8 @@ import { type PositionReadiness, usePositionReadiness } from "./usePositionReadi
  * A gesture edits a draft pose; it is saved once it completes -- pointer
  * release, or {@link NUDGE_DEBOUNCE_MS} after the last arrow key -- through
  * the editor's ordinary `onUpdate` and an immediate flush, so the head's save
- * status behaves as for any other field. Between that save and the saved
- * composite loading, the stage draws the draft overlay.
+ * status behaves as for any other field. From the gesture's first move until
+ * the saved composite has loaded, the stage draws the scene live.
  */
 
 /** Interactions, *Saving*: "a nudge after a short debounce (about 400 ms)". */
@@ -72,7 +73,9 @@ export interface Positioning {
   reset: { label: string; run: () => void } | null;
   fit: (() => void) | null;
   ghost: boolean;
-  overlay: boolean;
+  /** The position is ahead of the composite, so the stage draws it live. */
+  live: boolean;
+  look: LiveLook;
   begin: (gesture: Gesture, id: string, point: Point) => void;
   move: (point: Point) => void;
   end: () => void;
@@ -288,7 +291,6 @@ interface GestureContext {
  * nudge waiting out its debounce. */
 function useGestures() {
   const [draft, setDraft] = useState<Draft | null>(null);
-  const [dragging, setDragging] = useState(false);
   const drag = useRef<Drag | null>(null);
   const draftRef = useRef<Draft | null>(null);
   const nudging = useRef<{ timer: ReturnType<typeof setTimeout>; save: () => void } | null>(null);
@@ -316,7 +318,6 @@ function useGestures() {
         if (!ctx.on || target === undefined) return;
         ctx.select(id);
         drag.current = { gesture, id, start: point, from: target.pose };
-        setDragging(true);
       },
       move: (point) => {
         const d = drag.current;
@@ -331,7 +332,6 @@ function useGestures() {
       end: () => {
         const target = find(drag.current?.id);
         drag.current = null;
-        setDragging(false);
         const pending = draftRef.current;
         if (pending === null || pending.id !== target?.id) return;
         ctx.commit(target, pending.pose);
@@ -352,7 +352,13 @@ function useGestures() {
     };
   }
 
-  return { draft, dragging, clear: () => setDraftPose(null), handlers };
+  return { draft, clear: () => setDraftPose(null), handlers };
+}
+
+function lookOf({ renderer }: TemplateConfigState): LiveLook {
+  if (renderer.type === "marigold") return { kind: "marigold" };
+  const { enabled, blend, opacity } = renderer.config.shade;
+  return { kind: "photo-warp", blend, opacity: enabled ? opacity : 0 };
 }
 
 function resetOf(layer: Layer, on: boolean, run: () => void): Positioning["reset"] {
@@ -442,7 +448,8 @@ export function usePositioning(args: Args): Positioning | null {
           }
         : null,
     ghost: on && !isIdentity(layer.pose),
-    overlay: on && (gestures.dragging || gestures.draft !== null || savePending || unseen),
+    live: on && (gestures.draft !== null || savePending || unseen),
+    look: lookOf(ready.config),
     ...gestures.handlers({ name, layers, layer, on, limits: bounds, select, commit }),
     loaded: setLoadedSrc,
   };

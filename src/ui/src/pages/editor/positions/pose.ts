@@ -114,6 +114,11 @@ function invert(m: Matrix): Matrix {
   ];
 }
 
+/** The homography taking `quad` back onto the unit square. */
+export function unitFrame(quad: Quad): Matrix {
+  return invert(homography(quad));
+}
+
 /** One point through `m`, with its homogeneous weight. */
 function project({ x, y }: Point, m: Matrix): Point & { w: number } {
   const w = m[6] * x + m[7] * y + m[8];
