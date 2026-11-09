@@ -126,6 +126,15 @@ def scoped(run: Path) -> list[Json]:
     return listings
 
 
+def tags_of(doc: Json) -> list[str]:
+    """A listing's tags; a new listing has none yet."""
+    return list(doc["etsy"].get("tags") or [])
+
+
+def title_of(doc: Json) -> str:
+    return doc["etsy"].get("title") or ""
+
+
 def title_terms(title: str) -> list[str]:
     return [t.strip() for t in html.unescape(title).split(",")][:2]
 
@@ -230,10 +239,11 @@ def cmd_scope(args: argparse.Namespace) -> None:
     rows = [{"dir": n, "id": lock_listing_id(root / n)} for n in names]
     states = listing_states([r["id"] for r in rows if r["id"]])
     for row in rows:
-        row["state"] = "Live" if states.get(row["id"]) == "active" else "Draft"
+        live = states.get(row["id"]) == "active"
+        row["state"] = "Live" if live else ("Draft" if row["id"] else "New")
         doc = docs.read(row["dir"])
         say(f"{row['state']:5} {row['id']} {row['dir']}")
-        say("     ", doc["etsy"]["title"])
+        say("     ", title_of(doc) or "(no title yet)")
         say("      brief:", str(doc.get("brief"))[:160].replace("\n", " "))
     save(run_dir(args.run) / "listings.json", rows)
     say(f"{len(rows)} listings, {sum(r['state'] == 'Live' for r in rows)} live")
@@ -366,9 +376,10 @@ def competition_of(client: Transport, term: str) -> Json:
 def wanted_terms(run: Path, file: str | None) -> set[str]:
     _, docs = workspace()
     plan = load(run / "plan.json", {})
-    terms = {s[1].lower() for entry in plan.values() for s in entry["swaps"]}
+    terms = {s[1].lower() for entry in plan.values() for s in entry.get("swaps", [])}
+    terms |= {t.lower() for entry in plan.values() for t in entry.get("tags", [])}
     for row in scoped(run):
-        terms |= {t.lower() for t in docs.read(row["dir"])["etsy"]["tags"]}
+        terms |= {t.lower() for t in tags_of(docs.read(row["dir"]))}
     return terms | set(read_terms(file) if file else [])
 
 
@@ -414,7 +425,7 @@ def cmd_score(args: argparse.Namespace) -> None:
     under = total = 0
     for row in scoped(run_dir(args.run)):
         say(f"## {row['dir']} ({row['state']})")
-        for tag in docs.read(row["dir"])["etsy"]["tags"]:
+        for tag in tags_of(docs.read(row["dir"])):
             s = info(tag, words, rivals)
             tally[s["tier"]] += 1
             total += 1
@@ -509,7 +520,7 @@ def grouped(checked: Json, key: Any) -> dict[str, list[bool]]:
 
 def scoped_tags(run: Path) -> set[str]:
     _, docs = workspace()
-    return {t.lower() for r in scoped(run) for t in docs.read(r["dir"])["etsy"]["tags"]}
+    return {t.lower() for r in scoped(run) for t in tags_of(docs.read(r["dir"]))}
 
 
 def say_disagreements(checked: Json) -> None:
@@ -587,14 +598,17 @@ def entry_problems(entry: Json, old: list[str], words: Json, rivals: Json) -> li
 def plan_problems(run: Path) -> list[Any]:
     _, docs = workspace()
     words, rivals = stores()
-    by_id = {str(r["id"]): r for r in scoped(run)}
+    by_id = {str(r["id"]): r for r in scoped(run)} | {r["dir"]: r for r in scoped(run)}
     problems: list[Any] = []
     for key, entry in load(run / "plan.json", {}).items():
         row = by_id.get(key)
         if row is None:
             problems.append((key, "not in scope"))
             continue
-        old = docs.read(row["dir"])["etsy"]["tags"]
+        if "tags" in entry:
+            problems += new_listing_problems(row["dir"], entry, words, rivals)
+            continue
+        old = tags_of(docs.read(row["dir"]))
         found = entry_problems(entry, old, words, rivals)
         problems += found
         if not found:
@@ -602,6 +616,54 @@ def plan_problems(run: Path) -> list[Any]:
             before = reach(old, words, rivals)
             say(f"{entry['short']:32} {row['state']:5} reach {before} -> {after}")
     return problems
+
+
+def set_tag_problems(name: str, tag: str, own: set[str], words: Json, rivals: Json) -> list[Any]:
+    """The design's own phrase may lack data; every other tag needs it."""
+    if tag.lower() not in own:
+        return swap_problems(name, tag, words, rivals)
+    return [(name, "tag over 20 characters", tag)] if len(tag) > TAG_LIMIT else []
+
+
+def new_listing_problems(name: str, entry: Json, words: Json, rivals: Json) -> list[Any]:
+    """A new listing's full set: 13 distinct tags with data, apart from its own phrases."""
+    tags, own = entry["tags"], {t.lower() for t in entry.get("own", [])}
+    problems = tag_set_problems(name, tags)
+    for tag in tags:
+        problems += set_tag_problems(name, tag, own, words, rivals)
+    title = entry.get("title") or ""
+    if not title or len(title) > TITLE_LIMIT:
+        problems.append((name, "title missing or over 140", len(title)))
+    if not problems:
+        say(f"{name[:44]:44} New   reach {reach(tags, words, rivals)}")
+    return problems
+
+
+def cmd_draft(args: argparse.Namespace) -> None:
+    """Write new listings' title, tags and lead from plan.json and leads.json.
+
+    A dry run without --write.
+    """
+    run = run_dir(args.run)
+    plan, leads = load(run / "plan.json", {}), load(run / "leads.json", {})
+    words, rivals = stores()
+    changes = [
+        {"dir": key, "title": entry["title"], "tags": entry["tags"]}
+        for key, entry in plan.items()
+        if "tags" in entry
+    ]
+    problems: list[Any] = []
+    for change in changes:
+        name = change["dir"]
+        problems += new_listing_problems(name, plan[name], words, rivals)
+        if name not in leads:
+            problems.append((name, "no lead in leads.json"))
+        problems += lead_problems(name, change["title"], leads.get(name))
+    say("problems", problems)
+    if problems:
+        sys.exit(1)
+    if args.write:
+        write_changes(run, changes, leads)
 
 
 def cmd_check(args: argparse.Namespace) -> None:
@@ -727,6 +789,7 @@ def headline_stats(pairs: list[tuple[list[str], list[str]]], scoring: tuple, row
 
 
 def build_cards(run: Path, plan: Json, scoring: tuple) -> tuple[list[Json], list[tuple]]:
+    plan = {key: entry for key, entry in plan.items() if "swaps" in entry}
     _, docs = workspace()
     rows = [r for r in scoped(run) if str(r["id"]) in plan]
     ids = ",".join(str(r["id"]) for r in rows)
@@ -933,6 +996,7 @@ def parser() -> argparse.ArgumentParser:
     command("report", cmd_report)
     command("resolve", cmd_resolve).add_argument("decisions")
     command("write", cmd_write).add_argument("--write", action="store_true")
+    command("draft", cmd_draft).add_argument("--write", action="store_true")
     return top
 
 
