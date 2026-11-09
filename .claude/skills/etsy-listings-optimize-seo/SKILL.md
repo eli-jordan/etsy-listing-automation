@@ -15,6 +15,16 @@ All commands run from the repo root:
 uv run python .claude/skills/etsy-listings-optimize-seo/seo_review.py COMMAND RUN ...
 ```
 
+**New listings** have no title or tags yet, so they get a first set instead of swaps, usually from the `etsy-listing-create` skill. `scope` marks them `New`. Run steps 1, 2 and 4 to 7, skip the audits in step 3, and write each one into `plan.json` keyed by folder name instead of listing ID:
+
+```json
+{"christmas-2026-krampus": {"short": "Krampus", "title": "Full title", "tags": ["13 tags"], "own": ["the design's own phrase"], "why": "Reason"}}
+```
+
+`own` lists tags allowed without eRank data, usually the printed phrase. Pass `check`, then write `RUN/leads.json` as in step 10 and run `seo_review.py draft RUN`, then `draft RUN --write`. The seller reviews new listings in the app before planning, so no report is built.
+
+New listings have no tags for `suggest`, `competition` or `signals` to start from. Keep your candidate list in `RUN/terms.txt`, because `discover` overwrites `candidates.txt`, and pass it to `suggest`, `competition` and `score`. `competition` takes about 4 seconds a term, so run a long list in the background. `signals` has nothing to compare until the tags are written. eRank's "Unknown" is stored as 0, so a looked-up term with 0 passes `check` without real data, and the plan should name it in `why`.
+
 `RUN` is `<scope>-<YYYY-MM-DD>`, a folder under `C:\Users\Admin\Downloads\etsy-seo-review\`. That home also holds `keyword-store.json` and `competition-store.json`, shared by every run. Follow [etsy-research](../etsy-research/SKILL.md) for loading the Chrome tools, pacing on etsy.com and the Etsy API.
 
 ## 1. Scope
