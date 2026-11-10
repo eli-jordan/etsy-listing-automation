@@ -21,8 +21,12 @@ export interface WordDiffToken {
 }
 
 export function wordDiff(before: string, after: string): WordDiffToken[] {
-  const from = before.length ? before.split(" ") : [];
-  const to = after.length ? after.split(" ") : [];
+  return sequenceDiff(before.length ? before.split(" ") : [], after.length ? after.split(" ") : []);
+}
+
+/** The diff itself, over any sequence of whole strings: words here,
+ * paragraphs in `driftText.ts`. */
+export function sequenceDiff(from: string[], to: string[]): WordDiffToken[] {
   const n = from.length;
   const m = to.length;
 

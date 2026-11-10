@@ -90,6 +90,26 @@ def test_a_listing_is_read_from_the_unscoped_path() -> None:
     assert listing.title == "OUR COPY - written by the tool, must survive republish"
 
 
+def test_a_listings_escaped_copy_is_decoded_once() -> None:
+    """Measured on a live listing: Etsy answers ``Don&#39;t`` for the
+    ``Don't`` this tool wrote. Left in, every apostrophe reads as drift against
+    the last apply. A seller's literal ``&amp;`` arrives as ``&amp;amp;``, so
+    decoding twice would corrupt it."""
+    payload = {
+        **LISTING_PAYLOAD,
+        "title": "NaN Don&#39;t Count On It",
+        "description": "NaN&#39;s reputation. R&amp;amp;D approved.",
+        "tags": ["don&#39;t count"],
+    }
+
+    listing = _client(lambda _: httpx.Response(200, json=payload)).get_listing(LISTING_ID)
+
+    assert listing is not None
+    assert listing.title == "NaN Don't Count On It"
+    assert listing.description == "NaN's reputation. R&amp;D approved."
+    assert listing.tags == ("don't count",)
+
+
 # ------------------------------------------------------------ listing_states
 
 

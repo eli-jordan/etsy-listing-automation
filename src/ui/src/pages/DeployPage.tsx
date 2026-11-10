@@ -5,8 +5,9 @@ import { getListing, tryGetListing } from "../api/listings";
 import { StatusTag } from "../components/StatusTag";
 import { sceneSource } from "../media";
 import { stageWillRun, type ListingDetail } from "../types";
-import { buildComparison } from "./deploy/comparison";
+import { buildComparison, type DriftedField } from "./deploy/comparison";
 import { ComparisonView } from "./deploy/ComparisonView";
+import { scrollToDriftRow } from "./deploy/driftRowAnchor";
 import { Callouts } from "./deploy/Callouts";
 import { PriceTable } from "./deploy/PriceTable";
 import { StepStrip } from "./deploy/StepStrip";
@@ -79,6 +80,7 @@ export function DeployPage() {
   const [state, setState] = useState<DeployState>(initialDeployState);
   const [applyRequested, setApplyRequested] = useState(false);
   const [deletedAfterApply, setDeletedAfterApply] = useState(false);
+  const [openDrift, setOpenDrift] = useState<string | null>(null);
   const streamRef = useRef<RunStreamHandle | null>(null);
   const seenRef = useRef<string | null>(null);
   const leavingRef = useRef(false);
@@ -302,6 +304,10 @@ export function DeployPage() {
     phase === "applying" ||
     phase === "applied" ||
     Object.keys(state.stageRuntime).length > 0;
+  const revealDrift = (field: DriftedField) => {
+    if (field.expandable) setOpenDrift(field.key);
+    scrollToDriftRow(field.key);
+  };
   const { total: previewsTotal, done: previewsDone } = previewCounts(state);
   const appliedStepCount = state.plan?.stage_plans.filter(stageWillRun).length ?? 0;
 
@@ -375,7 +381,12 @@ export function DeployPage() {
                 heading={stepStripHeading(phase)}
               />
             )}
-            <Callouts plan={state.plan} comparison={comparison} applied={phase === "applied"} />
+            <Callouts
+              plan={state.plan}
+              comparison={comparison}
+              applied={phase === "applied"}
+              {...(applyFocused ? {} : { onRevealDrift: revealDrift })}
+            />
             {applyFocused ? (
               <details className="dv-approved-comparison">
                 <summary>View approved before-and-after comparison</summary>
@@ -408,8 +419,14 @@ export function DeployPage() {
                     state.plan.stage_plans.find((s) => s.stage === "render")?.snapshot ?? null
                   }
                   previewsRendered={state.previewsRendered}
-                  collapsed={!comparison.impacts.length && comparison.hasEtsyListing}
+                  collapsed={
+                    !comparison.impacts.length &&
+                    !comparison.drifted.length &&
+                    comparison.hasEtsyListing
+                  }
                   etsyListingId={state.plan.etsy_listing_id}
+                  openDrift={openDrift}
+                  onOpenDriftChange={setOpenDrift}
                 />
                 {comparison.price?.changed && <PriceTable rows={comparison.priceRows} />}
                 <StepStrip

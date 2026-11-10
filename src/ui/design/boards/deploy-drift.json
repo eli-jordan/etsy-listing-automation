@@ -1,0 +1,36 @@
+{
+  "version": 1,
+  "name": "deploy-drift",
+  "title": "Deploy drift",
+  "description": "Three directions for a top drift warning plus a click-to-compare on the drifted field; A (field lens) won and is built.",
+  "auto": false,
+  "layout": {
+    "rows": [
+      [
+        "deploy-drift"
+      ]
+    ],
+    "scenes": {
+      "deploy-drift": {
+        "rows": [
+          [
+            "a-field-lens",
+            "b-history-inspector",
+            "c-change-ledger"
+          ]
+        ]
+      }
+    }
+  },
+  "nodes": [
+    {
+      "frame": "deploy-drift/a-field-lens"
+    },
+    {
+      "frame": "deploy-drift/b-history-inspector"
+    },
+    {
+      "frame": "deploy-drift/c-change-ledger"
+    }
+  ]
+}

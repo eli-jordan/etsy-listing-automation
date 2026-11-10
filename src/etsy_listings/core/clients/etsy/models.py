@@ -200,6 +200,17 @@ class Inventory(BaseModel):
     products: tuple[InventoryProduct, ...] = ()
 
 
+def _unescape_copy(value: dict[str, Any]) -> dict[str, Any]:
+    """A copy with the title, description and tags' HTML entities decoded."""
+    value = dict(value)
+    for key in ("title", "description"):
+        if isinstance(value.get(key), str):
+            value[key] = html.unescape(value[key])
+    if isinstance(value.get("tags"), list):
+        value["tags"] = [html.unescape(t) if isinstance(t, str) else t for t in value["tags"]]
+    return value
+
+
 class Listing(BaseModel):
     """`getListing`'s response, narrowed to what the stages compare against
     `applied` (the Etsy write surface table in features/etsy-listing-20260910/spec.md).
@@ -207,6 +218,10 @@ class Listing(BaseModel):
     Read only through `GET /v3/application/listings/{id}` -- the *unscoped*
     path. The shop-scoped one exists for `PATCH`/`DELETE` and 404s on `GET`,
     which cost the probe a false "our copy was overwritten" verdict.
+
+    Text arrives **HTML-escaped** (measured: ``Don&#39;t``) and is unescaped
+    here, once. `applied` holds the plain text this tool sent, so an escaped
+    read would report every apostrophe as drift.
     """
 
     model_config = ConfigDict(extra="ignore")
@@ -234,6 +249,11 @@ class Listing(BaseModel):
     """Newest *upload* first, inactive ones included (measured). An ordering
     of the response, not of the gallery -- which the API never reports."""
 
+    @model_validator(mode="before")
+    @classmethod
+    def _decode(cls, value: object) -> object:
+        return _unescape_copy(value) if isinstance(value, dict) else value
+
     @field_validator("images", "videos", mode="before")
     @classmethod
     def _null_images_is_none_requested(cls, value: object) -> object:
@@ -255,16 +275,6 @@ def _drop_nulls(value: object) -> object:
     the nulls lets one set of field defaults answer both shapes."""
     if isinstance(value, dict):
         return {key: item for key, item in value.items() if item is not None}
-    return value
-
-
-def _unescape_copy(value: dict[str, Any]) -> dict[str, Any]:
-    """The title, description and tags with Etsy's HTML entities decoded."""
-    for key in ("title", "description"):
-        if isinstance(value.get(key), str):
-            value[key] = html.unescape(value[key])
-    if isinstance(value.get("tags"), list):
-        value["tags"] = [html.unescape(t) if isinstance(t, str) else t for t in value["tags"]]
     return value
 
 

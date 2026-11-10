@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { ComparisonView } from "./ComparisonView";
 import { buildComparison } from "./comparison";
@@ -240,6 +240,84 @@ describe("ComparisonView", () => {
   });
 });
 
+describe("ComparisonView's drifted fields", () => {
+  const AFTER = "First paragraph.\n\nGuaranteed for 14 days.\n\nLast paragraph.";
+  const LIVE = "First paragraph.\n\nGuaranteed for 30 days.\n\nLast paragraph.";
+
+  function renderDrift(collapsed = false) {
+    const p = plan([
+      stage({
+        stage: "etsy_listing",
+        will_run: true,
+        snapshot: {
+          live: { ...ETSY_LISTING_SNAPSHOT.live, description: LIVE },
+          desired: { ...ETSY_LISTING_SNAPSHOT.desired, description: AFTER },
+        },
+        drift: [
+          { path: "description", last_applied: AFTER, live: LIVE },
+          {
+            path: "shipping_profile_id",
+            last_applied: 19283,
+            live: 20011,
+            last_applied_label: "Norway standard",
+            live_label: "Printify default",
+          },
+        ],
+      }),
+    ]);
+    render(
+      <ComparisonView
+        comparison={buildComparison(p)}
+        listing={{ name: "x", scene: null }}
+        renderSnapshot={null}
+        previewsRendered={new Set()}
+        collapsed={collapsed}
+        etsyListingId={1}
+      />,
+    );
+  }
+
+  it("marks the field and opens it to show only the characters that differ", () => {
+    renderDrift();
+    expect(screen.getAllByText("Changed on Etsy")).toHaveLength(2);
+
+    fireEvent.click(screen.getByRole("button", { name: "Compare Description" }));
+
+    const lens = screen.getByRole("region", { name: "Description compared with this plan" });
+    expect(lens).toHaveTextContent("The wording was edited on Etsy.");
+    expect(Array.from(lens.querySelectorAll(".dv-del")).map((e) => e.textContent)).toEqual(["30"]);
+    expect(Array.from(lens.querySelectorAll(".dv-ins")).map((e) => e.textContent)).toEqual(["14"]);
+  });
+
+  it("folds identical paragraphs until asked, and closes again", () => {
+    renderDrift();
+    fireEvent.click(screen.getByRole("button", { name: "Compare Description" }));
+    const lens = screen.getByRole("region", { name: "Description compared with this plan" });
+    expect(lens).not.toHaveTextContent("Last paragraph.");
+
+    const [fold] = screen.getAllByRole("button", { name: /1 identical paragraph/ });
+    fireEvent.click(fold as HTMLElement);
+    expect(lens).toHaveTextContent("Last paragraph.");
+    expect(screen.queryByRole("button", { name: /identical paragraph/ })).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: /Close/ }));
+    expect(screen.getByRole("button", { name: "Compare Description" })).toBeInTheDocument();
+  });
+
+  it("gives a setting with no block of its own a row showing both named values", () => {
+    renderDrift();
+    expect(screen.getAllByText("Shipping profile")).toHaveLength(2);
+    expect(screen.getByText("Printify default")).toHaveClass("dv-setting");
+    expect(screen.getByText("Norway standard")).toHaveClass("dv-setting");
+    expect(screen.queryByText("20011")).not.toBeInTheDocument();
+  });
+
+  it("shows no drift rows in the single-column view", () => {
+    renderDrift(true);
+    expect(screen.queryByText("Changed on Etsy")).not.toBeInTheDocument();
+  });
+});
+
 describe("ComparisonView's rendered scenes", () => {
   it("asks for the plan's own preview of a scene by the hash the plan computed", () => {
     const sceneHash = "c".repeat(64);
@@ -328,10 +406,10 @@ describe("ComparisonView's videos", () => {
   }
 
   function block(side: "On Etsy now" | "After apply"): HTMLElement {
-    const column = screen.getByText(side).closest(".dv-col") as HTMLElement;
-    const label = Array.from(column.querySelectorAll(".dv-eyebrow")).find(
-      (e) => e.textContent === "Videos",
-    );
+    const dataSide = side === "After apply" ? "after" : "before";
+    const label = Array.from(
+      document.querySelectorAll(`.dv-cell[data-side="${dataSide}"] .dv-eyebrow`),
+    ).find((e) => e.textContent === "Videos");
     return label?.closest(".dv-block") as HTMLElement;
   }
 

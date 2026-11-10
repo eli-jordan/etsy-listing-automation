@@ -3,6 +3,7 @@ import {
   stageWillRun,
   type BelowCostRow,
   type ChangeDTO,
+  type DriftDTO,
   type PlanDTO,
   type StagePlanDTO,
 } from "../../types";
@@ -143,11 +144,26 @@ export interface PriceRow {
   belowCost: boolean;
 }
 
+/** One field that differs from the last apply, ready to show. */
+export interface DriftedField {
+  /** `etsy:title`: stable across renders, and names the page anchor. */
+  key: string;
+  path: string;
+  label: string;
+  source: "etsy" | "printify";
+  live: string;
+  after: string;
+  /** Long copy opens a comparison; anything else fits in its row. */
+  expandable: boolean;
+}
+
 export interface Comparison {
   /** Which of the parts of the listing the plan touches, for the headline's
    * tags -- in reading order, not the order `Change`s happened to be emitted
    * in. */
   impacts: ImpactTag[];
+  /** Every field that changed outside this tool since the last apply. */
+  drifted: DriftedField[];
   /** Whether `plan.etsy_listing_id` names a real listing -- `false` gets a
    * single "After apply" column with a *Not on Etsy yet* note (decision 3),
    * never an empty "On Etsy now" one. */
@@ -393,6 +409,80 @@ function buildVideos(stagePlan: StagePlanFor<"etsy_videos"> | undefined): Videos
   };
 }
 
+const DRIFT_LABELS: Record<string, string> = {
+  is_supply: "Supply item",
+  should_auto_renew: "Auto-renew",
+  production_partner_ids: "Production partners",
+  external: "Published on Etsy",
+};
+
+const NAMED_SETTINGS: Partial<Record<string, "shop_section" | "shipping_profile">> = {
+  shop_section_id: "shop_section",
+  shipping_profile_id: "shipping_profile",
+};
+
+function driftLabel(path: string, source: DriftedField["source"]): string {
+  const words = path.replace(/_ids?$/, "").replace(/_/g, " ");
+  const label = DRIFT_LABELS[path] ?? `${words.charAt(0).toUpperCase()}${words.slice(1)}`;
+  return source === "printify" ? `${label} in Printify` : label;
+}
+
+function displayValue(value: unknown): string {
+  if (value === null || value === undefined) return "None";
+  if (typeof value === "boolean") return value ? "Yes" : "No";
+  return Array.isArray(value) ? value.join(", ") : String(value);
+}
+
+/** What apply leaves in this field: the plan's named setting, its own change
+ * to the field, or, with neither, the last-applied value it re-asserts. */
+function driftAfter(drift: DriftDTO, stagePlan: StagePlanDTO): string {
+  const desired = stagePlan.stage === "etsy_listing" ? stagePlan.snapshot?.desired : undefined;
+  const setting = NAMED_SETTINGS[drift.path];
+  const named = setting && desired?.[setting];
+  if (named) return named;
+  const change = findChange(stagePlan, (c) => c.kind === "field" && c.path === drift.path);
+  if (change?.kind === "field") return displayValue(change.after);
+  return drift.last_applied_label ?? displayValue(drift.last_applied);
+}
+
+/** Printify republishes linked copy onto Etsy, so the same external edit can
+ * appear in both stages. Show that event once, preferring the buyer-facing
+ * Etsy observation when both sides are byte-for-byte identical. */
+function uniqueDrifts(plan: PlanDTO): { drift: DriftDTO; stagePlan: StagePlanDTO }[] {
+  const found = new Map<string, { drift: DriftDTO; stagePlan: StagePlanDTO }>();
+  for (const stagePlan of plan.stage_plans) {
+    for (const drift of stagePlan.drift) {
+      const key = JSON.stringify([
+        drift.path,
+        drift.last_applied,
+        drift.live,
+        drift.last_applied_label,
+        drift.live_label,
+      ]);
+      const previous = found.get(key);
+      if (previous === undefined || previous.stagePlan.stage === "printify_product") {
+        found.set(key, { drift, stagePlan });
+      }
+    }
+  }
+  return [...found.values()];
+}
+
+function buildDrifted(plan: PlanDTO): DriftedField[] {
+  return uniqueDrifts(plan).map(({ drift, stagePlan }) => {
+    const source = stagePlan.stage === "printify_product" ? "printify" : "etsy";
+    return {
+      key: `${source}:${drift.path}`,
+      path: drift.path,
+      label: driftLabel(drift.path, source),
+      source,
+      live: drift.live_label ?? displayValue(drift.live),
+      after: driftAfter(drift, stagePlan),
+      expandable: drift.path === "title" || drift.path === "description",
+    };
+  });
+}
+
 function impactsFor(
   colours: ColoursBlock | null,
   title: TitleBlock | null,
@@ -432,9 +522,24 @@ export function buildComparison(plan: PlanDTO): Comparison {
   const price = buildPrice(productPlan);
   const images = buildImages(etsyMediaPlan);
   const videos = buildVideos(findStage(plan, "etsy_videos"));
+  const drifted = buildDrifted(plan);
+
+  // Setting drifted copy back changes what buyers read as much as an edit does.
+  const orDrifted = <Block extends { changed: boolean }>(block: Block | null, key: string) =>
+    block && { ...block, changed: block.changed || drifted.some((d) => d.key === key) };
 
   return {
-    impacts: impactsFor(colours, title, description, price, tags, materials, images, videos),
+    impacts: impactsFor(
+      colours,
+      orDrifted(title, "etsy:title"),
+      orDrifted(description, "etsy:description"),
+      price,
+      tags,
+      materials,
+      images,
+      videos,
+    ),
+    drifted,
     hasEtsyListing: plan.etsy_listing_id !== null,
     title,
     description,

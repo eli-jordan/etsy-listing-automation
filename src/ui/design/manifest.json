@@ -95,6 +95,11 @@
       "description": "Clickable Admin prototype with Shop, Settings, coupled AI time limits, discovery, disconnected shops and save recovery states."
     },
     {
+      "name": "deploy-drift",
+      "title": "Deploy drift",
+      "description": "Three directions for a top drift warning plus a click-to-compare on the drifted field; A (field lens) won and is built."
+    },
+    {
       "name": "deploy-open-etsy",
       "title": "Open on Etsy after deploy",
       "description": "Three directions for opening a just-deployed listing on Etsy; A (footer Open on Etsy button) won and is built in ApplyFooter."
@@ -203,6 +208,13 @@
     {
       "name": "demo",
       "frames": 3
+    },
+    {
+      "name": "deploy-drift",
+      "frames": 3,
+      "brief": "design/scenes/deploy-drift/_brief.md",
+      "description": "Three directions for showing Etsy drift on the deploy page; A (field lens) won and is built in Callouts and ComparisonView.",
+      "note": "**A is built.** It mounts the shipped `Callouts` and `ComparisonView`. B and C are the directions that were not chosen.\n\nA's fixture has a wording edit, a description edit and a setting Printify re-attached. B and C still show the `&#39;` case, which the decoding fix has since removed."
     },
     {
       "name": "deploy-open-etsy",
@@ -1419,6 +1431,39 @@
       "scene": "demo",
       "title": "Demo - welcome",
       "viewport": "mobile"
+    },
+    {
+      "id": "deploy-drift/a-field-lens",
+      "file": "design/scenes/deploy-drift/a-field-lens.tsx",
+      "kind": "tsx",
+      "scene": "deploy-drift",
+      "title": "A · Field lens",
+      "viewport": "monitor",
+      "description": "Chosen and built: the real Callouts and ComparisonView, with one drift warning and fields that open in place.",
+      "variantGroup": "deploy-drift",
+      "variant": "a"
+    },
+    {
+      "id": "deploy-drift/b-history-inspector",
+      "file": "design/scenes/deploy-drift/b-history-inspector.tsx",
+      "kind": "tsx",
+      "scene": "deploy-drift",
+      "title": "B · History inspector",
+      "viewport": "monitor",
+      "description": "Not chosen, A won. A short warning opens a docked inspector that steps through drifted fields and shows last applied, on Etsy now and after apply as one history.",
+      "variantGroup": "deploy-drift",
+      "variant": "b"
+    },
+    {
+      "id": "deploy-drift/c-change-ledger",
+      "file": "design/scenes/deploy-drift/c-change-ledger.tsx",
+      "kind": "tsx",
+      "scene": "deploy-drift",
+      "title": "C · Change ledger",
+      "viewport": "monitor",
+      "description": "Not chosen, A won. A top ledger names each exact difference; clicking a field replaces its two columns with one full-width unified diff.",
+      "variantGroup": "deploy-drift",
+      "variant": "c"
     },
     {
       "id": "deploy-open-etsy/a-footer",
