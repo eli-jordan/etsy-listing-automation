@@ -442,6 +442,111 @@ describe("buildComparison: images", () => {
   });
 });
 
+describe("buildComparison: drifted fields", () => {
+  const titleDrift = { path: "title", last_applied: "Ours", live: "Theirs" };
+
+  it("names a setting by its labels and carries the plan's value as the after", () => {
+    const p = plan([
+      stage({
+        stage: "etsy_listing",
+        snapshot: {
+          ...ETSY_LISTING_SNAPSHOT,
+          desired: { ...ETSY_LISTING_SNAPSHOT.desired, shipping_profile: "Norway express" },
+        },
+        drift: [
+          {
+            path: "shipping_profile_id",
+            last_applied: 19283,
+            live: 20011,
+            last_applied_label: "Norway standard",
+            live_label: "Printify default",
+          },
+        ],
+      }),
+    ]);
+
+    expect(buildComparison(p).drifted).toEqual([
+      {
+        key: "etsy:shipping_profile_id",
+        path: "shipping_profile_id",
+        label: "Shipping profile",
+        source: "etsy",
+        live: "Printify default",
+        after: "Norway express",
+        expandable: false,
+      },
+    ]);
+  });
+
+  it("re-asserts the last-applied value when the plan has no change of its own", () => {
+    const p = plan([stage({ stage: "etsy_listing", drift: [titleDrift] })]);
+
+    expect(buildComparison(p).drifted[0]).toMatchObject({ after: "Ours", expandable: true });
+  });
+
+  it("prefers the plan's own edit to the last-applied value", () => {
+    const p = plan([
+      stage({
+        stage: "etsy_listing",
+        drift: [titleDrift],
+        changes: [{ kind: "field", path: "title", before: "Ours", after: "Edited here" }],
+      }),
+    ]);
+
+    expect(buildComparison(p).drifted[0]?.after).toBe("Edited here");
+  });
+
+  it("reads a yes-or-no setting in words", () => {
+    const p = plan([
+      stage({
+        stage: "etsy_listing",
+        drift: [{ path: "should_auto_renew", last_applied: false, live: true }],
+      }),
+    ]);
+
+    expect(buildComparison(p).drifted[0]).toMatchObject({
+      label: "Auto-renew",
+      live: "Yes",
+      after: "No",
+    });
+  });
+
+  it("shows one edit seen in both stages once, as Etsy's", () => {
+    const p = plan([
+      stage({ stage: "printify_product", drift: [titleDrift] }),
+      stage({ stage: "etsy_listing", drift: [titleDrift] }),
+    ]);
+
+    expect(buildComparison(p).drifted.map((field) => field.key)).toEqual(["etsy:title"]);
+  });
+
+  it("labels Printify-only drift as Printify's", () => {
+    const p = plan([stage({ stage: "printify_product", drift: [titleDrift] })]);
+
+    expect(buildComparison(p).drifted[0]).toMatchObject({
+      key: "printify:title",
+      label: "Title in Printify",
+      source: "printify",
+    });
+  });
+
+  it("counts drifted Etsy copy as an impact, in reading order", () => {
+    const p = plan([
+      stage({
+        stage: "etsy_listing",
+        snapshot: ETSY_LISTING_SNAPSHOT,
+        drift: [
+          { path: "description", last_applied: "A", live: "B" },
+          { path: "title", last_applied: "A", live: "B" },
+        ],
+      }),
+    ]);
+
+    expect(buildComparison(p).impacts).toEqual(["Title", "Description"]);
+    expect(buildComparison(p).title?.changed).toBe(false);
+  });
+});
+
 describe("buildComparison: no Etsy listing yet", () => {
   it("reports hasEtsyListing false when the plan carries no id", () => {
     const draft = plan(

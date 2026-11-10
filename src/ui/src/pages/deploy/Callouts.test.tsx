@@ -1,5 +1,5 @@
-import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { fireEvent, render, screen } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
 import { Callouts } from "./Callouts";
 import { buildComparison } from "./comparison";
 import type { PlanDTO, StagePlanDTO } from "../../types";
@@ -44,13 +44,14 @@ describe("Callouts", () => {
     expect(screen.queryByText("Apply will change what buyers see")).not.toBeInTheDocument();
   });
 
-  it("shows a drift callout naming both sides, from the stage's own labels", () => {
+  it("warns once for all drift, linking each field and leaving its value to the row", () => {
     const p = plan([
       stage({
         stage: "etsy_listing",
         will_run: true,
         reason: "the listing's copy or settings changed",
         drift: [
+          { path: "description", last_applied: "A long description.", live: "An edited one." },
           {
             path: "shipping_profile_id",
             last_applied: 19283,
@@ -61,11 +62,39 @@ describe("Callouts", () => {
         ],
       }),
     ]);
+    const onRevealDrift = vi.fn();
+    render(
+      <Callouts
+        plan={p}
+        comparison={buildComparison(p)}
+        applied={false}
+        onRevealDrift={onRevealDrift}
+      />,
+    );
+
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "This listing has drifted from what’s on Etsy. 2 fields changed there since your last apply. Apply will set them back.",
+    );
+    expect(screen.queryByText(/A long description/)).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Shipping profile" }));
+    expect(onRevealDrift).toHaveBeenCalledWith(
+      expect.objectContaining({ key: "etsy:shipping_profile_id", expandable: false }),
+    );
+  });
+
+  it("offers no field links while the comparison is off the page", () => {
+    const p = plan([
+      stage({
+        stage: "etsy_listing",
+        will_run: true,
+        drift: [{ path: "title", last_applied: "Old", live: "New" }],
+      }),
+    ]);
     render(<Callouts plan={p} comparison={buildComparison(p)} applied={false} />);
 
-    expect(screen.getByText(/Printify default/)).toBeInTheDocument();
-    expect(screen.getByText(/Norway standard/)).toBeInTheDocument();
-    expect(screen.queryByText(/19283/)).not.toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("1 field changed");
+    expect(screen.queryByRole("button", { name: "Title" })).not.toBeInTheDocument();
   });
 
   it("shows identical Printify and Etsy drift once, attributed to Etsy", () => {
@@ -82,8 +111,7 @@ describe("Callouts", () => {
     ]);
     render(<Callouts plan={p} comparison={buildComparison(p)} applied={false} />);
 
-    expect(screen.getAllByText(/Changed on Etsy since your last apply/)).toHaveLength(1);
-    expect(screen.queryByText(/Changed in Printify since your last apply/)).not.toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("what’s on Etsy. 1 field changed");
   });
 
   it("attributes Printify-only drift to Printify rather than Etsy", () => {
@@ -96,7 +124,7 @@ describe("Callouts", () => {
     ]);
     render(<Callouts plan={p} comparison={buildComparison(p)} applied={false} />);
 
-    expect(screen.getByText(/Changed in Printify since your last apply/)).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("what’s in Printify.");
   });
 
   it("collapses to a single Deployed callout once applied", () => {

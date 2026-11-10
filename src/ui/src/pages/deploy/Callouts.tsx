@@ -1,5 +1,5 @@
-import type { Comparison } from "./comparison";
-import { stageBlocked, stageWillRun, type DriftDTO, type PlanDTO } from "../../types";
+import type { Comparison, DriftedField } from "./comparison";
+import { stageBlocked, stageWillRun, type PlanDTO } from "../../types";
 
 /**
  * The headline, impact tags, and the blocked/drift/ok callouts above the
@@ -62,50 +62,67 @@ function DriftIcon() {
   );
 }
 
-type SourcedDrift = DriftDTO & { stage: PlanDTO["stage_plans"][number]["stage"] };
+/** One line above the comparison: the values themselves live on each field's
+ * own row, where a long description can be read and compared. */
+function DriftWarning({
+  drifted,
+  onReveal,
+}: {
+  drifted: DriftedField[];
+  onReveal: ((field: DriftedField) => void) | undefined;
+}) {
+  const where = [
+    drifted.some((field) => field.source === "etsy") && "on Etsy",
+    drifted.some((field) => field.source === "printify") && "in Printify",
+  ]
+    .filter(Boolean)
+    .join(" and ");
+  const count = drifted.length;
 
-function driftKey(drift: SourcedDrift): string {
-  return JSON.stringify([
-    drift.path,
-    drift.last_applied,
-    drift.live,
-    drift.last_applied_label,
-    drift.live_label,
-  ]);
-}
-
-/** Printify republishes linked copy onto Etsy, so the same external edit can
- * appear in both stages. Show that event once, preferring the buyer-facing
- * Etsy observation when both sides are byte-for-byte identical. */
-function uniqueDrifts(plan: PlanDTO): SourcedDrift[] {
-  const found = new Map<string, SourcedDrift>();
-  for (const stagePlan of plan.stage_plans) {
-    for (const drift of stagePlan.drift) {
-      const sourced = { ...drift, stage: stagePlan.stage };
-      const key = driftKey(sourced);
-      const previous = found.get(key);
-      if (previous === undefined || previous.stage === "printify_product") {
-        found.set(key, sourced);
-      }
-    }
-  }
-  return [...found.values()];
+  return (
+    <div className="dv-callout dv-callout--drift dv-drift-strip" role="status">
+      <DriftIcon />
+      <div className="dv-drift-strip__text">
+        <strong>This listing has drifted from what&rsquo;s {where}.</strong> {count}{" "}
+        {count === 1 ? "field" : "fields"} changed there since your last apply. Apply will set{" "}
+        {count === 1 ? "it" : "them"} back.
+      </div>
+      {onReveal && (
+        <div className="dv-drift-strip__links">
+          {drifted.map((field) => (
+            <button
+              key={field.key}
+              type="button"
+              className="dv-drift-link"
+              onClick={() => onReveal(field)}
+            >
+              {field.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
 }
 
 export function Callouts({
   plan,
   comparison,
   applied,
+  onRevealDrift,
 }: {
   plan: PlanDTO;
   comparison: Comparison;
   /** True once this run's outcome is "applied" -- the summary becomes a
    * single "Deployed" callout, per the spec's Applied element. */
   applied: boolean;
+  /** Links the warning to each field's row, while the comparison is on the
+   * page. */
+  onRevealDrift?: (field: DriftedField) => void;
 }) {
   const hasWork = plan.stage_plans.some(stageWillRun);
   const blocked = plan.stage_plans.filter((stage) => stageBlocked(stage) !== null);
-  const drifts = uniqueDrifts(plan);
+  const { drifted } = comparison;
 
   if (applied) {
     return (
@@ -165,24 +182,7 @@ export function Callouts({
         );
       })}
 
-      {drifts.map((drift, index) => (
-        <div key={`${drift.stage}-${drift.path}-${index}`} className="dv-callout dv-callout--drift">
-          <DriftIcon />
-          <div>
-            <strong>
-              Changed {drift.stage === "printify_product" ? "in Printify" : "on Etsy"} since your
-              last apply:
-            </strong>{" "}
-            the {drift.path.replace(/_/g, " ")} is now &ldquo;
-            {drift.live_label ?? String(drift.live)}
-            &rdquo;, not &ldquo;
-            {drift.last_applied_label ?? String(drift.last_applied)}&rdquo;.
-            {drift.stage !== "printify_product" &&
-              " Printify re-attaches its own settings when it republishes."}{" "}
-            Apply will set it back.
-          </div>
-        </div>
-      ))}
+      {drifted.length > 0 && <DriftWarning drifted={drifted} onReveal={onRevealDrift} />}
     </div>
   );
 }

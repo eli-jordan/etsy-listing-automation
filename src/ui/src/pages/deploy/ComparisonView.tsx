@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { MutedClip } from "../../components/MutedClip";
 import { pictureFor, type SceneSource } from "../../media";
 import type { RenderSnapshot } from "../../types";
@@ -6,9 +7,15 @@ import type {
   AfterVideoTile,
   BeforeImageTile,
   BeforeVideoTile,
+  ColoursBlock,
   Comparison as ComparisonData,
+  DescriptionBlock,
+  DriftedField,
+  PriceBlock,
   TagsBlock,
+  TitleBlock,
 } from "./comparison";
+import { DriftTextRow, DriftValueRow } from "./DriftRows";
 import { wordDiff } from "./wordDiff";
 
 /**
@@ -292,106 +299,161 @@ function TextDiff({
   ));
 }
 
-function Column({
-  side,
-  comparison,
-  listing,
-  renderSnapshot,
-  previewsRendered,
-  etsyListingIdLabel,
-  imageUrlForRef,
-}: {
-  side: "before" | "after";
-  comparison: ComparisonData;
+type Side = "before" | "after";
+
+/** One field across the comparison. Fields are rows, not two free-standing
+ * columns, so a drifted field's two sides line up and can open together. */
+interface FieldRow {
+  key: string;
+  cell: (side: Side) => React.ReactNode;
+  /** Set when this field drifted, which replaces the plain row. */
+  drift?: DriftedField | null;
+}
+
+interface MediaContext {
   listing: ListingMediaContext;
   renderSnapshot: RenderSnapshot | null;
   previewsRendered: Set<string>;
-  etsyListingIdLabel: string;
   imageUrlForRef: ((ref: string) => string | null) | undefined;
-}) {
-  const isAfter = side === "after";
-  const { title, description, tags, materials, colours, price, images, videos } = comparison;
+}
 
-  return (
-    <div className="dv-col">
-      <div className="dv-col__head">
-        <h3>{isAfter ? "After apply" : "On Etsy now"}</h3>
-        <span className="dv-eyebrow">{isAfter ? "from this plan" : etsyListingIdLabel}</span>
-      </div>
-
-      {images && (
+function mediaRows({ images, videos }: ComparisonData, media: MediaContext): FieldRow[] {
+  const rows: FieldRow[] = [];
+  if (images) {
+    rows.push({
+      key: "images",
+      cell: (side) => (
         <Block label="Images" changed={images.changed} side={side}>
           <div className="dv-gallery">
-            {isAfter
-              ? images.after.map((tile) => (
-                  <AfterTile
-                    key={tile.rank}
-                    tile={tile}
-                    listing={listing}
-                    renderSnapshot={renderSnapshot}
-                    previewsRendered={previewsRendered}
-                    imageUrlForRef={imageUrlForRef}
-                  />
-                ))
+            {side === "after"
+              ? images.after.map((tile) => <AfterTile key={tile.rank} tile={tile} {...media} />)
               : images.before.map((tile) => <BeforeTile key={tile.rank} tile={tile} />)}
           </div>
         </Block>
-      )}
-
-      {videos && (
+      ),
+    });
+  }
+  if (videos) {
+    rows.push({
+      key: "videos",
+      cell: (side) => (
         <Block label="Videos" changed={videos.changed} side={side}>
           <div className="dv-gallery dv-gallery--videos">
-            {isAfter
+            {side === "after"
               ? videos.after.map((tile) => (
-                  <AfterVideo key={tile.ref} tile={tile} listing={listing.name} />
+                  <AfterVideo key={tile.ref} tile={tile} listing={media.listing.name} />
                 ))
               : videos.before.map((tile) => <BeforeVideo key={tile.videoId} tile={tile} />)}
           </div>
         </Block>
-      )}
+      ),
+    });
+  }
+  return rows;
+}
 
-      {title && (
-        <Block label="Title" changed={title.changed} side={side}>
-          <div className="dv-title">
-            <TextDiff field={title} isAfter={isAfter} />
+function copyRow(
+  key: "title" | "description",
+  label: string,
+  block: TitleBlock | DescriptionBlock,
+  drifted: DriftedField[],
+): FieldRow {
+  return {
+    key,
+    drift: drifted.find((field) => field.key === `etsy:${key}`) ?? null,
+    cell: (side) => (
+      <Block label={label} changed={block.changed} side={side}>
+        <div className={`dv-${key}`}>
+          <TextDiff field={block} isAfter={side === "after"} />
+        </div>
+      </Block>
+    ),
+  };
+}
+
+function coloursRow(colours: ColoursBlock): FieldRow {
+  return {
+    key: "colours",
+    cell: (side) => (
+      <Block label="Colours" changed={colours.changed} side={side}>
+        <div className="dv-swatches">
+          {(side === "after" ? colours.after : colours.before).map((colour) => {
+            const isNew = side === "after" && colours.added.includes(colour);
+            return (
+              <span key={colour} className={isNew ? "dv-sw dv-sw--new" : "dv-sw"}>
+                {colour}
+                {isNew && " · new"}
+              </span>
+            );
+          })}
+        </div>
+      </Block>
+    ),
+  };
+}
+
+function priceRow(price: PriceBlock): FieldRow {
+  return {
+    key: "price",
+    cell: (side) => (
+      <Block label="Price" changed={price.changed} side={side}>
+        <div className="dv-price dv-tnum">
+          {formatRange(side === "after" ? price.after : price.before)}
+        </div>
+      </Block>
+    ),
+  };
+}
+
+function listRow(label: string, block: TagsBlock): FieldRow {
+  return {
+    key: label,
+    cell: (side) => <StringList label={label} block={block} side={side} />,
+  };
+}
+
+function fieldRows(comparison: ComparisonData, media: MediaContext): FieldRow[] {
+  const { title, description, price, colours, tags, materials, drifted } = comparison;
+  const present = (row: FieldRow | null): row is FieldRow => row !== null;
+  return [
+    ...mediaRows(comparison, media),
+    ...[
+      title && copyRow("title", "Title", title, drifted),
+      description && copyRow("description", "Description", description, drifted),
+      price && priceRow(price),
+      colours && coloursRow(colours),
+      tags && listRow("Tags", tags),
+      materials && listRow("Materials", materials),
+    ].filter(present),
+  ];
+}
+
+const hasOwnRow = (field: DriftedField) =>
+  field.key === "etsy:title" || field.key === "etsy:description";
+
+function PlainRow({ row, sides }: { row: FieldRow; sides: Side[] }) {
+  return (
+    <div className="dv-row">
+      {sides.map((side) => (
+        <div key={side} className="dv-cell" data-side={side}>
+          {row.cell(side)}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function ColumnHeads({ sides, idLabel }: { sides: Side[]; idLabel: string }) {
+  return (
+    <div className="dv-row dv-row--head">
+      {sides.map((side) => (
+        <div key={side} className="dv-cell">
+          <div className="dv-col__head">
+            <h3>{side === "after" ? "After apply" : "On Etsy now"}</h3>
+            <span className="dv-eyebrow">{side === "after" ? "from this plan" : idLabel}</span>
           </div>
-        </Block>
-      )}
-
-      {description && (
-        <Block label="Description" changed={description.changed} side={side}>
-          <div className="dv-description">
-            <TextDiff field={description} isAfter={isAfter} />
-          </div>
-        </Block>
-      )}
-
-      {price && (
-        <Block label="Price" changed={price.changed} side={side}>
-          <div className="dv-price dv-tnum">
-            {formatRange(isAfter ? price.after : price.before)}
-          </div>
-        </Block>
-      )}
-
-      {colours && (
-        <Block label="Colours" changed={colours.changed} side={side}>
-          <div className="dv-swatches">
-            {(isAfter ? colours.after : colours.before).map((colour) => {
-              const isNew = isAfter && colours.added.includes(colour);
-              return (
-                <span key={colour} className={isNew ? "dv-sw dv-sw--new" : "dv-sw"}>
-                  {colour}
-                  {isNew && " · new"}
-                </span>
-              );
-            })}
-          </div>
-        </Block>
-      )}
-
-      {tags && <StringList label="Tags" block={tags} side={side} />}
-      {materials && <StringList label="Materials" block={materials} side={side} />}
+        </div>
+      ))}
     </div>
   );
 }
@@ -414,6 +476,8 @@ export function ComparisonView({
   collapsed,
   etsyListingId,
   imageUrlForRef,
+  openDrift,
+  onOpenDriftChange,
 }: {
   comparison: ComparisonData;
   listing: ListingMediaContext;
@@ -426,38 +490,53 @@ export function ComparisonView({
   /** Optional fixture resolver for canvases and component galleries. The app
    * normally derives these URLs from the listing's media refs. */
   imageUrlForRef?: (ref: string) => string | null;
+  /** The drifted field shown open, when the page links to fields from
+   * outside. Left out, the view keeps this itself. */
+  openDrift?: string | null;
+  onOpenDriftChange?: (key: string | null) => void;
 }) {
-  const etsyListingIdLabel = etsyListingId !== null ? `listing ${etsyListingId}` : "";
-  const columnProps = {
-    comparison,
+  const [ownOpenDrift, setOwnOpenDrift] = useState<string | null>(null);
+  const open = onOpenDriftChange ? (openDrift ?? null) : ownOpenDrift;
+  const setOpen = onOpenDriftChange ?? setOwnOpenDrift;
+
+  const single = !comparison.hasEtsyListing || collapsed;
+  const singleSide: Side = comparison.hasEtsyListing ? "before" : "after";
+  const sides: Side[] = single ? [singleSide] : ["before", "after"];
+  const rows = fieldRows(comparison, {
     listing,
     renderSnapshot,
     previewsRendered,
-    etsyListingIdLabel,
     imageUrlForRef,
-  };
+  });
+  const extraDrift = single ? [] : comparison.drifted.filter((field) => !hasOwnRow(field));
 
-  if (!comparison.hasEtsyListing) {
-    return (
-      <div className="dv-compare dv-compare--single">
-        <Column {...columnProps} side="after" />
-        <p className="dv-note">Not on Etsy yet.</p>
-      </div>
+  const driftRow = (field: DriftedField) =>
+    field.expandable ? (
+      <DriftTextRow
+        key={field.key}
+        field={field}
+        open={open === field.key}
+        onToggle={() => setOpen(open === field.key ? null : field.key)}
+      />
+    ) : (
+      <DriftValueRow key={field.key} field={field} />
     );
-  }
-
-  if (collapsed) {
-    return (
-      <div className="dv-compare dv-compare--single">
-        <Column {...columnProps} side="before" />
-      </div>
-    );
-  }
 
   return (
-    <div className="dv-compare">
-      <Column {...columnProps} side="before" />
-      <Column {...columnProps} side="after" />
+    <div className={single ? "dv-compare dv-compare--single" : "dv-compare"}>
+      <ColumnHeads
+        sides={sides}
+        idLabel={etsyListingId !== null ? `listing ${etsyListingId}` : ""}
+      />
+      {rows.map((row) =>
+        row.drift && !single ? (
+          driftRow(row.drift)
+        ) : (
+          <PlainRow key={row.key} row={row} sides={sides} />
+        ),
+      )}
+      {extraDrift.map(driftRow)}
+      {!comparison.hasEtsyListing && <p className="dv-note">Not on Etsy yet.</p>}
     </div>
   );
 }
