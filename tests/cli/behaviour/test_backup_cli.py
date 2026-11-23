@@ -18,6 +18,7 @@ from typer.testing import CliRunner
 
 from etsy_listings.cli.app import app
 from etsy_listings.core.backup.binary import RESTIC_BINARY_ENV_VAR
+from etsy_listings.core.backup.state import HISTORY_FILE
 from etsy_listings.core.config.secrets import BACKUP_PASSWORD_VAR
 from etsy_listings.core.workspace import layout
 
@@ -114,6 +115,16 @@ def test_status_without_restic_installed_says_how_to_get_it(
     assert not isolated.exists()
 
 
+def test_run_without_a_password_fails_and_is_recorded(
+    workspace_root: Path, repository: Path, isolated: Path
+) -> None:
+    code, output = _run(workspace_root, "run")
+
+    assert code == 1
+    assert BACKUP_PASSWORD_VAR in output
+    assert '"outcome": "failed"' in (isolated / ".etsy-listings" / HISTORY_FILE).read_text()
+
+
 # ---------------------------------------------------------------- with restic
 
 
@@ -207,3 +218,20 @@ def test_status_json_reports_the_configuration(workspace_root: Path, repository:
     assert report["interval_hours"] == 12
     assert report["snapshots"] == 0
     assert report["problem"] is None
+
+
+@pytest.mark.restic
+@pytest.mark.usefixtures("with_restic")
+def test_run_backs_up_then_check_finds_no_errors(workspace_root: Path, repository: Path) -> None:
+    (workspace_root / layout.ENV_FILE).write_text(f"{BACKUP_PASSWORD_VAR}={PASSWORD}\n")
+    assert _run(workspace_root, "init")[0] == 0
+
+    code, output = _run(workspace_root, "run")
+    assert code == 0, output
+    assert "Pruning" in output
+    snapshot = json.loads(_run(workspace_root, "snapshots", "--json")[1])
+    assert len(snapshot) == 1
+    assert f"snapshot {snapshot[0]['short_id']}" in output
+
+    code, output = _run(workspace_root, "check")
+    assert (code, output.strip()) == (0, "The backup repository has no errors.")

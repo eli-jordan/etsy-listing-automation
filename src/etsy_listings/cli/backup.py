@@ -1,15 +1,16 @@
 """``etsy-listings backup``: the workspace's restic repository from a terminal
 (workspace-backup spec, *CLI*).
 
-PR 2 builds ``init``, ``snapshots`` and ``status``; ``run``, ``check`` and
-``restore`` follow with the backup run and restore. The CLI does not
-coordinate with a running server; restic's own repository lock keeps two
-processes apart.
+``init``, ``run``, ``check``, ``snapshots`` and ``status``; ``restore``
+follows with restore (plan, PR 7). The CLI does not coordinate with a
+running server, so ``run`` pauses no jobs; restic's own repository lock
+keeps two processes apart.
 """
 
 from __future__ import annotations
 
 import json
+import time
 from collections.abc import Iterator
 from contextlib import contextmanager
 from typing import Annotated, Any
@@ -27,6 +28,7 @@ from etsy_listings.core.application.backup_repository import (
     open_repository,
     stored_password,
 )
+from etsy_listings.core.application.backup_run import BackupProgress, BackupRunner
 from etsy_listings.core.backup.binary import RESTIC_VERSION, ResticBinaries
 from etsy_listings.core.backup.restic import Snapshot
 from etsy_listings.core.config.secrets import BACKUP_PASSWORD_VAR
@@ -83,6 +85,60 @@ def init(root: str | None = root_option()) -> None:
             f"{BACKUP_PASSWORD_VAR}. Keep a copy in a password manager: the .env inside "
             "each backup is encrypted with it."
         )
+
+
+_STEP_LINES = {
+    "backing_up": "Backing up the workspace...",
+    "forgetting": "Applying the retention...",
+    "pruning": "Pruning unused data (weekly)...",
+    "checking": "Checking the repository (weekly)...",
+}
+PROGRESS_EVERY_SECONDS = 5.0
+
+
+class _ProgressLines:
+    """Each step once, and the files read at most every few seconds."""
+
+    def __init__(self) -> None:
+        self._step: str | None = None
+        self._printed = 0.0
+
+    def __call__(self, progress: BackupProgress) -> None:
+        if progress.step != self._step and progress.step in _STEP_LINES:
+            self._step = progress.step
+            typer.echo(_STEP_LINES[progress.step], err=True)
+        elif progress.files_total and time.monotonic() - self._printed >= PROGRESS_EVERY_SECONDS:
+            self._printed = time.monotonic()
+            typer.echo(f"  {progress.files_done:,} of {progress.files_total:,} files", err=True)
+
+
+@app.command()
+def run(root: str | None = root_option()) -> None:
+    """Back up the workspace now and apply the retention; prune and check the
+    repository once a week. For when the app is stopped: it pauses no jobs
+    in a running server."""
+    workspace = open_workspace(root)
+    with _reported():
+        record = BackupRunner(workspace, ResticBinaries()).run(progress=_ProgressLines())
+    for warning in record.warnings:
+        typer.echo(f"Not backed up: {warning}", err=True)
+    if record.snapshot_id is not None:
+        typer.echo(f"Backed up {workspace.root} as snapshot {record.snapshot_id[:8]}.")
+    if record.outcome != "succeeded":
+        typer.echo(f"Backup {record.outcome}: {record.message}", err=True)
+        raise typer.Exit(1)
+
+
+@app.command()
+def check(root: str | None = root_option()) -> None:
+    """Check the backup repository's structure with restic check."""
+    workspace = open_workspace(root)
+    with _reported():
+        result = BackupRunner(workspace, ResticBinaries()).check()
+    if not result.ok:
+        typer.echo(result.message, err=True)
+        raise typer.Exit(1)
+    typer.echo("The backup repository has no errors.")
 
 
 def _snapshot_json(snapshot: Snapshot) -> dict[str, Any]:
