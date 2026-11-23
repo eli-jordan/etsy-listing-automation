@@ -542,9 +542,18 @@ Deviations recorded during implementation:
   opened. A forgotten snapshot's row reads "No longer kept".
 - The mockup stylesheet moved to `src/ui/src/pages/admin/backup/backup.css`
   and the live scene imports it from there (design promotion rule).
-- Size: about 2,500 changed lines, 780 of them tests, over the 1,500
-  target. The repair dialog and the set-up form are the seams if it must
-  split.
+- Size: about 2,600 changed lines, 830 of them tests, over the 1,500
+  target; accepted at review without a split.
+- Set-up's stale revision is told from its other conflicts by the HTTP
+  status (412 against 409), as `saveSettings` already does; both bodies
+  are `kind: "conflict"`, so no new field was needed.
+- Backups off leaves out the mockup's "Already have backups…" note until
+  Connect exists (PR 8). A destination's pill names its problem when the
+  reason is short ("Folder not found"), else says "Not copied".
+- The app screenshots come from a scratch script that serves `create_app`
+  with a `BackupEnvironment` (temp home, the test suite's by-command fake
+  restic) and seeded state, captured with Playwright's Chromium at
+  1280 × 800: the CLI cannot take a fake restic or a temp home.
 
 ### PR 7 — Restore
 
