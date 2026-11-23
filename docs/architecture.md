@@ -631,6 +631,28 @@ Before a browser plan or apply begins, `Deployments` yields its listings to the
 `AiCoordinator`, which cancels their queued batch AI, stops and awaits active
 AI, and holds those names against new AI until deployment ends (ADR-0050).
 
+`create_app` also builds one `JobGate` (`core/application/job_gate.py`) and
+passes it to `Deployments`, the `AiCoordinator` and its batch queue,
+`Preparations` and the scene warmer. It is the workspace backup's pause
+(workspace-backup spec, *Pausing jobs*). Each place a unit of work starts asks
+the gate for a ticket and holds it until the work ends: the deploy executor
+before it executes a dequeued run, a manual run before it is registered, the
+batch queue before it claims a row, each Prepare lane before it dispatches a
+job, and the warmer before each pass. While the gate is paused nothing is
+admitted. Submissions are still accepted: deploy runs stay queued, a manual
+AI run is answered in a `queued` phase, batch rows and Prepare jobs stay
+queued, and warmer requests wait. Summaries report this as
+`waiting_for_backup`, derived on each read and never stored (plan decision
+P4). `wait_idle` counts tickets, not queued work, so it ends once the work in
+flight has finished and names the oldest job it is waiting for. A backup
+pauses before it waits. That keeps a deploy already yielding to an AI run
+safe, because finishing work in flight needs no admission. Resume starts held
+work in submission order. On shutdown the lifespan stops the gate first: a
+pending wait ends and held work stays held. Each coordinator's own stop then
+drops it as it drops queued work. Held deploy runs end as queued runs do, held
+manual AI runs end `cancelled`, and batch rows and Prepare jobs stay queued on
+disk for the next start.
+
 ### Shop administration
 
 The SPA's `/admin` route owns Shop navigation and serializes blur saves against

@@ -111,6 +111,22 @@ Exit when:
 - shared gates pass, including the e2e workflow (this PR touches the deploy
   path).
 
+Deviations recorded during implementation:
+
+- `wait_idle` counts admission tickets the gate hands out, not each
+  coordinator's own state (`Deployments.busy()`, `BatchQueue._running()`,
+  running Prepare jobs). Checking a coordinator's state and then starting work
+  leaves a window where a backup sees nothing in flight while a job is about
+  to begin. Taking the ticket under the gate's lock closes that window.
+  `Deployments.busy()` also counts queued runs, which a pause holds, so a wait
+  for it would never end.
+- A Prepare job between its GPU and CPU steps (`cpu_queued`) holds no
+  ticket. A backup can therefore snapshot its work files mid-job, which the
+  spec already accepts for Prepare work files.
+- Fixed in its own commit: two AI runs whose listings share a design raced on
+  `ai/viewable.py`'s `{name}.{pid}.tmp`. The partial name is now
+  `{name}.{pid}.{thread}.tmp`, which PR 3's exclude list must match.
+
 ### PR 2 — restic and the backup settings
 
 Spec: *Configuration*, *Scope and decisions* (restic binary, Repository),
