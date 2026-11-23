@@ -3,10 +3,14 @@
 plan, PR 5).
 
 **One operation at a time.** A backup run and a repair both write to a
-destination, and PR 7's restore prunes nothing while it reads, so every
-operation here takes the one slot :attr:`BackupCoordinator.running`
+destination, so each takes the one slot :attr:`BackupCoordinator.running`
 describes. A second is refused with :class:`BackupBusyError`; the
 scheduler simply waits for its next check.
+
+**A restore beside them.** A restore only reads the repository, under
+restic's shared lock, so it has a slot of its own and backups keep running.
+Forget, prune and check need the exclusive lock, so a backup during a
+restore leaves them to a later run (spec, *Restore*).
 
 **The schedule.** A backup is due ``interval_hours`` after the newest
 snapshot restic lists, at once when there is none, and an hour after a run
@@ -43,15 +47,22 @@ from etsy_listings.core.application.backup_overview import (
     next_due,
 )
 from etsy_listings.core.application.backup_repository import backup_settings, open_repository
+from etsy_listings.core.application.backup_restore import (
+    RestoreProgress,
+    RestoreStatus,
+    check_target,
+    find_snapshot,
+    restore,
+)
 from etsy_listings.core.application.backup_run import BackupProgress, BackupRunner
 from etsy_listings.core.application.backup_setup import BackupSetUp, set_up_backups
 from etsy_listings.core.application.job_gate import JobGate
 from etsy_listings.core.backup.binary import ResticBinaries
 from etsy_listings.core.backup.destinations import RepairResult
-from etsy_listings.core.backup.restic import Launch
+from etsy_listings.core.backup.restic import Launch, Restic, ResticCancelledError, Snapshot
 from etsy_listings.core.backup.state import BackupState, BackupStateStore, RunRecord
 from etsy_listings.core.config.settings import BackupSettings
-from etsy_listings.core.errors import ConflictError, UserFacingError
+from etsy_listings.core.errors import ConflictError, MissingError, UserFacingError
 from etsy_listings.core.workspace.workspace import Workspace
 
 logger = logging.getLogger(__name__)
@@ -64,6 +75,11 @@ backup starts at most five minutes after it falls due."""
 class BackupBusyError(ConflictError):
     def __init__(self, running: RunningBackup) -> None:
         super().__init__(f"A {running.operation} is already running; try again when it ends.")
+
+
+class RestoreBusyError(ConflictError):
+    def __init__(self) -> None:
+        super().__init__("A restore is already running; stop it or wait for it to end.")
 
 
 class RepositoryMissingError(ConflictError):
@@ -112,6 +128,11 @@ class BackupCoordinator:
         self._wake = threading.Event()
         self._stopping = threading.Event()
         self._cancel = threading.Event()
+        self._restore: RestoreStatus | None = None
+        """The latest restore since start-up, kept once it ends so the page
+        can say where the files are."""
+        self._restorer: threading.Thread | None = None
+        self._stop_restore = threading.Event()
 
     # ------------------------------------------------------------ lifecycle
 
@@ -126,10 +147,11 @@ class BackupCoordinator:
         with self._lock:
             # Under the lock, so no worker starts after this reads it.
             self._stopping.set()
-            worker = self._worker
+            worker, restorer = self._worker, self._restorer
         self._cancel.set()
+        self._stop_restore.set()
         self._wake.set()
-        for thread in (self._scheduler, worker):
+        for thread in (self._scheduler, worker, restorer):
             if thread is not None:
                 thread.join()
 
@@ -237,7 +259,12 @@ class BackupCoordinator:
 
     def _back_up(self) -> None:
         try:
-            self._runner().run(gate=self._gate, progress=self._heard, cancel=self._cancel)
+            self._runner().run(
+                gate=self._gate,
+                progress=self._heard,
+                cancel=self._cancel,
+                exclusive=lambda: not self.restoring,
+            )
         finally:
             self._release()
 
@@ -258,6 +285,77 @@ class BackupCoordinator:
                     "destination": progress.destination,
                 }
             )
+
+    # -------------------------------------------------------------- restore
+
+    @property
+    def restoring(self) -> bool:
+        with self._lock:
+            return self._restore is not None and self._restore.outcome == "running"
+
+    def start_restore(self, snapshot: str, target: Path) -> None:
+        """Restore ``snapshot`` (an id, its start, or ``latest``) into the
+        new folder ``target`` on its own thread (spec, *Restore*)."""
+        settings = backup_settings(self._workspace)
+        check_target(target, workspace=self._workspace.root, repository=settings.repository)
+        reading = self._refresh(settings)
+        if reading.snapshots is None:
+            raise MissingError(reading.problem or "The backups could not be read.")
+        found = find_snapshot(reading.snapshots, snapshot)
+        restic = open_repository(self._workspace, binaries=self._binaries, launch=self._env.launch)
+        with self._lock:
+            if self._stopping.is_set():
+                raise ConflictError("The app is shutting down.")
+            if self._restore is not None and self._restore.outcome == "running":
+                raise RestoreBusyError
+            self._restore = RestoreStatus(
+                snapshot_id=found.id,
+                snapshot_time=found.time,
+                target=str(target),
+                started_at=self._env.now(),
+            )
+            self._stop_restore = stop = threading.Event()
+            self._restorer = threading.Thread(
+                target=self._run_restore,
+                args=(restic, found, target, stop),
+                name="backup-restore",
+                daemon=True,
+            )
+            self._restorer.start()
+
+    def stop_restore(self) -> None:
+        """Stop the restore, answering once it has; the files restored so
+        far stay in its folder."""
+        self._stop_restore.set()
+        self.join_restore()
+
+    def join_restore(self, timeout: float | None = None) -> None:
+        restorer = self._restorer
+        if restorer is not None:
+            restorer.join(timeout)
+
+    def _run_restore(
+        self, restic: Restic, snapshot: Snapshot, target: Path, stop: threading.Event
+    ) -> None:
+        update: dict[str, object] = {"outcome": "succeeded"}
+        try:
+            restore(restic, snapshot, target, progress=self._heard_restore, cancel=stop)
+        except ResticCancelledError:
+            update = {"outcome": "stopped", "message": "The restore was stopped."}
+        except UserFacingError as exc:
+            update = {"outcome": "failed", "message": str(exc)}
+        except Exception:
+            logger.exception("restore failed")
+            update = {"outcome": "failed", "message": "The restore failed; see the server log."}
+        with self._lock:
+            if self._restore is not None:
+                update["finished_at"] = self._env.now()
+                self._restore = self._restore.model_copy(update=update)
+
+    def _heard_restore(self, figures: RestoreProgress) -> None:
+        with self._lock:
+            if self._restore is not None:
+                self._restore = self._restore.model_copy(update=vars(figures))
 
     def _runner(self) -> BackupRunner:
         return BackupRunner(
@@ -280,7 +378,9 @@ class BackupCoordinator:
             runs = self._runs(settings)
             reading = self._cached(settings, runs)
         facts = BackupFacts(settings, state, runs, reading, self.running, self._env.now())
-        return backup_overview(facts)
+        with self._lock:
+            restoring = self._restore
+        return backup_overview(facts).model_copy(update={"restore": restoring})
 
     def history(self) -> list[HistoryEntry]:
         settings = self._settings()

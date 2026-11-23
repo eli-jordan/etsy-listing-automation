@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import threading
+import time
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -33,12 +34,20 @@ class Reply:
     exit_code: int = 0
     hang: bool = False
     """Keep running after the last line until stopped, like a long backup."""
+    release: threading.Event | None = None
+    """Ends a hang without a stop; ``after`` is written then."""
+    after: Sequence[Any] = ()
 
 
 @dataclass
 class Launch:
     argv: list[str]
     env: dict[str, str]
+
+
+def _lines(lines: Sequence[Any]) -> Iterator[str]:
+    for line in lines:
+        yield (line if isinstance(line, str) else json.dumps(line)) + "\n"
 
 
 @dataclass
@@ -48,10 +57,15 @@ class _Process:
 
     @property
     def stdout(self) -> Iterator[str]:
-        for line in self.reply.stdout:
-            yield (line if isinstance(line, str) else json.dumps(line)) + "\n"
+        yield from _lines(self.reply.stdout)
         if self.reply.hang:
-            self.stopped.wait(timeout=10)
+            release = self.reply.release or threading.Event()
+            deadline = time.monotonic() + 10
+            while not (self.stopped.wait(0.01) or release.is_set()):
+                if time.monotonic() > deadline:
+                    return
+            if release.is_set():
+                yield from _lines(self.reply.after)
 
     def wait(self) -> int:
         if self.stopped.is_set():
@@ -99,6 +113,33 @@ def snapshot_json(time: datetime, number: int) -> dict[str, Any]:
     }
 
 
+RESTORE_STATUS = {
+    "message_type": "status",
+    "seconds_elapsed": 60,
+    "percent_done": 0.25,
+    "total_files": 400,
+    "files_restored": 100,
+    "total_bytes": 8_000_000,
+    "bytes_restored": 2_000_000,
+}
+"""A ``restic restore --json`` status line, a quarter of the way."""
+RESTORE_SUMMARY = {
+    "message_type": "summary",
+    "total_files": 400,
+    "files_restored": 400,
+    "total_bytes": 8_000_000,
+    "bytes_restored": 8_000_000,
+}
+
+
+def snapshot_path(folder: Path) -> str:
+    """Where restic keeps a backed-up ``folder`` inside a snapshot: as is on
+    POSIX, and ``/C/Users/...`` for ``C:/Users/...`` on Windows."""
+    if folder.drive:
+        return "/" + folder.drive.rstrip(":") + folder.as_posix()[len(folder.drive) :]
+    return folder.as_posix()
+
+
 class RepositoryRestic:
     """A launcher that answers by subcommand and keeps snapshots as a
     repository would, for callers whose commands interleave, such as a
@@ -106,7 +147,9 @@ class RepositoryRestic:
 
     ``init`` writes ``config`` into ``repository``; ``backup`` adds a
     snapshot at ``now()``, or keeps running until stopped while ``hang`` is
-    set; ``failing`` maps a subcommand to the reply that fails it.
+    set; ``restore`` reports a quarter done, then, while ``restore_hang`` is
+    set, keeps running until stopped or ``restore_release`` is set;
+    ``failing`` maps a subcommand to the reply that fails it.
     """
 
     def __init__(self, repository: Path, now: Callable[[], datetime]) -> None:
@@ -114,15 +157,25 @@ class RepositoryRestic:
         self.now = now
         self.snapshots: list[datetime] = []
         self.hang = False
+        self.restore_hang = False
+        self.restore_release = threading.Event()
         self.failing: dict[str, Reply] = {}
         self.commands: list[list[str]] = []
+        self._processes: list[tuple[str, _Process]] = []
         self._lock = threading.Lock()
 
     def __call__(self, argv: Sequence[str], env: Mapping[str, str]) -> ResticProcess:
         command = [arg for arg in argv[list(argv).index("--json") + 1 :] if arg != "--no-lock"]
         with self._lock:
             self.commands.append(command)
-            return _Process(self._reply(command[0]))
+            process = _Process(self._reply(command[0]))
+            self._processes.append((command[0], process))
+            return process
+
+    def stopped(self, subcommand: str) -> int:
+        """How many of ``subcommand``'s runs were stopped."""
+        with self._lock:
+            return sum(name == subcommand and p.stopped.is_set() for name, p in self._processes)
 
     def ran(self, subcommand: str) -> int:
         with self._lock:
@@ -131,17 +184,36 @@ class RepositoryRestic:
     def _reply(self, subcommand: str) -> Reply:
         if subcommand in self.failing:
             return self.failing[subcommand]
-        if subcommand == "init":
-            self.repository.mkdir(parents=True, exist_ok=True)
-            (self.repository / "config").write_bytes(b"{}")
-            return Reply(stdout=[{"message_type": "initialized", "id": "f00d"}])
-        if subcommand == "snapshots":
-            listed = [snapshot_json(time, n) for n, time in enumerate(self.snapshots, 1)]
-            return Reply(stdout=[listed])
-        if subcommand == "backup":
-            if self.hang:
-                return Reply(hang=True)
-            self.snapshots.append(self.now())
-            summary = snapshot_json(self.now(), len(self.snapshots))
-            return Reply(stdout=[{"message_type": "summary", "snapshot_id": summary["id"]}])
-        return Reply()
+        answer = {
+            "init": self._init,
+            "snapshots": self._snapshots,
+            "backup": self._backup,
+            "restore": self._restore,
+        }.get(subcommand)
+        return Reply() if answer is None else answer()
+
+    def _init(self) -> Reply:
+        self.repository.mkdir(parents=True, exist_ok=True)
+        (self.repository / "config").write_bytes(b"{}")
+        return Reply(stdout=[{"message_type": "initialized", "id": "f00d"}])
+
+    def _snapshots(self) -> Reply:
+        listed = [snapshot_json(time, n) for n, time in enumerate(self.snapshots, 1)]
+        return Reply(stdout=[listed])
+
+    def _backup(self) -> Reply:
+        if self.hang:
+            return Reply(hang=True)
+        self.snapshots.append(self.now())
+        summary = snapshot_json(self.now(), len(self.snapshots))
+        return Reply(stdout=[{"message_type": "summary", "snapshot_id": summary["id"]}])
+
+    def _restore(self) -> Reply:
+        if self.restore_hang:
+            return Reply(
+                stdout=[RESTORE_STATUS],
+                hang=True,
+                release=self.restore_release,
+                after=[RESTORE_SUMMARY],
+            )
+        return Reply(stdout=[RESTORE_STATUS, RESTORE_SUMMARY])

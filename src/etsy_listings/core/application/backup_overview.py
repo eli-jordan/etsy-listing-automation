@@ -18,6 +18,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict
 
+from etsy_listings.core.application.backup_restore import RestoreStatus
 from etsy_listings.core.backup.destinations import ChangedFile
 from etsy_listings.core.backup.restic import Snapshot
 from etsy_listings.core.backup.state import BackupState, CheckResult, RunRecord
@@ -94,6 +95,8 @@ class BackupOverview(_Model):
     repository: RepositoryOverview | None = None
     destinations: list[DestinationOverview] = []
     warnings: list[BackupWarning] = []
+    restore: RestoreStatus | None = None
+    """The latest restore since the app started (spec, *Restore*)."""
 
 
 @dataclass(frozen=True)

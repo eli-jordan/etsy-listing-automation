@@ -144,9 +144,13 @@ class BackupRunner:
         gate: JobGate | None = None,
         progress: Progress | None = None,
         cancel: threading.Event | None = None,
+        exclusive: Callable[[], bool] | None = None,
     ) -> RunRecord:
         """Back up, forget, and prune and check when due. ``cancel`` stops
-        restic part way; the run is then recorded as stopped."""
+        restic part way; the run is then recorded as stopped. ``exclusive``
+        says whether restic may take its exclusive lock now: false while a
+        restore holds a shared one, and then forget, prune and check wait for
+        a later run (spec, *Restore*)."""
         settings = backup_settings(self.workspace)
         store = BackupStateStore(self.home)
         run = _Run(self.now(), str(settings.repository), progress or (lambda _: None))
@@ -155,15 +159,8 @@ class BackupRunner:
             with _paused(gate, run):
                 run.enter("backing_up")
                 self._back_up(restic, run, cancel)
-            run.enter("forgetting")
-            restic.run(*forget_arguments(settings.retention), cancel=cancel)
-            if self._prune_due(store.load(settings.repository)):
-                run.enter("pruning")
-                restic.run("prune", cancel=cancel)
-                state = store.load(settings.repository)
-                store.save(state.model_copy(update={"last_prune": self.now()}))
-                run.enter("checking")
-                run.failure = self._check(restic, store).message
+            if exclusive is None or exclusive():
+                self._tidy(restic, settings, store, run, cancel)
             if run.failure is None:
                 self._copy_all(settings, store, run, cancel)
         except (_StoppedError, ResticCancelledError) as exc:
@@ -173,6 +170,26 @@ class BackupRunner:
         record = run.record(self.now())
         store.append_run(record)
         return record
+
+    def _tidy(
+        self,
+        restic: Restic,
+        settings: BackupSettings,
+        store: BackupStateStore,
+        run: _Run,
+        cancel: threading.Event | None,
+    ) -> None:
+        """Forget, then the weekly prune and check, each under restic's
+        exclusive lock."""
+        run.enter("forgetting")
+        restic.run(*forget_arguments(settings.retention), cancel=cancel)
+        if self._prune_due(store.load(settings.repository)):
+            run.enter("pruning")
+            restic.run("prune", cancel=cancel)
+            state = store.load(settings.repository)
+            store.save(state.model_copy(update={"last_prune": self.now()}))
+            run.enter("checking")
+            run.failure = self._check(restic, store).message
 
     def _back_up(self, restic: Restic, run: _Run, cancel: threading.Event | None) -> None:
         arguments = ["backup", str(self.workspace.root)]
