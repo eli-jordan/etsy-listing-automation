@@ -322,8 +322,17 @@ class Product(BaseModel):
         return {v.id: v.price for v in self.variants if v.is_enabled}
 
     def all_variant_ids(self) -> tuple[int, ...]:
-        """Every variant the product carries, for the update coverage rule."""
-        return tuple(v.id for v in self.variants)
+        """Every variant the product carries, for the update coverage rule.
+
+        The print areas name them, not ``variants``: an older product listed
+        399 variants against 238 in its print areas, and naming the other 161
+        (unavailable, disabled) got 400 code 8251. The variant list is the
+        fallback for a product read without print areas.
+        """
+        named = {vid for area in self.print_areas for vid in area.variant_ids}
+        return tuple(v.id for v in self.variants if v.id in named) or tuple(
+            v.id for v in self.variants
+        )
 
 
 class ProductSpec(BaseModel):
