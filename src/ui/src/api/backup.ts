@@ -13,9 +13,11 @@ export type RetentionSettings = components["schemas"]["RetentionSettings"];
 export type IntervalHours = BackupSetUp["interval_hours"];
 type Refusal = components["schemas"]["SettingsSaveRefusal"];
 
-/** Set-up's answer: started, or refused with the field it names. */
+/** Set-up's answer: started, refused because settings.yaml changed since it
+ * was read (412: reload), or refused with the reason and field it names. */
 export type SetUpOutcome =
   | { kind: "started"; status: BackupStatus }
+  | { kind: "stale"; message: string }
   | { kind: "conflict" | "invalid"; message: string; fieldErrors: Record<string, string> };
 
 function message(error: unknown, fallback: string): string {
@@ -46,9 +48,12 @@ export async function runBackup(): Promise<BackupStatus> {
 }
 
 export async function setUpBackup(answers: BackupSetUp): Promise<SetUpOutcome> {
-  const { data, error } = await api.POST("/api/backup/setup", { body: answers });
+  const { data, error, response } = await api.POST("/api/backup/setup", { body: answers });
   if (data) return { kind: "started", status: data };
   const refusal = error as Refusal | undefined;
+  // Both a stale revision and a folder holding files are `conflict`; only
+  // the status separates them, as `saveSettings` reads its 412.
+  if (response.status === 412 && refusal) return { kind: "stale", message: refusal.message };
   if (refusal?.kind === "conflict" || refusal?.kind === "invalid")
     return {
       kind: refusal.kind,
