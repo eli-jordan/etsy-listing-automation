@@ -615,6 +615,13 @@ Deviations recorded during implementation:
 - The disaster guide is `docs/guides/restore-a-backup.md`. restic 0.19.1 on
   Windows exits 1 after a whole-snapshot restore (it cannot set the timestamp
   of `C\Users`), so the guide also gives the `latest:/C/...` form.
+- Finish: the app screenshots come from a scratch server on PR 5's
+  `BackupEnvironment`, with seeded history under a temp home and a fake
+  restic whose restore progress a test file steps through, captured with
+  Playwright at 1280×800. No browser test was added: PR 7's exit conditions
+  name none, and Vitest covers the flow.
+- Size: about 1,800 changed lines without generated files, accepted over the
+  1,500 target rather than split.
 
 ### PR 8 — Missing repository and the migration guide
 
