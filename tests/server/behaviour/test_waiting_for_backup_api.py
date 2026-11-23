@@ -92,12 +92,15 @@ def test_a_manual_ai_run_started_during_a_pause_is_queued_waiting_for_backup(
 
     assert created.status_code == 202, created.text
     assert (created.json()["phase"], created.json()["waiting_for_backup"]) == ("queued", True)
+    assert created.json()["started_at"] is None
     found = _get(client, f"/api/ai/runs?listing={LISTING}")
     assert found["waiting_for_backup"] is True
 
     _gate(client).resume()
     wait_for(lambda: _get(client, f"/api/ai/runs/{found['id']}")["phase"] == "done")
-    assert _get(client, f"/api/ai/runs/{found['id']}")["waiting_for_backup"] is False
+    finished = _get(client, f"/api/ai/runs/{found['id']}")
+    assert finished["waiting_for_backup"] is False
+    assert finished["started_at"] > finished["created_at"]
 
 
 def test_a_batch_confirmed_during_a_pause_has_its_rows_waiting_for_backup(

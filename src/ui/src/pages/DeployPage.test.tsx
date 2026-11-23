@@ -200,6 +200,7 @@ describe("DeployPage: while a backup pauses deploys", () => {
 
     expect(await screen.findByRole("heading", { name: "Waiting for backup" })).toBeInTheDocument();
     expect(screen.getByText("Waiting for backup…")).toBeInTheDocument();
+    expect(screen.getByText("Waiting for the backup to finish.")).toBeInTheDocument();
     streamAt(handles, 0).onEvent({ type: "phase", id: 2, phase: "planning" });
     expect(await screen.findByRole("heading", { name: "Planning…" })).toBeInTheDocument();
     expect(screen.queryByText("Waiting for backup…")).not.toBeInTheDocument();

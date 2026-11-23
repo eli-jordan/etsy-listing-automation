@@ -138,12 +138,29 @@ jobs:
       - name: install (locked)
         run: uv sync --frozen
 
+      # Tests marked `restic` run the pinned binary (workspace-backup plan,
+      # P3). The app's own installer downloads it and checks the SHA-256s
+      # pinned in core/backup/binary.py; the cache is keyed on that version,
+      # which tests/test_ci_selection.py keeps in step.
+      - name: restore the pinned restic
+        uses: actions/cache@v6
+        with:
+          path: ${{ runner.temp }}/restic-home
+          key: restic-0.19.1-${{ runner.os }}
+
+      - name: install the pinned restic
+        shell: bash
+        run: echo "ETSY_LISTINGS_RESTIC_BINARY=$(uv run python scripts/install_restic.py "$RUNNER_TEMP/restic-home")" >> "$GITHUB_ENV"
+
       # `poe test-ci`: unit, golden, behaviour and contract; browser and e2e
       # excluded. The 85% branch floor comes from `fail_under` in
       # pyproject.toml, so this gate and a local `poe check` can never disagree
       # about the number.
       - name: pytest + coverage (branch, fail under 85%)
         if: runner.os == 'Linux'
+        # A missing restic fails the `restic` tests instead of skipping them.
+        env:
+          ETSY_LISTINGS_REQUIRE_EVERY_LAYER: "1"
         run: uv run poe test-ci
 
       # The same selection without coverage. Windows is here for the goldens
@@ -152,6 +169,9 @@ jobs:
       # slowest job, more than it told us.
       - name: pytest (no coverage)
         if: runner.os == 'Windows'
+        # A missing restic fails the `restic` tests instead of skipping them.
+        env:
+          ETSY_LISTINGS_REQUIRE_EVERY_LAYER: "1"
         run: uv run poe test-ci-nocov --shard ${{ matrix.shard }}/3
 
   windows:
