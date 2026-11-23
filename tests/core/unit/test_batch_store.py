@@ -10,6 +10,7 @@ renaming or deleting one must not reach the other's row.
 
 from __future__ import annotations
 
+import threading
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -231,3 +232,45 @@ def test_a_batch_that_stays_unreadable_is_no_batch(
     refuse_reads(monkeypatch, 1000)
 
     assert store.load("b1") is None
+
+
+# ---------------------------------------------------------------- deployed
+
+
+def test_mark_deployed_marks_the_listing_s_row_reviewed_in_every_batch(store: BatchStore) -> None:
+    _save(store, "b1", _row("cedar"), _row("lake"))
+    _save(store, "b2", _row("cedar", ai="failed"))
+
+    store.mark_deployed("cedar")
+
+    assert [r.reviewed for r in _rows(store, "b1")] == [True, False]
+    assert [r.reviewed for r in _rows(store, "b2")] == [True]
+
+
+def test_mark_deployed_leaves_a_row_mark_reviewed_would_refuse(store: BatchStore) -> None:
+    """A CLI apply beside the UI server's queue can deploy a listing whose
+    row is still drafting; a deleted row's listing is not this one."""
+    _save(store, "b1", _row("cedar", ai="running"), _row("cedar", deleted=True))
+
+    store.mark_deployed("cedar")
+
+    assert [r.reviewed for r in _rows(store, "b1")] == [False, False]
+
+
+def test_stores_over_one_workspace_share_a_record_s_lock(workspace_root: Path) -> None:
+    """The engine makes its own store to mark a deploy; it must wait on the
+    UI server's store mid-write rather than interleave with it."""
+    first = BatchStore(Workspace.discover(root_override=workspace_root))
+    second = BatchStore(Workspace.discover(root_override=workspace_root))
+    taken = threading.Event()
+
+    def try_second() -> None:
+        with second.lock("b1"):
+            taken.set()
+
+    with first.lock("b1"):
+        waiter = threading.Thread(target=try_second)
+        waiter.start()
+        assert not taken.wait(0.2)
+    waiter.join(5)
+    assert taken.is_set()

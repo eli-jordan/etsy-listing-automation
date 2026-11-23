@@ -152,9 +152,12 @@ class BatchRow(BaseModel):
     ai_error: str | None = None
     ai_steps: list[AiStep] = Field(default_factory=list)
     reviewed: bool = False
-    """The seller's own judgement (spec, *Review workflow*): set and cleared
-    only by Mark reviewed / Mark needs review, never by an edit, a proposal
-    or a deploy, and never read by ``plan`` or ``apply``."""
+    """The seller's judgement (spec, *Review workflow*): set and cleared by
+    Mark reviewed / Mark needs review, and set by a full apply of the
+    listing, since deploying it is that judgement made
+    (:meth:`BatchStore.mark_deployed`). Never set by an edit or a proposal,
+    never cleared by anything but Mark needs review, and never read by
+    ``plan`` or ``apply``."""
     deleted: bool = False
     """The listing was deleted. The row stays, struck through, so the
     batch still says what it made (UI doc §7); nothing follows or queues it
@@ -186,6 +189,10 @@ class Batch(_Record):
     rows: list[BatchRow]
 
 
+_GUARD = threading.Lock()
+_LOCKS: dict[str, threading.Lock] = {}
+
+
 class _Store[R: _Record]:
     """Load and save one kind of record, with a lock per record for the
     read-modify-write every mutation is."""
@@ -201,8 +208,6 @@ class _Store[R: _Record]:
         self._model = model
         self._file = file
         self._ids = ids
-        self._guard = threading.Lock()
-        self._locks: dict[str, threading.Lock] = {}
 
     @property
     def workspace(self) -> Workspace:
@@ -211,8 +216,14 @@ class _Store[R: _Record]:
 
     @contextmanager
     def lock(self, record: str) -> Iterator[None]:
-        with self._guard:
-            lock = self._locks.setdefault(record, threading.Lock())
+        """The record's lock, shared by every store over the same file: the
+        UI server's own store and the one an apply makes to mark its listing
+        deployed (:meth:`BatchStore.mark_deployed`) must not interleave a
+        read-modify-write. Like ``core/workspace/locks.py``'s, it does not
+        reach a second process."""
+        key = str(self._file(record).absolute()).casefold()
+        with _GUARD:
+            lock = _LOCKS.setdefault(key, threading.Lock())
         with lock:
             yield
 
@@ -353,6 +364,16 @@ class BatchStore(_Store[Batch]):
                     lambda row: row.name == old and not row.deleted,
                     lambda _: {"name": new},
                 )
+
+    def mark_deployed(self, listing: str) -> None:
+        """A full apply of ``listing`` (spec, *Deployment interaction*): its
+        row is marked reviewed, as Mark reviewed would mark it. A row Mark
+        reviewed would refuse -- still drafting, as a CLI apply beside the
+        UI server's queue can leave one -- stays as it is."""
+        self._each_row(
+            lambda row: row.name == listing and reviewable(row) and not row.reviewed,
+            lambda _: {"reviewed": True},
+        )
 
     def mark_deleted(self, listing: str) -> None:
         """Delete's half of rename and delete hooks: the row stays, marked deleted, and leaves

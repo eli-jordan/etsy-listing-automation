@@ -134,7 +134,8 @@ Not obvious from the designs:
   moves the batch to Complete; marking one back to *needs review* moves it back
   to In review.
 - **Complete does not require deploying.** It means only that every listing has
-  been reviewed, because the spec keeps review and deployment independent.
+  been reviewed. Deploying a listing in full marks it reviewed, so deploying
+  every listing also completes the batch.
 - **Failures are not a status.** They appear as a red count beside the progress
   (*2 need retry*), so a batch with one failed row still reads as Drafting or
   In review rather than hiding its review progress.
@@ -285,8 +286,8 @@ Not obvious from the designs:
   since*) but stay usable. See [section 8](#8-a-listing-opened-from-a-batch).
 - **Mark reviewed is the seller's own judgement.** Opening a listing or
   accepting every suggestion doesn't mark it. Later edits don't reset it. A
-  failed row can still be marked after finishing it by hand. It never blocks
-  deploying. It is offered only on rows the seller can review: not on queued,
+  failed row can still be marked after finishing it by hand. A full deploy of
+  the listing marks it too. It never blocks deploying. It is offered only on rows the seller can review: not on queued,
   drafting, deleted or never-created rows.
 - **Cancel batch** stops pending and running AI work but keeps every listing,
   brief and proposal already written. The batch becomes Stopped, and **Resume**
