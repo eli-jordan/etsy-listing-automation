@@ -311,10 +311,40 @@ def test_each_destination_is_copied_after_jobs_resume(
         CopyRecord(destination=str(nas), outcome="copied"),
     )
     assert files(icloud) == files(nas) == files(repository.root)
-    steps = [p.step for p in heard if p.files_done is None]
-    assert steps[-4:] == ["copying", "checking_copy", "copying", "checking_copy"]
-    assert [p.destination for p in heard[-4:]] == [str(icloud)] * 2 + [str(nas)] * 2
+    steps = [p for p in heard if p.files_done is None]
+    assert [p.step for p in steps[-4:]] == ["copying", "checking_copy", "copying", "checking_copy"]
+    assert [p.destination for p in steps[-4:]] == [str(icloud)] * 2 + [str(nas)] * 2
     assert _destination_state(workspace, home, icloud).last_copy == NOW
+
+
+def test_copying_reports_files_copied_out_of_those_the_destination_lacks(
+    workspace: Workspace, home: Path, repository: FakeRepository, tmp_path: Path
+) -> None:
+    """The first copy of a whole workspace is large, so the running line
+    counts files as they land (plan, PR 5)."""
+    icloud = tmp_path / "icloud" / "backups"
+    icloud.mkdir(parents=True)
+    workspace = _with_destinations(workspace, icloud)
+    added = {**SUMMARY, "data_added": 41_000_000}
+    heard: list[BackupProgress] = []
+    runner = BackupRunner(
+        workspace,
+        ResticBinaries(home=home),
+        home=home,
+        launch=ScriptedRestic(Reply(stdout=[added]), FORGOT, PRUNED, CHECKED),
+        now=lambda: NOW,
+    )
+
+    record = runner.run(progress=heard.append)
+
+    lacking = len(files(repository.root))
+    counted = [
+        (p.files_done, p.files_total, p.destination)
+        for p in heard
+        if p.step == "copying" and p.files_total is not None
+    ]
+    assert counted == [(done, lacking, str(icloud)) for done in range(lacking + 1)]
+    assert record.data_added == 41_000_000
 
 
 def test_an_unreachable_destination_is_skipped_and_the_backup_still_succeeds(

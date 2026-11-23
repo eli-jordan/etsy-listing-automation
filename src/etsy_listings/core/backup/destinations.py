@@ -58,9 +58,11 @@ class CopyStep:
 class CopyHooks:
     """Observation points, for progress and for tests: ``after_listing``
     runs once both folders are listed, before anything is written;
+    ``planned`` then hears how many files the destination lacks;
     ``observe`` hears each operation as it completes."""
 
     after_listing: Callable[[], None] = lambda: None
+    planned: Callable[[int], None] = lambda _: None
     observe: Callable[[CopyStep], None] = lambda _: None
 
 
@@ -214,6 +216,7 @@ def copy_repository(
     except OSError:
         return _unreachable(destination)
     hooks.after_listing()
+    hooks.planned(len(plan.missing))
     copy = _Copy(repository, destination, plan, hooks.observe, cancel or threading.Event())
     if plan.changed:
         return copy.result("changed", _changed_message(plan.changed))

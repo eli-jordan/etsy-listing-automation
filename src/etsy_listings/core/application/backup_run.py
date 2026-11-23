@@ -23,7 +23,9 @@ from etsy_listings.core.application.job_gate import JobGate
 from etsy_listings.core.backup.binary import ResticBinaries
 from etsy_listings.core.backup.destinations import (
     SAMPLE_FRACTION,
+    CopyHooks,
     CopyResult,
+    CopyStep,
     DestinationCheck,
     RepairResult,
     check_destination,
@@ -221,7 +223,11 @@ class BackupRunner:
     ) -> CopyResult:
         before = store.load(settings.repository).destination(destination)
         result = copy_repository(
-            settings.repository, destination, suspect=_suspects(before), cancel=cancel
+            settings.repository,
+            destination,
+            suspect=_suspects(before),
+            hooks=_CopyProgress(run, str(destination)).hooks(),
+            cancel=cancel,
         )
         after = _after_copy(before, result, self.now())
         if result.outcome == "copied" and _copy_check_due(after, self.now()):
@@ -319,12 +325,46 @@ class _StoppedError(Exception):
 
 
 @dataclass
+class _CopyProgress:
+    """Files copied out of those the destination lacks, for the running
+    line during a large first copy (plan, PR 5)."""
+
+    run: _Run
+    destination: str
+    done: int = 0
+    total: int = 0
+
+    def hooks(self) -> CopyHooks:
+        return CopyHooks(planned=self._planned, observe=self._observe)
+
+    def _planned(self, total: int) -> None:
+        self.total = total
+        self._tell()
+
+    def _observe(self, step: CopyStep) -> None:
+        if step.action == "copied":
+            self.done += 1
+            self._tell()
+
+    def _tell(self) -> None:
+        self.run.tell(
+            BackupProgress(
+                "copying",
+                files_done=self.done,
+                files_total=self.total,
+                destination=self.destination,
+            )
+        )
+
+
+@dataclass
 class _Run:
     started_at: datetime
     repository: str
     tell: Progress
     step: BackupStep = "starting"
     snapshot_id: str | None = None
+    data_added: int | None = None
     failure: str | None = None
     stopped: bool = False
     warnings: list[str] = field(default_factory=list)
@@ -350,6 +390,7 @@ class _Run:
             )
         elif kind == "summary":
             self.snapshot_id = line.get("snapshot_id")
+            self.data_added = line.get("data_added")
         elif kind == "error":
             error = line.get("error") or {}
             self.warnings.append(f"{line.get('item', '')}: {error.get('message', '')}")
@@ -366,5 +407,6 @@ class _Run:
             failed_step=self.step if failed else None,
             message=self.failure,
             warnings=tuple(self.warnings),
+            data_added=self.data_added,
             copies=tuple(self.copies),
         )

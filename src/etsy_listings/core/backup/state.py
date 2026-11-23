@@ -91,6 +91,8 @@ class RunRecord(_Record):
     message: str | None = None
     warnings: tuple[str, ...] = ()
     """Files restic could not read; the snapshot was made without them."""
+    data_added: int | None = None
+    """Bytes the snapshot added to the repository, from restic's summary."""
     copies: tuple[CopyRecord, ...] = ()
     """Each destination's copy, in the configured order."""
 
