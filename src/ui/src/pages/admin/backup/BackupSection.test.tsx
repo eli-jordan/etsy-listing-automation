@@ -719,4 +719,31 @@ describe("Restore", () => {
     await userEvent.click(button("Dismiss"));
     expect(screen.queryByText(/Restore stopped/)).not.toBeInTheDocument();
   });
+
+  it("a restore that fails says how far it got and why", async () => {
+    status.mockResolvedValue(
+      healthy({
+        restore: restoring({ outcome: "failed", message: "restic: disk full" }),
+      }),
+    );
+    open();
+    expect(
+      await screen.findByText(
+        "The restore failed at 25%: restic: disk full The folder holds the files restored so far; delete it before restoring there again.",
+      ),
+    ).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Show" })).not.toBeInTheDocument();
+  });
+
+  it("Copy path in the Restored dialog copies the folder", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.assign(navigator, { clipboard: { writeText } });
+    status.mockResolvedValue(
+      healthy({ restore: restoring({ outcome: "succeeded", percent: 1, files_done: 5142 }) }),
+    );
+    open();
+    await userEvent.click(await screen.findByRole("button", { name: "Show" }));
+    await userEvent.click(button(/Copy path/));
+    expect(writeText).toHaveBeenCalledWith(`${LIVE}-restore-bbbbbbbb`);
+  });
 });
