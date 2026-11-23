@@ -552,3 +552,151 @@ describe("Changed and unexpected files", () => {
     expect(within(dialog).getByRole("button", { name: "Set aside and copy again" })).toBeEnabled();
   });
 });
+
+describe("Restore", () => {
+  const NEWEST = "b".repeat(64);
+  const OLDER = `a3f9c2e1${"0".repeat(56)}`;
+  const LIVE = "C:/Users/me/studio";
+  const restoring = (extra: Partial<backupApi.RestoreStatus> = {}): backupApi.RestoreStatus => ({
+    snapshot_id: NEWEST,
+    snapshot_time: iso(-2),
+    target: `${LIVE}-restore-bbbbbbbb`,
+    started_at: iso(0),
+    outcome: "running",
+    percent: 0.25,
+    bytes_done: 5_000_000_000,
+    bytes_total: 20_100_000_000,
+    files_done: 1285,
+    files_total: 5142,
+    seconds_left: 600,
+    ...extra,
+  });
+  let start: MockInstance<typeof backupApi.startRestore>;
+
+  beforeEach(() => {
+    vi.spyOn(backupApi, "getBackupSnapshots").mockResolvedValue({
+      workspace: LIVE,
+      snapshots: [
+        { id: NEWEST, short_id: "bbbbbbbb", time: iso(-2), files: 5142, size: 20_100_000_000 },
+        { id: OLDER, short_id: "a3f9c2e1", time: iso(-26), files: 5100, size: 20_000_000_000 },
+      ],
+    });
+    history.mockResolvedValue([run(2, { snapshot_id: NEWEST }), run(26, { snapshot_id: OLDER })]);
+    start = vi.spyOn(backupApi, "startRestore").mockImplementation(async () => {
+      status.mockResolvedValue(healthy({ restore: restoring() }));
+      return { status: healthy({ restore: restoring() }) };
+    });
+  });
+
+  async function withPolls(body: () => Promise<void>) {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      await body();
+    } finally {
+      vi.useRealTimers();
+    }
+  }
+  const poll = () => act(() => vi.advanceTimersByTimeAsync(2000));
+  const target = () => screen.getByLabelText<HTMLInputElement>("Restore into");
+
+  async function restoreNewest() {
+    open();
+    await userEvent.click(await screen.findByRole("button", { name: "Restore…" }));
+    await waitFor(() => expect(target().value).toBe(`${LIVE}-restore-bbbbbbbb`));
+    await userEvent.click(button("Restore to this folder"));
+    return screen.findByRole("dialog", { name: /Restoring the backup from/ });
+  }
+
+  it("opens on the newest backup, or a row's, and names the folder after it", async () => {
+    open();
+    await userEvent.click(await screen.findByRole("button", { name: "Restore…" }));
+    await waitFor(() => expect(target().value).toBe(`${LIVE}-restore-bbbbbbbb`));
+    expect(screen.getByText("20.1 GB · 5,142 files")).toBeVisible();
+    await userEvent.click(button("Cancel"));
+
+    const rows = screen.getAllByRole("row");
+    await userEvent.click(within(rows[2] as HTMLElement).getByRole("button", { name: "Restore…" }));
+    await waitFor(() => expect(target().value).toBe(`${LIVE}-restore-a3f9c2e1`));
+    fireEvent.change(screen.getByLabelText("Backup to restore"), { target: { value: NEWEST } });
+    expect(target().value).toBe(`${LIVE}-restore-bbbbbbbb`);
+  });
+
+  it("refuses the live workspace at once, and shows the server's refusal in the same place", async () => {
+    start.mockResolvedValue({ refused: "D:/full already holds files." });
+    open();
+    await userEvent.click(await screen.findByRole("button", { name: "Restore…" }));
+    await waitFor(() => expect(target().value).not.toBe(""));
+    fireEvent.change(target(), { target: { value: `${LIVE}/` } });
+    expect(
+      screen.getByText("That's your live workspace. Choose a new, empty folder."),
+    ).toBeVisible();
+    expect(button("Restore to this folder")).toBeDisabled();
+
+    fireEvent.change(target(), { target: { value: "D:/full" } });
+    await userEvent.click(button("Restore to this folder"));
+    expect(await screen.findByText("D:/full already holds files.")).toBeVisible();
+    expect(start).toHaveBeenCalledWith(NEWEST, "D:/full");
+  });
+
+  it("shows progress, closes to a strip with Keep working, and Show reopens it", async () => {
+    const dialog = await restoreNewest();
+    expect(within(dialog).getByText("25%")).toBeVisible();
+    expect(within(dialog).getByText("about 10 min left")).toBeVisible();
+    expect(within(dialog).getByText("5 GB of 20.1 GB · 1,285 of 5,142 files")).toBeVisible();
+
+    await userEvent.click(within(dialog).getByRole("button", { name: "Keep working" }));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(screen.getByText(/25% · 5 GB of 20.1 GB · about 10 min left/)).toBeVisible();
+    for (const restore of screen.getAllByRole("button", { name: "Restore…" }))
+      expect(restore).toBeDisabled();
+    await userEvent.click(button("Show"));
+    expect(screen.getByRole("dialog", { name: /Restoring the backup from/ })).toBeVisible();
+  });
+
+  it("finishing with the dialog open shows Restored", () =>
+    withPolls(async () => {
+      await restoreNewest();
+      status.mockResolvedValue(
+        healthy({ restore: restoring({ outcome: "succeeded", percent: 1, files_done: 5142 }) }),
+      );
+      await poll();
+      const done = await screen.findByRole("dialog", { name: "Restored 5,142 files" });
+      expect(within(done).getByLabelText("Restored folder")).toHaveValue(
+        `${LIVE}-restore-bbbbbbbb`,
+      );
+      await userEvent.click(within(done).getByRole("button", { name: "Done" }));
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+      expect(screen.queryByText(/Restored the backup from/)).not.toBeInTheDocument();
+    }));
+
+  it("finishing with the dialog closed leaves a note whose Show opens Restored", () =>
+    withPolls(async () => {
+      const dialog = await restoreNewest();
+      await userEvent.click(within(dialog).getByRole("button", { name: "Keep working" }));
+      status.mockResolvedValue(
+        healthy({ restore: restoring({ outcome: "succeeded", percent: 1, files_done: 5142 }) }),
+      );
+      await poll();
+      expect(await screen.findByText(/^Restored the backup from/)).toBeVisible();
+      await userEvent.click(button("Show"));
+      expect(screen.getByRole("dialog", { name: "Restored 5,142 files" })).toBeVisible();
+    }));
+
+  it("Stop restore stops it and says how far it got", async () => {
+    const stop = vi.spyOn(backupApi, "stopRestore").mockImplementation(async () => {
+      status.mockResolvedValue(healthy({ restore: restoring({ outcome: "stopped" }) }));
+      return healthy({ restore: restoring({ outcome: "stopped" }) });
+    });
+    const dialog = await restoreNewest();
+    await userEvent.click(within(dialog).getByRole("button", { name: "Stop restore" }));
+    expect(stop).toHaveBeenCalled();
+    expect(
+      await screen.findByText(
+        "Restore stopped at 25%. The folder holds the files restored so far; delete it before restoring there again.",
+      ),
+    ).toBeVisible();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    await userEvent.click(button("Dismiss"));
+    expect(screen.queryByText(/Restore stopped/)).not.toBeInTheDocument();
+  });
+});

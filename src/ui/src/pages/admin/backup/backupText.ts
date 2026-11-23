@@ -1,9 +1,11 @@
 import type {
+  BackupSnapshot,
   BackupStatus,
   BackupWarning,
   HistoryEntry,
   IntervalHours,
   RepairResult,
+  RestoreStatus,
   RetentionSettings,
   RunningBackup,
 } from "../../../api/backup";
@@ -208,4 +210,51 @@ export function repairNote(path: string, result: RepairResult): string {
   const after =
     result.outcome === "copied" ? "" : ` The copy again: ${result.message ?? result.outcome}.`;
   return `Repaired the ${destinationName(path)} copy.${aside}${after}`;
+}
+
+/** A restore's progress, worded as the prototype's `restoreFigures`. */
+export function restoreFigures(restore: RestoreStatus) {
+  const { bytes_total: total, files_total: files, seconds_left: left } = restore;
+  const count = (n: number) => n.toLocaleString("en-GB");
+  return {
+    pctText: `${Math.round(restore.percent * 100)}%`,
+    bytes: total == null ? "" : `${bytes(restore.bytes_done ?? 0)} of ${bytes(total)}`,
+    files: files == null ? "" : `${count(restore.files_done ?? 0)} of ${count(files)} files`,
+    left:
+      left == null
+        ? "working out the time left"
+        : `about ${Math.max(1, Math.ceil(left / 60))} min left`,
+  };
+}
+
+/** The parts that are known, joined as the prototype joins figures. */
+export const joined = (...parts: string[]) => parts.filter(Boolean).join(" · ");
+
+/** Without trailing separators; a loop, as a regex here would backtrack. */
+function trimmed(path: string): string {
+  let end = path.length;
+  while (end > 0 && "/\\".includes(path.charAt(end - 1))) end -= 1;
+  return path.slice(0, end);
+}
+
+/** The restore dialog's default: the workspace's sibling, named after the snapshot. */
+export function restoreTarget(workspace: string, snapshot: BackupSnapshot): string {
+  return `${trimmed(workspace)}-restore-${snapshot.short_id}`;
+}
+
+/** Whether two paths name one folder, as Windows compares them. */
+export function samePath(a: string, b: string): boolean {
+  const normal = (path: string) => trimmed(path.trim()).replaceAll("\\", "/").toLowerCase();
+  return normal(a) === normal(b);
+}
+
+/** The status panel's note once a restore has ended. */
+export function restoreNote(restore: RestoreStatus): string {
+  const left =
+    "The folder holds the files restored so far; delete it before restoring there again.";
+  const at = `${Math.round(restore.percent * 100)}%`;
+  if (restore.outcome === "succeeded")
+    return `Restored the backup from ${when(restore.snapshot_time)}.`;
+  if (restore.outcome === "stopped") return `Restore stopped at ${at}. ${left}`;
+  return `The restore failed at ${at}: ${restore.message ?? "no reason was given"} ${left}`;
 }

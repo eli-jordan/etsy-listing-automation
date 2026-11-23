@@ -1,8 +1,8 @@
 // Admin › Settings › Backup (workspace-backup plan, PR 6): Backups off, the
 // set-up form, Status and history, and Setup. Status comes from the shell's
 // one poll (`useBackupStatus`); Setup saves through settings.yaml's revision
-// check, like the AI section. Restore is PR 7, the missing-repository
-// actions PR 8.
+// check, like the AI section. Restore is in Restore.tsx; the missing-repository
+// actions are PR 8.
 import { WarningIcon } from "@phosphor-icons/react/dist/csr/Warning";
 import { XIcon } from "@phosphor-icons/react/dist/csr/X";
 import { useEffect, useRef, useState } from "react";
@@ -28,6 +28,8 @@ import {
   StatusPanel,
   StoragePipeline,
 } from "./BackupPanels";
+import { RestoreDialogs, RestoreStrip } from "./Restore";
+import { useRestore } from "./useRestore";
 import {
   type BackupAnswers,
   NEW_BACKUP,
@@ -179,6 +181,7 @@ function StatusPage({
   onSetup: () => void;
 }) {
   const history = useHistory(status);
+  const restore = useRestore(status, refresh);
   const [note, setNote] = useState<string | null>(null);
   const [repair, setRepair] = useState<Repair | null>(null);
   const warnings = status.warnings.filter((w) => w.banner);
@@ -247,8 +250,18 @@ function StatusPage({
         headline={headline}
         detail={detail}
         running={status.running ? runningLine(status.running) : undefined}
+        restore={{
+          disabled: restore.busy || !status.repository?.snapshots,
+          onClick: () => restore.begin(),
+        }}
         onBackup={backUp}
       >
+        <RestoreStrip flow={restore} />
+        {restore.error && (
+          <p className="adm-error-text" role="alert">
+            {restore.error}
+          </p>
+        )}
         {note && (
           <div className="bk-strip" role="status">
             <span className="bk-strip__text">
@@ -271,7 +284,15 @@ function StatusPage({
           {history.error}
         </p>
       )}
-      <History entries={history.entries} retention={retention} fresh={history.fresh} now={now} />
+      <History
+        entries={history.entries}
+        retention={retention}
+        fresh={history.fresh}
+        now={now}
+        restoreBusy={restore.busy}
+        onRestore={restore.begin}
+      />
+      <RestoreDialogs flow={restore} now={now} />
       {repair && (
         <RepairDialog
           destination={repair.destination}

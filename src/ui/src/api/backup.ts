@@ -64,3 +64,32 @@ export async function repairDestination(destination: string): Promise<RepairResu
   if (data) return data;
   throw new Error(message(error, "Could not repair the copy"));
 }
+
+export type RestoreStatus = components["schemas"]["RestoreStatus"];
+export type BackupSnapshot = components["schemas"]["BackupSnapshot"];
+export type BackupSnapshots = components["schemas"]["BackupSnapshotsResponse"];
+
+/** restic's own snapshots, newest first, with the live workspace's path. */
+export async function getBackupSnapshots(): Promise<BackupSnapshots> {
+  const { data, error } = await api.GET("/api/backup/snapshots");
+  if (data) return data;
+  throw new Error(message(error, "Could not read the backups"));
+}
+
+/** Start a restore. A refusal (the live workspace, a folder with files, a
+ * restore already running) comes back as its message, for under the field. */
+export async function startRestore(
+  snapshot: string,
+  target: string,
+): Promise<{ status: BackupStatus } | { refused: string }> {
+  const { data, error } = await api.POST("/api/backup/restore", { body: { snapshot, target } });
+  if (data) return { status: data };
+  return { refused: message(error, "Could not start the restore") };
+}
+
+/** Stop the restore; answers once it has stopped. */
+export async function stopRestore(): Promise<BackupStatus> {
+  const { data, error } = await api.POST("/api/backup/restore/stop");
+  if (data) return data;
+  throw new Error(message(error, "Could not stop the restore"));
+}

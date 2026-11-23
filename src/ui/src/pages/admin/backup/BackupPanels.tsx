@@ -1,6 +1,7 @@
 // The Backup section's panels, from the approved `workspace-backup` mockup
 // (`design/scenes/workspace-backup/_parts.tsx` and `_prototype.tsx`), fed by
 // `GET /api/backup` and its history instead of fixtures.
+import { ArrowCounterClockwiseIcon } from "@phosphor-icons/react/dist/csr/ArrowCounterClockwise";
 import { ArrowRightIcon } from "@phosphor-icons/react/dist/csr/ArrowRight";
 import { CheckCircleIcon } from "@phosphor-icons/react/dist/csr/CheckCircle";
 import { CircleNotchIcon } from "@phosphor-icons/react/dist/csr/CircleNotch";
@@ -116,6 +117,7 @@ export function StatusPanel({
   headline,
   detail,
   running,
+  restore,
   onBackup,
   children,
 }: {
@@ -123,7 +125,10 @@ export function StatusPanel({
   headline: string;
   detail: string;
   running: string | undefined;
+  /** Restore…: disabled while a restore runs or with no backup to restore. */
+  restore: { disabled: boolean; onClick: () => void };
   onBackup: () => void;
+  /** A restore in progress or its note. */
   children?: ReactNode;
 }) {
   return (
@@ -147,6 +152,14 @@ export function StatusPanel({
         )}
       </div>
       <div className="bk-status__actions">
+        <button
+          type="button"
+          className="btn btn-secondary"
+          disabled={restore.disabled}
+          onClick={restore.onClick}
+        >
+          <ArrowCounterClockwiseIcon size={16} /> Restore…
+        </button>
         <button
           type="button"
           className="btn btn-primary"
@@ -289,12 +302,16 @@ export function History({
   retention,
   fresh,
   now,
+  restoreBusy,
+  onRestore,
 }: {
   entries: HistoryEntry[];
   retention: RetentionSettings;
   /** The run that just finished, briefly highlighted. */
   fresh: string | undefined;
   now: number;
+  restoreBusy: boolean;
+  onRestore: (snapshot: string) => void;
 }) {
   return (
     <Panel
@@ -308,6 +325,7 @@ export function History({
           <col />
           <col className="bk-c-num" />
           <col className="bk-c-kept" />
+          <col className="bk-c-act" />
         </colgroup>
         <thead>
           <tr>
@@ -317,6 +335,7 @@ export function History({
               Added
             </th>
             <th scope="col">Kept as</th>
+            <th scope="col" aria-label="Actions" />
           </tr>
         </thead>
         <tbody>
@@ -347,6 +366,18 @@ export function History({
                     <span className="bk-sub">
                       {run.snapshot_id ? "No longer kept" : "Nothing saved"}
                     </span>
+                  )}
+                </td>
+                <td className="bk-actions">
+                  {entry.kept_as && run.snapshot_id && (
+                    <button
+                      type="button"
+                      className="btn btn-ghost bk-restore"
+                      disabled={restoreBusy}
+                      onClick={() => onRestore(run.snapshot_id ?? "")}
+                    >
+                      Restore…
+                    </button>
                   )}
                 </td>
               </tr>
