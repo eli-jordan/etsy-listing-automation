@@ -238,6 +238,58 @@ describe("useAiRun starting and following a run", () => {
   });
 });
 
+describe("useAiRun while a backup holds the run", () => {
+  function queued() {
+    runs.start.mockResolvedValue({
+      kind: "started",
+      run: aiRunSummary({
+        phase: "queued",
+        waiting_for_backup: true,
+        steps: [
+          { id: "brief", state: "pending", detail: null },
+          { id: "market", state: "pending", detail: null },
+          { id: "seo", state: "pending", detail: null },
+        ],
+      }),
+    });
+  }
+
+  it("is busy and queued until the run's first step, then running", async () => {
+    queued();
+    const view = setup();
+
+    act(() => view.result.current.start({ draftBrief: true }));
+    await waitFor(() => expect(view.result.current.phase).toBe("queued"));
+    expect(view.result.current.busy).toBe(true);
+
+    runs.emit(stepEvent("brief", "active", "Drafting a brief from the design"));
+    expect(view.result.current.phase).toBe("running");
+  });
+
+  it("hands over the brief a held run writes once it starts", async () => {
+    queued();
+    const onBrief = vi.fn();
+    const view = setup({}, { onBrief });
+    act(() => view.result.current.start({ draftBrief: true }));
+    await waitFor(() => expect(view.result.current.phase).toBe("queued"));
+
+    runs.emit(stepEvent("brief", "active"), briefEvent("Retro sunset over mountains."));
+
+    expect(onBrief).toHaveBeenCalledWith("Retro sunset over mountains.");
+  });
+
+  it("cancels a held run", async () => {
+    queued();
+    const view = setup();
+    act(() => view.result.current.start({ draftBrief: false }));
+    await waitFor(() => expect(view.result.current.phase).toBe("queued"));
+
+    act(() => view.result.current.cancel());
+
+    expect(runs.cancel).toHaveBeenCalledWith("run-1");
+  });
+});
+
 describe("useAiRun reattaching", () => {
   it("replays a run still in flight after a reload", async () => {
     runs.find.mockResolvedValue(aiRunSummary({ id: "run-7" }));

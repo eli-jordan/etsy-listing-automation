@@ -19,6 +19,7 @@ function row(name: string, over: Partial<BatchRow> = {}): BatchRow {
     ai_steps: [],
     ai_error: null,
     queue_position: null,
+    waiting_for_backup: false,
     proposal: null,
     stale_reasons: [],
     reviewed: false,
@@ -101,6 +102,11 @@ function rowFor(name: string): HTMLElement {
   return found;
 }
 
+async function findRow(name: string): Promise<HTMLElement> {
+  await screen.findAllByText(name);
+  return rowFor(name);
+}
+
 function counts(): string {
   return document.querySelector(".bc-counts")?.textContent ?? "";
 }
@@ -120,6 +126,25 @@ describe("BatchSummaryPage", () => {
     await screen.findByText("Brief ready");
     expect(screen.getByText("Start AI Mode in the listing")).toBeInTheDocument();
     expect(screen.queryByText("Ready to review")).not.toBeInTheDocument();
+  });
+
+  it("says a queued row is waiting for backup while a backup holds the queue", async () => {
+    vi.spyOn(batchesApi, "getBatch").mockResolvedValue(
+      batch([
+        row("night-hike-club", {
+          ai: "queued",
+          queue_position: 1,
+          waiting_for_backup: true,
+          reviewable: false,
+        }),
+      ]),
+    );
+    renderPage();
+
+    expect(
+      await within(await findRow("night-hike-club")).findByText("Queued, waiting for backup"),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/in line/)).not.toBeInTheDocument();
   });
 
   it("shows the queue mid-run: counts, each row's AI and its proposal (UI doc §7)", async () => {

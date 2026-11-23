@@ -186,6 +186,43 @@ describe("DeployPage: starting fresh", () => {
   });
 });
 
+describe("DeployPage: while a backup pauses deploys", () => {
+  it("says the queued plan is waiting for backup until it starts planning", async () => {
+    vi.spyOn(listingsApi, "getListing").mockResolvedValue(detail());
+    vi.spyOn(runsApi, "currentRun").mockResolvedValue(null);
+    vi.spyOn(runsApi, "createRun").mockResolvedValue({
+      kind: "created",
+      run: runSummary({ id: "run-1", waiting_for_backup: true }),
+    });
+    const handles = stubStream();
+
+    renderPage();
+
+    expect(await screen.findByRole("heading", { name: "Waiting for backup" })).toBeInTheDocument();
+    expect(screen.getByText("Waiting for backup…")).toBeInTheDocument();
+    streamAt(handles, 0).onEvent({ type: "phase", id: 2, phase: "planning" });
+    expect(await screen.findByRole("heading", { name: "Planning…" })).toBeInTheDocument();
+    expect(screen.queryByText("Waiting for backup…")).not.toBeInTheDocument();
+  });
+
+  it("says so when reattaching to a run the backup holds", async () => {
+    vi.spyOn(listingsApi, "getListing").mockResolvedValue(detail());
+    vi.spyOn(runsApi, "currentRun").mockResolvedValue(runSummary({ id: "run-1" }));
+    vi.spyOn(runsApi, "getRun").mockResolvedValue(
+      runDetail({
+        id: "run-1",
+        waiting_for_backup: true,
+        events: [{ type: "phase", id: 1, phase: "queued" }],
+      }),
+    );
+    stubStream();
+
+    renderPage();
+
+    expect(await screen.findByRole("heading", { name: "Waiting for backup" })).toBeInTheDocument();
+  });
+});
+
 describe("DeployPage: reattaching", () => {
   it("rebuilds from RunDetail and keeps streaming for an active run", async () => {
     vi.spyOn(listingsApi, "getListing").mockResolvedValue(detail());

@@ -41,6 +41,13 @@ import type {
  * AI Mode does not. A new pick re-arms it; leaving the editor disarms it.
  * A run that fails is reported and left alone: an automatic retry against a
  * metered CLI is the failure mode "once" exists to rule out.
+ *
+ * ## Waiting for backup
+ *
+ * While a workspace backup pauses background jobs, a run the editor starts
+ * is answered `queued` (workspace-backup plan, decision P4). It is busy and
+ * cancellable like a running one, and its first `step` event is the sign it
+ * has started: no phase event announces that.
  */
 
 export type AiRunViewPhase = "idle" | "starting" | AiRunPhase;
@@ -49,8 +56,8 @@ export interface AiRun {
   /** `"idle"` until this editor starts or finds a run; `"starting"` while
    * the `POST` is in flight; then the run's own phase. */
   phase: AiRunViewPhase;
-  /** Starting or running: what disables the AI Mode button and shows
-   * *Generating for…* and Cancel. */
+  /** Starting, queued or running: what disables the AI Mode button and
+   * shows *Generating for…* (or *Waiting for backup*) and Cancel. */
   busy: boolean;
   /** The three nodes, brief → market → seo, each as its latest `step`
    * event left it. Empty until there is a run. */
@@ -122,6 +129,11 @@ function viewOf(run: AiRunSummary): View {
   };
 }
 
+/** Not finished: a run the server is still holding or running. */
+function active(phase: AiRunViewPhase): boolean {
+  return phase === "queued" || phase === "running";
+}
+
 function applyEvent(view: View, event: AiRunEvent): View {
   switch (event.type) {
     case "step": {
@@ -129,6 +141,8 @@ function applyEvent(view: View, event: AiRunEvent): View {
       const known = view.steps.some((s) => s.id === step.id);
       return {
         ...view,
+        // A held run's first event is a step: the backup let it start.
+        phase: view.phase === "queued" ? "running" : view.phase,
         steps: known ? view.steps.map((s) => (s.id === step.id ? step : s)) : [...view.steps, step],
       };
     }
@@ -169,7 +183,7 @@ export function useAiRun(
     // the seller has changed it since -- and its proposal is cached with the
     // seller's resolutions. Brief adoption is live-only; proposal review
     // receives the attachment context to decide which events remain current.
-    const live = run.phase === "running";
+    const live = active(run.phase);
     setView(viewOf(run));
     stream.current = openAiRunStream(run.id, {
       onEvent: (event) => {
@@ -185,9 +199,7 @@ export function useAiRun(
       onError: () => {
         if (mine !== generation.current) return;
         setView((current) =>
-          current.phase === "running"
-            ? { ...current, phase: "failed", message: LOST_STREAM }
-            : current,
+          active(current.phase) ? { ...current, phase: "failed", message: LOST_STREAM } : current,
         );
       },
     });
@@ -221,7 +233,7 @@ export function useAiRun(
   );
 
   const runId = view.runId;
-  const running = view.phase === "running";
+  const running = active(view.phase);
   const cancel = useCallback(() => {
     if (runId === null || !running) return;
     // The run stays busy until its own `cancelled` phase arrives, moments
@@ -289,7 +301,7 @@ export function useAiRun(
 
   return {
     phase: view.phase,
-    busy: view.phase === "starting" || view.phase === "running",
+    busy: view.phase === "starting" || active(view.phase),
     steps: view.steps,
     queries: view.queries,
     market: view.market,
