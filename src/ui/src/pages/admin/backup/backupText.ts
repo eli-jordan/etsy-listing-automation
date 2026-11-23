@@ -258,3 +258,17 @@ export function restoreNote(restore: RestoreStatus): string {
   if (restore.outcome === "stopped") return `Restore stopped at ${at}. ${left}`;
   return `The restore failed at ${at}: ${restore.message ?? "no reason was given"} ${left}`;
 }
+
+/** The set-up form's password, typed twice, and the saved-it checkbox. */
+export interface Password {
+  pw: string;
+  pw2: string;
+  stored: boolean;
+}
+
+/** A new repository's password: 12 characters (plan, PR 5), typed alike twice. */
+export function passwordProblem({ pw, pw2 }: Password): string | null {
+  if (pw.length < 12) return "Use at least 12 characters.";
+  if (pw !== pw2) return "The two passwords don't match.";
+  return null;
+}

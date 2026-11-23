@@ -53,7 +53,7 @@ function healthy(extra: Partial<BackupStatus> = {}): BackupStatus {
     interval_hours: 12,
     last_success: iso(-2),
     next_due: iso(10),
-    repository: { path: REPO, missing: false, snapshots: 5 },
+    repository: { path: REPO, missing: false, snapshots: 5, password_stored: true },
     destinations: [
       { path: ICLOUD, last_copy: iso(-2), behind: false, changed: [], unexpected: [] },
     ],
@@ -432,10 +432,10 @@ describe("Warnings on the Backup page", () => {
     await waitFor(() => expect(screen.queryByRole("alert")).not.toBeInTheDocument());
   });
 
-  it("names a missing repository and offers no action yet", async () => {
+  it("names a missing repository and offers its two actions", async () => {
     status.mockResolvedValue(
       healthy({
-        repository: { path: REPO, missing: true, snapshots: 0 },
+        repository: { path: REPO, missing: true, snapshots: 0, password_stored: true },
         warnings: [
           {
             kind: "repository_missing",
@@ -448,7 +448,11 @@ describe("Warnings on the Backup page", () => {
     open();
     const banner = await screen.findByRole("alert");
     expect(banner).toHaveTextContent("Backup repository not found");
-    expect(within(banner).queryByRole("button")).not.toBeInTheDocument();
+    expect(
+      within(banner)
+        .getAllByRole("button")
+        .map((b) => b.textContent),
+    ).toEqual(["Create a new repository", "Connect an existing repository"]);
     expect(screen.getByText("Not found")).toHaveClass("bk-pill--bad");
   });
 });

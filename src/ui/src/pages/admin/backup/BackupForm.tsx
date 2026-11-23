@@ -17,6 +17,8 @@ import {
   INTERVALS,
   intervalChoice,
   intervalHint,
+  type Password,
+  passwordProblem,
 } from "./backupText";
 
 /** A failure to show under the form, or null once it worked. */
@@ -27,12 +29,6 @@ const SAVED_NOTE_MS = 4000;
 type Row = { id: number; path: string };
 let nextRow = 0;
 const rows = (paths: string[]): Row[] => paths.map((path) => ({ id: nextRow++, path }));
-
-interface Password {
-  pw: string;
-  pw2: string;
-  stored: boolean;
-}
 
 export function BackupForm({
   mode,
@@ -172,12 +168,6 @@ function createReady(answers: BackupAnswers, password: Password): boolean {
   return passwordProblem(password) === null && password.stored && answers.repository.trim() !== "";
 }
 
-function passwordProblem({ pw, pw2 }: Password): string | null {
-  if (pw.length < 12) return "Use at least 12 characters.";
-  if (pw !== pw2) return "The two passwords don't match.";
-  return null;
-}
-
 function Field({ label, hint, children }: { label: string; hint: string; children: ReactNode }) {
   return (
     <div className="bk-field">
@@ -252,7 +242,7 @@ function Interval({
   );
 }
 
-function PasswordFields({
+export function PasswordFields({
   value,
   onChange,
 }: {

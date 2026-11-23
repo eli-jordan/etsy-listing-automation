@@ -245,7 +245,7 @@ describe("Admin page shell", () => {
 const ON: BackupStatus = {
   enabled: true,
   interval_hours: 12,
-  repository: { path: "C:/backups/studio", missing: false, snapshots: 0 },
+  repository: { path: "C:/backups/studio", missing: false, snapshots: 0, password_stored: true },
   destinations: [],
   warnings: [],
 };

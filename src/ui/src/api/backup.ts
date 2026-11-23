@@ -45,8 +45,7 @@ export async function runBackup(): Promise<BackupStatus> {
   throw new Error(message(error, "Could not start a backup"));
 }
 
-export async function setUpBackup(answers: BackupSetUp): Promise<SetUpOutcome> {
-  const { data, error } = await api.POST("/api/backup/setup", { body: answers });
+function outcome(data: BackupStatus | undefined, error: unknown, fallback: string): SetUpOutcome {
   if (data) return { kind: "started", status: data };
   const refusal = error as Refusal | undefined;
   if (refusal?.kind === "conflict" || refusal?.kind === "invalid")
@@ -55,7 +54,29 @@ export async function setUpBackup(answers: BackupSetUp): Promise<SetUpOutcome> {
       message: refusal.message,
       fieldErrors: refusal.field_errors ?? {},
     };
-  throw new Error(message(error, "Could not set up backups"));
+  throw new Error(message(error, fallback));
+}
+
+export async function setUpBackup(answers: BackupSetUp): Promise<SetUpOutcome> {
+  const { data, error } = await api.POST("/api/backup/setup", { body: answers });
+  return outcome(data, error, "Could not set up backups");
+}
+
+export type NewRepository = components["schemas"]["BackupNewRepositoryRequest"];
+export type ConnectRepository = components["schemas"]["BackupConnectRequest"];
+
+/** Create a new repository while the configured one is missing; starts the
+ * first backup. Refusals come back as set-up's do. */
+export async function createRepository(body: NewRepository): Promise<SetUpOutcome> {
+  const { data, error } = await api.POST("/api/backup/repository", { body });
+  return outcome(data, error, "Could not create the repository");
+}
+
+/** Copy an existing repository to this computer and use it; answers once
+ * it is connected. A wrong password is an `invalid` refusal. */
+export async function connectRepository(body: ConnectRepository): Promise<SetUpOutcome> {
+  const { data, error } = await api.POST("/api/backup/connect", { body });
+  return outcome(data, error, "Could not connect the repository");
 }
 
 /** Set aside a destination's changed files and copy again; answers when done. */

@@ -120,6 +120,7 @@ export function SettingsPanel({
             onPage={onBackupPage}
             saved={settings.backup ?? null}
             setUp={state.setUp}
+            replaceRepository={state.replaceRepository}
             save={state.confirmSave}
           />
         </fieldset>

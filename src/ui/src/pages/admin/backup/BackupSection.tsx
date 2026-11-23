@@ -2,7 +2,7 @@
 // set-up form, Status and history, and Setup. Status comes from the shell's
 // one poll (`useBackupStatus`); Setup saves through settings.yaml's revision
 // check, like the AI section. Restore is in Restore.tsx; the missing-repository
-// actions are PR 8.
+// actions are in MissingRepository.tsx (PR 8).
 import { WarningIcon } from "@phosphor-icons/react/dist/csr/Warning";
 import { XIcon } from "@phosphor-icons/react/dist/csr/X";
 import { useEffect, useRef, useState } from "react";
@@ -19,6 +19,7 @@ import {
 } from "../../../api/backup";
 import type { SettingsChanges } from "../../../api/workspaceSettings";
 import { useBackupStatus } from "../../../shell/backupStatus";
+import type { RepositoryAction } from "../useWorkspaceSettings";
 import { type Answer, BackupForm } from "./BackupForm";
 import {
   ChangedFilesBanner,
@@ -28,6 +29,11 @@ import {
   StatusPanel,
   StoragePipeline,
 } from "./BackupPanels";
+import {
+  MissingRepositoryBanner,
+  type RepositoryMode,
+  RepositoryDialog,
+} from "./MissingRepository";
 import { RestoreDialogs, RestoreStrip } from "./Restore";
 import { useRestore } from "./useRestore";
 import {
@@ -68,6 +74,7 @@ export function BackupSection({
   onPage,
   saved,
   setUp,
+  replaceRepository,
   save,
 }: {
   page: BackupPage;
@@ -75,6 +82,7 @@ export function BackupSection({
   /** settings.yaml's `backup:` block; null while off, undefined while loading. */
   saved: BackupSettings | null | undefined;
   setUp: (answers: BackupAnswers & { password: string }) => Promise<SetUpOutcome>;
+  replaceRepository: (action: RepositoryAction) => Promise<SetUpOutcome>;
   save: (changes: SettingsChanges) => Promise<SaveAnswer>;
 }) {
   const { status, error, readAt, refresh } = useBackupStatus();
@@ -137,6 +145,7 @@ export function BackupSection({
       now={readAt}
       retention={saved?.retention ?? NEW_BACKUP.retention}
       refresh={refresh}
+      replaceRepository={replaceRepository}
       onSetup={() => onPage("setup")}
     />
   );
@@ -172,18 +181,21 @@ function StatusPage({
   now,
   retention,
   refresh,
+  replaceRepository,
   onSetup,
 }: {
   status: BackupStatus;
   now: number;
   retention: RetentionSettings;
   refresh: () => Promise<unknown>;
+  replaceRepository: (action: RepositoryAction) => Promise<SetUpOutcome>;
   onSetup: () => void;
 }) {
   const history = useHistory(status);
   const restore = useRestore(status, refresh);
   const [note, setNote] = useState<string | null>(null);
   const [repair, setRepair] = useState<Repair | null>(null);
+  const [replacing, setReplacing] = useState<RepositoryMode | null>(null);
   const warnings = status.warnings.filter((w) => w.banner);
   const retry = warnings.filter(retryable);
   const missing = warnings.find((w) => w.kind === "repository_missing");
@@ -195,6 +207,17 @@ function StatusPage({
   const backUp = () => {
     setNote(null);
     runBackup().then(refresh, (e: unknown) => setNote(failure(e, "Could not start a backup")));
+  };
+  const replace = async (action: RepositoryAction): Promise<string | null> => {
+    try {
+      const refused = refusal(await replaceRepository(action));
+      if (refused) return refused;
+      setReplacing(null);
+      void refresh();
+      return null;
+    } catch (e) {
+      return failure(e, "Could not reach the server");
+    }
   };
   const runRepair = async (destination: DestinationStatus) => {
     setRepair({ destination, working: true, error: null });
@@ -210,14 +233,7 @@ function StatusPage({
 
   return (
     <>
-      {missing && (
-        <div className="adm-warn bk-banner" role="alert">
-          <WarningIcon size={18} />
-          <span>
-            <strong>{missing.message}</strong>
-          </span>
-        </div>
-      )}
+      {missing && <MissingRepositoryBanner warning={missing} onAction={setReplacing} />}
       {changed.map((d) => (
         <ChangedFilesBanner
           key={d.path}
@@ -293,6 +309,15 @@ function StatusPage({
         onRestore={restore.begin}
       />
       <RestoreDialogs flow={restore} now={now} />
+      {replacing && (
+        <RepositoryDialog
+          mode={replacing}
+          repository={status.repository?.path ?? ""}
+          passwordStored={status.repository?.password_stored ?? false}
+          onCancel={() => setReplacing(null)}
+          onSubmit={replace}
+        />
+      )}
       {repair && (
         <RepairDialog
           destination={repair.destination}
