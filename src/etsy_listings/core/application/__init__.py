@@ -38,12 +38,18 @@ import names the module it depends on. Public interfaces:
     profile (``build_garment_profile``, ``garment_profile_slug_for``,
     ``sort_sizes``, ``write_garment_profile_if_absent``).
 ``credentials``
-    ``Credential`` (``PRINTIFY``, ``ETSY_APP_KEY``, ``ANTHROPIC``),
+    ``Credential`` (``PRINTIFY``, ``ETSY_APP_KEY``, ``ANTHROPIC``,
+    ``BACKUP_PASSWORD``),
     ``stored`` / ``stored_values`` (environment over ``.env``), ``store``,
     ``verify_printify_token``, ``verify_etsy_app_key``,
     ``credential_status`` -> ``CredentialStatus`` / ``TokenSummary``, and
     the Etsy grant either side of the browser -- ``begin_etsy_sign_in`` ->
     ``EtsySignIn``, ``complete_etsy_sign_in`` -> ``SignedIn``.
+``backup_repository``
+    The workspace's restic repository: ``backup_settings`` (or
+    ``BackupOffError``), ``create_repository`` (refusing a short password
+    and a folder that holds files), ``open_repository`` -> ``Restic``, and
+    ``backup_status`` -> ``BackupStatus``, read without a lock.
 ``workspace_setup``
     ``create_directories``, ``sync_packaged_prompts`` -> ``PackagedPrompt``,
     ``read_shop_document``, ``SetupAnswers`` / ``POD_DEFAULTS``,

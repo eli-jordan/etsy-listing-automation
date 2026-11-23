@@ -8,8 +8,10 @@ Public modules, imported directly, with nothing re-exported here:
   the pinned release) and installing that release under ``~/.etsy-listings``.
 - ``restic`` -- `Restic`: one repository's commands, streamed as parsed
   ``--json`` lines, with restic's exit codes as typed errors and cancel.
-- ``repository`` -- opening and creating the configured repository for a
-  workspace: settings, password and binary together.
+
+Opening and creating a workspace's configured repository, which joins the
+settings, the password and the binary, is
+``core.application.backup_repository``'s.
 
 ``installation`` is implementation only (download, digest check, unpack),
 reached through ``binary`` alone; an Import Linter contract enforces it.
