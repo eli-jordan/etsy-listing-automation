@@ -18,7 +18,7 @@ from typer.testing import CliRunner
 
 from etsy_listings.cli.app import app
 from etsy_listings.core.backup.binary import RESTIC_BINARY_ENV_VAR
-from etsy_listings.core.backup.state import HISTORY_FILE
+from etsy_listings.core.backup.state import HISTORY_FILE, STATE_FILE
 from etsy_listings.core.config.secrets import BACKUP_PASSWORD_VAR
 from etsy_listings.core.workspace import layout
 
@@ -235,3 +235,24 @@ def test_run_backs_up_then_check_finds_no_errors(workspace_root: Path, repositor
 
     code, output = _run(workspace_root, "check")
     assert (code, output.strip()) == (0, "The backup repository has no errors.")
+
+
+@pytest.mark.restic
+@pytest.mark.usefixtures("with_restic")
+def test_check_of_a_damaged_repository_fails_and_is_recorded(
+    workspace_root: Path, repository: Path, isolated: Path
+) -> None:
+    (workspace_root / layout.ENV_FILE).write_text(f"{BACKUP_PASSWORD_VAR}={PASSWORD}\n")
+    assert _run(workspace_root, "init")[0] == 0
+    assert _run(workspace_root, "run")[0] == 0
+    for pack in (repository / "data").rglob("*"):
+        if pack.is_file():
+            pack.unlink()
+
+    code, output = _run(workspace_root, "check")
+
+    assert code == 1
+    assert "has no errors" not in output
+    assert "restic:" in output
+    state = json.loads((isolated / ".etsy-listings" / STATE_FILE).read_text())
+    assert state["last_check"]["ok"] is False
