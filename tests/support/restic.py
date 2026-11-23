@@ -11,8 +11,10 @@ from __future__ import annotations
 
 import json
 import threading
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field
+from datetime import datetime
+from pathlib import Path
 from typing import Any
 
 from etsy_listings.core.backup.restic import ResticProcess
@@ -83,3 +85,63 @@ class ScriptedRestic:
     def commands(self) -> list[list[str]]:
         """Each launch's argv after the binary and the global flags."""
         return [launch.argv[launch.argv.index("--json") + 1 :] for launch in self.launches]
+
+
+def snapshot_json(time: datetime, number: int) -> dict[str, Any]:
+    """One entry of ``restic snapshots --json``, trimmed to what is read."""
+    snapshot_id = f"{number:064x}"
+    return {
+        "time": time.isoformat(),
+        "paths": ["/workspace"],
+        "hostname": "pc",
+        "id": snapshot_id,
+        "short_id": snapshot_id[:8],
+    }
+
+
+class RepositoryRestic:
+    """A launcher that answers by subcommand and keeps snapshots as a
+    repository would, for callers whose commands interleave, such as a
+    server whose scheduler and requests both read snapshots.
+
+    ``init`` writes ``config`` into ``repository``; ``backup`` adds a
+    snapshot at ``now()``, or keeps running until stopped while ``hang`` is
+    set; ``failing`` maps a subcommand to the reply that fails it.
+    """
+
+    def __init__(self, repository: Path, now: Callable[[], datetime]) -> None:
+        self.repository = repository
+        self.now = now
+        self.snapshots: list[datetime] = []
+        self.hang = False
+        self.failing: dict[str, Reply] = {}
+        self.commands: list[list[str]] = []
+        self._lock = threading.Lock()
+
+    def __call__(self, argv: Sequence[str], env: Mapping[str, str]) -> ResticProcess:
+        command = [arg for arg in argv[list(argv).index("--json") + 1 :] if arg != "--no-lock"]
+        with self._lock:
+            self.commands.append(command)
+            return _Process(self._reply(command[0]))
+
+    def ran(self, subcommand: str) -> int:
+        with self._lock:
+            return sum(command[0] == subcommand for command in self.commands)
+
+    def _reply(self, subcommand: str) -> Reply:
+        if subcommand in self.failing:
+            return self.failing[subcommand]
+        if subcommand == "init":
+            self.repository.mkdir(parents=True, exist_ok=True)
+            (self.repository / "config").write_bytes(b"{}")
+            return Reply(stdout=[{"message_type": "initialized", "id": "f00d"}])
+        if subcommand == "snapshots":
+            listed = [snapshot_json(time, n) for n, time in enumerate(self.snapshots, 1)]
+            return Reply(stdout=[listed])
+        if subcommand == "backup":
+            if self.hang:
+                return Reply(hang=True)
+            self.snapshots.append(self.now())
+            summary = snapshot_json(self.now(), len(self.snapshots))
+            return Reply(stdout=[{"message_type": "summary", "snapshot_id": summary["id"]}])
+        return Reply()
