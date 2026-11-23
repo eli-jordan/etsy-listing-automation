@@ -13,6 +13,7 @@ import json
 import threading
 from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass, field
+from pathlib import PurePath
 from typing import Any
 
 from etsy_listings.core.backup.restic import ResticProcess
@@ -83,3 +84,10 @@ class ScriptedRestic:
     def commands(self) -> list[list[str]]:
         """Each launch's argv after the binary and the global flags."""
         return [launch.argv[launch.argv.index("--json") + 1 :] for launch in self.launches]
+
+
+def snapshot_path(path: PurePath) -> str:
+    """How restic names a local folder inside a snapshot: a Windows drive
+    becomes a top folder (``/C/Users/...``); a POSIX path is itself."""
+    posix = path.as_posix()
+    return posix if not path.drive else "/" + posix.replace(":", "", 1)
