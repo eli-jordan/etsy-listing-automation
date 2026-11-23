@@ -290,8 +290,8 @@ def test_each_destination_is_copied_after_jobs_resume(
     workspace: Workspace, home: Path, repository: FakeRepository, tmp_path: Path
 ) -> None:
     icloud, nas = tmp_path / "icloud" / "backups", tmp_path / "nas" / "backups"
-    icloud.parent.mkdir()
-    nas.parent.mkdir()
+    icloud.mkdir(parents=True)
+    nas.mkdir(parents=True)
     workspace = _with_destinations(workspace, icloud, nas)
     gate = JobGate()
     heard: list[BackupProgress] = []
@@ -338,6 +338,7 @@ def test_each_destination_is_checked_once_30_days_have_passed(
     workspace: Workspace, home: Path, repository: FakeRepository, tmp_path: Path
 ) -> None:
     icloud = tmp_path / "icloud"
+    icloud.mkdir()
     workspace = _with_destinations(workspace, icloud)
     weekly = (BACKED_UP, FORGOT, PRUNED, CHECKED)
 
@@ -355,6 +356,7 @@ def test_a_change_the_check_found_stops_copying_until_the_destination_is_repaire
     workspace: Workspace, home: Path, repository: FakeRepository, tmp_path: Path
 ) -> None:
     icloud = tmp_path / "icloud"
+    icloud.mkdir()
     workspace = _with_destinations(workspace, icloud)
     [pack] = [name for name in files(repository.root) if name.startswith("data/")]
     weekly = (BACKED_UP, FORGOT, PRUNED, CHECKED)
@@ -381,6 +383,7 @@ def test_a_damaged_local_file_fails_the_run_as_a_failed_check(
     workspace: Workspace, home: Path, repository: FakeRepository, tmp_path: Path
 ) -> None:
     icloud = tmp_path / "icloud"
+    icloud.mkdir()
     workspace = _with_destinations(workspace, icloud)
     pack, _, _ = repository.backup("second")
     (repository.root / pack).write_bytes(b"pack:bit rot")
@@ -399,6 +402,8 @@ def test_stopping_while_copying_records_the_run_as_stopped(
     workspace: Workspace, home: Path, repository: FakeRepository, tmp_path: Path
 ) -> None:
     icloud, nas = tmp_path / "icloud", tmp_path / "nas"
+    icloud.mkdir()
+    nas.mkdir()
     workspace = _with_destinations(workspace, icloud, nas)
     cancel = threading.Event()
     launcher = ScriptedRestic(BACKED_UP, FORGOT, PRUNED, CHECKED)

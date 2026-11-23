@@ -227,11 +227,12 @@ def test_run_backs_up_copies_then_check_finds_no_errors(
 ) -> None:
     (workspace_root / layout.ENV_FILE).write_text(f"{BACKUP_PASSWORD_VAR}={PASSWORD}\n")
     assert _run(workspace_root, "init")[0] == 0
+    cloud = repository.with_name("cloud")
+    cloud.mkdir()
 
     code, output = _run(workspace_root, "run")
     assert code == 0, output
     assert "Pruning" in output
-    cloud = repository.with_name("cloud")
     assert f"Copied to {cloud}." in output
     assert (cloud / "config").read_bytes() == (repository / "config").read_bytes()
     snapshot = json.loads(_run(workspace_root, "snapshots", "--json")[1])

@@ -343,11 +343,14 @@ Deviations recorded during implementation:
   `restic.py`. `BackupRunner` gains `repair(destination)` for PR 5's
   endpoint, and `backup run` prints each copy's outcome. The CLI has no
   repair command, because the spec's *CLI* lists none.
-- "The folder is missing" is read as "its parent is missing". A destination
-  folder that does not exist yet, inside a folder that does, is created and
-  copied to, so a new destination needs no extra set-up step. A missing
-  parent means the drive, share or sync folder is offline, and that
-  destination is skipped.
+- A copy never creates its destination. A missing destination folder is
+  unreachable ("Folder not found", as frame `04-failing` shows), even when
+  its parent exists. If iCloud is signed out, `iCloudDrive\` can still be
+  there, and creating the folder would copy about 20 GB into a folder
+  nothing syncs while reporting the copy up to date. Only set-up creates a
+  destination folder: PR 5 calls `create_destination`, which makes the
+  folder when its parent exists and refuses with `DestinationNotFoundError`
+  otherwise.
 - A local file whose contents no longer match its name gets its own outcome,
   `damaged`. The run fails at `copying`, `last_check` records the failure as
   the spec asks, and no further destination is copied. No copy runs after a
