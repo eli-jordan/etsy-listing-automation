@@ -157,12 +157,17 @@ def test_set_up_refuses_a_destination_whose_drive_is_missing(
     assert not workspace_root.joinpath("settings.yaml").exists()
 
 
-def test_set_up_twice_is_refused(client: TestClient, repository: Path, tmp_path: Path) -> None:
+def test_set_up_twice_is_refused(
+    client: TestClient, workspace_root: Path, repository: Path, tmp_path: Path
+) -> None:
     _ok(_set_up(client, repository), 202)
+    before = (workspace_root / "settings.yaml").read_bytes()
 
     refused = _set_up(client, tmp_path / "elsewhere")
 
     assert refused.status_code == 409, refused.text
+    assert "already set up" in refused.json()["message"]
+    assert (workspace_root / "settings.yaml").read_bytes() == before
 
 
 def test_back_up_now_starts_a_run_and_refuses_a_second(
