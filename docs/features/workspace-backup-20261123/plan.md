@@ -174,6 +174,43 @@ Exit when:
   group;
 - shared gates pass.
 
+Deviations recorded during implementation:
+
+- The pin is restic 0.19.1 (published 2026-07-05), because 0.20.0 was four
+  days old. Its digests come from the release's `SHA256SUMS`, and the Windows
+  zip was downloaded and checked against it. Only the archive is checked, at
+  install. The unpacked binary is not hashed again on each run.
+- `ETSY_LISTINGS_RESTIC_BINARY` wins over the `restic_binary` setting, as the
+  process environment wins over `.env` for credentials. CI can then point
+  every test at its download whatever a fixture's settings say.
+- Creating, opening and reporting on a workspace's repository is a new
+  module, `core/application/backup_repository.py`, which the plan did not
+  name. It joins the settings, the password and the binary, so `core/backup`
+  knows no workspace and PR 3 and PR 5 reuse it.
+- `backup init` already refuses a password under 12 characters and a folder
+  that holds files. The plan put those refusals in PR 5 and PR 8. It stores a
+  new password before `restic init` runs, and asks for it twice through
+  `cli/prompts.py` in plain text, like every other credential (a cygwin pty
+  cannot hide input).
+- `status` reads snapshots with `--no-lock`, so it answers while a backup
+  holds the lock. It exits 1 when the repository does not open.
+- Stopping restic does not use a Job Object. restic runs in its own process
+  group (a new session on POSIX, `CREATE_NEW_PROCESS_GROUP` on Windows) and
+  gets an interrupt first (`SIGINT`, `CTRL_BREAK_EVENT`) so it can drop its
+  lock. After five seconds the group is killed (`killpg`, `taskkill /T /F`).
+  restic starts no child processes for a local repository.
+- No setting value goes through `to_native_path`. PR 2 has no CLI path
+  argument besides `--root`. `BackupSettings` parses its paths as `Path`, so a
+  cygwin-style path in `settings.yaml` is not translated. PR 7's restore
+  target is a CLI argument and must go through `to_native_path`.
+- `write_env_value` now writes bytes, so `.env` keeps LF endings on Windows,
+  where `write_text` used to write CRLF. `tests/cli/behaviour/test_auth.py`'s
+  ordering spy also records `Path.replace`, because `.env` now arrives by a
+  rename.
+- Tests marked `restic` skip when `ETSY_LISTINGS_RESTIC_BINARY` is unset.
+  CI does not download the binary yet. The finish pass adds that step, so
+  the tests run there.
+
 ### PR 3 — The backup run
 
 Spec: *Backup run*, *Status and warnings* (the state file), *CLI* (`run`,

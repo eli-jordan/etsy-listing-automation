@@ -123,6 +123,8 @@ package never drags in OpenCV, FastAPI or Typer to reach one name.
 | `core/listing_templates` | Template conversion and frozen document/assets/timestamp capture | Capture occurs under the template write lock before upload; shared references are revalidated at confirm and retry |
 | `core/market` | Comparable-listing research, scoring and evidence snapshots | Read-only Etsy data informs wording rather than product facts |
 | `core/batches` | Upload validation, archive inspection, staging, name allocation and idempotent local creation | Creates ordinary listings; AI dispatch belongs to `application/ai` |
+| `core/backup` | The pinned restic release and which binary to run (`binary.py`, installing through the protected `installation.py`), and the streaming restic runner (`restic.py`) | Knows no workspace; `core/application/backup_repository.py` joins the `backup:` settings, the `.env` password and the binary |
+| `core/user_directory.py` | `user_directory(home)`: `~/.etsy-listings`, this machine's state outside every workspace (Marigold runtime, restic) | Every owner takes `home`, so tests never write to the real home directory |
 | `core/bounded_cache.py` | `BoundedCache`: the one thread-safe least-recently-used cache, bounded by total `size(value)` (bytes, or entries without a size function), behind every in-process cache of decoded arrays, validation proofs and pixel digests | Locks only bookkeeping, never `get_or_compute`'s computation; an item larger than the whole budget is served, never kept, and evicts nothing; a replaced key counts only its new size |
 | `core/connections.py`, `core/errors.py` | Client and `RunContext` construction; `UserFacingError` and the refusal categories (`MissingError`, `ConflictError`, `StaleError`, `RefusedError`) | See the credential invariant below; core names a refusal's category, never its status code |
 
@@ -1273,6 +1275,37 @@ headers, role/shape, finite values, ranges and checksums with pickle disabled.
 Import contracts keep runtime installation and torch out of CPU rendering and
 prediction loading. Preparation coordination, durable maps and rendering use
 separate modules and never start inference implicitly.
+
+## restic for workspace backup
+
+The [workspace-backup spec](features/workspace-backup-20261123/spec.md) backs
+the workspace up with restic, run as a subprocess (ADR-0059). Which restic runs
+is `core/backup/binary.py`'s `ResticBinaries`: `ETSY_LISTINGS_RESTIC_BINARY`,
+then the `backup.restic_binary` setting, then restic 0.19.1 pinned by the
+SHA-256 of its Windows amd64 and Linux amd64 release files. Only `backup init`
+installs the pinned release. It downloads into a staging directory beside
+`<home>/.etsy-listings/restic/0.19.1/`, checks the digest, unpacks and renames
+the directory into place, and removes the staging directory on any failure.
+Import Linter admits only `binary.py` to `installation.py`.
+
+`core/backup/restic.py`'s `Restic` runs one command with `--json` through
+`subprocess.Popen` with line-buffered stdout, yielding each parsed line as
+restic writes it. It does not use `core/ai/process.py`'s `run_managed`, which
+takes no environment and buffers output. The password reaches restic only as
+`RESTIC_PASSWORD` in the child's environment. Inherited
+`RESTIC_PASSWORD_FILE`, `RESTIC_PASSWORD_COMMAND` and `RESTIC_REPOSITORY*`
+are dropped, and any echo of the password in an error is redacted. Exit codes
+10, 11 and 12 become `RepositoryNotFoundError`, `RepositoryLockedError` and
+`WrongPasswordError`, carrying the message of restic's `exit_error` line.
+Cancel, or abandoning the stream, interrupts restic's process group so it can
+drop its lock, then kills the group after five seconds.
+
+The password is `ETSY_LISTINGS_BACKUP_PASSWORD` in the workspace `.env`.
+`scaffold.write_env_value` replaces `.env` atomically and durably, because the
+file holds this machine's only copy of the password.
+`core/application/backup_repository.py` stores a new password before
+`restic init` runs, so no repository can exist whose password was never
+recorded.
 
 ## Durable Marigold maps and CPU composition
 
