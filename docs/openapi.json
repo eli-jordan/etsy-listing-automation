@@ -779,6 +779,41 @@
         "title": "AssignKindRequest",
         "type": "object"
       },
+      "BackupConnectRequest": {
+        "description": "Connect an existing repository, such as a destination copy restored\nonto a new machine, by copying it to local disk first.",
+        "properties": {
+          "password": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Password"
+          },
+          "repository": {
+            "title": "Repository",
+            "type": "string"
+          },
+          "revision": {
+            "title": "Revision",
+            "type": "string"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          }
+        },
+        "required": [
+          "revision",
+          "source",
+          "repository"
+        ],
+        "title": "BackupConnectRequest",
+        "type": "object"
+      },
       "BackupHistoryResponse": {
         "properties": {
           "runs": {
@@ -793,6 +828,36 @@
           "runs"
         ],
         "title": "BackupHistoryResponse",
+        "type": "object"
+      },
+      "BackupNewRepositoryRequest": {
+        "description": "Create a new repository while the configured one is missing\n(workspace-backup spec, *Missing repository*).",
+        "properties": {
+          "password": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Password"
+          },
+          "repository": {
+            "title": "Repository",
+            "type": "string"
+          },
+          "revision": {
+            "title": "Revision",
+            "type": "string"
+          }
+        },
+        "required": [
+          "revision",
+          "repository"
+        ],
+        "title": "BackupNewRepositoryRequest",
         "type": "object"
       },
       "BackupOverview": {
@@ -6648,6 +6713,11 @@
             "title": "Missing",
             "type": "boolean"
           },
+          "password_stored": {
+            "default": false,
+            "title": "Password Stored",
+            "type": "boolean"
+          },
           "path": {
             "title": "Path",
             "type": "string"
@@ -7116,7 +7186,8 @@
           "operation": {
             "enum": [
               "backup",
-              "repair"
+              "repair",
+              "connect"
             ],
             "title": "Operation",
             "type": "string"
@@ -9836,6 +9907,68 @@
         ]
       }
     },
+    "/api/backup/connect": {
+      "post": {
+        "description": "Copy an existing repository to local disk, check the password opens\nit, then use it; answers once it is connected. A wrong password or a\nfolder that is not a repository is a 422, and nothing is saved.",
+        "operationId": "connect_repository_api_backup_connect_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BackupConnectRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BackupOverview"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SettingsSaveRefusal"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "412": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SettingsSaveRefusal"
+                }
+              }
+            },
+            "description": "Precondition Failed"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SettingsSaveRefusal"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          }
+        },
+        "summary": "Connect Repository",
+        "tags": [
+          "backup"
+        ]
+      }
+    },
     "/api/backup/history": {
       "get": {
         "operationId": "backup_history_api_backup_history_get",
@@ -9894,6 +10027,68 @@
           }
         },
         "summary": "Repair",
+        "tags": [
+          "backup"
+        ]
+      }
+    },
+    "/api/backup/repository": {
+      "post": {
+        "description": "Create a new repository while the configured one is missing, save\nits folder, and start the first backup. Refuses a folder that holds\nfiles (409) and a missing or short password (422).",
+        "operationId": "create_repository_api_backup_repository_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BackupNewRepositoryRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BackupOverview"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SettingsSaveRefusal"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "412": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SettingsSaveRefusal"
+                }
+              }
+            },
+            "description": "Precondition Failed"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SettingsSaveRefusal"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          }
+        },
+        "summary": "Create Repository",
         "tags": [
           "backup"
         ]

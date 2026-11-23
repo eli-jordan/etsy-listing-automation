@@ -1224,6 +1224,31 @@ class BackupSetUpRequest(BaseModel):
     password: str
 
 
+class BackupNewRepositoryRequest(BaseModel):
+    """Create a new repository while the configured one is missing
+    (workspace-backup spec, *Missing repository*)."""
+
+    revision: str
+    """``settings.yaml``'s revision from ``GET /api/admin/settings``."""
+    repository: str
+    """The folder the seller confirmed: new or empty."""
+    password: str | None = None
+    """Only read when no password is stored."""
+
+
+class BackupConnectRequest(BaseModel):
+    """Connect an existing repository, such as a destination copy restored
+    onto a new machine, by copying it to local disk first."""
+
+    revision: str
+    source: str
+    """The repository to copy from; only read."""
+    repository: str
+    """The local folder to copy into: new or empty."""
+    password: str | None = None
+    """Only read when no password is stored."""
+
+
 class BackupHistoryResponse(BaseModel):
     runs: list[HistoryEntry]
     """Newest first, failed runs included."""

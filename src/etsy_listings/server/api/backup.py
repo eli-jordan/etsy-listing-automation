@@ -1,5 +1,5 @@
-"""The backup status, history, Back up now, set-up, repair and restore
-(workspace-backup plan, PRs 5 and 7).
+"""The backup status, history, Back up now, set-up, repair, restore, and the
+missing-repository actions (workspace-backup plan, PRs 5, 7 and 8).
 
 ``GET /api/backup`` is the one status source for the Backup page, the
 banner on every other page and both nav icons (interactions, *What the
@@ -9,19 +9,24 @@ save through ``PATCH /api/admin/settings`` and its revision check.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
 from etsy_listings.core.application import backup_setup
+from etsy_listings.core.application.backup_coordinator import BackupCoordinator
+from etsy_listings.core.application.backup_missing import Replacement
 from etsy_listings.core.application.backup_overview import BackupOverview
 from etsy_listings.core.application.refusals import InvalidSettingsEditError
 from etsy_listings.core.errors import ConflictError, RefusedError, StaleError
 from etsy_listings.server.api import app_state
 from etsy_listings.server.api.schemas import (
+    BackupConnectRequest,
     BackupHistoryResponse,
+    BackupNewRepositoryRequest,
     BackupRepairRequest,
     BackupRepairResponse,
     BackupRestoreRequest,
@@ -83,16 +88,14 @@ def back_up_now(request: Request) -> BackupOverview:
     return backups.overview()
 
 
-@router.post(
-    "/setup",
-    status_code=202,
-    response_model=BackupOverview,
-    responses={
-        409: {"model": SettingsSaveRefusal},
-        412: {"model": SettingsSaveRefusal},
-        422: {"model": SettingsSaveRefusal},
-    },
-)
+_REFUSALS: dict[int | str, dict[str, Any]] = {
+    409: {"model": SettingsSaveRefusal},
+    412: {"model": SettingsSaveRefusal},
+    422: {"model": SettingsSaveRefusal},
+}
+
+
+@router.post("/setup", status_code=202, response_model=BackupOverview, responses=_REFUSALS)
 def set_up(request: Request, body: BackupSetUpRequest) -> BackupOverview | JSONResponse:
     """Write the ``backup:`` block and the password, create the repository
     and the destination folders, then start the first backup. Refuses a
@@ -106,8 +109,38 @@ def set_up(request: Request, body: BackupSetUpRequest) -> BackupOverview | JSONR
         retention=body.retention,
         password=body.password,
     )
+    return _answer(backups, lambda: backups.set_up(answers, expected_revision=body.revision))
+
+
+@router.post("/repository", status_code=202, response_model=BackupOverview, responses=_REFUSALS)
+def create_repository(
+    request: Request, body: BackupNewRepositoryRequest
+) -> BackupOverview | JSONResponse:
+    """Create a new repository while the configured one is missing, save
+    its folder, and start the first backup. Refuses a folder that holds
+    files (409) and a missing or short password (422)."""
+    backups = app_state.backups(request)
+    answers = Replacement(Path(body.repository), body.password, body.revision)
+    return _answer(backups, lambda: backups.create_repository(answers))
+
+
+@router.post("/connect", response_model=BackupOverview, responses=_REFUSALS)
+def connect_repository(
+    request: Request, body: BackupConnectRequest
+) -> BackupOverview | JSONResponse:
+    """Copy an existing repository to local disk, check the password opens
+    it, then use it; answers once it is connected. A wrong password or a
+    folder that is not a repository is a 422, and nothing is saved."""
+    backups = app_state.backups(request)
+    answers = Replacement(Path(body.repository), body.password, body.revision)
+    return _answer(backups, lambda: backups.connect(Path(body.source), answers))
+
+
+def _answer(
+    backups: BackupCoordinator, action: Callable[[], None]
+) -> BackupOverview | JSONResponse:
     try:
-        backups.set_up(answers, expected_revision=body.revision)
+        action()
     except StaleError as exc:
         return _refusal(412, "conflict", exc)
     except ConflictError as exc:

@@ -51,7 +51,7 @@ class BackupWarning(_Model):
 class RunningBackup(_Model):
     """The operation in progress, for the running line."""
 
-    operation: Literal["backup", "repair"]
+    operation: Literal["backup", "repair", "connect"]
     started_at: datetime
     step: str
     waiting_for: str | None = None
@@ -69,6 +69,9 @@ class RepositoryOverview(_Model):
     """No restic repository at ``path``: backups stop (spec, *Missing repository*)."""
     problem: str | None = None
     """Why its snapshots could not be read, such as a wrong password."""
+    password_stored: bool = False
+    """Whether ``.env`` or the environment holds the password, so the
+    missing-repository actions ask for one only when it does not."""
     snapshots: int = 0
     last_prune: datetime | None = None
     last_check: CheckResult | None = None
@@ -142,6 +145,7 @@ class BackupFacts:
     reading: RepositoryReading
     running: RunningBackup | None
     now: datetime
+    password_stored: bool = False
 
 
 def backup_overview(facts: BackupFacts) -> BackupOverview:
@@ -161,6 +165,7 @@ def backup_overview(facts: BackupFacts) -> BackupOverview:
             path=str(settings.repository),
             missing=reading.missing,
             problem=reading.problem,
+            password_stored=facts.password_stored,
             snapshots=len(reading.snapshots or ()),
             last_prune=facts.state.last_prune,
             last_check=facts.state.last_check,

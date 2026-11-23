@@ -149,7 +149,9 @@ class RepositoryRestic:
     snapshot at ``now()``, or keeps running until stopped while ``hang`` is
     set; ``restore`` reports a quarter done, then, while ``restore_hang`` is
     set, keeps running until stopped or ``restore_release`` is set;
-    ``failing`` maps a subcommand to the reply that fails it.
+    ``failing`` maps a subcommand to the reply that fails it; with
+    ``password`` set, a launch given any other password fails as restic's
+    wrong password does.
     """
 
     def __init__(self, repository: Path, now: Callable[[], datetime]) -> None:
@@ -160,15 +162,21 @@ class RepositoryRestic:
         self.restore_hang = False
         self.restore_release = threading.Event()
         self.failing: dict[str, Reply] = {}
+        self.password: str | None = None
         self.commands: list[list[str]] = []
         self._processes: list[tuple[str, _Process]] = []
         self._lock = threading.Lock()
 
     def __call__(self, argv: Sequence[str], env: Mapping[str, str]) -> ResticProcess:
         command = [arg for arg in argv[list(argv).index("--json") + 1 :] if arg != "--no-lock"]
+        repository = Path(argv[list(argv).index("--repo") + 1])
         with self._lock:
             self.commands.append(command)
-            process = _Process(self._reply(command[0]))
+            if self.password is not None and env.get("RESTIC_PASSWORD") != self.password:
+                reply = Reply(exit_code=12, stderr=exit_error(12, "wrong password or no key found"))
+            else:
+                reply = self._reply(command[0], repository)
+            process = _Process(reply)
             self._processes.append((command[0], process))
             return process
 
@@ -181,20 +189,21 @@ class RepositoryRestic:
         with self._lock:
             return sum(command[0] == subcommand for command in self.commands)
 
-    def _reply(self, subcommand: str) -> Reply:
+    def _reply(self, subcommand: str, repository: Path) -> Reply:
         if subcommand in self.failing:
             return self.failing[subcommand]
         answer = {
-            "init": self._init,
+            "init": lambda: self._init(repository),
             "snapshots": self._snapshots,
             "backup": self._backup,
             "restore": self._restore,
         }.get(subcommand)
         return Reply() if answer is None else answer()
 
-    def _init(self) -> Reply:
-        self.repository.mkdir(parents=True, exist_ok=True)
-        (self.repository / "config").write_bytes(b"{}")
+    def _init(self, repository: Path) -> Reply:
+        """Into the ``--repo`` restic was given, which may not be ``repository``."""
+        repository.mkdir(parents=True, exist_ok=True)
+        (repository / "config").write_bytes(b"{}")
         return Reply(stdout=[{"message_type": "initialized", "id": "f00d"}])
 
     def _snapshots(self) -> Reply:

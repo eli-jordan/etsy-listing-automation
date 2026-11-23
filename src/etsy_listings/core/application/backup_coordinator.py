@@ -22,7 +22,9 @@ interval.
 
 **No repository, no backup.** A repository folder without restic's
 ``config`` stops the schedule and is reported (spec, *Missing repository*):
-nothing here creates one by itself.
+nothing here creates one by itself. The seller creates a new one or
+connects an existing one (``backup_missing``); a connect holds the slot
+while it copies, so no backup or repair starts meanwhile.
 """
 
 from __future__ import annotations
@@ -35,6 +37,12 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal
 
+from etsy_listings.core.application.backup_missing import (
+    Replacement,
+    connect_repository,
+    create_new_repository,
+    has_repository,
+)
 from etsy_listings.core.application.backup_overview import (
     BackupFacts,
     BackupOverview,
@@ -46,7 +54,11 @@ from etsy_listings.core.application.backup_overview import (
     last_success,
     next_due,
 )
-from etsy_listings.core.application.backup_repository import backup_settings, open_repository
+from etsy_listings.core.application.backup_repository import (
+    backup_settings,
+    open_repository,
+    stored_password,
+)
 from etsy_listings.core.application.backup_restore import (
     RestoreProgress,
     RestoreStatus,
@@ -212,6 +224,31 @@ class BackupCoordinator:
         )
         self.run_now()
 
+    def create_repository(self, answers: Replacement) -> None:
+        """Create a new repository where the missing one was named or the
+        seller chose, then start the first backup into it."""
+        create_new_repository(
+            self._workspace, answers, binaries=self._binaries, launch=self._env.launch
+        )
+        self.run_now()
+
+    def connect(self, source: Path, answers: Replacement) -> None:
+        """Copy the repository at ``source`` to local disk and use it;
+        answers once it is connected, holding the slot meanwhile. The
+        schedule then backs up when the copied snapshots say it is due."""
+        self._claim("connect", None)
+        try:
+            connect_repository(
+                self._workspace,
+                source,
+                answers,
+                binaries=self._binaries,
+                launch=self._env.launch,
+            )
+        finally:
+            self._release()
+        self.wake()
+
     def repair(self, destination: Path) -> RepairResult:
         """Set aside what changed in ``destination`` and copy again, holding
         the slot so no backup copies there meanwhile."""
@@ -226,19 +263,21 @@ class BackupCoordinator:
         with self._lock:
             return self._running
 
-    def _claim(self, operation: Literal["backup", "repair"], destination: Path | None) -> None:
+    def _claim(
+        self, operation: Literal["backup", "repair", "connect"], destination: Path | None
+    ) -> None:
         with self._lock:
             self._claim_locked(operation, destination)
 
     def _claim_locked(
-        self, operation: Literal["backup", "repair"], destination: Path | None
+        self, operation: Literal["backup", "repair", "connect"], destination: Path | None
     ) -> None:
         if self._running is not None:
             raise BackupBusyError(self._running)
         self._running = RunningBackup(
             operation=operation,
             started_at=self._env.now(),
-            step="starting" if destination is None else "copying",
+            step="copying" if destination is not None or operation == "connect" else "starting",
             destination=None if destination is None else str(destination),
         )
 
@@ -374,7 +413,15 @@ class BackupCoordinator:
             state = self._store.load(settings.repository)
             runs = self._runs(settings)
             reading = self._cached(settings, runs)
-        facts = BackupFacts(settings, state, runs, reading, self.running, self._env.now())
+        facts = BackupFacts(
+            settings,
+            state,
+            runs,
+            reading,
+            self.running,
+            self._env.now(),
+            password_stored=settings is not None and stored_password(self._workspace) is not None,
+        )
         with self._lock:
             restoring = self._restore
         return backup_overview(facts).model_copy(update={"restore": restoring})
@@ -418,7 +465,7 @@ class BackupCoordinator:
         return reading
 
     def _read_repository(self, settings: BackupSettings) -> RepositoryReading:
-        if not (settings.repository / "config").is_file():
+        if not has_repository(settings.repository):
             return RepositoryReading(missing=True)
         try:
             restic = open_repository(
