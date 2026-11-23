@@ -10,6 +10,7 @@ so nothing reaches the real ``~/.etsy-listings`` (P2).
 from __future__ import annotations
 
 import json
+import os
 from collections.abc import Callable
 from pathlib import Path
 
@@ -296,3 +297,18 @@ def test_restore_writes_a_snapshot_into_a_new_folder(
     assert (target / "settings.yaml").read_bytes() == (
         workspace_root / "settings.yaml"
     ).read_bytes()
+
+
+@pytest.mark.skipif(os.name != "nt", reason="translation is a Windows-only concern")
+def test_restore_reads_a_cygwin_style_target_as_the_windows_folder(
+    workspace_root: Path, repository: Path
+) -> None:
+    """``/cygdrive/c/...`` from a Cygwin shell names the same folder as
+    ``C:/...``, so the live workspace is still refused."""
+    drive, rest = workspace_root.drive, workspace_root.as_posix()[len(workspace_root.drive) :]
+    cygwin = f"/cygdrive/{drive.rstrip(':').lower()}{rest}"
+
+    assert _run(workspace_root, "restore", "latest", cygwin) == (
+        1,
+        "That's your live workspace. Choose a new, empty folder.\n",
+    )
