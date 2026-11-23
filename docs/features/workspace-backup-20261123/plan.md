@@ -466,13 +466,19 @@ Deviations recorded during implementation:
 - Set-up is `POST /api/backup/setup`. It writes the whole block through
   the settings revision check (`edit_settings(editable=("backup",))`). It
   is refused once backups are set up. It creates the destination folders,
-  as does a Setup save that adds one, and each must be inside a folder
-  that exists (PR 4's finisher makes a missing destination folder
-  unreachable). The refusals now carry categories: backups off and a
+  as does a Setup save that adds one, through PR 4's `create_destination`,
+  and each must be inside a folder that exists. A run never creates one:
+  a destination folder that is missing is reported as "Folder not found".
+  The refusals now carry categories: backups off and a
   folder that holds files are conflicts (409), and a short password is
   refused (422).
 - `create_app` gains `backup: BackupEnvironment`, which holds `home`, the
   restic launcher and the clock, for tests (P2, P3).
+- Handed to PR 7: the history lists only runs the app recorded. A snapshot
+  made by hand with restic has no entry there, so PR 7's restore list must
+  read restic's own snapshot list.
+- Size: about 1,880 changed lines without the generated files, about 1,050
+  of code and docs and 800 of tests, over the 1,500 aim. Accepted unsplit.
 
 ### PR 6 — Backup in Admin › Settings, with warnings
 
