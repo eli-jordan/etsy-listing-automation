@@ -172,12 +172,19 @@ def test_the_gitignore_is_written_before_any_secret(
     directory some repository is already tracking."""
     written: list[str] = []
     real_write = Path.write_text
+    real_replace = Path.replace
 
     def spy(self: Path, *args: Any, **kwargs: Any) -> int:
         written.append(self.name)
         return real_write(self, *args, **kwargs)
 
+    def replaced(self: Path, target: Path) -> Path:
+        # `.env` is written to a temporary and renamed over (scaffold.write_env_value).
+        written.append(Path(target).name)
+        return real_replace(self, target)
+
     monkeypatch.setattr(Path, "write_text", spy)
+    monkeypatch.setattr(Path, "replace", replaced)
     scripted.install(monkeypatch, ANSWERS)
 
     run_auth(tmp_path, backends=backends(etsy, printify))
