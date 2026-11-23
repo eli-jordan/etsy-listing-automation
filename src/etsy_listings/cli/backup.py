@@ -1,10 +1,9 @@
 """``etsy-listings backup``: the workspace's restic repository from a terminal
 (workspace-backup spec, *CLI*).
 
-``init``, ``run``, ``check``, ``snapshots`` and ``status``; ``restore``
-follows with restore (plan, PR 7). The CLI does not coordinate with a
-running server, so ``run`` pauses no jobs; restic's own repository lock
-keeps two processes apart.
+``init``, ``run``, ``check``, ``snapshots``, ``status`` and ``restore``.
+The CLI does not coordinate with a running server, so ``run`` pauses no
+jobs; restic's own repository lock keeps two processes apart.
 """
 
 from __future__ import annotations
@@ -28,12 +27,19 @@ from etsy_listings.core.application.backup_repository import (
     open_repository,
     stored_password,
 )
+from etsy_listings.core.application.backup_restore import (
+    RestoreProgress,
+    check_target,
+    find_snapshot,
+    restore,
+)
 from etsy_listings.core.application.backup_run import BackupProgress, BackupRunner
 from etsy_listings.core.backup.binary import RESTIC_VERSION, ResticBinaries
 from etsy_listings.core.backup.restic import Snapshot
 from etsy_listings.core.config.secrets import BACKUP_PASSWORD_VAR
 from etsy_listings.core.errors import UserFacingError
 from etsy_listings.core.workspace import layout
+from etsy_listings.core.workspace.userpath import to_native_path
 
 app = typer.Typer(no_args_is_help=True, help="Back up the workspace with restic.")
 
@@ -182,6 +188,43 @@ def snapshots(root: str | None = root_option(), *, json_output: JsonOption = Fal
     else:
         for snapshot in found:
             typer.echo(_snapshot_line(snapshot))
+
+
+class _RestoreLines:
+    """The percentage and files at most every few seconds."""
+
+    def __init__(self) -> None:
+        self._printed = 0.0
+
+    def __call__(self, figures: RestoreProgress) -> None:
+        if time.monotonic() - self._printed < PROGRESS_EVERY_SECONDS:
+            return
+        self._printed = time.monotonic()
+        files = f" · {figures.files_done:,} of {figures.files_total:,} files"
+        typer.echo(f"  {figures.percent:.0%}{files if figures.files_total else ''}", err=True)
+
+
+@app.command(name="restore")
+def restore_command(
+    snapshot: Annotated[str, typer.Argument(help="A snapshot id, its start, or latest.")],
+    target: Annotated[str, typer.Argument(help="A new or empty folder to restore into.")],
+    root: str | None = root_option(),
+) -> None:
+    """Restore a snapshot into a new folder, never over the workspace.
+
+    Stopping it part way (Ctrl+C) leaves the files restored so far; delete
+    them before restoring into that folder again."""
+    workspace = open_workspace(root)
+    folder = to_native_path(target).absolute()
+    with _reported():
+        settings = backup_settings(workspace)
+        check_target(folder, workspace=workspace.root, repository=settings.repository)
+        restic = open_repository(workspace, binaries=ResticBinaries())
+        found = find_snapshot(restic.snapshots(), snapshot)
+        typer.echo(f"Restoring snapshot {found.short_id} into {folder}...", err=True)
+        figures = restore(restic, found, folder, progress=_RestoreLines())
+    files = f"{figures.files_done:,} files" if figures.files_done is not None else "the files"
+    typer.echo(f"Restored {files} from {found.time:%Y-%m-%d %H:%M} into {folder}.")
 
 
 def _status_json(status: BackupStatus) -> dict[str, Any]:

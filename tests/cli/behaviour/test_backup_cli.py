@@ -240,3 +240,36 @@ def test_run_backs_up_copies_then_check_finds_no_errors(
 
     code, output = _run(workspace_root, "check")
     assert (code, output.strip()) == (0, "The backup repository has no errors.")
+
+
+def test_restore_refuses_the_live_workspace_and_a_folder_with_files(
+    workspace_root: Path, repository: Path, tmp_path: Path
+) -> None:
+    full = tmp_path / "full"
+    full.mkdir()
+    (full / "notes.txt").write_text("keep me")
+
+    live = _run(workspace_root, "restore", "latest", str(workspace_root))
+    used = _run(workspace_root, "restore", "latest", str(full))
+
+    assert live == (1, "That's your live workspace. Choose a new, empty folder.\n")
+    assert used[0] == 1
+    assert "already holds files" in used[1]
+
+
+@pytest.mark.restic
+def test_restore_writes_a_snapshot_into_a_new_folder(
+    workspace_root: Path, repository: Path, tmp_path: Path
+) -> None:
+    (workspace_root / layout.ENV_FILE).write_text(f"{BACKUP_PASSWORD_VAR}={PASSWORD}\n")
+    assert _run(workspace_root, "init")[0] == 0
+    assert _run(workspace_root, "run")[0] == 0
+    target = tmp_path / "restored"
+
+    code, output = _run(workspace_root, "restore", "latest", target.as_posix())
+
+    assert code == 0, output
+    assert f"into {target}" in output
+    assert (target / "settings.yaml").read_bytes() == (
+        workspace_root / "settings.yaml"
+    ).read_bytes()
