@@ -14,6 +14,9 @@ import { type Password, passwordProblem } from "./backupText";
 
 export type RepositoryMode = RepositoryAction["kind"];
 
+/** A refusal's message; for Create, the destination to connect instead. */
+export type Refused = { message: string; connectFrom?: string };
+
 export function MissingRepositoryBanner({
   warning,
   onAction,
@@ -63,10 +66,11 @@ const TEXT = {
   },
 } as const;
 
-/** Create or connect. `onSubmit` answers with a refusal's message, or null
- * once the repository is there. */
+/** Create or connect. `onSubmit` answers with a refusal, or null once the
+ * repository is there. A Create refused over a destination's copy offers to
+ * switch to Connect with that copy as the source (plan, PR 8). */
 export function RepositoryDialog({
-  mode,
+  mode: initialMode,
   repository,
   passwordStored,
   onCancel,
@@ -76,14 +80,15 @@ export function RepositoryDialog({
   repository: string;
   passwordStored: boolean;
   onCancel: () => void;
-  onSubmit: (action: RepositoryAction) => Promise<string | null>;
+  onSubmit: (action: RepositoryAction) => Promise<Refused | null>;
 }) {
+  const [mode, setMode] = useState(initialMode);
   const text = TEXT[mode];
   const [folder, setFolder] = useState(repository);
   const [source, setSource] = useState("");
   const [password, setPassword] = useState<Password>({ pw: "", pw2: "", stored: false });
   const [working, setWorking] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<Refused | null>(null);
   const edit =
     <T,>(set: (value: T) => void) =>
     (value: T) => {
@@ -180,8 +185,21 @@ export function RepositoryDialog({
         )}
         {error && (
           <p className="adm-error-text" role="alert">
-            {error}
+            {error.message}
           </p>
+        )}
+        {error?.connectFrom && (
+          <button
+            type="button"
+            className="btn btn-secondary"
+            onClick={() => {
+              setMode("connect");
+              setSource(error.connectFrom ?? "");
+              setError(null);
+            }}
+          >
+            Connect this copy instead
+          </button>
         )}
         <div className="bk-dialog__foot">
           <button type="button" className="btn btn-ghost" onClick={onCancel} disabled={working}>

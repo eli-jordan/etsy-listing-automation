@@ -11,14 +11,20 @@ export type RepairResult = components["schemas"]["BackupRepairResponse"];
 export type BackupSettings = components["schemas"]["BackupSettings"];
 export type RetentionSettings = components["schemas"]["RetentionSettings"];
 export type IntervalHours = BackupSetUp["interval_hours"];
-type Refusal = components["schemas"]["SettingsSaveRefusal"];
+type Refusal = components["schemas"]["BackupRefusal"];
 
 /** Set-up's answer: started, refused because settings.yaml changed since it
  * was read (412: reload), or refused with the reason and field it names. */
 export type SetUpOutcome =
   | { kind: "started"; status: BackupStatus }
   | { kind: "stale"; message: string }
-  | { kind: "conflict" | "invalid"; message: string; fieldErrors: Record<string, string> };
+  | {
+      kind: "conflict" | "invalid";
+      message: string;
+      fieldErrors: Record<string, string>;
+      /** Create refused: this destination holds a repository's copy. */
+      connectFrom?: string;
+    };
 
 function message(error: unknown, fallback: string): string {
   const body = error as { detail?: unknown; message?: unknown } | undefined;
@@ -62,6 +68,7 @@ function outcome(
       kind: refusal.kind,
       message: refusal.message,
       fieldErrors: refusal.field_errors ?? {},
+      ...(refusal.connect_from && { connectFrom: refusal.connect_from }),
     };
   throw new Error(message(error, fallback));
 }

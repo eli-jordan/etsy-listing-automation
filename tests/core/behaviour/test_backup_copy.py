@@ -18,6 +18,7 @@ from etsy_listings.core.backup.destinations import (
     CopyHooks,
     CopyStep,
     DestinationNotFoundError,
+    ForeignCopyError,
     check_destination,
     copy_repository,
     create_destination,
@@ -430,3 +431,22 @@ def test_repairing_a_whole_copy_moves_nothing(local: FakeRepository, destination
 
     assert (repair.set_aside, repair.moved, repair.copy.outcome) == (None, (), "copied")
     assert identities(destination) == before
+
+
+def test_repair_refuses_a_copy_whose_config_differs_and_moves_nothing(
+    local: FakeRepository, destination: Path
+) -> None:
+    """Another repository's copy, say one left from before Create a new
+    repository: setting its config aside would let the copy then delete
+    every pack as expired. A damaged config cannot be told apart without
+    the password, so any changed config is refused (plan, PR 8)."""
+    _copied(local, destination, 1)
+    (destination / "config").write_bytes(b'{"version": 2, "id": "another repository"}')
+    before = identities(destination)
+
+    with pytest.raises(ForeignCopyError, match="another repository") as refused:
+        repair_destination(local.root, destination, today=date(2026, 11, 23))
+
+    assert str(destination) in str(refused.value)
+    assert identities(destination) == before
+    assert not destination.with_name("backups-set-aside-2026-11-23").exists()

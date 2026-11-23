@@ -38,8 +38,9 @@ from etsy_listings.core.application.backup_repository import (
 )
 from etsy_listings.core.application.refusals import SettingsRevisionConflictError
 from etsy_listings.core.backup.binary import ResticBinaries
-from etsy_listings.core.backup.destinations import copy_repository
+from etsy_listings.core.backup.destinations import copy_repository, holds_repository
 from etsy_listings.core.backup.restic import Launch, Restic, WrongPasswordError
+from etsy_listings.core.config.secrets import BACKUP_PASSWORD_VAR
 from etsy_listings.core.config.settings import BackupSettings
 from etsy_listings.core.errors import ConflictError, RefusedError
 from etsy_listings.core.workspace.workspace import Workspace
@@ -53,6 +54,19 @@ class RepositoryPresentError(ConflictError):
     def __init__(self, repository: Path) -> None:
         super().__init__(
             f"{repository} already holds the backup repository; there is nothing to replace."
+        )
+
+
+class DestinationHoldsRepositoryError(ConflictError):
+    """Create refused: a destination still holds a repository's copy, which
+    a new repository would leave looking changed (plan, PR 8)."""
+
+    def __init__(self, destination: Path) -> None:
+        self.destination = destination
+        super().__init__(
+            f"{destination} already holds a copy of a backup repository. Use Connect an "
+            "existing repository with that folder to keep those backups, or remove that "
+            "destination or change it in Setup before creating a new repository."
         )
 
 
@@ -88,6 +102,9 @@ def create_new_repository(
     """Create a repository at ``answers.repository``, saving it as the
     backup repository first; refuses a folder that holds files."""
     settings = _missing(workspace)
+    for destination in settings.destinations:
+        if holds_repository(destination):
+            raise DestinationHoldsRepositoryError(destination)
     stored = stored_password(workspace)
     chosen = stored or answers.password
     if not chosen:
@@ -123,7 +140,7 @@ def connect_repository(
         if copied.outcome != "copied":
             raise ConnectRefusedError(copied.message or f"{source} could not be copied.")
         restic = Restic(binaries.ensure(settings.restic_binary), staging, chosen, launch=launch)
-        _open(restic, from_env=stored is not None)
+        _open(restic, env_file=workspace.root / ".env" if stored is not None else None)
         if repository.is_dir():
             repository.rmdir()  # empty: _check_connect saw to it
         staging.rename(repository)
@@ -162,14 +179,23 @@ def _check_connect(workspace: Workspace, source: Path, answers: Replacement) -> 
         raise SettingsRevisionConflictError
 
 
-def _open(restic: Restic, *, from_env: bool) -> None:
+def _open(restic: Restic, *, env_file: Path | None) -> None:
+    """Refuse a password that does not open ``restic``'s repository. One
+    from ``.env`` is never asked for again, so the message says how to
+    change it."""
     try:
         restic.snapshots(lock=False)
     except WrongPasswordError:
-        where = "The password in the workspace .env" if from_env else "That password"
-        raise ConnectRefusedError(
-            f"{where} does not open this repository. Nothing was saved."
-        ) from None
+        if env_file is None:
+            message = "That password does not open this repository. Nothing was saved."
+        else:
+            message = (
+                f"The password in {env_file} does not open this repository. Nothing was "
+                f"saved. Set {BACKUP_PASSWORD_VAR} there (and in the environment, if it is "
+                "set) to this repository's password, or delete the line to be asked for "
+                "it, then try again."
+            )
+        raise ConnectRefusedError(message) from None
 
 
 def _point_at(workspace: Workspace, settings: BackupSettings, answers: Replacement) -> None:

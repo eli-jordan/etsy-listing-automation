@@ -1153,6 +1153,14 @@ class SettingsSaveRefusal(BaseModel):
     field_errors: dict[str, str] = Field(default_factory=dict)
 
 
+class BackupRefusal(SettingsSaveRefusal):
+    """Set-up's, create's and connect's refusals."""
+
+    connect_from: str | None = None
+    """Create refused because this destination holds a repository's copy:
+    connect it instead (workspace-backup plan, PR 8)."""
+
+
 class TemplatePositionImpactRequest(BaseModel):
     limits: dict[str, Any]
     """Candidate limits, shaped as ``template_positions`` in settings.yaml."""

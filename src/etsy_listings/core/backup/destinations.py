@@ -24,7 +24,7 @@ from datetime import date
 from pathlib import Path
 from typing import Literal
 
-from etsy_listings.core.errors import UserFacingError
+from etsy_listings.core.errors import ConflictError, UserFacingError
 
 READ_ORDER = ("snapshots", "index", "data", "keys", "config")
 """restic reads snapshots, then indexes, then packs, the reverse of how it
@@ -425,6 +425,27 @@ def _sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+class ForeignCopyError(ConflictError):
+    """A destination whose ``config`` differs from the local one's."""
+
+    def __init__(self, destination: Path) -> None:
+        super().__init__(
+            f"config in {destination} is not the backup storage folder's: the copy may "
+            "belong to another repository, such as one from before Create a new "
+            "repository, or its config may be damaged. Repair would set config aside, "
+            "and the next copy would then delete every other file there as expired, so "
+            "nothing was moved. To keep those backups, use Connect an existing repository "
+            "with that folder; otherwise move it somewhere else and create an empty "
+            "folder in its place, or change the destination in Setup."
+        )
+
+
+def holds_repository(folder: Path) -> bool:
+    """Whether ``folder`` holds restic's files: ``config``, ``keys/`` or
+    ``data/``, so a copy whose config was set aside still counts."""
+    return (folder / CONFIG).is_file() or (folder / "keys").is_dir() or (folder / "data").is_dir()
+
+
 @dataclass(frozen=True)
 class RepairResult:
     set_aside: Path | None
@@ -446,6 +467,10 @@ def repair_destination(
     if CONFIG not in local or not destination.is_dir():
         return RepairResult(None, (), copy_repository(repository, destination))
     plan = sort_destination(repository, destination, local, suspect)
+    if any(file.name == CONFIG for file in plan.changed):
+        # Telling another repository's config from a damaged one needs the
+        # password, so either way nothing moves (plan, PR 8).
+        raise ForeignCopyError(destination)
     moving = [file.name for file in plan.changed] + plan.unexpected
     if not moving:
         return RepairResult(None, (), copy_repository(repository, destination))

@@ -2492,6 +2492,25 @@ export interface components {
        */
       warnings: components["schemas"]["BackupWarning"][];
     };
+    /**
+     * BackupRefusal
+     * @description Set-up's, create's and connect's refusals.
+     */
+    BackupRefusal: {
+      /** Connect From */
+      connect_from?: string | null;
+      /** Field Errors */
+      field_errors?: {
+        [key: string]: string;
+      };
+      /**
+       * Kind
+       * @enum {string}
+       */
+      kind: "conflict" | "invalid";
+      /** Message */
+      message: string;
+    };
     /** BackupRepairRequest */
     BackupRepairRequest: {
       /** Destination */
@@ -6453,7 +6472,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["SettingsSaveRefusal"];
+          "application/json": components["schemas"]["BackupRefusal"];
         };
       };
       /** @description Precondition Failed */
@@ -6462,7 +6481,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["SettingsSaveRefusal"];
+          "application/json": components["schemas"]["BackupRefusal"];
         };
       };
       /** @description Unprocessable Entity */
@@ -6471,7 +6490,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["SettingsSaveRefusal"];
+          "application/json": components["schemas"]["BackupRefusal"];
         };
       };
     };
@@ -6557,7 +6576,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["SettingsSaveRefusal"];
+          "application/json": components["schemas"]["BackupRefusal"];
         };
       };
       /** @description Precondition Failed */
@@ -6566,7 +6585,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["SettingsSaveRefusal"];
+          "application/json": components["schemas"]["BackupRefusal"];
         };
       };
       /** @description Unprocessable Entity */
@@ -6575,7 +6594,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["SettingsSaveRefusal"];
+          "application/json": components["schemas"]["BackupRefusal"];
         };
       };
     };
@@ -6681,7 +6700,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["SettingsSaveRefusal"];
+          "application/json": components["schemas"]["BackupRefusal"];
         };
       };
       /** @description Precondition Failed */
@@ -6690,7 +6709,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["SettingsSaveRefusal"];
+          "application/json": components["schemas"]["BackupRefusal"];
         };
       };
       /** @description Unprocessable Entity */
@@ -6699,7 +6718,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["SettingsSaveRefusal"];
+          "application/json": components["schemas"]["BackupRefusal"];
         };
       };
     };

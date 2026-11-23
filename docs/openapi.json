@@ -980,6 +980,47 @@
         "title": "BackupOverview",
         "type": "object"
       },
+      "BackupRefusal": {
+        "description": "Set-up's, create's and connect's refusals.",
+        "properties": {
+          "connect_from": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Connect From"
+          },
+          "field_errors": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Field Errors",
+            "type": "object"
+          },
+          "kind": {
+            "enum": [
+              "conflict",
+              "invalid"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "message"
+        ],
+        "title": "BackupRefusal",
+        "type": "object"
+      },
       "BackupRepairRequest": {
         "properties": {
           "destination": {
@@ -9962,7 +10003,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/SettingsSaveRefusal"
+                  "$ref": "#/components/schemas/BackupRefusal"
                 }
               }
             },
@@ -9972,7 +10013,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/SettingsSaveRefusal"
+                  "$ref": "#/components/schemas/BackupRefusal"
                 }
               }
             },
@@ -9982,7 +10023,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/SettingsSaveRefusal"
+                  "$ref": "#/components/schemas/BackupRefusal"
                 }
               }
             },
@@ -10087,7 +10128,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/SettingsSaveRefusal"
+                  "$ref": "#/components/schemas/BackupRefusal"
                 }
               }
             },
@@ -10097,7 +10138,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/SettingsSaveRefusal"
+                  "$ref": "#/components/schemas/BackupRefusal"
                 }
               }
             },
@@ -10107,7 +10148,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/SettingsSaveRefusal"
+                  "$ref": "#/components/schemas/BackupRefusal"
                 }
               }
             },
@@ -10235,7 +10276,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/SettingsSaveRefusal"
+                  "$ref": "#/components/schemas/BackupRefusal"
                 }
               }
             },
@@ -10245,7 +10286,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/SettingsSaveRefusal"
+                  "$ref": "#/components/schemas/BackupRefusal"
                 }
               }
             },
@@ -10255,7 +10296,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/SettingsSaveRefusal"
+                  "$ref": "#/components/schemas/BackupRefusal"
                 }
               }
             },

@@ -153,6 +153,32 @@ def test_create_refuses_a_folder_that_holds_files(
     assert _state(workspace_root, elsewhere) == before
 
 
+@pytest.mark.parametrize("holds", ["config", "keys", "data"])
+def test_create_refuses_while_a_destination_holds_a_repository(
+    workspace_root: Path, repository: Path, client: TestClient, tmp_path: Path, holds: str
+) -> None:
+    """A new repository would leave the old copy looking changed, and a
+    repair would then let the copy delete it: Connect is the way back."""
+    cloud = tmp_path / "cloud"
+    (cloud / "keys" if holds == "keys" else cloud / "data" / "7c").mkdir(parents=True)
+    if holds == "config":
+        (cloud / "config").write_bytes(b"{}")
+    _configure(workspace_root, repository)
+    settings = workspace_root / "settings.yaml"
+    with settings.open("a", encoding="utf-8") as appended:
+        appended.write(f"  destinations:\n    - {cloud.as_posix()}\n")
+    before = _state(workspace_root, repository) | {"cloud": files(cloud)}
+
+    refused = _create(client, repository)
+
+    assert refused.status_code == 409, refused.text
+    body = refused.json()
+    assert str(cloud) in body["message"]
+    assert "Connect" in body["message"]
+    assert body["connect_from"] == str(cloud)
+    assert _state(workspace_root, repository) | {"cloud": files(cloud)} == before
+
+
 def test_create_at_a_confirmed_folder_saves_it_and_starts_backing_up(
     workspace_root: Path, repository: Path, client: TestClient, tmp_path: Path
 ) -> None:
@@ -239,6 +265,8 @@ def test_a_wrong_password_leaves_nothing_half_saved(
 
     assert refused.status_code == 422, refused.text
     assert "password" in refused.json()["message"].lower()
+    if stored:
+        assert f"Set {BACKUP_PASSWORD_VAR} there" in refused.json()["message"]
     assert _state(workspace_root, repository) == before
     assert _kinds(client) == ["repository_missing"]
 

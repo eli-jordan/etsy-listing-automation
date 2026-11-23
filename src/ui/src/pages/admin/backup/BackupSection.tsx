@@ -31,6 +31,7 @@ import {
 } from "./BackupPanels";
 import {
   MissingRepositoryBanner,
+  type Refused,
   type RepositoryMode,
   RepositoryDialog,
 } from "./MissingRepository";
@@ -214,15 +215,20 @@ function StatusPage({
     setNote(null);
     runBackup().then(refresh, (e: unknown) => setNote(failure(e, "Could not start a backup")));
   };
-  const replace = async (action: RepositoryAction): Promise<string | null> => {
+  const replace = async (action: RepositoryAction): Promise<Refused | null> => {
     try {
       const outcome = await replaceRepository(action);
-      if (outcome.kind !== "started") return refusal(outcome);
+      if (outcome.kind !== "started")
+        return {
+          message: refusal(outcome),
+          ...(outcome.kind === "conflict" &&
+            outcome.connectFrom && { connectFrom: outcome.connectFrom }),
+        };
       setReplacing(null);
       void refresh();
       return null;
     } catch (e) {
-      return failure(e, "Could not reach the server");
+      return { message: failure(e, "Could not reach the server") };
     }
   };
   const runRepair = async (destination: DestinationStatus) => {

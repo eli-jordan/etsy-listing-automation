@@ -1385,7 +1385,11 @@ staging copy before it takes the target's name, and only then are
 `backup.repository` (when the folder changed) and the password written. A
 wrong password deletes the staging folder and writes nothing. Connect holds
 the backup slot while it copies. The status's `repository.password_stored`
-tells the page whether to ask for a password.
+tells the page whether to ask for a password. Create is refused while a
+destination holds a repository's copy (`holds_repository`), with
+`connect_from` in the refusal, and `repair_destination` refuses a destination
+whose `config` is among its changed files (`ForeignCopyError`), so neither
+path ends with the copy deleting another repository's files as expired.
 
 ## Durable Marigold maps and CPU composition
 

@@ -267,7 +267,11 @@ repository not found at <path>` and offers two actions:
 Both take a local folder that is new or empty, prefilled with
 `backup.repository`, and save it there when it differs. The password in `.env`
 is used when there is one; otherwise the seller gives it. Connect saves
-nothing until restic has opened the local copy with that password.
+nothing until restic has opened the local copy with that password. Create is
+refused while a destination already holds a repository's copy, and offers
+Connect with that folder instead, because a new repository would lead a repair
+and the next copy to delete the old backups there. For the same reason, Repair
+refuses a destination whose `config` differs from the local one.
 
 ## Restore
 

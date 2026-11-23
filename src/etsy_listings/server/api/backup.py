@@ -18,7 +18,10 @@ from fastapi.responses import JSONResponse
 
 from etsy_listings.core.application import backup_setup
 from etsy_listings.core.application.backup_coordinator import BackupCoordinator
-from etsy_listings.core.application.backup_missing import Replacement
+from etsy_listings.core.application.backup_missing import (
+    DestinationHoldsRepositoryError,
+    Replacement,
+)
 from etsy_listings.core.application.backup_overview import BackupOverview
 from etsy_listings.core.application.refusals import InvalidSettingsEditError
 from etsy_listings.core.errors import ConflictError, RefusedError, StaleError
@@ -27,13 +30,13 @@ from etsy_listings.server.api.schemas import (
     BackupConnectRequest,
     BackupHistoryResponse,
     BackupNewRepositoryRequest,
+    BackupRefusal,
     BackupRepairRequest,
     BackupRepairResponse,
     BackupRestoreRequest,
     BackupSetUpRequest,
     BackupSnapshot,
     BackupSnapshotsResponse,
-    SettingsSaveRefusal,
 )
 
 router = APIRouter(prefix="/api/backup", tags=["backup"])
@@ -89,9 +92,9 @@ def back_up_now(request: Request) -> BackupOverview:
 
 
 _REFUSALS: dict[int | str, dict[str, Any]] = {
-    409: {"model": SettingsSaveRefusal},
-    412: {"model": SettingsSaveRefusal},
-    422: {"model": SettingsSaveRefusal},
+    409: {"model": BackupRefusal},
+    412: {"model": BackupRefusal},
+    422: {"model": BackupRefusal},
 }
 
 
@@ -143,6 +146,8 @@ def _answer(
         action()
     except StaleError as exc:
         return _refusal(412, "conflict", exc)
+    except DestinationHoldsRepositoryError as exc:
+        return _refusal(409, "conflict", exc, connect_from=str(exc.destination))
     except ConflictError as exc:
         return _refusal(409, "conflict", exc)
     except RefusedError as exc:
@@ -169,7 +174,11 @@ def _refusal(
     kind: Literal["conflict", "invalid"],
     exc: Exception,
     field_errors: dict[str, str] | None = None,
+    *,
+    connect_from: str | None = None,
 ) -> JSONResponse:
     """Set-up answers as a settings save does, with the field it refuses."""
-    refusal = SettingsSaveRefusal(kind=kind, message=str(exc), field_errors=field_errors or {})
+    refusal = BackupRefusal(
+        kind=kind, message=str(exc), field_errors=field_errors or {}, connect_from=connect_from
+    )
     return JSONResponse(status_code=status, content=refusal.model_dump())

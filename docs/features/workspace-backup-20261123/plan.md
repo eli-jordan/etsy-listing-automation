@@ -660,8 +660,7 @@ Deviations recorded during implementation:
 - The password in `.env` (or the environment) wins; the request's is read
   only when none is stored, and stored only once the repository is there.
   The status gains `repository.password_stored` so the dialog asks only
-  when it must. A stored password that does not open the copy is refused
-  with a message naming `.env`; the page offers no override.
+  when it must. The page offers no override for a stored password.
 - Connect copies with PR 4's `copy_repository`, the source as the
   "repository" and a staging folder `<folder>.connecting-<hex>` as the
   "destination", so the source is only read. restic runs
@@ -676,9 +675,20 @@ Deviations recorded during implementation:
   (`RunningBackup.operation` gains `connect`). Create starts the first
   backup, as set-up does; connect wakes the scheduler, which backs up when
   the copied snapshots say it is due.
-- After create, existing destination copies hold the old repository's
-  `config`, so the next copy reports them as changed and the repair dialog
-  sets them aside. Nothing deletes them unasked.
+- Create is refused (409) while any configured destination holds a
+  repository's copy (`config`, `keys/` or `data/`), naming it, with
+  `connect_from` in the refusal so the dialog offers **Connect this copy
+  instead**, prefilled. Otherwise the copy's `config` would read as changed,
+  a repair would set it aside, and the next copy would delete every old pack,
+  index and snapshot as expired (found in review).
+- Repair refuses (409, `ForeignCopyError`) whenever `config` is among a
+  destination's changed files, and moves nothing. Telling another
+  repository's `config` from a damaged one needs the password, so it does
+  not try. The message says to connect that folder, or move it aside and
+  leave an empty folder, or change the destination in Setup.
+- A stored password that does not open the copy is refused with a message
+  naming the `.env` file and `ETSY_LISTINGS_BACKUP_PASSWORD`, and saying to
+  delete the line to be asked instead.
 - "Foreign" means a folder without restic's `config`, PR 5's test. A folder
   with a `config` that is not restic's reads as present, and restic's error
   shows as the repository's problem.

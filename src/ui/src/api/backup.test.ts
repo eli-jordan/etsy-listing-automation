@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { setUpBackup } from "./backup";
+import { connectRepository, createRepository, setUpBackup } from "./backup";
 import { api } from "./client";
 
 /* `POST /api/backup/setup` through the typed client's `api` seam. Both
@@ -52,6 +52,32 @@ describe("setUpBackup", () => {
       kind: "invalid",
       message: "Refused",
       fieldErrors: { password: "Too short" },
+    });
+  });
+});
+
+describe("createRepository and connectRepository", () => {
+  const NEW = { revision: "s1", repository: "D:/backups", password: null };
+
+  it("read a 412 as stale, as set-up does", async () => {
+    refuse(412, "conflict", "settings.yaml changed.");
+    expect(await createRepository(NEW)).toMatchObject({ kind: "stale" });
+    expect(await connectRepository({ ...NEW, source: "E:/copy" })).toMatchObject({
+      kind: "stale",
+    });
+  });
+
+  it("carry the destination a refused Create names to connect instead", async () => {
+    vi.spyOn(api, "POST").mockResolvedValue({
+      data: undefined,
+      error: { kind: "conflict", message: "Holds a copy.", connect_from: "E:/copy" },
+      response: new Response(null, { status: 409 }),
+    } as never);
+    expect(await createRepository(NEW)).toEqual({
+      kind: "conflict",
+      message: "Holds a copy.",
+      fieldErrors: {},
+      connectFrom: "E:/copy",
     });
   });
 });

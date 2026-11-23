@@ -140,6 +140,37 @@ describe("Create a new repository", () => {
   });
 });
 
+describe("Create while a destination holds a copy", () => {
+  it("names the copy and switches to Connect with it as the source", async () => {
+    vi.spyOn(backupApi, "createRepository").mockResolvedValue({
+      kind: "conflict",
+      message: `${CLOUD} already holds a copy of a backup repository. Use Connect an existing repository with that folder.`,
+      fieldErrors: {},
+      connectFrom: CLOUD,
+    });
+    const connect = vi
+      .spyOn(backupApi, "connectRepository")
+      .mockResolvedValue({ kind: "started", status: HEALTHY });
+    await openMissing();
+    await userEvent.click(button("Create a new repository"));
+    await userEvent.click(button("Create and back up now"));
+
+    expect(await within(dialog()).findByRole("alert")).toHaveTextContent(CLOUD);
+    await userEvent.click(
+      within(dialog()).getByRole("button", { name: "Connect this copy instead" }),
+    );
+
+    expect(within(dialog()).getByRole("heading")).toHaveTextContent(
+      "Connect an existing repository",
+    );
+    expect(within(dialog()).getByLabelText("Copy from")).toHaveValue(CLOUD);
+    expect(within(dialog()).getByLabelText("Copy into")).toHaveValue(REPO);
+    expect(within(dialog()).queryByRole("alert")).not.toBeInTheDocument();
+    await userEvent.click(button("Copy and connect"));
+    expect(connect).toHaveBeenCalledWith(expect.objectContaining({ source: CLOUD }));
+  });
+});
+
 describe("Connect an existing repository", () => {
   it("copies the chosen repository here, showing it is working, then closes", async () => {
     let finish: ((outcome: backupApi.SetUpOutcome) => void) | undefined;
