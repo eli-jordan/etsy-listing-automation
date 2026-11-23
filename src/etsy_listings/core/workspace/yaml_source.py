@@ -42,10 +42,13 @@ from ruamel.yaml.scalarstring import (
 
 from etsy_listings.core.errors import UserFacingError
 
-__all__ = ["UNSET", "UneditableYamlError", "edit_yaml", "edit_yaml_bytes"]
+__all__ = ["ITSELF", "UNSET", "UneditableYamlError", "edit_yaml", "edit_yaml_bytes"]
 
 UNSET: Any = object()
 """``before`` not given: the edit is two-way, against what the source reads as."""
+ITSELF = ""
+"""A ``sequence_keys`` identity for rows that are plain values, such as
+paths: each row is known by its value, so its comment moves with it."""
 _YAML_VERSION = (1, 1)
 """PyYAML's rules, which every reader of a workspace file applies."""
 
@@ -105,8 +108,9 @@ def edit_yaml(
     defaults the seller never wrote stay unwritten and a ``25`` the model
     reads as ``"25.00"`` stays ``25``.
 
-    ``sequence_keys`` declares stable identities for ordered mapping rows.
-    Reordering those rows moves their original source, including comments.
+    ``sequence_keys`` declares stable identities for ordered mapping rows,
+    or :data:`ITSELF` for rows of plain values. Reordering or removing those
+    rows moves their original source, including comments.
     """
     try:
         return _edited(source, after, before=before, sequence_keys=sequence_keys)
@@ -201,6 +205,10 @@ def _insert_after_predecessor(
 
 
 # ------------------------------------------------------------------ text
+
+
+def _identity(row: Any, key: str) -> Any:
+    return row if key == ITSELF else row[key]
 
 
 def _is_flow(node: Node) -> bool:
@@ -469,7 +477,7 @@ class _Editor:
         identity: changing names in place would attach comments to another CLI.
         Only owners declaring that identity opt into moving source rows.
         """
-        names = [row[key] for row in old]
+        names = [_identity(row, key) for row in old]
         if len(set(names)) != len(names):
             raise UneditableYamlError("duplicate identities in an ordered sequence")
         starts = [self._line_start(dash) for dash in rows.dashes]
@@ -485,7 +493,7 @@ class _Editor:
             # another row. Only insert that necessary line boundary.
             if replacement and not replacement.endswith("\n"):
                 replacement += self.newline
-            replacement += self._named_row(row, fragments.get(row[key]), rows.column)
+            replacement += self._named_row(row, fragments.get(_identity(row, key)), rows.column)
         if end == len(self.source) and not self.source.endswith("\n"):
             replacement = replacement.removesuffix(self.newline)
         # Existing fragments already carry their exact line endings.
