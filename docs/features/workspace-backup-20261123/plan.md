@@ -608,6 +608,48 @@ Exit when:
 - vitest covers both actions and their errors;
 - shared gates pass.
 
+Deviations recorded during implementation:
+
+- Two endpoints: `POST /api/backup/repository` (create) and
+  `POST /api/backup/connect`. Both are refused (409) while the configured
+  folder holds restic's `config`, and both take the local folder, prefilled
+  with `backup.repository`. A different folder is written to
+  `backup.repository` through the settings revision check
+  (`editable=("backup.repository",)`), because a workspace restored onto
+  another machine names a folder from the old one. Refusals use set-up's
+  shape: 409 for a folder that holds files, 412 for a stale revision, 422
+  for a missing, short or wrong password or a source that is not a
+  repository.
+- The password in `.env` (or the environment) wins; the request's is read
+  only when none is stored, and stored only once the repository is there.
+  The status gains `repository.password_stored` so the dialog asks only
+  when it must. A stored password that does not open the copy is refused
+  with a message naming `.env`; the page offers no override.
+- Connect copies with PR 4's `copy_repository`, the source as the
+  "repository" and a staging folder `<folder>.connecting-<hex>` as the
+  "destination", so the source is only read. restic runs
+  `snapshots --no-lock` on the staging copy; only then is it renamed to the
+  target and are `settings.yaml` and `.env` written. A wrong password or a
+  failed copy deletes the staging folder, so the next attempt copies again
+  from the start. The revision is checked before copying as well as by the
+  save, so a stale page does not waste a 20 GB copy; a save that loses a race
+  in the moment after the rename leaves the repository in place under the
+  new folder with `settings.yaml` unchanged.
+- Connect answers when it ends, holding the backup slot as a repair does
+  (`RunningBackup.operation` gains `connect`). Create starts the first
+  backup, as set-up does; connect wakes the scheduler, which backs up when
+  the copied snapshots say it is due.
+- After create, existing destination copies hold the old repository's
+  `config`, so the next copy reports them as changed and the repair dialog
+  sets them aside. Nothing deletes them unasked.
+- "Foreign" means a folder without restic's `config`, PR 5's test. A folder
+  with a `config` that is not restic's reads as present, and restic's error
+  shows as the repository's problem.
+- No Choose… button, as in PRs 6 and 7. The migration guide is
+  `docs/guides/migrate-the-workspace-out-of-icloud.md`, written for
+  PowerShell (robocopy, and `Get-ChildItem | Measure-Object` for file counts
+  and sizes), with a section on connecting from a new computer.
+
 ## Shared gates
 
 | Gate | Exit condition |

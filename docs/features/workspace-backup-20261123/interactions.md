@@ -155,7 +155,7 @@ Banner actions on the Backup page:
 |---|---|
 | Destination unreachable, behind, or a run failed | **Try again** runs a backup now. Success clears the warning everywhere. |
 | Changed or unexpected files in a destination | **Repair the iCloud Drive copy…** (see below) |
-| Repository missing | **Create a new repository** and **Connect an existing repository** (spec, *Missing repository*). Not prototyped. |
+| Repository missing | **Create a new repository** and **Connect an existing repository** (spec, *Missing repository*). Not prototyped: each opens a dialog like the repair dialog, with the local folder prefilled and a password only when `.env` has none. Connect also asks for the folder to copy from, and keeps the dialog open with a spinner while it copies. |
 
 ## Changed and unexpected files
 

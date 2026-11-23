@@ -1375,6 +1375,18 @@ progress as `restore`. `GET /api/backup/snapshots` lists restic's own
 snapshots for the restore dialog, including ones made by hand. The CLI's
 `backup restore` uses the same module without the server.
 
+A missing repository has two ways back, in `core/application/backup_missing.py`,
+both refused while the configured folder holds restic's `config`.
+`POST /api/backup/repository` creates one in a new or empty folder and starts
+the first backup. `POST /api/backup/connect` copies an existing one, usually a
+destination, with the destinations' own one-way copy into a
+`<folder>.connecting-<hex>` staging folder beside the target. restic opens the
+staging copy before it takes the target's name, and only then are
+`backup.repository` (when the folder changed) and the password written. A
+wrong password deletes the staging folder and writes nothing. Connect holds
+the backup slot while it copies. The status's `repository.password_stored`
+tells the page whether to ask for a password.
+
 ## Durable Marigold maps and CPU composition
 
 `preparation.numerics` ports crop planning, mask proposal, robust normals/depth

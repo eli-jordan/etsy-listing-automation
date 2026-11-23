@@ -1,7 +1,10 @@
 # Workspace backup
 
 Status: agreed in a design interview on 2026-11-23, with the UI approved the
-same day. Being implemented. This specification owns the requirements under the
+same day. Implemented as a stacked PR series ([plan](plan.md)), awaiting
+merge; the seller then migrates by hand with the
+[migration guide](../../guides/migrate-the-workspace-out-of-icloud.md). This
+specification owns the requirements under the
 [documentation authority rules](../../README.md#documentation-authority).
 [ADR-0059](../../adr/0059-back-up-the-workspace-with-restic-from-the-app.md)
 records why the design uses restic, runs inside the app and keeps the
@@ -261,6 +264,11 @@ repository not found at <path>` and offers two actions:
   onto a new machine. Connecting copies that repository to local disk first,
   so the destination stays a one-way copy.
 
+Both take a local folder that is new or empty, prefilled with
+`backup.repository`, and save it there when it differs. The password in `.env`
+is used when there is one; otherwise the seller gives it. Connect saves
+nothing until restic has opened the local copy with that password.
+
 ## Restore
 
 The UI lists the snapshots with their time, size and the files that changed. A
@@ -296,7 +304,8 @@ lock still keeps two processes from using the repository at the same time.
 
 ## Migration
 
-A one-off procedure, written up in a guide:
+A one-off procedure, written up in the
+[migration guide](../../guides/migrate-the-workspace-out-of-icloud.md):
 
 1. Stop the app.
 2. Copy the workspace from iCloud Drive to the local folder, and check the
