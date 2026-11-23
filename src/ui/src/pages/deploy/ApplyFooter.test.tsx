@@ -29,6 +29,19 @@ describe("ApplyFooter: footer notes per control phase", () => {
     expect(screen.getByText(note)).toBeInTheDocument();
   });
 
+  it("says a queued run is waiting for backup when a backup holds it", () => {
+    render(
+      <ApplyFooter
+        controlPhase="queued"
+        waitingForBackup
+        previewsTotal={0}
+        previewsDone={0}
+        onApply={() => {}}
+      />,
+    );
+    expect(screen.getByText("Waiting for the backup to finish.")).toBeInTheDocument();
+  });
+
   it("counts previews still rendering", () => {
     render(
       <ApplyFooter

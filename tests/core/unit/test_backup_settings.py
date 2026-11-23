@@ -8,6 +8,7 @@ repository to back up to.
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import pytest
@@ -26,7 +27,7 @@ backup:
     keep_within_days: 10
     weekly: 6
     monthly: 12
-  restic_binary: /usr/bin/restic
+  restic_binary: D:\\tools\\restic.exe
 """
 
 
@@ -60,7 +61,7 @@ def test_a_full_block_loads_every_key(tmp_path: Path) -> None:
         ),
         interval_hours=24,
         retention=RetentionSettings(keep_within_days=10, weekly=6, monthly=12),
-        restic_binary=Path("/usr/bin/restic"),
+        restic_binary=Path("D:\\tools\\restic.exe"),
     )
 
 
@@ -110,3 +111,34 @@ def test_an_unknown_backup_key_is_refused(tmp_path: Path) -> None:
     message = _refusal(tmp_path, "backup:\n  repository: /srv/b\n  intervall_hours: 12\n")
 
     assert "backup.intervall_hours" in message
+
+
+windows_only = pytest.mark.skipif(os.name != "nt", reason="translation is a Windows-only concern")
+
+CYGWIN_BLOCK = """\
+backup:
+  repository: /cygdrive/c/Users/Admin/backups
+  destinations: [/cygdrive/d/cloud/backups, C:\\native\\stays]
+  restic_binary: /cygdrive/c/tools/restic.exe
+"""
+
+
+@windows_only
+def test_cygwin_style_paths_are_translated_like_root(tmp_path: Path) -> None:
+    r"""A hand edit made from a Cygwin shell names ``/cygdrive/c/...``, which
+    a Windows ``Path`` would read as ``\cygdrive\c\...`` on the current drive."""
+    backup = _load(tmp_path, CYGWIN_BLOCK).backup
+
+    assert backup is not None
+    assert backup.repository == Path(r"C:\Users\Admin\backups")
+    assert backup.destinations == (Path(r"D:\cloud\backups"), Path(r"C:\native\stays"))
+    assert backup.restic_binary == Path(r"C:\tools\restic.exe")
+
+
+def test_paths_are_left_alone_on_posix(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("etsy_listings.core.workspace.userpath.os.name", "posix")
+
+    backup = _load(tmp_path, "backup:\n  repository: /cygdrive/c/backups\n").backup
+
+    assert backup is not None
+    assert str(backup.repository).replace("\\", "/") == "/cygdrive/c/backups"

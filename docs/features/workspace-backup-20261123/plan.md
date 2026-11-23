@@ -199,17 +199,26 @@ Deviations recorded during implementation:
   gets an interrupt first (`SIGINT`, `CTRL_BREAK_EVENT`) so it can drop its
   lock. After five seconds the group is killed (`killpg`, `taskkill /T /F`).
   restic starts no child processes for a local repository.
-- No setting value goes through `to_native_path`. PR 2 has no CLI path
-  argument besides `--root`. `BackupSettings` parses its paths as `Path`, so a
-  cygwin-style path in `settings.yaml` is not translated. PR 7's restore
-  target is a CLI argument and must go through `to_native_path`.
+- `repository`, `destinations` and `restic_binary` go through
+  `to_native_path` when `settings.yaml` is parsed, not where they are used.
+  On Windows a `Path` already reads `/cygdrive/c/...` as `\cygdrive\c\...`
+  on the current drive. PR 7's restore target is a CLI argument and must go
+  through `to_native_path` too.
 - `write_env_value` now writes bytes, so `.env` keeps LF endings on Windows,
   where `write_text` used to write CRLF. `tests/cli/behaviour/test_auth.py`'s
   ordering spy also records `Path.replace`, because `.env` now arrives by a
   rename.
-- Tests marked `restic` skip when `ETSY_LISTINGS_RESTIC_BINARY` is unset.
-  CI does not download the binary yet. The finish pass adds that step, so
-  the tests run there.
+- Tests marked `restic` skip locally when `ETSY_LISTINGS_RESTIC_BINARY` is
+  unset. Every CI python leg installs the pin through
+  `scripts/install_restic.py`, which runs the app's own installer so the
+  digests live only in `core/backup/binary.py`. It caches the download by
+  version and sets `ETSY_LISTINGS_REQUIRE_EVERY_LAYER`, so a missing binary
+  fails instead of skipping.
+- Exit code 11 is proved against real restic: a `restic key passwd` waiting
+  on stdin holds the exclusive lock while `snapshots` runs.
+- The size is about 2,450 lines, over the 1,500 aim. About 1,150 of them are
+  source and docs, and the rest are tests. The orchestrator accepted it
+  unsplit.
 
 ### PR 3 — The backup run
 
@@ -286,6 +295,9 @@ Deviations recorded during implementation:
   spec's wording, not against restic's flags.
 - `backup run` and `backup check` take no `--json`. PR 5's API reads the
   history file directly.
+- Handed to PR 7: the weekly prune fails the run when another restic holds
+  the repository lock, as a restore does. PR 7 must make the prune wait for
+  a running restore (spec, *Restore*).
 
 ### PR 4 — Copying to destinations
 
@@ -331,11 +343,14 @@ Deviations recorded during implementation:
   `restic.py`. `BackupRunner` gains `repair(destination)` for PR 5's
   endpoint, and `backup run` prints each copy's outcome. The CLI has no
   repair command, because the spec's *CLI* lists none.
-- "The folder is missing" is read as "its parent is missing". A destination
-  folder that does not exist yet, inside a folder that does, is created and
-  copied to, so a new destination needs no extra set-up step. A missing
-  parent means the drive, share or sync folder is offline, and that
-  destination is skipped.
+- A copy never creates its destination. A missing destination folder is
+  unreachable ("Folder not found", as frame `04-failing` shows), even when
+  its parent exists. If iCloud is signed out, `iCloudDrive\` can still be
+  there, and creating the folder would copy about 20 GB into a folder
+  nothing syncs while reporting the copy up to date. Only set-up creates a
+  destination folder: PR 5 calls `create_destination`, which makes the
+  folder when its parent exists and refuses with `DestinationNotFoundError`
+  otherwise.
 - A local file whose contents no longer match its name gets its own outcome,
   `damaged`. The run fails at `copying`, `last_check` records the failure as
   the spec asks, and no further destination is copied. No copy runs after a

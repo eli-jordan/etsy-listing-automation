@@ -24,6 +24,8 @@ from datetime import date
 from pathlib import Path
 from typing import Literal
 
+from etsy_listings.core.errors import UserFacingError
+
 READ_ORDER = ("snapshots", "index", "data", "keys", "config")
 """restic reads snapshots, then indexes, then packs, the reverse of how it
 writes them (restic's design document, *Read and Write Ordering*). Listed in
@@ -179,17 +181,31 @@ def _changed_message(changed: list[ChangedFile]) -> str:
     return f"Something else changed files in this copy, so nothing more is copied there: {listed}."
 
 
-def reachable(destination: Path) -> bool:
-    """A destination folder, or a new one whose parent is there. A missing
-    parent is a drive, share or sync folder that is offline."""
-    return destination.is_dir() or destination.parent.is_dir()
+class DestinationNotFoundError(UserFacingError):
+    pass
+
+
+def create_destination(destination: Path) -> None:
+    """Set-up's one way to make a destination folder: inside a folder that
+    exists, and never over one that is already there."""
+    if destination.is_dir():
+        return
+    if not destination.parent.is_dir():
+        raise DestinationNotFoundError(
+            f"{destination.parent} was not found, so {destination.name} cannot be "
+            "created there. Connect the drive, share or sync folder first."
+        )
+    destination.mkdir()
 
 
 def _unreachable(destination: Path) -> CopyResult:
+    """A copy never creates its destination: a missing folder can mean a
+    sync client signed out with its folder left behind, where a new folder
+    would fill up and never sync."""
     return CopyResult(
         destination,
         "unreachable",
-        f"{destination} could not be reached; the next run catches it up.",
+        f"Folder not found: {destination}. It is caught up once it is back.",
     )
 
 
@@ -208,10 +224,9 @@ def copy_repository(
     if CONFIG not in local:
         # Never mirror an empty listing: that would delete the whole copy.
         return CopyResult(destination, "failed", f"{repository} is not a restic repository.")
-    if not reachable(destination):
+    if not destination.is_dir():
         return _unreachable(destination)
     try:
-        destination.mkdir(exist_ok=True)
         plan = sort_destination(repository, destination, local, suspect)
     except OSError:
         return _unreachable(destination)

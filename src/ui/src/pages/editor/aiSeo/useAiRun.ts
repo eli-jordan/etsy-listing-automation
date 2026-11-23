@@ -68,7 +68,8 @@ export interface AiRun {
   market: MarketSnapshot | null;
   /** Why the run failed, or was refused. */
   message: string | null;
-  /** When the run started (ms since the epoch), from the server. */
+  /** When the run began working (ms since the epoch), from the server:
+   * `null` while a backup holds it, so the wait is not generating time. */
   startedAt: number | null;
   /** Who started the run: this editor, or the batch queue. `null`
    * until there is a run. */
@@ -124,7 +125,7 @@ function viewOf(run: AiRunSummary): View {
     runId: run.id,
     phase: run.phase,
     steps: run.steps,
-    startedAt: Date.parse(run.created_at),
+    startedAt: run.started_at === null ? null : Date.parse(run.started_at),
     origin: run.origin,
   };
 }
@@ -141,8 +142,9 @@ function applyEvent(view: View, event: AiRunEvent): View {
       const known = view.steps.some((s) => s.id === step.id);
       return {
         ...view,
-        // A held run's first event is a step: the backup let it start.
-        phase: view.phase === "queued" ? "running" : view.phase,
+        // A held run's first event is a step: the backup let it start, and
+        // no summary arrives to say when, so it started now.
+        ...(view.phase === "queued" ? { phase: "running" as const, startedAt: Date.now() } : {}),
         steps: known ? view.steps.map((s) => (s.id === step.id ? step : s)) : [...view.steps, step],
       };
     }

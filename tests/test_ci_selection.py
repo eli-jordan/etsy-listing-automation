@@ -227,3 +227,41 @@ def test_lint_runs_once_in_the_quality_job_and_the_test_matrix_only_tests() -> N
     assert node["with"]["cache-dependency-path"] == "src/ui/package-lock.json"
     python = [step.get("run", "") for step in workflow["jobs"]["python"]["steps"]]
     assert not [run for run in python if any(tool in run for tool in ("ruff", "mypy", "lint"))]
+
+
+def _python_steps() -> list[dict[str, object]]:
+    workflow = yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text())
+    steps: list[dict[str, object]] = workflow["jobs"]["python"]["steps"]
+    return steps
+
+
+def test_every_python_leg_installs_the_pinned_restic_before_its_tests() -> None:
+    """Tests marked ``restic`` need the binary (workspace-backup plan, P3).
+    The app's own installer fetches it, so the digests stay in one place."""
+    from etsy_listings.core.backup.binary import (
+        RESTIC_VERSION,
+    )
+
+    steps = _python_steps()
+    runs = [str(step.get("run", "")) for step in steps]
+    install = next(i for i, run in enumerate(runs) if "scripts/install_restic.py" in run)
+    tests = [i for i, run in enumerate(runs) if run.startswith("uv run poe test")]
+    assert "if" not in steps[install]
+    assert "ETSY_LISTINGS_RESTIC_BINARY=" in runs[install]
+    assert "$GITHUB_ENV" in runs[install]
+    assert all(install < i for i in tests)
+    cache = next(
+        step
+        for step in steps
+        if "restic" in str(step.get("name", ""))
+        and step.get("uses", "").startswith("actions/cache")
+    )
+    assert f"restic-{RESTIC_VERSION}-" in cache["with"]["key"]  # type: ignore[index]  # -- YAML mapping
+
+
+def test_a_missing_restic_fails_the_python_legs_rather_than_skipping() -> None:
+    """``ETSY_LISTINGS_REQUIRE_EVERY_LAYER`` turns the ``restic_binary``
+    fixture's skip into a failure, so a leg cannot pass without running them."""
+    for step in _python_steps():
+        if str(step.get("run", "")).startswith("uv run poe test"):
+            assert step.get("env", {}).get("ETSY_LISTINGS_REQUIRE_EVERY_LAYER") == "1"  # type: ignore[union-attr]  # -- YAML mapping
