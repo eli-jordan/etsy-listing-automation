@@ -360,6 +360,7 @@
           },
           "phase": {
             "enum": [
+              "queued",
               "running",
               "done",
               "failed",
@@ -374,6 +375,11 @@
             },
             "title": "Steps",
             "type": "array"
+          },
+          "waiting_for_backup": {
+            "default": false,
+            "title": "Waiting For Backup",
+            "type": "boolean"
           }
         },
         "required": [
@@ -460,6 +466,7 @@
           },
           "phase": {
             "enum": [
+              "queued",
               "running",
               "done",
               "failed",
@@ -474,6 +481,11 @@
             },
             "title": "Steps",
             "type": "array"
+          },
+          "waiting_for_backup": {
+            "default": false,
+            "title": "Waiting For Backup",
+            "type": "boolean"
           }
         },
         "required": [
@@ -652,6 +664,11 @@
           "seen": {
             "title": "Seen",
             "type": "boolean"
+          },
+          "waiting_for_backup": {
+            "default": false,
+            "title": "Waiting For Backup",
+            "type": "boolean"
           }
         },
         "required": [
@@ -723,6 +740,11 @@
           },
           "seen": {
             "title": "Seen",
+            "type": "boolean"
+          },
+          "waiting_for_backup": {
+            "default": false,
+            "title": "Waiting For Backup",
             "type": "boolean"
           }
         },
@@ -1047,6 +1069,11 @@
             },
             "title": "Stale Reasons",
             "type": "array"
+          },
+          "waiting_for_backup": {
+            "default": false,
+            "title": "Waiting For Backup",
+            "type": "boolean"
           }
         },
         "required": [
@@ -4839,6 +4866,11 @@
           "seen": {
             "title": "Seen",
             "type": "boolean"
+          },
+          "waiting_for_backup": {
+            "default": false,
+            "title": "Waiting For Backup",
+            "type": "boolean"
           }
         },
         "required": [
@@ -4904,6 +4936,11 @@
           },
           "seen": {
             "title": "Seen",
+            "type": "boolean"
+          },
+          "waiting_for_backup": {
+            "default": false,
+            "title": "Waiting For Backup",
             "type": "boolean"
           }
         },
@@ -5088,6 +5125,11 @@
           "template": {
             "title": "Template",
             "type": "string"
+          },
+          "waiting_for_backup": {
+            "default": false,
+            "title": "Waiting For Backup",
+            "type": "boolean"
           }
         },
         "required": [

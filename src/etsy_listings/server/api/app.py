@@ -28,6 +28,7 @@ from etsy_listings.core.application.dependencies import (
     ContextFactory,
 )
 from etsy_listings.core.application.deploy.deployments import Deployments
+from etsy_listings.core.application.job_gate import JobGate
 from etsy_listings.core.application.preparation.coordinator import Preparations
 from etsy_listings.core.application.preparation.dependencies import PreparationRuntime
 from etsy_listings.core.application.scene_warming import SceneWarmer
@@ -71,7 +72,10 @@ def create_app(
     # One of each per process, so their locks mean something: the cache
     # records' stores. Listing, mockup-template and listing-template locks need
     # no instance; `core/workspace/locks.py` keys them by workspace root.
-    preparations = Preparations(workspace, runtime=preparation_runtime)
+    # The backup's pause (workspace-backup spec, *Pausing jobs*): one gate,
+    # shared by every coordinator below, so a backup holds them all at once.
+    job_gate = JobGate()
+    preparations = Preparations(workspace, runtime=preparation_runtime, gate=job_gate)
     proposal_store = ProposalStore(workspace)
     staging_store = StagingStore(workspace)
     batch_store = BatchStore(workspace)
@@ -83,9 +87,10 @@ def create_app(
         batches=batch_store,
         providers=seo_provider_factory,
         market_client=clients.etsy_market,
+        gate=job_gate,
     )
-    deployments = Deployments(workspace, context_factory, ai=ai)
-    scene_warmer = SceneWarmer(workspace)
+    deployments = Deployments(workspace, context_factory, ai=ai, gate=job_gate)
+    scene_warmer = SceneWarmer(workspace, gate=job_gate)
 
     @asynccontextmanager
     async def lifespan(running: FastAPI) -> AsyncIterator[None]:
@@ -105,7 +110,11 @@ def create_app(
         to the queue.
 
         The scene warmer stops before the rest, abandoning its queue: what
-        it composes is only ever a head start."""
+        it composes is only ever a head start.
+
+        The job gate stops first of all: a backup waiting for quiet gives
+        up, and work its pause holds stays held, for each coordinator's own
+        stop to drop as it drops queued work."""
         await run_in_threadpool(preparations.start)
         # ADR-0056: discovery is advisory. Its owned worker must not hold
         # application availability behind installed CLI processes.
@@ -119,6 +128,7 @@ def create_app(
         try:
             yield
         finally:
+            job_gate.stop()
             await run_in_threadpool(discovery.stop)
             scene_warmer.stop()
             ai.stop()
@@ -130,6 +140,7 @@ def create_app(
     app.state.workspace = workspace
     app.state.model_discovery = ModelDiscovery()
     app.state.deployments = deployments
+    app.state.job_gate = job_gate
     # Shared with the preview endpoint (`listings.py`), which needs a
     # `RunContext` to ask the render stage for a scene's current hash but has
     # nothing to do with running a run -- reaching through `deployments` for

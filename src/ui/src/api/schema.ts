@@ -2054,9 +2054,14 @@ export interface components {
        * Phase
        * @enum {string}
        */
-      phase: "running" | "done" | "failed" | "cancelled";
+      phase: "queued" | "running" | "done" | "failed" | "cancelled";
       /** Steps */
       steps: components["schemas"]["WorkflowStep"][];
+      /**
+       * Waiting For Backup
+       * @default false
+       */
+      waiting_for_backup: boolean;
     };
     /**
      * AiRunRefusal
@@ -2094,9 +2099,14 @@ export interface components {
        * Phase
        * @enum {string}
        */
-      phase: "running" | "done" | "failed" | "cancelled";
+      phase: "queued" | "running" | "done" | "failed" | "cancelled";
       /** Steps */
       steps: components["schemas"]["WorkflowStep"][];
+      /**
+       * Waiting For Backup
+       * @default false
+       */
+      waiting_for_backup: boolean;
     };
     /**
      * AiStepEvent
@@ -2167,6 +2177,11 @@ export interface components {
       scope: "listings" | "workspace";
       /** Seen */
       seen: boolean;
+      /**
+       * Waiting For Backup
+       * @default false
+       */
+      waiting_for_backup: boolean;
     };
     /** ApplyRunSummary */
     ApplyRunSummary: {
@@ -2198,6 +2213,11 @@ export interface components {
       scope: "listings" | "workspace";
       /** Seen */
       seen: boolean;
+      /**
+       * Waiting For Backup
+       * @default false
+       */
+      waiting_for_backup: boolean;
     };
     /** AssignKindRequest */
     AssignKindRequest: {
@@ -2359,6 +2379,11 @@ export interface components {
        * @default []
        */
       stale_reasons: string[];
+      /**
+       * Waiting For Backup
+       * @default false
+       */
+      waiting_for_backup: boolean;
     };
     /**
      * BelowCostRow
@@ -3944,6 +3969,11 @@ export interface components {
       scope: "listings" | "workspace";
       /** Seen */
       seen: boolean;
+      /**
+       * Waiting For Backup
+       * @default false
+       */
+      waiting_for_backup: boolean;
     };
     /** PlanRunSummary */
     PlanRunSummary: {
@@ -3975,6 +4005,11 @@ export interface components {
       scope: "listings" | "workspace";
       /** Seen */
       seen: boolean;
+      /**
+       * Waiting For Backup
+       * @default false
+       */
+      waiting_for_backup: boolean;
     };
     /** Point */
     Point: {
@@ -4053,6 +4088,11 @@ export interface components {
       step: string;
       /** Template */
       template: string;
+      /**
+       * Waiting For Backup
+       * @default false
+       */
+      waiting_for_backup: boolean;
     };
     /** PreparationPlacementResponse */
     PreparationPlacementResponse: {

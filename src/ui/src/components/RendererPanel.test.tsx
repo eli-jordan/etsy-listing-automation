@@ -20,6 +20,7 @@ function job(kind: api.PreparationJob["kind"]): api.PreparationJob {
     error: null,
     last_event_sequence: 1,
     queue_position: null,
+    waiting_for_backup: false,
     engine_version: "engine",
   };
 }

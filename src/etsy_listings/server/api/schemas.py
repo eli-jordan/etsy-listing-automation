@@ -685,6 +685,9 @@ class BatchRowDetail(BaseModel):
     queue_position: int | None = None
     """1 for the next row to start, across every batch; ``None`` unless
     queued."""
+    waiting_for_backup: bool = False
+    """Held by a backup's pause (workspace-backup plan, decision P4): accepted
+    and queued, starting once the backup step ends. Never stored."""
     proposal: Literal["ready", "stale", "resolved"] | None = None
     """The listing's cached proposal: sections waiting and current,
     waiting but out of date, or every section dealt with."""
@@ -812,6 +815,9 @@ class _RunSummary(BaseModel):
     seen: bool
     reviewed_run_id: str | None
     created_at: datetime
+    waiting_for_backup: bool = False
+    """Held by a backup's pause (workspace-backup plan, decision P4): accepted
+    and queued, starting once the backup step ends. Never stored."""
 
 
 class PlanRunSummary(_RunSummary):
@@ -914,6 +920,9 @@ class AiRunSummary(BaseModel):
     steps: list[WorkflowStep]
     created_at: datetime
     finished_at: datetime | None
+    waiting_for_backup: bool = False
+    """Held by a backup's pause (workspace-backup plan, decision P4): accepted
+    and queued, starting once the backup step ends. Never stored."""
 
 
 class AiRunDetail(AiRunSummary):
@@ -958,6 +967,9 @@ class PreparationJobResponse(BaseModel):
     last_event_sequence: int
     queue_position: int | None
     engine_version: str | None
+    waiting_for_backup: bool = False
+    """Held by a backup's pause (workspace-backup plan, decision P4): accepted
+    and queued, starting once the backup step ends. Never stored."""
 
 
 class PreparationResponse(BaseModel):

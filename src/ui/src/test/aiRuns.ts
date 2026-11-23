@@ -45,6 +45,7 @@ export function aiRunSummary(over: Partial<AiRunSummary> = {}): AiRunSummary {
     ],
     created_at: AI_RUN_CREATED_AT,
     finished_at: null,
+    waiting_for_backup: false,
     ...over,
   };
 }

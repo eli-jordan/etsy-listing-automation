@@ -9,6 +9,7 @@ from __future__ import annotations
 from fastapi import Request
 
 from etsy_listings.core.application.dependencies import ClientFactories
+from etsy_listings.core.application.job_gate import JobGate
 from etsy_listings.core.batches import BatchStore, StagingStore
 from etsy_listings.core.workspace.workspace import Workspace
 
@@ -34,4 +35,11 @@ def batch_store(request: Request) -> BatchStore:
 def clients(request: Request) -> ClientFactories:
     """How the routes build the Etsy and Printify clients they ask through."""
     value: ClientFactories = request.app.state.clients
+    return value
+
+
+def job_gate(request: Request) -> JobGate:
+    """The pause a backup puts on every background job (workspace-backup
+    spec, *Pausing jobs*), shared by the coordinators the lifespan starts."""
+    value: JobGate = request.app.state.job_gate
     return value

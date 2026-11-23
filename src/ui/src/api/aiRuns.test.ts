@@ -28,6 +28,7 @@ function summary(over: Partial<AiRunSummary> = {}): AiRunSummary {
     ],
     created_at: "2026-09-25T10:00:00Z",
     finished_at: null,
+    waiting_for_backup: false,
     ...over,
   };
 }
