@@ -29,6 +29,7 @@ from etsy_listings.core.application.deploy.registry import (
     WorkspaceApply,
 )
 from etsy_listings.core.application.deploy.review import check_reviewed_apply
+from etsy_listings.core.application.job_gate import JobGate
 from etsy_listings.core.engine.stage import AnyStage
 from etsy_listings.core.engine.stages import STAGES
 from etsy_listings.core.workspace.workspace import Workspace
@@ -49,14 +50,17 @@ class Deployments:
         *,
         ai: AiCoordinator | None = None,
         stages: Sequence[AnyStage] = STAGES,
+        gate: JobGate | None = None,
     ) -> None:
         self._registry = RunRegistry()
+        self._gate = gate if gate is not None else JobGate()
         self._executor = RunExecutor(
             workspace=workspace,
             context_factory=context_factory,
             registry=self._registry,
             stages=list(stages),
             ai=ai,
+            gate=self._gate,
         )
 
     def start(self) -> None:
@@ -93,6 +97,11 @@ class Deployments:
     def busy(self) -> bool:
         """Whether any run is queued or in progress, on any listing."""
         return any(run.phase not in TERMINAL_PHASES for run in self._registry.all_runs())
+
+    def waiting_for_backup(self, run: Run) -> bool:
+        """Whether ``run`` is held by a backup's pause (plan decision P4):
+        queued while the gate is paused. Never stored, only read."""
+        return run.phase == "queued" and self._gate.paused
 
     def runs(self, *, listing: str | None = None, scope: RunScope | None = None) -> list[Run]:
         """Runs still remembered (ADR-0041's retention).

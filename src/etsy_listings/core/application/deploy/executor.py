@@ -46,7 +46,8 @@ from etsy_listings.core.application.deploy.events import (
     plan_dto,
     stage_plan_dto,
 )
-from etsy_listings.core.application.deploy.registry import Run, RunRegistry
+from etsy_listings.core.application.deploy.registry import Run, RunRegistry, abandon
+from etsy_listings.core.application.job_gate import JobGate, Ticket
 from etsy_listings.core.engine.context import RunContext
 from etsy_listings.core.engine.events import (
     EngineListingFailed,
@@ -90,6 +91,9 @@ class RunExecutor:
     ai: AiCoordinator | None = None
     """Whose AI work a run takes its listings from before reading them
     (ADR-0050); a host with no AI work passes none."""
+    gate: JobGate = field(default_factory=JobGate)
+    """The backup's pause (workspace-backup spec, *Pausing jobs*); a host
+    that never backs up keeps one that is never paused."""
     _thread: threading.Thread | None = field(default=None, init=False, repr=False)
     _stop: threading.Event = field(default_factory=threading.Event, init=False, repr=False)
 
@@ -114,13 +118,41 @@ class RunExecutor:
 
     def _loop(self) -> None:
         while True:
-            run_id = self.registry.dequeue(timeout=0.5)
-            if run_id is not None:
-                run = self.registry.get(run_id)
-                if run is not None and run.phase not in TERMINAL_PHASES:
-                    self._execute(run)
+            # Take nothing off the queue while a backup is paused, so the
+            # runs behind stay where `drain_and_cancel` finds them.
+            if self.gate.wait_open(timeout=0.5):
+                run_id = self.registry.dequeue(timeout=0.5)
+                if run_id is not None:
+                    self._admitted(run_id)
             if self._stop.is_set():
                 return
+
+    def _admitted(self, run_id: str) -> None:
+        """Execute ``run_id`` once the gate admits it. A pause that landed
+        after the dequeue holds this run first in line; a shutdown while
+        it is held ends it as a queued run is ended."""
+        run = self.registry.get(run_id)
+        if run is None or run.phase in TERMINAL_PHASES:
+            return
+        ticket = self._admit(run)
+        if ticket is None:
+            abandon(run)
+            return
+        with ticket:
+            # A plan cancelled while it was held has already ended.
+            if run.phase not in TERMINAL_PHASES:
+                self._execute(run)
+
+    def _admit(self, run: Run) -> Ticket | None:
+        job = f"Deploy {run.kind} for {', '.join(run.listings)}"
+        if run.scope == "workspace":
+            job = f"Workspace {run.kind}"
+        while not self._stop.is_set():
+            ticket = self.gate.admit(job)
+            if ticket is not None:
+                return ticket
+            self.gate.wait_open(timeout=0.5)
+        return None
 
     def _should_stop(self, run: Run) -> bool:
         """A plan run stops for its own cancel *or* a shutdown; an apply run
