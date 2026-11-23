@@ -189,6 +189,104 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/backup": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Backup Status */
+    get: operations["backup_status_api_backup_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/backup/history": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Backup History */
+    get: operations["backup_history_api_backup_history_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/backup/repair": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Repair
+     * @description Set aside a destination's changed and unexpected files and copy it
+     *     again (spec, *Changed and unexpected files*). Answers when it ends.
+     */
+    post: operations["repair_api_backup_repair_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/backup/run": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Back Up Now
+     * @description Start a backup; 409 while another backup operation runs.
+     */
+    post: operations["back_up_now_api_backup_run_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/backup/setup": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Set Up
+     * @description Write the ``backup:`` block and the password, create the repository
+     *     and the destination folders, then start the first backup. Refuses a
+     *     short password (422), a folder that holds files (409) and a destination
+     *     whose parent is missing (422), writing nothing.
+     */
+    post: operations["set_up_api_backup_setup_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/batches": {
     parameters: {
       query?: never;
@@ -2227,6 +2325,119 @@ export interface components {
        */
       kind: "colour-matrix" | "multiple" | "single";
     };
+    /** BackupHistoryResponse */
+    BackupHistoryResponse: {
+      /** Runs */
+      runs: components["schemas"]["HistoryEntry"][];
+    };
+    /** BackupOverview */
+    BackupOverview: {
+      /**
+       * Destinations
+       * @default []
+       */
+      destinations: components["schemas"]["DestinationOverview"][];
+      /** Enabled */
+      enabled: boolean;
+      /** Interval Hours */
+      interval_hours?: number | null;
+      /** Last Success */
+      last_success?: string | null;
+      /** Next Due */
+      next_due?: string | null;
+      repository?: components["schemas"]["RepositoryOverview"] | null;
+      running?: components["schemas"]["RunningBackup"] | null;
+      /**
+       * Warnings
+       * @default []
+       */
+      warnings: components["schemas"]["BackupWarning"][];
+    };
+    /** BackupRepairRequest */
+    BackupRepairRequest: {
+      /** Destination */
+      destination: string;
+    };
+    /** BackupRepairResponse */
+    BackupRepairResponse: {
+      /** Message */
+      message?: string | null;
+      /** Moved */
+      moved: string[];
+      /**
+       * Outcome
+       * @enum {string}
+       */
+      outcome: "copied" | "unreachable" | "changed" | "damaged" | "failed" | "stopped";
+      /** Set Aside */
+      set_aside: string | null;
+    };
+    /**
+     * BackupSetUpRequest
+     * @description The set-up form (workspace-backup interactions, *Set up and Setup*).
+     */
+    BackupSetUpRequest: {
+      /** Destinations */
+      destinations?: string[];
+      /**
+       * Interval Hours
+       * @default 12
+       * @enum {integer}
+       */
+      interval_hours: 4 | 6 | 12 | 24 | 48;
+      /** Password */
+      password: string;
+      /** Repository */
+      repository: string;
+      retention?: components["schemas"]["RetentionSettings"];
+      /** Revision */
+      revision: string;
+    };
+    /**
+     * BackupSettings
+     * @description The ``backup:`` block. Paths are this machine's, and the block travels
+     *     with the workspace, so a path that no longer exists is not refused here:
+     *     the backup reports a missing repository instead (spec, *Missing
+     *     repository*), and the rest of the app keeps loading its settings.
+     */
+    BackupSettings: {
+      /**
+       * Destinations
+       * @default []
+       */
+      destinations: string[];
+      /**
+       * Interval Hours
+       * @default 12
+       * @enum {integer}
+       */
+      interval_hours: 4 | 6 | 12 | 24 | 48;
+      /**
+       * Repository
+       * Format: path
+       */
+      repository: string;
+      /** Restic Binary */
+      restic_binary?: string | null;
+      retention?: components["schemas"]["RetentionSettings"];
+    };
+    /** BackupWarning */
+    BackupWarning: {
+      /**
+       * Banner
+       * @default true
+       */
+      banner: boolean;
+      /** Destination */
+      destination?: string | null;
+      /**
+       * Kind
+       * @enum {string}
+       */
+      kind: "off" | "repository_missing" | "stale" | "failed" | "behind" | "changed";
+      /** Message */
+      message: string;
+    };
     /** BatchDetail */
     BatchDetail: {
       /**
@@ -2460,6 +2671,31 @@ export interface components {
       request_id: string;
     };
     /**
+     * ChangedFile
+     * @description A destination file that differs from the local one of its name. For
+     *     ``config``, or a change the sample check found, the sizes can match.
+     */
+    ChangedFile: {
+      /** Actual Size */
+      actual_size: number;
+      /** Expected Size */
+      expected_size: number;
+      /** Name */
+      name: string;
+    };
+    /** CheckResult */
+    CheckResult: {
+      /**
+       * At
+       * Format: date-time
+       */
+      at: string;
+      /** Message */
+      message?: string | null;
+      /** Ok */
+      ok: boolean;
+    };
+    /**
      * ColourMatrixPreviewRequest
      * @description Disambiguated from the other two preview shapes by required fields
      *     alone (``colour`` here, ``placements`` on ``MultiplePreviewRequest``,
@@ -2583,6 +2819,18 @@ export interface components {
        * @enum {string}
        */
       state: "connected" | "not_connected" | "lookup_failed";
+    };
+    /** CopyRecord */
+    CopyRecord: {
+      /** Destination */
+      destination: string;
+      /** Message */
+      message?: string | null;
+      /**
+       * Outcome
+       * @enum {string}
+       */
+      outcome: "copied" | "unreachable" | "changed" | "damaged" | "failed" | "stopped";
     };
     /** CreateAiRunRequest */
     CreateAiRunRequest: {
@@ -2722,6 +2970,31 @@ export interface components {
       file: string;
       /** Ref */
       ref: string;
+    };
+    /** DestinationOverview */
+    DestinationOverview: {
+      /**
+       * Behind
+       * @default false
+       */
+      behind: boolean;
+      /**
+       * Changed
+       * @default []
+       */
+      changed: components["schemas"]["ChangedFile"][];
+      last_check?: components["schemas"]["CheckResult"] | null;
+      /** Last Copy */
+      last_copy?: string | null;
+      /** Path */
+      path: string;
+      /** Problem */
+      problem?: string | null;
+      /**
+       * Unexpected
+       * @default []
+       */
+      unexpected: string[];
     };
     /**
      * DisplaceConfig
@@ -3013,6 +3286,12 @@ export interface components {
     HTTPValidationError: {
       /** Detail */
       detail?: components["schemas"]["ValidationError"][];
+    };
+    /** HistoryEntry */
+    HistoryEntry: {
+      /** Kept As */
+      kept_as?: ("recent" | "weekly" | "monthly") | null;
+      run: components["schemas"]["RunRecord"];
     };
     /** IdleOutcomeDTO */
     IdleOutcomeDTO: {
@@ -4444,6 +4723,23 @@ export interface components {
        */
       stage: "render";
     };
+    /** RepositoryOverview */
+    RepositoryOverview: {
+      last_check?: components["schemas"]["CheckResult"] | null;
+      /** Last Prune */
+      last_prune?: string | null;
+      /** Missing */
+      missing: boolean;
+      /** Path */
+      path: string;
+      /** Problem */
+      problem?: string | null;
+      /**
+       * Snapshots
+       * @default 0
+       */
+      snapshots: number;
+    };
     /** Reset */
     Reset: {
       /**
@@ -4458,6 +4754,30 @@ export interface components {
       amount: string;
       /** Size */
       size: string;
+    };
+    /**
+     * RetentionSettings
+     * @description What ``restic forget`` keeps: every snapshot from the last
+     *     ``keep_within_days``, then the latest of each of the last ``weekly`` weeks
+     *     and ``monthly`` months (spec, *Backup run* step 5). At least one of each,
+     *     because zero would let a forget remove the snapshot it just made.
+     */
+    RetentionSettings: {
+      /**
+       * Keep Within Days
+       * @default 7
+       */
+      keep_within_days: number;
+      /**
+       * Monthly
+       * @default 3
+       */
+      monthly: number;
+      /**
+       * Weekly
+       * @default 4
+       */
+      weekly: number;
     };
     /** RetractStagePlanDTO */
     RetractStagePlanDTO: {
@@ -4503,6 +4823,75 @@ export interface components {
     ReviewedRequest: {
       /** Reviewed */
       reviewed: boolean;
+    };
+    /**
+     * RunRecord
+     * @description One run's outcome, as the history keeps it.
+     */
+    RunRecord: {
+      /**
+       * Copies
+       * @default []
+       */
+      copies: components["schemas"]["CopyRecord"][];
+      /** Data Added */
+      data_added?: number | null;
+      /** Failed Step */
+      failed_step?: string | null;
+      /**
+       * Finished At
+       * Format: date-time
+       */
+      finished_at: string;
+      /** Message */
+      message?: string | null;
+      /**
+       * Outcome
+       * @enum {string}
+       */
+      outcome: "succeeded" | "failed" | "stopped";
+      /** Repository */
+      repository: string;
+      /** Snapshot Id */
+      snapshot_id?: string | null;
+      /**
+       * Started At
+       * Format: date-time
+       */
+      started_at: string;
+      /**
+       * Warnings
+       * @default []
+       */
+      warnings: string[];
+    };
+    /**
+     * RunningBackup
+     * @description The operation in progress, for the running line.
+     */
+    RunningBackup: {
+      /** Destination */
+      destination?: string | null;
+      /** Files Done */
+      files_done?: number | null;
+      /** Files Total */
+      files_total?: number | null;
+      /**
+       * Operation
+       * @enum {string}
+       */
+      operation: "backup" | "repair";
+      /**
+       * Started At
+       * Format: date-time
+       */
+      started_at: string;
+      /** Step */
+      step: string;
+      /** Waiting For */
+      waiting_for?: string | null;
+      /** Waiting Since */
+      waiting_since?: string | null;
     };
     /**
      * ScoredListing
@@ -5282,6 +5671,14 @@ export interface components {
     };
     /** WorkspaceSettingsChanges */
     WorkspaceSettingsChanges: {
+      /** Backup Destinations */
+      backup_destinations?: string[] | null;
+      /** Backup Interval Hours */
+      backup_interval_hours?: number | null;
+      /** Backup Retention */
+      backup_retention?: {
+        [key: string]: unknown;
+      } | null;
       /** Concurrency */
       concurrency?: number | null;
       /** Providers */
@@ -5311,6 +5708,7 @@ export interface components {
     };
     /** WorkspaceSettingsResponse */
     WorkspaceSettingsResponse: {
+      backup?: components["schemas"]["BackupSettings"] | null;
       /** Concurrency */
       concurrency: number;
       /** Default Weights */
@@ -5784,6 +6182,150 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  backup_status_api_backup_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["BackupOverview"];
+        };
+      };
+    };
+  };
+  backup_history_api_backup_history_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["BackupHistoryResponse"];
+        };
+      };
+    };
+  };
+  repair_api_backup_repair_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["BackupRepairRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["BackupRepairResponse"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  back_up_now_api_backup_run_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      202: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["BackupOverview"];
+        };
+      };
+    };
+  };
+  set_up_api_backup_setup_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["BackupSetUpRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      202: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["BackupOverview"];
+        };
+      };
+      /** @description Conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["SettingsSaveRefusal"];
+        };
+      };
+      /** @description Precondition Failed */
+      412: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["SettingsSaveRefusal"];
+        };
+      };
+      /** @description Unprocessable Entity */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["SettingsSaveRefusal"];
         };
       };
     };

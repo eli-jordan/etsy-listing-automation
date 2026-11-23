@@ -43,7 +43,7 @@ from etsy_listings.core.backup.state import (
     RunRecord,
 )
 from etsy_listings.core.config.settings import BackupSettings, RetentionSettings
-from etsy_listings.core.errors import UserFacingError
+from etsy_listings.core.errors import MissingError, UserFacingError
 from etsy_listings.core.workspace.workspace import Workspace
 
 Clock = Callable[[], datetime]
@@ -242,7 +242,7 @@ class BackupRunner:
         (spec, *Changed and unexpected files*)."""
         settings = backup_settings(self.workspace)
         if destination not in settings.destinations:
-            raise UserFacingError(f"{destination} is not a destination in settings.yaml.")
+            raise MissingError(f"{destination} is not a destination in settings.yaml.")
         store = BackupStateStore(self.home)
         before = store.load(settings.repository).destination(destination)
         repair = repair_destination(

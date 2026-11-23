@@ -43,6 +43,7 @@ from etsy_listings.core.application.backup_overview import (
 )
 from etsy_listings.core.application.backup_repository import backup_settings, open_repository
 from etsy_listings.core.application.backup_run import BackupProgress, BackupRunner
+from etsy_listings.core.application.backup_setup import BackupSetUp, set_up_backups
 from etsy_listings.core.application.job_gate import JobGate
 from etsy_listings.core.backup.binary import ResticBinaries
 from etsy_listings.core.backup.destinations import RepairResult
@@ -99,9 +100,10 @@ class BackupCoordinator:
         self._check_every = check_every
         self._lock = threading.Lock()
         self._running: RunningBackup | None = None
-        self._reading: tuple[Path, RepositoryReading] | None = None
-        """The last snapshot read, by repository, so a status poll does not
-        start restic each time; refreshed by every check and operation."""
+        self._reading: tuple[Path, datetime, RepositoryReading] | None = None
+        """The last snapshot read, its repository and time, so a status poll
+        does not start restic each time; refreshed by every check and
+        operation, and once a run has finished since."""
         self._worker: threading.Thread | None = None
         self._scheduler: threading.Thread | None = None
         self._wake = threading.Event()
@@ -166,6 +168,17 @@ class BackupCoordinator:
         if self._refresh(settings).missing:
             raise RepositoryMissingError(settings.repository)
         self._start_backup()
+
+    def set_up(self, answers: BackupSetUp, *, expected_revision: str) -> None:
+        """Set backups up (``backup_setup``), then start the first backup."""
+        set_up_backups(
+            self._workspace,
+            answers,
+            expected_revision=expected_revision,
+            binaries=self._binaries,
+            launch=self._env.launch,
+        )
+        self.run_now()
 
     def repair(self, destination: Path) -> RepairResult:
         """Set aside what changed in ``destination`` and copy again, holding
@@ -251,7 +264,7 @@ class BackupCoordinator:
         if settings is not None:
             state = self._store.load(settings.repository)
             runs = self._runs(settings)
-            reading = self._cached(settings)
+            reading = self._cached(settings, runs)
         facts = BackupFacts(settings, state, runs, reading, self.running, self._env.now())
         return backup_overview(facts)
 
@@ -259,8 +272,9 @@ class BackupCoordinator:
         settings = self._settings()
         if settings is None:
             return []
-        snapshots = self._cached(settings).snapshots or ()
-        return history(self._runs(settings), snapshots, settings.retention, self._env.now())
+        runs = self._runs(settings)
+        snapshots = self._cached(settings, runs).snapshots or ()
+        return history(runs, snapshots, settings.retention, self._env.now())
 
     def _settings(self) -> BackupSettings | None:
         settings = self._workspace.settings_if_readable(skipping="checking the backup schedule")
@@ -269,15 +283,20 @@ class BackupCoordinator:
     def _runs(self, settings: BackupSettings) -> list[RunRecord]:
         return [run for run in self._store.runs() if run.repository == str(settings.repository)]
 
-    def _cached(self, settings: BackupSettings) -> RepositoryReading:
+    def _cached(self, settings: BackupSettings, runs: list[RunRecord]) -> RepositoryReading:
+        """The last read, unless it was of another repository or a run has
+        been recorded since: a run's history line lands before the run's
+        own refresh, and its snapshot must be listed with it."""
         cached = self._reading
-        if cached is not None and cached[0] == settings.repository:
-            return cached[1]
+        newest = runs[-1].finished_at if runs else None
+        fresh = cached is not None and (newest is None or newest < cached[1])
+        if cached is not None and fresh and cached[0] == settings.repository:
+            return cached[2]
         return self._refresh(settings)
 
     def _refresh(self, settings: BackupSettings) -> RepositoryReading:
         reading = self._read_repository(settings)
-        self._reading = (settings.repository, reading)
+        self._reading = (settings.repository, self._env.now(), reading)
         return reading
 
     def _read_repository(self, settings: BackupSettings) -> RepositoryReading:

@@ -4,7 +4,11 @@ from fastapi import APIRouter, BackgroundTasks, HTTPException, Request
 from fastapi.responses import JSONResponse
 
 from etsy_listings.core.ai.discovery import ModelCatalogs, ModelDiscovery
-from etsy_listings.core.application import template_position_impact, workspace_settings
+from etsy_listings.core.application import (
+    backup_setup,
+    template_position_impact,
+    workspace_settings,
+)
 from etsy_listings.core.application.position_coverage import cover_widened_limits
 from etsy_listings.core.application.refusals import (
     InvalidSettingsEditError,
@@ -12,6 +16,7 @@ from etsy_listings.core.application.refusals import (
 )
 from etsy_listings.core.config.errors import ConfigLoadError
 from etsy_listings.core.config.settings import PROVIDER_NAMES, AiProviderSettings, SettingsProblem
+from etsy_listings.server.api import app_state
 from etsy_listings.server.api.schemas import (
     ListingOutsideBody,
     SettingsSaveRefusal,
@@ -45,6 +50,7 @@ def _response(view: workspace_settings.SettingsView) -> WorkspaceSettingsRespons
         ],
         step_limit_minutes=view.settings.ai.step_limit_minutes,
         run_limit_minutes=view.settings.ai.run_limit_minutes,
+        backup=view.settings.backup,
     )
 
 
@@ -75,6 +81,9 @@ def edit_settings(
         "step_limit_minutes": workspace_settings.STEP_LIMIT,
         "run_limit_minutes": workspace_settings.RUN_LIMIT,
         "template_positions": workspace_settings.TEMPLATE_POSITIONS,
+        "backup_destinations": workspace_settings.BACKUP_DESTINATIONS,
+        "backup_interval_hours": workspace_settings.BACKUP_INTERVAL,
+        "backup_retention": workspace_settings.BACKUP_RETENTION,
     }
     changes = {
         keys[key]: value for key, value in body.changes.model_dump(exclude_unset=True).items()
@@ -85,6 +94,8 @@ def edit_settings(
         saved = workspace.settings_if_readable(skipping="comparing saved position limits")
         before = saved.template_positions if saved is not None else None
     try:
+        # Setup's new destinations: refused unless each can be created.
+        added = backup_setup.added_destinations(workspace, changes)
         view = workspace_settings.edit_settings(
             workspace,
             expected_revision=body.revision,
@@ -101,6 +112,10 @@ def edit_settings(
     # stops active runs when the seller lowered the limit.
     if workspace_settings.CONCURRENCY in changes:
         request.app.state.ai.queue.wake()
+    backup_setup.create_folders(added)
+    if any(key.startswith(f"{workspace_settings.BACKUP}.") for key in changes):
+        # A shorter interval can make a backup due now.
+        app_state.backups(request).wake()
     if before is not None:
         background.add_task(
             cover_widened_limits,

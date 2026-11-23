@@ -21,7 +21,7 @@ from etsy_listings.core.backup.binary import ResticBinaries
 from etsy_listings.core.backup.restic import Launch, Restic, Snapshot
 from etsy_listings.core.config.secrets import Secrets
 from etsy_listings.core.config.settings import BackupSettings
-from etsy_listings.core.errors import UserFacingError
+from etsy_listings.core.errors import ConflictError, RefusedError, UserFacingError
 from etsy_listings.core.workspace import layout
 from etsy_listings.core.workspace.workspace import Workspace
 
@@ -29,7 +29,7 @@ MIN_PASSWORD_LENGTH = 12
 """The set-up form's minimum (plan, PR 5), applied to ``backup init`` too."""
 
 
-class BackupOffError(UserFacingError):
+class BackupOffError(ConflictError):
     def __init__(self, settings_file: Path) -> None:
         super().__init__(
             f"Backups are off: {settings_file} has no backup: block. Add one naming "
@@ -37,13 +37,13 @@ class BackupOffError(UserFacingError):
         )
 
 
-class RepositoryNotEmptyError(UserFacingError):
+class RepositoryNotEmptyError(ConflictError):
     """``init`` refuses a folder that already holds files: restic would put a
     repository beside them, and a later restore or copy would treat them as
     part of it."""
 
 
-class PasswordTooShortError(UserFacingError):
+class PasswordTooShortError(RefusedError):
     pass
 
 
@@ -80,18 +80,19 @@ def create_repository(
     when no other is named.
     """
     settings = backup_settings(workspace)
-    if len(password) < MIN_PASSWORD_LENGTH:
-        raise PasswordTooShortError(
-            f"The backup password must be at least {MIN_PASSWORD_LENGTH} characters."
-        )
-    _refuse_files_in(settings.repository)
+    check_new_repository(settings.repository, password)
     if store:
         credentials.store(workspace.root, credentials.BACKUP_PASSWORD, (password,))
     binary = binaries.ensure(settings.restic_binary)
     return Restic(binary, settings.repository, password, launch=launch).init()
 
 
-def _refuse_files_in(folder: Path) -> None:
+def check_new_repository(folder: Path, password: str) -> None:
+    """Refuse a short password, or a folder that already holds files."""
+    if len(password) < MIN_PASSWORD_LENGTH:
+        raise PasswordTooShortError(
+            f"The backup password must be at least {MIN_PASSWORD_LENGTH} characters."
+        )
     if folder.is_dir() and any(folder.iterdir()):
         raise RepositoryNotEmptyError(
             f"{folder} already holds files. Name an empty or new folder as "

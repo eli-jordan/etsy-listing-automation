@@ -28,6 +28,7 @@ from etsy_listings.core.application.ai.events import (
 from etsy_listings.core.application.ai.readiness import (
     AiReadinessBlock as AiReadinessBlock,
 )
+from etsy_listings.core.application.backup_overview import HistoryEntry
 from etsy_listings.core.application.deploy.events import (
     ApplyRunPhase,
     PlanRunPhase,
@@ -35,11 +36,18 @@ from etsy_listings.core.application.deploy.events import (
     RunScope,
 )
 from etsy_listings.core.application.preparation.models import Action, Phase
+from etsy_listings.core.backup.destinations import CopyOutcome
 from etsy_listings.core.batches import AiState
 from etsy_listings.core.config.listing import Listing
 from etsy_listings.core.config.listing_template import ListingTemplate
 from etsy_listings.core.config.media import MediaEntry, MediaKind
-from etsy_listings.core.config.settings import AiProviderSettings, TemplatePositionLimits
+from etsy_listings.core.config.settings import (
+    AiProviderSettings,
+    BackupIntervalHours,
+    BackupSettings,
+    RetentionSettings,
+    TemplatePositionLimits,
+)
 
 # ``draft``/``deployed``/``live``/``dirty``, imported rather than restated:
 # the lifecycle rule is the engine's (the UI's badge and Phase 6's `status`
@@ -1110,6 +1118,8 @@ class WorkspaceSettingsResponse(BaseModel):
     run_limit_minutes: int
     """At least ``max(5, enabled providers x step_limit_minutes)`` (ADR-0057);
     the page computes that floor from ``providers`` as the seller edits."""
+    backup: BackupSettings | None = None
+    """The ``backup:`` block, for the Setup page; None while backups are off."""
 
 
 class WorkspaceSettingsChanges(BaseModel):
@@ -1122,6 +1132,11 @@ class WorkspaceSettingsChanges(BaseModel):
     run_limit_minutes: int | float | None = None
     template_positions: dict[str, Any] | None = None
     """The whole limits section; only the leaves it changes are written."""
+    backup_destinations: list[str] | None = None
+    """Backup's Setup page: every destination, in order. A new one is
+    created, inside a folder that must exist."""
+    backup_interval_hours: int | None = None
+    backup_retention: dict[str, Any] | None = None
 
 
 class WorkspaceSettingsPatch(BaseModel):
@@ -1195,3 +1210,34 @@ class PrintifyLookupsBody(BaseModel):
 class ShopLookupsResponse(BaseModel):
     etsy: EtsyLookupsBody
     printify: PrintifyLookupsBody
+
+
+class BackupSetUpRequest(BaseModel):
+    """The set-up form (workspace-backup interactions, *Set up and Setup*)."""
+
+    revision: str
+    """``settings.yaml``'s revision from ``GET /api/admin/settings``."""
+    repository: str
+    destinations: list[str] = Field(default_factory=list)
+    interval_hours: BackupIntervalHours = 12
+    retention: RetentionSettings = Field(default_factory=RetentionSettings)
+    password: str
+
+
+class BackupHistoryResponse(BaseModel):
+    runs: list[HistoryEntry]
+    """Newest first, failed runs included."""
+
+
+class BackupRepairRequest(BaseModel):
+    destination: str
+    """As ``settings.yaml`` names it."""
+
+
+class BackupRepairResponse(BaseModel):
+    set_aside: str | None
+    """``<destination>-set-aside-<date>``; None when nothing was moved."""
+    moved: list[str]
+    outcome: CopyOutcome
+    """How the copy after it went."""
+    message: str | None = None
