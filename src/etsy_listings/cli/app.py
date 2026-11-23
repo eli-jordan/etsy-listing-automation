@@ -1,8 +1,8 @@
 """Typer CLI. One module per command; this module wires them into one app.
 
-``plan``, ``apply``, ``new``, ``ui``, ``setup``, ``auth``, ``unlock`` and ``marigold`` are
-built, per strict phase order. ``catalog refresh`` and ``status``
-remain for Phase 6.
+``plan``, ``apply``, ``new``, ``ui``, ``setup``, ``auth``, ``unlock``, ``marigold`` and
+``backup`` (``init``, ``snapshots``, ``status``) are built, per strict phase order.
+``catalog refresh`` and ``status`` remain for Phase 6.
 """
 
 from __future__ import annotations
@@ -20,6 +20,7 @@ from etsy_listings.cli import prompts, terminal
 from etsy_listings.cli.auth import ALL_PARTS as ALL_AUTH_PARTS
 from etsy_listings.cli.auth import Part as AuthPart
 from etsy_listings.cli.auth import run_auth
+from etsy_listings.cli.backup import app as backup_app
 from etsy_listings.cli.marigold import app as marigold_app
 from etsy_listings.cli.new import run_new
 from etsy_listings.cli.options import open_workspace, root_option
@@ -27,6 +28,7 @@ from etsy_listings.cli.render import format_blocked, format_plan
 from etsy_listings.cli.setup import run_setup
 from etsy_listings.cli.ui import ui
 from etsy_listings.core import connections
+from etsy_listings.core.backup.binary import RESTIC_BINARY_ENV_VAR
 from etsy_listings.core.clients.printify import (
     PrintifyAuthError,
     PrintifyClient,
@@ -34,6 +36,7 @@ from etsy_listings.core.clients.printify import (
 from etsy_listings.core.config.defaults import MissingDefaultError
 from etsy_listings.core.config.secrets import (
     ANTHROPIC_KEY_VAR,
+    BACKUP_PASSWORD_VAR,
     PRINTIFY_TOKEN_VAR,
     MissingCredentialError,
 )
@@ -60,6 +63,8 @@ EPILOG = f"""
   [cyan]{layout.ROOT_ENV_VAR}[/cyan]  workspace root, same as --root (--root wins).
   [cyan]{PRINTIFY_TOKEN_VAR}[/cyan]  Printify token, [cyan]catalog.read[/cyan] scope.
   [cyan]{ANTHROPIC_KEY_VAR}[/cyan]   Anthropic key for copy generation (Phase 4).
+  [cyan]{BACKUP_PASSWORD_VAR}[/cyan]  restic repository password.
+  [cyan]{RESTIC_BINARY_ENV_VAR}[/cyan]  restic to run instead of the pinned download.
   [cyan]NO_COLOR[/cyan]            suppress the colour swatches [cyan]apply[/cyan] prints.
   [cyan]FORCE_COLOR[/cyan]         print them even when stdout looks non-interactive
                       (a cygwin pty is reported as a pipe, not a terminal).
@@ -71,6 +76,7 @@ the process environment overrides that file. See docs/guides/setup.md.
 
 app = typer.Typer(no_args_is_help=True, epilog=EPILOG)
 app.add_typer(marigold_app, name="marigold")
+app.add_typer(backup_app, name="backup")
 
 
 @app.callback(epilog=EPILOG)

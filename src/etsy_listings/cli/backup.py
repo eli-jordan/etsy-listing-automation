@@ -1,0 +1,175 @@
+"""``etsy-listings backup``: the workspace's restic repository from a terminal
+(workspace-backup spec, *CLI*).
+
+PR 2 builds ``init``, ``snapshots`` and ``status``; ``run``, ``check`` and
+``restore`` follow with the backup run and restore. The CLI does not
+coordinate with a running server; restic's own repository lock keeps two
+processes apart.
+"""
+
+from __future__ import annotations
+
+import json
+from collections.abc import Iterator
+from contextlib import contextmanager
+from typing import Annotated, Any
+
+import typer
+
+from etsy_listings.cli import prompts
+from etsy_listings.cli.options import open_workspace, root_option
+from etsy_listings.core.application.backup_repository import (
+    MIN_PASSWORD_LENGTH,
+    BackupStatus,
+    backup_settings,
+    backup_status,
+    create_repository,
+    open_repository,
+    stored_password,
+)
+from etsy_listings.core.backup.binary import RESTIC_VERSION, ResticBinaries
+from etsy_listings.core.backup.restic import Snapshot
+from etsy_listings.core.config.secrets import BACKUP_PASSWORD_VAR
+from etsy_listings.core.errors import UserFacingError
+from etsy_listings.core.workspace import layout
+
+app = typer.Typer(no_args_is_help=True, help="Back up the workspace with restic.")
+
+JsonOption = Annotated[bool, typer.Option("--json", help="Print the result as JSON.")]
+
+
+@contextmanager
+def _reported() -> Iterator[None]:
+    """A user-facing failure is its message and exit status 1."""
+    try:
+        yield
+    except UserFacingError as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(1) from exc
+    except prompts.Cancelled as exc:
+        typer.echo("Cancelled; nothing was written.", err=True)
+        raise typer.Exit(1) from exc
+
+
+def _ask_password() -> str:
+    password = prompts.ask_text(f"New backup password (at least {MIN_PASSWORD_LENGTH} characters):")
+    if len(password) >= MIN_PASSWORD_LENGTH and password != prompts.ask_text(
+        "Type the backup password again:"
+    ):
+        typer.echo("The two passwords did not match; nothing was written.", err=True)
+        raise typer.Exit(1)
+    return password
+
+
+@app.command()
+def init(root: str | None = root_option()) -> None:
+    """Create the repository backup.repository names in settings.yaml.
+
+    Uses the password in the workspace .env, or asks for one and stores it
+    there first. Downloads the pinned restic when no other is configured."""
+    workspace = open_workspace(root)
+    with _reported():
+        settings = backup_settings(workspace)
+        existing = stored_password(workspace)
+        password = existing or _ask_password()
+        typer.echo(f"Creating the backup repository at {settings.repository}...", err=True)
+        repository_id = create_repository(
+            workspace, password, binaries=ResticBinaries(), store=existing is None
+        )
+    typer.echo(f"Created the backup repository at {settings.repository} (id {repository_id[:8]}).")
+    if existing is None:
+        typer.echo(
+            f"Stored the password in {workspace.root / layout.ENV_FILE} as "
+            f"{BACKUP_PASSWORD_VAR}. Keep a copy in a password manager: the .env inside "
+            "each backup is encrypted with it."
+        )
+
+
+def _snapshot_json(snapshot: Snapshot) -> dict[str, Any]:
+    return {
+        "id": snapshot.id,
+        "short_id": snapshot.short_id,
+        "time": snapshot.time.isoformat(),
+        "paths": list(snapshot.paths),
+        "hostname": snapshot.hostname,
+        "files": snapshot.files,
+        "size": snapshot.size,
+    }
+
+
+def _snapshot_line(snapshot: Snapshot) -> str:
+    files = "" if snapshot.files is None else f"  {snapshot.files:,} files"
+    size = "" if snapshot.size is None else f"  {snapshot.size / 2**20:,.1f} MiB"
+    return f"{snapshot.short_id}  {snapshot.time:%Y-%m-%d %H:%M}{files}{size}"
+
+
+@app.command()
+def snapshots(root: str | None = root_option(), *, json_output: JsonOption = False) -> None:
+    """List the repository's snapshots, oldest first."""
+    workspace = open_workspace(root)
+    with _reported():
+        found = open_repository(workspace, binaries=ResticBinaries()).snapshots()
+    if json_output:
+        typer.echo(json.dumps([_snapshot_json(snapshot) for snapshot in found], indent=2))
+    elif not found:
+        typer.echo("No snapshots yet.")
+    else:
+        for snapshot in found:
+            typer.echo(_snapshot_line(snapshot))
+
+
+def _status_json(status: BackupStatus) -> dict[str, Any]:
+    settings = status.settings
+    if settings is None:
+        return {"enabled": False}
+    latest = status.snapshots[-1].time.isoformat() if status.snapshots else None
+    return {
+        "enabled": True,
+        "repository": str(settings.repository),
+        "destinations": [str(path) for path in settings.destinations],
+        "interval_hours": settings.interval_hours,
+        "retention": settings.retention.model_dump(),
+        "restic": None if status.binary is None else str(status.binary),
+        "snapshots": None if status.snapshots is None else len(status.snapshots),
+        "latest_snapshot": latest,
+        "problem": status.problem,
+    }
+
+
+def _status_lines(status: BackupStatus) -> list[str]:
+    settings = status.settings
+    assert settings is not None
+    retention = settings.retention
+    lines = [
+        f"Repository:   {settings.repository}",
+        *(f"Destination:  {path}" for path in settings.destinations),
+        f"Schedule:     every {settings.interval_hours} hours",
+        f"Retention:    every snapshot for {retention.keep_within_days} days, then "
+        f"{retention.weekly} weekly and {retention.monthly} monthly",
+        f"restic:       {status.binary or f'not installed (pinned {RESTIC_VERSION})'}",
+    ]
+    if status.snapshots is not None:
+        latest = f", latest {status.snapshots[-1].time:%Y-%m-%d %H:%M}" if status.snapshots else ""
+        lines.append(f"Reachable:    {len(status.snapshots)} snapshots{latest}")
+    return lines
+
+
+@app.command()
+def status(root: str | None = root_option(), *, json_output: JsonOption = False) -> None:
+    """Show the backup configuration and whether the repository opens.
+
+    Exits 1 when backups are configured but the repository cannot be read."""
+    workspace = open_workspace(root)
+    with _reported():
+        report = backup_status(workspace, binaries=ResticBinaries())
+    if json_output:
+        typer.echo(json.dumps(_status_json(report), indent=2))
+    elif report.settings is None:
+        typer.echo(f"Backups are off: {workspace.settings_file()} has no backup: block.")
+    else:
+        for line in _status_lines(report):
+            typer.echo(line)
+        if report.problem is not None:
+            typer.echo(report.problem, err=True)
+    if report.problem is not None:
+        raise typer.Exit(1)
