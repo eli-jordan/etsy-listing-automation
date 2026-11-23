@@ -1,0 +1,104 @@
+"""This machine's backup records in ``~/.etsy-listings`` (workspace-backup
+spec, *Status and warnings*).
+
+- ``backup-state.json``: the last prune and the last check of the local
+  repository. PR 4 adds each destination's copy and check here.
+- ``backup-history.jsonl``: one JSON object per line, one line per run,
+  oldest first, appended when a run ends, failed runs included. JSON lines
+  because a run only ever adds an entry: an append needs no rewrite of the
+  history, and a line cut short by a crash loses only itself.
+
+Neither file says when the last successful backup was; ``restic snapshots``
+does. The state names the repository it describes, so pointing the app at
+another repository starts its state afresh instead of reusing a prune time
+that belongs elsewhere.
+"""
+
+from __future__ import annotations
+
+import contextlib
+import json
+from collections.abc import Iterator
+from datetime import datetime
+from pathlib import Path
+from typing import Literal
+
+from pydantic import BaseModel, ConfigDict, ValidationError
+
+from etsy_listings.core.user_directory import user_directory
+from etsy_listings.core.workspace.atomic import write_json_atomic
+
+STATE_FILE = "backup-state.json"
+HISTORY_FILE = "backup-history.jsonl"
+
+RunOutcome = Literal["succeeded", "failed", "stopped"]
+
+
+class _Record(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="ignore")
+
+
+class CheckResult(_Record):
+    at: datetime
+    ok: bool
+    message: str | None = None
+    """restic's message when the check failed."""
+
+
+class BackupState(_Record):
+    repository: str
+    last_prune: datetime | None = None
+    last_check: CheckResult | None = None
+
+
+class RunRecord(_Record):
+    """One run's outcome, as the history keeps it."""
+
+    repository: str
+    started_at: datetime
+    finished_at: datetime
+    outcome: RunOutcome
+    snapshot_id: str | None = None
+    """Set once restic made a snapshot, even when a later step failed."""
+    failed_step: str | None = None
+    message: str | None = None
+    warnings: tuple[str, ...] = ()
+    """Files restic could not read; the snapshot was made without them."""
+
+
+class BackupStateStore:
+    def __init__(self, home: Path | None = None) -> None:
+        self.directory = user_directory(home)
+
+    def load(self, repository: Path) -> BackupState:
+        """The state of ``repository``; empty when none is recorded for it."""
+        fresh = BackupState(repository=str(repository))
+        try:
+            state = BackupState.model_validate_json(self._path(STATE_FILE).read_bytes())
+        except (OSError, ValidationError):
+            return fresh
+        return state if state.repository == fresh.repository else fresh
+
+    def save(self, state: BackupState) -> None:
+        write_json_atomic(self._path(STATE_FILE), state.model_dump(mode="json"))
+
+    def append_run(self, record: RunRecord) -> None:
+        self.directory.mkdir(parents=True, exist_ok=True)
+        with self._path(HISTORY_FILE).open("a", encoding="utf-8", newline="\n") as history:
+            history.write(json.dumps(record.model_dump(mode="json")) + "\n")
+
+    def runs(self) -> list[RunRecord]:
+        """Every recorded run, oldest first. A damaged line is skipped."""
+        return list(self._runs())
+
+    def _runs(self) -> Iterator[RunRecord]:
+        try:
+            lines = self._path(HISTORY_FILE).read_text(encoding="utf-8").splitlines()
+        except FileNotFoundError:
+            return
+        for line in lines:
+            with contextlib.suppress(ValidationError):
+                yield RunRecord.model_validate_json(line)
+
+    def _path(self, name: str) -> Path:
+        return self.directory / name

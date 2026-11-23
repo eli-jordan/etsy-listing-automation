@@ -8,6 +8,8 @@ Public modules, imported directly, with nothing re-exported here:
   the pinned release) and installing that release under ``~/.etsy-listings``.
 - ``restic`` -- `Restic`: one repository's commands, streamed as parsed
   ``--json`` lines, with restic's exit codes as typed errors and cancel.
+- ``state`` -- `BackupStateStore`: ``backup-state.json`` (last prune and
+  check) and the run history ``backup-history.jsonl`` in ``~/.etsy-listings``.
 
 Opening and creating a workspace's configured repository, which joins the
 settings, the password and the binary, is
