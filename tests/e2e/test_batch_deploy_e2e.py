@@ -248,8 +248,9 @@ def test_a_batch_created_listing_deploys_and_its_proposal_goes(
     assert live.state == "draft"
 
     # ADR-0050: the UI apply's full success removed the proposal. The batch
-    # record and its row stay, and deploying never marks a row reviewed.
+    # record and its row stay, and the same full success marked the row
+    # reviewed (spec, *Review workflow*).
     assert client.get(f"/api/listings/{DESIGN}/proposal").status_code == 404
     row = _row(client, batch_id)
     assert row["ai"] == "done"
-    assert row["reviewed"] is False
+    assert row["reviewed"] is True
