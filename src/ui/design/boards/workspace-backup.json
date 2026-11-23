@@ -1,0 +1,136 @@
+{
+  "version": 1,
+  "name": "workspace-backup",
+  "auto": false,
+  "layout": {
+    "rows": [
+      [
+        "workspace-backup"
+      ]
+    ],
+    "scenes": {
+      "workspace-backup": {
+        "rows": [
+          [
+            "01-not-set-up",
+            "02-set-up",
+            "03-overview",
+            "07-backing-up",
+            "08-edit"
+          ],
+          [
+            "04-failing",
+            "12-changed-files",
+            "11-warning-elsewhere"
+          ],
+          [
+            "05-restore",
+            "09-restoring",
+            "10-restoring-background",
+            "06-restored"
+          ]
+        ]
+      }
+    }
+  },
+  "nodes": [
+    {
+      "key": "n_wb01",
+      "frame": "workspace-backup/01-not-set-up",
+      "x": 0,
+      "y": 0,
+      "w": 1280,
+      "h": 800
+    },
+    {
+      "key": "n_wb02",
+      "frame": "workspace-backup/02-set-up",
+      "x": 1434,
+      "y": 0,
+      "w": 1280,
+      "h": 800
+    },
+    {
+      "key": "n_wb03",
+      "frame": "workspace-backup/03-overview",
+      "x": 3151,
+      "y": 0,
+      "w": 1280,
+      "h": 800
+    },
+    {
+      "key": "n_wb04",
+      "frame": "workspace-backup/04-failing",
+      "x": 0,
+      "y": 960,
+      "w": 1280,
+      "h": 800
+    },
+    {
+      "key": "n_wb05",
+      "frame": "workspace-backup/05-restore",
+      "x": 0,
+      "y": 1921,
+      "w": 1280,
+      "h": 800
+    },
+    {
+      "key": "n_wb06",
+      "frame": "workspace-backup/06-restored",
+      "x": 4301,
+      "y": 1921,
+      "w": 1280,
+      "h": 800
+    },
+    {
+      "key": "n_wb07",
+      "frame": "workspace-backup/07-backing-up",
+      "x": 4585,
+      "y": 0,
+      "w": 1280,
+      "h": 800
+    },
+    {
+      "key": "n_wb08",
+      "frame": "workspace-backup/08-edit",
+      "x": 6018,
+      "y": 0,
+      "w": 1280,
+      "h": 800
+    },
+    {
+      "key": "n_wb09",
+      "frame": "workspace-backup/09-restoring",
+      "x": 1434,
+      "y": 1921,
+      "w": 1280,
+      "h": 800
+    },
+    {
+      "key": "n_wb10",
+      "frame": "workspace-backup/10-restoring-background",
+      "x": 2867,
+      "y": 1921,
+      "w": 1280,
+      "h": 800
+    },
+    {
+      "key": "n_wb11",
+      "frame": "workspace-backup/11-warning-elsewhere",
+      "x": 1434,
+      "y": 960,
+      "w": 1280,
+      "h": 800
+    },
+    {
+      "key": "n_wb12",
+      "frame": "workspace-backup/12-changed-files",
+      "x": 0,
+      "y": 3840,
+      "w": 1280,
+      "h": 800
+    }
+  ],
+  "title": "Admin \u00b7 Workspace backup",
+  "description": "Clickable Backup prototype: Backup as its own Admin section, storage diagram, failures warned on every page, and restore with progress."
+}

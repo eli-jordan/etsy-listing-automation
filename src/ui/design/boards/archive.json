@@ -221,6 +221,24 @@
       },
       [
         "template-labels-v2"
+      ],
+      {
+        "space": 4
+      },
+      [
+        "workspace-backup-v1"
+      ],
+      {
+        "space": 4
+      },
+      [
+        "workspace-backup-v2"
+      ],
+      {
+        "space": 4
+      },
+      [
+        "workspace-backup-v3"
       ]
     ],
     "scenes": {
@@ -671,6 +689,55 @@
             "filtered",
             "typing-label",
             "labelling"
+          ]
+        ]
+      },
+      "workspace-backup-v1": {
+        "rows": [
+          [
+            "01-not-set-up",
+            "02-set-up",
+            "03-overview",
+            "04-failing",
+            "05-restore",
+            "06-restored"
+          ]
+        ]
+      },
+      "workspace-backup-v2": {
+        "rows": [
+          [
+            "01-not-set-up",
+            "02-set-up",
+            "03-overview",
+            "07-backing-up"
+          ],
+          [
+            "04-failing",
+            "08-edit",
+            "05-restore",
+            "06-restored"
+          ]
+        ]
+      },
+      "workspace-backup-v3": {
+        "rows": [
+          [
+            "01-not-set-up",
+            "02-set-up",
+            "03-overview",
+            "07-backing-up",
+            "08-edit"
+          ],
+          [
+            "04-failing",
+            "11-warning-elsewhere"
+          ],
+          [
+            "05-restore",
+            "09-restoring",
+            "10-restoring-background",
+            "06-restored"
           ]
         ]
       }
@@ -1441,6 +1508,81 @@
     },
     {
       "frame": "template-labels-v2/labelling"
+    },
+    {
+      "frame": "workspace-backup-v1/01-not-set-up"
+    },
+    {
+      "frame": "workspace-backup-v1/02-set-up"
+    },
+    {
+      "frame": "workspace-backup-v1/03-overview"
+    },
+    {
+      "frame": "workspace-backup-v1/04-failing"
+    },
+    {
+      "frame": "workspace-backup-v1/05-restore"
+    },
+    {
+      "frame": "workspace-backup-v1/06-restored"
+    },
+    {
+      "frame": "workspace-backup-v2/01-not-set-up"
+    },
+    {
+      "frame": "workspace-backup-v2/02-set-up"
+    },
+    {
+      "frame": "workspace-backup-v2/03-overview"
+    },
+    {
+      "frame": "workspace-backup-v2/04-failing"
+    },
+    {
+      "frame": "workspace-backup-v2/05-restore"
+    },
+    {
+      "frame": "workspace-backup-v2/06-restored"
+    },
+    {
+      "frame": "workspace-backup-v2/07-backing-up"
+    },
+    {
+      "frame": "workspace-backup-v2/08-edit"
+    },
+    {
+      "frame": "workspace-backup-v3/01-not-set-up"
+    },
+    {
+      "frame": "workspace-backup-v3/02-set-up"
+    },
+    {
+      "frame": "workspace-backup-v3/03-overview"
+    },
+    {
+      "frame": "workspace-backup-v3/04-failing"
+    },
+    {
+      "frame": "workspace-backup-v3/05-restore"
+    },
+    {
+      "frame": "workspace-backup-v3/06-restored"
+    },
+    {
+      "frame": "workspace-backup-v3/07-backing-up"
+    },
+    {
+      "frame": "workspace-backup-v3/08-edit"
+    },
+    {
+      "frame": "workspace-backup-v3/09-restoring"
+    },
+    {
+      "frame": "workspace-backup-v3/10-restoring-background"
+    },
+    {
+      "frame": "workspace-backup-v3/11-warning-elsewhere"
     }
   ]
 }

@@ -76,3 +76,4 @@ so the trade-off remains visible.
 | 0056 | [Configure AI providers per workspace](0056-configure-ai-providers-per-workspace.md) | 2026-10-30 |
 | 0057 | [Bound AI attempts and runs](0057-bound-ai-attempts-and-runs.md) | 2026-10-30 |
 | 0058 | [Allow per-listing template positions within limits](0058-allow-per-listing-template-positions-within-limits.md) | 2026-11-02 |
+| 0059 | [Back up the workspace with restic from the app](0059-back-up-the-workspace-with-restic-from-the-app.md) | 2026-11-23 |

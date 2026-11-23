@@ -1,0 +1,652 @@
+/* Backup section. Semantic tokens only, so both canvas themes carry it. */
+
+/* --- status summary ---------------------------------------------------- */
+.bk-status {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-4);
+}
+.bk-status__icon {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+}
+.bk-status--ok .bk-status__icon {
+  background: var(--color-accent-2-100);
+  color: var(--color-accent-2-700);
+}
+.bk-status--warn .bk-status__icon {
+  background: color-mix(in srgb, var(--color-warning) 18%, var(--color-bg));
+  color: var(--color-warning-ink);
+}
+.bk-status__text .b-panel__lede {
+  margin-top: 2px;
+}
+.bk-status__running {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: var(--space-2) 0 0;
+  font-size: 13px;
+  color: var(--color-neutral-700);
+}
+.bk-status__actions {
+  display: flex;
+  gap: var(--space-2);
+}
+.bk-status__actions .btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* --- rows and pills ---------------------------------------------------- */
+.bk-dest .sa-row__value {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.bk-dest .s-mono {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+}
+.bk-sub {
+  display: block;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--color-neutral-600);
+}
+.bk-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.bk-pill--ok {
+  background: var(--color-accent-2-100);
+  color: var(--color-accent-2-800);
+}
+.bk-pill--warn {
+  background: color-mix(in srgb, var(--color-warning) 18%, var(--color-bg));
+  color: var(--color-warning-ink);
+}
+.bk-pill--bad {
+  background: color-mix(in srgb, var(--color-danger) 14%, var(--color-bg));
+  color: var(--color-danger-700);
+}
+.bk-pill--quiet {
+  background: var(--color-neutral-100);
+  color: var(--color-neutral-700);
+  font-weight: 500;
+}
+
+/* --- history table ----------------------------------------------------- */
+.bk-table {
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+.bk-table col.bk-c-when {
+  width: 200px;
+}
+.bk-table col.bk-c-num {
+  width: 84px;
+}
+.bk-table col.bk-c-kept {
+  width: 122px;
+}
+.bk-table col.bk-c-act {
+  width: 100px;
+}
+.bk-banner {
+  margin-bottom: var(--space-4);
+}
+.bk-table th {
+  padding: 0 var(--space-3) var(--space-2);
+  text-align: left;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-neutral-600);
+  border-bottom: 1px solid var(--color-divider);
+}
+.bk-table td {
+  padding: var(--space-2) var(--space-3);
+  vertical-align: top;
+  border-bottom: 1px solid var(--color-divider);
+}
+.bk-table tr:last-child td {
+  border-bottom: 0;
+}
+.bk-table .bk-num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.bk-when {
+  display: block;
+  white-space: nowrap;
+  font-weight: 600;
+}
+.bk-result {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+}
+.bk-result--ok {
+  color: var(--color-accent-2-700);
+}
+.bk-result--warn {
+  color: var(--color-warning-ink);
+}
+.bk-result--bad {
+  color: var(--color-danger-700);
+}
+.bk-detail {
+  margin-top: 2px;
+}
+.bk-actions {
+  text-align: right;
+  white-space: nowrap;
+}
+.bk-restore {
+  padding-inline: var(--space-2);
+}
+.bk-run:hover td {
+  background: color-mix(in srgb, var(--color-text) 3%, transparent);
+}
+
+/* --- setup form ---------------------------------------------------------- */
+.bk-form {
+  display: grid;
+  gap: var(--space-4);
+}
+.bk-field {
+  display: grid;
+  grid-template-columns: 200px minmax(0, 1fr);
+  gap: var(--space-4);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--color-divider);
+}
+.bk-field:first-child {
+  padding-top: 0;
+  border-top: 0;
+}
+.bk-field__label {
+  display: grid;
+  align-content: start;
+  gap: 2px;
+  font-weight: 600;
+  font-size: 14px;
+}
+.bk-field__label .bk-sub {
+  font-weight: 400;
+}
+.bk-field__control {
+  display: grid;
+  gap: var(--space-2);
+  min-width: 0;
+}
+.bk-inline {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+}
+.bk-inline > .input {
+  flex: 1 1 0;
+  width: auto;
+  min-width: 0;
+}
+.bk-inline .btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+.bk-pw {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+}
+.bk-pw > .input {
+  width: 100%;
+}
+.bk-pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-2);
+}
+.bk-check {
+  display: flex;
+  gap: var(--space-2);
+  align-items: flex-start;
+  font-size: 13px;
+  cursor: pointer;
+}
+.bk-check input {
+  margin-top: 3px;
+  accent-color: var(--color-accent);
+}
+.bk-keep {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  font-size: 14px;
+}
+.bk-keep .input {
+  width: 64px;
+  min-height: 32px;
+  padding: 4px 8px;
+  text-align: right;
+}
+.bk-keep label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px 4px 4px;
+  border: 1px solid var(--color-divider);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg);
+}
+.bk-foot {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--color-divider);
+}
+.bk-foot__note {
+  margin-right: auto;
+  font-size: 13px;
+  color: var(--color-neutral-700);
+  max-width: 52ch;
+}
+
+/* --- restore dialog ------------------------------------------------------ */
+.bk-dim {
+  position: relative;
+}
+.bk-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  background: color-mix(in srgb, var(--color-text) 32%, transparent);
+}
+.bk-dialog {
+  width: 560px;
+  max-width: calc(100vw - 32px);
+  display: grid;
+  gap: var(--space-4);
+  padding: var(--space-6);
+  border-radius: var(--radius-md);
+  background: var(--color-bg);
+  box-shadow: 0 18px 48px color-mix(in srgb, var(--color-text) 24%, transparent);
+}
+.bk-dialog__title {
+  margin: 0;
+  font-family: var(--font-body);
+  font-size: 19px;
+  font-weight: 600;
+}
+.bk-dialog__lede {
+  margin: 4px 0 0;
+  font-size: 14px;
+  color: var(--color-neutral-700);
+}
+.bk-facts {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 6px var(--space-4);
+  margin: 0;
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  font-size: 14px;
+}
+.bk-facts dt {
+  color: var(--color-neutral-600);
+}
+.bk-facts dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+.bk-dialog .adm-warn svg,
+.bk-note svg {
+  flex: none;
+  margin-top: 1px;
+}
+.bk-note {
+  display: flex;
+  gap: var(--space-2);
+  font-size: 13px;
+  color: var(--color-neutral-700);
+}
+.bk-dialog__foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+.bk-done-icon {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: var(--color-accent-2-100);
+  color: var(--color-accent-2-700);
+}
+.bk-steps {
+  margin: 0;
+  padding-left: 1.2em;
+  font-size: 14px;
+  display: grid;
+  gap: 6px;
+}
+.bk-steps code {
+  font-size: 13px;
+}
+.bk-intro {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 var(--space-4);
+  gap: var(--space-3);
+  max-width: 72ch;
+}
+.bk-intro li {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr);
+  column-gap: var(--space-2);
+  align-items: start;
+}
+.bk-intro li svg {
+  margin-top: 3px;
+  color: var(--color-accent);
+}
+/* --- prototype states ---------------------------------------------------- */
+.bk-banner {
+  align-items: center;
+}
+.bk-banner__btn {
+  flex: none;
+  margin-left: auto;
+}
+.bk-saved {
+  margin-bottom: var(--space-3);
+}
+.bk-readonly {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 36px;
+  font-size: 14px;
+}
+.bk-readonly .s-mono {
+  font-size: 13px;
+}
+.bk-seg {
+  justify-self: start;
+}
+.bk-seg .seg-opt {
+  border: 0;
+  background: var(--color-bg);
+  color: var(--color-text);
+  font: inherit;
+  font-size: 13px;
+}
+.bk-seg .seg-opt + .seg-opt {
+  border-left: 1px solid var(--color-divider);
+}
+.bk-seg .seg-opt:hover {
+  background: var(--color-accent-100);
+}
+.bk-seg .seg-opt:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: -2px;
+}
+.bk-seg .seg-opt--on,
+.bk-seg .seg-opt--on:hover {
+  background: var(--color-accent);
+  color: var(--color-bg);
+  font-weight: 600;
+}
+.bk-dest--edit {
+  grid-template-columns: 22px 110px minmax(0, 1fr) auto;
+}
+.bk-dest--edit .input {
+  min-height: 32px;
+  font-size: 13px;
+}
+.bk-run--fresh td {
+  animation: bk-fresh 2.4s ease-out;
+}
+@keyframes bk-fresh {
+  from {
+    background: var(--color-accent-2-100);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .bk-run--fresh td {
+    animation: none;
+  }
+}
+.bk-pick {
+  min-height: 30px;
+  padding: 2px 10px;
+}
+.bk-pick select {
+  min-height: 30px;
+  padding: 2px 10px;
+}
+.bk-add {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* --- progress ------------------------------------------------------------ */
+.bk-progress {
+  display: grid;
+  gap: 6px;
+}
+.bk-progress__top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+.bk-progress__pct {
+  font-size: 22px;
+  font-variant-numeric: tabular-nums;
+}
+.bk-bar {
+  display: block;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--color-neutral-200);
+  overflow: hidden;
+}
+.bk-bar__fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--color-accent);
+  transition: width 0.3s linear;
+}
+@media (prefers-reduced-motion: reduce) {
+  .bk-bar__fill {
+    transition: none;
+  }
+}
+
+/* --- restore running in the background, inside the status panel --------- */
+.bk-status__extra {
+  grid-column: 1 / -1;
+}
+.bk-strip {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 200px auto auto;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg);
+  font-size: 14px;
+}
+.bk-strip__text {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.bk-strip__text .s-mono {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* --- where the backups are: workspace -> storage folder -> destinations -- */
+.bk-flow {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 112px minmax(0, 1fr) 112px minmax(0, 1fr);
+  align-items: start;
+}
+.bk-node {
+  display: grid;
+  align-content: start;
+  justify-items: start;
+  gap: 4px;
+  min-width: 0;
+  padding: var(--space-3);
+  border: 1px solid var(--color-divider);
+  border-radius: var(--radius-md);
+  background: var(--color-bg);
+}
+.bk-node__head {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  font-size: 14px;
+}
+.bk-node__path {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  font-size: 12px;
+}
+.bk-node .bk-pill {
+  margin-top: 4px;
+}
+.bk-dests {
+  display: grid;
+  gap: var(--space-2);
+  align-content: start;
+}
+.bk-arrow {
+  align-self: center;
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  gap: 4px;
+  padding: 0 var(--space-2);
+  text-align: center;
+  color: var(--color-neutral-700);
+}
+.bk-arrow__step {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--color-accent-100);
+  color: var(--color-accent-800);
+  font-size: 12px;
+  font-weight: 700;
+}
+.bk-arrow__text {
+  display: grid;
+  gap: 2px;
+  font-size: 12px;
+  line-height: 1.35;
+}
+.bk-arrow__text strong {
+  font-size: 13px;
+  color: var(--color-text);
+}
+.bk-arrow__icon {
+  color: var(--color-accent);
+}
+
+/* --- warnings outside the Backup section --------------------------------- */
+.bk-nav-dot {
+  width: 8px;
+  height: 8px;
+  margin-left: auto;
+  border-radius: 50%;
+  background: var(--color-warning);
+  box-shadow: 0 0 0 2px var(--color-surface);
+}
+/* Backup, nested under Settings, with its own two pages beneath it. */
+.bk-subnav-backup {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.bk-subnav-hint {
+  font-size: 12px;
+  font-weight: 500;
+  color: color-mix(in srgb, var(--color-text) 55%, transparent);
+}
+.bk-nav-warn {
+  display: inline-flex;
+  margin-left: auto;
+  color: var(--color-warning-ink);
+}
+.s-subnav.bk-subnav-nested {
+  margin: 2px 0 4px 14px;
+}
+.bk-global {
+  align-items: center;
+  margin-bottom: var(--space-4);
+  font-size: 14px;
+}
+
+/* --- changed or unexpected files in a destination ------------------------ */
+.bk-changed {
+  align-items: flex-start;
+}
+.bk-changed__body {
+  display: grid;
+  gap: var(--space-2);
+  min-width: 0;
+}
+.bk-changed__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+}
+.bk-changed__list li {
+  display: grid;
+  grid-template-columns: max-content max-content minmax(0, 1fr);
+  align-items: center;
+  gap: var(--space-2);
+}
+.bk-changed__list .s-mono {
+  font-size: 12px;
+}
+.bk-changed__why {
+  font-size: 12.5px;
+}
