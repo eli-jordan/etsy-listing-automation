@@ -15,6 +15,8 @@ from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
+from etsy_listings.core.backup.restic import ResticProcess
+
 
 def exit_error(code: int, message: str) -> str:
     """restic's last stderr line when a command fails under ``--json``."""
@@ -69,7 +71,7 @@ class ScriptedRestic:
         self.launches: list[Launch] = []
         self.processes: list[_Process] = []
 
-    def __call__(self, argv: Sequence[str], env: Mapping[str, str]) -> _Process:
+    def __call__(self, argv: Sequence[str], env: Mapping[str, str]) -> ResticProcess:
         if not self._replies:
             raise AssertionError(f"restic was run more times than scripted: {list(argv)}")
         self.launches.append(Launch(list(argv), dict(env)))

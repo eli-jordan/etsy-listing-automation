@@ -50,6 +50,11 @@ import names the module it depends on. Public interfaces:
     ``BackupOffError``), ``create_repository`` (refusing a short password
     and a folder that holds files), ``open_repository`` -> ``Restic``, and
     ``backup_status`` -> ``BackupStatus``, read without a lock.
+``backup_run``
+    ``BackupRunner``: ``run`` (one backup, paused through an optional
+    ``JobGate``, then forget and the weekly prune and check) -> ``RunRecord``,
+    reporting ``BackupProgress``; ``check`` -> ``CheckResult``. ``EXCLUDES``
+    and ``forget_arguments``.
 ``workspace_setup``
     ``create_directories``, ``sync_packaged_prompts`` -> ``PackagedPrompt``,
     ``read_shop_document``, ``SetupAnswers`` / ``POD_DEFAULTS``,
