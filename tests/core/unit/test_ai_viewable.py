@@ -1,6 +1,8 @@
 """The design an AI provider looks at: transparency flattened onto a
 background the artwork can be seen against."""
 
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from PIL import Image
@@ -60,3 +62,22 @@ def test_an_edited_design_gets_a_fresh_copy(tmp_path: Path) -> None:
     assert second != first
     with Image.open(second) as image:
         assert image.getpixel((20, 20)) == (255, 255, 255)
+
+
+def test_runs_flattening_one_design_at_once_each_get_the_copy(tmp_path: Path) -> None:
+    """Two AI runs whose listings share a design flatten it together, on
+    threads of one process: neither may fail on the other's write."""
+    source = _artwork(tmp_path / "black-text.png", (0, 0, 0))
+    cache = tmp_path / "cache"
+    callers = 8
+    start = threading.Barrier(callers)
+
+    def flatten() -> Path:
+        start.wait()
+        return viewable_design(source, cache)
+
+    with ThreadPoolExecutor(max_workers=callers) as pool:
+        copies = list(pool.map(lambda _: flatten(), range(callers)))
+
+    assert len(set(copies)) == 1
+    assert sorted(path.name for path in copies[0].parent.iterdir()) == ["black-text.png"]
