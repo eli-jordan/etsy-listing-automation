@@ -250,6 +250,26 @@ describe("Backups off and Set up", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("holds files");
     expect(screen.getByLabelText("Backup storage folder")).toHaveValue(REPO);
   });
+  it.each([
+    [
+      { kind: "stale", message: "Something else wrote settings.yaml." },
+      "settings.yaml changed on disk. Nothing was overwritten. Reload, then try again.",
+    ],
+    [
+      {
+        kind: "conflict",
+        message: "Backups are set up; edit the revision in Setup.",
+        fieldErrors: {},
+      },
+      "Backups are set up; edit the revision in Setup.",
+    ],
+  ] as const)("words a %o set-up refusal by its kind, not its text", async (outcome, shown) => {
+    vi.spyOn(backupApi, "setUpBackup").mockResolvedValue(outcome);
+    await openSetUp();
+    await fillSetUp();
+    await userEvent.click(button("Create and back up now"));
+    expect(await screen.findByRole("alert")).toHaveTextContent(shown);
+  });
 });
 
 describe("Setup", () => {
@@ -424,7 +444,7 @@ describe("Warnings on the Backup page", () => {
       screen.getByRole("heading", { name: "Backed up 2 hrs ago, not copied to iCloud Drive" }),
     ).toBeVisible();
     expect(container.querySelector(".bk-status--warn")).not.toBeNull();
-    expect(screen.getByText("Not copied")).toHaveClass("bk-pill--warn");
+    expect(screen.getByText("Folder not found")).toHaveClass("bk-pill--warn");
 
     status.mockResolvedValue(healthy());
     await userEvent.click(within(banner).getByRole("button", { name: "Try again" }));
@@ -646,11 +666,11 @@ describe("Restore", () => {
     const dialog = await restoreNewest();
     expect(within(dialog).getByText("25%")).toBeVisible();
     expect(within(dialog).getByText("about 10 min left")).toBeVisible();
-    expect(within(dialog).getByText("5 GB of 20.1 GB · 1,285 of 5,142 files")).toBeVisible();
+    expect(within(dialog).getByText("5 of 20.1 GB · 1,285 of 5,142 files")).toBeVisible();
 
     await userEvent.click(within(dialog).getByRole("button", { name: "Keep working" }));
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-    expect(screen.getByText(/25% · 5 GB of 20.1 GB · about 10 min left/)).toBeVisible();
+    expect(screen.getByText(/25% · 5 of 20.1 GB · about 10 min left/)).toBeVisible();
     for (const restore of screen.getAllByRole("button", { name: "Restore…" }))
       expect(restore).toBeDisabled();
     await userEvent.click(button("Show"));
@@ -702,5 +722,32 @@ describe("Restore", () => {
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     await userEvent.click(button("Dismiss"));
     expect(screen.queryByText(/Restore stopped/)).not.toBeInTheDocument();
+  });
+
+  it("a restore that fails says how far it got and why", async () => {
+    status.mockResolvedValue(
+      healthy({
+        restore: restoring({ outcome: "failed", message: "restic: disk full" }),
+      }),
+    );
+    open();
+    expect(
+      await screen.findByText(
+        "The restore failed at 25%: restic: disk full The folder holds the files restored so far; delete it before restoring there again.",
+      ),
+    ).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Show" })).not.toBeInTheDocument();
+  });
+
+  it("Copy path in the Restored dialog copies the folder", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.assign(navigator, { clipboard: { writeText } });
+    status.mockResolvedValue(
+      healthy({ restore: restoring({ outcome: "succeeded", percent: 1, files_done: 5142 }) }),
+    );
+    open();
+    await userEvent.click(await screen.findByRole("button", { name: "Show" }));
+    await userEvent.click(button(/Copy path/));
+    expect(writeText).toHaveBeenCalledWith(`${LIVE}-restore-bbbbbbbb`);
   });
 });

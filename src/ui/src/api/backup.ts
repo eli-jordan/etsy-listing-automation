@@ -13,9 +13,11 @@ export type RetentionSettings = components["schemas"]["RetentionSettings"];
 export type IntervalHours = BackupSetUp["interval_hours"];
 type Refusal = components["schemas"]["SettingsSaveRefusal"];
 
-/** Set-up's answer: started, or refused with the field it names. */
+/** Set-up's answer: started, refused because settings.yaml changed since it
+ * was read (412: reload), or refused with the reason and field it names. */
 export type SetUpOutcome =
   | { kind: "started"; status: BackupStatus }
+  | { kind: "stale"; message: string }
   | { kind: "conflict" | "invalid"; message: string; fieldErrors: Record<string, string> };
 
 function message(error: unknown, fallback: string): string {
@@ -45,9 +47,16 @@ export async function runBackup(): Promise<BackupStatus> {
   throw new Error(message(error, "Could not start a backup"));
 }
 
-function outcome(data: BackupStatus | undefined, error: unknown, fallback: string): SetUpOutcome {
+/** Set-up's, create's and connect's answer. Both a stale revision and a
+ * folder holding files are `conflict`; only the status separates them, as
+ * `saveSettings` reads its 412. */
+function outcome(
+  { data, error, response }: { data?: BackupStatus; error?: unknown; response: Response },
+  fallback: string,
+): SetUpOutcome {
   if (data) return { kind: "started", status: data };
   const refusal = error as Refusal | undefined;
+  if (response.status === 412 && refusal) return { kind: "stale", message: refusal.message };
   if (refusal?.kind === "conflict" || refusal?.kind === "invalid")
     return {
       kind: refusal.kind,
@@ -58,8 +67,10 @@ function outcome(data: BackupStatus | undefined, error: unknown, fallback: strin
 }
 
 export async function setUpBackup(answers: BackupSetUp): Promise<SetUpOutcome> {
-  const { data, error } = await api.POST("/api/backup/setup", { body: answers });
-  return outcome(data, error, "Could not set up backups");
+  return outcome(
+    await api.POST("/api/backup/setup", { body: answers }),
+    "Could not set up backups",
+  );
 }
 
 export type NewRepository = components["schemas"]["BackupNewRepositoryRequest"];
@@ -68,15 +79,19 @@ export type ConnectRepository = components["schemas"]["BackupConnectRequest"];
 /** Create a new repository while the configured one is missing; starts the
  * first backup. Refusals come back as set-up's do. */
 export async function createRepository(body: NewRepository): Promise<SetUpOutcome> {
-  const { data, error } = await api.POST("/api/backup/repository", { body });
-  return outcome(data, error, "Could not create the repository");
+  return outcome(
+    await api.POST("/api/backup/repository", { body }),
+    "Could not create the repository",
+  );
 }
 
 /** Copy an existing repository to this computer and use it; answers once
  * it is connected. A wrong password is an `invalid` refusal. */
 export async function connectRepository(body: ConnectRepository): Promise<SetUpOutcome> {
-  const { data, error } = await api.POST("/api/backup/connect", { body });
-  return outcome(data, error, "Could not connect the repository");
+  return outcome(
+    await api.POST("/api/backup/connect", { body }),
+    "Could not connect the repository",
+  );
 }
 
 /** Set aside a destination's changed files and copy again; answers when done. */

@@ -10,6 +10,7 @@ so nothing reaches the real ``~/.etsy-listings`` (P2).
 from __future__ import annotations
 
 import json
+import os
 from collections.abc import Callable
 from pathlib import Path
 
@@ -18,7 +19,7 @@ from typer.testing import CliRunner
 
 from etsy_listings.cli.app import app
 from etsy_listings.core.backup.binary import RESTIC_BINARY_ENV_VAR
-from etsy_listings.core.backup.state import HISTORY_FILE
+from etsy_listings.core.backup.state import HISTORY_FILE, STATE_FILE
 from etsy_listings.core.config.secrets import BACKUP_PASSWORD_VAR
 from etsy_listings.core.workspace import layout
 
@@ -227,11 +228,12 @@ def test_run_backs_up_copies_then_check_finds_no_errors(
 ) -> None:
     (workspace_root / layout.ENV_FILE).write_text(f"{BACKUP_PASSWORD_VAR}={PASSWORD}\n")
     assert _run(workspace_root, "init")[0] == 0
+    cloud = repository.with_name("cloud")
+    cloud.mkdir()
 
     code, output = _run(workspace_root, "run")
     assert code == 0, output
     assert "Pruning" in output
-    cloud = repository.with_name("cloud")
     assert f"Copied to {cloud}." in output
     assert (cloud / "config").read_bytes() == (repository / "config").read_bytes()
     snapshot = json.loads(_run(workspace_root, "snapshots", "--json")[1])
@@ -240,6 +242,27 @@ def test_run_backs_up_copies_then_check_finds_no_errors(
 
     code, output = _run(workspace_root, "check")
     assert (code, output.strip()) == (0, "The backup repository has no errors.")
+
+
+@pytest.mark.restic
+@pytest.mark.usefixtures("with_restic")
+def test_check_of_a_damaged_repository_fails_and_is_recorded(
+    workspace_root: Path, repository: Path, isolated: Path
+) -> None:
+    (workspace_root / layout.ENV_FILE).write_text(f"{BACKUP_PASSWORD_VAR}={PASSWORD}\n")
+    assert _run(workspace_root, "init")[0] == 0
+    assert _run(workspace_root, "run")[0] == 0
+    for pack in (repository / "data").rglob("*"):
+        if pack.is_file():
+            pack.unlink()
+
+    code, output = _run(workspace_root, "check")
+
+    assert code == 1
+    assert "has no errors" not in output
+    assert "restic:" in output
+    state = json.loads((isolated / ".etsy-listings" / STATE_FILE).read_text())
+    assert state["last_check"]["ok"] is False
 
 
 def test_restore_refuses_the_live_workspace_and_a_folder_with_files(
@@ -258,6 +281,7 @@ def test_restore_refuses_the_live_workspace_and_a_folder_with_files(
 
 
 @pytest.mark.restic
+@pytest.mark.usefixtures("with_restic")
 def test_restore_writes_a_snapshot_into_a_new_folder(
     workspace_root: Path, repository: Path, tmp_path: Path
 ) -> None:
@@ -273,3 +297,18 @@ def test_restore_writes_a_snapshot_into_a_new_folder(
     assert (target / "settings.yaml").read_bytes() == (
         workspace_root / "settings.yaml"
     ).read_bytes()
+
+
+@pytest.mark.skipif(os.name != "nt", reason="translation is a Windows-only concern")
+def test_restore_reads_a_cygwin_style_target_as_the_windows_folder(
+    workspace_root: Path, repository: Path
+) -> None:
+    """``/cygdrive/c/...`` from a Cygwin shell names the same folder as
+    ``C:/...``, so the live workspace is still refused."""
+    drive, rest = workspace_root.drive, workspace_root.as_posix()[len(workspace_root.drive) :]
+    cygwin = f"/cygdrive/{drive.rstrip(':').lower()}{rest}"
+
+    assert _run(workspace_root, "restore", "latest", cygwin) == (
+        1,
+        "That's your live workspace. Choose a new, empty folder.\n",
+    )

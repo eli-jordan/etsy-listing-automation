@@ -60,6 +60,9 @@ class AiRun:
     draft_brief: bool
     origin: RunOrigin = "manual"
     created_at: datetime = field(default_factory=_now)
+    started_at: datetime | None = None
+    """When the run began working: ``created_at`` unless a backup's pause held
+    it, then when :meth:`begin` released it; ``None`` while held."""
     finished_at: datetime | None = None
     events: list[AnyAiRunEvent] = field(default_factory=list)
     cancel_event: threading.Event = field(default_factory=threading.Event, repr=False)
@@ -78,6 +81,10 @@ class AiRun:
         default_factory=lambda: {i: WorkflowStep(id=i, state="pending") for i in STEP_IDS}
     )
 
+    def __post_init__(self) -> None:
+        if self._phase == "running" and self.started_at is None:
+            self.started_at = self.created_at
+
     @property
     def phase(self) -> AiRunPhase:
         return self._phase
@@ -92,6 +99,7 @@ class AiRun:
         with self.condition:
             if self._phase == "queued":
                 self._phase = "running"
+                self.started_at = _now()
             return self._phase == "running"
 
     @property

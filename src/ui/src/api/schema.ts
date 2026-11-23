@@ -2259,6 +2259,8 @@ export interface components {
        * @enum {string}
        */
       phase: "queued" | "running" | "done" | "failed" | "cancelled";
+      /** Started At */
+      started_at: string | null;
       /** Steps */
       steps: components["schemas"]["WorkflowStep"][];
       /**
@@ -2304,6 +2306,8 @@ export interface components {
        * @enum {string}
        */
       phase: "queued" | "running" | "done" | "failed" | "cancelled";
+      /** Started At */
+      started_at: string | null;
       /** Steps */
       steps: components["schemas"]["WorkflowStep"][];
       /**

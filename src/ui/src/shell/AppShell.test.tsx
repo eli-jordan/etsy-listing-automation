@@ -202,4 +202,30 @@ describe("AppShell backup warning", () => {
       vi.useRealTimers();
     }
   });
+
+  it("polls faster while a restore runs", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.spyOn(document, "visibilityState", "get").mockReturnValue("visible");
+    try {
+      const restoring: BackupStatus = {
+        ...HEALTHY,
+        restore: {
+          snapshot_id: "b".repeat(64),
+          snapshot_time: "2026-11-23T08:00:00Z",
+          target: "D:/restored",
+          started_at: "2026-11-23T10:00:00Z",
+          outcome: "running",
+          percent: 0.1,
+        },
+      };
+      const status = vi.spyOn(backupApi, "getBackupStatus").mockResolvedValue(restoring);
+      renderAt("/");
+      await waitFor(() => expect(status).toHaveBeenCalled());
+      const before = status.mock.calls.length;
+      await vi.advanceTimersByTimeAsync(FAST_POLL_MS * 2);
+      expect(status.mock.calls.length).toBeGreaterThanOrEqual(before + 2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });

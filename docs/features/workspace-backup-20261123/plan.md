@@ -199,17 +199,26 @@ Deviations recorded during implementation:
   gets an interrupt first (`SIGINT`, `CTRL_BREAK_EVENT`) so it can drop its
   lock. After five seconds the group is killed (`killpg`, `taskkill /T /F`).
   restic starts no child processes for a local repository.
-- No setting value goes through `to_native_path`. PR 2 has no CLI path
-  argument besides `--root`. `BackupSettings` parses its paths as `Path`, so a
-  cygwin-style path in `settings.yaml` is not translated. PR 7's restore
-  target is a CLI argument and must go through `to_native_path`.
+- `repository`, `destinations` and `restic_binary` go through
+  `to_native_path` when `settings.yaml` is parsed, not where they are used.
+  On Windows a `Path` already reads `/cygdrive/c/...` as `\cygdrive\c\...`
+  on the current drive. PR 7's restore target is a CLI argument and must go
+  through `to_native_path` too.
 - `write_env_value` now writes bytes, so `.env` keeps LF endings on Windows,
   where `write_text` used to write CRLF. `tests/cli/behaviour/test_auth.py`'s
   ordering spy also records `Path.replace`, because `.env` now arrives by a
   rename.
-- Tests marked `restic` skip when `ETSY_LISTINGS_RESTIC_BINARY` is unset.
-  CI does not download the binary yet. The finish pass adds that step, so
-  the tests run there.
+- Tests marked `restic` skip locally when `ETSY_LISTINGS_RESTIC_BINARY` is
+  unset. Every CI python leg installs the pin through
+  `scripts/install_restic.py`, which runs the app's own installer so the
+  digests live only in `core/backup/binary.py`. It caches the download by
+  version and sets `ETSY_LISTINGS_REQUIRE_EVERY_LAYER`, so a missing binary
+  fails instead of skipping.
+- Exit code 11 is proved against real restic: a `restic key passwd` waiting
+  on stdin holds the exclusive lock while `snapshots` runs.
+- The size is about 2,450 lines, over the 1,500 aim. About 1,150 of them are
+  source and docs, and the rest are tests. The orchestrator accepted it
+  unsplit.
 
 ### PR 3 — The backup run
 
@@ -286,6 +295,9 @@ Deviations recorded during implementation:
   spec's wording, not against restic's flags.
 - `backup run` and `backup check` take no `--json`. PR 5's API reads the
   history file directly.
+- Handed to PR 7: the weekly prune fails the run when another restic holds
+  the repository lock, as a restore does. PR 7 must make the prune wait for
+  a running restore (spec, *Restore*).
 
 ### PR 4 — Copying to destinations
 
@@ -331,11 +343,14 @@ Deviations recorded during implementation:
   `restic.py`. `BackupRunner` gains `repair(destination)` for PR 5's
   endpoint, and `backup run` prints each copy's outcome. The CLI has no
   repair command, because the spec's *CLI* lists none.
-- "The folder is missing" is read as "its parent is missing". A destination
-  folder that does not exist yet, inside a folder that does, is created and
-  copied to, so a new destination needs no extra set-up step. A missing
-  parent means the drive, share or sync folder is offline, and that
-  destination is skipped.
+- A copy never creates its destination. A missing destination folder is
+  unreachable ("Folder not found", as frame `04-failing` shows), even when
+  its parent exists. If iCloud is signed out, `iCloudDrive\` can still be
+  there, and creating the folder would copy about 20 GB into a folder
+  nothing syncs while reporting the copy up to date. Only set-up creates a
+  destination folder: PR 5 calls `create_destination`, which makes the
+  folder when its parent exists and refuses with `DestinationNotFoundError`
+  otherwise.
 - A local file whose contents no longer match its name gets its own outcome,
   `damaged`. The run fails at `copying`, `last_check` records the failure as
   the spec asks, and no further destination is copied. No copy runs after a
@@ -451,13 +466,19 @@ Deviations recorded during implementation:
 - Set-up is `POST /api/backup/setup`. It writes the whole block through
   the settings revision check (`edit_settings(editable=("backup",))`). It
   is refused once backups are set up. It creates the destination folders,
-  as does a Setup save that adds one, and each must be inside a folder
-  that exists (PR 4's finisher makes a missing destination folder
-  unreachable). The refusals now carry categories: backups off and a
+  as does a Setup save that adds one, through PR 4's `create_destination`,
+  and each must be inside a folder that exists. A run never creates one:
+  a destination folder that is missing is reported as "Folder not found".
+  The refusals now carry categories: backups off and a
   folder that holds files are conflicts (409), and a short password is
   refused (422).
 - `create_app` gains `backup: BackupEnvironment`, which holds `home`, the
   restic launcher and the clock, for tests (P2, P3).
+- Handed to PR 7: the history lists only runs the app recorded. A snapshot
+  made by hand with restic has no entry there, so PR 7's restore list must
+  read restic's own snapshot list.
+- Size: about 1,880 changed lines without the generated files, about 1,050
+  of code and docs and 800 of tests, over the 1,500 aim. Accepted unsplit.
 
 ### PR 6 — Backup in Admin › Settings, with warnings
 
@@ -521,9 +542,18 @@ Deviations recorded during implementation:
   opened. A forgotten snapshot's row reads "No longer kept".
 - The mockup stylesheet moved to `src/ui/src/pages/admin/backup/backup.css`
   and the live scene imports it from there (design promotion rule).
-- Size: about 2,500 changed lines, 780 of them tests, over the 1,500
-  target. The repair dialog and the set-up form are the seams if it must
-  split.
+- Size: about 2,600 changed lines, 830 of them tests, over the 1,500
+  target; accepted at review without a split.
+- Set-up's stale revision is told from its other conflicts by the HTTP
+  status (412 against 409), as `saveSettings` already does; both bodies
+  are `kind: "conflict"`, so no new field was needed.
+- Backups off leaves out the mockup's "Already have backups…" note until
+  Connect exists (PR 8). A destination's pill names its problem when the
+  reason is short ("Folder not found"), else says "Not copied".
+- The app screenshots come from a scratch script that serves `create_app`
+  with a `BackupEnvironment` (temp home, the test suite's by-command fake
+  restic) and seeded state, captured with Playwright's Chromium at
+  1280 × 800: the CLI cannot take a fake restic or a temp home.
 
 ### PR 7 — Restore
 
@@ -585,6 +615,13 @@ Deviations recorded during implementation:
 - The disaster guide is `docs/guides/restore-a-backup.md`. restic 0.19.1 on
   Windows exits 1 after a whole-snapshot restore (it cannot set the timestamp
   of `C\Users`), so the guide also gives the `latest:/C/...` form.
+- Finish: the app screenshots come from a scratch server on PR 5's
+  `BackupEnvironment`, with seeded history under a temp home and a fake
+  restic whose restore progress a test file steps through, captured with
+  Playwright at 1280×800. No browser test was added: PR 7's exit conditions
+  name none, and Vitest covers the flow.
+- Size: about 1,800 changed lines without generated files, accepted over the
+  1,500 target rather than split.
 
 ### PR 8 — Missing repository and the migration guide
 

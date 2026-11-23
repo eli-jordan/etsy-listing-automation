@@ -286,6 +286,26 @@ def test_while_paused_a_manual_run_is_accepted_queued_and_starts_on_resume(
     assert wait_until_finished(second).phase == "done", second.events
 
 
+def test_a_run_starts_when_created_unless_a_backup_holds_it_until_resume(
+    ai: AiCoordinator, gate: JobGate, provider: ChainProvider, workspace_root: Path
+) -> None:
+    """AI Mode's timer counts generating time, not the wait for a backup."""
+    copy_listing(workspace_root, "second")
+    unheld = _started(ai.start_run("second", draft_brief=False))
+    gate.pause()
+    held = _started(ai.start_run(LISTING, draft_brief=False))
+    time.sleep(0.05)
+
+    assert unheld.started_at == unheld.created_at
+    assert held.started_at is None
+
+    gate.resume()
+    wait_until_finished(held)
+
+    assert held.started_at is not None
+    assert held.started_at > held.created_at
+
+
 def test_a_held_run_cancelled_ends_without_starting(
     ai: AiCoordinator, gate: JobGate, provider: ChainProvider
 ) -> None:

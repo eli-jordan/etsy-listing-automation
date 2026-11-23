@@ -218,13 +218,20 @@ export function restoreFigures(restore: RestoreStatus) {
   const count = (n: number) => n.toLocaleString("en-GB");
   return {
     pctText: `${Math.round(restore.percent * 100)}%`,
-    bytes: total == null ? "" : `${bytes(restore.bytes_done ?? 0)} of ${bytes(total)}`,
+    bytes: total == null ? "" : bytesOf(restore.bytes_done ?? 0, total),
     files: files == null ? "" : `${count(restore.files_done ?? 0)} of ${count(files)} files`,
     left:
       left == null
         ? "working out the time left"
         : `about ${Math.max(1, Math.ceil(left / 60))} min left`,
   };
+}
+
+/** "7.6 of 20.1 GB": the unit once when both share it, as the prototype words it. */
+function bytesOf(done: number, total: number): string {
+  const [part, whole] = [bytes(done), bytes(total)];
+  const unit = whole.slice(whole.indexOf(" "));
+  return part.endsWith(unit) ? `${part.slice(0, -unit.length)} of ${whole}` : `${part} of ${whole}`;
 }
 
 /** The parts that are known, joined as the prototype joins figures. */

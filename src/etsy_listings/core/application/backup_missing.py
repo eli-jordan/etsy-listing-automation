@@ -38,7 +38,7 @@ from etsy_listings.core.application.backup_repository import (
 )
 from etsy_listings.core.application.refusals import SettingsRevisionConflictError
 from etsy_listings.core.backup.binary import ResticBinaries
-from etsy_listings.core.backup.destinations import copy_repository, reachable
+from etsy_listings.core.backup.destinations import copy_repository
 from etsy_listings.core.backup.restic import Launch, Restic, WrongPasswordError
 from etsy_listings.core.config.settings import BackupSettings
 from etsy_listings.core.errors import ConflictError, RefusedError
@@ -117,6 +117,8 @@ def connect_repository(
     _check_connect(workspace, source, answers)
     staging = repository.with_name(f"{repository.name}{STAGING_MARK}{secrets.token_hex(4)}")
     try:
+        # The copy never creates its destination (PR 4); the parent is checked.
+        staging.mkdir()
         copied = copy_repository(source, staging)
         if copied.outcome != "copied":
             raise ConnectRefusedError(copied.message or f"{source} could not be copied.")
@@ -153,7 +155,7 @@ def _check_connect(workspace: Workspace, source: Path, answers: Replacement) -> 
         raise RepositoryNotEmptyError(
             f"{repository} already holds files. Choose an empty or new folder to copy into."
         )
-    if not reachable(repository):
+    if not repository.parent.is_dir():
         raise ConnectRefusedError(f"{repository.parent} does not exist. Choose another folder.")
     if workspace_settings.read_settings(workspace).revision != answers.expected_revision:
         # Checked again by the save itself; this only saves the copy.

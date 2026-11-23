@@ -20,6 +20,7 @@ from etsy_listings.core.application.backup_repository import (
 )
 from etsy_listings.core.application.refusals import InvalidSettingsEditError
 from etsy_listings.core.backup.binary import ResticBinaries
+from etsy_listings.core.backup.destinations import create_destination
 from etsy_listings.core.backup.restic import Launch
 from etsy_listings.core.config.settings import RetentionSettings
 from etsy_listings.core.errors import ConflictError
@@ -85,6 +86,8 @@ def added_destinations(workspace: Workspace, changes: Mapping[str, object]) -> t
 
 
 def refuse_unreachable(destinations: Sequence[Path]) -> None:
+    """``create_destination``'s own refusal, made before anything is
+    written, naming the field the form shows it under."""
     missing = [path for path in destinations if not path.is_dir() and not path.parent.is_dir()]
     if missing:
         listed = "; ".join(
@@ -99,5 +102,7 @@ def refuse_unreachable(destinations: Sequence[Path]) -> None:
 
 
 def create_folders(destinations: Sequence[Path]) -> None:
+    """Through the copy's own ``create_destination``, the one place a
+    destination folder is made."""
     for path in destinations:
-        path.mkdir(exist_ok=True)
+        create_destination(path)
