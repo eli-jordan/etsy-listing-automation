@@ -252,6 +252,41 @@ Exit when:
 - a test proves prune and check run only when 7 days have passed;
 - shared gates pass.
 
+Deviations recorded during implementation:
+
+- The exclude list differs from the plan's, after checking each writer.
+  `*.tmp` covers four of the plan's patterns. `ai/viewable.py` now writes
+  `{name}.{pid}.{thread}.tmp` (PR 1). The Marigold worker's temporaries are
+  `.{name}.npz.{uuid}`, so the pattern is `.*.npz.*`. Template renderer
+  folders are `_renderer/`, so the map and calibration patterns are
+  `_renderer/maps/staging` and `_renderer/calibration-transaction`. Three
+  writers the plan did not list are added: the position-fit staging
+  directory `.cache/position-fits/.{key}-{uuid}`, a mockup photo between its
+  two renames (`.{slug}.renaming.png`), and a dropped ZIP while it is read
+  (`.cache/staging/*/upload.zip`).
+- The writer pin is a source check per writer: the test reads each writer's
+  module and asserts the expression that names its temporary is still
+  there. The `restic` test then backs up a sample of each name.
+- The run is a `BackupRunner` object with `run()` and `check()`, so PR 5's
+  coordinator holds one value, not six arguments.
+- A failed weekly check fails the run (`failed_step: "checking"`), keeping
+  the snapshot id. A run that cannot open the repository, such as one with
+  no password, is recorded as failed at `"starting"`. Backups switched off
+  are not a run and record nothing.
+- restic's exit code 3, a snapshot made without some unreadable files,
+  counts as a successful run, with each such file as a warning.
+- The run history is `~/.etsy-listings/backup-history.jsonl`, one JSON
+  object per run, oldest first. Each object holds `repository`,
+  `started_at`, `finished_at`, `outcome` (`succeeded`, `failed` or
+  `stopped`), `snapshot_id`, `failed_step`, `message` and `warnings`.
+  `backup-state.json` names its repository, and a different repository starts
+  with empty state.
+- The retention test spans four months of runs rather than one, because a
+  month cannot show the monthly rule. It checks restic's result against the
+  spec's wording, not against restic's flags.
+- `backup run` and `backup check` take no `--json`. PR 5's API reads the
+  history file directly.
+
 ### PR 4 — Copying to destinations
 
 Spec: *Copy to destinations*, *Changed and unexpected files*, *Checking a

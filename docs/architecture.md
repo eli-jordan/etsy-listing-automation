@@ -123,8 +123,8 @@ package never drags in OpenCV, FastAPI or Typer to reach one name.
 | `core/listing_templates` | Template conversion and frozen document/assets/timestamp capture | Capture occurs under the template write lock before upload; shared references are revalidated at confirm and retry |
 | `core/market` | Comparable-listing research, scoring and evidence snapshots | Read-only Etsy data informs wording rather than product facts |
 | `core/batches` | Upload validation, archive inspection, staging, name allocation and idempotent local creation | Creates ordinary listings; AI dispatch belongs to `application/ai` |
-| `core/backup` | The pinned restic release and which binary to run (`binary.py`, installing through the protected `installation.py`), and the streaming restic runner (`restic.py`) | Knows no workspace; `core/application/backup_repository.py` joins the `backup:` settings, the `.env` password and the binary |
-| `core/user_directory.py` | `user_directory(home)`: `~/.etsy-listings`, this machine's state outside every workspace (Marigold runtime, restic) | Every owner takes `home`, so tests never write to the real home directory |
+| `core/backup` | The pinned restic release and which binary to run (`binary.py`, installing through the protected `installation.py`), the streaming restic runner (`restic.py`), and this machine's `backup-state.json` and run history (`state.py`) | Knows no workspace; `core/application/backup_repository.py` joins the `backup:` settings, the `.env` password and the binary |
+| `core/user_directory.py` | `user_directory(home)`: `~/.etsy-listings`, this machine's state outside every workspace (Marigold runtime, restic, backup state and history) | Every owner takes `home`, so tests never write to the real home directory |
 | `core/bounded_cache.py` | `BoundedCache`: the one thread-safe least-recently-used cache, bounded by total `size(value)` (bytes, or entries without a size function), behind every in-process cache of decoded arrays, validation proofs and pixel digests | Locks only bookkeeping, never `get_or_compute`'s computation; an item larger than the whole budget is served, never kept, and evicts nothing; a replaced key counts only its new size |
 | `core/connections.py`, `core/errors.py` | Client and `RunContext` construction; `UserFacingError` and the refusal categories (`MissingError`, `ConflictError`, `StaleError`, `RefusedError`) | See the credential invariant below; core names a refusal's category, never its status code |
 
@@ -1306,6 +1306,19 @@ file holds this machine's only copy of the password.
 `core/application/backup_repository.py` stores a new password before
 `restic init` runs, so no repository can exist whose password was never
 recorded.
+
+`core/application/backup_run.py`'s `BackupRunner.run` is one backup. Given the
+server's `JobGate`, it pauses, waits for work in flight, and resumes jobs as
+soon as `restic backup` ends, whether it succeeded or not. `forget`, and the
+weekly `prune` and `check`, run after the resume. The CLI's `backup run`
+passes no gate. `EXCLUDES` leaves out the temporary names the app's own
+writers use, and `tests/core/behaviour/test_backup_excludes.py` fails when a
+writer renames its temporaries. restic's exit code 3 (the snapshot was made
+without some unreadable files) counts as success, with those files as
+warnings. `core/backup/state.py` keeps the last prune and check in
+`~/.etsy-listings/backup-state.json`, keyed to the repository path. Every run,
+including a failed one, is appended to `backup-history.jsonl` as one JSON
+line. The last successful backup is read from `restic snapshots`.
 
 ## Durable Marigold maps and CPU composition
 
