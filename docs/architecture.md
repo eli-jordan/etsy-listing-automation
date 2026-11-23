@@ -123,7 +123,7 @@ package never drags in OpenCV, FastAPI or Typer to reach one name.
 | `core/listing_templates` | Template conversion and frozen document/assets/timestamp capture | Capture occurs under the template write lock before upload; shared references are revalidated at confirm and retry |
 | `core/market` | Comparable-listing research, scoring and evidence snapshots | Read-only Etsy data informs wording rather than product facts |
 | `core/batches` | Upload validation, archive inspection, staging, name allocation and idempotent local creation | Creates ordinary listings; AI dispatch belongs to `application/ai` |
-| `core/backup` | The pinned restic release and which binary to run (`binary.py`, installing through the protected `installation.py`), the streaming restic runner (`restic.py`), and this machine's `backup-state.json` and run history (`state.py`) | Knows no workspace; `core/application/backup_repository.py` joins the `backup:` settings, the `.env` password and the binary |
+| `core/backup` | The pinned restic release and which binary to run (`binary.py`, installing through the protected `installation.py`), the streaming restic runner (`restic.py`), the copy to destinations with its sample check and repair (`destinations.py`, no restic), and this machine's `backup-state.json` and run history (`state.py`) | Knows no workspace; `core/application/backup_repository.py` joins the `backup:` settings, the `.env` password and the binary |
 | `core/user_directory.py` | `user_directory(home)`: `~/.etsy-listings`, this machine's state outside every workspace (Marigold runtime, restic, backup state and history) | Every owner takes `home`, so tests never write to the real home directory |
 | `core/bounded_cache.py` | `BoundedCache`: the one thread-safe least-recently-used cache, bounded by total `size(value)` (bytes, or entries without a size function), behind every in-process cache of decoded arrays, validation proofs and pixel digests | Locks only bookkeeping, never `get_or_compute`'s computation; an item larger than the whole budget is served, never kept, and evicts nothing; a replaced key counts only its new size |
 | `core/connections.py`, `core/errors.py` | Client and `RunContext` construction; `UserFacingError` and the refusal categories (`MissingError`, `ConflictError`, `StaleError`, `RefusedError`) | See the credential invariant below; core names a refusal's category, never its status code |
@@ -1319,6 +1319,19 @@ warnings. `core/backup/state.py` keeps the last prune and check in
 `~/.etsy-listings/backup-state.json`, keyed to the repository path. Every run,
 including a failed one, is appended to `backup-history.jsonl` as one JSON
 line. The last successful backup is read from `restic snapshots`.
+
+After a successful run, `BackupRunner` copies the repository to each
+destination with `core/backup/destinations.py`, which is plain file operations
+and no restic. It lists both folders once, in restic's read order. It refuses a
+destination holding a changed file, copies what is missing in write order
+through hashed `.copying-` temporaries, and then deletes expired files newest
+first. A file is never given a name that something already has: rename refuses
+it on Windows, and a hard link takes the name elsewhere. Once 30 days have
+passed, a run hashes a 5% sample of the destination. The state file keeps each
+destination's last copy and check and the changed and unexpected files found
+there. A change the sample found keeps its size, so the state passes it to
+later copies until `BackupRunner.repair` moves it to
+`<destination>-set-aside-<date>`.
 
 ## Durable Marigold maps and CPU composition
 

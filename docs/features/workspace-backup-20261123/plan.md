@@ -325,6 +325,55 @@ Exit when:
   that exists at the destination, by checking file identity before and after;
 - shared gates pass.
 
+Deviations recorded during implementation:
+
+- The copy module is `core/backup/destinations.py`. It imports nothing from
+  `restic.py`. `BackupRunner` gains `repair(destination)` for PR 5's
+  endpoint, and `backup run` prints each copy's outcome. The CLI has no
+  repair command, because the spec's *CLI* lists none.
+- "The folder is missing" is read as "its parent is missing". A destination
+  folder that does not exist yet, inside a folder that does, is created and
+  copied to, so a new destination needs no extra set-up step. A missing
+  parent means the drive, share or sync folder is offline, and that
+  destination is skipped.
+- A local file whose contents no longer match its name gets its own outcome,
+  `damaged`. The run fails at `copying`, `last_check` records the failure as
+  the spec asks, and no further destination is copied. No copy runs after a
+  failed weekly `restic check` either.
+- Each run's history entry gains `copies`: each destination's outcome
+  (`copied`, `unreachable`, `changed`, `damaged`, `failed` or `stopped`) with
+  its message. An unreachable or changed destination leaves the run
+  `succeeded`.
+- `backup-state.json` gains `destinations`, keyed by the path as
+  `settings.yaml` gives it. Each holds `last_copy`, `problem` (why the
+  latest copy did not finish), `last_check`, `changed` and `unexpected`. A
+  change the sample check finds keeps its size, so a later copy cannot see
+  it by listing. The state keeps it, the next copy treats it as changed, and
+  only a repair clears it.
+- The monthly sample check runs only after a copy to that destination
+  finishes, and only once 30 days have passed since its last check. It
+  samples files that both folders hold, rounding 5% up to at least one file.
+  `config` is always compared.
+- The copy's temporaries are `<name>.copying-<8 hex>`. `locks/` and restic's
+  own `-tmp-` names at a destination are neither expired nor unexpected,
+  because restic writes them itself when it opens a destination, say to
+  restore from it.
+- An empty or foreign local folder (no `config`) is refused before the
+  destination is listed. A wrong repository path would otherwise make every
+  destination file look expired, and the copy would delete them.
+- On POSIX, a hard link gives a file its name, because `rename` would
+  replace an existing file. A filesystem without hard links falls back to
+  checking for the name, then renaming. Windows' rename refuses an existing
+  name.
+- Repair puts files in a new folder each time: `-set-aside-<date>`, then
+  `-2`, `-3` and so on the same day. The date is the local date.
+- The copy reports no per-file progress yet, only the step and the
+  destination. PR 5 can add a count from `CopyHooks.observe` if the UI
+  needs one for the first, full copy.
+- The interrupted-copy `restic` test starts from a complete earlier copy.
+  An interruption before the first copy has written `config` and a key
+  cannot leave a repository restic opens.
+
 ### PR 5 — Scheduler and status API
 
 Spec: *Scope and decisions* (Scheduling, Manual run, Failures), *Status and
