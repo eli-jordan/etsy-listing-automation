@@ -11,6 +11,7 @@ from typing import Literal, Protocol
 from pydantic import BaseModel, ConfigDict, ValidationError
 
 from etsy_listings.core.preparation.worker_client import WarmWorker
+from etsy_listings.core.user_directory import user_directory
 from etsy_listings.core.workspace.atomic import write_json_atomic
 from etsy_listings.core.workspace.trees import remove_tree
 
@@ -99,7 +100,7 @@ class Runtime:
         engine_version: str = ENGINE_VERSION,
     ) -> None:
         _segment(engine_version)
-        self.root = (home or Path.home()) / ".etsy-listings" / "marigold"
+        self.root = user_directory(home) / "marigold"
         self.engine_version = engine_version
         if installer is None:
             from etsy_listings.core.preparation.installation import (  # noqa: PLC0415 -- cycle: installation imports this module's Capability

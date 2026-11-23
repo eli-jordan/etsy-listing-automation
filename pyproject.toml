@@ -145,6 +145,7 @@ markers = [
     "e2e: exercises real Printify/Etsy APIs against a throwaway shop; skipped by default",
     "browser: drives the calibrator in a real browser via playwright; skipped when it is unavailable",
     "capture: opt-in screenshot artifacts for human review; run only when -m names capture",
+    "restic: runs the pinned restic binary (ETSY_LISTINGS_RESTIC_BINARY or backup.restic_binary); skipped when it is absent",
 ]
 addopts = "-m 'not e2e'"
 # Delete a passing test's tmp_path in its own teardown, keeping only failures'.
@@ -400,6 +401,13 @@ name = "Native installation is reached through the explicit Runtime interface"
 type = "protected"
 protected_modules = ["etsy_listings.core.preparation.installation"]
 allowed_importers = ["etsy_listings.core.preparation.runtime"]
+as_packages = false
+
+[[tool.importlinter.contracts]]
+name = "The pinned restic is installed only through ResticBinaries"
+type = "protected"
+protected_modules = ["etsy_listings.core.backup.installation"]
+allowed_importers = ["etsy_listings.core.backup.binary"]
 as_packages = false
 
 [[tool.importlinter.contracts]]
