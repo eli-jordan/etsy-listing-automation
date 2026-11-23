@@ -26,6 +26,11 @@ removes the position fits no listing's current position produces
 so a position change prunes the fit it replaced once its new fit is stored.
 :meth:`SceneWarmer.wait_idle` waits for the prune too.
 
+**A backup's pause** (workspace-backup spec, *Pausing jobs*) starts no
+pass: requests queue as usual and the next pass begins after resume. A pass
+-- one listing and the prune after it -- holds a gate ticket, which a
+backup's wait for quiet counts.
+
 A scene that cannot be composed -- a template not prepared, a photo or design
 missing, a listing that no longer loads -- is skipped: the preview endpoint
 reports the same refusal when the seller opens it.
@@ -38,6 +43,7 @@ import threading
 from collections import OrderedDict
 from collections.abc import Callable
 
+from etsy_listings.core.application.job_gate import JobGate, Ticket
 from etsy_listings.core.application.listing_reads import listing_scenes
 from etsy_listings.core.application.position_fit_pruning import prune_position_fits
 from etsy_listings.core.application.scene_previews import (
@@ -95,8 +101,11 @@ class SceneWarmer:
         scenes: Callable[[Workspace, str], list[Scene]] = gallery_scenes,
         warm: Callable[[Workspace, str, str, str | None], None] = warm_scene,
         prune: Callable[[Workspace], object] = prune_position_fits,
+        gate: JobGate | None = None,
     ) -> None:
         self._workspace = workspace
+        self._gate = gate if gate is not None else JobGate()
+        self._gate.on_resume(self._resumed)
         self._scenes = scenes
         self._warm = warm
         self._prune = prune
@@ -136,20 +145,45 @@ class SceneWarmer:
         instead of a sleep; ``False`` on timeout."""
         return self._idle.wait(timeout)
 
+    def _resumed(self) -> None:
+        with self._wake:
+            self._wake.notify_all()
+
     def _loop(self) -> None:
-        self._settle()
+        startup = self._admitted(lambda: True, lambda: "Pruning position fits")
+        if startup is not None:
+            with startup:
+                self._settle()
         while True:
-            with self._wake:
-                self._wake.wait_for(lambda: bool(self._queued) or self._stopping)
-                if self._stopping:
+            ticket = self._admitted(
+                lambda: bool(self._queued),
+                lambda: f"Scene warming for {next(iter(self._queued))}",
+            )
+            if ticket is None:
+                with self._wake:
                     self._idle.set()
-                    return
+                return
+            with self._wake:
                 name, _ = self._queued.popitem(last=False)
-            try:
-                self._warm_listing(name)
-            except Exception:
-                logger.exception("warming listing %r's scenes failed", name)
-            self._settle()
+            with ticket:
+                try:
+                    self._warm_listing(name)
+                except Exception:
+                    logger.exception("warming listing %r's scenes failed", name)
+                self._settle()
+
+    def _admitted(self, ready: Callable[[], bool], job: Callable[[], str]) -> Ticket | None:
+        """Block until ``ready`` and the gate admits ``job``; ``None`` on
+        stopping. Both are read under the queue's lock, so the listing
+        named is the one the pass takes."""
+        with self._wake:
+            while True:
+                self._wake.wait_for(lambda: (ready() and not self._gate.paused) or self._stopping)
+                if self._stopping:
+                    return None
+                ticket = self._gate.admit(job())
+                if ticket is not None:
+                    return ticket
 
     def _settle(self) -> None:
         """Prune once the queue has drained, then report idle if it still has."""

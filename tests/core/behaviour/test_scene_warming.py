@@ -9,6 +9,7 @@ from pathlib import Path
 
 import pytest
 
+from etsy_listings.core.application.job_gate import JobGate
 from etsy_listings.core.application.refusals import TemplateMissingError
 from etsy_listings.core.application.scene_warming import Scene, SceneWarmer
 from etsy_listings.core.workspace.workspace import Workspace
@@ -169,4 +170,85 @@ def test_a_stopped_warmer_takes_no_more_requests(workspace: Workspace) -> None:
     warmer.request(FIXTURE_LISTING)
 
     assert warmer.wait_idle(timeout=WAIT)
+    assert recorder.calls == []
+
+
+# -------------------------------------------------------- pausing for a backup
+
+
+def test_while_paused_nothing_warms_and_resume_warms_in_request_order(
+    workspace: Workspace,
+) -> None:
+    """Workspace-backup spec, *Backup run* steps 2 and 4."""
+    recorder = Recorder()
+    gate = JobGate()
+    gate.pause()
+    warmer = SceneWarmer(
+        workspace, scenes=_scenes(("flat-lay-01", "moss")), warm=recorder, gate=gate
+    )
+    warmer.start()
+    try:
+        warmer.request("second")
+        warmer.request(FIXTURE_LISTING)
+        assert not warmer.wait_idle(timeout=0.3)
+        assert recorder.calls == []
+
+        gate.resume()
+        assert warmer.wait_idle(timeout=WAIT)
+    finally:
+        warmer.stop()
+
+    assert recorder.calls == [
+        ("second", "flat-lay-01", "moss"),
+        (FIXTURE_LISTING, "flat-lay-01", "moss"),
+    ]
+
+
+def test_a_backup_waits_for_the_warming_pass_in_flight_and_names_it(
+    workspace: Workspace,
+) -> None:
+    entered, release = threading.Event(), threading.Event()
+
+    def warm(workspace: Workspace, name: str, template: str, colour: str | None) -> None:
+        entered.set()
+        assert release.wait(WAIT)
+
+    gate = JobGate()
+    warmer = SceneWarmer(workspace, scenes=_scenes(("flat-lay-01", "moss")), warm=warm, gate=gate)
+    warmer.start()
+    named: list[str] = []
+    result: list[bool] = []
+    try:
+        warmer.request(FIXTURE_LISTING)
+        assert entered.wait(WAIT)
+        gate.pause()
+        waiter = threading.Thread(
+            target=lambda: result.append(gate.wait_idle(waiting=named.append)), daemon=True
+        )
+        waiter.start()
+        waiter.join(0.2)
+        assert waiter.is_alive(), "the backup did not wait for the warming pass"
+        release.set()
+        waiter.join(WAIT)
+    finally:
+        release.set()
+        warmer.stop()
+
+    assert result == [True]
+    assert named == [f"Scene warming for {FIXTURE_LISTING}"]
+
+
+def test_shutdown_during_a_pause_drops_the_held_requests(workspace: Workspace) -> None:
+    recorder = Recorder()
+    gate = JobGate()
+    gate.pause()
+    warmer = SceneWarmer(
+        workspace, scenes=_scenes(("flat-lay-01", "moss")), warm=recorder, gate=gate
+    )
+    warmer.start()
+    warmer.request(FIXTURE_LISTING)
+
+    gate.stop()
+    warmer.stop()
+
     assert recorder.calls == []
