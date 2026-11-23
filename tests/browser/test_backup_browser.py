@@ -22,6 +22,8 @@ from etsy_listings.core.config.secrets import BACKUP_PASSWORD_VAR
 pytestmark = [pytest.mark.browser, pytest.mark.restic]
 
 PASSWORD = "correct horse battery staple"
+RESTIC_TIMEOUT_MS = 120_000
+"""restic's init and first backup, under ``poe check``'s parallel, covered run."""
 
 
 @pytest.fixture
@@ -57,10 +59,12 @@ def test_setting_up_backups_makes_the_first_backup_and_lists_it(
     page.get_by_role("button", name="Create and back up now").click()
 
     expect(page.get_by_role("link", name="Status and history")).to_have_attribute(
-        "aria-current", "page"
+        "aria-current", "page", timeout=RESTIC_TIMEOUT_MS
     )
     history = page.get_by_role("region", name="Backup history")
-    expect(history.get_by_role("row").nth(1)).to_contain_text("Backed up")
+    expect(history.get_by_role("row").nth(1)).to_contain_text(
+        "Backed up", timeout=RESTIC_TIMEOUT_MS
+    )
     expect(history.get_by_role("row").nth(1)).to_contain_text("Recent")
     expect(page.get_by_role("heading", name="Backed up a moment ago")).to_be_visible()
     assert (repository / "config").is_file()
