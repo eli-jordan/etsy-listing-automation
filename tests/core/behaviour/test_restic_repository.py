@@ -3,11 +3,16 @@ PR 2 and P3). Skipped unless ``ETSY_LISTINGS_RESTIC_BINARY`` names restic."""
 
 from __future__ import annotations
 
+import os
+import subprocess
+import time
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
 
 from etsy_listings.core.backup.restic import (
+    RepositoryLockedError,
     RepositoryNotFoundError,
     Restic,
     ResticError,
@@ -70,3 +75,35 @@ def test_the_wrong_password_is_reported_without_echoing_it(
 
     assert "wrong password" in str(caught.value)
     assert "not the password at all" not in str(caught.value)
+
+
+@pytest.fixture
+def exclusive_lock(restic: Restic, restic_binary: Path) -> Iterator[None]:
+    """``restic key passwd`` takes the exclusive lock, then waits on stdin for
+    the new password; an open pipe keeps it waiting with the lock held."""
+    restic.init()
+    env = {**os.environ, "RESTIC_PASSWORD": PASSWORD}
+    holder = subprocess.Popen(
+        [str(restic_binary), "--repo", str(restic.repository), "key", "passwd"],
+        env=env,
+        stdin=subprocess.PIPE,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    try:
+        deadline = time.monotonic() + 30
+        while not any((restic.repository / "locks").iterdir()):
+            assert time.monotonic() < deadline, "restic key passwd never took its lock"
+            time.sleep(0.05)
+        yield
+    finally:
+        holder.kill()
+        holder.wait()
+
+
+@pytest.mark.usefixtures("exclusive_lock")
+def test_a_repository_locked_elsewhere_is_reported(restic: Restic) -> None:
+    with pytest.raises(RepositoryLockedError, match="locked exclusively") as caught:
+        restic.snapshots()
+
+    assert caught.value.exit_code == 11

@@ -199,6 +199,14 @@ class TemplatePositionLimits(BaseModel):
     rotation: float = Field(15, ge=0, le=30, allow_inf_nan=False)
 
 
+def _native(value: str) -> Path:
+    """``userpath.to_native_path``, imported here because ``core.workspace``'s
+    initialiser imports this module."""
+    from etsy_listings.core.workspace.userpath import to_native_path  # noqa: PLC0415 -- cycle
+
+    return to_native_path(value)
+
+
 BACKUP_INTERVAL_HOURS = (4, 6, 12, 24, 48)
 """The intervals the Backup page offers (workspace-backup spec, *Scheduling*).
 Enforced here so a hand edit cannot set one the page could not show."""
@@ -237,6 +245,21 @@ class BackupSettings(BaseModel):
     """Another restic to run instead of the pinned download."""
 
     _retention_absent = field_validator("retention", mode="before")(_absent_is_empty)
+
+    @field_validator("repository", "restic_binary", mode="before")
+    @classmethod
+    def native_path(cls, value: object) -> object:  # pre-validation YAML
+        r"""A ``/cygdrive/c/...`` or Cygwin ``/home/...`` path from a hand edit,
+        translated as ``--root`` is. It must happen before pydantic makes a
+        ``Path``: on Windows that already reads it as ``\cygdrive\c\...``."""
+        return _native(value) if isinstance(value, str) else value
+
+    @field_validator("destinations", mode="before")
+    @classmethod
+    def native_paths(cls, value: object) -> object:  # pre-validation YAML
+        if isinstance(value, list | tuple):
+            return [_native(item) if isinstance(item, str) else item for item in value]
+        return value
 
     @field_validator("interval_hours", mode="wrap")
     @classmethod

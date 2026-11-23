@@ -306,3 +306,30 @@ def test_set_up_with_restic_makes_a_first_backup_the_history_shows(
     assert entry["run"]["outcome"] == "succeeded", entry
     assert entry["kept_as"] == "recent"
     assert status["repository"]["snapshots"] == 1
+
+
+def test_a_destination_folder_gone_missing_is_reported_and_never_created(
+    workspace_root: Path, home: Path, repository: Path, tmp_path: Path
+) -> None:
+    """Only set-up and a Setup save create a destination (PR 4's finish): a
+    run reports the missing folder and leaves its parent alone."""
+    FakeRepository(repository).backup("first")
+    signed_out = tmp_path / "iCloudDrive" / "backups"
+    signed_out.parent.mkdir()
+    _configured(workspace_root, repository, signed_out)
+    BackupStateStore(home).save(BackupState(repository=str(repository), last_prune=NOW))
+    restic = RepositoryRestic(repository, lambda: NOW)
+
+    with _client(workspace_root, home, restic) as client:
+        wait_for(lambda: len(_history(client)) == 1)
+        status = _ok(client.get("/api/backup"))
+
+    (entry,) = _destinations(status)
+    assert entry["problem"].startswith("Folder not found")
+    assert entry["last_copy"] is None
+    assert not signed_out.exists()
+
+
+def _destinations(status: dict[str, Any]) -> list[dict[str, Any]]:
+    destinations: list[dict[str, Any]] = status["destinations"]
+    return destinations

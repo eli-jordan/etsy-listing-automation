@@ -17,8 +17,10 @@ from etsy_listings.core.backup.destinations import (
     ChangedFile,
     CopyHooks,
     CopyStep,
+    DestinationNotFoundError,
     check_destination,
     copy_repository,
+    create_destination,
     repair_destination,
 )
 
@@ -195,16 +197,52 @@ def test_an_unreachable_destination_is_skipped_and_reported(
     assert not (tmp_path / "nas").exists()
 
 
-def test_a_new_destination_folder_is_created_inside_a_reachable_parent(
+def test_a_missing_destination_folder_is_unreachable_even_when_its_parent_exists(
     local: FakeRepository, tmp_path: Path
 ) -> None:
-    new = tmp_path / "icloud" / "backups"
+    # iCloud signed out leaves iCloudDrive\ behind: creating the folder there
+    # would copy everything into a folder nothing syncs.
+    missing = tmp_path / "iCloudDrive" / "backups"
+    missing.parent.mkdir()
+
+    result = copy_repository(local.root, missing)
+
+    assert result.outcome == "unreachable"
+    assert "Folder not found" in (result.message or "")
+    assert not missing.exists()
+
+
+def test_set_up_creates_a_destination_folder_inside_an_existing_one(
+    local: FakeRepository, tmp_path: Path
+) -> None:
+    new = tmp_path / "iCloudDrive" / "backups"
     new.parent.mkdir()
 
+    create_destination(new)
     result = copy_repository(local.root, new)
 
     assert result.outcome == "copied"
     assert files(new) == files(local.root)
+
+
+def test_set_up_refuses_a_destination_whose_parent_is_missing(tmp_path: Path) -> None:
+    offline = tmp_path / "nas" / "backups"
+
+    with pytest.raises(DestinationNotFoundError, match="nas"):
+        create_destination(offline)
+
+    assert not (tmp_path / "nas").exists()
+
+
+def test_set_up_keeps_an_existing_destination_as_it_is(
+    local: FakeRepository, destination: Path
+) -> None:
+    copy_repository(local.root, destination)
+    before = identities(destination)
+
+    create_destination(destination)
+
+    assert identities(destination) == before
 
 
 def test_a_prune_after_listing_never_leaves_an_index_naming_a_missing_pack(

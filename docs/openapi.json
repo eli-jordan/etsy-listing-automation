@@ -369,6 +369,18 @@
             "title": "Phase",
             "type": "string"
           },
+          "started_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          },
           "steps": {
             "items": {
               "$ref": "#/components/schemas/WorkflowStep"
@@ -390,6 +402,7 @@
           "phase",
           "steps",
           "created_at",
+          "started_at",
           "finished_at",
           "events"
         ],
@@ -475,6 +488,18 @@
             "title": "Phase",
             "type": "string"
           },
+          "started_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          },
           "steps": {
             "items": {
               "$ref": "#/components/schemas/WorkflowStep"
@@ -496,6 +521,7 @@
           "phase",
           "steps",
           "created_at",
+          "started_at",
           "finished_at"
         ],
         "title": "AiRunSummary",

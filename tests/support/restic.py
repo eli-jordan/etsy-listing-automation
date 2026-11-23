@@ -14,7 +14,7 @@ import threading
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
-from pathlib import Path
+from pathlib import Path, PurePath
 from typing import Any
 
 from etsy_listings.core.backup.restic import ResticProcess
@@ -145,3 +145,10 @@ class RepositoryRestic:
             summary = snapshot_json(self.now(), len(self.snapshots))
             return Reply(stdout=[{"message_type": "summary", "snapshot_id": summary["id"]}])
         return Reply()
+
+
+def snapshot_path(path: PurePath) -> str:
+    """How restic names a local folder inside a snapshot: a Windows drive
+    becomes a top folder (``/C/Users/...``); a POSIX path is itself."""
+    posix = path.as_posix()
+    return posix if not path.drive else "/" + posix.replace(":", "", 1)
