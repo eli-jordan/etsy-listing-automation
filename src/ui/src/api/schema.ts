@@ -244,6 +244,47 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/backup/restore": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Start Restore
+     * @description Restore a snapshot into a new folder; 409 for the live workspace, a
+     *     folder that holds files or a restore already running.
+     */
+    post: operations["start_restore_api_backup_restore_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/backup/restore/stop": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Stop Restore
+     * @description Stop the restore, answering once it has.
+     */
+    post: operations["stop_restore_api_backup_restore_stop_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/backup/run": {
     parameters: {
       query?: never;
@@ -281,6 +322,27 @@ export interface paths {
      *     whose parent is missing (422), writing nothing.
      */
     post: operations["set_up_api_backup_setup_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/backup/snapshots": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Backup Snapshots
+     * @description restic's snapshots, for the restore dialog: a run's history entry
+     *     may be gone, and a snapshot made by hand has none.
+     */
+    get: operations["backup_snapshots_api_backup_snapshots_get"];
+    put?: never;
+    post?: never;
     delete?: never;
     options?: never;
     head?: never;
@@ -2346,6 +2408,7 @@ export interface components {
       /** Next Due */
       next_due?: string | null;
       repository?: components["schemas"]["RepositoryOverview"] | null;
+      restore?: components["schemas"]["RestoreStatus"] | null;
       running?: components["schemas"]["RunningBackup"] | null;
       /**
        * Warnings
@@ -2371,6 +2434,13 @@ export interface components {
       outcome: "copied" | "unreachable" | "changed" | "damaged" | "failed" | "stopped";
       /** Set Aside */
       set_aside: string | null;
+    };
+    /** BackupRestoreRequest */
+    BackupRestoreRequest: {
+      /** Snapshot */
+      snapshot: string;
+      /** Target */
+      target: string;
     };
     /**
      * BackupSetUpRequest
@@ -2420,6 +2490,29 @@ export interface components {
       /** Restic Binary */
       restic_binary?: string | null;
       retention?: components["schemas"]["RetentionSettings"];
+    };
+    /** BackupSnapshot */
+    BackupSnapshot: {
+      /** Files */
+      files?: number | null;
+      /** Id */
+      id: string;
+      /** Short Id */
+      short_id: string;
+      /** Size */
+      size?: number | null;
+      /**
+       * Time
+       * Format: date-time
+       */
+      time: string;
+    };
+    /** BackupSnapshotsResponse */
+    BackupSnapshotsResponse: {
+      /** Snapshots */
+      snapshots: components["schemas"]["BackupSnapshot"][];
+      /** Workspace */
+      workspace: string;
     };
     /** BackupWarning */
     BackupWarning: {
@@ -4756,6 +4849,51 @@ export interface components {
       size: string;
     };
     /**
+     * RestoreStatus
+     * @description A restore, for the dialog and the status panel's strip.
+     */
+    RestoreStatus: {
+      /** Bytes Done */
+      bytes_done?: number | null;
+      /** Bytes Total */
+      bytes_total?: number | null;
+      /** Files Done */
+      files_done?: number | null;
+      /** Files Total */
+      files_total?: number | null;
+      /** Finished At */
+      finished_at?: string | null;
+      /** Message */
+      message?: string | null;
+      /**
+       * Outcome
+       * @default running
+       * @enum {string}
+       */
+      outcome: "running" | "succeeded" | "failed" | "stopped";
+      /**
+       * Percent
+       * @default 0
+       */
+      percent: number;
+      /** Seconds Left */
+      seconds_left?: number | null;
+      /** Snapshot Id */
+      snapshot_id: string;
+      /**
+       * Snapshot Time
+       * Format: date-time
+       */
+      snapshot_time: string;
+      /**
+       * Started At
+       * Format: date-time
+       */
+      started_at: string;
+      /** Target */
+      target: string;
+    };
+    /**
      * RetentionSettings
      * @description What ``restic forget`` keeps: every snapshot from the last
      *     ``keep_within_days``, then the latest of each of the last ``weekly`` weeks
@@ -6259,6 +6397,59 @@ export interface operations {
       };
     };
   };
+  start_restore_api_backup_restore_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["BackupRestoreRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      202: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["BackupOverview"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  stop_restore_api_backup_restore_stop_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["BackupOverview"];
+        };
+      };
+    };
+  };
   back_up_now_api_backup_run_post: {
     parameters: {
       query?: never;
@@ -6326,6 +6517,26 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["SettingsSaveRefusal"];
+        };
+      };
+    };
+  };
+  backup_snapshots_api_backup_snapshots_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["BackupSnapshotsResponse"];
         };
       };
     };

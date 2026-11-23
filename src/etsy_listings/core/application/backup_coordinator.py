@@ -298,10 +298,7 @@ class BackupCoordinator:
         new folder ``target`` on its own thread (spec, *Restore*)."""
         settings = backup_settings(self._workspace)
         check_target(target, workspace=self._workspace.root, repository=settings.repository)
-        reading = self._refresh(settings)
-        if reading.snapshots is None:
-            raise MissingError(reading.problem or "The backups could not be read.")
-        found = find_snapshot(reading.snapshots, snapshot)
+        found = find_snapshot(self.snapshots(), snapshot)
         restic = open_repository(self._workspace, binaries=self._binaries, launch=self._env.launch)
         with self._lock:
             if self._stopping.is_set():
@@ -381,6 +378,13 @@ class BackupCoordinator:
         with self._lock:
             restoring = self._restore
         return backup_overview(facts).model_copy(update={"restore": restoring})
+
+    def snapshots(self) -> tuple[Snapshot, ...]:
+        """Every snapshot restic lists, read afresh, oldest first."""
+        reading = self._refresh(backup_settings(self._workspace))
+        if reading.snapshots is None:
+            raise MissingError(reading.problem or "The backups could not be read.")
+        return reading.snapshots
 
     def history(self) -> list[HistoryEntry]:
         settings = self._settings()

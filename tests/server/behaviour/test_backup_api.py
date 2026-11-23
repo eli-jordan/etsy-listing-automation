@@ -8,7 +8,7 @@ the by-command fake unless a test is marked ``restic``; ``home`` is under
 from __future__ import annotations
 
 from collections.abc import Iterator
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -306,3 +306,66 @@ def test_set_up_with_restic_makes_a_first_backup_the_history_shows(
     assert entry["run"]["outcome"] == "succeeded", entry
     assert entry["kept_as"] == "recent"
     assert status["repository"]["snapshots"] == 1
+
+
+@pytest.fixture
+def restorable(
+    workspace_root: Path, home: Path, repository: Path, restic: RepositoryRestic
+) -> Iterator[TestClient]:
+    """Set up, with one snapshot made by the app and one by hand."""
+    _configured(workspace_root, repository)
+    repository.mkdir()
+    (repository / "config").write_bytes(b"{}")
+    restic.snapshots += [NOW - timedelta(days=1), NOW - timedelta(hours=1)]
+    with _client(workspace_root, home, restic) as test_client:
+        yield test_client
+
+
+def test_the_snapshot_list_is_restic_s_own_newest_first(
+    restorable: TestClient, workspace_root: Path, home: Path
+) -> None:
+    listed = _ok(restorable.get("/api/backup/snapshots"))
+
+    assert listed["workspace"] == str(workspace_root)
+    assert [s["id"] for s in listed["snapshots"]] == [f"{2:064x}", f"{1:064x}"]
+    assert BackupStateStore(home).runs() == [], "no run recorded either snapshot"
+
+
+def test_a_restore_starts_shows_in_the_status_and_stops(
+    restorable: TestClient, restic: RepositoryRestic, tmp_path: Path
+) -> None:
+    restic.restore_hang = True
+    target = str(tmp_path / "restored")
+
+    started = _ok(
+        restorable.post("/api/backup/restore", json={"snapshot": f"{1:064x}", "target": target}),
+        202,
+    )
+    wait_for(lambda: _ok(restorable.get("/api/backup"))["restore"]["files_done"] == 100)
+    second = restorable.post("/api/backup/restore", json={"snapshot": "latest", "target": target})
+    stopped = _ok(restorable.post("/api/backup/restore/stop"))
+
+    assert (started["restore"]["outcome"], started["restore"]["target"]) == ("running", target)
+    assert second.status_code == 409
+    assert stopped["restore"]["outcome"] == "stopped"
+
+
+@pytest.mark.parametrize("case", [("workspace", 409), ("relative", 422), ("unknown", 404)])
+def test_a_restore_is_refused_before_restic_runs(
+    restorable: TestClient,
+    restic: RepositoryRestic,
+    workspace_root: Path,
+    tmp_path: Path,
+    case: tuple[str, int],
+) -> None:
+    target, status = case
+    body = {
+        "workspace": {"snapshot": "latest", "target": str(workspace_root)},
+        "relative": {"snapshot": "latest", "target": "restored"},
+        "unknown": {"snapshot": "beef", "target": str(tmp_path / "restored")},
+    }[target]
+
+    response = restorable.post("/api/backup/restore", json=body)
+
+    assert response.status_code == status, response.text
+    assert restic.ran("restore") == 0

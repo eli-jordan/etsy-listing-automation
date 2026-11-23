@@ -1,5 +1,5 @@
-"""The backup status, history, Back up now, set-up and repair
-(workspace-backup plan, PR 5).
+"""The backup status, history, Back up now, set-up, repair and restore
+(workspace-backup plan, PRs 5 and 7).
 
 ``GET /api/backup`` is the one status source for the Backup page, the
 banner on every other page and both nav icons (interactions, *What the
@@ -24,7 +24,10 @@ from etsy_listings.server.api.schemas import (
     BackupHistoryResponse,
     BackupRepairRequest,
     BackupRepairResponse,
+    BackupRestoreRequest,
     BackupSetUpRequest,
+    BackupSnapshot,
+    BackupSnapshotsResponse,
     SettingsSaveRefusal,
 )
 
@@ -39,6 +42,37 @@ def backup_status(request: Request) -> BackupOverview:
 @router.get("/history")
 def backup_history(request: Request) -> BackupHistoryResponse:
     return BackupHistoryResponse(runs=app_state.backups(request).history())
+
+
+@router.get("/snapshots")
+def backup_snapshots(request: Request) -> BackupSnapshotsResponse:
+    """restic's snapshots, for the restore dialog: a run's history entry
+    may be gone, and a snapshot made by hand has none."""
+    backups = app_state.backups(request)
+    return BackupSnapshotsResponse(
+        workspace=str(app_state.workspace(request).root),
+        snapshots=[
+            BackupSnapshot(id=s.id, short_id=s.short_id, time=s.time, files=s.files, size=s.size)
+            for s in reversed(backups.snapshots())
+        ],
+    )
+
+
+@router.post("/restore", status_code=202)
+def start_restore(request: Request, body: BackupRestoreRequest) -> BackupOverview:
+    """Restore a snapshot into a new folder; 409 for the live workspace, a
+    folder that holds files or a restore already running."""
+    backups = app_state.backups(request)
+    backups.start_restore(body.snapshot, Path(body.target))
+    return backups.overview()
+
+
+@router.post("/restore/stop")
+def stop_restore(request: Request) -> BackupOverview:
+    """Stop the restore, answering once it has."""
+    backups = app_state.backups(request)
+    backups.stop_restore()
+    return backups.overview()
 
 
 @router.post("/run", status_code=202)

@@ -854,6 +854,16 @@
               }
             ]
           },
+          "restore": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RestoreStatus"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "running": {
             "anyOf": [
               {
@@ -942,6 +952,24 @@
           "outcome"
         ],
         "title": "BackupRepairResponse",
+        "type": "object"
+      },
+      "BackupRestoreRequest": {
+        "properties": {
+          "snapshot": {
+            "title": "Snapshot",
+            "type": "string"
+          },
+          "target": {
+            "title": "Target",
+            "type": "string"
+          }
+        },
+        "required": [
+          "snapshot",
+          "target"
+        ],
+        "title": "BackupRestoreRequest",
         "type": "object"
       },
       "BackupSetUpRequest": {
@@ -1040,6 +1068,73 @@
           "repository"
         ],
         "title": "BackupSettings",
+        "type": "object"
+      },
+      "BackupSnapshot": {
+        "properties": {
+          "files": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Files"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "short_id": {
+            "title": "Short Id",
+            "type": "string"
+          },
+          "size": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Size"
+          },
+          "time": {
+            "format": "date-time",
+            "title": "Time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "short_id",
+          "time"
+        ],
+        "title": "BackupSnapshot",
+        "type": "object"
+      },
+      "BackupSnapshotsResponse": {
+        "properties": {
+          "snapshots": {
+            "items": {
+              "$ref": "#/components/schemas/BackupSnapshot"
+            },
+            "title": "Snapshots",
+            "type": "array"
+          },
+          "workspace": {
+            "title": "Workspace",
+            "type": "string"
+          }
+        },
+        "required": [
+          "workspace",
+          "snapshots"
+        ],
+        "title": "BackupSnapshotsResponse",
         "type": "object"
       },
       "BackupWarning": {
@@ -6614,6 +6709,131 @@
         "title": "ResolvedPrice",
         "type": "object"
       },
+      "RestoreStatus": {
+        "description": "A restore, for the dialog and the status panel's strip.",
+        "properties": {
+          "bytes_done": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bytes Done"
+          },
+          "bytes_total": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bytes Total"
+          },
+          "files_done": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Files Done"
+          },
+          "files_total": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Files Total"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message"
+          },
+          "outcome": {
+            "default": "running",
+            "enum": [
+              "running",
+              "succeeded",
+              "failed",
+              "stopped"
+            ],
+            "title": "Outcome",
+            "type": "string"
+          },
+          "percent": {
+            "default": 0.0,
+            "title": "Percent",
+            "type": "number"
+          },
+          "seconds_left": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Seconds Left"
+          },
+          "snapshot_id": {
+            "title": "Snapshot Id",
+            "type": "string"
+          },
+          "snapshot_time": {
+            "format": "date-time",
+            "title": "Snapshot Time",
+            "type": "string"
+          },
+          "started_at": {
+            "format": "date-time",
+            "title": "Started At",
+            "type": "string"
+          },
+          "target": {
+            "title": "Target",
+            "type": "string"
+          }
+        },
+        "required": [
+          "snapshot_id",
+          "snapshot_time",
+          "target",
+          "started_at"
+        ],
+        "title": "RestoreStatus",
+        "type": "object"
+      },
       "RetentionSettings": {
         "additionalProperties": false,
         "description": "What ``restic forget`` keeps: every snapshot from the last\n``keep_within_days``, then the latest of each of the last ``weekly`` weeks\nand ``monthly`` months (spec, *Backup run* step 5). At least one of each,\nbecause zero would let a forget remove the snapshot it just made.",
@@ -9679,6 +9899,70 @@
         ]
       }
     },
+    "/api/backup/restore": {
+      "post": {
+        "description": "Restore a snapshot into a new folder; 409 for the live workspace, a\nfolder that holds files or a restore already running.",
+        "operationId": "start_restore_api_backup_restore_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BackupRestoreRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BackupOverview"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Start Restore",
+        "tags": [
+          "backup"
+        ]
+      }
+    },
+    "/api/backup/restore/stop": {
+      "post": {
+        "description": "Stop the restore, answering once it has.",
+        "operationId": "stop_restore_api_backup_restore_stop_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BackupOverview"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Stop Restore",
+        "tags": [
+          "backup"
+        ]
+      }
+    },
     "/api/backup/run": {
       "post": {
         "description": "Start a backup; 409 while another backup operation runs.",
@@ -9758,6 +10042,28 @@
           }
         },
         "summary": "Set Up",
+        "tags": [
+          "backup"
+        ]
+      }
+    },
+    "/api/backup/snapshots": {
+      "get": {
+        "description": "restic's snapshots, for the restore dialog: a run's history entry\nmay be gone, and a snapshot made by hand has none.",
+        "operationId": "backup_snapshots_api_backup_snapshots_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BackupSnapshotsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Backup Snapshots",
         "tags": [
           "backup"
         ]

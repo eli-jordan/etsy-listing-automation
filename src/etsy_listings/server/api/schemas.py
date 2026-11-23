@@ -1229,6 +1229,29 @@ class BackupHistoryResponse(BaseModel):
     """Newest first, failed runs included."""
 
 
+class BackupSnapshot(BaseModel):
+    id: str
+    short_id: str
+    time: datetime
+    files: int | None = None
+    size: int | None = None
+    """Bytes the backup read."""
+
+
+class BackupSnapshotsResponse(BaseModel):
+    workspace: str
+    """The live workspace, which a restore refuses."""
+    snapshots: list[BackupSnapshot]
+    """Every snapshot restic lists, made by the app or by hand, newest first."""
+
+
+class BackupRestoreRequest(BaseModel):
+    snapshot: str
+    """An id, its start, or ``latest``."""
+    target: str
+    """A new or empty folder, as a full path."""
+
+
 class BackupRepairRequest(BaseModel):
     destination: str
     """As ``settings.yaml`` names it."""
