@@ -33,6 +33,7 @@ from typing import Any
 
 from etsy_listings import __about__
 from etsy_listings.core.ai import ProposalStore
+from etsy_listings.core.batches import BatchStore
 from etsy_listings.core.config.money import Money
 from etsy_listings.core.engine.apply import execute
 from etsy_listings.core.engine.change import Plan
@@ -307,8 +308,11 @@ class _ApplyListing:
         after_apply(ctx, listing, planned)
         if fully_applied(ListingOutcome(listing=listing, planned=planned), applied):
             # ADR-0050: here, not in an entry point, so a CLI apply and a UI
-            # apply leave the same proposal state.
+            # apply leave the same proposal state -- and the same batch row,
+            # which a deploy marks reviewed unless the retract wiped it.
             ProposalStore(ctx.workspace).remove(listing)
+            if ctx.workspace.listing_file(listing).is_file():
+                BatchStore(ctx.workspace).mark_deployed(listing)
         return planned
 
     def _check_expected(self, listing: str, planned: PlannedRun) -> None:
@@ -353,6 +357,8 @@ def apply_listings(
         A listing that ends :func:`fully_applied` loses its cached AI proposal
     : the proposal described copy that is now deployed or deliberately
         not taken, and every entry point must leave the same proposal state.
+        Its batch row, if a batch made it, is marked reviewed: deploying a
+        draft is the seller's judgement that it is finished.
     """
     work = _ApplyListing(ctx, stages, hooks, expect)
     return _over(listings, work, hooks.on_event, should_stop=hooks.should_stop)

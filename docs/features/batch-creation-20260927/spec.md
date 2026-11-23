@@ -423,7 +423,8 @@ rows, never set by hand: *Staging* (not confirmed), *Drafting* (AI work still
 queued or running), *In review* (AI finished, not every listing reviewed),
 *Complete* (every created listing reviewed) or *Stopped* (**Cancel batch** left
 work undrafted). Failures are not a status; they appear as a count beside the
-progress. Complete does not require deploying.
+progress. Complete does not require deploying, though a deploy marks its
+listing reviewed.
 
 **Mark reviewed** and **Mark needs review** are available from both the batch
 summary and listing editor. Reviewed is an explicit seller judgment:
@@ -432,7 +433,9 @@ summary and listing editor. Reviewed is an explicit seller judgment:
 - accepting every proposal field does not mark it reviewed;
 - a later listing edit or regenerated proposal does not reset it;
 - a failed AI row may still be marked reviewed after manual completion or an
-  intentional decision not to use AI; and
+  intentional decision not to use AI;
+- a full apply of the listing marks it reviewed, since deploying it is that
+  judgment (see *Deployment interaction*); and
 - review state is advisory and never blocks `plan` or `apply`.
 
 Review and batch membership live in disposable cache. Clearing `.cache` removes
@@ -464,8 +467,11 @@ that listing's cached proposal. **Full success** means the engine's outcome for
 the listing is `ok`, no stage in its plan was blocked, and its lockfile carries
 no incomplete-apply marker. `ok` alone is not enough, because a blocked stage is
 not a failure; nor is an entry-point command merely returning normally.
-The batch record remains, and deployment does not change the explicit Reviewed
-flag.
+The batch record remains, and the same full success marks the listing's batch
+row Reviewed, from every apply entry point. A row still queued or drafting, as
+a CLI apply beside the UI server's queue can leave one, is not marked. An apply
+that is not a full success leaves the flag as it was, and a deploy never clears
+it.
 
 This cache cleanup is an entry-point-independent lifecycle rule, not UI-only
 behavior. A CLI apply and UI apply must leave the same proposal state.
