@@ -1,4 +1,5 @@
 import { useCallback, useState } from "react";
+import { type BackupSetUp, setUpBackup } from "../../api/backup";
 import {
   getSettings,
   saveSettings,
@@ -23,7 +24,8 @@ const clears = (key: string, changes: SettingsChanges) =>
   (key === "ai.step_limit_minutes" && "step_limit_minutes" in changes) ||
   (key === "ai.run_limit_minutes" && "run_limit_minutes" in changes) ||
   (key.startsWith("market_seo") && "weights" in changes) ||
-  (key.startsWith("template_positions") && "template_positions" in changes);
+  (key.startsWith("template_positions") && "template_positions" in changes) ||
+  (key.startsWith("backup") && Object.keys(changes).some((change) => change.startsWith("backup")));
 
 /** settings.yaml's revision and save queue (`useSaveQueue`), independent of
  * Shop. Responses advance the revision without replacing newer local edits:
@@ -56,8 +58,22 @@ export function useWorkspaceSettings() {
     [enqueue],
   );
 
+  // Backup's set-up writes settings.yaml outside the queue: after the
+  // queued saves, naming their revision, then reloading the file it changed.
+  const { afterSaves, currentRevision } = queue;
+  const setUp = useCallback(
+    (answers: Omit<BackupSetUp, "revision">) =>
+      afterSaves(async () => {
+        const outcome = await setUpBackup({ ...answers, revision: currentRevision() ?? "" });
+        if (outcome.kind === "started") await reload();
+        return outcome;
+      }),
+    [afterSaves, currentRevision, reload],
+  );
+
   return {
     settings,
+    setUp,
     loadedVersion,
     status: queue.status,
     fieldErrors: queue.fieldErrors as Record<string, string>,

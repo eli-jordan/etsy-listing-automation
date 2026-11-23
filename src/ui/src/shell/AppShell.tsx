@@ -5,7 +5,8 @@ import { useEffect, useState } from "react";
 import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
 import { getWorkspace } from "../api/listings";
 import "../pages/admin/backup/backup.css";
-import { BackupStatusProvider, bannerWarnings, useBackupStatus } from "./backupStatus";
+import { bannerWarnings, useBackupStatus } from "./backupStatus";
+import { BackupStatusProvider } from "./BackupStatusProvider";
 import { ShellSidebar } from "./ShellSidebar";
 
 /**

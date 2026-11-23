@@ -229,6 +229,8 @@ export function useSaveQueue<C extends Changes, O extends SaveOutcome>({
     retry,
     reset,
     afterSaves,
+    /** The revision the next save names, for a write outside the queue. */
+    currentRevision: useCallback(() => revision.current, []),
     locked: status.kind === "conflict",
   };
 }

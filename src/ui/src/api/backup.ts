@@ -8,6 +8,8 @@ export type RunningBackup = components["schemas"]["RunningBackup"];
 export type HistoryEntry = components["schemas"]["HistoryEntry"];
 export type BackupSetUp = components["schemas"]["BackupSetUpRequest"];
 export type RepairResult = components["schemas"]["BackupRepairResponse"];
+export type BackupSettings = components["schemas"]["BackupSettings"];
+export type RetentionSettings = components["schemas"]["RetentionSettings"];
 export type IntervalHours = BackupSetUp["interval_hours"];
 type Refusal = components["schemas"]["SettingsSaveRefusal"];
 

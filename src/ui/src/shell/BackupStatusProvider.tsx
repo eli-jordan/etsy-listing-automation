@@ -1,37 +1,6 @@
-import {
-  createContext,
-  type ReactNode,
-  useCallback,
-  useContext,
-  useEffect,
-  useMemo,
-  useState,
-} from "react";
-import { type BackupStatus, type BackupWarning, getBackupStatus } from "../api/backup";
-
-/** While a backup or repair runs, so the running line moves. */
-export const FAST_POLL_MS = 2000;
-/** Otherwise: warnings appear and clear within half a minute. */
-export const SLOW_POLL_MS = 30000;
-
-export interface BackupStatusSource {
-  /** Null until the first read answers, and after a read fails. */
-  status: BackupStatus | null;
-  error: string | null;
-  /** Read now, for an action that changed it; resolves with the new status. */
-  refresh: () => Promise<BackupStatus | null>;
-}
-
-const Context = createContext<BackupStatusSource>({
-  status: null,
-  error: null,
-  refresh: () => Promise.resolve(null),
-});
-
-/** The warnings that show beyond the Backup page: all but `off`. */
-export function bannerWarnings(status: BackupStatus | null): BackupWarning[] {
-  return (status?.warnings ?? []).filter((warning) => warning.banner);
-}
+import { type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
+import { type BackupStatus, getBackupStatus } from "../api/backup";
+import { BackupStatusContext, FAST_POLL_MS, SLOW_POLL_MS } from "./backupStatus";
 
 /**
  * The one poll of `GET /api/backup` (workspace-backup interactions, *What the
@@ -43,6 +12,7 @@ export function bannerWarnings(status: BackupStatus | null): BackupWarning[] {
 export function BackupStatusProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<BackupStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [readAt, setReadAt] = useState(0);
   const [hidden, setHidden] = useState(() => document.visibilityState === "hidden");
 
   const refresh = useCallback(
@@ -50,6 +20,7 @@ export function BackupStatusProvider({ children }: { children: ReactNode }) {
       getBackupStatus().then(
         (next) => {
           setStatus(next);
+          setReadAt(Date.now());
           setError(null);
           return next;
         },
@@ -75,10 +46,9 @@ export function BackupStatusProvider({ children }: { children: ReactNode }) {
     return () => clearInterval(timer);
   }, [hidden, running, refresh]);
 
-  const value = useMemo(() => ({ status, error, refresh }), [status, error, refresh]);
-  return <Context.Provider value={value}>{children}</Context.Provider>;
-}
-
-export function useBackupStatus(): BackupStatusSource {
-  return useContext(Context);
+  const value = useMemo(
+    () => ({ status, error, readAt, refresh }),
+    [status, error, readAt, refresh],
+  );
+  return <BackupStatusContext.Provider value={value}>{children}</BackupStatusContext.Provider>;
 }
