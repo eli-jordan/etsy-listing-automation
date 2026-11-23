@@ -199,17 +199,26 @@ Deviations recorded during implementation:
   gets an interrupt first (`SIGINT`, `CTRL_BREAK_EVENT`) so it can drop its
   lock. After five seconds the group is killed (`killpg`, `taskkill /T /F`).
   restic starts no child processes for a local repository.
-- No setting value goes through `to_native_path`. PR 2 has no CLI path
-  argument besides `--root`. `BackupSettings` parses its paths as `Path`, so a
-  cygwin-style path in `settings.yaml` is not translated. PR 7's restore
-  target is a CLI argument and must go through `to_native_path`.
+- `repository`, `destinations` and `restic_binary` go through
+  `to_native_path` when `settings.yaml` is parsed, not where they are used.
+  On Windows a `Path` already reads `/cygdrive/c/...` as `\cygdrive\c\...`
+  on the current drive. PR 7's restore target is a CLI argument and must go
+  through `to_native_path` too.
 - `write_env_value` now writes bytes, so `.env` keeps LF endings on Windows,
   where `write_text` used to write CRLF. `tests/cli/behaviour/test_auth.py`'s
   ordering spy also records `Path.replace`, because `.env` now arrives by a
   rename.
-- Tests marked `restic` skip when `ETSY_LISTINGS_RESTIC_BINARY` is unset.
-  CI does not download the binary yet. The finish pass adds that step, so
-  the tests run there.
+- Tests marked `restic` skip locally when `ETSY_LISTINGS_RESTIC_BINARY` is
+  unset. Every CI python leg installs the pin through
+  `scripts/install_restic.py`, which runs the app's own installer so the
+  digests live only in `core/backup/binary.py`. It caches the download by
+  version and sets `ETSY_LISTINGS_REQUIRE_EVERY_LAYER`, so a missing binary
+  fails instead of skipping.
+- Exit code 11 is proved against real restic: a `restic key passwd` waiting
+  on stdin holds the exclusive lock while `snapshots` runs.
+- The size is about 2,450 lines, over the 1,500 aim. About 1,150 of them are
+  source and docs, and the rest are tests. The orchestrator accepted it
+  unsplit.
 
 ### PR 3 — The backup run
 
