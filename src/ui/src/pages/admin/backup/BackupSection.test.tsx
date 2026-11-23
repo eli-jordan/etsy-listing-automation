@@ -444,7 +444,7 @@ describe("Warnings on the Backup page", () => {
       screen.getByRole("heading", { name: "Backed up 2 hrs ago, not copied to iCloud Drive" }),
     ).toBeVisible();
     expect(container.querySelector(".bk-status--warn")).not.toBeNull();
-    expect(screen.getByText("Not copied")).toHaveClass("bk-pill--warn");
+    expect(screen.getByText("Folder not found")).toHaveClass("bk-pill--warn");
 
     status.mockResolvedValue(healthy());
     await userEvent.click(within(banner).getByRole("button", { name: "Try again" }));

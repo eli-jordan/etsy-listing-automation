@@ -173,9 +173,16 @@ function repositoryState(status: BackupStatus): { ok: boolean; text: string } {
 function copyState(destination: DestinationStatus): { ok: boolean; text: string } {
   const found = destination.changed.length + destination.unexpected.length;
   if (found) return { ok: false, text: `${found} file${found === 1 ? "" : "s"} to check` };
-  if (destination.problem) return { ok: false, text: "Not copied" };
+  if (destination.problem) return { ok: false, text: shortProblem(destination.problem) };
   if (destination.behind) return { ok: false, text: "Behind" };
   return { ok: true, text: "Up to date" };
+}
+
+/** "Folder not found." fits a pill as "Folder not found"; a longer reason
+ * does not, so the pill says only that the copy did not happen. */
+function shortProblem(problem: string): string {
+  const first = problem.split(/[.:]/)[0]?.trim() ?? "";
+  return first && first.length <= 24 ? first : "Not copied";
 }
 
 /**
