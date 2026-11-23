@@ -19,6 +19,8 @@ from etsy_listings.core.application.backup_run import BackupRunner
 from etsy_listings.core.backup.binary import RESTIC_BINARY_ENV_VAR, ResticBinaries
 from etsy_listings.core.workspace.workspace import Workspace
 
+from tests.support.restic import snapshot_path
+
 PASSWORD = "correct horse battery staple"
 SOURCE = Path(etsy_listings.__file__).parent
 
@@ -123,7 +125,7 @@ def test_the_backup_leaves_out_every_temporary_and_keeps_its_neighbours(
 
 
 def _snapshot_files(workspace: Workspace, binaries: ResticBinaries) -> set[str]:
-    root = "/" + workspace.root.as_posix().replace(":", "")
+    root = snapshot_path(workspace.root)
     nodes = open_repository(workspace, binaries=binaries).run("ls", "latest")
     return {
         node["path"].removeprefix(root + "/")
