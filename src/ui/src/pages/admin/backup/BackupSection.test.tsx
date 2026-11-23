@@ -662,11 +662,11 @@ describe("Restore", () => {
     const dialog = await restoreNewest();
     expect(within(dialog).getByText("25%")).toBeVisible();
     expect(within(dialog).getByText("about 10 min left")).toBeVisible();
-    expect(within(dialog).getByText("5 GB of 20.1 GB · 1,285 of 5,142 files")).toBeVisible();
+    expect(within(dialog).getByText("5 of 20.1 GB · 1,285 of 5,142 files")).toBeVisible();
 
     await userEvent.click(within(dialog).getByRole("button", { name: "Keep working" }));
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-    expect(screen.getByText(/25% · 5 GB of 20.1 GB · about 10 min left/)).toBeVisible();
+    expect(screen.getByText(/25% · 5 of 20.1 GB · about 10 min left/)).toBeVisible();
     for (const restore of screen.getAllByRole("button", { name: "Restore…" }))
       expect(restore).toBeDisabled();
     await userEvent.click(button("Show"));
