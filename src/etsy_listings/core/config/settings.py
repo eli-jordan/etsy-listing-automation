@@ -19,8 +19,15 @@ limits (ADR-0058)::
       scale: {min: 0.80, max: 1.10}
       offset: 0.10
       rotation: 15
+    backup:
+      repository: C:/Users/Admin/naturally-inked-studio-backups
+      destinations: [C:/Users/Admin/iCloudDrive/naturally-inked-studio-backups]
+      interval_hours: 12
+      retention: {keep_within_days: 7, weekly: 4, monthly: 3}
 
-Everything is optional. A missing file, section or key falls back to the
+Everything is optional. ``backup`` alone has no defaults to fall back to:
+without the block backups are off (features/workspace-backup-20261123/spec.md,
+*Configuration*). A missing file, section or key falls back to the
 spec's defaults -- :class:`~etsy_listings.core.market.models.MarketWeights` owns
 those, and its validation (no negatives, not all zero, no unknown metric) is
 the file's. Unknown keys are refused rather than ignored: a misspelt
@@ -192,6 +199,57 @@ class TemplatePositionLimits(BaseModel):
     rotation: float = Field(15, ge=0, le=30, allow_inf_nan=False)
 
 
+BACKUP_INTERVAL_HOURS = (4, 6, 12, 24, 48)
+"""The intervals the Backup page offers (workspace-backup spec, *Scheduling*).
+Enforced here so a hand edit cannot set one the page could not show."""
+
+BackupIntervalHours = Literal[4, 6, 12, 24, 48]
+
+
+class RetentionSettings(BaseModel):
+    """What ``restic forget`` keeps: every snapshot from the last
+    ``keep_within_days``, then the latest of each of the last ``weekly`` weeks
+    and ``monthly`` months (spec, *Backup run* step 5). At least one of each,
+    because zero would let a forget remove the snapshot it just made."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    keep_within_days: int = Field(7, ge=1)
+    weekly: int = Field(4, ge=1)
+    monthly: int = Field(3, ge=1)
+
+
+class BackupSettings(BaseModel):
+    """The ``backup:`` block. Paths are this machine's, and the block travels
+    with the workspace, so a path that no longer exists is not refused here:
+    the backup reports a missing repository instead (spec, *Missing
+    repository*), and the rest of the app keeps loading its settings."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    repository: Path
+    """The backup storage folder: the local restic repository."""
+    destinations: tuple[Path, ...] = ()
+    """Folders the repository is copied to one way, in order."""
+    interval_hours: BackupIntervalHours = 12
+    retention: RetentionSettings = Field(default_factory=RetentionSettings)
+    restic_binary: Path | None = None
+    """Another restic to run instead of the pinned download."""
+
+    _retention_absent = field_validator("retention", mode="before")(_absent_is_empty)
+
+    @field_validator("interval_hours", mode="wrap")
+    @classmethod
+    def offered_interval(cls, value: object, handler: Any) -> int:  # pydantic's wrap handler
+        """Pydantic's own message lists each literal quoted; this one reads
+        as the page's choices."""
+        try:
+            return int(handler(value))
+        except ValidationError:
+            choices = ", ".join(str(hours) for hours in BACKUP_INTERVAL_HOURS[:-1])
+            raise ValueError(f"must be {choices} or {BACKUP_INTERVAL_HOURS[-1]}") from None
+
+
 @dataclass(frozen=True)
 class SettingsProblem:
     """Why ``settings.yaml`` will not load, for a read that reports it rather
@@ -207,6 +265,10 @@ class Settings(BaseModel):
     batch_ai: BatchAiSettings = Field(default_factory=BatchAiSettings)
     ai: AiSettings = Field(default_factory=AiSettings)
     template_positions: TemplatePositionLimits = Field(default_factory=TemplatePositionLimits)
+    backup: BackupSettings | None = None
+    """Off when absent, and also when written empty (``backup:``): unlike the
+    sections above it gets no ``_absent_is_empty``, because there is no
+    default repository to turn an empty block into (plan, P5)."""
 
     _market_seo_absent = field_validator("market_seo", mode="before")(_absent_is_empty)
     _batch_ai_absent = field_validator("batch_ai", mode="before")(_absent_is_empty)
