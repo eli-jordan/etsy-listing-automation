@@ -295,6 +295,9 @@ Deviations recorded during implementation:
   spec's wording, not against restic's flags.
 - `backup run` and `backup check` take no `--json`. PR 5's API reads the
   history file directly.
+- Handed to PR 7: the weekly prune fails the run when another restic holds
+  the repository lock, as a restore does. PR 7 must make the prune wait for
+  a running restore (spec, *Restore*).
 
 ### PR 4 — Copying to destinations
 
