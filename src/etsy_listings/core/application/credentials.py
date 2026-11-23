@@ -42,6 +42,7 @@ from etsy_listings.core.clients.printify.models import Shop
 from etsy_listings.core.clients.printify.protocol import PrintifyClient
 from etsy_listings.core.config.secrets import (
     ANTHROPIC_KEY_VAR,
+    BACKUP_PASSWORD_VAR,
     ETSY_KEYSTRING_VAR,
     ETSY_SHARED_SECRET_VAR,
     PRINTIFY_TOKEN_VAR,
@@ -70,6 +71,7 @@ class Credential:
 PRINTIFY = Credential((PRINTIFY_TOKEN_VAR,))
 ETSY_APP_KEY = Credential((ETSY_KEYSTRING_VAR, ETSY_SHARED_SECRET_VAR))
 ANTHROPIC = Credential((ANTHROPIC_KEY_VAR,), optional=True)
+BACKUP_PASSWORD = Credential((BACKUP_PASSWORD_VAR,))
 
 
 def stored(root: Path, variable: str) -> str | None:
@@ -89,6 +91,7 @@ def stored(root: Path, variable: str) -> str | None:
         ETSY_KEYSTRING_VAR: secrets.etsy_keystring,
         ETSY_SHARED_SECRET_VAR: secrets.etsy_shared_secret,
         ANTHROPIC_KEY_VAR: secrets.anthropic_api_key,
+        BACKUP_PASSWORD_VAR: secrets.backup_password,
     }[variable]
 
 

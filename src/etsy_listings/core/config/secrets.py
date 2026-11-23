@@ -11,7 +11,7 @@ which tells the user nothing about what to do next.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -26,6 +26,11 @@ ETSY_SHARED_SECRET_VAR = "ETSY_SHARED_SECRET"
 request -- `x-api-key: <keystring>:<shared_secret>`. Two variables rather than
 one pre-joined string, because they are two values on two lines of Etsy's app
 page and a user pasting them should not have to assemble anything."""
+BACKUP_PASSWORD_VAR = "ETSY_LISTINGS_BACKUP_PASSWORD"
+"""The restic repository's password (workspace-backup spec, *Configuration*).
+The workspace ``.env`` holds the only copy on this machine; the seller keeps
+another in a password manager, because the ``.env`` inside a backup is
+encrypted with it."""
 
 
 class MissingCredentialError(UserFacingError, RuntimeError):
@@ -58,6 +63,7 @@ class _EnvValues(BaseSettings):
     anthropic_api_key: str | None = None
     etsy_keystring: str | None = None
     etsy_shared_secret: str | None = None
+    etsy_listings_backup_password: str | None = None
 
 
 @dataclass(frozen=True)
@@ -83,6 +89,8 @@ class Secrets:
     anthropic_api_key: str | None = None
     etsy_keystring: str | None = None
     etsy_shared_secret: str | None = None
+    backup_password: str | None = field(default=None, repr=False)
+    """Kept out of ``repr`` so a logged or traced ``Secrets`` never shows it."""
 
     @classmethod
     def load(cls, env_file: Path) -> Secrets:
@@ -93,6 +101,7 @@ class Secrets:
             anthropic_api_key=values.anthropic_api_key or None,
             etsy_keystring=values.etsy_keystring or None,
             etsy_shared_secret=values.etsy_shared_secret or None,
+            backup_password=values.etsy_listings_backup_password or None,
         )
 
     def require_printify_api_token(self) -> str:
@@ -141,3 +150,14 @@ class Secrets:
                 "Create a key at console.anthropic.com -- see docs/guides/setup.md.",
             )
         return self.anthropic_api_key
+
+    def require_backup_password(self) -> str:
+        if not self.backup_password:
+            raise MissingCredentialError(
+                BACKUP_PASSWORD_VAR,
+                self.env_file,
+                "open the backup repository",
+                "`etsy-listings backup init` asks for one and stores it; keep a copy in "
+                "a password manager.",
+            )
+        return self.backup_password
