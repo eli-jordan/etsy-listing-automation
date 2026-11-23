@@ -94,11 +94,14 @@ def test_files_the_local_repository_dropped_are_deleted_after_copying_newest_fir
     local.remove(old_snapshot)
     new_pack, new_index = _prune(local, old_index, old_pack)
     steps: list[CopyStep] = []
+    before = identities(destination)
 
     result = copy_repository(local.root, destination, hooks=CopyHooks(observe=steps.append))
 
     assert result.outcome == "copied"
     assert files(destination) == files(local.root)
+    kept = {name: file for name, file in before.items() if name not in result.deleted}
+    assert {name: identities(destination)[name] for name in kept} == kept
     assert steps == [
         CopyStep("copied", new_pack),
         CopyStep("copied", new_index),
@@ -300,6 +303,7 @@ def test_the_sample_check_finds_a_change_that_kept_the_size(
 
     assert check.outcome == "changed"
     assert check.changed == (ChangedFile(pack, len(original), len(original)),)
+    assert pack in (check.message or "")
     assert identities(destination) == before
 
 

@@ -92,21 +92,26 @@ _STEP_LINES = {
     "forgetting": "Applying the retention...",
     "pruning": "Pruning unused data (weekly)...",
     "checking": "Checking the repository (weekly)...",
+    "copying": "Copying to {destination}...",
+    "checking_copy": "Checking the copy in {destination} (monthly)...",
 }
 PROGRESS_EVERY_SECONDS = 5.0
 
 
 class _ProgressLines:
-    """Each step once, and the files read at most every few seconds."""
+    """Each step once per destination, and the files read at most every few
+    seconds."""
 
     def __init__(self) -> None:
-        self._step: str | None = None
+        self._step: tuple[str, str | None] | None = None
         self._printed = 0.0
 
     def __call__(self, progress: BackupProgress) -> None:
-        if progress.step != self._step and progress.step in _STEP_LINES:
-            self._step = progress.step
-            typer.echo(_STEP_LINES[progress.step], err=True)
+        step = (progress.step, progress.destination)
+        if step != self._step and progress.step in _STEP_LINES:
+            self._step = step
+            line = _STEP_LINES[progress.step].format(destination=progress.destination)
+            typer.echo(line, err=True)
         elif progress.files_total and time.monotonic() - self._printed >= PROGRESS_EVERY_SECONDS:
             self._printed = time.monotonic()
             typer.echo(f"  {progress.files_done:,} of {progress.files_total:,} files", err=True)
@@ -124,6 +129,11 @@ def run(root: str | None = root_option()) -> None:
         typer.echo(f"Not backed up: {warning}", err=True)
     if record.snapshot_id is not None:
         typer.echo(f"Backed up {workspace.root} as snapshot {record.snapshot_id[:8]}.")
+    for copy in record.copies:
+        if copy.outcome == "copied":
+            typer.echo(f"Copied to {copy.destination}.")
+        else:
+            typer.echo(f"Not copied to {copy.destination}: {copy.message}", err=True)
     if record.outcome != "succeeded":
         typer.echo(f"Backup {record.outcome}: {record.message}", err=True)
         raise typer.Exit(1)

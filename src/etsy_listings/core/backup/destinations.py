@@ -392,9 +392,11 @@ def check_destination(
     config = destination / CONFIG
     if config.is_file() and config.read_bytes() != (repository / CONFIG).read_bytes():
         changed.insert(0, ChangedFile(CONFIG, local[CONFIG], config.stat().st_size))
-    return DestinationCheck(
-        destination, "changed" if changed else "ok", tuple(sample), tuple(changed)
-    )
+    if not changed:
+        return DestinationCheck(destination, "ok", tuple(sample))
+    listed = ", ".join(file.name for file in changed)
+    message = f"Files in this copy no longer match the backup storage folder: {listed}."
+    return DestinationCheck(destination, "changed", tuple(sample), tuple(changed), message)
 
 
 def _sha256(path: Path) -> str:

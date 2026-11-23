@@ -222,13 +222,18 @@ def test_status_json_reports_the_configuration(workspace_root: Path, repository:
 
 @pytest.mark.restic
 @pytest.mark.usefixtures("with_restic")
-def test_run_backs_up_then_check_finds_no_errors(workspace_root: Path, repository: Path) -> None:
+def test_run_backs_up_copies_then_check_finds_no_errors(
+    workspace_root: Path, repository: Path
+) -> None:
     (workspace_root / layout.ENV_FILE).write_text(f"{BACKUP_PASSWORD_VAR}={PASSWORD}\n")
     assert _run(workspace_root, "init")[0] == 0
 
     code, output = _run(workspace_root, "run")
     assert code == 0, output
     assert "Pruning" in output
+    cloud = repository.with_name("cloud")
+    assert f"Copied to {cloud}." in output
+    assert (cloud / "config").read_bytes() == (repository / "config").read_bytes()
     snapshot = json.loads(_run(workspace_root, "snapshots", "--json")[1])
     assert len(snapshot) == 1
     assert f"snapshot {snapshot[0]['short_id']}" in output

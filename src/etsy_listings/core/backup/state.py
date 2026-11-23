@@ -2,7 +2,8 @@
 spec, *Status and warnings*).
 
 - ``backup-state.json``: the last prune and the last check of the local
-  repository. PR 4 adds each destination's copy and check here.
+  repository, and each destination's last copy, last check, and the changed
+  and unexpected files found there.
 - ``backup-history.jsonl``: one JSON object per line, one line per run,
   oldest first, appended when a run ends, failed runs included. JSON lines
   because a run only ever adds an entry: an append needs no rewrite of the
@@ -25,6 +26,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, ValidationError
 
+from etsy_listings.core.backup.destinations import ChangedFile, CopyOutcome
 from etsy_listings.core.user_directory import user_directory
 from etsy_listings.core.workspace.atomic import write_json_atomic
 
@@ -45,10 +47,35 @@ class CheckResult(_Record):
     """restic's message when the check failed."""
 
 
+class DestinationState(_Record):
+    last_copy: datetime | None = None
+    """The last copy that finished."""
+    problem: str | None = None
+    """Why the latest copy did not finish; None once one does."""
+    last_check: CheckResult | None = None
+    changed: tuple[ChangedFile, ...] = ()
+    """Found by the latest copy or check; kept until a repair."""
+    unexpected: tuple[str, ...] = ()
+
+
 class BackupState(_Record):
     repository: str
     last_prune: datetime | None = None
     last_check: CheckResult | None = None
+    destinations: dict[str, DestinationState] = {}
+    """Keyed by the destination's path as ``settings.yaml`` gives it."""
+
+    def destination(self, path: Path) -> DestinationState:
+        return self.destinations.get(str(path), DestinationState())
+
+    def with_destination(self, path: Path, state: DestinationState) -> BackupState:
+        return self.model_copy(update={"destinations": {**self.destinations, str(path): state}})
+
+
+class CopyRecord(_Record):
+    destination: str
+    outcome: CopyOutcome
+    message: str | None = None
 
 
 class RunRecord(_Record):
@@ -64,6 +91,8 @@ class RunRecord(_Record):
     message: str | None = None
     warnings: tuple[str, ...] = ()
     """Files restic could not read; the snapshot was made without them."""
+    copies: tuple[CopyRecord, ...] = ()
+    """Each destination's copy, in the configured order."""
 
 
 class BackupStateStore:

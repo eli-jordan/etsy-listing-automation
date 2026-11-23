@@ -19,11 +19,19 @@ from etsy_listings.core.application.backup_run import BackupProgress, BackupRunn
 from etsy_listings.core.application.job_gate import JobGate
 from etsy_listings.core.backup.binary import RESTIC_BINARY_ENV_VAR, ResticBinaries
 from etsy_listings.core.backup.restic import ResticProcess
-from etsy_listings.core.backup.state import BackupState, BackupStateStore, CheckResult, RunRecord
+from etsy_listings.core.backup.state import (
+    BackupState,
+    BackupStateStore,
+    CheckResult,
+    CopyRecord,
+    DestinationState,
+    RunRecord,
+)
 from etsy_listings.core.config.secrets import BACKUP_PASSWORD_VAR
 from etsy_listings.core.workspace import layout
 from etsy_listings.core.workspace.workspace import Workspace
 
+from tests.support.repository_files import FakeRepository, files
 from tests.support.restic import Reply, ScriptedRestic, exit_error
 
 PASSWORD = "correct horse battery staple"
@@ -90,7 +98,12 @@ def _run(
     now: datetime = NOW,
 ) -> RunRecord:
     runner = BackupRunner(
-        workspace, ResticBinaries(home=home), home=home, launch=launcher, now=lambda: now
+        workspace,
+        ResticBinaries(home=home),
+        home=home,
+        launch=launcher,
+        now=lambda: now,
+        sample=1.0,  # every file, so a check always finds a change
     )
     return runner.run(gate=gate)
 
@@ -250,3 +263,153 @@ def test_a_failed_check_fails_the_run_and_is_recorded(workspace: Workspace, home
     assert check is not None
     assert not check.ok
     assert "not referenced" in (check.message or "")
+
+
+def _with_destinations(workspace: Workspace, *destinations: Path) -> Workspace:
+    settings = workspace.root / "settings.yaml"
+    listed = "".join(f"    - {path.as_posix()}\n" for path in destinations)
+    settings.write_text(
+        settings.read_text(encoding="utf-8") + f"  destinations:\n{listed}", encoding="utf-8"
+    )
+    return Workspace.discover(root_override=workspace.root)
+
+
+@pytest.fixture
+def repository(tmp_path: Path) -> FakeRepository:
+    """The backup storage folder's files; restic itself is scripted."""
+    local = FakeRepository(tmp_path / "backups")
+    local.backup("first")
+    return local
+
+
+def _destination_state(workspace: Workspace, home: Path, destination: Path) -> DestinationState:
+    return _state(workspace, home).destinations[str(destination)]
+
+
+def test_each_destination_is_copied_after_jobs_resume(
+    workspace: Workspace, home: Path, repository: FakeRepository, tmp_path: Path
+) -> None:
+    icloud, nas = tmp_path / "icloud" / "backups", tmp_path / "nas" / "backups"
+    icloud.parent.mkdir()
+    nas.parent.mkdir()
+    workspace = _with_destinations(workspace, icloud, nas)
+    gate = JobGate()
+    heard: list[BackupProgress] = []
+    runner = BackupRunner(
+        workspace,
+        ResticBinaries(home=home),
+        home=home,
+        launch=ScriptedRestic(BACKED_UP, FORGOT, PRUNED, CHECKED),
+        now=lambda: NOW,
+    )
+
+    record = runner.run(gate=gate, progress=heard.append)
+
+    assert record.outcome == "succeeded"
+    assert record.copies == (
+        CopyRecord(destination=str(icloud), outcome="copied"),
+        CopyRecord(destination=str(nas), outcome="copied"),
+    )
+    assert files(icloud) == files(nas) == files(repository.root)
+    steps = [p.step for p in heard if p.files_done is None]
+    assert steps[-4:] == ["copying", "checking_copy", "copying", "checking_copy"]
+    assert [p.destination for p in heard[-4:]] == [str(icloud)] * 2 + [str(nas)] * 2
+    assert _destination_state(workspace, home, icloud).last_copy == NOW
+
+
+def test_an_unreachable_destination_is_skipped_and_the_backup_still_succeeds(
+    workspace: Workspace, home: Path, repository: FakeRepository, tmp_path: Path
+) -> None:
+    offline, icloud = tmp_path / "nas" / "backups", tmp_path / "icloud"
+    icloud.mkdir()
+    workspace = _with_destinations(workspace, offline, icloud)
+
+    record = _run(workspace, home, ScriptedRestic(BACKED_UP, FORGOT, PRUNED, CHECKED))
+
+    assert record.outcome == "succeeded"
+    assert [copy.outcome for copy in record.copies] == ["unreachable", "copied"]
+    assert files(icloud) == files(repository.root)
+    unreachable = _destination_state(workspace, home, offline)
+    assert unreachable.last_copy is None
+    assert str(offline) in (unreachable.problem or "")
+
+
+def test_each_destination_is_checked_once_30_days_have_passed(
+    workspace: Workspace, home: Path, repository: FakeRepository, tmp_path: Path
+) -> None:
+    icloud = tmp_path / "icloud"
+    workspace = _with_destinations(workspace, icloud)
+    weekly = (BACKED_UP, FORGOT, PRUNED, CHECKED)
+
+    _run(workspace, home, ScriptedRestic(*weekly), now=NOW)
+    _run(workspace, home, ScriptedRestic(*weekly), now=NOW + timedelta(days=29, hours=23))
+    first = _destination_state(workspace, home, icloud).last_check
+    _run(workspace, home, ScriptedRestic(*weekly), now=NOW + timedelta(days=30))
+    second = _destination_state(workspace, home, icloud).last_check
+
+    assert first == CheckResult(at=NOW, ok=True)
+    assert second == CheckResult(at=NOW + timedelta(days=30), ok=True)
+
+
+def test_a_change_the_check_found_stops_copying_until_the_destination_is_repaired(
+    workspace: Workspace, home: Path, repository: FakeRepository, tmp_path: Path
+) -> None:
+    icloud = tmp_path / "icloud"
+    workspace = _with_destinations(workspace, icloud)
+    [pack] = [name for name in files(repository.root) if name.startswith("data/")]
+    weekly = (BACKED_UP, FORGOT, PRUNED, CHECKED)
+    _run(workspace, home, ScriptedRestic(*weekly), now=NOW)
+    (icloud / pack).write_bytes((icloud / pack).read_bytes().upper())
+    later = NOW + timedelta(days=30)
+
+    found = _run(workspace, home, ScriptedRestic(*weekly), now=later)
+    stopped = _run(workspace, home, ScriptedRestic(BACKED_UP, FORGOT), now=later)
+    state = _destination_state(workspace, home, icloud)
+    runner = BackupRunner(workspace, ResticBinaries(home=home), home=home, now=lambda: later)
+    repair = runner.repair(icloud)
+
+    assert found.copies[0].outcome == "copied"
+    assert stopped.copies[0].outcome == "changed"
+    assert [file.name for file in state.changed] == [pack]
+    assert repair.moved == (pack,)
+    repaired = _destination_state(workspace, home, icloud)
+    assert (repaired.changed, repaired.unexpected, repaired.last_copy) == ((), (), later)
+    assert files(icloud) == files(repository.root)
+
+
+def test_a_damaged_local_file_fails_the_run_as_a_failed_check(
+    workspace: Workspace, home: Path, repository: FakeRepository, tmp_path: Path
+) -> None:
+    icloud = tmp_path / "icloud"
+    workspace = _with_destinations(workspace, icloud)
+    pack, _, _ = repository.backup("second")
+    (repository.root / pack).write_bytes(b"pack:bit rot")
+
+    record = _run(workspace, home, ScriptedRestic(BACKED_UP, FORGOT, PRUNED, CHECKED))
+
+    assert (record.outcome, record.failed_step) == ("failed", "copying")
+    assert pack in (record.message or "")
+    check = _state(workspace, home).last_check
+    assert check is not None
+    assert not check.ok
+    assert pack in (check.message or "")
+
+
+def test_stopping_while_copying_records_the_run_as_stopped(
+    workspace: Workspace, home: Path, repository: FakeRepository, tmp_path: Path
+) -> None:
+    icloud, nas = tmp_path / "icloud", tmp_path / "nas"
+    workspace = _with_destinations(workspace, icloud, nas)
+    cancel = threading.Event()
+    launcher = ScriptedRestic(BACKED_UP, FORGOT, PRUNED, CHECKED)
+    runner = BackupRunner(workspace, ResticBinaries(home=home), home=home, launch=launcher)
+
+    def stop_when_copying(progress: BackupProgress) -> None:
+        if progress.step == "copying":
+            cancel.set()
+
+    record = runner.run(progress=stop_when_copying, cancel=cancel)
+
+    assert (record.outcome, record.failed_step) == ("stopped", "copying")
+    assert [copy.outcome for copy in record.copies] == ["stopped"]
+    assert not (nas / "config").exists()
