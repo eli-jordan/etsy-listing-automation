@@ -489,6 +489,42 @@ Exit when:
   the PR;
 - shared gates pass.
 
+Deviations recorded during implementation:
+
+- The address is `/admin?section=<s>` with `s` one of `defaults`, `ai`,
+  `rendering` and `backup`; Connected shops is bare `/admin`. Setup adds
+  `&page=setup`. Before set-up the Backup item itself is current.
+- `BackupStatusProvider` in the shell is the one poll: every 30 s, every
+  2 s while `running` is set, none while the tab is hidden, and a read on
+  showing it again. Relative times count from when the status was read.
+- Set-up runs after the settings save queue drains, naming its revision,
+  then reloads `settings.yaml`. Setup saves only the changed `backup_*`
+  keys through the same queue; a conflict uses the existing reload banner.
+- Restore… is left out of the status panel and the history (PR 7), so the
+  history has no actions column.
+- No Choose… button or "Empty folder · N GB free" hint: the API has no
+  folder picker or folder inspection. The hint says the folder must be
+  empty or new, and set-up's refusal shows under the form.
+- The diagram's workspace box shows no folder name or size, and the storage
+  box counts backups rather than bytes: the status carries neither.
+- Destinations are named from their path: "iCloud Drive" for a path with
+  iCloud in it, else the folder's name.
+- Relative times use the editor's `timeAgo` ("2 hrs ago").
+- The retryable warnings (`stale`, `failed`, `behind`) share one banner with
+  one Try again, disabled while a run is in progress. A missing repository
+  shows its message with no action (PR 8). Each destination with changed
+  files has its own banner.
+- The repair dialog's "Set aside in" is worked out in the browser as
+  `<folder>-set-aside-<today>`; the note after it names the folder the
+  server used.
+- The brief highlight goes to the newest run that finished after the page
+  opened. A forgotten snapshot's row reads "No longer kept".
+- The mockup stylesheet moved to `src/ui/src/pages/admin/backup/backup.css`
+  and the live scene imports it from there (design promotion rule).
+- Size: about 2,500 changed lines, 780 of them tests, over the 1,500
+  target. The repair dialog and the set-up form are the seams if it must
+  split.
+
 ### PR 7 — Restore
 
 Spec: *Restore*, *CLI* (`restore`). Interactions: *Restore*. Frames 05, 06,
