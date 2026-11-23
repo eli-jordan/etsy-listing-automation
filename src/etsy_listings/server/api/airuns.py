@@ -88,6 +88,7 @@ def _summary(run: AiRun) -> AiRunSummary:
         phase=run.phase,
         steps=run.steps,
         created_at=run.created_at,
+        started_at=run.started_at,
         finished_at=run.finished_at,
         # Plan decision P4: only a backup's pause holds a run queued.
         waiting_for_backup=run.phase == "queued",

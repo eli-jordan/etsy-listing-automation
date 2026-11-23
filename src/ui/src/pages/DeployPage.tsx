@@ -459,6 +459,7 @@ export function DeployPage() {
 
         <ApplyFooter
           controlPhase={phase}
+          waitingForBackup={heldForBackup}
           previewsTotal={previewsTotal}
           previewsDone={previewsDone}
           onApply={beginApply}
