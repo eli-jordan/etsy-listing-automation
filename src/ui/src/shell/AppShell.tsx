@@ -1,8 +1,11 @@
 import { GearIcon } from "@phosphor-icons/react/dist/csr/Gear";
 import { StackIcon } from "@phosphor-icons/react/dist/csr/Stack";
+import { WarningIcon } from "@phosphor-icons/react/dist/csr/Warning";
 import { useEffect, useState } from "react";
-import { NavLink, Outlet, useLocation } from "react-router-dom";
+import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
 import { getWorkspace } from "../api/listings";
+import "../pages/admin/backup/backup.css";
+import { BackupStatusProvider, bannerWarnings, useBackupStatus } from "./backupStatus";
 import { ShellSidebar } from "./ShellSidebar";
 
 /**
@@ -18,12 +21,24 @@ function navClass({ isActive }: { isActive: boolean }): string {
 }
 
 export function AppShell() {
+  return (
+    <BackupStatusProvider>
+      <Shell />
+    </BackupStatusProvider>
+  );
+}
+
+function Shell() {
   // One workspace is one shop, and the sidebar is where that is said. A
   // failure is silence, not an error banner: the shop's name is orientation,
   // and no page here stops working without it.
   const [shopName, setShopName] = useState<string | null>(null);
   // A batch is made from a listing template, and its pages sit under it.
-  const inBatches = useLocation().pathname.startsWith("/batches/");
+  const { pathname } = useLocation();
+  const inBatches = pathname.startsWith("/batches/");
+  // A backup warning shows on every page but Admin, which has its own
+  // (workspace-backup interactions, *Warnings*); it cannot be dismissed.
+  const warning = bannerWarnings(useBackupStatus().status)[0];
 
   useEffect(() => {
     getWorkspace()
@@ -39,6 +54,9 @@ export function AppShell() {
           <NavLink to="/admin" className={navClass}>
             <GearIcon size={18} />
             Admin
+            {warning && (
+              <span className="bk-nav-dot" role="img" aria-label="Backups need attention" />
+            )}
           </NavLink>
         }
       >
@@ -105,6 +123,17 @@ export function AppShell() {
       </ShellSidebar>
 
       <main className="shell__main">
+        {warning && !pathname.startsWith("/admin") && (
+          <div className="adm-warn bk-global" role="alert">
+            <WarningIcon size={18} weight="fill" />
+            <span>
+              <strong>Backups need attention.</strong> {warning.message}
+            </span>
+            <Link to="/admin?section=backup" className="btn btn-secondary bk-banner__btn">
+              Open Backup
+            </Link>
+          </div>
+        )}
         <Outlet />
       </main>
     </div>
