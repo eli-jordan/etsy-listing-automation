@@ -927,6 +927,9 @@ class AiRunSummary(BaseModel):
     phase: AiRunPhase
     steps: list[WorkflowStep]
     created_at: datetime
+    started_at: datetime | None
+    """When the run began working: ``created_at``, or later when a backup's
+    pause held it; ``None`` while it is held."""
     finished_at: datetime | None
     waiting_for_backup: bool = False
     """Held by a backup's pause (workspace-backup plan, decision P4): accepted

@@ -250,6 +250,26 @@ describe("Backups off and Set up", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("holds files");
     expect(screen.getByLabelText("Backup storage folder")).toHaveValue(REPO);
   });
+  it.each([
+    [
+      { kind: "stale", message: "Something else wrote settings.yaml." },
+      "settings.yaml changed on disk. Nothing was overwritten. Reload, then try again.",
+    ],
+    [
+      {
+        kind: "conflict",
+        message: "Backups are set up; edit the revision in Setup.",
+        fieldErrors: {},
+      },
+      "Backups are set up; edit the revision in Setup.",
+    ],
+  ] as const)("words a %o set-up refusal by its kind, not its text", async (outcome, shown) => {
+    vi.spyOn(backupApi, "setUpBackup").mockResolvedValue(outcome);
+    await openSetUp();
+    await fillSetUp();
+    await userEvent.click(button("Create and back up now"));
+    expect(await screen.findByRole("alert")).toHaveTextContent(shown);
+  });
 });
 
 describe("Setup", () => {
@@ -424,7 +444,7 @@ describe("Warnings on the Backup page", () => {
       screen.getByRole("heading", { name: "Backed up 2 hrs ago, not copied to iCloud Drive" }),
     ).toBeVisible();
     expect(container.querySelector(".bk-status--warn")).not.toBeNull();
-    expect(screen.getByText("Not copied")).toHaveClass("bk-pill--warn");
+    expect(screen.getByText("Folder not found")).toHaveClass("bk-pill--warn");
 
     status.mockResolvedValue(healthy());
     await userEvent.click(within(banner).getByRole("button", { name: "Try again" }));

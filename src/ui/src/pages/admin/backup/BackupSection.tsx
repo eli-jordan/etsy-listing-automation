@@ -51,10 +51,17 @@ export type SaveAnswer =
 
 const RELOAD = "settings.yaml changed on disk. Nothing was overwritten. Reload, then try again.";
 
-function refusal(outcome: Exclude<SaveAnswer | SetUpOutcome, null>): string | null {
-  if (outcome.kind === "saved" || outcome.kind === "started") return null;
-  if (outcome.kind === "conflict" && /revision|changed on disk/i.test(outcome.message))
-    return RELOAD;
+/** A settings save's `conflict` is always its 412 (`saveSettings`), and
+ * set-up reports its 412 as `stale`: both mean reload. Set-up's other
+ * conflicts (409) say what is wrong themselves. */
+function refusal(outcome: Exclude<SetUpOutcome, { kind: "started" }>): string;
+function refusal(outcome: Exclude<SaveAnswer, null>, settingsSave: true): string | null;
+function refusal(
+  outcome: Exclude<SaveAnswer | SetUpOutcome, null | { kind: "started" }>,
+  settingsSave = false,
+): string | null {
+  if (outcome.kind === "saved") return null;
+  if (outcome.kind === "stale" || (settingsSave && outcome.kind === "conflict")) return RELOAD;
   const fields = Object.values(outcome.kind === "invalid" ? outcome.fieldErrors : {});
   return [outcome.message, ...fields].filter(Boolean).join(" ");
 }
@@ -95,8 +102,7 @@ export function BackupSection({
     const create = async (answers: BackupAnswers, password: string): Answer => {
       try {
         const outcome = await setUp({ ...answers, password });
-        const refused = refusal(outcome);
-        if (refused) return refused;
+        if (outcome.kind !== "started") return refusal(outcome);
         await refresh();
         setCreating(false);
         onPage("status");
@@ -121,7 +127,7 @@ export function BackupSection({
       try {
         const refused = await save(changes(answers, base));
         if (refused === null) return RELOAD;
-        const message = refusal(refused);
+        const message = refusal(refused, true);
         if (!message) void refresh();
         return message;
       } catch (e) {

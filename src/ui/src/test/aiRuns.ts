@@ -44,6 +44,7 @@ export function aiRunSummary(over: Partial<AiRunSummary> = {}): AiRunSummary {
       { id: "seo", state: "pending", detail: null },
     ],
     created_at: AI_RUN_CREATED_AT,
+    started_at: AI_RUN_CREATED_AT,
     finished_at: null,
     waiting_for_backup: false,
     ...over,

@@ -53,8 +53,9 @@ def test_a_backup_restores_byte_for_byte(workspace: Workspace, tmp_path: Path) -
 
     record = BackupRunner(workspace, binaries, home=home).run()
     target = tmp_path / "restored"
+    snapshot_root = snapshot_path(workspace.root)
     open_repository(workspace, binaries=binaries).run(
-        "restore", f"latest:{snapshot_path(workspace.root)}", "--target", str(target)
+        "restore", f"latest:{snapshot_root}", "--target", str(target)
     )
 
     assert record.outcome == "succeeded", record.message

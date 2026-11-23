@@ -44,6 +44,7 @@ def test_a_copy_interrupted_at_any_file_still_opens_in_restic(
     (source / "shop.yaml").write_bytes(b"shop: naturally inked\n")
     local.run("backup", str(source), "--host", "test")
     first = tmp_path / "first-copy"
+    first.mkdir()
     assert copy_repository(local.repository, first).outcome == "copied"
     # A week later: a new design, the oldest snapshot forgotten and pruned,
     # so the next copy both adds files and deletes expired ones.

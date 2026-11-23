@@ -15,7 +15,7 @@ import time
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
-from pathlib import Path
+from pathlib import Path, PurePath
 from typing import Any
 
 from etsy_listings.core.backup.restic import ResticProcess
@@ -132,14 +132,6 @@ RESTORE_SUMMARY = {
 }
 
 
-def snapshot_path(folder: Path) -> str:
-    """Where restic keeps a backed-up ``folder`` inside a snapshot: as is on
-    POSIX, and ``/C/Users/...`` for ``C:/Users/...`` on Windows."""
-    if folder.drive:
-        return "/" + folder.drive.rstrip(":") + folder.as_posix()[len(folder.drive) :]
-    return folder.as_posix()
-
-
 class RepositoryRestic:
     """A launcher that answers by subcommand and keeps snapshots as a
     repository would, for callers whose commands interleave, such as a
@@ -217,3 +209,10 @@ class RepositoryRestic:
                 after=[RESTORE_SUMMARY],
             )
         return Reply(stdout=[RESTORE_STATUS, RESTORE_SUMMARY])
+
+
+def snapshot_path(path: PurePath) -> str:
+    """How restic names a local folder inside a snapshot: a Windows drive
+    becomes a top folder (``/C/Users/...``); a POSIX path is itself."""
+    posix = path.as_posix()
+    return posix if not path.drive else "/" + posix.replace(":", "", 1)
