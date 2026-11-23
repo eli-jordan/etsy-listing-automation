@@ -13,6 +13,7 @@ stopped so that nothing new starts while active runs are cancelled
 from __future__ import annotations
 
 import threading
+import time
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -21,6 +22,7 @@ import pytest
 from etsy_listings.core.ai.proposals import ProposalStore
 from etsy_listings.core.application.ai.coordinator import AiCoordinator
 from etsy_listings.core.application.ai.registry import AiRun, Conflict
+from etsy_listings.core.application.job_gate import JobGate
 from etsy_listings.core.application.refusals import (
     AiNotReadyError,
     ListingDeployingError,
@@ -39,7 +41,7 @@ from tests.support.ai_runs import (
 )
 from tests.support.batches import LISTING_TEMPLATE, a_listing_template, png, uploads
 from tests.support.builders import FIXTURE_LISTING as LISTING
-from tests.support.builders import edit_listing
+from tests.support.builders import copy_listing, edit_listing
 
 
 @pytest.fixture
@@ -61,8 +63,14 @@ def batches(workspace: Workspace) -> BatchStore:
 
 
 @pytest.fixture
+def gate() -> JobGate:
+    """The backup's pause, never paused unless a test pauses it."""
+    return JobGate()
+
+
+@pytest.fixture
 def ai(
-    workspace: Workspace, provider: ChainProvider, batches: BatchStore
+    workspace: Workspace, provider: ChainProvider, batches: BatchStore, gate: JobGate
 ) -> Iterator[AiCoordinator]:
     market = seeded_market()
     coordinator = AiCoordinator(
@@ -71,6 +79,7 @@ def ai(
         batches=batches,
         providers=lambda _workspace, _ai: [provider],
         market_client=lambda _workspace: market,
+        gate=gate,
     )
     yield coordinator
     coordinator.stop()
@@ -250,3 +259,80 @@ def test_a_deploy_cancels_the_listing_s_queued_rows_for_good(
     ai.queue.resume(batch.id)
 
     assert _states(batches, batch) == ["cancelled_by_deploy"]
+
+
+# -------------------------------------------------------- pausing for a backup
+
+
+def test_while_paused_a_manual_run_is_accepted_queued_and_starts_on_resume(
+    ai: AiCoordinator, gate: JobGate, provider: ChainProvider, workspace_root: Path
+) -> None:
+    """Plan decision P4: a manual run never queued before, so a pause holds
+    it in a ``queued`` phase; resume starts every held run."""
+    copy_listing(workspace_root, "second")
+    gate.pause()
+
+    first = _started(ai.start_run(LISTING, draft_brief=False))
+    second = _started(ai.start_run("second", draft_brief=False))
+    time.sleep(0.2)
+
+    assert (first.phase, second.phase) == ("queued", "queued")
+    assert provider.calls == [], "a provider was called while the gate was paused"
+    assert ai.start_run(LISTING, draft_brief=False) == Conflict(active_run=first.id)
+
+    gate.resume()
+
+    assert wait_until_finished(first).phase == "done", first.events
+    assert wait_until_finished(second).phase == "done", second.events
+
+
+def test_a_held_run_cancelled_ends_without_starting(
+    ai: AiCoordinator, gate: JobGate, provider: ChainProvider
+) -> None:
+    gate.pause()
+    run = _started(ai.start_run(LISTING, draft_brief=False))
+
+    assert run.request_stop("cancelled")
+    assert run.phase == "cancelled"
+    gate.resume()
+    time.sleep(0.2)
+
+    assert provider.calls == []
+    assert run.phase == "cancelled"
+
+
+def test_a_backup_waits_for_the_manual_run_in_flight_and_names_it(
+    ai: AiCoordinator, gate: JobGate, provider: ChainProvider
+) -> None:
+    release = provider.gate("queries")
+    run = _started(ai.start_run(LISTING, draft_brief=False))
+    wait_for(provider.started["queries"].is_set)
+    gate.pause()
+    named: list[str] = []
+    result: list[bool] = []
+    waiter = threading.Thread(
+        target=lambda: result.append(gate.wait_idle(waiting=named.append)), daemon=True
+    )
+
+    waiter.start()
+    waiter.join(0.2)
+    assert waiter.is_alive(), "the backup did not wait for the AI run in flight"
+    release.set()
+    waiter.join(15)
+
+    assert result == [True]
+    assert named == [f"AI run for {LISTING}"]
+    assert run.finished
+
+
+def test_shutdown_during_a_pause_drops_the_held_run(
+    ai: AiCoordinator, gate: JobGate, provider: ChainProvider
+) -> None:
+    gate.pause()
+    run = _started(ai.start_run(LISTING, draft_brief=False))
+
+    gate.stop()
+    ai.stop()
+
+    assert run.phase == "cancelled"
+    assert provider.calls == []

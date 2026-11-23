@@ -13,6 +13,7 @@ dispatcher is waited for with :meth:`BatchQueue.wait_idle`, never a sleep.
 
 from __future__ import annotations
 
+import threading
 from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -25,6 +26,7 @@ from etsy_listings.core.ai.proposals import ProposalStore
 from etsy_listings.core.application.ai.batch_queue import BatchQueue
 from etsy_listings.core.application.ai.registry import AiRun, AiRunRegistry
 from etsy_listings.core.application.ai.runner import AiRunner
+from etsy_listings.core.application.job_gate import JobGate
 from etsy_listings.core.batches import (
     Batch,
     BatchRow,
@@ -83,11 +85,14 @@ class Queue:
         )
         self.staging = StagingStore(self.workspace)
         self.batches = BatchStore(self.workspace)
+        self.gate = JobGate()
+        """The backup's pause, never paused unless a test pauses it."""
         self.queue = BatchQueue(
             workspace=self.workspace,
             batches=self.batches,
             registry=self.registry,
             runner=self.runner,
+            gate=self.gate,
         )
 
     def confirm(self, *designs: tuple[str, bytes], at: datetime = CREATED) -> Batch:
@@ -454,3 +459,71 @@ def test_a_row_running_when_the_server_stops_reruns_after_a_restart(
     record = ProposalStore(workspace).load("night-hike-club")
     assert record is None
     assert workspace.load_listing("night-hike-club").brief.strip()
+
+
+# -------------------------------------------------------- pausing for a backup
+
+
+def test_while_paused_no_row_starts_and_resume_drafts_them_in_queue_order(q: Queue) -> None:
+    """Workspace-backup spec, *Backup run* steps 2 and 4: the rows stay
+    queued and report waiting for backup; resume starts them in order."""
+    order: list[list[str]] = []
+    q.provider.during["brief"] = lambda: order.append(q.batch_runs())
+    q.gate.pause()
+    batch = q.confirm(*_designs("night-hike-club", "cedar-trail"))
+
+    q.queue.start()
+    q.idle()
+
+    assert q.states(batch) == ["queued", "queued"]
+    assert q.provider.calls == []
+    assert [q.queue.waiting_for_backup(q.row(batch, i)) for i in (0, 1)] == [True, True]
+
+    q.gate.resume()
+    q.settle(batch, "done", "done")
+
+    assert order == [["night-hike-club"], ["cedar-trail"]]
+    assert not q.queue.waiting_for_backup(q.row(batch, 0))
+
+
+def test_a_queued_row_is_not_waiting_for_backup_without_a_pause(q: Queue) -> None:
+    batch = q.confirm(*_designs("night-hike-club"))
+
+    assert not q.queue.waiting_for_backup(q.row(batch, 0))
+
+
+def test_a_backup_waits_for_the_row_in_flight_names_it_and_starts_no_other(q: Queue) -> None:
+    release = q.provider.gate("brief")
+    batch = q.confirm(*_designs("night-hike-club", "cedar-trail"))
+    q.queue.start()
+    wait_for(q.provider.started["brief"].is_set)
+    q.gate.pause()
+    named: list[str] = []
+    result: list[bool] = []
+    waiter = threading.Thread(
+        target=lambda: result.append(q.gate.wait_idle(waiting=named.append)), daemon=True
+    )
+
+    waiter.start()
+    waiter.join(0.2)
+    assert waiter.is_alive(), "the backup did not wait for the row in flight"
+    release.set()
+    waiter.join(15)
+    q.idle()
+
+    assert result == [True]
+    assert named == ["Batch AI for night-hike-club"]
+    assert q.states(batch) == ["done", "queued"]
+
+
+def test_shutdown_during_a_pause_leaves_the_rows_queued_for_the_next_start(q: Queue) -> None:
+    q.gate.pause()
+    batch = q.confirm(*_designs("night-hike-club"))
+    q.queue.start()
+    q.idle()
+
+    q.gate.stop()
+    q.queue.stop()
+
+    assert q.states(batch) == ["queued"]
+    assert q.provider.calls == []

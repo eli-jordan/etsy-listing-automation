@@ -73,6 +73,7 @@ class AiRun:
     """Set once :meth:`finish` has told every listener: a batch row has its
     outcome by then, not just the run its phase."""
     _phase: AiRunPhase = "running"
+    """``queued`` while a backup's pause holds the run, until :meth:`begin`."""
     _steps: dict[StepId, WorkflowStep] = field(
         default_factory=lambda: {i: WorkflowStep(id=i, state="pending") for i in STEP_IDS}
     )
@@ -83,7 +84,15 @@ class AiRun:
 
     @property
     def finished(self) -> bool:
-        return self._phase != "running"
+        return self._phase not in ("queued", "running")
+
+    def begin(self) -> bool:
+        """A held run starts: ``queued`` becomes ``running``. ``False`` when
+        it was stopped while held, so it must not start."""
+        with self.condition:
+            if self._phase == "queued":
+                self._phase = "running"
+            return self._phase == "running"
 
     @property
     def steps(self) -> list[WorkflowStep]:
@@ -132,14 +141,19 @@ class AiRun:
     def request_stop(self, reason: StopReason) -> bool:
         """Ask the run to stop: sets the cancel event, which kills a provider's
         subprocess tree and stops research at its next call. ``False`` when
-        the run has already finished. The first reason wins."""
+        the run has already finished. The first reason wins. A run still
+        held by a backup's pause has no thread to notice, so it ends
+        ``cancelled`` here."""
         with self.condition:
             if self.finished:
                 return False
             if self.stop_reason is None:
                 self.stop_reason = reason
             self.cancel_event.set()
-            return True
+            held = self._phase == "queued"
+        if held:
+            self.finish("cancelled")
+        return True
 
     def wait_for_events(
         self, after_seq: int, *, timeout: float
@@ -183,8 +197,15 @@ class AiRunRegistry:
             self._listeners.append(listener)
 
     def create(
-        self, listing: str, *, draft_brief: bool, origin: RunOrigin = "manual"
+        self,
+        listing: str,
+        *,
+        draft_brief: bool,
+        origin: RunOrigin = "manual",
+        queued: bool = False,
     ) -> AiRun | Conflict | Deploying:
+        """A new run holding ``listing``; ``queued`` when a backup's pause
+        holds it from starting."""
         key = listing.casefold()
         with self._lock:
             if self._deploying[key]:
@@ -200,6 +221,7 @@ class AiRunRegistry:
                 draft_brief=draft_brief,
                 origin=origin,
                 on_finish=tuple(self._listeners),
+                _phase="queued" if queued else "running",
             )
             self._runs[run.id] = run
             self._latest[key] = run.id
