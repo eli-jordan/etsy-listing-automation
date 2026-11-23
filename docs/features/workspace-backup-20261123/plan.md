@@ -417,6 +417,48 @@ Exit when:
 - shared gates pass, including the e2e workflow (this PR changes the server
   lifespan).
 
+Deviations recorded during implementation:
+
+- The coordinator runs one backup operation at a time: a run or a repair,
+  and later PR 7's restore steps that conflict. A second one gets
+  `BackupBusyError`, a 409. Repair answers when it ends, holding that slot,
+  rather than running as a job with its own status.
+- A failed run is tried again an hour after it ended (`RETRY_AFTER`), not
+  at every check. A locked or unreadable repository would otherwise add a
+  failed run to the history every five minutes. A run stopped by shutdown
+  does not count, so the next start-up backs up at once.
+- The scheduler checks every five minutes, and each check runs
+  `restic snapshots --no-lock`. Status reads a cached copy, which is read
+  again after each operation and whenever a run has finished since. A
+  folder without restic's `config` stops the schedule and reports
+  `repository_missing`, without running restic.
+- Status has six warning kinds: `off`, `repository_missing`, `stale`,
+  `failed`, `behind` and `changed`. Every kind except `off` has
+  `banner: true`. A missing repository hides the other warnings. A run
+  stopped by shutdown raises none. "More than 24 hours behind" counts from
+  the oldest snapshot the destination has not had yet.
+- The history endpoint returns each run with `kept_as`: `recent`,
+  `weekly`, `monthly`, or null once its snapshot is forgotten. It follows
+  the spec's wording, not restic's own forget output. Each run now also
+  records restic's `data_added`, for the history's Added column.
+- Copy progress counts files, not bytes. `CopyHooks` gains `planned(n)`,
+  the number of files a destination lacks, and the running line counts
+  copied files against it. Packs are about 16 MB, so files move steadily
+  enough.
+- Destinations are plain paths, so `sequence_keys` alone could not keep
+  their comments: a replaced path took the old path's comment. The YAML
+  editor gains an `ITSELF` identity, so each path is known by its value.
+- Set-up is `POST /api/backup/setup`. It writes the whole block through
+  the settings revision check (`edit_settings(editable=("backup",))`). It
+  is refused once backups are set up. It creates the destination folders,
+  as does a Setup save that adds one, and each must be inside a folder
+  that exists (PR 4's finisher makes a missing destination folder
+  unreachable). The refusals now carry categories: backups off and a
+  folder that holds files are conflicts (409), and a short password is
+  refused (422).
+- `create_app` gains `backup: BackupEnvironment`, which holds `home`, the
+  restic launcher and the clock, for tests (P2, P3).
+
 ### PR 6 — Backup in Admin › Settings, with warnings
 
 Interactions: *Where Backup lives*, *Status and history*, *Set up and Setup*,

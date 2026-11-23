@@ -1333,6 +1333,35 @@ there. A change the sample found keeps its size, so the state passes it to
 later copies until `BackupRunner.repair` moves it to
 `<destination>-set-aside-<date>`.
 
+In the server, `core/application/backup_coordinator.py`'s `BackupCoordinator`
+owns backups. `create_app` builds it with the `JobGate`. The lifespan starts it
+after the other coordinators and stops it right after the gate, which stops
+restic part way and records the run as stopped. It runs one backup operation
+at a time, a run or a repair, so a repair never meets a run's copy at a
+destination. A second operation is refused with `BackupBusyError`, a 409. A
+backup is due `interval_hours` after the newest snapshot restic lists, or at
+once when there is none. A failed run is tried again an hour later, not at
+every check. The scheduler checks at start-up and then every five minutes. Each
+check reads `settings.yaml` again, and a Setup save wakes it. A repository
+folder without restic's `config` stops the schedule. The clock, `home` and the
+restic launcher come in through `BackupEnvironment`, so tests never sleep for an
+interval or touch the real home directory.
+
+`core/application/backup_overview.py` works out the status on every read from
+the state file, the history and the snapshots. That covers the last success,
+when the next backup is due, the running step with its job and file counts, the
+repository and each destination, and every warning in the spec's *Status and
+warnings*. Nothing is stored, so a warning clears as soon as its problem does.
+`server/api/backup.py` serves it as `GET /api/backup`, the one status source
+for the Backup page, the banner and the nav icons. The router also has
+`GET /api/backup/history`, with each run's retention bucket, and `POST` for
+`run`, `setup` and `repair`. Setup's edits save through
+`PATCH /api/admin/settings` as `backup.destinations`, `backup.interval_hours`
+and `backup.retention`. The destinations are known by their path (`ITSELF` in
+`yaml_source`), so a comment stays with its path. A destination folder is
+created only by set-up or by the save that adds it, and only inside a folder
+that exists (`core/application/backup_setup.py`).
+
 ## Durable Marigold maps and CPU composition
 
 `preparation.numerics` ports crop planning, mask proposal, robust normals/depth

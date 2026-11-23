@@ -49,3 +49,16 @@ _Avoid_: listing files, caches (which names only some of them)
 A listing name that no directory under `listings/` holds. A directory holding
 only a lockfile is not a listing, but its name is not free.
 _Avoid_: available name, unused name
+
+**Backup storage folder**:
+The local restic repository the app backs the workspace up into, named by
+`backup.repository`. The app never creates one by itself: one that is missing
+stops backups until the seller creates or connects one.
+_Avoid_: backup folder, repository (restic's word, and the code's)
+
+**Destination**:
+A folder the backup storage folder is copied to one way after each backup, such
+as a folder in iCloud Drive. Each is a complete restic repository by itself.
+The app creates one only at set-up or when Setup adds it. A destination the app
+cannot reach is skipped and caught up later.
+_Avoid_: mirror, sync target, remote
