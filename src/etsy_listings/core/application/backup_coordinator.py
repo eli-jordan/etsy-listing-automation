@@ -23,6 +23,7 @@ nothing here creates one by itself.
 
 from __future__ import annotations
 
+import logging
 import threading
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -52,6 +53,8 @@ from etsy_listings.core.backup.state import BackupState, BackupStateStore, RunRe
 from etsy_listings.core.config.settings import BackupSettings
 from etsy_listings.core.errors import ConflictError, UserFacingError
 from etsy_listings.core.workspace.workspace import Workspace
+
+logger = logging.getLogger(__name__)
 
 CHECK_EVERY = 300.0
 """Seconds between the scheduler's checks: each reads the snapshots, so a
@@ -120,10 +123,13 @@ class BackupCoordinator:
     def stop(self) -> None:
         """Stop the schedule and any restic part way; the run is recorded
         as stopped. The gate's own stop ends a backup waiting for quiet."""
-        self._stopping.set()
+        with self._lock:
+            # Under the lock, so no worker starts after this reads it.
+            self._stopping.set()
+            worker = self._worker
         self._cancel.set()
         self._wake.set()
-        for thread in (self._scheduler, self._worker):
+        for thread in (self._scheduler, worker):
             if thread is not None:
                 thread.join()
 
@@ -139,7 +145,11 @@ class BackupCoordinator:
 
     def _schedule(self) -> None:
         while not self._stopping.is_set():
-            self.check()
+            try:
+                self.check()
+            except Exception:
+                # A defect in one check must not end the schedule for good.
+                logger.exception("backup scheduler check failed")
             self._wake.wait(self._check_every)
             self._wake.clear()
 
@@ -194,18 +204,21 @@ class BackupCoordinator:
         with self._lock:
             return self._running
 
-    def _claim(
-        self, operation: Literal["backup", "repair"], destination: Path | None = None
-    ) -> None:
+    def _claim(self, operation: Literal["backup", "repair"], destination: Path | None) -> None:
         with self._lock:
-            if self._running is not None:
-                raise BackupBusyError(self._running)
-            self._running = RunningBackup(
-                operation=operation,
-                started_at=self._env.now(),
-                step="starting" if destination is None else "copying",
-                destination=None if destination is None else str(destination),
-            )
+            self._claim_locked(operation, destination)
+
+    def _claim_locked(
+        self, operation: Literal["backup", "repair"], destination: Path | None
+    ) -> None:
+        if self._running is not None:
+            raise BackupBusyError(self._running)
+        self._running = RunningBackup(
+            operation=operation,
+            started_at=self._env.now(),
+            step="starting" if destination is None else "copying",
+            destination=None if destination is None else str(destination),
+        )
 
     def _release(self) -> None:
         if not self._stopping.is_set() and (settings := self._settings()) is not None:
@@ -215,11 +228,12 @@ class BackupCoordinator:
 
     def _start_backup(self) -> None:
         """Run a backup on its own thread, or :class:`BackupBusyError`."""
-        if self._stopping.is_set():
-            raise ConflictError("The app is shutting down.")
-        self._claim("backup")
-        self._worker = threading.Thread(target=self._back_up, name="backup-run", daemon=True)
-        self._worker.start()
+        with self._lock:
+            if self._stopping.is_set():
+                raise ConflictError("The app is shutting down.")
+            self._claim_locked("backup", None)
+            self._worker = threading.Thread(target=self._back_up, name="backup-run", daemon=True)
+            self._worker.start()
 
     def _back_up(self) -> None:
         try:
