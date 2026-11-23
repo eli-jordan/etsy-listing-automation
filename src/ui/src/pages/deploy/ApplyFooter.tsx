@@ -8,10 +8,17 @@ import type { ControlPhase } from "./deployState";
  * table, docs/features/deploy-20260917/spec.md §7's addition).
  */
 
-function note(phase: ControlPhase, previewsTotal: number, previewsDone: number): string {
+function note(
+  phase: ControlPhase,
+  previewsTotal: number,
+  previewsDone: number,
+  waitingForBackup: boolean,
+): string {
   switch (phase) {
     case "queued":
-      return "Waiting for another run to finish.";
+      return waitingForBackup
+        ? "Waiting for the backup to finish."
+        : "Waiting for another run to finish.";
     case "planning":
       return "Apply unlocks once the plan is ready.";
     case "previewing":
@@ -44,8 +51,11 @@ export function ApplyFooter({
   backLabel,
   onBack,
   etsyListingId,
+  waitingForBackup = false,
 }: {
   controlPhase: ControlPhase;
+  /** A workspace backup holds this queued run (plan decision P4). */
+  waitingForBackup?: boolean;
   previewsTotal: number;
   previewsDone: number;
   onApply: () => void;
@@ -96,7 +106,7 @@ export function ApplyFooter({
 
   return (
     <div className="dv-foot">
-      <p>{note(controlPhase, previewsTotal, previewsDone)}</p>
+      <p>{note(controlPhase, previewsTotal, previewsDone, waitingForBackup)}</p>
       <button
         type="button"
         className="btn btn-primary dv-big"
