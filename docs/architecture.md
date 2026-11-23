@@ -1362,6 +1362,19 @@ and `backup.retention`. The destinations are known by their path (`ITSELF` in
 created only by set-up or by the save that adds it, and only inside a folder
 that exists (`core/application/backup_setup.py`).
 
+A restore is `core/application/backup_restore.py`: it refuses the live
+workspace, a folder inside it or the repository, and a folder that holds
+files, then runs `restic restore <id>:<folder>` so the target holds the
+workspace itself. The server runs it as a job on `BackupCoordinator`, one at a
+time, beside the backup slot rather than in it: restore takes restic's shared
+lock, so scheduled backups keep running. A backup during a restore leaves
+`forget`, `prune` and `check`, which need the exclusive lock, to the next run.
+`POST /api/backup/restore` starts it, `POST /api/backup/restore/stop` stops it
+and leaves the files restored so far, and `GET /api/backup` carries its
+progress as `restore`. `GET /api/backup/snapshots` lists restic's own
+snapshots for the restore dialog, including ones made by hand. The CLI's
+`backup restore` uses the same module without the server.
+
 ## Durable Marigold maps and CPU composition
 
 `preparation.numerics` ports crop planning, mask proposal, robust normals/depth

@@ -554,6 +554,38 @@ Exit when:
 - mockup-vs-app screenshots for frames 05, 06, 09 and 10 are in the PR;
 - shared gates pass.
 
+Deviations recorded during implementation:
+
+- A restore has a slot of its own on `BackupCoordinator`, beside PR 5's
+  backup slot, so backups and repairs run during it. The coordinator keeps
+  the latest restore in memory only. A restart forgets it, as it stops it.
+- The prune does not wait inside the run. A backup during a restore skips
+  `forget`, `prune` and `check`, which take restic's exclusive lock, and the
+  next run after the restore does them, because `last_prune` is unchanged.
+  The restore passes `--retry-lock 1h`, so one started during a prune waits
+  for the lock. A forget that starts in the moment before a restore takes its
+  lock still fails that run, which is retried an hour later.
+- The restore writes `<id>:<folder>`, the backed-up folder only, so the target
+  is the workspace itself. A hand-made snapshot of several folders restores
+  whole. `core/application/backup_restore.py` turns `C:\x` into `/C/x`, and
+  `tests/support/restic.py`'s `snapshot_path` does the same for tests, which
+  PR 3's restic test now uses so it works on Linux.
+- Refusals: the live workspace, a folder inside it, the repository or a folder
+  inside it, a folder that holds files, and a relative path (422). An unknown
+  snapshot is a 404.
+- `GET /api/backup/snapshots` lists restic's snapshots, newest first, with the
+  workspace path the dialog refuses and builds its default folder from
+  (`<workspace>-restore-<short id>`).
+- The time left is worked out from restic's `seconds_elapsed` and
+  `percent_done`. Before a restore starts there is no rate, so the dialog's
+  Takes row gives no figure.
+- No Choose… button, as in PR 6. The Restored dialog's file count is
+  restic's `files_restored`.
+- History rows offer Restore… only while their snapshot is kept.
+- The disaster guide is `docs/guides/restore-a-backup.md`. restic 0.19.1 on
+  Windows exits 1 after a whole-snapshot restore (it cannot set the timestamp
+  of `C\Users`), so the guide also gives the `latest:/C/...` form.
+
 ### PR 8 — Missing repository and the migration guide
 
 Spec: *Missing repository*, *Migration*. Decision P7.
