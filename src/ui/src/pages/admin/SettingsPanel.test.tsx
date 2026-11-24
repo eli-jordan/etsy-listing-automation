@@ -190,7 +190,7 @@ it("serializes rapid saves with returned revisions and retains newer local value
 });
 
 it("stops queued saves after conflict until explicit reload discards stale edits", async () => {
-  vi.mocked(api.saveSettings).mockResolvedValue({ kind: "conflict", message: "external edit" });
+  vi.mocked(api.saveSettings).mockResolvedValue({ kind: "stale", message: "external edit" });
   render(<SettingsPanel />);
   const slider = await screen.findByRole("slider", { name: "Listings drafted at once" });
   fireEvent.change(slider, { target: { value: "2" } });
@@ -240,7 +240,7 @@ it("shows the controls once a recheck reads the corrected file", async () => {
 });
 
 it("reload discards a refused edit even when the external file returned to its original revision", async () => {
-  vi.mocked(api.saveSettings).mockResolvedValue({ kind: "conflict", message: "changed" });
+  vi.mocked(api.saveSettings).mockResolvedValue({ kind: "stale", message: "changed" });
   render(<SettingsPanel />);
   const slider = await screen.findByRole("slider", { name: "Listings drafted at once" });
   fireEvent.change(slider, { target: { value: "4" } });
@@ -272,7 +272,7 @@ it("ignores an abandoned initial read when StrictMode starts a fresh read", asyn
 
 it("retains refused field edits, keeps other controls usable, and retries network failures", async () => {
   vi.mocked(api.saveSettings).mockResolvedValueOnce({
-    kind: "invalid",
+    kind: "refused",
     message: "bad concurrency",
     fieldErrors: { "batch_ai.concurrency": "Choose 1–8" },
   });
@@ -319,7 +319,7 @@ it("keeps the YAML-source refusal actionable until its failed patch succeeds", a
   });
   vi.mocked(api.saveSettings)
     .mockResolvedValueOnce({
-      kind: "invalid",
+      kind: "refused",
       message: `__root__: ${reason}`,
       fieldErrors: { __root__: reason },
     })

@@ -68,12 +68,14 @@ export function RepositoryDialog({
   mode: initialMode,
   repository,
   passwordStored,
+  passwordMinLength,
   onCancel,
   onSubmit,
 }: {
   mode: RepositoryMode;
   repository: string;
   passwordStored: boolean;
+  passwordMinLength: number;
   onCancel: () => void;
   onSubmit: (action: RepositoryAction) => Promise<Refused | null>;
 }) {
@@ -94,7 +96,9 @@ export function RepositoryDialog({
   const given = passwordStored ? null : password.pw;
   let ready = folder.trim() !== "";
   if (mode === "connect") ready &&= source.trim() !== "" && (passwordStored || password.pw !== "");
-  else ready &&= passwordStored || (passwordProblem(password) === null && password.stored);
+  else
+    ready &&=
+      passwordStored || (passwordProblem(password, passwordMinLength) === null && password.stored);
 
   const submit = async () => {
     setWorking(true);
@@ -152,7 +156,11 @@ export function RepositoryDialog({
             </span>
           )}
           {!passwordStored && mode === "create" && (
-            <PasswordFields value={password} onChange={edit(setPassword)} />
+            <PasswordFields
+              value={password}
+              minLength={passwordMinLength}
+              onChange={edit(setPassword)}
+            />
           )}
           {!passwordStored && mode === "connect" && (
             <input

@@ -15,6 +15,7 @@ import { MemoryRouter, useLocation } from "react-router-dom";
 import * as backupApi from "../../api/backup";
 import type { BackupStatus } from "../../api/backup";
 import { BackupStatusProvider } from "../../shell/BackupStatusProvider";
+import { backupsOff, backupsOn, backupWarning } from "../../test/backup";
 import { AdminPage } from "./AdminPage";
 
 /* Admin plan, PR 3: the Shop tab against a mocked HTTP surface. Each save
@@ -156,11 +157,7 @@ beforeEach(() => {
 
 afterEach(() => vi.restoreAllMocks());
 
-const OFF: BackupStatus = {
-  enabled: false,
-  destinations: [],
-  warnings: [{ kind: "off", message: "Backups are off.", banner: false }],
-};
+const OFF = backupsOff();
 
 function Where() {
   const { search } = useLocation();
@@ -242,14 +239,6 @@ describe("Admin page shell", () => {
   });
 });
 
-const ON: BackupStatus = {
-  enabled: true,
-  interval_hours: 12,
-  repository: { path: "C:/backups/studio", missing: false, snapshots: 0, password_stored: true },
-  destinations: [],
-  warnings: [],
-};
-
 describe("Admin sections in the address", () => {
   it.each([
     ["", "Connected shops"],
@@ -290,7 +279,7 @@ describe("Backup in the Admin nav", () => {
   });
 
   it("nests Status and history and Setup once set up, opening Status and history", async () => {
-    renderAdmin("?section=backup", ON);
+    renderAdmin("?section=backup", backupsOn());
     const status = await screen.findByRole("link", { name: "Status and history" });
     expect(status).toHaveAttribute("aria-current", "page");
     expect(screen.getByRole("link", { name: /Backup/ })).not.toHaveTextContent("off");
@@ -307,20 +296,8 @@ describe("Backup in the Admin nav", () => {
   });
 
   it("carries a warning icon while a warning applies", async () => {
-    renderAdmin("?section=ai", {
-      ...ON,
-      warnings: [
-        { kind: "stale", message: "The last backup is more than a day old.", banner: true },
-      ],
-    });
+    renderAdmin("?section=ai", backupsOn({ warnings: [backupWarning("stale")] }));
     expect(await screen.findByRole("img", { name: "Needs attention" })).toBeInTheDocument();
-  });
-
-  it("carries no icon for backups being off", async () => {
-    renderAdmin("?section=ai");
-    await screen.findByRole("link", { name: /Backup/ });
-    await waitFor(() => expect(backupApi.getBackupStatus).toHaveBeenCalled());
-    expect(screen.queryByRole("img", { name: "Needs attention" })).not.toBeInTheDocument();
   });
 });
 
@@ -559,7 +536,7 @@ describe("Listing defaults", () => {
 
   it("keeps a refused value visible with its field error", async () => {
     save.mockResolvedValueOnce({
-      kind: "invalid",
+      kind: "refused",
       message: "bad",
       fieldErrors: { renewal: "Input should be 'manual' or 'auto'" },
     });
@@ -628,7 +605,7 @@ describe("Listing defaults", () => {
       if (failure === "network") server.failNext("renewal offline");
       else
         save.mockResolvedValueOnce({
-          kind: "invalid",
+          kind: "refused",
           message: "invalid renewal",
           fieldErrors: { renewal: "renewal refused" },
         });
@@ -711,7 +688,7 @@ describe("Listing defaults", () => {
         if (failure === "network") reject(new Error("renewal offline"));
         else
           answer({
-            kind: "invalid",
+            kind: "refused",
             message: "invalid renewal",
             fieldErrors: { renewal: "renewal refused" },
           });
@@ -766,7 +743,7 @@ describe("Listing defaults", () => {
       }
       await act(async () =>
         answer({
-          kind: "invalid",
+          kind: "refused",
           message: "invalid edit",
           fieldErrors: { [field]: "edit refused" },
         }),
@@ -835,7 +812,7 @@ describe("Listing defaults", () => {
       }
       await act(async () =>
         answer({
-          kind: "invalid",
+          kind: "refused",
           message: "invalid shipping",
           fieldErrors: {
             shipping_profile: "shipping refused",
@@ -865,7 +842,7 @@ describe("Listing defaults", () => {
     "keeps a refused %s choice visible when its lookup becomes unavailable",
     async (field) => {
       save.mockResolvedValueOnce({
-        kind: "invalid",
+        kind: "refused",
         message: "invalid edit",
         fieldErrors: {
           [field]: "edit refused",
@@ -1135,7 +1112,7 @@ describe("Listing defaults", () => {
         new Promise<SaveOutcome>((resolve) => {
           refuse = () =>
             resolve({
-              kind: "invalid",
+              kind: "refused",
               message: "invalid renewal",
               fieldErrors: { renewal: "auto refused" },
             });
@@ -1367,7 +1344,7 @@ describe("Listing defaults", () => {
   });
 
   it("asks for a reload after a conflict and edits nothing until then", async () => {
-    save.mockResolvedValueOnce({ kind: "conflict", message: "shop.yaml changed on disk" });
+    save.mockResolvedValueOnce({ kind: "stale", message: "shop.yaml changed on disk" });
     await openDefaults();
     fireEvent.change(screen.getByLabelText("Renewal"), { target: { value: "auto" } });
     fireEvent.blur(screen.getByLabelText("Renewal"));

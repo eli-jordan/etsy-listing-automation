@@ -48,6 +48,8 @@ REPOSITORY = Path("/srv/backups")
 
 # --------------------------------------------------- the scripted launcher
 
+WORKSPACE_ID = "0f8d6c1e-4b7a-4f6e-9a39-2d4c5b1e7a90"
+
 
 def exit_error(code: int, message: str) -> str:
     """restic's last stderr line when a command fails under ``--json``."""
@@ -390,11 +392,23 @@ def test_a_backup_names_the_folder_and_each_exclude_and_reports_progress() -> No
 
     folder = Path("/workspace")
     summary = restic.back_up(
-        folder, excludes=("*.tmp", ".cache/staging/*/upload.zip"), progress=heard.append
+        folder,
+        workspace_id=WORKSPACE_ID,
+        excludes=("*.tmp", ".cache/staging/*/upload.zip"),
+        progress=heard.append,
     )
 
     assert launcher.commands == [
-        ["backup", str(folder), "--exclude", "*.tmp", "--exclude", ".cache/staging/*/upload.zip"]
+        [
+            "backup",
+            str(folder),
+            "--tag",
+            f"workspace:{WORKSPACE_ID}",
+            "--exclude",
+            "*.tmp",
+            "--exclude",
+            ".cache/staging/*/upload.zip",
+        ]
     ]
     assert heard == [BackupFigures(files_done=5, files_total=10)]
     assert summary == BackupSummary(snapshot_id=SNAPSHOT_ID, data_added=41_000_000)
@@ -416,7 +430,7 @@ def test_a_backup_that_could_not_read_some_files_completes_with_warnings() -> No
         )
     )
 
-    summary = restic.back_up(Path("/workspace"))
+    summary = restic.back_up(Path("/workspace"), workspace_id=WORKSPACE_ID)
 
     assert summary.snapshot_id == SNAPSHOT_ID
     assert summary.warnings == ("C:\\workspace\\runs.db: The process cannot access the file",)
@@ -430,19 +444,34 @@ def test_a_backup_that_made_no_snapshot_fails_even_on_exit_code_3() -> None:
     )
 
     with pytest.raises(ResticError, match="could not be read") as caught:
-        restic.back_up(Path("/workspace"))
+        restic.back_up(Path("/workspace"), workspace_id=WORKSPACE_ID)
 
     assert caught.value.exit_code == 3
 
 
-def test_forget_keeps_one_more_week_and_month_than_the_retention_names() -> None:
-    """restic counts the current week and month as one of each."""
-    restic, launcher = _restic(Reply(stdout=[[{"host": "pc", "keep": [], "remove": None}]]))
+def test_forget_keeps_only_this_workspace_s_snapshots_grouped_by_its_tag() -> None:
+    """One more week and month than the retention names: restic counts the
+    current ones. Grouped by the workspace tag, not host and paths."""
+    restic, launcher = _restic(Reply(stdout=[[{"tags": [], "keep": [], "remove": None}]]))
 
-    restic.forget(RetentionSettings(keep_within_days=7, weekly=4, monthly=3))
+    restic.forget(
+        RetentionSettings(keep_within_days=7, weekly=4, monthly=3), workspace_id=WORKSPACE_ID
+    )
 
     assert launcher.commands == [
-        ["forget", "--keep-within", "7d", "--keep-weekly", "5", "--keep-monthly", "4"]
+        [
+            "forget",
+            "--tag",
+            f"workspace:{WORKSPACE_ID}",
+            "--group-by",
+            "tags",
+            "--keep-within",
+            "7d",
+            "--keep-weekly",
+            "5",
+            "--keep-monthly",
+            "4",
+        ]
     ]
 
 

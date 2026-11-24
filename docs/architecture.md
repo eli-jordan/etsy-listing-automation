@@ -681,7 +681,8 @@ build their clients through the app's `ClientFactories` (`app_state.clients`).
 `core/application/shop_settings.py` owns whole-document validation,
 configured-identity retention and the editable key set. `core/workspace/revisions.py` owns exact-byte hashes and a per-path process
 lock around read, revision comparison, validation and atomic replace. A stale
-revision refuses with 412; invalid values refuse with field errors and 422.
+revision refuses with 412 and `kind: "stale"`; invalid values refuse with field
+errors and 422.
 Semantic no-ops leave the source bytes and file untouched, per ADR-0055.
 
 A successful save replaces the server workspace's defaults inside the same
@@ -1297,7 +1298,7 @@ separate modules and never start inference implicitly.
 ## restic for workspace backup
 
 The [workspace-backup spec](features/workspace-backup-20261123/spec.md) backs
-the workspace up with restic, run as a subprocess (ADR-0059). Which restic runs
+the workspace up with restic, run as a subprocess (ADR-0060). Which restic runs
 is `core/backup/binary.py`'s `ResticBinaries`: `ETSY_LISTINGS_RESTIC_BINARY`,
 then the `backup.restic_binary` setting, then restic 0.19.1 pinned by the
 SHA-256 of its Windows amd64 and Linux amd64 release files. Only `backup init`
@@ -1415,22 +1416,61 @@ and `backup.retention`. The destinations are known by their path (`ITSELF` in
 created only by set-up or by the save that adds it, and only inside a folder
 that exists (`core/application/backup_setup.py`).
 
-A restore is `core/application/backup_restore.py`. Its target is checked by
-`ConfiguredBackup.check_restore_target`, which refuses the live workspace, the
-repository, the destinations, paths inside any of them and a folder that holds
-files. It checks the target again, against the settings as they read then, just before
-`Repository.restore` starts, which restores a one-folder snapshot's contents
-(`restic restore <id>:<folder> --overwrite never`), so the target holds the
-workspace itself and nothing that reached it is overwritten. The server runs it as a job on `BackupCoordinator`, one at a
-time, beside the backup slot rather than in it: restore takes restic's shared
-lock, so scheduled backups keep running. A backup during a restore leaves
-`forget`, `prune` and `check`, which need the exclusive lock, to the next run.
-A restore requested during maintenance waits for those commands to finish.
-`POST /api/backup/restore` starts it, `POST /api/backup/restore/stop` stops it
+The server also owns the backup's naming conventions, and its responses carry
+what they derive, so the browser never re-implements them. Each destination in
+the overview has its display `name` ("iCloud Drive" for an iCloud folder, else
+the folder's own name), `icloud`, a `short_problem` for its pill, and, while it
+has changed or unexpected files, `set_aside`: the folder Repair would use
+today, from `destinations.planned_set_aside`, the same name sequence
+(`-2`, `-3`...) the repair takes. History entries carry each copy's
+destination `names`, each snapshot its default `restore_target`
+(`backup_restore.default_target`), and the overview the
+`password_min_length` the set-up and Create forms pre-check. Set-up, Create,
+Connect, settings and shop saves refuse with a `kind` that alone says what to do:
+`stale` (412) means reload, `conflict` (409) and `invalid` (422) carry the
+reason and field errors.
+
+In the UI, the shell's `BackupStatusProvider` polls `GET /api/backup` once for
+every surface. `useBackupStatus()` returns no raw status. It returns a
+`BackupView` from `ui/src/shell/backupAttention.ts`, a pure module that encodes
+the interactions doc's *Warnings* table in one place. The view says whether
+backups are loading, unread, off or on. It gives the warning the shell banner
+and both nav marks show, and each banner on Status and history with its action:
+connect, repair, or one Try again for the rest. It also says whether a backup
+or repair is running and whether a restore is running, and gives each
+destination's files to check. A destination has changed files only when a
+`changed` warning names it. The shell, the Admin nav, `BackupSection`,
+`BackupPanels`, `backupText.summary` and `useRestore` only draw the view.
+The adapters in `ui/src/api/backup.ts`, `workspaceSettings.ts` and `shop.ts`
+answer success or one `Refusal` from `ui/src/api/refusal.ts`: `stale`, or
+`refused` with its message, field errors and an optional `connectFrom`. The
+save queue and `BackupSection` word a refusal from that alone. The browser keeps
+only two instant pre-checks, both refused by the server too: the password
+length and a target that looks like the live workspace.
+
+A restore is `core/application/backup_restore.py`, the whole sequence for the
+server and the CLI alike. `prepare_restore` resolves the configured backup once,
+checks the target with `ConfiguredBackup.check_restore_target` (which refuses the
+live workspace, the repository, the destinations, paths inside any of them and a
+folder that holds files), opens the repository and finds the snapshot, all before
+restic writes. The `PreparedRestore` it returns runs the restore: just before
+`Repository.restore` starts it checks the target again, against `settings.yaml`
+read afresh, so a folder saved as a destination or storage folder since, or files
+that landed in the target, stop it. `Repository.restore` restores a one-folder
+snapshot's contents (`restic restore <id>:<folder> --overwrite never`), so the
+target holds the workspace itself and nothing that reached it is overwritten.
+The server runs a prepared restore as a job on `BackupCoordinator`, which owns
+only the thread, the status, the maintenance reservation and shutdown: one
+restore at a time, beside the backup slot rather than in it. Restore takes
+restic's shared lock, so scheduled backups keep running. A backup during a
+restore leaves `forget`, `prune` and `check`, which need the exclusive lock, to
+the next run. A restore requested during maintenance waits for those commands
+to finish. `POST /api/backup/restore` starts it, `POST /api/backup/restore/stop` stops it
 and leaves the files restored so far, and `GET /api/backup` carries its
 progress as `restore`. `GET /api/backup/snapshots` lists restic's own
 snapshots for the restore dialog, including ones made by hand. The CLI's
-`backup restore` uses the same module without the server.
+`backup restore` prepares and runs the same restore in the foreground and only
+prints.
 
 A missing repository has two ways back, in `core/application/backup_missing.py`,
 both refused while the configured folder holds restic's `config`.
@@ -1448,6 +1488,16 @@ destination holds a repository's copy (`holds_repository`), with
 `connect_from` in the refusal, and `repair_destination` refuses a destination
 whose `config` differs or is missing while restic files remain
 (`ForeignCopyError`). The ordinary copy also stops in these cases.
+
+First-time set-up uses the same connect. `backup_setup.prepare_set_up`
+checks every refusal before writing, and asks `backup_missing.existing_copies`
+whether the destinations hold a repository: copies of one repository share
+`config`'s bytes, and only a copy holding every file the others hold may be
+the source. When one does, `POST /api/backup/setup` and `backup init`
+connect it with `connect_existing` (Connect's own staging copy, the first
+copy that opens and passes a check) instead of creating, and the coordinator
+holds the `connect` slot meanwhile. The answer's `connected` names the
+destination and the snapshot count.
 
 ## Durable Marigold maps and CPU composition
 

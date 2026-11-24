@@ -39,6 +39,7 @@ from etsy_listings.server.api.app import create_app
 from tests.support.builders import FIXTURE_LISTING as LISTING
 from tests.support.builders import a_context, copy_listing
 from tests.support.gates import Gate
+from tests.support.listings import applied, batch_naming
 from tests.support.pipeline import a_deployable_context
 
 
@@ -216,6 +217,72 @@ def test_workspace_apply_reuses_exact_reviewed_targets_and_retains_the_plan(
     assert client.get(f"/api/runs/{reviewed['id']}").json()["phase"] == "ready"
 
     _wait_until_terminal(client, body["id"])
+
+
+def _reviewed_batch(workspace_root: Path, *listings: str) -> None:
+    """Batch ``b1`` naming ``listings``, every row marked reviewed."""
+    store = batch_naming(Workspace.discover(root_override=workspace_root), "b1", *listings)
+    batch = store.load("b1")
+    assert batch is not None
+    batch.rows = [row.model_copy(update={"reviewed": True}) for row in batch.rows]
+    store.save(batch)
+
+
+def test_a_batch_plan_resolves_its_reviewed_undeployed_rows_on_the_server(
+    workspace_root: Path, client: TestClient
+) -> None:
+    copy_listing(workspace_root, "second")
+    copy_listing(workspace_root, "already-out")
+    _reviewed_batch(workspace_root, "second", "already-out", LISTING)
+    applied(Workspace.discover(root_override=workspace_root), "already-out")
+
+    response = client.post("/api/runs", json={"kind": "plan", "scope": "batch", "batch_id": "b1"})
+
+    assert response.status_code == 202
+    body = response.json()
+    assert (body["scope"], body["batch_id"]) == ("batch", "b1")
+    assert body["listings"] == ["second", LISTING]
+    detail = _wait_until_terminal(client, body["id"])
+    assert (
+        client.get("/api/runs", params={"scope": "batch", "batch": "b1"}).json()[0]["id"]
+        == (body["id"])
+    )
+    assert client.get("/api/runs", params={"listing": LISTING}).json() == []
+    assert [row["deployable"] for row in client.get("/api/batches/b1").json()["rows"]] == [
+        True,
+        False,
+        True,
+    ]
+
+    planned = [event for event in detail["events"] if event["type"] == "listing_planned"]
+    expect = {event["listing"]: event["fingerprint"] for event in planned}
+    apply_body = {
+        "kind": "apply",
+        "scope": "batch",
+        "batch_id": "b1",
+        "listings": list(expect),
+        "expect": expect,
+        "reviewed_run_id": body["id"],
+    }
+    assert client.post("/api/runs", json={**apply_body, "batch_id": "b2"}).status_code == 409
+    applied_run = client.post("/api/runs", json=apply_body)
+    assert applied_run.status_code == 202
+    assert applied_run.json()["reviewed_run_id"] == body["id"]
+    _wait_until_terminal(client, applied_run.json()["id"])
+
+
+def test_a_batch_plan_with_nothing_to_deploy_is_409_and_an_unknown_batch_404(
+    workspace_root: Path, client: TestClient
+) -> None:
+    store = batch_naming(Workspace.discover(root_override=workspace_root), "b1", LISTING)
+    assert store.load("b1") is not None, "the one row is not reviewed"
+
+    nothing = client.post("/api/runs", json={"kind": "plan", "scope": "batch", "batch_id": "b1"})
+    unknown = client.post("/api/runs", json={"kind": "plan", "scope": "batch", "batch_id": "b9"})
+
+    assert nothing.status_code == 409
+    assert "no reviewed listings with changes to deploy" in nothing.text
+    assert unknown.status_code == 404
 
 
 def test_a_listing_apply_requires_the_post_preview_fingerprint(workspace_root: Path) -> None:

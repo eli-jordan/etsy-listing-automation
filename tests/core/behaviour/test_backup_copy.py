@@ -27,6 +27,7 @@ from etsy_listings.core.backup.destinations import (
     check_destination,
     copy_repository,
     create_destination,
+    planned_set_aside,
     repair_destination,
 )
 
@@ -515,7 +516,7 @@ def test_repair_sets_changed_and_unexpected_files_aside_and_completes_the_copy(
         assert identity((aside if name in repair.moved else destination) / name) == file
 
 
-def test_a_second_repair_the_same_day_never_reuses_the_set_aside_folder(
+def test_a_second_repair_the_same_day_plans_and_takes_the_next_set_aside_folder(
     local: FakeRepository, destination: Path
 ) -> None:
     _copied(local, destination, 1)
@@ -523,11 +524,12 @@ def test_a_second_repair_the_same_day_never_reuses_the_set_aside_folder(
     (destination / "notes.txt").write_bytes(b"first")
     first = repair_destination(local.root, destination, today=today)
     (destination / "notes.txt").write_bytes(b"second")
+    planned = planned_set_aside(destination, today)
 
     second = repair_destination(local.root, destination, today=today)
 
     assert first.set_aside is not None
-    assert second.set_aside == destination.with_name("backups-set-aside-2026-11-23-2")
+    assert planned == second.set_aside == destination.with_name("backups-set-aside-2026-11-23-2")
     assert (first.set_aside / "notes.txt").read_bytes() == b"first"
     assert (second.set_aside / "notes.txt").read_bytes() == b"second"
 
