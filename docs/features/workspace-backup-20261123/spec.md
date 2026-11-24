@@ -6,7 +6,7 @@ merge; the seller then migrates by hand with the
 [migration guide](../../guides/migrate-the-workspace-out-of-icloud.md). This
 specification owns the requirements under the
 [documentation authority rules](../../README.md#documentation-authority).
-[ADR-0059](../../adr/0059-back-up-the-workspace-with-restic-from-the-app.md)
+[ADR-0060](../../adr/0060-back-up-the-workspace-with-restic-from-the-app.md)
 records why the design uses restic, runs inside the app and keeps the
 repository on local disk. The [interactions document](interactions.md) covers
 the UI and the [plan](plan.md) the delivery.
@@ -71,9 +71,59 @@ app passes it to restic only in that subprocess's environment, as
 copy in a password manager, because the `.env` inside a backup is encrypted with
 that same password.
 
+`backup.workspace_id` is the **workspace ID**, a random UUID. Set-up writes
+it, and `backup init` or the first run write one when a hand-written block
+has none. Setup does not show it. Because it is in `settings.yaml`, a copied,
+moved or restored workspace keeps it, and an ID already there is never
+changed.
+
+A workspace without one takes the ID its repository's snapshots already
+carry, so their schedule carries on: after set-up connects a destination's
+backup, after `backup init` connects one, and on the first run after
+Create or Connect a new repository. The snapshots are read without restic's
+lock, and untagged ones, from before workspace IDs, are not counted. With no
+tagged snapshots it is a new ID. With snapshots of several workspaces it is
+a new ID too, and set-up, `backup init` and the run's history say: "This
+backup holds snapshots from more than one workspace, so this workspace
+starts its own retention."
+
 The paths are specific to one machine, yet `settings.yaml` travels with the
 workspace when it is restored somewhere else. See *Missing repository* for how
 the app treats stale paths.
+
+## Set-up
+
+Set-up, from the Backup page or `backup init`, first looks in each
+destination. If none holds a restic repository, it creates a new one in the
+backup storage folder, as before.
+
+If a destination already holds a backup, set-up connects it instead of
+creating one. A typical case is a new computer whose iCloud Drive already
+holds the backups. Connecting works as *Connect an existing repository*
+does: the copy is copied one way into a staging folder beside the backup
+storage folder, the password must open it and `restic check` must pass, and
+only then does it take the storage folder's name. The settings and the
+password are saved after that. The next scheduled backup adds to the
+connected repository, and its first copy back finds every file the
+destination already has, so nothing there is replaced or deleted.
+
+Several destinations may hold copies of the same repository, with the same
+`config`. Set-up connects the first one that holds every file the others
+hold and passes the check, and says which. A copy that is still syncing is
+never the one connected: the copy back would delete what it lacks from the
+fuller copies.
+
+Set-up refuses, and writes nothing, when:
+- the password does not open the destination's backup (the error is on the
+  password field);
+- a destination holds restic's folders but no `config`, as a sync client
+  that is still downloading leaves it;
+- two destinations hold different repositories;
+- two copies of the same repository each lack files the other has;
+- the backup storage folder is not new or empty.
+
+A new repository needs a password of at least 12 characters. An existing one
+only needs the password it was made with.
 
 ## Backup run
 
@@ -83,14 +133,20 @@ One run, from the scheduler or from "Back up now":
    batch-queue dispatch, Prepare job or scene-warming pass is in progress.
 2. **Pause.** Stop those runners from starting new work. A submission during
    the pause is accepted, held, and reported as `waiting for backup`.
-3. **Back up.** Run `restic backup` on the live workspace root. Leave out the
+3. **Back up.** Run `restic backup` on the live workspace root, tagged
+   `workspace:<id>` with the workspace ID (*Configuration*). Leave out the
    temporary names the app's own writers use: `*.tmp`, plus the patterns
    `core/workspace/atomic.py` and the other temp-then-rename writers create.
 4. **Resume.** Release held jobs in the order they were submitted. Jobs resume
    whether the backup succeeded or failed.
 5. **Forget.** Apply the retention with `restic forget`. restic counts the
    current week and month as one of each, so 4 past weeks and 3 past months
-   become `--keep-within 7d --keep-weekly 5 --keep-monthly 4`.
+   become `--keep-within 7d --keep-weekly 5 --keep-monthly 4`. It runs with
+   `--tag workspace:<id> --group-by tags`: only this workspace's snapshots,
+   as one group, whatever host or folder made them, so the old ones age out
+   after the PC is renamed or the workspace moves (ADR-0061). Other
+   workspaces' snapshots and untagged ones, such as a backup made by hand,
+   are never forgotten. `prune` is repository-wide.
 6. **Weekly.** If 7 days have passed since the last prune, run `restic prune`,
    then `restic check` on the local repository.
 7. **Copy** the repository to each destination (see *Copy to destinations*).
@@ -269,7 +325,8 @@ Both take a local folder that is new or empty, prefilled with
 is used when there is one; otherwise the seller gives it. Connect saves
 nothing until restic has opened the local copy with that password. Create is
 refused while a destination already holds a repository's copy, and offers
-Connect with that folder instead, because a new repository would lead a repair
+Connect with that folder instead (first-time set-up connects it by itself,
+see *Set-up*), because a new repository would lead a repair
 and the next copy to delete the old backups there. For the same reason, Repair
 refuses a destination whose `config` differs from the local one.
 
@@ -300,7 +357,8 @@ restores whole snapshots only. It does not restore single files.
 
 ## CLI
 
-`etsy-listings backup` with these subcommands: `init` (create a repository),
+`etsy-listings backup` with these subcommands: `init` (create a repository,
+or connect the one a destination already holds and print which),
 `run`, `status`, `snapshots`, `restore <snapshot> <target>`, and `check`.
 The CLI does not coordinate with a running server. `run` is meant for when the
 app is stopped, which is the case during the migration. restic's repository

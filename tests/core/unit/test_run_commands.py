@@ -1,4 +1,4 @@
-"""The four legal run requests carry exactly the data their executor needs."""
+"""The six legal run requests carry exactly the data their executor needs."""
 
 from __future__ import annotations
 
@@ -8,9 +8,12 @@ import pytest
 from pydantic import TypeAdapter, ValidationError
 
 from etsy_listings.core.application.deploy.registry import (
+    BatchApply,
+    BatchPlan,
     ListingApply,
     ListingPlan,
     Run,
+    RunCommand,
     WorkspaceApply,
     WorkspacePlan,
 )
@@ -29,10 +32,12 @@ from etsy_listings.server.api.schemas import RunSummary
             "workspace",
             ("one",),
         ),
+        (BatchPlan("b1", ("one",)), "plan", "batch", ("one",)),
+        (BatchApply("b1", ("one",), {"one": "hash"}, "review-run"), "apply", "batch", ("one",)),
     ],
 )
 def test_run_identity_is_derived_from_its_command(
-    command: ListingPlan | WorkspacePlan | ListingApply | WorkspaceApply,
+    command: RunCommand,
     kind: str,
     scope: str,
     listings: tuple[str, ...],
@@ -42,6 +47,7 @@ def test_run_identity_is_derived_from_its_command(
     assert run.kind == kind
     assert run.scope == scope
     assert run.listings == listings
+    assert run.batch_id == ("b1" if scope == "batch" else None)
 
 
 def test_plan_and_apply_have_separate_phase_transitions() -> None:

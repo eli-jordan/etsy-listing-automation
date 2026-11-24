@@ -91,7 +91,7 @@ def edit_shop(request: Request, body: ShopPatchRequest) -> ShopSettingsResponse 
             app_state.workspace(request), expected_revision=body.revision, changes=changes
         )
     except ShopRevisionConflictError as exc:
-        return _refusal(412, ShopSaveRefusal(kind="conflict", message=str(exc)))
+        return _refusal(412, ShopSaveRefusal(kind="stale", message=str(exc)))
     except InvalidShopEditError as exc:
         refusal = ShopSaveRefusal(kind="invalid", message=str(exc), field_errors=exc.field_errors)
         return _refusal(422, refusal)

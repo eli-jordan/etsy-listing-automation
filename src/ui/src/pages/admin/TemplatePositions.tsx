@@ -52,7 +52,7 @@ export function TemplatePositions({
       queueMicrotask(() => title.current?.focus());
       return;
     }
-    if (outcome === null || outcome.kind === "conflict")
+    if (outcome === null || outcome.kind === "stale")
       throw new Error(
         "settings.yaml changed on disk since this page loaded it. Nothing was overwritten. " +
           "Reload settings, then make your change again.",

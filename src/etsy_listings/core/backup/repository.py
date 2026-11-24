@@ -65,6 +65,25 @@ class Snapshot:
     """Files the backup read, from the snapshot's summary (restic 0.17+)."""
     size: int | None = None
     """Bytes the backup read, from the snapshot's summary."""
+    tags: tuple[str, ...] = ()
+
+    @property
+    def workspace_id(self) -> str | None:
+        """The workspace ID its ``workspace:<id>`` tag names; None for an
+        untagged snapshot, such as one made by hand (ADR-0061)."""
+        for tag in self.tags:
+            if tag.startswith(WORKSPACE_TAG):
+                return tag.removeprefix(WORKSPACE_TAG)
+        return None
+
+
+WORKSPACE_TAG = "workspace:"
+"""Every backup the app makes is tagged ``workspace:<workspace ID>``."""
+
+
+def workspace_tag(workspace_id: str) -> str:
+    """The tag every snapshot of the workspace ``workspace_id`` carries."""
+    return f"{WORKSPACE_TAG}{workspace_id}"
 
 
 @dataclass(frozen=True)
@@ -136,18 +155,26 @@ class Repository(Protocol):
         self,
         folder: Path,
         *,
+        workspace_id: str,
         excludes: Sequence[str] = (),
         progress: BackupListener | None = None,
         cancel: threading.Event | None = None,
     ) -> BackupSummary:
-        """Snapshot ``folder``, leaving out what matches ``excludes``."""
+        """Snapshot ``folder``, leaving out what matches ``excludes``,
+        marked as the workspace ``workspace_id``'s."""
         ...
 
     def forget(
-        self, retention: RetentionSettings, *, cancel: threading.Event | None = None
+        self,
+        retention: RetentionSettings,
+        *,
+        workspace_id: str,
+        cancel: threading.Event | None = None,
     ) -> None:
-        """Forget the snapshots ``retention`` does not keep (spec, *Backup run*
-        step 5); their data stays until a prune."""
+        """Forget the workspace ``workspace_id``'s snapshots ``retention``
+        does not keep, as one schedule whatever host or folder made them
+        (spec, *Backup run* step 5). Other snapshots are left alone; their
+        data stays until a prune."""
         ...
 
     def prune(self, *, cancel: threading.Event | None = None) -> None:

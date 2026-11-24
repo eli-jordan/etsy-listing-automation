@@ -1,6 +1,8 @@
-"""Creating, opening and checking a workspace's backup repository
-(workspace-backup plan, PR 2): the ``backup:`` block, the ``.env`` password
-and the restic binary together, against the in-memory repository.
+"""Creating, opening and reporting on a workspace's backup repository
+through its configured backup (workspace-backup plan, PR 2): the ``backup:``
+block, the ``.env`` password and the restic binary together, against the
+in-memory repository. Which folders the configuration refuses is
+test_backup_folder_rules.py's.
 """
 
 from __future__ import annotations
@@ -16,8 +18,8 @@ from etsy_listings.core.application.backup_repository import (
     RepositoryNotEmptyError,
     ResticNotInstalledError,
     backup_status,
+    configured_backup,
     create_repository,
-    open_repository,
 )
 from etsy_listings.core.backup.binary import RESTIC_BINARY_ENV_VAR, ResticBinaries
 from etsy_listings.core.backup.repository import ResticError, WrongPasswordError
@@ -25,9 +27,9 @@ from etsy_listings.core.config.secrets import BACKUP_PASSWORD_VAR, MissingCreden
 from etsy_listings.core.workspace import layout
 from etsy_listings.core.workspace.workspace import Workspace
 
+from tests.support.backups import PASSWORD, configure_backups
 from tests.support.restic import InMemoryRestic, snapshot_id
 
-PASSWORD = "correct horse battery staple"
 NOW = datetime(2026, 11, 23, 8, tzinfo=UTC)
 
 
@@ -51,11 +53,7 @@ def repository(tmp_path: Path, workspace: Workspace) -> Path:
     """A ``backup:`` block naming a repository under ``tmp_path``, run with a
     restic named in the setting, so nothing is downloaded."""
     path = tmp_path / "backups"
-    workspace.settings_file().write_text(
-        f"backup:\n  repository: {path.as_posix()}\n"
-        f"  restic_binary: {(tmp_path / 'restic').as_posix()}\n",
-        encoding="utf-8",
-    )
+    configure_backups(workspace.root, path, restic_binary=tmp_path / "restic", password=None)
     return path
 
 
@@ -68,11 +66,23 @@ def _env(workspace: Workspace) -> str:
     return (workspace.root / layout.ENV_FILE).read_text(encoding="utf-8")
 
 
+def _create(
+    workspace: Workspace,
+    binaries: ResticBinaries,
+    restic: InMemoryRestic,
+    password: str = PASSWORD,
+    *,
+    store: bool = True,
+) -> str:
+    backup = configured_backup(workspace, binaries=binaries, restic=restic)
+    return create_repository(backup, password, store=store)
+
+
 def test_without_a_backup_block_there_is_nothing_to_create(
     workspace: Workspace, binaries: ResticBinaries
 ) -> None:
     with pytest.raises(BackupOffError, match="backup:"):
-        create_repository(workspace, PASSWORD, binaries=binaries, restic=_restic())
+        configured_backup(workspace, binaries=binaries, restic=_restic())
 
 
 def test_creating_stores_the_password_then_initialises(
@@ -81,7 +91,7 @@ def test_creating_stores_the_password_then_initialises(
     restic = _restic()
     restic.password = PASSWORD
 
-    created = create_repository(workspace, PASSWORD, binaries=binaries, restic=restic)
+    created = _create(workspace, binaries, restic)
 
     assert created == "f00d"
     assert f"{BACKUP_PASSWORD_VAR}={PASSWORD}" in _env(workspace)
@@ -98,7 +108,7 @@ def test_a_failed_init_keeps_the_stored_password(
     restic.fail("init", ResticError("restic: Fatal: disk full", exit_code=1))
 
     with pytest.raises(ResticError, match="disk full"):
-        create_repository(workspace, PASSWORD, binaries=binaries, restic=restic)
+        _create(workspace, binaries, restic)
 
     assert f"{BACKUP_PASSWORD_VAR}={PASSWORD}" in _env(workspace)
 
@@ -110,13 +120,7 @@ def test_a_password_already_stored_is_not_written_again(
         f"# mine\n{BACKUP_PASSWORD_VAR}={PASSWORD}\n", encoding="utf-8"
     )
 
-    create_repository(
-        workspace,
-        PASSWORD,
-        binaries=binaries,
-        restic=_restic(),
-        store=False,
-    )
+    _create(workspace, binaries, _restic(), store=False)
 
     assert _env(workspace) == f"# mine\n{BACKUP_PASSWORD_VAR}={PASSWORD}\n"
 
@@ -125,7 +129,7 @@ def test_a_short_password_is_refused_before_anything_is_written(
     workspace: Workspace, repository: Path, binaries: ResticBinaries
 ) -> None:
     with pytest.raises(PasswordTooShortError, match="12"):
-        create_repository(workspace, "eleven-char", binaries=binaries, restic=_restic())
+        _create(workspace, binaries, _restic(), "eleven-char")
 
     assert not (workspace.root / layout.ENV_FILE).exists()
 
@@ -137,7 +141,7 @@ def test_a_folder_holding_files_is_refused(
     (repository / "holiday.jpg").write_bytes(b"\xff\xd8")
 
     with pytest.raises(RepositoryNotEmptyError, match=str(repository).replace("\\", "\\\\")):
-        create_repository(workspace, PASSWORD, binaries=binaries, restic=_restic())
+        _create(workspace, binaries, _restic())
 
     assert not (workspace.root / layout.ENV_FILE).exists()
 
@@ -147,7 +151,7 @@ def test_an_empty_existing_folder_is_used(
 ) -> None:
     repository.mkdir()
 
-    created = create_repository(workspace, PASSWORD, binaries=binaries, restic=_restic())
+    created = _create(workspace, binaries, _restic())
 
     assert created == "f00d"
 
@@ -156,7 +160,7 @@ def test_opening_needs_the_stored_password(
     workspace: Workspace, repository: Path, binaries: ResticBinaries
 ) -> None:
     with pytest.raises(MissingCredentialError) as caught:
-        open_repository(workspace, binaries=binaries)
+        configured_backup(workspace, binaries=binaries).open()
 
     assert caught.value.variable == BACKUP_PASSWORD_VAR
 
@@ -164,13 +168,10 @@ def test_opening_needs_the_stored_password(
 def test_opening_never_downloads_restic(
     workspace: Workspace, tmp_path: Path, binaries: ResticBinaries
 ) -> None:
-    workspace.settings_file().write_text(
-        f"backup:\n  repository: {(tmp_path / 'b').as_posix()}\n", encoding="utf-8"
-    )
-    (workspace.root / layout.ENV_FILE).write_text(f"{BACKUP_PASSWORD_VAR}={PASSWORD}\n")
+    configure_backups(workspace.root, tmp_path / "b")
 
     with pytest.raises(ResticNotInstalledError, match="backup init"):
-        open_repository(workspace, binaries=binaries)
+        configured_backup(workspace, binaries=binaries).open()
 
     assert not (tmp_path / "home").exists()
 
@@ -187,7 +188,7 @@ def test_status_of_a_workspace_without_backups_says_they_are_off(
 def test_status_lists_the_snapshots_read_without_a_lock(
     workspace: Workspace, repository: Path, binaries: ResticBinaries
 ) -> None:
-    (workspace.root / layout.ENV_FILE).write_text(f"{BACKUP_PASSWORD_VAR}={PASSWORD}\n")
+    configure_backups(workspace.root, repository, restic_binary=repository.parent / "restic")
     restic = _restic()
     restic.snapshots.append(NOW)
 
@@ -204,7 +205,12 @@ def test_status_lists_the_snapshots_read_without_a_lock(
 def test_status_reports_what_stops_the_repository_opening(
     workspace: Workspace, repository: Path, binaries: ResticBinaries
 ) -> None:
-    (workspace.root / layout.ENV_FILE).write_text(f"{BACKUP_PASSWORD_VAR}=not-the-one-at-all\n")
+    configure_backups(
+        workspace.root,
+        repository,
+        restic_binary=repository.parent / "restic",
+        password="not-the-one-at-all",
+    )
     restic = _restic()
     restic.password = PASSWORD
 

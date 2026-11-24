@@ -10,6 +10,7 @@ source for the Backup page, the banner and the nav icons (interactions,
 
 from __future__ import annotations
 
+import re
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -18,8 +19,9 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict
 
+from etsy_listings.core.application.backup_repository import MIN_PASSWORD_LENGTH
 from etsy_listings.core.application.backup_restore import RestoreStatus
-from etsy_listings.core.backup.destinations import ChangedFile
+from etsy_listings.core.backup.destinations import ChangedFile, planned_set_aside
 from etsy_listings.core.backup.repository import Snapshot
 from etsy_listings.core.backup.state import BackupState, CheckResult, RunRecord
 from etsy_listings.core.config.settings import BackupSettings, RetentionSettings
@@ -79,13 +81,23 @@ class RepositoryOverview(_Model):
 
 class DestinationOverview(_Model):
     path: str
+    name: str
+    """What the page calls it: :func:`destination_name`."""
+    icloud: bool = False
+    """An iCloud Drive folder, which iCloud for Windows uploads."""
     last_copy: datetime | None = None
     problem: str | None = None
     """Why the latest copy did not finish, such as an unreachable folder."""
+    short_problem: str | None = None
+    """``problem`` in a few words, for a pill: :func:`short_problem`."""
     last_check: CheckResult | None = None
     changed: tuple[ChangedFile, ...] = ()
     unexpected: tuple[str, ...] = ()
     behind: bool = False
+    set_aside: str | None = None
+    """The folder Repair would set ``changed`` and ``unexpected`` aside in
+    today, as :func:`planned_set_aside` finds it; None with nothing to set
+    aside."""
 
 
 class BackupOverview(_Model):
@@ -100,6 +112,8 @@ class BackupOverview(_Model):
     warnings: list[BackupWarning] = []
     restore: RestoreStatus | None = None
     """The latest restore since the app started (spec, *Restore*)."""
+    password_min_length: int = MIN_PASSWORD_LENGTH
+    """The shortest password set-up and Create a new repository accept."""
 
 
 @dataclass(frozen=True)
@@ -175,20 +189,48 @@ def backup_overview(facts: BackupFacts) -> BackupOverview:
     )
 
 
+ICLOUD_DRIVE = "iCloud Drive"
+SHORT_PROBLEM = 24
+"""The most characters a problem's first phrase may have to stand alone."""
+
+
+def destination_name(path: Path) -> str:
+    """ "iCloud Drive" for an iCloud folder, else the folder's own name."""
+    if "icloud" in str(path).lower():
+        return ICLOUD_DRIVE
+    return path.name or "Folder"
+
+
+def short_problem(problem: str | None) -> str | None:
+    """A copy's problem as a pill says it: its first phrase when that is
+    short, as "Folder not found: ..." is, else only that it was not copied."""
+    if problem is None:
+        return None
+    first = re.split(r"[.:]", problem, maxsplit=1)[0].strip()
+    return first if first and len(first) <= SHORT_PROBLEM else "Not copied"
+
+
 def _destination(facts: BackupFacts, path: Path) -> DestinationOverview:
     recorded = facts.state.destination(path)
     copied = recorded.last_copy
     snapshots = facts.reading.snapshots or ()
     # The oldest snapshot the destination has not had yet.
     pending = min((s.time for s in snapshots if copied is None or s.time > copied), default=None)
+    # The same day as the repair takes: the seller's, not UTC's.
+    today = facts.now.astimezone().date()
+    to_repair = recorded.changed or recorded.unexpected
     return DestinationOverview(
         path=str(path),
+        name=destination_name(path),
+        icloud=destination_name(path) == ICLOUD_DRIVE,
         last_copy=copied,
         problem=recorded.problem,
+        short_problem=short_problem(recorded.problem),
         last_check=recorded.last_check,
         changed=recorded.changed,
         unexpected=recorded.unexpected,
         behind=pending is not None and facts.now - pending > WARN_AFTER,
+        set_aside=str(planned_set_aside(path, today)) if to_repair else None,
     )
 
 
@@ -250,6 +292,8 @@ class HistoryEntry(_Model):
     kept_as: KeptAs | None = None
     """The retention bucket holding the run's snapshot; None once it is
     forgotten, or for a run that made none."""
+    names: dict[str, str] = {}
+    """Each copy's destination's :func:`destination_name`, by path."""
 
 
 def history(
@@ -262,7 +306,11 @@ def history(
     times = {s.id: s.time for s in snapshots}
     return [
         HistoryEntry(
-            run=run, kept_as=_kept_as(times.get(run.snapshot_id or ""), times, retention, now)
+            run=run,
+            kept_as=_kept_as(times.get(run.snapshot_id or ""), times, retention, now),
+            names={
+                copy.destination: destination_name(Path(copy.destination)) for copy in run.copies
+            },
         )
         for run in reversed(runs)
     ]

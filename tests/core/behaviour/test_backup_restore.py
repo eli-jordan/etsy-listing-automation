@@ -1,32 +1,41 @@
-"""The restore job on the backup coordinator (workspace-backup spec,
-*Restore*; plan, PR 7), against the in-memory repository. ``home`` is under
-``tmp_path`` throughout (plan, P2).
+"""A restore, prepared and run (workspace-backup spec, *Restore*; plan,
+PR 7), against the in-memory repository: the one place a restore target's
+refusals are tested, both before the repository opens and just before restic
+writes. The coordinator's job around it is test_backup_restore_job.py's.
+
+Paths are written against ``{tmp}`` (this test's folder) and ``{ws}`` (the
+workspace inside it); ``{WS}`` is the workspace path in upper case, which
+Windows treats as the same folder.
 """
 
 from __future__ import annotations
 
+import os
+import threading
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
 
-from etsy_listings.core.application.backup_coordinator import (
-    BackupCoordinator,
-    BackupEnvironment,
-)
-from etsy_listings.core.application.backup_restore import RestoreRefusedError
-from etsy_listings.core.backup.binary import RESTIC_BINARY_ENV_VAR
-from etsy_listings.core.backup.state import BackupState, BackupStateStore, CheckResult
+from etsy_listings.core.application.backup_repository import LIVE_WORKSPACE
+from etsy_listings.core.application.backup_restore import PreparedRestore, prepare_restore
+from etsy_listings.core.backup.binary import RESTIC_BINARY_ENV_VAR, ResticBinaries
+from etsy_listings.core.backup.repository import ResticCancelledError, RestoreProgress
 from etsy_listings.core.config.secrets import BACKUP_PASSWORD_VAR
-from etsy_listings.core.errors import ConflictError, MissingError
-from etsy_listings.core.workspace import layout
+from etsy_listings.core.errors import MissingError, UserFacingError
 from etsy_listings.core.workspace.workspace import Workspace
 
-from tests.support.ai_runs import wait_for
+from tests.support.backups import configure_backups
 from tests.support.restic import InMemoryRestic, snapshot_id
 
+WINDOWS = pytest.mark.skipif(os.name != "nt", reason="Windows folds the case of paths")
 NOW = datetime(2026, 11, 23, 9, 0, tzinfo=UTC)
 SNAPSHOT = snapshot_id(1)
+
+STORAGE_FOLDER = "is in the backup storage folder"
+DESTINATION = "is in a backup destination"
+INSIDE = "is inside your live workspace"
+HOLDS_FILES = "already holds files"
 
 
 @pytest.fixture(autouse=True)
@@ -35,214 +44,200 @@ def _no_ambient_backup(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv(RESTIC_BINARY_ENV_VAR, raising=False)
 
 
-@pytest.fixture
-def repository(tmp_path: Path) -> Path:
-    path = tmp_path / "backups"
-    path.mkdir()
-    (path / "config").write_bytes(b"{}")
-    return path
-
-
-@pytest.fixture
-def workspace(workspace_root: Path, repository: Path, tmp_path: Path) -> Workspace:
-    workspace_root.joinpath("settings.yaml").write_text(
-        f"backup:\n  repository: {repository.as_posix()}\n"
-        f"  restic_binary: {(tmp_path / 'restic').as_posix()}\n",
-        encoding="utf-8",
+def _configure(workspace_root: Path, storage: str = "backups", *extra: Path) -> Workspace:
+    tmp = workspace_root.parent
+    return configure_backups(
+        workspace_root,
+        tmp / storage,
+        destinations=[tmp / "cloud", *extra],
+        restic_binary=tmp / "restic",
     )
-    (workspace_root / layout.ENV_FILE).write_text(f"{BACKUP_PASSWORD_VAR}=correct horse battery\n")
-    return Workspace.discover(root_override=workspace_root)
+
+
+@pytest.fixture
+def workspace(workspace_root: Path) -> Workspace:
+    return _configure(workspace_root)
 
 
 @pytest.fixture
 def restic() -> InMemoryRestic:
     fake = InMemoryRestic(lambda: NOW)
-    fake.snapshots.append(NOW - timedelta(hours=2))
+    fake.snapshots += [NOW - timedelta(days=1), NOW - timedelta(hours=2)]
     return fake
 
 
-@pytest.fixture
-def coordinator(workspace: Workspace, restic: InMemoryRestic, tmp_path: Path) -> BackupCoordinator:
-    environment = BackupEnvironment(home=tmp_path / "home", restic=restic, now=lambda: NOW)
-    return BackupCoordinator(workspace, gate=None, environment=environment)
+def _prepare(
+    workspace: Workspace, restic: InMemoryRestic, target: Path, snapshot: str = SNAPSHOT
+) -> PreparedRestore:
+    home = workspace.root.parent / "home"
+    return prepare_restore(
+        workspace, snapshot, target, binaries=ResticBinaries(home=home), restic=restic
+    )
 
 
-def _files_done(coordinator: BackupCoordinator) -> int | None:
-    restore = coordinator.overview().restore
-    return None if restore is None else restore.files_done
+def _path(template: str, tmp: Path, workspace: Path) -> Path:
+    return Path(
+        template.format(tmp=tmp.as_posix(), ws=workspace.as_posix(), WS=str(workspace).upper())
+    )
 
 
-def test_a_restore_writes_the_snapshot_into_a_new_folder_and_reports_progress(
-    coordinator: BackupCoordinator, restic: InMemoryRestic, tmp_path: Path
-) -> None:
-    release = restic.hold("restore")
-    target = tmp_path / "restored"
-
-    coordinator.start_restore(SNAPSHOT[:8], target)
-    wait_for(lambda: _files_done(coordinator) == 100)
-    running = coordinator.overview().restore
-    release.set()
-    coordinator.join_restore(timeout=10)
-
-    assert running is not None
-    assert (running.outcome, running.percent, running.bytes_total) == ("running", 0.25, 8_000_000)
-    assert (running.snapshot_id, running.seconds_left) == (SNAPSHOT, 180)
-    done = coordinator.overview().restore
-    assert done is not None
-    assert (done.outcome, done.files_done, done.target) == ("succeeded", 400, str(target))
+def _link(link: Path, target: Path) -> None:
+    try:
+        link.symlink_to(target, target_is_directory=True)
+    except OSError:
+        pytest.skip("this machine does not let tests make symbolic links")
 
 
-@pytest.mark.parametrize("where", ["workspace", "inside", "non_empty"])
-def test_a_restore_refuses_the_live_workspace_and_a_folder_with_files(
-    coordinator: BackupCoordinator,
-    restic: InMemoryRestic,
-    workspace: Workspace,
-    tmp_path: Path,
-    where: str,
-) -> None:
-    full = tmp_path / "full"
-    full.mkdir()
-    (full / "notes.txt").write_text("keep me")
-    target = {"workspace": workspace.root, "inside": workspace.root / "old", "non_empty": full}
-
-    with pytest.raises(RestoreRefusedError):
-        coordinator.start_restore(SNAPSHOT, target[where])
-
-    assert restic.ran("restore") == 0
-    assert coordinator.overview().restore is None
+# ------------------------------------------------------------- the snapshot
 
 
-def test_an_unknown_snapshot_is_missing(
-    coordinator: BackupCoordinator, restic: InMemoryRestic, tmp_path: Path
-) -> None:
-    with pytest.raises(MissingError):
-        coordinator.start_restore("deadbeef", tmp_path / "restored")
-    assert restic.ran("restore") == 0
-
-
-def test_a_restore_rechecks_the_target_after_listing_snapshots(
+def test_a_prepared_restore_writes_the_snapshot_and_reports_its_figures(
     workspace: Workspace, restic: InMemoryRestic, tmp_path: Path
 ) -> None:
-    target = tmp_path / "restore"
-    target.mkdir()
-    document = target / "notes.txt"
+    heard: list[RestoreProgress] = []
+    prepared = _prepare(workspace, restic, tmp_path / "restored")
 
-    def a_file_lands(operation: str) -> None:
-        if operation == "snapshots":
-            document.write_text("preserve me")
+    last = prepared.run(progress=heard.append)
 
-    restic.on_start = a_file_lands
-    environment = BackupEnvironment(home=tmp_path / "home", restic=restic, now=lambda: NOW)
-    coordinator = BackupCoordinator(workspace, gate=None, environment=environment)
-    coordinator.start_restore(SNAPSHOT, target)
-    coordinator.join_restore(timeout=10)
-
-    result = coordinator.overview().restore
-    assert result is not None
-    assert result.outcome == "failed"
-    assert restic.ran("restore") == 0
-    assert document.read_text() == "preserve me"
+    assert (prepared.snapshot.id, prepared.target) == (SNAPSHOT, (tmp_path / "restored").resolve())
+    assert [figures.files_done for figures in heard] == [100, 400]
+    assert last.files_done == 400
+    assert restic.reads_without_lock == 1, "a backup underway does not hold the listing up"
 
 
-def test_a_restore_refuses_an_empty_backup_destination(
-    coordinator: BackupCoordinator, workspace: Workspace, restic: InMemoryRestic, tmp_path: Path
+def test_latest_is_the_newest_snapshot(
+    workspace: Workspace, restic: InMemoryRestic, tmp_path: Path
 ) -> None:
-    destination = tmp_path / "cloud"
-    destination.mkdir()
-    with workspace.settings_file().open("a", encoding="utf-8") as settings:
-        settings.write(f"  destinations:\n    - {destination.as_posix()}\n")
-
-    with pytest.raises(RestoreRefusedError, match="destination"):
-        coordinator.start_restore(SNAPSHOT, destination)
-
-    assert restic.ran("restore") == 0
-
-
-def test_one_restore_at_a_time(
-    coordinator: BackupCoordinator, restic: InMemoryRestic, tmp_path: Path
-) -> None:
-    restic.hold("restore")
-    coordinator.start_restore(SNAPSHOT, tmp_path / "first")
-    try:
-        with pytest.raises(ConflictError):
-            coordinator.start_restore(SNAPSHOT, tmp_path / "second")
-    finally:
-        coordinator.stop_restore()
-
-
-def test_stop_ends_the_restore_part_way_and_says_how_far_it_got(
-    coordinator: BackupCoordinator, restic: InMemoryRestic, tmp_path: Path
-) -> None:
-    restic.hold("restore")
-    coordinator.start_restore(SNAPSHOT, tmp_path / "restored")
-    wait_for(lambda: _files_done(coordinator) == 100)
-
-    coordinator.stop_restore()
-
-    stopped = coordinator.overview().restore
-    assert stopped is not None
-    assert (stopped.outcome, stopped.percent) == ("stopped", 0.25)
-    assert restic.stopped("restore") == 1
-
-
-def test_shutting_down_stops_a_restore(
-    coordinator: BackupCoordinator, restic: InMemoryRestic, tmp_path: Path
-) -> None:
-    restic.hold("restore")
-    coordinator.start_restore(SNAPSHOT, tmp_path / "restored")
-
-    coordinator.stop()
-
-    stopped = coordinator.overview().restore
-    assert stopped is not None
-    assert stopped.outcome == "stopped"
-
-
-def test_a_scheduled_backup_runs_during_a_restore_and_the_weekly_prune_waits(
-    coordinator: BackupCoordinator, restic: InMemoryRestic, repository: Path, tmp_path: Path
-) -> None:
-    """restore's shared lock lets a backup in, but forget, prune and check
-    need restic's exclusive lock, so they wait for the next run after it."""
-    restic.snapshots[0] = NOW - timedelta(days=1)
-    store = BackupStateStore(tmp_path / "home")
-    pruned = NOW - timedelta(days=8)
-    store.save(
-        BackupState(
-            repository=str(repository),
-            last_prune=pruned,
-            last_check=CheckResult(at=pruned, ok=True),
-        )
+    assert _prepare(workspace, restic, tmp_path / "restored", "latest").snapshot.id == (
+        snapshot_id(2)
     )
-    release = restic.hold("restore")
-    coordinator.start_restore(SNAPSHOT, tmp_path / "restored")
-    wait_for(lambda: restic.ran("restore") == 1)
-
-    assert coordinator.check()
-    coordinator.join(timeout=10)
-    during = {name: restic.ran(name) for name in ("back_up", "forget", "prune", "check")}
-    release.set()
-    coordinator.join_restore(timeout=10)
-    coordinator.run_now()
-    coordinator.join(timeout=10)
-
-    assert during == {"back_up": 1, "forget": 0, "prune": 0, "check": 0}
-    assert (restic.ran("back_up"), restic.ran("prune"), restic.ran("check")) == (2, 1, 1)
-    assert coordinator.history()[1].run.outcome == "succeeded"
 
 
-def test_a_restore_waits_for_maintenance_already_underway(
-    coordinator: BackupCoordinator, restic: InMemoryRestic, tmp_path: Path
+@pytest.mark.parametrize(
+    ("ref", "missing"),
+    [("deadbeef", "No backup has the id deadbeef."), ("0000", "0000 is ambiguous.")],
+)
+def test_a_snapshot_no_id_or_several_start_with_is_missing(
+    workspace: Workspace, restic: InMemoryRestic, tmp_path: Path, ref: str, missing: str
 ) -> None:
-    release = restic.hold("forget")
-    coordinator.run_now()
-    try:
-        wait_for(lambda: restic.ran("forget") == 1)
-        coordinator.start_restore(SNAPSHOT, tmp_path / "restored")
-        assert coordinator.restoring
-    finally:
-        release.set()
-        coordinator.join(timeout=10)
-        coordinator.join_restore(timeout=10)
-        coordinator.stop()
+    with pytest.raises(MissingError, match=missing):
+        _prepare(workspace, restic, tmp_path / "restored", ref)
+    assert restic.ran("restore") == 0
 
-    assert restic.operations.index("restore") > restic.operations.index("check")
+
+def test_a_restore_stopped_before_it_starts_writes_nothing(
+    workspace: Workspace, restic: InMemoryRestic, tmp_path: Path
+) -> None:
+    stop = threading.Event()
+    stop.set()
+
+    with pytest.raises(ResticCancelledError):
+        _prepare(workspace, restic, tmp_path / "restored").run(cancel=stop)
+    assert restic.ran("restore") == 0
+
+
+# ---------------------------------------------------- the target, prepared
+
+
+@pytest.mark.parametrize(
+    ("target", "refused"),
+    [
+        pytest.param("{tmp}/restored", None, id="a new folder"),
+        pytest.param("{tmp}/empty", None, id="an empty folder"),
+        pytest.param("restored", "is not a full path", id="relative"),
+        pytest.param("{ws}", LIVE_WORKSPACE, id="the live workspace"),
+        pytest.param("{WS}", LIVE_WORKSPACE, id="the live workspace, other case", marks=WINDOWS),
+        pytest.param("{ws}/old", INSIDE, id="inside the workspace"),
+        pytest.param("{WS}/old", INSIDE, id="inside the workspace, other case", marks=WINDOWS),
+        pytest.param("{tmp}/backups", STORAGE_FOLDER, id="the storage folder"),
+        pytest.param("{tmp}/backups/old", STORAGE_FOLDER, id="inside the storage folder"),
+        pytest.param("{tmp}/cloud", DESTINATION, id="an empty destination"),
+        pytest.param("{tmp}/cloud/old", DESTINATION, id="inside a destination"),
+        pytest.param("{tmp}/full", HOLDS_FILES, id="a folder with files"),
+        pytest.param("{tmp}/notes.txt", HOLDS_FILES, id="a file"),
+        pytest.param("{tmp}", HOLDS_FILES, id="the folder holding the workspace"),
+    ],
+)
+def test_a_restore_target_must_be_new_and_outside_every_backup_folder(
+    workspace: Workspace, restic: InMemoryRestic, tmp_path: Path, target: str, refused: str | None
+) -> None:
+    (tmp_path / "empty").mkdir()
+    (tmp_path / "full").mkdir()
+    (tmp_path / "full" / "notes.txt").write_text("keep me")
+    (tmp_path / "notes.txt").write_text("keep me")
+    (tmp_path / "cloud").mkdir()
+    folder = _path(target, tmp_path, workspace.root)
+
+    if refused is None:
+        _prepare(workspace, restic, folder).run()
+        assert restic.ran("restore") == 1
+        return
+    with pytest.raises(UserFacingError, match=refused):
+        _prepare(workspace, restic, folder)
+    assert restic.operations == [], "refused before the repository opens"
+
+
+def test_a_restore_target_reached_through_a_link_into_the_workspace_is_inside_it(
+    workspace: Workspace, restic: InMemoryRestic, tmp_path: Path
+) -> None:
+    _link(tmp_path / "shortcut", workspace.root)
+
+    with pytest.raises(UserFacingError, match=INSIDE):
+        _prepare(workspace, restic, tmp_path / "shortcut" / "old")
+
+
+@WINDOWS
+def test_a_letter_windows_keeps_apart_but_str_lower_folds_is_one_folder(
+    workspace_root: Path, restic: InMemoryRestic, tmp_path: Path
+) -> None:
+    """Where the two "inside" rules backup_repository's replaced disagreed.
+    The Kelvin sign lower-cases to ``k`` in Python but not in
+    ``os.path.normcase``, so the restore's old rule let this target through;
+    the one rule refuses it, the safe side for a folder that only differs by
+    such a letter."""
+    workspace = _configure(workspace_root, "k-store")
+
+    with pytest.raises(UserFacingError, match=STORAGE_FOLDER):
+        _prepare(workspace, restic, tmp_path / "K-store" / "old")
+
+
+# ------------------------------------------- the target, just before restic
+
+
+def test_files_that_land_in_the_target_after_preparing_stop_the_restore(
+    workspace: Workspace, restic: InMemoryRestic, tmp_path: Path
+) -> None:
+    target = tmp_path / "restored"
+    target.mkdir()
+    prepared = _prepare(workspace, restic, target)
+    (target / "notes.txt").write_text("preserve me")
+
+    with pytest.raises(UserFacingError, match=HOLDS_FILES):
+        prepared.run()
+    assert restic.ran("restore") == 0
+    assert (target / "notes.txt").read_text() == "preserve me"
+
+
+@pytest.mark.parametrize(
+    ("saved", "target"),
+    [
+        pytest.param(("backups", "added"), "added", id="a destination added"),
+        pytest.param(("added",), "added/old", id="the storage folder moved"),
+    ],
+)
+def test_a_target_the_settings_made_a_backup_folder_since_preparing_is_refused(
+    workspace: Workspace,
+    restic: InMemoryRestic,
+    tmp_path: Path,
+    saved: tuple[str, ...],
+    target: str,
+) -> None:
+    """A Setup save between preparing and running: the re-check reads
+    ``settings.yaml`` afresh and refuses its folders as destinations."""
+    prepared = _prepare(workspace, restic, tmp_path / target)
+    storage, *added = saved
+    _configure(workspace.root, storage, *(tmp_path / name for name in added))
+
+    with pytest.raises(UserFacingError, match=DESTINATION):
+        prepared.run()
+    assert restic.ran("restore") == 0

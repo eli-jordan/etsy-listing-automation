@@ -21,11 +21,21 @@ Every write goes through `setup.py` or the SEO skill's `draft`. Each prints any 
 
 ```bash
 setup.py health --root $ROOT
-setup.py create --template "<listing template>" --prefix <prefix> --strip-variant <PNG files>
+setup.py create --template "<listing template>" --prefix <prefix> --label "<batch name>" --strip-variant <PNG files>
 setup.py briefs <batch id>
 ```
 
 Use the naming convention the existing listings follow, for example `christmas-2026-`. `--strip-variant` drops a trailing `-a` or `-b` variant letter from file names. A staging problem leaves the batch unconfirmed and prints why. `briefs` waits for the app's AI to draft each brief, then prints them.
+
+`--label` is the batch's name in the app's Recent batches, where the seller finds it again, so name the collection the designs belong to. Use the zip's or folder's name when it has one, such as `Artistic Designs` or `Christmas 2026 part 2`. Otherwise name the theme the designs share. Leave out the skill's name, ids and timestamps, because the app already shows the date.
+
+When the designs come from a zip or a folder named after a collection, rename the PNGs to short slugs before `create`, because the listing name is the prefix plus the file name. For example, rename `Artistic Designs - Boho Racoon.png` to `boho-raccoon.png`, and correct spelling while you're at it.
+
+The template stamps one section on every listing. When the seller names a section, or the designs belong in another one, set it straight after `create`:
+
+```bash
+setup.py section "<section title>" <names>
+```
 
 For each listing, run `setup.py look <name> --root $ROOT --out <dir>`. It prints the brief and section, and writes `design-*.jpg`, the design on grey, dark and light backdrops. Image viewers flatten transparency, so read that file rather than the PNG. The copy steps treat the brief as fact, so correct anything it gets wrong, especially the exact printed words and anything it calls a background, with `setup.py brief <name> --file <path>`. Also check that the section suits the design, because the template stamps one section on every listing.
 
@@ -55,7 +65,9 @@ setup.py gallery <name> --colours a,b,c --hero b --variation <template> --scenes
 
 `gallery` writes the shop's gallery shape: hero, video, size guide, lifestyle scenes, info card, then one variation tile for each other colour. It also enforces Etsy's limit of 20 images, so each extra colour leaves room for one less scene. A bare scene name takes the next colour in turn.
 
-Choose the variation template, the hero colour and 5 to 9 scenes from [reference/templates.md](reference/templates.md). The hero is the shirt that sells the design best at thumbnail size. Some colours look different in a photo than on a swatch, so confirm the hero and scene colours on the sheet in step 4. A colour may appear in more than one scene.
+Choose the variation template, the hero colour and 5 to 9 scenes from [reference/templates.md](reference/templates.md). The variation template fills the hero and every colour tile, about half the gallery, so vary it across the batch: rotate through the section's variation templates, give each listing the one that suits its art, and don't use any single template for most of the batch. The hero is the shirt that sells the design best at thumbnail size. Some colours look different in a photo than on a swatch, so confirm the hero and scene colours on the sheet in step 4.
+
+Give every colour its own lifestyle scene with a model, as well as its variation tile, so a buyer sees each colour worn. The 20-image limit allows this for up to 9 colours, so prefer 9 or fewer when the design doesn't need more. With 10 or more colours, fill every free slot with a scene and leave the weakest colours without one. Below 5 colours, a colour may appear in more than one scene. Pass one bare scene name per colour to have `gallery` deal the colours out in turn, or name each scene's colour to match the shirt to the scene. When a section's scene list runs short, reuse a scene in another colour.
 
 Done when `gallery` prints `saved`.
 
