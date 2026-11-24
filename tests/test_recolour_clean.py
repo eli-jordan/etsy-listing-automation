@@ -22,6 +22,7 @@ STAR_PRINT = (130, 44, 44)
 # removed and loses its colour edges, as the stars on a real photo measured: 0.72 and 0.31.
 STAR_SHIFT = np.array((-60, 80, 0), np.int16)
 GOLD = (226, 188, 140)
+BLUSH = (214, 96, 40)  # flat orange, as on the B14 portrait's cheek
 PRINT_BOX = (800, 1200, 800, 1200)  # top, bottom, left, right
 
 
@@ -131,6 +132,22 @@ def test_a_small_print_item_on_grainy_fabric_is_removed(recolour: ModuleType) ->
     plain = fabric(size, 1, sigma=8)
     original = with_gap(plain, plain)
     original[item] = np.clip(plain[item] + STAR_SHIFT, 0, 255).astype(np.uint8)
+
+    patches = recolour.edited_patches(original, fabric(size, 2, sigma=8))
+
+    assert len(patches) == 1
+    assert patches[0][item].all()
+
+
+def test_a_flat_print_item_inside_the_patch_is_removed(recolour: ModuleType) -> None:
+    """A flat patch of colour, such as a portrait's cheek blush, has hardly any edges
+    inside it, so the fabric grain left in its place keeps them all; it is still a
+    removal, because the generator turned it into the fabric around it."""
+    size = recolour.SIZE
+    item = bulb(size, (1000, 1000))
+    plain = fabric(size, 1, sigma=8)
+    original = with_gap(plain, plain)
+    original[item] = BLUSH
 
     patches = recolour.edited_patches(original, fabric(size, 2, sigma=8))
 
