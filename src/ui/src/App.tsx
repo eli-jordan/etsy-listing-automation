@@ -10,6 +10,7 @@ import { PositionedListingsNote } from "./components/PositionedListingsNote";
 import { preparationLabel, marigoldMapsReady } from "./components/preparationLabel";
 import { RendererPanel } from "./components/RendererPanel";
 import { TemplateRail } from "./components/TemplateRail";
+import { TemplateSheet, TemplateSwitcher } from "./components/TemplateSwitcher";
 import { ColourMatrixEditor } from "./editors/ColourMatrixEditor";
 import { MARIGOLD_DEFAULTS } from "./editors/marigoldDefaults";
 import { MarigoldEditor } from "./editors/MarigoldEditor";
@@ -24,6 +25,7 @@ import {
   type TemplateSession,
 } from "./hooks/useTemplateSession";
 import { SavedAgo } from "./pages/editor/SavedAgo";
+import { useIsPhone } from "./phone/usePhone";
 import type { Renderer, TemplateConfigState, TemplateKind, TemplateSummary } from "./types";
 
 /** A thin router: picks the template, hands it to an authoring session
@@ -87,6 +89,30 @@ function templateMeta(selected: TemplateSummary, config: TemplateConfigState | n
   return `${kindLabel ?? "Unknown"} · ${colours} colour${colours === 1 ? "" : "s"}`;
 }
 
+/** Whether the open template is finished: calibrated, or its Marigold maps
+ * preparation state. */
+function StatusChip({
+  selected,
+  config,
+  preparationStatus,
+  statusClass,
+}: {
+  selected: TemplateSummary;
+  config: TemplateConfigState | null;
+  preparationStatus: string;
+  statusClass: string;
+}) {
+  if (config?.renderer.type === "marigold") {
+    return <span className={"tag mg-status" + statusClass}>{preparationStatus}</span>;
+  }
+  if (!config) return null;
+  return (
+    <span className={selected.status === "calibrated" ? "tag tag-accent-2" : "tag tag-accent"}>
+      {selected.status === "calibrated" ? "calibrated" : "needs calibration"}
+    </span>
+  );
+}
+
 function TemplateCrumb({
   selected,
   config,
@@ -113,14 +139,12 @@ function TemplateCrumb({
         titleClassName="app__crumb"
         inputClassName="app__crumb-name"
       />
-      {config && config.renderer.type !== "marigold" && (
-        <span className={selected.status === "calibrated" ? "tag tag-accent-2" : "tag tag-accent"}>
-          {selected.status === "calibrated" ? "calibrated" : "needs calibration"}
-        </span>
-      )}
-      {config?.renderer.type === "marigold" && (
-        <span className={"tag mg-status" + statusClass}>{preparationStatus}</span>
-      )}
+      <StatusChip
+        selected={selected}
+        config={config}
+        preparationStatus={preparationStatus}
+        statusClass={statusClass}
+      />
       <span className="app__meta">{templateMeta(selected, config)}</span>
       {rename.note && (
         <span className="app__meta" role="status">
@@ -152,6 +176,85 @@ function SaveStatus({
   if (save.kind === "failed" || save.kind === "conflict") return save.message;
   if (load === "error") return "failed to load template config";
   return catalogState === "error" ? "failed to load templates" : "";
+}
+
+interface ChipState {
+  config: TemplateConfigState | null;
+  preparationStatus: string;
+  statusClass: string;
+}
+
+interface HeaderProps {
+  phone: boolean;
+  selected: TemplateSummary | undefined;
+  names: readonly string[];
+  onSelect: (name: string) => void;
+  onOpenTemplates: () => void;
+  chip: ChipState;
+  session: TemplateSession;
+  catalogState: CatalogState;
+  rename: TemplateRename;
+}
+
+/** The phone's header: the template switcher, then what the rename said and
+ * the conflict's way out. */
+function PhoneHeader({
+  selected,
+  names,
+  onSelect,
+  onOpenTemplates,
+  chip,
+  session,
+  catalogState,
+  rename,
+}: HeaderProps & { selected: TemplateSummary }) {
+  return (
+    <header className="app__header app__header--phone">
+      <TemplateSwitcher
+        names={names}
+        selected={selected.name}
+        onSelect={onSelect}
+        onOpen={onOpenTemplates}
+        chip={<StatusChip selected={selected} {...chip} />}
+        meta={
+          <>
+            <span className="app__meta">{templateMeta(selected, chip.config)}</span>
+            <span className="app__status" role="status">
+              <SaveStatus save={session.save} load={session.load} catalogState={catalogState} />
+            </span>
+          </>
+        }
+      />
+      {rename.note && (
+        <span className="app__meta" role="status">
+          {rename.note}
+        </span>
+      )}
+      {session.save.kind === "conflict" && (
+        <button onClick={session.reload}>Reload template</button>
+      )}
+    </header>
+  );
+}
+
+function CalibratorHeader(props: HeaderProps) {
+  const { phone, selected, chip, session, catalogState, rename } = props;
+  if (phone && selected) return <PhoneHeader {...props} selected={selected} />;
+  return (
+    <header className="app__header">
+      <h1 className="app__title">Mockup Templates</h1>
+      {selected && <TemplateCrumb selected={selected} {...chip} rename={rename} />}
+
+      <div className="app__actions">
+        <p className="app__status" role="status">
+          <SaveStatus save={session.save} load={session.load} catalogState={catalogState} />
+        </p>
+        {session.save.kind === "conflict" && (
+          <button onClick={session.reload}>Reload template</button>
+        )}
+      </div>
+    </header>
+  );
 }
 
 /** Why the labels waiting to save have not, for beside the bar. A failed save
@@ -247,6 +350,9 @@ export function App() {
   // template.yaml -- and it deliberately survives switching template, since
   // "show me all of these against my real artwork" is the point of changing it.
   const [design, setDesign] = useState("bundled-grid");
+  const isPhone = useIsPhone();
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const closeSheet = useCallback(() => setSheetOpen(false), []);
 
   // Refreshes overlap: assigning a kind fires one and saving fires another
   // moments later. They are separate requests, so the *older* can resolve
@@ -377,6 +483,21 @@ export function App() {
   const knownLabels = useMemo(() => templates.flatMap((t) => t.labels), [templates]);
   const isMarigold = config?.renderer.type === "marigold";
   const preparationStatus = preparing ? "Preparing" : preparationLabel(preparation);
+  const templateNames = useMemo(() => templates.map((t) => t.name), [templates]);
+  const chipProps = {
+    config,
+    preparationStatus,
+    statusClass: marigoldStatusClass(preparing, preparation),
+  };
+  const rail = (onSelect: (name: string) => void) => (
+    <TemplateRail
+      templates={railTemplates}
+      selectedPreparationStatus={isMarigold ? preparationStatus : null}
+      selected={templateName}
+      onSelect={onSelect}
+      jobs={preparationJobs}
+    />
+  );
 
   // The photo's true pixel size, which is the coordinate space every bounding
   // box in template.yaml is written in. It has to come from the API: the
@@ -389,34 +510,30 @@ export function App() {
 
   return (
     <div className={isMarigold ? "app mg-frame mg-app" : "app mg-frame"}>
-      <header className="app__header">
-        <h1 className="app__title">Mockup Templates</h1>
-        {selected && (
-          <TemplateCrumb
-            selected={selected}
-            config={config}
-            preparationStatus={preparationStatus}
-            statusClass={marigoldStatusClass(preparing, preparation)}
-            rename={rename}
-          />
-        )}
-
-        <div className="app__actions">
-          <p className="app__status" role="status">
-            <SaveStatus save={save} load={session.load} catalogState={catalogState} />
-          </p>
-          {save.kind === "conflict" && <button onClick={session.reload}>Reload template</button>}
-        </div>
-      </header>
+      <CalibratorHeader
+        phone={isPhone}
+        selected={selected}
+        names={templateNames}
+        onSelect={setTemplateName}
+        onOpenTemplates={() => setSheetOpen(true)}
+        chip={chipProps}
+        session={session}
+        catalogState={catalogState}
+        rename={rename}
+      />
 
       <div className="app__workbench">
-        <TemplateRail
-          templates={railTemplates}
-          selectedPreparationStatus={isMarigold ? preparationStatus : null}
-          selected={templateName}
-          onSelect={setTemplateName}
-          jobs={preparationJobs}
-        />
+        {/* A phone has no room for the rail beside the canvas: it opens in a
+            sheet from the header's template name instead. */}
+        {!isPhone && rail(setTemplateName)}
+        {isPhone && sheetOpen && templateName && (
+          <TemplateSheet selected={templateName} rename={rename} onClose={closeSheet}>
+            {rail((name) => {
+              setTemplateName(name);
+              closeSheet();
+            })}
+          </TemplateSheet>
+        )}
 
         <div className="app__workspace">
           {/* 2a: an uncalibrated template replaces the workspace with a single

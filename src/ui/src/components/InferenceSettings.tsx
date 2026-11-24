@@ -3,6 +3,8 @@ import { useEffect, useRef, useState } from "react";
 import { InfoIcon } from "@phosphor-icons/react/dist/csr/Info";
 import { ArrowCounterClockwiseIcon } from "@phosphor-icons/react/dist/csr/ArrowCounterClockwise";
 import "./marigold.css";
+import { SheetGrabber } from "../phone/SheetGrabber";
+import { useIsPhone } from "../phone/usePhone";
 const defaults = { num_inference_steps: 10, ensemble_size: 3 };
 type Key = keyof typeof defaults;
 const fields = {
@@ -37,9 +39,12 @@ export function InferenceSettings({
   const [highlight, setHighlight] = useState<Key | null>(null);
   const dialog = useRef<HTMLElement>(null);
   const launch = useRef<HTMLButtonElement>(null);
+  const phone = useIsPhone();
+  // Not on a phone, where focusing a field opens the keyboard over the sheet
+  // before the seller has read it.
   useEffect(() => {
-    if (open) dialog.current?.querySelector<HTMLInputElement>("input")?.focus();
-  }, [open]);
+    if (open && !phone) dialog.current?.querySelector<HTMLInputElement>("input")?.focus();
+  }, [open, phone]);
   const close = () => {
     setOpen(false);
     launch.current?.focus();
@@ -88,6 +93,7 @@ export function InferenceSettings({
             aria-modal="true"
             aria-labelledby="mi-heading"
           >
+            <SheetGrabber sheetRef={dialog} onDismiss={close} />
             <header>
               <div>
                 <span className="mi-eyebrow">{templateName}</span>
