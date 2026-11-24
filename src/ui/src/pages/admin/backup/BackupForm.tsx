@@ -8,16 +8,16 @@ import { LockKeyIcon } from "@phosphor-icons/react/dist/csr/LockKey";
 import { PlusIcon } from "@phosphor-icons/react/dist/csr/Plus";
 import { XIcon } from "@phosphor-icons/react/dist/csr/X";
 import { type ReactNode, useEffect, useState } from "react";
-import type { IntervalHours, RetentionSettings } from "../../../api/backup";
+import type { BackupStatus, IntervalHours, RetentionSettings } from "../../../api/backup";
 import { Panel } from "./BackupPanels";
 import {
   type BackupAnswers,
-  destinationName,
   everyLabel,
   INTERVALS,
   intervalChoice,
   intervalHint,
   type Password,
+  nameOf,
   passwordProblem,
 } from "./backupText";
 
@@ -33,12 +33,16 @@ const rows = (paths: string[]): Row[] => paths.map((path) => ({ id: nextRow++, p
 export function BackupForm({
   mode,
   initial,
+  status,
   onCancel,
   onCreate,
   onSave,
 }: {
   mode: "create" | "edit";
   initial: BackupAnswers;
+  /** The server's status: its names for saved destinations and the
+   * shortest password it accepts. */
+  status: BackupStatus;
   onCancel?: () => void;
   onCreate?: (answers: BackupAnswers, password: string) => Answer;
   onSave?: (answers: BackupAnswers, base: BackupAnswers) => Answer;
@@ -60,7 +64,8 @@ export function BackupForm({
   const answers: BackupAnswers = { ...s, destinations: destinations.map((d) => d.path) };
   const create = mode === "create";
   const changed = JSON.stringify(answers) !== JSON.stringify(base);
-  const ready = create ? createReady(answers, password) : changed;
+  const minLength = status.password_min_length;
+  const ready = create ? createReady(answers, password, minLength) : changed;
 
   const submit = async () => {
     setBusy(true);
@@ -111,7 +116,7 @@ export function BackupForm({
           hint="Encrypts every backup. Saved as ETSY_LISTINGS_BACKUP_PASSWORD in .env."
         >
           {create ? (
-            <PasswordFields value={password} onChange={setPassword} />
+            <PasswordFields value={password} minLength={minLength} onChange={setPassword} />
           ) : (
             <span className="bk-readonly">
               <LockKeyIcon size={16} /> Set, in .env
@@ -122,7 +127,11 @@ export function BackupForm({
           label="Copy to"
           hint="After each backup, new files in the backup storage folder are copied one way into each folder. An unavailable one catches up at the next run."
         >
-          <Destinations value={destinations} onChange={setDestinations} />
+          <Destinations
+            value={destinations}
+            nameOf={(path) => nameOf(status, path)}
+            onChange={setDestinations}
+          />
         </Field>
         <Field label="Keep" hint="Older backups are removed once a week.">
           <Keep
@@ -164,8 +173,12 @@ export function BackupForm({
   );
 }
 
-function createReady(answers: BackupAnswers, password: Password): boolean {
-  return passwordProblem(password) === null && password.stored && answers.repository.trim() !== "";
+function createReady(answers: BackupAnswers, password: Password, minLength: number): boolean {
+  return (
+    passwordProblem(password, minLength) === null &&
+    password.stored &&
+    answers.repository.trim() !== ""
+  );
 }
 
 function Field({ label, hint, children }: { label: string; hint: string; children: ReactNode }) {
@@ -244,13 +257,15 @@ function Interval({
 
 export function PasswordFields({
   value,
+  minLength,
   onChange,
 }: {
   value: Password;
+  minLength: number;
   onChange: (value: Password) => void;
 }) {
   const [show, setShow] = useState(false);
-  const problem = passwordProblem(value);
+  const problem = passwordProblem(value, minLength);
   const type = show ? "text" : "password";
   return (
     <>
@@ -297,7 +312,15 @@ export function PasswordFields({
   );
 }
 
-function Destinations({ value, onChange }: { value: Row[]; onChange: (value: Row[]) => void }) {
+function Destinations({
+  value,
+  nameOf,
+  onChange,
+}: {
+  value: Row[];
+  nameOf: (path: string) => string;
+  onChange: (value: Row[]) => void;
+}) {
   return (
     <>
       {value.length > 0 && (
@@ -305,7 +328,7 @@ function Destinations({ value, onChange }: { value: Row[]; onChange: (value: Row
           {value.map((d, index) => (
             <div className="sa-row bk-dest bk-dest--edit" key={d.id}>
               <CloudArrowUpIcon size={18} />
-              <span className="sa-row__label">{destinationName(d.path)}</span>
+              <span className="sa-row__label">{nameOf(d.path)}</span>
               <input
                 className="input s-mono"
                 aria-label={`Destination ${index + 1} folder`}

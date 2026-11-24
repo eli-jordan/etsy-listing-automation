@@ -1,4 +1,5 @@
 import { api } from "./client";
+import { type Refusal, refusalOf } from "./refusal";
 import type { components } from "./schema";
 
 export type BackupStatus = components["schemas"]["BackupOverview"];
@@ -11,20 +12,10 @@ export type RepairResult = components["schemas"]["BackupRepairResponse"];
 export type BackupSettings = components["schemas"]["BackupSettings"];
 export type RetentionSettings = components["schemas"]["RetentionSettings"];
 export type IntervalHours = BackupSetUp["interval_hours"];
-type Refusal = components["schemas"]["BackupRefusal"];
 
-/** Set-up's answer: started, refused because settings.yaml changed since it
- * was read (412: reload), or refused with the reason and field it names. */
-export type SetUpOutcome =
-  | { kind: "started"; status: BackupStatus }
-  | { kind: "stale"; message: string }
-  | {
-      kind: "conflict" | "invalid";
-      message: string;
-      fieldErrors: Record<string, string>;
-      /** Create refused: this destination holds a repository's copy. */
-      connectFrom?: string;
-    };
+/** Set-up's, create's, connect's and restore's answer: started, or a
+ * {@link Refusal}. */
+export type SetUpOutcome = { kind: "started"; status: BackupStatus } | Refusal;
 
 function message(error: unknown, fallback: string): string {
   const body = error as { detail?: unknown; message?: unknown } | undefined;
@@ -53,23 +44,14 @@ export async function runBackup(): Promise<BackupStatus> {
   throw new Error(message(error, "Could not start a backup"));
 }
 
-/** Set-up's, create's and connect's answer. Both a stale revision and a
- * folder holding files are `conflict`; only the status separates them, as
- * `saveSettings` reads its 412. */
+/** A write's answer; an error that is no refusal throws. */
 function outcome(
-  { data, error, response }: { data?: BackupStatus; error?: unknown; response: Response },
+  { data, error }: { data?: BackupStatus; error?: unknown },
   fallback: string,
 ): SetUpOutcome {
   if (data) return { kind: "started", status: data };
-  const refusal = error as Refusal | undefined;
-  if (response.status === 412 && refusal) return { kind: "stale", message: refusal.message };
-  if (refusal?.kind === "conflict" || refusal?.kind === "invalid")
-    return {
-      kind: refusal.kind,
-      message: refusal.message,
-      fieldErrors: refusal.field_errors ?? {},
-      ...(refusal.connect_from && { connectFrom: refusal.connect_from }),
-    };
+  const refusal = refusalOf(error);
+  if (refusal) return refusal;
   throw new Error(message(error, fallback));
 }
 
@@ -120,14 +102,13 @@ export async function getBackupSnapshots(): Promise<BackupSnapshots> {
 }
 
 /** Start a restore. A refusal (the live workspace, a folder with files, a
- * restore already running) comes back as its message, for under the field. */
-export async function startRestore(
-  snapshot: string,
-  target: string,
-): Promise<{ status: BackupStatus } | { refused: string }> {
+ * restore already running) comes back for under the field. */
+export async function startRestore(snapshot: string, target: string): Promise<SetUpOutcome> {
   const { data, error } = await api.POST("/api/backup/restore", { body: { snapshot, target } });
-  if (data) return { status: data };
-  return { refused: message(error, "Could not start the restore") };
+  if (data) return { kind: "started", status: data };
+  // A refused target is the domain's 409, answered as `detail`.
+  const refused = message(error, "Could not start the restore");
+  return refusalOf(error) ?? { kind: "refused", message: refused, fieldErrors: {} };
 }
 
 /** Stop the restore; answers once it has stopped. */

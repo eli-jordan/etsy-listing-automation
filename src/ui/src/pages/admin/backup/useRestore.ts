@@ -57,10 +57,11 @@ export function useRestore(view: BackupsOn, refresh: () => Promise<unknown>) {
     cancel: () => setPicking(null),
     /** A refusal's message, or null once the restore has started. */
     async start(snapshot: string, target: string): Promise<string | null> {
-      const answer = await startRestore(snapshot, target).catch((e: unknown) => ({
-        refused: failure(e, "Could not reach the server"),
-      }));
-      if ("refused" in answer) return answer.refused;
+      const answer = await startRestore(snapshot, target).catch(
+        (e: unknown) =>
+          ({ kind: "refused", message: failure(e, "Could not reach the server") }) as const,
+      );
+      if (answer.kind !== "started") return answer.message;
       setDismissed(latest?.started_at ?? null); // the last restore's note gives way
       setPicking(null);
       setShown(true);

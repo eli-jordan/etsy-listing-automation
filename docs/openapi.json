@@ -935,6 +935,11 @@
             ],
             "title": "Next Due"
           },
+          "password_min_length": {
+            "default": 12,
+            "title": "Password Min Length",
+            "type": "integer"
+          },
           "repository": {
             "anyOf": [
               {
@@ -1003,6 +1008,7 @@
           },
           "kind": {
             "enum": [
+              "stale",
               "conflict",
               "invalid"
             ],
@@ -1219,6 +1225,10 @@
             "title": "Id",
             "type": "string"
           },
+          "restore_target": {
+            "title": "Restore Target",
+            "type": "string"
+          },
           "short_id": {
             "title": "Short Id",
             "type": "string"
@@ -1243,7 +1253,8 @@
         "required": [
           "id",
           "short_id",
-          "time"
+          "time",
+          "restore_target"
         ],
         "title": "BackupSnapshot",
         "type": "object"
@@ -2510,6 +2521,11 @@
             "title": "Changed",
             "type": "array"
           },
+          "icloud": {
+            "default": false,
+            "title": "Icloud",
+            "type": "boolean"
+          },
           "last_check": {
             "anyOf": [
               {
@@ -2532,6 +2548,10 @@
             ],
             "title": "Last Copy"
           },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
           "path": {
             "title": "Path",
             "type": "string"
@@ -2547,6 +2567,28 @@
             ],
             "title": "Problem"
           },
+          "set_aside": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Set Aside"
+          },
+          "short_problem": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Short Problem"
+          },
           "unexpected": {
             "default": [],
             "items": {
@@ -2557,7 +2599,8 @@
           }
         },
         "required": [
-          "path"
+          "path",
+          "name"
         ],
         "title": "DestinationOverview",
         "type": "object"
@@ -3320,6 +3363,14 @@
               }
             ],
             "title": "Kept As"
+          },
+          "names": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "default": {},
+            "title": "Names",
+            "type": "object"
           },
           "run": {
             "$ref": "#/components/schemas/RunRecord"
@@ -7630,7 +7681,7 @@
           },
           "kind": {
             "enum": [
-              "conflict",
+              "stale",
               "invalid"
             ],
             "title": "Kind",

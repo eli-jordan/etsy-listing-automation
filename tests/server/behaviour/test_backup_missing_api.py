@@ -195,6 +195,7 @@ def test_create_checks_the_revision_even_when_using_the_saved_path(
     )
 
     assert response.status_code == 412, response.text
+    assert response.json()["kind"] == "stale"
     assert _state(workspace_root, repository) == before
 
 

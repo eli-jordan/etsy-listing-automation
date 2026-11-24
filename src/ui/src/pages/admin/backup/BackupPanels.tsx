@@ -23,7 +23,6 @@ import type { BackupsOn, Copy } from "../../../shell/backupAttention";
 import {
   ago,
   bytes,
-  destinationName,
   duration,
   everyLabel,
   lastPart,
@@ -185,16 +184,9 @@ function repositoryState(status: BackupStatus): { ok: boolean; text: string } {
 
 function copyState({ destination, toCheck: found }: Copy): { ok: boolean; text: string } {
   if (found) return { ok: false, text: `${found} file${found === 1 ? "" : "s"} to check` };
-  if (destination.problem) return { ok: false, text: shortProblem(destination.problem) };
+  if (destination.short_problem) return { ok: false, text: destination.short_problem };
   if (destination.behind) return { ok: false, text: "Behind" };
   return { ok: true, text: "Up to date" };
-}
-
-/** "Folder not found." fits a pill as "Folder not found"; a longer reason
- * does not, so the pill says only that the copy did not happen. */
-function shortProblem(problem: string): string {
-  const first = problem.split(/[.:]/)[0]?.trim() ?? "";
-  return first && first.length <= 24 ? first : "Not copied";
 }
 
 /**
@@ -270,20 +262,17 @@ export function StoragePipeline({
           {view.copies.map((copy) => {
             const d = copy.destination;
             const state = copyState(copy);
-            const name = destinationName(d.path);
             return (
               <span className="bk-node" key={d.path}>
                 <span className="bk-node__head">
-                  <CloudArrowUpIcon size={18} /> {name}
+                  <CloudArrowUpIcon size={18} /> {d.name}
                 </span>
                 <span className="s-mono bk-node__path" title={d.path}>
                   {lastPart(d.path)}
                 </span>
                 <span className="bk-sub">
                   Copied {d.last_copy ? ago(d.last_copy, now) : "never"}.{" "}
-                  {name === "iCloud Drive"
-                    ? "iCloud for Windows uploads it from here."
-                    : "A complete copy."}
+                  {d.icloud ? "iCloud for Windows uploads it from here." : "A complete copy."}
                 </span>
                 <Pill tone={state.ok ? "ok" : "warn"}>{state.text}</Pill>
               </span>
@@ -406,7 +395,7 @@ export function ChangedFilesBanner({
   destination: DestinationStatus;
   onRepair: () => void;
 }) {
-  const name = destinationName(destination.path);
+  const { name } = destination;
   return (
     <div className="adm-warn bk-banner bk-changed" role="alert">
       <WarningIcon size={18} />
@@ -459,7 +448,7 @@ export function RepairDialog({
   onCancel: () => void;
   onRepair: () => void;
 }) {
-  const name = destinationName(destination.path);
+  const { name } = destination;
   const count = destination.changed.length + destination.unexpected.length;
   return (
     <div className="bk-scrim">
@@ -476,7 +465,7 @@ export function RepairDialog({
         </div>
         <dl className="bk-facts">
           <dt>Set aside in</dt>
-          <dd className="s-mono">{`${lastPart(destination.path)}-set-aside-${new Date().toLocaleDateString("sv-SE")}`}</dd>
+          <dd className="s-mono">{lastPart(destination.set_aside ?? "")}</dd>
           <dt>Copied again</dt>
           <dd>
             {destination.changed.length} file{destination.changed.length === 1 ? "" : "s"},{" "}

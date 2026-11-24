@@ -8,11 +8,15 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+import pytest
+
 from etsy_listings.core.application.backup_overview import (
     BackupFacts,
     BackupOverview,
     RepositoryReading,
     backup_overview,
+    destination_name,
+    short_problem,
 )
 from etsy_listings.core.backup.destinations import ChangedFile
 from etsy_listings.core.backup.restic import Snapshot
@@ -159,5 +163,37 @@ def test_changed_or_unexpected_files_in_a_destination_warn_until_repaired() -> N
         assert (warning.kind, warning.destination, warning.banner) == ("changed", str(CLOUD), True)
     overview = _overview(state=changed)
     assert overview.destinations[0].changed[0].name == "data/7c/7c41"
+    today = NOW.astimezone().date().isoformat()
+    planned = CLOUD.with_name(f"backups-set-aside-{today}")
+    assert overview.destinations[0].set_aside == str(planned)
 
     assert _kinds(_overview(state=state())) == []
+    assert _overview(state=state()).destinations[0].set_aside is None
+
+
+@pytest.mark.parametrize(
+    ("path", "name"),
+    [
+        (Path("C:/Users/me/iCloudDrive/studio-backups"), "iCloud Drive"),
+        (Path("E:/studio-backups"), "studio-backups"),
+        (Path("/"), "Folder"),
+    ],
+)
+def test_a_destination_is_named_for_icloud_or_its_folder(path: Path, name: str) -> None:
+    assert destination_name(path) == name
+    overview = _overview(settings=BackupSettings(repository=REPOSITORY, destinations=(path,)))
+    (shown,) = overview.destinations
+    assert (shown.name, shown.icloud) == (name, name == "iCloud Drive")
+
+
+@pytest.mark.parametrize(
+    ("problem", "short"),
+    [
+        ("Folder not found: E:/b. It is caught up once it is back.", "Folder not found"),
+        ("Access is denied.", "Access is denied"),
+        ("The backup storage folder could not be listed: [WinError 5]", "Not copied"),
+        (None, None),
+    ],
+)
+def test_a_copy_problem_is_shortened_for_its_pill(problem: str | None, short: str | None) -> None:
+    assert short_problem(problem) == short

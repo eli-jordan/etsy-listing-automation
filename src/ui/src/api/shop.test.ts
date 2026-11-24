@@ -35,7 +35,7 @@ describe("shop api", () => {
     vi.spyOn(api, "PATCH").mockResolvedValueOnce(
       answer(412, undefined, { kind: "conflict", message: "changed", field_errors: {} }),
     );
-    await expect(saveShop("r1", {})).resolves.toEqual({ kind: "conflict", message: "changed" });
+    await expect(saveShop("r1", {})).resolves.toEqual({ kind: "stale", message: "changed" });
 
     vi.spyOn(api, "PATCH").mockResolvedValueOnce(
       answer(422, undefined, {
@@ -45,7 +45,7 @@ describe("shop api", () => {
       }),
     );
     await expect(saveShop("r1", {})).resolves.toEqual({
-      kind: "invalid",
+      kind: "refused",
       message: "bad",
       fieldErrors: { renewal: "nope" },
     });

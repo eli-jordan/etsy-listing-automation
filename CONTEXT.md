@@ -62,3 +62,15 @@ as a folder in iCloud Drive. Each is a complete restic repository by itself.
 The app creates one only at set-up or when Setup adds it. A destination the app
 cannot reach is skipped and caught up later.
 _Avoid_: mirror, sync target, remote
+
+**Set-aside folder**:
+The new folder beside a destination that a repair moves its changed and
+unexpected files into: `<destination>-set-aside-<date>`, then `-2`, `-3`... when
+that name is taken. The server names it, before the repair as well as after.
+_Avoid_: quarantine, backup of the backup
+
+**Stale**:
+A revision-checked write refused because the file changed since the page read
+it. Nothing was written; the page reloads before trying again. Every other
+refusal is **refused**, with the server's reason and the fields it names.
+_Avoid_: conflict (the server's word for a folder that holds files)

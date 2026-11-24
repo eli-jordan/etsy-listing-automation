@@ -16,6 +16,7 @@ import {
   runBackup,
   type SetUpOutcome,
 } from "../../../api/backup";
+import type { Refusal } from "../../../api/refusal";
 import type { SettingsChanges } from "../../../api/workspaceSettings";
 import type { BackupsOn } from "../../../shell/backupAttention";
 import { useBackupStatus } from "../../../shell/backupStatus";
@@ -42,28 +43,17 @@ import "./backup.css";
 
 export type BackupPage = "status" | "setup";
 
-/** What a settings.yaml save answered, as `useWorkspaceSettings` reports it. */
-export type SaveAnswer =
-  | { kind: "saved" }
-  | { kind: "conflict"; message: string }
-  | { kind: "invalid"; message: string; fieldErrors: Partial<Record<string, string>> }
-  | null;
+/** What a settings.yaml save answered, as `useWorkspaceSettings` reports
+ * it: null when an earlier save already found the file stale. */
+export type SaveAnswer = { kind: "saved" } | Refusal | null;
 
 const RELOAD = "settings.yaml changed on disk. Nothing was overwritten. Reload, then try again.";
 
-/** A settings save's `conflict` is always its 412 (`saveSettings`), and
- * set-up reports its 412 as `stale`: both mean reload. Set-up's other
- * conflicts (409) say what is wrong themselves. */
-function refusal(outcome: Exclude<SetUpOutcome, { kind: "started" }>): string;
-function refusal(outcome: Exclude<SaveAnswer, null>, settingsSave: true): string | null;
-function refusal(
-  outcome: Exclude<SaveAnswer | SetUpOutcome, null | { kind: "started" }>,
-  settingsSave = false,
-): string | null {
-  if (outcome.kind === "saved") return null;
-  if (outcome.kind === "stale" || (settingsSave && outcome.kind === "conflict")) return RELOAD;
-  const fields = Object.values(outcome.kind === "invalid" ? outcome.fieldErrors : {});
-  return [outcome.message, ...fields].filter(Boolean).join(" ");
+/** Every refusal, worded one way: a stale file means reload; otherwise the
+ * server's reason and the fields it names. */
+function refusal(outcome: Refusal): string {
+  if (outcome.kind === "stale") return RELOAD;
+  return [outcome.message, ...Object.values(outcome.fieldErrors)].filter(Boolean).join(" ");
 }
 
 function failure(error: unknown, fallback: string): string {
@@ -116,6 +106,7 @@ export function BackupSection({
       <BackupForm
         mode="create"
         initial={NEW_BACKUP}
+        status={view.status}
         onCancel={() => setCreating(false)}
         onCreate={create}
       />
@@ -126,16 +117,16 @@ export function BackupSection({
     if (!saved) return <p role="status">Loading settings…</p>;
     const edit = async (answers: BackupAnswers, base: BackupAnswers): Answer => {
       try {
-        const refused = await save(changes(answers, base));
-        if (refused === null) return RELOAD;
-        const message = refusal(refused, true);
-        if (!message) void refresh();
-        return message;
+        const answer = await save(changes(answers, base));
+        if (answer === null) return RELOAD;
+        if (answer.kind !== "saved") return refusal(answer);
+        void refresh();
+        return null;
       } catch (e) {
         return failure(e, "Could not save settings.yaml");
       }
     };
-    return <BackupForm mode="edit" initial={answersOf(saved)} onSave={edit} />;
+    return <BackupForm mode="edit" initial={answersOf(saved)} status={view.status} onSave={edit} />;
   }
 
   return (
@@ -208,7 +199,7 @@ function StatusPage({
       if (outcome.kind !== "started")
         return {
           message: refusal(outcome),
-          ...(outcome.kind === "conflict" &&
+          ...(outcome.kind === "refused" &&
             outcome.connectFrom && { connectFrom: outcome.connectFrom }),
         };
       setReplacing(null);
@@ -223,7 +214,7 @@ function StatusPage({
     try {
       const result = await repairDestination(destination.path);
       setRepair(null);
-      setNote(repairNote(destination.path, result));
+      setNote(repairNote(destination, result));
       void refresh();
     } catch (e) {
       setRepair({ destination, working: false, error: failure(e, "Could not repair the copy") });
@@ -270,7 +261,7 @@ function StatusPage({
         headline={headline}
         detail={detail}
         running={view.running}
-        runningLine={status.running ? runningLine(status.running) : undefined}
+        runningLine={status.running ? runningLine(status, status.running) : undefined}
         restore={{
           disabled: restore.busy || !status.repository?.snapshots,
           onClick: () => restore.begin(),
@@ -319,6 +310,7 @@ function StatusPage({
           mode={replacing}
           repository={status.repository?.path ?? ""}
           passwordStored={status.repository?.password_stored ?? false}
+          passwordMinLength={status.password_min_length}
           onCancel={() => setReplacing(null)}
           onSubmit={replace}
         />

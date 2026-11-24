@@ -1366,6 +1366,20 @@ and `backup.retention`. The destinations are known by their path (`ITSELF` in
 created only by set-up or by the save that adds it, and only inside a folder
 that exists (`core/application/backup_setup.py`).
 
+The server also owns the backup's naming conventions, and its responses carry
+what they derive, so the browser never re-implements them. Each destination in
+the overview has its display `name` ("iCloud Drive" for an iCloud folder, else
+the folder's own name), `icloud`, a `short_problem` for its pill, and, while it
+has changed or unexpected files, `set_aside`: the folder Repair would use
+today, from `destinations.planned_set_aside`, the same name sequence
+(`-2`, `-3`...) the repair takes. History entries carry each copy's
+destination `names`, each snapshot its default `restore_target`
+(`backup_restore.default_target`), and the overview the
+`password_min_length` the set-up and Create forms pre-check. Set-up, Create,
+Connect and settings saves refuse with a `kind` that alone says what to do:
+`stale` (412) means reload, `conflict` (409) and `invalid` (422) carry the
+reason and field errors.
+
 In the UI, the shell's `BackupStatusProvider` polls `GET /api/backup` once for
 every surface. `useBackupStatus()` returns no raw status. It returns a
 `BackupView` from `ui/src/shell/backupAttention.ts`, a pure module that encodes
@@ -1377,6 +1391,12 @@ or repair is running and whether a restore is running, and gives each
 destination's files to check. A destination has changed files only when a
 `changed` warning names it. The shell, the Admin nav, `BackupSection`,
 `BackupPanels`, `backupText.summary` and `useRestore` only draw the view.
+The adapters in `ui/src/api/backup.ts`, `workspaceSettings.ts` and `shop.ts`
+answer success or one `Refusal` from `ui/src/api/refusal.ts`: `stale`, or
+`refused` with its message, field errors and an optional `connectFrom`. The
+save queue and `BackupSection` word a refusal from that alone. The browser keeps
+only two instant pre-checks, both refused by the server too: the password
+length and a target that looks like the live workspace.
 
 A restore is `core/application/backup_restore.py`: it refuses the live
 workspace, the repository, the destinations, paths inside any of them and a

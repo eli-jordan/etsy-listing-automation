@@ -22,6 +22,7 @@ from etsy_listings.core.application.backup_missing import (
     Replacement,
 )
 from etsy_listings.core.application.backup_overview import BackupOverview
+from etsy_listings.core.application.backup_restore import default_target
 from etsy_listings.core.application.refusals import InvalidSettingsEditError
 from etsy_listings.core.errors import ConflictError, RefusedError, StaleError
 from etsy_listings.core.workspace.userpath import to_native_path
@@ -57,10 +58,18 @@ def backup_snapshots(request: Request) -> BackupSnapshotsResponse:
     """restic's snapshots, for the restore dialog: a run's history entry
     may be gone, and a snapshot made by hand has none."""
     backups = app_state.backups(request)
+    workspace = app_state.workspace(request).root
     return BackupSnapshotsResponse(
-        workspace=str(app_state.workspace(request).root),
+        workspace=str(workspace),
         snapshots=[
-            BackupSnapshot(id=s.id, short_id=s.short_id, time=s.time, files=s.files, size=s.size)
+            BackupSnapshot(
+                id=s.id,
+                short_id=s.short_id,
+                time=s.time,
+                files=s.files,
+                size=s.size,
+                restore_target=str(default_target(workspace, s)),
+            )
             for s in reversed(backups.snapshots())
         ],
     )
@@ -145,7 +154,7 @@ def _answer(
     try:
         action()
     except StaleError as exc:
-        return _refusal(412, "conflict", exc)
+        return _refusal(412, "stale", exc)
     except DestinationHoldsRepositoryError as exc:
         return _refusal(409, "conflict", exc, connect_from=str(exc.destination))
     except ConflictError as exc:
@@ -171,7 +180,7 @@ def repair(request: Request, body: BackupRepairRequest) -> BackupRepairResponse:
 
 def _refusal(
     status: int,
-    kind: Literal["conflict", "invalid"],
+    kind: Literal["stale", "conflict", "invalid"],
     exc: Exception,
     field_errors: dict[str, str] | None = None,
     *,

@@ -1148,13 +1148,21 @@ class WorkspaceSettingsPatch(BaseModel):
 
 
 class SettingsSaveRefusal(BaseModel):
-    kind: Literal["conflict", "invalid"]
+    kind: Literal["stale", "invalid"]
+    """``stale`` (412): settings.yaml changed since the page read it, so
+    reload; ``invalid`` (422): ``field_errors`` say what to change."""
     message: str
     field_errors: dict[str, str] = Field(default_factory=dict)
 
 
-class BackupRefusal(SettingsSaveRefusal):
+class BackupRefusal(BaseModel):
     """Set-up's, create's and connect's refusals."""
+
+    kind: Literal["stale", "conflict", "invalid"]
+    """As a settings save's, plus ``conflict`` (409): a folder that holds
+    files or a repository's copy."""
+    message: str
+    field_errors: dict[str, str] = Field(default_factory=dict)
 
     connect_from: str | None = None
     """Create refused because this destination holds a repository's copy:
@@ -1272,6 +1280,8 @@ class BackupSnapshot(BaseModel):
     files: int | None = None
     size: int | None = None
     """Bytes the backup read."""
+    restore_target: str
+    """The restore dialog's suggested folder for it."""
 
 
 class BackupSnapshotsResponse(BaseModel):

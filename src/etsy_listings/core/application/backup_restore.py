@@ -60,6 +60,12 @@ class RestoreStatus(BaseModel):
     """Why it failed or stopped."""
 
 
+def default_target(workspace: Path, snapshot: Snapshot) -> Path:
+    """The restore dialog's suggestion: a sibling of the workspace named
+    after the snapshot, so it is new and outside every refused folder."""
+    return workspace.with_name(f"{workspace.name}-restore-{snapshot.short_id}")
+
+
 def check_target(
     target: Path, *, workspace: Path, repository: Path | None, destinations: Sequence[Path] = ()
 ) -> Path:

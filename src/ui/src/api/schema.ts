@@ -2483,6 +2483,11 @@ export interface components {
       last_success?: string | null;
       /** Next Due */
       next_due?: string | null;
+      /**
+       * Password Min Length
+       * @default 12
+       */
+      password_min_length: number;
       repository?: components["schemas"]["RepositoryOverview"] | null;
       restore?: components["schemas"]["RestoreStatus"] | null;
       running?: components["schemas"]["RunningBackup"] | null;
@@ -2507,7 +2512,7 @@ export interface components {
        * Kind
        * @enum {string}
        */
-      kind: "conflict" | "invalid";
+      kind: "stale" | "conflict" | "invalid";
       /** Message */
       message: string;
     };
@@ -2592,6 +2597,8 @@ export interface components {
       files?: number | null;
       /** Id */
       id: string;
+      /** Restore Target */
+      restore_target: string;
       /** Short Id */
       short_id: string;
       /** Size */
@@ -3171,13 +3178,24 @@ export interface components {
        * @default []
        */
       changed: components["schemas"]["ChangedFile"][];
+      /**
+       * Icloud
+       * @default false
+       */
+      icloud: boolean;
       last_check?: components["schemas"]["CheckResult"] | null;
       /** Last Copy */
       last_copy?: string | null;
+      /** Name */
+      name: string;
       /** Path */
       path: string;
       /** Problem */
       problem?: string | null;
+      /** Set Aside */
+      set_aside?: string | null;
+      /** Short Problem */
+      short_problem?: string | null;
       /**
        * Unexpected
        * @default []
@@ -3479,6 +3497,13 @@ export interface components {
     HistoryEntry: {
       /** Kept As */
       kept_as?: ("recent" | "weekly" | "monthly") | null;
+      /**
+       * Names
+       * @default {}
+       */
+      names: {
+        [key: string]: string;
+      };
       run: components["schemas"]["RunRecord"];
     };
     /** IdleOutcomeDTO */
@@ -5273,7 +5298,7 @@ export interface components {
        * Kind
        * @enum {string}
        */
-      kind: "conflict" | "invalid";
+      kind: "stale" | "invalid";
       /** Message */
       message: string;
     };

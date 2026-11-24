@@ -19,8 +19,8 @@ export type ShopField = keyof ShopChanges;
 
 export type SaveOutcome =
   | { kind: "saved"; shop: ShopSettings }
-  | { kind: "conflict"; message: string }
-  | { kind: "invalid"; message: string; fieldErrors: Partial<Record<ShopField, string>> };
+  | { kind: "stale"; message: string }
+  | { kind: "refused"; message: string; fieldErrors: Partial<Record<ShopField, string>> };
 
 export class ShopApiError extends Error {}
 
@@ -46,13 +46,14 @@ export async function saveShop(revision: string, changes: ShopChanges): Promise<
   });
   if (data) return { kind: "saved", shop: data };
   const refusal = error as Refusal | undefined;
+  // shop.yaml's 412 still says `conflict`: the status tells it apart.
   if (response.status === 412 && refusal?.kind === "conflict")
-    return { kind: "conflict", message: refusal.message };
+    return { kind: "stale", message: refusal.message };
   if (response.status === 422 && refusal?.kind === "invalid") {
     const fieldErrors = Object.fromEntries(
       Object.entries(refusal.field_errors ?? {}).map(([key, message]) => [fieldOf(key), message]),
     );
-    return { kind: "invalid", message: refusal.message, fieldErrors };
+    return { kind: "refused", message: refusal.message, fieldErrors };
   }
   throw new ShopApiError("could not save shop.yaml");
 }
