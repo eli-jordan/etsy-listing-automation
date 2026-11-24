@@ -3,6 +3,9 @@
   padding: 0;
   margin: 0;
   min-width: 0;
+  /* The global fieldset card (index.css) would paint the gaps between
+     panels, so they read as one block. */
+  background: none;
 }
 .settings-panels {
   max-width: 860px;

@@ -18,6 +18,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from etsy_listings.core.workspace import layout
+from etsy_listings.core.workspace.atomic import write_bytes_atomic
 
 GITIGNORE_ENTRIES: tuple[tuple[str, str], ...] = (
     (layout.ENV_FILE, "API tokens -- never commit"),
@@ -84,8 +85,13 @@ def write_env_value(root: Path, key: str, value: str) -> Path:
     The one place the read-modify-write is spelled, because both commands that
     store a credential do exactly this and neither should be deciding on its
     own what happens to a file it did not fully read.
+
+    Replaced atomically and durably, never rewritten in place: ``.env`` holds
+    the only copy of the backup password on this machine, and a write cut
+    short would lose it (workspace-backup plan, PR 2). Written as bytes, so
+    the file keeps LF endings on Windows too.
     """
     path = root / layout.ENV_FILE
     existing = path.read_text(encoding="utf-8") if path.is_file() else ""
-    path.write_text(env_with(existing, key, value), encoding="utf-8")
+    write_bytes_atomic(path, env_with(existing, key, value).encode("utf-8"), durable=True)
     return path

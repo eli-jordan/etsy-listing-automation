@@ -7,7 +7,7 @@ The root [README](../README.md) covers installation and contributor commands;
 
 | Kind | Purpose | Entry point |
 |---|---|---|
-| Guides | Tasks a person can follow | [Getting started](guides/getting-started.md), [setup](guides/setup.md) |
+| Guides | Tasks a person can follow | [Getting started](guides/getting-started.md), [setup](guides/setup.md), [restoring a backup](guides/restore-a-backup.md), [moving the workspace out of iCloud Drive](guides/migrate-the-workspace-out-of-icloud.md) |
 | Architecture | Current modules, data flow and development invariants | [Architecture](architecture.md) |
 | Decisions | Rationale for choices that are costly to reverse | [ADR index](adr/README.md) |
 | Reference | Current conventions needed to interpret configuration and deployment | [Reference index](reference/README.md) |
@@ -43,6 +43,7 @@ identify the start of the work, not its release date.
 | Mockup template rename | [Spec](features/template-rename-20261105/spec.md) | | |
 | Per-listing template positions | [Spec](features/template-positions-20261102/spec.md) | [Interactions](features/template-positions-20261102/interactions.md) | [Plan](features/template-positions-20261102/plan.md) |
 | Mockup template labels | [Spec](features/template-labels-20261106/spec.md) | [Interactions](features/template-labels-20261106/interactions.md) | [Plan](features/template-labels-20261106/plan.md) |
+| Workspace backup | [Spec](features/workspace-backup-20261123/spec.md) | [Interactions](features/workspace-backup-20261123/interactions.md) | [Plan](features/workspace-backup-20261123/plan.md) |
 
 Test suite quality also keeps an [audit-to-delivery map](features/test-suite-quality-20261003/coverage-map.md)
 and an [execution record](features/test-suite-quality-20261003/execution.md)

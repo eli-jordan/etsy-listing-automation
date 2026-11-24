@@ -40,6 +40,7 @@ it("prioritizes failed preparation over changed photos and ready maps", () => {
         error: "failed",
         last_event_sequence: 1,
         queue_position: null,
+        waiting_for_backup: false,
         engine_version: "engine",
       },
     }),

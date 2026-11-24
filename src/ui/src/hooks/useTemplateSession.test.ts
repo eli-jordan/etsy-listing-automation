@@ -59,6 +59,7 @@ function job(over: Partial<PreparationJob> = {}): PreparationJob {
     last_event_sequence: 0,
     queue_position: 1,
     engine_version: null,
+    waiting_for_backup: false,
     ...over,
   };
 }

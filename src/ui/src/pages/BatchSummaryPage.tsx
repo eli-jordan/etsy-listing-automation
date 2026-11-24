@@ -148,7 +148,10 @@ function AiCell({ row }: { row: BatchRow }) {
       return (
         <span className="bc-status bc-status--info">
           <ClockIcon className="bc-icon" />
-          Queued, {place(row.queue_position ?? 1)} in line
+          {/* A workspace backup holds the queue (plan decision P4). */}
+          {row.waiting_for_backup
+            ? "Queued, waiting for backup"
+            : `Queued, ${place(row.queue_position ?? 1)} in line`}
         </span>
       );
     case "failed":

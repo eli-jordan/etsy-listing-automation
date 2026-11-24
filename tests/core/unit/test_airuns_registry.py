@@ -8,6 +8,7 @@ from __future__ import annotations
 import threading
 
 from etsy_listings.core.application.ai.registry import AiRun, AiRunRegistry, Conflict, Deploying
+from etsy_listings.core.application.job_gate import JobGate, Ticket
 
 
 def _registry() -> AiRunRegistry:
@@ -260,3 +261,57 @@ def test_a_run_settles_once_its_listeners_have_heard() -> None:
 
     assert heard == [False]
     assert run.wait_settled(timeout=0)
+
+
+# ------------------------------------------------- the backup gate's ticket
+
+
+def _ticket(gate: JobGate) -> Ticket:
+    ticket = gate.admit("AI run for take-a-hike")
+    assert ticket is not None
+    return ticket
+
+
+def test_a_run_keeps_its_ticket_until_its_listeners_have_heard_it_finish() -> None:
+    """A backup waiting for quiet starts only once a batch row has its
+    outcome."""
+    gate = JobGate()
+    registry = _registry()
+    in_flight: list[str | None] = []
+    registry.subscribe(lambda _run: in_flight.append(gate.waiting_for))
+    run = registry.create("take-a-hike", draft_brief=False, ticket=_ticket(gate))
+    assert isinstance(run, AiRun)
+
+    run.finish("failed", "The batch row could not be saved.")
+
+    assert in_flight == ["AI run for take-a-hike"]
+    assert gate.waiting_for is None
+
+
+def test_a_refused_run_releases_its_ticket() -> None:
+    gate = JobGate()
+    registry = _registry()
+    _create(registry)
+
+    refused = registry.create("take-a-hike", draft_brief=False, ticket=_ticket(gate))
+
+    assert isinstance(refused, Conflict)
+    assert gate.waiting_for is None
+
+
+def test_a_held_run_takes_its_ticket_when_it_begins_unless_it_was_stopped() -> None:
+    gate = JobGate()
+    registry = _registry()
+    held = registry.create("take-a-hike", draft_brief=False, queued=True)
+    stopped = registry.create("sunset", draft_brief=False, queued=True)
+    assert isinstance(held, AiRun)
+    assert isinstance(stopped, AiRun)
+    stopped.request_stop("cancelled")
+
+    assert held.begin(_ticket(gate))
+    assert not stopped.begin(_ticket(gate))
+
+    assert held.phase == "running"
+    assert gate.waiting_for == "AI run for take-a-hike"
+    held.finish("done")
+    assert gate.waiting_for is None

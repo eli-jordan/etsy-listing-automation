@@ -137,6 +137,7 @@ def _batch_detail(request: Request, batch: Batch) -> BatchDetail:
                 ai_steps=_steps(request, row),
                 ai_error=row.ai_error,
                 queue_position=positions.get((batch.id, row.id)),
+                waiting_for_backup=_queue(request).waiting_for_backup(row),
                 proposal=proposal,
                 stale_reasons=stale,
                 reviewed=row.reviewed,

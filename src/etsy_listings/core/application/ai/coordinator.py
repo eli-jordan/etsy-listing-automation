@@ -14,6 +14,13 @@ Its parts stay in their modules and two are shared beyond it: the
 consult -- and the batch ``queue``, which the seller's batch controls steer.
 Each run gets its own thread (``runner``), never the deployment worker; the
 queue is process-local and guards no second server on the workspace.
+
+**A backup's pause** (workspace-backup spec, *Pausing jobs*) is the one time
+a manual run waits: while the shared :class:`JobGate` is paused a new run is
+accepted ``queued`` and held here, and resume starts the held runs in the
+order they were asked for (plan decision P4) -- the gate keeps that line.
+Each run that starts owns a gate ticket until it finishes, which is what a
+backup's wait for quiet counts.
 """
 
 from __future__ import annotations
@@ -35,6 +42,7 @@ from etsy_listings.core.application.dependencies import (
     MarketClientFactory,
     default_market_client,
 )
+from etsy_listings.core.application.job_gate import JobGate, Ticket
 from etsy_listings.core.application.refusals import (
     AiNotReadyError,
     AiRunRefusedError,
@@ -51,7 +59,7 @@ from etsy_listings.core.workspace.workspace import Workspace
 class AiCoordinator:
     """Manual and batch AI runs for one workspace."""
 
-    def __init__(
+    def __init__(  # noqa: PLR0913 -- the gate joins the host seams; each has a default but the stores
         self,
         workspace: Workspace,
         *,
@@ -59,8 +67,10 @@ class AiCoordinator:
         batches: BatchStore,
         providers: ProviderFactory = default_ai_providers,
         market_client: MarketClientFactory = default_market_client,
+        gate: JobGate | None = None,
     ) -> None:
         self._workspace = workspace
+        self._gate = gate if gate is not None else JobGate()
         self._registry = AiRunRegistry()
         self._runner = AiRunner(
             workspace=workspace,
@@ -70,7 +80,11 @@ class AiCoordinator:
             proposals=proposals,
         )
         self._queue = BatchQueue(
-            workspace=workspace, batches=batches, registry=self._registry, runner=self._runner
+            workspace=workspace,
+            batches=batches,
+            registry=self._registry,
+            runner=self._runner,
+            gate=self._gate,
         )
 
     @property
@@ -95,7 +109,8 @@ class AiCoordinator:
         """Start nothing more, then cancel every active run -- which kills
         its provider's process tree -- and wait (bounded) for its thread. A
         batch run stopped this way leaves its row ``running``, for the next
-        :meth:`start` to rerun. Safe to call more than once."""
+        :meth:`start` to rerun. Manual runs a backup's pause holds end
+        ``cancelled`` without starting. Safe to call more than once."""
         self._queue.stop()
         self._runner.shutdown()
 
@@ -109,6 +124,9 @@ class AiCoordinator:
         :class:`ListingDeployingError` (ADR-0050 wins over everything below),
         :class:`ListingDraftingInBatchError`, and -- after the active-run check --
         :class:`AiNotReadyError` with the readiness rule that failed.
+
+        While a backup's pause is on, the run is answered ``queued`` and
+        starts when the pause ends.
         """
         if not ListingDocuments(self._workspace).exists(listing):
             raise ListingMissingError(listing)
@@ -121,15 +139,34 @@ class AiCoordinator:
         reason = self._unready(listing, draft_brief=draft_brief)
         if reason is not None:
             raise AiNotReadyError(listing, reason)
+        return self._create(listing, draft_brief=draft_brief)
+
+    def _create(self, listing: str, *, draft_brief: bool) -> AiRun | Conflict:
+        """Create the run and start it, or hold it while a backup's pause is
+        on. Admitted before the run exists, so a backup waiting for quiet
+        counts it from the moment anyone can see it; the run owns the
+        ticket from then on."""
+        ticket = self._gate.admit(_job(listing))
         # The registry refuses a held listing again here, which is what
         # closes the race with a deploy taking it since the check above.
-        run = self._registry.create(listing, draft_brief=draft_brief)
+        run = self._registry.create(
+            listing, draft_brief=draft_brief, queued=ticket is None, ticket=ticket
+        )
         if isinstance(run, Deploying):
             raise ListingDeployingError(listing)
         if isinstance(run, Conflict):
             return run
-        self._runner.start(run)
+        if ticket is None:
+            self._gate.hold(_job(listing), lambda admitted: self._begin(run, admitted))
+        else:
+            self._runner.start(run)
         return run
+
+    def _begin(self, run: AiRun, ticket: Ticket) -> None:
+        """Resume reached a held run: start it, unless it was stopped while
+        held."""
+        if run.begin(ticket):
+            self._runner.start(run)
 
     def blocked(self, listing: str) -> AiRunRefusedError | None:
         """What :meth:`start_run` would refuse saved ``listing`` with for
@@ -161,6 +198,11 @@ class AiCoordinator:
             draft_brief=draft_brief,
         )
 
+    def waiting_for_backup(self, run: AiRun) -> bool:
+        """Whether ``run`` is held by a backup's pause (plan decision P4).
+        Never stored, only read."""
+        return self._gate.holds(queued=run.phase == "queued")
+
     # -------------------------------------------------------------- deploys
 
     @contextmanager
@@ -171,3 +213,8 @@ class AiCoordinator:
         on exit they are free again and the queue looks again."""
         with self._queue.yield_to_deploy(listings):
             yield
+
+
+def _job(listing: str) -> str:
+    """What a backup waiting for this run names."""
+    return f"AI run for {listing}"

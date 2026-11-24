@@ -36,10 +36,10 @@ import { MARK_SEEN_GRACE_MS, TERMINAL_PHASES } from "./deploy/runPhases";
  * `comparison` builder, and the presentation modules that draw them.
  */
 
-function metaText(phase: ReturnType<typeof controlPhase>): string {
+function metaText(phase: ReturnType<typeof controlPhase>, waitingForBackup: boolean): string {
   switch (phase) {
     case "queued":
-      return "Waiting for another run…";
+      return waitingForBackup ? "Waiting for backup…" : "Waiting for another run…";
     case "planning":
       return "Planning…";
     case "previewing":
@@ -84,6 +84,10 @@ export function DeployPage() {
 
   const [detail, setDetail] = useState<ListingDetail | null>(null);
   const [runId, setRunId] = useState<string | null>(null);
+  /** The server held this run queued for a backup (workspace-backup plan,
+   * decision P4) when the page last read it; the run's first phase event
+   * after that says it has started. */
+  const [waitingForBackup, setWaitingForBackup] = useState(false);
   const [state, setState] = useState<DeployState>(initialDeployState);
   const [applyRequested, setApplyRequested] = useState(false);
   const [deletedAfterApply, setDeletedAfterApply] = useState(false);
@@ -117,6 +121,7 @@ export function DeployPage() {
     async (id: string) => {
       const detail = await getRun(id);
       setRunId(detail.id);
+      setWaitingForBackup(detail.waiting_for_backup);
       setState(deployState(detail.events));
       const last = detail.events.at(-1);
       if (TERMINAL_PHASES.has(detail.phase)) streamRef.current?.close();
@@ -155,6 +160,7 @@ export function DeployPage() {
       }
       setState(initialDeployState);
       setRunId(result.run.id);
+      setWaitingForBackup(result.run.waiting_for_backup);
       openStream(result.run.id);
     } catch {
       setStatus("Could not start a plan. Go back and try again.");
@@ -177,6 +183,7 @@ export function DeployPage() {
           const detail = await getRun(run.id);
           if (!current) return;
           setRunId(detail.id);
+          setWaitingForBackup(detail.waiting_for_backup);
           setState(deployState(detail.events));
           const last = detail.events.at(-1);
           openStream(detail.id, last?.id);
@@ -204,6 +211,7 @@ export function DeployPage() {
   }, [name]);
 
   const phase = controlPhase(state);
+  const heldForBackup = phase === "queued" && waitingForBackup;
 
   // Mark a terminal run seen once it is showing -- "the deploy view marks a
   // finished run seen when it renders that run's result" (decision 9), true
@@ -345,7 +353,7 @@ export function DeployPage() {
         <span className="page-head__sep">/</span>
         <h1 className="page-head__title">Deploy</h1>
         {detail && <StatusTag status={detail.status} />}
-        <span className="page-head__meta">{metaText(phase)}</span>
+        <span className="page-head__meta">{metaText(phase, heldForBackup)}</span>
         {showPlanAgain && (
           <div className="page-head__actions dv-head-actions">
             <button
@@ -369,13 +377,23 @@ export function DeployPage() {
         {(phase === "queued" || phase === "planning") && status === "" && (
           <div className="dv-planning">
             <span className="dv-spinner" aria-hidden="true" />
-            <div>
-              <h2>Planning&hellip;</h2>
-              <p>
-                Reading Printify and Etsy to work out what apply would change. Nothing is written
-                yet.
-              </p>
-            </div>
+            {heldForBackup ? (
+              <div>
+                <h2>Waiting for backup</h2>
+                <p>
+                  A workspace backup is running. This plan starts as soon as it finishes. Nothing is
+                  written yet.
+                </p>
+              </div>
+            ) : (
+              <div>
+                <h2>Planning&hellip;</h2>
+                <p>
+                  Reading Printify and Etsy to work out what apply would change. Nothing is written
+                  yet.
+                </p>
+              </div>
+            )}
           </div>
         )}
 
@@ -454,6 +472,7 @@ export function DeployPage() {
 
         <ApplyFooter
           controlPhase={phase}
+          waitingForBackup={heldForBackup}
           previewsTotal={previewsTotal}
           previewsDone={previewsDone}
           onApply={beginApply}

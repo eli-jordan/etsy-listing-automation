@@ -103,6 +103,11 @@
       "name": "deploy-open-etsy",
       "title": "Open on Etsy after deploy",
       "description": "Three directions for opening a just-deployed listing on Etsy; A (footer Open on Etsy button) won and is built in ApplyFooter."
+    },
+    {
+      "name": "workspace-backup",
+      "title": "Admin · Workspace backup",
+      "description": "Clickable Backup prototype: Backup as its own Admin section, storage diagram, failures warned on every page, and restore with progress."
     }
   ],
   "scenes": [
@@ -495,6 +500,30 @@
       "title": "Template positions · v2",
       "description": "Template positions - a listing moves, resizes or tilts the design on one mockup template, within limits (round 2: switch + handles, no readout)",
       "note": "**Template positions, round 2.** Direction A won; the readout is gone. Real editor head, issues banner and tabs; locator and reel copy the app's markup with fixture photos. The stage is live: flip **Adjust position**, then drag the box, pull a corner, swing the round handle, or use the arrow keys.\r\n\r\n- The chip *is* the position readout (\"92% · up 6%\"); it tracks the drag.\r\n- A handle that stops at a limit turns amber and the note line says why ([3](goto:template-positions-v2/03-at-limit)).\r\n- No Done: like every editor field, the position saves as you go. Switch off to leave.\r\n- The composite is faked (artwork multiplied onto the photo).\r\n- Round 1 (foot bar with meters, and the B inspector) is on the Archive board as `template-positions-v1`."
+    },
+    {
+      "name": "workspace-backup",
+      "frames": 12,
+      "brief": "design/scenes/workspace-backup/_brief.md",
+      "description": "Clickable Backup prototype: Backup nested under Settings, a storage diagram, warnings on every page, and restore with progress. v4, 2026-11-23."
+    },
+    {
+      "name": "workspace-backup-v1",
+      "frames": 6,
+      "brief": "design/scenes/workspace-backup-v1/_brief.md",
+      "description": "v1 of the Backup frames: static screens linked with data-goto, before the clickable prototype. History, not options."
+    },
+    {
+      "name": "workspace-backup-v2",
+      "frames": 8,
+      "brief": "design/scenes/workspace-backup-v2/_brief.md",
+      "description": "History: v2 of the Backup prototype (Backup under Settings, one-step copy panel, short restore). Superseded by v3 on 2026-11-23."
+    },
+    {
+      "name": "workspace-backup-v3",
+      "frames": 11,
+      "brief": "design/scenes/workspace-backup-v3/_brief.md",
+      "description": "History: v3 of the Backup prototype (Backup as its own top-level Admin section). Superseded by v4 on 2026-11-23."
     }
   ],
   "frames": [
@@ -3850,6 +3879,341 @@
       "title": "4 · Position outside the limits",
       "viewport": "laptop",
       "description": "Second entry point: cc1717-folded was recalibrated and this listing's box now falls outside the limits. Fit within limits or Reset to template both resolve it."
+    },
+    {
+      "id": "workspace-backup-v1/01-not-set-up",
+      "file": "design/scenes/workspace-backup-v1/01-not-set-up.tsx",
+      "kind": "tsx",
+      "scene": "workspace-backup-v1",
+      "title": "1 · Backup — not set up · v1",
+      "viewport": "laptop",
+      "description": "Settings > Backup before any repository exists: what backups do, and the one action that starts setup."
+    },
+    {
+      "id": "workspace-backup-v1/02-set-up",
+      "file": "design/scenes/workspace-backup-v1/02-set-up.tsx",
+      "kind": "tsx",
+      "scene": "workspace-backup-v1",
+      "title": "2 · Backup — set up · v1",
+      "viewport": "laptop",
+      "description": "Setup form: local repository folder, password with a saved-elsewhere confirmation, destinations, and retention. Creating it leads to the overview."
+    },
+    {
+      "id": "workspace-backup-v1/03-overview",
+      "file": "design/scenes/workspace-backup-v1/03-overview.tsx",
+      "kind": "tsx",
+      "scene": "workspace-backup-v1",
+      "title": "3 · Backup — healthy · v1",
+      "viewport": "laptop",
+      "description": "Settings > Backup once running: health summary, where backups go, and the run history with Restore on every saved backup."
+    },
+    {
+      "id": "workspace-backup-v1/04-failing",
+      "file": "design/scenes/workspace-backup-v1/04-failing.tsx",
+      "kind": "tsx",
+      "scene": "workspace-backup-v1",
+      "title": "4 · Backup — failing · v1",
+      "viewport": "laptop",
+      "description": "Warning states: iCloud copy 2 days behind, a failed weekly check and a wrong password in history, while a backup waits for a deploy."
+    },
+    {
+      "id": "workspace-backup-v1/05-restore",
+      "file": "design/scenes/workspace-backup-v1/05-restore.tsx",
+      "kind": "tsx",
+      "scene": "workspace-backup-v1",
+      "title": "5 · Restore a backup · v1",
+      "viewport": "laptop",
+      "description": "Restore dialog over the overview: the chosen backup's facts and a new target folder. Never restores over the live workspace."
+    },
+    {
+      "id": "workspace-backup-v1/06-restored",
+      "file": "design/scenes/workspace-backup-v1/06-restored.tsx",
+      "kind": "tsx",
+      "scene": "workspace-backup-v1",
+      "title": "6 · Restore finished · v1",
+      "viewport": "laptop",
+      "description": "Restore done: where the files are and the two ways to use them, pointing the app at the folder or copying files back."
+    },
+    {
+      "id": "workspace-backup-v2/01-not-set-up",
+      "file": "design/scenes/workspace-backup-v2/01-not-set-up.tsx",
+      "kind": "tsx",
+      "scene": "workspace-backup-v2",
+      "title": "1 · Backup — not set up · v2",
+      "viewport": "laptop",
+      "description": "Prototype start before any backup exists: Set up backups opens the form."
+    },
+    {
+      "id": "workspace-backup-v2/02-set-up",
+      "file": "design/scenes/workspace-backup-v2/02-set-up.tsx",
+      "kind": "tsx",
+      "scene": "workspace-backup-v2",
+      "title": "2 · Backup — set up · v2",
+      "viewport": "laptop",
+      "description": "Setup form: folder, interval (4 h to 2 days), password with a saved-elsewhere check, destinations and retention. Create runs the first backup."
+    },
+    {
+      "id": "workspace-backup-v2/03-overview",
+      "file": "design/scenes/workspace-backup-v2/03-overview.tsx",
+      "kind": "tsx",
+      "scene": "workspace-backup-v2",
+      "title": "3 · Backup — healthy · v2",
+      "viewport": "laptop",
+      "description": "Running backups: summary, Back up now, history with Restore on each saved backup, destinations and Edit settings."
+    },
+    {
+      "id": "workspace-backup-v2/04-failing",
+      "file": "design/scenes/workspace-backup-v2/04-failing.tsx",
+      "kind": "tsx",
+      "scene": "workspace-backup-v2",
+      "title": "4 · Backup — failing · v2",
+      "viewport": "laptop",
+      "description": "Warning states: iCloud copy 2 days behind, failed check and wrong-password runs. Try again clears them."
+    },
+    {
+      "id": "workspace-backup-v2/05-restore",
+      "file": "design/scenes/workspace-backup-v2/05-restore.tsx",
+      "kind": "tsx",
+      "scene": "workspace-backup-v2",
+      "title": "5 · Restore a backup · v2",
+      "viewport": "laptop",
+      "description": "Restore dialog: pick a backup and a new folder; the live workspace is refused. Restore runs, then reports."
+    },
+    {
+      "id": "workspace-backup-v2/06-restored",
+      "file": "design/scenes/workspace-backup-v2/06-restored.tsx",
+      "kind": "tsx",
+      "scene": "workspace-backup-v2",
+      "title": "6 · Restore finished · v2",
+      "viewport": "laptop",
+      "description": "Restore done: where the files are and the two ways to use them."
+    },
+    {
+      "id": "workspace-backup-v2/07-backing-up",
+      "file": "design/scenes/workspace-backup-v2/07-backing-up.tsx",
+      "kind": "tsx",
+      "scene": "workspace-backup-v2",
+      "title": "7 · Backup — running · v2",
+      "viewport": "laptop",
+      "description": "Back up now in progress: waits for a deploy, checks files, copies to iCloud Drive, then the new row lands in history."
+    },
+    {
+      "id": "workspace-backup-v2/08-edit",
+      "file": "design/scenes/workspace-backup-v2/08-edit.tsx",
+      "kind": "tsx",
+      "scene": "workspace-backup-v2",
+      "title": "8 · Backup — edit settings · v2",
+      "viewport": "laptop",
+      "description": "Editing a running setup: interval, destinations and retention; the folder and password are fixed here."
+    },
+    {
+      "id": "workspace-backup-v3/01-not-set-up",
+      "file": "design/scenes/workspace-backup-v3/01-not-set-up.tsx",
+      "kind": "tsx",
+      "scene": "workspace-backup-v3",
+      "title": "1 · Backup — not set up · v3",
+      "viewport": "laptop",
+      "description": "Prototype start before any backup exists: Set up backups opens the form."
+    },
+    {
+      "id": "workspace-backup-v3/02-set-up",
+      "file": "design/scenes/workspace-backup-v3/02-set-up.tsx",
+      "kind": "tsx",
+      "scene": "workspace-backup-v3",
+      "title": "2 · Backup — set up · v3",
+      "viewport": "laptop",
+      "description": "Setup form: folder, interval (4 h to 2 days), password with a saved-elsewhere check, destinations and retention. Create runs the first backup."
+    },
+    {
+      "id": "workspace-backup-v3/03-overview",
+      "file": "design/scenes/workspace-backup-v3/03-overview.tsx",
+      "kind": "tsx",
+      "scene": "workspace-backup-v3",
+      "note": "### How step 2, Copy, works\n\nThe backup storage folder is a restic repository. A backup never rewrites its files. It only **adds new ones**, each named after a hash of its contents:\n\n- `data/` holds encrypted pack files of about 16 MB each.\n- `index/` and `snapshots/` hold small files.\n\nAfter each backup the app compares the two folders and copies only the files the destination lacks. Usually that is a handful of new packs, tens of MB.\n\n```mermaid\nflowchart LR\n  W[Workspace] -->|restic backup| R[Backup storage folder]\n  R -->|copy new files| I[iCloud Drive folder]\n  I -->|iCloud for Windows| C((iCloud))\n```\n\n- Each file is written under a temporary name and then renamed into place. A file that already exists is never replaced, so iCloud never sees a conflict and never makes a \"name 2\" copy.\n- Order: `data`, then `index`, then `snapshots`. A destination never lists a backup before its data has arrived.\n- After a weekly clean-up, the app deletes the files the storage folder no longer has.\n- iCloud for Windows uploads the new files on its own schedule. The app only writes to the local iCloud Drive folder.\n\nThe destination ends up a complete repository. If this PC is lost, `restic -r <iCloud folder> restore latest` works on any computer.",
+      "title": "3 · Backup — healthy · v3",
+      "viewport": "laptop",
+      "description": "Running backups: summary, Back up now, history with Restore on each saved backup, destinations and Edit settings."
+    },
+    {
+      "id": "workspace-backup-v3/04-failing",
+      "file": "design/scenes/workspace-backup-v3/04-failing.tsx",
+      "kind": "tsx",
+      "scene": "workspace-backup-v3",
+      "title": "4 · Backup — failing · v3",
+      "viewport": "laptop",
+      "description": "Warning states: iCloud copy 2 days behind, failed check and wrong-password runs. Try again clears them."
+    },
+    {
+      "id": "workspace-backup-v3/05-restore",
+      "file": "design/scenes/workspace-backup-v3/05-restore.tsx",
+      "kind": "tsx",
+      "scene": "workspace-backup-v3",
+      "title": "5 · Restore a backup · v3",
+      "viewport": "laptop",
+      "description": "Restore dialog: pick a backup and a new folder; the live workspace is refused. Restore runs, then reports."
+    },
+    {
+      "id": "workspace-backup-v3/06-restored",
+      "file": "design/scenes/workspace-backup-v3/06-restored.tsx",
+      "kind": "tsx",
+      "scene": "workspace-backup-v3",
+      "title": "6 · Restore finished · v3",
+      "viewport": "laptop",
+      "description": "Restore done: where the files are and the two ways to use them."
+    },
+    {
+      "id": "workspace-backup-v3/07-backing-up",
+      "file": "design/scenes/workspace-backup-v3/07-backing-up.tsx",
+      "kind": "tsx",
+      "scene": "workspace-backup-v3",
+      "title": "7 · Backup — running · v3",
+      "viewport": "laptop",
+      "description": "Back up now in progress: waits for a deploy, checks files, copies to iCloud Drive, then the new row lands in history."
+    },
+    {
+      "id": "workspace-backup-v3/08-edit",
+      "file": "design/scenes/workspace-backup-v3/08-edit.tsx",
+      "kind": "tsx",
+      "scene": "workspace-backup-v3",
+      "title": "8 · Backup settings · v3",
+      "viewport": "laptop",
+      "description": "The Settings subsection under Backup: interval, destinations and retention. Folder and password are fixed once set."
+    },
+    {
+      "id": "workspace-backup-v3/09-restoring",
+      "file": "design/scenes/workspace-backup-v3/09-restoring.tsx",
+      "kind": "tsx",
+      "scene": "workspace-backup-v3",
+      "title": "9 · Restoring · v3",
+      "viewport": "laptop",
+      "description": "A long restore: live progress from restic, time left, and Keep working to close the dialog while it runs."
+    },
+    {
+      "id": "workspace-backup-v3/10-restoring-background",
+      "file": "design/scenes/workspace-backup-v3/10-restoring-background.tsx",
+      "kind": "tsx",
+      "scene": "workspace-backup-v3",
+      "title": "10 · Restoring in the background",
+      "viewport": "laptop",
+      "description": "The dialog closed mid-restore: progress stays on the Backup page, and Show reopens it."
+    },
+    {
+      "id": "workspace-backup-v3/11-warning-elsewhere",
+      "file": "design/scenes/workspace-backup-v3/11-warning-elsewhere.tsx",
+      "kind": "tsx",
+      "scene": "workspace-backup-v3",
+      "title": "11 · Warning on every page",
+      "viewport": "laptop",
+      "description": "Backups failing while the seller works elsewhere: a banner on every page and a dot on Admin, until a backup succeeds."
+    },
+    {
+      "id": "workspace-backup/01-not-set-up",
+      "file": "design/scenes/workspace-backup/01-not-set-up.tsx",
+      "kind": "tsx",
+      "scene": "workspace-backup",
+      "title": "1 · Backup — not set up",
+      "viewport": "laptop",
+      "description": "Prototype start before any backup exists: Set up backups opens the form."
+    },
+    {
+      "id": "workspace-backup/02-set-up",
+      "file": "design/scenes/workspace-backup/02-set-up.tsx",
+      "kind": "tsx",
+      "scene": "workspace-backup",
+      "title": "2 · Backup — set up",
+      "viewport": "laptop",
+      "description": "Setup form: folder, interval (4 h to 2 days), password with a saved-elsewhere check, destinations and retention. Create runs the first backup."
+    },
+    {
+      "id": "workspace-backup/03-overview",
+      "file": "design/scenes/workspace-backup/03-overview.tsx",
+      "kind": "tsx",
+      "scene": "workspace-backup",
+      "note": "### How step 2, Copy, works\n\nThe backup storage folder is a restic repository. A backup never rewrites its files. It only **adds new ones**, each named after a hash of its contents:\n\n- `data/` holds encrypted pack files of about 16 MB each.\n- `index/` and `snapshots/` hold small files.\n\nAfter each backup the app compares the two folders and copies only the files the destination lacks. Usually that is a handful of new packs, tens of MB.\n\n```mermaid\nflowchart LR\n  W[Workspace] -->|restic backup| R[Backup storage folder]\n  R -->|copy new files| I[iCloud Drive folder]\n  I -->|iCloud for Windows| C((iCloud))\n```\n\n- Each file is written under a temporary name and then renamed into place. A file that already exists is never replaced, so iCloud never sees a conflict and never makes a \"name 2\" copy.\n- Order: `data`, then `index`, then `snapshots`. A destination never lists a backup before its data has arrived.\n- The weekly clean-up (`prune`) also never edits a file. It writes new packs and a new index, then deletes the old ones. The next copy adds the new files, then deletes the old ones in the order `snapshots`, `index`, `data`.\n- iCloud for Windows uploads the new files on its own schedule. The app only writes to the local iCloud Drive folder.\n\nThe destination ends up a complete repository. If this PC is lost, `restic -r <iCloud folder> restore latest` works on any computer.",
+      "title": "3 · Backup — healthy",
+      "viewport": "laptop",
+      "description": "Running backups: summary, Back up now, history with Restore on each saved backup, destinations and Edit settings."
+    },
+    {
+      "id": "workspace-backup/04-failing",
+      "file": "design/scenes/workspace-backup/04-failing.tsx",
+      "kind": "tsx",
+      "scene": "workspace-backup",
+      "title": "4 · Backup — failing",
+      "viewport": "laptop",
+      "description": "Warning states: iCloud copy 2 days behind, failed check and wrong-password runs. Try again clears them."
+    },
+    {
+      "id": "workspace-backup/05-restore",
+      "file": "design/scenes/workspace-backup/05-restore.tsx",
+      "kind": "tsx",
+      "scene": "workspace-backup",
+      "title": "5 · Restore a backup",
+      "viewport": "laptop",
+      "description": "Restore dialog: pick a backup and a new folder; the live workspace is refused. Restore runs, then reports."
+    },
+    {
+      "id": "workspace-backup/06-restored",
+      "file": "design/scenes/workspace-backup/06-restored.tsx",
+      "kind": "tsx",
+      "scene": "workspace-backup",
+      "title": "6 · Restore finished",
+      "viewport": "laptop",
+      "description": "Restore done: where the files are and the two ways to use them."
+    },
+    {
+      "id": "workspace-backup/07-backing-up",
+      "file": "design/scenes/workspace-backup/07-backing-up.tsx",
+      "kind": "tsx",
+      "scene": "workspace-backup",
+      "title": "7 · Backup — running",
+      "viewport": "laptop",
+      "description": "Back up now in progress: waits for a deploy, checks files, copies to iCloud Drive, then the new row lands in history."
+    },
+    {
+      "id": "workspace-backup/08-edit",
+      "file": "design/scenes/workspace-backup/08-edit.tsx",
+      "kind": "tsx",
+      "scene": "workspace-backup",
+      "title": "8 · Backup settings",
+      "viewport": "laptop",
+      "description": "The Settings subsection under Backup: interval, destinations and retention. Folder and password are fixed once set."
+    },
+    {
+      "id": "workspace-backup/09-restoring",
+      "file": "design/scenes/workspace-backup/09-restoring.tsx",
+      "kind": "tsx",
+      "scene": "workspace-backup",
+      "title": "9 · Restoring",
+      "viewport": "laptop",
+      "description": "A long restore: live progress from restic, time left, and Keep working to close the dialog while it runs."
+    },
+    {
+      "id": "workspace-backup/10-restoring-background",
+      "file": "design/scenes/workspace-backup/10-restoring-background.tsx",
+      "kind": "tsx",
+      "scene": "workspace-backup",
+      "title": "10 · Restoring in the background",
+      "viewport": "laptop",
+      "description": "The dialog closed mid-restore: progress stays on the Backup page, and Show reopens it."
+    },
+    {
+      "id": "workspace-backup/11-warning-elsewhere",
+      "file": "design/scenes/workspace-backup/11-warning-elsewhere.tsx",
+      "kind": "tsx",
+      "scene": "workspace-backup",
+      "title": "11 · Warning on every page",
+      "viewport": "laptop",
+      "description": "Backups failing while the seller works elsewhere: a banner on every page and a dot on Admin, until a backup succeeds."
+    },
+    {
+      "id": "workspace-backup/12-changed-files",
+      "file": "design/scenes/workspace-backup/12-changed-files.tsx",
+      "kind": "tsx",
+      "scene": "workspace-backup",
+      "title": "12 · Changed files in a destination",
+      "viewport": "laptop",
+      "description": "A file in iCloud Drive changed after it was copied, and an iCloud conflict copy appeared: copying stops, and Repair sets them aside."
     }
   ]
 }

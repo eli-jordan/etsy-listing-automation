@@ -12,6 +12,12 @@ const stepLabels: Record<string, string> = {
   building_maps: "Building maps",
   publication: "Publishing maps",
 };
+function heading(job: PreparationJob, queuePosition: string): string {
+  // Held by a workspace backup's pause (plan decision P4).
+  if (job.waiting_for_backup) return "Waiting for backup";
+  if (job.phase === "queued") return `Waiting in queue${queuePosition}`;
+  return stepLabels[job.step] ?? job.step.replaceAll("_", " ");
+}
 export function PreparationProgress({ job }: { job: PreparationJob }) {
   const [ticks, setTicks] = useState(0);
   const [base, setBase] = useState({ elapsed: job.elapsed, ticks });
@@ -26,11 +32,7 @@ export function PreparationProgress({ job }: { job: PreparationJob }) {
   return (
     <>
       <p className="mg-row">
-        <strong>
-          {job.phase === "queued"
-            ? `Waiting in queue${queuePosition}`
-            : (stepLabels[job.step] ?? job.step.replaceAll("_", " "))}
-        </strong>
+        <strong>{heading(job, queuePosition)}</strong>
         <span>{Math.floor(job.elapsed + ticks - base.ticks)}s</span>
       </p>
       <p className="mg-help">

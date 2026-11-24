@@ -40,6 +40,7 @@ from etsy_listings.core.application.ai.readiness import (
 )
 from etsy_listings.core.application.ai.registry import AiRun, AiRunRegistry
 from etsy_listings.core.application.ai.runner import AiRunner
+from etsy_listings.core.application.job_gate import JobGate
 from etsy_listings.core.batches import RETRYABLE, AiState, AiStep, Batch, BatchRow, BatchStore
 from etsy_listings.core.config.settings import SettingsProblem
 from etsy_listings.core.workspace.workspace import Workspace
@@ -89,8 +90,11 @@ class BatchQueue:
         batches: BatchStore,
         registry: AiRunRegistry,
         runner: AiRunner,
+        gate: JobGate | None = None,
     ) -> None:
         self._workspace = workspace
+        self._gate = gate if gate is not None else JobGate()
+        self._gate.on_resume(self.wake)
         self._batches = batches
         self._registry = registry
         self._runner = runner
@@ -168,7 +172,8 @@ class BatchQueue:
         """One round: start queued rows until the limit is reached or none
         can start."""
         skipped: set[Slot] = set()
-        while self._running() < self._limit():
+        # A backup's pause starts no row; resume wakes the queue again.
+        while not self._gate.paused and self._running() < self._limit():
             with self._state:
                 after = self._last
             order = [
@@ -189,20 +194,36 @@ class BatchQueue:
             row = _row(batch, row_id)
             if batch is None or row is None or row.ai != "queued":
                 return False
+            # A pause that landed since `dispatch` looked leaves the row
+            # queued, and ends the round.
+            ticket = self._gate.admit(f"Batch AI for {row.name}")
+            if ticket is None:
+                return False
             run = self._registry.create(
-                row.name, draft_brief=self._brief_is_empty(row.name), origin="batch"
+                row.name,
+                draft_brief=self._brief_is_empty(row.name),
+                origin="batch",
+                ticket=ticket,
             )
             if not isinstance(run, AiRun):
                 # A manual run holds the listing, or a deploy does: a
                 # row Retry queued mid-deploy starts once the deploy ends.
                 return False
+            self._save_claim(batch, row, run)
             with self._state:
                 self._runs[run.id] = slot
                 self._last = batch_id
-            _replace(batch, row.model_copy(update={"ai": "running", "ai_error": None}))
-            self._batches.save(batch)
         self._runner.start(run)
         return True
+
+    def _save_claim(self, batch: Batch, row: BatchRow, run: AiRun) -> None:
+        try:
+            _replace(batch, row.model_copy(update={"ai": "running", "ai_error": None}))
+            self._batches.save(batch)
+        except OSError:
+            # Finishing the run releases its gate ticket.
+            run.finish("failed", "The batch row could not be saved.")
+            raise
 
     def _brief_is_empty(self, name: str) -> bool:
         """ADR-0048: a brief already there -- the seller's, or a retried row's own
@@ -215,23 +236,27 @@ class BatchQueue:
 
     def _finished(self, run: AiRun) -> None:
         """A run ended. A batch run's row takes its outcome; any run ending
-        can free a listing or a slot, so the queue looks again."""
+        can free a listing or a slot, so the queue looks again. The run
+        releases its gate ticket once this has written the row."""
         with self._state:
             slot = self._runs.pop(run.id, None)
         if slot is not None and run.stop_reason != "shutdown":
-            last = run.events[-1] if run.events else None
-            message = last.message if isinstance(last, AiPhaseEvent) else None
-            ended = _ENDED[run.phase]
-            if self._registry.deploying(run.listing):
-                ended = "cancelled_by_deploy"
-            self._update(
-                slot[0],
-                lambda row: row.id == slot[1] and row.ai == "running",
-                ai=ended,
-                ai_error=message if ended == "failed" else None,
-                ai_steps=[AiStep(**step.model_dump()) for step in run.steps],
-            )
+            self._record_outcome(run, slot)
         self.wake()
+
+    def _record_outcome(self, run: AiRun, slot: Slot) -> None:
+        last = run.events[-1] if run.events else None
+        message = last.message if isinstance(last, AiPhaseEvent) else None
+        ended = _ENDED[run.phase]
+        if self._registry.deploying(run.listing):
+            ended = "cancelled_by_deploy"
+        self._update(
+            slot[0],
+            lambda row: row.id == slot[1] and row.ai == "running",
+            ai=ended,
+            ai_error=message if ended == "failed" else None,
+            ai_steps=[AiStep(**step.model_dump()) for step in run.steps],
+        )
 
     # ------------------------------------------------------ seller controls
 
@@ -318,6 +343,11 @@ class BatchQueue:
             self.wake()
 
     # ------------------------------------------------------------- reading
+
+    def waiting_for_backup(self, row: BatchRow) -> bool:
+        """Whether ``row`` is held by a backup's pause (plan decision P4):
+        queued while the gate is paused. Never stored in the record."""
+        return self._gate.holds(queued=row.ai == "queued")
 
     def pending(self, listing: str) -> bool:
         """Does batch work own ``listing``'s AI right now?"""

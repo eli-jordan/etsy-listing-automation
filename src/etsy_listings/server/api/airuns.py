@@ -79,7 +79,7 @@ def _run(request: Request, run_id: str) -> AiRun:
     return run
 
 
-def _summary(run: AiRun) -> AiRunSummary:
+def _summary(request: Request, run: AiRun) -> AiRunSummary:
     return AiRunSummary(
         id=run.id,
         listing=run.listing,
@@ -88,7 +88,9 @@ def _summary(run: AiRun) -> AiRunSummary:
         phase=run.phase,
         steps=run.steps,
         created_at=run.created_at,
+        started_at=run.started_at,
         finished_at=run.finished_at,
+        waiting_for_backup=_ai(request).waiting_for_backup(run),
     )
 
 
@@ -115,7 +117,7 @@ def create_ai_run(request: Request, body: CreateAiRunRequest) -> AiRunSummary | 
         return _refused(AiRunRefusal(reason=exc.reason))
     if isinstance(run, Conflict):
         return _refused(AiRunRefusal(active_run=run.active_run))
-    return _summary(run)
+    return _summary(request, run)
 
 
 @router.get("", response_model=AiRunSummary, responses={404: {}})
@@ -125,23 +127,23 @@ def find_ai_run(request: Request, listing: str) -> AiRunSummary:
     run = _registry(request).latest(listing)
     if run is None:
         raise HTTPException(status_code=404, detail=f"no AI run for {listing!r}")
-    return _summary(run)
+    return _summary(request, run)
 
 
 @router.get("/{run_id}", response_model=AiRunDetail, responses={404: {}})
-def get_ai_run(run: Annotated[AiRun, Depends(_run)]) -> AiRunDetail:
+def get_ai_run(request: Request, run: Annotated[AiRun, Depends(_run)]) -> AiRunDetail:
     with run.condition:
-        return AiRunDetail(**_summary(run).model_dump(), events=list(run.events))
+        return AiRunDetail(**_summary(request, run).model_dump(), events=list(run.events))
 
 
 @router.delete("/{run_id}", response_model=AiRunSummary, responses={404: {}, 409: {}})
-def cancel_ai_run(run: Annotated[AiRun, Depends(_run)]) -> AiRunSummary:
+def cancel_ai_run(request: Request, run: Annotated[AiRun, Depends(_run)]) -> AiRunSummary:
     """Cancel: the run's provider subprocess tree is killed and research
     starts no new call. The run ends ``cancelled`` on its own thread
     shortly after; a brief or snapshot already written stays."""
     if not run.request_stop("cancelled"):
         raise HTTPException(status_code=409, detail="this AI run has already finished")
-    return _summary(run)
+    return _summary(request, run)
 
 
 def _sse_frame(event: AnyAiRunEvent) -> bytes:

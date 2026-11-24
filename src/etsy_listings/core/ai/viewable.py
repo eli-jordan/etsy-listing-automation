@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+import threading
 from pathlib import Path
 from typing import Final
 
@@ -47,9 +48,18 @@ def viewable_design(source: Path, cache_dir: Path) -> Path:
     background = Image.new("RGBA", rgba.size, (*_background_for(rgba), 255))
     flattened = Image.alpha_composite(background, rgba).convert("RGB")
     target.parent.mkdir(parents=True, exist_ok=True)
-    partial = target.with_name(f"{target.name}.{os.getpid()}.tmp")
+    # Two runs whose listings share a design flatten it on threads of one
+    # process, so the partial name carries the thread as well as the pid.
+    partial = target.with_name(f"{target.name}.{os.getpid()}.{threading.get_ident()}.tmp")
     flattened.save(partial, format="PNG")
-    partial.replace(target)
+    try:
+        partial.replace(target)
+    except PermissionError:
+        # Windows refuses to replace a file another run has open. The copy
+        # is named by its content, so the one already there is this one.
+        partial.unlink(missing_ok=True)
+        if not target.is_file():
+            raise
     return target
 
 

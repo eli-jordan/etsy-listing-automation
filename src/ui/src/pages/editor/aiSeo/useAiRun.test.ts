@@ -107,13 +107,16 @@ describe("useAiRun starting and following a run", () => {
   it("dates Generating for… from the run's own start time", async () => {
     runs.start.mockResolvedValue({
       kind: "started",
-      run: aiRunSummary({ created_at: "2026-09-25T10:00:00Z" }),
+      run: aiRunSummary({
+        created_at: "2026-09-25T10:00:00Z",
+        started_at: "2026-09-25T10:03:00Z",
+      }),
     });
     const view = setup();
 
     await started(view);
 
-    expect(view.result.current.startedAt).toBe(Date.parse("2026-09-25T10:00:00Z"));
+    expect(view.result.current.startedAt).toBe(Date.parse("2026-09-25T10:03:00Z"));
   });
 
   it("keeps the latest step event for each node, in chain order", async () => {
@@ -235,6 +238,62 @@ describe("useAiRun starting and following a run", () => {
 
     expect(runs.stream().closed).toBe(true);
     expect(runs.cancel).not.toHaveBeenCalled();
+  });
+});
+
+describe("useAiRun while a backup holds the run", () => {
+  function queued() {
+    runs.start.mockResolvedValue({
+      kind: "started",
+      run: aiRunSummary({
+        phase: "queued",
+        started_at: null,
+        waiting_for_backup: true,
+        steps: [
+          { id: "brief", state: "pending", detail: null },
+          { id: "market", state: "pending", detail: null },
+          { id: "seo", state: "pending", detail: null },
+        ],
+      }),
+    });
+  }
+
+  it("is busy and queued until the run's first step, then running", async () => {
+    queued();
+    const view = setup();
+
+    act(() => view.result.current.start({ draftBrief: true }));
+    await waitFor(() => expect(view.result.current.phase).toBe("queued"));
+    expect(view.result.current.busy).toBe(true);
+    expect(view.result.current.startedAt).toBeNull();
+
+    const before = Date.now();
+    runs.emit(stepEvent("brief", "active", "Drafting a brief from the design"));
+    expect(view.result.current.phase).toBe("running");
+    expect(view.result.current.startedAt).toBeGreaterThanOrEqual(before);
+  });
+
+  it("hands over the brief a held run writes once it starts", async () => {
+    queued();
+    const onBrief = vi.fn();
+    const view = setup({}, { onBrief });
+    act(() => view.result.current.start({ draftBrief: true }));
+    await waitFor(() => expect(view.result.current.phase).toBe("queued"));
+
+    runs.emit(stepEvent("brief", "active"), briefEvent("Retro sunset over mountains."));
+
+    expect(onBrief).toHaveBeenCalledWith("Retro sunset over mountains.");
+  });
+
+  it("cancels a held run", async () => {
+    queued();
+    const view = setup();
+    act(() => view.result.current.start({ draftBrief: false }));
+    await waitFor(() => expect(view.result.current.phase).toBe("queued"));
+
+    act(() => view.result.current.cancel());
+
+    expect(runs.cancel).toHaveBeenCalledWith("run-1");
   });
 });
 

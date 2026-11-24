@@ -1,5 +1,14 @@
 import { useCallback, useState } from "react";
 import {
+  type BackupSetUp,
+  type ConnectRepository,
+  connectRepository,
+  createRepository,
+  type NewRepository,
+  type SetUpOutcome,
+  setUpBackup,
+} from "../../api/backup";
+import {
   getSettings,
   saveSettings,
   type SettingsChanges,
@@ -23,7 +32,13 @@ const clears = (key: string, changes: SettingsChanges) =>
   (key === "ai.step_limit_minutes" && "step_limit_minutes" in changes) ||
   (key === "ai.run_limit_minutes" && "run_limit_minutes" in changes) ||
   (key.startsWith("market_seo") && "weights" in changes) ||
-  (key.startsWith("template_positions") && "template_positions" in changes);
+  (key.startsWith("template_positions") && "template_positions" in changes) ||
+  (key.startsWith("backup") && Object.keys(changes).some((change) => change.startsWith("backup")));
+
+/** A missing-repository action's answers, without the revision. */
+export type RepositoryAction =
+  | { kind: "create"; body: Omit<NewRepository, "revision"> }
+  | { kind: "connect"; body: Omit<ConnectRepository, "revision"> };
 
 /** settings.yaml's revision and save queue (`useSaveQueue`), independent of
  * Shop. Responses advance the revision without replacing newer local edits:
@@ -56,8 +71,38 @@ export function useWorkspaceSettings() {
     [enqueue],
   );
 
+  // Backup's set-up and the missing-repository actions write settings.yaml
+  // outside the queue: after the queued saves, naming their revision, then
+  // reloading the file they changed.
+  const { afterSaves, currentRevision } = queue;
+  const outsideQueue = useCallback(
+    (send: (revision: string) => Promise<SetUpOutcome>) =>
+      afterSaves(async () => {
+        const outcome = await send(currentRevision() ?? "");
+        if (outcome.kind === "started") await reload();
+        return outcome;
+      }),
+    [afterSaves, currentRevision, reload],
+  );
+  const setUp = useCallback(
+    (answers: Omit<BackupSetUp, "revision">) =>
+      outsideQueue((revision) => setUpBackup({ ...answers, revision })),
+    [outsideQueue],
+  );
+  const replaceRepository = useCallback(
+    (action: RepositoryAction) =>
+      outsideQueue((revision) =>
+        action.kind === "create"
+          ? createRepository({ ...action.body, revision })
+          : connectRepository({ ...action.body, revision }),
+      ),
+    [outsideQueue],
+  );
+
   return {
     settings,
+    setUp,
+    replaceRepository,
     loadedVersion,
     status: queue.status,
     fieldErrors: queue.fieldErrors as Record<string, string>,

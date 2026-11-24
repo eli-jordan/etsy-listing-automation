@@ -77,3 +77,5 @@ so the trade-off remains visible.
 | 0057 | [Bound AI attempts and runs](0057-bound-ai-attempts-and-runs.md) | 2026-10-30 |
 | 0058 | [Allow per-listing template positions within limits](0058-allow-per-listing-template-positions-within-limits.md) | 2026-11-02 |
 | 0059 | [Deploy a batch's reviewed listings as their own scope](0059-deploy-a-batchs-reviewed-listings-as-their-own-scope.md) | 2026-11-24 |
+| 0060 | [Back up the workspace with restic from the app](0060-back-up-the-workspace-with-restic-from-the-app.md) | 2026-11-23 |
+| 0061 | [Group backup retention by workspace ID](0061-group-backup-retention-by-workspace-id.md) | 2026-11-24 |

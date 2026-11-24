@@ -53,7 +53,7 @@ from etsy_listings.core.workspace.revisions import (
     replace_if_unchanged,
 )
 from etsy_listings.core.workspace.workspace import Workspace
-from etsy_listings.core.workspace.yaml_source import UneditableYamlError, edit_yaml_bytes
+from etsy_listings.core.workspace.yaml_source import ITSELF, UneditableYamlError, edit_yaml_bytes
 
 CONCURRENCY = "batch_ai.concurrency"
 WEIGHTS = "market_seo.weights"
@@ -61,6 +61,14 @@ PROVIDERS = "ai.providers"
 STEP_LIMIT = "ai.step_limit_minutes"
 RUN_LIMIT = "ai.run_limit_minutes"
 TEMPLATE_POSITIONS = "template_positions"
+BACKUP = "backup"
+BACKUP_REPOSITORY = "backup.repository"
+"""Not editable from Setup; written by the missing-repository actions."""
+BACKUP_DESTINATIONS = "backup.destinations"
+BACKUP_INTERVAL = "backup.interval_hours"
+BACKUP_RETENTION = "backup.retention"
+BACKUP_WORKSPACE_ID = "backup.workspace_id"
+"""Not editable from Setup; written once by ``backup_repository.ensure_workspace_id``."""
 _WHOLE = 100
 """Percent: what the page's six shares total."""
 
@@ -71,10 +79,19 @@ EDITABLE_KEYS: tuple[str, ...] = (
     STEP_LIMIT,
     RUN_LIMIT,
     TEMPLATE_POSITIONS,
+    BACKUP_DESTINATIONS,
+    BACKUP_INTERVAL,
+    BACKUP_RETENTION,
 )
 """One save may carry several keys. The page couples a provider enable or a
 larger step limit with the run-limit increase it needs, so no written file
-breaks ADR-0057's floor; nothing here raises the run limit on its own."""
+breaks ADR-0057's floor; nothing here raises the run limit on its own.
+
+Backup's Setup page edits destinations, the interval and the retention; the
+repository and the password are read-only there (interactions, *Set up and
+Setup*), so only set-up writes the whole ``backup`` block, through
+``backup_setup``. A destination is known by its path (``ITSELF``), so
+removing one takes its comment with it and a kept one keeps its own."""
 
 
 @dataclass(frozen=True)
@@ -101,17 +118,20 @@ def read_settings(workspace: Workspace) -> SettingsView:
 
 
 def edit_settings(
-    workspace: Workspace, *, expected_revision: str, changes: Mapping[str, object]
+    workspace: Workspace,
+    *,
+    expected_revision: str,
+    changes: Mapping[str, object],
+    editable: tuple[str, ...] = EDITABLE_KEYS,
 ) -> SettingsView:
     """Apply ``changes`` (dotted key to value) if ``settings.yaml`` is still
-    at ``expected_revision``.
+    at ``expected_revision``. ``editable`` widens what may change for an
+    owner other than the Admin page, such as backup set-up.
 
     Refuses with :class:`SettingsRevisionConflictError` or
     :class:`InvalidSettingsEditError`, writing nothing either way.
     """
-    refused = {
-        key: "not editable from the Admin page" for key in changes if key not in EDITABLE_KEYS
-    }
+    refused = {key: "not editable from the Admin page" for key in changes if key not in editable}
     if WEIGHTS in changes and (problem := _percentage_problem(changes[WEIGHTS])):
         refused[WEIGHTS] = problem
     if TEMPLATE_POSITIONS in changes and not isinstance(changes[TEMPLATE_POSITIONS], Mapping):
@@ -147,12 +167,18 @@ def _edited(path: Path, source: bytes, changes: Mapping[str, object]) -> tuple[b
     if PROVIDERS in changes:
         _retain_provider_source(raw, candidate, original, validated)
     try:
-        edited = edit_yaml_bytes(source, candidate, sequence_keys={("ai", "providers"): "name"})
+        edited = edit_yaml_bytes(source, candidate, sequence_keys=_SEQUENCE_KEYS)
     except UneditableYamlError as exc:
         raise InvalidSettingsEditError(
             {"__root__": f"{path}: {exc}. Edit this value in the file, then reload Settings."}
         ) from exc
     return edited, validated
+
+
+_SEQUENCE_KEYS: dict[tuple[str, ...], str] = {
+    ("ai", "providers"): "name",
+    ("backup", "destinations"): ITSELF,
+}
 
 
 def _leaf_changes(changes: Mapping[str, object], original: Settings) -> dict[str, object]:

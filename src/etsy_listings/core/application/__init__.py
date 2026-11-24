@@ -38,12 +38,29 @@ import names the module it depends on. Public interfaces:
     profile (``build_garment_profile``, ``garment_profile_slug_for``,
     ``sort_sizes``, ``write_garment_profile_if_absent``).
 ``credentials``
-    ``Credential`` (``PRINTIFY``, ``ETSY_APP_KEY``, ``ANTHROPIC``),
+    ``Credential`` (``PRINTIFY``, ``ETSY_APP_KEY``, ``ANTHROPIC``,
+    ``BACKUP_PASSWORD``),
     ``stored`` / ``stored_values`` (environment over ``.env``), ``store``,
     ``verify_printify_token``, ``verify_etsy_app_key``,
     ``credential_status`` -> ``CredentialStatus`` / ``TokenSummary``, and
     the Etsy grant either side of the browser -- ``begin_etsy_sign_in`` ->
     ``EtsySignIn``, ``complete_etsy_sign_in`` -> ``SignedIn``.
+``backup_repository``
+    The workspace's configured backup: ``configured_backup`` ->
+    ``ConfiguredBackup``, resolved once per operation from the ``backup:``
+    block (or ``BackupOffError``), the password and the restic binary, and
+    refusing overlapping folders. It holds the storage folder and
+    destinations, answers ``check_new_storage`` and
+    ``check_restore_target``, and opens the repository (``open`` -> a
+    ``core.backup.repository.Repository``, restic or the ``restic`` opener
+    a caller passes) and the state record. The folder rules ``inside``,
+    ``overlaps``, ``holds_files``, ``has_repository`` and
+    ``check_backup_paths``; ``create_repository``, ``repository_at``, and
+    ``backup_status`` -> ``BackupStatus``, read without a lock.
+``backup_run``
+    ``BackupRunner``: ``run`` (one backup, paused through an optional
+    ``JobGate``, then forget and the weekly prune and check) -> ``RunRecord``,
+    reporting ``BackupProgress``; ``check`` -> ``CheckResult``. ``EXCLUDES``.
 ``workspace_setup``
     ``create_directories``, ``sync_packaged_prompts`` -> ``PackagedPrompt``,
     ``read_shop_document``, ``SetupAnswers`` / ``POD_DEFAULTS``,

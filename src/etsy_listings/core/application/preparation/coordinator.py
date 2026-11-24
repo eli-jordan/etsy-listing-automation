@@ -2,6 +2,11 @@
 
 Async hosts offload synchronous request operations. GPU and CPU work each own a
 single executor lane; installation inspection never runs on their event loop.
+
+A backup's pause (workspace-backup spec, *Pausing jobs*) dispatches nothing:
+queued jobs, and a job waiting for the CPU lane, stay as they are and report
+waiting for backup until resume schedules them again. Each job's turn on a
+lane runs inside its gate ticket, which a backup's wait for quiet counts.
 """
 
 from __future__ import annotations
@@ -17,6 +22,7 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
+from etsy_listings.core.application.job_gate import JobGate, Ticket
 from etsy_listings.core.application.preparation.dependencies import (
     PreparationRuntime,
 )
@@ -74,8 +80,11 @@ class Preparations:
         runtime: PreparationRuntime | None = None,
         artifacts: Artifacts | None = None,
         checkpoint: Callable[[str, str], None] = lambda _job, _step: None,
+        gate: JobGate | None = None,
     ) -> None:
         self.workspace = workspace
+        self.gate = gate if gate is not None else JobGate()
+        self.gate.on_resume(self._schedule)
         self.runtime: PreparationRuntime = runtime if runtime is not None else Runtime()
         self.calibration = CalibrationStore(workspace)
         self.artifacts = artifacts if artifacts is not None else Artifacts(workspace)
@@ -536,30 +545,55 @@ class Preparations:
         return not cpu_work and job.phase == "queued"
 
     def _dispatch(self, job: Job, lane: str) -> None:
-        """Under the journal lock: mark ``lane`` busy and submit ``job`` to it."""
+        """Under the journal lock: mark ``lane`` busy and submit ``job`` to
+        it, unless a backup's pause holds it queued."""
+        ticket = self.gate.admit(f"Prepare job for {job.template}")
+        if ticket is None:
+            return
+        try:
+            self.store.write(
+                job, phase="running", step="loading_models" if lane == "gpu" else "fitting"
+            )
+            future = getattr(self, lane).submit(self._run, job.id, lane, ticket)
+        except BaseException:
+            # The turn never began, so neither did its ticket's work.
+            ticket.release()
+            raise
         self._active.add(job.id)
         setattr(self, "_" + lane + "_busy", True)
-        self.store.write(
-            job, phase="running", step="loading_models" if lane == "gpu" else "fitting"
-        )
         self._futures = [f for f in self._futures if not f.done()]
-        self._futures.append(getattr(self, lane).submit(self._run, job.id, lane))
+        self._futures.append(future)
 
-    def _run(self, identity: str, lane: str) -> None:
-        try:
-            self.execution.run(identity, lane)
-        finally:
-            with self.store.condition:
-                self._active.discard(identity)
-                setattr(self, "_" + lane + "_busy", False)
-            job = self.status(identity)
-            if job.phase == "superseded" and not self._closing:
-                self.reconcile_saved(job.template)
-            if job.phase in TERMINAL:
-                self.cleanup(job.template)
-            if job.kind == "prepare" and job.phase == "completed":
-                self._cover_prepared(job.template)
-            self._schedule()
+    def _run(self, identity: str, lane: str, ticket: Ticket) -> None:
+        """``identity``'s turn on ``lane``, and what it leaves to do, under
+        the gate's ``ticket``."""
+        with ticket:
+            try:
+                self.execution.run(identity, lane)
+            finally:
+                with self.store.condition:
+                    self._active.discard(identity)
+                    setattr(self, "_" + lane + "_busy", False)
+                self._settle(identity)
+        self._schedule()
+
+    def _settle(self, identity: str) -> None:
+        """What a job's turn on a lane leaves to do: rebuild a superseded
+        template, release terminal scratch, queue coverage. Part of the
+        job's turn, so a backup waits for it."""
+        job = self.status(identity)
+        if job.phase == "superseded" and not self._closing:
+            self.reconcile_saved(job.template)
+        if job.phase in TERMINAL:
+            self.cleanup(job.template)
+        if job.kind == "prepare" and job.phase == "completed":
+            self._cover_prepared(job.template)
+
+    def waiting_for_backup(self, job: Job) -> bool:
+        """Whether ``job`` is held by a backup's pause (plan decision P4):
+        queued, or waiting for the CPU lane, while the gate is paused.
+        Never stored in the journal."""
+        return self.gate.holds(queued=job.phase == "queued" or job.step == "cpu_queued")
 
     def _cover_prepared(self, template: str) -> None:
         """Queue ``template``'s coverage now its preparation has finished, so

@@ -34,6 +34,7 @@ from etsy_listings.core.application.deploy.registry import (
     WorkspaceApply,
     WorkspacePlan,
 )
+from etsy_listings.core.application.job_gate import JobGate
 from etsy_listings.core.application.refusals import ReviewedPlanRefusedError
 from etsy_listings.core.batches import BatchStore
 from etsy_listings.core.clients.printify.fakes import FakeCatalogClient
@@ -473,6 +474,143 @@ def test_stop_finishes_the_work_in_flight_keeps_its_progress_and_starts_nothing_
     assert queued_plan.phase == "cancelled"
     assert queued_apply.phase == "failed"
     assert [event.type for event in queued_apply.events] == ["phase", "phase"]
+
+
+# ------------------------------------------------------- pausing for a backup
+
+
+def _waiting_for(gate: JobGate) -> tuple[threading.Thread, list[str], list[bool]]:
+    """A backup's wait for quiet, on its own thread: what it named, and its
+    answer once it returns."""
+    named: list[str] = []
+    result: list[bool] = []
+    thread = threading.Thread(
+        target=lambda: result.append(gate.wait_idle(waiting=named.append)), daemon=True
+    )
+    thread.start()
+    return thread, named, result
+
+
+def test_while_paused_no_run_starts_and_each_waits_for_backup_until_resume_runs_them_in_order(
+    workspace_root: Path, workspace: Workspace
+) -> None:
+    """Workspace-backup spec, *Backup run* steps 2 and 4: a submission
+    during the pause is accepted and held, and resume releases the held runs
+    in the order they were submitted."""
+    copy_listing(workspace_root, "second")
+    runs: list[Run] = []
+    seen: list[tuple[str, ...]] = []
+
+    def context(ws: Workspace, on_event: EventSink | None = None) -> RunContext:
+        """As each run starts reading: every run's phase at that moment."""
+        seen.append(tuple(run.phase for run in runs))
+        return _context(ws, on_event)
+
+    gate = JobGate()
+    gate.pause()
+    deployments = Deployments(workspace, context, gate=gate)
+    runs.append(_run(deployments.submit(ListingApply((LISTING,), {}))))
+    runs.append(_run(deployments.submit(ListingPlan(("second",)))))
+    deployments.start()
+    try:
+        time.sleep(0.3)
+        assert seen == [], "a run started while the gate was paused"
+        assert [run.phase for run in runs] == ["queued", "queued"]
+        assert [deployments.waiting_for_backup(run) for run in runs] == [True, True]
+
+        gate.resume()
+        for run in runs:
+            _wait_until_terminal(run)
+    finally:
+        gate.stop()  # first, as the lifespan does: it lets a held run go
+        deployments.stop()
+
+    assert seen == [("applying", "queued"), ("applied", "planning")]
+    assert [deployments.waiting_for_backup(run) for run in runs] == [False, False]
+
+
+def test_a_batch_deploy_waits_for_backup_while_paused_and_runs_on_resume(
+    workspace_root: Path, workspace: Workspace
+) -> None:
+    """A batch's reviewed deploy (ADR-0059) is held by the same gate as a
+    listing's or the workspace's: accepted, waiting for backup, and run once
+    the backup resumes."""
+    copy_listing(workspace_root, "second")
+    started: list[str] = []
+
+    def context(ws: Workspace, on_event: EventSink | None = None) -> RunContext:
+        started.append("started")
+        return _context(ws, on_event)
+
+    gate = JobGate()
+    gate.pause()
+    deployments = Deployments(workspace, context, gate=gate)
+    run = _run(deployments.submit(BatchPlan("b1", (LISTING, "second"))))
+    deployments.start()
+    try:
+        time.sleep(0.3)
+        assert started == [], "a batch deploy started while the gate was paused"
+        assert run.phase == "queued"
+        assert deployments.waiting_for_backup(run)
+
+        gate.resume()
+        _wait_until_terminal(run)
+    finally:
+        gate.stop()  # first, as the lifespan does: it lets a held run go
+        deployments.stop()
+
+    assert started == ["started"]
+    assert run.phase == "ready"
+    assert not deployments.waiting_for_backup(run)
+
+
+def test_a_backup_waits_for_the_run_in_flight_and_names_it(workspace: Workspace) -> None:
+    planning = threading.Event()
+    release = threading.Event()
+
+    def held(ws: Workspace, on_event: EventSink | None) -> RunContext:
+        planning.set()
+        assert release.wait(timeout=10)
+        return _context(ws, on_event)
+
+    gate = JobGate()
+    deployments = Deployments(workspace, held, gate=gate)
+    run = _run(deployments.submit(ListingPlan((LISTING,))))
+    deployments.start()
+    try:
+        assert planning.wait(timeout=10)
+        gate.pause()
+        waiter, named, result = _waiting_for(gate)
+        waiter.join(0.2)
+        assert waiter.is_alive(), "the backup did not wait for the plan in flight"
+
+        release.set()
+        waiter.join(10)
+        assert result == [True]
+        assert named == [f"Deploy plan for {LISTING}"]
+        assert run.phase in TERMINAL_PHASES
+    finally:
+        gate.resume()
+        deployments.stop()
+
+
+def test_shutdown_during_a_pause_drops_the_held_runs(workspace: Workspace) -> None:
+    """As shutdown drops queued runs today: a plan cancelled, an apply
+    failed, neither started."""
+    gate = JobGate()
+    gate.pause()
+    deployments = Deployments(workspace, _context, gate=gate)
+    plan = _run(deployments.submit(ListingPlan((LISTING,))))
+    apply = _run(deployments.submit(ListingApply(("second",), {})))
+    deployments.start()
+    time.sleep(0.2)
+
+    gate.stop()
+    deployments.stop()
+
+    assert plan.phase == "cancelled"
+    assert apply.phase == "failed"
+    assert [event.type for event in plan.events] == ["phase", "phase"]
 
 
 # --------------------------------------------------------------------- replay

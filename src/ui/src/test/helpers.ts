@@ -84,6 +84,7 @@ export interface RunSummaryOverrides {
   seen?: boolean;
   reviewed_run_id?: string | null;
   created_at?: string;
+  waiting_for_backup?: boolean;
 }
 
 export function runSummary(overrides: RunSummaryOverrides = {}): RunSummary {
@@ -96,6 +97,7 @@ export function runSummary(overrides: RunSummaryOverrides = {}): RunSummary {
     seen: false,
     reviewed_run_id: null,
     created_at: "2026-09-21T10:00:00Z",
+    waiting_for_backup: false,
     ...overrides,
   } as RunSummary;
 }

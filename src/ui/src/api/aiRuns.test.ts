@@ -27,7 +27,9 @@ function summary(over: Partial<AiRunSummary> = {}): AiRunSummary {
       { id: "seo", state: "pending", detail: null },
     ],
     created_at: "2026-09-25T10:00:00Z",
+    started_at: "2026-09-25T10:00:00Z",
     finished_at: null,
+    waiting_for_backup: false,
     ...over,
   };
 }

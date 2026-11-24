@@ -102,7 +102,8 @@ def target(request: Request, run_id: str) -> Target:
     return Target(deployments=deployments, run=run)
 
 
-def _summary(run: Run) -> RunSummary:
+def _summary(run: Run, deployments: Deployments) -> RunSummary:
+    waiting = deployments.waiting_for_backup(run)
     if run.kind == "plan":
         return PlanRunSummary(
             id=run.id,
@@ -113,6 +114,7 @@ def _summary(run: Run) -> RunSummary:
             phase=run.plan_phase,
             seen=run.seen,
             created_at=run.created_at,
+            waiting_for_backup=waiting,
         )
     return ApplyRunSummary(
         id=run.id,
@@ -124,11 +126,12 @@ def _summary(run: Run) -> RunSummary:
         seen=run.seen,
         reviewed_run_id=run.reviewed_run_id,
         created_at=run.created_at,
+        waiting_for_backup=waiting,
     )
 
 
-def _detail(run: Run) -> RunDetail:
-    summary = _summary(run)
+def _detail(run: Run, deployments: Deployments) -> RunDetail:
+    summary = _summary(run, deployments)
     if isinstance(summary, PlanRunSummary):
         return PlanRunDetail(**summary.model_dump(), events=list(run.events))
     return ApplyRunDetail(**summary.model_dump(), events=list(run.events))
@@ -161,10 +164,11 @@ def create_run(request: Request, body: CreateRunRequest) -> RunSummary | JSONRes
         assert isinstance(body, WorkspaceApplyRequest)  # closed request union
         command = WorkspaceApply(tuple(body.listings), body.expect, body.reviewed_run_id)
 
-    result = _deployments(request).submit(command)
+    deployments = _deployments(request)
+    result = deployments.submit(command)
     if isinstance(result, Conflict):
         return JSONResponse(status_code=409, content={"active_run": result.active_run})
-    return _summary(result)
+    return _summary(result, deployments)
 
 
 @router.get("", response_model=list[RunSummary])
@@ -178,13 +182,14 @@ def list_runs(
     and not yet superseded -- decision 7's retention); ``scope=batch&batch=``
     to that listing batch's. Omitted, every run this process still
     remembers, for a future workspace-wide view."""
-    runs = _deployments(request).runs(listing=listing, scope=scope, batch=batch)
-    return [_summary(run) for run in runs]
+    deployments = _deployments(request)
+    runs = deployments.runs(listing=listing, scope=scope, batch=batch)
+    return [_summary(run, deployments) for run in runs]
 
 
 @router.get("/{run_id}", response_model=RunDetail)
 def get_run(target: Annotated[Target, Depends(target)]) -> RunDetail:
-    return _detail(target.run)
+    return _detail(target.run, target.deployments)
 
 
 @router.delete("/{run_id}", response_model=RunSummary)
@@ -195,13 +200,13 @@ def cancel_run(target: Annotated[Target, Depends(target)]) -> RunSummary:
     result = target.deployments.cancel(target.run.id)
     if result is False:
         raise HTTPException(status_code=409, detail="this run cannot be cancelled")
-    return _summary(target.run)
+    return _summary(target.run, target.deployments)
 
 
 @router.post("/{run_id}/seen", response_model=RunSummary)
 def mark_seen(target: Annotated[Target, Depends(target)]) -> RunSummary:
     target.run.mark_seen()
-    return _summary(target.run)
+    return _summary(target.run, target.deployments)
 
 
 def last_event_id(request: Request) -> int:

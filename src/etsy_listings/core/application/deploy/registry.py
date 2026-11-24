@@ -265,6 +265,17 @@ class Run:
             return pending, done
 
 
+def abandon(run: Run) -> None:
+    """End a run that never started in a legal terminal state: a plan is
+    cancelled and an apply fails. A run already finished is left alone."""
+    if run.phase in TERMINAL_PHASES:
+        return
+    if run.kind == "plan":
+        run.transition_plan("cancelled")
+    else:
+        run.transition_apply("failed")
+
+
 @dataclass(frozen=True)
 class Conflict:
     """``create`` refused: ``active_run`` is already holding one of the
@@ -412,11 +423,8 @@ class RunRegistry:
             except queue.Empty:
                 return
             run = self.get(run_id)
-            if run is not None and run.phase not in TERMINAL_PHASES:
-                if run.kind == "plan":
-                    run.transition_plan("cancelled")
-                else:
-                    run.transition_apply("failed")
+            if run is not None:
+                abandon(run)
 
     def cancel(self, run_id: str) -> bool | None:
         """Cancel a queued or running **plan**.

@@ -162,11 +162,11 @@ describe("useSaveQueue", () => {
     const refused = save({ renewal: "yearly" });
     await sent(1);
     await nth(requests, 0).answer({
-      kind: "invalid",
+      kind: "refused",
       message: "invalid renewal",
       fieldErrors: { renewal: "Input should be 'manual' or 'auto'" },
     });
-    await expect(refused).resolves.toMatchObject({ kind: "invalid" });
+    await expect(refused).resolves.toMatchObject({ kind: "refused" });
     expect(queue().status).toEqual({ kind: "error", message: "Not saved" });
     expect(queue().fieldErrors).toEqual({ renewal: "Input should be 'manual' or 'auto'" });
     expect(queue().refusal("renewal")).toEqual({ value: "yearly", attempt: 1 });
@@ -184,7 +184,7 @@ describe("useSaveQueue", () => {
     save({ providers: ["codex"] });
     await sent(1);
     await nth(requests, 0).answer({
-      kind: "invalid",
+      kind: "refused",
       message: "__root__: cannot edit",
       fieldErrors: { __root__: "Edit this value in the file, then reload Settings." },
     });
@@ -202,7 +202,7 @@ describe("useSaveQueue", () => {
     save({ renewal: "manual" });
     await sent(1);
     await nth(requests, 0).answer({
-      kind: "invalid",
+      kind: "refused",
       message: "invalid renewal",
       fieldErrors: { renewal: "refused" },
     });
@@ -219,7 +219,7 @@ describe("useSaveQueue", () => {
     save({ renewal: "auto" });
     const queued = save({ who_made: "collective" });
     await sent(1);
-    await nth(requests, 0).answer({ kind: "conflict", message: "shop.yaml changed on disk" });
+    await nth(requests, 0).answer({ kind: "stale", message: "shop.yaml changed on disk" });
 
     await expect(queued).resolves.toBeNull();
     await expect(save({ renewal: "manual" })).resolves.toBeNull();

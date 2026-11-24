@@ -122,6 +122,7 @@ describe("App Marigold workflow", () => {
         error: null,
         last_event_sequence: 0,
         queue_position: 1,
+        waiting_for_backup: false,
         engine_version: null,
       };
     });
@@ -203,6 +204,7 @@ it("authorizes changed-photo mask recovery explicitly and preserves calibration 
     error: null,
     last_event_sequence: 0,
     queue_position: 1,
+    waiting_for_backup: false,
     engine_version: null,
   });
   render(<App />);
