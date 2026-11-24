@@ -5,7 +5,7 @@ Written 2026-11-23 from the [specification](spec.md) and the
 series, in review (2026-11-24). This plan owns the delivery sequence. The spec
 owns requirements and the interactions document owns UI behaviour, so cite
 their sections rather than restating them.
-[ADR-0059](../../adr/0059-back-up-the-workspace-with-restic-from-the-app.md)
+[ADR-0060](../../adr/0060-back-up-the-workspace-with-restic-from-the-app.md)
 records the design choices.
 
 The clickable source is the **Admin · Workspace backup** board
@@ -29,7 +29,7 @@ components. Screenshots for comparison are in [`screenshots/`](screenshots/).
 
 ## Delivery sequence
 
-Commit the spec, ADR-0059, the interactions document, the screenshots, the
+Commit the spec, ADR-0060, the interactions document, the screenshots, the
 `workspace-backup` scenes (live and `-v1` to `-v3`), the two boards, the
 manifest and this plan as documentation before implementation. That commit is
 the stack base (`b5213bfd`). Each PR is based on the preceding tip. Every

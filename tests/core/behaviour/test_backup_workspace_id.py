@@ -1,6 +1,6 @@
 """The workspace ID: every snapshot is tagged with it, and the retention
 keeps and groups this workspace's snapshots by it (workspace-backup spec,
-*Backup run* step 5; ADR-0060). Against the in-memory repository; ``home``
+*Backup run* step 5; ADR-0061). Against the in-memory repository; ``home``
 is under ``tmp_path`` (plan, P2).
 """
 

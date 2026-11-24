@@ -1,5 +1,5 @@
 """The real :class:`~etsy_listings.core.backup.repository.Repository`: restic
-itself, run as a subprocess (workspace-backup plan, P6; ADR-0059).
+itself, run as a subprocess (workspace-backup plan, P6; ADR-0060).
 
 Each operation becomes one ``restic --repo <folder> --json <subcommand>``,
 and its ``--json`` lines become the interface's figures and summaries. The
@@ -256,7 +256,7 @@ def forget_arguments(retention: RetentionSettings, workspace_id: str) -> tuple[s
     weeks and months are N + 1 (spec, *Backup run* step 5).
 
     Only the workspace's tagged snapshots are considered, grouped by that
-    tag rather than restic's default host and paths (ADR-0060): a renamed PC
+    tag rather than restic's default host and paths (ADR-0061): a renamed PC
     or a moved workspace then shares the old snapshots' schedule, and they
     age out. Other workspaces' snapshots and untagged ones, such as a backup
     made by hand, are never forgotten here."""

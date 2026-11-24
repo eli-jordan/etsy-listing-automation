@@ -70,7 +70,7 @@ class Snapshot:
     @property
     def workspace_id(self) -> str | None:
         """The workspace ID its ``workspace:<id>`` tag names; None for an
-        untagged snapshot, such as one made by hand (ADR-0060)."""
+        untagged snapshot, such as one made by hand (ADR-0061)."""
         for tag in self.tags:
             if tag.startswith(WORKSPACE_TAG):
                 return tag.removeprefix(WORKSPACE_TAG)

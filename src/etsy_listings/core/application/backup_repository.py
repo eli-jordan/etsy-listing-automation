@@ -312,7 +312,7 @@ class WorkspaceId:
 def workspace_id_for(snapshots: Sequence[Snapshot]) -> WorkspaceId:
     """The ID a workspace without one takes for a repository holding
     ``snapshots``: the one workspace ID they are tagged with, so its schedule
-    carries on (ADR-0060); otherwise a new one. Untagged snapshots, from
+    carries on (ADR-0061); otherwise a new one. Untagged snapshots, from
     before workspace IDs, are not counted. Several IDs are not guessed
     between: the new one comes with :data:`SEVERAL_WORKSPACES`."""
     found = {snapshot.workspace_id for snapshot in snapshots} - {None}

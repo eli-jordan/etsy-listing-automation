@@ -248,7 +248,7 @@ class BackupSettings(BaseModel):
     """The workspace ID: a random UUID set-up writes once. Every snapshot
     is tagged with it, and the retention keeps and groups this workspace's
     snapshots by it, so a renamed PC or a moved workspace keeps one
-    schedule (ADR-0060). Not shown in Setup; it travels with the file."""
+    schedule (ADR-0061). Not shown in Setup; it travels with the file."""
 
     _retention_absent = field_validator("retention", mode="before")(_absent_is_empty)
 

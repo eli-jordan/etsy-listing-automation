@@ -707,6 +707,9 @@ class BatchRowDetail(BaseModel):
     or never-created row (UI doc §7)."""
     deleted: bool = False
     """The listing was deleted; the row stays, struck through."""
+    deployable: bool = False
+    """Whether Deploy reviewed takes this row: reviewed, with changes its
+    last apply did not deploy (ADR-0059)."""
 
 
 BatchStatus = Literal["staging", "drafting", "in_review", "complete", "stopped"]
@@ -793,6 +796,15 @@ class WorkspacePlanRequest(_CreateRunRequest):
     scope: Literal["workspace"]
 
 
+class BatchPlanRequest(_CreateRunRequest):
+    """Plan the reviewed rows of one listing batch that have changes to
+    deploy (ADR-0059); the server resolves which."""
+
+    kind: Literal["plan"]
+    scope: Literal["batch"]
+    batch_id: str
+
+
 class ListingApplyRequest(_CreateRunRequest):
     kind: Literal["apply"]
     scope: Literal["listings"]
@@ -808,8 +820,22 @@ class WorkspaceApplyRequest(_CreateRunRequest):
     reviewed_run_id: str
 
 
+class BatchApplyRequest(_CreateRunRequest):
+    kind: Literal["apply"]
+    scope: Literal["batch"]
+    batch_id: str
+    listings: list[str]
+    expect: dict[str, str]
+    reviewed_run_id: str
+
+
 CreateRunRequest = (
-    ListingPlanRequest | WorkspacePlanRequest | ListingApplyRequest | WorkspaceApplyRequest
+    ListingPlanRequest
+    | WorkspacePlanRequest
+    | BatchPlanRequest
+    | ListingApplyRequest
+    | WorkspaceApplyRequest
+    | BatchApplyRequest
 )
 
 
@@ -819,6 +845,8 @@ class _RunSummary(BaseModel):
 
     id: str
     scope: RunScope
+    batch_id: str | None = None
+    """The listing batch a ``batch``-scoped run deploys (ADR-0059)."""
     listings: list[str]
     seen: bool
     reviewed_run_id: str | None
@@ -1251,7 +1279,7 @@ class BackupConnected(BaseModel):
     snapshots: int
     notice: str | None = None
     """Set when its snapshots name several workspaces, so this workspace
-    got a new workspace ID and starts its own retention (ADR-0060)."""
+    got a new workspace ID and starts its own retention (ADR-0061)."""
 
 
 class BackupSetUpResponse(BackupOverview):

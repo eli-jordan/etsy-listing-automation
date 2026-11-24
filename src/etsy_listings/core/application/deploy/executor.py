@@ -351,4 +351,6 @@ def _job(run: Run) -> str:
     """What a backup waiting for ``run`` names."""
     if run.scope == "workspace":
         return f"Workspace {run.kind}"
+    if run.scope == "batch":
+        return f"Batch {run.kind} for {', '.join(run.listings)}"
     return f"Deploy {run.kind} for {', '.join(run.listings)}"

@@ -1,5 +1,5 @@
 """Workspace backup with restic (features/workspace-backup-20261123/spec.md,
-ADR-0059).
+ADR-0060).
 
 Public modules, imported directly, with nothing re-exported here:
 

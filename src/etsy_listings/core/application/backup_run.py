@@ -179,7 +179,7 @@ class BackupRunner:
         self, backup: ConfiguredBackup, repository: Repository, run: _Run
     ) -> ConfiguredBackup:
         """A block written by hand has no workspace ID: write the one the
-        repository's snapshots carry, or a new one (ADR-0060)."""
+        repository's snapshots carry, or a new one (ADR-0061)."""
         chosen = ensure_workspace_id(self.workspace, repository.snapshots(lock=False))
         run.notice = chosen.notice
         settings = backup.settings.model_copy(update={"workspace_id": chosen.value})

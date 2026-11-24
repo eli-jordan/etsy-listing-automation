@@ -1,4 +1,4 @@
-# ADR-0060: Group backup retention by workspace ID
+# ADR-0061: Group backup retention by workspace ID
 
 Status: accepted. First recorded 2026-11-24.
 
@@ -47,4 +47,4 @@ arguments stay behind the `Repository` interface: `back_up` and `forget` take
 the workspace ID.
 
 See the [workspace-backup spec](../features/workspace-backup-20261123/spec.md),
-*Backup run* step 5, and [ADR-0059](0059-back-up-the-workspace-with-restic-from-the-app.md).
+*Backup run* step 5, and [ADR-0060](0060-back-up-the-workspace-with-restic-from-the-app.md).

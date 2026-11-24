@@ -1298,7 +1298,7 @@ separate modules and never start inference implicitly.
 ## restic for workspace backup
 
 The [workspace-backup spec](features/workspace-backup-20261123/spec.md) backs
-the workspace up with restic, run as a subprocess (ADR-0059). Which restic runs
+the workspace up with restic, run as a subprocess (ADR-0060). Which restic runs
 is `core/backup/binary.py`'s `ResticBinaries`: `ETSY_LISTINGS_RESTIC_BINARY`,
 then the `backup.restic_binary` setting, then restic 0.19.1 pinned by the
 SHA-256 of its Windows amd64 and Linux amd64 release files. Only `backup init`

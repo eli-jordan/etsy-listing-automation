@@ -110,7 +110,7 @@ class PreparedSetUp:
             return None
         connected = self._connect(expected_revision, trying)
         # Backups are off, so the workspace has no ID: it takes the one the
-        # connected snapshots carry, so their schedule carries on (ADR-0060).
+        # connected snapshots carry, so their schedule carries on (ADR-0061).
         chosen = workspace_id_for(connected.snapshots)
         connected = replace(connected, notice=chosen.notice)
         try:

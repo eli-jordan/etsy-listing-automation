@@ -583,6 +583,17 @@
       },
       "ApplyRunDetail": {
         "properties": {
+          "batch_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Batch Id"
+          },
           "created_at": {
             "format": "date-time",
             "title": "Created At",
@@ -682,7 +693,8 @@
           "scope": {
             "enum": [
               "listings",
-              "workspace"
+              "workspace",
+              "batch"
             ],
             "title": "Scope",
             "type": "string"
@@ -713,6 +725,17 @@
       },
       "ApplyRunSummary": {
         "properties": {
+          "batch_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Batch Id"
+          },
           "created_at": {
             "format": "date-time",
             "title": "Created At",
@@ -759,7 +782,8 @@
           "scope": {
             "enum": [
               "listings",
-              "workspace"
+              "workspace",
+              "batch"
             ],
             "title": "Scope",
             "type": "string"
@@ -1473,6 +1497,53 @@
         "title": "BackupWarning",
         "type": "object"
       },
+      "BatchApplyRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "batch_id": {
+            "title": "Batch Id",
+            "type": "string"
+          },
+          "expect": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Expect",
+            "type": "object"
+          },
+          "kind": {
+            "const": "apply",
+            "title": "Kind",
+            "type": "string"
+          },
+          "listings": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Listings",
+            "type": "array"
+          },
+          "reviewed_run_id": {
+            "title": "Reviewed Run Id",
+            "type": "string"
+          },
+          "scope": {
+            "const": "batch",
+            "title": "Scope",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "scope",
+          "batch_id",
+          "listings",
+          "expect",
+          "reviewed_run_id"
+        ],
+        "title": "BatchApplyRequest",
+        "type": "object"
+      },
       "BatchDetail": {
         "properties": {
           "concurrency": {
@@ -1634,6 +1705,33 @@
         "title": "BatchPatch",
         "type": "object"
       },
+      "BatchPlanRequest": {
+        "additionalProperties": false,
+        "description": "Plan the reviewed rows of one listing batch that have changes to\ndeploy (ADR-0059); the server resolves which.",
+        "properties": {
+          "batch_id": {
+            "title": "Batch Id",
+            "type": "string"
+          },
+          "kind": {
+            "const": "plan",
+            "title": "Kind",
+            "type": "string"
+          },
+          "scope": {
+            "const": "batch",
+            "title": "Scope",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "scope",
+          "batch_id"
+        ],
+        "title": "BatchPlanRequest",
+        "type": "object"
+      },
       "BatchRowDetail": {
         "properties": {
           "ai": {
@@ -1687,6 +1785,11 @@
           "deleted": {
             "default": false,
             "title": "Deleted",
+            "type": "boolean"
+          },
+          "deployable": {
+            "default": false,
+            "title": "Deployable",
             "type": "boolean"
           },
           "design": {
@@ -5684,6 +5787,17 @@
       },
       "PlanRunDetail": {
         "properties": {
+          "batch_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Batch Id"
+          },
           "created_at": {
             "format": "date-time",
             "title": "Created At",
@@ -5778,7 +5892,8 @@
           "scope": {
             "enum": [
               "listings",
-              "workspace"
+              "workspace",
+              "batch"
             ],
             "title": "Scope",
             "type": "string"
@@ -5808,6 +5923,17 @@
       },
       "PlanRunSummary": {
         "properties": {
+          "batch_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Batch Id"
+          },
           "created_at": {
             "format": "date-time",
             "title": "Created At",
@@ -5849,7 +5975,8 @@
           "scope": {
             "enum": [
               "listings",
-              "workspace"
+              "workspace",
+              "batch"
             ],
             "title": "Scope",
             "type": "string"
@@ -13322,7 +13449,7 @@
     },
     "/api/runs": {
       "get": {
-        "description": "``listing`` narrows to that listing's current run (active, or finished\nand not yet superseded -- decision 7's retention). Omitted, every run this\nprocess still remembers, for a future workspace-wide view.",
+        "description": "``listing`` narrows to that listing's current run (active, or finished\nand not yet superseded -- decision 7's retention); ``scope=batch&batch=``\nto that listing batch's. Omitted, every run this process still\nremembers, for a future workspace-wide view.",
         "operationId": "list_runs_api_runs_get",
         "parameters": [
           {
@@ -13350,7 +13477,8 @@
                 {
                   "enum": [
                     "listings",
-                    "workspace"
+                    "workspace",
+                    "batch"
                   ],
                   "type": "string"
                 },
@@ -13359,6 +13487,22 @@
                 }
               ],
               "title": "Scope"
+            }
+          },
+          {
+            "in": "query",
+            "name": "batch",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Batch"
             }
           }
         ],
@@ -13408,7 +13552,7 @@
         ]
       },
       "post": {
-        "description": "A ``409`` names the run already holding one of these listings, so the\ncaller can reattach to it (``GET /api/runs/{active_run}``) instead of\nretrying into the same refusal. A workspace apply that is not exactly\nits review is a ``409`` too, carrying the refusal's message.",
+        "description": "A ``409`` names the run already holding one of these listings, so the\ncaller can reattach to it (``GET /api/runs/{active_run}``) instead of\nretrying into the same refusal. A workspace or batch apply that is not\nexactly its review is a ``409`` too, carrying the refusal's message, and\nso is a batch plan with nothing to deploy; a batch nobody holds is a\n``404``.",
         "operationId": "create_run_api_runs_post",
         "requestBody": {
           "content": {
@@ -13422,10 +13566,16 @@
                     "$ref": "#/components/schemas/WorkspacePlanRequest"
                   },
                   {
+                    "$ref": "#/components/schemas/BatchPlanRequest"
+                  },
+                  {
                     "$ref": "#/components/schemas/ListingApplyRequest"
                   },
                   {
                     "$ref": "#/components/schemas/WorkspaceApplyRequest"
+                  },
+                  {
+                    "$ref": "#/components/schemas/BatchApplyRequest"
                   }
                 ],
                 "title": "Body"

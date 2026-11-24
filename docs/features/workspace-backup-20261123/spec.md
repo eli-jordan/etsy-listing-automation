@@ -6,7 +6,7 @@ merge; the seller then migrates by hand with the
 [migration guide](../../guides/migrate-the-workspace-out-of-icloud.md). This
 specification owns the requirements under the
 [documentation authority rules](../../README.md#documentation-authority).
-[ADR-0059](../../adr/0059-back-up-the-workspace-with-restic-from-the-app.md)
+[ADR-0060](../../adr/0060-back-up-the-workspace-with-restic-from-the-app.md)
 records why the design uses restic, runs inside the app and keeps the
 repository on local disk. The [interactions document](interactions.md) covers
 the UI and the [plan](plan.md) the delivery.
@@ -144,7 +144,7 @@ One run, from the scheduler or from "Back up now":
    become `--keep-within 7d --keep-weekly 5 --keep-monthly 4`. It runs with
    `--tag workspace:<id> --group-by tags`: only this workspace's snapshots,
    as one group, whatever host or folder made them, so the old ones age out
-   after the PC is renamed or the workspace moves (ADR-0060). Other
+   after the PC is renamed or the workspace moves (ADR-0061). Other
    workspaces' snapshots and untagged ones, such as a backup made by hand,
    are never forgotten. `prune` is repository-wide.
 6. **Weekly.** If 7 days have passed since the last prune, run `restic prune`,
