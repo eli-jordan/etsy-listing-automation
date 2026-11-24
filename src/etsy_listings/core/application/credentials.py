@@ -124,10 +124,15 @@ def store(root: Path, credential: Credential, values: tuple[str, ...]) -> None:
     if blank:
         raise ValueError(f"refusing to store a blank {', '.join(blank)}")
     for variable, value in zip(credential.variables, values, strict=True):
-        encoded = (
-            json.dumps(value, ensure_ascii=False) if variable == BACKUP_PASSWORD_VAR else value
-        )
-        scaffold.write_env_value(root, variable, encoded)
+        scaffold.write_env_value(root, variable, _env_value(variable, value))
+
+
+def _env_value(variable: str, value: str) -> str:
+    if variable != BACKUP_PASSWORD_VAR:
+        return value
+    if value == value.strip() and not any(char in value for char in "#\"'\r\n"):
+        return value
+    return json.dumps(value, ensure_ascii=False)
 
 
 # --------------------------------------------------------------- verification
