@@ -7,7 +7,7 @@ import { WarningIcon } from "@phosphor-icons/react/dist/csr/Warning";
 import { type MouseEvent, type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { getShopConnections, type ShopConnections } from "../../api/shop";
-import { bannerWarnings, useBackupStatus } from "../../shell/backupStatus";
+import { useBackupStatus } from "../../shell/backupStatus";
 import type { BackupPage } from "./backup/BackupSection";
 import { ConnectedShops } from "./ConnectedShops";
 import { CurrencyDialog } from "./CurrencyDialog";
@@ -92,9 +92,9 @@ export function AdminPage() {
     // acknowledged Change, so a cancelled change is never resent by Retry.
     const outcome = await save({ currency: code }, { retain: false });
     if (outcome?.kind === "saved") closeCurrency();
-    else if (outcome?.kind === "invalid")
+    else if (outcome?.kind === "refused")
       throw new Error(outcome.fieldErrors.currency ?? outcome.message);
-    else if (outcome?.kind === "conflict") closeCurrency();
+    else if (outcome?.kind === "stale") closeCurrency();
   };
 
   return (
@@ -225,9 +225,9 @@ function Nav({
   backupPage: BackupPage;
   onPick: (s: Section, page?: BackupPage) => void;
 }) {
-  const { status } = useBackupStatus();
-  const on = status?.enabled ?? false;
-  const warn = bannerWarnings(status).length > 0;
+  const { view } = useBackupStatus();
+  const on = view.state === "on";
+  const warn = view.banner !== null;
   const inBackup = section === "backup";
   const sub: { id: Section; label: string }[] = [
     { id: "connected", label: "Connected shops" },

@@ -1,4 +1,4 @@
-# ADR-0059: Back up the workspace with restic from the app
+# ADR-0060: Back up the workspace with restic from the app
 
 Status: accepted. First recorded 2026-11-23.
 

@@ -40,6 +40,7 @@ largely written by ``setup``; these are the seller's own knobs.
 
 from __future__ import annotations
 
+import uuid
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
@@ -243,6 +244,11 @@ class BackupSettings(BaseModel):
     retention: RetentionSettings = Field(default_factory=RetentionSettings)
     restic_binary: Path | None = None
     """Another restic to run instead of the pinned download."""
+    workspace_id: str | None = None
+    """The workspace ID: a random UUID set-up writes once. Every snapshot
+    is tagged with it, and the retention keeps and groups this workspace's
+    snapshots by it, so a renamed PC or a moved workspace keeps one
+    schedule (ADR-0061). Not shown in Setup; it travels with the file."""
 
     _retention_absent = field_validator("retention", mode="before")(_absent_is_empty)
 
@@ -253,6 +259,19 @@ class BackupSettings(BaseModel):
         translated as ``--root`` is. It must happen before pydantic makes a
         ``Path``: on Windows that already reads it as ``\cygdrive\c\...``."""
         return _native(value) if isinstance(value, str) else value
+
+    @field_validator("workspace_id")
+    @classmethod
+    def a_uuid(cls, value: str | None) -> str | None:
+        """A UUID in its canonical form, so it is a valid restic tag."""
+        if value is None:
+            return None
+        try:
+            return str(uuid.UUID(value))
+        except ValueError:
+            raise ValueError(
+                "must be the workspace ID set-up wrote, a UUID; delete the line to get a new one"
+            ) from None
 
     @field_validator("destinations", mode="before")
     @classmethod

@@ -54,10 +54,12 @@ def _named(folder: Path, content: bytes, *, fan_out: bool = False) -> str:
 class FakeRepository:
     """A repository folder a test grows the way restic would."""
 
-    def __init__(self, root: Path) -> None:
+    def __init__(self, root: Path, *, repository_id: str = "fake") -> None:
+        """``repository_id`` tells two repositories' ``config`` apart."""
         self.root = root
         root.mkdir(parents=True)
-        (root / "config").write_bytes(b'{"version": 2, "id": "fake"}')
+        config = {"version": 2, "id": repository_id}
+        (root / "config").write_bytes(json.dumps(config).encode())
         _named(root / "keys", b"key: correct horse")
         (root / "locks").mkdir()
 

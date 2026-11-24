@@ -7,8 +7,8 @@ import { WarningIcon } from "@phosphor-icons/react/dist/csr/Warning";
 import { XIcon } from "@phosphor-icons/react/dist/csr/X";
 import { useEffect, useRef, useState } from "react";
 import {
+  type BackupConnected,
   type BackupSettings,
-  type BackupStatus,
   type DestinationStatus,
   getBackupHistory,
   type HistoryEntry,
@@ -17,8 +17,10 @@ import {
   runBackup,
   type SetUpOutcome,
 } from "../../../api/backup";
+import type { Refusal } from "../../../api/refusal";
 import type { SettingsChanges } from "../../../api/workspaceSettings";
-import { useBackupStatus } from "../../../shell/backupStatus";
+import type { BackupsOn } from "../../../shell/backupAttention";
+import { FAST_POLL_MS, useBackupStatus } from "../../../shell/backupStatus";
 import type { RepositoryAction } from "../useWorkspaceSettings";
 import { type Answer, BackupForm } from "./BackupForm";
 import {
@@ -39,9 +41,9 @@ import { RestoreDialogs, RestoreStrip } from "./Restore";
 import { useRestore } from "./useRestore";
 import {
   type BackupAnswers,
+  connectedNote,
   NEW_BACKUP,
   repairNote,
-  retryable,
   runningLine,
   summary,
 } from "./backupText";
@@ -49,27 +51,19 @@ import "./backup.css";
 
 export type BackupPage = "status" | "setup";
 
-/** What a settings.yaml save answered, as `useWorkspaceSettings` reports it. */
-export type SaveAnswer =
-  | { kind: "saved" }
-  | { kind: "conflict"; message: string }
-  | { kind: "invalid"; message: string; fieldErrors: Partial<Record<string, string>> }
-  | null;
+/** What a settings.yaml save answered, as `useWorkspaceSettings` reports
+ * it: null when an earlier save already found the file stale. */
+export type SaveAnswer = { kind: "saved" } | Refusal | null;
 
 const RELOAD = "settings.yaml changed on disk. Nothing was overwritten. Reload, then try again.";
 
-/** A settings save's `conflict` is always its 412 (`saveSettings`), and
- * set-up reports its 412 as `stale`: both mean reload. Set-up's other
- * conflicts (409) say what is wrong themselves. */
-function refusal(outcome: Exclude<SetUpOutcome, { kind: "started" }>): string;
-function refusal(outcome: Exclude<SaveAnswer, null>, settingsSave: true): string | null;
-function refusal(
-  outcome: Exclude<SaveAnswer | SetUpOutcome, null | { kind: "started" }>,
-  settingsSave = false,
-): string | null {
-  if (outcome.kind === "saved") return null;
-  if (outcome.kind === "stale" || (settingsSave && outcome.kind === "conflict")) return RELOAD;
-  const fields = Object.values(outcome.kind === "invalid" ? outcome.fieldErrors : {});
+/** Every refusal, worded one way: a stale file means reload; otherwise the
+ * server's reason and the fields it names. */
+function refusal(outcome: Refusal): string {
+  if (outcome.kind === "stale") return RELOAD;
+  const fields = Object.values(outcome.fieldErrors).filter(
+    (text) => !outcome.message.includes(text),
+  );
   return [outcome.message, ...fields].filter(Boolean).join(" ");
 }
 
@@ -84,6 +78,8 @@ export function BackupSection({
   setUp,
   replaceRepository,
   save,
+  connected = null,
+  onConnectedSeen = () => undefined,
 }: {
   page: BackupPage;
   onPage: (page: BackupPage) => void;
@@ -92,23 +88,29 @@ export function BackupSection({
   setUp: (answers: BackupAnswers & { password: string }) => Promise<SetUpOutcome>;
   replaceRepository: (action: RepositoryAction) => Promise<SetUpOutcome>;
   save: (changes: SettingsChanges) => Promise<SaveAnswer>;
+  /** The backup set-up connected, kept above this section: the reload after
+   * set-up remounts it. Shown as a note until dismissed. */
+  connected?: BackupConnected | null;
+  onConnectedSeen?: () => void;
 }) {
-  const { status, error, readAt, refresh } = useBackupStatus();
+  const { view, readAt, refresh } = useBackupStatus();
   const [creating, setCreating] = useState(false);
 
-  if (!status)
-    return error ? (
+  if (view.state === "loading") return <p role="status">Loading backups…</p>;
+  if (view.state === "error")
+    return (
       <div className="adm-warn" role="alert">
         <WarningIcon size={18} />
-        <span>{error}</span>
+        <span>{view.error}</span>
       </div>
-    ) : (
-      <p role="status">Loading backups…</p>
     );
 
-  if (!status.enabled) {
+  if (view.state === "off") {
     if (!creating) return <NotSetUp onStart={() => setCreating(true)} />;
     const create = async (answers: BackupAnswers, password: string): Answer => {
+      // A destination that already holds a backup is connected, which can
+      // take minutes; the status says so while the request runs.
+      const polling = setInterval(() => void refresh(), FAST_POLL_MS);
       try {
         const outcome = await setUp({ ...answers, password });
         if (outcome.kind !== "started") return refusal(outcome);
@@ -118,12 +120,15 @@ export function BackupSection({
         return null;
       } catch (e) {
         return failure(e, "Could not set up backups");
+      } finally {
+        clearInterval(polling);
       }
     };
     return (
       <BackupForm
         mode="create"
         initial={NEW_BACKUP}
+        status={view.status}
         onCancel={() => setCreating(false)}
         onCreate={create}
       />
@@ -134,26 +139,28 @@ export function BackupSection({
     if (!saved) return <p role="status">Loading settings…</p>;
     const edit = async (answers: BackupAnswers, base: BackupAnswers): Answer => {
       try {
-        const refused = await save(changes(answers, base));
-        if (refused === null) return RELOAD;
-        const message = refusal(refused, true);
-        if (!message) void refresh();
-        return message;
+        const answer = await save(changes(answers, base));
+        if (answer === null) return RELOAD;
+        if (answer.kind !== "saved") return refusal(answer);
+        void refresh();
+        return null;
       } catch (e) {
         return failure(e, "Could not save settings.yaml");
       }
     };
-    return <BackupForm mode="edit" initial={answersOf(saved)} onSave={edit} />;
+    return <BackupForm mode="edit" initial={answersOf(saved)} status={view.status} onSave={edit} />;
   }
 
   return (
     <StatusPage
-      status={status}
+      view={view}
       now={readAt}
       retention={saved?.retention ?? NEW_BACKUP.retention}
       refresh={refresh}
       replaceRepository={replaceRepository}
       onSetup={() => onPage("setup")}
+      setUpNote={connected ? connectedNote(view.status, connected) : null}
+      onSetUpNoteSeen={onConnectedSeen}
     />
   );
 }
@@ -184,32 +191,33 @@ function changes(answers: BackupAnswers, base: BackupAnswers): SettingsChanges {
 type Repair = { destination: DestinationStatus; working: boolean; error: string | null };
 
 function StatusPage({
-  status,
+  view,
   now,
   retention,
   refresh,
   replaceRepository,
   onSetup,
+  setUpNote,
+  onSetUpNoteSeen,
 }: {
-  status: BackupStatus;
+  view: BackupsOn;
   now: number;
   retention: RetentionSettings;
   refresh: () => Promise<unknown>;
   replaceRepository: (action: RepositoryAction) => Promise<SetUpOutcome>;
   onSetup: () => void;
+  /** What set-up said, such as the backup it connected. */
+  setUpNote: string | null;
+  onSetUpNoteSeen: () => void;
 }) {
-  const history = useHistory(status);
-  const restore = useRestore(status, refresh);
-  const [note, setNote] = useState<string | null>(null);
+  const { status } = view;
+  const history = useHistory(view);
+  const restore = useRestore(view, refresh);
+  const [ownNote, setNote] = useState<string | null>(null);
+  const note = ownNote ?? setUpNote;
   const [repair, setRepair] = useState<Repair | null>(null);
   const [replacing, setReplacing] = useState<RepositoryMode | null>(null);
-  const warnings = status.warnings.filter((w) => w.banner);
-  const retry = warnings.filter(retryable);
-  const missing = warnings.find((w) => w.kind === "repository_missing");
-  const changed = status.destinations.filter((d) =>
-    warnings.some((w) => w.kind === "changed" && w.destination === d.path),
-  );
-  const { tone, headline, detail } = summary(status, now);
+  const { tone, headline, detail } = summary(view, now);
 
   const backUp = () => {
     setNote(null);
@@ -221,7 +229,7 @@ function StatusPage({
       if (outcome.kind !== "started")
         return {
           message: refusal(outcome),
-          ...(outcome.kind === "conflict" &&
+          ...(outcome.kind === "refused" &&
             outcome.connectFrom && { connectFrom: outcome.connectFrom }),
         };
       setReplacing(null);
@@ -236,7 +244,7 @@ function StatusPage({
     try {
       const result = await repairDestination(destination.path);
       setRepair(null);
-      setNote(repairNote(destination.path, result));
+      setNote(repairNote(destination, result));
       void refresh();
     } catch (e) {
       setRepair({ destination, working: false, error: failure(e, "Could not repair the copy") });
@@ -245,39 +253,45 @@ function StatusPage({
 
   return (
     <>
-      {missing && <MissingRepositoryBanner warning={missing} onAction={setReplacing} />}
-      {changed.map((d) => (
-        <ChangedFilesBanner
-          key={d.path}
-          destination={d}
-          onRepair={() => setRepair({ destination: d, working: false, error: null })}
-        />
-      ))}
-      {retry.length > 0 && (
-        <div className="adm-warn bk-banner" role="alert">
-          <WarningIcon size={18} />
-          <span>
-            <strong>{retry[0]?.message}</strong>{" "}
-            {retry
-              .slice(1)
-              .map((w) => w.message)
-              .join(" ")}
-          </span>
-          <button
-            type="button"
-            className="btn btn-secondary bk-banner__btn"
-            disabled={Boolean(status.running)}
-            onClick={backUp}
-          >
-            Try again
-          </button>
-        </div>
-      )}
+      {view.attention.map((item) => {
+        if (item.action === "connect")
+          return (
+            <MissingRepositoryBanner key="connect" warning={item.warning} onAction={setReplacing} />
+          );
+        if (item.action === "repair") {
+          const { destination } = item;
+          return (
+            <ChangedFilesBanner
+              key={destination.path}
+              destination={destination}
+              onRepair={() => setRepair({ destination, working: false, error: null })}
+            />
+          );
+        }
+        const [first, ...rest] = item.warnings;
+        return (
+          <div key="retry" className="adm-warn bk-banner" role="alert">
+            <WarningIcon size={18} />
+            <span>
+              <strong>{first?.message}</strong> {rest.map((w) => w.message).join(" ")}
+            </span>
+            <button
+              type="button"
+              className="btn btn-secondary bk-banner__btn"
+              disabled={view.running}
+              onClick={backUp}
+            >
+              Try again
+            </button>
+          </div>
+        );
+      })}
       <StatusPanel
         tone={tone}
         headline={headline}
         detail={detail}
-        running={status.running ? runningLine(status.running) : undefined}
+        running={view.running}
+        runningLine={status.running ? runningLine(status, status.running) : undefined}
         restore={{
           disabled: restore.busy || !status.repository?.snapshots,
           onClick: () => restore.begin(),
@@ -299,14 +313,17 @@ function StatusPage({
               type="button"
               className="btn btn-ghost"
               aria-label="Dismiss"
-              onClick={() => setNote(null)}
+              onClick={() => {
+                setNote(null);
+                onSetUpNoteSeen();
+              }}
             >
               <XIcon size={16} />
             </button>
           </div>
         )}
       </StatusPanel>
-      <StoragePipeline status={status} now={now} onSetup={onSetup} />
+      <StoragePipeline view={view} now={now} onSetup={onSetup} />
       {history.error && (
         <p className="adm-error-text" role="alert">
           {history.error}
@@ -326,6 +343,7 @@ function StatusPage({
           mode={replacing}
           repository={status.repository?.path ?? ""}
           passwordStored={status.repository?.password_stored ?? false}
+          passwordMinLength={status.password_min_length}
           onCancel={() => setReplacing(null)}
           onSubmit={replace}
         />
@@ -345,12 +363,12 @@ function StatusPage({
 
 /** The history, read again whenever a run starts or ends. The newest run,
  * when it finished after the page opened, is `fresh`: briefly highlighted. */
-function useHistory(status: BackupStatus) {
+function useHistory({ status, running }: BackupsOn) {
   const [entries, setEntries] = useState<HistoryEntry[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [fresh, setFresh] = useState<string | undefined>();
   const opened = useRef<number | null>(null);
-  const key = `${status.running ? "running" : "idle"} ${status.last_success ?? ""}`;
+  const key = `${running ? "running" : "idle"} ${status.last_success ?? ""}`;
   useEffect(() => {
     opened.current ??= Date.now();
     const since = opened.current;

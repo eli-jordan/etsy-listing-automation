@@ -3,21 +3,30 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, type MockInstance, vi } from "vitest";
 import * as backupApi from "../../../api/backup";
-import type { BackupStatus, HistoryEntry } from "../../../api/backup";
+import type { HistoryEntry } from "../../../api/backup";
 import * as settingsApi from "../../../api/workspaceSettings";
 import type { WorkspaceSettings } from "../../../api/workspaceSettings";
 import { BackupStatusProvider } from "../../../shell/BackupStatusProvider";
+import {
+  BACKUP_ICLOUD,
+  BACKUP_REPOSITORY,
+  backupDestination,
+  backupsOff,
+  backupsOn,
+  backupsMissing,
+  hoursFromNow,
+} from "../../../test/backup";
 import { AdminPage } from "../AdminPage";
 
 /* Workspace-backup plan, PR 6: Admin › Settings › Backup against a mocked
    HTTP surface (interactions, *Status and history*, *Set up and Setup*,
    *Warnings*, *Changed and unexpected files*). */
 
-const REPO = "D:/backups/studio";
-const ICLOUD = "C:/Users/me/iCloudDrive/studio-backups";
+const REPO = BACKUP_REPOSITORY;
+const ICLOUD = BACKUP_ICLOUD;
 const HOUR = 3_600_000;
 const PASSPHRASE = ["correct", "horse", "battery"].join("-");
-const iso = (offsetHours: number) => new Date(Date.now() + offsetHours * HOUR).toISOString();
+const iso = hoursFromNow;
 
 const weights = { reviews: 100 };
 function workspace(backup?: WorkspaceSettings["backup"]): WorkspaceSettings {
@@ -41,30 +50,13 @@ const SAVED_BLOCK = {
   retention: { keep_within_days: 7, weekly: 4, monthly: 3 },
 };
 
-const OFF: BackupStatus = {
-  enabled: false,
-  destinations: [],
-  warnings: [{ kind: "off", message: "Backups are off.", banner: false }],
-};
-
-function healthy(extra: Partial<BackupStatus> = {}): BackupStatus {
-  return {
-    enabled: true,
-    interval_hours: 12,
-    last_success: iso(-2),
-    next_due: iso(10),
-    repository: { path: REPO, missing: false, snapshots: 5, password_stored: true },
-    destinations: [
-      { path: ICLOUD, last_copy: iso(-2), behind: false, changed: [], unexpected: [] },
-    ],
-    warnings: [],
-    ...extra,
-  };
-}
+const OFF = backupsOff();
+const healthy = backupsOn;
 
 function run(startedHoursAgo: number, extra: Partial<HistoryEntry["run"]> = {}): HistoryEntry {
   return {
     kept_as: "recent",
+    names: { [ICLOUD]: "iCloud Drive" },
     run: {
       started_at: iso(-startedHoursAgo),
       finished_at: new Date(Date.now() - startedHoursAgo * HOUR + 48_000).toISOString(),
@@ -178,7 +170,8 @@ describe("Backups off and Set up", () => {
     expect(screen.getByText(/a failed disk loses them too/)).toBeVisible();
     await userEvent.click(button("Add destination"));
     fireEvent.change(screen.getByLabelText("Destination 1 folder"), { target: { value: ICLOUD } });
-    expect(screen.getByText("iCloud Drive")).toBeVisible();
+    // A folder the server has not named yet goes by its own name.
+    expect(screen.getByText("studio-backups")).toBeVisible();
     expect(screen.queryByText(/a failed disk loses them too/)).not.toBeInTheDocument();
     await userEvent.click(button("Add destination"));
     await userEvent.click(button("Remove destination 1"));
@@ -238,9 +231,73 @@ describe("Backups off and Set up", () => {
     );
   });
 
+  it("says it is connecting while a destination's backup is copied, then what it connected", async () => {
+    let finish: ((outcome: backupApi.SetUpOutcome) => void) | undefined;
+    vi.spyOn(backupApi, "setUpBackup").mockReturnValue(
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+    );
+    await openSetUp();
+    await fillSetUp();
+    await userEvent.click(button("Add destination"));
+    fireEvent.change(screen.getByLabelText("Destination 1 folder"), { target: { value: ICLOUD } });
+    status.mockResolvedValue(
+      backupsOff({
+        running: { operation: "connect", started_at: iso(0), step: "copying", destination: ICLOUD },
+      }),
+    );
+    await userEvent.click(button("Create and back up now"));
+
+    expect(screen.getByRole("status")).toHaveTextContent("Setting up backups…");
+    expect(
+      await screen.findByText(
+        /^Connecting to the backup in .+… Copying it to this computer/,
+        undefined,
+        {
+          timeout: 4000,
+        },
+      ),
+    ).toBeVisible();
+    expect(button("Create and back up now")).toBeDisabled();
+
+    vi.mocked(settingsApi.getSettings).mockResolvedValue({
+      ...workspace(SAVED_BLOCK),
+      revision: "s2",
+    });
+    status.mockResolvedValue(healthy());
+    history.mockResolvedValue([]);
+    await act(async () => {
+      finish?.({
+        kind: "started",
+        status: healthy(),
+        connected: { destination: ICLOUD, snapshots: 12, notice: "Starts its own retention." },
+      });
+    });
+
+    expect(
+      await screen.findByText(
+        "Connected to the backup in iCloud Drive: 12 snapshots. Starts its own retention.",
+      ),
+    ).toBeVisible();
+  });
+
+  it("shows a password the destination's backup refuses once, under the form", async () => {
+    const text = `${ICLOUD} already holds a backup, and this password does not open it.`;
+    vi.spyOn(backupApi, "setUpBackup").mockResolvedValue({
+      kind: "refused",
+      message: text,
+      fieldErrors: { password: text },
+    });
+    await openSetUp();
+    await fillSetUp();
+    await userEvent.click(button("Create and back up now"));
+    expect((await screen.findByRole("alert")).textContent).toBe(text);
+  });
+
   it("shows a refused set-up under the form and keeps the answers", async () => {
     vi.spyOn(backupApi, "setUpBackup").mockResolvedValue({
-      kind: "conflict",
+      kind: "refused",
       message: "D:/backups/studio holds files. Choose an empty folder.",
       fieldErrors: {},
     });
@@ -257,7 +314,7 @@ describe("Backups off and Set up", () => {
     ],
     [
       {
-        kind: "conflict",
+        kind: "refused",
         message: "Backups are set up; edit the revision in Setup.",
         fieldErrors: {},
       },
@@ -310,7 +367,7 @@ describe("Setup", () => {
 
   it("shows a refused save with its reason", async () => {
     vi.spyOn(settingsApi, "saveSettings").mockResolvedValue({
-      kind: "invalid",
+      kind: "refused",
       message: "Refused",
       fieldErrors: { "backup.destinations": "The folder above it does not exist." },
     });
@@ -356,6 +413,14 @@ describe("Status and history", () => {
     expect(rows[2]).toHaveTextContent("Wrong repository password.");
     expect(rows[2]).toHaveTextContent("Nothing saved");
     expect(screen.getByText(/Every backup from the last 7 days/)).toBeVisible();
+  });
+
+  it("says in the run's row when it started its own retention beside other workspaces", async () => {
+    const notice =
+      "This backup holds snapshots from more than one workspace, so this workspace starts its own retention.";
+    history.mockResolvedValue([run(2, { notice })]);
+    open();
+    expect(await screen.findByText(`Copied to iCloud Drive. ${notice}`)).toBeVisible();
   });
 
   it("starts a backup with Back up now, and says what the run is doing", async () => {
@@ -418,14 +483,12 @@ describe("Warnings on the Backup page", () => {
     status.mockResolvedValue(
       healthy({
         destinations: [
-          {
-            path: ICLOUD,
+          backupDestination({
             last_copy: iso(-50),
             problem: "Folder not found.",
+            short_problem: "Folder not found",
             behind: true,
-            changed: [],
-            unexpected: [],
-          },
+          }),
         ],
         warnings: [
           {
@@ -452,44 +515,26 @@ describe("Warnings on the Backup page", () => {
     await waitFor(() => expect(screen.queryByRole("alert")).not.toBeInTheDocument());
   });
 
-  it("names a missing repository and offers its two actions", async () => {
-    status.mockResolvedValue(
-      healthy({
-        repository: { path: REPO, missing: true, snapshots: 0, password_stored: true },
-        warnings: [
-          {
-            kind: "repository_missing",
-            message: `Backup repository not found at ${REPO}. Backups have stopped.`,
-            banner: true,
-          },
-        ],
-      }),
-    );
+  it("names a missing repository, and the storage folder as not found", async () => {
+    status.mockResolvedValue(backupsMissing());
     open();
-    const banner = await screen.findByRole("alert");
-    expect(banner).toHaveTextContent("Backup repository not found");
-    expect(
-      within(banner)
-        .getAllByRole("button")
-        .map((b) => b.textContent),
-    ).toEqual(["Create a new repository", "Connect an existing repository"]);
+    expect(await screen.findByRole("alert")).toHaveTextContent("Backup repository not found");
     expect(screen.getByText("Not found")).toHaveClass("bk-pill--bad");
   });
 });
 
 describe("Changed and unexpected files", () => {
-  const changed = () =>
+  const changed = (setAside = `${ICLOUD}-set-aside-2026-11-23`) =>
     healthy({
       destinations: [
-        {
-          path: ICLOUD,
+        backupDestination({
           last_copy: iso(-14),
-          behind: false,
           changed: [
             { name: "data/7c/7c41e0d2", expected_size: 16_800_000, actual_size: 16_100_000 },
           ],
           unexpected: ["index/a3f9c2e1 2"],
-        },
+          set_aside: setAside,
+        }),
       ],
       warnings: [
         {
@@ -538,7 +583,7 @@ describe("Changed and unexpected files", () => {
       await screen.findByRole("button", { name: "Repair the iCloud Drive copy…" }),
     );
     const dialog = screen.getByRole("dialog");
-    expect(dialog).toHaveTextContent("studio-backups-set-aside-");
+    expect(dialog).toHaveTextContent("studio-backups-set-aside-2026-11-23");
     await userEvent.click(within(dialog).getByRole("button", { name: "Set aside and copy again" }));
     expect(repair).toHaveBeenCalledWith(ICLOUD);
     expect(within(dialog).getByText("Setting files aside and copying…")).toBeVisible();
@@ -559,6 +604,17 @@ describe("Changed and unexpected files", () => {
     await waitFor(() => expect(screen.queryByRole("alert")).not.toBeInTheDocument());
     await userEvent.click(button("Dismiss"));
     expect(note).not.toBeInTheDocument();
+  });
+
+  it("names the folder the server plans when a set-aside folder for today already exists", async () => {
+    status.mockResolvedValue(changed(`${ICLOUD}-set-aside-2026-11-23-2`));
+    open();
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Repair the iCloud Drive copy…" }),
+    );
+    expect(screen.getByRole("dialog")).toHaveTextContent(
+      "Set aside instudio-backups-set-aside-2026-11-23-2",
+    );
   });
 
   it("keeps the dialog open with the reason when the repair fails", async () => {
@@ -601,14 +657,28 @@ describe("Restore", () => {
     vi.spyOn(backupApi, "getBackupSnapshots").mockResolvedValue({
       workspace: LIVE,
       snapshots: [
-        { id: NEWEST, short_id: "bbbbbbbb", time: iso(-2), files: 5142, size: 20_100_000_000 },
-        { id: OLDER, short_id: "a3f9c2e1", time: iso(-26), files: 5100, size: 20_000_000_000 },
+        {
+          id: NEWEST,
+          short_id: "bbbbbbbb",
+          time: iso(-2),
+          files: 5142,
+          size: 20_100_000_000,
+          restore_target: `${LIVE}-restore-bbbbbbbb`,
+        },
+        {
+          id: OLDER,
+          short_id: "a3f9c2e1",
+          time: iso(-26),
+          files: 5100,
+          size: 20_000_000_000,
+          restore_target: `${LIVE}-restore-a3f9c2e1`,
+        },
       ],
     });
     history.mockResolvedValue([run(2, { snapshot_id: NEWEST }), run(26, { snapshot_id: OLDER })]);
     start = vi.spyOn(backupApi, "startRestore").mockImplementation(async () => {
       status.mockResolvedValue(healthy({ restore: restoring() }));
-      return { status: healthy({ restore: restoring() }) };
+      return { kind: "started", status: healthy({ restore: restoring() }) };
     });
   });
 
@@ -646,7 +716,11 @@ describe("Restore", () => {
   });
 
   it("refuses the live workspace at once, and shows the server's refusal in the same place", async () => {
-    start.mockResolvedValue({ refused: "D:/full already holds files." });
+    start.mockResolvedValue({
+      kind: "refused",
+      message: "D:/full already holds files.",
+      fieldErrors: {},
+    });
     open();
     await userEvent.click(await screen.findByRole("button", { name: "Restore…" }));
     await waitFor(() => expect(target().value).not.toBe(""));
@@ -692,6 +766,18 @@ describe("Restore", () => {
       expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
       expect(screen.queryByText(/Restored the backup from/)).not.toBeInTheDocument();
     }));
+
+  it("keeps the restore form usable when the request cannot reach the server", async () => {
+    start.mockRejectedValueOnce(new Error("Network unavailable"));
+    open();
+    await userEvent.click(await screen.findByRole("button", { name: "Restore…" }));
+    const submit = await screen.findByRole("button", { name: "Restore to this folder" });
+
+    await userEvent.click(submit);
+
+    expect(await screen.findByText("Network unavailable")).toBeVisible();
+    expect(submit).toBeEnabled();
+  });
 
   it("finishing with the dialog closed leaves a note whose Show opens Restored", () =>
     withPolls(async () => {

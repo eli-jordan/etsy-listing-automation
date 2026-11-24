@@ -25,6 +25,8 @@ from etsy_listings.core.application.deploy.events import (
     StageCheckingEvent,
 )
 from etsy_listings.core.application.deploy.registry import (
+    BatchApply,
+    BatchPlan,
     Conflict,
     ListingApply,
     ListingPlan,
@@ -235,6 +237,63 @@ def test_a_workspace_apply_needs_a_workspace_plan_as_its_review(
 
     with pytest.raises(ReviewedPlanRefusedError, match="reviewed_run_id is not a workspace plan"):
         idle.submit(WorkspaceApply((), {}, reviewed_id))
+
+
+def _reviewed_batch_plan(deployments: Deployments, batch_id: str, *listings: str) -> Run:
+    """A ready batch plan of ``batch_id`` that reviewed ``listings``, each at
+    :data:`FINGERPRINT`, without executing it."""
+    run = _run(deployments.submit(BatchPlan(batch_id, listings)))
+    run.transition_plan("planning")
+    for name in listings:
+        plan = PlanDTO(listing=name, is_live=False, etsy_listing_id=None, stage_plans=())
+        run.append(
+            lambda i, name=name, plan=plan: ListingPlannedEvent(
+                id=i, listing=name, plan=plan, fingerprint=FINGERPRINT
+            )
+        )
+    run.transition_plan("planned")
+    run.transition_plan("ready")
+    return run
+
+
+def test_a_batch_apply_naming_exactly_its_batch_review_is_queued(idle: Deployments) -> None:
+    reviewed = _reviewed_batch_plan(idle, "b1", "a", "b")
+
+    run = _run(
+        idle.submit(BatchApply("b1", ("a", "b"), {"a": FINGERPRINT, "b": FINGERPRINT}, reviewed.id))
+    )
+
+    assert run.scope == "batch"
+    assert run.reviewed_run_id == reviewed.id
+    assert idle.runs(scope="batch", batch="b1") == [run]
+    assert idle.get(reviewed.id) is reviewed
+
+
+def test_a_batch_apply_differing_from_its_review_is_refused(idle: Deployments) -> None:
+    reviewed = _reviewed_batch_plan(idle, "b1", "a", "b")
+
+    with pytest.raises(ReviewedPlanRefusedError, match="exactly match the reviewed batch plan"):
+        idle.submit(BatchApply("b1", ("a",), {"a": FINGERPRINT}, reviewed.id))
+
+    assert idle.runs(scope="batch", batch="b1") == [reviewed], "a refusal queues nothing"
+
+
+@pytest.mark.parametrize("source", ["other-batch", "workspace-plan"])
+def test_a_batch_apply_needs_a_plan_of_its_own_batch(idle: Deployments, source: str) -> None:
+    if source == "other-batch":
+        reviewed = _reviewed_batch_plan(idle, "b2", "a")
+    else:
+        reviewed = _reviewed_workspace_plan(idle, "a")
+
+    with pytest.raises(ReviewedPlanRefusedError, match="reviewed_run_id is not a batch plan"):
+        idle.submit(BatchApply("b1", ("a",), {"a": FINGERPRINT}, reviewed.id))
+
+
+def test_a_workspace_apply_cannot_name_a_batch_review(idle: Deployments) -> None:
+    reviewed = _reviewed_batch_plan(idle, "b1", "a")
+
+    with pytest.raises(ReviewedPlanRefusedError, match="reviewed_run_id is not a workspace plan"):
+        idle.submit(WorkspaceApply(("a",), {"a": FINGERPRINT}, reviewed.id))
 
 
 # ------------------------------------------------------------------ retention
@@ -463,16 +522,46 @@ def test_while_paused_no_run_starts_and_each_waits_for_backup_until_resume_runs_
         for run in runs:
             _wait_until_terminal(run)
     finally:
+        gate.stop()  # first, as the lifespan does: it lets a held run go
         deployments.stop()
 
     assert seen == [("applying", "queued"), ("applied", "planning")]
     assert [deployments.waiting_for_backup(run) for run in runs] == [False, False]
 
 
-def test_a_run_queued_with_no_pause_is_not_waiting_for_backup(idle: Deployments) -> None:
-    run = _run(idle.submit(ListingPlan((LISTING,))))
+def test_a_batch_deploy_waits_for_backup_while_paused_and_runs_on_resume(
+    workspace_root: Path, workspace: Workspace
+) -> None:
+    """A batch's reviewed deploy (ADR-0059) is held by the same gate as a
+    listing's or the workspace's: accepted, waiting for backup, and run once
+    the backup resumes."""
+    copy_listing(workspace_root, "second")
+    started: list[str] = []
 
-    assert not idle.waiting_for_backup(run)
+    def context(ws: Workspace, on_event: EventSink | None = None) -> RunContext:
+        started.append("started")
+        return _context(ws, on_event)
+
+    gate = JobGate()
+    gate.pause()
+    deployments = Deployments(workspace, context, gate=gate)
+    run = _run(deployments.submit(BatchPlan("b1", (LISTING, "second"))))
+    deployments.start()
+    try:
+        time.sleep(0.3)
+        assert started == [], "a batch deploy started while the gate was paused"
+        assert run.phase == "queued"
+        assert deployments.waiting_for_backup(run)
+
+        gate.resume()
+        _wait_until_terminal(run)
+    finally:
+        gate.stop()  # first, as the lifespan does: it lets a held run go
+        deployments.stop()
+
+    assert started == ["started"]
+    assert run.phase == "ready"
+    assert not deployments.waiting_for_backup(run)
 
 
 def test_a_backup_waits_for_the_run_in_flight_and_names_it(workspace: Workspace) -> None:

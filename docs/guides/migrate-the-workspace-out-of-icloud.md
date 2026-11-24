@@ -27,12 +27,16 @@ iCloud only copies files it has downloaded. In File Explorer, right-click the
 old workspace folder and choose **Always keep on this device**, then wait
 until every file shows a green tick.
 
-Look for conflict copies, which iCloud names `<name> 2.<ext>`. Rename each back
-over its original, or delete it, before copying:
+Look for conflict copies, which iCloud names `<name> 2.<ext>`:
 
 ```powershell
 Get-ChildItem -LiteralPath $old -Recurse -File -Force | Where-Object Name -match ' 2(\.|$)'
 ```
+
+Compare each pair before deciding which version belongs in the new workspace.
+Keep both versions in the old workspace. After copying and checking the file
+counts, resolve the conflicts in the new folder. For `state.lock.json`, verify
+that the version you keep has the listing's current Etsy and Printify IDs.
 
 Copy everything, including hidden folders such as `.cache`:
 
@@ -72,6 +76,11 @@ backup:
   interval_hours: 12
 ```
 
+Leave out `workspace_id`: `backup init` adds that line, a random ID the
+retention keeps this workspace's backups by. If the destination already holds
+this workspace's backups, `init` takes the ID they carry, so their schedule
+carries on. Don't edit it or copy it to another workspace.
+
 The backup storage folder must not exist yet, or must be empty. The password
 goes into the workspace `.env` as `ETSY_LISTINGS_BACKUP_PASSWORD`. Either add
 the line yourself, or let `backup init` ask for it in step 4 and write it.
@@ -79,6 +88,14 @@ Keep a copy in your password manager: the `.env` inside each backup is
 encrypted with that same password.
 
 ## 4. Create the repository and make the first backup
+
+While iCloud Drive is connected and syncing, create the empty destination
+folder named in `backup.destinations`. The CLI skips a missing destination.
+If that path already holds a backup, keep it: `init` connects to it instead
+of creating a new repository. It uses the password in `.env`, or asks for
+that backup's password, then copies the
+backup into `$backups`, and prints `Connected to the backup in <folder>: N
+snapshots`. The `run` that follows adds to it.
 
 ```powershell
 uv run etsy-listings backup init
@@ -122,7 +139,10 @@ renamed folder.
 Copy or let iCloud download the destination folder
 (`naturally-inked-studio-backups` in iCloud Drive) and restore the workspace
 from it, as [restoring a backup](restore-a-backup.md) describes under *When the
-computer is gone*. Then open **Admin › Settings › Backup**. It reports
+computer is gone*. Then open **Admin › Settings › Backup**. If backups are off there, choose
+**Set up backups** and name the iCloud Drive folder as a destination, with
+that backup's password: set-up connects it instead of creating a new
+repository, and says so. Otherwise it reports
 `Backup repository not found` because the old computer's backup storage
 folder is not there. Choose **Connect an existing repository**, name the
 iCloud Drive folder under **Copy from**, and a local folder under **Copy

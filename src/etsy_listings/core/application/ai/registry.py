@@ -30,6 +30,7 @@ from etsy_listings.core.application.ai.events import (
     TerminalPhase,
     WorkflowStep,
 )
+from etsy_listings.core.application.job_gate import Ticket
 
 StopReason = Literal["cancelled", "timeout", "shutdown", "deploy"]
 """Why a run was asked to stop. ``deploy`` is a UI deploy taking the listing
@@ -77,6 +78,10 @@ class AiRun:
     outcome by then, not just the run its phase."""
     _phase: AiRunPhase = "running"
     """``queued`` while a backup's pause holds the run, until :meth:`begin`."""
+    _ticket: Ticket | None = field(default=None, repr=False)
+    """The backup gate's ticket for this run's work, released once
+    :meth:`finish` has told every listener -- so a backup waiting for quiet
+    starts only after a batch row has its outcome."""
     _steps: dict[StepId, WorkflowStep] = field(
         default_factory=lambda: {i: WorkflowStep(id=i, state="pending") for i in STEP_IDS}
     )
@@ -93,14 +98,19 @@ class AiRun:
     def finished(self) -> bool:
         return self._phase not in ("queued", "running")
 
-    def begin(self) -> bool:
-        """A held run starts: ``queued`` becomes ``running``. ``False`` when
-        it was stopped while held, so it must not start."""
+    def begin(self, ticket: Ticket) -> bool:
+        """A held run starts under the gate's ``ticket``: ``queued`` becomes
+        ``running`` and the run holds the ticket until it finishes. ``False``
+        when it was stopped while held, so it must not start; the ticket is
+        released."""
         with self.condition:
             if self._phase == "queued":
                 self._phase = "running"
                 self.started_at = _now()
-            return self._phase == "running"
+                self._ticket = ticket
+                return True
+        ticket.release()
+        return False
 
     @property
     def steps(self) -> list[WorkflowStep]:
@@ -140,6 +150,8 @@ class AiRun:
                 listener(self)
         finally:
             self._settled.set()
+            if self._ticket is not None:
+                self._ticket.release()
 
     def wait_settled(self, timeout: float | None = None) -> bool:
         """Block until the run has finished and its listeners have heard.
@@ -211,17 +223,20 @@ class AiRunRegistry:
         draft_brief: bool,
         origin: RunOrigin = "manual",
         queued: bool = False,
+        ticket: Ticket | None = None,
     ) -> AiRun | Conflict | Deploying:
         """A new run holding ``listing``; ``queued`` when a backup's pause
-        holds it from starting."""
+        holds it from starting, until :meth:`AiRun.begin`. The run owns the
+        gate's ``ticket`` until it finishes; a refusal releases it."""
         key = listing.casefold()
         with self._lock:
-            if self._deploying[key]:
-                return Deploying()
+            refused = self._refusal(key)
+            if refused is not None:
+                if ticket is not None:
+                    ticket.release()
+                return refused
             previous = self._runs.get(self._latest.get(key, ""))
             if previous is not None:
-                if not previous.finished:
-                    return Conflict(active_run=previous.id)
                 del self._runs[previous.id]
             run = AiRun(
                 id=self._id_source(),
@@ -230,10 +245,20 @@ class AiRunRegistry:
                 origin=origin,
                 on_finish=tuple(self._listeners),
                 _phase="queued" if queued else "running",
+                _ticket=ticket,
             )
             self._runs[run.id] = run
             self._latest[key] = run.id
             return run
+
+    def _refusal(self, key: str) -> Conflict | Deploying | None:
+        """Under the lock: why no new run may hold ``key`` now."""
+        if self._deploying[key]:
+            return Deploying()
+        previous = self._runs.get(self._latest.get(key, ""))
+        if previous is not None and not previous.finished:
+            return Conflict(active_run=previous.id)
+        return None
 
     def get(self, run_id: str) -> AiRun | None:
         with self._lock:
