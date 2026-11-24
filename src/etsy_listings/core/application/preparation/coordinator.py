@@ -5,8 +5,8 @@ single executor lane; installation inspection never runs on their event loop.
 
 A backup's pause (workspace-backup spec, *Pausing jobs*) dispatches nothing:
 queued jobs, and a job waiting for the CPU lane, stay as they are and report
-waiting for backup until resume schedules them again. Each lane holds a gate
-ticket while it runs a job, which a backup's wait for quiet counts.
+waiting for backup until resume schedules them again. Each job's turn on a
+lane runs inside its gate ticket, which a backup's wait for quiet counts.
 """
 
 from __future__ import annotations
@@ -97,9 +97,6 @@ class Preparations:
         self._active: set[str] = set()
         self.worker_slot = WorkerSlot()
         self._futures: list[Future[Any]] = []
-        self._tickets: dict[tuple[str, str], Ticket] = {}
-        """The gate ticket of each job's turn on a lane, by job and lane,
-        until the turn and what it leaves to do have ended."""
         self._gpu_busy = False
         self._cpu_busy = False
         self.execution = Execution(self)
@@ -557,29 +554,28 @@ class Preparations:
             self.store.write(
                 job, phase="running", step="loading_models" if lane == "gpu" else "fitting"
             )
-        except OSError:
+            future = getattr(self, lane).submit(self._run, job.id, lane, ticket)
+        except BaseException:
+            # The turn never began, so neither did its ticket's work.
             ticket.release()
             raise
-        self._tickets[job.id, lane] = ticket
         self._active.add(job.id)
         setattr(self, "_" + lane + "_busy", True)
         self._futures = [f for f in self._futures if not f.done()]
-        self._futures.append(getattr(self, lane).submit(self._run, job.id, lane))
+        self._futures.append(future)
 
-    def _run(self, identity: str, lane: str) -> None:
-        try:
-            self.execution.run(identity, lane)
-        finally:
-            with self.store.condition:
-                self._active.discard(identity)
-                setattr(self, "_" + lane + "_busy", False)
-                ticket = self._tickets.pop((identity, lane), None)
+    def _run(self, identity: str, lane: str, ticket: Ticket) -> None:
+        """``identity``'s turn on ``lane``, and what it leaves to do, under
+        the gate's ``ticket``."""
+        with ticket:
             try:
-                self._settle(identity)
+                self.execution.run(identity, lane)
             finally:
-                if ticket is not None:
-                    ticket.release()
-            self._schedule()
+                with self.store.condition:
+                    self._active.discard(identity)
+                    setattr(self, "_" + lane + "_busy", False)
+                self._settle(identity)
+        self._schedule()
 
     def _settle(self, identity: str) -> None:
         """What a job's turn on a lane leaves to do: rebuild a superseded
@@ -597,8 +593,7 @@ class Preparations:
         """Whether ``job`` is held by a backup's pause (plan decision P4):
         queued, or waiting for the CPU lane, while the gate is paused.
         Never stored in the journal."""
-        waiting = job.phase == "queued" or job.step == "cpu_queued"
-        return waiting and self.gate.paused
+        return self.gate.holds(queued=job.phase == "queued" or job.step == "cpu_queued")
 
     def _cover_prepared(self, template: str) -> None:
         """Queue ``template``'s coverage now its preparation has finished, so

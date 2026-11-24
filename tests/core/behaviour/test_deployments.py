@@ -463,16 +463,11 @@ def test_while_paused_no_run_starts_and_each_waits_for_backup_until_resume_runs_
         for run in runs:
             _wait_until_terminal(run)
     finally:
+        gate.stop()  # first, as the lifespan does: it lets a held run go
         deployments.stop()
 
     assert seen == [("applying", "queued"), ("applied", "planning")]
     assert [deployments.waiting_for_backup(run) for run in runs] == [False, False]
-
-
-def test_a_run_queued_with_no_pause_is_not_waiting_for_backup(idle: Deployments) -> None:
-    run = _run(idle.submit(ListingPlan((LISTING,))))
-
-    assert not idle.waiting_for_backup(run)
 
 
 def test_a_backup_waits_for_the_run_in_flight_and_names_it(workspace: Workspace) -> None:

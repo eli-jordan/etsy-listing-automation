@@ -40,7 +40,7 @@ from etsy_listings.core.application.ai.readiness import (
 )
 from etsy_listings.core.application.ai.registry import AiRun, AiRunRegistry
 from etsy_listings.core.application.ai.runner import AiRunner
-from etsy_listings.core.application.job_gate import JobGate, Ticket
+from etsy_listings.core.application.job_gate import JobGate
 from etsy_listings.core.batches import RETRYABLE, AiState, AiStep, Batch, BatchRow, BatchStore
 from etsy_listings.core.config.settings import SettingsProblem
 from etsy_listings.core.workspace.workspace import Workspace
@@ -107,8 +107,6 @@ class BatchQueue:
         self._state = threading.Lock()
         self._runs: dict[str, Slot] = {}
         """Batch runs this queue started, by run id, until they finish."""
-        self._tickets: dict[str, Ticket] = {}
-        """Each started batch run's gate ticket, by run id, until it finishes."""
         self._last: str | None = None
         registry.subscribe(self._finished)
 
@@ -202,30 +200,29 @@ class BatchQueue:
             if ticket is None:
                 return False
             run = self._registry.create(
-                row.name, draft_brief=self._brief_is_empty(row.name), origin="batch"
+                row.name,
+                draft_brief=self._brief_is_empty(row.name),
+                origin="batch",
+                ticket=ticket,
             )
             if not isinstance(run, AiRun):
                 # A manual run holds the listing, or a deploy does: a
                 # row Retry queued mid-deploy starts once the deploy ends.
-                ticket.release()
                 return False
-            self._save_claim(batch, row, run, ticket)
+            self._save_claim(batch, row, run)
             with self._state:
                 self._runs[run.id] = slot
-                self._tickets[run.id] = ticket
                 self._last = batch_id
         self._runner.start(run)
         return True
 
-    def _save_claim(self, batch: Batch, row: BatchRow, run: AiRun, ticket: Ticket) -> None:
+    def _save_claim(self, batch: Batch, row: BatchRow, run: AiRun) -> None:
         try:
             _replace(batch, row.model_copy(update={"ai": "running", "ai_error": None}))
             self._batches.save(batch)
         except OSError:
-            try:
-                run.finish("failed", "The batch row could not be saved.")
-            finally:
-                ticket.release()
+            # Finishing the run releases its gate ticket.
+            run.finish("failed", "The batch row could not be saved.")
             raise
 
     def _brief_is_empty(self, name: str) -> bool:
@@ -239,17 +236,12 @@ class BatchQueue:
 
     def _finished(self, run: AiRun) -> None:
         """A run ended. A batch run's row takes its outcome; any run ending
-        can free a listing or a slot, so the queue looks again. A backup
-        waiting for quiet hears of it once the row is written."""
+        can free a listing or a slot, so the queue looks again. The run
+        releases its gate ticket once this has written the row."""
         with self._state:
             slot = self._runs.pop(run.id, None)
-            ticket = self._tickets.pop(run.id, None)
-        try:
-            if slot is not None and run.stop_reason != "shutdown":
-                self._record_outcome(run, slot)
-        finally:
-            if ticket is not None:
-                ticket.release()
+        if slot is not None and run.stop_reason != "shutdown":
+            self._record_outcome(run, slot)
         self.wake()
 
     def _record_outcome(self, run: AiRun, slot: Slot) -> None:
@@ -355,7 +347,7 @@ class BatchQueue:
     def waiting_for_backup(self, row: BatchRow) -> bool:
         """Whether ``row`` is held by a backup's pause (plan decision P4):
         queued while the gate is paused. Never stored in the record."""
-        return row.ai == "queued" and self._gate.paused
+        return self._gate.holds(queued=row.ai == "queued")
 
     def pending(self, listing: str) -> bool:
         """Does batch work own ``listing``'s AI right now?"""
