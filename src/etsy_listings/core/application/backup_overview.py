@@ -22,7 +22,7 @@ from pydantic import BaseModel, ConfigDict
 from etsy_listings.core.application.backup_repository import MIN_PASSWORD_LENGTH
 from etsy_listings.core.application.backup_restore import RestoreStatus
 from etsy_listings.core.backup.destinations import ChangedFile, planned_set_aside
-from etsy_listings.core.backup.restic import Snapshot
+from etsy_listings.core.backup.repository import Snapshot
 from etsy_listings.core.backup.state import BackupState, CheckResult, RunRecord
 from etsy_listings.core.config.settings import BackupSettings, RetentionSettings
 

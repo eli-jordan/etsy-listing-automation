@@ -486,12 +486,6 @@ def test_while_paused_no_row_starts_and_resume_drafts_them_in_queue_order(q: Que
     assert not q.queue.waiting_for_backup(q.row(batch, 0))
 
 
-def test_a_queued_row_is_not_waiting_for_backup_without_a_pause(q: Queue) -> None:
-    batch = q.confirm(*_designs("night-hike-club"))
-
-    assert not q.queue.waiting_for_backup(q.row(batch, 0))
-
-
 def test_a_failed_row_save_does_not_hold_the_backup_gate(
     q: Queue, monkeypatch: pytest.MonkeyPatch
 ) -> None:

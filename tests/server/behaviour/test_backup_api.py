@@ -29,17 +29,17 @@ from etsy_listings.core.workspace.workspace import Workspace
 from etsy_listings.server.api.app import create_app
 
 from tests.support.ai_runs import wait_for
+from tests.support.backups import PASSWORD, configure_backups
 from tests.support.repository_files import FakeRepository, files
-from tests.support.restic import RepositoryRestic
+from tests.support.restic import InMemoryRestic
 
 NOW = datetime(2026, 11, 23, 9, 0, tzinfo=UTC)
-PASSWORD = "correct horse battery staple"
 
 
 @pytest.fixture(autouse=True)
 def _no_ambient_backup(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     monkeypatch.delenv(BACKUP_PASSWORD_VAR, raising=False)
-    # Named, so set-up never downloads restic; the fake launcher ignores it.
+    # Named, so set-up never downloads restic; the in-memory repository ignores it.
     monkeypatch.setenv(RESTIC_BINARY_ENV_VAR, str(tmp_path / "restic"))
 
 
@@ -54,18 +54,18 @@ def repository(tmp_path: Path) -> Path:
 
 
 @pytest.fixture
-def restic(repository: Path) -> RepositoryRestic:
-    return RepositoryRestic(repository, lambda: NOW)
+def restic() -> InMemoryRestic:
+    return InMemoryRestic(lambda: NOW)
 
 
-def _client(workspace_root: Path, home: Path, restic: RepositoryRestic | None) -> TestClient:
-    environment = BackupEnvironment(home=home, launch=restic, now=lambda: NOW)
+def _client(workspace_root: Path, home: Path, restic: InMemoryRestic | None) -> TestClient:
+    environment = BackupEnvironment(home=home, restic=restic, now=lambda: NOW)
     workspace = Workspace.discover(root_override=workspace_root)
     return TestClient(create_app(workspace, backup=environment))
 
 
 @pytest.fixture
-def client(workspace_root: Path, home: Path, restic: RepositoryRestic) -> Iterator[TestClient]:
+def client(workspace_root: Path, home: Path, restic: InMemoryRestic) -> Iterator[TestClient]:
     with _client(workspace_root, home, restic) as test_client:
         yield test_client
 
@@ -176,11 +176,11 @@ def test_set_up_twice_is_refused(
 
 
 def test_back_up_now_starts_a_run_and_refuses_a_second(
-    client: TestClient, restic: RepositoryRestic, repository: Path
+    client: TestClient, restic: InMemoryRestic, repository: Path
 ) -> None:
-    restic.hang = True
+    restic.hold("back_up")
     _ok(_set_up(client, repository), 202)
-    wait_for(lambda: restic.ran("backup") == 1)
+    wait_for(lambda: restic.ran("back_up") == 1)
 
     assert _ok(client.get("/api/backup"))["running"]["operation"] == "backup"
     assert client.post("/api/backup/run").status_code == 409
@@ -191,13 +191,7 @@ def test_back_up_now_is_refused_while_backups_are_off(client: TestClient) -> Non
 
 
 def _configured(workspace_root: Path, repository: Path, *destinations: Path) -> None:
-    listed = "".join(f"    - {path.as_posix()}\n" for path in destinations)
-    workspace_root.joinpath("settings.yaml").write_text(
-        f"backup:\n  repository: {repository.as_posix()}\n"
-        + (f"  destinations:\n{listed}" if destinations else ""),
-        encoding="utf-8",
-    )
-    (workspace_root / layout.ENV_FILE).write_text(f"{BACKUP_PASSWORD_VAR}={PASSWORD}\n")
+    configure_backups(workspace_root, repository, destinations=destinations)
 
 
 def test_repair_sets_aside_unexpected_files_and_clears_the_warning(
@@ -219,7 +213,7 @@ def test_repair_sets_aside_unexpected_files_and_clears_the_warning(
             destinations={str(cloud): found},
         )
     )
-    restic = RepositoryRestic(repository, lambda: NOW)
+    restic = InMemoryRestic(lambda: NOW)
     restic.snapshots.append(NOW)
 
     # An earlier repair the same day: this one takes the next name.
@@ -351,7 +345,7 @@ def test_a_destination_folder_gone_missing_is_reported_and_never_created(
     signed_out.parent.mkdir()
     _configured(workspace_root, repository, signed_out)
     BackupStateStore(home).save(BackupState(repository=str(repository), last_prune=NOW))
-    restic = RepositoryRestic(repository, lambda: NOW)
+    restic = InMemoryRestic(lambda: NOW)
 
     with _client(workspace_root, home, restic) as client:
         wait_for(lambda: len(_history(client)) == 1)
@@ -370,7 +364,7 @@ def _destinations(status: dict[str, Any]) -> list[dict[str, Any]]:
 
 @pytest.fixture
 def restorable(
-    workspace_root: Path, home: Path, repository: Path, restic: RepositoryRestic
+    workspace_root: Path, home: Path, repository: Path, restic: InMemoryRestic
 ) -> Iterator[TestClient]:
     """Set up, with one snapshot made by the app and one by hand."""
     _configured(workspace_root, repository)
@@ -395,9 +389,9 @@ def test_the_snapshot_list_is_restic_s_own_newest_first(
 
 
 def test_a_restore_starts_shows_in_the_status_and_stops(
-    restorable: TestClient, restic: RepositoryRestic, tmp_path: Path
+    restorable: TestClient, restic: InMemoryRestic, tmp_path: Path
 ) -> None:
-    restic.restore_hang = True
+    restic.hold("restore")
     target = str(tmp_path / "restored")
 
     started = _ok(
@@ -416,7 +410,7 @@ def test_a_restore_starts_shows_in_the_status_and_stops(
 @pytest.mark.parametrize("case", [("workspace", 409), ("relative", 422), ("unknown", 404)])
 def test_a_restore_is_refused_before_restic_runs(
     restorable: TestClient,
-    restic: RepositoryRestic,
+    restic: InMemoryRestic,
     workspace_root: Path,
     tmp_path: Path,
     case: tuple[str, int],

@@ -19,7 +19,7 @@ from etsy_listings.core.application.backup_overview import (
     short_problem,
 )
 from etsy_listings.core.backup.destinations import ChangedFile
-from etsy_listings.core.backup.restic import Snapshot
+from etsy_listings.core.backup.repository import Snapshot
 from etsy_listings.core.backup.state import (
     BackupState,
     CheckResult,

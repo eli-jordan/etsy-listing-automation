@@ -24,9 +24,9 @@ from etsy_listings.core.config.secrets import BACKUP_PASSWORD_VAR, Secrets
 from etsy_listings.core.workspace import layout
 
 from tests.support import scripted as scripted_prompts
+from tests.support.backups import PASSWORD, configure_backups
 
 runner = CliRunner()
-PASSWORD = "correct horse battery staple"
 Script = Callable[[scripted_prompts.Answers], scripted_prompts.Scripted]
 
 
@@ -42,12 +42,14 @@ def isolated(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 @pytest.fixture
 def repository(tmp_path: Path, workspace_root: Path) -> Path:
     path = tmp_path / "backups"
-    cloud = (tmp_path / "cloud").as_posix()
-    (workspace_root / "settings.yaml").write_text(
-        f"backup:\n  repository: {path.as_posix()}\n  destinations: [{cloud}]\n",
-        encoding="utf-8",
-    )
+    configure_backups(workspace_root, path, destinations=[tmp_path / "cloud"], password=None)
     return path
+
+
+def _store_password(workspace_root: Path, repository: Path, password: str = PASSWORD) -> None:
+    configure_backups(
+        workspace_root, repository, destinations=[repository.with_name("cloud")], password=password
+    )
 
 
 def _run(workspace_root: Path, *args: str) -> tuple[int, str]:
@@ -106,13 +108,26 @@ def test_status_without_restic_installed_says_how_to_get_it(
     workspace_root: Path, repository: Path, monkeypatch: pytest.MonkeyPatch, isolated: Path
 ) -> None:
     monkeypatch.delenv(RESTIC_BINARY_ENV_VAR, raising=False)
-    (workspace_root / layout.ENV_FILE).write_text(f"{BACKUP_PASSWORD_VAR}={PASSWORD}\n")
+    _store_password(workspace_root, repository)
 
     code, output = _run(workspace_root, "status")
 
     assert code == 1
     assert str(repository) in output
     assert "backup init" in output
+    assert not isolated.exists()
+
+
+def test_snapshots_refuses_a_storage_folder_inside_the_workspace(
+    workspace_root: Path, tmp_path: Path, isolated: Path
+) -> None:
+    """Resolved as every other command is, so restic never starts."""
+    configure_backups(workspace_root, workspace_root / "backups", restic_binary=tmp_path / "r")
+
+    code, output = _run(workspace_root, "snapshots")
+
+    assert code == 1
+    assert "overlaps" in output
     assert not isolated.exists()
 
 
@@ -157,7 +172,7 @@ def test_init_asks_for_a_password_stores_it_and_creates_the_repository(
 def test_init_uses_a_stored_password_without_asking(
     workspace_root: Path, repository: Path, scripted: Script
 ) -> None:
-    (workspace_root / layout.ENV_FILE).write_text(f"{BACKUP_PASSWORD_VAR}={PASSWORD}\n")
+    _store_password(workspace_root, repository)
     script = scripted({})
 
     code, output = _run(workspace_root, "init")
@@ -172,7 +187,7 @@ def test_init_uses_a_stored_password_without_asking(
 def test_snapshots_and_status_read_the_new_repository(
     workspace_root: Path, repository: Path, tmp_path: Path
 ) -> None:
-    (workspace_root / layout.ENV_FILE).write_text(f"{BACKUP_PASSWORD_VAR}={PASSWORD}\n")
+    _store_password(workspace_root, repository)
     assert _run(workspace_root, "init")[0] == 0
 
     code, output = _run(workspace_root, "snapshots")
@@ -193,9 +208,9 @@ def test_snapshots_and_status_read_the_new_repository(
 @pytest.mark.restic
 @pytest.mark.usefixtures("with_restic")
 def test_status_reports_a_wrong_password(workspace_root: Path, repository: Path) -> None:
-    (workspace_root / layout.ENV_FILE).write_text(f"{BACKUP_PASSWORD_VAR}={PASSWORD}\n")
+    _store_password(workspace_root, repository)
     assert _run(workspace_root, "init")[0] == 0
-    (workspace_root / layout.ENV_FILE).write_text(f"{BACKUP_PASSWORD_VAR}=another password\n")
+    _store_password(workspace_root, repository, "another password")
 
     code, output = _run(workspace_root, "status")
 
@@ -207,7 +222,7 @@ def test_status_reports_a_wrong_password(workspace_root: Path, repository: Path)
 @pytest.mark.restic
 @pytest.mark.usefixtures("with_restic")
 def test_status_json_reports_the_configuration(workspace_root: Path, repository: Path) -> None:
-    (workspace_root / layout.ENV_FILE).write_text(f"{BACKUP_PASSWORD_VAR}={PASSWORD}\n")
+    _store_password(workspace_root, repository)
     assert _run(workspace_root, "init")[0] == 0
 
     code, output = _run(workspace_root, "status", "--json")
@@ -226,7 +241,7 @@ def test_status_json_reports_the_configuration(workspace_root: Path, repository:
 def test_run_backs_up_copies_then_check_finds_no_errors(
     workspace_root: Path, repository: Path
 ) -> None:
-    (workspace_root / layout.ENV_FILE).write_text(f"{BACKUP_PASSWORD_VAR}={PASSWORD}\n")
+    _store_password(workspace_root, repository)
     assert _run(workspace_root, "init")[0] == 0
     cloud = repository.with_name("cloud")
     cloud.mkdir()
@@ -249,7 +264,7 @@ def test_run_backs_up_copies_then_check_finds_no_errors(
 def test_check_of_a_damaged_repository_fails_and_is_recorded(
     workspace_root: Path, repository: Path, isolated: Path
 ) -> None:
-    (workspace_root / layout.ENV_FILE).write_text(f"{BACKUP_PASSWORD_VAR}={PASSWORD}\n")
+    _store_password(workspace_root, repository)
     assert _run(workspace_root, "init")[0] == 0
     assert _run(workspace_root, "run")[0] == 0
     for pack in (repository / "data").rglob("*"):
@@ -265,19 +280,12 @@ def test_check_of_a_damaged_repository_fails_and_is_recorded(
     assert state["last_check"]["ok"] is False
 
 
-def test_restore_refuses_the_live_workspace_and_a_folder_with_files(
-    workspace_root: Path, repository: Path, tmp_path: Path
-) -> None:
-    full = tmp_path / "full"
-    full.mkdir()
-    (full / "notes.txt").write_text("keep me")
-
-    live = _run(workspace_root, "restore", "latest", str(workspace_root))
-    used = _run(workspace_root, "restore", "latest", str(full))
-
-    assert live == (1, "That's your live workspace. Choose a new, empty folder.\n")
-    assert used[0] == 1
-    assert "already holds files" in used[1]
+def test_a_refused_restore_prints_why_and_exits_1(workspace_root: Path, repository: Path) -> None:
+    """Which targets are refused is test_backup_restore.py's."""
+    assert _run(workspace_root, "restore", "latest", str(workspace_root)) == (
+        1,
+        "That's your live workspace. Choose a new, empty folder.\n",
+    )
 
 
 @pytest.mark.restic
@@ -285,7 +293,7 @@ def test_restore_refuses_the_live_workspace_and_a_folder_with_files(
 def test_restore_writes_a_snapshot_into_a_new_folder(
     workspace_root: Path, repository: Path, tmp_path: Path
 ) -> None:
-    (workspace_root / layout.ENV_FILE).write_text(f"{BACKUP_PASSWORD_VAR}={PASSWORD}\n")
+    _store_password(workspace_root, repository)
     assert _run(workspace_root, "init")[0] == 0
     assert _run(workspace_root, "run")[0] == 0
     target = tmp_path / "restored"

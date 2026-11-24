@@ -27,9 +27,10 @@ so a position change prunes the fit it replaced once its new fit is stored.
 :meth:`SceneWarmer.wait_idle` waits for the prune too.
 
 **A backup's pause** (workspace-backup spec, *Pausing jobs*) starts no
-pass: requests queue as usual and the next pass begins after resume. A pass
--- one listing and the prune after it -- holds a gate ticket, which a
-backup's wait for quiet counts.
+pass: requests queue as usual, and the worker waits in the gate's line for
+the next pass to begin after resume. A pass -- one listing and the prune
+after it -- holds a gate ticket, which a backup's wait for quiet counts; a
+shutdown during the pause ends the wait (the gate stops before the warmer).
 
 A scene that cannot be composed -- a template not prepared, a photo or design
 missing, a listing that no longer loads -- is skipped: the preview endpoint
@@ -105,7 +106,6 @@ class SceneWarmer:
     ) -> None:
         self._workspace = workspace
         self._gate = gate if gate is not None else JobGate()
-        self._gate.on_resume(self._resumed)
         self._scenes = scenes
         self._warm = warm
         self._prune = prune
@@ -145,12 +145,8 @@ class SceneWarmer:
         instead of a sleep; ``False`` on timeout."""
         return self._idle.wait(timeout)
 
-    def _resumed(self) -> None:
-        with self._wake:
-            self._wake.notify_all()
-
     def _loop(self) -> None:
-        startup = self._admitted(lambda: True, lambda: "Pruning position fits")
+        startup = self._gate.wait_admit("Pruning position fits")
         if startup is not None:
             with startup:
                 self._settle()
@@ -169,28 +165,23 @@ class SceneWarmer:
                 self._settle()
 
     def _take(self) -> tuple[str, Ticket] | None:
-        with self._wake:
-            ticket = self._admitted(
-                lambda: bool(self._queued),
-                lambda: f"Scene warming for {next(iter(self._queued))}",
-            )
-            if ticket is None:
-                return None
-            name, _ = self._queued.popitem(last=False)
-            return name, ticket
-
-    def _admitted(self, ready: Callable[[], bool], job: Callable[[], str]) -> Ticket | None:
-        """Block until ``ready`` and the gate admits ``job``; ``None`` on
-        stopping. Both are read under the queue's lock, so the listing
-        named is the one the pass takes."""
-        with self._wake:
-            while True:
-                self._wake.wait_for(lambda: (ready() and not self._gate.paused) or self._stopping)
+        """The next listing and its gate ticket, once one is queued and the
+        gate admits its pass; ``None`` on stopping. Only this thread takes
+        from the queue, so the listing the ticket names stays first until
+        it is taken here, under the queue's lock."""
+        while True:
+            with self._wake:
+                self._wake.wait_for(lambda: bool(self._queued) or self._stopping)
                 if self._stopping:
                     return None
-                ticket = self._gate.admit(job())
-                if ticket is not None:
-                    return ticket
+                name = next(iter(self._queued))
+            ticket = self._gate.wait_admit(f"Scene warming for {name}")
+            if ticket is None:
+                return None
+            with self._wake:
+                if self._queued and not self._stopping:
+                    return self._queued.popitem(last=False)[0], ticket
+            ticket.release()
 
     def _settle(self) -> None:
         """Prune once the queue has drained, then report idle if it still has."""
