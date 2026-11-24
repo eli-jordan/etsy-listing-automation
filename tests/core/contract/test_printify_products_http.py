@@ -330,6 +330,29 @@ def test_an_update_covers_every_variant_the_product_has() -> None:
     assert set(seen["body"]["print_areas"][0]["variant_ids"]) == {73196, 73200, 99999}
 
 
+def test_an_update_leaves_out_variants_the_print_areas_never_named() -> None:
+    """Measured on 2026-11-23: an older product's `variants` listed 399 while
+    its print areas named 238. The other 161 were unavailable and disabled, and
+    naming them got 400 code 8251; the 238 alone was accepted. The print areas
+    say which variants the product has, not the variant list."""
+    discontinued = {**_variant(88888, enabled=False, price=1304), "is_available": False}
+    payload = {**PRODUCT_PAYLOAD, "variants": [*PRODUCT_PAYLOAD["variants"], discontinued]}
+    seen: dict = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.method == "GET":
+            return httpx.Response(200, json=payload)
+        seen["body"] = httpx.Response(200, content=request.read()).json()
+        return httpx.Response(200, json=payload)
+
+    client = _client(handler)
+    live = client.get_product(SHOP_ID, PRODUCT_ID)
+    assert live is not None
+    client.update_product(SHOP_ID, PRODUCT_ID, SPEC, live=live)
+
+    assert set(seen["body"]["print_areas"][0]["variant_ids"]) == {73196, 73200, 99999}
+
+
 def test_an_update_disables_what_the_spec_dropped() -> None:
     """Omission means "no opinion", not "off" -- a `PUT` carrying three of six
     enabled variants left all six enabled. A dropped colour would keep

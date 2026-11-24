@@ -2,6 +2,8 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import * as batchesApi from "../api/batches";
+import type { BatchDetail } from "../api/batches";
 import * as listingsApi from "../api/listings";
 import * as runsApi from "../api/runs";
 import { MARK_SEEN_GRACE_MS } from "./deploy/runPhases";
@@ -333,6 +335,94 @@ describe("BatchDeployPage", () => {
       expect(runsApi.createRun).toHaveBeenCalledWith({
         kind: "plan",
         scope: "workspace",
+      }),
+    );
+  });
+
+  it("reviews a listing batch's run on the same page, applying and planning again by batch", async () => {
+    const reviewed = runDetail({
+      id: "plan-1",
+      scope: "batch",
+      batch_id: "b1",
+      phase: "ready",
+      listings: ["alpha"],
+      events: [
+        {
+          type: "listing_planned",
+          id: 1,
+          listing: "alpha",
+          plan: plan({ listing: "alpha" }),
+          fingerprint: "fp-alpha",
+        },
+        { type: "phase", id: 2, phase: "ready" },
+      ],
+    });
+    vi.spyOn(runsApi, "getRun").mockResolvedValue(reviewed);
+    vi.spyOn(listingsApi, "listListings").mockResolvedValue([summary("alpha")]);
+    vi.spyOn(batchesApi, "getBatch").mockResolvedValue({ label: "Autumn drop" } as BatchDetail);
+    const create = vi.spyOn(runsApi, "createRun").mockRejectedValue(new Error("refused"));
+
+    render(
+      <MemoryRouter initialEntries={["/listings/deploy/plan-1"]}>
+        <Routes>
+          <Route path="/listings/deploy/:runId" element={<BatchDeployPage />} />
+          <Route path="/batches/:id" element={<p>batch page</p>} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByRole("heading", { name: "Review batch changes" })).toBeVisible();
+    expect(await screen.findByText(/Autumn drop/)).toBeVisible();
+    await userEvent.click(screen.getByRole("button", { name: /Apply 1 listing/ }));
+    await waitFor(() =>
+      expect(create).toHaveBeenCalledWith({
+        kind: "apply",
+        scope: "batch",
+        batch_id: "b1",
+        listings: ["alpha"],
+        expect: { alpha: "fp-alpha" },
+        reviewed_run_id: "plan-1",
+      }),
+    );
+    expect(await screen.findByText("Could not start the reviewed batch apply.")).toBeVisible();
+    await userEvent.click(screen.getByRole("button", { name: "← Back to batch" }));
+    expect(await screen.findByText("batch page")).toBeInTheDocument();
+  });
+
+  it("plans a listing batch again by its batch", async () => {
+    vi.spyOn(runsApi, "getRun").mockResolvedValue(
+      runDetail({
+        scope: "batch",
+        batch_id: "b1",
+        phase: "ready",
+        events: [
+          {
+            type: "listing_planned",
+            id: 1,
+            listing: "take-a-hike",
+            plan: plan({ stage_plans: [stage("render")] }),
+            fingerprint: "fp-clean",
+          },
+          { type: "phase", id: 2, phase: "ready" },
+        ],
+      }),
+    );
+    vi.spyOn(listingsApi, "listListings").mockResolvedValue([summary("take-a-hike")]);
+    vi.spyOn(batchesApi, "getBatch").mockResolvedValue({ label: "Autumn drop" } as BatchDetail);
+    vi.spyOn(runsApi, "createRun").mockResolvedValue({
+      kind: "created",
+      run: runSummary({ id: "plan-2", scope: "batch", batch_id: "b1" }),
+    });
+
+    renderPage();
+
+    expect(await screen.findByText("The batch plan found no changes to apply.")).toBeVisible();
+    await userEvent.click(screen.getByRole("button", { name: "Plan again" }));
+    await waitFor(() =>
+      expect(runsApi.createRun).toHaveBeenCalledWith({
+        kind: "plan",
+        scope: "batch",
+        batch_id: "b1",
       }),
     );
   });

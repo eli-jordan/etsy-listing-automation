@@ -1,11 +1,18 @@
-"""One restic repository's commands, streamed (workspace-backup plan, P6).
+"""The real :class:`~etsy_listings.core.backup.repository.Repository`: restic
+itself, run as a subprocess (workspace-backup plan, P6; ADR-0060).
+
+Each operation becomes one ``restic --repo <folder> --json <subcommand>``,
+and its ``--json`` lines become the interface's figures and summaries. The
+subcommands, flags, exit codes and line shapes are known here and nowhere
+else. Reached only through ``core/application/backup_repository.py``; an
+Import Linter contract enforces it.
 
 Not ``core/ai/process.py``'s ``run_managed``: that takes no environment,
 buffers stdout until exit and needs input text. restic needs the password in
 its environment, reports progress as ``--json`` lines while it runs, and
 reads nothing from stdin. So this launches restic with ``subprocess.Popen``
 and line-buffered stdout, as ``preparation/worker_client.py`` does, and
-yields each parsed line as it arrives.
+reads each line as it arrives.
 
 The password goes only into the child's environment as ``RESTIC_PASSWORD``,
 never onto the command line or into a log (spec, *Configuration*). restic's
@@ -21,18 +28,33 @@ import contextlib
 import json
 import logging
 import os
+import re
 import signal
 import subprocess
 import sys
 import threading
 from collections import deque
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Protocol
 
-from etsy_listings.core.errors import UserFacingError
+from etsy_listings.core.backup.repository import (
+    BackupFigures,
+    BackupListener,
+    BackupSummary,
+    RepositoryCheck,
+    RepositoryLockedError,
+    RepositoryNotFoundError,
+    ResticCancelledError,
+    ResticError,
+    RestoreProgress,
+    Snapshot,
+    WrongPasswordError,
+    workspace_tag,
+)
+from etsy_listings.core.config.settings import RetentionSettings
 
 logger = logging.getLogger(__name__)
 
@@ -42,6 +64,13 @@ killed. A killed restic leaves a lock behind, which restic itself treats as
 stale once it sees the process is gone from this host."""
 CANCEL_POLL_SECONDS = 0.1
 
+PARTIAL_SNAPSHOT_EXIT = 3
+"""``restic backup``: the snapshot was made, but some files could not be read."""
+
+RETRY_LOCK = "1h"
+"""A restore started while a weekly prune holds restic's exclusive lock
+waits for it rather than failing. An hour is more than any prune here."""
+
 _INHERITED_TO_DROP = (
     "RESTIC_PASSWORD_FILE",
     "RESTIC_PASSWORD_COMMAND",
@@ -50,30 +79,6 @@ _INHERITED_TO_DROP = (
 )
 """Shell settings that would make restic refuse two password sources, or
 open a different repository than the one named with ``--repo``."""
-
-
-class ResticError(UserFacingError):
-    """A restic command failed; the message is restic's own."""
-
-    def __init__(self, message: str, *, exit_code: int | None = None) -> None:
-        super().__init__(message)
-        self.exit_code = exit_code
-
-
-class RepositoryNotFoundError(ResticError):
-    """The repository folder is missing or is not a restic repository (exit 10)."""
-
-
-class RepositoryLockedError(ResticError):
-    """Another restic holds a lock that this command cannot share (exit 11)."""
-
-
-class WrongPasswordError(ResticError):
-    """No key in the repository opens with the password (exit 12)."""
-
-
-class ResticCancelledError(ResticError):
-    """The command was stopped before it finished."""
 
 
 _ERRORS: Mapping[int, type[ResticError]] = {
@@ -99,34 +104,8 @@ Launch = Callable[[Sequence[str], Mapping[str, str]], ResticProcess]
 """Start ``argv`` with exactly the environment ``env``."""
 
 
-@dataclass(frozen=True)
-class Snapshot:
-    id: str
-    short_id: str
-    time: datetime
-    paths: tuple[str, ...]
-    hostname: str
-    files: int | None = None
-    """Files the backup read, from the snapshot's summary (restic 0.17+)."""
-    size: int | None = None
-    """Bytes the backup read, from the snapshot's summary."""
-
-    @classmethod
-    def from_json(cls, raw: Mapping[str, Any]) -> Snapshot:
-        summary = raw.get("summary") or {}
-        return cls(
-            id=raw["id"],
-            short_id=raw["short_id"],
-            time=datetime.fromisoformat(raw["time"]),
-            paths=tuple(raw.get("paths") or ()),
-            hostname=raw.get("hostname", ""),
-            files=summary.get("total_files_processed"),
-            size=summary.get("total_bytes_processed"),
-        )
-
-
 class Restic:
-    """The commands of the repository at ``repository``."""
+    """The repository in ``repository``, run with the restic at ``binary``."""
 
     def __init__(
         self, binary: Path, repository: Path, password: str, *, launch: Launch | None = None
@@ -139,12 +118,97 @@ class Restic:
     def __repr__(self) -> str:
         return f"Restic({str(self.binary)!r}, {str(self.repository)!r})"
 
+    @property
+    def path(self) -> Path:
+        return self.repository
+
+    # ------------------------------------------------------ the operations
+
+    def init(self) -> str:
+        for message in self.run("init"):
+            if isinstance(message, dict) and message.get("message_type") == "initialized":
+                return str(message["id"])
+        raise ResticError("restic init reported no repository id")
+
+    def snapshots(self, *, lock: bool = True) -> tuple[Snapshot, ...]:
+        args = ("snapshots",) if lock else ("--no-lock", "snapshots")
+        found = [
+            _snapshot(raw) for line in self.run(*args) if isinstance(line, list) for raw in line
+        ]
+        return tuple(sorted(found, key=lambda snapshot: snapshot.time))
+
+    def back_up(
+        self,
+        folder: Path,
+        *,
+        workspace_id: str,
+        excludes: Sequence[str] = (),
+        progress: BackupListener | None = None,
+        cancel: threading.Event | None = None,
+    ) -> BackupSummary:
+        arguments = ["backup", str(folder), "--tag", workspace_tag(workspace_id)]
+        for pattern in excludes:
+            arguments += ["--exclude", pattern]
+        heard = _BackupLines(progress or (lambda _: None))
+        try:
+            for line in self.stream(*arguments, cancel=cancel):
+                heard.hear(line)
+        except ResticError as exc:
+            if exc.exit_code != PARTIAL_SNAPSHOT_EXIT or heard.snapshot_id is None:
+                raise
+        return BackupSummary(heard.snapshot_id, heard.data_added, tuple(heard.warnings))
+
+    def forget(
+        self,
+        retention: RetentionSettings,
+        *,
+        workspace_id: str,
+        cancel: threading.Event | None = None,
+    ) -> None:
+        self.run(*forget_arguments(retention, workspace_id), cancel=cancel)
+
+    def prune(self, *, cancel: threading.Event | None = None) -> None:
+        self.run("prune", cancel=cancel)
+
+    def check(self, *, cancel: threading.Event | None = None) -> RepositoryCheck:
+        try:
+            self.run("check", cancel=cancel)
+        except ResticCancelledError:
+            raise
+        except ResticError as exc:
+            return RepositoryCheck(ok=False, message=str(exc))
+        return RepositoryCheck(ok=True)
+
+    def restore(
+        self,
+        snapshot: Snapshot,
+        target: Path,
+        *,
+        progress: Callable[[RestoreProgress], None] | None = None,
+        cancel: threading.Event | None = None,
+    ) -> RestoreProgress:
+        figures = RestoreProgress()
+        for line in self.stream(*restore_arguments(snapshot, target), cancel=cancel):
+            heard = _restore_figures(figures, line)
+            if heard is not None:
+                figures = heard
+                if progress is not None:
+                    progress(figures)
+        return figures
+
+    def verify_password(self) -> None:
+        """``cat config`` reads the one file every key opens, and no more."""
+        self.run("--no-lock", "cat", "config")
+
+    # -------------------------------------------------------- the commands
+
     def stream(self, *args: str, cancel: threading.Event | None = None) -> Iterator[Any]:
-        """Run ``restic <args> --json`` and yield each JSON line as it comes.
+        """Run ``restic <args> --json`` and yield each JSON line as it comes:
+        the operations' runner, and for tests that drive restic itself.
 
         Raises a :class:`ResticError` once restic exits unsuccessfully, and
-        :class:`ResticCancelledError` when ``cancel`` was set while it ran.
-        Closing the iterator early stops restic.
+        :class:`ResticCancelledError` when ``cancel`` was set before it
+        started or while it ran. Closing the iterator early stops restic.
         """
         if cancel is not None and cancel.is_set():
             raise ResticCancelledError(f"restic {args[0] if args else ''} was stopped")
@@ -172,25 +236,6 @@ class Restic:
         """:meth:`stream`, collected."""
         return list(self.stream(*args, cancel=cancel))
 
-    def init(self) -> str:
-        """Create the repository; its id."""
-        for message in self.run("init"):
-            if isinstance(message, dict) and message.get("message_type") == "initialized":
-                return str(message["id"])
-        raise ResticError("restic init reported no repository id")
-
-    def snapshots(self, *, lock: bool = True) -> tuple[Snapshot, ...]:
-        """Every snapshot, oldest first. ``lock=False`` reads without taking
-        restic's shared lock, for a status check that must not wait."""
-        args = ("snapshots",) if lock else ("--no-lock", "snapshots")
-        found = [
-            Snapshot.from_json(raw)
-            for line in self.run(*args)
-            if isinstance(line, list)
-            for raw in line
-        ]
-        return tuple(sorted(found, key=lambda snapshot: snapshot.time))
-
     def _environment(self) -> dict[str, str]:
         env = {k: v for k, v in os.environ.items() if k not in _INHERITED_TO_DROP}
         env["RESTIC_PASSWORD"] = self._password
@@ -201,6 +246,127 @@ class Restic:
         message = message.replace(self._password, "***")
         error = _ERRORS.get(code, ResticError)
         return error(f"restic: {message}", exit_code=code)
+
+
+# ----------------------------------------------------- arguments and lines
+
+
+def forget_arguments(retention: RetentionSettings, workspace_id: str) -> tuple[str, ...]:
+    """restic counts the current week and month as one of each, so N past
+    weeks and months are N + 1 (spec, *Backup run* step 5).
+
+    Only the workspace's tagged snapshots are considered, grouped by that
+    tag rather than restic's default host and paths (ADR-0061): a renamed PC
+    or a moved workspace then shares the old snapshots' schedule, and they
+    age out. Other workspaces' snapshots and untagged ones, such as a backup
+    made by hand, are never forgotten here."""
+    return (
+        "forget",
+        "--tag",
+        workspace_tag(workspace_id),
+        "--group-by",
+        "tags",
+        "--keep-within",
+        f"{retention.keep_within_days}d",
+        "--keep-weekly",
+        str(retention.weekly + 1),
+        "--keep-monthly",
+        str(retention.monthly + 1),
+    )
+
+
+_DRIVE = re.compile(r"^([A-Za-z]):[\\/]?(.*)$")
+
+
+def tree_path(path: str) -> str:
+    """Where restic keeps a backed-up folder inside the snapshot: ``C:\\x``
+    becomes ``/C/x`` on Windows; a POSIX path stays as it is."""
+    drive = _DRIVE.match(path)
+    if drive is None:
+        return path
+    return f"/{drive.group(1)}/{drive.group(2)}".replace("\\", "/").rstrip("/")
+
+
+def restore_arguments(snapshot: Snapshot, target: Path) -> tuple[str, ...]:
+    """A snapshot of one folder restores that folder's contents; one made by
+    hand of several folders restores them all as restic lays them out.
+    ``--overwrite never`` keeps any file that reached the target after it
+    was checked."""
+    ref = (
+        snapshot.id if len(snapshot.paths) != 1 else f"{snapshot.id}:{tree_path(snapshot.paths[0])}"
+    )
+    return (
+        "restore",
+        ref,
+        "--target",
+        str(target),
+        "--overwrite",
+        "never",
+        "--retry-lock",
+        RETRY_LOCK,
+    )
+
+
+def _snapshot(raw: Mapping[str, Any]) -> Snapshot:
+    """One entry of ``restic snapshots --json``."""
+    summary = raw.get("summary") or {}
+    return Snapshot(
+        id=raw["id"],
+        short_id=raw["short_id"],
+        time=datetime.fromisoformat(raw["time"]),
+        paths=tuple(raw.get("paths") or ()),
+        hostname=raw.get("hostname", ""),
+        files=summary.get("total_files_processed"),
+        size=summary.get("total_bytes_processed"),
+        tags=tuple(raw.get("tags") or ()),
+    )
+
+
+@dataclass
+class _BackupLines:
+    """What ``restic backup --json`` reported."""
+
+    progress: BackupListener
+    snapshot_id: str | None = None
+    data_added: int | None = None
+    warnings: list[str] = field(default_factory=list)
+
+    def hear(self, line: object) -> None:
+        if not isinstance(line, dict):
+            return
+        kind = line.get("message_type")
+        if kind == "status":
+            self.progress(BackupFigures(line.get("files_done", 0), line.get("total_files")))
+        elif kind == "summary":
+            self.snapshot_id = line.get("snapshot_id")
+            self.data_added = line.get("data_added")
+        elif kind == "error":
+            error = line.get("error") or {}
+            self.warnings.append(f"{line.get('item', '')}: {error.get('message', '')}")
+
+
+def _restore_figures(figures: RestoreProgress, line: object) -> RestoreProgress | None:
+    """``figures`` updated by one ``restic restore --json`` line, or None
+    when the line carries none."""
+    if not isinstance(line, dict) or line.get("message_type") not in ("status", "summary"):
+        return None
+    summary = line["message_type"] == "summary"
+    percent = 1.0 if summary else float(line.get("percent_done", figures.percent))
+    return RestoreProgress(
+        percent=percent,
+        bytes_done=line.get("bytes_restored", figures.bytes_done),
+        bytes_total=line.get("total_bytes", figures.bytes_total),
+        files_done=line.get("files_restored", figures.files_done),
+        files_total=line.get("total_files", figures.files_total),
+        seconds_left=0 if summary else _seconds_left(line, percent),
+    )
+
+
+def _seconds_left(line: Mapping[str, object], percent: float) -> int | None:
+    elapsed = line.get("seconds_elapsed")
+    if not isinstance(elapsed, int | float) or percent <= 0:
+        return None
+    return round(elapsed * (1 - percent) / percent)
 
 
 def _json_lines(lines: Iterable[str]) -> Iterator[Any]:

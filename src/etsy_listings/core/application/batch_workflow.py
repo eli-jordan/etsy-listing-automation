@@ -32,6 +32,7 @@ from etsy_listings.core.application.refusals import (
     BatchRowMissingError,
     BatchRowNotReviewableError,
     BatchRowUploadMissingError,
+    NothingToDeployError,
     NothingToRetryError,
     StagingMissingError,
 )
@@ -47,9 +48,11 @@ from etsy_listings.core.batches import (
     confirm,
     has_listing,
     retry_row,
+    reviewable,
     row_upload,
     standing,
 )
+from etsy_listings.core.engine.status import has_undeployed_changes
 from etsy_listings.core.errors import UserFacingError
 from etsy_listings.core.workspace.facts import WorkspaceFacts
 from etsy_listings.core.workspace.workspace import Workspace
@@ -233,6 +236,32 @@ def batch_row_upload(workspace: Workspace, batches: BatchStore, batch_id: str, r
     if not path.is_file():
         raise BatchRowUploadMissingError(row_id)
     return path
+
+
+def deployable(workspace: Workspace, row: BatchRow) -> bool:
+    """Whether a batch deploy takes this row (ADR-0059): marked reviewed,
+    its listing there to deploy and not drafting, with changes its last
+    apply did not deploy. A reviewed row already deployed stays out until
+    it is edited again."""
+    return (
+        row.reviewed
+        and reviewable(row)
+        and workspace.listing_file(row.name).is_file()
+        and has_undeployed_changes(workspace, row.name)
+    )
+
+
+def batch_deploy_listings(
+    workspace: Workspace, batches: BatchStore, batch_id: str
+) -> tuple[str, ...]:
+    """The listings a batch plan deploys, in the batch's row order: every
+    :func:`deployable` row. :class:`NothingToDeployError` when there are
+    none, so no empty plan is queued."""
+    batch = read_batch(workspace, batches, batch_id)
+    names = tuple(dict.fromkeys(row.name for row in batch.rows if deployable(workspace, row)))
+    if not names:
+        raise NothingToDeployError(batch.label)
+    return names
 
 
 @dataclass(frozen=True)

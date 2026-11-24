@@ -5,7 +5,7 @@ Written 2026-11-23 from the [specification](spec.md) and the
 series, in review (2026-11-24). This plan owns the delivery sequence. The spec
 owns requirements and the interactions document owns UI behaviour, so cite
 their sections rather than restating them.
-[ADR-0059](../../adr/0059-back-up-the-workspace-with-restic-from-the-app.md)
+[ADR-0060](../../adr/0060-back-up-the-workspace-with-restic-from-the-app.md)
 records the design choices.
 
 The clickable source is the **Admin · Workspace backup** board
@@ -29,7 +29,7 @@ components. Screenshots for comparison are in [`screenshots/`](screenshots/).
 
 ## Delivery sequence
 
-Commit the spec, ADR-0059, the interactions document, the screenshots, the
+Commit the spec, ADR-0060, the interactions document, the screenshots, the
 `workspace-backup` scenes (live and `-v1` to `-v3`), the two boards, the
 manifest and this plan as documentation before implementation. That commit is
 the stack base (`b5213bfd`). Each PR is based on the preceding tip. Every
@@ -701,6 +701,30 @@ Deviations recorded during implementation:
   first status line, because restic's `--json` leaves out a zero
   `files_restored` (PR 7). Fixed with `restore_progress_line` in its own
   commit.
+
+### After PR 8 — Set-up connects an existing backup
+
+Spec: *Set-up*. The seller decided that first-time set-up connects by itself
+when a destination is already a restic backup, with no separate button.
+
+- `backup_missing.existing_copies` reads the destinations: copies of one
+  repository share `config`'s bytes, and only a copy holding every file the
+  others hold may be the source, so the first copy back never expires files
+  from a fuller copy. Part of a copy, two repositories, and two copies that
+  each lack files are refused. `connect_existing` connects the first copy
+  that opens and passes a check, through Connect's own staging copy
+  (`copy_into_place`).
+- `backup_setup.prepare_set_up` checks everything before writing and says
+  whether it connects. The coordinator then holds the `connect` slot while
+  it copies, with `running.destination` naming the copy it is trying, as a
+  Connect does; it does not pause the job gate, because Connect does not.
+  A save that fails after the rename removes the copy, so set-up writes
+  nothing it is refused for.
+- `POST /api/backup/setup` answers `BackupSetUpResponse`: the overview plus
+  `connected` (`destination`, `snapshots`). A password the copy refuses is a
+  422 with `field_errors.password`. An existing backup's password has no
+  minimum length on the server.
+- `backup init` connects the same way and prints the destination.
 
 ## Shared gates
 
