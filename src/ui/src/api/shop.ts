@@ -1,4 +1,5 @@
 import { api } from "./client";
+import { refusalOf } from "./refusal";
 import type { components } from "./schema";
 
 /**
@@ -13,7 +14,6 @@ export type ShopConnections = components["schemas"]["ShopConnectionsResponse"];
 export type ConnectionRow = components["schemas"]["ConnectionRowBody"];
 export type ShopLookups = components["schemas"]["ShopLookupsResponse"];
 export type ReturnPolicyTerms = components["schemas"]["ReturnPolicyTermsBody"];
-type Refusal = components["schemas"]["ShopSaveRefusal"];
 
 export type ShopField = keyof ShopChanges;
 
@@ -41,17 +41,15 @@ export async function getShop(): Promise<ShopSettings> {
 }
 
 export async function saveShop(revision: string, changes: ShopChanges): Promise<SaveOutcome> {
-  const { data, error, response } = await api.PATCH("/api/admin/shop", {
+  const { data, error } = await api.PATCH("/api/admin/shop", {
     body: { revision, changes },
   });
   if (data) return { kind: "saved", shop: data };
-  const refusal = error as Refusal | undefined;
-  // shop.yaml's 412 still says `conflict`: the status tells it apart.
-  if (response.status === 412 && refusal?.kind === "conflict")
-    return { kind: "stale", message: refusal.message };
-  if (response.status === 422 && refusal?.kind === "invalid") {
+  const refusal = refusalOf(error);
+  if (refusal?.kind === "stale") return refusal;
+  if (refusal) {
     const fieldErrors = Object.fromEntries(
-      Object.entries(refusal.field_errors ?? {}).map(([key, message]) => [fieldOf(key), message]),
+      Object.entries(refusal.fieldErrors).map(([key, message]) => [fieldOf(key), message]),
     );
     return { kind: "refused", message: refusal.message, fieldErrors };
   }

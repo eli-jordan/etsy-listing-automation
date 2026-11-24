@@ -1100,10 +1100,10 @@ class ShopPatchRequest(BaseModel):
 
 
 class ShopSaveRefusal(BaseModel):
-    """A 412 (``conflict``: reload, then edit again) or a 422 (``invalid``:
+    """A 412 (``stale``: reload, then edit again) or a 422 (``invalid``:
     each refused dotted shop.yaml key to its reason). Nothing was written."""
 
-    kind: Literal["conflict", "invalid"]
+    kind: Literal["stale", "invalid"]
     message: str
     field_errors: dict[str, str] = Field(default_factory=dict)
 

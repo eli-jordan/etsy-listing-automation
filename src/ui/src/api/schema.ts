@@ -5389,7 +5389,7 @@ export interface components {
     };
     /**
      * ShopSaveRefusal
-     * @description A 412 (``conflict``: reload, then edit again) or a 422 (``invalid``:
+     * @description A 412 (``stale``: reload, then edit again) or a 422 (``invalid``:
      *     each refused dotted shop.yaml key to its reason). Nothing was written.
      */
     ShopSaveRefusal: {
@@ -5401,7 +5401,7 @@ export interface components {
        * Kind
        * @enum {string}
        */
-      kind: "conflict" | "invalid";
+      kind: "stale" | "invalid";
       /** Message */
       message: string;
     };

@@ -663,7 +663,8 @@ build their clients through the app's `ClientFactories` (`app_state.clients`).
 `core/application/shop_settings.py` owns whole-document validation,
 configured-identity retention and the editable key set. `core/workspace/revisions.py` owns exact-byte hashes and a per-path process
 lock around read, revision comparison, validation and atomic replace. A stale
-revision refuses with 412; invalid values refuse with field errors and 422.
+revision refuses with 412 and `kind: "stale"`; invalid values refuse with field
+errors and 422.
 Semantic no-ops leave the source bytes and file untouched, per ADR-0055.
 
 A successful save replaces the server workspace's defaults inside the same
@@ -1376,7 +1377,7 @@ today, from `destinations.planned_set_aside`, the same name sequence
 destination `names`, each snapshot its default `restore_target`
 (`backup_restore.default_target`), and the overview the
 `password_min_length` the set-up and Create forms pre-check. Set-up, Create,
-Connect and settings saves refuse with a `kind` that alone says what to do:
+Connect, settings and shop saves refuse with a `kind` that alone says what to do:
 `stale` (412) means reload, `conflict` (409) and `invalid` (422) carry the
 reason and field errors.
 

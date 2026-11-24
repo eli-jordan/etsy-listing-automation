@@ -7946,7 +7946,7 @@
         "type": "object"
       },
       "ShopSaveRefusal": {
-        "description": "A 412 (``conflict``: reload, then edit again) or a 422 (``invalid``:\neach refused dotted shop.yaml key to its reason). Nothing was written.",
+        "description": "A 412 (``stale``: reload, then edit again) or a 422 (``invalid``:\neach refused dotted shop.yaml key to its reason). Nothing was written.",
         "properties": {
           "field_errors": {
             "additionalProperties": {
@@ -7957,7 +7957,7 @@
           },
           "kind": {
             "enum": [
-              "conflict",
+              "stale",
               "invalid"
             ],
             "title": "Kind",

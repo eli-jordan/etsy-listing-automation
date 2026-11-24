@@ -31,9 +31,9 @@ describe("shop api", () => {
     });
   });
 
-  it("tells a conflict, field errors and a failure apart", async () => {
+  it("tells a stale file, field errors and a failure apart by kind", async () => {
     vi.spyOn(api, "PATCH").mockResolvedValueOnce(
-      answer(412, undefined, { kind: "conflict", message: "changed", field_errors: {} }),
+      answer(412, undefined, { kind: "stale", message: "changed", field_errors: {} }),
     );
     await expect(saveShop("r1", {})).resolves.toEqual({ kind: "stale", message: "changed" });
 
