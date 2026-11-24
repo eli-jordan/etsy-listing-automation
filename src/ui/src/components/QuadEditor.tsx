@@ -1,5 +1,6 @@
 import { type ReactNode, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import type { BoundingBox, Point } from "../types";
+import { useIsPhone } from "../phone/usePhone";
 import { cornerDragged, labelAnchor, menuPlacement, moved, nudged } from "./quadGeometry";
 
 interface Props {
@@ -147,6 +148,49 @@ function positionMenu(el: HTMLElement, menu: Menu): void {
   Object.assign(el.style, { left: `${placed.x}px`, top: `${placed.y}px` });
 }
 
+/** The right-click menu's actions as a row under the photo, on a phone: a
+ * finger has no right button, and a long press is the browser's own. */
+function BoxActions({
+  onAdd,
+  onDuplicate,
+  onBringToFront,
+  onDelete,
+}: {
+  onAdd: (() => void) | undefined;
+  onDuplicate: (() => void) | undefined;
+  onBringToFront: (() => void) | undefined;
+  onDelete: (() => void) | undefined;
+}) {
+  return (
+    <div className="quad-editor__phone-actions" role="toolbar" aria-label="Boxes">
+      {onAdd && (
+        <button type="button" className="btn btn-primary" onClick={onAdd}>
+          + Add box
+        </button>
+      )}
+      {onDuplicate && (
+        <button type="button" className="btn btn-secondary" onClick={onDuplicate}>
+          Duplicate
+        </button>
+      )}
+      {onBringToFront && (
+        <button type="button" className="btn btn-secondary" onClick={onBringToFront}>
+          Bring to front
+        </button>
+      )}
+      {onDelete && (
+        <button
+          type="button"
+          className="btn btn-secondary quad-editor__menu-danger"
+          onClick={onDelete}
+        >
+          Delete
+        </button>
+      )}
+    </div>
+  );
+}
+
 export function QuadEditor({
   overlay,
   interactive = true,
@@ -167,6 +211,7 @@ export function QuadEditor({
   labelSuggestions,
 }: Props) {
   const svgRef = useRef<SVGSVGElement>(null);
+  const phone = useIsPhone();
   // Purely a gate on drawing the overlay: the SVG is stretched over the image,
   // so it has no size of its own until the image has laid out. Deliberately
   // not a measurement -- `space` is where coordinates come from.
@@ -273,7 +318,7 @@ export function QuadEditor({
   const chromeVisible = (index: number): boolean =>
     outlines === "all" || (outlines === "selected" && index === selectedIndex);
 
-  return (
+  const canvas = (
     <div
       className="quad-editor"
       tabIndex={0}
@@ -329,6 +374,24 @@ export function QuadEditor({
                       r={Math.max(space[0], space[1]) * 0.015}
                       className="quad-editor__handle"
                       pointerEvents={interactive ? undefined : "none"}
+                      onPointerDown={handleCornerPointerDown(pointIndex)}
+                    />
+                  ))}
+                {/* A finger-sized grip over each drawn dot, phone only: an
+                    invisible stroke whose width is in screen pixels
+                    (phone/calibrator.css), so it stays ~44px across at any
+                    photo size while the dot keeps its look. */}
+                {active &&
+                  phone &&
+                  interactive &&
+                  box.map((p, pointIndex) => (
+                    <circle
+                      key={pointIndex}
+                      cx={p.x}
+                      cy={p.y}
+                      r={Math.max(space[0], space[1]) * 0.015}
+                      className="quad-editor__grip"
+                      data-corner={pointIndex}
                       onPointerDown={handleCornerPointerDown(pointIndex)}
                     />
                   ))}
@@ -399,7 +462,7 @@ export function QuadEditor({
         </div>
       )}
 
-      {onAddBox && interactive && (
+      {onAddBox && interactive && !phone && (
         <button type="button" className="btn btn-primary quad-editor__add" onClick={onAddBox}>
           + Add box
         </button>
@@ -430,5 +493,19 @@ export function QuadEditor({
         </div>
       )}
     </div>
+  );
+  // On a phone the box actions sit under the photo, outside the canvas: the
+  // overlay stretches over everything inside it.
+  if (!phone || !interactive || !(onAddBox || hasBoxMenu)) return canvas;
+  return (
+    <>
+      {canvas}
+      <BoxActions
+        onAdd={onAddBox}
+        onDuplicate={boxes[selectedIndex] ? onDuplicateSelected : undefined}
+        onBringToFront={boxes[selectedIndex] ? onBringSelectedToFront : undefined}
+        onDelete={boxes[selectedIndex] ? onDeleteSelected : undefined}
+      />
+    </>
   );
 }
