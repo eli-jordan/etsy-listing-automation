@@ -31,20 +31,15 @@ export function MissingRepositoryBanner({
         <strong>{warning.message}</strong> Create a new, empty repository, or connect one you
         already have, such as a copy in iCloud Drive.
       </span>
-      <button
-        type="button"
-        className="btn btn-secondary bk-banner__btn"
-        onClick={() => onAction("create")}
-      >
-        Create a new repository
-      </button>
-      <button
-        type="button"
-        className="btn btn-secondary bk-banner__btn"
-        onClick={() => onAction("connect")}
-      >
-        Connect an existing repository
-      </button>
+      {/* Stacked, so two actions fit beside a long path at 1280 px. */}
+      <div className="bk-banner__actions">
+        <button type="button" className="btn btn-secondary" onClick={() => onAction("create")}>
+          Create a new repository
+        </button>
+        <button type="button" className="btn btn-secondary" onClick={() => onAction("connect")}>
+          Connect an existing repository
+        </button>
+      </div>
     </div>
   );
 }
@@ -52,7 +47,7 @@ export function MissingRepositoryBanner({
 const TEXT = {
   create: {
     title: "Create a new backup repository",
-    lede: "An empty repository for new backups. The next backup is a full one, and existing copies in your destinations are reported as changed until you repair them.",
+    lede: "An empty repository for new backups; the next backup is a full one. If a destination still holds a copy of your old backups, connect that copy instead.",
     folder: "New backup storage folder",
     submit: "Create and back up now",
     working: "Creating the repository…",
