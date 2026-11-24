@@ -3,6 +3,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import * as batchesApi from "../api/batches";
 import * as listingsApi from "../api/listings";
+import * as runsApi from "../api/runs";
+import { runSummary } from "../test/helpers";
 import type { BatchDetail, BatchRow } from "../api/batches";
 import type { ListingSummary, WorkflowStep } from "../types";
 import { BatchSummaryPage, POLL_MS } from "./BatchSummaryPage";
@@ -19,11 +21,13 @@ function row(name: string, over: Partial<BatchRow> = {}): BatchRow {
     ai_steps: [],
     ai_error: null,
     queue_position: null,
+    waiting_for_backup: false,
     proposal: null,
     stale_reasons: [],
     reviewed: false,
     reviewable: true,
     deleted: false,
+    deployable: false,
     ...over,
   };
 }
@@ -90,6 +94,7 @@ function renderPage() {
       <Routes>
         <Route path="/batches/:id" element={<BatchSummaryPage />} />
         <Route path="/listing-templates" element={<p>Listing templates page</p>} />
+        <Route path="/listings/deploy/:runId" element={<p>Deploy review page</p>} />
       </Routes>
     </MemoryRouter>,
   );
@@ -99,6 +104,11 @@ function rowFor(name: string): HTMLElement {
   const found = screen.getAllByText(name)[0]?.closest("tr");
   if (!found) throw new Error(`no row ${name}`);
   return found;
+}
+
+async function findRow(name: string): Promise<HTMLElement> {
+  await screen.findAllByText(name);
+  return rowFor(name);
 }
 
 function counts(): string {
@@ -120,6 +130,25 @@ describe("BatchSummaryPage", () => {
     await screen.findByText("Brief ready");
     expect(screen.getByText("Start AI Mode in the listing")).toBeInTheDocument();
     expect(screen.queryByText("Ready to review")).not.toBeInTheDocument();
+  });
+
+  it("says a queued row is waiting for backup while a backup holds the queue", async () => {
+    vi.spyOn(batchesApi, "getBatch").mockResolvedValue(
+      batch([
+        row("night-hike-club", {
+          ai: "queued",
+          queue_position: 1,
+          waiting_for_backup: true,
+          reviewable: false,
+        }),
+      ]),
+    );
+    renderPage();
+
+    expect(
+      await within(await findRow("night-hike-club")).findByText("Queued, waiting for backup"),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/in line/)).not.toBeInTheDocument();
   });
 
   it("shows the queue mid-run: counts, each row's AI and its proposal (UI doc §7)", async () => {
@@ -416,5 +445,43 @@ describe("BatchSummaryPage, a created listing's name", () => {
     expect(await within(row).findByText("comfort-colors-1717")).toBeInTheDocument();
     expect(within(row).getByText("4 colours")).toBeInTheDocument();
     expect(within(row).queryByRole("link", { name: "Open" })).toBeNull();
+  });
+
+  it("deploys the batch's reviewed rows with changes, on the shared review page", async () => {
+    vi.spyOn(batchesApi, "getBatch").mockResolvedValue(
+      batch(
+        [
+          row("night-hike-club", { reviewed: true, deployable: true }),
+          row("after-rain-trail-2", { reviewed: true }),
+          row("lake-loop"),
+        ],
+        { status: "in_review" },
+      ),
+    );
+    vi.spyOn(runsApi, "currentBatchRun").mockResolvedValue(null);
+    const create = vi.spyOn(runsApi, "createRun").mockResolvedValue({
+      kind: "created",
+      run: runSummary({ id: "plan-1", scope: "batch", batch_id: "b1" }),
+    });
+    renderPage();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Deploy reviewed (1)" }));
+
+    expect(create).toHaveBeenCalledWith({ kind: "plan", scope: "batch", batch_id: "b1" });
+    expect(await screen.findByText("Deploy review page")).toBeInTheDocument();
+  });
+
+  it("offers the way back to this batch's deploy while it runs", async () => {
+    vi.spyOn(batchesApi, "getBatch").mockResolvedValue(
+      batch([row("night-hike-club", { reviewed: true })], { status: "in_review" }),
+    );
+    vi.spyOn(runsApi, "currentBatchRun").mockResolvedValue(
+      runSummary({ id: "plan-1", scope: "batch", batch_id: "b1", phase: "planning" }),
+    );
+    renderPage();
+
+    expect(await screen.findByRole("button", { name: "Deploy reviewed (0)" })).toBeDisabled();
+    fireEvent.click(await screen.findByRole("button", { name: /View batch progress/ }));
+    expect(await screen.findByText("Deploy review page")).toBeInTheDocument();
   });
 });

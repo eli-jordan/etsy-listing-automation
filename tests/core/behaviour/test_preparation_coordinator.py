@@ -1,8 +1,12 @@
 from __future__ import annotations
 
+import threading
+import time
+
 import pytest
 from PIL import Image, ImageDraw
 
+from etsy_listings.core.application.job_gate import JobGate
 from etsy_listings.core.application.preparation.coordinator import (
     PreparationRefusedError,
     PreparationRequest,
@@ -1424,3 +1428,107 @@ def test_a_queued_job_refuses_a_rename_before_the_move(workspace_root):
 
     assert moved == []
     coordinator.close()
+
+
+# -------------------------------------------------------- pausing for a backup
+
+
+def _submitted(coordinator, workspace, name):
+    revision = CalibrationStore(workspace).read(name).revision
+    return coordinator.submit(name, PreparationRequest(config_revision=revision, request_id=name))
+
+
+def test_while_paused_no_job_starts_and_resume_runs_them_in_submission_order(workspace_root):
+    """Workspace-backup spec, *Backup run* steps 2 and 4."""
+    from tests.support.marigold import PreparationRuntime
+
+    workspace = template(workspace_root)
+    template(workspace_root, "second")
+    runtime = PreparationRuntime()
+    started = []
+
+    def checkpoint(identity, _step):
+        if identity not in started:
+            started.append(identity)
+
+    gate = JobGate()
+    gate.pause()
+    coordinator = Preparations(workspace, runtime=runtime, checkpoint=checkpoint, gate=gate)
+    first = _submitted(coordinator, workspace, "shirt")
+    second = _submitted(coordinator, workspace, "second")
+    coordinator.start()
+    try:
+        time.sleep(0.3)
+        jobs = [coordinator.status(job.id) for job in (first, second)]
+        assert [job.phase for job in jobs] == ["queued", "queued"]
+        assert [coordinator.waiting_for_backup(job) for job in jobs] == [True, True]
+        assert runtime.workers == [], "a worker started while the gate was paused"
+
+        gate.resume()
+        assert wait_terminal(coordinator, first.id).phase == "completed"
+        assert wait_terminal(coordinator, second.id).phase == "completed"
+    finally:
+        coordinator.close()
+
+    assert started[:2] == [first.id, second.id]
+    assert not coordinator.waiting_for_backup(coordinator.status(first.id))
+
+
+def test_a_backup_waits_for_the_prepare_job_in_flight_and_names_it(workspace_root):
+    from tests.support.marigold import PreparationRuntime
+
+    workspace = template(workspace_root)
+    fitting = threading.Event()
+    release = threading.Event()
+
+    def checkpoint(_identity, step):
+        if step == "fitting" and not fitting.is_set():
+            fitting.set()
+            assert release.wait(15)
+
+    gate = JobGate()
+    coordinator = Preparations(
+        workspace, runtime=PreparationRuntime(), checkpoint=checkpoint, gate=gate
+    )
+    job = _submitted(coordinator, workspace, "shirt")
+    coordinator.start()
+    named = []
+    result = []
+    try:
+        assert fitting.wait(15)
+        gate.pause()
+        waiter = threading.Thread(
+            target=lambda: result.append(gate.wait_idle(waiting=named.append)), daemon=True
+        )
+        waiter.start()
+        waiter.join(0.2)
+        assert waiter.is_alive(), "the backup did not wait for the job in flight"
+        release.set()
+        waiter.join(30)
+        assert result == [True]
+        assert named == ["Prepare job for shirt"]
+        assert coordinator.status(job.id).phase in {"completed", "running"}
+    finally:
+        release.set()
+        gate.resume()
+        wait_terminal(coordinator, job.id)
+        coordinator.close()
+
+
+def test_shutdown_during_a_pause_keeps_the_held_job_queued_for_the_next_start(workspace_root):
+    """As shutdown leaves queued jobs today: the record stays, resumable."""
+    from tests.support.marigold import PreparationRuntime
+
+    workspace = template(workspace_root)
+    runtime = PreparationRuntime()
+    gate = JobGate()
+    gate.pause()
+    coordinator = Preparations(workspace, runtime=runtime, gate=gate)
+    job = _submitted(coordinator, workspace, "shirt")
+    coordinator.start()
+
+    gate.stop()
+    coordinator.close()
+
+    assert coordinator.status(job.id).phase == "queued"
+    assert runtime.workers == []

@@ -76,6 +76,7 @@ describe("ListingsPage", () => {
         seen: false,
         reviewed_run_id: null,
         created_at: "2026-09-21T10:00:00Z",
+        waiting_for_backup: false,
       },
     });
     renderPage();
@@ -102,6 +103,7 @@ describe("ListingsPage", () => {
       seen: false,
       reviewed_run_id: null,
       created_at: "2026-09-21T10:00:00Z",
+      waiting_for_backup: false,
       events: [],
     });
     renderPage();
@@ -147,6 +149,7 @@ describe("ListingsPage", () => {
       seen: false,
       reviewed_run_id: "batch-plan",
       created_at: "2026-09-21T10:00:00Z",
+      waiting_for_backup: false,
     });
     renderPage();
 

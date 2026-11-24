@@ -70,6 +70,7 @@ def job_response(preparations: Preparations, job: Job) -> PreparationJobResponse
         last_event_sequence=job.last_event_sequence,
         queue_position=queued.index(job.id) + 1 if job.id in queued else None,
         engine_version=job.engine_version,
+        waiting_for_backup=preparations.waiting_for_backup(job),
     )
 
 

@@ -93,3 +93,22 @@ def test_writing_a_second_value_keeps_the_first(tmp_path: Path) -> None:
 
     content = (tmp_path / layout.ENV_FILE).read_text(encoding="utf-8")
     assert content == "ETSY_KEYSTRING=abc123\nETSY_SHARED_SECRET=s3cret\n"
+
+
+def test_a_failed_env_write_leaves_the_previous_file_whole(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """``.env`` holds the only copy of the backup password on this machine, so
+    a write that fails part way must not leave it truncated (workspace-backup
+    plan, PR 2): the new content goes to a temporary that replaces the file."""
+    scaffold.write_env_value(tmp_path, "ETSY_LISTINGS_BACKUP_PASSWORD", "only-copy")
+
+    def refuse(self: Path, target: Path) -> Path:
+        raise OSError("disk full")
+
+    monkeypatch.setattr(Path, "replace", refuse)
+    with pytest.raises(OSError, match="disk full"):
+        scaffold.write_env_value(tmp_path, "PRINTIFY_API_TOKEN", "abc")
+
+    assert (tmp_path / layout.ENV_FILE).read_bytes() == b"ETSY_LISTINGS_BACKUP_PASSWORD=only-copy\n"
+    assert [path.name for path in tmp_path.iterdir()] == [layout.ENV_FILE]

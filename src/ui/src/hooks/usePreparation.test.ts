@@ -22,6 +22,7 @@ describe("usePreparation", () => {
       error: null,
       last_event_sequence: 3,
       queue_position: null,
+      waiting_for_backup: false,
       engine_version: "engine",
     };
     const get = vi.spyOn(api, "getPreparation").mockResolvedValue({ ...READY, active_job: job });

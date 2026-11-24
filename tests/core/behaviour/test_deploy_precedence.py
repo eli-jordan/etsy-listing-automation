@@ -38,6 +38,7 @@ from etsy_listings.core.application.ai.registry import AiRun
 from etsy_listings.core.application.deploy.deployments import Deployments
 from etsy_listings.core.application.deploy.events import TERMINAL_PHASES
 from etsy_listings.core.application.deploy.registry import ListingApply, ListingPlan, Run
+from etsy_listings.core.application.job_gate import JobGate
 from etsy_listings.core.application.refusals import ListingDeployingError
 from etsy_listings.core.batches import BatchRecords, BatchStore, StagingStore
 from etsy_listings.core.clients.printify.fakes import FakeCatalogClient
@@ -77,6 +78,8 @@ class Host:
         self.workspace = workspace
         self.staging = StagingStore(workspace)
         self.batches = BatchStore(workspace)
+        self.gate = JobGate()
+        """The backup's pause both coordinators share, as the server's do."""
         market = seeded_market()
         self.ai = AiCoordinator(
             workspace,
@@ -84,8 +87,9 @@ class Host:
             batches=self.batches,
             providers=lambda _workspace, _ai: [provider],
             market_client=lambda _workspace: market,
+            gate=self.gate,
         )
-        self.deployments = Deployments(workspace, deploys, ai=self.ai)
+        self.deployments = Deployments(workspace, deploys, ai=self.ai, gate=self.gate)
 
     def batch(self, *names: str) -> str:
         files = [(f"{name}.png", png(i + 1)) for i, name in enumerate(names)]
@@ -266,3 +270,36 @@ def test_a_manual_run_is_stopped_and_a_new_one_refused_while_the_deploy_holds_th
     assert (started.phase, provider.cancelled) == ("cancelled", ["queries"])
     assert _finished(deploy) == "ready"
     assert isinstance(host.ai.start_run(FIXTURE_LISTING, draft_brief=False), AiRun)
+
+
+def test_a_deploy_waiting_for_an_ai_run_to_stop_finishes_while_a_backup_pauses(
+    host: Host, provider: ChainProvider
+) -> None:
+    """Workspace-backup plan, PR 1: a pause stops new intake and then waits,
+    so a deploy already yielding to an AI run (ADR-0050) needs nothing the
+    pause holds, and the backup's wait ends once both have finished."""
+    provider.gate("queries")
+    run = host.ai.start_run(FIXTURE_LISTING, draft_brief=False)
+    assert isinstance(run, AiRun)
+    wait_for(provider.started["queries"].is_set)
+    named: list[str] = []
+    result: list[bool] = []
+
+    # Hold the run's condition so the deploy waits inside its yield, asking
+    # the run to stop, while the pause and the wait for quiet begin.
+    with run.condition:
+        deploy = host.deploy("plan", FIXTURE_LISTING)
+        wait_for(lambda: host.ai.registry.deploying(FIXTURE_LISTING))
+        host.gate.pause()
+        waiter = threading.Thread(
+            target=lambda: result.append(host.gate.wait_idle(waiting=named.append)), daemon=True
+        )
+        waiter.start()
+        wait_for(lambda: bool(named))
+    waiter.join(20)
+
+    assert result == [True], "the backup's wait for quiet never ended"
+    assert run.phase == "cancelled"
+    assert _finished(deploy) == "ready"
+    assert named == [f"AI run for {FIXTURE_LISTING}", f"Deploy plan for {FIXTURE_LISTING}"]
+    host.gate.resume()

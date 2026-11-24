@@ -54,9 +54,14 @@ export function AiSeoControl({
 
       {loading && (
         <div className="seo-ai-mode-progress">
-          <span className="seo-ai-mode-elapsed">
-            Generating for {formatElapsed(elapsed)} seconds
-          </span>
+          {mode.run.phase === "queued" ? (
+            // Held by a workspace backup's pause (plan decision P4).
+            <span className="seo-ai-mode-elapsed">Waiting for backup</span>
+          ) : (
+            <span className="seo-ai-mode-elapsed">
+              Generating for {formatElapsed(elapsed)} seconds
+            </span>
+          )}
           {mode.run.origin === "batch" ? (
             // No per-row cancel (spec, *Cancellation and deletion*): the
             // batch summary's Cancel batch stops it.

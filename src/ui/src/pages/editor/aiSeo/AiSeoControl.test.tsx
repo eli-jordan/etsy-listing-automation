@@ -58,6 +58,20 @@ describe("AiSeoControl", () => {
     );
   });
 
+  it("says a run a backup holds is waiting for backup, and offers Cancel", () => {
+    const cancel = vi.fn();
+    render(
+      <AiSeoControl
+        mode={mode({ phase: "loading", cancel, run: aiRunStub({ phase: "queued", busy: true }) })}
+      />,
+    );
+
+    expect(screen.getByText("Waiting for backup")).toBeInTheDocument();
+    expect(screen.queryByText(/Generating for/)).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(cancel).toHaveBeenCalled();
+  });
+
   it("renders an enabled AI Mode button when ready and idle", () => {
     render(<AiSeoControl mode={mode()} />);
     const button = screen.getByRole("button", { name: /AI Mode/i });

@@ -26,6 +26,7 @@ from etsy_listings.core.clients.printify.fakes import FakePrintifyClient
 from etsy_listings.core.clients.printify.models import Shop
 from etsy_listings.core.config.secrets import (
     ANTHROPIC_KEY_VAR,
+    BACKUP_PASSWORD_VAR,
     ETSY_KEYSTRING_VAR,
     ETSY_SHARED_SECRET_VAR,
     PRINTIFY_TOKEN_VAR,
@@ -67,6 +68,18 @@ def _token_store(root: Path) -> TokenStore:
 # ---------------------------------------------------------------- precedence
 
 
+def test_the_backup_password_round_trips_literally(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv(BACKUP_PASSWORD_VAR, raising=False)
+    monkeypatch.setenv("BACKUP_FIXTURE_PART", "expanded")
+    password = '  ${BACKUP_FIXTURE_PART} # "back\\up"  '
+
+    credentials.store(tmp_path, credentials.BACKUP_PASSWORD, (password,))
+
+    assert credentials.stored(tmp_path, BACKUP_PASSWORD_VAR) == password
+
+
 def test_a_credential_in_the_environment_wins_over_the_workspace_file(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -83,6 +96,16 @@ def test_the_workspace_file_answers_when_the_environment_is_silent(
     monkeypatch.delenv(PRINTIFY_TOKEN_VAR, raising=False)
 
     assert credentials.stored(tmp_path, PRINTIFY_TOKEN_VAR) == "from-file"
+
+
+def test_the_backup_password_is_found_like_any_other_credential(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv(BACKUP_PASSWORD_VAR, raising=False)
+
+    credentials.store(tmp_path, credentials.BACKUP_PASSWORD, ("correct horse battery",))
+
+    assert credentials.stored(tmp_path, BACKUP_PASSWORD_VAR) == "correct horse battery"
 
 
 def test_half_an_app_key_pair_is_reported_half_present(tmp_path: Path) -> None:

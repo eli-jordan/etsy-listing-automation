@@ -1,8 +1,8 @@
 """The runs resource's six endpoints (ADR-0041, decision 7).
 
 ```
-POST /api/runs {kind, listings, expect?} -> 202 RunSummary | 409 {active_run}
-GET /api/runs?listing= active and recent runs for a listing
+POST /api/runs {kind, scope, listings?, batch_id?, expect?} -> 202 RunSummary | 409 {active_run}
+GET /api/runs?listing=|scope=[&batch=] active and recent runs for a listing or scope
 GET /api/runs/{id} RunDetail: phase, listings, events so far
 GET /api/runs/{id}/events text/event-stream; replays after Last-Event-ID
 DELETE /api/runs/{id} cancel a queued or running plan; 409 for apply
@@ -42,9 +42,12 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 
+from etsy_listings.core.application import batch_workflow
 from etsy_listings.core.application.deploy.deployments import Deployments
 from etsy_listings.core.application.deploy.events import AnyRunEvent, RunScope
 from etsy_listings.core.application.deploy.registry import (
+    BatchApply,
+    BatchPlan,
     Conflict,
     ListingApply,
     ListingPlan,
@@ -54,9 +57,12 @@ from etsy_listings.core.application.deploy.registry import (
     WorkspacePlan,
 )
 from etsy_listings.core.workspace.workspace import Workspace
+from etsy_listings.server.api import app_state
 from etsy_listings.server.api.schemas import (
     ApplyRunDetail,
     ApplyRunSummary,
+    BatchApplyRequest,
+    BatchPlanRequest,
     CreateRunRequest,
     ListingApplyRequest,
     ListingPlanRequest,
@@ -96,31 +102,36 @@ def target(request: Request, run_id: str) -> Target:
     return Target(deployments=deployments, run=run)
 
 
-def _summary(run: Run) -> RunSummary:
+def _summary(run: Run, deployments: Deployments) -> RunSummary:
+    waiting = deployments.waiting_for_backup(run)
     if run.kind == "plan":
         return PlanRunSummary(
             id=run.id,
             kind="plan",
             scope=run.scope,
+            batch_id=run.batch_id,
             listings=list(run.listings),
             phase=run.plan_phase,
             seen=run.seen,
             created_at=run.created_at,
+            waiting_for_backup=waiting,
         )
     return ApplyRunSummary(
         id=run.id,
         kind="apply",
         scope=run.scope,
+        batch_id=run.batch_id,
         listings=list(run.listings),
         phase=run.apply_phase,
         seen=run.seen,
         reviewed_run_id=run.reviewed_run_id,
         created_at=run.created_at,
+        waiting_for_backup=waiting,
     )
 
 
-def _detail(run: Run) -> RunDetail:
-    summary = _summary(run)
+def _detail(run: Run, deployments: Deployments) -> RunDetail:
+    summary = _summary(run, deployments)
     if isinstance(summary, PlanRunSummary):
         return PlanRunDetail(**summary.model_dump(), events=list(run.events))
     return ApplyRunDetail(**summary.model_dump(), events=list(run.events))
@@ -130,40 +141,55 @@ def _detail(run: Run) -> RunDetail:
 def create_run(request: Request, body: CreateRunRequest) -> RunSummary | JSONResponse:
     """A ``409`` names the run already holding one of these listings, so the
     caller can reattach to it (``GET /api/runs/{active_run}``) instead of
-    retrying into the same refusal. A workspace apply that is not exactly
-    its review is a ``409`` too, carrying the refusal's message."""
+    retrying into the same refusal. A workspace or batch apply that is not
+    exactly its review is a ``409`` too, carrying the refusal's message, and
+    so is a batch plan with nothing to deploy; a batch nobody holds is a
+    ``404``."""
     workspace: Workspace = request.app.state.workspace
     command: RunCommand
     if isinstance(body, ListingPlanRequest):
         command = ListingPlan(tuple(body.listings))
     elif isinstance(body, WorkspacePlanRequest):
         command = WorkspacePlan(tuple(workspace.listing_names()))
+    elif isinstance(body, BatchPlanRequest):
+        listings = batch_workflow.batch_deploy_listings(
+            workspace, app_state.batch_store(request), body.batch_id
+        )
+        command = BatchPlan(body.batch_id, listings)
     elif isinstance(body, ListingApplyRequest):
         command = ListingApply(tuple(body.listings), body.expect)
+    elif isinstance(body, BatchApplyRequest):
+        command = BatchApply(body.batch_id, tuple(body.listings), body.expect, body.reviewed_run_id)
     else:
         assert isinstance(body, WorkspaceApplyRequest)  # closed request union
         command = WorkspaceApply(tuple(body.listings), body.expect, body.reviewed_run_id)
 
-    result = _deployments(request).submit(command)
+    deployments = _deployments(request)
+    result = deployments.submit(command)
     if isinstance(result, Conflict):
         return JSONResponse(status_code=409, content={"active_run": result.active_run})
-    return _summary(result)
+    return _summary(result, deployments)
 
 
 @router.get("", response_model=list[RunSummary])
 def list_runs(
-    request: Request, listing: str | None = None, scope: RunScope | None = None
+    request: Request,
+    listing: str | None = None,
+    scope: RunScope | None = None,
+    batch: str | None = None,
 ) -> list[RunSummary]:
     """``listing`` narrows to that listing's current run (active, or finished
-    and not yet superseded -- decision 7's retention). Omitted, every run this
-    process still remembers, for a future workspace-wide view."""
-    runs = _deployments(request).runs(listing=listing, scope=scope)
-    return [_summary(run) for run in runs]
+    and not yet superseded -- decision 7's retention); ``scope=batch&batch=``
+    to that listing batch's. Omitted, every run this process still
+    remembers, for a future workspace-wide view."""
+    deployments = _deployments(request)
+    runs = deployments.runs(listing=listing, scope=scope, batch=batch)
+    return [_summary(run, deployments) for run in runs]
 
 
 @router.get("/{run_id}", response_model=RunDetail)
 def get_run(target: Annotated[Target, Depends(target)]) -> RunDetail:
-    return _detail(target.run)
+    return _detail(target.run, target.deployments)
 
 
 @router.delete("/{run_id}", response_model=RunSummary)
@@ -174,13 +200,13 @@ def cancel_run(target: Annotated[Target, Depends(target)]) -> RunSummary:
     result = target.deployments.cancel(target.run.id)
     if result is False:
         raise HTTPException(status_code=409, detail="this run cannot be cancelled")
-    return _summary(target.run)
+    return _summary(target.run, target.deployments)
 
 
 @router.post("/{run_id}/seen", response_model=RunSummary)
 def mark_seen(target: Annotated[Target, Depends(target)]) -> RunSummary:
     target.run.mark_seen()
-    return _summary(target.run)
+    return _summary(target.run, target.deployments)
 
 
 def last_event_id(request: Request) -> int:

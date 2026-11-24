@@ -37,6 +37,16 @@ def prerequisite_missing() -> Callable[[str], NoReturn]:
     return _missing
 
 
+@pytest.fixture(scope="session")
+def restic_binary(prerequisite_missing: Callable[[str], NoReturn]) -> Path:
+    """The pinned restic for tests marked ``restic`` (workspace-backup plan,
+    P3), named by ``ETSY_LISTINGS_RESTIC_BINARY``; skipped when it is absent."""
+    named = os.environ.get("ETSY_LISTINGS_RESTIC_BINARY")
+    if not named or not Path(named).is_file():
+        prerequisite_missing("restic not found: set ETSY_LISTINGS_RESTIC_BINARY to restic 0.19.1")
+    return Path(named)
+
+
 @pytest.fixture
 def workspace_root(tmp_path: Path) -> Path:
     """A writable copy of the fixture workspace, so tests can write lockfiles and

@@ -37,10 +37,15 @@ def _designs(workspace_root: Path) -> None:
 
 
 def _design(workspace_root: Path) -> Any:
-    document = yaml.safe_load(
-        (workspace_root / "listings" / "take-a-hike" / "listing.yaml").read_text(encoding="utf-8")
-    )
-    return document.get("design")
+    """The saved design, or None while the server renames a new copy into
+    place: Windows refuses to open a file mid-replace."""
+    try:
+        text = (workspace_root / "listings" / "take-a-hike" / "listing.yaml").read_text(
+            encoding="utf-8"
+        )
+    except PermissionError:
+        return None
+    return yaml.safe_load(text).get("design")
 
 
 def _wait_for_design(page: Any, workspace_root: Path, expected: object) -> None:

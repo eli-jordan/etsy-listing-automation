@@ -26,6 +26,7 @@ import type { ListingSummary } from "../types";
 import { clock, dayMonth } from "../dates";
 import { EditableName } from "../components/EditableName";
 import { AiWorkflowIndicator } from "./editor/aiSeo/AiWorkflowIndicator";
+import { BatchDeployReviewedButton } from "./batchDeploy/BatchDeployReviewedButton";
 
 /**
  * The batch summary (UI doc §7; the `batch-summary` frame): the batch's one
@@ -147,7 +148,10 @@ function AiCell({ row }: { row: BatchRow }) {
       return (
         <span className="bc-status bc-status--info">
           <ClockIcon className="bc-icon" />
-          Queued, {place(row.queue_position ?? 1)} in line
+          {/* A workspace backup holds the queue (plan decision P4). */}
+          {row.waiting_for_backup
+            ? "Queued, waiting for backup"
+            : `Queued, ${place(row.queue_position ?? 1)} in line`}
         </span>
       );
     case "failed":
@@ -429,6 +433,11 @@ export function BatchSummaryPage() {
               </strong>{" "}
               reviewed
             </span>
+            <BatchDeployReviewedButton
+              batchId={id}
+              deployable={rows.filter((row) => row.deployable).length}
+              onError={setError}
+            />
             {needRetry > 0 && (
               <button
                 type="button"
