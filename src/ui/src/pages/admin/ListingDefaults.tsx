@@ -320,7 +320,7 @@ function held(shop: ShopSettings, pending: ShopChanges): ShopSettings {
 
 function answerFor(outcome: SaveOutcome | null): Answer {
   if (outcome?.kind === "saved") return "saved";
-  return outcome?.kind === "invalid" ? "refused" : "failed";
+  return outcome?.kind === "refused" ? "refused" : "failed";
 }
 
 function lookupStatus(lookups: Lookups): string {

@@ -1,11 +1,11 @@
 # Workspace backup implementation plan
 
 Written 2026-11-23 from the [specification](spec.md) and the
-[interactions document](interactions.md). Status: in progress as a stacked PR
-series. This plan owns the delivery sequence. The spec owns requirements and
-the interactions document owns UI behaviour, so cite their sections rather
-than restating them.
-[ADR-0059](../../adr/0059-back-up-the-workspace-with-restic-from-the-app.md)
+[interactions document](interactions.md). Status: implemented as a stacked PR
+series, in review (2026-11-24). This plan owns the delivery sequence. The spec
+owns requirements and the interactions document owns UI behaviour, so cite
+their sections rather than restating them.
+[ADR-0060](../../adr/0060-back-up-the-workspace-with-restic-from-the-app.md)
 records the design choices.
 
 The clickable source is the **Admin · Workspace backup** board
@@ -29,23 +29,24 @@ components. Screenshots for comparison are in [`screenshots/`](screenshots/).
 
 ## Delivery sequence
 
-Commit the spec, ADR-0059, the interactions document, the screenshots, the
+Commit the spec, ADR-0060, the interactions document, the screenshots, the
 `workspace-backup` scenes (live and `-v1` to `-v3`), the two boards, the
 manifest and this plan as documentation before implementation. That commit is
-the stack base. Record it and each PR link here when execution starts. Each PR
-is based on the preceding tip.
+the stack base (`b5213bfd`). Each PR is based on the preceding tip. Every
+delegate ran on `claude-opus-5-5` at medium effort (P0). Each PR's CI and the
+GitHub e2e workflow passed on its final head.
 
 | PR | Title | Difficulty | Branch | Link |
 |---|---|---|---|---|
-| 0 | Stack base: docs and mockups | — | `feat/workspace-backup` | |
-| 1 | A pause gate for background jobs | hard | `feat/backup-1-gate` | |
-| 2 | restic and the backup settings | standard | `feat/backup-2-restic` | |
-| 3 | The backup run | hard | `feat/backup-3-run` | |
-| 4 | Copying to destinations | hard | `feat/backup-4-copy` | |
-| 5 | Scheduler and status API | hard | `feat/backup-5-server` | |
-| 6 | Backup in Admin › Settings, with warnings | standard | `feat/backup-6-ui` | |
-| 7 | Restore | standard | `feat/backup-7-restore` | |
-| 8 | Missing repository and the migration guide | standard | `feat/backup-8-finish` | |
+| 0 | Stack base: docs and mockups | — | `feat/workspace-backup` | [#203](https://github.com/eli-jordan/etsy-listing-automation/pull/203) |
+| 1 | A pause gate for background jobs | hard | `feat/backup-1-gate` | [#204](https://github.com/eli-jordan/etsy-listing-automation/pull/204) |
+| 2 | restic and the backup settings | standard | `feat/backup-2-restic` | [#205](https://github.com/eli-jordan/etsy-listing-automation/pull/205) |
+| 3 | The backup run | hard | `feat/backup-3-run` | [#206](https://github.com/eli-jordan/etsy-listing-automation/pull/206) |
+| 4 | Copying to destinations | hard | `feat/backup-4-copy` | [#207](https://github.com/eli-jordan/etsy-listing-automation/pull/207) |
+| 5 | Scheduler and status API | hard | `feat/backup-5-server` | [#208](https://github.com/eli-jordan/etsy-listing-automation/pull/208) |
+| 6 | Backup in Admin › Settings, with warnings | standard | `feat/backup-6-ui` | [#209](https://github.com/eli-jordan/etsy-listing-automation/pull/209) |
+| 7 | Restore | standard | `feat/backup-7-restore` | [#210](https://github.com/eli-jordan/etsy-listing-automation/pull/210) |
+| 8 | Missing repository and the migration guide | standard | `feat/backup-8-finish` | [#211](https://github.com/eli-jordan/etsy-listing-automation/pull/211) |
 
 Size: aim for under about 1,500 changed lines per PR, not counting the
 regenerated OpenAPI and client files and lockfiles. A PR that cannot fit splits
@@ -644,6 +645,86 @@ Exit when:
   opens a repository made in a `restic` test;
 - vitest covers both actions and their errors;
 - shared gates pass.
+
+Deviations recorded during implementation:
+
+- Two endpoints: `POST /api/backup/repository` (create) and
+  `POST /api/backup/connect`. Both are refused (409) while the configured
+  folder holds restic's `config`, and both take the local folder, prefilled
+  with `backup.repository`. A different folder is written to
+  `backup.repository` through the settings revision check
+  (`editable=("backup.repository",)`), because a workspace restored onto
+  another machine names a folder from the old one. Refusals use set-up's
+  shape: 409 for a folder that holds files, 412 for a stale revision, 422
+  for a missing, short or wrong password or a source that is not a
+  repository.
+- The password in `.env` (or the environment) wins; the request's is read
+  only when none is stored, and stored only once the repository is there.
+  The status gains `repository.password_stored` so the dialog asks only
+  when it must. The page offers no override for a stored password.
+- Connect copies with PR 4's `copy_repository`, the source as the
+  "repository" and a staging folder `<folder>.connecting-<hex>` as the
+  "destination", so the source is only read. restic runs
+  `snapshots --no-lock` on the staging copy; only then is it renamed to the
+  target and are `settings.yaml` and `.env` written. A wrong password or a
+  failed copy deletes the staging folder, so the next attempt copies again
+  from the start. The revision is checked before copying as well as by the
+  save, so a stale page does not waste a 20 GB copy; a save that loses a race
+  in the moment after the rename leaves the repository in place under the
+  new folder with `settings.yaml` unchanged.
+- Connect answers when it ends, holding the backup slot as a repair does
+  (`RunningBackup.operation` gains `connect`). Create starts the first
+  backup, as set-up does; connect wakes the scheduler, which backs up when
+  the copied snapshots say it is due.
+- Create is refused (409) while any configured destination holds a
+  repository's copy (`config`, `keys/` or `data/`), naming it, with
+  `connect_from` in the refusal so the dialog offers **Connect this copy
+  instead**, prefilled. Otherwise the copy's `config` would read as changed,
+  a repair would set it aside, and the next copy would delete every old pack,
+  index and snapshot as expired (found in review).
+- Repair refuses (409, `ForeignCopyError`) whenever `config` is among a
+  destination's changed files, and moves nothing. Telling another
+  repository's `config` from a damaged one needs the password, so it does
+  not try. The message says to connect that folder, or move it aside and
+  leave an empty folder, or change the destination in Setup.
+- A stored password that does not open the copy is refused with a message
+  naming the `.env` file and `ETSY_LISTINGS_BACKUP_PASSWORD`, and saying to
+  delete the line to be asked instead.
+- "Foreign" means a folder without restic's `config`, PR 5's test. A folder
+  with a `config` that is not restic's reads as present, and restic's error
+  shows as the repository's problem.
+- No Choose… button, as in PRs 6 and 7. The migration guide is
+  `docs/guides/migrate-the-workspace-out-of-icloud.md`, written for
+  PowerShell (robocopy, and `Get-ChildItem | Measure-Object` for file counts
+  and sizes), with a section on connecting from a new computer.
+- Found while running the gates: `backup restore` crashed on a restore's
+  first status line, because restic's `--json` leaves out a zero
+  `files_restored` (PR 7). Fixed with `restore_progress_line` in its own
+  commit.
+
+### After PR 8 — Set-up connects an existing backup
+
+Spec: *Set-up*. The seller decided that first-time set-up connects by itself
+when a destination is already a restic backup, with no separate button.
+
+- `backup_missing.existing_copies` reads the destinations: copies of one
+  repository share `config`'s bytes, and only a copy holding every file the
+  others hold may be the source, so the first copy back never expires files
+  from a fuller copy. Part of a copy, two repositories, and two copies that
+  each lack files are refused. `connect_existing` connects the first copy
+  that opens and passes a check, through Connect's own staging copy
+  (`copy_into_place`).
+- `backup_setup.prepare_set_up` checks everything before writing and says
+  whether it connects. The coordinator then holds the `connect` slot while
+  it copies, with `running.destination` naming the copy it is trying, as a
+  Connect does; it does not pause the job gate, because Connect does not.
+  A save that fails after the rename removes the copy, so set-up writes
+  nothing it is refused for.
+- `POST /api/backup/setup` answers `BackupSetUpResponse`: the overview plus
+  `connected` (`destination`, `snapshots`). A password the copy refuses is a
+  422 with `field_errors.password`. An existing backup's password has no
+  minimum length on the server.
+- `backup init` connects the same way and prints the destination.
 
 ## Shared gates
 

@@ -75,7 +75,27 @@ class WorkspaceApply:
     reviewed_run_id: str
 
 
-RunCommand = ListingPlan | WorkspacePlan | ListingApply | WorkspaceApply
+@dataclass(frozen=True)
+class BatchPlan:
+    """The reviewed rows of one listing batch that have changes to deploy
+    (ADR-0059), resolved when the plan is accepted, as a workspace plan's
+    listings are (ADR-0042)."""
+
+    batch_id: str
+    listings: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class BatchApply:
+    batch_id: str
+    listings: tuple[str, ...]
+    expect: Mapping[str, str]
+    reviewed_run_id: str
+
+
+RunCommand = ListingPlan | WorkspacePlan | BatchPlan | ListingApply | WorkspaceApply | BatchApply
+ReviewedApply = WorkspaceApply | BatchApply
+"""An apply that must repeat a reviewed plan of its own scope (``review``)."""
 
 
 @dataclass
@@ -120,7 +140,7 @@ class Run:
 
         self._state = (
             PlanRunState()
-            if isinstance(self.command, ListingPlan | WorkspacePlan)
+            if isinstance(self.command, ListingPlan | WorkspacePlan | BatchPlan)
             else ApplyRunState()
         )
         self.events.append(PhaseEvent(id=self._next_event_id, phase="queued"))
@@ -128,13 +148,22 @@ class Run:
 
     @property
     def kind(self) -> RunKind:
-        return "plan" if isinstance(self.command, ListingPlan | WorkspacePlan) else "apply"
+        return (
+            "plan" if isinstance(self.command, ListingPlan | WorkspacePlan | BatchPlan) else "apply"
+        )
 
     @property
     def scope(self) -> RunScope:
-        return (
-            "workspace" if isinstance(self.command, WorkspacePlan | WorkspaceApply) else "listings"
-        )
+        if isinstance(self.command, WorkspacePlan | WorkspaceApply):
+            return "workspace"
+        if isinstance(self.command, BatchPlan | BatchApply):
+            return "batch"
+        return "listings"
+
+    @property
+    def batch_id(self) -> str | None:
+        """The listing batch a batch-scoped run deploys; ``None`` otherwise."""
+        return self.command.batch_id if isinstance(self.command, BatchPlan | BatchApply) else None
 
     @property
     def listings(self) -> tuple[str, ...]:
@@ -142,13 +171,15 @@ class Run:
 
     @property
     def expect(self) -> Mapping[str, str] | None:
-        if isinstance(self.command, ListingApply | WorkspaceApply):
+        if isinstance(self.command, ListingApply | WorkspaceApply | BatchApply):
             return self.command.expect
         return None
 
     @property
     def reviewed_run_id(self) -> str | None:
-        return self.command.reviewed_run_id if isinstance(self.command, WorkspaceApply) else None
+        if isinstance(self.command, WorkspaceApply | BatchApply):
+            return self.command.reviewed_run_id
+        return None
 
     @property
     def phase(self) -> RunPhase:
@@ -259,13 +290,18 @@ class RunRegistry:
 
     Listing-scoped runs use ``_holder``. Workspace runs use the separate
     ``_workspace_holder`` because a terminal workspace plan remains the
-    current review until its linked apply replaces it.
+    current review until its linked apply replaces it. Batch runs are kept
+    per listing batch in ``_batch_holder`` for the same reason, and stay out
+    of ``_holder`` so a listing's own deploy page never picks one up as that
+    listing's run; they still conflict with any active run on one of their
+    listings (ADR-0059).
     """
 
     _lock: threading.Lock = field(default_factory=threading.Lock)
     _runs: dict[str, Run] = field(default_factory=dict)
     _holder: dict[str, str] = field(default_factory=dict)
     _workspace_holder: str | None = None
+    _batch_holder: dict[str, str] = field(default_factory=dict)
     _queue: queue.Queue[str] = field(default_factory=queue.Queue)
     _id_source: Callable[[], str] = field(default=lambda: uuid.uuid4().hex)
 
@@ -281,6 +317,8 @@ class RunRegistry:
             self._runs[run.id] = run
             if run.scope == "workspace":
                 self._workspace_holder = run.id
+            elif run.batch_id is not None:
+                self._batch_holder[run.batch_id] = run.id
             else:
                 for name in run.listings:
                     self._holder[name] = run.id
@@ -290,16 +328,27 @@ class RunRegistry:
     def _blocking_run(self, command: RunCommand) -> Run | None:
         """Under ``_lock``: the active run ``command`` would collide with. An
         active workspace run blocks everything; a workspace command is also
-        blocked by any active listing run, a listing command only by one
-        holding one of its listings."""
+        blocked by any active listing or batch run, a listing or batch
+        command only by one holding one of its listings."""
         blocking = self._active(self._workspace_holder or "")
         if blocking is not None:
             return blocking
         if isinstance(command, WorkspacePlan | WorkspaceApply):
-            holder_ids: Iterable[str] = self._holder.values()
-        else:
-            holder_ids = (self._holder.get(name, "") for name in command.listings)
-        return next((run for run in map(self._active, holder_ids) if run is not None), None)
+            holder_ids: Iterable[str] = [*self._holder.values(), *self._batch_holder.values()]
+            return next((run for run in map(self._active, holder_ids) if run is not None), None)
+        wanted = set(command.listings)
+        holder_ids = [
+            *(self._holder.get(name, "") for name in command.listings),
+            *self._batch_holder.values(),
+        ]
+        return next(
+            (
+                run
+                for run in map(self._active, holder_ids)
+                if run is not None and wanted.intersection(run.listings)
+            ),
+            None,
+        )
 
     def _active(self, run_id: str) -> Run | None:
         run = self._runs.get(run_id)
@@ -330,6 +379,14 @@ class RunRegistry:
         remains the review source until a later workspace run replaces it."""
         with self._lock:
             run = self._runs.get(self._workspace_holder or "")
+            return [run] if run is not None else []
+
+    def for_batch(self, batch_id: str) -> list[Run]:
+        """The latest run deploying listing batch ``batch_id``, including a
+        finished plan that remains its review until a later batch run
+        replaces it."""
+        with self._lock:
+            run = self._runs.get(self._batch_holder.get(batch_id, ""))
             return [run] if run is not None else []
 
     def for_scope(self, scope: RunScope) -> list[Run]:

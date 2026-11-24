@@ -245,6 +245,15 @@ class BatchRowNotReviewableError(ConflictError, ValueError):
         self.name = name
 
 
+class NothingToDeployError(ConflictError, ValueError):
+    """A batch deploy with no reviewed row that has changes to deploy
+    (ADR-0059): nothing is queued."""
+
+    def __init__(self, label: str) -> None:
+        super().__init__(f"{label} has no reviewed listings with changes to deploy")
+        self.label = label
+
+
 class AiDraftingBlockedError(ConfirmRefusedError):
     """Spec, *Design validation*: a batch is not knowingly created into a
     queue that cannot run. Nothing is created and the staging stays."""

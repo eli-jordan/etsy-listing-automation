@@ -123,7 +123,7 @@ package never drags in OpenCV, FastAPI or Typer to reach one name.
 | `core/listing_templates` | Template conversion and frozen document/assets/timestamp capture | Capture occurs under the template write lock before upload; shared references are revalidated at confirm and retry |
 | `core/market` | Comparable-listing research, scoring and evidence snapshots | Read-only Etsy data informs wording rather than product facts |
 | `core/batches` | Upload validation, archive inspection, staging, name allocation and idempotent local creation | Creates ordinary listings; AI dispatch belongs to `application/ai` |
-| `core/backup` | The pinned restic release and which binary to run (`binary.py`, installing through the protected `installation.py`), the streaming restic runner (`restic.py`), the copy to destinations with its sample check and repair (`destinations.py`, no restic), and this machine's `backup-state.json` and run history (`state.py`) | Knows no workspace; `core/application/backup_repository.py` joins the `backup:` settings, the `.env` password and the binary |
+| `core/backup` | The pinned restic release and which binary to run (`binary.py`, installing through the protected `installation.py`), the restic repository interface (`repository.py`) and its real adapter (`restic.py`, reached only through `core/application/backup_repository.py`), the copy to destinations with its sample check and repair (`destinations.py`, no restic), and this machine's `backup-state.json` and run history (`state.py`) | Knows no workspace; `core/application/backup_repository.py`'s `ConfiguredBackup` joins the `backup:` settings, the `.env` password and the binary |
 | `core/user_directory.py` | `user_directory(home)`: `~/.etsy-listings`, this machine's state outside every workspace (Marigold runtime, restic, backup state and history) | Every owner takes `home`, so tests never write to the real home directory |
 | `core/bounded_cache.py` | `BoundedCache`: the one thread-safe least-recently-used cache, bounded by total `size(value)` (bytes, or entries without a size function), behind every in-process cache of decoded arrays, validation proofs and pixel digests | Locks only bookkeeping, never `get_or_compute`'s computation; an item larger than the whole budget is served, never kept, and evicts nothing; a replaced key counts only its new size |
 | `core/connections.py`, `core/errors.py` | Client and `RunContext` construction; `UserFacingError` and the refusal categories (`MissingError`, `ConflictError`, `StaleError`, `RefusedError`) | See the credential invariant below; core names a refusal's category, never its status code |
@@ -636,24 +636,42 @@ AI, and holds those names against new AI until deployment ends (ADR-0050).
 `create_app` also builds one `JobGate` (`core/application/job_gate.py`) and
 passes it to `Deployments`, the `AiCoordinator` and its batch queue,
 `Preparations` and the scene warmer. It is the workspace backup's pause
-(workspace-backup spec, *Pausing jobs*). Each place a unit of work starts asks
-the gate for a ticket and holds it until the work ends: the deploy executor
-before it executes a dequeued run, a manual run before it is registered, the
-batch queue before it claims a row, each Prepare lane before it dispatches a
-job, and the warmer before each pass. While the gate is paused nothing is
-admitted. Submissions are still accepted: deploy runs stay queued, a manual
-AI run is answered in a `queued` phase, batch rows and Prepare jobs stay
-queued, and warmer requests wait. Summaries report this as
-`waiting_for_backup`, derived on each read and never stored (plan decision
-P4). `wait_idle` counts tickets, not queued work, so it ends once the work in
-flight has finished and names the oldest job it is waiting for. A backup
-pauses before it waits. That keeps a deploy already yielding to an AI run
-safe, because finishing work in flight needs no admission. Resume starts held
-work in submission order. On shutdown the lifespan stops the gate first: a
-pending wait ends and held work stays held. Each coordinator's own stop then
-drops it as it drops queued work. Held deploy runs end as queued runs do, held
-manual AI runs end `cancelled`, and batch rows and Prepare jobs stay queued on
-disk for the next start.
+(workspace-backup spec, *Pausing jobs*). A unit of work is admitted when it
+starts and holds a ticket until it ends. The gate owns the rules every
+coordinator shares, so the races are fixed and tested once
+(`tests/core/unit/test_job_gate.py`). It has three ways in, one per kind of
+caller:
+
+- `admit` answers a ticket now, or none while paused. The batch queue and each
+  Prepare lane use it, because their durable queue already records what
+  waits. They leave the work queued and look again from `on_resume`.
+- `hold` starts work now, or in line once the pause ends. A manual AI run uses
+  it, because it has nowhere else to wait. The gate keeps the line, so a
+  resume that lands just before the run joins it still starts the run.
+- `wait_admit` blocks in line until admitted, and gives up when the gate
+  stops. The deploy executor and the scene warmer loops use it.
+
+What a ticket is handed to owns it. An AI run, manual or batch, releases its
+ticket in `finish`, after its listeners have written the batch row, and a
+refused `create` releases it at once. A Prepare lane's turn and a warmer pass
+run inside a `with ticket` block. A deploy run executes inside one. Held work
+that fails to start loses its ticket in the gate.
+
+While the gate is paused nothing is admitted. Submissions are still accepted:
+deploy runs stay queued, a manual AI run is answered in a `queued` phase,
+batch rows and Prepare jobs stay queued, and warmer requests wait. Summaries
+report this as `waiting_for_backup`, from the gate's `holds(queued=...)` on
+each read, and never store it (plan decision P4). `wait_idle` counts tickets,
+not queued work, so it ends once the work in flight has finished and names the
+oldest job it is waiting for. A backup pauses before it waits. That keeps a
+deploy already yielding to an AI run safe, because finishing work in flight
+needs no admission. Resume starts the line in order, then tells each
+`on_resume` listener; one that fails does not stop the rest. On shutdown the
+lifespan stops the gate first. That closes admission for good, ends a pending
+wait and every `wait_admit`, and leaves the line unstarted. Each coordinator's
+own stop then drops what it holds as it drops queued work. Held deploy runs
+end as queued runs do, held manual AI runs end `cancelled`, and batch rows and
+Prepare jobs stay queued on disk for the next start.
 
 ### Shop administration
 
@@ -663,7 +681,8 @@ build their clients through the app's `ClientFactories` (`app_state.clients`).
 `core/application/shop_settings.py` owns whole-document validation,
 configured-identity retention and the editable key set. `core/workspace/revisions.py` owns exact-byte hashes and a per-path process
 lock around read, revision comparison, validation and atomic replace. A stale
-revision refuses with 412; invalid values refuse with field errors and 422.
+revision refuses with 412 and `kind: "stale"`; invalid values refuse with field
+errors and 422.
 Semantic no-ops leave the source bytes and file untouched, per ADR-0055.
 
 A successful save replaces the server workspace's defaults inside the same
@@ -1279,7 +1298,7 @@ separate modules and never start inference implicitly.
 ## restic for workspace backup
 
 The [workspace-backup spec](features/workspace-backup-20261123/spec.md) backs
-the workspace up with restic, run as a subprocess (ADR-0059). Which restic runs
+the workspace up with restic, run as a subprocess (ADR-0060). Which restic runs
 is `core/backup/binary.py`'s `ResticBinaries`: `ETSY_LISTINGS_RESTIC_BINARY`,
 then the `backup.restic_binary` setting, then restic 0.19.1 pinned by the
 SHA-256 of its Windows amd64 and Linux amd64 release files. Only `backup init`
@@ -1288,8 +1307,40 @@ installs the pinned release. It downloads into a staging directory beside
 the directory into place, and removes the staging directory on any failure.
 Import Linter admits only `binary.py` to `installation.py`.
 
-`core/backup/restic.py`'s `Restic` runs one command with `--json` through
-`subprocess.Popen` with line-buffered stdout, yielding each parsed line as
+`core/backup/repository.py`'s `Repository` is the seam between the backup's
+application modules and restic. Its operations are the backup's own: `init`,
+`snapshots` (with or without a lock), `back_up` a folder with excludes
+(reporting `BackupFigures`, returning a `BackupSummary` whose warnings name
+unreadable files), `forget` by the retention, `prune`, `check` (a
+`RepositoryCheck`), `restore` a snapshot into a target (reporting
+`RestoreProgress`), and `verify_password`. Every operation that takes `cancel`
+checks it before it starts. No application module knows a subcommand, flag,
+exit code or `--json` shape. `core/application/backup_repository.py` opens
+every repository, through `restic.py`'s `Restic` or an `OpenRepository` its
+caller passes as `restic=`; behaviour tests pass `tests/support/restic.py`'s
+in-memory repository.
+
+Every backup operation (run, check, repair, restore, create, connect, set-up,
+the status reads and each CLI command) works from a `ConfiguredBackup`, which
+`configured_backup` in `core/application/backup_repository.py` resolves once
+per operation from the `backup:` block (or one the caller already read), the
+password and the located restic binary. Building it refuses a storage folder
+that is not a full path and any storage folder or destination that overlaps
+the workspace or another, so no operation can skip the separation check. The
+value holds the workspace root, storage folder, destinations, password and
+binary. It answers whether a folder may become a new storage folder
+(`check_new_storage`) or a restore target (`check_restore_target`), and
+whether a repository is present, and it opens the `Repository` (`open`) and
+the state record (`state`). It runs no operation itself. One rule decides
+"inside" for every check: `inside` resolves both paths and asks `pathlib`,
+which on Windows ignores case. The coordinator asks `has_repository` of the
+settings alone before it builds the value, because a workspace restored from
+another machine can name a storage folder this one refuses, and that case
+must still read as a missing repository.
+
+`core/backup/restic.py`'s `Restic` is the real adapter. It runs each
+operation as one command with `--json` through
+`subprocess.Popen` with line-buffered stdout, reading each line as
 restic writes it. It does not use `core/ai/process.py`'s `run_managed`, which
 takes no environment and buffers output. The password reaches restic only as
 `RESTIC_PASSWORD` in the child's environment. Inherited
@@ -1311,22 +1362,25 @@ recorded.
 server's `JobGate`, it pauses, waits for work in flight, and resumes jobs as
 soon as `restic backup` ends, whether it succeeded or not. `forget`, and the
 weekly `prune` and `check`, run after the resume. The CLI's `backup run`
-passes no gate. `EXCLUDES` leaves out the temporary names the app's own
+passes no gate. A failed or interrupted check blocks copying and repair until
+the repository passes a check. `EXCLUDES` leaves out the temporary names the app's own
 writers use, and `tests/core/behaviour/test_backup_excludes.py` fails when a
-writer renames its temporaries. restic's exit code 3 (the snapshot was made
-without some unreadable files) counts as success, with those files as
-warnings. `core/backup/state.py` keeps the last prune and check in
+writer renames its temporaries. A backup that skipped unreadable files (restic's
+exit code 3) still counts, with those files as warnings. `core/backup/state.py` keeps the last prune and check in
 `~/.etsy-listings/backup-state.json`, keyed to the repository path. Every run,
 including a failed one, is appended to `backup-history.jsonl` as one JSON
 line. The last successful backup is read from `restic snapshots`.
 
 After a successful run, `BackupRunner` copies the repository to each
 destination with `core/backup/destinations.py`, which is plain file operations
-and no restic. It lists both folders once, in restic's read order. It refuses a
-destination holding a changed file, copies what is missing in write order
-through hashed `.copying-` temporaries, and then deletes expired files newest
-first. A file is never given a name that something already has: rename refuses
-it on Windows, and a hard link takes the name elsewhere. Once 30 days have
+and no restic. It lists both folders in restic's read order and abandons a
+source listing if the snapshot or index directories changed while it read
+them. It refuses a destination holding a changed file, copies what is missing
+in write order through hashed `.copying-` temporaries, and then deletes expired
+files in reverse order. Before deleting an expired file it checks that the
+destination config and the file still match the listing and that the file
+matches its hash. Publication uses a no-overwrite rename on Windows and a hard
+link elsewhere. A filesystem that rejects hard links stops the copy. Once 30 days have
 passed, a run hashes a 5% sample of the destination. The state file keeps each
 destination's last copy and check and the changed and unexpected files found
 there. A change the sample found keeps its size, so the state passes it to
@@ -1362,18 +1416,88 @@ and `backup.retention`. The destinations are known by their path (`ITSELF` in
 created only by set-up or by the save that adds it, and only inside a folder
 that exists (`core/application/backup_setup.py`).
 
-A restore is `core/application/backup_restore.py`: it refuses the live
-workspace, a folder inside it or the repository, and a folder that holds
-files, then runs `restic restore <id>:<folder>` so the target holds the
-workspace itself. The server runs it as a job on `BackupCoordinator`, one at a
-time, beside the backup slot rather than in it: restore takes restic's shared
-lock, so scheduled backups keep running. A backup during a restore leaves
-`forget`, `prune` and `check`, which need the exclusive lock, to the next run.
-`POST /api/backup/restore` starts it, `POST /api/backup/restore/stop` stops it
+The server also owns the backup's naming conventions, and its responses carry
+what they derive, so the browser never re-implements them. Each destination in
+the overview has its display `name` ("iCloud Drive" for an iCloud folder, else
+the folder's own name), `icloud`, a `short_problem` for its pill, and, while it
+has changed or unexpected files, `set_aside`: the folder Repair would use
+today, from `destinations.planned_set_aside`, the same name sequence
+(`-2`, `-3`...) the repair takes. History entries carry each copy's
+destination `names`, each snapshot its default `restore_target`
+(`backup_restore.default_target`), and the overview the
+`password_min_length` the set-up and Create forms pre-check. Set-up, Create,
+Connect, settings and shop saves refuse with a `kind` that alone says what to do:
+`stale` (412) means reload, `conflict` (409) and `invalid` (422) carry the
+reason and field errors.
+
+In the UI, the shell's `BackupStatusProvider` polls `GET /api/backup` once for
+every surface. `useBackupStatus()` returns no raw status. It returns a
+`BackupView` from `ui/src/shell/backupAttention.ts`, a pure module that encodes
+the interactions doc's *Warnings* table in one place. The view says whether
+backups are loading, unread, off or on. It gives the warning the shell banner
+and both nav marks show, and each banner on Status and history with its action:
+connect, repair, or one Try again for the rest. It also says whether a backup
+or repair is running and whether a restore is running, and gives each
+destination's files to check. A destination has changed files only when a
+`changed` warning names it. The shell, the Admin nav, `BackupSection`,
+`BackupPanels`, `backupText.summary` and `useRestore` only draw the view.
+The adapters in `ui/src/api/backup.ts`, `workspaceSettings.ts` and `shop.ts`
+answer success or one `Refusal` from `ui/src/api/refusal.ts`: `stale`, or
+`refused` with its message, field errors and an optional `connectFrom`. The
+save queue and `BackupSection` word a refusal from that alone. The browser keeps
+only two instant pre-checks, both refused by the server too: the password
+length and a target that looks like the live workspace.
+
+A restore is `core/application/backup_restore.py`, the whole sequence for the
+server and the CLI alike. `prepare_restore` resolves the configured backup once,
+checks the target with `ConfiguredBackup.check_restore_target` (which refuses the
+live workspace, the repository, the destinations, paths inside any of them and a
+folder that holds files), opens the repository and finds the snapshot, all before
+restic writes. The `PreparedRestore` it returns runs the restore: just before
+`Repository.restore` starts it checks the target again, against `settings.yaml`
+read afresh, so a folder saved as a destination or storage folder since, or files
+that landed in the target, stop it. `Repository.restore` restores a one-folder
+snapshot's contents (`restic restore <id>:<folder> --overwrite never`), so the
+target holds the workspace itself and nothing that reached it is overwritten.
+The server runs a prepared restore as a job on `BackupCoordinator`, which owns
+only the thread, the status, the maintenance reservation and shutdown: one
+restore at a time, beside the backup slot rather than in it. Restore takes
+restic's shared lock, so scheduled backups keep running. A backup during a
+restore leaves `forget`, `prune` and `check`, which need the exclusive lock, to
+the next run. A restore requested during maintenance waits for those commands
+to finish. `POST /api/backup/restore` starts it, `POST /api/backup/restore/stop` stops it
 and leaves the files restored so far, and `GET /api/backup` carries its
 progress as `restore`. `GET /api/backup/snapshots` lists restic's own
 snapshots for the restore dialog, including ones made by hand. The CLI's
-`backup restore` uses the same module without the server.
+`backup restore` prepares and runs the same restore in the foreground and only
+prints.
+
+A missing repository has two ways back, in `core/application/backup_missing.py`,
+both refused while the configured folder holds restic's `config`.
+`POST /api/backup/repository` creates one in a new or empty folder and starts
+the first backup. `POST /api/backup/connect` copies an existing one, usually a
+destination, with the destinations' own one-way copy into a
+`<folder>.connecting-<hex>` staging folder beside the target. The password
+must open the staging copy (`verify_password`) and the copy must pass a
+`check` before it takes the target's name, and only then are
+`backup.repository` (when the folder changed) and the password written. A
+wrong password deletes the staging folder and writes nothing. Connect holds
+the backup slot while it copies. The status's `repository.password_stored`
+tells the page whether to ask for a password. Create is refused while a
+destination holds a repository's copy (`holds_repository`), with
+`connect_from` in the refusal, and `repair_destination` refuses a destination
+whose `config` differs or is missing while restic files remain
+(`ForeignCopyError`). The ordinary copy also stops in these cases.
+
+First-time set-up uses the same connect. `backup_setup.prepare_set_up`
+checks every refusal before writing, and asks `backup_missing.existing_copies`
+whether the destinations hold a repository: copies of one repository share
+`config`'s bytes, and only a copy holding every file the others hold may be
+the source. When one does, `POST /api/backup/setup` and `backup init`
+connect it with `connect_existing` (Connect's own staging copy, the first
+copy that opens and passes a check) instead of creating, and the coordinator
+holds the `connect` slot meanwhile. The answer's `connected` names the
+destination and the snapshot count.
 
 ## Durable Marigold maps and CPU composition
 

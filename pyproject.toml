@@ -411,6 +411,13 @@ allowed_importers = ["etsy_listings.core.backup.binary"]
 as_packages = false
 
 [[tool.importlinter.contracts]]
+name = "restic's commands are run only through the Repository that backup_repository opens"
+type = "protected"
+protected_modules = ["etsy_listings.core.backup.restic"]
+allowed_importers = ["etsy_listings.core.application.backup_repository"]
+as_packages = false
+
+[[tool.importlinter.contracts]]
 name = "Material fitting is reached through pure preparation"
 type = "protected"
 protected_modules = ["etsy_listings.core.preparation._geometry"]

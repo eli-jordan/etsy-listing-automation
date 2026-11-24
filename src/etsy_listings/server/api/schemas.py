@@ -28,7 +28,7 @@ from etsy_listings.core.application.ai.events import (
 from etsy_listings.core.application.ai.readiness import (
     AiReadinessBlock as AiReadinessBlock,
 )
-from etsy_listings.core.application.backup_overview import HistoryEntry
+from etsy_listings.core.application.backup_overview import BackupOverview, HistoryEntry
 from etsy_listings.core.application.deploy.events import (
     ApplyRunPhase,
     PlanRunPhase,
@@ -707,6 +707,9 @@ class BatchRowDetail(BaseModel):
     or never-created row (UI doc §7)."""
     deleted: bool = False
     """The listing was deleted; the row stays, struck through."""
+    deployable: bool = False
+    """Whether Deploy reviewed takes this row: reviewed, with changes its
+    last apply did not deploy (ADR-0059)."""
 
 
 BatchStatus = Literal["staging", "drafting", "in_review", "complete", "stopped"]
@@ -793,6 +796,15 @@ class WorkspacePlanRequest(_CreateRunRequest):
     scope: Literal["workspace"]
 
 
+class BatchPlanRequest(_CreateRunRequest):
+    """Plan the reviewed rows of one listing batch that have changes to
+    deploy (ADR-0059); the server resolves which."""
+
+    kind: Literal["plan"]
+    scope: Literal["batch"]
+    batch_id: str
+
+
 class ListingApplyRequest(_CreateRunRequest):
     kind: Literal["apply"]
     scope: Literal["listings"]
@@ -808,8 +820,22 @@ class WorkspaceApplyRequest(_CreateRunRequest):
     reviewed_run_id: str
 
 
+class BatchApplyRequest(_CreateRunRequest):
+    kind: Literal["apply"]
+    scope: Literal["batch"]
+    batch_id: str
+    listings: list[str]
+    expect: dict[str, str]
+    reviewed_run_id: str
+
+
 CreateRunRequest = (
-    ListingPlanRequest | WorkspacePlanRequest | ListingApplyRequest | WorkspaceApplyRequest
+    ListingPlanRequest
+    | WorkspacePlanRequest
+    | BatchPlanRequest
+    | ListingApplyRequest
+    | WorkspaceApplyRequest
+    | BatchApplyRequest
 )
 
 
@@ -819,6 +845,8 @@ class _RunSummary(BaseModel):
 
     id: str
     scope: RunScope
+    batch_id: str | None = None
+    """The listing batch a ``batch``-scoped run deploys (ADR-0059)."""
     listings: list[str]
     seen: bool
     reviewed_run_id: str | None
@@ -1100,10 +1128,10 @@ class ShopPatchRequest(BaseModel):
 
 
 class ShopSaveRefusal(BaseModel):
-    """A 412 (``conflict``: reload, then edit again) or a 422 (``invalid``:
+    """A 412 (``stale``: reload, then edit again) or a 422 (``invalid``:
     each refused dotted shop.yaml key to its reason). Nothing was written."""
 
-    kind: Literal["conflict", "invalid"]
+    kind: Literal["stale", "invalid"]
     message: str
     field_errors: dict[str, str] = Field(default_factory=dict)
 
@@ -1148,9 +1176,25 @@ class WorkspaceSettingsPatch(BaseModel):
 
 
 class SettingsSaveRefusal(BaseModel):
-    kind: Literal["conflict", "invalid"]
+    kind: Literal["stale", "invalid"]
+    """``stale`` (412): settings.yaml changed since the page read it, so
+    reload; ``invalid`` (422): ``field_errors`` say what to change."""
     message: str
     field_errors: dict[str, str] = Field(default_factory=dict)
+
+
+class BackupRefusal(BaseModel):
+    """Set-up's, create's and connect's refusals."""
+
+    kind: Literal["stale", "conflict", "invalid"]
+    """As a settings save's, plus ``conflict`` (409): a folder that holds
+    files or a repository's copy."""
+    message: str
+    field_errors: dict[str, str] = Field(default_factory=dict)
+
+    connect_from: str | None = None
+    """Create refused because this destination holds a repository's copy:
+    connect it instead (workspace-backup plan, PR 8)."""
 
 
 class TemplatePositionImpactRequest(BaseModel):
@@ -1227,6 +1271,50 @@ class BackupSetUpRequest(BaseModel):
     password: str
 
 
+class BackupConnected(BaseModel):
+    """The backup set-up connected instead of creating one."""
+
+    destination: str
+    """The destination it was copied from."""
+    snapshots: int
+    notice: str | None = None
+    """Set when its snapshots name several workspaces, so this workspace
+    got a new workspace ID and starts its own retention (ADR-0061)."""
+
+
+class BackupSetUpResponse(BackupOverview):
+    """The status once set up, and what set-up connected, if anything."""
+
+    connected: BackupConnected | None = None
+    """Set when a destination already held a backup: set-up copied it to
+    the backup storage folder and uses it, instead of creating one."""
+
+
+class BackupNewRepositoryRequest(BaseModel):
+    """Create a new repository while the configured one is missing
+    (workspace-backup spec, *Missing repository*)."""
+
+    revision: str
+    """``settings.yaml``'s revision from ``GET /api/admin/settings``."""
+    repository: str
+    """The folder the seller confirmed: new or empty."""
+    password: str | None = None
+    """Only read when no password is stored."""
+
+
+class BackupConnectRequest(BaseModel):
+    """Connect an existing repository, such as a destination copy restored
+    onto a new machine, by copying it to local disk first."""
+
+    revision: str
+    source: str
+    """The repository to copy from; only read."""
+    repository: str
+    """The local folder to copy into: new or empty."""
+    password: str | None = None
+    """Only read when no password is stored."""
+
+
 class BackupHistoryResponse(BaseModel):
     runs: list[HistoryEntry]
     """Newest first, failed runs included."""
@@ -1239,6 +1327,8 @@ class BackupSnapshot(BaseModel):
     files: int | None = None
     size: int | None = None
     """Bytes the backup read."""
+    restore_target: str
+    """The restore dialog's suggested folder for it."""
 
 
 class BackupSnapshotsResponse(BaseModel):
