@@ -75,8 +75,9 @@ _Avoid_: backup config, backup settings (the `backup:` block as written)
 A random UUID in `backup.workspace_id` that names one workspace across
 machines, hosts and folders. Every snapshot is tagged with it, and the
 retention keeps and groups this workspace's snapshots by it alone. Set-up
-writes it once; it travels with `settings.yaml`, so a restored workspace keeps
-it. The seller never edits it.
+writes it once, taking the one its repository's snapshots already carry when
+there is exactly one; it travels with `settings.yaml`, so a restored workspace
+keeps it, and it is never changed. The seller never edits it.
 _Avoid_: host, machine ID, repository ID (restic's id for the repository)
 
 **Restore target**:

@@ -51,6 +51,7 @@ from etsy_listings.core.backup.repository import (
     OpenRepository,
     Repository,
     ResticError,
+    Snapshot,
     WrongPasswordError,
 )
 from etsy_listings.core.config.secrets import BACKUP_PASSWORD_VAR
@@ -104,7 +105,11 @@ class Connected:
 
     source: Path
     """The destination it copied from."""
-    snapshots: int
+    snapshots: tuple[Snapshot, ...]
+    """The copy's snapshots, read without the lock: set-up adopts the
+    workspace ID they carry (``backup_repository.workspace_id_for``)."""
+    notice: str | None = None
+    """What set-up says beside it, such as a new workspace ID among several."""
 
 
 @dataclass(frozen=True)
@@ -170,10 +175,10 @@ def connect_repository(
 
 def copy_into_place(
     backup: ConfiguredBackup, source: Path, password: str, *, env_file: Path | None
-) -> int:
+) -> tuple[Snapshot, ...]:
     """Copy the repository at ``source`` into a staging folder beside the
     storage folder, open it with ``password`` and check it, then give it the
-    storage folder's name; its snapshot count. The storage folder must be
+    storage folder's name; its snapshots, read without the lock. The storage folder must be
     new or empty. Refused (:class:`ConnectRefusedError`, or
     :class:`ConnectPasswordError` for the password) with nothing left
     behind. ``env_file`` is where ``password`` came from, if it was stored."""
@@ -186,7 +191,7 @@ def copy_into_place(
             raise ConnectRefusedError(copied.message or f"{source} could not be copied.")
         copy = backup.open(folder=staging, password=password, install=True)
         _open(copy, env_file=env_file)
-        snapshots = len(copy.snapshots(lock=False))
+        snapshots = copy.snapshots(lock=False)
         if repository.is_dir():
             repository.rmdir()  # empty: the caller saw to it
         staging.rename(repository)

@@ -134,7 +134,11 @@ def set_up(request: Request, body: BackupSetUpRequest) -> BackupSetUpResponse | 
         found = backups.set_up(answers, expected_revision=body.revision)
         if found is not None:
             connected.append(
-                BackupConnected(destination=str(found.source), snapshots=found.snapshots)
+                BackupConnected(
+                    destination=str(found.source),
+                    snapshots=len(found.snapshots),
+                    notice=found.notice,
+                )
             )
 
     answer = _answer(backups, run)

@@ -26,15 +26,23 @@ rejected, because it would be one more file to restore and to keep in step with
 the block.
 
 **When it is made.** First-time set-up writes the ID with the rest of the
-block. `backup init` and a backup run write one only when a hand-written block
-has none. A workspace being set up has backups off, so it has no block and no
-ID. It gets a new ID even when set-up connects a destination's existing
-backup. The snapshots already in that backup belong to another workspace: they
-keep their last schedule and are not adopted.
+block. `backup init` and a backup run write one only when a block has none.
+An ID already in the block is never changed.
 
-**Consequences.** Deleting the `backup:` block and setting up again makes a new
-ID. The old ID's snapshots then stay until they are removed by hand. Snapshots
-made before a workspace had an ID are untagged, and are kept too. All restic
+**Adopting the repository's ID.** A workspace with no ID that is given a
+repository whose snapshots carry exactly one workspace ID takes that ID
+(decided by the seller, 2026-11-24). Deleting the `backup:` block and setting
+up again against the same destination then carries the old schedule on, and
+the old snapshots age out with the new ones. Untagged snapshots are not
+counted. With no tagged snapshots the ID is new. With several IDs the app does
+not guess: the ID is new, and set-up, `backup init` and the run's history say
+that this workspace starts its own retention.
+
+**Consequences.** Two workspaces backed up into one repository, then a third set
+up against it, leave the third with its own schedule: the other two IDs' old
+snapshots stay until removed by hand. A copy of a workspace set up against
+the same repository adopts the same ID, and the two then share one schedule.
+Snapshots made before a workspace had an ID are untagged, and are kept. All restic
 arguments stay behind the `Repository` interface: `back_up` and `forget` take
 the workspace ID.
 

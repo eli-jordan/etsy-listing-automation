@@ -271,12 +271,14 @@ describe("Backups off and Set up", () => {
       finish?.({
         kind: "started",
         status: healthy(),
-        connected: { destination: ICLOUD, snapshots: 12 },
+        connected: { destination: ICLOUD, snapshots: 12, notice: "Starts its own retention." },
       });
     });
 
     expect(
-      await screen.findByText("Connected to the backup in iCloud Drive: 12 snapshots."),
+      await screen.findByText(
+        "Connected to the backup in iCloud Drive: 12 snapshots. Starts its own retention.",
+      ),
     ).toBeVisible();
   });
 
@@ -411,6 +413,14 @@ describe("Status and history", () => {
     expect(rows[2]).toHaveTextContent("Wrong repository password.");
     expect(rows[2]).toHaveTextContent("Nothing saved");
     expect(screen.getByText(/Every backup from the last 7 days/)).toBeVisible();
+  });
+
+  it("says in the run's row when it started its own retention beside other workspaces", async () => {
+    const notice =
+      "This backup holds snapshots from more than one workspace, so this workspace starts its own retention.";
+    history.mockResolvedValue([run(2, { notice })]);
+    open();
+    expect(await screen.findByText(`Copied to iCloud Drive. ${notice}`)).toBeVisible();
   });
 
   it("starts a backup with Back up now, and says what the run is doing", async () => {

@@ -847,6 +847,17 @@
             "title": "Destination",
             "type": "string"
           },
+          "notice": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notice"
+          },
           "snapshots": {
             "title": "Snapshots",
             "type": "integer"
@@ -7357,6 +7368,17 @@
               }
             ],
             "title": "Message"
+          },
+          "notice": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notice"
           },
           "outcome": {
             "enum": [

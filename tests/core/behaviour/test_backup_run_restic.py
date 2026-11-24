@@ -9,14 +9,17 @@ from pathlib import Path
 
 import pytest
 
-from etsy_listings.core.application.backup_repository import configured_backup
+from etsy_listings.core.application.backup_repository import backup_settings, configured_backup
 from etsy_listings.core.application.backup_run import BackupRunner
+from etsy_listings.core.application.backup_setup import BackupSetUp, prepare_set_up
+from etsy_listings.core.application.workspace_settings import read_settings
 from etsy_listings.core.backup.binary import RESTIC_BINARY_ENV_VAR, ResticBinaries
 from etsy_listings.core.backup.restic import Restic
 from etsy_listings.core.config.settings import RetentionSettings
+from etsy_listings.core.workspace import layout
 from etsy_listings.core.workspace.workspace import Workspace
 
-from tests.support.backups import PASSWORD, configure_backups, initialise
+from tests.support.backups import PASSWORD, WORKSPACE_ID, configure_backups, initialise
 
 pytestmark = pytest.mark.restic
 
@@ -136,3 +139,47 @@ def test_forget_ages_out_another_host_s_snapshots_of_the_same_workspace(
         ("new-pc", "11-09"),
         ("new-pc", "11-22"),
     }
+
+
+def test_set_up_again_takes_back_the_workspace_id_and_ages_its_old_snapshots_out(
+    restic_binary: Path, workspace_root: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The backup: block was deleted and backups set up again against the
+    same destination. The old snapshots, from another host, carry the
+    workspace ID, so set-up takes it back and they age out with the new one.
+    An untagged snapshot is left alone."""
+    monkeypatch.setenv(RESTIC_BINARY_ENV_VAR, str(restic_binary))
+    old = tmp_path / "old-machine"
+    workspace = configure_backups(workspace_root, old, workspace_id=WORKSPACE_ID)
+    home = tmp_path / "home"
+    initialise(workspace, home)
+    earlier = Restic(restic_binary, old, PASSWORD)
+    tag = ("--tag", f"workspace:{WORKSPACE_ID}")
+    for month in range(1, 9):
+        when = f"2026-{month:02d}-15 12:00:00"
+        earlier.run("backup", str(workspace_root), "--host", "old-pc", "--time", when, *tag)
+    earlier.run("backup", str(workspace_root), "--host", "old-pc", "--time", "2026-02-20 12:00:00")
+    cloud = tmp_path / "icloud"
+    old.rename(cloud)
+    (workspace_root / "settings.yaml").unlink()
+    (workspace_root / layout.ENV_FILE).unlink()
+    local = tmp_path / "local"
+    binaries = ResticBinaries(home=home)
+    answers = BackupSetUp(local, (cloud,), 12, RetentionSettings(), PASSWORD)
+
+    revision = read_settings(workspace).revision
+    connected = prepare_set_up(workspace, answers, binaries=binaries).run(
+        expected_revision=revision
+    )
+    record = BackupRunner(workspace, binaries, home=home).run()
+
+    assert connected is not None
+    assert connected.notice is None
+    assert backup_settings(workspace).workspace_id == WORKSPACE_ID
+    assert record.outcome == "succeeded", record.message
+    left = Restic(restic_binary, local, PASSWORD).snapshots()
+    ours = [f"{s.time:%m}" for s in left if s.workspace_id == WORKSPACE_ID]
+    # Seven days, five weeks and four months: May to August, and this run's.
+    assert ours[:4] == ["05", "06", "07", "08"]
+    assert len(ours) == 5
+    assert [f"{s.time:%m-%d}" for s in left if s.workspace_id is None] == ["02-20"]

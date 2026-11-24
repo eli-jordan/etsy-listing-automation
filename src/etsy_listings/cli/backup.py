@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import json
 import time
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Annotated, Any
@@ -20,7 +20,11 @@ import typer
 from etsy_listings.cli import prompts
 from etsy_listings.cli.options import open_workspace, root_option
 from etsy_listings.core.application import credentials
-from etsy_listings.core.application.backup_missing import connect_existing, existing_copies
+from etsy_listings.core.application.backup_missing import (
+    Connected,
+    connect_existing,
+    existing_copies,
+)
 from etsy_listings.core.application.backup_repository import (
     MIN_PASSWORD_LENGTH,
     BackupStatus,
@@ -38,6 +42,7 @@ from etsy_listings.core.config.secrets import BACKUP_PASSWORD_VAR
 from etsy_listings.core.errors import UserFacingError
 from etsy_listings.core.workspace import layout
 from etsy_listings.core.workspace.userpath import to_native_path
+from etsy_listings.core.workspace.workspace import Workspace
 
 app = typer.Typer(no_args_is_help=True, help="Back up the workspace with restic.")
 
@@ -79,20 +84,27 @@ def init(root: str | None = root_option()) -> None:
         backup = configured_backup(workspace, binaries=ResticBinaries())
         copies = existing_copies(backup.destinations)
         if copies:
-            _connect(backup, copies)
-            ensure_workspace_id(workspace)
+            connected = _connect(backup, copies)
+            _workspace_id(workspace, connected.snapshots)
             return
         existing = backup.password
         password = existing or _ask_password()
         typer.echo(f"Creating the backup repository at {backup.storage}...", err=True)
         repository_id = create_repository(backup, password, store=existing is None)
-        ensure_workspace_id(workspace)
+        _workspace_id(workspace, ())
     typer.echo(f"Created the backup repository at {backup.storage} (id {repository_id[:8]}).")
     if existing is None:
         _stored(backup)
 
 
-def _connect(backup: ConfiguredBackup, copies: tuple[Path, ...]) -> None:
+def _workspace_id(workspace: Workspace, snapshots: Sequence[Snapshot]) -> None:
+    """Keep the block's workspace ID, or write the one ``snapshots`` carry."""
+    chosen = ensure_workspace_id(workspace, snapshots)
+    if chosen.notice is not None:
+        typer.echo(chosen.notice)
+
+
+def _connect(backup: ConfiguredBackup, copies: tuple[Path, ...]) -> Connected:
     """``init`` with a destination that is already a backup: connect it."""
     existing = backup.password
     password = existing or prompts.ask_text("Password of the existing backup:")
@@ -105,11 +117,12 @@ def _connect(backup: ConfiguredBackup, copies: tuple[Path, ...]) -> None:
     if existing is None:
         credentials.store(backup.workspace, credentials.BACKUP_PASSWORD, (password,))
     typer.echo(
-        f"Connected to the backup in {connected.source}: {connected.snapshots} snapshots, "
+        f"Connected to the backup in {connected.source}: {len(connected.snapshots)} snapshots, "
         f"copied to {backup.storage}."
     )
     if existing is None:
         _stored(backup)
+    return connected
 
 
 def _stored(backup: ConfiguredBackup) -> None:
@@ -160,6 +173,8 @@ def run(root: str | None = root_option()) -> None:
         record = BackupRunner(workspace, ResticBinaries()).run(progress=_ProgressLines())
     for warning in record.warnings:
         typer.echo(f"Not backed up: {warning}", err=True)
+    if record.notice is not None:
+        typer.echo(record.notice)
     if record.snapshot_id is not None:
         typer.echo(f"Backed up {workspace.root} as snapshot {record.snapshot_id[:8]}.")
     for copy in record.copies:

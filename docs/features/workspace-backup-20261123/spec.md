@@ -74,9 +74,18 @@ that same password.
 `backup.workspace_id` is the **workspace ID**, a random UUID. Set-up writes
 it, and `backup init` or the first run write one when a hand-written block
 has none. Setup does not show it. Because it is in `settings.yaml`, a copied,
-moved or restored workspace keeps it. Set-up that connects a destination's
-backup still writes a new one: that backup's snapshots belong to the
-workspace that made them.
+moved or restored workspace keeps it, and an ID already there is never
+changed.
+
+A workspace without one takes the ID its repository's snapshots already
+carry, so their schedule carries on: after set-up connects a destination's
+backup, after `backup init` connects one, and on the first run after
+Create or Connect a new repository. The snapshots are read without restic's
+lock, and untagged ones, from before workspace IDs, are not counted. With no
+tagged snapshots it is a new ID. With snapshots of several workspaces it is
+a new ID too, and set-up, `backup init` and the run's history say: "This
+backup holds snapshots from more than one workspace, so this workspace
+starts its own retention."
 
 The paths are specific to one machine, yet `settings.yaml` travels with the
 workspace when it is restored somewhere else. See *Missing repository* for how

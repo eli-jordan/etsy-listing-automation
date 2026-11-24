@@ -29,6 +29,7 @@ from etsy_listings.core.backup.repository import (
     RestoreProgress,
     Snapshot,
     WrongPasswordError,
+    workspace_tag,
 )
 from etsy_listings.core.config.settings import RetentionSettings
 
@@ -320,4 +321,5 @@ def _listed(number: int, entry: datetime | MemorySnapshot) -> Snapshot:
         time=entry.time,
         paths=(entry.path,),
         hostname=entry.hostname,
+        tags=() if entry.workspace_id is None else (workspace_tag(entry.workspace_id),),
     )

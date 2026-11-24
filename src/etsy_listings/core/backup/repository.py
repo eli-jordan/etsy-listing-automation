@@ -65,6 +65,25 @@ class Snapshot:
     """Files the backup read, from the snapshot's summary (restic 0.17+)."""
     size: int | None = None
     """Bytes the backup read, from the snapshot's summary."""
+    tags: tuple[str, ...] = ()
+
+    @property
+    def workspace_id(self) -> str | None:
+        """The workspace ID its ``workspace:<id>`` tag names; None for an
+        untagged snapshot, such as one made by hand (ADR-0060)."""
+        for tag in self.tags:
+            if tag.startswith(WORKSPACE_TAG):
+                return tag.removeprefix(WORKSPACE_TAG)
+        return None
+
+
+WORKSPACE_TAG = "workspace:"
+"""Every backup the app makes is tagged ``workspace:<workspace ID>``."""
+
+
+def workspace_tag(workspace_id: str) -> str:
+    """The tag every snapshot of the workspace ``workspace_id`` carries."""
+    return f"{WORKSPACE_TAG}{workspace_id}"
 
 
 @dataclass(frozen=True)

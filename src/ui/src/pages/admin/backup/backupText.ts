@@ -124,7 +124,8 @@ export function connectingLine(status: BackupStatus, source?: string | null): st
 /** What set-up says once it connected a destination's backup. */
 export function connectedNote(status: BackupStatus, connected: BackupConnected): string {
   const count = `${connected.snapshots} ${connected.snapshots === 1 ? "snapshot" : "snapshots"}`;
-  return `Connected to the backup in ${nameOf(status, connected.destination)}: ${count}.`;
+  const note = `Connected to the backup in ${nameOf(status, connected.destination)}: ${count}.`;
+  return connected.notice ? `${note} ${connected.notice}` : note;
 }
 
 function filesCounted({ files_done: done, files_total: total }: RunningBackup): string {
@@ -183,6 +184,11 @@ export type RowResult = "ok" | "partial" | "failed" | "stopped";
 
 /** A history row's result and the one line under it. */
 export function rowResult(entry: HistoryEntry): { result: RowResult; detail: string } {
+  const { result, detail } = runResult(entry);
+  return { result, detail: entry.run.notice ? `${detail}. ${entry.run.notice}` : detail };
+}
+
+function runResult(entry: HistoryEntry): { result: RowResult; detail: string } {
   const { run } = entry;
   const name = (path: string) => entry.names[path] ?? lastPart(path);
   if (run.outcome === "failed")

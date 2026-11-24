@@ -21,6 +21,7 @@ from etsy_listings.core.application.backup_coordinator import (
     BackupCoordinator,
     BackupEnvironment,
 )
+from etsy_listings.core.application.backup_repository import SEVERAL_WORKSPACES, backup_settings
 from etsy_listings.core.application.backup_run import BackupRunner
 from etsy_listings.core.backup.binary import RESTIC_BINARY_ENV_VAR, ResticBinaries
 from etsy_listings.core.backup.repository import ResticError
@@ -32,7 +33,7 @@ from etsy_listings.server.api.app import create_app
 from tests.support.ai_runs import wait_for
 from tests.support.backups import PASSWORD, configure_backups, initialise
 from tests.support.repository_files import FakeRepository, files, identities
-from tests.support.restic import InMemoryRestic
+from tests.support.restic import InMemoryRestic, MemorySnapshot
 
 NOW = datetime(2026, 11, 23, 9, 0, tzinfo=UTC)
 
@@ -133,7 +134,7 @@ def test_set_up_connects_the_backup_a_destination_holds_then_backs_up_into_it(
 
     status = _ok(_set_up(client, storage, [cloud]))
 
-    assert status["connected"] == {"destination": str(cloud), "snapshots": 1}
+    assert status["connected"] == {"destination": str(cloud), "snapshots": 1, "notice": None}
     settings = (workspace_root / "settings.yaml").read_text(encoding="utf-8")
     assert f"repository: {storage}" in settings
     assert str(cloud) in settings
@@ -351,6 +352,42 @@ def test_set_up_connects_a_real_repository_and_the_next_backup_adds_to_it(
 
     assert wrong.status_code == 422, wrong.text
     assert "password" in wrong.json()["field_errors"]
-    assert status["connected"] == {"destination": str(cloud), "snapshots": 1}
+    assert status["connected"] == {"destination": str(cloud), "snapshots": 1, "notice": None}
     assert entry["run"]["outcome"] == "succeeded", entry
     assert after["repository"]["snapshots"] == 2
+
+
+def test_set_up_adopts_the_workspace_id_the_connected_backup_carries(
+    client: TestClient, workspace_root: Path, storage: Path, restic: InMemoryRestic, tmp_path: Path
+) -> None:
+    """Its snapshots' schedule carries on; untagged ones are not counted."""
+    cloud = _copy(tmp_path / "cloud", "first").root
+    restic.snapshots[:] = [NOW - timedelta(days=30), MemorySnapshot(NOW - timedelta(days=1), OURS)]
+
+    status = _ok(_set_up(client, storage, [cloud]))
+
+    assert status["connected"]["notice"] is None
+    assert _workspace_id(workspace_root) == OURS
+
+
+def test_set_up_starts_its_own_retention_beside_several_workspaces_and_says_so(
+    client: TestClient, workspace_root: Path, storage: Path, restic: InMemoryRestic, tmp_path: Path
+) -> None:
+    cloud = _copy(tmp_path / "cloud", "first").root
+    restic.snapshots[:] = [
+        MemorySnapshot(NOW - timedelta(days=2), OURS),
+        MemorySnapshot(NOW - timedelta(days=1), THEIRS),
+    ]
+
+    status = _ok(_set_up(client, storage, [cloud]))
+
+    assert status["connected"]["notice"] == SEVERAL_WORKSPACES
+    assert _workspace_id(workspace_root) not in (None, OURS, THEIRS)
+
+
+OURS = "6a1f3c0e-2b9d-4e5a-8c7f-0d1e2f3a4b5c"
+THEIRS = "b2c4d6e8-1a3b-4c5d-9e7f-a0b1c2d3e4f5"
+
+
+def _workspace_id(workspace_root: Path) -> str | None:
+    return backup_settings(Workspace.discover(root_override=workspace_root)).workspace_id

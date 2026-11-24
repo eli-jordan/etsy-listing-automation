@@ -52,6 +52,7 @@ from etsy_listings.core.backup.repository import (
     RestoreProgress,
     Snapshot,
     WrongPasswordError,
+    workspace_tag,
 )
 from etsy_listings.core.config.settings import RetentionSettings
 
@@ -250,11 +251,6 @@ class Restic:
 # ----------------------------------------------------- arguments and lines
 
 
-def workspace_tag(workspace_id: str) -> str:
-    """The tag every snapshot of the workspace ``workspace_id`` carries."""
-    return f"workspace:{workspace_id}"
-
-
 def forget_arguments(retention: RetentionSettings, workspace_id: str) -> tuple[str, ...]:
     """restic counts the current week and month as one of each, so N past
     weeks and months are N + 1 (spec, *Backup run* step 5).
@@ -322,6 +318,7 @@ def _snapshot(raw: Mapping[str, Any]) -> Snapshot:
         hostname=raw.get("hostname", ""),
         files=summary.get("total_files_processed"),
         size=summary.get("total_bytes_processed"),
+        tags=tuple(raw.get("tags") or ()),
     )
 
 

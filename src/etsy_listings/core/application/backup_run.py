@@ -13,7 +13,7 @@ from __future__ import annotations
 import threading
 from collections.abc import Callable, Iterator
 from contextlib import AbstractContextManager, contextmanager, nullcontext
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Literal
@@ -150,11 +150,10 @@ class BackupRunner:
         run = _Run(self.now(), str(settings.repository), progress or (lambda _: None))
         try:
             # Inside the try: a refused configuration is a failed run.
-            if settings.workspace_id is None:
-                identity = ensure_workspace_id(self.workspace)
-                settings = settings.model_copy(update={"workspace_id": identity})
             backup = self._configured(settings)
             repository = backup.open()
+            if settings.workspace_id is None:
+                backup = self._adopt_workspace_id(backup, repository, run)
             with _paused(gate, run):
                 run.enter("backing_up")
                 self._back_up(repository, backup, run, cancel)
@@ -175,6 +174,16 @@ class BackupRunner:
         record = run.record(self.now())
         BackupStateStore(self.home).append_run(record)
         return record
+
+    def _adopt_workspace_id(
+        self, backup: ConfiguredBackup, repository: Repository, run: _Run
+    ) -> ConfiguredBackup:
+        """A block written by hand has no workspace ID: write the one the
+        repository's snapshots carry, or a new one (ADR-0060)."""
+        chosen = ensure_workspace_id(self.workspace, repository.snapshots(lock=False))
+        run.notice = chosen.notice
+        settings = backup.settings.model_copy(update={"workspace_id": chosen.value})
+        return replace(backup, settings=settings)
 
     def _configured(self, settings: BackupSettings | None = None) -> ConfiguredBackup:
         return configured_backup(
@@ -413,6 +422,7 @@ class _Run:
     stopped: bool = False
     warnings: list[str] = field(default_factory=list)
     copies: list[CopyRecord] = field(default_factory=list)
+    notice: str | None = None
 
     def enter(self, step: BackupStep, destination: Path | None = None) -> None:
         self.step = step
@@ -440,4 +450,5 @@ class _Run:
             warnings=tuple(self.warnings),
             data_added=self.data_added,
             copies=tuple(self.copies),
+            notice=self.notice,
         )

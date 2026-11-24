@@ -293,26 +293,58 @@ def new_workspace_id() -> str:
     return str(uuid.uuid4())
 
 
-def ensure_workspace_id(workspace: Workspace) -> str:
-    """The workspace ID in ``backup.workspace_id``, written there first when
-    the block has none, as a ``backup:`` block written by hand does.
+SEVERAL_WORKSPACES = (
+    "This backup holds snapshots from more than one workspace, so this workspace "
+    "starts its own retention."
+)
+
+
+@dataclass(frozen=True)
+class WorkspaceId:
+    """The workspace ID an operation uses, and what to tell the seller."""
+
+    value: str
+    notice: str | None = None
+    """Set when the repository's snapshots name several workspaces, so a new
+    ID was made instead of adopting one."""
+
+
+def workspace_id_for(snapshots: Sequence[Snapshot]) -> WorkspaceId:
+    """The ID a workspace without one takes for a repository holding
+    ``snapshots``: the one workspace ID they are tagged with, so its schedule
+    carries on (ADR-0060); otherwise a new one. Untagged snapshots, from
+    before workspace IDs, are not counted. Several IDs are not guessed
+    between: the new one comes with :data:`SEVERAL_WORKSPACES`."""
+    found = {snapshot.workspace_id for snapshot in snapshots} - {None}
+    if len(found) == 1:
+        (only,) = found
+        assert only is not None
+        return WorkspaceId(only)
+    return WorkspaceId(new_workspace_id(), SEVERAL_WORKSPACES if found else None)
+
+
+def ensure_workspace_id(workspace: Workspace, snapshots: Sequence[Snapshot] = ()) -> WorkspaceId:
+    """The workspace ID in ``backup.workspace_id``, kept whenever there is
+    one. A block with none, as written by hand, gets
+    :func:`workspace_id_for` ``snapshots`` (the repository's, read without
+    the lock), written there first.
 
     Set-up writes the ID with the rest of the block; ``backup init`` and a
     run call this. Another write that lands first is read again, so two
     callers end with the one ID."""
+    chosen = workspace_id_for(snapshots)
     for _ in range(3):
         current = workspace_settings.read_settings(workspace)
         backup = current.settings.backup
         if backup is None:
             raise BackupOffError(workspace.settings_file())
         if backup.workspace_id is not None:
-            return backup.workspace_id
-        chosen = new_workspace_id()
+            return WorkspaceId(backup.workspace_id)
         try:
             workspace_settings.edit_settings(
                 workspace,
                 expected_revision=current.revision,
-                changes={workspace_settings.BACKUP_WORKSPACE_ID: chosen},
+                changes={workspace_settings.BACKUP_WORKSPACE_ID: chosen.value},
                 editable=(workspace_settings.BACKUP_WORKSPACE_ID,),
             )
         except SettingsRevisionConflictError:

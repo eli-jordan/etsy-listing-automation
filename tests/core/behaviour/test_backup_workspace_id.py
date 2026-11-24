@@ -12,9 +12,15 @@ from pathlib import Path
 
 import pytest
 
-from etsy_listings.core.application.backup_repository import backup_settings
+from etsy_listings.core.application.backup_repository import (
+    SEVERAL_WORKSPACES,
+    WorkspaceId,
+    backup_settings,
+    ensure_workspace_id,
+)
 from etsy_listings.core.application.backup_run import BackupRunner
 from etsy_listings.core.backup.binary import RESTIC_BINARY_ENV_VAR, ResticBinaries
+from etsy_listings.core.backup.state import RunRecord
 from etsy_listings.core.config.secrets import BACKUP_PASSWORD_VAR
 from etsy_listings.core.config.settings import RetentionSettings
 from etsy_listings.core.workspace.workspace import Workspace
@@ -117,3 +123,55 @@ def test_other_workspaces_and_untagged_snapshots_survive_forget(
     assert all(time in restic.snapshots for time in by_hand)
     # The older of this workspace's own goes; weekly and monthly keep the other.
     assert {entry.time for entry in restic.workspace_snapshots(OURS)} == {_days_ago(200), NOW}
+
+
+def test_a_workspace_without_an_id_adopts_the_one_its_repository_s_snapshots_carry(
+    workspace_root: Path, tmp_path: Path, home: Path, restic: InMemoryRestic
+) -> None:
+    """Untagged snapshots, from before workspace IDs, are not counted."""
+    workspace = _workspace(workspace_root, tmp_path, None)
+    restic.snapshots.extend([_days_ago(30), MemorySnapshot(_days_ago(2), OURS, hostname="old")])
+
+    record = _runner_record(workspace, home, restic)
+
+    assert backup_settings(workspace).workspace_id == OURS
+    assert record.notice is None
+    assert len(restic.workspace_snapshots(OURS)) == 2
+
+
+def test_snapshots_of_several_workspaces_get_a_new_id_and_say_so(
+    workspace_root: Path, tmp_path: Path, home: Path, restic: InMemoryRestic
+) -> None:
+    workspace = _workspace(workspace_root, tmp_path, None)
+    restic.snapshots.extend(
+        [MemorySnapshot(_days_ago(2), OURS), MemorySnapshot(_days_ago(1), THEIRS)]
+    )
+
+    record = _runner_record(workspace, home, restic)
+
+    chosen = backup_settings(workspace).workspace_id
+    assert chosen not in (None, OURS, THEIRS)
+    assert record.notice == SEVERAL_WORKSPACES
+
+
+def test_an_existing_id_is_never_changed(
+    workspace_root: Path, tmp_path: Path, home: Path, restic: InMemoryRestic
+) -> None:
+    workspace = _workspace(workspace_root, tmp_path, OURS)
+    restic.snapshots.append(MemorySnapshot(_days_ago(1), THEIRS))
+    before = (workspace_root / "settings.yaml").read_bytes()
+
+    record = _runner_record(workspace, home, restic)
+
+    assert (workspace_root / "settings.yaml").read_bytes() == before
+    assert record.notice is None
+    assert ensure_workspace_id(workspace, restic.snapshot_list(lock=False)) == WorkspaceId(OURS)
+
+
+def _runner_record(workspace: Workspace, home: Path, restic: InMemoryRestic) -> RunRecord:
+    runner = BackupRunner(
+        workspace, ResticBinaries(home=home), home=home, restic=restic, now=lambda: NOW
+    )
+    record = runner.run()
+    assert record.outcome == "succeeded", record.message
+    return record

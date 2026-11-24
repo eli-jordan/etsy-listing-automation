@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import os
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 from etsy_listings.core.application import credentials, workspace_settings
@@ -38,6 +38,7 @@ from etsy_listings.core.application.backup_repository import (
     create_repository,
     holds_files,
     new_workspace_id,
+    workspace_id_for,
 )
 from etsy_listings.core.application.refusals import (
     InvalidSettingsEditError,
@@ -103,13 +104,17 @@ class PreparedSetUp:
         None for a new repository. ``trying`` is told each copy a connect
         tries, before it copies."""
         if not self.connects:
-            self._save(expected_revision)
+            self._save(expected_revision, new_workspace_id())
             create_repository(self.backup, self.answers.password)
             create_folders(self.answers.destinations)
             return None
         connected = self._connect(expected_revision, trying)
+        # Backups are off, so the workspace has no ID: it takes the one the
+        # connected snapshots carry, so their schedule carries on (ADR-0060).
+        chosen = workspace_id_for(connected.snapshots)
+        connected = replace(connected, notice=chosen.notice)
         try:
-            self._save(expected_revision)
+            self._save(expected_revision, chosen.value)
         except BaseException:
             remove_tree(self.backup.storage)  # The copy just made: nothing is saved.
             raise
@@ -136,16 +141,14 @@ class PreparedSetUp:
         except ConnectPasswordError:
             raise ExistingBackupPasswordError(tried[-1]) from None
 
-    def _save(self, expected_revision: str) -> None:
+    def _save(self, expected_revision: str, workspace_id: str) -> None:
         answers = self.answers
         block = {
             "repository": str(answers.repository),
             "destinations": [str(path) for path in answers.destinations],
             "interval_hours": answers.interval_hours,
             "retention": answers.retention.model_dump(),
-            # Backups are off, so the workspace has none yet: even one that
-            # connects a destination's backup gets its own (ADR-0060).
-            "workspace_id": new_workspace_id(),
+            "workspace_id": workspace_id,
         }
         workspace_settings.edit_settings(
             self.workspace,

@@ -25,7 +25,7 @@ from etsy_listings.core.config.secrets import BACKUP_PASSWORD_VAR, Secrets
 from etsy_listings.core.workspace import layout
 
 from tests.support import scripted as scripted_prompts
-from tests.support.backups import PASSWORD, configure_backups
+from tests.support.backups import PASSWORD, WORKSPACE_ID, configure_backups
 
 runner = CliRunner()
 Script = Callable[[scripted_prompts.Answers], scripted_prompts.Scripted]
@@ -43,7 +43,9 @@ def isolated(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 @pytest.fixture
 def repository(tmp_path: Path, workspace_root: Path) -> Path:
     path = tmp_path / "backups"
-    configure_backups(workspace_root, path, destinations=[tmp_path / "cloud"], password=None)
+    configure_backups(
+        workspace_root, path, destinations=[tmp_path / "cloud"], password=None, workspace_id=None
+    )
     return path
 
 
@@ -56,6 +58,10 @@ def _store_password(workspace_root: Path, repository: Path, password: str = PASS
 def _run(workspace_root: Path, *args: str) -> tuple[int, str]:
     result = runner.invoke(app, ["backup", *args, "--root", str(workspace_root)])
     return result.exit_code, result.output
+
+
+def _settings(workspace_root: Path) -> str:
+    return (workspace_root / "settings.yaml").read_text(encoding="utf-8")
 
 
 def _env(workspace_root: Path) -> str:
@@ -163,7 +169,8 @@ def test_init_asks_for_a_password_stores_it_and_creates_the_repository(
     assert code == 0, output
     assert (repository / "config").is_file()
     assert Secrets.load(workspace_root / layout.ENV_FILE).require_backup_password() == PASSWORD
-    assert "workspace_id: " in (workspace_root / "settings.yaml").read_text(encoding="utf-8")
+    assert "workspace_id: " in _settings(workspace_root)
+    assert WORKSPACE_ID not in _settings(workspace_root), "a new repository gets a new ID"
     assert "password manager" in output
     assert PASSWORD not in output
     assert len(script.asked) == 2
@@ -340,6 +347,10 @@ def test_init_connects_the_backup_a_destination_already_holds(
     assert _run(workspace_root, "init")[0] == 0
     assert _run(workspace_root, "run")[0] == 0
     shutil.rmtree(repository)
+    # The block is written again by hand: no password and no workspace ID.
+    configure_backups(
+        workspace_root, repository, destinations=[cloud], password=None, workspace_id=None
+    )
     (workspace_root / layout.ENV_FILE).unlink()
 
     scripted({"password of the existing backup": "not the password at all"})
@@ -359,3 +370,4 @@ def test_init_connects_the_backup_a_destination_already_holds(
     assert len(script.asked) == 1
     assert Secrets.load(workspace_root / layout.ENV_FILE).require_backup_password() == PASSWORD
     assert (repository / "config").read_bytes() == (cloud / "config").read_bytes()
+    assert f"workspace_id: {WORKSPACE_ID}" in _settings(workspace_root), "adopted, not new"

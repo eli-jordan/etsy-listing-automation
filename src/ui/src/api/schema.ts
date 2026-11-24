@@ -2462,6 +2462,8 @@ export interface components {
     BackupConnected: {
       /** Destination */
       destination: string;
+      /** Notice */
+      notice?: string | null;
       /** Snapshots */
       snapshots: number;
     };
@@ -5158,6 +5160,8 @@ export interface components {
       finished_at: string;
       /** Message */
       message?: string | null;
+      /** Notice */
+      notice?: string | null;
       /**
        * Outcome
        * @enum {string}

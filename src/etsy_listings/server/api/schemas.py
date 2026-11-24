@@ -1249,6 +1249,9 @@ class BackupConnected(BaseModel):
     destination: str
     """The destination it was copied from."""
     snapshots: int
+    notice: str | None = None
+    """Set when its snapshots name several workspaces, so this workspace
+    got a new workspace ID and starts its own retention (ADR-0060)."""
 
 
 class BackupSetUpResponse(BackupOverview):

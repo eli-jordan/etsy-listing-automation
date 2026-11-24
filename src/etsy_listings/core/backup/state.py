@@ -96,6 +96,9 @@ class RunRecord(_Record):
     """Bytes the snapshot added to the repository, from restic's summary."""
     copies: tuple[CopyRecord, ...] = ()
     """Each destination's copy, in the configured order."""
+    notice: str | None = None
+    """Something the run decided that the seller should know, such as a
+    new workspace ID beside several others (ADR-0060)."""
 
 
 class BackupStateStore:

@@ -77,8 +77,9 @@ backup:
 ```
 
 Leave out `workspace_id`: `backup init` adds that line, a random ID the
-retention keeps this workspace's backups by. Don't edit or copy it to another
-workspace.
+retention keeps this workspace's backups by. If the destination already holds
+this workspace's backups, `init` takes the ID they carry, so their schedule
+carries on. Don't edit it or copy it to another workspace.
 
 The backup storage folder must not exist yet, or must be empty. The password
 goes into the workspace `.env` as `ETSY_LISTINGS_BACKUP_PASSWORD`. Either add
