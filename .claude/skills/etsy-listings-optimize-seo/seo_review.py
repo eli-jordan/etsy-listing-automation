@@ -35,7 +35,7 @@ from typing import Any
 from PIL import Image
 
 from etsy_listings.core.clients.etsy.transport import Transport
-from etsy_listings.core.connections import _etsy_app_key_source
+from etsy_listings.core.connections import _etsy_app_key_source, etsy_transport
 from etsy_listings.core.workspace.listing_documents import ListingDocuments
 from etsy_listings.core.workspace.workspace import Workspace
 
@@ -113,6 +113,11 @@ def workspace() -> tuple[Workspace, ListingDocuments]:
 
 def transport() -> Transport:
     return Transport(_etsy_app_key_source(WORKSPACE))
+
+
+def shop_transport() -> Transport:
+    """Sends the shop owner's sign-in, so the shop's own drafts come back too."""
+    return etsy_transport(WORKSPACE)
 
 
 def run_dir(name: str) -> Path:
@@ -222,7 +227,7 @@ def lock_listing_id(folder: Path) -> int | None:
 
 
 def listing_states(ids: list[int]) -> dict[int, str]:
-    client = transport()
+    client = shop_transport()
     states: dict[int, str] = {}
     for start in range(0, len(ids), 100):
         batch = ",".join(str(i) for i in ids[start : start + 100])
@@ -794,7 +799,7 @@ def build_cards(run: Path, plan: Json, scoring: tuple) -> tuple[list[Json], list
     rows = [r for r in scoped(run) if str(r["id"]) in plan]
     ids = ",".join(str(r["id"]) for r in rows)
     params = [("listing_ids", ids), ("includes", "Images")]
-    body = transport().get(BATCH_PATH, params=params).json()
+    body = shop_transport().get(BATCH_PATH, params=params).json()
     images = {x["listing_id"]: x["images"][0]["url_570xN"] for x in body["results"] if x["images"]}
     cards, pairs = [], []
     for row in rows:

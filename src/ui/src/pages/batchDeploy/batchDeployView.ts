@@ -21,6 +21,58 @@ export const BATCH_STAGE_TITLES: Record<BatchStage, string> = {
   review: "Review all changes",
 };
 
+/** The words that differ between a deploy of every listing and one of a
+ * listing batch's reviewed rows (ADR-0059); everything else on the page is
+ * the same. */
+export interface ScopeCopy {
+  scope: "workspace" | "batch";
+  noun: string;
+  plan: string;
+  across: string;
+  back: string;
+  returnTo: string;
+  planRefused: string;
+}
+
+const SCOPE_COPY: Record<ScopeCopy["scope"], ScopeCopy> = {
+  workspace: {
+    scope: "workspace",
+    noun: "workspace",
+    plan: "all-listings plan",
+    across: "across this workspace",
+    back: "← Back to listings",
+    returnTo: "return to Listings",
+    planRefused: "Could not start a fresh workspace plan.",
+  },
+  batch: {
+    scope: "batch",
+    noun: "batch",
+    plan: "batch plan",
+    across: "for the reviewed listings in this batch",
+    back: "← Back to batch",
+    returnTo: "return to the batch",
+    planRefused:
+      "Could not start a fresh batch plan. There may be no reviewed listings left to deploy.",
+  },
+};
+
+/** The page's words for a run of listing batch `batchId`, or of the whole
+ * workspace when `null`. */
+export function scopeCopy(batchId: string | null): ScopeCopy {
+  return SCOPE_COPY[batchId === null ? "workspace" : "batch"];
+}
+
+const BATCH_SCOPE_TITLES: Record<BatchStage, string> = {
+  planning: "Planning reviewed listings…",
+  applying: "Applying reviewed changes…",
+  applied: "Batch result",
+  review: "Review batch changes",
+};
+
+export function batchStageTitle(stage: BatchStage, copy: ScopeCopy): string {
+  return (copy.scope === "batch" ? BATCH_SCOPE_TITLES : BATCH_STAGE_TITLES)[stage];
+}
+
 /** An apply result someone has to act on: partial, failed or stale. */
 export function resultNeedsAttention(result: BatchResult): boolean {
   return result.partial || result.failed.length > 0 || result.stale.length > 0;

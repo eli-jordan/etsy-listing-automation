@@ -7,12 +7,12 @@ export type SaveStatus =
   | { kind: "error"; message: string }
   | { kind: "conflict"; message: string };
 
-/** What a file's save endpoint answers; `saved` carries the revision the
- * next save must name. */
+/** What a file's save endpoint answers: `saved`, carrying the revision the
+ * next save must name, or a refusal (`api/refusal.ts`). */
 export type SaveOutcome =
   | { kind: "saved"; revision: string }
-  | { kind: "conflict"; message: string }
-  | { kind: "invalid"; message: string; fieldErrors: FieldErrors };
+  | { kind: "stale"; message: string }
+  | { kind: "refused"; message: string; fieldErrors: FieldErrors };
 
 export type FieldErrors = Partial<Record<string, string>>;
 export type RefusedValue<T> = { value: T; attempt: number };
@@ -187,7 +187,7 @@ export function useSaveQueue<C extends Changes, O extends SaveOutcome>({
               Object.fromEntries(Object.entries(errors).filter(([key]) => !clears(key, changes))),
             );
             if (waiting.current === 1) settle(0);
-          } else if (outcome.kind === "conflict") {
+          } else if (outcome.kind === "stale") {
             conflicted.current = true;
             setStatus({ kind: "conflict", message: outcome.message });
           } else {
@@ -229,6 +229,8 @@ export function useSaveQueue<C extends Changes, O extends SaveOutcome>({
     retry,
     reset,
     afterSaves,
+    /** The revision the next save names, for a write outside the queue. */
+    currentRevision: useCallback(() => revision.current, []),
     locked: status.kind === "conflict",
   };
 }

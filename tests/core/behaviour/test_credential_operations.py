@@ -68,6 +68,18 @@ def _token_store(root: Path) -> TokenStore:
 # ---------------------------------------------------------------- precedence
 
 
+def test_the_backup_password_round_trips_literally(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv(BACKUP_PASSWORD_VAR, raising=False)
+    monkeypatch.setenv("BACKUP_FIXTURE_PART", "expanded")
+    password = '  ${BACKUP_FIXTURE_PART} # "back\\up"  '
+
+    credentials.store(tmp_path, credentials.BACKUP_PASSWORD, (password,))
+
+    assert credentials.stored(tmp_path, BACKUP_PASSWORD_VAR) == password
+
+
 def test_a_credential_in_the_environment_wins_over_the_workspace_file(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

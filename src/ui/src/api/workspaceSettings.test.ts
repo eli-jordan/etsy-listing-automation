@@ -44,8 +44,8 @@ it("sends the file revision and changed keys and distinguishes save refusals", a
   expect(patch).toHaveBeenCalledWith("/api/admin/settings", {
     body: { revision: "s1", changes: { concurrency: 2 } },
   });
-  patch.mockResolvedValueOnce(answer(412, undefined, { kind: "conflict", message: "changed" }));
-  await expect(saveSettings("s1", {})).resolves.toEqual({ kind: "conflict", message: "changed" });
+  patch.mockResolvedValueOnce(answer(412, undefined, { kind: "stale", message: "changed" }));
+  await expect(saveSettings("s1", {})).resolves.toEqual({ kind: "stale", message: "changed" });
   patch.mockResolvedValueOnce(
     answer(422, undefined, {
       kind: "invalid",
@@ -54,7 +54,7 @@ it("sends the file revision and changed keys and distinguishes save refusals", a
     }),
   );
   await expect(saveSettings("s1", {})).resolves.toEqual({
-    kind: "invalid",
+    kind: "refused",
     message: "bad",
     fieldErrors: { "batch_ai.concurrency": "1–8" },
   });
