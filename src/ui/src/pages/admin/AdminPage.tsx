@@ -92,9 +92,9 @@ export function AdminPage() {
     // acknowledged Change, so a cancelled change is never resent by Retry.
     const outcome = await save({ currency: code }, { retain: false });
     if (outcome?.kind === "saved") closeCurrency();
-    else if (outcome?.kind === "invalid")
+    else if (outcome?.kind === "refused")
       throw new Error(outcome.fieldErrors.currency ?? outcome.message);
-    else if (outcome?.kind === "conflict") closeCurrency();
+    else if (outcome?.kind === "stale") closeCurrency();
   };
 
   return (

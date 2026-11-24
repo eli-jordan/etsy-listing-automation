@@ -109,7 +109,7 @@ describe("Create a new repository", () => {
 
   it("shows a refusal in the dialog, keeps the answers, and Cancel changes nothing", async () => {
     vi.spyOn(backupApi, "createRepository").mockResolvedValue({
-      kind: "conflict",
+      kind: "refused",
       message: "E:/pictures already holds files.",
       fieldErrors: {},
     });
@@ -129,7 +129,7 @@ describe("Create a new repository", () => {
 describe("Create while a destination holds a copy", () => {
   it("names the copy and switches to Connect with it as the source", async () => {
     vi.spyOn(backupApi, "createRepository").mockResolvedValue({
-      kind: "conflict",
+      kind: "refused",
       message: `${CLOUD} already holds a copy of a backup repository. Use Connect an existing repository with that folder.`,
       fieldErrors: {},
       connectFrom: CLOUD,
@@ -189,7 +189,7 @@ describe("Connect an existing repository", () => {
 
   it("names a wrong password in the dialog and lets the seller try again", async () => {
     const connect = vi.spyOn(backupApi, "connectRepository").mockResolvedValue({
-      kind: "invalid",
+      kind: "refused",
       message: "That password does not open this repository. Nothing was saved.",
       fieldErrors: {},
     });

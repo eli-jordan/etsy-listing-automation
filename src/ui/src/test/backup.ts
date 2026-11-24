@@ -18,6 +18,7 @@ export function backupsOff(over: Partial<BackupStatus> = {}): BackupStatus {
   return {
     enabled: false,
     destinations: [],
+    password_min_length: 12,
     warnings: [{ kind: "off", message: "Backups are off.", banner: false }],
     ...over,
   };
@@ -33,6 +34,7 @@ export function backupsOn(over: Partial<BackupStatus> = {}): BackupStatus {
     repository: { path: BACKUP_REPOSITORY, missing: false, snapshots: 5, password_stored: true },
     destinations: [backupDestination()],
     warnings: [],
+    password_min_length: 12,
     ...over,
   };
 }
@@ -40,6 +42,8 @@ export function backupsOn(over: Partial<BackupStatus> = {}): BackupStatus {
 export function backupDestination(over: Partial<DestinationStatus> = {}): DestinationStatus {
   return {
     path: BACKUP_ICLOUD,
+    name: "iCloud Drive",
+    icloud: true,
     last_copy: hoursFromNow(-2),
     behind: false,
     changed: [],

@@ -24,7 +24,9 @@ interval.
 ``config`` stops the schedule and is reported (spec, *Missing repository*):
 nothing here creates one by itself. The seller creates a new one or
 connects an existing one (``backup_missing``); a connect holds the slot
-while it copies, so no backup or repair starts meanwhile.
+while it copies, so no backup or repair starts meanwhile. Set-up that finds
+a destination already holding a backup connects it the same way, holding
+the slot as a connect.
 """
 
 from __future__ import annotations
@@ -39,6 +41,7 @@ from pathlib import Path
 from typing import Literal
 
 from etsy_listings.core.application.backup_missing import (
+    Connected,
     Replacement,
     connect_repository,
     create_new_repository,
@@ -67,7 +70,7 @@ from etsy_listings.core.application.backup_restore import (
     prepare_restore,
 )
 from etsy_listings.core.application.backup_run import BackupProgress, BackupRunner
-from etsy_listings.core.application.backup_setup import BackupSetUp, set_up_backups
+from etsy_listings.core.application.backup_setup import BackupSetUp, prepare_set_up
 from etsy_listings.core.application.job_gate import JobGate
 from etsy_listings.core.backup.binary import ResticBinaries
 from etsy_listings.core.backup.destinations import RepairResult
@@ -219,19 +222,33 @@ class BackupCoordinator:
             raise RepositoryMissingError(settings.repository)
         self._start_backup()
 
-    def set_up(self, answers: BackupSetUp, *, expected_revision: str) -> None:
-        """Set backups up (``backup_setup``), then start the first backup."""
+    def set_up(self, answers: BackupSetUp, *, expected_revision: str) -> Connected | None:
+        """Set backups up (``backup_setup``), then start the first backup;
+        or, when a destination already holds a backup, connect it, answering
+        once it is connected and holding the slot meanwhile, as
+        :meth:`connect` does. What was connected, or None."""
         if self._settings() is not None:
             raise ConflictError("Backups are already set up; change them on the Setup page.")
-        self._prepare_first_backup(
-            lambda: set_up_backups(
-                self._workspace,
-                answers,
-                expected_revision=expected_revision,
-                binaries=self._binaries,
-                restic=self._env.restic,
-            )
+        prepared = prepare_set_up(
+            self._workspace, answers, binaries=self._binaries, restic=self._env.restic
         )
+        if not prepared.connects:
+            self._prepare_first_backup(lambda: prepared.run(expected_revision=expected_revision))
+            return None
+        self._claim("connect", prepared.copies[0])
+        try:
+            connected = prepared.run(
+                expected_revision=expected_revision, trying=self._connecting_from
+            )
+        finally:
+            self._release()
+        self.wake()
+        return connected
+
+    def _connecting_from(self, source: Path) -> None:
+        with self._lock:
+            if self._running is not None:
+                self._running = self._running.model_copy(update={"destination": str(source)})
 
     def create_repository(self, answers: Replacement) -> None:
         """Create a new repository where the missing one was named or the

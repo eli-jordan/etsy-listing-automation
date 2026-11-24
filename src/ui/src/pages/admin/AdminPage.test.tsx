@@ -536,7 +536,7 @@ describe("Listing defaults", () => {
 
   it("keeps a refused value visible with its field error", async () => {
     save.mockResolvedValueOnce({
-      kind: "invalid",
+      kind: "refused",
       message: "bad",
       fieldErrors: { renewal: "Input should be 'manual' or 'auto'" },
     });
@@ -605,7 +605,7 @@ describe("Listing defaults", () => {
       if (failure === "network") server.failNext("renewal offline");
       else
         save.mockResolvedValueOnce({
-          kind: "invalid",
+          kind: "refused",
           message: "invalid renewal",
           fieldErrors: { renewal: "renewal refused" },
         });
@@ -688,7 +688,7 @@ describe("Listing defaults", () => {
         if (failure === "network") reject(new Error("renewal offline"));
         else
           answer({
-            kind: "invalid",
+            kind: "refused",
             message: "invalid renewal",
             fieldErrors: { renewal: "renewal refused" },
           });
@@ -743,7 +743,7 @@ describe("Listing defaults", () => {
       }
       await act(async () =>
         answer({
-          kind: "invalid",
+          kind: "refused",
           message: "invalid edit",
           fieldErrors: { [field]: "edit refused" },
         }),
@@ -812,7 +812,7 @@ describe("Listing defaults", () => {
       }
       await act(async () =>
         answer({
-          kind: "invalid",
+          kind: "refused",
           message: "invalid shipping",
           fieldErrors: {
             shipping_profile: "shipping refused",
@@ -842,7 +842,7 @@ describe("Listing defaults", () => {
     "keeps a refused %s choice visible when its lookup becomes unavailable",
     async (field) => {
       save.mockResolvedValueOnce({
-        kind: "invalid",
+        kind: "refused",
         message: "invalid edit",
         fieldErrors: {
           [field]: "edit refused",
@@ -1112,7 +1112,7 @@ describe("Listing defaults", () => {
         new Promise<SaveOutcome>((resolve) => {
           refuse = () =>
             resolve({
-              kind: "invalid",
+              kind: "refused",
               message: "invalid renewal",
               fieldErrors: { renewal: "auto refused" },
             });
@@ -1344,7 +1344,7 @@ describe("Listing defaults", () => {
   });
 
   it("asks for a reload after a conflict and edits nothing until then", async () => {
-    save.mockResolvedValueOnce({ kind: "conflict", message: "shop.yaml changed on disk" });
+    save.mockResolvedValueOnce({ kind: "stale", message: "shop.yaml changed on disk" });
     await openDefaults();
     fireEvent.change(screen.getByLabelText("Renewal"), { target: { value: "auto" } });
     fireEvent.blur(screen.getByLabelText("Renewal"));

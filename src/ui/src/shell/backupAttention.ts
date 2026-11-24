@@ -56,7 +56,7 @@ export interface BackupsOn extends Activity {
 export type BackupView =
   | (Activity & { state: "loading"; banner: null })
   | (Activity & { state: "error"; error: string; banner: null })
-  | (Activity & { state: "off"; banner: null })
+  | (Activity & { state: "off"; status: BackupStatus; banner: null })
   | BackupsOn;
 
 const IDLE: Activity = { running: false, restoring: false };
@@ -70,7 +70,7 @@ export function backupView(status: BackupStatus | null, error: string | null): B
     running: Boolean(status.running),
     restoring: status.restore?.outcome === "running",
   };
-  if (!status.enabled) return { ...activity, state: "off", banner: null };
+  if (!status.enabled) return { ...activity, state: "off", status, banner: null };
 
   const warnings = status.warnings.filter((warning) => warning.banner);
   const changed = (d: DestinationStatus) =>

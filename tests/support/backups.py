@@ -22,11 +22,14 @@ from etsy_listings.core.application.backup_repository import (
 from etsy_listings.core.backup.binary import ResticBinaries
 from etsy_listings.core.backup.repository import OpenRepository
 from etsy_listings.core.config.secrets import BACKUP_PASSWORD_VAR
+from etsy_listings.core.config.settings import RetentionSettings
 from etsy_listings.core.workspace import layout
 from etsy_listings.core.workspace.workspace import Workspace
 
 PASSWORD = "correct horse battery staple"
 """Long enough for the set-up form's minimum."""
+WORKSPACE_ID = "3d6f1a2b-8c4e-4f7a-9b0c-1e2d3f4a5b6c"
+"""The workspace ID a block has unless a test asks for none."""
 
 
 def configure_backups(
@@ -37,11 +40,15 @@ def configure_backups(
     restic_binary: Path | None = None,
     interval_hours: int | None = None,
     password: str | None = PASSWORD,
+    workspace_id: str | None = WORKSPACE_ID,
+    retention: RetentionSettings | None = None,
 ) -> Workspace:
     """Replace ``root``'s ``settings.yaml`` with a ``backup:`` block naming
     ``storage``, and its ``.env`` with ``password`` unless that is None; the
     workspace at ``root``. ``restic_binary`` names a restic so nothing is
-    downloaded; tests that never run restic pass any path."""
+    downloaded; tests that never run restic pass any path. With
+    ``workspace_id=None`` the first run writes one, as for a block written by
+    hand."""
     block: dict[str, Any] = {"repository": storage.as_posix()}
     if destinations:
         block["destinations"] = [path.as_posix() for path in destinations]
@@ -49,6 +56,10 @@ def configure_backups(
         block["restic_binary"] = restic_binary.as_posix()
     if interval_hours is not None:
         block["interval_hours"] = interval_hours
+    if workspace_id is not None:
+        block["workspace_id"] = workspace_id
+    if retention is not None:
+        block["retention"] = retention.model_dump()
     (root / "settings.yaml").write_text(
         yaml.safe_dump({"backup": block}, sort_keys=False), encoding="utf-8"
     )

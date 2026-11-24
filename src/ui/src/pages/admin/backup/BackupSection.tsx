@@ -7,6 +7,7 @@ import { WarningIcon } from "@phosphor-icons/react/dist/csr/Warning";
 import { XIcon } from "@phosphor-icons/react/dist/csr/X";
 import { useEffect, useRef, useState } from "react";
 import {
+  type BackupConnected,
   type BackupSettings,
   type DestinationStatus,
   getBackupHistory,
@@ -16,9 +17,10 @@ import {
   runBackup,
   type SetUpOutcome,
 } from "../../../api/backup";
+import type { Refusal } from "../../../api/refusal";
 import type { SettingsChanges } from "../../../api/workspaceSettings";
 import type { BackupsOn } from "../../../shell/backupAttention";
-import { useBackupStatus } from "../../../shell/backupStatus";
+import { FAST_POLL_MS, useBackupStatus } from "../../../shell/backupStatus";
 import type { RepositoryAction } from "../useWorkspaceSettings";
 import { type Answer, BackupForm } from "./BackupForm";
 import {
@@ -37,32 +39,31 @@ import {
 } from "./MissingRepository";
 import { RestoreDialogs, RestoreStrip } from "./Restore";
 import { useRestore } from "./useRestore";
-import { type BackupAnswers, NEW_BACKUP, repairNote, runningLine, summary } from "./backupText";
+import {
+  type BackupAnswers,
+  connectedNote,
+  NEW_BACKUP,
+  repairNote,
+  runningLine,
+  summary,
+} from "./backupText";
 import "./backup.css";
 
 export type BackupPage = "status" | "setup";
 
-/** What a settings.yaml save answered, as `useWorkspaceSettings` reports it. */
-export type SaveAnswer =
-  | { kind: "saved" }
-  | { kind: "conflict"; message: string }
-  | { kind: "invalid"; message: string; fieldErrors: Partial<Record<string, string>> }
-  | null;
+/** What a settings.yaml save answered, as `useWorkspaceSettings` reports
+ * it: null when an earlier save already found the file stale. */
+export type SaveAnswer = { kind: "saved" } | Refusal | null;
 
 const RELOAD = "settings.yaml changed on disk. Nothing was overwritten. Reload, then try again.";
 
-/** A settings save's `conflict` is always its 412 (`saveSettings`), and
- * set-up reports its 412 as `stale`: both mean reload. Set-up's other
- * conflicts (409) say what is wrong themselves. */
-function refusal(outcome: Exclude<SetUpOutcome, { kind: "started" }>): string;
-function refusal(outcome: Exclude<SaveAnswer, null>, settingsSave: true): string | null;
-function refusal(
-  outcome: Exclude<SaveAnswer | SetUpOutcome, null | { kind: "started" }>,
-  settingsSave = false,
-): string | null {
-  if (outcome.kind === "saved") return null;
-  if (outcome.kind === "stale" || (settingsSave && outcome.kind === "conflict")) return RELOAD;
-  const fields = Object.values(outcome.kind === "invalid" ? outcome.fieldErrors : {});
+/** Every refusal, worded one way: a stale file means reload; otherwise the
+ * server's reason and the fields it names. */
+function refusal(outcome: Refusal): string {
+  if (outcome.kind === "stale") return RELOAD;
+  const fields = Object.values(outcome.fieldErrors).filter(
+    (text) => !outcome.message.includes(text),
+  );
   return [outcome.message, ...fields].filter(Boolean).join(" ");
 }
 
@@ -77,6 +78,8 @@ export function BackupSection({
   setUp,
   replaceRepository,
   save,
+  connected = null,
+  onConnectedSeen = () => undefined,
 }: {
   page: BackupPage;
   onPage: (page: BackupPage) => void;
@@ -85,6 +88,10 @@ export function BackupSection({
   setUp: (answers: BackupAnswers & { password: string }) => Promise<SetUpOutcome>;
   replaceRepository: (action: RepositoryAction) => Promise<SetUpOutcome>;
   save: (changes: SettingsChanges) => Promise<SaveAnswer>;
+  /** The backup set-up connected, kept above this section: the reload after
+   * set-up remounts it. Shown as a note until dismissed. */
+  connected?: BackupConnected | null;
+  onConnectedSeen?: () => void;
 }) {
   const { view, readAt, refresh } = useBackupStatus();
   const [creating, setCreating] = useState(false);
@@ -101,6 +108,9 @@ export function BackupSection({
   if (view.state === "off") {
     if (!creating) return <NotSetUp onStart={() => setCreating(true)} />;
     const create = async (answers: BackupAnswers, password: string): Answer => {
+      // A destination that already holds a backup is connected, which can
+      // take minutes; the status says so while the request runs.
+      const polling = setInterval(() => void refresh(), FAST_POLL_MS);
       try {
         const outcome = await setUp({ ...answers, password });
         if (outcome.kind !== "started") return refusal(outcome);
@@ -110,12 +120,15 @@ export function BackupSection({
         return null;
       } catch (e) {
         return failure(e, "Could not set up backups");
+      } finally {
+        clearInterval(polling);
       }
     };
     return (
       <BackupForm
         mode="create"
         initial={NEW_BACKUP}
+        status={view.status}
         onCancel={() => setCreating(false)}
         onCreate={create}
       />
@@ -126,16 +139,16 @@ export function BackupSection({
     if (!saved) return <p role="status">Loading settings…</p>;
     const edit = async (answers: BackupAnswers, base: BackupAnswers): Answer => {
       try {
-        const refused = await save(changes(answers, base));
-        if (refused === null) return RELOAD;
-        const message = refusal(refused, true);
-        if (!message) void refresh();
-        return message;
+        const answer = await save(changes(answers, base));
+        if (answer === null) return RELOAD;
+        if (answer.kind !== "saved") return refusal(answer);
+        void refresh();
+        return null;
       } catch (e) {
         return failure(e, "Could not save settings.yaml");
       }
     };
-    return <BackupForm mode="edit" initial={answersOf(saved)} onSave={edit} />;
+    return <BackupForm mode="edit" initial={answersOf(saved)} status={view.status} onSave={edit} />;
   }
 
   return (
@@ -146,6 +159,8 @@ export function BackupSection({
       refresh={refresh}
       replaceRepository={replaceRepository}
       onSetup={() => onPage("setup")}
+      setUpNote={connected ? connectedNote(view.status, connected) : null}
+      onSetUpNoteSeen={onConnectedSeen}
     />
   );
 }
@@ -182,6 +197,8 @@ function StatusPage({
   refresh,
   replaceRepository,
   onSetup,
+  setUpNote,
+  onSetUpNoteSeen,
 }: {
   view: BackupsOn;
   now: number;
@@ -189,11 +206,15 @@ function StatusPage({
   refresh: () => Promise<unknown>;
   replaceRepository: (action: RepositoryAction) => Promise<SetUpOutcome>;
   onSetup: () => void;
+  /** What set-up said, such as the backup it connected. */
+  setUpNote: string | null;
+  onSetUpNoteSeen: () => void;
 }) {
   const { status } = view;
   const history = useHistory(view);
   const restore = useRestore(view, refresh);
-  const [note, setNote] = useState<string | null>(null);
+  const [ownNote, setNote] = useState<string | null>(null);
+  const note = ownNote ?? setUpNote;
   const [repair, setRepair] = useState<Repair | null>(null);
   const [replacing, setReplacing] = useState<RepositoryMode | null>(null);
   const { tone, headline, detail } = summary(view, now);
@@ -208,7 +229,7 @@ function StatusPage({
       if (outcome.kind !== "started")
         return {
           message: refusal(outcome),
-          ...(outcome.kind === "conflict" &&
+          ...(outcome.kind === "refused" &&
             outcome.connectFrom && { connectFrom: outcome.connectFrom }),
         };
       setReplacing(null);
@@ -223,7 +244,7 @@ function StatusPage({
     try {
       const result = await repairDestination(destination.path);
       setRepair(null);
-      setNote(repairNote(destination.path, result));
+      setNote(repairNote(destination, result));
       void refresh();
     } catch (e) {
       setRepair({ destination, working: false, error: failure(e, "Could not repair the copy") });
@@ -270,7 +291,7 @@ function StatusPage({
         headline={headline}
         detail={detail}
         running={view.running}
-        runningLine={status.running ? runningLine(status.running) : undefined}
+        runningLine={status.running ? runningLine(status, status.running) : undefined}
         restore={{
           disabled: restore.busy || !status.repository?.snapshots,
           onClick: () => restore.begin(),
@@ -292,7 +313,10 @@ function StatusPage({
               type="button"
               className="btn btn-ghost"
               aria-label="Dismiss"
-              onClick={() => setNote(null)}
+              onClick={() => {
+                setNote(null);
+                onSetUpNoteSeen();
+              }}
             >
               <XIcon size={16} />
             </button>
@@ -319,6 +343,7 @@ function StatusPage({
           mode={replacing}
           repository={status.repository?.path ?? ""}
           passwordStored={status.repository?.password_stored ?? false}
+          passwordMinLength={status.password_min_length}
           onCancel={() => setReplacing(null)}
           onSubmit={replace}
         />

@@ -1,5 +1,7 @@
 import type {
-  BackupSnapshot,
+  BackupConnected,
+  BackupStatus,
+  DestinationStatus,
   HistoryEntry,
   IntervalHours,
   RepairResult,
@@ -27,10 +29,10 @@ export const NEW_BACKUP: BackupAnswers = {
   retention: { keep_within_days: 7, weekly: 4, monthly: 3 },
 };
 
-/** "iCloud Drive" for an iCloud folder, else the folder's own name. */
-export function destinationName(path: string): string {
-  if (/icloud/i.test(path)) return "iCloud Drive";
-  return lastPart(path) || "Folder";
+/** What the server calls a destination (`name`), or, for one it does not
+ * list, the folder's own name. */
+export function nameOf(status: BackupStatus, path: string): string {
+  return status.destinations.find((d) => d.path === path)?.name ?? lastPart(path);
 }
 
 export function lastPart(path: string): string {
@@ -99,10 +101,11 @@ const STEPS: Record<string, string> = {
 };
 
 /** What the operation in progress is doing, for the line under the detail. */
-export function runningLine(running: RunningBackup): string {
-  const name = running.destination ? destinationName(running.destination) : "the destination";
+export function runningLine(status: BackupStatus, running: RunningBackup): string {
+  const name = running.destination ? nameOf(status, running.destination) : "the destination";
   const counted = filesCounted(running);
   if (running.operation === "repair") return `Repairing the ${name} copy…`;
+  if (running.operation === "connect") return connectingLine(status, running.destination);
   if (running.step === "waiting" && running.waiting_for)
     return `Waiting for ${running.waiting_for} to finish…`;
   if (running.step === "backing_up")
@@ -110,6 +113,19 @@ export function runningLine(running: RunningBackup): string {
   if (running.step === "copying") return `Copying new files to ${name}…${counted}`;
   if (running.step === "checking_copy") return `Checking the copy in ${name}…`;
   return STEPS[running.step] ?? "Backing up…";
+}
+
+/** Set-up or Connect copying an existing backup to this computer. */
+export function connectingLine(status: BackupStatus, source?: string | null): string {
+  if (!source) return "Copying the existing backup to this computer…";
+  return `Connecting to the backup in ${nameOf(status, source)}… Copying it to this computer can take a while.`;
+}
+
+/** What set-up says once it connected a destination's backup. */
+export function connectedNote(status: BackupStatus, connected: BackupConnected): string {
+  const count = `${connected.snapshots} ${connected.snapshots === 1 ? "snapshot" : "snapshots"}`;
+  const note = `Connected to the backup in ${nameOf(status, connected.destination)}: ${count}.`;
+  return connected.notice ? `${note} ${connected.notice}` : note;
 }
 
 function filesCounted({ files_done: done, files_total: total }: RunningBackup): string {
@@ -139,7 +155,7 @@ export function summary(
     };
   const changed = warnings.find((w) => w.kind === "changed");
   if (changed) {
-    const name = destinationName(changed.destination ?? "");
+    const name = nameOf(status, changed.destination ?? "");
     return {
       tone: "warn",
       headline: `${last ?? "Not backed up"}, ${name} copy stopped`,
@@ -148,7 +164,7 @@ export function summary(
   }
   const behind = warnings.find((w) => w.kind === "behind");
   const headline = behind
-    ? `${last ?? "Not backed up"}, not copied to ${destinationName(behind.destination ?? "")}`
+    ? `${last ?? "Not backed up"}, not copied to ${nameOf(status, behind.destination ?? "")}`
     : (last ?? "No backups yet");
   return {
     tone: warnings.length ? "warn" : "ok",
@@ -168,7 +184,13 @@ export type RowResult = "ok" | "partial" | "failed" | "stopped";
 
 /** A history row's result and the one line under it. */
 export function rowResult(entry: HistoryEntry): { result: RowResult; detail: string } {
+  const { result, detail } = runResult(entry);
+  return { result, detail: entry.run.notice ? `${detail}. ${entry.run.notice}` : detail };
+}
+
+function runResult(entry: HistoryEntry): { result: RowResult; detail: string } {
   const { run } = entry;
+  const name = (path: string) => entry.names[path] ?? lastPart(path);
   if (run.outcome === "failed")
     return {
       result: "failed",
@@ -181,19 +203,19 @@ export function rowResult(entry: HistoryEntry): { result: RowResult; detail: str
     return {
       result: "partial",
       detail: `Backed up here. ${missed
-        .map((copy) => `${destinationName(copy.destination)}: ${copy.message ?? copy.outcome}`)
+        .map((copy) => `${name(copy.destination)}: ${copy.message ?? copy.outcome}`)
         .join(" ")}`,
     };
   return {
     result: "ok",
     detail: run.copies.length
-      ? `Copied to ${run.copies.map((copy) => destinationName(copy.destination)).join(", ")}`
+      ? `Copied to ${run.copies.map((copy) => name(copy.destination)).join(", ")}`
       : "Kept on this computer",
   };
 }
 
 /** The note a finished repair leaves in the status panel. */
-export function repairNote(path: string, result: RepairResult): string {
+export function repairNote(destination: DestinationStatus, result: RepairResult): string {
   const moved = result.moved.length;
   const files = moved === 1 ? "1 file was" : `${moved} files were`;
   const aside = result.set_aside
@@ -201,7 +223,7 @@ export function repairNote(path: string, result: RepairResult): string {
     : "";
   const after =
     result.outcome === "copied" ? "" : ` The copy again: ${result.message ?? result.outcome}.`;
-  return `Repaired the ${destinationName(path)} copy.${aside}${after}`;
+  return `Repaired the ${destination.name} copy.${aside}${after}`;
 }
 
 /** A restore's progress, worded as the prototype's `restoreFigures`. */
@@ -236,12 +258,8 @@ function trimmed(path: string): string {
   return path.slice(0, end);
 }
 
-/** The restore dialog's default: the workspace's sibling, named after the snapshot. */
-export function restoreTarget(workspace: string, snapshot: BackupSnapshot): string {
-  return `${trimmed(workspace)}-restore-${snapshot.short_id}`;
-}
-
-/** Whether two paths name one folder, as Windows compares them. */
+/** Whether two paths name one folder, as Windows compares them: the instant
+ * pre-check under the restore field. The server refuses it either way. */
 export function samePath(a: string, b: string): boolean {
   const normal = (path: string) => trimmed(path.trim()).replaceAll("\\", "/").toLowerCase();
   return normal(a) === normal(b);
@@ -265,9 +283,11 @@ export interface Password {
   stored: boolean;
 }
 
-/** A new repository's password: 12 characters (plan, PR 5), typed alike twice. */
-export function passwordProblem({ pw, pw2 }: Password): string | null {
-  if (pw.length < 12) return "Use at least 12 characters.";
+/** A new repository's password: at least the server's `password_min_length`
+ * (plan, PR 5), typed alike twice. An instant pre-check; the server refuses
+ * a short one either way. */
+export function passwordProblem({ pw, pw2 }: Password, minLength: number): string | null {
+  if (pw.length < minLength) return `Use at least ${minLength} characters.`;
   if (pw !== pw2) return "The two passwords don't match.";
   return null;
 }

@@ -95,7 +95,7 @@ def test_a_stale_save_is_a_conflict_and_writes_nothing(
     )
 
     assert refused.status_code == 412
-    assert refused.json()["kind"] == "conflict"
+    assert refused.json()["kind"] == "stale"
     assert shop_bytes(workspace_root) == edited
 
 
