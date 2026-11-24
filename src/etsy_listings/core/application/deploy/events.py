@@ -59,7 +59,7 @@ from etsy_listings.core.engine.stages.publish import PublishSnapshot
 from etsy_listings.core.engine.stages.render import RenderSnapshot
 
 RunKind = Literal["plan", "apply"]
-RunScope = Literal["listings", "workspace"]
+RunScope = Literal["listings", "workspace", "batch"]
 
 PlanRunPhase = Literal[
     "queued",

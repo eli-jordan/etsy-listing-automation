@@ -77,7 +77,8 @@ export function stagePlan<Name extends StageName>(
 export interface RunSummaryOverrides {
   id?: string;
   kind?: RunKind;
-  scope?: "listings" | "workspace";
+  scope?: "listings" | "workspace" | "batch";
+  batch_id?: string | null;
   listings?: string[];
   phase?: RunPhase;
   seen?: boolean;

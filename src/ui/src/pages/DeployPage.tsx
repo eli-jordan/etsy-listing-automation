@@ -1,6 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { cancelRun, createRun, currentRun, getRun, markRunSeen } from "../api/runs";
+import {
+  cancelRun,
+  createRun,
+  currentRun,
+  getRun,
+  isReviewedScope,
+  markRunSeen,
+} from "../api/runs";
 import { getListing, tryGetListing } from "../api/listings";
 import { StatusTag } from "../components/StatusTag";
 import { sceneSource } from "../media";
@@ -137,6 +144,12 @@ export function DeployPage() {
     try {
       const result = await createRun({ kind: "plan", scope: "listings", listings: [name] });
       if (result.kind === "conflict") {
+        // A workspace or batch deploy holding this listing has its own page.
+        const active = await getRun(result.activeRun);
+        if (isReviewedScope(active)) {
+          navigate(`/listings/deploy/${encodeURIComponent(active.id)}`, { replace: true });
+          return;
+        }
         await reattachRun(result.activeRun);
         return;
       }
@@ -146,7 +159,7 @@ export function DeployPage() {
     } catch {
       setStatus("Could not start a plan. Go back and try again.");
     }
-  }, [name, openStream, reattachRun]);
+  }, [name, navigate, openStream, reattachRun]);
 
   // Reattach or start (decision 9).
   useEffect(() => {

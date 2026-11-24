@@ -26,6 +26,7 @@ import type { ListingSummary } from "../types";
 import { clock, dayMonth } from "../dates";
 import { EditableName } from "../components/EditableName";
 import { AiWorkflowIndicator } from "./editor/aiSeo/AiWorkflowIndicator";
+import { BatchDeployReviewedButton } from "./batchDeploy/BatchDeployReviewedButton";
 
 /**
  * The batch summary (UI doc §7; the `batch-summary` frame): the batch's one
@@ -429,6 +430,11 @@ export function BatchSummaryPage() {
               </strong>{" "}
               reviewed
             </span>
+            <BatchDeployReviewedButton
+              batchId={id}
+              deployable={rows.filter((row) => row.deployable).length}
+              onError={setError}
+            />
             {needRetry > 0 && (
               <button
                 type="button"

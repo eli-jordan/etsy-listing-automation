@@ -22,6 +22,7 @@ from etsy_listings.core.application.dependencies import ContextFactory
 from etsy_listings.core.application.deploy.events import TERMINAL_PHASES, RunScope
 from etsy_listings.core.application.deploy.executor import RunExecutor
 from etsy_listings.core.application.deploy.registry import (
+    BatchApply,
     Conflict,
     Run,
     RunCommand,
@@ -74,10 +75,11 @@ class Deployments:
         """Queue ``command`` as a new run, or answer the active run already
         holding one of its listings (or the workspace), to reattach to.
 
-        A workspace apply must name exactly the ready workspace plan it was
-        reviewed from, or :class:`~etsy_listings.core.application.refusals.ReviewedPlanRefusedError`
-        is raised and nothing is queued (ADR-0042)."""
-        if isinstance(command, WorkspaceApply):
+        A workspace or batch apply must name exactly the ready plan of its
+        scope it was reviewed from, or
+        :class:`~etsy_listings.core.application.refusals.ReviewedPlanRefusedError`
+        is raised and nothing is queued (ADR-0042, ADR-0059)."""
+        if isinstance(command, WorkspaceApply | BatchApply):
             check_reviewed_apply(self._registry.get(command.reviewed_run_id), command)
         return self._registry.create(command)
 
@@ -94,17 +96,31 @@ class Deployments:
         """Whether any run is queued or in progress, on any listing."""
         return any(run.phase not in TERMINAL_PHASES for run in self._registry.all_runs())
 
-    def runs(self, *, listing: str | None = None, scope: RunScope | None = None) -> list[Run]:
+    def runs(
+        self,
+        *,
+        listing: str | None = None,
+        scope: RunScope | None = None,
+        batch: str | None = None,
+    ) -> list[Run]:
         """Runs still remembered (ADR-0041's retention).
 
         ``scope="workspace"``: the current workspace run, which a finished
-        plan stays until a later workspace run replaces it. ``scope=
+        plan stays until a later workspace run replaces it. ``scope="batch"``
+        with ``batch``: that listing batch's current run, kept the same way;
+        without, every retained batch run. ``scope=
         "listings"``: every retained listing-scoped run. Otherwise ``listing``
         narrows to that listing's current run, active or finished and not yet
         superseded; with neither, every run.
         """
         if scope == "workspace":
             return self._registry.for_workspace()
+        if scope == "batch":
+            return (
+                self._registry.for_batch(batch)
+                if batch is not None
+                else self._registry.for_scope("batch")
+            )
         if scope == "listings":
             return self._registry.for_scope("listings")
         if listing is not None:

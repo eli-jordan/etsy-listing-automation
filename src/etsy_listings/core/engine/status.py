@@ -92,6 +92,16 @@ def workspace_listing_status(
     )
 
 
+def has_undeployed_changes(workspace: Workspace, name: str) -> bool:
+    """Whether the workspace holds changes to ``name`` its last apply did not
+    deploy: never applied, edited since, or an apply left incomplete. The
+    local half of ``draft`` and ``dirty``, answered without asking Etsy."""
+    lock = Lockfile.read(workspace.lock_file(name))
+    if lock is None or not lock.stages_completed or lock.incomplete is not None:
+        return True
+    return edited_since_apply(workspace.listing_file(name), workspace.lock_file(name))
+
+
 LIVE_ETSY_STATES = frozenset({"active", "inactive", "sold_out", "expired", "removed"})
 """Etsy ``state`` values that mean the listing left draft at some point.
 
