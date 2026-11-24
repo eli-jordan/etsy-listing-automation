@@ -1,39 +1,134 @@
-"""The streaming restic runner (workspace-backup plan, PR 2 and P6).
+"""The real restic adapter (workspace-backup plan, PR 2 and P6): each
+repository operation's argv, and how restic's ``--json`` lines and exit
+codes become the interface's figures, summaries and errors.
 
 Driven through a scripted launcher that replays restic's real ``--json``
-lines: each exit code becomes a typed error carrying restic's message, cancel
-stops the process, and the password reaches restic only through its
-environment.
+lines (restic 0.19.1's, trimmed to the keys read): each exit code becomes a
+typed error carrying restic's message, cancel stops the process, and the
+password reaches restic only through its environment. This and the tests
+that run restic itself are the only ones that see argv; behaviour tests use
+``tests/support/restic.py``'s in-memory repository.
 """
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import sys
 import threading
 import time
+from collections.abc import Iterator, Mapping, Sequence
+from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta, timezone
 from pathlib import Path
+from typing import Any
 
 import pytest
 
-from etsy_listings.core.backup.restic import (
+from etsy_listings.core.backup.repository import (
+    BackupFigures,
+    BackupSummary,
+    RepositoryCheck,
     RepositoryLockedError,
     RepositoryNotFoundError,
-    Restic,
     ResticCancelledError,
     ResticError,
+    RestoreProgress,
     Snapshot,
     WrongPasswordError,
-    launch_process,
 )
-
-from tests.support.restic import Reply, ScriptedRestic, exit_error
+from etsy_listings.core.backup.restic import Restic, ResticProcess, launch_process
+from etsy_listings.core.config.settings import RetentionSettings
 
 PASSWORD = "correct horse battery staple"
 BINARY = Path("/opt/restic/restic")
 REPOSITORY = Path("/srv/backups")
+
+
+# --------------------------------------------------- the scripted launcher
+
+WORKSPACE_ID = "0f8d6c1e-4b7a-4f6e-9a39-2d4c5b1e7a90"
+
+
+def exit_error(code: int, message: str) -> str:
+    """restic's last stderr line when a command fails under ``--json``."""
+    return json.dumps({"message_type": "exit_error", "code": code, "message": message})
+
+
+@dataclass
+class Reply:
+    stdout: Sequence[Any] = ()
+    """Each item is one stdout line: a string as is, anything else as JSON."""
+    stderr: str = ""
+    exit_code: int = 0
+    hang: bool = False
+    """Keep running after the last line until stopped, like a long backup."""
+
+
+@dataclass
+class Launch:
+    argv: list[str]
+    env: dict[str, str]
+
+
+def _lines(lines: Sequence[Any]) -> Iterator[str]:
+    for line in lines:
+        yield (line if isinstance(line, str) else json.dumps(line)) + "\n"
+
+
+@dataclass
+class _Process:
+    reply: Reply
+    stopped: threading.Event = field(default_factory=threading.Event)
+
+    @property
+    def stdout(self) -> Iterator[str]:
+        yield from _lines(self.reply.stdout)
+        if self.reply.hang:
+            deadline = time.monotonic() + 10
+            while not self.stopped.wait(0.01):
+                if time.monotonic() > deadline:
+                    return
+
+    def wait(self) -> int:
+        if self.stopped.is_set():
+            return 1
+        return self.reply.exit_code
+
+    def stderr(self) -> str:
+        return self.reply.stderr
+
+    def stop(self) -> None:
+        self.stopped.set()
+
+
+class ScriptedRestic:
+    """The launcher: answers launches in order with ``replies``."""
+
+    def __init__(self, *replies: Reply) -> None:
+        self._replies = list(replies)
+        self.launches: list[Launch] = []
+        self.processes: list[_Process] = []
+
+    def __call__(self, argv: Sequence[str], env: Mapping[str, str]) -> ResticProcess:
+        if not self._replies:
+            raise AssertionError(f"restic was run more times than scripted: {list(argv)}")
+        self.launches.append(Launch(list(argv), dict(env)))
+        process = _Process(self._replies.pop(0))
+        self.processes.append(process)
+        return process
+
+    @property
+    def commands(self) -> list[list[str]]:
+        """Each launch's argv after the binary and the global flags."""
+        return [launch.argv[launch.argv.index("--json") + 1 :] for launch in self.launches]
+
+
+def _restic(*replies: Reply) -> tuple[Restic, ScriptedRestic]:
+    launcher = ScriptedRestic(*replies)
+    return Restic(BINARY, REPOSITORY, PASSWORD, launch=launcher), launcher
+
 
 SNAPSHOT_LINE = [
     {
@@ -48,11 +143,50 @@ SNAPSHOT_LINE = [
         "short_id": "e12483c7",
     }
 ]
+SNAPSHOT_ID = "0d4f8513e5f5dcca2a2449d564c44f6bd0d367955d7cd12a9a6fda20efd1d717"
+BACKUP_STATUS = {
+    "message_type": "status",
+    "percent_done": 0.5,
+    "total_files": 10,
+    "files_done": 5,
+    "total_bytes": 1000,
+    "bytes_done": 500,
+}
+BACKUP_SUMMARY = {
+    "message_type": "summary",
+    "files_new": 1,
+    "snapshot_id": SNAPSHOT_ID,
+    "data_added": 41_000_000,
+}
+RESTORE_STATUS = {
+    "message_type": "status",
+    "seconds_elapsed": 60,
+    "percent_done": 0.25,
+    "total_files": 400,
+    "files_restored": 100,
+    "total_bytes": 8_000_000,
+    "bytes_restored": 2_000_000,
+}
+RESTORE_SUMMARY = {
+    "message_type": "summary",
+    "total_files": 400,
+    "files_restored": 400,
+    "total_bytes": 8_000_000,
+    "bytes_restored": 8_000_000,
+}
 
 
-def _restic(*replies: Reply) -> tuple[Restic, ScriptedRestic]:
-    launcher = ScriptedRestic(*replies)
-    return Restic(BINARY, REPOSITORY, PASSWORD, launch=launcher), launcher
+def _snapshot(*paths: str) -> Snapshot:
+    return Snapshot(
+        id="a" * 64,
+        short_id="aaaaaaaa",
+        time=datetime(2026, 11, 23, tzinfo=UTC),
+        paths=paths,
+        hostname="pc",
+    )
+
+
+# ---------------------------------------------------------- the commands
 
 
 def test_a_command_streams_each_json_line_as_it_arrives() -> None:
@@ -179,6 +313,17 @@ def test_cancel_stops_the_process_and_says_so() -> None:
     assert launcher.processes[0].stopped.is_set()
 
 
+def test_a_cancelled_command_does_not_launch_restic() -> None:
+    cancel = threading.Event()
+    cancel.set()
+    restic, launcher = _restic(Reply())
+
+    with pytest.raises(ResticCancelledError):
+        restic.prune(cancel=cancel)
+
+    assert launcher.launches == []
+
+
 def test_a_cancel_after_the_command_finished_changes_nothing() -> None:
     cancel = threading.Event()
     restic, _ = _restic(Reply(stdout=[{"message_type": "summary"}]))
@@ -236,6 +381,198 @@ def test_snapshots_can_be_read_without_taking_a_lock() -> None:
 
     assert restic.snapshots(lock=False) == ()
     assert launcher.commands == [["--no-lock", "snapshots"]]
+
+
+# -------------------------------------------------------- the operations
+
+
+def test_a_backup_names_the_folder_and_each_exclude_and_reports_progress() -> None:
+    restic, launcher = _restic(Reply(stdout=[BACKUP_STATUS, BACKUP_SUMMARY]))
+    heard: list[BackupFigures] = []
+
+    folder = Path("/workspace")
+    summary = restic.back_up(
+        folder,
+        workspace_id=WORKSPACE_ID,
+        excludes=("*.tmp", ".cache/staging/*/upload.zip"),
+        progress=heard.append,
+    )
+
+    assert launcher.commands == [
+        [
+            "backup",
+            str(folder),
+            "--tag",
+            f"workspace:{WORKSPACE_ID}",
+            "--exclude",
+            "*.tmp",
+            "--exclude",
+            ".cache/staging/*/upload.zip",
+        ]
+    ]
+    assert heard == [BackupFigures(files_done=5, files_total=10)]
+    assert summary == BackupSummary(snapshot_id=SNAPSHOT_ID, data_added=41_000_000)
+
+
+def test_a_backup_that_could_not_read_some_files_completes_with_warnings() -> None:
+    """Exit code 3: the snapshot was made without the files it names."""
+    unreadable = {
+        "message_type": "error",
+        "error": {"message": "The process cannot access the file"},
+        "during": "archival",
+        "item": "C:\\workspace\\runs.db",
+    }
+    restic, _ = _restic(
+        Reply(
+            stdout=[unreadable, BACKUP_SUMMARY],
+            exit_code=3,
+            stderr=exit_error(3, "Warning: at least one source file could not be read"),
+        )
+    )
+
+    summary = restic.back_up(Path("/workspace"), workspace_id=WORKSPACE_ID)
+
+    assert summary.snapshot_id == SNAPSHOT_ID
+    assert summary.warnings == ("C:\\workspace\\runs.db: The process cannot access the file",)
+
+
+def test_a_backup_that_made_no_snapshot_fails_even_on_exit_code_3() -> None:
+    restic, _ = _restic(
+        Reply(
+            exit_code=3, stderr=exit_error(3, "Warning: at least one source file could not be read")
+        )
+    )
+
+    with pytest.raises(ResticError, match="could not be read") as caught:
+        restic.back_up(Path("/workspace"), workspace_id=WORKSPACE_ID)
+
+    assert caught.value.exit_code == 3
+
+
+def test_forget_keeps_only_this_workspace_s_snapshots_grouped_by_its_tag() -> None:
+    """One more week and month than the retention names: restic counts the
+    current ones. Grouped by the workspace tag, not host and paths."""
+    restic, launcher = _restic(Reply(stdout=[[{"tags": [], "keep": [], "remove": None}]]))
+
+    restic.forget(
+        RetentionSettings(keep_within_days=7, weekly=4, monthly=3), workspace_id=WORKSPACE_ID
+    )
+
+    assert launcher.commands == [
+        [
+            "forget",
+            "--tag",
+            f"workspace:{WORKSPACE_ID}",
+            "--group-by",
+            "tags",
+            "--keep-within",
+            "7d",
+            "--keep-weekly",
+            "5",
+            "--keep-monthly",
+            "4",
+        ]
+    ]
+
+
+def test_prune_runs_restic_prune() -> None:
+    restic, launcher = _restic(Reply(stdout=["loading all snapshots...", "done"]))
+
+    restic.prune()
+
+    assert launcher.commands == [["prune"]]
+
+
+def test_a_check_returns_its_verdict() -> None:
+    restic, launcher = _restic(
+        Reply(stdout=[{"message_type": "summary", "num_errors": 0}]),
+        Reply(exit_code=1, stderr=exit_error(1, "pack 5f2b: not referenced in any index")),
+        Reply(exit_code=11, stderr=exit_error(11, "repository is already locked")),
+    )
+
+    checks = [restic.check(), restic.check(), restic.check()]
+
+    assert launcher.commands == [["check"]] * 3
+    assert checks[0] == RepositoryCheck(ok=True)
+    assert [check.ok for check in checks[1:]] == [False, False]
+    assert "not referenced" in (checks[1].message or "")
+    assert "already locked" in (checks[2].message or "")
+
+
+def test_a_stopped_check_is_a_stop_not_a_failed_check() -> None:
+    cancel = threading.Event()
+    cancel.set()
+    restic, launcher = _restic(Reply())
+
+    with pytest.raises(ResticCancelledError):
+        restic.check(cancel=cancel)
+
+    assert launcher.launches == []
+
+
+@pytest.mark.parametrize(
+    ("paths", "ref"),
+    [
+        (("C:\\Users\\Admin\\workspace",), "a" * 64 + ":/C/Users/Admin/workspace"),
+        (("/home/admin/workspace",), "a" * 64 + ":/home/admin/workspace"),
+        (("/one", "/two"), "a" * 64),
+    ],
+    ids=["windows-folder", "posix-folder", "several-folders"],
+)
+def test_a_restore_writes_a_one_folder_snapshot_s_contents_and_never_overwrites(
+    paths: tuple[str, ...], ref: str
+) -> None:
+    restic, launcher = _restic(Reply(stdout=[RESTORE_SUMMARY]))
+
+    restic.restore(_snapshot(*paths), Path("/restored"))
+
+    target = str(Path("/restored"))
+    assert launcher.commands == [
+        ["restore", ref, "--target", target, "--overwrite", "never", "--retry-lock", "1h"]
+    ]
+
+
+def test_a_restore_reports_its_figures_and_estimates_the_time_left() -> None:
+    restic, _ = _restic(
+        Reply(stdout=[RESTORE_STATUS, {"message_type": "verbose"}, RESTORE_SUMMARY])
+    )
+    heard: list[RestoreProgress] = []
+
+    last = restic.restore(_snapshot("/workspace"), Path("/restored"), progress=heard.append)
+
+    assert heard[0] == RestoreProgress(
+        percent=0.25,
+        bytes_done=2_000_000,
+        bytes_total=8_000_000,
+        files_done=100,
+        files_total=400,
+        seconds_left=180,  # a quarter done in a minute leaves three
+    )
+    assert heard[1:] == [last]
+    assert (last.percent, last.files_done, last.seconds_left) == (1.0, 400, 0)
+
+
+def test_a_restore_status_without_files_restored_keeps_none() -> None:
+    """``--json`` leaves out fields that are zero."""
+    restic, _ = _restic(Reply(stdout=[{"message_type": "status", "percent_done": 0.02}]))
+    heard: list[RestoreProgress] = []
+
+    restic.restore(_snapshot("/workspace"), Path("/restored"), progress=heard.append)
+
+    assert (heard[0].percent, heard[0].files_done, heard[0].seconds_left) == (0.02, None, None)
+
+
+def test_the_password_is_verified_by_reading_the_config_without_a_lock() -> None:
+    restic, launcher = _restic(
+        Reply(stdout=[{"version": 2}]),
+        Reply(exit_code=12, stderr=exit_error(12, "Fatal: wrong password or no key found")),
+    )
+
+    restic.verify_password()
+    with pytest.raises(WrongPasswordError):
+        restic.verify_password()
+
+    assert launcher.commands == [["--no-lock", "cat", "config"]] * 2
 
 
 # ----------------------------------------------------------- the real launcher

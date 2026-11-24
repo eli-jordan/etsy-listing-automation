@@ -43,6 +43,17 @@ OWNING_TESTS: Mapping[str, frozenset[str]] = {
     ),
     # Installed through ResticBinaries, whose tests fake the download.
     "etsy_listings.core.backup.installation": frozenset(),
+    # The real restic adapter: its argv and --json lines are tested here and
+    # against restic itself; behaviour tests use the in-memory repository.
+    "etsy_listings.core.backup.restic": frozenset(
+        {
+            "tests/core/unit/test_restic_runner.py",
+            "tests/core/behaviour/test_restic_repository.py",
+            "tests/core/behaviour/test_backup_run_restic.py",
+            "tests/core/behaviour/test_backup_copy_restic.py",
+            "tests/core/behaviour/test_backup_excludes.py",
+        }
+    ),
     "etsy_listings.core.application.deploy.executor": frozenset(
         {"tests/core/behaviour/test_runs_executor.py"}
     ),

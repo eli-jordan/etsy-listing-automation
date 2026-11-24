@@ -9,7 +9,12 @@ from __future__ import annotations
 import pytest
 import yaml
 
-from etsy_listings.core.workspace.yaml_source import UneditableYamlError, edit_yaml, edit_yaml_bytes
+from etsy_listings.core.workspace.yaml_source import (
+    ITSELF,
+    UneditableYamlError,
+    edit_yaml,
+    edit_yaml_bytes,
+)
 
 SOURCE = """\
 # Shop-wide settings -- my notes stay.
@@ -289,3 +294,11 @@ def test_adding_then_removing_a_last_key_gives_back_the_same_text() -> None:
 
 def test_replacing_the_only_key_of_a_file_with_no_final_newline() -> None:
     assert edit_yaml("a: 1", {"b": 2}) == "b: 2\n"
+
+
+def test_plain_rows_known_by_their_value_keep_their_own_comments() -> None:
+    source = "paths:\n  - /icloud  # the cloud copy\n  - /nas  # the old NAS\n"
+
+    edited = edit_yaml(source, {"paths": ["/icloud", "/usb"]}, sequence_keys={("paths",): ITSELF})
+
+    assert edited == "paths:\n  - /icloud  # the cloud copy\n  - /usb\n"

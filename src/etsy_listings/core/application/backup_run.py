@@ -12,25 +12,37 @@ from __future__ import annotations
 
 import threading
 from collections.abc import Callable, Iterator
-from contextlib import contextmanager
-from dataclasses import dataclass, field
+from contextlib import AbstractContextManager, contextmanager, nullcontext
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Literal
 
-from etsy_listings.core.application.backup_repository import backup_settings, open_repository
+from etsy_listings.core.application.backup_repository import (
+    ConfiguredBackup,
+    backup_settings,
+    configured_backup,
+    ensure_workspace_id,
+)
 from etsy_listings.core.application.job_gate import JobGate
 from etsy_listings.core.backup.binary import ResticBinaries
 from etsy_listings.core.backup.destinations import (
     SAMPLE_FRACTION,
+    CopyHooks,
     CopyResult,
+    CopyStep,
     DestinationCheck,
     RepairResult,
     check_destination,
     copy_repository,
     repair_destination,
 )
-from etsy_listings.core.backup.restic import Launch, Restic, ResticCancelledError, ResticError
+from etsy_listings.core.backup.repository import (
+    BackupFigures,
+    OpenRepository,
+    Repository,
+    ResticCancelledError,
+)
 from etsy_listings.core.backup.state import (
     BackupState,
     BackupStateStore,
@@ -40,12 +52,11 @@ from etsy_listings.core.backup.state import (
     RunOutcome,
     RunRecord,
 )
-from etsy_listings.core.config.settings import BackupSettings, RetentionSettings
-from etsy_listings.core.errors import UserFacingError
+from etsy_listings.core.config.settings import BackupSettings
+from etsy_listings.core.errors import ConflictError, MissingError, UserFacingError
 from etsy_listings.core.workspace.workspace import Workspace
 
 Clock = Callable[[], datetime]
-PARTIAL_SNAPSHOT_EXIT = 3
 PRUNE_INTERVAL = timedelta(days=7)
 """Prune, then check, weekly (spec, *Backup run* step 6)."""
 COPY_CHECK_INTERVAL = timedelta(days=30)
@@ -109,29 +120,17 @@ def _utc_now() -> datetime:
     return datetime.now(UTC)
 
 
-def forget_arguments(retention: RetentionSettings) -> tuple[str, ...]:
-    """restic counts the current week and month as one of each, so N past
-    weeks and months are N + 1 (spec, *Backup run* step 5)."""
-    return (
-        "forget",
-        "--keep-within",
-        f"{retention.keep_within_days}d",
-        "--keep-weekly",
-        str(retention.weekly + 1),
-        "--keep-monthly",
-        str(retention.monthly + 1),
-    )
-
-
 @dataclass(frozen=True)
 class BackupRunner:
-    """Runs against ``workspace``'s configured repository. ``home`` holds
-    the state and history; tests pass one under ``tmp_path`` (plan, P2)."""
+    """Runs against ``workspace``'s configured backup, resolved once per
+    operation. ``home`` holds the state and history; tests pass one under
+    ``tmp_path`` (plan, P2)."""
 
     workspace: Workspace
     binaries: ResticBinaries
     home: Path | None = None
-    launch: Launch | None = None
+    restic: OpenRepository | None = None
+    """Replaces restic itself; tests pass an in-memory repository."""
     now: Clock = _utc_now
     sample: float = SAMPLE_FRACTION
     """The share of a destination's files its monthly check reads."""
@@ -142,61 +141,105 @@ class BackupRunner:
         gate: JobGate | None = None,
         progress: Progress | None = None,
         cancel: threading.Event | None = None,
+        maintenance: Callable[[], AbstractContextManager[bool]] | None = None,
     ) -> RunRecord:
         """Back up, forget, and prune and check when due. ``cancel`` stops
-        restic part way; the run is then recorded as stopped."""
+        restic part way; the run is then recorded as stopped. The server
+        reserves exclusive maintenance or defers it while a restore runs."""
         settings = backup_settings(self.workspace)
-        store = BackupStateStore(self.home)
         run = _Run(self.now(), str(settings.repository), progress or (lambda _: None))
         try:
-            restic = open_repository(self.workspace, binaries=self.binaries, launch=self.launch)
+            # Inside the try: a refused configuration is a failed run.
+            backup = self._configured(settings)
+            repository = backup.open()
+            if settings.workspace_id is None:
+                backup = self._adopt_workspace_id(backup, repository, run)
             with _paused(gate, run):
                 run.enter("backing_up")
-                self._back_up(restic, run, cancel)
-            run.enter("forgetting")
-            restic.run(*forget_arguments(settings.retention), cancel=cancel)
-            if self._prune_due(store.load(settings.repository)):
-                run.enter("pruning")
-                restic.run("prune", cancel=cancel)
-                state = store.load(settings.repository)
-                store.save(state.model_copy(update={"last_prune": self.now()}))
-                run.enter("checking")
-                run.failure = self._check(restic, store).message
+                self._back_up(repository, backup, run, cancel)
+            with maintenance() if maintenance else nullcontext(enter_result=True) as available:
+                if available:
+                    self._tidy(repository, backup, run, cancel)
+                elif _needs_check(backup.state()):
+                    run.enter("checking")
+                    run.failure = "The repository must pass a check before it can be copied."
             if run.failure is None:
-                self._copy_all(settings, store, run, cancel)
+                self._copy_all(backup, run, cancel)
         except (_StoppedError, ResticCancelledError) as exc:
             run.stopped, run.failure = True, str(exc)
         except UserFacingError as exc:
             run.failure = str(exc)
+        except OSError as exc:
+            run.failure = str(exc)
         record = run.record(self.now())
-        store.append_run(record)
+        BackupStateStore(self.home).append_run(record)
         return record
 
-    def _back_up(self, restic: Restic, run: _Run, cancel: threading.Event | None) -> None:
-        arguments = ["backup", str(self.workspace.root)]
-        for pattern in EXCLUDES:
-            arguments += ["--exclude", pattern]
-        try:
-            for line in restic.stream(*arguments, cancel=cancel):
-                run.hear(line)
-        except ResticError as exc:
-            # 3: the snapshot was made, but some files could not be read.
-            if exc.exit_code != PARTIAL_SNAPSHOT_EXIT or run.snapshot_id is None:
-                raise
+    def _adopt_workspace_id(
+        self, backup: ConfiguredBackup, repository: Repository, run: _Run
+    ) -> ConfiguredBackup:
+        """A block written by hand has no workspace ID: write the one the
+        repository's snapshots carry, or a new one (ADR-0061)."""
+        chosen = ensure_workspace_id(self.workspace, repository.snapshots(lock=False))
+        run.notice = chosen.notice
+        settings = backup.settings.model_copy(update={"workspace_id": chosen.value})
+        return replace(backup, settings=settings)
 
-    def _copy_all(
+    def _configured(self, settings: BackupSettings | None = None) -> ConfiguredBackup:
+        return configured_backup(
+            self.workspace, settings, binaries=self.binaries, home=self.home, restic=self.restic
+        )
+
+    def _tidy(
         self,
-        settings: BackupSettings,
-        store: BackupStateStore,
+        repository: Repository,
+        backup: ConfiguredBackup,
         run: _Run,
         cancel: threading.Event | None,
+    ) -> None:
+        """Forget, then the weekly prune and check, each under restic's
+        exclusive lock."""
+        run.enter("forgetting")
+        repository.forget(
+            backup.settings.retention, workspace_id=backup.workspace_id, cancel=cancel
+        )
+        state = backup.state()
+        prune = self._prune_due(state)
+        if prune:
+            run.enter("pruning")
+            repository.prune(cancel=cancel)
+            state = backup.state().model_copy(update={"last_prune": self.now()})
+            backup.store.save(state)
+        if prune or _needs_check(state):
+            run.enter("checking")
+            run.failure = self._check(repository, backup.store, cancel=cancel).message
+
+    def _back_up(
+        self,
+        repository: Repository,
+        backup: ConfiguredBackup,
+        run: _Run,
+        cancel: threading.Event | None,
+    ) -> None:
+        summary = repository.back_up(
+            self.workspace.root,
+            workspace_id=backup.workspace_id,
+            excludes=EXCLUDES,
+            progress=run.read,
+            cancel=cancel,
+        )
+        run.snapshot_id, run.data_added = summary.snapshot_id, summary.data_added
+        run.warnings.extend(summary.warnings)
+
+    def _copy_all(
+        self, backup: ConfiguredBackup, run: _Run, cancel: threading.Event | None
     ) -> None:
         """Steps 7 and 8, after the jobs resumed. An unreachable or changed
         destination is recorded and the run goes on: the local backup still
         counts. A damaged local file is a failed check and ends the run."""
-        for destination in settings.destinations:
+        for destination in backup.destinations:
             run.enter("copying", destination)
-            result = self._copy_one(settings, store, destination, run, cancel)
+            result = self._copy_one(backup, destination, run, cancel)
             run.copies.append(
                 CopyRecord(
                     destination=str(destination), outcome=result.outcome, message=result.message
@@ -206,67 +249,82 @@ class BackupRunner:
                 raise _StoppedError(result.message)
             if result.outcome == "damaged":
                 run.failure = result.message
-                state = store.load(settings.repository)
                 damage = CheckResult(at=self.now(), ok=False, message=result.message)
-                store.save(state.model_copy(update={"last_check": damage}))
+                backup.store.save(backup.state().model_copy(update={"last_check": damage}))
                 return
 
     def _copy_one(
         self,
-        settings: BackupSettings,
-        store: BackupStateStore,
+        backup: ConfiguredBackup,
         destination: Path,
         run: _Run,
         cancel: threading.Event | None,
     ) -> CopyResult:
-        before = store.load(settings.repository).destination(destination)
+        before = backup.state().destination(destination)
         result = copy_repository(
-            settings.repository, destination, suspect=_suspects(before), cancel=cancel
+            backup.storage,
+            destination,
+            suspect=_suspects(before),
+            hooks=_CopyProgress(run, str(destination)).hooks(),
+            cancel=cancel,
         )
         after = _after_copy(before, result, self.now())
         if result.outcome == "copied" and _copy_check_due(after, self.now()):
             run.enter("checking_copy", destination)
-            check = check_destination(settings.repository, destination, fraction=self.sample)
+            check = check_destination(backup.storage, destination, fraction=self.sample)
             after = _after_check(after, check, self.now())
-        store.save(store.load(settings.repository).with_destination(destination, after))
+        backup.store.save(backup.state().with_destination(destination, after))
         return result
 
     def repair(self, destination: Path) -> RepairResult:
         """Set aside what changed in ``destination`` and copy it again
         (spec, *Changed and unexpected files*)."""
-        settings = backup_settings(self.workspace)
-        if destination not in settings.destinations:
-            raise UserFacingError(f"{destination} is not a destination in settings.yaml.")
-        store = BackupStateStore(self.home)
-        before = store.load(settings.repository).destination(destination)
+        backup = self._configured()
+        if destination not in backup.destinations:
+            raise MissingError(f"{destination} is not a destination in settings.yaml.")
+        state = backup.state()
+        if _needs_check(state):
+            raise ConflictError("The repository must pass a check before its copy can be repaired.")
+        before = state.destination(destination)
         repair = repair_destination(
-            settings.repository,
+            backup.storage,
             destination,
             today=self.now().astimezone().date(),
             suspect=_suspects(before),
         )
         after = _after_copy(before.model_copy(update={"changed": ()}), repair.copy, self.now())
-        store.save(store.load(settings.repository).with_destination(destination, after))
+        backup.store.save(backup.state().with_destination(destination, after))
         return repair
 
     def check(self) -> CheckResult:
-        """``restic check`` of the local repository, recorded in the state."""
-        restic = open_repository(self.workspace, binaries=self.binaries, launch=self.launch)
-        return self._check(restic, BackupStateStore(self.home))
+        """``restic check`` of the local repository, recorded in the state.
+        Refuses an overlapping configuration, as a run does."""
+        backup = self._configured()
+        return self._check(backup.open(), backup.store)
 
-    def _check(self, restic: Restic, store: BackupStateStore) -> CheckResult:
-        try:
-            restic.run("check")
-        except ResticError as exc:
-            result = CheckResult(at=self.now(), ok=False, message=str(exc))
-        else:
-            result = CheckResult(at=self.now(), ok=True)
-        state = store.load(restic.repository)
+    def _check(
+        self,
+        repository: Repository,
+        store: BackupStateStore,
+        *,
+        cancel: threading.Event | None = None,
+    ) -> CheckResult:
+        checked = repository.check(cancel=cancel)
+        result = CheckResult(at=self.now(), ok=checked.ok, message=checked.message)
+        state = store.load(repository.path)
         store.save(state.model_copy(update={"last_check": result}))
         return result
 
     def _prune_due(self, state: BackupState) -> bool:
         return state.last_prune is None or self.now() - state.last_prune >= PRUNE_INTERVAL
+
+
+def _needs_check(state: BackupState) -> bool:
+    check = state.last_check
+    if check is not None and not check.ok:
+        return True
+    pruned = state.last_prune
+    return pruned is not None and (check is None or check.at < pruned)
 
 
 def _suspects(state: DestinationState) -> frozenset[str]:
@@ -285,7 +343,8 @@ def _after_copy(state: DestinationState, result: CopyResult, now: datetime) -> D
 
 
 def _copy_check_due(state: DestinationState, now: datetime) -> bool:
-    return state.last_check is None or now - state.last_check.at >= COPY_CHECK_INTERVAL
+    check = state.last_check
+    return check is None or not check.ok or now - check.at >= COPY_CHECK_INTERVAL
 
 
 def _after_check(
@@ -319,40 +378,63 @@ class _StoppedError(Exception):
 
 
 @dataclass
+class _CopyProgress:
+    """Files copied out of those the destination lacks, for the running
+    line during a large first copy (plan, PR 5)."""
+
+    run: _Run
+    destination: str
+    done: int = 0
+    total: int = 0
+
+    def hooks(self) -> CopyHooks:
+        return CopyHooks(planned=self._planned, observe=self._observe)
+
+    def _planned(self, total: int) -> None:
+        self.total = total
+        self._tell()
+
+    def _observe(self, step: CopyStep) -> None:
+        if step.action == "copied":
+            self.done += 1
+            self._tell()
+
+    def _tell(self) -> None:
+        self.run.tell(
+            BackupProgress(
+                "copying",
+                files_done=self.done,
+                files_total=self.total,
+                destination=self.destination,
+            )
+        )
+
+
+@dataclass
 class _Run:
     started_at: datetime
     repository: str
     tell: Progress
     step: BackupStep = "starting"
     snapshot_id: str | None = None
+    data_added: int | None = None
     failure: str | None = None
     stopped: bool = False
     warnings: list[str] = field(default_factory=list)
     copies: list[CopyRecord] = field(default_factory=list)
+    notice: str | None = None
 
     def enter(self, step: BackupStep, destination: Path | None = None) -> None:
         self.step = step
         where = None if destination is None else str(destination)
         self.tell(BackupProgress(step, destination=where))
 
-    def hear(self, line: object) -> None:
-        """One line of ``restic backup --json``."""
-        if not isinstance(line, dict):
-            return
-        kind = line.get("message_type")
-        if kind == "status":
-            self.tell(
-                BackupProgress(
-                    "backing_up",
-                    files_done=line.get("files_done", 0),
-                    files_total=line.get("total_files"),
-                )
+    def read(self, figures: BackupFigures) -> None:
+        self.tell(
+            BackupProgress(
+                "backing_up", files_done=figures.files_done, files_total=figures.files_total
             )
-        elif kind == "summary":
-            self.snapshot_id = line.get("snapshot_id")
-        elif kind == "error":
-            error = line.get("error") or {}
-            self.warnings.append(f"{line.get('item', '')}: {error.get('message', '')}")
+        )
 
     def record(self, finished_at: datetime) -> RunRecord:
         outcome: RunOutcome = "stopped" if self.stopped else "failed"
@@ -366,5 +448,7 @@ class _Run:
             failed_step=self.step if failed else None,
             message=self.failure,
             warnings=tuple(self.warnings),
+            data_added=self.data_added,
             copies=tuple(self.copies),
+            notice=self.notice,
         )

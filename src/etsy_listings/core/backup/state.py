@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import contextlib
 import json
+import os
 from collections.abc import Iterator
 from datetime import datetime
 from pathlib import Path
@@ -91,8 +92,13 @@ class RunRecord(_Record):
     message: str | None = None
     warnings: tuple[str, ...] = ()
     """Files restic could not read; the snapshot was made without them."""
+    data_added: int | None = None
+    """Bytes the snapshot added to the repository, from restic's summary."""
     copies: tuple[CopyRecord, ...] = ()
     """Each destination's copy, in the configured order."""
+    notice: str | None = None
+    """Something the run decided that the seller should know, such as a
+    new workspace ID beside several others (ADR-0061)."""
 
 
 class BackupStateStore:
@@ -113,8 +119,14 @@ class BackupStateStore:
 
     def append_run(self, record: RunRecord) -> None:
         self.directory.mkdir(parents=True, exist_ok=True)
-        with self._path(HISTORY_FILE).open("a", encoding="utf-8", newline="\n") as history:
-            history.write(json.dumps(record.model_dump(mode="json")) + "\n")
+        with self._path(HISTORY_FILE).open("a+b") as history:
+            prefix = b""
+            if history.tell():
+                history.seek(-1, os.SEEK_END)
+                if history.read(1) != b"\n":
+                    prefix = b"\n"
+            line = json.dumps(record.model_dump(mode="json")).encode("utf-8")
+            history.write(prefix + line + b"\n")
 
     def runs(self) -> list[RunRecord]:
         """Every recorded run, oldest first. A damaged line is skipped."""
