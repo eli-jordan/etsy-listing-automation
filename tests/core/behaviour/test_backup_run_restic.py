@@ -9,16 +9,16 @@ from pathlib import Path
 
 import pytest
 
-from etsy_listings.core.application.backup_repository import create_repository, open_repository
+from etsy_listings.core.application.backup_repository import configured_backup
 from etsy_listings.core.application.backup_run import BackupRunner
 from etsy_listings.core.backup.binary import RESTIC_BINARY_ENV_VAR, ResticBinaries
 from etsy_listings.core.backup.restic import Restic
 from etsy_listings.core.config.settings import RetentionSettings
 from etsy_listings.core.workspace.workspace import Workspace
 
-pytestmark = pytest.mark.restic
+from tests.support.backups import PASSWORD, configure_backups, initialise
 
-PASSWORD = "correct horse battery staple"
+pytestmark = pytest.mark.restic
 
 
 @pytest.fixture
@@ -26,11 +26,8 @@ def workspace(
     restic_binary: Path, workspace_root: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> Workspace:
     monkeypatch.setenv(RESTIC_BINARY_ENV_VAR, str(restic_binary))
-    workspace_root.joinpath("settings.yaml").write_text(
-        f"backup:\n  repository: {(tmp_path / 'backups').as_posix()}\n", encoding="utf-8"
-    )
-    workspace = Workspace.discover(root_override=workspace_root)
-    create_repository(workspace, PASSWORD, binaries=ResticBinaries(home=tmp_path / "home"))
+    workspace = configure_backups(workspace_root, tmp_path / "backups", password=None)
+    initialise(workspace, tmp_path / "home")
     return workspace
 
 
@@ -51,7 +48,7 @@ def test_a_backup_restores_byte_for_byte(workspace: Workspace, tmp_path: Path) -
 
     record = BackupRunner(workspace, binaries, home=home).run()
     target = tmp_path / "restored"
-    repository = open_repository(workspace, binaries=binaries)
+    repository = configured_backup(workspace, binaries=binaries).open()
     repository.restore(repository.snapshots()[-1], target)
 
     assert record.outcome == "succeeded", record.message

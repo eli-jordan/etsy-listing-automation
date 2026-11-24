@@ -25,10 +25,10 @@ from etsy_listings.core.backup.repository import RepositoryLockedError
 from etsy_listings.core.backup.state import BackupState, BackupStateStore
 from etsy_listings.core.config.secrets import BACKUP_PASSWORD_VAR
 from etsy_listings.core.errors import ConflictError
-from etsy_listings.core.workspace import layout
 from etsy_listings.core.workspace.workspace import Workspace
 
 from tests.support.ai_runs import wait_for
+from tests.support.backups import configure_backups
 from tests.support.restic import InMemoryRestic
 
 NOW = datetime(2026, 11, 23, 9, 0, tzinfo=UTC)
@@ -54,18 +54,14 @@ def repository(tmp_path: Path) -> Path:
 
 
 def _settings(workspace_root: Path, repository: Path, tmp_path: Path, *, hours: int = 12) -> None:
-    workspace_root.joinpath("settings.yaml").write_text(
-        f"backup:\n  repository: {repository.as_posix()}\n"
-        f"  restic_binary: {(tmp_path / 'restic').as_posix()}\n"
-        f"  interval_hours: {hours}\n",
-        encoding="utf-8",
+    configure_backups(
+        workspace_root, repository, restic_binary=tmp_path / "restic", interval_hours=hours
     )
 
 
 @pytest.fixture
 def workspace(workspace_root: Path, repository: Path, tmp_path: Path) -> Workspace:
     _settings(workspace_root, repository, tmp_path)
-    (workspace_root / layout.ENV_FILE).write_text(f"{BACKUP_PASSWORD_VAR}=correct horse battery\n")
     return Workspace.discover(root_override=workspace_root)
 
 

@@ -1,6 +1,7 @@
 """Restore one snapshot into a new folder (workspace-backup spec, *Restore*;
 plan, PR 7). The server's coordinator runs it as a job and the CLI's
-``backup restore`` runs it in the foreground; both refuse the same targets.
+``backup restore`` runs it in the foreground; both refuse the same targets,
+through ``ConfiguredBackup.check_restore_target`` in ``backup_repository``.
 
 The snapshot's own folder is restored, not the whole tree restic keeps, so
 the target holds the workspace itself and ``ETSY_LISTINGS_ROOT`` can point
@@ -9,7 +10,6 @@ at it straight away.
 
 from __future__ import annotations
 
-import os
 import threading
 from collections.abc import Callable, Sequence
 from datetime import datetime
@@ -19,7 +19,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict
 
 from etsy_listings.core.backup.repository import Repository, RestoreProgress, Snapshot
-from etsy_listings.core.errors import ConflictError, MissingError, RefusedError
+from etsy_listings.core.errors import ConflictError, MissingError
 
 RestoreOutcome = Literal["running", "succeeded", "failed", "stopped"]
 
@@ -54,45 +54,6 @@ class RestoreStatus(BaseModel):
     """Why it failed or stopped."""
 
 
-def check_target(
-    target: Path, *, workspace: Path, repository: Path | None, destinations: Sequence[Path] = ()
-) -> Path:
-    """Refuse the live workspace, a folder inside it or the repository, and
-    a folder that already holds files (spec, *Restore*)."""
-    if not target.is_absolute():
-        raise RefusedError(f"{target} is not a full path. Name the folder from its drive.")
-    target = target.resolve()
-    if _same(target, workspace):
-        raise RestoreRefusedError(LIVE_WORKSPACE)
-    if _within(target, workspace):
-        raise RestoreRefusedError(
-            f"{target} is inside your live workspace. Choose a new, empty folder outside it."
-        )
-    if repository is not None and _within(target, repository):
-        raise RestoreRefusedError(f"{target} is in the backup storage folder. Choose another.")
-    if any(_within(target, destination) for destination in destinations):
-        raise RestoreRefusedError(f"{target} is in a backup destination. Choose another folder.")
-    if target.exists() and (not target.is_dir() or any(target.iterdir())):
-        raise RestoreRefusedError(
-            f"{target} already holds files. Choose a new, empty folder, or delete what a "
-            "stopped restore left there."
-        )
-    return target
-
-
-def _key(path: Path) -> str:
-    return os.path.normcase(path.resolve())
-
-
-def _same(a: Path, b: Path) -> bool:
-    return _key(a) == _key(b)
-
-
-def _within(path: Path, folder: Path) -> bool:
-    inner, outer = _key(path), _key(folder)
-    return inner == outer or inner.startswith(outer.rstrip(os.sep) + os.sep)
-
-
 def find_snapshot(snapshots: Sequence[Snapshot], ref: str) -> Snapshot:
     """``latest``, or the snapshot whose id starts with ``ref``."""
     if ref == "latest" and snapshots:
@@ -113,7 +74,7 @@ def restore(
 ) -> RestoreProgress:
     """Run the restore; its last figures. The repository writes into
     ``target`` without overwriting anything there, so files that reached it
-    after :func:`check_target` stay. Raises restic's error, or
+    after the target was checked stay. Raises restic's error, or
     :class:`~etsy_listings.core.backup.repository.ResticCancelledError` when
     stopped, leaving the files restored so far."""
     return repository.restore(snapshot, target, progress=progress, cancel=cancel)

@@ -16,7 +16,6 @@ import pytest
 from fastapi.testclient import TestClient
 
 from etsy_listings.core.application.backup_coordinator import BackupEnvironment
-from etsy_listings.core.application.backup_repository import create_repository
 from etsy_listings.core.application.backup_run import BackupRunner
 from etsy_listings.core.backup.binary import RESTIC_BINARY_ENV_VAR, ResticBinaries
 from etsy_listings.core.backup.repository import ResticError
@@ -26,11 +25,11 @@ from etsy_listings.core.workspace.workspace import Workspace
 from etsy_listings.server.api.app import create_app
 
 from tests.support.ai_runs import wait_for
+from tests.support.backups import PASSWORD, configure_backups, initialise
 from tests.support.repository_files import FakeRepository, files
 from tests.support.restic import InMemoryRestic
 
 NOW = datetime(2026, 11, 23, 9, 0, tzinfo=UTC)
-PASSWORD = "correct horse battery staple"
 
 
 @pytest.fixture(autouse=True)
@@ -50,11 +49,7 @@ def restic() -> InMemoryRestic:
 
 
 def _configure(workspace_root: Path, repository: Path, *, password: bool = True) -> None:
-    workspace_root.joinpath("settings.yaml").write_text(
-        f"backup:\n  repository: {repository.as_posix()}\n", encoding="utf-8"
-    )
-    if password:
-        (workspace_root / layout.ENV_FILE).write_text(f"{BACKUP_PASSWORD_VAR}={PASSWORD}\n")
+    configure_backups(workspace_root, repository, password=PASSWORD if password else None)
 
 
 @pytest.fixture
@@ -349,7 +344,7 @@ def test_connect_copies_then_opens_a_repository_restic_made(
     _configure(workspace_root, old)
     workspace = Workspace.discover(root_override=workspace_root)
     home = tmp_path / "home"
-    create_repository(workspace, PASSWORD, binaries=ResticBinaries(home=home))
+    initialise(workspace, home)
     record = BackupRunner(workspace, ResticBinaries(home=home), home=home).run()
     cloud = tmp_path / "cloud"
     old.rename(cloud)

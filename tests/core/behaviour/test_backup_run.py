@@ -27,13 +27,14 @@ from etsy_listings.core.backup.state import (
     RunRecord,
 )
 from etsy_listings.core.config.secrets import BACKUP_PASSWORD_VAR
+from etsy_listings.core.errors import RefusedError
 from etsy_listings.core.workspace import layout
 from etsy_listings.core.workspace.workspace import Workspace
 
+from tests.support.backups import configure_backups
 from tests.support.repository_files import FakeRepository, files
 from tests.support.restic import InMemoryRestic, snapshot_id
 
-PASSWORD = "correct horse battery staple"
 NOW = datetime(2026, 11, 23, 9, 0, tzinfo=UTC)
 WEEKLY = ["back_up", "forget", "prune", "check"]
 """A run with the weekly prune due."""
@@ -47,13 +48,9 @@ def _no_ambient_backup(monkeypatch: pytest.MonkeyPatch) -> None:
 
 @pytest.fixture
 def workspace(workspace_root: Path, tmp_path: Path) -> Workspace:
-    workspace_root.joinpath("settings.yaml").write_text(
-        f"backup:\n  repository: {(tmp_path / 'backups').as_posix()}\n"
-        f"  restic_binary: {(tmp_path / 'restic').as_posix()}\n",
-        encoding="utf-8",
+    return configure_backups(
+        workspace_root, tmp_path / "backups", restic_binary=tmp_path / "restic"
     )
-    (workspace_root / layout.ENV_FILE).write_text(f"{BACKUP_PASSWORD_VAR}={PASSWORD}\n")
-    return Workspace.discover(root_override=workspace_root)
 
 
 @pytest.fixture
@@ -261,12 +258,24 @@ def test_the_next_run_rechecks_damage_before_copying(
 
 
 def _with_destinations(workspace: Workspace, *destinations: Path) -> Workspace:
-    settings = workspace.root / "settings.yaml"
-    listed = "".join(f"    - {path.as_posix()}\n" for path in destinations)
-    settings.write_text(
-        settings.read_text(encoding="utf-8") + f"  destinations:\n{listed}", encoding="utf-8"
+    storage = backup_settings(workspace).repository
+    return configure_backups(
+        workspace.root, storage, destinations=destinations, restic_binary=storage.parent / "restic"
     )
-    return Workspace.discover(root_override=workspace.root)
+
+
+def test_check_refuses_a_storage_folder_inside_the_workspace_before_restic_runs(
+    workspace: Workspace, home: Path, tmp_path: Path
+) -> None:
+    """As a run, repair and create do: the check resolves the same
+    configured backup."""
+    configure_backups(workspace.root, workspace.root / "backups", restic_binary=tmp_path / "r")
+    restic = _restic()
+
+    with pytest.raises(RefusedError, match="overlaps"):
+        _runner(workspace, home, restic).check()
+
+    assert restic.operations == []
 
 
 @pytest.fixture

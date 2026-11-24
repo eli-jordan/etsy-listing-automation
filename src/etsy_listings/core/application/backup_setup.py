@@ -17,7 +17,8 @@ from pathlib import Path
 from etsy_listings.core.application import workspace_settings
 from etsy_listings.core.application.backup_repository import (
     check_backup_paths,
-    check_new_repository,
+    check_new_storage,
+    configured_backup,
     create_repository,
 )
 from etsy_listings.core.application.refusals import InvalidSettingsEditError
@@ -25,7 +26,7 @@ from etsy_listings.core.backup.binary import ResticBinaries
 from etsy_listings.core.backup.destinations import create_destination
 from etsy_listings.core.backup.repository import OpenRepository
 from etsy_listings.core.config.secrets import BACKUP_PASSWORD_VAR
-from etsy_listings.core.config.settings import RetentionSettings
+from etsy_listings.core.config.settings import BackupSettings, RetentionSettings
 from etsy_listings.core.errors import ConflictError, RefusedError
 from etsy_listings.core.workspace.userpath import to_native_path
 from etsy_listings.core.workspace.workspace import Workspace
@@ -57,9 +58,12 @@ def set_up_backups(
     current = workspace_settings.read_settings(workspace)
     if current.settings.backup is not None:
         raise ConflictError("Backups are already set up; change them on the Setup page.")
-    check_new_repository(answers.repository, answers.password)
+    check_new_storage(answers.repository, answers.password)
     _refuse_password_override(answers.password)
-    check_backup_paths(workspace, answers.repository, answers.destinations)
+    # The folders about to be written, refused before they are. The interval
+    # is left to the settings save, which refuses it by field.
+    folders = BackupSettings(repository=answers.repository, destinations=answers.destinations)
+    backup = configured_backup(workspace, folders, binaries=binaries, restic=restic)
     refuse_unreachable(answers.destinations)
     block = {
         "repository": str(answers.repository),
@@ -73,7 +77,7 @@ def set_up_backups(
         changes={workspace_settings.BACKUP: block},
         editable=(workspace_settings.BACKUP,),
     )
-    create_repository(workspace, answers.password, binaries=binaries, restic=restic)
+    create_repository(backup, answers.password)
     create_folders(answers.destinations)
     return view
 

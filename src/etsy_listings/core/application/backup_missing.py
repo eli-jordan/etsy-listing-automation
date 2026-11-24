@@ -29,13 +29,14 @@ from pathlib import Path
 from etsy_listings.core.application import credentials, workspace_settings
 from etsy_listings.core.application.backup_repository import (
     BackupOffError,
+    ConfiguredBackup,
     PasswordTooShortError,
     RepositoryNotEmptyError,
-    check_backup_paths,
-    check_new_repository,
+    configured_backup,
     create_repository,
-    paths_overlap,
-    repository_at,
+    has_repository,
+    holds_files,
+    overlaps,
     stored_password,
 )
 from etsy_listings.core.application.refusals import SettingsRevisionConflictError
@@ -94,12 +95,6 @@ class Replacement:
     """``settings.yaml``'s revision the seller saw."""
 
 
-def has_repository(folder: Path) -> bool:
-    """Whether ``folder`` holds restic's ``config``: the coordinator's test
-    for a missing repository, which runs no restic."""
-    return (folder / "config").is_file()
-
-
 def create_new_repository(
     workspace: Workspace,
     answers: Replacement,
@@ -113,14 +108,14 @@ def create_new_repository(
     for destination in settings.destinations:
         if destination.is_absolute() and holds_repository(destination):
             raise DestinationHoldsRepositoryError(destination)
-    check_backup_paths(workspace, answers.repository, settings.destinations)
-    stored = stored_password(workspace)
+    backup = _replacing(workspace, settings, answers, binaries=binaries, restic=restic)
+    stored = backup.password
     chosen = stored or answers.password
     if not chosen:
         raise PasswordTooShortError("Enter a password for the new backup repository.")
-    check_new_repository(answers.repository, chosen)
+    backup.check_new_storage(chosen)
     _point_at(workspace, settings, answers)
-    create_repository(workspace, chosen, binaries=binaries, restic=restic, store=stored is None)
+    create_repository(backup, chosen, store=stored is None)
 
 
 def connect_repository(
@@ -140,7 +135,7 @@ def connect_repository(
     if not chosen:
         raise ConnectRefusedError("Enter the password of the repository you are connecting.")
     repository = answers.repository
-    check_backup_paths(workspace, repository, settings.destinations)
+    backup = _replacing(workspace, settings, answers, binaries=binaries, restic=restic)
     _check_connect(workspace, source, answers)
     staging = repository.with_name(f"{repository.name}{STAGING_MARK}{secrets.token_hex(4)}")
     staging.mkdir()
@@ -148,10 +143,8 @@ def connect_repository(
         copied = copy_repository(source, staging)
         if copied.outcome != "copied":
             raise ConnectRefusedError(copied.message or f"{source} could not be copied.")
-        copy = repository_at(
-            binaries.ensure(settings.restic_binary), staging, chosen, restic=restic
-        )
-        _open(copy, env_file=workspace.root / ".env" if stored is not None else None)
+        copy = backup.open(folder=staging, password=chosen, install=True)
+        _open(copy, env_file=backup.env_file if stored is not None else None)
         if repository.is_dir():
             repository.rmdir()  # empty: _check_connect saw to it
         staging.rename(repository)
@@ -175,6 +168,21 @@ def _missing(workspace: Workspace, expected_revision: str) -> BackupSettings:
     return settings
 
 
+def _replacing(
+    workspace: Workspace,
+    settings: BackupSettings,
+    answers: Replacement,
+    *,
+    binaries: ResticBinaries,
+    restic: OpenRepository | None,
+) -> ConfiguredBackup:
+    """The configured backup with the storage folder the seller confirmed,
+    refused if it overlaps the workspace or a destination. The old folder is
+    not checked: it may be another machine's path."""
+    chosen = settings.model_copy(update={"repository": answers.repository})
+    return configured_backup(workspace, chosen, binaries=binaries, restic=restic)
+
+
 def _check_connect(workspace: Workspace, source: Path, answers: Replacement) -> None:
     """Everything a connect can be refused for before it copies, so a
     20 GB copy is not wasted on a typo."""
@@ -184,9 +192,9 @@ def _check_connect(workspace: Workspace, source: Path, answers: Replacement) -> 
             "folder that holds config, data, index, keys and snapshots."
         )
     repository = answers.repository
-    if paths_overlap(repository, source):
+    if overlaps(repository, source):
         raise ConnectRefusedError("Choose a local folder separate from the source repository.")
-    if repository.exists() and (not repository.is_dir() or any(repository.iterdir())):
+    if holds_files(repository):
         raise RepositoryNotEmptyError(
             f"{repository} already holds files. Choose an empty or new folder to copy into."
         )

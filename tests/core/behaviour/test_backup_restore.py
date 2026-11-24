@@ -19,10 +19,10 @@ from etsy_listings.core.backup.binary import RESTIC_BINARY_ENV_VAR
 from etsy_listings.core.backup.state import BackupState, BackupStateStore, CheckResult
 from etsy_listings.core.config.secrets import BACKUP_PASSWORD_VAR
 from etsy_listings.core.errors import ConflictError, MissingError
-from etsy_listings.core.workspace import layout
 from etsy_listings.core.workspace.workspace import Workspace
 
 from tests.support.ai_runs import wait_for
+from tests.support.backups import configure_backups
 from tests.support.restic import InMemoryRestic, snapshot_id
 
 NOW = datetime(2026, 11, 23, 9, 0, tzinfo=UTC)
@@ -45,13 +45,7 @@ def repository(tmp_path: Path) -> Path:
 
 @pytest.fixture
 def workspace(workspace_root: Path, repository: Path, tmp_path: Path) -> Workspace:
-    workspace_root.joinpath("settings.yaml").write_text(
-        f"backup:\n  repository: {repository.as_posix()}\n"
-        f"  restic_binary: {(tmp_path / 'restic').as_posix()}\n",
-        encoding="utf-8",
-    )
-    (workspace_root / layout.ENV_FILE).write_text(f"{BACKUP_PASSWORD_VAR}=correct horse battery\n")
-    return Workspace.discover(root_override=workspace_root)
+    return configure_backups(workspace_root, repository, restic_binary=tmp_path / "restic")
 
 
 @pytest.fixture
@@ -92,21 +86,12 @@ def test_a_restore_writes_the_snapshot_into_a_new_folder_and_reports_progress(
     assert (done.outcome, done.files_done, done.target) == ("succeeded", 400, str(target))
 
 
-@pytest.mark.parametrize("where", ["workspace", "inside", "non_empty"])
-def test_a_restore_refuses_the_live_workspace_and_a_folder_with_files(
-    coordinator: BackupCoordinator,
-    restic: InMemoryRestic,
-    workspace: Workspace,
-    tmp_path: Path,
-    where: str,
+def test_a_refused_target_starts_no_restore(
+    coordinator: BackupCoordinator, restic: InMemoryRestic, workspace: Workspace
 ) -> None:
-    full = tmp_path / "full"
-    full.mkdir()
-    (full / "notes.txt").write_text("keep me")
-    target = {"workspace": workspace.root, "inside": workspace.root / "old", "non_empty": full}
-
+    """Which targets are refused is test_backup_folder_rules.py's."""
     with pytest.raises(RestoreRefusedError):
-        coordinator.start_restore(SNAPSHOT, target[where])
+        coordinator.start_restore(SNAPSHOT, workspace.root)
 
     assert restic.ran("restore") == 0
     assert coordinator.overview().restore is None
@@ -144,18 +129,32 @@ def test_a_restore_rechecks_the_target_after_listing_snapshots(
     assert document.read_text() == "preserve me"
 
 
-def test_a_restore_refuses_an_empty_backup_destination(
-    coordinator: BackupCoordinator, workspace: Workspace, restic: InMemoryRestic, tmp_path: Path
+def test_a_restore_rechecks_against_a_destination_added_while_it_started(
+    coordinator: BackupCoordinator,
+    workspace: Workspace,
+    repository: Path,
+    restic: InMemoryRestic,
+    tmp_path: Path,
 ) -> None:
-    destination = tmp_path / "cloud"
-    destination.mkdir()
-    with workspace.settings_file().open("a", encoding="utf-8") as settings:
-        settings.write(f"  destinations:\n    - {destination.as_posix()}\n")
+    """The re-check reads the settings again: a Setup save that made the
+    empty target a destination while the snapshots were listed stops it."""
+    target = tmp_path / "cloud"
 
-    with pytest.raises(RestoreRefusedError, match="destination"):
-        coordinator.start_restore(SNAPSHOT, destination)
+    def a_setup_save(operation: str) -> None:
+        if operation == "snapshots":
+            target.mkdir(exist_ok=True)
+            configure_backups(
+                workspace.root, repository, destinations=[target], restic_binary=tmp_path / "r"
+            )
 
-    assert restic.ran("restore") == 0
+    restic.on_start = a_setup_save
+    coordinator.start_restore(SNAPSHOT, target)
+    coordinator.join_restore(timeout=10)
+
+    result = coordinator.overview().restore
+    assert result is not None
+    assert (result.outcome, restic.ran("restore")) == ("failed", 0)
+    assert "backup destination" in (result.message or "")
 
 
 def test_one_restore_at_a_time(

@@ -14,13 +14,13 @@ from pathlib import Path
 import pytest
 
 import etsy_listings
-from etsy_listings.core.application.backup_repository import create_repository
 from etsy_listings.core.application.backup_run import BackupRunner
 from etsy_listings.core.backup.binary import RESTIC_BINARY_ENV_VAR, ResticBinaries
 from etsy_listings.core.backup.restic import Restic, tree_path
 from etsy_listings.core.workspace.workspace import Workspace
 
-PASSWORD = "correct horse battery staple"
+from tests.support.backups import PASSWORD, configure_backups, initialise
+
 SOURCE = Path(etsy_listings.__file__).parent
 
 WRITERS: dict[str, tuple[str, str]] = {
@@ -104,12 +104,9 @@ def test_the_backup_leaves_out_every_temporary_and_keeps_its_neighbours(
     restic_binary: Path, workspace_root: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setenv(RESTIC_BINARY_ENV_VAR, str(restic_binary))
-    workspace_root.joinpath("settings.yaml").write_text(
-        f"backup:\n  repository: {(tmp_path / 'backups').as_posix()}\n", encoding="utf-8"
-    )
-    workspace = Workspace.discover(root_override=workspace_root)
+    workspace = configure_backups(workspace_root, tmp_path / "backups", password=None)
     binaries = ResticBinaries(home=tmp_path / "home")
-    create_repository(workspace, PASSWORD, binaries=binaries)
+    initialise(workspace, tmp_path / "home")
     for relative in [sample for _, sample in WRITERS.values()] + list(KEPT[1:]):
         path = workspace_root / relative
         path.parent.mkdir(parents=True, exist_ok=True)

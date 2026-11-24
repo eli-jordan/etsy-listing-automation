@@ -42,7 +42,6 @@ from etsy_listings.core.application.backup_missing import (
     Replacement,
     connect_repository,
     create_new_repository,
-    has_repository,
 )
 from etsy_listings.core.application.backup_overview import (
     BackupFacts,
@@ -56,13 +55,14 @@ from etsy_listings.core.application.backup_overview import (
     next_due,
 )
 from etsy_listings.core.application.backup_repository import (
+    ConfiguredBackup,
     backup_settings,
-    open_repository,
+    configured_backup,
+    has_repository,
     stored_password,
 )
 from etsy_listings.core.application.backup_restore import (
     RestoreStatus,
-    check_target,
     find_snapshot,
     restore,
 )
@@ -379,16 +379,9 @@ class BackupCoordinator:
     def start_restore(self, snapshot: str, target: Path) -> None:
         """Restore ``snapshot`` (an id, its start, or ``latest``) into the
         new folder ``target`` on its own thread (spec, *Restore*)."""
-        settings = backup_settings(self._workspace)
-        target = check_target(
-            target,
-            workspace=self._workspace.root,
-            repository=settings.repository,
-            destinations=settings.destinations,
-        )
-        repository = open_repository(
-            self._workspace, binaries=self._binaries, restic=self._env.restic, settings=settings
-        )
+        backup = self._configured()
+        target = backup.check_restore_target(target)
+        repository = backup.open()
         found = find_snapshot(repository.snapshots(lock=False), snapshot)
         with self._lock:
             if self._stopping.is_set():
@@ -404,7 +397,7 @@ class BackupCoordinator:
             self._stop_restore = stop = threading.Event()
             self._restorer = threading.Thread(
                 target=self._run_restore,
-                args=(repository, found, target, stop),
+                args=(backup, repository, found, target, stop),
                 name="backup-restore",
                 daemon=True,
             )
@@ -425,12 +418,17 @@ class BackupCoordinator:
             restorer.join(timeout)
 
     def _run_restore(
-        self, repository: Repository, snapshot: Snapshot, target: Path, stop: threading.Event
+        self,
+        backup: ConfiguredBackup,
+        repository: Repository,
+        snapshot: Snapshot,
+        target: Path,
+        stop: threading.Event,
     ) -> None:
         update: dict[str, object] = {"outcome": "succeeded"}
         try:
             with self._maintenance_lock:
-                self._restore_to(repository, snapshot, target, stop)
+                self._restore_to(backup, repository, snapshot, target, stop)
         except ResticCancelledError:
             update = {"outcome": "stopped", "message": "The restore was stopped."}
         except UserFacingError as exc:
@@ -444,24 +442,34 @@ class BackupCoordinator:
                 self._restore = self._restore.model_copy(update=update)
 
     def _restore_to(
-        self, repository: Repository, snapshot: Snapshot, target: Path, stop: threading.Event
+        self,
+        backup: ConfiguredBackup,
+        repository: Repository,
+        snapshot: Snapshot,
+        target: Path,
+        stop: threading.Event,
     ) -> None:
         if stop.is_set():
             raise ResticCancelledError("The restore was stopped.")
-        current = self._settings()
-        protected = () if current is None else (current.repository, *current.destinations)
-        target = check_target(
-            target,
-            workspace=self._workspace.root,
-            repository=repository.path,
-            destinations=protected,
-        )
+        # Again, against the settings as they read now: a Setup save may have
+        # added a destination while the snapshots were listed.
+        target = backup.check_restore_target(target, now=self._settings())
         restore(repository, snapshot, target, progress=self._heard_restore, cancel=stop)
 
     def _heard_restore(self, figures: RestoreProgress) -> None:
         with self._lock:
             if self._restore is not None:
                 self._restore = self._restore.model_copy(update=vars(figures))
+
+    def _configured(self, settings: BackupSettings | None = None) -> ConfiguredBackup:
+        """The configured backup for one operation (``backup_repository``)."""
+        return configured_backup(
+            self._workspace,
+            settings,
+            binaries=self._binaries,
+            home=self._env.home,
+            restic=self._env.restic,
+        )
 
     def _runner(self) -> BackupRunner:
         return BackupRunner(
@@ -535,15 +543,12 @@ class BackupCoordinator:
         return reading
 
     def _read_repository(self, settings: BackupSettings) -> RepositoryReading:
+        """Missing is asked first, of the settings alone: a workspace from
+        another machine names a folder this one may not even accept."""
         if not has_repository(settings.repository):
             return RepositoryReading(missing=True)
         try:
-            repository = open_repository(
-                self._workspace,
-                binaries=self._binaries,
-                restic=self._env.restic,
-                settings=settings,
-            )
+            repository = self._configured(settings).open()
             return RepositoryReading(missing=False, snapshots=repository.snapshots(lock=False))
         except UserFacingError as exc:
             return RepositoryReading(missing=False, problem=str(exc))

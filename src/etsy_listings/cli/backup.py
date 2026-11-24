@@ -12,7 +12,6 @@ import json
 import time
 from collections.abc import Iterator
 from contextlib import contextmanager
-from functools import partial
 from typing import Annotated, Any
 
 import typer
@@ -22,17 +21,11 @@ from etsy_listings.cli.options import open_workspace, root_option
 from etsy_listings.core.application.backup_repository import (
     MIN_PASSWORD_LENGTH,
     BackupStatus,
-    backup_settings,
     backup_status,
+    configured_backup,
     create_repository,
-    open_repository,
-    stored_password,
 )
-from etsy_listings.core.application.backup_restore import (
-    check_target,
-    find_snapshot,
-    restore,
-)
+from etsy_listings.core.application.backup_restore import find_snapshot, restore
 from etsy_listings.core.application.backup_run import BackupProgress, BackupRunner
 from etsy_listings.core.backup.binary import RESTIC_VERSION, ResticBinaries
 from etsy_listings.core.backup.repository import RestoreProgress, Snapshot
@@ -77,14 +70,12 @@ def init(root: str | None = root_option()) -> None:
     there first. Downloads the pinned restic when no other is configured."""
     workspace = open_workspace(root)
     with _reported():
-        settings = backup_settings(workspace)
-        existing = stored_password(workspace)
+        backup = configured_backup(workspace, binaries=ResticBinaries())
+        existing = backup.password
         password = existing or _ask_password()
-        typer.echo(f"Creating the backup repository at {settings.repository}...", err=True)
-        repository_id = create_repository(
-            workspace, password, binaries=ResticBinaries(), store=existing is None
-        )
-    typer.echo(f"Created the backup repository at {settings.repository} (id {repository_id[:8]}).")
+        typer.echo(f"Creating the backup repository at {backup.storage}...", err=True)
+        repository_id = create_repository(backup, password, store=existing is None)
+    typer.echo(f"Created the backup repository at {backup.storage} (id {repository_id[:8]}).")
     if existing is None:
         typer.echo(
             f"Stored the password in {workspace.root / layout.ENV_FILE} as "
@@ -180,7 +171,7 @@ def snapshots(root: str | None = root_option(), *, json_output: JsonOption = Fal
     """List the repository's snapshots, oldest first."""
     workspace = open_workspace(root)
     with _reported():
-        found = open_repository(workspace, binaries=ResticBinaries()).snapshots()
+        found = configured_backup(workspace, binaries=ResticBinaries()).open().snapshots()
     if json_output:
         typer.echo(json.dumps([_snapshot_json(snapshot) for snapshot in found], indent=2))
     elif not found:
@@ -224,17 +215,11 @@ def restore_command(
     workspace = open_workspace(root)
     folder = to_native_path(target).absolute()
     with _reported():
-        settings = backup_settings(workspace)
-        check = partial(
-            check_target,
-            workspace=workspace.root,
-            repository=settings.repository,
-            destinations=settings.destinations,
-        )
-        folder = check(folder)
-        repository = open_repository(workspace, binaries=ResticBinaries(), settings=settings)
+        backup = configured_backup(workspace, binaries=ResticBinaries())
+        folder = backup.check_restore_target(folder)
+        repository = backup.open()
         found = find_snapshot(repository.snapshots(), snapshot)
-        folder = check(folder)
+        folder = backup.check_restore_target(folder)
         typer.echo(f"Restoring snapshot {found.short_id} into {folder}...", err=True)
         figures = restore(repository, found, folder, progress=_RestoreLines())
     files = f"{figures.files_done:,} files" if figures.files_done is not None else "the files"

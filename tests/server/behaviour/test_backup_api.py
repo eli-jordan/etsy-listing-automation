@@ -29,11 +29,11 @@ from etsy_listings.core.workspace.workspace import Workspace
 from etsy_listings.server.api.app import create_app
 
 from tests.support.ai_runs import wait_for
+from tests.support.backups import PASSWORD, configure_backups
 from tests.support.repository_files import FakeRepository, files
 from tests.support.restic import InMemoryRestic
 
 NOW = datetime(2026, 11, 23, 9, 0, tzinfo=UTC)
-PASSWORD = "correct horse battery staple"
 
 
 @pytest.fixture(autouse=True)
@@ -191,13 +191,7 @@ def test_back_up_now_is_refused_while_backups_are_off(client: TestClient) -> Non
 
 
 def _configured(workspace_root: Path, repository: Path, *destinations: Path) -> None:
-    listed = "".join(f"    - {path.as_posix()}\n" for path in destinations)
-    workspace_root.joinpath("settings.yaml").write_text(
-        f"backup:\n  repository: {repository.as_posix()}\n"
-        + (f"  destinations:\n{listed}" if destinations else ""),
-        encoding="utf-8",
-    )
-    (workspace_root / layout.ENV_FILE).write_text(f"{BACKUP_PASSWORD_VAR}={PASSWORD}\n")
+    configure_backups(workspace_root, repository, destinations=destinations)
 
 
 def test_repair_sets_aside_unexpected_files_and_clears_the_warning(
