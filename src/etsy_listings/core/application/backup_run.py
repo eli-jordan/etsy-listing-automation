@@ -12,13 +12,17 @@ from __future__ import annotations
 
 import threading
 from collections.abc import Callable, Iterator
-from contextlib import contextmanager
+from contextlib import AbstractContextManager, contextmanager, nullcontext
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Literal
 
-from etsy_listings.core.application.backup_repository import backup_settings, open_repository
+from etsy_listings.core.application.backup_repository import (
+    backup_settings,
+    check_backup_paths,
+    open_repository,
+)
 from etsy_listings.core.application.job_gate import JobGate
 from etsy_listings.core.backup.binary import ResticBinaries
 from etsy_listings.core.backup.destinations import (
@@ -43,7 +47,7 @@ from etsy_listings.core.backup.state import (
     RunRecord,
 )
 from etsy_listings.core.config.settings import BackupSettings, RetentionSettings
-from etsy_listings.core.errors import MissingError, UserFacingError
+from etsy_listings.core.errors import ConflictError, MissingError, UserFacingError
 from etsy_listings.core.workspace.workspace import Workspace
 
 Clock = Callable[[], datetime]
@@ -144,28 +148,35 @@ class BackupRunner:
         gate: JobGate | None = None,
         progress: Progress | None = None,
         cancel: threading.Event | None = None,
-        exclusive: Callable[[], bool] | None = None,
+        maintenance: Callable[[], AbstractContextManager[bool]] | None = None,
     ) -> RunRecord:
         """Back up, forget, and prune and check when due. ``cancel`` stops
-        restic part way; the run is then recorded as stopped. ``exclusive``
-        says whether restic may take its exclusive lock now: false while a
-        restore holds a shared one, and then forget, prune and check wait for
-        a later run (spec, *Restore*)."""
+        restic part way; the run is then recorded as stopped. The server
+        reserves exclusive maintenance or defers it while a restore runs."""
         settings = backup_settings(self.workspace)
         store = BackupStateStore(self.home)
         run = _Run(self.now(), str(settings.repository), progress or (lambda _: None))
         try:
-            restic = open_repository(self.workspace, binaries=self.binaries, launch=self.launch)
+            check_backup_paths(self.workspace, settings.repository, settings.destinations)
+            restic = open_repository(
+                self.workspace, binaries=self.binaries, launch=self.launch, settings=settings
+            )
             with _paused(gate, run):
                 run.enter("backing_up")
                 self._back_up(restic, run, cancel)
-            if exclusive is None or exclusive():
-                self._tidy(restic, settings, store, run, cancel)
+            with maintenance() if maintenance else nullcontext(enter_result=True) as available:
+                if available:
+                    self._tidy(restic, settings, store, run, cancel)
+                elif _needs_check(store.load(settings.repository)):
+                    run.enter("checking")
+                    run.failure = "The repository must pass a check before it can be copied."
             if run.failure is None:
                 self._copy_all(settings, store, run, cancel)
         except (_StoppedError, ResticCancelledError) as exc:
             run.stopped, run.failure = True, str(exc)
         except UserFacingError as exc:
+            run.failure = str(exc)
+        except OSError as exc:
             run.failure = str(exc)
         record = run.record(self.now())
         store.append_run(record)
@@ -183,13 +194,17 @@ class BackupRunner:
         exclusive lock."""
         run.enter("forgetting")
         restic.run(*forget_arguments(settings.retention), cancel=cancel)
-        if self._prune_due(store.load(settings.repository)):
+        state = store.load(settings.repository)
+        prune = self._prune_due(state)
+        if prune:
             run.enter("pruning")
             restic.run("prune", cancel=cancel)
             state = store.load(settings.repository)
-            store.save(state.model_copy(update={"last_prune": self.now()}))
+            state = state.model_copy(update={"last_prune": self.now()})
+            store.save(state)
+        if prune or _needs_check(state):
             run.enter("checking")
-            run.failure = self._check(restic, store).message
+            run.failure = self._check(restic, store, cancel=cancel).message
 
     def _back_up(self, restic: Restic, run: _Run, cancel: threading.Event | None) -> None:
         arguments = ["backup", str(self.workspace.root)]
@@ -258,10 +273,14 @@ class BackupRunner:
         """Set aside what changed in ``destination`` and copy it again
         (spec, *Changed and unexpected files*)."""
         settings = backup_settings(self.workspace)
+        check_backup_paths(self.workspace, settings.repository, settings.destinations)
         if destination not in settings.destinations:
             raise MissingError(f"{destination} is not a destination in settings.yaml.")
         store = BackupStateStore(self.home)
-        before = store.load(settings.repository).destination(destination)
+        state = store.load(settings.repository)
+        if _needs_check(state):
+            raise ConflictError("The repository must pass a check before its copy can be repaired.")
+        before = state.destination(destination)
         repair = repair_destination(
             settings.repository,
             destination,
@@ -277,9 +296,13 @@ class BackupRunner:
         restic = open_repository(self.workspace, binaries=self.binaries, launch=self.launch)
         return self._check(restic, BackupStateStore(self.home))
 
-    def _check(self, restic: Restic, store: BackupStateStore) -> CheckResult:
+    def _check(
+        self, restic: Restic, store: BackupStateStore, *, cancel: threading.Event | None = None
+    ) -> CheckResult:
         try:
-            restic.run("check")
+            restic.run("check", cancel=cancel)
+        except ResticCancelledError:
+            raise
         except ResticError as exc:
             result = CheckResult(at=self.now(), ok=False, message=str(exc))
         else:
@@ -290,6 +313,14 @@ class BackupRunner:
 
     def _prune_due(self, state: BackupState) -> bool:
         return state.last_prune is None or self.now() - state.last_prune >= PRUNE_INTERVAL
+
+
+def _needs_check(state: BackupState) -> bool:
+    check = state.last_check
+    if check is not None and not check.ok:
+        return True
+    pruned = state.last_prune
+    return pruned is not None and (check is None or check.at < pruned)
 
 
 def _suspects(state: DestinationState) -> frozenset[str]:
@@ -308,7 +339,8 @@ def _after_copy(state: DestinationState, result: CopyResult, now: datetime) -> D
 
 
 def _copy_check_due(state: DestinationState, now: datetime) -> bool:
-    return state.last_check is None or now - state.last_check.at >= COPY_CHECK_INTERVAL
+    check = state.last_check
+    return check is None or not check.ok or now - check.at >= COPY_CHECK_INTERVAL
 
 
 def _after_check(

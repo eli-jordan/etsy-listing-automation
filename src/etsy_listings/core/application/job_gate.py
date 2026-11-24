@@ -29,8 +29,11 @@ drops it, as it drops queued work.
 from __future__ import annotations
 
 import itertools
+import logging
 import threading
 from collections.abc import Callable
+
+logger = logging.getLogger(__name__)
 
 
 class Ticket:
@@ -105,12 +108,16 @@ class JobGate:
             listeners = list(self._listeners)
             self._condition.notify_all()
         for listener in listeners:
-            listener()
+            try:
+                listener()
+            except Exception:
+                logger.exception("a background coordinator could not resume")
 
     def stop(self) -> None:
         """Shutdown: end a pending :meth:`wait_idle` and keep held work held."""
         with self._condition:
             self._stopped = True
+            self._paused = True
             self._condition.notify_all()
 
     def wait_open(self, *, timeout: float) -> bool:

@@ -25,6 +25,7 @@ first is a human step and the second is the clients' own
 
 from __future__ import annotations
 
+import json
 import os
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -123,7 +124,10 @@ def store(root: Path, credential: Credential, values: tuple[str, ...]) -> None:
     if blank:
         raise ValueError(f"refusing to store a blank {', '.join(blank)}")
     for variable, value in zip(credential.variables, values, strict=True):
-        scaffold.write_env_value(root, variable, value)
+        encoded = (
+            json.dumps(value, ensure_ascii=False) if variable == BACKUP_PASSWORD_VAR else value
+        )
+        scaffold.write_env_value(root, variable, encoded)
 
 
 # --------------------------------------------------------------- verification

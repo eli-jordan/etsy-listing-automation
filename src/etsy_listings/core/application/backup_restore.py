@@ -60,24 +60,30 @@ class RestoreStatus(BaseModel):
     """Why it failed or stopped."""
 
 
-def check_target(target: Path, *, workspace: Path, repository: Path | None) -> None:
+def check_target(
+    target: Path, *, workspace: Path, repository: Path | None, destinations: Sequence[Path] = ()
+) -> Path:
     """Refuse the live workspace, a folder inside it or the repository, and
     a folder that already holds files (spec, *Restore*)."""
     if not target.is_absolute():
         raise RefusedError(f"{target} is not a full path. Name the folder from its drive.")
+    target = target.resolve()
+    if _same(target, workspace):
+        raise RestoreRefusedError(LIVE_WORKSPACE)
     if _within(target, workspace):
         raise RestoreRefusedError(
-            LIVE_WORKSPACE
-            if _same(target, workspace)
-            else f"{target} is inside your live workspace. Choose a new, empty folder outside it."
+            f"{target} is inside your live workspace. Choose a new, empty folder outside it."
         )
     if repository is not None and _within(target, repository):
         raise RestoreRefusedError(f"{target} is in the backup storage folder. Choose another.")
+    if any(_within(target, destination) for destination in destinations):
+        raise RestoreRefusedError(f"{target} is in a backup destination. Choose another folder.")
     if target.exists() and (not target.is_dir() or any(target.iterdir())):
         raise RestoreRefusedError(
             f"{target} already holds files. Choose a new, empty folder, or delete what a "
             "stopped restore left there."
         )
+    return target
 
 
 def _key(path: Path) -> str:
@@ -121,7 +127,16 @@ def restore_arguments(snapshot: Snapshot, target: Path) -> tuple[str, ...]:
     ref = (
         snapshot.id if len(snapshot.paths) != 1 else f"{snapshot.id}:{tree_path(snapshot.paths[0])}"
     )
-    return ("restore", ref, "--target", str(target), "--retry-lock", RETRY_LOCK)
+    return (
+        "restore",
+        ref,
+        "--target",
+        str(target),
+        "--overwrite",
+        "never",
+        "--retry-lock",
+        RETRY_LOCK,
+    )
 
 
 @dataclass

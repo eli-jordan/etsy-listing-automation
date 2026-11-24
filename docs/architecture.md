@@ -1311,7 +1311,8 @@ recorded.
 server's `JobGate`, it pauses, waits for work in flight, and resumes jobs as
 soon as `restic backup` ends, whether it succeeded or not. `forget`, and the
 weekly `prune` and `check`, run after the resume. The CLI's `backup run`
-passes no gate. `EXCLUDES` leaves out the temporary names the app's own
+passes no gate. A failed or interrupted check blocks copying and repair until
+the repository passes a check. `EXCLUDES` leaves out the temporary names the app's own
 writers use, and `tests/core/behaviour/test_backup_excludes.py` fails when a
 writer renames its temporaries. restic's exit code 3 (the snapshot was made
 without some unreadable files) counts as success, with those files as
@@ -1322,11 +1323,14 @@ line. The last successful backup is read from `restic snapshots`.
 
 After a successful run, `BackupRunner` copies the repository to each
 destination with `core/backup/destinations.py`, which is plain file operations
-and no restic. It lists both folders once, in restic's read order. It refuses a
-destination holding a changed file, copies what is missing in write order
-through hashed `.copying-` temporaries, and then deletes expired files newest
-first. A file is never given a name that something already has: rename refuses
-it on Windows, and a hard link takes the name elsewhere. Once 30 days have
+and no restic. It lists both folders in restic's read order and abandons a
+source listing if the snapshot or index directories changed while it read
+them. It refuses a destination holding a changed file, copies what is missing
+in write order through hashed `.copying-` temporaries, and then deletes expired
+files in reverse order. Before deleting an expired file it checks that the
+destination config and the file still match the listing and that the file
+matches its hash. Publication uses a no-overwrite rename on Windows and a hard
+link elsewhere. A filesystem that rejects hard links stops the copy. Once 30 days have
 passed, a run hashes a 5% sample of the destination. The state file keeps each
 destination's last copy and check and the changed and unexpected files found
 there. A change the sample found keeps its size, so the state passes it to
@@ -1363,12 +1367,14 @@ created only by set-up or by the save that adds it, and only inside a folder
 that exists (`core/application/backup_setup.py`).
 
 A restore is `core/application/backup_restore.py`: it refuses the live
-workspace, a folder inside it or the repository, and a folder that holds
-files, then runs `restic restore <id>:<folder>` so the target holds the
+workspace, the repository, the destinations, paths inside any of them and a
+folder that holds files. It checks the target again before starting
+`restic restore <id>:<folder>` so the target holds the
 workspace itself. The server runs it as a job on `BackupCoordinator`, one at a
 time, beside the backup slot rather than in it: restore takes restic's shared
 lock, so scheduled backups keep running. A backup during a restore leaves
 `forget`, `prune` and `check`, which need the exclusive lock, to the next run.
+A restore requested during maintenance waits for those commands to finish.
 `POST /api/backup/restore` starts it, `POST /api/backup/restore/stop` stops it
 and leaves the files restored so far, and `GET /api/backup` carries its
 progress as `restore`. `GET /api/backup/snapshots` lists restic's own
@@ -1380,16 +1386,16 @@ both refused while the configured folder holds restic's `config`.
 `POST /api/backup/repository` creates one in a new or empty folder and starts
 the first backup. `POST /api/backup/connect` copies an existing one, usually a
 destination, with the destinations' own one-way copy into a
-`<folder>.connecting-<hex>` staging folder beside the target. restic opens the
-staging copy before it takes the target's name, and only then are
+`<folder>.connecting-<hex>` staging folder beside the target. The staging
+copy must pass `restic check` before it takes the target's name, and only then are
 `backup.repository` (when the folder changed) and the password written. A
 wrong password deletes the staging folder and writes nothing. Connect holds
 the backup slot while it copies. The status's `repository.password_stored`
 tells the page whether to ask for a password. Create is refused while a
 destination holds a repository's copy (`holds_repository`), with
 `connect_from` in the refusal, and `repair_destination` refuses a destination
-whose `config` is among its changed files (`ForeignCopyError`), so neither
-path ends with the copy deleting another repository's files as expired.
+whose `config` differs or is missing while restic files remain
+(`ForeignCopyError`). The ordinary copy also stops in these cases.
 
 ## Durable Marigold maps and CPU composition
 

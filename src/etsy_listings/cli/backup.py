@@ -12,6 +12,7 @@ import json
 import time
 from collections.abc import Iterator
 from contextlib import contextmanager
+from functools import partial
 from typing import Annotated, Any
 
 import typer
@@ -225,9 +226,16 @@ def restore_command(
     folder = to_native_path(target).absolute()
     with _reported():
         settings = backup_settings(workspace)
-        check_target(folder, workspace=workspace.root, repository=settings.repository)
-        restic = open_repository(workspace, binaries=ResticBinaries())
+        check = partial(
+            check_target,
+            workspace=workspace.root,
+            repository=settings.repository,
+            destinations=settings.destinations,
+        )
+        folder = check(folder)
+        restic = open_repository(workspace, binaries=ResticBinaries(), settings=settings)
         found = find_snapshot(restic.snapshots(), snapshot)
+        folder = check(folder)
         typer.echo(f"Restoring snapshot {found.short_id} into {folder}...", err=True)
         figures = restore(restic, found, folder, progress=_RestoreLines())
     files = f"{figures.files_done:,} files" if figures.files_done is not None else "the files"

@@ -9,12 +9,14 @@ drive, share or sync folder that is offline, refused here with the reason.
 
 from __future__ import annotations
 
+import os
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
 from etsy_listings.core.application import workspace_settings
 from etsy_listings.core.application.backup_repository import (
+    check_backup_paths,
     check_new_repository,
     create_repository,
 )
@@ -22,8 +24,10 @@ from etsy_listings.core.application.refusals import InvalidSettingsEditError
 from etsy_listings.core.backup.binary import ResticBinaries
 from etsy_listings.core.backup.destinations import create_destination
 from etsy_listings.core.backup.restic import Launch
+from etsy_listings.core.config.secrets import BACKUP_PASSWORD_VAR
 from etsy_listings.core.config.settings import RetentionSettings
-from etsy_listings.core.errors import ConflictError
+from etsy_listings.core.errors import ConflictError, RefusedError
+from etsy_listings.core.workspace.userpath import to_native_path
 from etsy_listings.core.workspace.workspace import Workspace
 
 
@@ -54,6 +58,8 @@ def set_up_backups(
     if current.settings.backup is not None:
         raise ConflictError("Backups are already set up; change them on the Setup page.")
     check_new_repository(answers.repository, answers.password)
+    _refuse_password_override(answers.password)
+    check_backup_paths(workspace, answers.repository, answers.destinations)
     refuse_unreachable(answers.destinations)
     block = {
         "repository": str(answers.repository),
@@ -72,6 +78,15 @@ def set_up_backups(
     return view
 
 
+def _refuse_password_override(password: str) -> None:
+    override = os.environ.get(BACKUP_PASSWORD_VAR)
+    if override and override != password:
+        raise RefusedError(
+            f"{BACKUP_PASSWORD_VAR} in the server environment overrides the saved password. "
+            "Use the same password here or remove the override and restart the server."
+        )
+
+
 def added_destinations(workspace: Workspace, changes: Mapping[str, object]) -> tuple[Path, ...]:
     """The destinations a Setup save adds, refused unless each can be
     created. Only checks: :func:`create_folders` runs after the save."""
@@ -80,14 +95,30 @@ def added_destinations(workspace: Workspace, changes: Mapping[str, object]) -> t
         return ()
     backup = workspace_settings.read_settings(workspace).settings.backup
     known = set(backup.destinations) if backup is not None else set()
-    added = tuple(Path(str(path)) for path in edited if Path(str(path)) not in known)
+    offered = tuple(to_native_path(str(path)) for path in edited)
+    storage = None if backup is None else backup.repository
+    _refuse_overlapping(workspace, storage, offered)
+    added = tuple(path for path in offered if path not in known)
     refuse_unreachable(added)
     return added
+
+
+def _refuse_overlapping(
+    workspace: Workspace, storage: Path | None, paths: tuple[Path, ...]
+) -> None:
+    if storage is not None and not storage.is_absolute():
+        storage = None  # A repository path carried over from another operating system.
+    try:
+        check_backup_paths(workspace, storage, paths)
+    except RefusedError as exc:
+        raise InvalidSettingsEditError({workspace_settings.BACKUP_DESTINATIONS: str(exc)}) from exc
 
 
 def refuse_unreachable(destinations: Sequence[Path]) -> None:
     """``create_destination``'s own refusal, made before anything is
     written, naming the field the form shows it under."""
+    for path in destinations:
+        _refuse_invalid_folder(path)
     missing = [path for path in destinations if not path.is_dir() and not path.parent.is_dir()]
     if missing:
         listed = "; ".join(
@@ -98,6 +129,17 @@ def refuse_unreachable(destinations: Sequence[Path]) -> None:
                 workspace_settings.BACKUP_DESTINATIONS: f"{listed}. Connect the drive or "
                 "sync folder, or choose another folder."
             }
+        )
+
+
+def _refuse_invalid_folder(path: Path) -> None:
+    if not path.is_absolute():
+        raise InvalidSettingsEditError(
+            {workspace_settings.BACKUP_DESTINATIONS: f"{path} is not a full folder path."}
+        )
+    if path.exists() and not path.is_dir():
+        raise InvalidSettingsEditError(
+            {workspace_settings.BACKUP_DESTINATIONS: f"{path} is a file. Choose a folder."}
         )
 
 

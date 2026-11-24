@@ -88,12 +88,16 @@ def test_forget_keeps_what_the_retention_describes(restic_binary: Path, tmp_path
     times += [datetime(2026, 11, day, 12, tzinfo=UTC) for day in range(13, 22)]
     times.append(datetime(2026, 11, 22, 18, tzinfo=UTC))
     for time in times:
-        # restic reads --time as local time.
-        local = f"{time.astimezone():%Y-%m-%d %H:%M:%S}"
+        # Use local calendar dates and let restic apply the host's historical UTC offset.
+        local = f"{time:%Y-%m-%d %H:%M:%S}"
         restic.run("backup", str(source), "--host", "test", "--time", local)
 
+    before = [snapshot.time for snapshot in restic.snapshots()]
+    assert [time.replace(tzinfo=None) for time in before] == [
+        time.replace(tzinfo=None) for time in times
+    ]
     restic.run(*forget_arguments(RetentionSettings(keep_within_days=7, weekly=4, monthly=3)))
     remaining = {snapshot.time for snapshot in restic.snapshots()}
 
-    assert remaining == _kept_by_the_spec(times)
+    assert remaining == _kept_by_the_spec(before)
     assert len(remaining) < len(set(times))

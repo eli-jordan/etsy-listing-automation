@@ -10,7 +10,6 @@ save through ``PATCH /api/admin/settings`` and its revision check.
 from __future__ import annotations
 
 from collections.abc import Callable
-from pathlib import Path
 from typing import Any, Literal
 
 from fastapi import APIRouter, Request
@@ -25,6 +24,7 @@ from etsy_listings.core.application.backup_missing import (
 from etsy_listings.core.application.backup_overview import BackupOverview
 from etsy_listings.core.application.refusals import InvalidSettingsEditError
 from etsy_listings.core.errors import ConflictError, RefusedError, StaleError
+from etsy_listings.core.workspace.userpath import to_native_path
 from etsy_listings.server.api import app_state
 from etsy_listings.server.api.schemas import (
     BackupConnectRequest,
@@ -71,7 +71,7 @@ def start_restore(request: Request, body: BackupRestoreRequest) -> BackupOvervie
     """Restore a snapshot into a new folder; 409 for the live workspace, a
     folder that holds files or a restore already running."""
     backups = app_state.backups(request)
-    backups.start_restore(body.snapshot, Path(body.target))
+    backups.start_restore(body.snapshot, to_native_path(body.target))
     return backups.overview()
 
 
@@ -106,8 +106,8 @@ def set_up(request: Request, body: BackupSetUpRequest) -> BackupOverview | JSONR
     whose parent is missing (422), writing nothing."""
     backups = app_state.backups(request)
     answers = backup_setup.BackupSetUp(
-        repository=Path(body.repository),
-        destinations=tuple(Path(path) for path in body.destinations),
+        repository=to_native_path(body.repository),
+        destinations=tuple(to_native_path(path) for path in body.destinations),
         interval_hours=body.interval_hours,
         retention=body.retention,
         password=body.password,
@@ -123,7 +123,7 @@ def create_repository(
     its folder, and start the first backup. Refuses a folder that holds
     files (409) and a missing or short password (422)."""
     backups = app_state.backups(request)
-    answers = Replacement(Path(body.repository), body.password, body.revision)
+    answers = Replacement(to_native_path(body.repository), body.password, body.revision)
     return _answer(backups, lambda: backups.create_repository(answers))
 
 
@@ -135,8 +135,8 @@ def connect_repository(
     it, then use it; answers once it is connected. A wrong password or a
     folder that is not a repository is a 422, and nothing is saved."""
     backups = app_state.backups(request)
-    answers = Replacement(Path(body.repository), body.password, body.revision)
-    return _answer(backups, lambda: backups.connect(Path(body.source), answers))
+    answers = Replacement(to_native_path(body.repository), body.password, body.revision)
+    return _answer(backups, lambda: backups.connect(to_native_path(body.source), answers))
 
 
 def _answer(
@@ -160,7 +160,7 @@ def _answer(
 def repair(request: Request, body: BackupRepairRequest) -> BackupRepairResponse:
     """Set aside a destination's changed and unexpected files and copy it
     again (spec, *Changed and unexpected files*). Answers when it ends."""
-    result = app_state.backups(request).repair(Path(body.destination))
+    result = app_state.backups(request).repair(to_native_path(body.destination))
     return BackupRepairResponse(
         set_aside=None if result.set_aside is None else str(result.set_aside),
         moved=list(result.moved),

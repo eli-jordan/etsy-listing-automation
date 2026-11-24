@@ -31,7 +31,8 @@ from __future__ import annotations
 
 import logging
 import threading
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -130,6 +131,7 @@ class BackupCoordinator:
         self._store = BackupStateStore(self._env.home)
         self._check_every = check_every
         self._lock = threading.Lock()
+        self._maintenance_lock = threading.Lock()
         self._running: RunningBackup | None = None
         self._reading: tuple[Path, datetime, RepositoryReading] | None = None
         """The last snapshot read, its repository and time, so a status poll
@@ -215,22 +217,26 @@ class BackupCoordinator:
 
     def set_up(self, answers: BackupSetUp, *, expected_revision: str) -> None:
         """Set backups up (``backup_setup``), then start the first backup."""
-        set_up_backups(
-            self._workspace,
-            answers,
-            expected_revision=expected_revision,
-            binaries=self._binaries,
-            launch=self._env.launch,
+        if self._settings() is not None:
+            raise ConflictError("Backups are already set up; change them on the Setup page.")
+        self._prepare_first_backup(
+            lambda: set_up_backups(
+                self._workspace,
+                answers,
+                expected_revision=expected_revision,
+                binaries=self._binaries,
+                launch=self._env.launch,
+            )
         )
-        self.run_now()
 
     def create_repository(self, answers: Replacement) -> None:
         """Create a new repository where the missing one was named or the
         seller chose, then start the first backup into it."""
-        create_new_repository(
-            self._workspace, answers, binaries=self._binaries, launch=self._env.launch
+        self._prepare_first_backup(
+            lambda: create_new_repository(
+                self._workspace, answers, binaries=self._binaries, launch=self._env.launch
+            )
         )
-        self.run_now()
 
     def connect(self, source: Path, answers: Replacement) -> None:
         """Copy the repository at ``source`` to local disk and use it;
@@ -272,6 +278,8 @@ class BackupCoordinator:
     def _claim_locked(
         self, operation: Literal["backup", "repair", "connect"], destination: Path | None
     ) -> None:
+        if self._stopping.is_set():
+            raise ConflictError("The app is shutting down.")
         if self._running is not None:
             raise BackupBusyError(self._running)
         self._running = RunningBackup(
@@ -282,19 +290,40 @@ class BackupCoordinator:
         )
 
     def _release(self) -> None:
-        if not self._stopping.is_set() and (settings := self._settings()) is not None:
-            self._refresh(settings)
-        with self._lock:
-            self._running = None
+        try:
+            if not self._stopping.is_set() and (settings := self._settings()) is not None:
+                self._refresh(settings)
+        finally:
+            with self._lock:
+                self._running = None
 
     def _start_backup(self) -> None:
         """Run a backup on its own thread, or :class:`BackupBusyError`."""
         with self._lock:
-            if self._stopping.is_set():
-                raise ConflictError("The app is shutting down.")
             self._claim_locked("backup", None)
-            self._worker = threading.Thread(target=self._back_up, name="backup-run", daemon=True)
-            self._worker.start()
+            try:
+                self._launch_backup()
+            except BaseException:
+                self._running = None
+                raise
+
+    def _prepare_first_backup(self, prepare: Callable[[], object]) -> None:
+        self._claim("backup", None)
+        try:
+            prepare()
+            with self._lock:
+                self._launch_backup()
+        except BaseException:
+            self._release()
+            raise
+
+    def _launch_backup(self) -> None:
+        """Under the coordinator lock, hand the claimed slot to the worker."""
+        if self._stopping.is_set():
+            raise ConflictError("The app is shutting down.")
+        worker = threading.Thread(target=self._back_up, name="backup-run", daemon=True)
+        worker.start()
+        self._worker = worker
 
     def _back_up(self) -> None:
         try:
@@ -302,7 +331,7 @@ class BackupCoordinator:
                 gate=self._gate,
                 progress=self._heard,
                 cancel=self._cancel,
-                exclusive=lambda: not self.restoring,
+                maintenance=self._maintenance,
             )
         finally:
             self._release()
@@ -332,13 +361,30 @@ class BackupCoordinator:
         with self._lock:
             return self._restore is not None and self._restore.outcome == "running"
 
+    @contextmanager
+    def _maintenance(self) -> Iterator[bool]:
+        """Reserve the exclusive commands or defer them to a later run."""
+        acquired = self._maintenance_lock.acquire(blocking=False)
+        try:
+            yield acquired and not self.restoring
+        finally:
+            if acquired:
+                self._maintenance_lock.release()
+
     def start_restore(self, snapshot: str, target: Path) -> None:
         """Restore ``snapshot`` (an id, its start, or ``latest``) into the
         new folder ``target`` on its own thread (spec, *Restore*)."""
         settings = backup_settings(self._workspace)
-        check_target(target, workspace=self._workspace.root, repository=settings.repository)
-        found = find_snapshot(self.snapshots(), snapshot)
-        restic = open_repository(self._workspace, binaries=self._binaries, launch=self._env.launch)
+        target = check_target(
+            target,
+            workspace=self._workspace.root,
+            repository=settings.repository,
+            destinations=settings.destinations,
+        )
+        restic = open_repository(
+            self._workspace, binaries=self._binaries, launch=self._env.launch, settings=settings
+        )
+        found = find_snapshot(restic.snapshots(lock=False), snapshot)
         with self._lock:
             if self._stopping.is_set():
                 raise ConflictError("The app is shutting down.")
@@ -362,8 +408,11 @@ class BackupCoordinator:
     def stop_restore(self) -> None:
         """Stop the restore, answering once it has; the files restored so
         far stay in its folder."""
-        self._stop_restore.set()
-        self.join_restore()
+        with self._lock:
+            self._stop_restore.set()
+            restorer = self._restorer
+        if restorer is not None:
+            restorer.join()
 
     def join_restore(self, timeout: float | None = None) -> None:
         restorer = self._restorer
@@ -375,7 +424,8 @@ class BackupCoordinator:
     ) -> None:
         update: dict[str, object] = {"outcome": "succeeded"}
         try:
-            restore(restic, snapshot, target, progress=self._heard_restore, cancel=stop)
+            with self._maintenance_lock:
+                self._restore_to(restic, snapshot, target, stop)
         except ResticCancelledError:
             update = {"outcome": "stopped", "message": "The restore was stopped."}
         except UserFacingError as exc:
@@ -387,6 +437,21 @@ class BackupCoordinator:
             if self._restore is not None:
                 update["finished_at"] = self._env.now()
                 self._restore = self._restore.model_copy(update=update)
+
+    def _restore_to(
+        self, restic: Restic, snapshot: Snapshot, target: Path, stop: threading.Event
+    ) -> None:
+        if stop.is_set():
+            raise ResticCancelledError("The restore was stopped.")
+        current = self._settings()
+        protected = () if current is None else (current.repository, *current.destinations)
+        target = check_target(
+            target,
+            workspace=self._workspace.root,
+            repository=restic.repository,
+            destinations=protected,
+        )
+        restore(restic, snapshot, target, progress=self._heard_restore, cancel=stop)
 
     def _heard_restore(self, figures: RestoreProgress) -> None:
         with self._lock:
@@ -469,7 +534,10 @@ class BackupCoordinator:
             return RepositoryReading(missing=True)
         try:
             restic = open_repository(
-                self._workspace, binaries=self._binaries, launch=self._env.launch
+                self._workspace,
+                binaries=self._binaries,
+                launch=self._env.launch,
+                settings=settings,
             )
             return RepositoryReading(missing=False, snapshots=restic.snapshots(lock=False))
         except UserFacingError as exc:

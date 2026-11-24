@@ -209,14 +209,24 @@ class BatchQueue:
                 # row Retry queued mid-deploy starts once the deploy ends.
                 ticket.release()
                 return False
+            self._save_claim(batch, row, run, ticket)
             with self._state:
                 self._runs[run.id] = slot
                 self._tickets[run.id] = ticket
                 self._last = batch_id
-            _replace(batch, row.model_copy(update={"ai": "running", "ai_error": None}))
-            self._batches.save(batch)
         self._runner.start(run)
         return True
+
+    def _save_claim(self, batch: Batch, row: BatchRow, run: AiRun, ticket: Ticket) -> None:
+        try:
+            _replace(batch, row.model_copy(update={"ai": "running", "ai_error": None}))
+            self._batches.save(batch)
+        except OSError:
+            try:
+                run.finish("failed", "The batch row could not be saved.")
+            finally:
+                ticket.release()
+            raise
 
     def _brief_is_empty(self, name: str) -> bool:
         """ADR-0048: a brief already there -- the seller's, or a retried row's own

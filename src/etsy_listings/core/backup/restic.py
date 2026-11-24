@@ -146,6 +146,8 @@ class Restic:
         :class:`ResticCancelledError` when ``cancel`` was set while it ran.
         Closing the iterator early stops restic.
         """
+        if cancel is not None and cancel.is_set():
+            raise ResticCancelledError(f"restic {args[0] if args else ''} was stopped")
         argv = [str(self.binary), "--repo", str(self.repository), "--json", *args]
         logger.debug("running restic: %s", argv)
         try:

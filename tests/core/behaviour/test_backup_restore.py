@@ -5,6 +5,8 @@
 
 from __future__ import annotations
 
+import threading
+from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -16,14 +18,15 @@ from etsy_listings.core.application.backup_coordinator import (
 )
 from etsy_listings.core.application.backup_restore import RestoreRefusedError
 from etsy_listings.core.backup.binary import RESTIC_BINARY_ENV_VAR
-from etsy_listings.core.backup.state import BackupState, BackupStateStore
+from etsy_listings.core.backup.restic import ResticProcess
+from etsy_listings.core.backup.state import BackupState, BackupStateStore, CheckResult
 from etsy_listings.core.config.secrets import BACKUP_PASSWORD_VAR
 from etsy_listings.core.errors import ConflictError, MissingError
 from etsy_listings.core.workspace import layout
 from etsy_listings.core.workspace.workspace import Workspace
 
 from tests.support.ai_runs import wait_for
-from tests.support.restic import RepositoryRestic
+from tests.support.restic import Reply, RepositoryRestic
 
 NOW = datetime(2026, 11, 23, 9, 0, tzinfo=UTC)
 SNAPSHOT = f"{1:064x}"
@@ -127,6 +130,44 @@ def test_an_unknown_snapshot_is_missing(
     assert restic.ran("restore") == 0
 
 
+def test_a_restore_rechecks_the_target_after_listing_snapshots(
+    workspace: Workspace, restic: RepositoryRestic, tmp_path: Path
+) -> None:
+    target = tmp_path / "restore"
+    target.mkdir()
+    document = target / "notes.txt"
+
+    def launch(argv: Sequence[str], env: Mapping[str, str]) -> ResticProcess:
+        if "snapshots" in argv:
+            document.write_text("preserve me")
+        return restic(argv, env)
+
+    environment = BackupEnvironment(home=tmp_path / "home", launch=launch, now=lambda: NOW)
+    coordinator = BackupCoordinator(workspace, gate=None, environment=environment)
+    coordinator.start_restore(SNAPSHOT, target)
+    coordinator.join_restore(timeout=10)
+
+    result = coordinator.overview().restore
+    assert result is not None
+    assert result.outcome == "failed"
+    assert restic.ran("restore") == 0
+    assert document.read_text() == "preserve me"
+
+
+def test_a_restore_refuses_an_empty_backup_destination(
+    coordinator: BackupCoordinator, workspace: Workspace, restic: RepositoryRestic, tmp_path: Path
+) -> None:
+    destination = tmp_path / "cloud"
+    destination.mkdir()
+    with workspace.settings_file().open("a", encoding="utf-8") as settings:
+        settings.write(f"  destinations:\n    - {destination.as_posix()}\n")
+
+    with pytest.raises(RestoreRefusedError, match="destination"):
+        coordinator.start_restore(SNAPSHOT, destination)
+
+    assert restic.ran("restore") == 0
+
+
 def test_one_restore_at_a_time(
     coordinator: BackupCoordinator, restic: RepositoryRestic, tmp_path: Path
 ) -> None:
@@ -174,7 +215,14 @@ def test_a_scheduled_backup_runs_during_a_restore_and_the_weekly_prune_waits(
     need restic's exclusive lock, so they wait for the next run after it."""
     restic.snapshots[0] = NOW - timedelta(days=1)
     store = BackupStateStore(tmp_path / "home")
-    store.save(BackupState(repository=str(restic.repository), last_prune=NOW - timedelta(days=8)))
+    pruned = NOW - timedelta(days=8)
+    store.save(
+        BackupState(
+            repository=str(restic.repository),
+            last_prune=pruned,
+            last_check=CheckResult(at=pruned, ok=True),
+        )
+    )
     restic.restore_hang = True
     coordinator.start_restore(SNAPSHOT, tmp_path / "restored")
     wait_for(lambda: restic.ran("restore") == 1)
@@ -191,3 +239,23 @@ def test_a_scheduled_backup_runs_during_a_restore_and_the_weekly_prune_waits(
     assert during == ["restore", "backup"]
     assert after[len(during) :] == ["backup", "forget", "prune", "check"]
     assert coordinator.history()[1].run.outcome == "succeeded"
+
+
+def test_a_restore_waits_for_maintenance_already_underway(
+    coordinator: BackupCoordinator, restic: RepositoryRestic, tmp_path: Path
+) -> None:
+    release = threading.Event()
+    restic.failing["forget"] = Reply(hang=True, release=release)
+    coordinator.run_now()
+    try:
+        wait_for(lambda: restic.ran("forget") == 1)
+        coordinator.start_restore(SNAPSHOT, tmp_path / "restored")
+        assert coordinator.restoring
+    finally:
+        release.set()
+        coordinator.join(timeout=10)
+        coordinator.join_restore(timeout=10)
+        coordinator.stop()
+
+    names = [command[0] for command in restic.commands]
+    assert names.index("restore") > names.index("check")

@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import contextlib
 import json
+import os
 from collections.abc import Iterator
 from datetime import datetime
 from pathlib import Path
@@ -115,8 +116,14 @@ class BackupStateStore:
 
     def append_run(self, record: RunRecord) -> None:
         self.directory.mkdir(parents=True, exist_ok=True)
-        with self._path(HISTORY_FILE).open("a", encoding="utf-8", newline="\n") as history:
-            history.write(json.dumps(record.model_dump(mode="json")) + "\n")
+        with self._path(HISTORY_FILE).open("a+b") as history:
+            prefix = b""
+            if history.tell():
+                history.seek(-1, os.SEEK_END)
+                if history.read(1) != b"\n":
+                    prefix = b"\n"
+            line = json.dumps(record.model_dump(mode="json")).encode("utf-8")
+            history.write(prefix + line + b"\n")
 
     def runs(self) -> list[RunRecord]:
         """Every recorded run, oldest first. A damaged line is skipped."""

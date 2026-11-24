@@ -179,6 +179,17 @@ def test_cancel_stops_the_process_and_says_so() -> None:
     assert launcher.processes[0].stopped.is_set()
 
 
+def test_a_cancelled_command_does_not_launch_restic() -> None:
+    cancel = threading.Event()
+    cancel.set()
+    restic, launcher = _restic(Reply())
+
+    with pytest.raises(ResticCancelledError):
+        restic.run("prune", cancel=cancel)
+
+    assert launcher.launches == []
+
+
 def test_a_cancel_after_the_command_finished_changes_nothing() -> None:
     cancel = threading.Event()
     restic, _ = _restic(Reply(stdout=[{"message_type": "summary"}]))

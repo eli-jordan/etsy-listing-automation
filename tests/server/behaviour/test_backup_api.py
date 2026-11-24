@@ -17,7 +17,12 @@ from fastapi.testclient import TestClient
 
 from etsy_listings.core.application.backup_coordinator import BackupEnvironment
 from etsy_listings.core.backup.binary import RESTIC_BINARY_ENV_VAR
-from etsy_listings.core.backup.state import BackupState, BackupStateStore, DestinationState
+from etsy_listings.core.backup.state import (
+    BackupState,
+    BackupStateStore,
+    CheckResult,
+    DestinationState,
+)
 from etsy_listings.core.config.secrets import BACKUP_PASSWORD_VAR
 from etsy_listings.core.workspace import layout
 from etsy_listings.core.workspace.workspace import Workspace
@@ -207,7 +212,12 @@ def test_repair_sets_aside_unexpected_files_and_clears_the_warning(
     _configured(workspace_root, repository, cloud)
     found = DestinationState(last_copy=NOW, unexpected=("index/a3f9 2",))
     BackupStateStore(home).save(
-        BackupState(repository=str(repository), last_prune=NOW, destinations={str(cloud): found})
+        BackupState(
+            repository=str(repository),
+            last_prune=NOW,
+            last_check=CheckResult(at=NOW, ok=True),
+            destinations={str(cloud): found},
+        )
     )
     restic = RepositoryRestic(repository, lambda: NOW)
     restic.snapshots.append(NOW)
@@ -286,6 +296,23 @@ def test_a_setup_save_refuses_a_destination_whose_drive_is_missing(
     assert "does not exist" in refused.json()["field_errors"]["backup.destinations"]
     assert repository_edit.status_code == 422
     assert (workspace_root / "settings.yaml").read_bytes() == before
+
+
+def test_a_setup_save_refuses_a_destination_that_is_a_file(
+    workspace_root: Path, home: Path, repository: Path, tmp_path: Path
+) -> None:
+    _configured(workspace_root, repository)
+    settings = workspace_root / "settings.yaml"
+    before = settings.read_bytes()
+    existing = tmp_path / "file"
+    existing.write_bytes(b"keep me")
+
+    with _client(workspace_root, home, None) as client:
+        refused = _save(client, backup_destinations=[str(existing)])
+
+    assert refused.status_code == 422, refused.text
+    assert settings.read_bytes() == before
+    assert existing.read_bytes() == b"keep me"
 
 
 @pytest.mark.restic

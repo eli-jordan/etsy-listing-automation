@@ -27,12 +27,16 @@ iCloud only copies files it has downloaded. In File Explorer, right-click the
 old workspace folder and choose **Always keep on this device**, then wait
 until every file shows a green tick.
 
-Look for conflict copies, which iCloud names `<name> 2.<ext>`. Rename each back
-over its original, or delete it, before copying:
+Look for conflict copies, which iCloud names `<name> 2.<ext>`:
 
 ```powershell
 Get-ChildItem -LiteralPath $old -Recurse -File -Force | Where-Object Name -match ' 2(\.|$)'
 ```
+
+Compare each pair before deciding which version belongs in the new workspace.
+Keep both versions in the old workspace. After copying and checking the file
+counts, resolve the conflicts in the new folder. For `state.lock.json`, verify
+that the version you keep has the listing's current Etsy and Printify IDs.
 
 Copy everything, including hidden folders such as `.cache`:
 
@@ -79,6 +83,11 @@ Keep a copy in your password manager: the `.env` inside each backup is
 encrypted with that same password.
 
 ## 4. Create the repository and make the first backup
+
+While iCloud Drive is connected and syncing, create the empty destination
+folder named in `backup.destinations`. The CLI skips a missing destination.
+If that path already holds a backup, keep it and use a different empty
+destination.
 
 ```powershell
 uv run etsy-listings backup init

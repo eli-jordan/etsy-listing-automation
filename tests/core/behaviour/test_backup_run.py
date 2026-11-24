@@ -265,6 +265,23 @@ def test_a_failed_check_fails_the_run_and_is_recorded(workspace: Workspace, home
     assert "not referenced" in (check.message or "")
 
 
+def test_the_next_run_rechecks_damage_before_copying(
+    workspace: Workspace, home: Path, repository: FakeRepository, tmp_path: Path
+) -> None:
+    destination = tmp_path / "cloud"
+    destination.mkdir()
+    workspace = _with_destinations(workspace, destination)
+    damaged = Reply(exit_code=1, stderr=exit_error(1, "a pack is missing"))
+    _run(workspace, home, ScriptedRestic(BACKED_UP, FORGOT, PRUNED, damaged))
+
+    launcher = ScriptedRestic(BACKED_UP, FORGOT, damaged)
+    record = _run(workspace, home, launcher, now=NOW + timedelta(hours=12))
+
+    assert [command[0] for command in launcher.commands] == ["backup", "forget", "check"]
+    assert (record.outcome, record.failed_step) == ("failed", "checking")
+    assert files(destination) == {}
+
+
 def _with_destinations(workspace: Workspace, *destinations: Path) -> Workspace:
     settings = workspace.root / "settings.yaml"
     listed = "".join(f"    - {path.as_posix()}\n" for path in destinations)

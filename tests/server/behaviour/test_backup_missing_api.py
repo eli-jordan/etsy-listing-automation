@@ -26,7 +26,7 @@ from etsy_listings.server.api.app import create_app
 
 from tests.support.ai_runs import wait_for
 from tests.support.repository_files import FakeRepository, files
-from tests.support.restic import RepositoryRestic
+from tests.support.restic import Reply, RepositoryRestic, exit_error
 
 NOW = datetime(2026, 11, 23, 9, 0, tzinfo=UTC)
 PASSWORD = "correct horse battery staple"
@@ -153,16 +153,18 @@ def test_create_refuses_a_folder_that_holds_files(
     assert _state(workspace_root, elsewhere) == before
 
 
-@pytest.mark.parametrize("holds", ["config", "keys", "data"])
+@pytest.mark.parametrize("holds", ["config", "keys", "data", "snapshots", "index"])
 def test_create_refuses_while_a_destination_holds_a_repository(
     workspace_root: Path, repository: Path, client: TestClient, tmp_path: Path, holds: str
 ) -> None:
     """A new repository would leave the old copy looking changed, and a
     repair would then let the copy delete it: Connect is the way back."""
     cloud = tmp_path / "cloud"
-    (cloud / "keys" if holds == "keys" else cloud / "data" / "7c").mkdir(parents=True)
+    cloud.mkdir()
     if holds == "config":
         (cloud / "config").write_bytes(b"{}")
+    else:
+        (cloud / holds).mkdir()
     _configure(workspace_root, repository)
     settings = workspace_root / "settings.yaml"
     with settings.open("a", encoding="utf-8") as appended:
@@ -177,6 +179,23 @@ def test_create_refuses_while_a_destination_holds_a_repository(
     assert "Connect" in body["message"]
     assert body["connect_from"] == str(cloud)
     assert _state(workspace_root, repository) | {"cloud": files(cloud)} == before
+
+
+def test_create_checks_the_revision_even_when_using_the_saved_path(
+    workspace_root: Path, repository: Path, client: TestClient
+) -> None:
+    _configure(workspace_root, repository)
+    old_revision = _revision(client)
+    with (workspace_root / "settings.yaml").open("a", encoding="utf-8") as settings:
+        settings.write("  interval_hours: 6\n")
+    before = _state(workspace_root, repository)
+
+    response = client.post(
+        "/api/backup/repository", json={"revision": old_revision, "repository": str(repository)}
+    )
+
+    assert response.status_code == 412, response.text
+    assert _state(workspace_root, repository) == before
 
 
 def test_create_at_a_confirmed_folder_saves_it_and_starts_backing_up(
@@ -269,6 +288,25 @@ def test_a_wrong_password_leaves_nothing_half_saved(
         assert f"Set {BACKUP_PASSWORD_VAR} there" in refused.json()["message"]
     assert _state(workspace_root, repository) == before
     assert _kinds(client) == ["repository_missing"]
+
+
+def test_connect_refuses_a_copy_that_opens_but_fails_check(
+    workspace_root: Path,
+    repository: Path,
+    client: TestClient,
+    restic: RepositoryRestic,
+    tmp_path: Path,
+) -> None:
+    _configure(workspace_root, repository, password=False)
+    cloud = _destination_copy(tmp_path)
+    before = _state(workspace_root, repository) | {"cloud": files(cloud)}
+    restic.failing["check"] = Reply(exit_code=1, stderr=exit_error(1, "pack is missing"))
+
+    refused = _connect(client, cloud, repository, PASSWORD)
+
+    assert refused.status_code == 422, refused.text
+    assert "pack is missing" in refused.json()["message"]
+    assert _state(workspace_root, repository) | {"cloud": files(cloud)} == before
 
 
 def test_connect_refuses_a_folder_that_is_not_a_repository_or_a_full_target(

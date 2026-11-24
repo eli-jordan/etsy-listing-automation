@@ -6,13 +6,18 @@ restic-shaped folders under ``tmp_path`` (plan, P2).
 
 from __future__ import annotations
 
+import errno
+import os
 import random
 import threading
+from collections.abc import Iterator
 from datetime import date
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
+from etsy_listings.core.backup import destinations
 from etsy_listings.core.backup.destinations import (
     ChangedFile,
     CopyHooks,
@@ -146,6 +151,91 @@ def test_config_counts_as_changed_when_any_byte_differs(
     assert result.changed == (ChangedFile("config", len(config), len(config)),)
 
 
+@pytest.mark.parametrize("repair", [False, True])
+def test_a_copy_without_config_keeps_old_backups(
+    local: FakeRepository, tmp_path: Path, *, repair: bool
+) -> None:
+    old = FakeRepository(tmp_path / "old")
+    old.backup("the only copy of the old backup")
+    old.remove("config")
+    before = identities(old.root)
+
+    if repair:
+        with pytest.raises(ForeignCopyError, match="config"):
+            repair_destination(local.root, old.root, today=date(2026, 11, 23))
+    else:
+        result = copy_repository(local.root, old.root)
+        assert result.outcome == "changed"
+        assert "config" in (result.message or "")
+
+    assert identities(old.root) == before
+
+
+@pytest.mark.parametrize("name", ["readme.copying-0a1b2c3d", "data/a/" + "a" * 64])
+def test_a_copy_keeps_non_restic_files_with_similar_names(
+    local: FakeRepository, destination: Path, name: str
+) -> None:
+    copy_repository(local.root, destination)
+    path = destination / name
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(b"keep this file")
+
+    result = copy_repository(local.root, destination)
+
+    assert result.unexpected == (name,)
+    assert path.read_bytes() == b"keep this file"
+
+
+def test_a_copy_keeps_an_expired_file_replaced_after_listing(
+    local: FakeRepository, destination: Path, tmp_path: Path
+) -> None:
+    _, _, snapshot = local.backup("expired")
+    copy_repository(local.root, destination)
+    local.remove(snapshot)
+    user_file = tmp_path / "replacement"
+    user_file.write_bytes(b"this is someone's new file")
+    target = destination / snapshot
+
+    result = copy_repository(
+        local.root, destination, hooks=CopyHooks(after_listing=lambda: user_file.replace(target))
+    )
+
+    assert result.outcome == "changed"
+    assert target.read_bytes() == b"this is someone's new file"
+
+
+def test_repair_sets_aside_unexpected_contents_at_an_expired_name(
+    local: FakeRepository, destination: Path
+) -> None:
+    _, _, snapshot = local.backup("expired")
+    copy_repository(local.root, destination)
+    local.remove(snapshot)
+    (destination / snapshot).write_bytes(b"unexpected contents")
+
+    result = copy_repository(local.root, destination)
+    assert result.unexpected == (snapshot,)
+    repair = repair_destination(local.root, destination, today=date(2026, 11, 23))
+
+    assert repair.set_aside is not None
+    assert (repair.set_aside / snapshot).read_bytes() == b"unexpected contents"
+    assert not (destination / snapshot).exists()
+
+
+def test_a_copy_fails_safely_if_atomic_publication_is_unavailable(
+    local: FakeRepository, destination: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def no_links(*_: object) -> None:
+        raise OSError(errno.ENOTSUP, "hard links are unavailable")
+
+    monkeypatch.setattr(
+        destinations, "os", SimpleNamespace(name="posix", link=no_links, fsync=os.fsync)
+    )
+    result = copy_repository(local.root, destination)
+
+    assert result.outcome == "failed"
+    assert files(destination) == {}
+
+
 def test_a_conflict_copy_is_reported_and_kept_while_copying_continues(
     local: FakeRepository, destination: Path
 ) -> None:
@@ -269,6 +359,25 @@ def test_a_prune_after_listing_never_leaves_an_index_naming_a_missing_pack(
     assert "next" in (result.message or "")
     assert missing_packs(destination) == set()
     assert not (destination / index).exists()
+
+
+def test_a_prune_during_listing_keeps_the_previous_copy(
+    local: FakeRepository, destination: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    pack, index, snapshot = local.backup("expires during listing")
+    copy_repository(local.root, destination)
+    before = identities(destination)
+    iterdir = Path.iterdir
+
+    def list_after_prune(path: Path) -> Iterator[Path]:
+        if path == local.root / "data":
+            local.remove(snapshot, index, pack)
+        return iterdir(path)
+
+    monkeypatch.setattr(Path, "iterdir", list_after_prune)
+
+    assert copy_repository(local.root, destination).outcome == "failed"
+    assert identities(destination) == before
 
 
 def test_a_file_that_appears_at_the_destination_mid_copy_is_never_replaced(

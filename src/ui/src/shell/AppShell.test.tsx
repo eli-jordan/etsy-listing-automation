@@ -4,6 +4,7 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import * as backupApi from "../api/backup";
 import type { BackupStatus } from "../api/backup";
 import * as listingsApi from "../api/listings";
+import { deferred } from "../test/helpers";
 import { AppShell } from "./AppShell";
 import { FAST_POLL_MS, SLOW_POLL_MS } from "./backupStatus";
 
@@ -180,6 +181,25 @@ describe("AppShell backup warning", () => {
       status.mockResolvedValue(HEALTHY);
       await vi.advanceTimersByTimeAsync(SLOW_POLL_MS);
       await waitFor(() => expect(screen.queryByRole("alert")).not.toBeInTheDocument());
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("keeps the latest warning when an older poll answers late", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      const stale = deferred<BackupStatus>();
+      vi.spyOn(backupApi, "getBackupStatus")
+        .mockResolvedValue(FAILING)
+        .mockReturnValueOnce(stale.promise);
+      renderAt("/");
+      await act(() => vi.advanceTimersByTimeAsync(SLOW_POLL_MS));
+      await screen.findByRole("alert");
+
+      await act(async () => stale.resolve(HEALTHY));
+
+      expect(screen.getByRole("alert")).toHaveTextContent("disk full");
     } finally {
       vi.useRealTimers();
     }

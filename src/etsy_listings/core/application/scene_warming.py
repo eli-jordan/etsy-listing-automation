@@ -155,22 +155,29 @@ class SceneWarmer:
             with startup:
                 self._settle()
         while True:
-            ticket = self._admitted(
-                lambda: bool(self._queued),
-                lambda: f"Scene warming for {next(iter(self._queued))}",
-            )
-            if ticket is None:
+            next_job = self._take()
+            if next_job is None:
                 with self._wake:
                     self._idle.set()
                 return
-            with self._wake:
-                name, _ = self._queued.popitem(last=False)
+            name, ticket = next_job
             with ticket:
                 try:
                     self._warm_listing(name)
                 except Exception:
                     logger.exception("warming listing %r's scenes failed", name)
                 self._settle()
+
+    def _take(self) -> tuple[str, Ticket] | None:
+        with self._wake:
+            ticket = self._admitted(
+                lambda: bool(self._queued),
+                lambda: f"Scene warming for {next(iter(self._queued))}",
+            )
+            if ticket is None:
+                return None
+            name, _ = self._queued.popitem(last=False)
+            return name, ticket
 
     def _admitted(self, ready: Callable[[], bool], job: Callable[[], str]) -> Ticket | None:
         """Block until ``ready`` and the gate admits ``job``; ``None`` on

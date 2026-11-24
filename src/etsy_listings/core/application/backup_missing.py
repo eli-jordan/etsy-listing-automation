@@ -23,26 +23,28 @@ password or a failed copy deletes the staging folder and writes nothing.
 from __future__ import annotations
 
 import secrets
-import shutil
 from dataclasses import dataclass
 from pathlib import Path
 
 from etsy_listings.core.application import credentials, workspace_settings
 from etsy_listings.core.application.backup_repository import (
+    BackupOffError,
     PasswordTooShortError,
     RepositoryNotEmptyError,
-    backup_settings,
+    check_backup_paths,
     check_new_repository,
     create_repository,
+    paths_overlap,
     stored_password,
 )
 from etsy_listings.core.application.refusals import SettingsRevisionConflictError
 from etsy_listings.core.backup.binary import ResticBinaries
 from etsy_listings.core.backup.destinations import copy_repository, holds_repository
-from etsy_listings.core.backup.restic import Launch, Restic, WrongPasswordError
+from etsy_listings.core.backup.restic import Launch, Restic, ResticError, WrongPasswordError
 from etsy_listings.core.config.secrets import BACKUP_PASSWORD_VAR
 from etsy_listings.core.config.settings import BackupSettings
 from etsy_listings.core.errors import ConflictError, RefusedError
+from etsy_listings.core.workspace.trees import remove_tree
 from etsy_listings.core.workspace.workspace import Workspace
 
 STAGING_MARK = ".connecting-"
@@ -101,10 +103,11 @@ def create_new_repository(
 ) -> None:
     """Create a repository at ``answers.repository``, saving it as the
     backup repository first; refuses a folder that holds files."""
-    settings = _missing(workspace)
+    settings = _missing(workspace, answers.expected_revision)
     for destination in settings.destinations:
-        if holds_repository(destination):
+        if destination.is_absolute() and holds_repository(destination):
             raise DestinationHoldsRepositoryError(destination)
+    check_backup_paths(workspace, answers.repository, settings.destinations)
     stored = stored_password(workspace)
     chosen = stored or answers.password
     if not chosen:
@@ -125,17 +128,17 @@ def connect_repository(
     """Copy the repository at ``source`` into the new folder
     ``answers.repository``, check the password opens it, then save both.
     Writes nothing it is refused for."""
-    settings = _missing(workspace)
+    settings = _missing(workspace, answers.expected_revision)
     stored = stored_password(workspace)
     chosen = stored or answers.password
     if not chosen:
         raise ConnectRefusedError("Enter the password of the repository you are connecting.")
     repository = answers.repository
+    check_backup_paths(workspace, repository, settings.destinations)
     _check_connect(workspace, source, answers)
     staging = repository.with_name(f"{repository.name}{STAGING_MARK}{secrets.token_hex(4)}")
+    staging.mkdir()
     try:
-        # The copy never creates its destination (PR 4); the parent is checked.
-        staging.mkdir()
         copied = copy_repository(source, staging)
         if copied.outcome != "copied":
             raise ConnectRefusedError(copied.message or f"{source} could not be copied.")
@@ -146,14 +149,19 @@ def connect_repository(
         staging.rename(repository)
     finally:
         if staging.exists():
-            shutil.rmtree(staging)
+            remove_tree(staging)
     _point_at(workspace, settings, answers)
     if stored is None:
         credentials.store(workspace.root, credentials.BACKUP_PASSWORD, (chosen,))
 
 
-def _missing(workspace: Workspace) -> BackupSettings:
-    settings = backup_settings(workspace)
+def _missing(workspace: Workspace, expected_revision: str) -> BackupSettings:
+    current = workspace_settings.read_settings(workspace)
+    if current.revision != expected_revision:
+        raise SettingsRevisionConflictError
+    settings = current.settings.backup
+    if settings is None:
+        raise BackupOffError(workspace.settings_file())
     if has_repository(settings.repository):
         raise RepositoryPresentError(settings.repository)
     return settings
@@ -168,6 +176,8 @@ def _check_connect(workspace: Workspace, source: Path, answers: Replacement) -> 
             "folder that holds config, data, index, keys and snapshots."
         )
     repository = answers.repository
+    if paths_overlap(repository, source):
+        raise ConnectRefusedError("Choose a local folder separate from the source repository.")
     if repository.exists() and (not repository.is_dir() or any(repository.iterdir())):
         raise RepositoryNotEmptyError(
             f"{repository} already holds files. Choose an empty or new folder to copy into."
@@ -184,7 +194,7 @@ def _open(restic: Restic, *, env_file: Path | None) -> None:
     from ``.env`` is never asked for again, so the message says how to
     change it."""
     try:
-        restic.snapshots(lock=False)
+        restic.run("check")
     except WrongPasswordError:
         if env_file is None:
             message = "That password does not open this repository. Nothing was saved."
@@ -196,10 +206,14 @@ def _open(restic: Restic, *, env_file: Path | None) -> None:
                 "it, then try again."
             )
         raise ConnectRefusedError(message) from None
+    except ResticError as exc:
+        raise ConnectRefusedError(f"The copied repository did not pass a check: {exc}") from exc
 
 
 def _point_at(workspace: Workspace, settings: BackupSettings, answers: Replacement) -> None:
     if answers.repository == settings.repository:
+        if workspace_settings.read_settings(workspace).revision != answers.expected_revision:
+            raise SettingsRevisionConflictError
         return
     workspace_settings.edit_settings(
         workspace,

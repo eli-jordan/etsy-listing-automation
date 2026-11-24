@@ -13,6 +13,7 @@ explicit setup step, and nothing creates a repository by itself (spec,
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -80,6 +81,7 @@ def create_repository(
     when no other is named.
     """
     settings = backup_settings(workspace)
+    check_backup_paths(workspace, settings.repository, settings.destinations)
     check_new_repository(settings.repository, password)
     if store:
         credentials.store(workspace.root, credentials.BACKUP_PASSWORD, (password,))
@@ -89,24 +91,50 @@ def create_repository(
 
 def check_new_repository(folder: Path, password: str) -> None:
     """Refuse a short password, or a folder that already holds files."""
-    if len(password) < MIN_PASSWORD_LENGTH:
+    if len(password) < MIN_PASSWORD_LENGTH or not password.strip():
         raise PasswordTooShortError(
             f"The backup password must be at least {MIN_PASSWORD_LENGTH} characters."
         )
-    if folder.is_dir() and any(folder.iterdir()):
+    if folder.exists() and (not folder.is_dir() or any(folder.iterdir())):
         raise RepositoryNotEmptyError(
             f"{folder} already holds files. Name an empty or new folder as "
             "backup.repository in settings.yaml."
         )
 
 
+def paths_overlap(first: Path, second: Path) -> bool:
+    first, second = first.resolve(), second.resolve()
+    return first.is_relative_to(second) or second.is_relative_to(first)
+
+
+def check_backup_paths(
+    workspace: Workspace, repository: Path | None, destinations: Sequence[Path]
+) -> None:
+    """Keep the backup output outside the workspace and each other."""
+    if repository is not None and not repository.is_absolute():
+        raise RefusedError(f"{repository} is not a full backup storage folder path.")
+    folders = destinations if repository is None else (repository, *destinations)
+    _require_separate([workspace.root, *(path for path in folders if path.is_absolute())])
+
+
+def _require_separate(folders: list[Path]) -> None:
+    for index, folder in enumerate(folders):
+        for other in folders[:index]:
+            if paths_overlap(folder, other):
+                raise RefusedError(f"{folder} overlaps {other}. Choose separate folders.")
+
+
 def open_repository(
-    workspace: Workspace, *, binaries: ResticBinaries, launch: Launch | None = None
+    workspace: Workspace,
+    *,
+    binaries: ResticBinaries,
+    launch: Launch | None = None,
+    settings: BackupSettings | None = None,
 ) -> Restic:
     """The configured repository, ready to run commands. Raises when backups
     are off, the password is missing or no restic is installed; whether the
     repository exists is restic's to say on the first command."""
-    settings = backup_settings(workspace)
+    settings = settings if settings is not None else backup_settings(workspace)
     password = Secrets.load(workspace.root / layout.ENV_FILE).require_backup_password()
     binary = binaries.locate(settings.restic_binary)
     if binary is None:
@@ -143,9 +171,9 @@ def backup_status(
         return BackupStatus(settings=None)
     binary = binaries.locate(settings.restic_binary)
     try:
-        snapshots = open_repository(workspace, binaries=binaries, launch=launch).snapshots(
-            lock=False
-        )
+        snapshots = open_repository(
+            workspace, binaries=binaries, launch=launch, settings=settings
+        ).snapshots(lock=False)
     except UserFacingError as exc:
         return BackupStatus(settings=settings, binary=binary, error=exc)
     return BackupStatus(settings=settings, binary=binary, snapshots=snapshots)

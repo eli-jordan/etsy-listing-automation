@@ -693,6 +693,18 @@ describe("Restore", () => {
       expect(screen.queryByText(/Restored the backup from/)).not.toBeInTheDocument();
     }));
 
+  it("keeps the restore form usable when the request cannot reach the server", async () => {
+    start.mockRejectedValueOnce(new Error("Network unavailable"));
+    open();
+    await userEvent.click(await screen.findByRole("button", { name: "Restore…" }));
+    const submit = await screen.findByRole("button", { name: "Restore to this folder" });
+
+    await userEvent.click(submit);
+
+    expect(await screen.findByText("Network unavailable")).toBeVisible();
+    expect(submit).toBeEnabled();
+  });
+
   it("finishing with the dialog closed leaves a note whose Show opens Restored", () =>
     withPolls(async () => {
       const dialog = await restoreNewest();

@@ -114,3 +114,12 @@ def test_stop_ends_a_wait_and_a_later_resume_releases_nothing() -> None:
     assert result == [False]
     assert gate.paused, "shutdown during a pause must not release held work"
     assert heard == []
+
+
+def test_stopping_an_open_gate_blocks_new_work() -> None:
+    gate = JobGate()
+
+    gate.stop()
+
+    assert gate.admit("Deploy") is None
+    assert not gate.wait_open(timeout=0)

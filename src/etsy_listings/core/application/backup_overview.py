@@ -220,11 +220,15 @@ def _destination_warnings(destination: DestinationOverview) -> list[BackupWarnin
         message = f"{destination.path} is more than a day behind the backups.{reason}"
         found.append(BackupWarning(kind="behind", message=message, destination=destination.path))
     if destination.changed or destination.unexpected:
-        message = (
+        message = destination.problem or (
             f"Something else changed files in {destination.path}. "
             "Repair it to set them aside and copy again."
         )
         found.append(BackupWarning(kind="changed", message=message, destination=destination.path))
+    elif (check := destination.last_check) is not None and not check.ok and check.message:
+        found.append(
+            BackupWarning(kind="failed", message=check.message, destination=destination.path)
+        )
     return found
 
 

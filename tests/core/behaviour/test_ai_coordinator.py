@@ -22,7 +22,7 @@ import pytest
 from etsy_listings.core.ai.proposals import ProposalStore
 from etsy_listings.core.application.ai.coordinator import AiCoordinator
 from etsy_listings.core.application.ai.registry import AiRun, Conflict
-from etsy_listings.core.application.job_gate import JobGate
+from etsy_listings.core.application.job_gate import JobGate, Ticket
 from etsy_listings.core.application.refusals import (
     AiNotReadyError,
     ListingDeployingError,
@@ -304,6 +304,25 @@ def test_a_run_starts_when_created_unless_a_backup_holds_it_until_resume(
 
     assert held.started_at is not None
     assert held.started_at > held.created_at
+
+
+def test_a_manual_run_catches_a_resume_between_admission_and_queueing(
+    ai: AiCoordinator, gate: JobGate, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    admit = gate.admit
+    gate.pause()
+
+    def resume_after_admission(job: str) -> Ticket | None:
+        ticket = admit(job)
+        if ticket is None:
+            gate.resume()
+        return ticket
+
+    monkeypatch.setattr(gate, "admit", resume_after_admission)
+
+    run = _started(ai.start_run(LISTING, draft_brief=False))
+
+    assert wait_until_finished(run).phase == "done"
 
 
 def test_a_held_run_cancelled_ends_without_starting(

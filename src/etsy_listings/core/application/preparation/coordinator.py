@@ -553,12 +553,16 @@ class Preparations:
         ticket = self.gate.admit(f"Prepare job for {job.template}")
         if ticket is None:
             return
+        try:
+            self.store.write(
+                job, phase="running", step="loading_models" if lane == "gpu" else "fitting"
+            )
+        except OSError:
+            ticket.release()
+            raise
         self._tickets[job.id, lane] = ticket
         self._active.add(job.id)
         setattr(self, "_" + lane + "_busy", True)
-        self.store.write(
-            job, phase="running", step="loading_models" if lane == "gpu" else "fitting"
-        )
         self._futures = [f for f in self._futures if not f.done()]
         self._futures.append(getattr(self, lane).submit(self._run, job.id, lane))
 

@@ -170,6 +170,9 @@ class AiCoordinator:
         if ticket is None:
             with self._lock:
                 self._held.append(run)
+            # A resume can run its listener before this request queues the run.
+            if not self._gate.paused:
+                self._release_held()
         else:
             self._launch(run, ticket)
         return run
@@ -190,18 +193,22 @@ class AiCoordinator:
     def _release_held(self) -> None:
         """Resume: start the held runs in the order asked for. One stopped
         while held is skipped; a pause landing part way holds the rest."""
-        with self._lock:
-            held, self._held = self._held, []
-        for index, run in enumerate(held):
-            ticket = self._gate.admit(_job(run.listing))
-            if ticket is None:
-                with self._lock:
-                    self._held[:0] = held[index:]
-                return
+        for run, ticket in self._admit_held():
             if run.begin():
                 self._launch(run, ticket)
             else:
                 ticket.release()
+
+    def _admit_held(self) -> list[tuple[AiRun, Ticket]]:
+        admitted: list[tuple[AiRun, Ticket]] = []
+        with self._lock:
+            for run in self._held:
+                ticket = self._gate.admit(_job(run.listing))
+                if ticket is None:
+                    break
+                admitted.append((run, ticket))
+            del self._held[: len(admitted)]
+        return admitted
 
     def blocked(self, listing: str) -> AiRunRefusedError | None:
         """What :meth:`start_run` would refuse saved ``listing`` with for

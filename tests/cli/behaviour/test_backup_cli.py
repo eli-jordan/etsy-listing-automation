@@ -20,7 +20,7 @@ from typer.testing import CliRunner
 from etsy_listings.cli.app import app
 from etsy_listings.core.backup.binary import RESTIC_BINARY_ENV_VAR
 from etsy_listings.core.backup.state import HISTORY_FILE, STATE_FILE
-from etsy_listings.core.config.secrets import BACKUP_PASSWORD_VAR
+from etsy_listings.core.config.secrets import BACKUP_PASSWORD_VAR, Secrets
 from etsy_listings.core.workspace import layout
 
 from tests.support import scripted as scripted_prompts
@@ -146,7 +146,7 @@ def test_init_asks_for_a_password_stores_it_and_creates_the_repository(
 
     assert code == 0, output
     assert (repository / "config").is_file()
-    assert f"{BACKUP_PASSWORD_VAR}={PASSWORD}" in _env(workspace_root)
+    assert Secrets.load(workspace_root / layout.ENV_FILE).require_backup_password() == PASSWORD
     assert "password manager" in output
     assert PASSWORD not in output
     assert len(script.asked) == 2

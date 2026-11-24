@@ -1,4 +1,4 @@
-import { type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { type BackupStatus, getBackupStatus } from "../api/backup";
 import { BackupStatusContext, FAST_POLL_MS, SLOW_POLL_MS } from "./backupStatus";
 
@@ -14,23 +14,33 @@ export function BackupStatusProvider({ children }: { children: ReactNode }) {
   const [error, setError] = useState<string | null>(null);
   const [readAt, setReadAt] = useState(0);
   const [hidden, setHidden] = useState(() => document.visibilityState === "hidden");
+  const requested = useRef(0);
+  const applied = useRef(0);
 
-  const refresh = useCallback(
-    () =>
-      getBackupStatus().then(
-        (next) => {
+  const refresh = useCallback(() => {
+    const request = ++requested.current;
+    function apply(update: () => void) {
+      if (request < applied.current) return;
+      applied.current = request;
+      update();
+    }
+    return getBackupStatus().then(
+      (next) => {
+        apply(() => {
           setStatus(next);
           setReadAt(Date.now());
           setError(null);
-          return next;
-        },
-        (failure: unknown) => {
+        });
+        return next;
+      },
+      (failure: unknown) => {
+        apply(() => {
           setError(failure instanceof Error ? failure.message : "Could not read the backup status");
-          return null;
-        },
-      ),
-    [],
-  );
+        });
+        return null;
+      },
+    );
+  }, []);
 
   useEffect(() => {
     const onChange = () => setHidden(document.visibilityState === "hidden");
