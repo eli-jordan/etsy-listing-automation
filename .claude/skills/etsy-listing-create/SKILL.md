@@ -65,7 +65,9 @@ setup.py gallery <name> --colours a,b,c --hero b --variation <template> --scenes
 
 `gallery` writes the shop's gallery shape: hero, video, size guide, lifestyle scenes, info card, then one variation tile for each other colour. It also enforces Etsy's limit of 20 images, so each extra colour leaves room for one less scene. A bare scene name takes the next colour in turn.
 
-Choose the variation template, the hero colour and 5 to 9 scenes from [reference/templates.md](reference/templates.md). The hero is the shirt that sells the design best at thumbnail size. Some colours look different in a photo than on a swatch, so confirm the hero and scene colours on the sheet in step 4. A colour may appear in more than one scene.
+Choose the variation template, the hero colour and 5 to 9 scenes from [reference/templates.md](reference/templates.md). The variation template fills the hero and every colour tile, about half the gallery, so vary it across the batch: rotate through the section's variation templates, give each listing the one that suits its art, and don't use any single template for most of the batch. The hero is the shirt that sells the design best at thumbnail size. Some colours look different in a photo than on a swatch, so confirm the hero and scene colours on the sheet in step 4.
+
+Give every colour its own lifestyle scene with a model, as well as its variation tile, so a buyer sees each colour worn. The 20-image limit allows this for up to 9 colours, so prefer 9 or fewer when the design doesn't need more. With 10 or more colours, fill every free slot with a scene and leave the weakest colours without one. Below 5 colours, a colour may appear in more than one scene. Pass one bare scene name per colour to have `gallery` deal the colours out in turn, or name each scene's colour to match the shirt to the scene. When a section's scene list runs short, reuse a scene in another colour.
 
 Done when `gallery` prints `saved`.
 
