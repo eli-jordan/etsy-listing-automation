@@ -6,38 +6,24 @@ import * as backupApi from "../../../api/backup";
 import type { BackupStatus } from "../../../api/backup";
 import * as settingsApi from "../../../api/workspaceSettings";
 import { BackupStatusProvider } from "../../../shell/BackupStatusProvider";
+import { BACKUP_ICLOUD, BACKUP_REPOSITORY, backupsMissing, backupsOn } from "../../../test/backup";
 import { AdminPage } from "../AdminPage";
 
 /* Workspace-backup plan, PR 8: the missing-repository banner's Create a new
    repository and Connect an existing repository (spec, *Missing
    repository*; interactions, *Warnings*), against a mocked HTTP surface. */
 
-const REPO = "D:/backups/studio";
-const CLOUD = "C:/Users/me/iCloudDrive/studio-backups";
+const REPO = BACKUP_REPOSITORY;
+const CLOUD = BACKUP_ICLOUD;
 const PASSPHRASE = ["correct", "horse", "battery"].join("-");
 const weights = { reviews: 100 };
 
-function missing(passwordStored: boolean): BackupStatus {
-  return {
-    enabled: true,
-    interval_hours: 12,
-    repository: { path: REPO, missing: true, snapshots: 0, password_stored: passwordStored },
-    destinations: [],
-    warnings: [
-      {
-        kind: "repository_missing",
-        message: `Backup repository not found at ${REPO}. Backups have stopped.`,
-        banner: true,
-      },
-    ],
-  };
-}
-
-const HEALTHY: BackupStatus = {
-  ...missing(true),
+const HEALTHY: BackupStatus = backupsOn({
+  last_success: null,
+  next_due: null,
   repository: { path: REPO, missing: false, snapshots: 3, password_stored: true },
-  warnings: [],
-};
+  destinations: [],
+});
 
 let status: MockInstance<typeof backupApi.getBackupStatus>;
 
@@ -54,14 +40,14 @@ beforeEach(() => {
     backup: { repository: REPO, destinations: [], interval_hours: 12 },
   });
   vi.spyOn(settingsApi, "getModelCatalogs").mockResolvedValue({ cache_seconds: 1, providers: {} });
-  status = vi.spyOn(backupApi, "getBackupStatus").mockResolvedValue(missing(true));
+  status = vi.spyOn(backupApi, "getBackupStatus").mockResolvedValue(backupsMissing(true));
   vi.spyOn(backupApi, "getBackupHistory").mockResolvedValue([]);
 });
 
 afterEach(() => vi.restoreAllMocks());
 
 async function openMissing(passwordStored = true) {
-  status.mockResolvedValue(missing(passwordStored));
+  status.mockResolvedValue(backupsMissing(passwordStored));
   render(
     <MemoryRouter initialEntries={["/admin?section=backup"]}>
       <BackupStatusProvider>
@@ -123,7 +109,7 @@ describe("Create a new repository", () => {
 
   it("shows a refusal in the dialog, keeps the answers, and Cancel changes nothing", async () => {
     vi.spyOn(backupApi, "createRepository").mockResolvedValue({
-      kind: "conflict",
+      kind: "refused",
       message: "E:/pictures already holds files.",
       fieldErrors: {},
     });
@@ -143,7 +129,7 @@ describe("Create a new repository", () => {
 describe("Create while a destination holds a copy", () => {
   it("names the copy and switches to Connect with it as the source", async () => {
     vi.spyOn(backupApi, "createRepository").mockResolvedValue({
-      kind: "conflict",
+      kind: "refused",
       message: `${CLOUD} already holds a copy of a backup repository. Use Connect an existing repository with that folder.`,
       fieldErrors: {},
       connectFrom: CLOUD,
@@ -203,7 +189,7 @@ describe("Connect an existing repository", () => {
 
   it("names a wrong password in the dialog and lets the seller try again", async () => {
     const connect = vi.spyOn(backupApi, "connectRepository").mockResolvedValue({
-      kind: "invalid",
+      kind: "refused",
       message: "That password does not open this repository. Nothing was saved.",
       fieldErrors: {},
     });

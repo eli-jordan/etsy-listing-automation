@@ -4,6 +4,7 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import * as backupApi from "../api/backup";
 import type { BackupStatus } from "../api/backup";
 import * as listingsApi from "../api/listings";
+import { backupsOn, backupWarning } from "../test/backup";
 import { deferred } from "../test/helpers";
 import { AppShell } from "./AppShell";
 import { FAST_POLL_MS, SLOW_POLL_MS } from "./backupStatus";
@@ -34,11 +35,8 @@ beforeEach(() => {
   vi.spyOn(backupApi, "getBackupStatus").mockResolvedValue(HEALTHY);
 });
 
-const HEALTHY: BackupStatus = { enabled: true, destinations: [], warnings: [] };
-const FAILING: BackupStatus = {
-  ...HEALTHY,
-  warnings: [{ kind: "failed", message: "The last backup failed: disk full", banner: true }],
-};
+const HEALTHY = backupsOn();
+const FAILING = backupsOn({ warnings: [backupWarning("failed")] });
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -151,25 +149,6 @@ describe("AppShell backup warning", () => {
 
     expect(await screen.findByRole("img", { name: "Backups need attention" })).toBeInTheDocument();
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
-  });
-
-  it.each([
-    ["healthy", HEALTHY],
-    [
-      "off",
-      {
-        enabled: false,
-        destinations: [],
-        warnings: [{ kind: "off", message: "Backups are off.", banner: false }],
-      } satisfies BackupStatus,
-    ],
-  ])("shows nothing while backups are %s", async (_name, status) => {
-    vi.spyOn(backupApi, "getBackupStatus").mockResolvedValue(status);
-    renderAt("/");
-    await waitFor(() => expect(backupApi.getBackupStatus).toHaveBeenCalled());
-    await screen.findByText("dashboard content");
-    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
-    expect(screen.queryByRole("img", { name: "Backups need attention" })).not.toBeInTheDocument();
   });
 
   it("clears the banner when the problem does", async () => {

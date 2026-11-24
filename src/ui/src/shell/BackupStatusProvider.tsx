@@ -1,11 +1,13 @@
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { type BackupStatus, getBackupStatus } from "../api/backup";
+import { backupView } from "./backupAttention";
 import { BackupStatusContext, FAST_POLL_MS, SLOW_POLL_MS } from "./backupStatus";
 
 /**
  * The one poll of `GET /api/backup` (workspace-backup interactions, *What the
  * production implementation must finish*). The shell mounts it, so its banner
- * and dot, the Admin nav icon and the Backup page all read the same answer.
+ * and dot, the Admin nav icon and the Backup page all read the same answer,
+ * as one `BackupView` (`backupAttention.ts`).
  * It polls faster while an operation or a restore runs, and not at all while the tab is
  * hidden; showing the tab again reads at once.
  */
@@ -16,6 +18,7 @@ export function BackupStatusProvider({ children }: { children: ReactNode }) {
   const [hidden, setHidden] = useState(() => document.visibilityState === "hidden");
   const requested = useRef(0);
   const applied = useRef(0);
+  const latest = useRef<BackupStatus | null>(null);
 
   const refresh = useCallback(() => {
     const request = ++requested.current;
@@ -27,17 +30,18 @@ export function BackupStatusProvider({ children }: { children: ReactNode }) {
     return getBackupStatus().then(
       (next) => {
         apply(() => {
+          latest.current = next;
           setStatus(next);
           setReadAt(Date.now());
           setError(null);
         });
-        return next;
+        return latest.current;
       },
       (failure: unknown) => {
         apply(() => {
           setError(failure instanceof Error ? failure.message : "Could not read the backup status");
         });
-        return null;
+        return latest.current;
       },
     );
   }, []);
@@ -48,17 +52,15 @@ export function BackupStatusProvider({ children }: { children: ReactNode }) {
     return () => document.removeEventListener("visibilitychange", onChange);
   }, []);
 
-  const running = Boolean(status?.running) || status?.restore?.outcome === "running";
+  const view = useMemo(() => backupView(status, error), [status, error]);
+  const fast = view.running || view.restoring;
   useEffect(() => {
     if (hidden) return;
     void refresh();
-    const timer = setInterval(() => void refresh(), running ? FAST_POLL_MS : SLOW_POLL_MS);
+    const timer = setInterval(() => void refresh(), fast ? FAST_POLL_MS : SLOW_POLL_MS);
     return () => clearInterval(timer);
-  }, [hidden, running, refresh]);
+  }, [hidden, fast, refresh]);
 
-  const value = useMemo(
-    () => ({ status, error, readAt, refresh }),
-    [status, error, readAt, refresh],
-  );
+  const value = useMemo(() => ({ view, readAt, refresh }), [view, readAt, refresh]);
   return <BackupStatusContext.Provider value={value}>{children}</BackupStatusContext.Provider>;
 }

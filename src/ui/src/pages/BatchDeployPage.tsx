@@ -1,8 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import { getBatch } from "../api/batches";
 import { listListings } from "../api/listings";
-import { cancelRun, createRun, getRun, markRunSeen } from "../api/runs";
-import { stageWillRun, type ListingSummary, type PlanDTO, type RunDetail } from "../types";
+import { cancelRun, createRun, getRun, isReviewedScope, markRunSeen } from "../api/runs";
+import {
+  stageWillRun,
+  type CreateRunRequest,
+  type ListingSummary,
+  type PlanDTO,
+  type RunDetail,
+} from "../types";
 import { BatchAggregateStages } from "./batchDeploy/BatchAggregateStages";
 import { BatchListingDrawer } from "./batchDeploy/BatchListingDrawer";
 import { BatchListingGroups } from "./batchDeploy/BatchListingGroups";
@@ -17,9 +24,10 @@ import {
 import { batchResult, planGroup } from "./batchDeploy/batchDeployPresentation";
 import { BatchResultCallout, FooterAction, ReviewSummary } from "./batchDeploy/BatchDeployPanels";
 import {
-  BATCH_STAGE_TITLES,
   batchFooterMessage,
   batchStage,
+  batchStageTitle,
+  scopeCopy,
   type BatchStage,
 } from "./batchDeploy/batchDeployView";
 import { openRunStream, type RunStreamHandle } from "./deploy/runStream";
@@ -95,24 +103,63 @@ const DRAWER_MODES: Record<BatchStage, "applying" | "applied" | "review"> = {
   review: "review",
 };
 
-/** A workspace run and the review it applies (the run itself, for a plan),
- * or `null` when the run is not a workspace one. Throws when an apply has no
- * ready workspace review. */
-async function loadWorkspaceRun(
+/** A workspace or batch run and the review it applies (the run itself, for a
+ * plan), or `null` when the run is a single listing's. Throws when an apply
+ * has no ready review of its own scope. */
+async function loadReviewedRun(
   id: string,
 ): Promise<{ loaded: RunDetail; reviewed: RunDetail } | null> {
   const loaded = await getRun(id);
-  if (loaded.scope !== "workspace") return null;
+  if (!isReviewedScope(loaded)) return null;
   if (loaded.kind !== "apply") return { loaded, reviewed: loaded };
   if (loaded.reviewed_run_id === null) throw new Error("apply run has no reviewed plan");
   const reviewed = await getRun(loaded.reviewed_run_id);
-  if (reviewed.scope !== "workspace" || reviewed.kind !== "plan" || reviewed.phase !== "ready") {
-    throw new Error("apply run has no ready workspace review");
+  if (
+    reviewed.scope !== loaded.scope ||
+    (reviewed.batch_id ?? null) !== (loaded.batch_id ?? null) ||
+    reviewed.kind !== "plan" ||
+    reviewed.phase !== "ready"
+  ) {
+    throw new Error("apply run has no ready review");
   }
   return { loaded, reviewed };
 }
 
-/** The stable workspace route. It owns only run attachment and page composition;
+/** The listing batch the page's run deploys, or `null` for a workspace run
+ * (or before this URL's run has loaded). */
+function runBatchId(run: RunDetail | null, runId: string): string | null {
+  if (run === null || run.id !== runId) return null;
+  return run.batch_id ?? null;
+}
+
+function freshPlanRequest(batchId: string | null): CreateRunRequest {
+  return batchId === null
+    ? { kind: "plan", scope: "workspace" }
+    : { kind: "plan", scope: "batch", batch_id: batchId };
+}
+
+function reviewedApplyRequest(
+  batchId: string | null,
+  target: { listings: string[]; expect: Record<string, string>; reviewed_run_id: string },
+): CreateRunRequest {
+  return batchId === null
+    ? { kind: "apply", scope: "workspace", ...target }
+    : { kind: "apply", scope: "batch", batch_id: batchId, ...target };
+}
+
+function exitPath(batchId: string | null): string {
+  return batchId === null ? "/listings" : `/batches/${encodeURIComponent(batchId)}`;
+}
+
+/** The batch's label, for a batch run, beside when the plan was made. */
+function pageMeta(batchId: string | null, batchLabel: string | null, planTimestamp: string) {
+  const label = batchId === null ? "" : (batchLabel ?? "");
+  return [label, planTimestamp].filter((part) => part !== "").join(" · ");
+}
+
+/** The stable workspace and batch route (ADR-0042, ADR-0059): one page for
+ * every listing or for a listing batch's reviewed rows, told apart only by
+ * the run's scope. It owns only run attachment and page composition;
  * event meaning remains in batchDeployState and all change meaning remains in
  * the engine-provided plans. A workspace apply keeps its linked review as the
  * approval surface and contributes only a live runtime overlay. */
@@ -131,6 +178,7 @@ export function BatchDeployPage() {
   const applyStartRef = useRef<Promise<void> | null>(null);
   const leavingRef = useRef(false);
   const [applyPending, setApplyPending] = useState(false);
+  const [batchLabel, setBatchLabel] = useState<string | null>(null);
 
   const openStream = useCallback((id: string, lastEventId: number, source: BatchRunSource) => {
     streamRef.current?.close();
@@ -151,7 +199,7 @@ export function BatchDeployPage() {
   const attach = useCallback(
     async (id: string) => {
       try {
-        const runs = await loadWorkspaceRun(id);
+        const runs = await loadReviewedRun(id);
         if (activeRunRef.current !== id) return;
         if (runs === null) {
           streamRef.current?.close();
@@ -254,6 +302,21 @@ export function BatchDeployPage() {
   // the approval surface. The state itself is reset by the detail replay, so
   // this also avoids synchronous setState calls in the route effect.
   const visibleState = run?.id === runId ? state : initialBatchDeployState;
+  const batchId = runBatchId(run, runId);
+  const copy = scopeCopy(batchId);
+
+  useEffect(() => {
+    if (batchId === null) return;
+    let current = true;
+    getBatch(batchId)
+      .then((loaded) => {
+        if (current) setBatchLabel(loaded.label);
+      })
+      .catch(() => {});
+    return () => {
+      current = false;
+    };
+  }, [batchId]);
   const listings = useMemo(() => reviewedListings(visibleState), [visibleState]);
   const plans = useMemo(
     () =>
@@ -288,7 +351,7 @@ export function BatchDeployPage() {
     async (created: Awaited<ReturnType<typeof createRun>>) => {
       if (created.kind === "conflict") {
         const conflict = await getRun(created.activeRun);
-        if (conflict.scope === "workspace") {
+        if (isReviewedScope(conflict)) {
           navigate(`/listings/deploy/${encodeURIComponent(conflict.id)}`, { replace: true });
         } else {
           setStatus("A listing deploy is already running. Return to Listings to follow it.");
@@ -300,14 +363,13 @@ export function BatchDeployPage() {
     [navigate],
   );
 
-  const startWorkspacePlan = useCallback(async () => {
+  const startFreshPlan = useCallback(async () => {
     try {
-      const created = await createRun({ kind: "plan", scope: "workspace" });
-      await followCreatedRun(created);
+      await followCreatedRun(await createRun(freshPlanRequest(batchId)));
     } catch {
-      setStatus("Could not start a fresh workspace plan.");
+      setStatus(copy.planRefused);
     }
-  }, [followCreatedRun]);
+  }, [batchId, copy, followCreatedRun]);
 
   async function handleApply() {
     if (run?.kind !== "plan" || visibleState.phase !== "ready" || !previewsReady) return;
@@ -317,18 +379,18 @@ export function BatchDeployPage() {
     setSelectedListing(null);
     const pending = (async () => {
       try {
-        const created = await createRun({
-          kind: "apply",
-          scope: "workspace",
-          listings: listingsToApply.map((listing) => listing.listing),
-          expect: Object.fromEntries(
-            listingsToApply.map((listing) => [listing.listing, listing.fingerprint as string]),
-          ),
-          reviewed_run_id: run.id,
-        });
+        const created = await createRun(
+          reviewedApplyRequest(batchId, {
+            listings: listingsToApply.map((listing) => listing.listing),
+            expect: Object.fromEntries(
+              listingsToApply.map((listing) => [listing.listing, listing.fingerprint as string]),
+            ),
+            reviewed_run_id: run.id,
+          }),
+        );
         await followCreatedRun(created);
       } catch {
-        setStatus("Could not start the reviewed workspace apply.");
+        setStatus(`Could not start the reviewed ${copy.noun} apply.`);
       }
     })();
     applyStartRef.current = pending;
@@ -348,7 +410,7 @@ export function BatchDeployPage() {
       await cancelRun(run.id).catch(() => false);
     }
     streamRef.current?.close();
-    navigate("/listings");
+    navigate(exitPath(batchId));
   }
 
   const phase = visibleState.phase;
@@ -371,11 +433,11 @@ export function BatchDeployPage() {
           className="btn btn-secondary dv-back"
           onClick={() => void handleBack()}
         >
-          ← Back to listings
+          {copy.back}
         </button>
         <span className="page-head__sep">/</span>
-        <h1 className="page-head__title">{BATCH_STAGE_TITLES[stage]}</h1>
-        <span className="page-head__meta">{planTimestamp}</span>
+        <h1 className="page-head__title">{batchStageTitle(stage, copy)}</h1>
+        <span className="page-head__meta">{pageMeta(batchId, batchLabel, planTimestamp)}</span>
       </div>
 
       {status !== "" && (
@@ -388,10 +450,10 @@ export function BatchDeployPage() {
         <div className="dv-planning" role="status">
           <span className="dv-spinner" aria-hidden="true" />
           <div>
-            <h2>Planning all listings…</h2>
+            <h2>{batchStageTitle("planning", copy)}</h2>
             <p>
-              Reading Printify and Etsy to work out what apply would change across this workspace.
-              Nothing is written yet.
+              Reading Printify and Etsy to work out what apply would change {copy.across}. Nothing
+              is written yet.
             </p>
           </div>
         </div>
@@ -413,7 +475,9 @@ export function BatchDeployPage() {
       {showPlanningFailure && (
         <div className="dv-callout dv-callout--blocked" role="alert">
           <strong>Planning could not finish.</strong>
-          <p>Plan again to retry the workspace read, or return to Listings.</p>
+          <p>
+            Plan again to retry the {copy.noun} read, or {copy.returnTo}.
+          </p>
         </div>
       )}
 
@@ -430,7 +494,7 @@ export function BatchDeployPage() {
         <div className="dv-callout dv-callout--ok batch-deploy-empty" role="status">
           <div>
             <strong>Everything is up to date.</strong>
-            <p>The all-listings plan found no changes to apply.</p>
+            <p>The {copy.plan} found no changes to apply.</p>
           </div>
         </div>
       ) : (
@@ -485,7 +549,7 @@ export function BatchDeployPage() {
           }
           runnableCount={runnableCount}
           previewsReady={previewsReady}
-          onPlanAgain={() => void startWorkspacePlan()}
+          onPlanAgain={() => void startFreshPlan()}
           onApply={() => void handleApply()}
         />
       </div>
