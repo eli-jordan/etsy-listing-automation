@@ -108,6 +108,7 @@ CLEAN_FINE_BLUR = 2  # px; finds small removals that the edit blur averages away
 CLEAN_KEEP = 33  # px; the margin a redrawn item keeps around it
 CLEAN_REMOVED_EDGES = 0.5  # a removal keeps under this share of the original's edges
 CLEAN_FAINT_EDGES = 0.7  # the same for colour edges: faint removals keep 0.5, redraws 1.0
+CLEAN_FABRIC_DELTA_E = 6  # an edit this close to the fabric around it was filled with fabric
 CLEAN_PAD = 64
 CLEAN_RING = 41  # px band either side of a patch edge used to compare inside with outside
 MAX_ECHO_R = 0.2  # the cleaned patch still follows the removed item's edges
@@ -500,6 +501,18 @@ def edited_areas(
     return [(labels == label, int(stats[label, cv2.CC_STAT_AREA])) for label in range(1, count)]
 
 
+def became_fabric(generated_lab: np.ndarray, area: np.ndarray) -> bool:
+    """The generator filled the area with the fabric around it. A flat item,
+    such as a portrait's cheek blush, has too few edges for `removed` to judge:
+    the fabric's grain in its place keeps as many. A redrawn pendant or hair
+    strand still differs from the fabric around it."""
+    ring = cv2.dilate(area.astype(np.uint8), np.ones((CLEAN_RING, CLEAN_RING), np.uint8)) > 0
+    ring &= ~area
+    inside = np.median(generated_lab[area], axis=0)
+    around = np.median(generated_lab[ring], axis=0)
+    return bool(np.linalg.norm(inside - around) < CLEAN_FABRIC_DELTA_E)
+
+
 def redrawn_items(
     original: np.ndarray, generated: np.ndarray, coarse: list[tuple[np.ndarray, int]]
 ) -> np.ndarray:
@@ -509,9 +522,14 @@ def redrawn_items(
     edges, because on a small item the fabric's grain counts as lightness edges."""
     lightness = lightness_edges(original), lightness_edges(generated)
     colour = colour_edges(original), colour_edges(generated)
+    lab = lab_pixels(generated)
     keep = np.zeros((SIZE, SIZE), np.uint8)
     for area, _ in coarse:
-        if not removed(*lightness, area) and not removed(*colour, area, CLEAN_FAINT_EDGES):
+        if (
+            not removed(*lightness, area)
+            and not removed(*colour, area, CLEAN_FAINT_EDGES)
+            and not became_fabric(lab, area)
+        ):
             cv2.fillConvexPoly(keep, cv2.convexHull(cv2.findNonZero(area.astype(np.uint8))), 1)
     return cv2.dilate(keep, np.ones((CLEAN_KEEP, CLEAN_KEEP), np.uint8)) > 0
 
