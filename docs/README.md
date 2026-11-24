@@ -7,7 +7,7 @@ The root [README](../README.md) covers installation and contributor commands;
 
 | Kind | Purpose | Entry point |
 |---|---|---|
-| Guides | Tasks a person can follow | [Getting started](guides/getting-started.md), [setup](guides/setup.md) |
+| Guides | Tasks a person can follow | [Getting started](guides/getting-started.md), [setup](guides/setup.md), [restoring a backup](guides/restore-a-backup.md), [moving the workspace out of iCloud Drive](guides/migrate-the-workspace-out-of-icloud.md) |
 | Architecture | Current modules, data flow and development invariants | [Architecture](architecture.md) |
 | Decisions | Rationale for choices that are costly to reverse | [ADR index](adr/README.md) |
 | Reference | Current conventions needed to interpret configuration and deployment | [Reference index](reference/README.md) |

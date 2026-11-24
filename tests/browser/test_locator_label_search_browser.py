@@ -41,7 +41,13 @@ def _label_templates(root: Path) -> None:
 
 
 def _media(path: Path) -> list[object]:
-    media: list[object] = yaml.safe_load(path.read_text("utf-8"))["media"]
+    """The file's media, or none while the server is renaming a new copy
+    into place: Windows refuses to open a file mid-replace."""
+    try:
+        text = path.read_text("utf-8")
+    except PermissionError:
+        return []
+    media: list[object] = yaml.safe_load(text)["media"]
     return media
 
 

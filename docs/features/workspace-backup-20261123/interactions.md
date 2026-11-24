@@ -106,6 +106,8 @@ highlight, and the status panel updates. The highlight is skipped under
 ![The set-up form](screenshots/set-up.png)
 
 **Backups off** explains the feature in three points and offers Set up backups.
+A note beside the button says that backups from another computer are
+connected when their folder is added as a destination.
 
 **Set up** is one form, saved with **Create and back up now**:
 
@@ -121,6 +123,17 @@ highlight, and the status panel updates. The highlight is skipped under
 Create saves the `backup:` block and the password (spec, *Configuration*),
 creates the repository, and starts the first backup. The page switches to
 Status and history with that backup running. Cancel returns to Backups off.
+
+If a destination already holds a backup, Create connects it instead (spec,
+*Set-up*). While it copies, the form keeps its buttons disabled and shows
+"Connecting to the backup in <destination>… Copying it to this computer can
+take a while." under the fields. When it is done, the page switches to
+Status and history with the note "Connected to the backup in <destination>:
+N snapshots." A password that does not open that backup is refused under the
+form: "<folder> already holds a backup, and this password does not open it.
+Enter that backup's password to connect it. Nothing was saved." Part of a
+copy, two different backups and a storage folder that holds files are
+refused the same way.
 
 ![The Setup page once backups exist](screenshots/setup-page.png)
 
@@ -155,7 +168,7 @@ Banner actions on the Backup page:
 |---|---|
 | Destination unreachable, behind, or a run failed | **Try again** runs a backup now. Success clears the warning everywhere. |
 | Changed or unexpected files in a destination | **Repair the iCloud Drive copy…** (see below) |
-| Repository missing | **Create a new repository** and **Connect an existing repository** (spec, *Missing repository*). Not prototyped. |
+| Repository missing | **Create a new repository** and **Connect an existing repository** (spec, *Missing repository*). Not prototyped: each opens a dialog like the repair dialog, with the local folder prefilled and a password only when `.env` has none. Connect also asks for the folder to copy from, and keeps the dialog open with a spinner while it copies. |
 
 ## Changed and unexpected files
 

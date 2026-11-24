@@ -47,7 +47,7 @@ from etsy_listings.core.application.deploy.events import (
     stage_plan_dto,
 )
 from etsy_listings.core.application.deploy.registry import Run, RunRegistry, abandon
-from etsy_listings.core.application.job_gate import JobGate, Ticket
+from etsy_listings.core.application.job_gate import JobGate
 from etsy_listings.core.engine.context import RunContext
 from etsy_listings.core.engine.events import (
     EngineListingFailed,
@@ -107,6 +107,8 @@ class RunExecutor:
         boundary, or an apply run's current stage -- to finish and start
         nothing else. Not a daemon thread, so a caller that forgets to call
         this hangs the process on exit rather than silently dropping work.
+        A run waiting for a backup's pause is let go by the gate's own stop,
+        which the lifespan calls first.
         """
         self._stop.set()
         self.registry.drain_and_cancel()
@@ -118,23 +120,21 @@ class RunExecutor:
 
     def _loop(self) -> None:
         while True:
-            # Take nothing off the queue while a backup is paused, so the
-            # runs behind stay where `drain_and_cancel` finds them.
-            if self.gate.wait_open(timeout=0.5):
-                run_id = self.registry.dequeue(timeout=0.5)
-                if run_id is not None:
-                    self._admitted(run_id)
+            run_id = self.registry.dequeue(timeout=0.5)
+            if run_id is not None:
+                self._admitted(run_id)
             if self._stop.is_set():
                 return
 
     def _admitted(self, run_id: str) -> None:
-        """Execute ``run_id`` once the gate admits it. A pause that landed
-        after the dequeue holds this run first in line; a shutdown while
-        it is held ends it as a queued run is ended."""
+        """Execute ``run_id`` once the gate admits it. While a backup is
+        paused this run waits first in line and the runs behind stay queued;
+        a shutdown -- whose gate stops first -- ends it as a queued run is
+        ended."""
         run = self.registry.get(run_id)
         if run is None or run.phase in TERMINAL_PHASES:
             return
-        ticket = self._admit(run)
+        ticket = self.gate.wait_admit(_job(run))
         if ticket is None:
             abandon(run)
             return
@@ -142,17 +142,6 @@ class RunExecutor:
             # A plan cancelled while it was held has already ended.
             if run.phase not in TERMINAL_PHASES:
                 self._execute(run)
-
-    def _admit(self, run: Run) -> Ticket | None:
-        job = f"Deploy {run.kind} for {', '.join(run.listings)}"
-        if run.scope == "workspace":
-            job = f"Workspace {run.kind}"
-        while not self._stop.is_set():
-            ticket = self.gate.admit(job)
-            if ticket is not None:
-                return ticket
-            self.gate.wait_open(timeout=0.5)
-        return None
 
     def _should_stop(self, run: Run) -> bool:
         """A plan run stops for its own cancel *or* a shutdown; an apply run
@@ -356,3 +345,12 @@ def _progress(event: EngineProgress) -> _EventFactory:
 @_public_event.register(EngineStageApplied)
 def _stage_applied(event: EngineStageApplied) -> _EventFactory:
     return lambda i: StageAppliedEvent(id=i, listing=event.listing, stage=event.stage)
+
+
+def _job(run: Run) -> str:
+    """What a backup waiting for ``run`` names."""
+    if run.scope == "workspace":
+        return f"Workspace {run.kind}"
+    if run.scope == "batch":
+        return f"Batch {run.kind} for {', '.join(run.listings)}"
+    return f"Deploy {run.kind} for {', '.join(run.listings)}"

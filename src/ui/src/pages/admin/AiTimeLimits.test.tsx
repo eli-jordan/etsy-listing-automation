@@ -147,7 +147,7 @@ it("turning a provider off leaves the run limit where the seller set it", async 
 
 it("shows a refused limit next to the limits, naming the key", async () => {
   save.mockResolvedValue({
-    kind: "invalid",
+    kind: "refused",
     message: "refused",
     fieldErrors: { "ai.run_limit_minutes": "must be at least 30" },
   });

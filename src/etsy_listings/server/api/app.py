@@ -22,6 +22,7 @@ from etsy_listings.core.ai.discovery import ModelDiscovery
 from etsy_listings.core.ai.proposals import ProposalStore
 from etsy_listings.core.application.ai.coordinator import AiCoordinator
 from etsy_listings.core.application.ai.readiness import ProviderFactory, default_ai_providers
+from etsy_listings.core.application.backup_coordinator import BackupCoordinator, BackupEnvironment
 from etsy_listings.core.application.dependencies import (
     DEFAULT_CLIENTS,
     ClientFactories,
@@ -36,6 +37,7 @@ from etsy_listings.core.batches import BatchStore, StagingStore
 from etsy_listings.core.errors import ConflictError, MissingError, RefusedError, StaleError
 from etsy_listings.core.workspace.workspace import InvalidNameError, Workspace
 from etsy_listings.server.api.airuns import router as ai_runs_router
+from etsy_listings.server.api.backup import router as backup_router
 from etsy_listings.server.api.batches import router as batches_router
 from etsy_listings.server.api.designs import router as designs_router
 from etsy_listings.server.api.listing_templates import router as listing_templates_router
@@ -61,13 +63,14 @@ def _frontend_dist() -> Path:
 FRONTEND_DIST = _frontend_dist()
 
 
-def create_app(
+def create_app(  # noqa: PLR0913 -- every argument after the workspace is a test seam with a default
     workspace: Workspace,
     *,
     context_factory: ContextFactory = connections.run_context,
     seo_provider_factory: ProviderFactory = default_ai_providers,
     preparation_runtime: PreparationRuntime | None = None,
     clients: ClientFactories = DEFAULT_CLIENTS,
+    backup: BackupEnvironment | None = None,
 ) -> FastAPI:
     # One of each per process, so their locks mean something: the cache
     # records' stores. Listing, mockup-template and listing-template locks need
@@ -91,6 +94,10 @@ def create_app(
     )
     deployments = Deployments(workspace, context_factory, ai=ai, gate=job_gate)
     scene_warmer = SceneWarmer(workspace, gate=job_gate)
+    # The schedule and the one backup operation at a time; it owns the
+    # gate's pause during a run. `backup` lets a test keep the state under
+    # tmp_path and replace restic (workspace-backup plan, P2 and P3).
+    backups = BackupCoordinator(workspace, gate=job_gate, environment=backup)
 
     @asynccontextmanager
     async def lifespan(running: FastAPI) -> AsyncIterator[None]:
@@ -114,7 +121,10 @@ def create_app(
 
         The job gate stops first of all: a backup waiting for quiet gives
         up, and work its pause holds stays held, for each coordinator's own
-        stop to drop as it drops queued work."""
+        stop to drop as it drops queued work. The backup scheduler starts
+        last, so an overdue backup's pause finds every coordinator running,
+        and stops next, stopping restic part way; the run is recorded as
+        stopped."""
         await run_in_threadpool(preparations.start)
         # ADR-0056: discovery is advisory. Its owned worker must not hold
         # application availability behind installed CLI processes.
@@ -125,10 +135,12 @@ def create_app(
         deployments.start()
         ai.start()
         scene_warmer.start()
+        backups.start()
         try:
             yield
         finally:
             job_gate.stop()
+            await run_in_threadpool(backups.stop)
             await run_in_threadpool(discovery.stop)
             scene_warmer.stop()
             ai.stop()
@@ -141,6 +153,7 @@ def create_app(
     app.state.model_discovery = ModelDiscovery()
     app.state.deployments = deployments
     app.state.job_gate = job_gate
+    app.state.backups = backups
     # Shared with the preview endpoint (`listings.py`), which needs a
     # `RunContext` to ask the render stage for a scene's current hash but has
     # nothing to do with running a run -- reaching through `deployments` for
@@ -200,6 +213,7 @@ API_ROUTERS = (
     seo_router,
     shop_router,
     workspace_settings_router,
+    backup_router,
 )
 
 

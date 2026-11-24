@@ -14,6 +14,7 @@ from pathlib import Path
 import pytest
 
 from etsy_listings.core.config.secrets import (
+    BACKUP_PASSWORD_VAR,
     ETSY_KEYSTRING_VAR,
     ETSY_SHARED_SECRET_VAR,
     PRINTIFY_TOKEN_VAR,
@@ -112,3 +113,38 @@ def test_missing_token_names_the_file_it_should_be_in(tmp_path: Path, monkeypatc
     assert f"Put it in {tmp_path / '.env'} as `{PRINTIFY_TOKEN_VAR}=...`" in message
     assert "printify.com/app/account/connections" in message
     assert "`catalog.read` scope" in message
+
+
+def test_the_backup_password_is_read_from_the_workspace_env(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv(BACKUP_PASSWORD_VAR, raising=False)
+
+    secrets = _env(tmp_path, f"{BACKUP_PASSWORD_VAR}=correct horse battery\n")
+
+    assert secrets.backup_password == "correct horse battery"
+
+
+def test_a_missing_backup_password_names_the_variable_and_the_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv(BACKUP_PASSWORD_VAR, raising=False)
+
+    with pytest.raises(MissingCredentialError) as caught:
+        _env(tmp_path, "").require_backup_password()
+
+    assert caught.value.variable == BACKUP_PASSWORD_VAR
+    assert str(tmp_path / ".env") in str(caught.value)
+    assert "backup init" in str(caught.value)
+
+
+def test_the_backup_password_stays_out_of_the_secrets_repr(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A ``Secrets`` that reaches a log line or a traceback's locals must not
+    carry the only key to every backup (workspace-backup plan, PR 2)."""
+    monkeypatch.delenv(BACKUP_PASSWORD_VAR, raising=False)
+
+    secrets = _env(tmp_path, f"{BACKUP_PASSWORD_VAR}=correct horse battery\n")
+
+    assert "correct horse battery" not in repr(secrets)

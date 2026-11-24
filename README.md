@@ -65,6 +65,9 @@ uv run etsy-listings ui --root <workspace>  # serves the UI at :8000
 uv run etsy-listings marigold setup        # explicit native GPU worker + weights
 uv run etsy-listings marigold status       # inspect capabilities; never install
 uv run etsy-listings marigold update       # select required engine; retain old installs
+uv run etsy-listings backup init           # create the restic repository settings.yaml names
+uv run etsy-listings backup snapshots      # list its snapshots
+uv run etsy-listings backup status         # configuration and whether the repository opens
 ```
 
 ## Shop administration

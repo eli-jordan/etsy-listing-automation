@@ -78,7 +78,7 @@ A new T3 worktree runs `scripts/setup_worktree.py` (`uv sync`, `npm install` in 
 
 Human-facing setup, calibrator usage and contributor docs live in [README.md](README.md); this file holds only what an agent needs to act correctly. Keep the two commands lists in step.
 
-CLI surface (`etsy-listings`). `setup`, `auth`, `new`, `plan`, `apply`, `unlock`, `marigold` and `ui` are registered in `cli/app.py` (`ui` lives in `cli/ui.py`); `render`, `generate`, `catalog refresh` and `status` remain unbuilt — do not assume a command exists because a historical plan lists it.
+CLI surface (`etsy-listings`). `setup`, `auth`, `new`, `plan`, `apply`, `unlock`, `marigold`, `backup` and `ui` are registered in `cli/app.py` (`ui` lives in `cli/ui.py`); `render`, `generate`, `catalog refresh` and `status` remain unbuilt — do not assume a command exists because a historical plan lists it.
 
 ```
 setup initialise a workspace: skeleton, shop.yaml, ids
@@ -89,6 +89,7 @@ plan <listing|--all> three-way diff against live state
 apply <listing|--all> execute every stage the plan identified
 unlock <listing> clear a Printify product stuck publishing
 marigold setup|status|update explicit native worker installation and inspection
+backup init|snapshots|status the workspace's restic repository (run, check, restore not built yet)
 ui [--host --port] serve the dashboard, calibrator, listings and runs over HTTP in the foreground; no native window
 render / generate force a single local stage [not built]
 catalog refresh force-refresh the cached Printify catalog [not built]
