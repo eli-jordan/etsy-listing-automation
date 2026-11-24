@@ -21,11 +21,21 @@ Every write goes through `setup.py` or the SEO skill's `draft`. Each prints any 
 
 ```bash
 setup.py health --root $ROOT
-setup.py create --template "<listing template>" --prefix <prefix> --strip-variant <PNG files>
+setup.py create --template "<listing template>" --prefix <prefix> --label "<batch name>" --strip-variant <PNG files>
 setup.py briefs <batch id>
 ```
 
 Use the naming convention the existing listings follow, for example `christmas-2026-`. `--strip-variant` drops a trailing `-a` or `-b` variant letter from file names. A staging problem leaves the batch unconfirmed and prints why. `briefs` waits for the app's AI to draft each brief, then prints them.
+
+`--label` is the batch's name in the app's Recent batches, where the seller finds it again, so name the collection the designs belong to. Use the zip's or folder's name when it has one, such as `Artistic Designs` or `Christmas 2026 part 2`. Otherwise name the theme the designs share. Leave out the skill's name, ids and timestamps, because the app already shows the date.
+
+When the designs come from a zip or a folder named after a collection, rename the PNGs to short slugs before `create`, because the listing name is the prefix plus the file name. For example, rename `Artistic Designs - Boho Racoon.png` to `boho-raccoon.png`, and correct spelling while you're at it.
+
+The template stamps one section on every listing. When the seller names a section, or the designs belong in another one, set it straight after `create`:
+
+```bash
+setup.py section "<section title>" <names>
+```
 
 For each listing, run `setup.py look <name> --root $ROOT --out <dir>`. It prints the brief and section, and writes `design-*.jpg`, the design on grey, dark and light backdrops. Image viewers flatten transparency, so read that file rather than the PNG. The copy steps treat the brief as fact, so correct anything it gets wrong, especially the exact printed words and anything it calls a background, with `setup.py brief <name> --file <path>`. Also check that the section suits the design, because the template stamps one section on every listing.
 
