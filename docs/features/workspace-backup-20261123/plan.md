@@ -696,6 +696,10 @@ Deviations recorded during implementation:
   `docs/guides/migrate-the-workspace-out-of-icloud.md`, written for
   PowerShell (robocopy, and `Get-ChildItem | Measure-Object` for file counts
   and sizes), with a section on connecting from a new computer.
+- Found while running the gates: `backup restore` crashed on a restore's
+  first status line, because restic's `--json` leaves out a zero
+  `files_restored` (PR 7). Fixed with `restore_progress_line` in its own
+  commit.
 
 ## Shared gates
 
