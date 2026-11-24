@@ -8,6 +8,9 @@ What the shop's finished listings use, and the scenes known to need help. New te
 |---|---|---|
 | Christmas | `cc1717-red-shirt-flat-lay` | the variation template in the strongest colour |
 | Geek Humor | `cc1717-folded-with-hat-and-leaf`, or `cc1717-hanging-on-fence` when tall art collides with the folded shirt's props | usually black or white |
+| Artistic | `cc1717-hanging-on-fence`, because its grass backdrop suits nature art | the colour the art reads best on at thumbnail size |
+
+The flat lay, `cc1717-woman-with-peace-sign-and-mug` and `cc1717-woman-on-white-sofa` show stockings, fairy lights, a tree or a reindeer slipper, so keep them to Christmas.
 
 The hero is the variation template in 28 of the shop's 34 listings.
 
@@ -16,6 +19,7 @@ The hero is the variation template in 28 of the shop's 34 listings.
 Pick scenes for the audience the brief names, and vary the colours across them.
 
 - **Christmas** leans on women and seasonal scenes: `woman-by-christmas-tree`, `woman-with-peace-sign-and-mug`, `woman-on-white-sofa`, `woman-with-mug-and-blanket`, `woman-in-elevator`, `woman-in-cardigan-by-tree`, plus one or two men, `man-with-tattoos-standing` or `man-sitting-with-hat-and-glasses`.
+- **Artistic** uses `man-with-tattoos-standing`, `woman-holding-a-bag`, `woman-with-oversize-fit`, `woman-in-elevator`, `man-sitting-with-hat-and-glasses` and `woman-sitting-cross-legged`. Leave `woman-in-elevator` off round art, such as a globe or an ensō circle.
 - **Geek Humor** leans on men: `man-sitting-with-hat-and-glasses`, `man-with-sunglasses-against-blue-tiles`, `man-with-tattoos-standing`, with women in `woman-holding-a-bag`, `woman-with-oversize-fit` and `woman-sitting-cross-legged`.
 
 Every name above takes the `cc1717-` prefix.
