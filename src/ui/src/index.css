@@ -7248,8 +7248,17 @@ button.seo-ai-mode.seo-ai-mode--busy:disabled {
     margin-top: var(--space-2);
   }
 
+  /* Admin is the only way into settings, so it stays: it moves up beside the
+     brand on the first row, and the page links wrap onto the second. */
   .sidebar__bottom {
-    display: none;
+    order: 1;
+    margin-left: auto;
+    padding-top: 0;
+    border-top: 0;
+  }
+
+  .sidebar__nav {
+    order: 2;
   }
 
   .nav-item {

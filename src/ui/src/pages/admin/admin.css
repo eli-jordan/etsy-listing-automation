@@ -789,3 +789,44 @@
   margin: var(--space-1) 0 0;
   overflow-wrap: anywhere;
 }
+
+/* Phones (the shell's 700px breakpoint): the section list sits above the
+   page instead of beside it, a row's value drops under its label, and a
+   danger action takes the full width under its description. */
+@media (max-width: 700px) {
+  .adm-body {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-4);
+  }
+
+  .adm-sections {
+    position: static;
+  }
+
+  .sa-row {
+    grid-template-columns: 22px minmax(0, 1fr) auto;
+    row-gap: var(--space-1);
+    padding: 11px var(--space-3);
+  }
+
+  .sa-row__value {
+    grid-column: 2 / -1;
+    grid-row: 2;
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .sa-danger__row {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-3);
+  }
+
+  .sa-fields,
+  .sd-set__row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .sd-label {
+    flex-wrap: wrap;
+  }
+}

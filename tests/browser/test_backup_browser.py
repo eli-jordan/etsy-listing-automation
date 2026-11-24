@@ -19,6 +19,8 @@ from etsy_listings.core.application.backup_coordinator import BackupEnvironment
 from etsy_listings.core.backup.binary import RESTIC_BINARY_ENV_VAR
 from etsy_listings.core.config.secrets import BACKUP_PASSWORD_VAR
 
+from tests.support.mobile import MOBILE_VIEWPORT, assert_mobile_page_fits
+
 pytestmark = [pytest.mark.browser, pytest.mark.restic]
 
 PASSWORD = "correct horse battery staple"
@@ -69,3 +71,47 @@ def test_setting_up_backups_makes_the_first_backup_and_lists_it(
     expect(page.get_by_role("heading", name="Backed up a moment ago")).to_be_visible()
     assert (repository / "config").is_file()
     assert "backup:" in (workspace_root / "settings.yaml").read_text(encoding="utf-8")
+
+
+def test_backup_pages_fit_a_phone_through_set_up_history_and_restore(
+    page, expect, calibrator_server: str, tmp_path: Path
+) -> None:
+    page.set_viewport_size(MOBILE_VIEWPORT)
+    page.goto(f"{calibrator_server}/admin?section=backup")
+
+    expect(page.get_by_role("heading", name="Backups are off")).to_be_visible()
+    assert_mobile_page_fits(page)
+
+    page.get_by_role("button", name="Set up backups").click()
+    page.get_by_label("Backup storage folder").fill(str(tmp_path / "backups"))
+    page.get_by_label("Password", exact=True).fill(PASSWORD)
+    page.get_by_label("Repeat password").fill(PASSWORD)
+    page.get_by_role("checkbox").check()
+    assert_mobile_page_fits(page)
+    page.get_by_role("button", name="Create and back up now").click()
+
+    history = page.get_by_role("region", name="Backup history")
+    expect(history.get_by_role("row").nth(1)).to_contain_text(
+        "Backed up", timeout=RESTIC_TIMEOUT_MS
+    )
+    assert_mobile_page_fits(page)
+
+    history.get_by_role("button", name="Restore…").first.click()
+    dialog = page.get_by_role("dialog")
+    expect(dialog).to_be_visible()
+    box = dialog.bounding_box()
+    assert box is not None
+    assert box["x"] >= 0, box
+    assert box["x"] + box["width"] <= MOBILE_VIEWPORT["width"], box
+    spill = dialog.evaluate(
+        """(d) => [...d.querySelectorAll('*')]
+            .filter((e) => e.getBoundingClientRect().right > d.getBoundingClientRect().right + 1)
+            .map((e) => e.tagName + '.' + (e.getAttribute('class') || ''))"""
+    )
+    assert spill == [], spill
+    dialog.get_by_role("button", name="Cancel").click()
+    expect(dialog).to_be_hidden()
+
+    page.locator(".adm-sections").get_by_role("link", name="Setup").click()
+    page.get_by_role("heading", name="Backup settings").wait_for(state="visible")
+    assert_mobile_page_fits(page)
