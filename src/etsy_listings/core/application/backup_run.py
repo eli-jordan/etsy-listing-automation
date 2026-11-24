@@ -36,7 +36,12 @@ from etsy_listings.core.backup.destinations import (
     copy_repository,
     repair_destination,
 )
-from etsy_listings.core.backup.restic import Launch, Restic, ResticCancelledError, ResticError
+from etsy_listings.core.backup.repository import (
+    BackupFigures,
+    OpenRepository,
+    Repository,
+    ResticCancelledError,
+)
 from etsy_listings.core.backup.state import (
     BackupState,
     BackupStateStore,
@@ -46,12 +51,11 @@ from etsy_listings.core.backup.state import (
     RunOutcome,
     RunRecord,
 )
-from etsy_listings.core.config.settings import BackupSettings, RetentionSettings
+from etsy_listings.core.config.settings import BackupSettings
 from etsy_listings.core.errors import ConflictError, MissingError, UserFacingError
 from etsy_listings.core.workspace.workspace import Workspace
 
 Clock = Callable[[], datetime]
-PARTIAL_SNAPSHOT_EXIT = 3
 PRUNE_INTERVAL = timedelta(days=7)
 """Prune, then check, weekly (spec, *Backup run* step 6)."""
 COPY_CHECK_INTERVAL = timedelta(days=30)
@@ -115,20 +119,6 @@ def _utc_now() -> datetime:
     return datetime.now(UTC)
 
 
-def forget_arguments(retention: RetentionSettings) -> tuple[str, ...]:
-    """restic counts the current week and month as one of each, so N past
-    weeks and months are N + 1 (spec, *Backup run* step 5)."""
-    return (
-        "forget",
-        "--keep-within",
-        f"{retention.keep_within_days}d",
-        "--keep-weekly",
-        str(retention.weekly + 1),
-        "--keep-monthly",
-        str(retention.monthly + 1),
-    )
-
-
 @dataclass(frozen=True)
 class BackupRunner:
     """Runs against ``workspace``'s configured repository. ``home`` holds
@@ -137,7 +127,8 @@ class BackupRunner:
     workspace: Workspace
     binaries: ResticBinaries
     home: Path | None = None
-    launch: Launch | None = None
+    restic: OpenRepository | None = None
+    """Replaces restic itself; tests pass an in-memory repository."""
     now: Clock = _utc_now
     sample: float = SAMPLE_FRACTION
     """The share of a destination's files its monthly check reads."""
@@ -158,15 +149,15 @@ class BackupRunner:
         run = _Run(self.now(), str(settings.repository), progress or (lambda _: None))
         try:
             check_backup_paths(self.workspace, settings.repository, settings.destinations)
-            restic = open_repository(
-                self.workspace, binaries=self.binaries, launch=self.launch, settings=settings
+            repository = open_repository(
+                self.workspace, binaries=self.binaries, restic=self.restic, settings=settings
             )
             with _paused(gate, run):
                 run.enter("backing_up")
-                self._back_up(restic, run, cancel)
+                self._back_up(repository, run, cancel)
             with maintenance() if maintenance else nullcontext(enter_result=True) as available:
                 if available:
-                    self._tidy(restic, settings, store, run, cancel)
+                    self._tidy(repository, settings, store, run, cancel)
                 elif _needs_check(store.load(settings.repository)):
                     run.enter("checking")
                     run.failure = "The repository must pass a check before it can be copied."
@@ -184,7 +175,7 @@ class BackupRunner:
 
     def _tidy(
         self,
-        restic: Restic,
+        repository: Repository,
         settings: BackupSettings,
         store: BackupStateStore,
         run: _Run,
@@ -193,30 +184,25 @@ class BackupRunner:
         """Forget, then the weekly prune and check, each under restic's
         exclusive lock."""
         run.enter("forgetting")
-        restic.run(*forget_arguments(settings.retention), cancel=cancel)
+        repository.forget(settings.retention, cancel=cancel)
         state = store.load(settings.repository)
         prune = self._prune_due(state)
         if prune:
             run.enter("pruning")
-            restic.run("prune", cancel=cancel)
+            repository.prune(cancel=cancel)
             state = store.load(settings.repository)
             state = state.model_copy(update={"last_prune": self.now()})
             store.save(state)
         if prune or _needs_check(state):
             run.enter("checking")
-            run.failure = self._check(restic, store, cancel=cancel).message
+            run.failure = self._check(repository, store, cancel=cancel).message
 
-    def _back_up(self, restic: Restic, run: _Run, cancel: threading.Event | None) -> None:
-        arguments = ["backup", str(self.workspace.root)]
-        for pattern in EXCLUDES:
-            arguments += ["--exclude", pattern]
-        try:
-            for line in restic.stream(*arguments, cancel=cancel):
-                run.hear(line)
-        except ResticError as exc:
-            # 3: the snapshot was made, but some files could not be read.
-            if exc.exit_code != PARTIAL_SNAPSHOT_EXIT or run.snapshot_id is None:
-                raise
+    def _back_up(self, repository: Repository, run: _Run, cancel: threading.Event | None) -> None:
+        summary = repository.back_up(
+            self.workspace.root, excludes=EXCLUDES, progress=run.read, cancel=cancel
+        )
+        run.snapshot_id, run.data_added = summary.snapshot_id, summary.data_added
+        run.warnings.extend(summary.warnings)
 
     def _copy_all(
         self,
@@ -293,21 +279,19 @@ class BackupRunner:
 
     def check(self) -> CheckResult:
         """``restic check`` of the local repository, recorded in the state."""
-        restic = open_repository(self.workspace, binaries=self.binaries, launch=self.launch)
-        return self._check(restic, BackupStateStore(self.home))
+        repository = open_repository(self.workspace, binaries=self.binaries, restic=self.restic)
+        return self._check(repository, BackupStateStore(self.home))
 
     def _check(
-        self, restic: Restic, store: BackupStateStore, *, cancel: threading.Event | None = None
+        self,
+        repository: Repository,
+        store: BackupStateStore,
+        *,
+        cancel: threading.Event | None = None,
     ) -> CheckResult:
-        try:
-            restic.run("check", cancel=cancel)
-        except ResticCancelledError:
-            raise
-        except ResticError as exc:
-            result = CheckResult(at=self.now(), ok=False, message=str(exc))
-        else:
-            result = CheckResult(at=self.now(), ok=True)
-        state = store.load(restic.repository)
+        checked = repository.check(cancel=cancel)
+        result = CheckResult(at=self.now(), ok=checked.ok, message=checked.message)
+        state = store.load(repository.path)
         store.save(state.model_copy(update={"last_check": result}))
         return result
 
@@ -424,25 +408,12 @@ class _Run:
         where = None if destination is None else str(destination)
         self.tell(BackupProgress(step, destination=where))
 
-    def hear(self, line: object) -> None:
-        """One line of ``restic backup --json``."""
-        if not isinstance(line, dict):
-            return
-        kind = line.get("message_type")
-        if kind == "status":
-            self.tell(
-                BackupProgress(
-                    "backing_up",
-                    files_done=line.get("files_done", 0),
-                    files_total=line.get("total_files"),
-                )
+    def read(self, figures: BackupFigures) -> None:
+        self.tell(
+            BackupProgress(
+                "backing_up", files_done=figures.files_done, files_total=figures.files_total
             )
-        elif kind == "summary":
-            self.snapshot_id = line.get("snapshot_id")
-            self.data_added = line.get("data_added")
-        elif kind == "error":
-            error = line.get("error") or {}
-            self.warnings.append(f"{line.get('item', '')}: {error.get('message', '')}")
+        )
 
     def record(self, finished_at: datetime) -> RunRecord:
         outcome: RunOutcome = "stopped" if self.stopped else "failed"

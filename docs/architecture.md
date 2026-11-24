@@ -123,7 +123,7 @@ package never drags in OpenCV, FastAPI or Typer to reach one name.
 | `core/listing_templates` | Template conversion and frozen document/assets/timestamp capture | Capture occurs under the template write lock before upload; shared references are revalidated at confirm and retry |
 | `core/market` | Comparable-listing research, scoring and evidence snapshots | Read-only Etsy data informs wording rather than product facts |
 | `core/batches` | Upload validation, archive inspection, staging, name allocation and idempotent local creation | Creates ordinary listings; AI dispatch belongs to `application/ai` |
-| `core/backup` | The pinned restic release and which binary to run (`binary.py`, installing through the protected `installation.py`), the streaming restic runner (`restic.py`), the copy to destinations with its sample check and repair (`destinations.py`, no restic), and this machine's `backup-state.json` and run history (`state.py`) | Knows no workspace; `core/application/backup_repository.py` joins the `backup:` settings, the `.env` password and the binary |
+| `core/backup` | The pinned restic release and which binary to run (`binary.py`, installing through the protected `installation.py`), the restic repository interface (`repository.py`) and its real adapter (`restic.py`, reached only through `core/application/backup_repository.py`), the copy to destinations with its sample check and repair (`destinations.py`, no restic), and this machine's `backup-state.json` and run history (`state.py`) | Knows no workspace; `core/application/backup_repository.py` joins the `backup:` settings, the `.env` password and the binary |
 | `core/user_directory.py` | `user_directory(home)`: `~/.etsy-listings`, this machine's state outside every workspace (Marigold runtime, restic, backup state and history) | Every owner takes `home`, so tests never write to the real home directory |
 | `core/bounded_cache.py` | `BoundedCache`: the one thread-safe least-recently-used cache, bounded by total `size(value)` (bytes, or entries without a size function), behind every in-process cache of decoded arrays, validation proofs and pixel digests | Locks only bookkeeping, never `get_or_compute`'s computation; an item larger than the whole budget is served, never kept, and evicts nothing; a replaced key counts only its new size |
 | `core/connections.py`, `core/errors.py` | Client and `RunContext` construction; `UserFacingError` and the refusal categories (`MissingError`, `ConflictError`, `StaleError`, `RefusedError`) | See the credential invariant below; core names a refusal's category, never its status code |
@@ -1288,8 +1288,22 @@ installs the pinned release. It downloads into a staging directory beside
 the directory into place, and removes the staging directory on any failure.
 Import Linter admits only `binary.py` to `installation.py`.
 
-`core/backup/restic.py`'s `Restic` runs one command with `--json` through
-`subprocess.Popen` with line-buffered stdout, yielding each parsed line as
+`core/backup/repository.py`'s `Repository` is the seam between the backup's
+application modules and restic. Its operations are the backup's own: `init`,
+`snapshots` (with or without a lock), `back_up` a folder with excludes
+(reporting `BackupFigures`, returning a `BackupSummary` whose warnings name
+unreadable files), `forget` by the retention, `prune`, `check` (a
+`RepositoryCheck`), `restore` a snapshot into a target (reporting
+`RestoreProgress`), and `verify_password`. Every operation that takes `cancel`
+checks it before it starts. No application module knows a subcommand, flag,
+exit code or `--json` shape. `core/application/backup_repository.py` opens
+every repository, through `restic.py`'s `Restic` or an `OpenRepository` its
+caller passes as `restic=`; behaviour tests pass `tests/support/restic.py`'s
+in-memory repository.
+
+`core/backup/restic.py`'s `Restic` is the real adapter. It runs each
+operation as one command with `--json` through
+`subprocess.Popen` with line-buffered stdout, reading each line as
 restic writes it. It does not use `core/ai/process.py`'s `run_managed`, which
 takes no environment and buffers output. The password reaches restic only as
 `RESTIC_PASSWORD` in the child's environment. Inherited
@@ -1314,9 +1328,8 @@ weekly `prune` and `check`, run after the resume. The CLI's `backup run`
 passes no gate. A failed or interrupted check blocks copying and repair until
 the repository passes a check. `EXCLUDES` leaves out the temporary names the app's own
 writers use, and `tests/core/behaviour/test_backup_excludes.py` fails when a
-writer renames its temporaries. restic's exit code 3 (the snapshot was made
-without some unreadable files) counts as success, with those files as
-warnings. `core/backup/state.py` keeps the last prune and check in
+writer renames its temporaries. A backup that skipped unreadable files (restic's
+exit code 3) still counts, with those files as warnings. `core/backup/state.py` keeps the last prune and check in
 `~/.etsy-listings/backup-state.json`, keyed to the repository path. Every run,
 including a failed one, is appended to `backup-history.jsonl` as one JSON
 line. The last successful backup is read from `restic snapshots`.
@@ -1368,9 +1381,10 @@ that exists (`core/application/backup_setup.py`).
 
 A restore is `core/application/backup_restore.py`: it refuses the live
 workspace, the repository, the destinations, paths inside any of them and a
-folder that holds files. It checks the target again before starting
-`restic restore <id>:<folder>` so the target holds the
-workspace itself. The server runs it as a job on `BackupCoordinator`, one at a
+folder that holds files. It checks the target again just before
+`Repository.restore` starts, which restores a one-folder snapshot's contents
+(`restic restore <id>:<folder> --overwrite never`), so the target holds the
+workspace itself and nothing that reached it is overwritten. The server runs it as a job on `BackupCoordinator`, one at a
 time, beside the backup slot rather than in it: restore takes restic's shared
 lock, so scheduled backups keep running. A backup during a restore leaves
 `forget`, `prune` and `check`, which need the exclusive lock, to the next run.
@@ -1386,8 +1400,9 @@ both refused while the configured folder holds restic's `config`.
 `POST /api/backup/repository` creates one in a new or empty folder and starts
 the first backup. `POST /api/backup/connect` copies an existing one, usually a
 destination, with the destinations' own one-way copy into a
-`<folder>.connecting-<hex>` staging folder beside the target. The staging
-copy must pass `restic check` before it takes the target's name, and only then are
+`<folder>.connecting-<hex>` staging folder beside the target. The password
+must open the staging copy (`verify_password`) and the copy must pass a
+`check` before it takes the target's name, and only then are
 `backup.repository` (when the folder changed) and the password written. A
 wrong password deletes the staging folder and writes nothing. Connect holds
 the backup slot while it copies. The status's `repository.password_stored`

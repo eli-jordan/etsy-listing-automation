@@ -29,14 +29,13 @@ from etsy_listings.core.application.backup_repository import (
     stored_password,
 )
 from etsy_listings.core.application.backup_restore import (
-    RestoreProgress,
     check_target,
     find_snapshot,
     restore,
 )
 from etsy_listings.core.application.backup_run import BackupProgress, BackupRunner
 from etsy_listings.core.backup.binary import RESTIC_VERSION, ResticBinaries
-from etsy_listings.core.backup.restic import Snapshot
+from etsy_listings.core.backup.repository import RestoreProgress, Snapshot
 from etsy_listings.core.config.secrets import BACKUP_PASSWORD_VAR
 from etsy_listings.core.errors import UserFacingError
 from etsy_listings.core.workspace import layout
@@ -233,11 +232,11 @@ def restore_command(
             destinations=settings.destinations,
         )
         folder = check(folder)
-        restic = open_repository(workspace, binaries=ResticBinaries(), settings=settings)
-        found = find_snapshot(restic.snapshots(), snapshot)
+        repository = open_repository(workspace, binaries=ResticBinaries(), settings=settings)
+        found = find_snapshot(repository.snapshots(), snapshot)
         folder = check(folder)
         typer.echo(f"Restoring snapshot {found.short_id} into {folder}...", err=True)
-        figures = restore(restic, found, folder, progress=_RestoreLines())
+        figures = restore(repository, found, folder, progress=_RestoreLines())
     files = f"{figures.files_done:,} files" if figures.files_done is not None else "the files"
     typer.echo(f"Restored {files} from {found.time:%Y-%m-%d %H:%M} into {folder}.")
 

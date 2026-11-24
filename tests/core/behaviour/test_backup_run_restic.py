@@ -10,13 +10,11 @@ from pathlib import Path
 import pytest
 
 from etsy_listings.core.application.backup_repository import create_repository, open_repository
-from etsy_listings.core.application.backup_run import BackupRunner, forget_arguments
+from etsy_listings.core.application.backup_run import BackupRunner
 from etsy_listings.core.backup.binary import RESTIC_BINARY_ENV_VAR, ResticBinaries
 from etsy_listings.core.backup.restic import Restic
 from etsy_listings.core.config.settings import RetentionSettings
 from etsy_listings.core.workspace.workspace import Workspace
-
-from tests.support.restic import snapshot_path
 
 pytestmark = pytest.mark.restic
 
@@ -53,10 +51,8 @@ def test_a_backup_restores_byte_for_byte(workspace: Workspace, tmp_path: Path) -
 
     record = BackupRunner(workspace, binaries, home=home).run()
     target = tmp_path / "restored"
-    snapshot_root = snapshot_path(workspace.root)
-    open_repository(workspace, binaries=binaries).run(
-        "restore", f"latest:{snapshot_root}", "--target", str(target)
-    )
+    repository = open_repository(workspace, binaries=binaries)
+    repository.restore(repository.snapshots()[-1], target)
 
     assert record.outcome == "succeeded", record.message
     assert _files(target) == _files(workspace.root)
@@ -96,7 +92,7 @@ def test_forget_keeps_what_the_retention_describes(restic_binary: Path, tmp_path
     assert [time.replace(tzinfo=None) for time in before] == [
         time.replace(tzinfo=None) for time in times
     ]
-    restic.run(*forget_arguments(RetentionSettings(keep_within_days=7, weekly=4, monthly=3)))
+    restic.forget(RetentionSettings(keep_within_days=7, weekly=4, monthly=3))
     remaining = {snapshot.time for snapshot in restic.snapshots()}
 
     assert remaining == _kept_by_the_spec(before)

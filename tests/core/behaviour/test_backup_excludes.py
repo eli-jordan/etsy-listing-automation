@@ -14,12 +14,11 @@ from pathlib import Path
 import pytest
 
 import etsy_listings
-from etsy_listings.core.application.backup_repository import create_repository, open_repository
+from etsy_listings.core.application.backup_repository import create_repository
 from etsy_listings.core.application.backup_run import BackupRunner
 from etsy_listings.core.backup.binary import RESTIC_BINARY_ENV_VAR, ResticBinaries
+from etsy_listings.core.backup.restic import Restic, tree_path
 from etsy_listings.core.workspace.workspace import Workspace
-
-from tests.support.restic import snapshot_path
 
 PASSWORD = "correct horse battery staple"
 SOURCE = Path(etsy_listings.__file__).parent
@@ -117,16 +116,16 @@ def test_the_backup_leaves_out_every_temporary_and_keeps_its_neighbours(
         path.write_bytes(b"x")
 
     record = BackupRunner(workspace, binaries, home=tmp_path / "home").run()
-    stored = _snapshot_files(workspace, binaries)
+    stored = _snapshot_files(workspace, Restic(restic_binary, tmp_path / "backups", PASSWORD))
 
     assert record.outcome == "succeeded", record.message
     assert sorted(set(KEPT) - stored) == []
     assert sorted(stored & {sample for _, sample in WRITERS.values()}) == []
 
 
-def _snapshot_files(workspace: Workspace, binaries: ResticBinaries) -> set[str]:
-    root = snapshot_path(workspace.root)
-    nodes = open_repository(workspace, binaries=binaries).run("ls", "latest")
+def _snapshot_files(workspace: Workspace, restic: Restic) -> set[str]:
+    root = tree_path(str(workspace.root))
+    nodes = restic.run("ls", "latest")
     return {
         node["path"].removeprefix(root + "/")
         for node in nodes

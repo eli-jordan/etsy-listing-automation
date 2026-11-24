@@ -35,12 +35,18 @@ from etsy_listings.core.application.backup_repository import (
     check_new_repository,
     create_repository,
     paths_overlap,
+    repository_at,
     stored_password,
 )
 from etsy_listings.core.application.refusals import SettingsRevisionConflictError
 from etsy_listings.core.backup.binary import ResticBinaries
 from etsy_listings.core.backup.destinations import copy_repository, holds_repository
-from etsy_listings.core.backup.restic import Launch, Restic, ResticError, WrongPasswordError
+from etsy_listings.core.backup.repository import (
+    OpenRepository,
+    Repository,
+    ResticError,
+    WrongPasswordError,
+)
 from etsy_listings.core.config.secrets import BACKUP_PASSWORD_VAR
 from etsy_listings.core.config.settings import BackupSettings
 from etsy_listings.core.errors import ConflictError, RefusedError
@@ -99,7 +105,7 @@ def create_new_repository(
     answers: Replacement,
     *,
     binaries: ResticBinaries,
-    launch: Launch | None = None,
+    restic: OpenRepository | None = None,
 ) -> None:
     """Create a repository at ``answers.repository``, saving it as the
     backup repository first; refuses a folder that holds files."""
@@ -114,7 +120,7 @@ def create_new_repository(
         raise PasswordTooShortError("Enter a password for the new backup repository.")
     check_new_repository(answers.repository, chosen)
     _point_at(workspace, settings, answers)
-    create_repository(workspace, chosen, binaries=binaries, launch=launch, store=stored is None)
+    create_repository(workspace, chosen, binaries=binaries, restic=restic, store=stored is None)
 
 
 def connect_repository(
@@ -123,7 +129,7 @@ def connect_repository(
     answers: Replacement,
     *,
     binaries: ResticBinaries,
-    launch: Launch | None = None,
+    restic: OpenRepository | None = None,
 ) -> None:
     """Copy the repository at ``source`` into the new folder
     ``answers.repository``, check the password opens it, then save both.
@@ -142,8 +148,10 @@ def connect_repository(
         copied = copy_repository(source, staging)
         if copied.outcome != "copied":
             raise ConnectRefusedError(copied.message or f"{source} could not be copied.")
-        restic = Restic(binaries.ensure(settings.restic_binary), staging, chosen, launch=launch)
-        _open(restic, env_file=workspace.root / ".env" if stored is not None else None)
+        copy = repository_at(
+            binaries.ensure(settings.restic_binary), staging, chosen, restic=restic
+        )
+        _open(copy, env_file=workspace.root / ".env" if stored is not None else None)
         if repository.is_dir():
             repository.rmdir()  # empty: _check_connect saw to it
         staging.rename(repository)
@@ -189,12 +197,12 @@ def _check_connect(workspace: Workspace, source: Path, answers: Replacement) -> 
         raise SettingsRevisionConflictError
 
 
-def _open(restic: Restic, *, env_file: Path | None) -> None:
-    """Refuse a password that does not open ``restic``'s repository. One
-    from ``.env`` is never asked for again, so the message says how to
-    change it."""
+def _open(repository: Repository, *, env_file: Path | None) -> None:
+    """Refuse a password that does not open ``repository``, or a copy that
+    does not pass a check. A password from ``.env`` is never asked for
+    again, so the message says how to change it."""
     try:
-        restic.run("check")
+        repository.verify_password()
     except WrongPasswordError:
         if env_file is None:
             message = "That password does not open this repository. Nothing was saved."
@@ -208,6 +216,9 @@ def _open(restic: Restic, *, env_file: Path | None) -> None:
         raise ConnectRefusedError(message) from None
     except ResticError as exc:
         raise ConnectRefusedError(f"The copied repository did not pass a check: {exc}") from exc
+    checked = repository.check()
+    if not checked.ok:
+        raise ConnectRefusedError(f"The copied repository did not pass a check: {checked.message}")
 
 
 def _point_at(workspace: Workspace, settings: BackupSettings, answers: Replacement) -> None:

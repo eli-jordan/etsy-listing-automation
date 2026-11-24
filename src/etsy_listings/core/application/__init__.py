@@ -48,13 +48,14 @@ import names the module it depends on. Public interfaces:
 ``backup_repository``
     The workspace's restic repository: ``backup_settings`` (or
     ``BackupOffError``), ``create_repository`` (refusing a short password
-    and a folder that holds files), ``open_repository`` -> ``Restic``, and
-    ``backup_status`` -> ``BackupStatus``, read without a lock.
+    and a folder that holds files), ``open_repository`` and ``repository_at`` -> a
+    ``core.backup.repository.Repository`` (restic, or the ``restic`` opener
+    a caller passes), and ``backup_status`` -> ``BackupStatus``, read
+    without a lock.
 ``backup_run``
     ``BackupRunner``: ``run`` (one backup, paused through an optional
     ``JobGate``, then forget and the weekly prune and check) -> ``RunRecord``,
-    reporting ``BackupProgress``; ``check`` -> ``CheckResult``. ``EXCLUDES``
-    and ``forget_arguments``.
+    reporting ``BackupProgress``; ``check`` -> ``CheckResult``. ``EXCLUDES``.
 ``workspace_setup``
     ``create_directories``, ``sync_packaged_prompts`` -> ``PackagedPrompt``,
     ``read_shop_document``, ``SetupAnswers`` / ``POD_DEFAULTS``,

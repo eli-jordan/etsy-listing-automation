@@ -9,6 +9,11 @@ and PR 5's server use the same entry points.
 Nothing here downloads restic except :func:`create_repository`, the one
 explicit setup step, and nothing creates a repository by itself (spec,
 *Missing repository*).
+
+Every repository the backup opens is opened here, as a
+:class:`~etsy_listings.core.backup.repository.Repository`. ``restic``, where
+a function takes it, replaces the real restic adapter; tests pass an
+in-memory one.
 """
 
 from __future__ import annotations
@@ -19,7 +24,8 @@ from pathlib import Path
 
 from etsy_listings.core.application import credentials
 from etsy_listings.core.backup.binary import ResticBinaries
-from etsy_listings.core.backup.restic import Launch, Restic, Snapshot
+from etsy_listings.core.backup.repository import OpenRepository, Repository, Snapshot
+from etsy_listings.core.backup.restic import Restic
 from etsy_listings.core.config.secrets import Secrets
 from etsy_listings.core.config.settings import BackupSettings
 from etsy_listings.core.errors import ConflictError, RefusedError, UserFacingError
@@ -70,7 +76,7 @@ def create_repository(
     password: str,
     *,
     binaries: ResticBinaries,
-    launch: Launch | None = None,
+    restic: OpenRepository | None = None,
     store: bool = True,
 ) -> str:
     """Create the configured repository; its restic id.
@@ -86,7 +92,7 @@ def create_repository(
     if store:
         credentials.store(workspace.root, credentials.BACKUP_PASSWORD, (password,))
     binary = binaries.ensure(settings.restic_binary)
-    return Restic(binary, settings.repository, password, launch=launch).init()
+    return repository_at(binary, settings.repository, password, restic=restic).init()
 
 
 def check_new_repository(folder: Path, password: str) -> None:
@@ -124,13 +130,20 @@ def _require_separate(folders: list[Path]) -> None:
                 raise RefusedError(f"{folder} overlaps {other}. Choose separate folders.")
 
 
+def repository_at(
+    binary: Path, folder: Path, password: str, *, restic: OpenRepository | None = None
+) -> Repository:
+    """The repository in ``folder``, run with the restic at ``binary``."""
+    return (restic or Restic)(binary, folder, password)
+
+
 def open_repository(
     workspace: Workspace,
     *,
     binaries: ResticBinaries,
-    launch: Launch | None = None,
+    restic: OpenRepository | None = None,
     settings: BackupSettings | None = None,
-) -> Restic:
+) -> Repository:
     """The configured repository, ready to run commands. Raises when backups
     are off, the password is missing or no restic is installed; whether the
     repository exists is restic's to say on the first command."""
@@ -142,7 +155,7 @@ def open_repository(
             "restic is not installed yet. `etsy-listings backup init` downloads the "
             "pinned release, or name one in settings.yaml as backup.restic_binary."
         )
-    return Restic(binary, settings.repository, password, launch=launch)
+    return repository_at(binary, settings.repository, password, restic=restic)
 
 
 @dataclass(frozen=True)
@@ -163,7 +176,7 @@ class BackupStatus:
 
 
 def backup_status(
-    workspace: Workspace, *, binaries: ResticBinaries, launch: Launch | None = None
+    workspace: Workspace, *, binaries: ResticBinaries, restic: OpenRepository | None = None
 ) -> BackupStatus:
     """Read without writing or taking a lock, so it answers while a backup runs."""
     settings = workspace.capture_settings().backup
@@ -172,7 +185,7 @@ def backup_status(
     binary = binaries.locate(settings.restic_binary)
     try:
         snapshots = open_repository(
-            workspace, binaries=binaries, launch=launch, settings=settings
+            workspace, binaries=binaries, restic=restic, settings=settings
         ).snapshots(lock=False)
     except UserFacingError as exc:
         return BackupStatus(settings=settings, binary=binary, error=exc)

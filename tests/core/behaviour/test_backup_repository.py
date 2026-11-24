@@ -1,10 +1,11 @@
 """Creating, opening and checking a workspace's backup repository
 (workspace-backup plan, PR 2): the ``backup:`` block, the ``.env`` password
-and the restic binary together, with restic replaced by recorded replies.
+and the restic binary together, against the in-memory repository.
 """
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -19,15 +20,19 @@ from etsy_listings.core.application.backup_repository import (
     open_repository,
 )
 from etsy_listings.core.backup.binary import RESTIC_BINARY_ENV_VAR, ResticBinaries
-from etsy_listings.core.backup.restic import WrongPasswordError
+from etsy_listings.core.backup.repository import ResticError, WrongPasswordError
 from etsy_listings.core.config.secrets import BACKUP_PASSWORD_VAR, MissingCredentialError
 from etsy_listings.core.workspace import layout
 from etsy_listings.core.workspace.workspace import Workspace
 
-from tests.support.restic import Reply, ScriptedRestic, exit_error
+from tests.support.restic import InMemoryRestic, snapshot_id
 
 PASSWORD = "correct horse battery staple"
-INITIALIZED = {"message_type": "initialized", "id": "62d06b01", "repository": "r"}
+NOW = datetime(2026, 11, 23, 8, tzinfo=UTC)
+
+
+def _restic() -> InMemoryRestic:
+    return InMemoryRestic(lambda: NOW)
 
 
 @pytest.fixture(autouse=True)
@@ -67,21 +72,21 @@ def test_without_a_backup_block_there_is_nothing_to_create(
     workspace: Workspace, binaries: ResticBinaries
 ) -> None:
     with pytest.raises(BackupOffError, match="backup:"):
-        create_repository(workspace, PASSWORD, binaries=binaries, launch=ScriptedRestic())
+        create_repository(workspace, PASSWORD, binaries=binaries, restic=_restic())
 
 
 def test_creating_stores_the_password_then_initialises(
     workspace: Workspace, repository: Path, binaries: ResticBinaries
 ) -> None:
-    launcher = ScriptedRestic(Reply(stdout=[INITIALIZED]))
+    restic = _restic()
+    restic.password = PASSWORD
 
-    created = create_repository(workspace, PASSWORD, binaries=binaries, launch=launcher)
+    created = create_repository(workspace, PASSWORD, binaries=binaries, restic=restic)
 
-    assert created == "62d06b01"
+    assert created == "f00d"
     assert f"{BACKUP_PASSWORD_VAR}={PASSWORD}" in _env(workspace)
-    assert launcher.commands == [["init"]]
-    assert launcher.launches[0].argv[2] == str(repository)
-    assert launcher.launches[0].env["RESTIC_PASSWORD"] == PASSWORD
+    assert restic.operations == ["init"]
+    assert (repository / "config").is_file()
 
 
 def test_a_failed_init_keeps_the_stored_password(
@@ -89,10 +94,11 @@ def test_a_failed_init_keeps_the_stored_password(
 ) -> None:
     """Stored before restic runs, so no repository can exist whose password
     this machine never recorded."""
-    launcher = ScriptedRestic(Reply(stderr=exit_error(1, "Fatal: disk full"), exit_code=1))
+    restic = _restic()
+    restic.fail("init", ResticError("restic: Fatal: disk full", exit_code=1))
 
-    with pytest.raises(Exception, match="disk full"):
-        create_repository(workspace, PASSWORD, binaries=binaries, launch=launcher)
+    with pytest.raises(ResticError, match="disk full"):
+        create_repository(workspace, PASSWORD, binaries=binaries, restic=restic)
 
     assert f"{BACKUP_PASSWORD_VAR}={PASSWORD}" in _env(workspace)
 
@@ -108,7 +114,7 @@ def test_a_password_already_stored_is_not_written_again(
         workspace,
         PASSWORD,
         binaries=binaries,
-        launch=ScriptedRestic(Reply(stdout=[INITIALIZED])),
+        restic=_restic(),
         store=False,
     )
 
@@ -119,7 +125,7 @@ def test_a_short_password_is_refused_before_anything_is_written(
     workspace: Workspace, repository: Path, binaries: ResticBinaries
 ) -> None:
     with pytest.raises(PasswordTooShortError, match="12"):
-        create_repository(workspace, "eleven-char", binaries=binaries, launch=ScriptedRestic())
+        create_repository(workspace, "eleven-char", binaries=binaries, restic=_restic())
 
     assert not (workspace.root / layout.ENV_FILE).exists()
 
@@ -131,7 +137,7 @@ def test_a_folder_holding_files_is_refused(
     (repository / "holiday.jpg").write_bytes(b"\xff\xd8")
 
     with pytest.raises(RepositoryNotEmptyError, match=str(repository).replace("\\", "\\\\")):
-        create_repository(workspace, PASSWORD, binaries=binaries, launch=ScriptedRestic())
+        create_repository(workspace, PASSWORD, binaries=binaries, restic=_restic())
 
     assert not (workspace.root / layout.ENV_FILE).exists()
 
@@ -141,11 +147,9 @@ def test_an_empty_existing_folder_is_used(
 ) -> None:
     repository.mkdir()
 
-    created = create_repository(
-        workspace, PASSWORD, binaries=binaries, launch=ScriptedRestic(Reply(stdout=[INITIALIZED]))
-    )
+    created = create_repository(workspace, PASSWORD, binaries=binaries, restic=_restic())
 
-    assert created == "62d06b01"
+    assert created == "f00d"
 
 
 def test_opening_needs_the_stored_password(
@@ -174,7 +178,7 @@ def test_opening_never_downloads_restic(
 def test_status_of_a_workspace_without_backups_says_they_are_off(
     workspace: Workspace, binaries: ResticBinaries
 ) -> None:
-    status = backup_status(workspace, binaries=binaries, launch=ScriptedRestic())
+    status = backup_status(workspace, binaries=binaries, restic=_restic())
 
     assert status.settings is None
     assert status.problem is None
@@ -184,34 +188,27 @@ def test_status_lists_the_snapshots_read_without_a_lock(
     workspace: Workspace, repository: Path, binaries: ResticBinaries
 ) -> None:
     (workspace.root / layout.ENV_FILE).write_text(f"{BACKUP_PASSWORD_VAR}={PASSWORD}\n")
-    snapshot = {
-        "time": "2026-11-23T08:00:00Z",
-        "paths": ["/w"],
-        "hostname": "h",
-        "id": "a" * 64,
-        "short_id": "aaaaaaaa",
-    }
-    launcher = ScriptedRestic(Reply(stdout=[[snapshot]]))
+    restic = _restic()
+    restic.snapshots.append(NOW)
 
-    status = backup_status(workspace, binaries=binaries, launch=launcher)
+    status = backup_status(workspace, binaries=binaries, restic=restic)
 
     assert status.problem is None
     assert status.settings is not None
     assert status.settings.repository == repository
     assert status.binary == repository.parent / "restic"
-    assert [s.short_id for s in status.snapshots or ()] == ["aaaaaaaa"]
-    assert launcher.commands == [["--no-lock", "snapshots"]]
+    assert [s.id for s in status.snapshots or ()] == [snapshot_id(1)]
+    assert (restic.operations, restic.reads_without_lock) == (["snapshots"], 1)
 
 
 def test_status_reports_what_stops_the_repository_opening(
     workspace: Workspace, repository: Path, binaries: ResticBinaries
 ) -> None:
     (workspace.root / layout.ENV_FILE).write_text(f"{BACKUP_PASSWORD_VAR}=not-the-one-at-all\n")
-    launcher = ScriptedRestic(
-        Reply(stderr=exit_error(12, "Fatal: wrong password or no key found"), exit_code=12)
-    )
+    restic = _restic()
+    restic.password = PASSWORD
 
-    status = backup_status(workspace, binaries=binaries, launch=launcher)
+    status = backup_status(workspace, binaries=binaries, restic=restic)
 
     assert status.snapshots is None
     assert status.problem is not None
@@ -223,7 +220,7 @@ def test_status_reports_what_stops_the_repository_opening(
 def test_status_reports_a_missing_password_without_running_restic(
     workspace: Workspace, repository: Path, binaries: ResticBinaries
 ) -> None:
-    status = backup_status(workspace, binaries=binaries, launch=ScriptedRestic())
+    status = backup_status(workspace, binaries=binaries, restic=_restic())
 
     assert status.problem is not None
     assert BACKUP_PASSWORD_VAR in status.problem

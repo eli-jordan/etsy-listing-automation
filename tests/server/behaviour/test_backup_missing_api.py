@@ -19,6 +19,7 @@ from etsy_listings.core.application.backup_coordinator import BackupEnvironment
 from etsy_listings.core.application.backup_repository import create_repository
 from etsy_listings.core.application.backup_run import BackupRunner
 from etsy_listings.core.backup.binary import RESTIC_BINARY_ENV_VAR, ResticBinaries
+from etsy_listings.core.backup.repository import ResticError
 from etsy_listings.core.config.secrets import BACKUP_PASSWORD_VAR
 from etsy_listings.core.workspace import layout
 from etsy_listings.core.workspace.workspace import Workspace
@@ -26,7 +27,7 @@ from etsy_listings.server.api.app import create_app
 
 from tests.support.ai_runs import wait_for
 from tests.support.repository_files import FakeRepository, files
-from tests.support.restic import Reply, RepositoryRestic, exit_error
+from tests.support.restic import InMemoryRestic
 
 NOW = datetime(2026, 11, 23, 9, 0, tzinfo=UTC)
 PASSWORD = "correct horse battery staple"
@@ -44,8 +45,8 @@ def repository(tmp_path: Path) -> Path:
 
 
 @pytest.fixture
-def restic(repository: Path) -> RepositoryRestic:
-    return RepositoryRestic(repository, lambda: NOW)
+def restic() -> InMemoryRestic:
+    return InMemoryRestic(lambda: NOW)
 
 
 def _configure(workspace_root: Path, repository: Path, *, password: bool = True) -> None:
@@ -57,8 +58,8 @@ def _configure(workspace_root: Path, repository: Path, *, password: bool = True)
 
 
 @pytest.fixture
-def client(workspace_root: Path, tmp_path: Path, restic: RepositoryRestic) -> Iterator[TestClient]:
-    environment = BackupEnvironment(home=tmp_path / "home", launch=restic, now=lambda: NOW)
+def client(workspace_root: Path, tmp_path: Path, restic: InMemoryRestic) -> Iterator[TestClient]:
+    environment = BackupEnvironment(home=tmp_path / "home", restic=restic, now=lambda: NOW)
     workspace = Workspace.discover(root_override=workspace_root)
     with TestClient(create_app(workspace, backup=environment)) as test_client:
         yield test_client
@@ -110,7 +111,7 @@ def _state(workspace_root: Path, folder: Path) -> dict[str, Any]:
 def test_a_missing_or_foreign_repository_stops_backups_and_warns(
     workspace_root: Path,
     repository: Path,
-    restic: RepositoryRestic,
+    restic: InMemoryRestic,
     tmp_path: Path,
     folder: str,
 ) -> None:
@@ -118,7 +119,7 @@ def test_a_missing_or_foreign_repository_stops_backups_and_warns(
         repository.mkdir()
         (repository / "holiday.jpg").write_bytes(b"not restic")
     _configure(workspace_root, repository)
-    environment = BackupEnvironment(home=tmp_path / "home", launch=restic, now=lambda: NOW)
+    environment = BackupEnvironment(home=tmp_path / "home", restic=restic, now=lambda: NOW)
     workspace = Workspace.discover(root_override=workspace_root)
 
     with TestClient(create_app(workspace, backup=environment)) as client:
@@ -134,7 +135,7 @@ def test_a_missing_or_foreign_repository_stops_backups_and_warns(
     )
     assert status["next_due"] is None
     assert refused.status_code == 409
-    assert restic.ran("backup") == 0
+    assert restic.ran("back_up") == 0
 
 
 def test_create_refuses_a_folder_that_holds_files(
@@ -239,7 +240,7 @@ def test_connect_copies_the_repository_to_local_disk_then_opens_it(
     workspace_root: Path,
     repository: Path,
     client: TestClient,
-    restic: RepositoryRestic,
+    restic: InMemoryRestic,
     tmp_path: Path,
 ) -> None:
     _configure(workspace_root, repository, password=False)
@@ -270,7 +271,7 @@ def test_a_wrong_password_leaves_nothing_half_saved(
     workspace_root: Path,
     repository: Path,
     client: TestClient,
-    restic: RepositoryRestic,
+    restic: InMemoryRestic,
     tmp_path: Path,
     password: str,
 ) -> None:
@@ -294,13 +295,13 @@ def test_connect_refuses_a_copy_that_opens_but_fails_check(
     workspace_root: Path,
     repository: Path,
     client: TestClient,
-    restic: RepositoryRestic,
+    restic: InMemoryRestic,
     tmp_path: Path,
 ) -> None:
     _configure(workspace_root, repository, password=False)
     cloud = _destination_copy(tmp_path)
     before = _state(workspace_root, repository) | {"cloud": files(cloud)}
-    restic.failing["check"] = Reply(exit_code=1, stderr=exit_error(1, "pack is missing"))
+    restic.fail("check", ResticError("restic: pack is missing", exit_code=1))
 
     refused = _connect(client, cloud, repository, PASSWORD)
 

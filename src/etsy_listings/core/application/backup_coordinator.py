@@ -61,7 +61,6 @@ from etsy_listings.core.application.backup_repository import (
     stored_password,
 )
 from etsy_listings.core.application.backup_restore import (
-    RestoreProgress,
     RestoreStatus,
     check_target,
     find_snapshot,
@@ -72,7 +71,13 @@ from etsy_listings.core.application.backup_setup import BackupSetUp, set_up_back
 from etsy_listings.core.application.job_gate import JobGate
 from etsy_listings.core.backup.binary import ResticBinaries
 from etsy_listings.core.backup.destinations import RepairResult
-from etsy_listings.core.backup.restic import Launch, Restic, ResticCancelledError, Snapshot
+from etsy_listings.core.backup.repository import (
+    OpenRepository,
+    Repository,
+    ResticCancelledError,
+    RestoreProgress,
+    Snapshot,
+)
 from etsy_listings.core.backup.state import BackupState, BackupStateStore, RunRecord
 from etsy_listings.core.config.settings import BackupSettings
 from etsy_listings.core.errors import ConflictError, MissingError, UserFacingError
@@ -107,11 +112,11 @@ def _utc_now() -> datetime:
 @dataclass(frozen=True)
 class BackupEnvironment:
     """What a coordinator runs with, injected by tests: ``home`` keeps the
-    state and history under ``tmp_path`` (plan, P2), ``launch`` replaces
-    restic, ``now`` is the clock."""
+    state and history under ``tmp_path`` (plan, P2), ``restic`` replaces
+    restic with an in-memory repository, ``now`` is the clock."""
 
     home: Path | None = None
-    launch: Launch | None = None
+    restic: OpenRepository | None = None
     now: Callable[[], datetime] = _utc_now
 
 
@@ -225,7 +230,7 @@ class BackupCoordinator:
                 answers,
                 expected_revision=expected_revision,
                 binaries=self._binaries,
-                launch=self._env.launch,
+                restic=self._env.restic,
             )
         )
 
@@ -234,7 +239,7 @@ class BackupCoordinator:
         seller chose, then start the first backup into it."""
         self._prepare_first_backup(
             lambda: create_new_repository(
-                self._workspace, answers, binaries=self._binaries, launch=self._env.launch
+                self._workspace, answers, binaries=self._binaries, restic=self._env.restic
             )
         )
 
@@ -249,7 +254,7 @@ class BackupCoordinator:
                 source,
                 answers,
                 binaries=self._binaries,
-                launch=self._env.launch,
+                restic=self._env.restic,
             )
         finally:
             self._release()
@@ -381,10 +386,10 @@ class BackupCoordinator:
             repository=settings.repository,
             destinations=settings.destinations,
         )
-        restic = open_repository(
-            self._workspace, binaries=self._binaries, launch=self._env.launch, settings=settings
+        repository = open_repository(
+            self._workspace, binaries=self._binaries, restic=self._env.restic, settings=settings
         )
-        found = find_snapshot(restic.snapshots(lock=False), snapshot)
+        found = find_snapshot(repository.snapshots(lock=False), snapshot)
         with self._lock:
             if self._stopping.is_set():
                 raise ConflictError("The app is shutting down.")
@@ -399,7 +404,7 @@ class BackupCoordinator:
             self._stop_restore = stop = threading.Event()
             self._restorer = threading.Thread(
                 target=self._run_restore,
-                args=(restic, found, target, stop),
+                args=(repository, found, target, stop),
                 name="backup-restore",
                 daemon=True,
             )
@@ -420,12 +425,12 @@ class BackupCoordinator:
             restorer.join(timeout)
 
     def _run_restore(
-        self, restic: Restic, snapshot: Snapshot, target: Path, stop: threading.Event
+        self, repository: Repository, snapshot: Snapshot, target: Path, stop: threading.Event
     ) -> None:
         update: dict[str, object] = {"outcome": "succeeded"}
         try:
             with self._maintenance_lock:
-                self._restore_to(restic, snapshot, target, stop)
+                self._restore_to(repository, snapshot, target, stop)
         except ResticCancelledError:
             update = {"outcome": "stopped", "message": "The restore was stopped."}
         except UserFacingError as exc:
@@ -439,7 +444,7 @@ class BackupCoordinator:
                 self._restore = self._restore.model_copy(update=update)
 
     def _restore_to(
-        self, restic: Restic, snapshot: Snapshot, target: Path, stop: threading.Event
+        self, repository: Repository, snapshot: Snapshot, target: Path, stop: threading.Event
     ) -> None:
         if stop.is_set():
             raise ResticCancelledError("The restore was stopped.")
@@ -448,10 +453,10 @@ class BackupCoordinator:
         target = check_target(
             target,
             workspace=self._workspace.root,
-            repository=restic.repository,
+            repository=repository.path,
             destinations=protected,
         )
-        restore(restic, snapshot, target, progress=self._heard_restore, cancel=stop)
+        restore(repository, snapshot, target, progress=self._heard_restore, cancel=stop)
 
     def _heard_restore(self, figures: RestoreProgress) -> None:
         with self._lock:
@@ -463,7 +468,7 @@ class BackupCoordinator:
             self._workspace,
             self._binaries,
             home=self._env.home,
-            launch=self._env.launch,
+            restic=self._env.restic,
             now=self._env.now,
         )
 
@@ -533,12 +538,12 @@ class BackupCoordinator:
         if not has_repository(settings.repository):
             return RepositoryReading(missing=True)
         try:
-            restic = open_repository(
+            repository = open_repository(
                 self._workspace,
                 binaries=self._binaries,
-                launch=self._env.launch,
+                restic=self._env.restic,
                 settings=settings,
             )
-            return RepositoryReading(missing=False, snapshots=restic.snapshots(lock=False))
+            return RepositoryReading(missing=False, snapshots=repository.snapshots(lock=False))
         except UserFacingError as exc:
             return RepositoryReading(missing=False, problem=str(exc))
