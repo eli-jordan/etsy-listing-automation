@@ -196,6 +196,7 @@ def test_while_paused_nothing_warms_and_resume_warms_in_request_order(
         gate.resume()
         assert warmer.wait_idle(timeout=WAIT)
     finally:
+        gate.stop()
         warmer.stop()
 
     assert recorder.calls == [
