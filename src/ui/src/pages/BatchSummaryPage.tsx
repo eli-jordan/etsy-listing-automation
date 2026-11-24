@@ -25,6 +25,7 @@ import { ListingHover } from "../components/ListingHover";
 import type { ListingSummary } from "../types";
 import { clock, dayMonth } from "../dates";
 import { EditableName } from "../components/EditableName";
+import { useIsPhone } from "../phone/usePhone";
 import { AiWorkflowIndicator } from "./editor/aiSeo/AiWorkflowIndicator";
 import { BatchDeployReviewedButton } from "./batchDeploy/BatchDeployReviewedButton";
 
@@ -258,12 +259,80 @@ function editorUrl(batch: string, row: BatchRow): string {
   return `/listings/${encodeURIComponent(row.name)}?batch=${encodeURIComponent(batch)}`;
 }
 
+/** One batch row as a phone card: the listing (its whole head a tap target
+ * into the editor once it exists), then its AI drafting and SEO proposal
+ * as labelled lines, then Reviewed and Retry where a thumb reaches them. */
+function PhoneRowCard({
+  batch,
+  row,
+  retryable,
+  onReview,
+  onRetry,
+}: {
+  batch: string;
+  row: BatchRow;
+  retryable: boolean;
+  onReview: (next: boolean) => void;
+  onRetry: () => void;
+}) {
+  const open = row.creation === "created" && !row.deleted;
+  const thumb = (
+    <img
+      className="listing-thumb"
+      src={
+        row.creation === "created"
+          ? listingDesignThumbnailUrl(row.design)
+          : batchRowThumbnailUrl(batch, row.id)
+      }
+      alt=""
+    />
+  );
+  const name = row.deleted ? <s>{row.name}</s> : row.name;
+  return (
+    <li className={open ? "m-card" : "m-card m-card--muted"}>
+      {open ? (
+        <Link className="m-card__head" to={editorUrl(batch, row)}>
+          {thumb}
+          <span className="m-row__name">{name}</span>
+          <span className="m-chevron" aria-hidden="true" />
+        </Link>
+      ) : (
+        <span className="m-card__head">
+          {thumb}
+          <span className="m-row__name">{name}</span>
+        </span>
+      )}
+      <dl className="m-card__facts">
+        <dt>AI drafting</dt>
+        <dd>
+          <AiCell row={row} />
+        </dd>
+        <dt>SEO proposal</dt>
+        <dd>
+          <ProposalCell row={row} />
+        </dd>
+      </dl>
+      {(row.reviewable || retryable) && (
+        <div className="m-card__actions">
+          {retryable && (
+            <button type="button" className="btn btn-secondary" onClick={onRetry}>
+              Retry
+            </button>
+          )}
+          {row.reviewable && <ReviewedCell row={row} onReview={onReview} />}
+        </div>
+      )}
+    </li>
+  );
+}
+
 export function BatchSummaryPage() {
   const { id = "" } = useParams();
   const navigate = useNavigate();
   const [batch, setBatch] = useState<BatchDetail | null>(null);
   const [error, setError] = useState("");
   const [deleting, setDeleting] = useState(false);
+  const isPhone = useIsPhone();
 
   const rows = batch?.rows ?? [];
   const kinds = rows.map(kindOf);
@@ -352,7 +421,9 @@ export function BatchSummaryPage() {
               label="Batch label"
               placeholder="Name this batch…"
             />
-            <span className="page-head__meta">Double-click the label to rename it</span>
+            <span className="page-head__meta">
+              {isPhone ? "Tap the name to rename it" : "Double-click the label to rename it"}
+            </span>
           </>
         ) : (
           <h1 className="page-head__title">Batch</h1>
@@ -459,92 +530,107 @@ export function BatchSummaryPage() {
             each listing.
           </p>
 
-          <table className="listings bc-table">
-            <thead>
-              <tr>
-                <th style={{ width: "22%" }}>Listing</th>
-                <th>AI drafting</th>
-                <th style={{ width: "17%" }}>SEO proposal</th>
-                <th style={{ width: "14%" }}>Reviewed</th>
-                <th className="bc-end"> </th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((row, index) => {
-                const open = row.creation === "created" && !row.deleted;
-                // A deploy's cancelled row has only its own Retry: Resume
-                // skips it, and it is not a failure for Retry N failed (ADR-0050).
-                const retryable = kinds[index] === "retry" || kinds[index] === "deployed";
-                return (
-                  <tr key={row.id} className={open ? undefined : "bc-tr--muted"}>
-                    <td>
-                      <span className="bc-cell">
-                        {open ? (
-                          <ListingHover
-                            listing={summaries.get(row.name) ?? null}
-                            thumb={
-                              <img
-                                className="listing-thumb"
-                                src={listingDesignThumbnailUrl(row.design)}
-                                alt=""
-                              />
-                            }
+          {isPhone ? (
+            <ul className="m-cards" aria-label="Listings in this batch">
+              {rows.map((row, index) => (
+                <PhoneRowCard
+                  key={row.id}
+                  batch={id}
+                  row={row}
+                  retryable={kinds[index] === "retry" || kinds[index] === "deployed"}
+                  onReview={(next) => act(setReviewed(id, row.id, next))}
+                  onRetry={() => act(retryBatchRow(id, row.id))}
+                />
+              ))}
+            </ul>
+          ) : (
+            <table className="listings bc-table">
+              <thead>
+                <tr>
+                  <th style={{ width: "22%" }}>Listing</th>
+                  <th>AI drafting</th>
+                  <th style={{ width: "17%" }}>SEO proposal</th>
+                  <th style={{ width: "14%" }}>Reviewed</th>
+                  <th className="bc-end"> </th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((row, index) => {
+                  const open = row.creation === "created" && !row.deleted;
+                  // A deploy's cancelled row has only its own Retry: Resume
+                  // skips it, and it is not a failure for Retry N failed (ADR-0050).
+                  const retryable = kinds[index] === "retry" || kinds[index] === "deployed";
+                  return (
+                    <tr key={row.id} className={open ? undefined : "bc-tr--muted"}>
+                      <td>
+                        <span className="bc-cell">
+                          {open ? (
+                            <ListingHover
+                              listing={summaries.get(row.name) ?? null}
+                              thumb={
+                                <img
+                                  className="listing-thumb"
+                                  src={listingDesignThumbnailUrl(row.design)}
+                                  alt=""
+                                />
+                              }
+                            >
+                              <Link className="listing-row__link" to={editorUrl(id, row)}>
+                                {row.name}
+                              </Link>
+                            </ListingHover>
+                          ) : (
+                            <img
+                              className="listing-thumb"
+                              src={
+                                row.creation === "created"
+                                  ? listingDesignThumbnailUrl(row.design)
+                                  : batchRowThumbnailUrl(id, row.id)
+                              }
+                              alt=""
+                            />
+                          )}
+                          {!open && (
+                            <span
+                              className={row.deleted ? "bc-muted" : undefined}
+                              style={{ fontWeight: 600 }}
+                            >
+                              {row.deleted ? <s>{row.name}</s> : row.name}
+                            </span>
+                          )}
+                        </span>
+                      </td>
+                      <td>
+                        <AiCell row={row} />
+                      </td>
+                      <td>
+                        <ProposalCell row={row} />
+                      </td>
+                      <td>
+                        <ReviewedCell
+                          row={row}
+                          onReview={(next) => act(setReviewed(id, row.id, next))}
+                        />
+                      </td>
+                      <td className="bc-end">
+                        {retryable && (
+                          <button
+                            type="button"
+                            className="btn btn-ghost"
+                            onClick={() => act(retryBatchRow(id, row.id))}
                           >
-                            <Link className="listing-row__link" to={editorUrl(id, row)}>
-                              {row.name}
-                            </Link>
-                          </ListingHover>
-                        ) : (
-                          <img
-                            className="listing-thumb"
-                            src={
-                              row.creation === "created"
-                                ? listingDesignThumbnailUrl(row.design)
-                                : batchRowThumbnailUrl(id, row.id)
-                            }
-                            alt=""
-                          />
+                            Retry
+                          </button>
                         )}
-                        {!open && (
-                          <span
-                            className={row.deleted ? "bc-muted" : undefined}
-                            style={{ fontWeight: 600 }}
-                          >
-                            {row.deleted ? <s>{row.name}</s> : row.name}
-                          </span>
-                        )}
-                      </span>
-                    </td>
-                    <td>
-                      <AiCell row={row} />
-                    </td>
-                    <td>
-                      <ProposalCell row={row} />
-                    </td>
-                    <td>
-                      <ReviewedCell
-                        row={row}
-                        onReview={(next) => act(setReviewed(id, row.id, next))}
-                      />
-                    </td>
-                    <td className="bc-end">
-                      {retryable && (
-                        <button
-                          type="button"
-                          className="btn btn-ghost"
-                          onClick={() => act(retryBatchRow(id, row.id))}
-                        >
-                          Retry
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
 
-          <div className="bc-row" style={{ marginTop: "var(--space-4)" }}>
+          <div className="bc-row bc-delete-record" style={{ marginTop: "var(--space-4)" }}>
             <span className="bc-small bc-muted">
               Deleting the batch record keeps every listing, design and brief it created.
             </span>

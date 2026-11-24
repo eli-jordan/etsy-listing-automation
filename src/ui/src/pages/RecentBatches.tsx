@@ -1,7 +1,8 @@
-import { useEffect, useState } from "react";
+import { type CSSProperties, useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { listBatches, type BatchIndexEntry, type BatchStatus } from "../api/batches";
 import { clock, dayMonth } from "../dates";
+import { useIsPhone } from "../phone/usePhone";
 
 /**
  * Recent batches (UI doc §2; the `templates` frame): every batch and every
@@ -72,9 +73,46 @@ function destination(entry: BatchIndexEntry): string {
   return entry.kind === "staging" ? `/batches/staging/${id}` : `/batches/${id}`;
 }
 
+function Failures({ entry, style }: { entry: BatchIndexEntry; style?: CSSProperties }) {
+  if (entry.failures === 0) return null;
+  return (
+    <span className="bc-status bc-status--error" style={style}>
+      <span className="bc-dot bc-dot--error" style={{ marginTop: 5 }} />
+      {entry.failures} {entry.failures === 1 ? "needs" : "need"} retry
+    </span>
+  );
+}
+
+/** The phone layout's batches: one tappable row each, the label and status
+ * on top and the progress, template and date as quiet lines beneath. */
+function PhoneBatchList({ entries }: { entries: BatchIndexEntry[] }) {
+  return (
+    <ul className="m-list" aria-label="Recent batches">
+      {entries.map((entry) => (
+        <li key={`${entry.kind}-${entry.id}`} className="m-row">
+          <Link className="m-row__main m-row__main--stack" to={destination(entry)}>
+            <span className="m-row__text">
+              <span className="m-row__top">
+                <span className="m-row__name">{entry.label}</span>
+                <BatchStatusTag status={entry.status} />
+              </span>
+              <span className="m-row__sub">{batchProgress(entry)}</span>
+              <Failures entry={entry} />
+              <span className="m-row__sub">
+                {entry.listing_template} · {created(entry.created_at)}
+              </span>
+            </span>
+          </Link>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 export function RecentBatches() {
   const [entries, setEntries] = useState<BatchIndexEntry[]>([]);
   const navigate = useNavigate();
+  const isPhone = useIsPhone();
 
   useEffect(() => {
     let current = true;
@@ -93,54 +131,53 @@ export function RecentBatches() {
   return (
     <section className="bc-section">
       <h2>Recent batches</h2>
-      <table className="listings bc-table">
-        <thead>
-          <tr>
-            <th>Batch</th>
-            <th>Status</th>
-            <th>Progress</th>
-            <th>Template</th>
-            <th>Created</th>
-          </tr>
-        </thead>
-        <tbody>
-          {entries.map((entry) => (
-            <tr
-              key={`${entry.kind}-${entry.id}`}
-              className="bc-tr--link"
-              onClick={() => navigate(destination(entry))}
-            >
-              <td style={{ whiteSpace: "nowrap" }}>
-                <Link
-                  className="listing-row__link"
-                  to={destination(entry)}
-                  onClick={(event) => event.stopPropagation()}
-                >
-                  {entry.label}
-                </Link>
-              </td>
-              <td>
-                <BatchStatusTag status={entry.status} />
-              </td>
-              <td>
-                {batchProgress(entry)}
-                {entry.failures > 0 && (
-                  <span className="bc-status bc-status--error" style={{ marginLeft: 8 }}>
-                    <span className="bc-dot bc-dot--error" style={{ marginTop: 5 }} />
-                    {entry.failures} {entry.failures === 1 ? "needs" : "need"} retry
-                  </span>
-                )}
-              </td>
-              <td className="bc-muted" style={{ whiteSpace: "nowrap" }}>
-                {entry.listing_template}
-              </td>
-              <td className="bc-muted" style={{ whiteSpace: "nowrap" }}>
-                {created(entry.created_at)}
-              </td>
+      {isPhone ? (
+        <PhoneBatchList entries={entries} />
+      ) : (
+        <table className="listings bc-table">
+          <thead>
+            <tr>
+              <th>Batch</th>
+              <th>Status</th>
+              <th>Progress</th>
+              <th>Template</th>
+              <th>Created</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {entries.map((entry) => (
+              <tr
+                key={`${entry.kind}-${entry.id}`}
+                className="bc-tr--link"
+                onClick={() => navigate(destination(entry))}
+              >
+                <td style={{ whiteSpace: "nowrap" }}>
+                  <Link
+                    className="listing-row__link"
+                    to={destination(entry)}
+                    onClick={(event) => event.stopPropagation()}
+                  >
+                    {entry.label}
+                  </Link>
+                </td>
+                <td>
+                  <BatchStatusTag status={entry.status} />
+                </td>
+                <td>
+                  {batchProgress(entry)}
+                  <Failures entry={entry} style={{ marginLeft: 8 }} />
+                </td>
+                <td className="bc-muted" style={{ whiteSpace: "nowrap" }}>
+                  {entry.listing_template}
+                </td>
+                <td className="bc-muted" style={{ whiteSpace: "nowrap" }}>
+                  {created(entry.created_at)}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
     </section>
   );
 }

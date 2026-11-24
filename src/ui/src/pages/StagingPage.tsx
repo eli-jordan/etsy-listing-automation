@@ -17,6 +17,7 @@ import {
   type StagingRow,
 } from "../api/batches";
 import { clock, dayMonth } from "../dates";
+import { useIsPhone } from "../phone/usePhone";
 
 /**
  * Staging review (UI doc §5; the `staging` and `staging-blocked` frames): one
@@ -132,6 +133,45 @@ function NameInput({ row, onCommit }: { row: StagingRow; onCommit: (name: string
   );
 }
 
+/** One staged design as a phone card: the file and Remove on top, the
+ * name field full width, then its check. */
+function PhoneStagingCard({
+  session,
+  row,
+  onEdit,
+}: {
+  session: string;
+  row: StagingRow;
+  onEdit: (body: Parameters<typeof patchStaging>[1]) => void;
+}) {
+  return (
+    <li className={row.state === "invalid" ? "m-card m-card--muted" : "m-card"}>
+      <span className="m-card__head">
+        <img className="listing-thumb" src={stagingThumbnailUrl(session, row.id)} alt="" />
+        <span className="m-row__name m-row__name--file">{row.sources[0]}</span>
+        <button
+          type="button"
+          className="m-card__remove"
+          aria-label={`Remove ${row.sources[0]}`}
+          onClick={() => onEdit({ remove: [row.id] })}
+        >
+          <XIcon className="bc-icon" />
+        </button>
+      </span>
+      {row.state === "invalid" ? (
+        <span className="bc-muted bc-small">{row.name}</span>
+      ) : (
+        <NameInput
+          key={row.name}
+          row={row}
+          onCommit={(name) => onEdit({ names: { [row.id]: name } })}
+        />
+      )}
+      <Check row={row} onUse={(name) => onEdit({ names: { [row.id]: name } })} />
+    </li>
+  );
+}
+
 export function StagingPage() {
   const { id = "" } = useParams();
   const navigate = useNavigate();
@@ -139,6 +179,7 @@ export function StagingPage() {
   const [label, setLabel] = useState("");
   const [error, setError] = useState("");
   const [creating, setCreating] = useState(false);
+  const isPhone = useIsPhone();
 
   useEffect(() => {
     let current = true;
@@ -282,7 +323,7 @@ export function StagingPage() {
             <span className="bc-mono">designs/&lt;name&gt;.png</span>.
           </p>
 
-          <div className="bc-row" style={{ marginBottom: "var(--space-3)" }}>
+          <div className="bc-row bc-staging-label" style={{ marginBottom: "var(--space-3)" }}>
             <label className="toolbar__filter">
               <span className="toolbar__filter-label">Batch label</span>
               <input
@@ -309,57 +350,69 @@ export function StagingPage() {
             )}
           </div>
 
-          <table className="listings bc-table">
-            <thead>
-              <tr>
-                <th style={{ width: "28%" }}>Design</th>
-                <th style={{ width: "26%" }}>Listing name</th>
-                <th>Check</th>
-                <th className="bc-end"> </th>
-              </tr>
-            </thead>
-            <tbody>
+          {isPhone ? (
+            <ul className="m-cards" aria-label="Staged designs">
               {rows.map((row) => (
-                <tr key={row.id} className={row.state === "invalid" ? "bc-tr--muted" : undefined}>
-                  <td>
-                    <span className="bc-cell">
-                      <img className="listing-thumb" src={stagingThumbnailUrl(id, row.id)} alt="" />
-                      <span className="bc-cell__text">
-                        <span className="bc-cell__sub" style={{ color: "var(--color-text)" }}>
-                          {row.sources[0]}
+                <PhoneStagingCard key={row.id} session={id} row={row} onEdit={edit} />
+              ))}
+            </ul>
+          ) : (
+            <table className="listings bc-table">
+              <thead>
+                <tr>
+                  <th style={{ width: "28%" }}>Design</th>
+                  <th style={{ width: "26%" }}>Listing name</th>
+                  <th>Check</th>
+                  <th className="bc-end"> </th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((row) => (
+                  <tr key={row.id} className={row.state === "invalid" ? "bc-tr--muted" : undefined}>
+                    <td>
+                      <span className="bc-cell">
+                        <img
+                          className="listing-thumb"
+                          src={stagingThumbnailUrl(id, row.id)}
+                          alt=""
+                        />
+                        <span className="bc-cell__text">
+                          <span className="bc-cell__sub" style={{ color: "var(--color-text)" }}>
+                            {row.sources[0]}
+                          </span>
                         </span>
                       </span>
-                    </span>
-                  </td>
-                  <td>
-                    {row.state === "invalid" ? (
-                      <span className="bc-muted bc-small">{row.name}</span>
-                    ) : (
-                      <NameInput
-                        key={row.name}
-                        row={row}
-                        onCommit={(name) => edit({ names: { [row.id]: name } })}
-                      />
-                    )}
-                  </td>
-                  <td>
-                    <Check row={row} onUse={(name) => edit({ names: { [row.id]: name } })} />
-                  </td>
-                  <td className="bc-end">
-                    <button
-                      type="button"
-                      className="bc-quiet"
-                      aria-label={`Remove ${row.sources[0]}`}
-                      title="Remove from batch"
-                      onClick={() => edit({ remove: [row.id] })}
-                    >
-                      <XIcon className="bc-icon" style={{ width: 13, height: 13 }} />
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                    </td>
+                    <td>
+                      {row.state === "invalid" ? (
+                        <span className="bc-muted bc-small">{row.name}</span>
+                      ) : (
+                        <NameInput
+                          key={row.name}
+                          row={row}
+                          onCommit={(name) => edit({ names: { [row.id]: name } })}
+                        />
+                      )}
+                    </td>
+                    <td>
+                      <Check row={row} onUse={(name) => edit({ names: { [row.id]: name } })} />
+                    </td>
+                    <td className="bc-end">
+                      <button
+                        type="button"
+                        className="bc-quiet"
+                        aria-label={`Remove ${row.sources[0]}`}
+                        title="Remove from batch"
+                        onClick={() => edit({ remove: [row.id] })}
+                      >
+                        <XIcon className="bc-icon" style={{ width: 13, height: 13 }} />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
 
           <p className="bc-small bc-muted" style={{ marginTop: "var(--space-3)" }}>
             This staging is saved on the server until {day(session.expires_at)}, so reloading the

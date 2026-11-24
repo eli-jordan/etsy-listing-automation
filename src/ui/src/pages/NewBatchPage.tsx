@@ -6,6 +6,7 @@ import { Link, useLocation, useNavigate, useSearchParams } from "react-router-do
 import { stageDesigns, StagingRefused, type StagingRefusal } from "../api/batches";
 import { listListingTemplates } from "../api/listingTemplates";
 import { ownedTile } from "../media";
+import { useIsPhone } from "../phone/usePhone";
 import type { ListingTemplateSummary } from "../types";
 
 /**
@@ -35,8 +36,10 @@ function refusedHeading(files: string[]): string {
   return files.length === 1 && only ? `${only} was not staged.` : "These files were not staged.";
 }
 
-function dropTitle(busy: boolean, refused: boolean): string {
+/** A phone has no files to drag, so there the zone asks you to pick them. */
+function dropTitle(busy: boolean, refused: boolean, phone = false): string {
   if (busy) return "Staging…";
+  if (phone) return refused ? "Choose a different ZIP or PNGs" : "Choose a ZIP or PNGs";
   return refused ? "Drop a different ZIP or PNGs" : "Drop a ZIP or PNGs here";
 }
 
@@ -50,6 +53,7 @@ export function NewBatchPage() {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const input = useRef<HTMLInputElement>(null);
+  const isPhone = useIsPhone();
 
   useEffect(() => {
     let current = true;
@@ -176,13 +180,17 @@ export function NewBatchPage() {
             onDrop={onDrop}
           >
             <FileZipIcon className="bc-drop__icon" />
-            <span className="bc-drop__title">{dropTitle(busy, refused !== null)}</span>
+            <span className="bc-drop__title">{dropTitle(busy, refused !== null, isPhone)}</span>
             <span className="bc-small bc-muted">
               Kittl exports work as they are. Every PNG in the ZIP, in any folder, becomes a design.
             </span>
             <span className="bc-row" style={{ marginTop: "var(--space-1)" }}>
-              <button type="button" className="btn btn-secondary" disabled={!chosen || busy}>
-                Choose files…
+              <button
+                type="button"
+                className={isPhone ? "btn btn-primary" : "btn btn-secondary"}
+                disabled={!chosen || busy}
+              >
+                {isPhone ? "Choose files" : "Choose files…"}
               </button>
             </span>
             <input

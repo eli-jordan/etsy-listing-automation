@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { listListings } from "../api/listings";
 import { STATUS_LABELS } from "../components/StatusTag";
+import { useIsPhone } from "../phone/usePhone";
 import type { ListingStatus, ListingSummary } from "../types";
 
 /**
@@ -24,6 +25,7 @@ export function DashboardPage() {
   const navigate = useNavigate();
   const [listings, setListings] = useState<ListingSummary[] | null>(null);
   const [status, setStatus] = useState("");
+  const isPhone = useIsPhone();
 
   useEffect(() => {
     listListings()
@@ -60,13 +62,29 @@ export function DashboardPage() {
           request is still in flight states something false. */}
       {listings !== null && (
         <div className="stat-row">
-          {CARDS.map((card) => (
-            <div key={card.status} className="card stat-card">
-              <span className="stat-card__label">{STATUS_LABELS[card.status]}</span>
-              <span className="stat-card__value">{counts(card.status)}</span>
-              <span className="stat-card__caption">{card.caption}</span>
-            </div>
-          ))}
+          {CARDS.map((card) => {
+            const body = (
+              <>
+                <span className="stat-card__label">{STATUS_LABELS[card.status]}</span>
+                <span className="stat-card__value">{counts(card.status)}</span>
+                <span className="stat-card__caption">{card.caption}</span>
+              </>
+            );
+            // On a phone each count is a shortcut to the listings it counts.
+            return isPhone ? (
+              <Link
+                key={card.status}
+                className="card stat-card stat-card--link"
+                to={`/listings?status=${card.status}`}
+              >
+                {body}
+              </Link>
+            ) : (
+              <div key={card.status} className="card stat-card">
+                {body}
+              </div>
+            );
+          })}
         </div>
       )}
 

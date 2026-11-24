@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import { useIsPhone } from "../phone/usePhone";
 
 /**
  * The listing editor's page-head title, in both states a listing can have a
@@ -66,6 +67,9 @@ export function EditableName({
   // the keydown either way -- so the key handler records what it decided and
   // the blur handler obeys it.
   const reverting = useRef(false);
+  // A finger cannot double-click: on a phone one tap opens the field, and a
+  // pencil says the name is editable.
+  const isPhone = useIsPhone();
 
   // Adjusting state while rendering, rather than in an effect: the name landed
   // (a rename went through, or this page moved to another listing) and the edit
@@ -98,9 +102,10 @@ export function EditableName({
     return (
       <Title
         className={titleClassName}
-        title="Double-click to rename"
+        title={isPhone ? "Tap to rename" : "Double-click to rename"}
         tabIndex={0}
         onDoubleClick={() => setOpened(true)}
+        onClick={isPhone ? () => setOpened(true) : undefined}
         // Keyboard equivalents, because a rename reachable only with a mouse
         // would be the one control in this editor that is.
         onKeyDown={(event) => {
@@ -108,6 +113,7 @@ export function EditableName({
         }}
       >
         {value}
+        {isPhone && <span className="editable-name__pencil" aria-hidden="true" />}
       </Title>
     );
   }

@@ -42,7 +42,7 @@ def test_mobile_shell_keeps_listing_workflows_usable_without_page_overflow(
 
     page.get_by_role("navigation").get_by_role("link", name="Listings").click()
     page.get_by_role("heading", name="Listings").wait_for(state="visible")
-    page.get_by_role("button", name="+ New listing").wait_for(state="visible")
+    page.get_by_role("button", name="New listing").wait_for(state="visible")
     assert_mobile_page_fits(page)
 
     page.goto(f"{origin}/listings/take-a-hike")
