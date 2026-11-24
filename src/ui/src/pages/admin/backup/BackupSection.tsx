@@ -8,7 +8,6 @@ import { XIcon } from "@phosphor-icons/react/dist/csr/X";
 import { useEffect, useRef, useState } from "react";
 import {
   type BackupSettings,
-  type BackupStatus,
   type DestinationStatus,
   getBackupHistory,
   type HistoryEntry,
@@ -18,6 +17,7 @@ import {
   type SetUpOutcome,
 } from "../../../api/backup";
 import type { SettingsChanges } from "../../../api/workspaceSettings";
+import type { BackupsOn } from "../../../shell/backupAttention";
 import { useBackupStatus } from "../../../shell/backupStatus";
 import type { RepositoryAction } from "../useWorkspaceSettings";
 import { type Answer, BackupForm } from "./BackupForm";
@@ -37,14 +37,7 @@ import {
 } from "./MissingRepository";
 import { RestoreDialogs, RestoreStrip } from "./Restore";
 import { useRestore } from "./useRestore";
-import {
-  type BackupAnswers,
-  NEW_BACKUP,
-  repairNote,
-  retryable,
-  runningLine,
-  summary,
-} from "./backupText";
+import { type BackupAnswers, NEW_BACKUP, repairNote, runningLine, summary } from "./backupText";
 import "./backup.css";
 
 export type BackupPage = "status" | "setup";
@@ -93,20 +86,19 @@ export function BackupSection({
   replaceRepository: (action: RepositoryAction) => Promise<SetUpOutcome>;
   save: (changes: SettingsChanges) => Promise<SaveAnswer>;
 }) {
-  const { status, error, readAt, refresh } = useBackupStatus();
+  const { view, readAt, refresh } = useBackupStatus();
   const [creating, setCreating] = useState(false);
 
-  if (!status)
-    return error ? (
+  if (view.state === "loading") return <p role="status">Loading backups…</p>;
+  if (view.state === "error")
+    return (
       <div className="adm-warn" role="alert">
         <WarningIcon size={18} />
-        <span>{error}</span>
+        <span>{view.error}</span>
       </div>
-    ) : (
-      <p role="status">Loading backups…</p>
     );
 
-  if (!status.enabled) {
+  if (view.state === "off") {
     if (!creating) return <NotSetUp onStart={() => setCreating(true)} />;
     const create = async (answers: BackupAnswers, password: string): Answer => {
       try {
@@ -148,7 +140,7 @@ export function BackupSection({
 
   return (
     <StatusPage
-      status={status}
+      view={view}
       now={readAt}
       retention={saved?.retention ?? NEW_BACKUP.retention}
       refresh={refresh}
@@ -184,32 +176,27 @@ function changes(answers: BackupAnswers, base: BackupAnswers): SettingsChanges {
 type Repair = { destination: DestinationStatus; working: boolean; error: string | null };
 
 function StatusPage({
-  status,
+  view,
   now,
   retention,
   refresh,
   replaceRepository,
   onSetup,
 }: {
-  status: BackupStatus;
+  view: BackupsOn;
   now: number;
   retention: RetentionSettings;
   refresh: () => Promise<unknown>;
   replaceRepository: (action: RepositoryAction) => Promise<SetUpOutcome>;
   onSetup: () => void;
 }) {
-  const history = useHistory(status);
-  const restore = useRestore(status, refresh);
+  const { status } = view;
+  const history = useHistory(view);
+  const restore = useRestore(view, refresh);
   const [note, setNote] = useState<string | null>(null);
   const [repair, setRepair] = useState<Repair | null>(null);
   const [replacing, setReplacing] = useState<RepositoryMode | null>(null);
-  const warnings = status.warnings.filter((w) => w.banner);
-  const retry = warnings.filter(retryable);
-  const missing = warnings.find((w) => w.kind === "repository_missing");
-  const changed = status.destinations.filter((d) =>
-    warnings.some((w) => w.kind === "changed" && w.destination === d.path),
-  );
-  const { tone, headline, detail } = summary(status, now);
+  const { tone, headline, detail } = summary(view, now);
 
   const backUp = () => {
     setNote(null);
@@ -245,39 +232,45 @@ function StatusPage({
 
   return (
     <>
-      {missing && <MissingRepositoryBanner warning={missing} onAction={setReplacing} />}
-      {changed.map((d) => (
-        <ChangedFilesBanner
-          key={d.path}
-          destination={d}
-          onRepair={() => setRepair({ destination: d, working: false, error: null })}
-        />
-      ))}
-      {retry.length > 0 && (
-        <div className="adm-warn bk-banner" role="alert">
-          <WarningIcon size={18} />
-          <span>
-            <strong>{retry[0]?.message}</strong>{" "}
-            {retry
-              .slice(1)
-              .map((w) => w.message)
-              .join(" ")}
-          </span>
-          <button
-            type="button"
-            className="btn btn-secondary bk-banner__btn"
-            disabled={Boolean(status.running)}
-            onClick={backUp}
-          >
-            Try again
-          </button>
-        </div>
-      )}
+      {view.attention.map((item) => {
+        if (item.action === "connect")
+          return (
+            <MissingRepositoryBanner key="connect" warning={item.warning} onAction={setReplacing} />
+          );
+        if (item.action === "repair") {
+          const { destination } = item;
+          return (
+            <ChangedFilesBanner
+              key={destination.path}
+              destination={destination}
+              onRepair={() => setRepair({ destination, working: false, error: null })}
+            />
+          );
+        }
+        const [first, ...rest] = item.warnings;
+        return (
+          <div key="retry" className="adm-warn bk-banner" role="alert">
+            <WarningIcon size={18} />
+            <span>
+              <strong>{first?.message}</strong> {rest.map((w) => w.message).join(" ")}
+            </span>
+            <button
+              type="button"
+              className="btn btn-secondary bk-banner__btn"
+              disabled={view.running}
+              onClick={backUp}
+            >
+              Try again
+            </button>
+          </div>
+        );
+      })}
       <StatusPanel
         tone={tone}
         headline={headline}
         detail={detail}
-        running={status.running ? runningLine(status.running) : undefined}
+        running={view.running}
+        runningLine={status.running ? runningLine(status.running) : undefined}
         restore={{
           disabled: restore.busy || !status.repository?.snapshots,
           onClick: () => restore.begin(),
@@ -306,7 +299,7 @@ function StatusPage({
           </div>
         )}
       </StatusPanel>
-      <StoragePipeline status={status} now={now} onSetup={onSetup} />
+      <StoragePipeline view={view} now={now} onSetup={onSetup} />
       {history.error && (
         <p className="adm-error-text" role="alert">
           {history.error}
@@ -345,12 +338,12 @@ function StatusPage({
 
 /** The history, read again whenever a run starts or ends. The newest run,
  * when it finished after the page opened, is `fresh`: briefly highlighted. */
-function useHistory(status: BackupStatus) {
+function useHistory({ status, running }: BackupsOn) {
   const [entries, setEntries] = useState<HistoryEntry[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [fresh, setFresh] = useState<string | undefined>();
   const opened = useRef<number | null>(null);
-  const key = `${status.running ? "running" : "idle"} ${status.last_success ?? ""}`;
+  const key = `${running ? "running" : "idle"} ${status.last_success ?? ""}`;
   useEffect(() => {
     opened.current ??= Date.now();
     const since = opened.current;

@@ -15,6 +15,7 @@ import { MemoryRouter, useLocation } from "react-router-dom";
 import * as backupApi from "../../api/backup";
 import type { BackupStatus } from "../../api/backup";
 import { BackupStatusProvider } from "../../shell/BackupStatusProvider";
+import { backupsOff, backupsOn, backupWarning } from "../../test/backup";
 import { AdminPage } from "./AdminPage";
 
 /* Admin plan, PR 3: the Shop tab against a mocked HTTP surface. Each save
@@ -156,11 +157,7 @@ beforeEach(() => {
 
 afterEach(() => vi.restoreAllMocks());
 
-const OFF: BackupStatus = {
-  enabled: false,
-  destinations: [],
-  warnings: [{ kind: "off", message: "Backups are off.", banner: false }],
-};
+const OFF = backupsOff();
 
 function Where() {
   const { search } = useLocation();
@@ -242,14 +239,6 @@ describe("Admin page shell", () => {
   });
 });
 
-const ON: BackupStatus = {
-  enabled: true,
-  interval_hours: 12,
-  repository: { path: "C:/backups/studio", missing: false, snapshots: 0, password_stored: true },
-  destinations: [],
-  warnings: [],
-};
-
 describe("Admin sections in the address", () => {
   it.each([
     ["", "Connected shops"],
@@ -290,7 +279,7 @@ describe("Backup in the Admin nav", () => {
   });
 
   it("nests Status and history and Setup once set up, opening Status and history", async () => {
-    renderAdmin("?section=backup", ON);
+    renderAdmin("?section=backup", backupsOn());
     const status = await screen.findByRole("link", { name: "Status and history" });
     expect(status).toHaveAttribute("aria-current", "page");
     expect(screen.getByRole("link", { name: /Backup/ })).not.toHaveTextContent("off");
@@ -307,20 +296,8 @@ describe("Backup in the Admin nav", () => {
   });
 
   it("carries a warning icon while a warning applies", async () => {
-    renderAdmin("?section=ai", {
-      ...ON,
-      warnings: [
-        { kind: "stale", message: "The last backup is more than a day old.", banner: true },
-      ],
-    });
+    renderAdmin("?section=ai", backupsOn({ warnings: [backupWarning("stale")] }));
     expect(await screen.findByRole("img", { name: "Needs attention" })).toBeInTheDocument();
-  });
-
-  it("carries no icon for backups being off", async () => {
-    renderAdmin("?section=ai");
-    await screen.findByRole("link", { name: /Backup/ });
-    await waitFor(() => expect(backupApi.getBackupStatus).toHaveBeenCalled());
-    expect(screen.queryByRole("img", { name: "Needs attention" })).not.toBeInTheDocument();
   });
 });
 

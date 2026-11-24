@@ -1366,6 +1366,18 @@ and `backup.retention`. The destinations are known by their path (`ITSELF` in
 created only by set-up or by the save that adds it, and only inside a folder
 that exists (`core/application/backup_setup.py`).
 
+In the UI, the shell's `BackupStatusProvider` polls `GET /api/backup` once for
+every surface. `useBackupStatus()` returns no raw status. It returns a
+`BackupView` from `ui/src/shell/backupAttention.ts`, a pure module that encodes
+the interactions doc's *Warnings* table in one place. The view says whether
+backups are loading, unread, off or on. It gives the warning the shell banner
+and both nav marks show, and each banner on Status and history with its action:
+connect, repair, or one Try again for the rest. It also says whether a backup
+or repair is running and whether a restore is running, and gives each
+destination's files to check. A destination has changed files only when a
+`changed` warning names it. The shell, the Admin nav, `BackupSection`,
+`BackupPanels`, `backupText.summary` and `useRestore` only draw the view.
+
 A restore is `core/application/backup_restore.py`: it refuses the live
 workspace, the repository, the destinations, paths inside any of them and a
 folder that holds files. It checks the target again before starting

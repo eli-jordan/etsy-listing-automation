@@ -19,6 +19,7 @@ import type {
   HistoryEntry,
   RetentionSettings,
 } from "../../../api/backup";
+import type { BackupsOn, Copy } from "../../../shell/backupAttention";
 import {
   ago,
   bytes,
@@ -117,6 +118,7 @@ export function StatusPanel({
   headline,
   detail,
   running,
+  runningLine,
   restore,
   onBackup,
   children,
@@ -124,7 +126,10 @@ export function StatusPanel({
   tone: "ok" | "warn";
   headline: string;
   detail: string;
-  running: string | undefined;
+  /** A backup or repair runs, so Back up now waits. */
+  running: boolean;
+  /** What it is doing, under the detail. */
+  runningLine: string | undefined;
   /** Restore…: disabled while a restore runs or with no backup to restore. */
   restore: { disabled: boolean; onClick: () => void };
   onBackup: () => void;
@@ -145,9 +150,9 @@ export function StatusPanel({
           {headline}
         </h2>
         <p className="b-panel__lede">{detail}</p>
-        {running && (
+        {runningLine && (
           <p className="bk-status__running" role="status">
-            <CircleNotchIcon size={14} className="adm-spin" /> {running}
+            <CircleNotchIcon size={14} className="adm-spin" /> {runningLine}
           </p>
         )}
       </div>
@@ -160,12 +165,7 @@ export function StatusPanel({
         >
           <ArrowCounterClockwiseIcon size={16} /> Restore…
         </button>
-        <button
-          type="button"
-          className="btn btn-primary"
-          disabled={running !== undefined}
-          onClick={onBackup}
-        >
+        <button type="button" className="btn btn-primary" disabled={running} onClick={onBackup}>
           {running ? "Backing up…" : "Back up now"}
         </button>
       </div>
@@ -183,8 +183,7 @@ function repositoryState(status: BackupStatus): { ok: boolean; text: string } {
   return { ok: true, text: check ? `Checked ${when(check.at).split(",")[0]}` : "Not checked yet" };
 }
 
-function copyState(destination: DestinationStatus): { ok: boolean; text: string } {
-  const found = destination.changed.length + destination.unexpected.length;
+function copyState({ destination, toCheck: found }: Copy): { ok: boolean; text: string } {
   if (found) return { ok: false, text: `${found} file${found === 1 ? "" : "s"} to check` };
   if (destination.problem) return { ok: false, text: shortProblem(destination.problem) };
   if (destination.behind) return { ok: false, text: "Behind" };
@@ -204,14 +203,15 @@ function shortProblem(problem: string): string {
  * files one way into each destination, and the sync client takes it there.
  */
 export function StoragePipeline({
-  status,
+  view,
   now,
   onSetup,
 }: {
-  status: BackupStatus;
+  view: BackupsOn;
   now: number;
   onSetup: () => void;
 }) {
+  const { status } = view;
   const repository = status.repository?.path ?? "";
   const stored = repositoryState(status);
   const every = everyLabel(status.interval_hours ?? 12);
@@ -262,13 +262,14 @@ export function StoragePipeline({
           <ArrowRightIcon size={18} className="bk-arrow__icon" />
         </li>
         <li className="bk-dests">
-          {status.destinations.length === 0 && (
+          {view.copies.length === 0 && (
             <span className="bk-node bk-node--empty bk-sub">
               No destinations. A failed disk loses the backups too.
             </span>
           )}
-          {status.destinations.map((d) => {
-            const state = copyState(d);
+          {view.copies.map((copy) => {
+            const d = copy.destination;
+            const state = copyState(copy);
             const name = destinationName(d.path);
             return (
               <span className="bk-node" key={d.path}>

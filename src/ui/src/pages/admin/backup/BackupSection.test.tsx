@@ -3,21 +3,29 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, type MockInstance, vi } from "vitest";
 import * as backupApi from "../../../api/backup";
-import type { BackupStatus, HistoryEntry } from "../../../api/backup";
+import type { HistoryEntry } from "../../../api/backup";
 import * as settingsApi from "../../../api/workspaceSettings";
 import type { WorkspaceSettings } from "../../../api/workspaceSettings";
 import { BackupStatusProvider } from "../../../shell/BackupStatusProvider";
+import {
+  BACKUP_ICLOUD,
+  BACKUP_REPOSITORY,
+  backupsOff,
+  backupsOn,
+  backupsMissing,
+  hoursFromNow,
+} from "../../../test/backup";
 import { AdminPage } from "../AdminPage";
 
 /* Workspace-backup plan, PR 6: Admin › Settings › Backup against a mocked
    HTTP surface (interactions, *Status and history*, *Set up and Setup*,
    *Warnings*, *Changed and unexpected files*). */
 
-const REPO = "D:/backups/studio";
-const ICLOUD = "C:/Users/me/iCloudDrive/studio-backups";
+const REPO = BACKUP_REPOSITORY;
+const ICLOUD = BACKUP_ICLOUD;
 const HOUR = 3_600_000;
 const PASSPHRASE = ["correct", "horse", "battery"].join("-");
-const iso = (offsetHours: number) => new Date(Date.now() + offsetHours * HOUR).toISOString();
+const iso = hoursFromNow;
 
 const weights = { reviews: 100 };
 function workspace(backup?: WorkspaceSettings["backup"]): WorkspaceSettings {
@@ -41,26 +49,8 @@ const SAVED_BLOCK = {
   retention: { keep_within_days: 7, weekly: 4, monthly: 3 },
 };
 
-const OFF: BackupStatus = {
-  enabled: false,
-  destinations: [],
-  warnings: [{ kind: "off", message: "Backups are off.", banner: false }],
-};
-
-function healthy(extra: Partial<BackupStatus> = {}): BackupStatus {
-  return {
-    enabled: true,
-    interval_hours: 12,
-    last_success: iso(-2),
-    next_due: iso(10),
-    repository: { path: REPO, missing: false, snapshots: 5, password_stored: true },
-    destinations: [
-      { path: ICLOUD, last_copy: iso(-2), behind: false, changed: [], unexpected: [] },
-    ],
-    warnings: [],
-    ...extra,
-  };
-}
+const OFF = backupsOff();
+const healthy = backupsOn;
 
 function run(startedHoursAgo: number, extra: Partial<HistoryEntry["run"]> = {}): HistoryEntry {
   return {
@@ -452,27 +442,10 @@ describe("Warnings on the Backup page", () => {
     await waitFor(() => expect(screen.queryByRole("alert")).not.toBeInTheDocument());
   });
 
-  it("names a missing repository and offers its two actions", async () => {
-    status.mockResolvedValue(
-      healthy({
-        repository: { path: REPO, missing: true, snapshots: 0, password_stored: true },
-        warnings: [
-          {
-            kind: "repository_missing",
-            message: `Backup repository not found at ${REPO}. Backups have stopped.`,
-            banner: true,
-          },
-        ],
-      }),
-    );
+  it("names a missing repository, and the storage folder as not found", async () => {
+    status.mockResolvedValue(backupsMissing());
     open();
-    const banner = await screen.findByRole("alert");
-    expect(banner).toHaveTextContent("Backup repository not found");
-    expect(
-      within(banner)
-        .getAllByRole("button")
-        .map((b) => b.textContent),
-    ).toEqual(["Create a new repository", "Connect an existing repository"]);
+    expect(await screen.findByRole("alert")).toHaveTextContent("Backup repository not found");
     expect(screen.getByText("Not found")).toHaveClass("bk-pill--bad");
   });
 });

@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
 import { getWorkspace } from "../api/listings";
 import "../pages/admin/backup/backup.css";
-import { bannerWarnings, useBackupStatus } from "./backupStatus";
+import { useBackupStatus } from "./backupStatus";
 import { BackupStatusProvider } from "./BackupStatusProvider";
 import { ShellSidebar } from "./ShellSidebar";
 
@@ -39,7 +39,7 @@ function Shell() {
   const inBatches = pathname.startsWith("/batches/");
   // A backup warning shows on every page but Admin, which has its own
   // (workspace-backup interactions, *Warnings*); it cannot be dismissed.
-  const warning = bannerWarnings(useBackupStatus().status)[0];
+  const warning = useBackupStatus().view.banner;
 
   useEffect(() => {
     getWorkspace()

@@ -1,12 +1,12 @@
 import { useEffect, useState } from "react";
 import {
   type BackupSnapshots,
-  type BackupStatus,
   getBackupSnapshots,
   type RestoreStatus,
   startRestore,
   stopRestore,
 } from "../../../api/backup";
+import type { BackupsOn } from "../../../shell/backupAttention";
 
 export type RestoreFlow = ReturnType<typeof useRestore>;
 
@@ -19,13 +19,13 @@ const failure = (e: unknown, fallback: string) => (e instanceof Error ? e.messag
  * (progress, then Restored) is open. A dismissed restore's note stays away
  * until the next restore.
  */
-export function useRestore(status: BackupStatus, refresh: () => Promise<unknown>) {
+export function useRestore(view: BackupsOn, refresh: () => Promise<unknown>) {
   const [picking, setPicking] = useState<{ snapshot: string | undefined } | null>(null);
   const [choices, setChoices] = useState<BackupSnapshots | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [shown, setShown] = useState(false);
   const [dismissed, setDismissed] = useState<string | null>(null);
-  const latest = status.restore ?? null;
+  const latest = view.status.restore ?? null;
   const restore = latest && latest.started_at !== dismissed ? latest : null;
 
   useEffect(() => {
@@ -45,7 +45,7 @@ export function useRestore(status: BackupStatus, refresh: () => Promise<unknown>
     shown,
     error,
     /** Only one restore runs at a time, so every Restore… waits for it. */
-    busy: latest?.outcome === "running",
+    busy: view.restoring,
     /** The dialog's choices, once read, while it is open. */
     picking: picking && choices ? { ...picking, choices } : null,
     /** Open the restore dialog on `snapshot`, or the newest. */

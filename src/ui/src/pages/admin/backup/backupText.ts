@@ -1,7 +1,5 @@
 import type {
   BackupSnapshot,
-  BackupStatus,
-  BackupWarning,
   HistoryEntry,
   IntervalHours,
   RepairResult,
@@ -9,6 +7,7 @@ import type {
   RetentionSettings,
   RunningBackup,
 } from "../../../api/backup";
+import type { BackupsOn } from "../../../shell/backupAttention";
 import { timeAgo } from "../../editor/timeAgo";
 
 export const INTERVALS = [4, 6, 12, 24, 48] as const;
@@ -120,11 +119,10 @@ function filesCounted({ files_done: done, files_total: total }: RunningBackup): 
 
 /** The status panel's headline and detail. */
 export function summary(
-  status: BackupStatus,
+  { status, warnings }: BackupsOn,
   now: number,
 ): { tone: "ok" | "warn"; headline: string; detail: string } {
   const last = status.last_success ? `Backed up ${ago(status.last_success, now)}` : null;
-  const warnings = status.warnings.filter((w) => w.banner);
   const kept = `${status.repository?.snapshots ?? 0} backups kept`;
   const every = everyLabel(status.interval_hours ?? 12).toLowerCase();
   if (status.running?.operation === "backup" && !status.last_success)
@@ -164,12 +162,6 @@ function nextLine(due: string | null | undefined, now: number): string {
   const hours = Math.round((Date.parse(due) - now) / 3_600_000);
   if (hours <= 0) return "Next backup due now";
   return `Next backup in about ${hours} hour${hours === 1 ? "" : "s"}`;
-}
-
-/** The warnings that a Try again answers: all but changed files and a
- * missing repository, which have their own actions. */
-export function retryable(warning: BackupWarning): boolean {
-  return warning.kind === "stale" || warning.kind === "failed" || warning.kind === "behind";
 }
 
 export type RowResult = "ok" | "partial" | "failed" | "stopped";

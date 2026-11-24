@@ -7,7 +7,7 @@ import { WarningIcon } from "@phosphor-icons/react/dist/csr/Warning";
 import { type MouseEvent, type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { getShopConnections, type ShopConnections } from "../../api/shop";
-import { bannerWarnings, useBackupStatus } from "../../shell/backupStatus";
+import { useBackupStatus } from "../../shell/backupStatus";
 import type { BackupPage } from "./backup/BackupSection";
 import { ConnectedShops } from "./ConnectedShops";
 import { CurrencyDialog } from "./CurrencyDialog";
@@ -225,9 +225,9 @@ function Nav({
   backupPage: BackupPage;
   onPick: (s: Section, page?: BackupPage) => void;
 }) {
-  const { status } = useBackupStatus();
-  const on = status?.enabled ?? false;
-  const warn = bannerWarnings(status).length > 0;
+  const { view } = useBackupStatus();
+  const on = view.state === "on";
+  const warn = view.banner !== null;
   const inBackup = section === "backup";
   const sub: { id: Section; label: string }[] = [
     { id: "connected", label: "Connected shops" },
