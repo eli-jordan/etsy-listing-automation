@@ -101,7 +101,7 @@ class Deployments:
     def waiting_for_backup(self, run: Run) -> bool:
         """Whether ``run`` is held by a backup's pause (plan decision P4):
         queued while the gate is paused. Never stored, only read."""
-        return run.phase == "queued" and self._gate.paused
+        return self._gate.holds(queued=run.phase == "queued")
 
     def runs(self, *, listing: str | None = None, scope: RunScope | None = None) -> list[Run]:
         """Runs still remembered (ADR-0041's retention).
