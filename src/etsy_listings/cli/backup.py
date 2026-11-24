@@ -200,8 +200,15 @@ class _RestoreLines:
         if time.monotonic() - self._printed < PROGRESS_EVERY_SECONDS:
             return
         self._printed = time.monotonic()
-        files = f" · {figures.files_done:,} of {figures.files_total:,} files"
-        typer.echo(f"  {figures.percent:.0%}{files if figures.files_total else ''}", err=True)
+        typer.echo(restore_progress_line(figures), err=True)
+
+
+def restore_progress_line(figures: RestoreProgress) -> str:
+    """``  25% · 100 of 400 files``. restic's ``--json`` leaves out a zero
+    ``files_restored``, so a missing count is none yet."""
+    if not figures.files_total:
+        return f"  {figures.percent:.0%}"
+    return f"  {figures.percent:.0%} · {figures.files_done or 0:,} of {figures.files_total:,} files"
 
 
 @app.command(name="restore")
