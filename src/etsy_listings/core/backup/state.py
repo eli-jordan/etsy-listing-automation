@@ -2,7 +2,8 @@
 spec, *Status and warnings*).
 
 - ``backup-state.json``: the last prune and the last check of the local
-  repository. PR 4 adds each destination's copy and check here.
+  repository, and each destination's last copy, last check, and the changed
+  and unexpected files found there.
 - ``backup-history.jsonl``: one JSON object per line, one line per run,
   oldest first, appended when a run ends, failed runs included. JSON lines
   because a run only ever adds an entry: an append needs no rewrite of the
@@ -18,6 +19,7 @@ from __future__ import annotations
 
 import contextlib
 import json
+import os
 from collections.abc import Iterator
 from datetime import datetime
 from pathlib import Path
@@ -25,6 +27,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, ValidationError
 
+from etsy_listings.core.backup.destinations import ChangedFile, CopyOutcome
 from etsy_listings.core.user_directory import user_directory
 from etsy_listings.core.workspace.atomic import write_json_atomic
 
@@ -45,10 +48,35 @@ class CheckResult(_Record):
     """restic's message when the check failed."""
 
 
+class DestinationState(_Record):
+    last_copy: datetime | None = None
+    """The last copy that finished."""
+    problem: str | None = None
+    """Why the latest copy did not finish; None once one does."""
+    last_check: CheckResult | None = None
+    changed: tuple[ChangedFile, ...] = ()
+    """Found by the latest copy or check; kept until a repair."""
+    unexpected: tuple[str, ...] = ()
+
+
 class BackupState(_Record):
     repository: str
     last_prune: datetime | None = None
     last_check: CheckResult | None = None
+    destinations: dict[str, DestinationState] = {}
+    """Keyed by the destination's path as ``settings.yaml`` gives it."""
+
+    def destination(self, path: Path) -> DestinationState:
+        return self.destinations.get(str(path), DestinationState())
+
+    def with_destination(self, path: Path, state: DestinationState) -> BackupState:
+        return self.model_copy(update={"destinations": {**self.destinations, str(path): state}})
+
+
+class CopyRecord(_Record):
+    destination: str
+    outcome: CopyOutcome
+    message: str | None = None
 
 
 class RunRecord(_Record):
@@ -64,6 +92,13 @@ class RunRecord(_Record):
     message: str | None = None
     warnings: tuple[str, ...] = ()
     """Files restic could not read; the snapshot was made without them."""
+    data_added: int | None = None
+    """Bytes the snapshot added to the repository, from restic's summary."""
+    copies: tuple[CopyRecord, ...] = ()
+    """Each destination's copy, in the configured order."""
+    notice: str | None = None
+    """Something the run decided that the seller should know, such as a
+    new workspace ID beside several others (ADR-0061)."""
 
 
 class BackupStateStore:
@@ -84,8 +119,14 @@ class BackupStateStore:
 
     def append_run(self, record: RunRecord) -> None:
         self.directory.mkdir(parents=True, exist_ok=True)
-        with self._path(HISTORY_FILE).open("a", encoding="utf-8", newline="\n") as history:
-            history.write(json.dumps(record.model_dump(mode="json")) + "\n")
+        with self._path(HISTORY_FILE).open("a+b") as history:
+            prefix = b""
+            if history.tell():
+                history.seek(-1, os.SEEK_END)
+                if history.read(1) != b"\n":
+                    prefix = b"\n"
+            line = json.dumps(record.model_dump(mode="json")).encode("utf-8")
+            history.write(prefix + line + b"\n")
 
     def runs(self) -> list[RunRecord]:
         """Every recorded run, oldest first. A damaged line is skipped."""

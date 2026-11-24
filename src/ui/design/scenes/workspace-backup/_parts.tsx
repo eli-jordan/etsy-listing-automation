@@ -22,7 +22,7 @@ import "../../../src/pages/admin/settings.css";
 import "../admin-settings/_admin.css";
 import { PageHead } from "../admin-settings/_parts";
 import type { BackupRun, BackupSettings, Destination } from "./_fixtures";
-import "./_backup.css";
+import "../../../src/pages/admin/backup/backup.css";
 
 export type AppPage = "dashboard" | "admin";
 export type BackupSub = "overview" | "settings";

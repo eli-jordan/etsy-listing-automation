@@ -6,6 +6,7 @@ import sys
 import tomllib
 from pathlib import Path
 
+import pytest
 import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -229,20 +230,22 @@ def test_lint_runs_once_in_the_quality_job_and_the_test_matrix_only_tests() -> N
     assert not [run for run in python if any(tool in run for tool in ("ruff", "mypy", "lint"))]
 
 
-def _python_steps() -> list[dict[str, object]]:
+def _python_steps(job: str = "python") -> list[dict[str, object]]:
     workflow = yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text())
-    steps: list[dict[str, object]] = workflow["jobs"]["python"]["steps"]
+    steps: list[dict[str, object]] = workflow["jobs"][job]["steps"]
     return steps
 
 
-def test_every_python_leg_installs_the_pinned_restic_before_its_tests() -> None:
-    """Tests marked ``restic`` need the binary (workspace-backup plan, P3).
-    The app's own installer fetches it, so the digests stay in one place."""
+@pytest.mark.parametrize("job", ["python", "browser"])
+def test_every_python_leg_installs_the_pinned_restic_before_its_tests(job: str) -> None:
+    """Tests marked ``restic`` need the binary (workspace-backup plan, P3),
+    the browser layer's Backup set-up among them. The app's own installer
+    fetches it, so the digests stay in one place."""
     from etsy_listings.core.backup.binary import (
         RESTIC_VERSION,
     )
 
-    steps = _python_steps()
+    steps = _python_steps(job)
     runs = [str(step.get("run", "")) for step in steps]
     install = next(i for i, run in enumerate(runs) if "scripts/install_restic.py" in run)
     tests = [i for i, run in enumerate(runs) if run.startswith("uv run poe test")]

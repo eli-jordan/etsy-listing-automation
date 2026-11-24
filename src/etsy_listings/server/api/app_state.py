@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from fastapi import Request
 
+from etsy_listings.core.application.backup_coordinator import BackupCoordinator
 from etsy_listings.core.application.dependencies import ClientFactories
 from etsy_listings.core.application.job_gate import JobGate
 from etsy_listings.core.batches import BatchStore, StagingStore
@@ -42,4 +43,11 @@ def job_gate(request: Request) -> JobGate:
     """The pause a backup puts on every background job (workspace-backup
     spec, *Pausing jobs*), shared by the coordinators the lifespan starts."""
     value: JobGate = request.app.state.job_gate
+    return value
+
+
+def backups(request: Request) -> BackupCoordinator:
+    """The scheduler and the one backup operation at a time (workspace-backup
+    plan, PR 5)."""
+    value: BackupCoordinator = request.app.state.backups
     return value

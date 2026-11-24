@@ -226,6 +226,7 @@
 }
 .bk-check {
   display: flex;
+  margin: 0; /* not the global fieldset label's */
   gap: var(--space-2);
   align-items: flex-start;
   font-size: 13px;
@@ -249,6 +250,7 @@
 }
 .bk-keep label {
   display: inline-flex;
+  margin: 0;
   align-items: center;
   gap: 6px;
   padding: 4px 10px 4px 4px;
@@ -376,6 +378,18 @@
 /* --- prototype states ---------------------------------------------------- */
 .bk-banner {
   align-items: center;
+}
+/* A long folder path must wrap, not push the actions off the page. */
+.bk-banner > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.bk-banner__actions {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-left: auto;
 }
 .bk-banner__btn {
   flex: none;

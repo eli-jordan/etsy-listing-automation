@@ -11,6 +11,11 @@ import type {
   ShopLookups,
   ShopSettings,
 } from "../../api/shop";
+import { MemoryRouter, useLocation } from "react-router-dom";
+import * as backupApi from "../../api/backup";
+import type { BackupStatus } from "../../api/backup";
+import { BackupStatusProvider } from "../../shell/BackupStatusProvider";
+import { backupsOff, backupsOn, backupWarning } from "../../test/backup";
 import { AdminPage } from "./AdminPage";
 
 /* Admin plan, PR 3: the Shop tab against a mocked HTTP surface. Each save
@@ -152,6 +157,27 @@ beforeEach(() => {
 
 afterEach(() => vi.restoreAllMocks());
 
+const OFF = backupsOff();
+
+function Where() {
+  const { search } = useLocation();
+  return <output aria-label="Address">{search}</output>;
+}
+
+/** The page at `/admin<search>`, under the shell's backup status. */
+function renderAdmin(search = "", backup: BackupStatus = OFF) {
+  vi.spyOn(backupApi, "getBackupStatus").mockResolvedValue(backup);
+  vi.spyOn(backupApi, "getBackupHistory").mockResolvedValue([]);
+  return render(
+    <MemoryRouter initialEntries={[`/admin${search}`]}>
+      <BackupStatusProvider>
+        <AdminPage />
+        <Where />
+      </BackupStatusProvider>
+    </MemoryRouter>,
+  );
+}
+
 function scrim(): HTMLElement {
   const element = document.querySelector<HTMLElement>(".sa-scrim");
   if (!element) throw new Error("no dialog backdrop");
@@ -159,14 +185,14 @@ function scrim(): HTMLElement {
 }
 
 async function openDefaults() {
-  render(<AdminPage />);
+  renderAdmin();
   await userEvent.click(await screen.findByRole("link", { name: "Listing defaults" }));
   await screen.findByRole("heading", { name: "Listing defaults" });
 }
 
 describe("Admin page shell", () => {
   it("opens on Connected shops and preserves pending Settings edits across navigation", async () => {
-    render(<AdminPage />);
+    renderAdmin();
     expect(await screen.findByRole("heading", { name: "Connected shops" })).toBeVisible();
     expect(
       screen.queryByRole("slider", { name: "Listings drafted at once" }),
@@ -184,7 +210,7 @@ describe("Admin page shell", () => {
   });
 
   it("splits Settings into AI and Template rendering, keeping a limits draft", async () => {
-    render(<AdminPage />);
+    renderAdmin();
     await screen.findByRole("heading", { name: "Connected shops" });
     fireEvent.click(screen.getByRole("link", { name: /Settings/ }));
     expect(await screen.findByRole("link", { name: "AI" })).toHaveAttribute("aria-current", "page");
@@ -213,9 +239,71 @@ describe("Admin page shell", () => {
   });
 });
 
+describe("Admin sections in the address", () => {
+  it.each([
+    ["", "Connected shops"],
+    ["?section=defaults", "Listing defaults"],
+    ["?section=ai", "AI"],
+    ["?section=rendering", "Template rendering"],
+  ])("opens %s on %s", async (search, link) => {
+    renderAdmin(search);
+    expect(await screen.findByRole("link", { name: link })).toHaveAttribute("aria-current", "page");
+  });
+
+  it("records each section picked, so Back and a link can return to it", async () => {
+    renderAdmin();
+    await screen.findByRole("heading", { name: "Connected shops" });
+    fireEvent.click(screen.getByRole("link", { name: "Template rendering" }));
+    expect(screen.getByRole("status", { name: "Address" })).toHaveTextContent("?section=rendering");
+    fireEvent.click(screen.getByRole("link", { name: /Backup/ }));
+    expect(screen.getByRole("status", { name: "Address" })).toHaveTextContent("?section=backup");
+    fireEvent.click(screen.getByRole("link", { name: /Shop shop.yaml/ }));
+    expect(screen.getByRole("status", { name: "Address" })).toHaveTextContent(/^$/);
+  });
+});
+
+describe("Backup in the Admin nav", () => {
+  it("is the third Settings item, reading off with nothing nested before set-up", async () => {
+    renderAdmin("?section=backup");
+    const backup = await screen.findByRole("link", { name: /Backup/ });
+    expect(backup).toHaveTextContent("off");
+    expect(backup).toHaveAttribute("aria-current", "page");
+    expect(await screen.findByRole("heading", { name: "Backups are off" })).toBeVisible();
+    expect(screen.queryByRole("link", { name: "Setup" })).not.toBeInTheDocument();
+    const settings = screen.getAllByRole("link").map((link) => link.textContent?.trim());
+    expect(settings.slice(settings.indexOf("AI"), settings.indexOf("AI") + 3)).toEqual([
+      "AI",
+      "Template rendering",
+      "Backupoff",
+    ]);
+  });
+
+  it("nests Status and history and Setup once set up, opening Status and history", async () => {
+    renderAdmin("?section=backup", backupsOn());
+    const status = await screen.findByRole("link", { name: "Status and history" });
+    expect(status).toHaveAttribute("aria-current", "page");
+    expect(screen.getByRole("link", { name: /Backup/ })).not.toHaveTextContent("off");
+    fireEvent.click(screen.getByRole("link", { name: "Setup" }));
+    expect(screen.getByRole("link", { name: "Setup" })).toHaveAttribute("aria-current", "page");
+    expect(screen.getByRole("status", { name: "Address" })).toHaveTextContent(
+      "?section=backup&page=setup",
+    );
+    fireEvent.click(screen.getByRole("link", { name: /Backup/ }));
+    expect(screen.getByRole("link", { name: "Status and history" })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+  });
+
+  it("carries a warning icon while a warning applies", async () => {
+    renderAdmin("?section=ai", backupsOn({ warnings: [backupWarning("stale")] }));
+    expect(await screen.findByRole("img", { name: "Needs attention" })).toBeInTheDocument();
+  });
+});
+
 describe("Connected shops", () => {
   it("shows both configured shops as read-only identities", async () => {
-    render(<AdminPage />);
+    renderAdmin();
     const etsy = await screen.findByTestId("connection-etsy");
     expect(within(etsy).getByText("NaturallyInkedStudio")).toBeInTheDocument();
     expect(within(etsy).getByText("#48210377")).toBeInTheDocument();
@@ -242,7 +330,7 @@ describe("Connected shops", () => {
         commands: ["etsy-listings auth printify"],
       },
     });
-    render(<AdminPage />);
+    renderAdmin();
 
     const etsy = await screen.findByTestId("connection-etsy");
     expect(within(etsy).getByText("Not connected")).toBeInTheDocument();
@@ -258,7 +346,7 @@ describe("Connected shops", () => {
       ...CONNECTED,
       etsy: { ...CONNECTED.etsy, state: "lookup_failed", problem: "Could not reach Etsy: 503" },
     });
-    render(<AdminPage />);
+    renderAdmin();
 
     const etsy = await screen.findByTestId("connection-etsy");
     expect(within(etsy).getByText("NaturallyInkedStudio")).toBeInTheDocument();
@@ -269,7 +357,7 @@ describe("Connected shops", () => {
 
 describe("Currency", () => {
   async function openDialog() {
-    render(<AdminPage />);
+    renderAdmin();
     await userEvent.click(await screen.findByRole("button", { name: "Change currency…" }));
     return screen.getByRole("dialog", { name: /converts nothing/ });
   }
@@ -448,7 +536,7 @@ describe("Listing defaults", () => {
 
   it("keeps a refused value visible with its field error", async () => {
     save.mockResolvedValueOnce({
-      kind: "invalid",
+      kind: "refused",
       message: "bad",
       fieldErrors: { renewal: "Input should be 'manual' or 'auto'" },
     });
@@ -517,7 +605,7 @@ describe("Listing defaults", () => {
       if (failure === "network") server.failNext("renewal offline");
       else
         save.mockResolvedValueOnce({
-          kind: "invalid",
+          kind: "refused",
           message: "invalid renewal",
           fieldErrors: { renewal: "renewal refused" },
         });
@@ -600,7 +688,7 @@ describe("Listing defaults", () => {
         if (failure === "network") reject(new Error("renewal offline"));
         else
           answer({
-            kind: "invalid",
+            kind: "refused",
             message: "invalid renewal",
             fieldErrors: { renewal: "renewal refused" },
           });
@@ -655,7 +743,7 @@ describe("Listing defaults", () => {
       }
       await act(async () =>
         answer({
-          kind: "invalid",
+          kind: "refused",
           message: "invalid edit",
           fieldErrors: { [field]: "edit refused" },
         }),
@@ -724,7 +812,7 @@ describe("Listing defaults", () => {
       }
       await act(async () =>
         answer({
-          kind: "invalid",
+          kind: "refused",
           message: "invalid shipping",
           fieldErrors: {
             shipping_profile: "shipping refused",
@@ -754,7 +842,7 @@ describe("Listing defaults", () => {
     "keeps a refused %s choice visible when its lookup becomes unavailable",
     async (field) => {
       save.mockResolvedValueOnce({
-        kind: "invalid",
+        kind: "refused",
         message: "invalid edit",
         fieldErrors: {
           [field]: "edit refused",
@@ -826,7 +914,9 @@ describe("Listing defaults", () => {
     );
     render(
       <StrictMode>
-        <AdminPage />
+        <MemoryRouter>
+          <AdminPage />
+        </MemoryRouter>
       </StrictMode>,
     );
     await userEvent.click(await screen.findByRole("link", { name: "Listing defaults" }));
@@ -949,7 +1039,7 @@ describe("Listing defaults", () => {
   ])("never retries a currency change cancelled with %s after it failed", async (_, cancel) => {
     const server = fileServer();
     server.failNext("network down");
-    render(<AdminPage />);
+    renderAdmin();
     await userEvent.click(await screen.findByRole("button", { name: "Change currency…" }));
     const dialog = screen.getByRole("dialog", { name: /converts nothing/ });
     await userEvent.click(within(dialog).getByLabelText(/prices won't be converted/));
@@ -1022,7 +1112,7 @@ describe("Listing defaults", () => {
         new Promise<SaveOutcome>((resolve) => {
           refuse = () =>
             resolve({
-              kind: "invalid",
+              kind: "refused",
               message: "invalid renewal",
               fieldErrors: { renewal: "auto refused" },
             });
@@ -1254,7 +1344,7 @@ describe("Listing defaults", () => {
   });
 
   it("asks for a reload after a conflict and edits nothing until then", async () => {
-    save.mockResolvedValueOnce({ kind: "conflict", message: "shop.yaml changed on disk" });
+    save.mockResolvedValueOnce({ kind: "stale", message: "shop.yaml changed on disk" });
     await openDefaults();
     fireEvent.change(screen.getByLabelText("Renewal"), { target: { value: "auto" } });
     fireEvent.blur(screen.getByLabelText("Renewal"));
