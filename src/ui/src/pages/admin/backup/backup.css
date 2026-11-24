@@ -379,6 +379,11 @@
 .bk-banner {
   align-items: center;
 }
+/* A long folder path must wrap, not push the actions off the page. */
+.bk-banner > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
 .bk-banner__actions {
   display: flex;
   flex: none;
