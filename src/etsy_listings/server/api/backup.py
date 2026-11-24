@@ -28,6 +28,7 @@ from etsy_listings.core.errors import ConflictError, RefusedError, StaleError
 from etsy_listings.core.workspace.userpath import to_native_path
 from etsy_listings.server.api import app_state
 from etsy_listings.server.api.schemas import (
+    BackupConnected,
     BackupConnectRequest,
     BackupHistoryResponse,
     BackupNewRepositoryRequest,
@@ -36,6 +37,7 @@ from etsy_listings.server.api.schemas import (
     BackupRepairResponse,
     BackupRestoreRequest,
     BackupSetUpRequest,
+    BackupSetUpResponse,
     BackupSnapshot,
     BackupSnapshotsResponse,
 )
@@ -107,12 +109,17 @@ _REFUSALS: dict[int | str, dict[str, Any]] = {
 }
 
 
-@router.post("/setup", status_code=202, response_model=BackupOverview, responses=_REFUSALS)
-def set_up(request: Request, body: BackupSetUpRequest) -> BackupOverview | JSONResponse:
+@router.post("/setup", status_code=202, response_model=BackupSetUpResponse, responses=_REFUSALS)
+def set_up(request: Request, body: BackupSetUpRequest) -> BackupSetUpResponse | JSONResponse:
     """Write the ``backup:`` block and the password, create the repository
     and the destination folders, then start the first backup. Refuses a
     short password (422), a folder that holds files (409) and a destination
-    whose parent is missing (422), writing nothing."""
+    whose parent is missing (422), writing nothing.
+
+    When a destination already holds a backup, connects it instead, as
+    ``/connect`` does, answering once it is copied: ``connected`` names the
+    destination. Refuses a password that does not open it (422, field
+    ``password``), part of a copy, and two different repositories (422)."""
     backups = app_state.backups(request)
     answers = backup_setup.BackupSetUp(
         repository=to_native_path(body.repository),
@@ -121,7 +128,20 @@ def set_up(request: Request, body: BackupSetUpRequest) -> BackupOverview | JSONR
         retention=body.retention,
         password=body.password,
     )
-    return _answer(backups, lambda: backups.set_up(answers, expected_revision=body.revision))
+    connected: list[BackupConnected] = []
+
+    def run() -> None:
+        found = backups.set_up(answers, expected_revision=body.revision)
+        if found is not None:
+            connected.append(
+                BackupConnected(destination=str(found.source), snapshots=found.snapshots)
+            )
+
+    answer = _answer(backups, run)
+    if isinstance(answer, JSONResponse):
+        return answer
+    found = connected[0] if connected else None
+    return BackupSetUpResponse.model_validate(answer.model_dump() | {"connected": found})
 
 
 @router.post("/repository", status_code=202, response_model=BackupOverview, responses=_REFUSALS)

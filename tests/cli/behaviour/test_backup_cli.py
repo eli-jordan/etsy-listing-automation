@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 from collections.abc import Callable
 from pathlib import Path
 
@@ -320,3 +321,37 @@ def test_restore_reads_a_cygwin_style_target_as_the_windows_folder(
         1,
         "That's your live workspace. Choose a new, empty folder.\n",
     )
+
+
+@pytest.mark.restic
+@pytest.mark.usefixtures("with_restic")
+def test_init_connects_the_backup_a_destination_already_holds(
+    workspace_root: Path, repository: Path, scripted: Script
+) -> None:
+    """A new machine: the storage folder is gone, the destination copy and
+    settings.yaml are there, and .env is not."""
+    _store_password(workspace_root, repository)
+    cloud = repository.with_name("cloud")
+    cloud.mkdir()
+    assert _run(workspace_root, "init")[0] == 0
+    assert _run(workspace_root, "run")[0] == 0
+    shutil.rmtree(repository)
+    (workspace_root / layout.ENV_FILE).unlink()
+
+    scripted({"password of the existing backup": "not the password at all"})
+    wrong, refused = _run(workspace_root, "init")
+    left_behind = sorted(path.name for path in repository.parent.iterdir())
+    script = scripted({"password of the existing backup": PASSWORD})
+    code, output = _run(workspace_root, "init")
+
+    assert wrong == 1, refused
+    assert "does not open" in refused
+    assert "backups" not in left_behind
+    assert not any(".connecting-" in name for name in left_behind)
+    assert code == 0, output
+    assert f"Copying the backup in {cloud} to {repository}..." in output
+    assert f"Connected to the backup in {cloud}: 1 snapshots, copied to {repository}." in output
+    assert "password manager" in output
+    assert len(script.asked) == 1
+    assert Secrets.load(workspace_root / layout.ENV_FILE).require_backup_password() == PASSWORD
+    assert (repository / "config").read_bytes() == (cloud / "config").read_bytes()

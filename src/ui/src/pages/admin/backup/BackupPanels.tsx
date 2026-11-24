@@ -103,6 +103,10 @@ export function NotSetUp({ onStart }: { onStart: () => void }) {
         </li>
       </ul>
       <div className="bk-foot">
+        <span className="bk-foot__note">
+          Already have backups from another computer? Add the folder that holds them as a
+          destination, and set-up connects them instead of starting new ones.
+        </span>
         <button type="button" className="btn btn-primary" onClick={onStart}>
           Set up backups
         </button>

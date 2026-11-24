@@ -75,6 +75,40 @@ The paths are specific to one machine, yet `settings.yaml` travels with the
 workspace when it is restored somewhere else. See *Missing repository* for how
 the app treats stale paths.
 
+## Set-up
+
+Set-up, from the Backup page or `backup init`, first looks in each
+destination. If none holds a restic repository, it creates a new one in the
+backup storage folder, as before.
+
+If a destination already holds a backup, set-up connects it instead of
+creating one. A typical case is a new computer whose iCloud Drive already
+holds the backups. Connecting works as *Connect an existing repository*
+does: the copy is copied one way into a staging folder beside the backup
+storage folder, the password must open it and `restic check` must pass, and
+only then does it take the storage folder's name. The settings and the
+password are saved after that. The next scheduled backup adds to the
+connected repository, and its first copy back finds every file the
+destination already has, so nothing there is replaced or deleted.
+
+Several destinations may hold copies of the same repository, with the same
+`config`. Set-up connects the first one that holds every file the others
+hold and passes the check, and says which. A copy that is still syncing is
+never the one connected: the copy back would delete what it lacks from the
+fuller copies.
+
+Set-up refuses, and writes nothing, when:
+- the password does not open the destination's backup (the error is on the
+  password field);
+- a destination holds restic's folders but no `config`, as a sync client
+  that is still downloading leaves it;
+- two destinations hold different repositories;
+- two copies of the same repository each lack files the other has;
+- the backup storage folder is not new or empty.
+
+A new repository needs a password of at least 12 characters. An existing one
+only needs the password it was made with.
+
 ## Backup run
 
 One run, from the scheduler or from "Back up now":
@@ -269,7 +303,8 @@ Both take a local folder that is new or empty, prefilled with
 is used when there is one; otherwise the seller gives it. Connect saves
 nothing until restic has opened the local copy with that password. Create is
 refused while a destination already holds a repository's copy, and offers
-Connect with that folder instead, because a new repository would lead a repair
+Connect with that folder instead (first-time set-up connects it by itself,
+see *Set-up*), because a new repository would lead a repair
 and the next copy to delete the old backups there. For the same reason, Repair
 refuses a destination whose `config` differs from the local one.
 
@@ -300,7 +335,8 @@ restores whole snapshots only. It does not restore single files.
 
 ## CLI
 
-`etsy-listings backup` with these subcommands: `init` (create a repository),
+`etsy-listings backup` with these subcommands: `init` (create a repository,
+or connect the one a destination already holds and print which),
 `run`, `status`, `snapshots`, `restore <snapshot> <target>`, and `check`.
 The CLI does not coordinate with a running server. `run` is meant for when the
 app is stopped, which is the case during the migration. restic's repository

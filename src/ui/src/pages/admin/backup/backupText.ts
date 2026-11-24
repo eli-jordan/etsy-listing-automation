@@ -1,4 +1,5 @@
 import type {
+  BackupConnected,
   BackupStatus,
   DestinationStatus,
   HistoryEntry,
@@ -104,6 +105,7 @@ export function runningLine(status: BackupStatus, running: RunningBackup): strin
   const name = running.destination ? nameOf(status, running.destination) : "the destination";
   const counted = filesCounted(running);
   if (running.operation === "repair") return `Repairing the ${name} copy…`;
+  if (running.operation === "connect") return connectingLine(status, running.destination);
   if (running.step === "waiting" && running.waiting_for)
     return `Waiting for ${running.waiting_for} to finish…`;
   if (running.step === "backing_up")
@@ -111,6 +113,18 @@ export function runningLine(status: BackupStatus, running: RunningBackup): strin
   if (running.step === "copying") return `Copying new files to ${name}…${counted}`;
   if (running.step === "checking_copy") return `Checking the copy in ${name}…`;
   return STEPS[running.step] ?? "Backing up…";
+}
+
+/** Set-up or Connect copying an existing backup to this computer. */
+export function connectingLine(status: BackupStatus, source?: string | null): string {
+  if (!source) return "Copying the existing backup to this computer…";
+  return `Connecting to the backup in ${nameOf(status, source)}… Copying it to this computer can take a while.`;
+}
+
+/** What set-up says once it connected a destination's backup. */
+export function connectedNote(status: BackupStatus, connected: BackupConnected): string {
+  const count = `${connected.snapshots} ${connected.snapshots === 1 ? "snapshot" : "snapshots"}`;
+  return `Connected to the backup in ${nameOf(status, connected.destination)}: ${count}.`;
 }
 
 function filesCounted({ files_done: done, files_total: total }: RunningBackup): string {

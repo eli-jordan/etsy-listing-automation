@@ -1,5 +1,6 @@
 // Set up and Setup, one form (workspace-backup interactions, *Set up and
 // Setup*), from the mockup's `SettingsForm` in `_prototype.tsx`.
+import { CircleNotchIcon } from "@phosphor-icons/react/dist/csr/CircleNotch";
 import { CloudArrowUpIcon } from "@phosphor-icons/react/dist/csr/CloudArrowUp";
 import { EyeIcon } from "@phosphor-icons/react/dist/csr/Eye";
 import { EyeSlashIcon } from "@phosphor-icons/react/dist/csr/EyeSlash";
@@ -12,6 +13,7 @@ import type { BackupStatus, IntervalHours, RetentionSettings } from "../../../ap
 import { Panel } from "./BackupPanels";
 import {
   type BackupAnswers,
+  connectingLine,
   everyLabel,
   INTERVALS,
   intervalChoice,
@@ -139,6 +141,11 @@ export function BackupForm({
             onChange={(retention) => setS((cur) => ({ ...cur, retention }))}
           />
         </Field>
+        {busy && create && (
+          <p className="bk-status__running" role="status">
+            <CircleNotchIcon size={14} className="adm-spin" /> {settingUpLine(status)}
+          </p>
+        )}
         {error && (
           <p className="adm-error-text" role="alert">
             {error}
@@ -148,7 +155,8 @@ export function BackupForm({
           {create && (
             <span className="bk-foot__note">
               The first backup copies the whole workspace and can take 20 minutes or more. Jobs you
-              start meanwhile wait until it finishes.
+              start meanwhile wait until it finishes. If a destination already holds a backup, it is
+              connected instead.
             </span>
           )}
           <button
@@ -171,6 +179,13 @@ export function BackupForm({
       </div>
     </Panel>
   );
+}
+
+/** While set-up runs: connecting, once the server says so. */
+function settingUpLine(status: BackupStatus): string {
+  const running = status.running;
+  if (running?.operation === "connect") return connectingLine(status, running.destination);
+  return "Setting up backups…";
 }
 
 function createReady(answers: BackupAnswers, password: Password, minLength: number): boolean {

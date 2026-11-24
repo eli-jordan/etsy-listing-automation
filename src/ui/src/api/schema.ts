@@ -364,6 +364,11 @@ export interface paths {
      *     and the destination folders, then start the first backup. Refuses a
      *     short password (422), a folder that holds files (409) and a destination
      *     whose parent is missing (422), writing nothing.
+     *
+     *     When a destination already holds a backup, connects it instead, as
+     *     ``/connect`` does, answering once it is copied: ``connected`` names the
+     *     destination. Refuses a password that does not open it (422, field
+     *     ``password``), part of a copy, and two different repositories (422).
      */
     post: operations["set_up_api_backup_setup_post"];
     delete?: never;
@@ -2450,6 +2455,16 @@ export interface components {
       /** Source */
       source: string;
     };
+    /**
+     * BackupConnected
+     * @description The backup set-up connected instead of creating one.
+     */
+    BackupConnected: {
+      /** Destination */
+      destination: string;
+      /** Snapshots */
+      snapshots: number;
+    };
     /** BackupHistoryResponse */
     BackupHistoryResponse: {
       /** Runs */
@@ -2562,6 +2577,39 @@ export interface components {
       retention?: components["schemas"]["RetentionSettings"];
       /** Revision */
       revision: string;
+    };
+    /**
+     * BackupSetUpResponse
+     * @description The status once set up, and what set-up connected, if anything.
+     */
+    BackupSetUpResponse: {
+      connected?: components["schemas"]["BackupConnected"] | null;
+      /**
+       * Destinations
+       * @default []
+       */
+      destinations: components["schemas"]["DestinationOverview"][];
+      /** Enabled */
+      enabled: boolean;
+      /** Interval Hours */
+      interval_hours?: number | null;
+      /** Last Success */
+      last_success?: string | null;
+      /** Next Due */
+      next_due?: string | null;
+      /**
+       * Password Min Length
+       * @default 12
+       */
+      password_min_length: number;
+      repository?: components["schemas"]["RepositoryOverview"] | null;
+      restore?: components["schemas"]["RestoreStatus"] | null;
+      running?: components["schemas"]["RunningBackup"] | null;
+      /**
+       * Warnings
+       * @default []
+       */
+      warnings: components["schemas"]["BackupWarning"][];
     };
     /**
      * BackupSettings
@@ -6716,7 +6764,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["BackupOverview"];
+          "application/json": components["schemas"]["BackupSetUpResponse"];
         };
       };
       /** @description Conflict */

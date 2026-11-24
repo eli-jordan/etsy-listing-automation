@@ -1489,6 +1489,16 @@ destination holds a repository's copy (`holds_repository`), with
 whose `config` differs or is missing while restic files remain
 (`ForeignCopyError`). The ordinary copy also stops in these cases.
 
+First-time set-up uses the same connect. `backup_setup.prepare_set_up`
+checks every refusal before writing, and asks `backup_missing.existing_copies`
+whether the destinations hold a repository: copies of one repository share
+`config`'s bytes, and only a copy holding every file the others hold may be
+the source. When one does, `POST /api/backup/setup` and `backup init`
+connect it with `connect_existing` (Connect's own staging copy, the first
+copy that opens and passes a check) instead of creating, and the coordinator
+holds the `connect` slot meanwhile. The answer's `connected` names the
+destination and the snapshot count.
+
 ## Durable Marigold maps and CPU composition
 
 `preparation.numerics` ports crop planning, mask proposal, robust normals/depth

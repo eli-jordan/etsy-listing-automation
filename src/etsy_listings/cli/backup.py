@@ -12,15 +12,19 @@ import json
 import time
 from collections.abc import Iterator
 from contextlib import contextmanager
+from pathlib import Path
 from typing import Annotated, Any
 
 import typer
 
 from etsy_listings.cli import prompts
 from etsy_listings.cli.options import open_workspace, root_option
+from etsy_listings.core.application import credentials
+from etsy_listings.core.application.backup_missing import connect_existing, existing_copies
 from etsy_listings.core.application.backup_repository import (
     MIN_PASSWORD_LENGTH,
     BackupStatus,
+    ConfiguredBackup,
     backup_status,
     configured_backup,
     create_repository,
@@ -64,24 +68,53 @@ def _ask_password() -> str:
 
 @app.command()
 def init(root: str | None = root_option()) -> None:
-    """Create the repository backup.repository names in settings.yaml.
+    """Create the repository backup.repository names in settings.yaml, or,
+    when a destination already holds a backup, copy that one there and use it.
 
     Uses the password in the workspace .env, or asks for one and stores it
     there first. Downloads the pinned restic when no other is configured."""
     workspace = open_workspace(root)
     with _reported():
         backup = configured_backup(workspace, binaries=ResticBinaries())
+        copies = existing_copies(backup.destinations)
+        if copies:
+            _connect(backup, copies)
+            return
         existing = backup.password
         password = existing or _ask_password()
         typer.echo(f"Creating the backup repository at {backup.storage}...", err=True)
         repository_id = create_repository(backup, password, store=existing is None)
     typer.echo(f"Created the backup repository at {backup.storage} (id {repository_id[:8]}).")
     if existing is None:
-        typer.echo(
-            f"Stored the password in {workspace.root / layout.ENV_FILE} as "
-            f"{BACKUP_PASSWORD_VAR}. Keep a copy in a password manager: the .env inside "
-            "each backup is encrypted with it."
-        )
+        _stored(backup)
+
+
+def _connect(backup: ConfiguredBackup, copies: tuple[Path, ...]) -> None:
+    """``init`` with a destination that is already a backup: connect it."""
+    existing = backup.password
+    password = existing or prompts.ask_text("Password of the existing backup:")
+
+    def trying(source: Path) -> None:
+        typer.echo(f"Copying the backup in {source} to {backup.storage}...", err=True)
+
+    env_file = backup.env_file if existing is not None else None
+    connected = connect_existing(backup, copies, password, env_file=env_file, trying=trying)
+    if existing is None:
+        credentials.store(backup.workspace, credentials.BACKUP_PASSWORD, (password,))
+    typer.echo(
+        f"Connected to the backup in {connected.source}: {connected.snapshots} snapshots, "
+        f"copied to {backup.storage}."
+    )
+    if existing is None:
+        _stored(backup)
+
+
+def _stored(backup: ConfiguredBackup) -> None:
+    typer.echo(
+        f"Stored the password in {backup.workspace / layout.ENV_FILE} as "
+        f"{BACKUP_PASSWORD_VAR}. Keep a copy in a password manager: the .env inside "
+        "each backup is encrypted with it."
+    )
 
 
 _STEP_LINES = {

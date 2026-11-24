@@ -28,7 +28,7 @@ from etsy_listings.core.application.ai.events import (
 from etsy_listings.core.application.ai.readiness import (
     AiReadinessBlock as AiReadinessBlock,
 )
-from etsy_listings.core.application.backup_overview import HistoryEntry
+from etsy_listings.core.application.backup_overview import BackupOverview, HistoryEntry
 from etsy_listings.core.application.deploy.events import (
     ApplyRunPhase,
     PlanRunPhase,
@@ -1241,6 +1241,22 @@ class BackupSetUpRequest(BaseModel):
     interval_hours: BackupIntervalHours = 12
     retention: RetentionSettings = Field(default_factory=RetentionSettings)
     password: str
+
+
+class BackupConnected(BaseModel):
+    """The backup set-up connected instead of creating one."""
+
+    destination: str
+    """The destination it was copied from."""
+    snapshots: int
+
+
+class BackupSetUpResponse(BackupOverview):
+    """The status once set up, and what set-up connected, if anything."""
+
+    connected: BackupConnected | None = None
+    """Set when a destination already held a backup: set-up copied it to
+    the backup storage folder and uses it, instead of creating one."""
 
 
 class BackupNewRepositoryRequest(BaseModel):

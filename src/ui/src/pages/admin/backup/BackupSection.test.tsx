@@ -231,6 +231,68 @@ describe("Backups off and Set up", () => {
     );
   });
 
+  it("says it is connecting while a destination's backup is copied, then what it connected", async () => {
+    let finish: ((outcome: backupApi.SetUpOutcome) => void) | undefined;
+    vi.spyOn(backupApi, "setUpBackup").mockReturnValue(
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+    );
+    await openSetUp();
+    await fillSetUp();
+    await userEvent.click(button("Add destination"));
+    fireEvent.change(screen.getByLabelText("Destination 1 folder"), { target: { value: ICLOUD } });
+    status.mockResolvedValue(
+      backupsOff({
+        running: { operation: "connect", started_at: iso(0), step: "copying", destination: ICLOUD },
+      }),
+    );
+    await userEvent.click(button("Create and back up now"));
+
+    expect(screen.getByRole("status")).toHaveTextContent("Setting up backups…");
+    expect(
+      await screen.findByText(
+        /^Connecting to the backup in .+… Copying it to this computer/,
+        undefined,
+        {
+          timeout: 4000,
+        },
+      ),
+    ).toBeVisible();
+    expect(button("Create and back up now")).toBeDisabled();
+
+    vi.mocked(settingsApi.getSettings).mockResolvedValue({
+      ...workspace(SAVED_BLOCK),
+      revision: "s2",
+    });
+    status.mockResolvedValue(healthy());
+    history.mockResolvedValue([]);
+    await act(async () => {
+      finish?.({
+        kind: "started",
+        status: healthy(),
+        connected: { destination: ICLOUD, snapshots: 12 },
+      });
+    });
+
+    expect(
+      await screen.findByText("Connected to the backup in iCloud Drive: 12 snapshots."),
+    ).toBeVisible();
+  });
+
+  it("shows a password the destination's backup refuses once, under the form", async () => {
+    const text = `${ICLOUD} already holds a backup, and this password does not open it.`;
+    vi.spyOn(backupApi, "setUpBackup").mockResolvedValue({
+      kind: "refused",
+      message: text,
+      fieldErrors: { password: text },
+    });
+    await openSetUp();
+    await fillSetUp();
+    await userEvent.click(button("Create and back up now"));
+    expect((await screen.findByRole("alert")).textContent).toBe(text);
+  });
+
   it("shows a refused set-up under the form and keeps the answers", async () => {
     vi.spyOn(backupApi, "setUpBackup").mockResolvedValue({
       kind: "refused",

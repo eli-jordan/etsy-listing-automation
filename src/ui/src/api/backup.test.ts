@@ -66,6 +66,20 @@ describe("set-up, create and connect", () => {
     });
   });
 
+  it("carry the destination set-up connected instead of creating", async () => {
+    const status = { enabled: true, destinations: [], warnings: [], password_min_length: 12 };
+    const connected = { destination: "E:/iCloud/backups", snapshots: 12 };
+    vi.spyOn(api, "POST").mockResolvedValue({
+      data: { ...status, connected },
+      response: new Response(null, { status: 202 }),
+    } as never);
+    expect(await setUpBackup(ANSWERS)).toEqual({
+      kind: "started",
+      status: { ...status, connected },
+      connected,
+    });
+  });
+
   it("throw on an answer that is no refusal", async () => {
     answer(500, { detail: "boom" });
     await expect(setUpBackup(ANSWERS)).rejects.toThrow("boom");

@@ -13,9 +13,13 @@ export type BackupSettings = components["schemas"]["BackupSettings"];
 export type RetentionSettings = components["schemas"]["RetentionSettings"];
 export type IntervalHours = BackupSetUp["interval_hours"];
 
+export type BackupConnected = components["schemas"]["BackupConnected"];
+
 /** Set-up's, create's, connect's and restore's answer: started, or a
- * {@link Refusal}. */
-export type SetUpOutcome = { kind: "started"; status: BackupStatus } | Refusal;
+ * {@link Refusal}. Set-up's names the destination it connected, when one
+ * already held a backup. */
+export type SetUpOutcome =
+  { kind: "started"; status: BackupStatus; connected?: BackupConnected | null } | Refusal;
 
 function message(error: unknown, fallback: string): string {
   const body = error as { detail?: unknown; message?: unknown } | undefined;
@@ -55,11 +59,13 @@ function outcome(
   throw new Error(message(error, fallback));
 }
 
+/** Set up backups. When a destination already holds a backup, the server
+ * connects it instead, answering once it is copied. */
 export async function setUpBackup(answers: BackupSetUp): Promise<SetUpOutcome> {
-  return outcome(
-    await api.POST("/api/backup/setup", { body: answers }),
-    "Could not set up backups",
-  );
+  const answer = await api.POST("/api/backup/setup", { body: answers });
+  const result = outcome(answer, "Could not set up backups");
+  if (result.kind !== "started") return result;
+  return { ...result, connected: answer.data?.connected ?? null };
 }
 
 export type NewRepository = components["schemas"]["BackupNewRepositoryRequest"];

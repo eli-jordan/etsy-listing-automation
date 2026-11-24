@@ -86,8 +86,11 @@ encrypted with that same password.
 
 While iCloud Drive is connected and syncing, create the empty destination
 folder named in `backup.destinations`. The CLI skips a missing destination.
-If that path already holds a backup, keep it and use a different empty
-destination.
+If that path already holds a backup, keep it: `init` connects to it instead
+of creating a new repository. It uses the password in `.env`, or asks for
+that backup's password, then copies the
+backup into `$backups`, and prints `Connected to the backup in <folder>: N
+snapshots`. The `run` that follows adds to it.
 
 ```powershell
 uv run etsy-listings backup init
@@ -131,7 +134,10 @@ renamed folder.
 Copy or let iCloud download the destination folder
 (`naturally-inked-studio-backups` in iCloud Drive) and restore the workspace
 from it, as [restoring a backup](restore-a-backup.md) describes under *When the
-computer is gone*. Then open **Admin › Settings › Backup**. It reports
+computer is gone*. Then open **Admin › Settings › Backup**. If backups are off there, choose
+**Set up backups** and name the iCloud Drive folder as a destination, with
+that backup's password: set-up connects it instead of creating a new
+repository, and says so. Otherwise it reports
 `Backup repository not found` because the old computer's backup storage
 folder is not there. Choose **Connect an existing repository**, name the
 iCloud Drive folder under **Copy from**, and a local folder under **Copy

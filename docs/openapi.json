@@ -840,6 +840,25 @@
         "title": "BackupConnectRequest",
         "type": "object"
       },
+      "BackupConnected": {
+        "description": "The backup set-up connected instead of creating one.",
+        "properties": {
+          "destination": {
+            "title": "Destination",
+            "type": "string"
+          },
+          "snapshots": {
+            "title": "Snapshots",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "destination",
+          "snapshots"
+        ],
+        "title": "BackupConnected",
+        "type": "object"
+      },
       "BackupHistoryResponse": {
         "properties": {
           "runs": {
@@ -1154,6 +1173,116 @@
           "password"
         ],
         "title": "BackupSetUpRequest",
+        "type": "object"
+      },
+      "BackupSetUpResponse": {
+        "description": "The status once set up, and what set-up connected, if anything.",
+        "properties": {
+          "connected": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BackupConnected"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "destinations": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/DestinationOverview"
+            },
+            "title": "Destinations",
+            "type": "array"
+          },
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "interval_hours": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Interval Hours"
+          },
+          "last_success": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Success"
+          },
+          "next_due": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Due"
+          },
+          "password_min_length": {
+            "default": 12,
+            "title": "Password Min Length",
+            "type": "integer"
+          },
+          "repository": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RepositoryOverview"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "restore": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RestoreStatus"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "running": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RunningBackup"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "warnings": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/BackupWarning"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "enabled"
+        ],
+        "title": "BackupSetUpResponse",
         "type": "object"
       },
       "BackupSettings": {
@@ -10300,7 +10429,7 @@
     },
     "/api/backup/setup": {
       "post": {
-        "description": "Write the ``backup:`` block and the password, create the repository\nand the destination folders, then start the first backup. Refuses a\nshort password (422), a folder that holds files (409) and a destination\nwhose parent is missing (422), writing nothing.",
+        "description": "Write the ``backup:`` block and the password, create the repository\nand the destination folders, then start the first backup. Refuses a\nshort password (422), a folder that holds files (409) and a destination\nwhose parent is missing (422), writing nothing.\n\nWhen a destination already holds a backup, connects it instead, as\n``/connect`` does, answering once it is copied: ``connected`` names the\ndestination. Refuses a password that does not open it (422, field\n``password``), part of a copy, and two different repositories (422).",
         "operationId": "set_up_api_backup_setup_post",
         "requestBody": {
           "content": {
@@ -10317,7 +10446,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/BackupOverview"
+                  "$ref": "#/components/schemas/BackupSetUpResponse"
                 }
               }
             },
