@@ -142,6 +142,7 @@ def _batch_detail(request: Request, batch: Batch) -> BatchDetail:
                 reviewed=row.reviewed,
                 reviewable=reviewable(row),
                 deleted=row.deleted,
+                deployable=batch_workflow.deployable(workspace, row),
             )
         )
     return BatchDetail(

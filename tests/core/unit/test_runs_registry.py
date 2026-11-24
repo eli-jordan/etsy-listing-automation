@@ -7,6 +7,8 @@ behaviour one.
 from __future__ import annotations
 
 from etsy_listings.core.application.deploy.registry import (
+    BatchApply,
+    BatchPlan,
     Conflict,
     ListingApply,
     ListingPlan,
@@ -108,6 +110,49 @@ def test_the_current_workspace_run_is_retained_until_a_new_workspace_run() -> No
     assert isinstance(second, Run)
     assert registry.for_workspace() == [second]
     assert registry.get(first.id) is first, "the reviewed plan remains addressable"
+
+
+def test_a_batch_run_conflicts_only_with_runs_on_its_own_listings() -> None:
+    registry = _registry()
+    batch = registry.create(BatchPlan("b1", ("a", "b")))
+    assert isinstance(batch, Run)
+
+    overlapping = _plan(registry, "b")
+    other_listing = _plan(registry, "c")
+    other_batch = registry.create(BatchPlan("b2", ("b", "d")))
+
+    assert overlapping == Conflict(active_run=batch.id)
+    assert isinstance(other_listing, Run)
+    assert other_batch == Conflict(active_run=batch.id)
+    assert isinstance(registry.create(WorkspacePlan(())), Conflict)
+
+
+def test_a_batch_run_conflicts_with_an_active_listing_or_workspace_run() -> None:
+    registry = _registry()
+    listing = _plan(registry, "a")
+    assert isinstance(listing, Run)
+
+    assert registry.create(BatchPlan("b1", ("a", "b"))) == Conflict(active_run=listing.id)
+    listing.transition_plan("cancelled")
+    workspace = registry.create(WorkspacePlan(()))
+    assert isinstance(workspace, Run)
+    assert registry.create(BatchPlan("b1", ("x",))) == Conflict(active_run=workspace.id)
+
+
+def test_a_batch_run_is_retained_per_batch_and_never_as_a_listing_run() -> None:
+    registry = _registry()
+    first = registry.create(BatchPlan("b1", ("a",)))
+    assert isinstance(first, Run)
+    first.transition_plan("ready")
+
+    assert registry.for_batch("b1") == [first]
+    assert registry.for_batch("b2") == []
+    assert registry.for_listing("a") == [], "a listing's own page never follows a batch run"
+
+    second = registry.create(BatchApply("b1", ("a",), {"a": "hash"}, first.id))
+    assert isinstance(second, Run)
+    assert second.batch_id == "b1"
+    assert registry.for_batch("b1") == [second]
 
 
 def test_a_finished_run_does_not_block_a_new_one_for_the_same_listing() -> None:

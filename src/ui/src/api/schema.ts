@@ -1328,8 +1328,9 @@ export interface paths {
     /**
      * List Runs
      * @description ``listing`` narrows to that listing's current run (active, or finished
-     *     and not yet superseded -- decision 7's retention). Omitted, every run this
-     *     process still remembers, for a future workspace-wide view.
+     *     and not yet superseded -- decision 7's retention); ``scope=batch&batch=``
+     *     to that listing batch's. Omitted, every run this process still
+     *     remembers, for a future workspace-wide view.
      */
     get: operations["list_runs_api_runs_get"];
     put?: never;
@@ -1337,8 +1338,10 @@ export interface paths {
      * Create Run
      * @description A ``409`` names the run already holding one of these listings, so the
      *     caller can reattach to it (``GET /api/runs/{active_run}``) instead of
-     *     retrying into the same refusal. A workspace apply that is not exactly
-     *     its review is a ``409`` too, carrying the refusal's message.
+     *     retrying into the same refusal. A workspace or batch apply that is not
+     *     exactly its review is a ``409`` too, carrying the refusal's message, and
+     *     so is a batch plan with nothing to deploy; a batch nobody holds is a
+     *     ``404``.
      */
     post: operations["create_run_api_runs_post"];
     delete?: never;
@@ -2126,6 +2129,8 @@ export interface components {
     };
     /** ApplyRunDetail */
     ApplyRunDetail: {
+      /** Batch Id */
+      batch_id?: string | null;
       /**
        * Created At
        * Format: date-time
@@ -2164,12 +2169,14 @@ export interface components {
        * Scope
        * @enum {string}
        */
-      scope: "listings" | "workspace";
+      scope: "listings" | "workspace" | "batch";
       /** Seen */
       seen: boolean;
     };
     /** ApplyRunSummary */
     ApplyRunSummary: {
+      /** Batch Id */
+      batch_id?: string | null;
       /**
        * Created At
        * Format: date-time
@@ -2195,7 +2202,7 @@ export interface components {
        * Scope
        * @enum {string}
        */
-      scope: "listings" | "workspace";
+      scope: "listings" | "workspace" | "batch";
       /** Seen */
       seen: boolean;
     };
@@ -2206,6 +2213,29 @@ export interface components {
        * @enum {string}
        */
       kind: "colour-matrix" | "multiple" | "single";
+    };
+    /** BatchApplyRequest */
+    BatchApplyRequest: {
+      /** Batch Id */
+      batch_id: string;
+      /** Expect */
+      expect: {
+        [key: string]: string;
+      };
+      /**
+       * Kind
+       * @constant
+       */
+      kind: "apply";
+      /** Listings */
+      listings: string[];
+      /** Reviewed Run Id */
+      reviewed_run_id: string;
+      /**
+       * Scope
+       * @constant
+       */
+      scope: "batch";
     };
     /** BatchDetail */
     BatchDetail: {
@@ -2299,6 +2329,25 @@ export interface components {
       /** Label */
       label: string;
     };
+    /**
+     * BatchPlanRequest
+     * @description Plan the reviewed rows of one listing batch that have changes to
+     *     deploy (ADR-0059); the server resolves which.
+     */
+    BatchPlanRequest: {
+      /** Batch Id */
+      batch_id: string;
+      /**
+       * Kind
+       * @constant
+       */
+      kind: "plan";
+      /**
+       * Scope
+       * @constant
+       */
+      scope: "batch";
+    };
     /** BatchRowDetail */
     BatchRowDetail: {
       /** Ai */
@@ -2330,6 +2379,11 @@ export interface components {
        * @default false
        */
       deleted: boolean;
+      /**
+       * Deployable
+       * @default false
+       */
+      deployable: boolean;
       /** Design */
       design: string;
       /** Error */
@@ -3903,6 +3957,8 @@ export interface components {
     };
     /** PlanRunDetail */
     PlanRunDetail: {
+      /** Batch Id */
+      batch_id?: string | null;
       /**
        * Created At
        * Format: date-time
@@ -3941,12 +3997,14 @@ export interface components {
        * Scope
        * @enum {string}
        */
-      scope: "listings" | "workspace";
+      scope: "listings" | "workspace" | "batch";
       /** Seen */
       seen: boolean;
     };
     /** PlanRunSummary */
     PlanRunSummary: {
+      /** Batch Id */
+      batch_id?: string | null;
       /**
        * Created At
        * Format: date-time
@@ -3972,7 +4030,7 @@ export interface components {
        * Scope
        * @enum {string}
        */
-      scope: "listings" | "workspace";
+      scope: "listings" | "workspace" | "batch";
       /** Seen */
       seen: boolean;
     };
@@ -7678,7 +7736,8 @@ export interface operations {
     parameters: {
       query?: {
         listing?: string | null;
-        scope?: ("listings" | "workspace") | null;
+        scope?: ("listings" | "workspace" | "batch") | null;
+        batch?: string | null;
       };
       header?: never;
       path?: never;
@@ -7720,8 +7779,10 @@ export interface operations {
         "application/json":
           | components["schemas"]["ListingPlanRequest"]
           | components["schemas"]["WorkspacePlanRequest"]
+          | components["schemas"]["BatchPlanRequest"]
           | components["schemas"]["ListingApplyRequest"]
-          | components["schemas"]["WorkspaceApplyRequest"];
+          | components["schemas"]["WorkspaceApplyRequest"]
+          | components["schemas"]["BatchApplyRequest"];
       };
     };
     responses: {

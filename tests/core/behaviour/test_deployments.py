@@ -25,6 +25,8 @@ from etsy_listings.core.application.deploy.events import (
     StageCheckingEvent,
 )
 from etsy_listings.core.application.deploy.registry import (
+    BatchApply,
+    BatchPlan,
     Conflict,
     ListingApply,
     ListingPlan,
@@ -234,6 +236,63 @@ def test_a_workspace_apply_needs_a_workspace_plan_as_its_review(
 
     with pytest.raises(ReviewedPlanRefusedError, match="reviewed_run_id is not a workspace plan"):
         idle.submit(WorkspaceApply((), {}, reviewed_id))
+
+
+def _reviewed_batch_plan(deployments: Deployments, batch_id: str, *listings: str) -> Run:
+    """A ready batch plan of ``batch_id`` that reviewed ``listings``, each at
+    :data:`FINGERPRINT`, without executing it."""
+    run = _run(deployments.submit(BatchPlan(batch_id, listings)))
+    run.transition_plan("planning")
+    for name in listings:
+        plan = PlanDTO(listing=name, is_live=False, etsy_listing_id=None, stage_plans=())
+        run.append(
+            lambda i, name=name, plan=plan: ListingPlannedEvent(
+                id=i, listing=name, plan=plan, fingerprint=FINGERPRINT
+            )
+        )
+    run.transition_plan("planned")
+    run.transition_plan("ready")
+    return run
+
+
+def test_a_batch_apply_naming_exactly_its_batch_review_is_queued(idle: Deployments) -> None:
+    reviewed = _reviewed_batch_plan(idle, "b1", "a", "b")
+
+    run = _run(
+        idle.submit(BatchApply("b1", ("a", "b"), {"a": FINGERPRINT, "b": FINGERPRINT}, reviewed.id))
+    )
+
+    assert run.scope == "batch"
+    assert run.reviewed_run_id == reviewed.id
+    assert idle.runs(scope="batch", batch="b1") == [run]
+    assert idle.get(reviewed.id) is reviewed
+
+
+def test_a_batch_apply_differing_from_its_review_is_refused(idle: Deployments) -> None:
+    reviewed = _reviewed_batch_plan(idle, "b1", "a", "b")
+
+    with pytest.raises(ReviewedPlanRefusedError, match="exactly match the reviewed batch plan"):
+        idle.submit(BatchApply("b1", ("a",), {"a": FINGERPRINT}, reviewed.id))
+
+    assert idle.runs(scope="batch", batch="b1") == [reviewed], "a refusal queues nothing"
+
+
+@pytest.mark.parametrize("source", ["other-batch", "workspace-plan"])
+def test_a_batch_apply_needs_a_plan_of_its_own_batch(idle: Deployments, source: str) -> None:
+    if source == "other-batch":
+        reviewed = _reviewed_batch_plan(idle, "b2", "a")
+    else:
+        reviewed = _reviewed_workspace_plan(idle, "a")
+
+    with pytest.raises(ReviewedPlanRefusedError, match="reviewed_run_id is not a batch plan"):
+        idle.submit(BatchApply("b1", ("a",), {"a": FINGERPRINT}, reviewed.id))
+
+
+def test_a_workspace_apply_cannot_name_a_batch_review(idle: Deployments) -> None:
+    reviewed = _reviewed_batch_plan(idle, "b1", "a")
+
+    with pytest.raises(ReviewedPlanRefusedError, match="reviewed_run_id is not a workspace plan"):
+        idle.submit(WorkspaceApply(("a",), {"a": FINGERPRINT}, reviewed.id))
 
 
 # ------------------------------------------------------------------ retention
