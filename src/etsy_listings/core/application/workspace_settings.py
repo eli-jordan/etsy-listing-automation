@@ -67,6 +67,8 @@ BACKUP_REPOSITORY = "backup.repository"
 BACKUP_DESTINATIONS = "backup.destinations"
 BACKUP_INTERVAL = "backup.interval_hours"
 BACKUP_RETENTION = "backup.retention"
+BACKUP_WORKSPACE_ID = "backup.workspace_id"
+"""Not editable from Setup; written once by ``backup_repository.ensure_workspace_id``."""
 _WHOLE = 100
 """Percent: what the page's six shares total."""
 

@@ -14,8 +14,9 @@ from __future__ import annotations
 
 import threading
 import time
-from collections.abc import Callable, Sequence
-from datetime import datetime
+from collections.abc import Callable, Iterable, Sequence
+from dataclasses import dataclass
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from etsy_listings.core.backup.repository import (
@@ -58,6 +59,51 @@ def snapshot_id(number: int) -> str:
     return f"{number:064x}"
 
 
+@dataclass(frozen=True)
+class MemorySnapshot:
+    """A snapshot as the in-memory repository keeps it. A bare ``datetime``
+    in :attr:`InMemoryRestic.snapshots` is one made by hand: untagged, on
+    ``pc``."""
+
+    time: datetime
+    workspace_id: str | None = None
+    hostname: str = "pc"
+    path: str = "/workspace"
+    number: int | None = None
+    """Its id's number; None numbers it by its place in the list."""
+
+
+def kept_by_retention(times: Iterable[datetime], retention: RetentionSettings) -> set[datetime]:
+    """What restic's ``forget`` keeps of one group: every snapshot within
+    ``keep_within_days`` of the newest, and the newest of each of the last
+    ``weekly + 1`` weeks and ``monthly + 1`` months that have one (spec,
+    *Backup run* step 5). As restic 0.17 and later do, a rule with fewer
+    weeks or months than it may keep also keeps the oldest snapshot."""
+    times = list(times)
+    if not times:
+        return set()
+    latest = max(times)
+    kept = {t for t in times if latest - t < timedelta(days=retention.keep_within_days)}
+    kept |= _newest_of_each(times, lambda t: t.isocalendar()[:2], retention.weekly + 1)
+    kept |= _newest_of_each(times, lambda t: (t.year, t.month), retention.monthly + 1)
+    return kept
+
+
+def _newest_of_each(
+    times: list[datetime], period: Callable[[datetime], tuple[int, int]], count: int
+) -> set[datetime]:
+    """The newest time in each of the ``count`` latest periods, and the
+    oldest time when there are fewer periods than ``count``."""
+    latest: dict[tuple[int, int], datetime] = {}
+    for t in times:
+        key = period(t)
+        latest[key] = max(latest.get(key, t), t)
+    kept = {latest[key] for key in sorted(latest, reverse=True)[:count]}
+    if len(latest) < count:
+        kept.add(min(times))
+    return kept
+
+
 class InMemoryRestic:
     """Opens repositories that live in memory; ``now`` dates each backup.
 
@@ -68,8 +114,10 @@ class InMemoryRestic:
 
     def __init__(self, now: Callable[[], datetime]) -> None:
         self.now = now
-        self.snapshots: list[datetime] = []
-        """Each snapshot's time, oldest first."""
+        self.snapshots: list[datetime | MemorySnapshot] = []
+        """Each snapshot, oldest first: a bare time is one made by hand."""
+        self.hostname = "pc"
+        """The host the next backups are made on."""
         self.password: str | None = None
         """When set, opening with any other password fails as restic does."""
         self.backup_figures: Sequence[BackupFigures] = (BackupFigures(5, 10),)
@@ -85,6 +133,8 @@ class InMemoryRestic:
         self._failing: dict[str, ResticError] = {}
         self._holds: dict[str, threading.Event] = {}
         self._stopped: list[str] = []
+        self._forgotten = 0
+        """Snapshots forgotten so far, so a new one never reuses an id."""
         self._lock = threading.Lock()
 
     def __call__(self, binary: Path, folder: Path, password: str) -> Repository:
@@ -140,22 +190,35 @@ class InMemoryRestic:
     def snapshot_list(self, *, lock: bool) -> tuple[Snapshot, ...]:
         with self._lock:
             self.reads_without_lock += not lock
-            times = list(self.snapshots)
-        return tuple(
-            Snapshot(
-                id=snapshot_id(n),
-                short_id=snapshot_id(n)[:8],
-                time=when,
-                paths=("/workspace",),
-                hostname="pc",
-            )
-            for n, when in enumerate(times, 1)
-        )
+            found = list(self.snapshots)
+        return tuple(_listed(n, entry) for n, entry in enumerate(found, 1))
 
-    def add_snapshot(self) -> str:
+    def add_snapshot(self, workspace_id: str | None = None) -> str:
         with self._lock:
-            self.snapshots.append(self.now())
-            return snapshot_id(len(self.snapshots))
+            number = len(self.snapshots) + 1 + self._forgotten
+            self.snapshots.append(
+                MemorySnapshot(self.now(), workspace_id, self.hostname, number=number)
+            )
+            return snapshot_id(number)
+
+    def workspace_snapshots(self, workspace_id: str) -> list[MemorySnapshot]:
+        """The snapshots tagged as the workspace ``workspace_id``'s."""
+        with self._lock:
+            return [
+                entry
+                for entry in self.snapshots
+                if isinstance(entry, MemorySnapshot) and entry.workspace_id == workspace_id
+            ]
+
+    def forget_snapshots(self, retention: RetentionSettings, workspace_id: str) -> None:
+        """Only ``workspace_id``'s, as one group whatever host or path."""
+        group = self.workspace_snapshots(workspace_id)
+        kept = kept_by_retention((entry.time for entry in group), retention)
+        gone = [entry for entry in group if entry.time not in kept]
+        with self._lock:
+            for entry in gone:
+                self.snapshots.remove(entry)
+            self._forgotten += len(gone)
 
 
 class _Repository:
@@ -187,6 +250,7 @@ class _Repository:
         self,
         folder: Path,
         *,
+        workspace_id: str,
         excludes: Sequence[str] = (),
         progress: Callable[[BackupFigures], None] | None = None,
         cancel: threading.Event | None = None,
@@ -196,14 +260,19 @@ class _Repository:
             if progress is not None:
                 progress(figures)
         self._restic.wait_if_held("back_up", cancel)
-        made = self._restic.add_snapshot()
+        made = self._restic.add_snapshot(workspace_id)
         return BackupSummary(made, self._restic.data_added, self._restic.warnings)
 
     def forget(
-        self, retention: RetentionSettings, *, cancel: threading.Event | None = None
+        self,
+        retention: RetentionSettings,
+        *,
+        workspace_id: str,
+        cancel: threading.Event | None = None,
     ) -> None:
         self._start("forget", cancel)
         self._restic.wait_if_held("forget", cancel)
+        self._restic.forget_snapshots(retention, workspace_id)
 
     def prune(self, *, cancel: threading.Event | None = None) -> None:
         self._start("prune", cancel)
@@ -239,3 +308,16 @@ class _Repository:
 
     def verify_password(self) -> None:
         self._start("verify_password")
+
+
+def _listed(number: int, entry: datetime | MemorySnapshot) -> Snapshot:
+    if isinstance(entry, datetime):
+        entry = MemorySnapshot(entry)
+    identity = snapshot_id(entry.number or number)
+    return Snapshot(
+        id=identity,
+        short_id=identity[:8],
+        time=entry.time,
+        paths=(entry.path,),
+        hostname=entry.hostname,
+    )

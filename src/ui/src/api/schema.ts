@@ -2638,6 +2638,8 @@ export interface components {
       /** Restic Binary */
       restic_binary?: string | null;
       retention?: components["schemas"]["RetentionSettings"];
+      /** Workspace Id */
+      workspace_id?: string | null;
     };
     /** BackupSnapshot */
     BackupSnapshot: {

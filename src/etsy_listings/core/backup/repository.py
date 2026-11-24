@@ -136,18 +136,26 @@ class Repository(Protocol):
         self,
         folder: Path,
         *,
+        workspace_id: str,
         excludes: Sequence[str] = (),
         progress: BackupListener | None = None,
         cancel: threading.Event | None = None,
     ) -> BackupSummary:
-        """Snapshot ``folder``, leaving out what matches ``excludes``."""
+        """Snapshot ``folder``, leaving out what matches ``excludes``,
+        marked as the workspace ``workspace_id``'s."""
         ...
 
     def forget(
-        self, retention: RetentionSettings, *, cancel: threading.Event | None = None
+        self,
+        retention: RetentionSettings,
+        *,
+        workspace_id: str,
+        cancel: threading.Event | None = None,
     ) -> None:
-        """Forget the snapshots ``retention`` does not keep (spec, *Backup run*
-        step 5); their data stays until a prune."""
+        """Forget the workspace ``workspace_id``'s snapshots ``retention``
+        does not keep, as one schedule whatever host or folder made them
+        (spec, *Backup run* step 5). Other snapshots are left alone; their
+        data stays until a prune."""
         ...
 
     def prune(self, *, cancel: threading.Event | None = None) -> None:

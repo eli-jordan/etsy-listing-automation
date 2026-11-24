@@ -71,6 +71,13 @@ app passes it to restic only in that subprocess's environment, as
 copy in a password manager, because the `.env` inside a backup is encrypted with
 that same password.
 
+`backup.workspace_id` is the **workspace ID**, a random UUID. Set-up writes
+it, and `backup init` or the first run write one when a hand-written block
+has none. Setup does not show it. Because it is in `settings.yaml`, a copied,
+moved or restored workspace keeps it. Set-up that connects a destination's
+backup still writes a new one: that backup's snapshots belong to the
+workspace that made them.
+
 The paths are specific to one machine, yet `settings.yaml` travels with the
 workspace when it is restored somewhere else. See *Missing repository* for how
 the app treats stale paths.
@@ -117,14 +124,20 @@ One run, from the scheduler or from "Back up now":
    batch-queue dispatch, Prepare job or scene-warming pass is in progress.
 2. **Pause.** Stop those runners from starting new work. A submission during
    the pause is accepted, held, and reported as `waiting for backup`.
-3. **Back up.** Run `restic backup` on the live workspace root. Leave out the
+3. **Back up.** Run `restic backup` on the live workspace root, tagged
+   `workspace:<id>` with the workspace ID (*Configuration*). Leave out the
    temporary names the app's own writers use: `*.tmp`, plus the patterns
    `core/workspace/atomic.py` and the other temp-then-rename writers create.
 4. **Resume.** Release held jobs in the order they were submitted. Jobs resume
    whether the backup succeeded or failed.
 5. **Forget.** Apply the retention with `restic forget`. restic counts the
    current week and month as one of each, so 4 past weeks and 3 past months
-   become `--keep-within 7d --keep-weekly 5 --keep-monthly 4`.
+   become `--keep-within 7d --keep-weekly 5 --keep-monthly 4`. It runs with
+   `--tag workspace:<id> --group-by tags`: only this workspace's snapshots,
+   as one group, whatever host or folder made them, so the old ones age out
+   after the PC is renamed or the workspace moves (ADR-0060). Other
+   workspaces' snapshots and untagged ones, such as a backup made by hand,
+   are never forgotten. `prune` is repository-wide.
 6. **Weekly.** If 7 days have passed since the last prune, run `restic prune`,
    then `restic check` on the local repository.
 7. **Copy** the repository to each destination (see *Copy to destinations*).

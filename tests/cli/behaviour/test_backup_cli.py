@@ -163,6 +163,7 @@ def test_init_asks_for_a_password_stores_it_and_creates_the_repository(
     assert code == 0, output
     assert (repository / "config").is_file()
     assert Secrets.load(workspace_root / layout.ENV_FILE).require_backup_password() == PASSWORD
+    assert "workspace_id: " in (workspace_root / "settings.yaml").read_text(encoding="utf-8")
     assert "password manager" in output
     assert PASSWORD not in output
     assert len(script.asked) == 2
@@ -181,6 +182,9 @@ def test_init_uses_a_stored_password_without_asking(
     assert code == 0, output
     assert script.asked == []
     assert (repository / "config").is_file()
+    settings = (workspace_root / "settings.yaml").read_text(encoding="utf-8")
+    assert _run(workspace_root, "init")[0] == 1, "the repository is there now"
+    assert (workspace_root / "settings.yaml").read_text(encoding="utf-8") == settings
 
 
 @pytest.mark.restic

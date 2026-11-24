@@ -16,6 +16,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from etsy_listings.core.application.backup_coordinator import BackupEnvironment
+from etsy_listings.core.application.backup_repository import backup_settings
 from etsy_listings.core.backup.binary import RESTIC_BINARY_ENV_VAR
 from etsy_listings.core.backup.state import (
     BackupState,
@@ -117,6 +118,7 @@ def test_set_up_writes_the_block_and_password_then_starts_the_first_backup(
     settings = workspace_root.joinpath("settings.yaml").read_text(encoding="utf-8")
     assert "interval_hours: 6" in settings
     assert str(repository) in settings
+    assert backup_settings(Workspace.discover(root_override=workspace_root)).workspace_id
     assert PASSWORD in (workspace_root / layout.ENV_FILE).read_text(encoding="utf-8")
     assert (repository / "config").is_file()
     assert files(cloud).keys() == files(repository).keys()

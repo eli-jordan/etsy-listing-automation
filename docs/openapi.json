@@ -1329,6 +1329,17 @@
           },
           "retention": {
             "$ref": "#/components/schemas/RetentionSettings"
+          },
+          "workspace_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workspace Id"
           }
         },
         "required": [

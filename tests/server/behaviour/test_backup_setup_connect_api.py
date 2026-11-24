@@ -136,6 +136,8 @@ def test_set_up_connects_the_backup_a_destination_holds_then_backs_up_into_it(
     settings = (workspace_root / "settings.yaml").read_text(encoding="utf-8")
     assert f"repository: {storage}" in settings
     assert str(cloud) in settings
+    # A fresh workspace gets its own ID, even when it connects a backup.
+    assert "workspace_id: " in settings
     assert PASSWORD in (workspace_root / layout.ENV_FILE).read_text(encoding="utf-8")
     # The schedule backs up into the connected repository, and the copy back
     # only adds the new snapshot: nothing that was there is replaced or deleted.

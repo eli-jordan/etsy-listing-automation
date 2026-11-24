@@ -28,6 +28,7 @@ from etsy_listings.core.application.backup_repository import (
     backup_status,
     configured_backup,
     create_repository,
+    ensure_workspace_id,
 )
 from etsy_listings.core.application.backup_restore import prepare_restore
 from etsy_listings.core.application.backup_run import BackupProgress, BackupRunner
@@ -79,11 +80,13 @@ def init(root: str | None = root_option()) -> None:
         copies = existing_copies(backup.destinations)
         if copies:
             _connect(backup, copies)
+            ensure_workspace_id(workspace)
             return
         existing = backup.password
         password = existing or _ask_password()
         typer.echo(f"Creating the backup repository at {backup.storage}...", err=True)
         repository_id = create_repository(backup, password, store=existing is None)
+        ensure_workspace_id(workspace)
     typer.echo(f"Created the backup repository at {backup.storage} (id {repository_id[:8]}).")
     if existing is None:
         _stored(backup)

@@ -20,6 +20,9 @@ from tests.support.backups import PASSWORD, configure_backups, initialise
 
 pytestmark = pytest.mark.restic
 
+OURS = "6a1f3c0e-2b9d-4e5a-8c7f-0d1e2f3a4b5c"
+TAG = f"workspace:{OURS}"
+
 
 @pytest.fixture
 def workspace(
@@ -83,14 +86,53 @@ def test_forget_keeps_what_the_retention_describes(restic_binary: Path, tmp_path
     for time in times:
         # Use local calendar dates and let restic apply the host's historical UTC offset.
         local = f"{time:%Y-%m-%d %H:%M:%S}"
-        restic.run("backup", str(source), "--host", "test", "--time", local)
+        restic.run("backup", str(source), "--host", "test", "--time", local, "--tag", TAG)
 
     before = [snapshot.time for snapshot in restic.snapshots()]
     assert [time.replace(tzinfo=None) for time in before] == [
         time.replace(tzinfo=None) for time in times
     ]
-    restic.forget(RetentionSettings(keep_within_days=7, weekly=4, monthly=3))
+    restic.forget(RetentionSettings(keep_within_days=7, weekly=4, monthly=3), workspace_id=OURS)
     remaining = {snapshot.time for snapshot in restic.snapshots()}
 
     assert remaining == _kept_by_the_spec(before)
     assert len(remaining) < len(set(times))
+
+
+def test_forget_ages_out_another_host_s_snapshots_of_the_same_workspace(
+    restic_binary: Path, tmp_path: Path
+) -> None:
+    """The PC was renamed: its old snapshots share the workspace tag, so
+    they age out with the new host's. Another workspace's and an untagged
+    one stay."""
+    restic = Restic(restic_binary, tmp_path / "repository", PASSWORD)
+    restic.init()
+    source = tmp_path / "source"
+    source.mkdir()
+    (source / "shop.yaml").write_bytes(b"shop: naturally inked\n")
+
+    def back_up(host: str, when: str, *tags: str) -> None:
+        tagged = [arg for tag in tags for arg in ("--tag", tag)]
+        restic.run("backup", str(source), "--host", host, "--time", when, *tagged)
+
+    # October, then weeks 45, 46 and 47 of November 2026. Two months, so
+    # restic need not keep the oldest to fill --keep-monthly.
+    back_up("new-pc", "2026-10-20 12:00:00", TAG)
+    back_up("old-pc", "2026-11-02 12:00:00", TAG)
+    back_up("old-pc", "2026-11-03 12:00:00", TAG)
+    back_up("old-pc", "2026-11-04 12:00:00", "workspace:another")
+    back_up("old-pc", "2026-11-05 12:00:00")
+    back_up("new-pc", "2026-11-09 12:00:00", TAG)
+    back_up("new-pc", "2026-11-22 12:00:00", TAG)
+
+    # The last day, the latest of two weeks and of two months.
+    restic.forget(RetentionSettings(keep_within_days=1, weekly=1, monthly=1), workspace_id=OURS)
+    left = {(snapshot.hostname, f"{snapshot.time:%m-%d}") for snapshot in restic.snapshots()}
+
+    assert left == {
+        ("old-pc", "11-04"),
+        ("old-pc", "11-05"),
+        ("new-pc", "10-20"),
+        ("new-pc", "11-09"),
+        ("new-pc", "11-22"),
+    }

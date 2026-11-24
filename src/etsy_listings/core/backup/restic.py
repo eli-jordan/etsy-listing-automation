@@ -140,11 +140,12 @@ class Restic:
         self,
         folder: Path,
         *,
+        workspace_id: str,
         excludes: Sequence[str] = (),
         progress: BackupListener | None = None,
         cancel: threading.Event | None = None,
     ) -> BackupSummary:
-        arguments = ["backup", str(folder)]
+        arguments = ["backup", str(folder), "--tag", workspace_tag(workspace_id)]
         for pattern in excludes:
             arguments += ["--exclude", pattern]
         heard = _BackupLines(progress or (lambda _: None))
@@ -157,9 +158,13 @@ class Restic:
         return BackupSummary(heard.snapshot_id, heard.data_added, tuple(heard.warnings))
 
     def forget(
-        self, retention: RetentionSettings, *, cancel: threading.Event | None = None
+        self,
+        retention: RetentionSettings,
+        *,
+        workspace_id: str,
+        cancel: threading.Event | None = None,
     ) -> None:
-        self.run(*forget_arguments(retention), cancel=cancel)
+        self.run(*forget_arguments(retention, workspace_id), cancel=cancel)
 
     def prune(self, *, cancel: threading.Event | None = None) -> None:
         self.run("prune", cancel=cancel)
@@ -245,11 +250,26 @@ class Restic:
 # ----------------------------------------------------- arguments and lines
 
 
-def forget_arguments(retention: RetentionSettings) -> tuple[str, ...]:
+def workspace_tag(workspace_id: str) -> str:
+    """The tag every snapshot of the workspace ``workspace_id`` carries."""
+    return f"workspace:{workspace_id}"
+
+
+def forget_arguments(retention: RetentionSettings, workspace_id: str) -> tuple[str, ...]:
     """restic counts the current week and month as one of each, so N past
-    weeks and months are N + 1 (spec, *Backup run* step 5)."""
+    weeks and months are N + 1 (spec, *Backup run* step 5).
+
+    Only the workspace's tagged snapshots are considered, grouped by that
+    tag rather than restic's default host and paths (ADR-0060): a renamed PC
+    or a moved workspace then shares the old snapshots' schedule, and they
+    age out. Other workspaces' snapshots and untagged ones, such as a backup
+    made by hand, are never forgotten here."""
     return (
         "forget",
+        "--tag",
+        workspace_tag(workspace_id),
+        "--group-by",
+        "tags",
         "--keep-within",
         f"{retention.keep_within_days}d",
         "--keep-weekly",

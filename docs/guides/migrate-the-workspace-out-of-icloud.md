@@ -76,6 +76,10 @@ backup:
   interval_hours: 12
 ```
 
+Leave out `workspace_id`: `backup init` adds that line, a random ID the
+retention keeps this workspace's backups by. Don't edit or copy it to another
+workspace.
+
 The backup storage folder must not exist yet, or must be empty. The password
 goes into the workspace `.env` as `ETSY_LISTINGS_BACKUP_PASSWORD`. Either add
 the line yourself, or let `backup init` ask for it in step 4 and write it.

@@ -37,6 +37,7 @@ from etsy_listings.core.application.backup_repository import (
     configured_backup,
     create_repository,
     holds_files,
+    new_workspace_id,
 )
 from etsy_listings.core.application.refusals import (
     InvalidSettingsEditError,
@@ -142,6 +143,9 @@ class PreparedSetUp:
             "destinations": [str(path) for path in answers.destinations],
             "interval_hours": answers.interval_hours,
             "retention": answers.retention.model_dump(),
+            # Backups are off, so the workspace has none yet: even one that
+            # connects a destination's backup gets its own (ADR-0060).
+            "workspace_id": new_workspace_id(),
         }
         workspace_settings.edit_settings(
             self.workspace,

@@ -22,6 +22,7 @@ from etsy_listings.core.application.backup_repository import (
     ConfiguredBackup,
     backup_settings,
     configured_backup,
+    ensure_workspace_id,
 )
 from etsy_listings.core.application.job_gate import JobGate
 from etsy_listings.core.backup.binary import ResticBinaries
@@ -149,11 +150,14 @@ class BackupRunner:
         run = _Run(self.now(), str(settings.repository), progress or (lambda _: None))
         try:
             # Inside the try: a refused configuration is a failed run.
+            if settings.workspace_id is None:
+                identity = ensure_workspace_id(self.workspace)
+                settings = settings.model_copy(update={"workspace_id": identity})
             backup = self._configured(settings)
             repository = backup.open()
             with _paused(gate, run):
                 run.enter("backing_up")
-                self._back_up(repository, run, cancel)
+                self._back_up(repository, backup, run, cancel)
             with maintenance() if maintenance else nullcontext(enter_result=True) as available:
                 if available:
                     self._tidy(repository, backup, run, cancel)
@@ -187,7 +191,9 @@ class BackupRunner:
         """Forget, then the weekly prune and check, each under restic's
         exclusive lock."""
         run.enter("forgetting")
-        repository.forget(backup.settings.retention, cancel=cancel)
+        repository.forget(
+            backup.settings.retention, workspace_id=backup.workspace_id, cancel=cancel
+        )
         state = backup.state()
         prune = self._prune_due(state)
         if prune:
@@ -199,9 +205,19 @@ class BackupRunner:
             run.enter("checking")
             run.failure = self._check(repository, backup.store, cancel=cancel).message
 
-    def _back_up(self, repository: Repository, run: _Run, cancel: threading.Event | None) -> None:
+    def _back_up(
+        self,
+        repository: Repository,
+        backup: ConfiguredBackup,
+        run: _Run,
+        cancel: threading.Event | None,
+    ) -> None:
         summary = repository.back_up(
-            self.workspace.root, excludes=EXCLUDES, progress=run.read, cancel=cancel
+            self.workspace.root,
+            workspace_id=backup.workspace_id,
+            excludes=EXCLUDES,
+            progress=run.read,
+            cancel=cancel,
         )
         run.snapshot_id, run.data_added = summary.snapshot_id, summary.data_added
         run.warnings.extend(summary.warnings)
