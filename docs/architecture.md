@@ -1298,7 +1298,7 @@ separate modules and never start inference implicitly.
 ## restic for workspace backup
 
 The [workspace-backup spec](features/workspace-backup-20261123/spec.md) backs
-the workspace up with restic, run as a subprocess (ADR-0059). Which restic runs
+the workspace up with restic, run as a subprocess (ADR-0060). Which restic runs
 is `core/backup/binary.py`'s `ResticBinaries`: `ETSY_LISTINGS_RESTIC_BINARY`,
 then the `backup.restic_binary` setting, then restic 0.19.1 pinned by the
 SHA-256 of its Windows amd64 and Linux amd64 release files. Only `backup init`
@@ -1488,6 +1488,16 @@ destination holds a repository's copy (`holds_repository`), with
 `connect_from` in the refusal, and `repair_destination` refuses a destination
 whose `config` differs or is missing while restic files remain
 (`ForeignCopyError`). The ordinary copy also stops in these cases.
+
+First-time set-up uses the same connect. `backup_setup.prepare_set_up`
+checks every refusal before writing, and asks `backup_missing.existing_copies`
+whether the destinations hold a repository: copies of one repository share
+`config`'s bytes, and only a copy holding every file the others hold may be
+the source. When one does, `POST /api/backup/setup` and `backup init`
+connect it with `connect_existing` (Connect's own staging copy, the first
+copy that opens and passes a check) instead of creating, and the coordinator
+holds the `connect` slot meanwhile. The answer's `connected` names the
+destination and the snapshot count.
 
 ## Durable Marigold maps and CPU composition
 

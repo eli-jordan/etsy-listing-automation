@@ -50,6 +50,22 @@ export async function currentWorkspaceRun(): Promise<RunSummary | null> {
   return data[0] ?? null;
 }
 
+/** The current run deploying listing batch `batchId` (ADR-0059), if the
+ * server remembers one: active, or finished and not yet superseded. */
+export async function currentBatchRun(batchId: string): Promise<RunSummary | null> {
+  const { data, error } = await api.GET("/api/runs", {
+    params: { query: { scope: "batch", batch: batchId } },
+  });
+  if (error || !data) throw new RunsApiError(`could not check deploy runs for ${batchId}`);
+  return data[0] ?? null;
+}
+
+/** Whether a run is one the shared review page follows: every listing of the
+ * workspace, or one listing batch's reviewed rows. */
+export function isReviewedScope(run: Pick<RunSummary, "scope">): boolean {
+  return run.scope === "workspace" || run.scope === "batch";
+}
+
 export async function getRun(id: string): Promise<RunDetail> {
   const { data, error } = await api.GET("/api/runs/{run_id}", { params: { path: { run_id: id } } });
   if (error || !data) throw new RunsApiError(`could not load run ${id}`);

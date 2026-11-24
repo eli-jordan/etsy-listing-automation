@@ -71,6 +71,15 @@ of those folders overlap. It decides which folders may be a new backup storage
 folder or a restore target. It runs nothing itself.
 _Avoid_: backup config, backup settings (the `backup:` block as written)
 
+**Workspace ID**:
+A random UUID in `backup.workspace_id` that names one workspace across
+machines, hosts and folders. Every snapshot is tagged with it, and the
+retention keeps and groups this workspace's snapshots by it alone. Set-up
+writes it once, taking the one its repository's snapshots already carry when
+there is exactly one; it travels with `settings.yaml`, so a restored workspace
+keeps it, and it is never changed. The seller never edits it.
+_Avoid_: host, machine ID, repository ID (restic's id for the repository)
+
 **Restore target**:
 The new or empty folder a snapshot is restored into, never the live workspace,
 the backup storage folder, a destination or a folder inside one. It is checked

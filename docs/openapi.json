@@ -583,6 +583,17 @@
       },
       "ApplyRunDetail": {
         "properties": {
+          "batch_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Batch Id"
+          },
           "created_at": {
             "format": "date-time",
             "title": "Created At",
@@ -682,7 +693,8 @@
           "scope": {
             "enum": [
               "listings",
-              "workspace"
+              "workspace",
+              "batch"
             ],
             "title": "Scope",
             "type": "string"
@@ -713,6 +725,17 @@
       },
       "ApplyRunSummary": {
         "properties": {
+          "batch_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Batch Id"
+          },
           "created_at": {
             "format": "date-time",
             "title": "Created At",
@@ -759,7 +782,8 @@
           "scope": {
             "enum": [
               "listings",
-              "workspace"
+              "workspace",
+              "batch"
             ],
             "title": "Scope",
             "type": "string"
@@ -838,6 +862,36 @@
           "repository"
         ],
         "title": "BackupConnectRequest",
+        "type": "object"
+      },
+      "BackupConnected": {
+        "description": "The backup set-up connected instead of creating one.",
+        "properties": {
+          "destination": {
+            "title": "Destination",
+            "type": "string"
+          },
+          "notice": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notice"
+          },
+          "snapshots": {
+            "title": "Snapshots",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "destination",
+          "snapshots"
+        ],
+        "title": "BackupConnected",
         "type": "object"
       },
       "BackupHistoryResponse": {
@@ -1156,6 +1210,116 @@
         "title": "BackupSetUpRequest",
         "type": "object"
       },
+      "BackupSetUpResponse": {
+        "description": "The status once set up, and what set-up connected, if anything.",
+        "properties": {
+          "connected": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BackupConnected"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "destinations": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/DestinationOverview"
+            },
+            "title": "Destinations",
+            "type": "array"
+          },
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "interval_hours": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Interval Hours"
+          },
+          "last_success": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Success"
+          },
+          "next_due": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Due"
+          },
+          "password_min_length": {
+            "default": 12,
+            "title": "Password Min Length",
+            "type": "integer"
+          },
+          "repository": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RepositoryOverview"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "restore": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RestoreStatus"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "running": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RunningBackup"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "warnings": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/BackupWarning"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "enabled"
+        ],
+        "title": "BackupSetUpResponse",
+        "type": "object"
+      },
       "BackupSettings": {
         "additionalProperties": false,
         "description": "The ``backup:`` block. Paths are this machine's, and the block travels\nwith the workspace, so a path that no longer exists is not refused here:\nthe backup reports a missing repository instead (spec, *Missing\nrepository*), and the rest of the app keeps loading its settings.",
@@ -1200,6 +1364,17 @@
           },
           "retention": {
             "$ref": "#/components/schemas/RetentionSettings"
+          },
+          "workspace_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workspace Id"
           }
         },
         "required": [
@@ -1320,6 +1495,53 @@
           "message"
         ],
         "title": "BackupWarning",
+        "type": "object"
+      },
+      "BatchApplyRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "batch_id": {
+            "title": "Batch Id",
+            "type": "string"
+          },
+          "expect": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Expect",
+            "type": "object"
+          },
+          "kind": {
+            "const": "apply",
+            "title": "Kind",
+            "type": "string"
+          },
+          "listings": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Listings",
+            "type": "array"
+          },
+          "reviewed_run_id": {
+            "title": "Reviewed Run Id",
+            "type": "string"
+          },
+          "scope": {
+            "const": "batch",
+            "title": "Scope",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "scope",
+          "batch_id",
+          "listings",
+          "expect",
+          "reviewed_run_id"
+        ],
+        "title": "BatchApplyRequest",
         "type": "object"
       },
       "BatchDetail": {
@@ -1483,6 +1705,33 @@
         "title": "BatchPatch",
         "type": "object"
       },
+      "BatchPlanRequest": {
+        "additionalProperties": false,
+        "description": "Plan the reviewed rows of one listing batch that have changes to\ndeploy (ADR-0059); the server resolves which.",
+        "properties": {
+          "batch_id": {
+            "title": "Batch Id",
+            "type": "string"
+          },
+          "kind": {
+            "const": "plan",
+            "title": "Kind",
+            "type": "string"
+          },
+          "scope": {
+            "const": "batch",
+            "title": "Scope",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "scope",
+          "batch_id"
+        ],
+        "title": "BatchPlanRequest",
+        "type": "object"
+      },
       "BatchRowDetail": {
         "properties": {
           "ai": {
@@ -1536,6 +1785,11 @@
           "deleted": {
             "default": false,
             "title": "Deleted",
+            "type": "boolean"
+          },
+          "deployable": {
+            "default": false,
+            "title": "Deployable",
             "type": "boolean"
           },
           "design": {
@@ -5533,6 +5787,17 @@
       },
       "PlanRunDetail": {
         "properties": {
+          "batch_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Batch Id"
+          },
           "created_at": {
             "format": "date-time",
             "title": "Created At",
@@ -5627,7 +5892,8 @@
           "scope": {
             "enum": [
               "listings",
-              "workspace"
+              "workspace",
+              "batch"
             ],
             "title": "Scope",
             "type": "string"
@@ -5657,6 +5923,17 @@
       },
       "PlanRunSummary": {
         "properties": {
+          "batch_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Batch Id"
+          },
           "created_at": {
             "format": "date-time",
             "title": "Created At",
@@ -5698,7 +5975,8 @@
           "scope": {
             "enum": [
               "listings",
-              "workspace"
+              "workspace",
+              "batch"
             ],
             "title": "Scope",
             "type": "string"
@@ -7217,6 +7495,17 @@
               }
             ],
             "title": "Message"
+          },
+          "notice": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notice"
           },
           "outcome": {
             "enum": [
@@ -10300,7 +10589,7 @@
     },
     "/api/backup/setup": {
       "post": {
-        "description": "Write the ``backup:`` block and the password, create the repository\nand the destination folders, then start the first backup. Refuses a\nshort password (422), a folder that holds files (409) and a destination\nwhose parent is missing (422), writing nothing.",
+        "description": "Write the ``backup:`` block and the password, create the repository\nand the destination folders, then start the first backup. Refuses a\nshort password (422), a folder that holds files (409) and a destination\nwhose parent is missing (422), writing nothing.\n\nWhen a destination already holds a backup, connects it instead, as\n``/connect`` does, answering once it is copied: ``connected`` names the\ndestination. Refuses a password that does not open it (422, field\n``password``), part of a copy, and two different repositories (422).",
         "operationId": "set_up_api_backup_setup_post",
         "requestBody": {
           "content": {
@@ -10317,7 +10606,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/BackupOverview"
+                  "$ref": "#/components/schemas/BackupSetUpResponse"
                 }
               }
             },
@@ -13160,7 +13449,7 @@
     },
     "/api/runs": {
       "get": {
-        "description": "``listing`` narrows to that listing's current run (active, or finished\nand not yet superseded -- decision 7's retention). Omitted, every run this\nprocess still remembers, for a future workspace-wide view.",
+        "description": "``listing`` narrows to that listing's current run (active, or finished\nand not yet superseded -- decision 7's retention); ``scope=batch&batch=``\nto that listing batch's. Omitted, every run this process still\nremembers, for a future workspace-wide view.",
         "operationId": "list_runs_api_runs_get",
         "parameters": [
           {
@@ -13188,7 +13477,8 @@
                 {
                   "enum": [
                     "listings",
-                    "workspace"
+                    "workspace",
+                    "batch"
                   ],
                   "type": "string"
                 },
@@ -13197,6 +13487,22 @@
                 }
               ],
               "title": "Scope"
+            }
+          },
+          {
+            "in": "query",
+            "name": "batch",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Batch"
             }
           }
         ],
@@ -13246,7 +13552,7 @@
         ]
       },
       "post": {
-        "description": "A ``409`` names the run already holding one of these listings, so the\ncaller can reattach to it (``GET /api/runs/{active_run}``) instead of\nretrying into the same refusal. A workspace apply that is not exactly\nits review is a ``409`` too, carrying the refusal's message.",
+        "description": "A ``409`` names the run already holding one of these listings, so the\ncaller can reattach to it (``GET /api/runs/{active_run}``) instead of\nretrying into the same refusal. A workspace or batch apply that is not\nexactly its review is a ``409`` too, carrying the refusal's message, and\nso is a batch plan with nothing to deploy; a batch nobody holds is a\n``404``.",
         "operationId": "create_run_api_runs_post",
         "requestBody": {
           "content": {
@@ -13260,10 +13566,16 @@
                     "$ref": "#/components/schemas/WorkspacePlanRequest"
                   },
                   {
+                    "$ref": "#/components/schemas/BatchPlanRequest"
+                  },
+                  {
                     "$ref": "#/components/schemas/ListingApplyRequest"
                   },
                   {
                     "$ref": "#/components/schemas/WorkspaceApplyRequest"
+                  },
+                  {
+                    "$ref": "#/components/schemas/BatchApplyRequest"
                   }
                 ],
                 "title": "Body"

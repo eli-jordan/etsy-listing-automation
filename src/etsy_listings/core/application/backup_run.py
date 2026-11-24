@@ -13,7 +13,7 @@ from __future__ import annotations
 import threading
 from collections.abc import Callable, Iterator
 from contextlib import AbstractContextManager, contextmanager, nullcontext
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Literal
@@ -22,6 +22,7 @@ from etsy_listings.core.application.backup_repository import (
     ConfiguredBackup,
     backup_settings,
     configured_backup,
+    ensure_workspace_id,
 )
 from etsy_listings.core.application.job_gate import JobGate
 from etsy_listings.core.backup.binary import ResticBinaries
@@ -151,9 +152,11 @@ class BackupRunner:
             # Inside the try: a refused configuration is a failed run.
             backup = self._configured(settings)
             repository = backup.open()
+            if settings.workspace_id is None:
+                backup = self._adopt_workspace_id(backup, repository, run)
             with _paused(gate, run):
                 run.enter("backing_up")
-                self._back_up(repository, run, cancel)
+                self._back_up(repository, backup, run, cancel)
             with maintenance() if maintenance else nullcontext(enter_result=True) as available:
                 if available:
                     self._tidy(repository, backup, run, cancel)
@@ -172,6 +175,16 @@ class BackupRunner:
         BackupStateStore(self.home).append_run(record)
         return record
 
+    def _adopt_workspace_id(
+        self, backup: ConfiguredBackup, repository: Repository, run: _Run
+    ) -> ConfiguredBackup:
+        """A block written by hand has no workspace ID: write the one the
+        repository's snapshots carry, or a new one (ADR-0061)."""
+        chosen = ensure_workspace_id(self.workspace, repository.snapshots(lock=False))
+        run.notice = chosen.notice
+        settings = backup.settings.model_copy(update={"workspace_id": chosen.value})
+        return replace(backup, settings=settings)
+
     def _configured(self, settings: BackupSettings | None = None) -> ConfiguredBackup:
         return configured_backup(
             self.workspace, settings, binaries=self.binaries, home=self.home, restic=self.restic
@@ -187,7 +200,9 @@ class BackupRunner:
         """Forget, then the weekly prune and check, each under restic's
         exclusive lock."""
         run.enter("forgetting")
-        repository.forget(backup.settings.retention, cancel=cancel)
+        repository.forget(
+            backup.settings.retention, workspace_id=backup.workspace_id, cancel=cancel
+        )
         state = backup.state()
         prune = self._prune_due(state)
         if prune:
@@ -199,9 +214,19 @@ class BackupRunner:
             run.enter("checking")
             run.failure = self._check(repository, backup.store, cancel=cancel).message
 
-    def _back_up(self, repository: Repository, run: _Run, cancel: threading.Event | None) -> None:
+    def _back_up(
+        self,
+        repository: Repository,
+        backup: ConfiguredBackup,
+        run: _Run,
+        cancel: threading.Event | None,
+    ) -> None:
         summary = repository.back_up(
-            self.workspace.root, excludes=EXCLUDES, progress=run.read, cancel=cancel
+            self.workspace.root,
+            workspace_id=backup.workspace_id,
+            excludes=EXCLUDES,
+            progress=run.read,
+            cancel=cancel,
         )
         run.snapshot_id, run.data_added = summary.snapshot_id, summary.data_added
         run.warnings.extend(summary.warnings)
@@ -397,6 +422,7 @@ class _Run:
     stopped: bool = False
     warnings: list[str] = field(default_factory=list)
     copies: list[CopyRecord] = field(default_factory=list)
+    notice: str | None = None
 
     def enter(self, step: BackupStep, destination: Path | None = None) -> None:
         self.step = step
@@ -424,4 +450,5 @@ class _Run:
             warnings=tuple(self.warnings),
             data_added=self.data_added,
             copies=tuple(self.copies),
+            notice=self.notice,
         )

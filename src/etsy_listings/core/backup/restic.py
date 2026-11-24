@@ -1,5 +1,5 @@
 """The real :class:`~etsy_listings.core.backup.repository.Repository`: restic
-itself, run as a subprocess (workspace-backup plan, P6; ADR-0059).
+itself, run as a subprocess (workspace-backup plan, P6; ADR-0060).
 
 Each operation becomes one ``restic --repo <folder> --json <subcommand>``,
 and its ``--json`` lines become the interface's figures and summaries. The
@@ -52,6 +52,7 @@ from etsy_listings.core.backup.repository import (
     RestoreProgress,
     Snapshot,
     WrongPasswordError,
+    workspace_tag,
 )
 from etsy_listings.core.config.settings import RetentionSettings
 
@@ -140,11 +141,12 @@ class Restic:
         self,
         folder: Path,
         *,
+        workspace_id: str,
         excludes: Sequence[str] = (),
         progress: BackupListener | None = None,
         cancel: threading.Event | None = None,
     ) -> BackupSummary:
-        arguments = ["backup", str(folder)]
+        arguments = ["backup", str(folder), "--tag", workspace_tag(workspace_id)]
         for pattern in excludes:
             arguments += ["--exclude", pattern]
         heard = _BackupLines(progress or (lambda _: None))
@@ -157,9 +159,13 @@ class Restic:
         return BackupSummary(heard.snapshot_id, heard.data_added, tuple(heard.warnings))
 
     def forget(
-        self, retention: RetentionSettings, *, cancel: threading.Event | None = None
+        self,
+        retention: RetentionSettings,
+        *,
+        workspace_id: str,
+        cancel: threading.Event | None = None,
     ) -> None:
-        self.run(*forget_arguments(retention), cancel=cancel)
+        self.run(*forget_arguments(retention, workspace_id), cancel=cancel)
 
     def prune(self, *, cancel: threading.Event | None = None) -> None:
         self.run("prune", cancel=cancel)
@@ -245,11 +251,21 @@ class Restic:
 # ----------------------------------------------------- arguments and lines
 
 
-def forget_arguments(retention: RetentionSettings) -> tuple[str, ...]:
+def forget_arguments(retention: RetentionSettings, workspace_id: str) -> tuple[str, ...]:
     """restic counts the current week and month as one of each, so N past
-    weeks and months are N + 1 (spec, *Backup run* step 5)."""
+    weeks and months are N + 1 (spec, *Backup run* step 5).
+
+    Only the workspace's tagged snapshots are considered, grouped by that
+    tag rather than restic's default host and paths (ADR-0061): a renamed PC
+    or a moved workspace then shares the old snapshots' schedule, and they
+    age out. Other workspaces' snapshots and untagged ones, such as a backup
+    made by hand, are never forgotten here."""
     return (
         "forget",
+        "--tag",
+        workspace_tag(workspace_id),
+        "--group-by",
+        "tags",
         "--keep-within",
         f"{retention.keep_within_days}d",
         "--keep-weekly",
@@ -302,6 +318,7 @@ def _snapshot(raw: Mapping[str, Any]) -> Snapshot:
         hostname=raw.get("hostname", ""),
         files=summary.get("total_files_processed"),
         size=summary.get("total_bytes_processed"),
+        tags=tuple(raw.get("tags") or ()),
     )
 
 

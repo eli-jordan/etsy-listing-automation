@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { deleteListing, listListings, patchListing } from "../api/listings";
-import { createRun, currentWorkspaceRun, getRun } from "../api/runs";
+import { createRun, currentWorkspaceRun, getRun, isReviewedScope } from "../api/runs";
+import { reviewRunAction } from "./batchDeploy/reviewRunAction";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { ListingHover } from "../components/ListingHover";
 import { OpenInMenu } from "../components/OpenInMenu";
@@ -52,38 +53,6 @@ function UndoMarkIcon() {
   );
 }
 
-type WorkspaceRun = NonNullable<Awaited<ReturnType<typeof currentWorkspaceRun>>>;
-
-interface WorkspaceAction {
-  label: string;
-  prefix: string;
-}
-
-/** The toolbar's way back to the workspace run: its progress while it
- * runs, then its outcome until it has been seen. */
-function workspaceRunAction(run: WorkspaceRun | null): WorkspaceAction | null {
-  if (run === null) return null;
-  if (!TERMINAL_PHASES.has(run.phase)) {
-    return {
-      label: "View batch progress",
-      prefix: run.kind === "apply" ? "Deploying…" : "Planning…",
-    };
-  }
-  return run.seen ? null : unseenRunAction(run);
-}
-
-function unseenRunAction(run: WorkspaceRun): WorkspaceAction | null {
-  if (run.kind === "apply" && run.phase === "applied") {
-    return { label: "View batch result", prefix: "Deployed ✓" };
-  }
-  if (run.kind === "apply" && run.phase === "stale") {
-    return { label: "View batch result", prefix: "Deploy failed" };
-  }
-  if (run.phase === "ready") return { label: "View batch review", prefix: "Review ready" };
-  if (run.phase === "failed") return { label: "View batch result", prefix: "Deploy failed" };
-  return null;
-}
-
 export function ListingsPage() {
   /** `null` until the first load answers, so the empty-table message cannot
    * flash before there is anything to say it about. */
@@ -118,7 +87,7 @@ export function ListingsPage() {
         return;
       }
       const conflict = await getRun(result.activeRun);
-      if (conflict.scope === "workspace") {
+      if (isReviewedScope(conflict)) {
         navigate(`/listings/deploy/${encodeURIComponent(conflict.id)}`);
       } else {
         setStatus("A listing deploy is already running. Open that listing to follow it.");
@@ -128,7 +97,7 @@ export function ListingsPage() {
     }
   }, [navigate]);
 
-  const workspaceAction = useMemo(() => workspaceRunAction(workspaceRun), [workspaceRun]);
+  const workspaceAction = useMemo(() => reviewRunAction(workspaceRun), [workspaceRun]);
 
   const runGesture = useCallback(
     async (row: ListingSummary, gesture: Gesture) => {

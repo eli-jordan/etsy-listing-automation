@@ -28,7 +28,7 @@ from etsy_listings.core.application.ai.events import (
 from etsy_listings.core.application.ai.readiness import (
     AiReadinessBlock as AiReadinessBlock,
 )
-from etsy_listings.core.application.backup_overview import HistoryEntry
+from etsy_listings.core.application.backup_overview import BackupOverview, HistoryEntry
 from etsy_listings.core.application.deploy.events import (
     ApplyRunPhase,
     PlanRunPhase,
@@ -707,6 +707,9 @@ class BatchRowDetail(BaseModel):
     or never-created row (UI doc §7)."""
     deleted: bool = False
     """The listing was deleted; the row stays, struck through."""
+    deployable: bool = False
+    """Whether Deploy reviewed takes this row: reviewed, with changes its
+    last apply did not deploy (ADR-0059)."""
 
 
 BatchStatus = Literal["staging", "drafting", "in_review", "complete", "stopped"]
@@ -793,6 +796,15 @@ class WorkspacePlanRequest(_CreateRunRequest):
     scope: Literal["workspace"]
 
 
+class BatchPlanRequest(_CreateRunRequest):
+    """Plan the reviewed rows of one listing batch that have changes to
+    deploy (ADR-0059); the server resolves which."""
+
+    kind: Literal["plan"]
+    scope: Literal["batch"]
+    batch_id: str
+
+
 class ListingApplyRequest(_CreateRunRequest):
     kind: Literal["apply"]
     scope: Literal["listings"]
@@ -808,8 +820,22 @@ class WorkspaceApplyRequest(_CreateRunRequest):
     reviewed_run_id: str
 
 
+class BatchApplyRequest(_CreateRunRequest):
+    kind: Literal["apply"]
+    scope: Literal["batch"]
+    batch_id: str
+    listings: list[str]
+    expect: dict[str, str]
+    reviewed_run_id: str
+
+
 CreateRunRequest = (
-    ListingPlanRequest | WorkspacePlanRequest | ListingApplyRequest | WorkspaceApplyRequest
+    ListingPlanRequest
+    | WorkspacePlanRequest
+    | BatchPlanRequest
+    | ListingApplyRequest
+    | WorkspaceApplyRequest
+    | BatchApplyRequest
 )
 
 
@@ -819,6 +845,8 @@ class _RunSummary(BaseModel):
 
     id: str
     scope: RunScope
+    batch_id: str | None = None
+    """The listing batch a ``batch``-scoped run deploys (ADR-0059)."""
     listings: list[str]
     seen: bool
     reviewed_run_id: str | None
@@ -1241,6 +1269,25 @@ class BackupSetUpRequest(BaseModel):
     interval_hours: BackupIntervalHours = 12
     retention: RetentionSettings = Field(default_factory=RetentionSettings)
     password: str
+
+
+class BackupConnected(BaseModel):
+    """The backup set-up connected instead of creating one."""
+
+    destination: str
+    """The destination it was copied from."""
+    snapshots: int
+    notice: str | None = None
+    """Set when its snapshots name several workspaces, so this workspace
+    got a new workspace ID and starts its own retention (ADR-0061)."""
+
+
+class BackupSetUpResponse(BackupOverview):
+    """The status once set up, and what set-up connected, if anything."""
+
+    connected: BackupConnected | None = None
+    """Set when a destination already held a backup: set-up copied it to
+    the backup storage folder and uses it, instead of creating one."""
 
 
 class BackupNewRepositoryRequest(BaseModel):

@@ -364,6 +364,11 @@ export interface paths {
      *     and the destination folders, then start the first backup. Refuses a
      *     short password (422), a folder that holds files (409) and a destination
      *     whose parent is missing (422), writing nothing.
+     *
+     *     When a destination already holds a backup, connects it instead, as
+     *     ``/connect`` does, answering once it is copied: ``connected`` names the
+     *     destination. Refuses a password that does not open it (422, field
+     *     ``password``), part of a copy, and two different repositories (422).
      */
     post: operations["set_up_api_backup_setup_post"];
     delete?: never;
@@ -1532,8 +1537,9 @@ export interface paths {
     /**
      * List Runs
      * @description ``listing`` narrows to that listing's current run (active, or finished
-     *     and not yet superseded -- decision 7's retention). Omitted, every run this
-     *     process still remembers, for a future workspace-wide view.
+     *     and not yet superseded -- decision 7's retention); ``scope=batch&batch=``
+     *     to that listing batch's. Omitted, every run this process still
+     *     remembers, for a future workspace-wide view.
      */
     get: operations["list_runs_api_runs_get"];
     put?: never;
@@ -1541,8 +1547,10 @@ export interface paths {
      * Create Run
      * @description A ``409`` names the run already holding one of these listings, so the
      *     caller can reattach to it (``GET /api/runs/{active_run}``) instead of
-     *     retrying into the same refusal. A workspace apply that is not exactly
-     *     its review is a ``409`` too, carrying the refusal's message.
+     *     retrying into the same refusal. A workspace or batch apply that is not
+     *     exactly its review is a ``409`` too, carrying the refusal's message, and
+     *     so is a batch plan with nothing to deploy; a batch nobody holds is a
+     *     ``404``.
      */
     post: operations["create_run_api_runs_post"];
     delete?: never;
@@ -2344,6 +2352,8 @@ export interface components {
     };
     /** ApplyRunDetail */
     ApplyRunDetail: {
+      /** Batch Id */
+      batch_id?: string | null;
       /**
        * Created At
        * Format: date-time
@@ -2382,7 +2392,7 @@ export interface components {
        * Scope
        * @enum {string}
        */
-      scope: "listings" | "workspace";
+      scope: "listings" | "workspace" | "batch";
       /** Seen */
       seen: boolean;
       /**
@@ -2393,6 +2403,8 @@ export interface components {
     };
     /** ApplyRunSummary */
     ApplyRunSummary: {
+      /** Batch Id */
+      batch_id?: string | null;
       /**
        * Created At
        * Format: date-time
@@ -2418,7 +2430,7 @@ export interface components {
        * Scope
        * @enum {string}
        */
-      scope: "listings" | "workspace";
+      scope: "listings" | "workspace" | "batch";
       /** Seen */
       seen: boolean;
       /**
@@ -2449,6 +2461,18 @@ export interface components {
       revision: string;
       /** Source */
       source: string;
+    };
+    /**
+     * BackupConnected
+     * @description The backup set-up connected instead of creating one.
+     */
+    BackupConnected: {
+      /** Destination */
+      destination: string;
+      /** Notice */
+      notice?: string | null;
+      /** Snapshots */
+      snapshots: number;
     };
     /** BackupHistoryResponse */
     BackupHistoryResponse: {
@@ -2564,6 +2588,39 @@ export interface components {
       revision: string;
     };
     /**
+     * BackupSetUpResponse
+     * @description The status once set up, and what set-up connected, if anything.
+     */
+    BackupSetUpResponse: {
+      connected?: components["schemas"]["BackupConnected"] | null;
+      /**
+       * Destinations
+       * @default []
+       */
+      destinations: components["schemas"]["DestinationOverview"][];
+      /** Enabled */
+      enabled: boolean;
+      /** Interval Hours */
+      interval_hours?: number | null;
+      /** Last Success */
+      last_success?: string | null;
+      /** Next Due */
+      next_due?: string | null;
+      /**
+       * Password Min Length
+       * @default 12
+       */
+      password_min_length: number;
+      repository?: components["schemas"]["RepositoryOverview"] | null;
+      restore?: components["schemas"]["RestoreStatus"] | null;
+      running?: components["schemas"]["RunningBackup"] | null;
+      /**
+       * Warnings
+       * @default []
+       */
+      warnings: components["schemas"]["BackupWarning"][];
+    };
+    /**
      * BackupSettings
      * @description The ``backup:`` block. Paths are this machine's, and the block travels
      *     with the workspace, so a path that no longer exists is not refused here:
@@ -2590,6 +2647,8 @@ export interface components {
       /** Restic Binary */
       restic_binary?: string | null;
       retention?: components["schemas"]["RetentionSettings"];
+      /** Workspace Id */
+      workspace_id?: string | null;
     };
     /** BackupSnapshot */
     BackupSnapshot: {
@@ -2632,6 +2691,29 @@ export interface components {
       kind: "off" | "repository_missing" | "stale" | "failed" | "behind" | "changed";
       /** Message */
       message: string;
+    };
+    /** BatchApplyRequest */
+    BatchApplyRequest: {
+      /** Batch Id */
+      batch_id: string;
+      /** Expect */
+      expect: {
+        [key: string]: string;
+      };
+      /**
+       * Kind
+       * @constant
+       */
+      kind: "apply";
+      /** Listings */
+      listings: string[];
+      /** Reviewed Run Id */
+      reviewed_run_id: string;
+      /**
+       * Scope
+       * @constant
+       */
+      scope: "batch";
     };
     /** BatchDetail */
     BatchDetail: {
@@ -2725,6 +2807,25 @@ export interface components {
       /** Label */
       label: string;
     };
+    /**
+     * BatchPlanRequest
+     * @description Plan the reviewed rows of one listing batch that have changes to
+     *     deploy (ADR-0059); the server resolves which.
+     */
+    BatchPlanRequest: {
+      /** Batch Id */
+      batch_id: string;
+      /**
+       * Kind
+       * @constant
+       */
+      kind: "plan";
+      /**
+       * Scope
+       * @constant
+       */
+      scope: "batch";
+    };
     /** BatchRowDetail */
     BatchRowDetail: {
       /** Ai */
@@ -2756,6 +2857,11 @@ export interface components {
        * @default false
        */
       deleted: boolean;
+      /**
+       * Deployable
+       * @default false
+       */
+      deployable: boolean;
       /** Design */
       design: string;
       /** Error */
@@ -4420,6 +4526,8 @@ export interface components {
     };
     /** PlanRunDetail */
     PlanRunDetail: {
+      /** Batch Id */
+      batch_id?: string | null;
       /**
        * Created At
        * Format: date-time
@@ -4458,7 +4566,7 @@ export interface components {
        * Scope
        * @enum {string}
        */
-      scope: "listings" | "workspace";
+      scope: "listings" | "workspace" | "batch";
       /** Seen */
       seen: boolean;
       /**
@@ -4469,6 +4577,8 @@ export interface components {
     };
     /** PlanRunSummary */
     PlanRunSummary: {
+      /** Batch Id */
+      batch_id?: string | null;
       /**
        * Created At
        * Format: date-time
@@ -4494,7 +4604,7 @@ export interface components {
        * Scope
        * @enum {string}
        */
-      scope: "listings" | "workspace";
+      scope: "listings" | "workspace" | "batch";
       /** Seen */
       seen: boolean;
       /**
@@ -5108,6 +5218,8 @@ export interface components {
       finished_at: string;
       /** Message */
       message?: string | null;
+      /** Notice */
+      notice?: string | null;
       /**
        * Outcome
        * @enum {string}
@@ -6716,7 +6828,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["BackupOverview"];
+          "application/json": components["schemas"]["BackupSetUpResponse"];
         };
       };
       /** @description Conflict */
@@ -8698,7 +8810,8 @@ export interface operations {
     parameters: {
       query?: {
         listing?: string | null;
-        scope?: ("listings" | "workspace") | null;
+        scope?: ("listings" | "workspace" | "batch") | null;
+        batch?: string | null;
       };
       header?: never;
       path?: never;
@@ -8740,8 +8853,10 @@ export interface operations {
         "application/json":
           | components["schemas"]["ListingPlanRequest"]
           | components["schemas"]["WorkspacePlanRequest"]
+          | components["schemas"]["BatchPlanRequest"]
           | components["schemas"]["ListingApplyRequest"]
-          | components["schemas"]["WorkspaceApplyRequest"];
+          | components["schemas"]["WorkspaceApplyRequest"]
+          | components["schemas"]["BatchApplyRequest"];
       };
     };
     responses: {
