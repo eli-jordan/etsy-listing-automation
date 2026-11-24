@@ -1,0 +1,163 @@
+/* — Phone base —
+   What every page needs on a phone: fields that do not make iOS zoom, taps
+   that do not flash or wait, a page head that reads as a back link over a
+   title, and dialogs as bottom sheets.
+
+   Every file in phone/ keeps all of its rules inside the phone query, so
+   the desktop layout never sees them (phone/usePhone.ts). main.tsx imports
+   these files last, so a rule here wins over the desktop rule it adjusts at
+   equal specificity. */
+
+@media (max-width: 700px) {
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* iOS zooms the page into any focused field whose text is under 16px, and
+     leaves it zoomed. A field at 16px is never zoomed into. */
+  input:not([type="checkbox"], [type="radio"], [type="range"], [type="color"], [type="file"]),
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+
+  /* No double-tap-to-zoom wait on things that are tapped. */
+  a,
+  button,
+  label,
+  summary,
+  select,
+  [role="button"],
+  [role="tab"] {
+    touch-action: manipulation;
+  }
+
+  /* — page head: a back link over the title — */
+  .page-head {
+    gap: var(--space-2);
+    margin-bottom: var(--space-3);
+  }
+
+  .page-head__title {
+    font-size: 22px;
+    line-height: 1.15;
+  }
+
+  .page-head__title,
+  .page-head__crumb {
+    overflow-wrap: anywhere;
+  }
+
+  .page-head__sep {
+    display: none;
+  }
+
+  /* A crumb is the way back, so it reads as one: a chevron and the parent's
+     name. The chevron is drawn, not typed, so the link's name stays the
+     parent's name. */
+  .page-head__crumb {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 14px;
+  }
+
+  .page-head__crumb::before {
+    content: "";
+    flex: none;
+    width: 8px;
+    height: 8px;
+    margin-left: 2px;
+    border-left: 2px solid currentColor;
+    border-bottom: 2px solid currentColor;
+    transform: rotate(45deg);
+  }
+
+  .page-head__actions {
+    width: 100%;
+    margin-left: 0;
+    flex-wrap: wrap;
+  }
+
+  .status-tag__hint {
+    right: 0;
+    left: auto;
+    max-width: calc(100vw - (2 * var(--space-3)));
+  }
+
+  /* — dialogs as bottom sheets — */
+  .modal-root {
+    align-items: flex-end;
+  }
+
+  .modal-dialog {
+    width: 100%;
+    max-width: 100%;
+    max-height: calc(100dvh - 40px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    border-radius: 18px 18px 0 0;
+    padding: 0 var(--space-4) calc(var(--space-4) + env(safe-area-inset-bottom, 0px));
+  }
+
+  /* Without a grab bar (a dialog not yet given one) the sheet still needs
+     its top padding. */
+  .modal-dialog > :first-child:not(.sheet-grabber) {
+    margin-top: var(--space-4);
+  }
+
+  .confirm-dialog__actions {
+    flex-direction: column-reverse;
+  }
+
+  .confirm-dialog__actions .btn {
+    width: 100%;
+    min-height: 46px;
+  }
+
+  .sheet-grabber {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    display: flex;
+    justify-content: center;
+    flex: none;
+    margin: 0 calc(-1 * var(--space-4));
+    padding: 8px 0 12px;
+    background: inherit;
+    cursor: grab;
+  }
+
+  .sheet-grabber__bar {
+    width: 40px;
+    height: 5px;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--color-text) 22%, transparent);
+  }
+}
+
+@media (max-width: 700px) and (prefers-reduced-motion: no-preference) {
+  .modal-dialog {
+    animation: phone-sheet-in 0.24s cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+
+  .modal-backdrop {
+    animation: phone-fade-in 0.2s ease-out;
+  }
+
+  @keyframes phone-sheet-in {
+    from {
+      transform: translateY(100%);
+    }
+  }
+
+  @keyframes phone-fade-in {
+    from {
+      opacity: 0;
+    }
+  }
+}

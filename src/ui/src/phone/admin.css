@@ -1,0 +1,7 @@
+/* — Phone: Admin (settings and backup) —
+   The section-specific phone rules from before this folder existed stay in
+   pages/admin/admin.css and pages/admin/backup/backup.css.
+   All rules inside the phone query (phone/usePhone.ts). */
+
+@media (max-width: 700px) {
+}

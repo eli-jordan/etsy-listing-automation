@@ -17,6 +17,7 @@ import uvicorn
 from etsy_listings.core.workspace.workspace import Workspace
 from etsy_listings.server.api.app import FRONTEND_DIST, create_app
 
+from tests.support.mobile import PHONE_CONTEXT
 from tests.support.server import stop_server
 
 STARTUP_TIMEOUT_SECONDS = 30
@@ -154,5 +155,18 @@ def page(browser_type, calibrator_server: str):
     # Phase 5 mounts the calibrator at /templates under the new app shell,
     # unchanged -- the bare origin now serves the Dashboard stub instead.
     page.goto(f"{calibrator_server}/templates")
+    yield page
+    context.close()
+
+
+@pytest.fixture
+def phone_page(browser_type, calibrator_server: str):
+    """``page`` on a phone: touch input, the mobile viewport, at the Dashboard.
+    Swipe on it with ``tests.support.mobile.swipe``."""
+    context = browser_type.new_context(**PHONE_CONTEXT)
+    context.set_default_timeout(DEFAULT_TIMEOUT_MS)
+    context.set_default_navigation_timeout(DEFAULT_TIMEOUT_MS)
+    page = context.new_page()
+    page.goto(calibrator_server)
     yield page
     context.close()

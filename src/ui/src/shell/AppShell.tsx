@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
 import { getWorkspace } from "../api/listings";
 import "../pages/admin/backup/backup.css";
+import { useIsPhone } from "../phone/usePhone";
 import { useBackupStatus } from "./backupStatus";
 import { BackupStatusProvider } from "./BackupStatusProvider";
 import { ShellSidebar } from "./ShellSidebar";
@@ -19,6 +20,13 @@ import { ShellSidebar } from "./ShellSidebar";
 
 function navClass({ isActive }: { isActive: boolean }): string {
   return isActive ? "nav-item nav-item--active" : "nav-item";
+}
+
+/** On a phone the nav is a bottom tab bar with a fifth of the width per
+ * entry, so the two long names shorten there; the link keeps its full name
+ * for assistive technology either way. */
+function navLabel(isPhone: boolean, full: string, short: string) {
+  return isPhone ? { label: short, aria: full } : { label: full, aria: undefined };
 }
 
 export function AppShell() {
@@ -40,6 +48,9 @@ function Shell() {
   // A backup warning shows on every page but Admin, which has its own
   // (workspace-backup interactions, *Warnings*); it cannot be dismissed.
   const warning = useBackupStatus().view.banner;
+  const isPhone = useIsPhone();
+  const listingTemplates = navLabel(isPhone, "Listing Templates", "Templates");
+  const mockupTemplates = navLabel(isPhone, "Mockup Templates", "Mockups");
 
   useEffect(() => {
     getWorkspace()
@@ -102,11 +113,12 @@ function Shell() {
           <NavLink
             to="/listing-templates"
             className={({ isActive }) => navClass({ isActive: isActive || inBatches })}
+            aria-label={listingTemplates.aria}
           >
             <StackIcon />
-            Listing Templates
+            {listingTemplates.label}
           </NavLink>
-          <NavLink to="/templates" className={navClass}>
+          <NavLink to="/templates" className={navClass} aria-label={mockupTemplates.aria}>
             <svg
               viewBox="0 0 24 24"
               fill="none"
@@ -118,7 +130,7 @@ function Shell() {
               <rect x="7.5" y="7.5" width="13.5" height="13.5" rx="2" />
               <path d="M3.5 15.5v-10a2 2 0 0 1 2-2h10" />
             </svg>
-            Mockup Templates
+            {mockupTemplates.label}
           </NavLink>
         </nav>
       </ShellSidebar>

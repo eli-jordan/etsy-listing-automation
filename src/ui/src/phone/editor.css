@@ -1,0 +1,42 @@
+/* — Phone: the listing editor and the listing-template editor —
+   All rules inside the phone query (phone/usePhone.ts). */
+
+@media (max-width: 700px) {
+  .page-head--editor {
+    flex-wrap: wrap;
+  }
+
+  .page-head__name {
+    width: 100%;
+    min-width: 0;
+  }
+
+  /* The split strip stacks: narrow widths are not designed yet
+     (multi-artwork plan, Uncovered surfaces), but the page must not scroll
+     sideways. */
+  .design-strip__slots--split {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .tabs {
+    width: 100%;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .tabs .seg-opt {
+    justify-content: center;
+    min-width: 0;
+    padding-inline: var(--space-2);
+    text-align: center;
+  }
+
+  .layout--variants,
+  .images-tab {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .preview-stage--large {
+    min-height: 280px;
+  }
+}

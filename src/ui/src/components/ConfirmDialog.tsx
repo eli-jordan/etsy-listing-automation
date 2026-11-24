@@ -1,4 +1,5 @@
-import { type ReactNode, useEffect, useId } from "react";
+import { type ReactNode, useEffect, useId, useRef } from "react";
+import { SheetGrabber } from "../phone/SheetGrabber";
 
 /**
  * An in-app confirm. `window.confirm` is browser chrome the rest of the
@@ -37,6 +38,7 @@ export function ConfirmDialog({
   onCancel,
 }: Props) {
   const titleId = useId();
+  const sheet = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -52,7 +54,11 @@ export function ConfirmDialog({
   return (
     <div className="modal-root" role="dialog" aria-modal="true" aria-labelledby={titleId}>
       <div className="modal-backdrop" onClick={onCancel} aria-hidden="true" />
-      <div className={["modal-dialog confirm-dialog", className].filter(Boolean).join(" ")}>
+      <div
+        ref={sheet}
+        className={["modal-dialog confirm-dialog", className].filter(Boolean).join(" ")}
+      >
+        <SheetGrabber sheetRef={sheet} onDismiss={onCancel} />
         <h2 id={titleId} className="confirm-dialog__title">
           {title}
         </h2>
