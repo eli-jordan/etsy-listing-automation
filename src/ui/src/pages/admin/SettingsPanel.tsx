@@ -6,6 +6,7 @@ import { MarketWeights } from "./MarketWeights";
 import { AiSettingsSections } from "./AiTimeLimits";
 import { TemplatePositions } from "./TemplatePositions";
 import { type BackupPage, BackupSection } from "./backup/BackupSection";
+import type { BackupConnected } from "../../api/backup";
 import "./settings.css";
 
 export type SettingsSection = "ai" | "rendering" | "backup";
@@ -24,6 +25,8 @@ export function SettingsPanel({
 }) {
   const state = useWorkspaceSettings();
   const { settings, status } = state;
+  // Outlives BackupSection, which the reload after set-up remounts.
+  const [connected, setConnected] = useState<BackupConnected | null>(null);
   if (state.loadError)
     return (
       <section className="b-panel settings-load-error" aria-labelledby="settings-invalid">
@@ -119,7 +122,14 @@ export function SettingsPanel({
             page={backupPage}
             onPage={onBackupPage}
             saved={settings.backup ?? null}
-            setUp={state.setUp}
+            setUp={async (answers) => {
+              const outcome = await state.setUp(answers);
+              if (outcome.kind === "started") setConnected(outcome.connected ?? null);
+              return outcome;
+            }}
+            connected={connected}
+            onConnectedSeen={() => setConnected(null)}
+            replaceRepository={state.replaceRepository}
             save={state.confirmSave}
           />
         </fieldset>

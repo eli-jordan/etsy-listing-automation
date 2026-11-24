@@ -25,7 +25,7 @@ def test_a_damaged_history_line_loses_only_itself(tmp_path: Path) -> None:
     second = first.model_copy(update={"outcome": "failed", "message": "restic: locked"})
     store.append_run(first)
     with (store.directory / HISTORY_FILE).open("a", encoding="utf-8") as history:
-        history.write('{"repository": "r", "started_at": "2026-11\n')
+        history.write('{"repository": "r", "started_at": "2026-11')
     store.append_run(second)
 
     assert store.runs() == [first, second]

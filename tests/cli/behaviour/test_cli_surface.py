@@ -58,11 +58,11 @@ def test_top_level_help_lists_every_command() -> None:
 
 def test_the_backup_group_lists_its_commands() -> None:
     output = _help("backup")
-    for command in ("init", "run", "check", "snapshots", "status"):
+    for command in ("init", "run", "check", "snapshots", "status", "restore"):
         assert command in output
 
 
-@pytest.mark.parametrize("command", ["init", "run", "check", "snapshots", "status"])
+@pytest.mark.parametrize("command", ["init", "run", "check", "snapshots", "status", "restore"])
 def test_every_backup_command_takes_the_workspace_root(command: str) -> None:
     output = _help("backup", command)
     assert "--root" in output

@@ -583,6 +583,17 @@
       },
       "ApplyRunDetail": {
         "properties": {
+          "batch_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Batch Id"
+          },
           "created_at": {
             "format": "date-time",
             "title": "Created At",
@@ -682,7 +693,8 @@
           "scope": {
             "enum": [
               "listings",
-              "workspace"
+              "workspace",
+              "batch"
             ],
             "title": "Scope",
             "type": "string"
@@ -713,6 +725,17 @@
       },
       "ApplyRunSummary": {
         "properties": {
+          "batch_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Batch Id"
+          },
           "created_at": {
             "format": "date-time",
             "title": "Created At",
@@ -759,7 +782,8 @@
           "scope": {
             "enum": [
               "listings",
-              "workspace"
+              "workspace",
+              "batch"
             ],
             "title": "Scope",
             "type": "string"
@@ -805,6 +829,71 @@
         "title": "AssignKindRequest",
         "type": "object"
       },
+      "BackupConnectRequest": {
+        "description": "Connect an existing repository, such as a destination copy restored\nonto a new machine, by copying it to local disk first.",
+        "properties": {
+          "password": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Password"
+          },
+          "repository": {
+            "title": "Repository",
+            "type": "string"
+          },
+          "revision": {
+            "title": "Revision",
+            "type": "string"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          }
+        },
+        "required": [
+          "revision",
+          "source",
+          "repository"
+        ],
+        "title": "BackupConnectRequest",
+        "type": "object"
+      },
+      "BackupConnected": {
+        "description": "The backup set-up connected instead of creating one.",
+        "properties": {
+          "destination": {
+            "title": "Destination",
+            "type": "string"
+          },
+          "notice": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notice"
+          },
+          "snapshots": {
+            "title": "Snapshots",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "destination",
+          "snapshots"
+        ],
+        "title": "BackupConnected",
+        "type": "object"
+      },
       "BackupHistoryResponse": {
         "properties": {
           "runs": {
@@ -819,6 +908,36 @@
           "runs"
         ],
         "title": "BackupHistoryResponse",
+        "type": "object"
+      },
+      "BackupNewRepositoryRequest": {
+        "description": "Create a new repository while the configured one is missing\n(workspace-backup spec, *Missing repository*).",
+        "properties": {
+          "password": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Password"
+          },
+          "repository": {
+            "title": "Repository",
+            "type": "string"
+          },
+          "revision": {
+            "title": "Revision",
+            "type": "string"
+          }
+        },
+        "required": [
+          "revision",
+          "repository"
+        ],
+        "title": "BackupNewRepositoryRequest",
         "type": "object"
       },
       "BackupOverview": {
@@ -870,10 +989,25 @@
             ],
             "title": "Next Due"
           },
+          "password_min_length": {
+            "default": 12,
+            "title": "Password Min Length",
+            "type": "integer"
+          },
           "repository": {
             "anyOf": [
               {
                 "$ref": "#/components/schemas/RepositoryOverview"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "restore": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RestoreStatus"
               },
               {
                 "type": "null"
@@ -903,6 +1037,48 @@
           "enabled"
         ],
         "title": "BackupOverview",
+        "type": "object"
+      },
+      "BackupRefusal": {
+        "description": "Set-up's, create's and connect's refusals.",
+        "properties": {
+          "connect_from": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Connect From"
+          },
+          "field_errors": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Field Errors",
+            "type": "object"
+          },
+          "kind": {
+            "enum": [
+              "stale",
+              "conflict",
+              "invalid"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "message"
+        ],
+        "title": "BackupRefusal",
         "type": "object"
       },
       "BackupRepairRequest": {
@@ -970,6 +1146,24 @@
         "title": "BackupRepairResponse",
         "type": "object"
       },
+      "BackupRestoreRequest": {
+        "properties": {
+          "snapshot": {
+            "title": "Snapshot",
+            "type": "string"
+          },
+          "target": {
+            "title": "Target",
+            "type": "string"
+          }
+        },
+        "required": [
+          "snapshot",
+          "target"
+        ],
+        "title": "BackupRestoreRequest",
+        "type": "object"
+      },
       "BackupSetUpRequest": {
         "description": "The set-up form (workspace-backup interactions, *Set up and Setup*).",
         "properties": {
@@ -1016,6 +1210,116 @@
         "title": "BackupSetUpRequest",
         "type": "object"
       },
+      "BackupSetUpResponse": {
+        "description": "The status once set up, and what set-up connected, if anything.",
+        "properties": {
+          "connected": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BackupConnected"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "destinations": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/DestinationOverview"
+            },
+            "title": "Destinations",
+            "type": "array"
+          },
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "interval_hours": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Interval Hours"
+          },
+          "last_success": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Success"
+          },
+          "next_due": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Due"
+          },
+          "password_min_length": {
+            "default": 12,
+            "title": "Password Min Length",
+            "type": "integer"
+          },
+          "repository": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RepositoryOverview"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "restore": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RestoreStatus"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "running": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RunningBackup"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "warnings": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/BackupWarning"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "enabled"
+        ],
+        "title": "BackupSetUpResponse",
+        "type": "object"
+      },
       "BackupSettings": {
         "additionalProperties": false,
         "description": "The ``backup:`` block. Paths are this machine's, and the block travels\nwith the workspace, so a path that no longer exists is not refused here:\nthe backup reports a missing repository instead (spec, *Missing\nrepository*), and the rest of the app keeps loading its settings.",
@@ -1060,12 +1364,95 @@
           },
           "retention": {
             "$ref": "#/components/schemas/RetentionSettings"
+          },
+          "workspace_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workspace Id"
           }
         },
         "required": [
           "repository"
         ],
         "title": "BackupSettings",
+        "type": "object"
+      },
+      "BackupSnapshot": {
+        "properties": {
+          "files": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Files"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "restore_target": {
+            "title": "Restore Target",
+            "type": "string"
+          },
+          "short_id": {
+            "title": "Short Id",
+            "type": "string"
+          },
+          "size": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Size"
+          },
+          "time": {
+            "format": "date-time",
+            "title": "Time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "short_id",
+          "time",
+          "restore_target"
+        ],
+        "title": "BackupSnapshot",
+        "type": "object"
+      },
+      "BackupSnapshotsResponse": {
+        "properties": {
+          "snapshots": {
+            "items": {
+              "$ref": "#/components/schemas/BackupSnapshot"
+            },
+            "title": "Snapshots",
+            "type": "array"
+          },
+          "workspace": {
+            "title": "Workspace",
+            "type": "string"
+          }
+        },
+        "required": [
+          "workspace",
+          "snapshots"
+        ],
+        "title": "BackupSnapshotsResponse",
         "type": "object"
       },
       "BackupWarning": {
@@ -1108,6 +1495,53 @@
           "message"
         ],
         "title": "BackupWarning",
+        "type": "object"
+      },
+      "BatchApplyRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "batch_id": {
+            "title": "Batch Id",
+            "type": "string"
+          },
+          "expect": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Expect",
+            "type": "object"
+          },
+          "kind": {
+            "const": "apply",
+            "title": "Kind",
+            "type": "string"
+          },
+          "listings": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Listings",
+            "type": "array"
+          },
+          "reviewed_run_id": {
+            "title": "Reviewed Run Id",
+            "type": "string"
+          },
+          "scope": {
+            "const": "batch",
+            "title": "Scope",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "scope",
+          "batch_id",
+          "listings",
+          "expect",
+          "reviewed_run_id"
+        ],
+        "title": "BatchApplyRequest",
         "type": "object"
       },
       "BatchDetail": {
@@ -1271,6 +1705,33 @@
         "title": "BatchPatch",
         "type": "object"
       },
+      "BatchPlanRequest": {
+        "additionalProperties": false,
+        "description": "Plan the reviewed rows of one listing batch that have changes to\ndeploy (ADR-0059); the server resolves which.",
+        "properties": {
+          "batch_id": {
+            "title": "Batch Id",
+            "type": "string"
+          },
+          "kind": {
+            "const": "plan",
+            "title": "Kind",
+            "type": "string"
+          },
+          "scope": {
+            "const": "batch",
+            "title": "Scope",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "scope",
+          "batch_id"
+        ],
+        "title": "BatchPlanRequest",
+        "type": "object"
+      },
       "BatchRowDetail": {
         "properties": {
           "ai": {
@@ -1324,6 +1785,11 @@
           "deleted": {
             "default": false,
             "title": "Deleted",
+            "type": "boolean"
+          },
+          "deployable": {
+            "default": false,
+            "title": "Deployable",
             "type": "boolean"
           },
           "design": {
@@ -2309,6 +2775,11 @@
             "title": "Changed",
             "type": "array"
           },
+          "icloud": {
+            "default": false,
+            "title": "Icloud",
+            "type": "boolean"
+          },
           "last_check": {
             "anyOf": [
               {
@@ -2331,6 +2802,10 @@
             ],
             "title": "Last Copy"
           },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
           "path": {
             "title": "Path",
             "type": "string"
@@ -2346,6 +2821,28 @@
             ],
             "title": "Problem"
           },
+          "set_aside": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Set Aside"
+          },
+          "short_problem": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Short Problem"
+          },
           "unexpected": {
             "default": [],
             "items": {
@@ -2356,7 +2853,8 @@
           }
         },
         "required": [
-          "path"
+          "path",
+          "name"
         ],
         "title": "DestinationOverview",
         "type": "object"
@@ -3119,6 +3617,14 @@
               }
             ],
             "title": "Kept As"
+          },
+          "names": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "default": {},
+            "title": "Names",
+            "type": "object"
           },
           "run": {
             "$ref": "#/components/schemas/RunRecord"
@@ -5281,6 +5787,17 @@
       },
       "PlanRunDetail": {
         "properties": {
+          "batch_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Batch Id"
+          },
           "created_at": {
             "format": "date-time",
             "title": "Created At",
@@ -5375,7 +5892,8 @@
           "scope": {
             "enum": [
               "listings",
-              "workspace"
+              "workspace",
+              "batch"
             ],
             "title": "Scope",
             "type": "string"
@@ -5405,6 +5923,17 @@
       },
       "PlanRunSummary": {
         "properties": {
+          "batch_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Batch Id"
+          },
           "created_at": {
             "format": "date-time",
             "title": "Created At",
@@ -5446,7 +5975,8 @@
           "scope": {
             "enum": [
               "listings",
-              "workspace"
+              "workspace",
+              "batch"
             ],
             "title": "Scope",
             "type": "string"
@@ -6579,6 +7109,11 @@
             "title": "Missing",
             "type": "boolean"
           },
+          "password_stored": {
+            "default": false,
+            "title": "Password Stored",
+            "type": "boolean"
+          },
           "path": {
             "title": "Path",
             "type": "string"
@@ -6638,6 +7173,131 @@
           "amount"
         ],
         "title": "ResolvedPrice",
+        "type": "object"
+      },
+      "RestoreStatus": {
+        "description": "A restore, for the dialog and the status panel's strip.",
+        "properties": {
+          "bytes_done": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bytes Done"
+          },
+          "bytes_total": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bytes Total"
+          },
+          "files_done": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Files Done"
+          },
+          "files_total": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Files Total"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message"
+          },
+          "outcome": {
+            "default": "running",
+            "enum": [
+              "running",
+              "succeeded",
+              "failed",
+              "stopped"
+            ],
+            "title": "Outcome",
+            "type": "string"
+          },
+          "percent": {
+            "default": 0.0,
+            "title": "Percent",
+            "type": "number"
+          },
+          "seconds_left": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Seconds Left"
+          },
+          "snapshot_id": {
+            "title": "Snapshot Id",
+            "type": "string"
+          },
+          "snapshot_time": {
+            "format": "date-time",
+            "title": "Snapshot Time",
+            "type": "string"
+          },
+          "started_at": {
+            "format": "date-time",
+            "title": "Started At",
+            "type": "string"
+          },
+          "target": {
+            "title": "Target",
+            "type": "string"
+          }
+        },
+        "required": [
+          "snapshot_id",
+          "snapshot_time",
+          "target",
+          "started_at"
+        ],
+        "title": "RestoreStatus",
         "type": "object"
       },
       "RetentionSettings": {
@@ -6836,6 +7496,17 @@
             ],
             "title": "Message"
           },
+          "notice": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notice"
+          },
           "outcome": {
             "enum": [
               "succeeded",
@@ -6922,7 +7593,8 @@
           "operation": {
             "enum": [
               "backup",
-              "repair"
+              "repair",
+              "connect"
             ],
             "title": "Operation",
             "type": "string"
@@ -7298,7 +7970,7 @@
           },
           "kind": {
             "enum": [
-              "conflict",
+              "stale",
               "invalid"
             ],
             "title": "Kind",
@@ -7563,7 +8235,7 @@
         "type": "object"
       },
       "ShopSaveRefusal": {
-        "description": "A 412 (``conflict``: reload, then edit again) or a 422 (``invalid``:\neach refused dotted shop.yaml key to its reason). Nothing was written.",
+        "description": "A 412 (``stale``: reload, then edit again) or a 422 (``invalid``:\neach refused dotted shop.yaml key to its reason). Nothing was written.",
         "properties": {
           "field_errors": {
             "additionalProperties": {
@@ -7574,7 +8246,7 @@
           },
           "kind": {
             "enum": [
-              "conflict",
+              "stale",
               "invalid"
             ],
             "title": "Kind",
@@ -9642,6 +10314,68 @@
         ]
       }
     },
+    "/api/backup/connect": {
+      "post": {
+        "description": "Copy an existing repository to local disk, check the password opens\nit, then use it; answers once it is connected. A wrong password or a\nfolder that is not a repository is a 422, and nothing is saved.",
+        "operationId": "connect_repository_api_backup_connect_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BackupConnectRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BackupOverview"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BackupRefusal"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "412": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BackupRefusal"
+                }
+              }
+            },
+            "description": "Precondition Failed"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BackupRefusal"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          }
+        },
+        "summary": "Connect Repository",
+        "tags": [
+          "backup"
+        ]
+      }
+    },
     "/api/backup/history": {
       "get": {
         "operationId": "backup_history_api_backup_history_get",
@@ -9705,6 +10439,132 @@
         ]
       }
     },
+    "/api/backup/repository": {
+      "post": {
+        "description": "Create a new repository while the configured one is missing, save\nits folder, and start the first backup. Refuses a folder that holds\nfiles (409) and a missing or short password (422).",
+        "operationId": "create_repository_api_backup_repository_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BackupNewRepositoryRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BackupOverview"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BackupRefusal"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "412": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BackupRefusal"
+                }
+              }
+            },
+            "description": "Precondition Failed"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BackupRefusal"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          }
+        },
+        "summary": "Create Repository",
+        "tags": [
+          "backup"
+        ]
+      }
+    },
+    "/api/backup/restore": {
+      "post": {
+        "description": "Restore a snapshot into a new folder; 409 for the live workspace, a\nfolder that holds files or a restore already running.",
+        "operationId": "start_restore_api_backup_restore_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BackupRestoreRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BackupOverview"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Start Restore",
+        "tags": [
+          "backup"
+        ]
+      }
+    },
+    "/api/backup/restore/stop": {
+      "post": {
+        "description": "Stop the restore, answering once it has.",
+        "operationId": "stop_restore_api_backup_restore_stop_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BackupOverview"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Stop Restore",
+        "tags": [
+          "backup"
+        ]
+      }
+    },
     "/api/backup/run": {
       "post": {
         "description": "Start a backup; 409 while another backup operation runs.",
@@ -9729,7 +10589,7 @@
     },
     "/api/backup/setup": {
       "post": {
-        "description": "Write the ``backup:`` block and the password, create the repository\nand the destination folders, then start the first backup. Refuses a\nshort password (422), a folder that holds files (409) and a destination\nwhose parent is missing (422), writing nothing.",
+        "description": "Write the ``backup:`` block and the password, create the repository\nand the destination folders, then start the first backup. Refuses a\nshort password (422), a folder that holds files (409) and a destination\nwhose parent is missing (422), writing nothing.\n\nWhen a destination already holds a backup, connects it instead, as\n``/connect`` does, answering once it is copied: ``connected`` names the\ndestination. Refuses a password that does not open it (422, field\n``password``), part of a copy, and two different repositories (422).",
         "operationId": "set_up_api_backup_setup_post",
         "requestBody": {
           "content": {
@@ -9746,7 +10606,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/BackupOverview"
+                  "$ref": "#/components/schemas/BackupSetUpResponse"
                 }
               }
             },
@@ -9756,7 +10616,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/SettingsSaveRefusal"
+                  "$ref": "#/components/schemas/BackupRefusal"
                 }
               }
             },
@@ -9766,7 +10626,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/SettingsSaveRefusal"
+                  "$ref": "#/components/schemas/BackupRefusal"
                 }
               }
             },
@@ -9776,7 +10636,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/SettingsSaveRefusal"
+                  "$ref": "#/components/schemas/BackupRefusal"
                 }
               }
             },
@@ -9784,6 +10644,28 @@
           }
         },
         "summary": "Set Up",
+        "tags": [
+          "backup"
+        ]
+      }
+    },
+    "/api/backup/snapshots": {
+      "get": {
+        "description": "restic's snapshots, for the restore dialog: a run's history entry\nmay be gone, and a snapshot made by hand has none.",
+        "operationId": "backup_snapshots_api_backup_snapshots_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BackupSnapshotsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Backup Snapshots",
         "tags": [
           "backup"
         ]
@@ -12567,7 +13449,7 @@
     },
     "/api/runs": {
       "get": {
-        "description": "``listing`` narrows to that listing's current run (active, or finished\nand not yet superseded -- decision 7's retention). Omitted, every run this\nprocess still remembers, for a future workspace-wide view.",
+        "description": "``listing`` narrows to that listing's current run (active, or finished\nand not yet superseded -- decision 7's retention); ``scope=batch&batch=``\nto that listing batch's. Omitted, every run this process still\nremembers, for a future workspace-wide view.",
         "operationId": "list_runs_api_runs_get",
         "parameters": [
           {
@@ -12595,7 +13477,8 @@
                 {
                   "enum": [
                     "listings",
-                    "workspace"
+                    "workspace",
+                    "batch"
                   ],
                   "type": "string"
                 },
@@ -12604,6 +13487,22 @@
                 }
               ],
               "title": "Scope"
+            }
+          },
+          {
+            "in": "query",
+            "name": "batch",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Batch"
             }
           }
         ],
@@ -12653,7 +13552,7 @@
         ]
       },
       "post": {
-        "description": "A ``409`` names the run already holding one of these listings, so the\ncaller can reattach to it (``GET /api/runs/{active_run}``) instead of\nretrying into the same refusal. A workspace apply that is not exactly\nits review is a ``409`` too, carrying the refusal's message.",
+        "description": "A ``409`` names the run already holding one of these listings, so the\ncaller can reattach to it (``GET /api/runs/{active_run}``) instead of\nretrying into the same refusal. A workspace or batch apply that is not\nexactly its review is a ``409`` too, carrying the refusal's message, and\nso is a batch plan with nothing to deploy; a batch nobody holds is a\n``404``.",
         "operationId": "create_run_api_runs_post",
         "requestBody": {
           "content": {
@@ -12667,10 +13566,16 @@
                     "$ref": "#/components/schemas/WorkspacePlanRequest"
                   },
                   {
+                    "$ref": "#/components/schemas/BatchPlanRequest"
+                  },
+                  {
                     "$ref": "#/components/schemas/ListingApplyRequest"
                   },
                   {
                     "$ref": "#/components/schemas/WorkspaceApplyRequest"
+                  },
+                  {
+                    "$ref": "#/components/schemas/BatchApplyRequest"
                   }
                 ],
                 "title": "Body"

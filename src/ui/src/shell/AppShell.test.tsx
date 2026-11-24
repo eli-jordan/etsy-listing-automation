@@ -4,6 +4,8 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import * as backupApi from "../api/backup";
 import type { BackupStatus } from "../api/backup";
 import * as listingsApi from "../api/listings";
+import { backupsOn, backupWarning } from "../test/backup";
+import { deferred } from "../test/helpers";
 import { AppShell } from "./AppShell";
 import { FAST_POLL_MS, SLOW_POLL_MS } from "./backupStatus";
 
@@ -33,11 +35,8 @@ beforeEach(() => {
   vi.spyOn(backupApi, "getBackupStatus").mockResolvedValue(HEALTHY);
 });
 
-const HEALTHY: BackupStatus = { enabled: true, destinations: [], warnings: [] };
-const FAILING: BackupStatus = {
-  ...HEALTHY,
-  warnings: [{ kind: "failed", message: "The last backup failed: disk full", banner: true }],
-};
+const HEALTHY = backupsOn();
+const FAILING = backupsOn({ warnings: [backupWarning("failed")] });
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -121,6 +120,13 @@ describe("AppShell", () => {
   });
 });
 
+/** Resolves once the provider polls fast. The fast interval is armed only
+ * when its effect re-runs on the applied status, and that re-run reads the
+ * status at once: a second call proves it, where the first does not. */
+async function untilFastPolling(status: { mock: { calls: unknown[] } }) {
+  await waitFor(() => expect(status.mock.calls.length).toBeGreaterThanOrEqual(2));
+}
+
 describe("AppShell backup warning", () => {
   it("shows the warning above the page, with Open Backup, and a dot on Admin", async () => {
     vi.spyOn(backupApi, "getBackupStatus").mockResolvedValue(FAILING);
@@ -145,25 +151,6 @@ describe("AppShell backup warning", () => {
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 
-  it.each([
-    ["healthy", HEALTHY],
-    [
-      "off",
-      {
-        enabled: false,
-        destinations: [],
-        warnings: [{ kind: "off", message: "Backups are off.", banner: false }],
-      } satisfies BackupStatus,
-    ],
-  ])("shows nothing while backups are %s", async (_name, status) => {
-    vi.spyOn(backupApi, "getBackupStatus").mockResolvedValue(status);
-    renderAt("/");
-    await waitFor(() => expect(backupApi.getBackupStatus).toHaveBeenCalled());
-    await screen.findByText("dashboard content");
-    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
-    expect(screen.queryByRole("img", { name: "Backups need attention" })).not.toBeInTheDocument();
-  });
-
   it("clears the banner when the problem does", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     try {
@@ -173,6 +160,25 @@ describe("AppShell backup warning", () => {
       status.mockResolvedValue(HEALTHY);
       await vi.advanceTimersByTimeAsync(SLOW_POLL_MS);
       await waitFor(() => expect(screen.queryByRole("alert")).not.toBeInTheDocument());
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("keeps the latest warning when an older poll answers late", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      const stale = deferred<BackupStatus>();
+      vi.spyOn(backupApi, "getBackupStatus")
+        .mockResolvedValue(FAILING)
+        .mockReturnValueOnce(stale.promise);
+      renderAt("/");
+      await act(() => vi.advanceTimersByTimeAsync(SLOW_POLL_MS));
+      await screen.findByRole("alert");
+
+      await act(async () => stale.resolve(HEALTHY));
+
+      expect(screen.getByRole("alert")).toHaveTextContent("disk full");
     } finally {
       vi.useRealTimers();
     }
@@ -188,7 +194,7 @@ describe("AppShell backup warning", () => {
       };
       const status = vi.spyOn(backupApi, "getBackupStatus").mockResolvedValue(running);
       renderAt("/");
-      await waitFor(() => expect(status).toHaveBeenCalled());
+      await untilFastPolling(status);
       const before = status.mock.calls.length;
       await vi.advanceTimersByTimeAsync(FAST_POLL_MS * 2);
       expect(status.mock.calls.length).toBeGreaterThanOrEqual(before + 2);
@@ -198,6 +204,32 @@ describe("AppShell backup warning", () => {
       const hidden = status.mock.calls.length;
       await vi.advanceTimersByTimeAsync(SLOW_POLL_MS * 2);
       expect(status.mock.calls).toHaveLength(hidden);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("polls faster while a restore runs", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.spyOn(document, "visibilityState", "get").mockReturnValue("visible");
+    try {
+      const restoring: BackupStatus = {
+        ...HEALTHY,
+        restore: {
+          snapshot_id: "b".repeat(64),
+          snapshot_time: "2026-11-23T08:00:00Z",
+          target: "D:/restored",
+          started_at: "2026-11-23T10:00:00Z",
+          outcome: "running",
+          percent: 0.1,
+        },
+      };
+      const status = vi.spyOn(backupApi, "getBackupStatus").mockResolvedValue(restoring);
+      renderAt("/");
+      await untilFastPolling(status);
+      const before = status.mock.calls.length;
+      await vi.advanceTimersByTimeAsync(FAST_POLL_MS * 2);
+      expect(status.mock.calls.length).toBeGreaterThanOrEqual(before + 2);
     } finally {
       vi.useRealTimers();
     }

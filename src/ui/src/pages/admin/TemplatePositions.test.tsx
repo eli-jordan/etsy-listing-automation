@@ -202,7 +202,7 @@ it.each([
     "a refusal",
     () =>
       vi.mocked(api.saveSettings).mockResolvedValue({
-        kind: "invalid",
+        kind: "refused",
         message: "Not saved",
         fieldErrors: { "template_positions.scale.max": "must be at most 1.5" },
       }),

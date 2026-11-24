@@ -89,7 +89,7 @@ def test_invalid_patch_and_external_comment_are_refused(
         "/api/admin/settings", json={"revision": revision, "changes": {"concurrency": 3}}
     )
     assert conflict.status_code == 412
-    assert conflict.json()["kind"] == "conflict"
+    assert conflict.json()["kind"] == "stale"
     assert path.read_bytes() == original + b"# external edit\n"
 
 

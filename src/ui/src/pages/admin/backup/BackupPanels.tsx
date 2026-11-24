@@ -1,6 +1,7 @@
 // The Backup section's panels, from the approved `workspace-backup` mockup
 // (`design/scenes/workspace-backup/_parts.tsx` and `_prototype.tsx`), fed by
 // `GET /api/backup` and its history instead of fixtures.
+import { ArrowCounterClockwiseIcon } from "@phosphor-icons/react/dist/csr/ArrowCounterClockwise";
 import { ArrowRightIcon } from "@phosphor-icons/react/dist/csr/ArrowRight";
 import { CheckCircleIcon } from "@phosphor-icons/react/dist/csr/CheckCircle";
 import { CircleNotchIcon } from "@phosphor-icons/react/dist/csr/CircleNotch";
@@ -18,10 +19,10 @@ import type {
   HistoryEntry,
   RetentionSettings,
 } from "../../../api/backup";
+import type { BackupsOn, Copy } from "../../../shell/backupAttention";
 import {
   ago,
   bytes,
-  destinationName,
   duration,
   everyLabel,
   lastPart,
@@ -102,6 +103,10 @@ export function NotSetUp({ onStart }: { onStart: () => void }) {
         </li>
       </ul>
       <div className="bk-foot">
+        <span className="bk-foot__note">
+          Already have backups from another computer? Add the folder that holds them as a
+          destination, and set-up connects them instead of starting new ones.
+        </span>
         <button type="button" className="btn btn-primary" onClick={onStart}>
           Set up backups
         </button>
@@ -116,14 +121,22 @@ export function StatusPanel({
   headline,
   detail,
   running,
+  runningLine,
+  restore,
   onBackup,
   children,
 }: {
   tone: "ok" | "warn";
   headline: string;
   detail: string;
-  running: string | undefined;
+  /** A backup or repair runs, so Back up now waits. */
+  running: boolean;
+  /** What it is doing, under the detail. */
+  runningLine: string | undefined;
+  /** Restore…: disabled while a restore runs or with no backup to restore. */
+  restore: { disabled: boolean; onClick: () => void };
   onBackup: () => void;
+  /** A restore in progress or its note. */
   children?: ReactNode;
 }) {
   return (
@@ -140,19 +153,22 @@ export function StatusPanel({
           {headline}
         </h2>
         <p className="b-panel__lede">{detail}</p>
-        {running && (
+        {runningLine && (
           <p className="bk-status__running" role="status">
-            <CircleNotchIcon size={14} className="adm-spin" /> {running}
+            <CircleNotchIcon size={14} className="adm-spin" /> {runningLine}
           </p>
         )}
       </div>
       <div className="bk-status__actions">
         <button
           type="button"
-          className="btn btn-primary"
-          disabled={running !== undefined}
-          onClick={onBackup}
+          className="btn btn-secondary"
+          disabled={restore.disabled}
+          onClick={restore.onClick}
         >
+          <ArrowCounterClockwiseIcon size={16} /> Restore…
+        </button>
+        <button type="button" className="btn btn-primary" disabled={running} onClick={onBackup}>
           {running ? "Backing up…" : "Back up now"}
         </button>
       </div>
@@ -170,19 +186,11 @@ function repositoryState(status: BackupStatus): { ok: boolean; text: string } {
   return { ok: true, text: check ? `Checked ${when(check.at).split(",")[0]}` : "Not checked yet" };
 }
 
-function copyState(destination: DestinationStatus): { ok: boolean; text: string } {
-  const found = destination.changed.length + destination.unexpected.length;
+function copyState({ destination, toCheck: found }: Copy): { ok: boolean; text: string } {
   if (found) return { ok: false, text: `${found} file${found === 1 ? "" : "s"} to check` };
-  if (destination.problem) return { ok: false, text: shortProblem(destination.problem) };
+  if (destination.short_problem) return { ok: false, text: destination.short_problem };
   if (destination.behind) return { ok: false, text: "Behind" };
   return { ok: true, text: "Up to date" };
-}
-
-/** "Folder not found." fits a pill as "Folder not found"; a longer reason
- * does not, so the pill says only that the copy did not happen. */
-function shortProblem(problem: string): string {
-  const first = problem.split(/[.:]/)[0]?.trim() ?? "";
-  return first && first.length <= 24 ? first : "Not copied";
 }
 
 /**
@@ -191,14 +199,15 @@ function shortProblem(problem: string): string {
  * files one way into each destination, and the sync client takes it there.
  */
 export function StoragePipeline({
-  status,
+  view,
   now,
   onSetup,
 }: {
-  status: BackupStatus;
+  view: BackupsOn;
   now: number;
   onSetup: () => void;
 }) {
+  const { status } = view;
   const repository = status.repository?.path ?? "";
   const stored = repositoryState(status);
   const every = everyLabel(status.interval_hours ?? 12);
@@ -249,27 +258,25 @@ export function StoragePipeline({
           <ArrowRightIcon size={18} className="bk-arrow__icon" />
         </li>
         <li className="bk-dests">
-          {status.destinations.length === 0 && (
+          {view.copies.length === 0 && (
             <span className="bk-node bk-node--empty bk-sub">
               No destinations. A failed disk loses the backups too.
             </span>
           )}
-          {status.destinations.map((d) => {
-            const state = copyState(d);
-            const name = destinationName(d.path);
+          {view.copies.map((copy) => {
+            const d = copy.destination;
+            const state = copyState(copy);
             return (
               <span className="bk-node" key={d.path}>
                 <span className="bk-node__head">
-                  <CloudArrowUpIcon size={18} /> {name}
+                  <CloudArrowUpIcon size={18} /> {d.name}
                 </span>
                 <span className="s-mono bk-node__path" title={d.path}>
                   {lastPart(d.path)}
                 </span>
                 <span className="bk-sub">
                   Copied {d.last_copy ? ago(d.last_copy, now) : "never"}.{" "}
-                  {name === "iCloud Drive"
-                    ? "iCloud for Windows uploads it from here."
-                    : "A complete copy."}
+                  {d.icloud ? "iCloud for Windows uploads it from here." : "A complete copy."}
                 </span>
                 <Pill tone={state.ok ? "ok" : "warn"}>{state.text}</Pill>
               </span>
@@ -296,12 +303,16 @@ export function History({
   retention,
   fresh,
   now,
+  restoreBusy,
+  onRestore,
 }: {
   entries: HistoryEntry[];
   retention: RetentionSettings;
   /** The run that just finished, briefly highlighted. */
   fresh: string | undefined;
   now: number;
+  restoreBusy: boolean;
+  onRestore: (snapshot: string) => void;
 }) {
   return (
     <Panel
@@ -315,6 +326,7 @@ export function History({
           <col />
           <col className="bk-c-num" />
           <col className="bk-c-kept" />
+          <col className="bk-c-act" />
         </colgroup>
         <thead>
           <tr>
@@ -324,6 +336,7 @@ export function History({
               Added
             </th>
             <th scope="col">Kept as</th>
+            <th scope="col" aria-label="Actions" />
           </tr>
         </thead>
         <tbody>
@@ -356,6 +369,18 @@ export function History({
                     </span>
                   )}
                 </td>
+                <td className="bk-actions">
+                  {entry.kept_as && run.snapshot_id && (
+                    <button
+                      type="button"
+                      className="btn btn-ghost bk-restore"
+                      disabled={restoreBusy}
+                      onClick={() => onRestore(run.snapshot_id ?? "")}
+                    >
+                      Restore…
+                    </button>
+                  )}
+                </td>
               </tr>
             );
           })}
@@ -374,7 +399,7 @@ export function ChangedFilesBanner({
   destination: DestinationStatus;
   onRepair: () => void;
 }) {
-  const name = destinationName(destination.path);
+  const { name } = destination;
   return (
     <div className="adm-warn bk-banner bk-changed" role="alert">
       <WarningIcon size={18} />
@@ -427,7 +452,7 @@ export function RepairDialog({
   onCancel: () => void;
   onRepair: () => void;
 }) {
-  const name = destinationName(destination.path);
+  const { name } = destination;
   const count = destination.changed.length + destination.unexpected.length;
   return (
     <div className="bk-scrim">
@@ -444,7 +469,7 @@ export function RepairDialog({
         </div>
         <dl className="bk-facts">
           <dt>Set aside in</dt>
-          <dd className="s-mono">{`${lastPart(destination.path)}-set-aside-${new Date().toLocaleDateString("sv-SE")}`}</dd>
+          <dd className="s-mono">{lastPart(destination.set_aside ?? "")}</dd>
           <dt>Copied again</dt>
           <dd>
             {destination.changed.length} file{destination.changed.length === 1 ? "" : "s"},{" "}

@@ -11,9 +11,11 @@ which tells the user nothing about what to do next.
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from dotenv import dotenv_values
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from etsy_listings.core.errors import UserFacingError
@@ -63,7 +65,16 @@ class _EnvValues(BaseSettings):
     anthropic_api_key: str | None = None
     etsy_keystring: str | None = None
     etsy_shared_secret: str | None = None
-    etsy_listings_backup_password: str | None = None
+
+
+def _backup_password(env_file: Path) -> str | None:
+    override = os.environ.get(BACKUP_PASSWORD_VAR)
+    if override or not env_file.is_file():
+        return override or None
+    # Passwords may contain a literal ${...}. dotenv expansion would change the key.
+    values = dotenv_values(env_file, interpolate=False, encoding="utf-8")
+    folded = {key.upper(): value for key, value in values.items()}
+    return folded.get(BACKUP_PASSWORD_VAR) or None
 
 
 @dataclass(frozen=True)
@@ -101,7 +112,7 @@ class Secrets:
             anthropic_api_key=values.anthropic_api_key or None,
             etsy_keystring=values.etsy_keystring or None,
             etsy_shared_secret=values.etsy_shared_secret or None,
-            backup_password=values.etsy_listings_backup_password or None,
+            backup_password=_backup_password(env_file),
         )
 
     def require_printify_api_token(self) -> str:

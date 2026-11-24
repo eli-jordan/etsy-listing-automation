@@ -486,10 +486,23 @@ def test_while_paused_no_row_starts_and_resume_drafts_them_in_queue_order(q: Que
     assert not q.queue.waiting_for_backup(q.row(batch, 0))
 
 
-def test_a_queued_row_is_not_waiting_for_backup_without_a_pause(q: Queue) -> None:
+def test_a_failed_row_save_does_not_hold_the_backup_gate(
+    q: Queue, monkeypatch: pytest.MonkeyPatch
+) -> None:
     batch = q.confirm(*_designs("night-hike-club"))
 
-    assert not q.queue.waiting_for_backup(q.row(batch, 0))
+    def fail_save(_batch: Batch) -> None:
+        raise OSError("disk full")
+
+    with monkeypatch.context() as patch:
+        patch.setattr(q.batches, "save", fail_save)
+        with pytest.raises(OSError, match="disk full"):
+            q.queue.dispatch()
+
+    assert q.gate.waiting_for is None
+    assert q.registry.active() == []
+    q.queue.dispatch()
+    q.settle(batch, "done")
 
 
 def test_a_backup_waits_for_the_row_in_flight_names_it_and_starts_no_other(q: Queue) -> None:
