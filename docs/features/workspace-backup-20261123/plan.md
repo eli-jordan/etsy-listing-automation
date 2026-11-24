@@ -1,10 +1,10 @@
 # Workspace backup implementation plan
 
 Written 2026-11-23 from the [specification](spec.md) and the
-[interactions document](interactions.md). Status: in progress as a stacked PR
-series. This plan owns the delivery sequence. The spec owns requirements and
-the interactions document owns UI behaviour, so cite their sections rather
-than restating them.
+[interactions document](interactions.md). Status: implemented as a stacked PR
+series, in review (2026-11-24). This plan owns the delivery sequence. The spec
+owns requirements and the interactions document owns UI behaviour, so cite
+their sections rather than restating them.
 [ADR-0059](../../adr/0059-back-up-the-workspace-with-restic-from-the-app.md)
 records the design choices.
 
@@ -32,20 +32,21 @@ components. Screenshots for comparison are in [`screenshots/`](screenshots/).
 Commit the spec, ADR-0059, the interactions document, the screenshots, the
 `workspace-backup` scenes (live and `-v1` to `-v3`), the two boards, the
 manifest and this plan as documentation before implementation. That commit is
-the stack base. Record it and each PR link here when execution starts. Each PR
-is based on the preceding tip.
+the stack base (`b5213bfd`). Each PR is based on the preceding tip. Every
+delegate ran on `claude-opus-5-5` at medium effort (P0). Each PR's CI and the
+GitHub e2e workflow passed on its final head.
 
 | PR | Title | Difficulty | Branch | Link |
 |---|---|---|---|---|
-| 0 | Stack base: docs and mockups | — | `feat/workspace-backup` | |
-| 1 | A pause gate for background jobs | hard | `feat/backup-1-gate` | |
-| 2 | restic and the backup settings | standard | `feat/backup-2-restic` | |
-| 3 | The backup run | hard | `feat/backup-3-run` | |
-| 4 | Copying to destinations | hard | `feat/backup-4-copy` | |
-| 5 | Scheduler and status API | hard | `feat/backup-5-server` | |
-| 6 | Backup in Admin › Settings, with warnings | standard | `feat/backup-6-ui` | |
-| 7 | Restore | standard | `feat/backup-7-restore` | |
-| 8 | Missing repository and the migration guide | standard | `feat/backup-8-finish` | |
+| 0 | Stack base: docs and mockups | — | `feat/workspace-backup` | [#203](https://github.com/eli-jordan/etsy-listing-automation/pull/203) |
+| 1 | A pause gate for background jobs | hard | `feat/backup-1-gate` | [#204](https://github.com/eli-jordan/etsy-listing-automation/pull/204) |
+| 2 | restic and the backup settings | standard | `feat/backup-2-restic` | [#205](https://github.com/eli-jordan/etsy-listing-automation/pull/205) |
+| 3 | The backup run | hard | `feat/backup-3-run` | [#206](https://github.com/eli-jordan/etsy-listing-automation/pull/206) |
+| 4 | Copying to destinations | hard | `feat/backup-4-copy` | [#207](https://github.com/eli-jordan/etsy-listing-automation/pull/207) |
+| 5 | Scheduler and status API | hard | `feat/backup-5-server` | [#208](https://github.com/eli-jordan/etsy-listing-automation/pull/208) |
+| 6 | Backup in Admin › Settings, with warnings | standard | `feat/backup-6-ui` | [#209](https://github.com/eli-jordan/etsy-listing-automation/pull/209) |
+| 7 | Restore | standard | `feat/backup-7-restore` | [#210](https://github.com/eli-jordan/etsy-listing-automation/pull/210) |
+| 8 | Missing repository and the migration guide | standard | `feat/backup-8-finish` | [#211](https://github.com/eli-jordan/etsy-listing-automation/pull/211) |
 
 Size: aim for under about 1,500 changed lines per PR, not counting the
 regenerated OpenAPI and client files and lockfiles. A PR that cannot fit splits
