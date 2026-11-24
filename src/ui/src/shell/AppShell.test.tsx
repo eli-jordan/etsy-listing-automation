@@ -121,6 +121,13 @@ describe("AppShell", () => {
   });
 });
 
+/** Resolves once the provider polls fast. The fast interval is armed only
+ * when its effect re-runs on the applied status, and that re-run reads the
+ * status at once: a second call proves it, where the first does not. */
+async function untilFastPolling(status: { mock: { calls: unknown[] } }) {
+  await waitFor(() => expect(status.mock.calls.length).toBeGreaterThanOrEqual(2));
+}
+
 describe("AppShell backup warning", () => {
   it("shows the warning above the page, with Open Backup, and a dot on Admin", async () => {
     vi.spyOn(backupApi, "getBackupStatus").mockResolvedValue(FAILING);
@@ -188,7 +195,7 @@ describe("AppShell backup warning", () => {
       };
       const status = vi.spyOn(backupApi, "getBackupStatus").mockResolvedValue(running);
       renderAt("/");
-      await waitFor(() => expect(status).toHaveBeenCalled());
+      await untilFastPolling(status);
       const before = status.mock.calls.length;
       await vi.advanceTimersByTimeAsync(FAST_POLL_MS * 2);
       expect(status.mock.calls.length).toBeGreaterThanOrEqual(before + 2);
@@ -220,7 +227,7 @@ describe("AppShell backup warning", () => {
       };
       const status = vi.spyOn(backupApi, "getBackupStatus").mockResolvedValue(restoring);
       renderAt("/");
-      await waitFor(() => expect(status).toHaveBeenCalled());
+      await untilFastPolling(status);
       const before = status.mock.calls.length;
       await vi.advanceTimersByTimeAsync(FAST_POLL_MS * 2);
       expect(status.mock.calls.length).toBeGreaterThanOrEqual(before + 2);
