@@ -10,6 +10,7 @@ and never deletes one it does not recognise.
 from __future__ import annotations
 
 import hashlib
+import itertools
 import math
 import os
 import random
@@ -595,7 +596,7 @@ def repair_destination(
     )
     if not moving:
         return RepairResult(None, (), copy_repository(repository, destination))
-    aside = _new_sibling(destination, f"set-aside-{today.isoformat()}")
+    aside = _new_sibling(destination, today)
     for name in moving:
         target = aside / name
         target.parent.mkdir(parents=True, exist_ok=True)
@@ -604,15 +605,28 @@ def repair_destination(
     return RepairResult(aside, tuple(moving), copy_repository(repository, destination))
 
 
-def _new_sibling(destination: Path, suffix: str) -> Path:
-    """``<destination>-<suffix>``, then ``-2``, ``-3``..., created empty."""
-    base = f"{destination.name}-{suffix}"
-    attempt = 1
+def planned_set_aside(destination: Path, today: date) -> Path:
+    """The folder a repair today would set files aside in: the first of
+    ``<destination>-set-aside-<date>``, ``-2``, ``-3``... not taken yet.
+    Reads only; :func:`repair_destination` creates it."""
+    return next(path for path in _set_aside_names(destination, today) if not path.exists())
+
+
+def _set_aside_names(destination: Path, today: date) -> Iterator[Path]:
+    base = f"{destination.name}-set-aside-{today.isoformat()}"
+    yield destination.with_name(base)
+    for attempt in itertools.count(2):
+        yield destination.with_name(f"{base}-{attempt}")
+
+
+def _new_sibling(destination: Path, today: date) -> Path:
+    """The first free set-aside name, created empty; a race that takes it
+    first moves on to the next."""
+    names = _set_aside_names(destination, today)
     while True:
-        candidate = destination.with_name(base if attempt == 1 else f"{base}-{attempt}")
+        candidate = next(names)
         try:
             candidate.mkdir()
         except FileExistsError:
-            attempt += 1
-        else:
-            return candidate
+            continue
+        return candidate

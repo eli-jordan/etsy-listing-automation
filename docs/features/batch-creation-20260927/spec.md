@@ -473,6 +473,11 @@ a CLI apply beside the UI server's queue can leave one, is not marked. An apply
 that is not a full success leaves the flag as it was, and a deploy never clears
 it.
 
+The batch summary's **Deploy reviewed (N)** plans and applies only this
+batch's rows that are Reviewed and have changes their last apply did not deploy,
+on the same review page as a deploy of every listing (ADR-0059). Here Reviewed
+chooses rows; it still never blocks `plan` or `apply`.
+
 This cache cleanup is an entry-point-independent lifecycle rule, not UI-only
 behavior. A CLI apply and UI apply must leave the same proposal state.
 

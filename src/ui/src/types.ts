@@ -100,8 +100,10 @@ export type RunPhase = RunSummary["phase"];
 export type CreateRunRequest =
   | components["schemas"]["ListingPlanRequest"]
   | components["schemas"]["WorkspacePlanRequest"]
+  | components["schemas"]["BatchPlanRequest"]
   | components["schemas"]["ListingApplyRequest"]
-  | components["schemas"]["WorkspaceApplyRequest"];
+  | components["schemas"]["WorkspaceApplyRequest"]
+  | components["schemas"]["BatchApplyRequest"];
 export type RunEvent = RunDetail["events"][number];
 
 export type ActionDTO = components["schemas"]["ActionDTO"];

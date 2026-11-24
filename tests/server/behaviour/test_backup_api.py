@@ -16,6 +16,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from etsy_listings.core.application.backup_coordinator import BackupEnvironment
+from etsy_listings.core.application.backup_repository import backup_settings
 from etsy_listings.core.backup.binary import RESTIC_BINARY_ENV_VAR
 from etsy_listings.core.backup.state import (
     BackupState,
@@ -117,6 +118,7 @@ def test_set_up_writes_the_block_and_password_then_starts_the_first_backup(
     settings = workspace_root.joinpath("settings.yaml").read_text(encoding="utf-8")
     assert "interval_hours: 6" in settings
     assert str(repository) in settings
+    assert backup_settings(Workspace.discover(root_override=workspace_root)).workspace_id
     assert PASSWORD in (workspace_root / layout.ENV_FILE).read_text(encoding="utf-8")
     assert (repository / "config").is_file()
     assert files(cloud).keys() == files(repository).keys()
@@ -216,14 +218,20 @@ def test_repair_sets_aside_unexpected_files_and_clears_the_warning(
     restic = InMemoryRestic(lambda: NOW)
     restic.snapshots.append(NOW)
 
+    # An earlier repair the same day: this one takes the next name.
+    taken = cloud.with_name(f"cloud-set-aside-{NOW.astimezone().date().isoformat()}")
+    taken.mkdir()
+
     with _client(workspace_root, home, restic) as client:
-        assert [w["kind"] for w in _ok(client.get("/api/backup"))["warnings"]] == ["changed"]
+        status = _ok(client.get("/api/backup"))
+        assert [w["kind"] for w in status["warnings"]] == ["changed"]
+        planned = _destinations(status)[0]["set_aside"]
 
         repaired = _ok(client.post("/api/backup/repair", json={"destination": str(cloud)}))
 
         assert repaired["moved"] == ["index/a3f9 2"]
         assert repaired["outcome"] == "copied"
-        assert Path(repaired["set_aside"]).name == f"cloud-set-aside-{NOW.date().isoformat()}"
+        assert repaired["set_aside"] == planned == f"{taken}-2"
         assert _ok(client.get("/api/backup"))["warnings"] == []
         unknown = client.post("/api/backup/repair", json={"destination": str(tmp_path / "x")})
         assert unknown.status_code == 404
@@ -376,6 +384,9 @@ def test_the_snapshot_list_is_restic_s_own_newest_first(
 
     assert listed["workspace"] == str(workspace_root)
     assert [s["id"] for s in listed["snapshots"]] == [f"{2:064x}", f"{1:064x}"]
+    newest = listed["snapshots"][0]
+    restored = workspace_root.with_name(f"{workspace_root.name}-restore-{newest['short_id']}")
+    assert newest["restore_target"] == str(restored)
     assert BackupStateStore(home).runs() == [], "no run recorded either snapshot"
 
 

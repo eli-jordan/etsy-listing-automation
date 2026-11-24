@@ -29,11 +29,13 @@ the other let a restore through.
 
 from __future__ import annotations
 
+import uuid
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
-from etsy_listings.core.application import credentials
+from etsy_listings.core.application import credentials, workspace_settings
+from etsy_listings.core.application.refusals import SettingsRevisionConflictError
 from etsy_listings.core.backup.binary import ResticBinaries
 from etsy_listings.core.backup.repository import OpenRepository, Repository, Snapshot
 from etsy_listings.core.backup.restic import Restic
@@ -163,6 +165,17 @@ class ConfiguredBackup:
         return self.settings.destinations
 
     @property
+    def workspace_id(self) -> str:
+        """``backup.workspace_id``: a run writes one first when it is
+        missing (:func:`ensure_workspace_id`)."""
+        if self.settings.workspace_id is None:
+            raise ConflictError(
+                f"{self.workspace / layout.SETTINGS_FILE} has no backup.workspace_id. Run "
+                "`etsy-listings backup run` or `backup init` to write one."
+            )
+        return self.settings.workspace_id
+
+    @property
     def password(self) -> str | None:
         """The stored password, the environment first; None when there is none."""
         return self.secrets.backup_password
@@ -273,6 +286,71 @@ def backup_settings(workspace: Workspace) -> BackupSettings:
     if settings is None:
         raise BackupOffError(workspace.settings_file())
     return settings
+
+
+def new_workspace_id() -> str:
+    """A fresh workspace ID (``backup.workspace_id``)."""
+    return str(uuid.uuid4())
+
+
+SEVERAL_WORKSPACES = (
+    "This backup holds snapshots from more than one workspace, so this workspace "
+    "starts its own retention."
+)
+
+
+@dataclass(frozen=True)
+class WorkspaceId:
+    """The workspace ID an operation uses, and what to tell the seller."""
+
+    value: str
+    notice: str | None = None
+    """Set when the repository's snapshots name several workspaces, so a new
+    ID was made instead of adopting one."""
+
+
+def workspace_id_for(snapshots: Sequence[Snapshot]) -> WorkspaceId:
+    """The ID a workspace without one takes for a repository holding
+    ``snapshots``: the one workspace ID they are tagged with, so its schedule
+    carries on (ADR-0061); otherwise a new one. Untagged snapshots, from
+    before workspace IDs, are not counted. Several IDs are not guessed
+    between: the new one comes with :data:`SEVERAL_WORKSPACES`."""
+    found = {snapshot.workspace_id for snapshot in snapshots} - {None}
+    if len(found) == 1:
+        (only,) = found
+        assert only is not None
+        return WorkspaceId(only)
+    return WorkspaceId(new_workspace_id(), SEVERAL_WORKSPACES if found else None)
+
+
+def ensure_workspace_id(workspace: Workspace, snapshots: Sequence[Snapshot] = ()) -> WorkspaceId:
+    """The workspace ID in ``backup.workspace_id``, kept whenever there is
+    one. A block with none, as written by hand, gets
+    :func:`workspace_id_for` ``snapshots`` (the repository's, read without
+    the lock), written there first.
+
+    Set-up writes the ID with the rest of the block; ``backup init`` and a
+    run call this. Another write that lands first is read again, so two
+    callers end with the one ID."""
+    chosen = workspace_id_for(snapshots)
+    for _ in range(3):
+        current = workspace_settings.read_settings(workspace)
+        backup = current.settings.backup
+        if backup is None:
+            raise BackupOffError(workspace.settings_file())
+        if backup.workspace_id is not None:
+            return WorkspaceId(backup.workspace_id)
+        try:
+            workspace_settings.edit_settings(
+                workspace,
+                expected_revision=current.revision,
+                changes={workspace_settings.BACKUP_WORKSPACE_ID: chosen.value},
+                editable=(workspace_settings.BACKUP_WORKSPACE_ID,),
+            )
+        except SettingsRevisionConflictError:
+            continue
+        return chosen
+    raise SettingsRevisionConflictError
 
 
 def stored_password(workspace: Workspace) -> str | None:

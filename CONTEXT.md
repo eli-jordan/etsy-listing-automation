@@ -71,9 +71,30 @@ of those folders overlap. It decides which folders may be a new backup storage
 folder or a restore target. It runs nothing itself.
 _Avoid_: backup config, backup settings (the `backup:` block as written)
 
+**Workspace ID**:
+A random UUID in `backup.workspace_id` that names one workspace across
+machines, hosts and folders. Every snapshot is tagged with it, and the
+retention keeps and groups this workspace's snapshots by it alone. Set-up
+writes it once, taking the one its repository's snapshots already carry when
+there is exactly one; it travels with `settings.yaml`, so a restored workspace
+keeps it, and it is never changed. The seller never edits it.
+_Avoid_: host, machine ID, repository ID (restic's id for the repository)
+
 **Restore target**:
 The new or empty folder a snapshot is restored into, never the live workspace,
 the backup storage folder, a destination or a folder inside one. It is checked
 when the restore is asked for and again just before restic writes, against the
 settings as they read then. Files already in it are never overwritten.
 _Avoid_: restore destination (a destination is where backups are copied)
+
+**Set-aside folder**:
+The new folder beside a destination that a repair moves its changed and
+unexpected files into: `<destination>-set-aside-<date>`, then `-2`, `-3`... when
+that name is taken. The server names it, before the repair as well as after.
+_Avoid_: quarantine, backup of the backup
+
+**Stale**:
+A revision-checked write refused because the file changed since the page read
+it. Nothing was written; the page reloads before trying again. Every other
+refusal is **refused**, with the server's reason and the fields it names.
+_Avoid_: conflict (the server's word for a folder that holds files)

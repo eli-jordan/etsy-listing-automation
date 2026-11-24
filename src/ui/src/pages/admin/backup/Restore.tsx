@@ -8,16 +8,7 @@ import { InfoIcon } from "@phosphor-icons/react/dist/csr/Info";
 import { XIcon } from "@phosphor-icons/react/dist/csr/X";
 import { type ReactNode, useState } from "react";
 import type { BackupSnapshot, BackupSnapshots, RestoreStatus } from "../../../api/backup";
-import {
-  ago,
-  bytes,
-  joined,
-  restoreFigures,
-  restoreNote,
-  restoreTarget,
-  samePath,
-  when,
-} from "./backupText";
+import { ago, bytes, joined, restoreFigures, restoreNote, samePath, when } from "./backupText";
 import type { RestoreFlow } from "./useRestore";
 
 export function Progress({ value, label }: { value: number; label: string }) {
@@ -52,9 +43,7 @@ function RestoreDialog({
   const pick = (id: string | undefined) =>
     choices.snapshots.find((s) => s.id === id) ?? choices.snapshots[0];
   const [snapshot, setSnapshot] = useState(() => pick(initial));
-  const [target, setTarget] = useState(() =>
-    snapshot ? restoreTarget(choices.workspace, snapshot) : "",
-  );
+  const [target, setTarget] = useState(() => (snapshot ? snapshot.restore_target : ""));
   const [refusal, setRefusal] = useState<string | null>(null);
   const [starting, setStarting] = useState(false);
   const taken = samePath(target, choices.workspace);
@@ -62,7 +51,7 @@ function RestoreDialog({
   const choose = (next: BackupSnapshot | undefined) => {
     if (!next) return;
     setSnapshot(next);
-    setTarget(restoreTarget(choices.workspace, next));
+    setTarget(next.restore_target);
     setRefusal(null);
   };
   let hint = (
