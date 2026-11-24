@@ -34,7 +34,6 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from etsy_listings.core.application import credentials
-from etsy_listings.core.application.backup_restore import LIVE_WORKSPACE, RestoreRefusedError
 from etsy_listings.core.backup.binary import ResticBinaries
 from etsy_listings.core.backup.repository import OpenRepository, Repository, Snapshot
 from etsy_listings.core.backup.restic import Restic
@@ -61,6 +60,14 @@ class RepositoryNotEmptyError(ConflictError):
     """A new backup storage folder that already holds files: restic would
     put a repository beside them, and a later restore or copy would treat
     them as part of it."""
+
+
+LIVE_WORKSPACE = "That's your live workspace. Choose a new, empty folder."
+"""The restore dialog's words (interactions, *Restore*)."""
+
+
+class RestoreRefusedError(ConflictError):
+    """A restore target the restore would damage or mix files into."""
 
 
 class PasswordTooShortError(RefusedError):

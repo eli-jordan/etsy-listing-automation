@@ -62,9 +62,9 @@ from etsy_listings.core.application.backup_repository import (
     stored_password,
 )
 from etsy_listings.core.application.backup_restore import (
+    PreparedRestore,
     RestoreStatus,
-    find_snapshot,
-    restore,
+    prepare_restore,
 )
 from etsy_listings.core.application.backup_run import BackupProgress, BackupRunner
 from etsy_listings.core.application.backup_setup import BackupSetUp, set_up_backups
@@ -73,7 +73,6 @@ from etsy_listings.core.backup.binary import ResticBinaries
 from etsy_listings.core.backup.destinations import RepairResult
 from etsy_listings.core.backup.repository import (
     OpenRepository,
-    Repository,
     ResticCancelledError,
     RestoreProgress,
     Snapshot,
@@ -378,26 +377,27 @@ class BackupCoordinator:
 
     def start_restore(self, snapshot: str, target: Path) -> None:
         """Restore ``snapshot`` (an id, its start, or ``latest``) into the
-        new folder ``target`` on its own thread (spec, *Restore*)."""
-        backup = self._configured()
-        target = backup.check_restore_target(target)
-        repository = backup.open()
-        found = find_snapshot(repository.snapshots(lock=False), snapshot)
+        new folder ``target`` on its own thread (spec, *Restore*). What is
+        refused before restic runs, and checked again just before it writes,
+        is ``backup_restore``'s."""
+        prepared = prepare_restore(
+            self._workspace, snapshot, target, binaries=self._binaries, restic=self._env.restic
+        )
         with self._lock:
             if self._stopping.is_set():
                 raise ConflictError("The app is shutting down.")
             if self._restore is not None and self._restore.outcome == "running":
                 raise RestoreBusyError
             self._restore = RestoreStatus(
-                snapshot_id=found.id,
-                snapshot_time=found.time,
-                target=str(target),
+                snapshot_id=prepared.snapshot.id,
+                snapshot_time=prepared.snapshot.time,
+                target=str(prepared.target),
                 started_at=self._env.now(),
             )
             self._stop_restore = stop = threading.Event()
             self._restorer = threading.Thread(
                 target=self._run_restore,
-                args=(backup, repository, found, target, stop),
+                args=(prepared, stop),
                 name="backup-restore",
                 daemon=True,
             )
@@ -417,18 +417,13 @@ class BackupCoordinator:
         if restorer is not None:
             restorer.join(timeout)
 
-    def _run_restore(
-        self,
-        backup: ConfiguredBackup,
-        repository: Repository,
-        snapshot: Snapshot,
-        target: Path,
-        stop: threading.Event,
-    ) -> None:
+    def _run_restore(self, prepared: PreparedRestore, stop: threading.Event) -> None:
+        """Run ``prepared`` holding the maintenance reservation, so it waits
+        for forget, prune or check underway and none starts until it ends."""
         update: dict[str, object] = {"outcome": "succeeded"}
         try:
             with self._maintenance_lock:
-                self._restore_to(backup, repository, snapshot, target, stop)
+                prepared.run(progress=self._heard_restore, cancel=stop)
         except ResticCancelledError:
             update = {"outcome": "stopped", "message": "The restore was stopped."}
         except UserFacingError as exc:
@@ -440,21 +435,6 @@ class BackupCoordinator:
             if self._restore is not None:
                 update["finished_at"] = self._env.now()
                 self._restore = self._restore.model_copy(update=update)
-
-    def _restore_to(
-        self,
-        backup: ConfiguredBackup,
-        repository: Repository,
-        snapshot: Snapshot,
-        target: Path,
-        stop: threading.Event,
-    ) -> None:
-        if stop.is_set():
-            raise ResticCancelledError("The restore was stopped.")
-        # Again, against the settings as they read now: a Setup save may have
-        # added a destination while the snapshots were listed.
-        target = backup.check_restore_target(target, now=self._settings())
-        restore(repository, snapshot, target, progress=self._heard_restore, cancel=stop)
 
     def _heard_restore(self, figures: RestoreProgress) -> None:
         with self._lock:

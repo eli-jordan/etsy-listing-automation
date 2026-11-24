@@ -25,7 +25,7 @@ from etsy_listings.core.application.backup_repository import (
     configured_backup,
     create_repository,
 )
-from etsy_listings.core.application.backup_restore import find_snapshot, restore
+from etsy_listings.core.application.backup_restore import prepare_restore
 from etsy_listings.core.application.backup_run import BackupProgress, BackupRunner
 from etsy_listings.core.backup.binary import RESTIC_VERSION, ResticBinaries
 from etsy_listings.core.backup.repository import RestoreProgress, Snapshot
@@ -215,15 +215,12 @@ def restore_command(
     workspace = open_workspace(root)
     folder = to_native_path(target).absolute()
     with _reported():
-        backup = configured_backup(workspace, binaries=ResticBinaries())
-        folder = backup.check_restore_target(folder)
-        repository = backup.open()
-        found = find_snapshot(repository.snapshots(), snapshot)
-        folder = backup.check_restore_target(folder)
-        typer.echo(f"Restoring snapshot {found.short_id} into {folder}...", err=True)
-        figures = restore(repository, found, folder, progress=_RestoreLines())
+        prepared = prepare_restore(workspace, snapshot, folder, binaries=ResticBinaries())
+        found = prepared.snapshot
+        typer.echo(f"Restoring snapshot {found.short_id} into {prepared.target}...", err=True)
+        figures = prepared.run(progress=_RestoreLines())
     files = f"{figures.files_done:,} files" if figures.files_done is not None else "the files"
-    typer.echo(f"Restored {files} from {found.time:%Y-%m-%d %H:%M} into {folder}.")
+    typer.echo(f"Restored {files} from {found.time:%Y-%m-%d %H:%M} into {prepared.target}.")
 
 
 def _status_json(status: BackupStatus) -> dict[str, Any]:

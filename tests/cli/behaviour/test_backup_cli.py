@@ -280,19 +280,12 @@ def test_check_of_a_damaged_repository_fails_and_is_recorded(
     assert state["last_check"]["ok"] is False
 
 
-def test_restore_refuses_the_live_workspace_and_a_folder_with_files(
-    workspace_root: Path, repository: Path, tmp_path: Path
-) -> None:
-    full = tmp_path / "full"
-    full.mkdir()
-    (full / "notes.txt").write_text("keep me")
-
-    live = _run(workspace_root, "restore", "latest", str(workspace_root))
-    used = _run(workspace_root, "restore", "latest", str(full))
-
-    assert live == (1, "That's your live workspace. Choose a new, empty folder.\n")
-    assert used[0] == 1
-    assert "already holds files" in used[1]
+def test_a_refused_restore_prints_why_and_exits_1(workspace_root: Path, repository: Path) -> None:
+    """Which targets are refused is test_backup_restore.py's."""
+    assert _run(workspace_root, "restore", "latest", str(workspace_root)) == (
+        1,
+        "That's your live workspace. Choose a new, empty folder.\n",
+    )
 
 
 @pytest.mark.restic

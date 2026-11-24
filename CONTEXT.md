@@ -70,3 +70,10 @@ restic binary. It is resolved once per operation, and it is refused if any two
 of those folders overlap. It decides which folders may be a new backup storage
 folder or a restore target. It runs nothing itself.
 _Avoid_: backup config, backup settings (the `backup:` block as written)
+
+**Restore target**:
+The new or empty folder a snapshot is restored into, never the live workspace,
+the backup storage folder, a destination or a folder inside one. It is checked
+when the restore is asked for and again just before restic writes, against the
+settings as they read then. Files already in it are never overwritten.
+_Avoid_: restore destination (a destination is where backups are copied)

@@ -1397,22 +1397,29 @@ and `backup.retention`. The destinations are known by their path (`ITSELF` in
 created only by set-up or by the save that adds it, and only inside a folder
 that exists (`core/application/backup_setup.py`).
 
-A restore is `core/application/backup_restore.py`. Its target is checked by
-`ConfiguredBackup.check_restore_target`, which refuses the live workspace, the
-repository, the destinations, paths inside any of them and a folder that holds
-files. It checks the target again, against the settings as they read then, just before
-`Repository.restore` starts, which restores a one-folder snapshot's contents
-(`restic restore <id>:<folder> --overwrite never`), so the target holds the
-workspace itself and nothing that reached it is overwritten. The server runs it as a job on `BackupCoordinator`, one at a
-time, beside the backup slot rather than in it: restore takes restic's shared
-lock, so scheduled backups keep running. A backup during a restore leaves
-`forget`, `prune` and `check`, which need the exclusive lock, to the next run.
-A restore requested during maintenance waits for those commands to finish.
-`POST /api/backup/restore` starts it, `POST /api/backup/restore/stop` stops it
+A restore is `core/application/backup_restore.py`, the whole sequence for the
+server and the CLI alike. `prepare_restore` resolves the configured backup once,
+checks the target with `ConfiguredBackup.check_restore_target` (which refuses the
+live workspace, the repository, the destinations, paths inside any of them and a
+folder that holds files), opens the repository and finds the snapshot, all before
+restic writes. The `PreparedRestore` it returns runs the restore: just before
+`Repository.restore` starts it checks the target again, against `settings.yaml`
+read afresh, so a folder saved as a destination or storage folder since, or files
+that landed in the target, stop it. `Repository.restore` restores a one-folder
+snapshot's contents (`restic restore <id>:<folder> --overwrite never`), so the
+target holds the workspace itself and nothing that reached it is overwritten.
+The server runs a prepared restore as a job on `BackupCoordinator`, which owns
+only the thread, the status, the maintenance reservation and shutdown: one
+restore at a time, beside the backup slot rather than in it. Restore takes
+restic's shared lock, so scheduled backups keep running. A backup during a
+restore leaves `forget`, `prune` and `check`, which need the exclusive lock, to
+the next run. A restore requested during maintenance waits for those commands
+to finish. `POST /api/backup/restore` starts it, `POST /api/backup/restore/stop` stops it
 and leaves the files restored so far, and `GET /api/backup` carries its
 progress as `restore`. `GET /api/backup/snapshots` lists restic's own
 snapshots for the restore dialog, including ones made by hand. The CLI's
-`backup restore` uses the same module without the server.
+`backup restore` prepares and runs the same restore in the foreground and only
+prints.
 
 A missing repository has two ways back, in `core/application/backup_missing.py`,
 both refused while the configured folder holds restic's `config`.
