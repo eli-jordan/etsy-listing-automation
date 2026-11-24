@@ -127,12 +127,13 @@ def test_set_up_connects_the_backup_a_destination_holds_then_backs_up_into_it(
 ) -> None:
     cloud = _copy(tmp_path / "cloud" / "backups", "first", "second").root
     before = identities(cloud)
-    restic.on_start = _writes_a_snapshot_into(storage)
+    copied = _without_locks(files(cloud))
+    first_backup = _FirstBackup(storage)
+    restic.on_start = first_backup.started
 
     status = _ok(_set_up(client, storage, [cloud]))
 
     assert status["connected"] == {"destination": str(cloud), "snapshots": 1}
-    assert _without_locks(files(storage)) == _without_locks(files(cloud))
     settings = (workspace_root / "settings.yaml").read_text(encoding="utf-8")
     assert f"repository: {storage}" in settings
     assert str(cloud) in settings
@@ -141,7 +142,10 @@ def test_set_up_connects_the_backup_a_destination_holds_then_backs_up_into_it(
     assert PASSWORD in (workspace_root / layout.ENV_FILE).read_text(encoding="utf-8")
     # The schedule backs up into the connected repository, and the copy back
     # only adds the new snapshot: nothing that was there is replaced or deleted.
+    # The schedule starts the first backup as soon as the connect is done,
+    # so the storage folder is read as connected when that backup begins.
     wait_for(lambda: len(_history(client)) == 1)
+    assert first_backup.storage_as_connected == copied
     (entry,) = _history(client)
     assert entry["run"]["outcome"] == "succeeded", entry
     assert restic.ran("init") == 0
@@ -153,14 +157,20 @@ def test_set_up_connects_the_backup_a_destination_holds_then_backs_up_into_it(
 _NEW_SNAPSHOT = hashlib.sha256(b"snapshot made here").hexdigest()
 
 
-def _writes_a_snapshot_into(storage: Path) -> Any:
-    """An ``on_start`` that gives each backup a file, as restic would."""
+class _FirstBackup:
+    """An ``on_start`` that gives each backup a file, as restic would, and
+    keeps the storage folder's files as they were before the first one."""
 
-    def started(operation: str) -> None:
-        if operation == "back_up":
-            (storage / "snapshots" / _NEW_SNAPSHOT).write_bytes(b"snapshot made here")
+    def __init__(self, storage: Path) -> None:
+        self.storage = storage
+        self.storage_as_connected: dict[str, bytes] | None = None
 
-    return started
+    def started(self, operation: str) -> None:
+        if operation != "back_up":
+            return
+        if self.storage_as_connected is None:
+            self.storage_as_connected = _without_locks(files(self.storage))
+        (self.storage / "snapshots" / _NEW_SNAPSHOT).write_bytes(b"snapshot made here")
 
 
 def test_while_it_copies_the_status_says_it_is_connecting_from_the_destination(
