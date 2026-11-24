@@ -29,18 +29,25 @@ from pathlib import Path
 from etsy_listings.core.application import credentials, workspace_settings
 from etsy_listings.core.application.backup_repository import (
     BackupOffError,
+    ConfiguredBackup,
     PasswordTooShortError,
     RepositoryNotEmptyError,
-    check_backup_paths,
-    check_new_repository,
+    configured_backup,
     create_repository,
-    paths_overlap,
+    has_repository,
+    holds_files,
+    overlaps,
     stored_password,
 )
 from etsy_listings.core.application.refusals import SettingsRevisionConflictError
 from etsy_listings.core.backup.binary import ResticBinaries
 from etsy_listings.core.backup.destinations import copy_repository, holds_repository
-from etsy_listings.core.backup.restic import Launch, Restic, ResticError, WrongPasswordError
+from etsy_listings.core.backup.repository import (
+    OpenRepository,
+    Repository,
+    ResticError,
+    WrongPasswordError,
+)
 from etsy_listings.core.config.secrets import BACKUP_PASSWORD_VAR
 from etsy_listings.core.config.settings import BackupSettings
 from etsy_listings.core.errors import ConflictError, RefusedError
@@ -88,18 +95,12 @@ class Replacement:
     """``settings.yaml``'s revision the seller saw."""
 
 
-def has_repository(folder: Path) -> bool:
-    """Whether ``folder`` holds restic's ``config``: the coordinator's test
-    for a missing repository, which runs no restic."""
-    return (folder / "config").is_file()
-
-
 def create_new_repository(
     workspace: Workspace,
     answers: Replacement,
     *,
     binaries: ResticBinaries,
-    launch: Launch | None = None,
+    restic: OpenRepository | None = None,
 ) -> None:
     """Create a repository at ``answers.repository``, saving it as the
     backup repository first; refuses a folder that holds files."""
@@ -107,14 +108,14 @@ def create_new_repository(
     for destination in settings.destinations:
         if destination.is_absolute() and holds_repository(destination):
             raise DestinationHoldsRepositoryError(destination)
-    check_backup_paths(workspace, answers.repository, settings.destinations)
-    stored = stored_password(workspace)
+    backup = _replacing(workspace, settings, answers, binaries=binaries, restic=restic)
+    stored = backup.password
     chosen = stored or answers.password
     if not chosen:
         raise PasswordTooShortError("Enter a password for the new backup repository.")
-    check_new_repository(answers.repository, chosen)
+    backup.check_new_storage(chosen)
     _point_at(workspace, settings, answers)
-    create_repository(workspace, chosen, binaries=binaries, launch=launch, store=stored is None)
+    create_repository(backup, chosen, store=stored is None)
 
 
 def connect_repository(
@@ -123,7 +124,7 @@ def connect_repository(
     answers: Replacement,
     *,
     binaries: ResticBinaries,
-    launch: Launch | None = None,
+    restic: OpenRepository | None = None,
 ) -> None:
     """Copy the repository at ``source`` into the new folder
     ``answers.repository``, check the password opens it, then save both.
@@ -134,7 +135,7 @@ def connect_repository(
     if not chosen:
         raise ConnectRefusedError("Enter the password of the repository you are connecting.")
     repository = answers.repository
-    check_backup_paths(workspace, repository, settings.destinations)
+    backup = _replacing(workspace, settings, answers, binaries=binaries, restic=restic)
     _check_connect(workspace, source, answers)
     staging = repository.with_name(f"{repository.name}{STAGING_MARK}{secrets.token_hex(4)}")
     staging.mkdir()
@@ -142,8 +143,8 @@ def connect_repository(
         copied = copy_repository(source, staging)
         if copied.outcome != "copied":
             raise ConnectRefusedError(copied.message or f"{source} could not be copied.")
-        restic = Restic(binaries.ensure(settings.restic_binary), staging, chosen, launch=launch)
-        _open(restic, env_file=workspace.root / ".env" if stored is not None else None)
+        copy = backup.open(folder=staging, password=chosen, install=True)
+        _open(copy, env_file=backup.env_file if stored is not None else None)
         if repository.is_dir():
             repository.rmdir()  # empty: _check_connect saw to it
         staging.rename(repository)
@@ -167,6 +168,21 @@ def _missing(workspace: Workspace, expected_revision: str) -> BackupSettings:
     return settings
 
 
+def _replacing(
+    workspace: Workspace,
+    settings: BackupSettings,
+    answers: Replacement,
+    *,
+    binaries: ResticBinaries,
+    restic: OpenRepository | None,
+) -> ConfiguredBackup:
+    """The configured backup with the storage folder the seller confirmed,
+    refused if it overlaps the workspace or a destination. The old folder is
+    not checked: it may be another machine's path."""
+    chosen = settings.model_copy(update={"repository": answers.repository})
+    return configured_backup(workspace, chosen, binaries=binaries, restic=restic)
+
+
 def _check_connect(workspace: Workspace, source: Path, answers: Replacement) -> None:
     """Everything a connect can be refused for before it copies, so a
     20 GB copy is not wasted on a typo."""
@@ -176,9 +192,9 @@ def _check_connect(workspace: Workspace, source: Path, answers: Replacement) -> 
             "folder that holds config, data, index, keys and snapshots."
         )
     repository = answers.repository
-    if paths_overlap(repository, source):
+    if overlaps(repository, source):
         raise ConnectRefusedError("Choose a local folder separate from the source repository.")
-    if repository.exists() and (not repository.is_dir() or any(repository.iterdir())):
+    if holds_files(repository):
         raise RepositoryNotEmptyError(
             f"{repository} already holds files. Choose an empty or new folder to copy into."
         )
@@ -189,12 +205,12 @@ def _check_connect(workspace: Workspace, source: Path, answers: Replacement) -> 
         raise SettingsRevisionConflictError
 
 
-def _open(restic: Restic, *, env_file: Path | None) -> None:
-    """Refuse a password that does not open ``restic``'s repository. One
-    from ``.env`` is never asked for again, so the message says how to
-    change it."""
+def _open(repository: Repository, *, env_file: Path | None) -> None:
+    """Refuse a password that does not open ``repository``, or a copy that
+    does not pass a check. A password from ``.env`` is never asked for
+    again, so the message says how to change it."""
     try:
-        restic.run("check")
+        repository.verify_password()
     except WrongPasswordError:
         if env_file is None:
             message = "That password does not open this repository. Nothing was saved."
@@ -208,6 +224,9 @@ def _open(restic: Restic, *, env_file: Path | None) -> None:
         raise ConnectRefusedError(message) from None
     except ResticError as exc:
         raise ConnectRefusedError(f"The copied repository did not pass a check: {exc}") from exc
+    checked = repository.check()
+    if not checked.ok:
+        raise ConnectRefusedError(f"The copied repository did not pass a check: {checked.message}")
 
 
 def _point_at(workspace: Workspace, settings: BackupSettings, answers: Replacement) -> None:

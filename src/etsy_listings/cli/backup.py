@@ -12,7 +12,6 @@ import json
 import time
 from collections.abc import Iterator
 from contextlib import contextmanager
-from functools import partial
 from typing import Annotated, Any
 
 import typer
@@ -22,21 +21,14 @@ from etsy_listings.cli.options import open_workspace, root_option
 from etsy_listings.core.application.backup_repository import (
     MIN_PASSWORD_LENGTH,
     BackupStatus,
-    backup_settings,
     backup_status,
+    configured_backup,
     create_repository,
-    open_repository,
-    stored_password,
 )
-from etsy_listings.core.application.backup_restore import (
-    RestoreProgress,
-    check_target,
-    find_snapshot,
-    restore,
-)
+from etsy_listings.core.application.backup_restore import prepare_restore
 from etsy_listings.core.application.backup_run import BackupProgress, BackupRunner
 from etsy_listings.core.backup.binary import RESTIC_VERSION, ResticBinaries
-from etsy_listings.core.backup.restic import Snapshot
+from etsy_listings.core.backup.repository import RestoreProgress, Snapshot
 from etsy_listings.core.config.secrets import BACKUP_PASSWORD_VAR
 from etsy_listings.core.errors import UserFacingError
 from etsy_listings.core.workspace import layout
@@ -78,14 +70,12 @@ def init(root: str | None = root_option()) -> None:
     there first. Downloads the pinned restic when no other is configured."""
     workspace = open_workspace(root)
     with _reported():
-        settings = backup_settings(workspace)
-        existing = stored_password(workspace)
+        backup = configured_backup(workspace, binaries=ResticBinaries())
+        existing = backup.password
         password = existing or _ask_password()
-        typer.echo(f"Creating the backup repository at {settings.repository}...", err=True)
-        repository_id = create_repository(
-            workspace, password, binaries=ResticBinaries(), store=existing is None
-        )
-    typer.echo(f"Created the backup repository at {settings.repository} (id {repository_id[:8]}).")
+        typer.echo(f"Creating the backup repository at {backup.storage}...", err=True)
+        repository_id = create_repository(backup, password, store=existing is None)
+    typer.echo(f"Created the backup repository at {backup.storage} (id {repository_id[:8]}).")
     if existing is None:
         typer.echo(
             f"Stored the password in {workspace.root / layout.ENV_FILE} as "
@@ -181,7 +171,7 @@ def snapshots(root: str | None = root_option(), *, json_output: JsonOption = Fal
     """List the repository's snapshots, oldest first."""
     workspace = open_workspace(root)
     with _reported():
-        found = open_repository(workspace, binaries=ResticBinaries()).snapshots()
+        found = configured_backup(workspace, binaries=ResticBinaries()).open().snapshots()
     if json_output:
         typer.echo(json.dumps([_snapshot_json(snapshot) for snapshot in found], indent=2))
     elif not found:
@@ -225,21 +215,12 @@ def restore_command(
     workspace = open_workspace(root)
     folder = to_native_path(target).absolute()
     with _reported():
-        settings = backup_settings(workspace)
-        check = partial(
-            check_target,
-            workspace=workspace.root,
-            repository=settings.repository,
-            destinations=settings.destinations,
-        )
-        folder = check(folder)
-        restic = open_repository(workspace, binaries=ResticBinaries(), settings=settings)
-        found = find_snapshot(restic.snapshots(), snapshot)
-        folder = check(folder)
-        typer.echo(f"Restoring snapshot {found.short_id} into {folder}...", err=True)
-        figures = restore(restic, found, folder, progress=_RestoreLines())
+        prepared = prepare_restore(workspace, snapshot, folder, binaries=ResticBinaries())
+        found = prepared.snapshot
+        typer.echo(f"Restoring snapshot {found.short_id} into {prepared.target}...", err=True)
+        figures = prepared.run(progress=_RestoreLines())
     files = f"{figures.files_done:,} files" if figures.files_done is not None else "the files"
-    typer.echo(f"Restored {files} from {found.time:%Y-%m-%d %H:%M} into {folder}.")
+    typer.echo(f"Restored {files} from {found.time:%Y-%m-%d %H:%M} into {prepared.target}.")
 
 
 def _status_json(status: BackupStatus) -> dict[str, Any]:
