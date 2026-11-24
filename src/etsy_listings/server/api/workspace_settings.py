@@ -104,7 +104,7 @@ def edit_settings(
     except SettingsRevisionConflictError as exc:
         return JSONResponse(
             status_code=412,
-            content=SettingsSaveRefusal(kind="conflict", message=str(exc)).model_dump(),
+            content=SettingsSaveRefusal(kind="stale", message=str(exc)).model_dump(),
         )
     except InvalidSettingsEditError as exc:
         return _invalid(exc)

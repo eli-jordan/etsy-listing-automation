@@ -18,14 +18,13 @@ queue is process-local and guards no second server on the workspace.
 **A backup's pause** (workspace-backup spec, *Pausing jobs*) is the one time
 a manual run waits: while the shared :class:`JobGate` is paused a new run is
 accepted ``queued`` and held here, and resume starts the held runs in the
-order they were asked for (plan decision P4). Each run that starts holds a
-gate ticket until it finishes, which is what a backup's wait for quiet
-counts.
+order they were asked for (plan decision P4) -- the gate keeps that line.
+Each run that starts owns a gate ticket until it finishes, which is what a
+backup's wait for quiet counts.
 """
 
 from __future__ import annotations
 
-import threading
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 
@@ -87,13 +86,6 @@ class AiCoordinator:
             runner=self._runner,
             gate=self._gate,
         )
-        self._lock = threading.Lock()
-        self._held: list[AiRun] = []
-        """Manual runs a backup's pause holds, in the order asked for."""
-        self._tickets: dict[str, Ticket] = {}
-        """The gate ticket of each manual run started, until it finishes."""
-        self._registry.subscribe(self._release_ticket)
-        self._gate.on_resume(self._release_held)
 
     @property
     def registry(self) -> AiRunRegistry:
@@ -120,10 +112,6 @@ class AiCoordinator:
         :meth:`start` to rerun. Manual runs a backup's pause holds end
         ``cancelled`` without starting. Safe to call more than once."""
         self._queue.stop()
-        with self._lock:
-            held, self._held = self._held, []
-        for run in held:
-            run.request_stop("shutdown")
         self._runner.shutdown()
 
     # ---------------------------------------------------------- manual runs
@@ -156,52 +144,29 @@ class AiCoordinator:
     def _create(self, listing: str, *, draft_brief: bool) -> AiRun | Conflict:
         """Create the run and start it, or hold it while a backup's pause is
         on. Admitted before the run exists, so a backup waiting for quiet
-        counts it from the moment anyone can see it."""
+        counts it from the moment anyone can see it; the run owns the
+        ticket from then on."""
         ticket = self._gate.admit(_job(listing))
         # The registry refuses a held listing again here, which is what
         # closes the race with a deploy taking it since the check above.
-        run = self._registry.create(listing, draft_brief=draft_brief, queued=ticket is None)
-        if not isinstance(run, AiRun):
-            if ticket is not None:
-                ticket.release()
-            if isinstance(run, Deploying):
-                raise ListingDeployingError(listing)
+        run = self._registry.create(
+            listing, draft_brief=draft_brief, queued=ticket is None, ticket=ticket
+        )
+        if isinstance(run, Deploying):
+            raise ListingDeployingError(listing)
+        if isinstance(run, Conflict):
             return run
         if ticket is None:
-            with self._lock:
-                self._held.append(run)
+            self._gate.hold(_job(listing), lambda admitted: self._begin(run, admitted))
         else:
-            self._launch(run, ticket)
+            self._runner.start(run)
         return run
 
-    def _launch(self, run: AiRun, ticket: Ticket) -> None:
-        # Kept before the thread starts: a run that fails to capture its
-        # providers finishes inside `start`, and its ticket must go with it.
-        with self._lock:
-            self._tickets[run.id] = ticket
-        self._runner.start(run)
-
-    def _release_ticket(self, run: AiRun) -> None:
-        with self._lock:
-            ticket = self._tickets.pop(run.id, None)
-        if ticket is not None:
-            ticket.release()
-
-    def _release_held(self) -> None:
-        """Resume: start the held runs in the order asked for. One stopped
-        while held is skipped; a pause landing part way holds the rest."""
-        with self._lock:
-            held, self._held = self._held, []
-        for index, run in enumerate(held):
-            ticket = self._gate.admit(_job(run.listing))
-            if ticket is None:
-                with self._lock:
-                    self._held[:0] = held[index:]
-                return
-            if run.begin():
-                self._launch(run, ticket)
-            else:
-                ticket.release()
+    def _begin(self, run: AiRun, ticket: Ticket) -> None:
+        """Resume reached a held run: start it, unless it was stopped while
+        held."""
+        if run.begin(ticket):
+            self._runner.start(run)
 
     def blocked(self, listing: str) -> AiRunRefusedError | None:
         """What :meth:`start_run` would refuse saved ``listing`` with for
@@ -232,6 +197,11 @@ class AiCoordinator:
             providers,
             draft_brief=draft_brief,
         )
+
+    def waiting_for_backup(self, run: AiRun) -> bool:
+        """Whether ``run`` is held by a backup's pause (plan decision P4).
+        Never stored, only read."""
+        return self._gate.holds(queued=run.phase == "queued")
 
     # -------------------------------------------------------------- deploys
 

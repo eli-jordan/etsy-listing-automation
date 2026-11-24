@@ -285,6 +285,12 @@ def cmd_brief(args: argparse.Namespace) -> None:
     patch(args.url, args.name, {"brief": text})
 
 
+def cmd_section(args: argparse.Namespace) -> None:
+    for name in args.names:
+        say("##", name)
+        patch(args.url, name, {"etsy": {"section": args.section}})
+
+
 def cmd_check(args: argparse.Namespace) -> None:
     for name in args.names:
         detail = call(listing_url(args.url, name))
@@ -305,7 +311,11 @@ def parser() -> argparse.ArgumentParser:
     create = commands.add_parser("create", help="Stage PNGs, name them and confirm the batch")
     create.add_argument("--template", required=True)
     create.add_argument("--prefix", default="")
-    create.add_argument("--label", default="etsy-listing-create")
+    create.add_argument(
+        "--label",
+        required=True,
+        help="the batch's name in Recent batches: the collection, e.g. 'Artistic Designs'",
+    )
     create.add_argument("--strip-variant", action="store_true", help="drop a trailing -a, -b")
     create.add_argument("--dry-run", action="store_true")
     create.add_argument("files", nargs="+")
@@ -330,6 +340,9 @@ def parser() -> argparse.ArgumentParser:
     brief.add_argument("name")
     brief.add_argument("text", nargs="?", default="")
     brief.add_argument("--file", help="read the brief from this file instead")
+    section = commands.add_parser("section", help="Put listings in a shop section")
+    section.add_argument("section", help="the section's title, as the shop names it")
+    section.add_argument("names", nargs="+")
     check = commands.add_parser("check", help="Counts and issues for listings")
     check.add_argument("names", nargs="+")
     handlers = {
@@ -341,6 +354,7 @@ def parser() -> argparse.ArgumentParser:
         "check": cmd_check,
         "look": cmd_look,
         "brief": cmd_brief,
+        "section": cmd_section,
     }
     top.set_defaults(handlers=handlers)
     return top

@@ -206,6 +206,28 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/backup/connect": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Connect Repository
+     * @description Copy an existing repository to local disk, check the password opens
+     *     it, then use it; answers once it is connected. A wrong password or a
+     *     folder that is not a repository is a 422, and nothing is saved.
+     */
+    post: operations["connect_repository_api_backup_connect_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/backup/history": {
     parameters: {
       query?: never;
@@ -238,6 +260,69 @@ export interface paths {
      *     again (spec, *Changed and unexpected files*). Answers when it ends.
      */
     post: operations["repair_api_backup_repair_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/backup/repository": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Create Repository
+     * @description Create a new repository while the configured one is missing, save
+     *     its folder, and start the first backup. Refuses a folder that holds
+     *     files (409) and a missing or short password (422).
+     */
+    post: operations["create_repository_api_backup_repository_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/backup/restore": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Start Restore
+     * @description Restore a snapshot into a new folder; 409 for the live workspace, a
+     *     folder that holds files or a restore already running.
+     */
+    post: operations["start_restore_api_backup_restore_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/backup/restore/stop": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Stop Restore
+     * @description Stop the restore, answering once it has.
+     */
+    post: operations["stop_restore_api_backup_restore_stop_post"];
     delete?: never;
     options?: never;
     head?: never;
@@ -279,8 +364,34 @@ export interface paths {
      *     and the destination folders, then start the first backup. Refuses a
      *     short password (422), a folder that holds files (409) and a destination
      *     whose parent is missing (422), writing nothing.
+     *
+     *     When a destination already holds a backup, connects it instead, as
+     *     ``/connect`` does, answering once it is copied: ``connected`` names the
+     *     destination. Refuses a password that does not open it (422, field
+     *     ``password``), part of a copy, and two different repositories (422).
      */
     post: operations["set_up_api_backup_setup_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/backup/snapshots": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Backup Snapshots
+     * @description restic's snapshots, for the restore dialog: a run's history entry
+     *     may be gone, and a snapshot made by hand has none.
+     */
+    get: operations["backup_snapshots_api_backup_snapshots_get"];
+    put?: never;
+    post?: never;
     delete?: never;
     options?: never;
     head?: never;
@@ -1426,8 +1537,9 @@ export interface paths {
     /**
      * List Runs
      * @description ``listing`` narrows to that listing's current run (active, or finished
-     *     and not yet superseded -- decision 7's retention). Omitted, every run this
-     *     process still remembers, for a future workspace-wide view.
+     *     and not yet superseded -- decision 7's retention); ``scope=batch&batch=``
+     *     to that listing batch's. Omitted, every run this process still
+     *     remembers, for a future workspace-wide view.
      */
     get: operations["list_runs_api_runs_get"];
     put?: never;
@@ -1435,8 +1547,10 @@ export interface paths {
      * Create Run
      * @description A ``409`` names the run already holding one of these listings, so the
      *     caller can reattach to it (``GET /api/runs/{active_run}``) instead of
-     *     retrying into the same refusal. A workspace apply that is not exactly
-     *     its review is a ``409`` too, carrying the refusal's message.
+     *     retrying into the same refusal. A workspace or batch apply that is not
+     *     exactly its review is a ``409`` too, carrying the refusal's message, and
+     *     so is a batch plan with nothing to deploy; a batch nobody holds is a
+     *     ``404``.
      */
     post: operations["create_run_api_runs_post"];
     delete?: never;
@@ -2238,6 +2352,8 @@ export interface components {
     };
     /** ApplyRunDetail */
     ApplyRunDetail: {
+      /** Batch Id */
+      batch_id?: string | null;
       /**
        * Created At
        * Format: date-time
@@ -2276,7 +2392,7 @@ export interface components {
        * Scope
        * @enum {string}
        */
-      scope: "listings" | "workspace";
+      scope: "listings" | "workspace" | "batch";
       /** Seen */
       seen: boolean;
       /**
@@ -2287,6 +2403,8 @@ export interface components {
     };
     /** ApplyRunSummary */
     ApplyRunSummary: {
+      /** Batch Id */
+      batch_id?: string | null;
       /**
        * Created At
        * Format: date-time
@@ -2312,7 +2430,7 @@ export interface components {
        * Scope
        * @enum {string}
        */
-      scope: "listings" | "workspace";
+      scope: "listings" | "workspace" | "batch";
       /** Seen */
       seen: boolean;
       /**
@@ -2329,10 +2447,50 @@ export interface components {
        */
       kind: "colour-matrix" | "multiple" | "single";
     };
+    /**
+     * BackupConnectRequest
+     * @description Connect an existing repository, such as a destination copy restored
+     *     onto a new machine, by copying it to local disk first.
+     */
+    BackupConnectRequest: {
+      /** Password */
+      password?: string | null;
+      /** Repository */
+      repository: string;
+      /** Revision */
+      revision: string;
+      /** Source */
+      source: string;
+    };
+    /**
+     * BackupConnected
+     * @description The backup set-up connected instead of creating one.
+     */
+    BackupConnected: {
+      /** Destination */
+      destination: string;
+      /** Notice */
+      notice?: string | null;
+      /** Snapshots */
+      snapshots: number;
+    };
     /** BackupHistoryResponse */
     BackupHistoryResponse: {
       /** Runs */
       runs: components["schemas"]["HistoryEntry"][];
+    };
+    /**
+     * BackupNewRepositoryRequest
+     * @description Create a new repository while the configured one is missing
+     *     (workspace-backup spec, *Missing repository*).
+     */
+    BackupNewRepositoryRequest: {
+      /** Password */
+      password?: string | null;
+      /** Repository */
+      repository: string;
+      /** Revision */
+      revision: string;
     };
     /** BackupOverview */
     BackupOverview: {
@@ -2349,13 +2507,38 @@ export interface components {
       last_success?: string | null;
       /** Next Due */
       next_due?: string | null;
+      /**
+       * Password Min Length
+       * @default 12
+       */
+      password_min_length: number;
       repository?: components["schemas"]["RepositoryOverview"] | null;
+      restore?: components["schemas"]["RestoreStatus"] | null;
       running?: components["schemas"]["RunningBackup"] | null;
       /**
        * Warnings
        * @default []
        */
       warnings: components["schemas"]["BackupWarning"][];
+    };
+    /**
+     * BackupRefusal
+     * @description Set-up's, create's and connect's refusals.
+     */
+    BackupRefusal: {
+      /** Connect From */
+      connect_from?: string | null;
+      /** Field Errors */
+      field_errors?: {
+        [key: string]: string;
+      };
+      /**
+       * Kind
+       * @enum {string}
+       */
+      kind: "stale" | "conflict" | "invalid";
+      /** Message */
+      message: string;
     };
     /** BackupRepairRequest */
     BackupRepairRequest: {
@@ -2375,6 +2558,13 @@ export interface components {
       outcome: "copied" | "unreachable" | "changed" | "damaged" | "failed" | "stopped";
       /** Set Aside */
       set_aside: string | null;
+    };
+    /** BackupRestoreRequest */
+    BackupRestoreRequest: {
+      /** Snapshot */
+      snapshot: string;
+      /** Target */
+      target: string;
     };
     /**
      * BackupSetUpRequest
@@ -2396,6 +2586,39 @@ export interface components {
       retention?: components["schemas"]["RetentionSettings"];
       /** Revision */
       revision: string;
+    };
+    /**
+     * BackupSetUpResponse
+     * @description The status once set up, and what set-up connected, if anything.
+     */
+    BackupSetUpResponse: {
+      connected?: components["schemas"]["BackupConnected"] | null;
+      /**
+       * Destinations
+       * @default []
+       */
+      destinations: components["schemas"]["DestinationOverview"][];
+      /** Enabled */
+      enabled: boolean;
+      /** Interval Hours */
+      interval_hours?: number | null;
+      /** Last Success */
+      last_success?: string | null;
+      /** Next Due */
+      next_due?: string | null;
+      /**
+       * Password Min Length
+       * @default 12
+       */
+      password_min_length: number;
+      repository?: components["schemas"]["RepositoryOverview"] | null;
+      restore?: components["schemas"]["RestoreStatus"] | null;
+      running?: components["schemas"]["RunningBackup"] | null;
+      /**
+       * Warnings
+       * @default []
+       */
+      warnings: components["schemas"]["BackupWarning"][];
     };
     /**
      * BackupSettings
@@ -2424,6 +2647,33 @@ export interface components {
       /** Restic Binary */
       restic_binary?: string | null;
       retention?: components["schemas"]["RetentionSettings"];
+      /** Workspace Id */
+      workspace_id?: string | null;
+    };
+    /** BackupSnapshot */
+    BackupSnapshot: {
+      /** Files */
+      files?: number | null;
+      /** Id */
+      id: string;
+      /** Restore Target */
+      restore_target: string;
+      /** Short Id */
+      short_id: string;
+      /** Size */
+      size?: number | null;
+      /**
+       * Time
+       * Format: date-time
+       */
+      time: string;
+    };
+    /** BackupSnapshotsResponse */
+    BackupSnapshotsResponse: {
+      /** Snapshots */
+      snapshots: components["schemas"]["BackupSnapshot"][];
+      /** Workspace */
+      workspace: string;
     };
     /** BackupWarning */
     BackupWarning: {
@@ -2441,6 +2691,29 @@ export interface components {
       kind: "off" | "repository_missing" | "stale" | "failed" | "behind" | "changed";
       /** Message */
       message: string;
+    };
+    /** BatchApplyRequest */
+    BatchApplyRequest: {
+      /** Batch Id */
+      batch_id: string;
+      /** Expect */
+      expect: {
+        [key: string]: string;
+      };
+      /**
+       * Kind
+       * @constant
+       */
+      kind: "apply";
+      /** Listings */
+      listings: string[];
+      /** Reviewed Run Id */
+      reviewed_run_id: string;
+      /**
+       * Scope
+       * @constant
+       */
+      scope: "batch";
     };
     /** BatchDetail */
     BatchDetail: {
@@ -2534,6 +2807,25 @@ export interface components {
       /** Label */
       label: string;
     };
+    /**
+     * BatchPlanRequest
+     * @description Plan the reviewed rows of one listing batch that have changes to
+     *     deploy (ADR-0059); the server resolves which.
+     */
+    BatchPlanRequest: {
+      /** Batch Id */
+      batch_id: string;
+      /**
+       * Kind
+       * @constant
+       */
+      kind: "plan";
+      /**
+       * Scope
+       * @constant
+       */
+      scope: "batch";
+    };
     /** BatchRowDetail */
     BatchRowDetail: {
       /** Ai */
@@ -2565,6 +2857,11 @@ export interface components {
        * @default false
        */
       deleted: boolean;
+      /**
+       * Deployable
+       * @default false
+       */
+      deployable: boolean;
       /** Design */
       design: string;
       /** Error */
@@ -2987,13 +3284,24 @@ export interface components {
        * @default []
        */
       changed: components["schemas"]["ChangedFile"][];
+      /**
+       * Icloud
+       * @default false
+       */
+      icloud: boolean;
       last_check?: components["schemas"]["CheckResult"] | null;
       /** Last Copy */
       last_copy?: string | null;
+      /** Name */
+      name: string;
       /** Path */
       path: string;
       /** Problem */
       problem?: string | null;
+      /** Set Aside */
+      set_aside?: string | null;
+      /** Short Problem */
+      short_problem?: string | null;
       /**
        * Unexpected
        * @default []
@@ -3295,6 +3603,13 @@ export interface components {
     HistoryEntry: {
       /** Kept As */
       kept_as?: ("recent" | "weekly" | "monthly") | null;
+      /**
+       * Names
+       * @default {}
+       */
+      names: {
+        [key: string]: string;
+      };
       run: components["schemas"]["RunRecord"];
     };
     /** IdleOutcomeDTO */
@@ -4211,6 +4526,8 @@ export interface components {
     };
     /** PlanRunDetail */
     PlanRunDetail: {
+      /** Batch Id */
+      batch_id?: string | null;
       /**
        * Created At
        * Format: date-time
@@ -4249,7 +4566,7 @@ export interface components {
        * Scope
        * @enum {string}
        */
-      scope: "listings" | "workspace";
+      scope: "listings" | "workspace" | "batch";
       /** Seen */
       seen: boolean;
       /**
@@ -4260,6 +4577,8 @@ export interface components {
     };
     /** PlanRunSummary */
     PlanRunSummary: {
+      /** Batch Id */
+      batch_id?: string | null;
       /**
        * Created At
        * Format: date-time
@@ -4285,7 +4604,7 @@ export interface components {
        * Scope
        * @enum {string}
        */
-      scope: "listings" | "workspace";
+      scope: "listings" | "workspace" | "batch";
       /** Seen */
       seen: boolean;
       /**
@@ -4734,6 +5053,11 @@ export interface components {
       last_prune?: string | null;
       /** Missing */
       missing: boolean;
+      /**
+       * Password Stored
+       * @default false
+       */
+      password_stored: boolean;
       /** Path */
       path: string;
       /** Problem */
@@ -4758,6 +5082,51 @@ export interface components {
       amount: string;
       /** Size */
       size: string;
+    };
+    /**
+     * RestoreStatus
+     * @description A restore, for the dialog and the status panel's strip.
+     */
+    RestoreStatus: {
+      /** Bytes Done */
+      bytes_done?: number | null;
+      /** Bytes Total */
+      bytes_total?: number | null;
+      /** Files Done */
+      files_done?: number | null;
+      /** Files Total */
+      files_total?: number | null;
+      /** Finished At */
+      finished_at?: string | null;
+      /** Message */
+      message?: string | null;
+      /**
+       * Outcome
+       * @default running
+       * @enum {string}
+       */
+      outcome: "running" | "succeeded" | "failed" | "stopped";
+      /**
+       * Percent
+       * @default 0
+       */
+      percent: number;
+      /** Seconds Left */
+      seconds_left?: number | null;
+      /** Snapshot Id */
+      snapshot_id: string;
+      /**
+       * Snapshot Time
+       * Format: date-time
+       */
+      snapshot_time: string;
+      /**
+       * Started At
+       * Format: date-time
+       */
+      started_at: string;
+      /** Target */
+      target: string;
     };
     /**
      * RetentionSettings
@@ -4849,6 +5218,8 @@ export interface components {
       finished_at: string;
       /** Message */
       message?: string | null;
+      /** Notice */
+      notice?: string | null;
       /**
        * Outcome
        * @enum {string}
@@ -4884,7 +5255,7 @@ export interface components {
        * Operation
        * @enum {string}
        */
-      operation: "backup" | "repair";
+      operation: "backup" | "repair" | "connect";
       /**
        * Started At
        * Format: date-time
@@ -5039,7 +5410,7 @@ export interface components {
        * Kind
        * @enum {string}
        */
-      kind: "conflict" | "invalid";
+      kind: "stale" | "invalid";
       /** Message */
       message: string;
     };
@@ -5130,7 +5501,7 @@ export interface components {
     };
     /**
      * ShopSaveRefusal
-     * @description A 412 (``conflict``: reload, then edit again) or a 422 (``invalid``:
+     * @description A 412 (``stale``: reload, then edit again) or a 422 (``invalid``:
      *     each refused dotted shop.yaml key to its reason). Nothing was written.
      */
     ShopSaveRefusal: {
@@ -5142,7 +5513,7 @@ export interface components {
        * Kind
        * @enum {string}
        */
-      kind: "conflict" | "invalid";
+      kind: "stale" | "invalid";
       /** Message */
       message: string;
     };
@@ -6210,6 +6581,57 @@ export interface operations {
       };
     };
   };
+  connect_repository_api_backup_connect_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["BackupConnectRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["BackupOverview"];
+        };
+      };
+      /** @description Conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["BackupRefusal"];
+        };
+      };
+      /** @description Precondition Failed */
+      412: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["BackupRefusal"];
+        };
+      };
+      /** @description Unprocessable Entity */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["BackupRefusal"];
+        };
+      };
+    };
+  };
   backup_history_api_backup_history_get: {
     parameters: {
       query?: never;
@@ -6263,6 +6685,110 @@ export interface operations {
       };
     };
   };
+  create_repository_api_backup_repository_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["BackupNewRepositoryRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      202: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["BackupOverview"];
+        };
+      };
+      /** @description Conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["BackupRefusal"];
+        };
+      };
+      /** @description Precondition Failed */
+      412: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["BackupRefusal"];
+        };
+      };
+      /** @description Unprocessable Entity */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["BackupRefusal"];
+        };
+      };
+    };
+  };
+  start_restore_api_backup_restore_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["BackupRestoreRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      202: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["BackupOverview"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  stop_restore_api_backup_restore_stop_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["BackupOverview"];
+        };
+      };
+    };
+  };
   back_up_now_api_backup_run_post: {
     parameters: {
       query?: never;
@@ -6302,7 +6828,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["BackupOverview"];
+          "application/json": components["schemas"]["BackupSetUpResponse"];
         };
       };
       /** @description Conflict */
@@ -6311,7 +6837,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["SettingsSaveRefusal"];
+          "application/json": components["schemas"]["BackupRefusal"];
         };
       };
       /** @description Precondition Failed */
@@ -6320,7 +6846,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["SettingsSaveRefusal"];
+          "application/json": components["schemas"]["BackupRefusal"];
         };
       };
       /** @description Unprocessable Entity */
@@ -6329,7 +6855,27 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["SettingsSaveRefusal"];
+          "application/json": components["schemas"]["BackupRefusal"];
+        };
+      };
+    };
+  };
+  backup_snapshots_api_backup_snapshots_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["BackupSnapshotsResponse"];
         };
       };
     };
@@ -8264,7 +8810,8 @@ export interface operations {
     parameters: {
       query?: {
         listing?: string | null;
-        scope?: ("listings" | "workspace") | null;
+        scope?: ("listings" | "workspace" | "batch") | null;
+        batch?: string | null;
       };
       header?: never;
       path?: never;
@@ -8306,8 +8853,10 @@ export interface operations {
         "application/json":
           | components["schemas"]["ListingPlanRequest"]
           | components["schemas"]["WorkspacePlanRequest"]
+          | components["schemas"]["BatchPlanRequest"]
           | components["schemas"]["ListingApplyRequest"]
-          | components["schemas"]["WorkspaceApplyRequest"];
+          | components["schemas"]["WorkspaceApplyRequest"]
+          | components["schemas"]["BatchApplyRequest"];
       };
     };
     responses: {

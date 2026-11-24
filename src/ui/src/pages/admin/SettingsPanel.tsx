@@ -5,16 +5,28 @@ import type { SaveStatus } from "./useSaveQueue";
 import { MarketWeights } from "./MarketWeights";
 import { AiSettingsSections } from "./AiTimeLimits";
 import { TemplatePositions } from "./TemplatePositions";
+import { type BackupPage, BackupSection } from "./backup/BackupSection";
+import type { BackupConnected } from "../../api/backup";
 import "./settings.css";
 
-export type SettingsSection = "ai" | "rendering";
+export type SettingsSection = "ai" | "rendering" | "backup";
 
 /** settings.yaml's two subsections (template positions PR 5): AI, the
  * original panels in their order, and Template rendering. Both stay mounted
  * so switching keeps drafts; they share one file, status and save queue. */
-export function SettingsPanel({ section = "ai" }: { section?: SettingsSection }) {
+export function SettingsPanel({
+  section = "ai",
+  backupPage = "status",
+  onBackupPage = () => undefined,
+}: {
+  section?: SettingsSection;
+  backupPage?: BackupPage;
+  onBackupPage?: (page: BackupPage) => void;
+}) {
   const state = useWorkspaceSettings();
   const { settings, status } = state;
+  // Outlives BackupSection, which the reload after set-up remounts.
+  const [connected, setConnected] = useState<BackupConnected | null>(null);
   if (state.loadError)
     return (
       <section className="b-panel settings-load-error" aria-labelledby="settings-invalid">
@@ -48,12 +60,13 @@ export function SettingsPanel({ section = "ai" }: { section?: SettingsSection })
       )}
       <div
         role="status"
+        hidden={section === "backup"}
         className={status.kind === "error" ? "adm-warn settings-notice" : "adm-save settings-save"}
       >
         {status.kind === "error" && <WarningIcon size={20} />}
         <span>{statusText(status)}</span>
       </div>
-      {status.kind === "error" && (
+      {status.kind === "error" && section !== "backup" && (
         <button className="btn btn-secondary" onClick={state.retry}>
           Retry save
         </button>
@@ -102,6 +115,25 @@ export function SettingsPanel({ section = "ai" }: { section?: SettingsSection })
           onConfirm={state.confirmSave}
         />
       </fieldset>
+      {section === "backup" && (
+        <fieldset disabled={state.locked} className="settings-fields">
+          <BackupSection
+            key={state.loadedVersion}
+            page={backupPage}
+            onPage={onBackupPage}
+            saved={settings.backup ?? null}
+            setUp={async (answers) => {
+              const outcome = await state.setUp(answers);
+              if (outcome.kind === "started") setConnected(outcome.connected ?? null);
+              return outcome;
+            }}
+            connected={connected}
+            onConnectedSeen={() => setConnected(null)}
+            replaceRepository={state.replaceRepository}
+            save={state.confirmSave}
+          />
+        </fieldset>
+      )}
     </div>
   );
 }
