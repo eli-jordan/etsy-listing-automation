@@ -4,7 +4,7 @@
    phone branches of these pages): native-style list rows, cards, chips, a
    floating action button and the action sheet. */
 
-@media (max-width: 700px) {
+@media (max-width: 700px), (pointer: coarse) and (orientation: landscape) and (max-height: 500px) {
   .design-row__file,
   .preview-meta__path {
     overflow-wrap: anywhere;
@@ -553,5 +553,58 @@
       center / contain no-repeat;
     mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 256 256'%3E%3Cpath d='M227.3 73.4 182.6 28.7a16 16 0 0 0-22.6 0L36.7 152A15.9 15.9 0 0 0 32 163.3V208a16 16 0 0 0 16 16h44.7a15.9 15.9 0 0 0 11.3-4.7L227.3 96a16 16 0 0 0 0-22.6ZM92.7 208H48v-44.7l88-88L180.7 120ZM192 108.7 147.3 64l24-24L216 84.7Z'/%3E%3C/svg%3E")
       center / contain no-repeat;
+  }
+}
+
+/* — A phone on its side —
+   The same lists, using the width a sideways phone has instead of its
+   height: the search and the status chips share a row, the dashboard's
+   four counts sit in one, and the floating button keeps clear of the
+   camera island on the right. */
+@media (pointer: coarse) and (orientation: landscape) and (max-height: 500px) {
+  .toolbar {
+    flex-wrap: nowrap;
+    align-items: center;
+  }
+
+  .toolbar__search {
+    flex: 1 1 200px;
+    width: auto;
+    min-width: 0;
+  }
+
+  .toolbar .m-chips {
+    flex: 0 1 auto;
+    width: auto;
+    min-width: 0;
+    margin: 0;
+    padding: 2px 0;
+  }
+
+  /* Deploy changes and New listing share the head's row. */
+  .page-head__actions {
+    flex-wrap: nowrap;
+  }
+
+  .page-head__actions .batch-candidate-control,
+  .page-head__actions .batch-candidate-control__button {
+    width: auto;
+  }
+
+  .m-fab {
+    right: max(var(--space-4), env(safe-area-inset-right, 0px));
+    bottom: calc(var(--phone-tabbar-h) + var(--space-3));
+  }
+
+  .stat-row {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .bc-picks {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .bc-reqs {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }

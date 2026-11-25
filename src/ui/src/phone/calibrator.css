@@ -6,7 +6,7 @@
    (components/TemplateSwitcher.tsx), the photo gets the width, and every
    control under it is a finger-sized row. */
 
-@media (max-width: 700px) {
+@media (max-width: 700px), (pointer: coarse) and (orientation: landscape) and (max-height: 500px) {
   /* The shell already gutters the page; the calibrator's own padding on top
      of it left the photo 300px wide. */
   .app {
@@ -603,20 +603,21 @@
   }
 }
 
-@media (max-width: 700px) and (prefers-reduced-motion: no-preference) {
+@media (max-width: 700px) and (prefers-reduced-motion: no-preference),
+  (pointer: coarse) and (orientation: landscape) and (max-height: 500px) and (prefers-reduced-motion: no-preference) {
   .mi-dialog .mi-sheet {
     animation: phone-sheet-in 0.24s cubic-bezier(0.2, 0.8, 0.2, 1);
   }
 }
 
-@media (max-width: 700px) {
+@media (max-width: 700px), (pointer: coarse) and (orientation: landscape) and (max-height: 500px) {
   /* The settings sheet has no side padding for the grab bar to reach past. */
   .mi-sheet > .sheet-grabber {
     margin: 0;
   }
 }
 
-@media (max-width: 700px) {
+@media (max-width: 700px), (pointer: coarse) and (orientation: landscape) and (max-height: 500px) {
   .mi-sheet h2 {
     font-size: 20px;
   }
@@ -641,5 +642,143 @@
     min-height: 44px;
     padding: 0 var(--space-2);
     font-size: 13px;
+  }
+}
+
+/* — A phone on its side —
+   Portrait stacks the switcher, the bar and the controls above and below the
+   photo; sideways that left the photo a screen and a half tall and below the
+   fold, so dragging a corner meant scrolling to find it. Here the photo takes
+   a left column sized to the screen's height and stays put while everything
+   else -- switcher, labels, tabs, pickers, controls -- scrolls beside it.
+
+   The parts sit in four nested wrappers (workbench, workspace, main,
+   preview); `display: contents` lifts their children into one grid on
+   `.app`, the stage spans every row of the left column, and the rest fill
+   the right one row by row. The last row is `1fr`, so a photo taller than
+   the controls grows that row alone instead of spacing the controls out.
+   What stands in for the photo while a template loads, or while it still
+   needs a kind, takes the stage too, so switching templates never drops
+   the page back to the stacked layout for a frame. */
+@media (pointer: coarse) and (orientation: landscape) and (max-height: 500px) {
+  .app {
+    --cal-stage-h: calc(100dvh - 2 * var(--space-3));
+    display: grid;
+    grid-template-columns: min(var(--cal-stage-h), 52%) minmax(0, 1fr);
+    grid-template-rows: repeat(8, auto) 1fr;
+    gap: var(--space-3) var(--space-4);
+    align-items: start;
+  }
+
+  .app__workbench,
+  .mg-frame .app__workbench,
+  .app__workspace,
+  .app__main,
+  .mg-frame .app__main,
+  .app__preview {
+    display: contents;
+  }
+
+  .app > *,
+  .app__workspace > *,
+  .app__main > *,
+  .app__preview > * {
+    grid-column: 2;
+    min-width: 0;
+  }
+
+  /* Grid gaps space the right column now. */
+  .app__header--phone,
+  .app__preview-bar {
+    margin: 0;
+  }
+
+  /* The bar lost the card it sat in (.app__preview's box is gone). */
+  .app__preview-bar {
+    border-radius: var(--radius-lg);
+    background: var(--color-surface);
+    box-shadow: var(--shadow-sm);
+  }
+
+  /* — the stage — */
+  .app__workspace > :is(p, .kind-picker),
+  .app__preview > :is(.quad-editor, .quad-editor__empty, .app__loading, .preview-grid),
+  .mg-stage > :is(.quad-editor, .app__loading) {
+    grid-column: 1;
+    grid-row: 1 / -1;
+  }
+
+  .app__preview > .quad-editor,
+  .mg-stage > .quad-editor {
+    position: sticky;
+    top: var(--space-3);
+  }
+
+  /* Marigold's stage is the photo plus its mask dock. The dock comes out to
+     the right column, under the bar, so the photo keeps the full height and
+     the brushes, Undo and Done sit beside the photo being painted rather
+     than under it and off the screen. */
+  .mg-stage {
+    display: contents;
+  }
+
+  .mg-stage > .mg-mask-dock {
+    grid-column: 2;
+    justify-content: flex-start;
+    width: auto;
+    max-width: none;
+    margin: 0;
+    padding: var(--space-2);
+    border-radius: var(--radius-lg);
+    background: var(--color-surface);
+  }
+
+  .mg-stage > .mg-mask-dock .mg-mask-legend {
+    justify-content: flex-start;
+  }
+
+  .mg-stage > .mg-mask-dock .mg-mask-edit {
+    flex: 1;
+  }
+
+  /* The photo fits the screen's height whatever its shape: the canvas
+     shrinks to the image, so the overlay drawn over it still matches. */
+  .app__preview > .quad-editor,
+  .mg-stage > .quad-editor {
+    width: fit-content;
+    max-width: 100%;
+    margin-inline: auto;
+    border-radius: var(--radius-md);
+    overflow: hidden;
+  }
+
+  .app__preview > .quad-editor .quad-editor__image,
+  .mg-stage > .quad-editor .quad-editor__image {
+    width: auto;
+    max-width: 100%;
+    max-height: var(--cal-stage-h);
+  }
+
+  .app__preview > .preview-grid {
+    padding: 0;
+  }
+
+  .app__preview > .preview-grid .preview-grid__head {
+    margin-top: 0;
+  }
+
+  /* The sheets: as wide as every other sheet sideways (base.css), and as
+     tall as the screen allows, since height is the short side. */
+  .tsheet__dialog {
+    height: calc(100dvh - 12px);
+  }
+
+  .mi-dialog {
+    justify-content: center;
+  }
+
+  .mi-dialog .mi-sheet {
+    width: min(100%, 600px);
+    max-height: calc(100dvh - 12px);
   }
 }

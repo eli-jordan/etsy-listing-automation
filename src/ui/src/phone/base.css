@@ -8,7 +8,7 @@
    these files last, so a rule here wins over the desktop rule it adjusts at
    equal specificity. */
 
-@media (max-width: 700px) {
+@media (max-width: 700px), (pointer: coarse) and (orientation: landscape) and (max-height: 500px) {
   html {
     -webkit-text-size-adjust: 100%;
   }
@@ -169,7 +169,34 @@
   }
 }
 
-@media (max-width: 700px) and (prefers-reduced-motion: no-preference) {
+/* — A phone on its side —
+   Rows are what is short, so a page head keeps its actions beside the title
+   instead of on a row of their own, and a sheet rises at a readable width
+   in the middle (as native landscape sheets do) rather than spanning 800px
+   of screen. It may use nearly the whole height: there is little of it. */
+@media (pointer: coarse) and (orientation: landscape) and (max-height: 500px) {
+  /* The editor's head has its own landscape row (editor.css). */
+  .page-head:not(.page-head--editor) {
+    align-items: center;
+  }
+
+  .page-head:not(.page-head--editor) > .page-head__actions {
+    width: auto;
+    margin-left: auto;
+  }
+
+  .modal-root {
+    justify-content: center;
+  }
+
+  .modal-dialog {
+    width: min(100%, 600px);
+    max-height: calc(100dvh - 12px);
+  }
+}
+
+@media (max-width: 700px) and (prefers-reduced-motion: no-preference),
+  (pointer: coarse) and (orientation: landscape) and (max-height: 500px) and (prefers-reduced-motion: no-preference) {
   .modal-dialog {
     animation: phone-sheet-in 0.24s cubic-bezier(0.2, 0.8, 0.2, 1);
   }

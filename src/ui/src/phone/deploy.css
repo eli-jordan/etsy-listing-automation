@@ -1,7 +1,7 @@
 /* — Phone: Deploy (one listing) and Deploy reviewed (a batch) —
    All rules inside the phone query (phone/usePhone.ts). */
 
-@media (max-width: 700px) {
+@media (max-width: 700px), (pointer: coarse) and (orientation: landscape) and (max-height: 500px) {
   .dv-cell {
     padding-inline: var(--space-3);
   }

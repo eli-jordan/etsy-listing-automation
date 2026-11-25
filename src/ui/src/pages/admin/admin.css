@@ -793,7 +793,7 @@
 /* Phones (the shell's 700px breakpoint): the section list sits above the
    page instead of beside it, a row's value drops under its label, and a
    danger action takes the full width under its description. */
-@media (max-width: 700px) {
+@media (max-width: 700px), (pointer: coarse) and (orientation: landscape) and (max-height: 500px) {
   .adm-body {
     grid-template-columns: minmax(0, 1fr);
     gap: var(--space-4);

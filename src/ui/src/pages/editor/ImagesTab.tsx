@@ -243,6 +243,7 @@ export function ImagesTab({ detail, onUpdate, artwork, owner, onFlush }: Props) 
           source={liveSource(detail, focus)}
           onOpen={setLightboxIndex}
           onToggle={toggleFocused}
+          phone={phone}
         />
 
         <MediaReel
@@ -314,6 +315,13 @@ function StagePicture({
   );
 }
 
+/** What the stage says before anything is pointed at. On a phone the
+ * gallery is not on its left (it sits above the stage, or beside it held
+ * sideways), and a finger taps rather than points. */
+function emptyStageText(phone: boolean): string {
+  return phone ? "Tap an image in the gallery to see it here" : "Point at something on the left";
+}
+
 /** The stage and its foot: the picture being judged, and -- for a template
  * entry this listing may position -- Position mode in place of it. */
 function PreviewPane({
@@ -322,12 +330,14 @@ function PreviewPane({
   source,
   onOpen,
   onToggle,
+  phone,
 }: {
   view: FocusView | null;
   positioning: Positioning | null;
   source: LiveSource | null;
   onOpen: (index: number) => void;
   onToggle: () => void;
+  phone: boolean;
 }) {
   const adjusting = positioning?.on === true ? positioning : null;
   return (
@@ -335,7 +345,7 @@ function PreviewPane({
       <div className="preview-stage preview-stage--large">
         {view === null && (
           <div className="image-placeholder">
-            <span>Point at something on the left</span>
+            <span>{emptyStageText(phone)}</span>
           </div>
         )}
         {view?.kind === "video" && (

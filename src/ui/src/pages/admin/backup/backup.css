@@ -679,7 +679,7 @@
    each one stacks: the status actions drop under the headline, the
    pipeline reads top to bottom, a history row becomes a card, and a form
    field's label sits above its control. */
-@media (max-width: 700px) {
+@media (max-width: 700px), (pointer: coarse) and (orientation: landscape) and (max-height: 500px) {
   .bk-status {
     grid-template-columns: auto minmax(0, 1fr);
     align-items: start;

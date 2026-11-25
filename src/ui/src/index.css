@@ -6374,7 +6374,7 @@ table.listings tbody tr:last-child td {
   opacity: 0.55;
 }
 
-@media (max-width: 700px) {
+@media (max-width: 700px), (pointer: coarse) and (orientation: landscape) and (max-height: 500px) {
   .batch-review-summary {
     align-items: flex-start;
     flex-direction: column;
@@ -6755,7 +6755,7 @@ table.listings tbody tr:last-child td {
   }
 }
 
-@media (max-width: 700px) {
+@media (max-width: 700px), (pointer: coarse) and (orientation: landscape) and (max-height: 500px) {
   .batch-aggregate__steps {
     grid-template-columns: 1fr 1fr;
   }

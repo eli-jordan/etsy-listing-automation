@@ -6,7 +6,7 @@
    one sticky row of tabs whose content also swipes sideways, and sheets in
    place of side panels and popovers. */
 
-@media (max-width: 700px) {
+@media (max-width: 700px), (pointer: coarse) and (orientation: landscape) and (max-height: 500px) {
   :root {
     /* Where the stuck tab strip sits, and where what sticks under it starts. */
     --editor-tabs-top: 6px;
@@ -595,5 +595,237 @@
   .lightbox__actions button {
     min-width: 40px;
     min-height: 40px;
+  }
+}
+
+/* — A phone on its side —
+   Height is what a sideways phone lacks, and width is what it has. The head
+   folds into one bar, the artwork card into one line, and Variants puts the
+   shirt beside its colours instead of over them, so the tabs and what they
+   hold start on the first screen. Inside PHONE_LANDSCAPE_QUERY
+   (phone/usePhone.ts): portrait and the desktop never see these. */
+@media (pointer: coarse) and (orientation: landscape) and (max-height: 500px) {
+  /* — the head: back, title, state, Deploy and "⋯" on one line — */
+  .page-head--editor {
+    flex-wrap: nowrap;
+    margin-bottom: var(--space-2);
+    padding-bottom: var(--space-2);
+  }
+
+  .page-head--editor::before,
+  .page-head--editor::after {
+    display: none;
+  }
+
+  .page-head--editor > .page-head__crumb,
+  .page-head--editor > .status-tag,
+  .page-head--editor > .aiflow {
+    flex: none;
+  }
+
+  /* A long name gives way to the controls, and shows whole once tapped to
+     rename. */
+  .page-head--editor > .page-head__title {
+    flex: 0 1 auto;
+    min-width: 0;
+    font-size: 20px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .page-head--editor > .page-head__name-edit {
+    flex: 1 1 0;
+    flex-wrap: nowrap;
+  }
+
+  /* The save state takes the slack, so Deploy and "⋯" sit at the right
+     whether or not the head has a Deploy (a listing template has none). */
+  .page-head--editor > .page-head__meta {
+    flex: 0 1 auto;
+    min-width: 0;
+    margin-right: auto;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .page-head--editor > .page-head__actions {
+    margin-left: 0;
+  }
+
+  .page-head--editor > .head-more {
+    order: 3;
+    margin-left: 0;
+  }
+
+  /* — the artwork card: its slots and the light/dark switch on one line — */
+  .design-strip__card {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+
+  .design-strip__slots {
+    flex: 1 1 360px;
+    min-width: 0;
+  }
+
+  .design-strip__slots--split {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .design-strip__foot {
+    flex: 0 1 auto;
+    padding: 0 8px;
+    border-top: none;
+  }
+
+  .design-strip .template-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .tabs {
+    margin-top: var(--space-2);
+  }
+
+  /* — Variants: the shirt beside its colours, held in view while they
+     scroll — */
+  .layout--variants {
+    grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+    align-items: start;
+  }
+
+  /* One screen tall at most: the photo gives up height to what the colour
+     prints, so both stay in view however far the colours scroll. */
+  .layout--variants > .variants-preview {
+    display: flex;
+    grid-row: 1;
+    grid-column: 1;
+    position: sticky;
+    top: var(--editor-under-tabs);
+    max-height: calc(100dvh - var(--editor-under-tabs) - var(--space-2));
+    /* Should what sits under the photo outgrow the screen, it scrolls
+       rather than hang out of reach below it. */
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+
+  .layout--variants > fieldset {
+    grid-row: 1;
+    grid-column: 2;
+  }
+
+  .layout--variants .preview-stage--large {
+    position: static;
+    flex: 0 1 auto;
+    height: 320px;
+    min-height: 140px;
+  }
+
+  /* With the shirt beside the colours, tapping one plainly shows it. */
+  .layout--variants .variants-preview__hint,
+  .layout--variants .app__status:empty {
+    display: none;
+  }
+
+  .layout--variants .color-prints {
+    flex: none;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    padding: var(--space-2);
+  }
+
+  .layout--variants .color-prints__thumb {
+    width: 40px;
+    height: 40px;
+  }
+
+  .layout--variants .color-prints__actions {
+    flex-direction: row;
+    flex-wrap: wrap;
+    flex-basis: 100%;
+  }
+
+  .layout--variants .color-prints__btn {
+    min-height: 36px;
+  }
+
+  /* — Listing Images: the picture beside the gallery, the same way, so a
+     tapped tile shows large without scrolling away from it — */
+  .images-right {
+    display: grid;
+    grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+    align-items: start;
+  }
+
+  .images-right > .preview-pane {
+    grid-row: 1 / span 2;
+    grid-column: 1;
+    position: sticky;
+    top: var(--editor-under-tabs);
+    max-height: calc(100dvh - var(--editor-under-tabs) - var(--space-2));
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+
+  .images-right > .reel {
+    grid-row: 1;
+    grid-column: 2;
+  }
+
+  .images-right > .app__status {
+    grid-row: 2;
+    grid-column: 2;
+  }
+
+  .images-tab .preview-stage--large {
+    flex: 0 1 auto;
+    height: 320px;
+    min-height: 140px;
+  }
+
+  .images-tab .preview-stage--large img,
+  .images-tab .preview-stage--large video {
+    max-height: 100%;
+  }
+
+  .images-tab .preview-foot {
+    flex: none;
+  }
+
+  /* The move bar in one line, so it covers as little of the gallery as it
+     can; the picture beside it already says which one is moving. */
+  .reel-moves {
+    flex-direction: row;
+    align-items: center;
+  }
+
+  .reel-moves__what {
+    flex: 1 1 auto;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .reel-moves__buttons {
+    flex: none;
+  }
+
+  .reel-moves__remove {
+    margin-left: 0;
+  }
+
+  /* — the lightbox: a slimmer bar, and both kept clear of the notch — */
+  .lightbox__bar {
+    padding: var(--space-1) max(var(--space-3), env(safe-area-inset-right, 0px)) var(--space-1)
+      max(var(--space-3), env(safe-area-inset-left, 0px));
+  }
+
+  .lightbox__stage {
+    padding: 0 max(var(--space-3), env(safe-area-inset-right, 0px))
+      max(var(--space-2), env(safe-area-inset-bottom, 0px))
+      max(var(--space-3), env(safe-area-inset-left, 0px));
   }
 }

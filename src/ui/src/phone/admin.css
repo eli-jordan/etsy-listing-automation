@@ -3,7 +3,7 @@
    pages/admin/admin.css and pages/admin/backup/backup.css.
    All rules inside the phone query (phone/usePhone.ts). */
 
-@media (max-width: 700px) {
+@media (max-width: 700px), (pointer: coarse) and (orientation: landscape) and (max-height: 500px) {
   /* — the sections: a sticky row of chips (PhoneSections) — */
   .adm-chips {
     position: sticky;
@@ -238,7 +238,8 @@
   }
 }
 
-@media (max-width: 700px) and (prefers-reduced-motion: no-preference) {
+@media (max-width: 700px) and (prefers-reduced-motion: no-preference),
+  (pointer: coarse) and (orientation: landscape) and (max-height: 500px) and (prefers-reduced-motion: no-preference) {
   .sa-modal,
   .bk-dialog {
     animation: phone-admin-sheet-in 0.24s cubic-bezier(0.2, 0.8, 0.2, 1);
@@ -248,5 +249,20 @@
     from {
       transform: translateY(100%);
     }
+  }
+}
+
+/* — A phone on its side: the dialogs rise at a readable width in the
+   middle, like every other sheet (phone/base.css). — */
+@media (pointer: coarse) and (orientation: landscape) and (max-height: 500px) {
+  .sa-scrim,
+  .bk-scrim {
+    place-items: end center;
+  }
+
+  .sa-modal,
+  .bk-dialog {
+    width: min(100%, 600px);
+    max-height: calc(100dvh - 12px);
   }
 }

@@ -44,6 +44,11 @@ PHONE_CONTEXT = {
 """A phone as Playwright emulates one: the viewport, plus touch input and the
 mobile viewport meta handling, so swipes and taps arrive as a finger's."""
 
+PHONE_LANDSCAPE_CONTEXT = {**PHONE_CONTEXT, "viewport": {"width": 844, "height": 390}}
+"""The same phone held sideways. Wider than the phone width, it gets the phone
+layout from the query's sideways clause alone: a coarse pointer, landscape,
+at most 500px tall (src/ui/src/phone/usePhone.ts)."""
+
 
 def swipe(page, start: tuple[float, float], end: tuple[float, float], steps: int = 12) -> None:
     """One finger dragged from ``start`` to ``end`` (viewport pixels).

@@ -8,7 +8,7 @@ import { ListingHover } from "../components/ListingHover";
 import { OpenInMenu } from "../components/OpenInMenu";
 import { hasOpenTargets } from "../components/openOn";
 import { STATUS_LABELS, StatusTag } from "../components/StatusTag";
-import { useIsPhone } from "../phone/usePhone";
+import { useIsPhone, useIsPhoneLandscape } from "../phone/usePhone";
 import type { ListingStatus, ListingSummary } from "../types";
 import { BatchCandidateControl } from "./batchDeploy/BatchCandidateControl";
 import { candidateNames } from "./batchDeploy/batchDeployPresentation";
@@ -168,6 +168,11 @@ export function ListingsPage() {
     setFilter(filterFrom(statusParam));
   }
   const isPhone = useIsPhone();
+  // New listing floats over the list on a phone held upright. Held sideways
+  // the head has room for it, and so few rows show that a floating button
+  // would sit on one.
+  const isPhoneSideways = useIsPhoneLandscape();
+  const floatingNew = isPhone && !isPhoneSideways;
   const [pendingDelete, setPendingDelete] = useState<ListingSummary | null>(null);
   const navigate = useNavigate();
 
@@ -270,8 +275,7 @@ export function ListingsPage() {
             names={candidateNames(listings ?? [])}
             onDeploy={() => void startBatchPlan()}
           />
-          {/* On a phone, New listing is the floating button above the tab bar. */}
-          {!isPhone && (
+          {!floatingNew && (
             <button
               type="button"
               className="btn btn-primary"
@@ -331,7 +335,7 @@ export function ListingsPage() {
         <p className="text-muted">No listings match.</p>
       )}
 
-      {isPhone && (
+      {floatingNew && (
         <button
           type="button"
           className="m-fab"
