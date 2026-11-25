@@ -3,6 +3,10 @@ new one, or connect an existing one (workspace-backup spec, *Missing
 repository*; plan, PR 8). Through the app with its lifespan running;
 restic is the by-command fake unless a test is marked ``restic``, and every
 folder is under ``tmp_path`` (plan, P2).
+
+These check status codes and the answer's shape. What provisioning refuses,
+its order, and that a refusal or failure leaves nothing behind are
+``tests/core/behaviour/test_backup_provisioning.py``'s.
 """
 
 from __future__ import annotations
@@ -18,7 +22,6 @@ from fastapi.testclient import TestClient
 from etsy_listings.core.application.backup_coordinator import BackupEnvironment
 from etsy_listings.core.application.backup_run import BackupRunner
 from etsy_listings.core.backup.binary import RESTIC_BINARY_ENV_VAR, ResticBinaries
-from etsy_listings.core.backup.repository import ResticError
 from etsy_listings.core.config.secrets import BACKUP_PASSWORD_VAR
 from etsy_listings.core.workspace import layout
 from etsy_listings.core.workspace.workspace import Workspace
@@ -26,7 +29,7 @@ from etsy_listings.server.api.app import create_app
 
 from tests.support.ai_runs import wait_for
 from tests.support.backups import PASSWORD, configure_backups, initialise
-from tests.support.repository_files import FakeRepository, files
+from tests.support.repository_files import FakeRepository
 from tests.support.restic import InMemoryRestic
 
 NOW = datetime(2026, 11, 23, 9, 0, tzinfo=UTC)
@@ -92,16 +95,6 @@ def _kinds(client: TestClient) -> list[str]:
     return [w["kind"] for w in _ok(client.get("/api/backup"))["warnings"]]
 
 
-def _state(workspace_root: Path, folder: Path) -> dict[str, Any]:
-    """Everything a refused action must leave as it was."""
-    env = workspace_root / layout.ENV_FILE
-    return {
-        "settings": (workspace_root / "settings.yaml").read_bytes(),
-        "env": env.read_bytes() if env.exists() else None,
-        "beside": sorted(path.name for path in folder.parent.iterdir()),
-    }
-
-
 @pytest.mark.parametrize("folder", ["missing", "foreign"])
 def test_a_missing_or_foreign_repository_stops_backups_and_warns(
     workspace_root: Path,
@@ -140,41 +133,31 @@ def test_create_refuses_a_folder_that_holds_files(
     elsewhere = tmp_path / "pictures"
     elsewhere.mkdir()
     (elsewhere / "holiday.jpg").write_bytes(b"mine")
-    before = _state(workspace_root, elsewhere)
 
     refused = _create(client, elsewhere)
 
     assert refused.status_code == 409, refused.text
+    assert refused.json()["kind"] == "conflict"
     assert "already holds files" in refused.json()["message"]
-    assert _state(workspace_root, elsewhere) == before
 
 
-@pytest.mark.parametrize("holds", ["config", "keys", "data", "snapshots", "index"])
-def test_create_refuses_while_a_destination_holds_a_repository(
-    workspace_root: Path, repository: Path, client: TestClient, tmp_path: Path, holds: str
+def test_create_refused_while_a_destination_holds_a_repository_names_it(
+    workspace_root: Path, repository: Path, client: TestClient, tmp_path: Path
 ) -> None:
-    """A new repository would leave the old copy looking changed, and a
-    repair would then let the copy delete it: Connect is the way back."""
+    """The refusal carries ``connect_from``, so the page offers Connect."""
     cloud = tmp_path / "cloud"
-    cloud.mkdir()
-    if holds == "config":
-        (cloud / "config").write_bytes(b"{}")
-    else:
-        (cloud / holds).mkdir()
+    (cloud / "keys").mkdir(parents=True)
     _configure(workspace_root, repository)
     settings = workspace_root / "settings.yaml"
     with settings.open("a", encoding="utf-8") as appended:
         appended.write(f"  destinations:\n    - {cloud.as_posix()}\n")
-    before = _state(workspace_root, repository) | {"cloud": files(cloud)}
 
     refused = _create(client, repository)
 
     assert refused.status_code == 409, refused.text
     body = refused.json()
     assert str(cloud) in body["message"]
-    assert "Connect" in body["message"]
     assert body["connect_from"] == str(cloud)
-    assert _state(workspace_root, repository) | {"cloud": files(cloud)} == before
 
 
 def test_create_checks_the_revision_even_when_using_the_saved_path(
@@ -184,7 +167,6 @@ def test_create_checks_the_revision_even_when_using_the_saved_path(
     old_revision = _revision(client)
     with (workspace_root / "settings.yaml").open("a", encoding="utf-8") as settings:
         settings.write("  interval_hours: 6\n")
-    before = _state(workspace_root, repository)
 
     response = client.post(
         "/api/backup/repository", json={"revision": old_revision, "repository": str(repository)}
@@ -192,7 +174,6 @@ def test_create_checks_the_revision_even_when_using_the_saved_path(
 
     assert response.status_code == 412, response.text
     assert response.json()["kind"] == "stale"
-    assert _state(workspace_root, repository) == before
 
 
 def test_create_at_a_confirmed_folder_saves_it_and_starts_backing_up(
@@ -222,7 +203,7 @@ def test_create_asks_for_a_password_only_when_none_is_stored(
     assert needed.status_code == 422, needed.text
     assert "password" in needed.json()["message"].lower()
     assert short.status_code == 422
-    assert PASSWORD in (workspace_root / layout.ENV_FILE).read_text(encoding="utf-8")
+    assert _ok(client.get("/api/backup"))["repository"]["password_stored"] is True
 
 
 def _destination_copy(tmp_path: Path) -> Path:
@@ -244,50 +225,15 @@ def test_connect_copies_the_repository_to_local_disk_then_opens_it(
     restic.password = PASSWORD
     restic.snapshots.append(NOW)
     chosen = tmp_path / "local-backups"
-    destination_before = files(cloud)
 
     status = _ok(_connect(client, cloud, chosen, PASSWORD))
 
-    assert files(chosen) == {
-        n: b for n, b in destination_before.items() if not n.startswith("locks")
-    }
-    assert files(cloud) == destination_before, "the destination stays a one-way copy"
     assert status["repository"]["path"] == str(chosen)
+    assert status["repository"]["password_stored"] is True
     assert status["warnings"] == []
-    assert f"repository: {chosen}" in (workspace_root / "settings.yaml").read_text("utf-8")
-    assert PASSWORD in (workspace_root / layout.ENV_FILE).read_text(encoding="utf-8")
-    assert sorted(path.name for path in tmp_path.iterdir() if "local-backups" in path.name) == [
-        "local-backups"
-    ]
 
 
-@pytest.mark.parametrize("password", ["asked", "from .env"])
-def test_a_wrong_password_leaves_nothing_half_saved(
-    *,
-    workspace_root: Path,
-    repository: Path,
-    client: TestClient,
-    restic: InMemoryRestic,
-    tmp_path: Path,
-    password: str,
-) -> None:
-    stored = password == "from .env"
-    _configure(workspace_root, repository, password=stored)
-    cloud = _destination_copy(tmp_path)
-    restic.password = "the old machine's password"
-    before = _state(workspace_root, repository)
-
-    refused = _connect(client, cloud, repository, None if stored else PASSWORD)
-
-    assert refused.status_code == 422, refused.text
-    assert "password" in refused.json()["message"].lower()
-    if stored:
-        assert f"Set {BACKUP_PASSWORD_VAR} there" in refused.json()["message"]
-    assert _state(workspace_root, repository) == before
-    assert _kinds(client) == ["repository_missing"]
-
-
-def test_connect_refuses_a_copy_that_opens_but_fails_check(
+def test_a_wrong_password_is_a_422_and_the_repository_stays_missing(
     workspace_root: Path,
     repository: Path,
     client: TestClient,
@@ -296,14 +242,14 @@ def test_connect_refuses_a_copy_that_opens_but_fails_check(
 ) -> None:
     _configure(workspace_root, repository, password=False)
     cloud = _destination_copy(tmp_path)
-    before = _state(workspace_root, repository) | {"cloud": files(cloud)}
-    restic.fail("check", ResticError("restic: pack is missing", exit_code=1))
+    restic.password = "the old machine's password"
 
     refused = _connect(client, cloud, repository, PASSWORD)
 
     assert refused.status_code == 422, refused.text
-    assert "pack is missing" in refused.json()["message"]
-    assert _state(workspace_root, repository) | {"cloud": files(cloud)} == before
+    assert refused.json()["kind"] == "invalid"
+    assert "password" in refused.json()["message"].lower()
+    assert _kinds(client) == ["repository_missing"]
 
 
 def test_connect_refuses_a_folder_that_is_not_a_repository_or_a_full_target(

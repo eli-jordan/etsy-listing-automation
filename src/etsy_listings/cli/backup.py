@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import json
 import time
-from collections.abc import Iterator, Sequence
+from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Annotated, Any
@@ -19,20 +19,21 @@ import typer
 
 from etsy_listings.cli import prompts
 from etsy_listings.cli.options import open_workspace, root_option
-from etsy_listings.core.application import credentials
-from etsy_listings.core.application.backup_missing import (
-    Connected,
-    connect_existing,
-    existing_copies,
+from etsy_listings.core.application.backup_provisioning import (
+    NewRepository,
+    PasswordSource,
+    Provisioned,
+    Provisioning,
+    Source,
+    provision,
+    source_for,
 )
 from etsy_listings.core.application.backup_repository import (
     MIN_PASSWORD_LENGTH,
     BackupStatus,
-    ConfiguredBackup,
+    backup_settings,
     backup_status,
     configured_backup,
-    create_repository,
-    ensure_workspace_id,
 )
 from etsy_listings.core.application.backup_restore import prepare_restore
 from etsy_listings.core.application.backup_run import BackupProgress, BackupRunner
@@ -62,7 +63,10 @@ def _reported() -> Iterator[None]:
         raise typer.Exit(1) from exc
 
 
-def _ask_password() -> str:
+def _ask_password(source: Source) -> str:
+    """A new repository's password, typed twice; an existing one's, once."""
+    if not isinstance(source, NewRepository):
+        return prompts.ask_text("Password of the existing backup:")
     password = prompts.ask_text(f"New backup password (at least {MIN_PASSWORD_LENGTH} characters):")
     if len(password) >= MIN_PASSWORD_LENGTH and password != prompts.ask_text(
         "Type the backup password again:"
@@ -78,59 +82,44 @@ def init(root: str | None = root_option()) -> None:
     when a destination already holds a backup, copy that one there and use it.
 
     Uses the password in the workspace .env, or asks for one and stores it
-    there first. Downloads the pinned restic when no other is configured."""
+    there. Downloads the pinned restic when no other is configured."""
     workspace = open_workspace(root)
     with _reported():
-        backup = configured_backup(workspace, binaries=ResticBinaries())
-        copies = existing_copies(backup.destinations)
-        if copies:
-            connected = _connect(backup, copies)
-            _workspace_id(workspace, connected.snapshots)
-            return
-        existing = backup.password
-        password = existing or _ask_password()
-        typer.echo(f"Creating the backup repository at {backup.storage}...", err=True)
-        repository_id = create_repository(backup, password, store=existing is None)
-        _workspace_id(workspace, ())
-    typer.echo(f"Created the backup repository at {backup.storage} (id {repository_id[:8]}).")
-    if existing is None:
-        _stored(backup)
+        saved = backup_settings(workspace)
+        storage = saved.repository
+        asked = Provisioning(
+            storage=storage,
+            source=source_for(saved.destinations),
+            password=PasswordSource.stored_or(_ask_password),
+        )
+
+        def trying(source: Path | None) -> None:
+            if source is None:
+                typer.echo(f"Creating the backup repository at {storage}...", err=True)
+            else:
+                typer.echo(f"Copying the backup in {source} to {storage}...", err=True)
+
+        done = provision(workspace, asked, binaries=ResticBinaries(), trying=trying)
+    _report_init(workspace, storage, done)
 
 
-def _workspace_id(workspace: Workspace, snapshots: Sequence[Snapshot]) -> None:
-    """Keep the block's workspace ID, or write the one ``snapshots`` carry."""
-    chosen = ensure_workspace_id(workspace, snapshots)
-    if chosen.notice is not None:
-        typer.echo(chosen.notice)
-
-
-def _connect(backup: ConfiguredBackup, copies: tuple[Path, ...]) -> Connected:
-    """``init`` with a destination that is already a backup: connect it."""
-    existing = backup.password
-    password = existing or prompts.ask_text("Password of the existing backup:")
-
-    def trying(source: Path) -> None:
-        typer.echo(f"Copying the backup in {source} to {backup.storage}...", err=True)
-
-    env_file = backup.env_file if existing is not None else None
-    connected = connect_existing(backup, copies, password, env_file=env_file, trying=trying)
-    if existing is None:
-        credentials.store(backup.workspace, credentials.BACKUP_PASSWORD, (password,))
-    typer.echo(
-        f"Connected to the backup in {connected.source}: {len(connected.snapshots)} snapshots, "
-        f"copied to {backup.storage}."
-    )
-    if existing is None:
-        _stored(backup)
-    return connected
-
-
-def _stored(backup: ConfiguredBackup) -> None:
-    typer.echo(
-        f"Stored the password in {backup.workspace / layout.ENV_FILE} as "
-        f"{BACKUP_PASSWORD_VAR}. Keep a copy in a password manager: the .env inside "
-        "each backup is encrypted with it."
-    )
+def _report_init(workspace: Workspace, storage: Path, done: Provisioned) -> None:
+    if done.connected is None:
+        repository_id = done.repository_id or ""
+        typer.echo(f"Created the backup repository at {storage} (id {repository_id[:8]}).")
+    else:
+        typer.echo(
+            f"Connected to the backup in {done.connected.source}: "
+            f"{len(done.connected.snapshots)} snapshots, copied to {storage}."
+        )
+    if done.workspace_id.notice is not None:
+        typer.echo(done.workspace_id.notice)
+    if done.stored_password:
+        typer.echo(
+            f"Stored the password in {workspace.root / layout.ENV_FILE} as "
+            f"{BACKUP_PASSWORD_VAR}. Keep a copy in a password manager: the .env inside "
+            "each backup is encrypted with it."
+        )
 
 
 _STEP_LINES = {

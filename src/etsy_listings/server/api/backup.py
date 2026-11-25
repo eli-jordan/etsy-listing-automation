@@ -17,11 +17,9 @@ from fastapi.responses import JSONResponse
 
 from etsy_listings.core.application import backup_setup
 from etsy_listings.core.application.backup_coordinator import BackupCoordinator
-from etsy_listings.core.application.backup_missing import (
-    DestinationHoldsRepositoryError,
-    Replacement,
-)
+from etsy_listings.core.application.backup_missing import Replacement
 from etsy_listings.core.application.backup_overview import BackupOverview
+from etsy_listings.core.application.backup_provisioning import DestinationHoldsRepositoryError
 from etsy_listings.core.application.backup_restore import default_target
 from etsy_listings.core.application.refusals import InvalidSettingsEditError
 from etsy_listings.core.errors import ConflictError, RefusedError, StaleError

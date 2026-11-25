@@ -15,6 +15,7 @@ from typing import Any
 
 import yaml
 
+from etsy_listings.core.application import credentials
 from etsy_listings.core.application.backup_repository import (
     configured_backup,
     create_repository,
@@ -72,4 +73,6 @@ def initialise(workspace: Workspace, home: Path, *, restic: OpenRepository | Non
     """Create the configured repository as ``backup init`` does, storing
     :data:`PASSWORD` unless one is stored; its restic id."""
     backup = configured_backup(workspace, binaries=ResticBinaries(home=home), restic=restic)
-    return create_repository(backup, backup.password or PASSWORD, store=backup.password is None)
+    if backup.password is None:
+        credentials.store(workspace.root, credentials.BACKUP_PASSWORD, (PASSWORD,))
+    return create_repository(backup, backup.password or PASSWORD)

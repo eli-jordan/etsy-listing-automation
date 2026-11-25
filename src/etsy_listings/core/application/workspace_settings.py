@@ -15,7 +15,7 @@ key; nothing here repairs it or falls back to defaults.
 (ADR-0056); ``ai.step_limit_minutes`` and ``ai.run_limit_minutes`` bound them
 (ADR-0057). A running AI job keeps the configuration it captured at start.
 ``batch_ai.concurrency`` is read afresh by the batch queue's next dispatch
-(ADR-0048), so a host wakes the queue after a save. ``market_seo.weights``
+(ADR-0048), so ``settings_save`` wakes the queue after a save. ``market_seo.weights``
 arrives as the page shows it: whole percentages for all six metrics
 totalling exactly 100. The file may still hold relative weights written by
 hand; the page normalises those for display only, and they are rewritten as
@@ -68,7 +68,8 @@ BACKUP_DESTINATIONS = "backup.destinations"
 BACKUP_INTERVAL = "backup.interval_hours"
 BACKUP_RETENTION = "backup.retention"
 BACKUP_WORKSPACE_ID = "backup.workspace_id"
-"""Not editable from Setup; written once by ``backup_repository.ensure_workspace_id``."""
+"""Not editable from Setup; written once, by ``backup_provisioning`` or
+``backup_repository.ensure_workspace_id``."""
 _WHOLE = 100
 """Percent: what the page's six shares total."""
 
@@ -131,14 +132,7 @@ def edit_settings(
     Refuses with :class:`SettingsRevisionConflictError` or
     :class:`InvalidSettingsEditError`, writing nothing either way.
     """
-    refused = {key: "not editable from the Admin page" for key in changes if key not in editable}
-    if WEIGHTS in changes and (problem := _percentage_problem(changes[WEIGHTS])):
-        refused[WEIGHTS] = problem
-    if TEMPLATE_POSITIONS in changes and not isinstance(changes[TEMPLATE_POSITIONS], Mapping):
-        refused[TEMPLATE_POSITIONS] = "give the limits as scale, offset and rotation"
-    if refused:
-        raise InvalidSettingsEditError(refused)
-
+    _refuse_shape(changes, editable)
     path = workspace.settings_file()
     adopted: list[Settings] = []
 
@@ -153,6 +147,35 @@ def edit_settings(
         raise SettingsRevisionConflictError from exc
     (settings,) = adopted
     return SettingsView(revised.revision, settings)
+
+
+def check_settings_edit(
+    workspace: Workspace,
+    *,
+    expected_revision: str,
+    changes: Mapping[str, object],
+    editable: tuple[str, ...] = EDITABLE_KEYS,
+) -> None:
+    """What :func:`edit_settings` would refuse for the same edit now,
+    refused with the same errors, writing nothing: for an owner that saves
+    only after a long step, such as backup provisioning's copy. The save
+    still checks the revision again."""
+    _refuse_shape(changes, editable)
+    path = workspace.settings_file()
+    source, revision = read_revisioned(path, absent_ok=True)
+    if revision != expected_revision:
+        raise SettingsRevisionConflictError
+    _edited(path, source, changes)
+
+
+def _refuse_shape(changes: Mapping[str, object], editable: tuple[str, ...]) -> None:
+    refused = {key: "not editable from the Admin page" for key in changes if key not in editable}
+    if WEIGHTS in changes and (problem := _percentage_problem(changes[WEIGHTS])):
+        refused[WEIGHTS] = problem
+    if TEMPLATE_POSITIONS in changes and not isinstance(changes[TEMPLATE_POSITIONS], Mapping):
+        refused[TEMPLATE_POSITIONS] = "give the limits as scale, offset and rotation"
+    if refused:
+        raise InvalidSettingsEditError(refused)
 
 
 def _edited(path: Path, source: bytes, changes: Mapping[str, object]) -> tuple[bytes, Settings]:
