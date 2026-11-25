@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { grownHeight, isExpandedHeight } from "./drawerSheet";
+import { fittedHeight, grownHeight, isExpandedHeight } from "./drawerSheet";
 
 const bounds = { minimum: 250, collapsed: 620, expanded: 780 };
 
@@ -11,6 +11,14 @@ describe("grownHeight", () => {
 
   it("rests where it started at no offset", () => {
     expect(grownHeight(0, 620, bounds)).toBe(620);
+  });
+});
+
+describe("fittedHeight", () => {
+  it("brings a height grown on a taller screen back inside the new one", () => {
+    const sideways = { minimum: 117, collapsed: 289, expanded: 359 };
+    expect(fittedHeight(776, sideways)).toBe(359);
+    expect(fittedHeight(300, sideways)).toBe(300);
   });
 });
 

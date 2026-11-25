@@ -21,6 +21,12 @@ export function grownHeight(by: number, startHeight: number, bounds: DrawerBound
   return clamp(startHeight + by, bounds.minimum, bounds.expanded);
 }
 
+/** A height the sheet grew to, kept inside new bounds after the screen
+ * changed size (a phone turned on its side). */
+export function fittedHeight(height: number, bounds: DrawerBounds): number {
+  return clamp(height, bounds.minimum, bounds.expanded);
+}
+
 /** Whether a height counts as the expanded drawer, by the same midpoint the
  * desktop handle uses. */
 export function isExpandedHeight(height: number, bounds: DrawerBounds): boolean {

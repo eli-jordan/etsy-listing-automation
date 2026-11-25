@@ -149,13 +149,20 @@ def _plan(name: str) -> dict[str, Any]:
     }
 
 
-def _route_run(page, run_id: str, scope: str, names: list[str]) -> None:
-    """Serve one finished plan run for ``names`` from the runs API."""
+def _route_run(
+    page, run_id: str, scope: str, names: list[str], failed: dict[str, str] | None = None
+) -> None:
+    """Serve one finished plan run for ``names`` from the runs API, with the
+    listings in ``failed`` failing to plan with that message."""
     ids = itertools.count(1)
     events: list[dict[str, Any]] = [
         {"id": next(ids), "type": "phase", "phase": "queued"},
         {"id": next(ids), "type": "phase", "phase": "planning"},
     ]
+    for name, message in (failed or {}).items():
+        events.append(
+            {"id": next(ids), "type": "listing_failed", "listing": name, "message": message}
+        )
     for name in names:
         plan = _plan(name)
         events += [
@@ -176,7 +183,7 @@ def _route_run(page, run_id: str, scope: str, names: list[str]) -> None:
         "id": run_id,
         "scope": scope,
         "batch_id": None,
-        "listings": names,
+        "listings": names + list(failed or {}),
         "seen": False,
         "reviewed_run_id": None,
         "created_at": "2026-11-24T10:00:00Z",
@@ -293,6 +300,53 @@ def test_the_listing_drawer_is_a_bottom_sheet(phone_page, expect) -> None:
     expect(dialog).to_have_js_property("open", False)
 
 
+def test_the_listing_drawer_fits_a_long_unbroken_summary(phone_page, expect) -> None:
+    page = phone_page
+    # No hyphen or space: nothing in it lets a line break.
+    path = "C:/Users/someone/" + "very_long_folder_name_" * 6 + "workspace/.env"
+    failed = {"fern-gully": f"Put it in {path}"}
+    _route_run(page, "w2", "workspace", ["take-a-hike"], failed=failed)
+    page.goto(f"{_origin(page)}/listings/deploy/w2")
+    page.get_by_role("heading", name="Review all changes").wait_for(state="visible")
+
+    page.get_by_text("fern-gully", exact=True).first.tap()
+    dialog = page.locator("dialog.batch-drawer-dialog")
+    expect(dialog).to_have_js_property("open", True)
+    page.wait_for_timeout(400)
+    # The path wraps inside the sheet rather than pushing it off the left.
+    assert dialog.evaluate("(el) => el.scrollLeft") == 0
+    panel = page.locator(".batch-drawer-panel").bounding_box()
+    assert panel["x"] == pytest.approx(0, abs=1)
+    head = page.locator(".batch-drawer__head").bounding_box()
+    assert head["x"] + head["width"] <= page.viewport_size["width"] + 1
+    close = page.locator(".batch-drawer__head").get_by_role("button", name="Close")
+    expect(close).to_be_in_viewport()
+
+
+def test_a_grown_listing_drawer_fits_the_phone_turned_sideways(phone_page, expect) -> None:
+    page = phone_page
+    _route_run(page, "w3", "workspace", ["take-a-hike", "fern-gully"])
+    page.goto(f"{_origin(page)}/listings/deploy/w3")
+    page.get_by_role("heading", name="Review all changes").wait_for(state="visible")
+    page.get_by_text("fern-gully", exact=True).first.tap()
+    dialog = page.locator("dialog.batch-drawer-dialog")
+    expect(dialog).to_have_js_property("open", True)
+    page.wait_for_timeout(400)
+
+    # The handle expands it to nearly the full height of the upright phone.
+    page.locator(".batch-drawer__handle").tap()
+    page.wait_for_timeout(400)
+    assert page.locator(".batch-drawer-panel").bounding_box()["height"] > 700
+
+    page.set_viewport_size({"width": 844, "height": 390})
+    page.wait_for_timeout(500)
+    panel = page.locator(".batch-drawer-panel").bounding_box()
+    assert panel["y"] >= 0, panel
+    assert panel["y"] + panel["height"] <= 390 + 1, panel
+    close = page.locator(".batch-drawer__head").get_by_role("button", name="Close")
+    expect(close).to_be_in_viewport()
+
+
 # -- Admin --------------------------------------------------------------------
 
 
@@ -339,6 +393,30 @@ def test_admin_sections_are_chips_that_a_swipe_walks_through(phone_page, expect)
     swipe(page, (60, 400), (330, 400))
     page.wait_for_timeout(300)
     assert page.url.endswith("/admin")
+
+
+def test_dragging_a_scoring_divider_stays_in_the_ai_section(phone_page, expect) -> None:
+    page = phone_page
+    patches: list[str] = []
+
+    def hold(route) -> None:
+        if route.request.method == "PATCH":
+            patches.append(route.request.url)
+        route.fallback()
+
+    page.route("**/api/**", hold)
+    page.goto(f"{_origin(page)}/admin?section=ai")
+    divider = page.get_by_role("separator").first
+    divider.scroll_into_view_if_needed()
+    box = divider.bounding_box()
+    x, y = box["x"] + box["width"] / 2, box["y"] + box["height"] / 2
+    swipe(page, (x, y), (x + 80, y))
+    page.wait_for_timeout(500)
+    # The divider moved the weights; the section stayed where it was.
+    assert "section=ai" in page.url
+    expect(
+        page.get_by_role("navigation", name="Admin sections").get_by_role("link", name="AI")
+    ).to_have_attribute("aria-current", "page")
 
 
 def test_ai_providers_reorder_with_arrows_on_a_phone(phone_page, expect) -> None:
