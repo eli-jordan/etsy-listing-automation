@@ -35,6 +35,26 @@
     padding-bottom: var(--space-3);
   }
 
+  /* The back link and "⋯" share the top line, the way a native screen puts
+     them in its bar, and the title gets a line of its own under them: a long
+     listing name then wraps on its own words instead of squeezing between
+     the two and pushing its rename pencil onto a line by itself. */
+  .page-head--editor > .page-head__crumb {
+    order: -3;
+  }
+
+  .page-head--editor > .head-more {
+    order: -2;
+    margin-left: auto;
+  }
+
+  .page-head--editor::before {
+    content: "";
+    order: -1;
+    flex-basis: 100%;
+    height: 0;
+  }
+
   /* The line break between the identity line and the state line. */
   .page-head--editor::after {
     content: "";
