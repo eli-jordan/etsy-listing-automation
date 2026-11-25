@@ -107,7 +107,7 @@ export function AdminPage() {
         <h1 className="page-head__title">Admin</h1>
         <span className="page-head__meta">Changes save when you leave a field</span>
         <div className="page-head__actions">
-          {!isSettings(section) && (
+          {!isSettings(section) && !isPhone && (
             <SaveIndicator status={settings.status} onRetry={() => void settings.retry()} />
           )}
         </div>
@@ -184,6 +184,13 @@ export function AdminPage() {
           </div>
         </div>
       </div>
+      {isPhone && !isSettings(section) && (
+        <PhoneSaveToast
+          status={settings.status}
+          onRetry={() => void settings.retry()}
+          onReload={() => void settings.reload()}
+        />
+      )}
       {currencyOpen && shop && (
         <CurrencyDialog
           current={shop.currency}
@@ -222,6 +229,50 @@ function SaveIndicator({ status, onRetry }: { status: SaveStatus; onRetry: () =>
       </>
     );
   return <span role="status" />;
+}
+
+/** How long "Saved" stays on a phone before the toast goes. */
+const SAVED_TOAST_MS = 2500;
+
+/**
+ * The phone's save indicator: the page head scrolls away under the sticky
+ * section chips, so what a field's save did shows in a toast above the tab
+ * bar instead, Retry and Reload with it. Saving and a failure stay until
+ * they change; Saved goes after a moment. The toast's live region is always
+ * there, so a screen reader hears each change.
+ */
+function PhoneSaveToast({
+  status,
+  onRetry,
+  onReload,
+}: {
+  status: SaveStatus;
+  onRetry: () => void;
+  onReload: () => void;
+}) {
+  const [settledSaved, setSettledSaved] = useState<SaveStatus | null>(null);
+  useEffect(() => {
+    if (status.kind !== "saved") return;
+    const timer = window.setTimeout(() => setSettledSaved(status), SAVED_TOAST_MS);
+    return () => window.clearTimeout(timer);
+  }, [status]);
+  const quiet = status.kind === "idle" || settledSaved === status;
+  let body: ReactNode = <SaveIndicator status={status} onRetry={onRetry} />;
+  if (quiet) body = <span role="status" />;
+  else if (status.kind === "conflict")
+    body = (
+      <>
+        <span className="adm-save adm-save--error" role="status">
+          <WarningIcon size={14} /> shop.yaml changed on disk. Nothing was overwritten.
+        </span>
+        <button type="button" className="btn btn-secondary" onClick={onReload}>
+          Reload shop.yaml
+        </button>
+      </>
+    );
+  return (
+    <div className={quiet ? "adm-save-toast adm-save-toast--quiet" : "adm-save-toast"}>{body}</div>
+  );
 }
 
 function Nav({

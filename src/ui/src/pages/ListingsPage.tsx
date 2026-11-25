@@ -22,6 +22,7 @@ import {
   type Gesture,
   LIFECYCLE_OF,
 } from "./listingLifecycle";
+import { useFabHiddenOnScroll } from "./phoneLists/fabScroll";
 import { PhoneListingList, PhoneStatusChips } from "./phoneLists/PhoneListingList";
 
 /** The listings list (phase 5): table + search + status filter, from
@@ -156,23 +157,50 @@ export function ListingsPage() {
   const [workspaceRun, setWorkspaceRun] =
     useState<Awaited<ReturnType<typeof currentWorkspaceRun>>>(null);
   const [status, setStatus] = useState("");
-  const [query, setQuery] = useState("");
-  const [params] = useSearchParams();
-  const statusParam = params.get("status");
-  const [filter, setFilter] = useState<Filter>(() => filterFrom(statusParam));
-  // A new `?status=` (a Dashboard count, or the Listings tab dropping it)
-  // chooses the filter again: adjusted while rendering, not in an effect.
-  const [seenParam, setSeenParam] = useState(statusParam);
-  if (seenParam !== statusParam) {
-    setSeenParam(statusParam);
-    setFilter(filterFrom(statusParam));
-  }
   const isPhone = useIsPhone();
+  // On a phone the filter and the search live in the address (`?status=`,
+  // `?q=`, both replaced rather than pushed), so Back from a listing comes
+  // back to the same list, and a Dashboard count or the Listings tab (which
+  // drops `?status=`) chooses the filter. The desktop keeps both in state.
+  const [params, setParams] = useSearchParams();
+  const [query, setQuery] = useState(() => (isPhone ? (params.get("q") ?? "") : ""));
+  const [desktopFilter, setDesktopFilter] = useState<Filter>("all");
+  const filter = isPhone ? filterFrom(params.get("status")) : desktopFilter;
+  const setPhoneFilter = useCallback(
+    (next: Filter) =>
+      setParams(
+        (current) => {
+          const updated = new URLSearchParams(current);
+          if (next === "all") updated.delete("status");
+          else updated.set("status", next);
+          return updated;
+        },
+        { replace: true },
+      ),
+    [setParams],
+  );
+  // The search box stays local state, since the address answers a step
+  // behind each keystroke, and is copied there whenever the two differ.
+  const addressQuery = params.get("q") ?? "";
+  useEffect(() => {
+    if (!isPhone || addressQuery === query) return;
+    setParams(
+      (current) => {
+        const updated = new URLSearchParams(current);
+        if (query === "") updated.delete("q");
+        else updated.set("q", query);
+        return updated;
+      },
+      { replace: true },
+    );
+  }, [isPhone, addressQuery, query, setParams]);
   // New listing floats over the list on a phone held upright. Held sideways
   // the head has room for it, and so few rows show that a floating button
   // would sit on one.
   const isPhoneSideways = useIsPhoneLandscape();
   const floatingNew = isPhone && !isPhoneSideways;
+  // It steps aside while the list scrolls down, off the rows' ⋯ buttons.
+  const fabHidden = useFabHiddenOnScroll(floatingNew);
   const [pendingDelete, setPendingDelete] = useState<ListingSummary | null>(null);
   const navigate = useNavigate();
 
@@ -297,7 +325,7 @@ export function ListingsPage() {
         />
         {isPhone ? (
           listings !== null && (
-            <PhoneStatusChips listings={listings} value={filter} onChange={setFilter} />
+            <PhoneStatusChips listings={listings} value={filter} onChange={setPhoneFilter} />
           )
         ) : (
           <label className="toolbar__filter">
@@ -305,7 +333,7 @@ export function ListingsPage() {
             <select
               className="input"
               value={filter}
-              onChange={(event) => setFilter(event.target.value as Filter)}
+              onChange={(event) => setDesktopFilter(event.target.value as Filter)}
             >
               {FILTERS.map((f) => (
                 <option key={f} value={f}>
@@ -338,7 +366,7 @@ export function ListingsPage() {
       {floatingNew && (
         <button
           type="button"
-          className="m-fab"
+          className={fabHidden ? "m-fab m-fab--hidden" : "m-fab"}
           aria-label="New listing"
           onClick={() => navigate("/listings/new")}
         >
