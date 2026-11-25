@@ -130,3 +130,23 @@ def test_apply_says_it_in_the_same_words_plan_does(workspace_root: Path) -> None
     )
 
     assert planned == applied
+
+
+# ------------------------------------------------------------ --publish
+
+
+def test_plan_without_publish_never_mentions_publishing_a_draft(workspace_root: Path) -> None:
+    """Opt-in: the default pipeline has no activation stage at all."""
+    result = _plan(workspace_root, "take-a-hike")
+
+    assert "etsy_activate" not in result.output
+    assert "0 to change, 4 blocked" in result.output
+
+
+def test_plan_with_publish_adds_the_activation_stage(workspace_root: Path) -> None:
+    """With no Etsy shop configured the stage is blocked, and says so."""
+    result = _plan(workspace_root, "take-a-hike", "--publish")
+
+    assert result.exit_code == 0, result.output
+    assert "this listing will stay a draft on Etsy" in result.output
+    assert "0 to change, 5 blocked" in result.output

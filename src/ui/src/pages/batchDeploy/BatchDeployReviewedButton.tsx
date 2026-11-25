@@ -41,7 +41,12 @@ export function BatchDeployReviewedButton({
     setStarting(true);
     onError("");
     try {
-      const result = await createRun({ kind: "plan", scope: "batch", batch_id: batchId });
+      const result = await createRun({
+        kind: "plan",
+        scope: "batch",
+        batch_id: batchId,
+        publish: false,
+      });
       if (result.kind === "created") {
         navigate(runUrl(result.run.id));
         return;

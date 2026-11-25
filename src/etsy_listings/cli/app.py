@@ -51,7 +51,7 @@ from etsy_listings.core.engine.events import (
 )
 from etsy_listings.core.engine.lock import Lockfile
 from etsy_listings.core.engine.run import RunReport, apply_listings, plan_listings
-from etsy_listings.core.engine.stages import STAGES
+from etsy_listings.core.engine.stages import STAGES, publishing_pipeline
 from etsy_listings.core.engine.stages.printify_product import PRODUCT_ID_KEY
 from etsy_listings.core.errors import UserFacingError
 from etsy_listings.core.workspace import layout
@@ -351,6 +351,18 @@ def auth_anthropic(
     _run_auth(root, ["anthropic"], check=check)
 
 
+PublishOption = Annotated[
+    bool,
+    typer.Option(
+        "--publish",
+        help=(
+            "Publish new and still-draft listings on Etsy (Etsy charges its listing fee) "
+            "instead of leaving them drafts. Paused and retired listings are never touched."
+        ),
+    ),
+]
+
+
 @app.command(epilog=EPILOG)
 def plan(
     listing: str | None = typer.Argument(None, help="Listing name, e.g. take-a-hike"),
@@ -358,6 +370,7 @@ def plan(
     all_: Annotated[
         bool, typer.Option("--all", help="Plan every listing in the workspace")
     ] = False,
+    publish: PublishOption = False,
     root: str | None = root_option(),
 ) -> None:
     """Three-way diff against live state; decides which stages need to run.
@@ -379,7 +392,7 @@ def plan(
         plan_listings(
             connections.run_context(workspace),
             _target_listings(workspace, listing, every=all_),
-            STAGES,
+            publishing_pipeline(STAGES, publish=publish),
             hooks=RunHooks(on_event=show),
         )
     )
@@ -392,12 +405,16 @@ def apply(
     all_: Annotated[
         bool, typer.Option("--all", help="Apply every listing in the workspace")
     ] = False,
+    publish: PublishOption = False,
     root: str | None = root_option(),
 ) -> None:
     """Execute every stage the plan identified: render, create or update the
     Printify product, publish it, and patch the resulting Etsy listing's
     copy and media. A stage a workspace has not configured (no Printify or
-    Etsy shop id) reports itself blocked rather than running."""
+    Etsy shop id) reports itself blocked rather than running.
+
+    New listings are left as Etsy drafts unless `--publish` is given; plan
+    with the same flag to see which listings it would publish."""
     workspace = open_workspace(root)
 
     def announce(event: EngineRunEvent) -> None:
@@ -417,7 +434,7 @@ def apply(
         apply_listings(
             connections.run_context(workspace, on_event=_echo_event),
             _target_listings(workspace, listing, every=all_),
-            STAGES,
+            publishing_pipeline(STAGES, publish=publish),
             hooks=RunHooks(on_event=announce),
         )
     )

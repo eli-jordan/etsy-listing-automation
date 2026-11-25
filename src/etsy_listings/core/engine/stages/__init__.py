@@ -28,7 +28,10 @@ friends) are its business; the engine only ever sees them through the
 
 from __future__ import annotations
 
+from collections.abc import Sequence
+
 from etsy_listings.core.engine.stage import AnyStage
+from etsy_listings.core.engine.stages.etsy_activate import EtsyActivateStage
 from etsy_listings.core.engine.stages.etsy_listing import EtsyListingStage
 from etsy_listings.core.engine.stages.etsy_media import EtsyMediaStage
 from etsy_listings.core.engine.stages.etsy_videos import EtsyVideosStage
@@ -45,12 +48,25 @@ STAGES: list[AnyStage] = [
     EtsyVideosStage(),
 ]
 
+
+def publishing_pipeline(stages: Sequence[AnyStage] = STAGES, *, publish: bool) -> list[AnyStage]:
+    """``stages``, with :class:`EtsyActivateStage` last when the run asked to
+    publish still-draft listings rather than leave them drafts. Opt-in: a run
+    that does not ask keeps today's draft-only pipeline exactly."""
+    pipeline = list(stages)
+    if publish:
+        pipeline.append(EtsyActivateStage())
+    return pipeline
+
+
 __all__ = [
     "STAGES",
+    "EtsyActivateStage",
     "EtsyListingStage",
     "EtsyMediaStage",
     "EtsyVideosStage",
     "PrintifyProductStage",
     "PublishStage",
     "RenderStage",
+    "publishing_pipeline",
 ]

@@ -133,6 +133,7 @@ describe("DeployPage: starting fresh", () => {
         kind: "plan",
         scope: "listings",
         listings: ["take-a-hike"],
+        publish: false,
       }),
     );
     await waitFor(() => expect(handles).toHaveLength(1));
@@ -563,6 +564,7 @@ describe("DeployPage: Apply", () => {
         scope: "listings",
         listings: ["take-a-hike"],
         expect: { "take-a-hike": "fp-7" },
+        publish: false,
       }),
     );
   });
@@ -636,5 +638,102 @@ describe("DeployPage: when the connection fails", () => {
     expect(await screen.findByRole("status")).toHaveTextContent(/could not start the apply/i);
     expect(screen.getByRole("button", { name: "Apply" })).toBeEnabled();
     await waitFor(() => expect(runsApi.markRunSeen).toHaveBeenCalledWith("run-1"));
+  });
+});
+
+describe("DeployPage: publishing new listings (opt-in)", () => {
+  function newListingPlan(): PlanDTO {
+    return {
+      ...plan([stage({ stage: "render", will_run: true, reason: "referenced scenes changed" })]),
+      is_live: false,
+      etsy_listing_id: null,
+    };
+  }
+
+  function readyPlan(handle: { onEvent: (e: RunEvent) => void }, fingerprint: string) {
+    handle.onEvent({ type: "phase", id: 1, phase: "planning" });
+    handle.onEvent({
+      type: "listing_planned",
+      id: 2,
+      listing: "take-a-hike",
+      plan: newListingPlan(),
+      fingerprint,
+    });
+    handle.onEvent({ type: "phase", id: 3, phase: "ready" });
+  }
+
+  it("is off by default, and turning it on plans again with publish before Apply sends it", async () => {
+    vi.spyOn(listingsApi, "getListing").mockResolvedValue(detail({ etsy_listing_id: null }));
+    vi.spyOn(runsApi, "currentRun").mockResolvedValue(null);
+    const create = vi
+      .spyOn(runsApi, "createRun")
+      .mockResolvedValueOnce({ kind: "created", run: runSummary({ id: "plan-1" }) })
+      .mockResolvedValueOnce({
+        kind: "created",
+        run: runSummary({ id: "plan-2", publish: true }),
+      })
+      .mockResolvedValueOnce({
+        kind: "created",
+        run: runSummary({ id: "apply-1", kind: "apply", publish: true }),
+      });
+    const handles = stubStream();
+
+    renderPage();
+    await waitFor(() => expect(handles).toHaveLength(1));
+    readyPlan(streamAt(handles, 0), "fp-1");
+
+    const toggle = await screen.findByRole("checkbox", { name: /Publish new listings on Etsy/ });
+    expect(toggle).not.toBeChecked();
+
+    await userEvent.click(toggle);
+
+    await waitFor(() =>
+      expect(create).toHaveBeenLastCalledWith({
+        kind: "plan",
+        scope: "listings",
+        listings: ["take-a-hike"],
+        publish: true,
+      }),
+    );
+    await waitFor(() => expect(handles).toHaveLength(2));
+    readyPlan(streamAt(handles, 1), "fp-2");
+
+    await userEvent.click(await screen.findByRole("button", { name: "Apply" }));
+
+    await waitFor(() =>
+      expect(create).toHaveBeenLastCalledWith({
+        kind: "apply",
+        scope: "listings",
+        listings: ["take-a-hike"],
+        expect: { "take-a-hike": "fp-2" },
+        publish: true,
+      }),
+    );
+  });
+
+  it("is not offered for a listing already live on Etsy", async () => {
+    vi.spyOn(listingsApi, "getListing").mockResolvedValue(detail());
+    vi.spyOn(runsApi, "currentRun").mockResolvedValue(null);
+    vi.spyOn(runsApi, "createRun").mockResolvedValue({
+      kind: "created",
+      run: runSummary({ id: "plan-1" }),
+    });
+    const handles = stubStream();
+
+    renderPage();
+    await waitFor(() => expect(handles).toHaveLength(1));
+    const live = streamAt(handles, 0);
+    live.onEvent({ type: "phase", id: 1, phase: "planning" });
+    live.onEvent({
+      type: "listing_planned",
+      id: 2,
+      listing: "take-a-hike",
+      plan: plan([stage({ stage: "render", will_run: true, reason: "referenced scenes changed" })]),
+      fingerprint: "fp-1",
+    });
+    live.onEvent({ type: "phase", id: 3, phase: "ready" });
+
+    expect(await screen.findByRole("button", { name: "Apply" })).toBeEnabled();
+    expect(screen.queryByRole("checkbox", { name: /Publish new listings/ })).toBeNull();
   });
 });

@@ -151,6 +151,7 @@ export const STAGE_LABELS: Record<string, string> = {
   etsy_media: "Etsy media",
   etsy_videos: "Etsy videos",
   retract: "Remove from Etsy",
+  etsy_activate: "Go live on Etsy",
 };
 
 /** Snapshot types generated from the stage-discriminated wire union. Narrow a

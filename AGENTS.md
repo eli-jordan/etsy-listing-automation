@@ -87,6 +87,7 @@ auth every credential: Printify, Etsy key pair + OAuth, Anthropic (auth printify
 new [<design>] interactive design/garment/provider picker; writes garment profile + listing
 plan <listing|--all> three-way diff against live state
 apply <listing|--all> execute every stage the plan identified
+                   --publish: also publish new and still-draft listings on Etsy (opt-in; plan takes it too)
 unlock <listing> clear a Printify product stuck publishing
 marigold setup|status|update explicit native worker installation and inspection
 backup init|snapshots|status the workspace's restic repository (run, check, restore not built yet)

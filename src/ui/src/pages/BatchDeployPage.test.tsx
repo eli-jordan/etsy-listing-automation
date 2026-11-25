@@ -297,6 +297,7 @@ describe("BatchDeployPage", () => {
         listings: ["alpha", "bravo"],
         expect: { alpha: "fp-alpha", bravo: "fp-bravo" },
         reviewed_run_id: "plan-1",
+        publish: false,
       }),
     );
     await waitFor(() => expect(runsApi.getRun).toHaveBeenCalledWith("apply-1"));
@@ -335,6 +336,7 @@ describe("BatchDeployPage", () => {
       expect(runsApi.createRun).toHaveBeenCalledWith({
         kind: "plan",
         scope: "workspace",
+        publish: false,
       }),
     );
   });
@@ -382,6 +384,7 @@ describe("BatchDeployPage", () => {
         listings: ["alpha"],
         expect: { alpha: "fp-alpha" },
         reviewed_run_id: "plan-1",
+        publish: false,
       }),
     );
     expect(await screen.findByText("Could not start the reviewed batch apply.")).toBeVisible();
@@ -423,6 +426,7 @@ describe("BatchDeployPage", () => {
         kind: "plan",
         scope: "batch",
         batch_id: "b1",
+        publish: false,
       }),
     );
   });
@@ -494,6 +498,7 @@ describe("BatchDeployPage", () => {
       expect(runsApi.createRun).toHaveBeenCalledWith({
         kind: "plan",
         scope: "workspace",
+        publish: false,
       }),
     );
   });
@@ -568,6 +573,7 @@ describe("BatchDeployPage", () => {
       expect(runsApi.createRun).toHaveBeenCalledWith({
         kind: "plan",
         scope: "workspace",
+        publish: false,
       }),
     );
   });
@@ -706,5 +712,60 @@ describe("BatchDeployPage", () => {
 
     expect(screen.getByRole("heading", { name: "Review all changes" })).toBeInTheDocument();
     expect(opened).not.toHaveBeenCalledWith("apply-1", expect.anything());
+  });
+
+  it("plans again with publish when the seller opts in, and applies with the plan's choice", async () => {
+    const reviewed = (publish: boolean, id: string) =>
+      runDetail({
+        id,
+        phase: "ready",
+        publish,
+        listings: ["alpha"],
+        events: [
+          { type: "phase", id: 1, phase: "queued" },
+          {
+            type: "listing_planned",
+            id: 2,
+            listing: "alpha",
+            plan: plan({ listing: "alpha" }),
+            fingerprint: "fp-alpha",
+          },
+          { type: "phase", id: 3, phase: "ready" },
+        ],
+      });
+    vi.spyOn(runsApi, "getRun").mockImplementation(async (id) => reviewed(id === "plan-2", id));
+    const create = vi
+      .spyOn(runsApi, "createRun")
+      .mockResolvedValueOnce({ kind: "created", run: reviewed(true, "plan-2") })
+      .mockResolvedValueOnce({ kind: "created", run: reviewed(true, "apply-1") });
+    vi.spyOn(listingsApi, "listListings").mockResolvedValue([summary("alpha")]);
+    streamStub();
+
+    render(
+      <MemoryRouter initialEntries={["/listings/deploy/plan-1"]}>
+        <Routes>
+          <Route path="/listings/deploy/:runId" element={<BatchDeployPage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    const toggle = await screen.findByRole("checkbox", { name: /Publish new listings on Etsy/ });
+    expect(toggle).not.toBeChecked();
+    await userEvent.click(toggle);
+
+    await waitFor(() =>
+      expect(create).toHaveBeenCalledWith({ kind: "plan", scope: "workspace", publish: true }),
+    );
+    await waitFor(() =>
+      expect(screen.getByRole("checkbox", { name: /Publish new listings on Etsy/ })).toBeChecked(),
+    );
+
+    await userEvent.click(await screen.findByRole("button", { name: /Apply 1 listing/ }));
+
+    await waitFor(() =>
+      expect(create).toHaveBeenLastCalledWith(
+        expect.objectContaining({ kind: "apply", reviewed_run_id: "plan-2", publish: true }),
+      ),
+    );
   });
 });

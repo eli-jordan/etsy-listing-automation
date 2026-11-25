@@ -20,10 +20,10 @@ export interface paths {
     head?: never;
     /**
      * Edit Settings
-     * @description Save ``changes`` against ``revision``. Wider template position limits
-     *     queue, after the response, coverage inference for each positioned Marigold
-     *     template whose evidence misses them (option B, ADR-0058); narrowing
-     *     queues nothing.
+     * @description Save ``changes`` against ``revision``: 412 when the file changed since,
+     *     422 for an edit it refuses. What the save sets off is ``settings_save``'s;
+     *     this hands it the host's coordinators, and coverage jobs it queues are
+     *     queued after the response.
      */
     patch: operations["edit_settings_api_admin_settings_patch"];
     trace?: never;
@@ -2386,6 +2386,11 @@ export interface components {
        * @enum {string}
        */
       phase: "queued" | "applying" | "applied" | "failed" | "stale";
+      /**
+       * Publish
+       * @default false
+       */
+      publish: boolean;
       /** Reviewed Run Id */
       reviewed_run_id: string | null;
       /**
@@ -2424,6 +2429,11 @@ export interface components {
        * @enum {string}
        */
       phase: "queued" | "applying" | "applied" | "failed" | "stale";
+      /**
+       * Publish
+       * @default false
+       */
+      publish: boolean;
       /** Reviewed Run Id */
       reviewed_run_id: string | null;
       /**
@@ -2707,6 +2717,11 @@ export interface components {
       kind: "apply";
       /** Listings */
       listings: string[];
+      /**
+       * Publish
+       * @default false
+       */
+      publish: boolean;
       /** Reviewed Run Id */
       reviewed_run_id: string;
       /**
@@ -2820,6 +2835,11 @@ export interface components {
        * @constant
        */
       kind: "plan";
+      /**
+       * Publish
+       * @default false
+       */
+      publish: boolean;
       /**
        * Scope
        * @constant
@@ -3354,6 +3374,31 @@ export interface components {
       /** Path */
       path: string;
     };
+    /**
+     * EtsyActivateStagePlanDTO
+     * @description Only in a run that asked to publish drafts (``publishing_pipeline``).
+     */
+    EtsyActivateStagePlanDTO: {
+      /**
+       * Drift
+       * @default []
+       */
+      drift: components["schemas"]["DriftDTO"][];
+      /** Group */
+      group?: string | null;
+      /** Outcome */
+      outcome:
+        | components["schemas"]["IdleOutcomeDTO"]
+        | components["schemas"]["WorkOutcomeDTO"]
+        | components["schemas"]["BlockedOutcomeDTO"];
+      /** Snapshot */
+      snapshot?: null;
+      /**
+       * @description discriminator enum property added by openapi-typescript
+       * @enum {string}
+       */
+      stage: "etsy_activate";
+    };
     /** EtsyListingConfig */
     EtsyListingConfig: {
       /**
@@ -3674,6 +3719,11 @@ export interface components {
       /** Listings */
       listings: string[];
       /**
+       * Publish
+       * @default false
+       */
+      publish: boolean;
+      /**
        * Scope
        * @constant
        */
@@ -3858,6 +3908,11 @@ export interface components {
       kind: "plan";
       /** Listings */
       listings: string[];
+      /**
+       * Publish
+       * @default false
+       */
+      publish: boolean;
       /**
        * Scope
        * @constant
@@ -4522,6 +4577,7 @@ export interface components {
         | components["schemas"]["EtsyMediaStagePlanDTO"]
         | components["schemas"]["EtsyVideosStagePlanDTO"]
         | components["schemas"]["RetractStagePlanDTO"]
+        | components["schemas"]["EtsyActivateStagePlanDTO"]
       )[];
     };
     /** PlanRunDetail */
@@ -4560,6 +4616,11 @@ export interface components {
        * @enum {string}
        */
       phase: "queued" | "planning" | "planned" | "previewing" | "ready" | "failed" | "cancelled";
+      /**
+       * Publish
+       * @default false
+       */
+      publish: boolean;
       /** Reviewed Run Id */
       reviewed_run_id?: null;
       /**
@@ -4598,6 +4659,11 @@ export interface components {
        * @enum {string}
        */
       phase: "queued" | "planning" | "planned" | "previewing" | "ready" | "failed" | "cancelled";
+      /**
+       * Publish
+       * @default false
+       */
+      publish: boolean;
       /** Reviewed Run Id */
       reviewed_run_id?: null;
       /**
@@ -5682,7 +5748,8 @@ export interface components {
         | components["schemas"]["EtsyListingStagePlanDTO"]
         | components["schemas"]["EtsyMediaStagePlanDTO"]
         | components["schemas"]["EtsyVideosStagePlanDTO"]
-        | components["schemas"]["RetractStagePlanDTO"];
+        | components["schemas"]["RetractStagePlanDTO"]
+        | components["schemas"]["EtsyActivateStagePlanDTO"];
       /**
        * @description discriminator enum property added by openapi-typescript
        * @enum {string}
@@ -6023,6 +6090,11 @@ export interface components {
       kind: "apply";
       /** Listings */
       listings: string[];
+      /**
+       * Publish
+       * @default false
+       */
+      publish: boolean;
       /** Reviewed Run Id */
       reviewed_run_id: string;
       /**
@@ -6038,6 +6110,11 @@ export interface components {
        * @constant
        */
       kind: "plan";
+      /**
+       * Publish
+       * @default false
+       */
+      publish: boolean;
       /**
        * Scope
        * @constant

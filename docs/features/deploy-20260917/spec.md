@@ -32,7 +32,7 @@ is shaped by one of them, and the spec has been corrected to match
 | The live side has the listing's images | `EtsyMediaLive` keeps a `frozenset` of image ids; `ListingImage` drops the URL | `etsy_media` keeps rank and URL |
 | A failed stage leaves earlier stages done, and Plan again continues | `apply_listings` writes the lockfile only after `execute` returns | Nothing is recorded, and ADR-0023 then refuses the re-create (ADR-0037) |
 | `apply` can be tied to the plan the user saw | `apply_listings` re-plans internally, blind to any earlier plan | A fingerprint and `expect` (ADR-0039) |
-| The status pill turns Live after apply | A first apply leaves an Etsy **draft**; only a human activates (non-goal 1) | The pill is re-derived from the server |
+| The status pill turns Live after apply | A first apply leaves an Etsy **draft**; only a human activates (non-goal 1, relaxed by §12's opt-in) | The pill is re-derived from the server |
 | The below-cost refusal is the Printify product stage's | ADR-0020's amendment put it in `publish`, whose `read_live` has `variant_costs` | The mock's blocked example belongs to `publish` |
 | Drift can be shown by name | `Drift` carries ids; only the *last-applied* name is in the lockfile | `Drift` gains labels from the in-run catalog (ADR-0038) |
 | There is somewhere to run a plan from the UI | No runs endpoint, no SSE, no executor exists | The runs resource (ADR-0041) |
@@ -374,7 +374,8 @@ editor mounted behind the route.
 
 When an apply run ends, the view re-fetches `ListingDetail` and shows the
 `status` the server derives. A first deploy leaves an Etsy draft (non-goal 1),
-so the pill reads **Deployed**, not Live. A failed deploy reads **Dirty**
+so the pill reads **Deployed**, not Live, unless the seller opted in to
+publishing (§12). A failed deploy reads **Dirty**
 (§1).
 
 The applied phase's single "On Etsy now" column is the reviewed plan's
@@ -392,6 +393,28 @@ every stage with one refusal. After a successful retract the listing
 directory no longer exists, so the applied footer's only button is
 **← Back to listings** and goes to `/listings`. Renew and retire are ordinary
 deploys.
+
+### 12. Publishing new listings is opt-in (amendment, 2026-11-25)
+
+Non-goal 1 stays the default: an apply leaves a new listing as an Etsy draft.
+The seller can opt in, per run, to publish instead: `etsy-listings plan|apply
+--publish` on the CLI, or **Publish new listings on Etsy** on the deploy
+review (single listing, workspace and batch). Off unless chosen.
+
+Opting in appends one stage, `etsy_activate`, after every other stage
+(`publishing_pipeline` in `engine/stages/__init__.py`). It sends
+`PATCH updateListing` with `state=active` only for a listing that is new this
+run or still an Etsy `draft`. An `active`, `inactive` (paused or retired),
+`sold_out` or `expired` listing is never touched, and a listing with a
+`lifecycle` verb is left to that verb. The stage declares
+`needs_every_earlier_stage`, so `build_plan` blocks it while any earlier stage
+is blocked: a listing goes live only with its own copy, images and videos on
+it, never Printify's mockups. Etsy charges its listing fee on activation.
+
+The choice is part of the plan, so the review shows the extra step and the
+fingerprint covers it (ADR-0039). Changing the toggle plans again. A
+workspace or batch apply must repeat its reviewed plan's choice or is refused
+before it is queued (ADR-0042). Run requests and summaries carry `publish`.
 
 ---
 

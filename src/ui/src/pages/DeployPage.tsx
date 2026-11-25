@@ -18,6 +18,7 @@ import { Callouts } from "./deploy/Callouts";
 import { PriceTable } from "./deploy/PriceTable";
 import { StepStrip } from "./deploy/StepStrip";
 import { ApplyFooter } from "./deploy/ApplyFooter";
+import { PublishDraftsToggle } from "./deploy/PublishDraftsToggle";
 import { DeployHead } from "./deploy/DeployHead";
 import {
   applyRunEvent,
@@ -65,6 +66,9 @@ export function DeployPage() {
   const [waitingForBackup, setWaitingForBackup] = useState(false);
   const [state, setState] = useState<DeployState>(initialDeployState);
   const [applyRequested, setApplyRequested] = useState(false);
+  /** Publish this listing on Etsy if it is new or still a draft (opt-in).
+   * Always the run's own choice once one is attached. */
+  const [publish, setPublish] = useState(false);
   const [deletedAfterApply, setDeletedAfterApply] = useState(false);
   const [openDrift, setOpenDrift] = useState<string | null>(null);
   const streamRef = useRef<RunStreamHandle | null>(null);
@@ -96,6 +100,7 @@ export function DeployPage() {
     async (id: string) => {
       const detail = await getRun(id);
       setRunId(detail.id);
+      setPublish(detail.publish);
       setWaitingForBackup(detail.waiting_for_backup);
       setState(deployState(detail.events));
       const last = detail.events.at(-1);
@@ -117,30 +122,39 @@ export function DeployPage() {
     };
   }, [reattachRun]);
 
-  const startFreshPlan = useCallback(async () => {
-    leavingRef.current = false;
-    setApplyRequested(false);
-    setStatus("");
-    try {
-      const result = await createRun({ kind: "plan", scope: "listings", listings: [name] });
-      if (result.kind === "conflict") {
-        // A workspace or batch deploy holding this listing has its own page.
-        const active = await getRun(result.activeRun);
-        if (isReviewedScope(active)) {
-          navigate(`/listings/deploy/${encodeURIComponent(active.id)}`, { replace: true });
+  const startFreshPlan = useCallback(
+    async (publishDrafts = false) => {
+      leavingRef.current = false;
+      setApplyRequested(false);
+      setStatus("");
+      try {
+        const result = await createRun({
+          kind: "plan",
+          scope: "listings",
+          listings: [name],
+          publish: publishDrafts,
+        });
+        if (result.kind === "conflict") {
+          // A workspace or batch deploy holding this listing has its own page.
+          const active = await getRun(result.activeRun);
+          if (isReviewedScope(active)) {
+            navigate(`/listings/deploy/${encodeURIComponent(active.id)}`, { replace: true });
+            return;
+          }
+          await reattachRun(result.activeRun);
           return;
         }
-        await reattachRun(result.activeRun);
-        return;
+        setState(initialDeployState);
+        setRunId(result.run.id);
+        setPublish(result.run.publish);
+        setWaitingForBackup(result.run.waiting_for_backup);
+        openStream(result.run.id);
+      } catch {
+        setStatus("Could not start a plan. Go back and try again.");
       }
-      setState(initialDeployState);
-      setRunId(result.run.id);
-      setWaitingForBackup(result.run.waiting_for_backup);
-      openStream(result.run.id);
-    } catch {
-      setStatus("Could not start a plan. Go back and try again.");
-    }
-  }, [name, navigate, openStream, reattachRun]);
+    },
+    [name, navigate, openStream, reattachRun],
+  );
 
   // Reattach or start (decision 9).
   useEffect(() => {
@@ -158,6 +172,7 @@ export function DeployPage() {
           const detail = await getRun(run.id);
           if (!current) return;
           setRunId(detail.id);
+          setPublish(detail.publish);
           setWaitingForBackup(detail.waiting_for_backup);
           setState(deployState(detail.events));
           const last = detail.events.at(-1);
@@ -168,6 +183,7 @@ export function DeployPage() {
           const detail = await getRun(run.id);
           if (!current) return;
           setRunId(detail.id);
+          setPublish(detail.publish);
           setState(deployState(detail.events));
           return;
         }
@@ -264,6 +280,7 @@ export function DeployPage() {
         scope: "listings",
         listings: [name],
         expect: { [name]: state.fingerprint },
+        publish,
       });
       if (result.kind === "conflict") {
         await reattachRun(result.activeRun);
@@ -294,6 +311,13 @@ export function DeployPage() {
   }
 
   const showPlanAgain = !["queued", "planning", "applying", "applied"].includes(phase);
+  // Not for a listing already live on Etsy: there is no draft to publish. Not
+  // once Apply is pressed either: the apply runs the reviewed choice.
+  const showPublishToggle =
+    state.plan?.is_live !== true &&
+    !applyRequested &&
+    !["applying", "applied"].includes(phase) &&
+    Object.keys(state.stageRuntime).length === 0;
   const comparison = state.plan ? buildComparison(state.plan) : null;
   const applyFocused =
     applyRequested ||
@@ -317,7 +341,7 @@ export function DeployPage() {
         backToListings={deletedAfterApply}
         showPlanAgain={showPlanAgain}
         onBack={() => void handleBack()}
-        onPlanAgain={() => void startFreshPlan()}
+        onPlanAgain={() => void startFreshPlan(publish)}
       />
 
       {status !== "" && (
@@ -421,6 +445,17 @@ export function DeployPage() {
               </>
             )}
           </>
+        )}
+
+        {showPublishToggle && (
+          <PublishDraftsToggle
+            checked={publish}
+            disabled={phase === "queued" || phase === "planning" || phase === "previewing"}
+            onChange={(next) => {
+              setPublish(next);
+              void startFreshPlan(next);
+            }}
+          />
         )}
 
         <ApplyFooter

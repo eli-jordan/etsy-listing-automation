@@ -32,6 +32,7 @@ import {
   type ScopeCopy,
 } from "./batchDeploy/batchDeployView";
 import { useIsPhone } from "../phone/usePhone";
+import { PublishDraftsToggle } from "./deploy/PublishDraftsToggle";
 import { openRunStream, type RunStreamHandle } from "./deploy/runStream";
 import { MARK_SEEN_GRACE_MS, TERMINAL_PHASES } from "./deploy/runPhases";
 
@@ -134,15 +135,20 @@ function runBatchId(run: RunDetail | null, runId: string): string | null {
   return run.batch_id ?? null;
 }
 
-function freshPlanRequest(batchId: string | null): CreateRunRequest {
+function freshPlanRequest(batchId: string | null, publish: boolean): CreateRunRequest {
   return batchId === null
-    ? { kind: "plan", scope: "workspace" }
-    : { kind: "plan", scope: "batch", batch_id: batchId };
+    ? { kind: "plan", scope: "workspace", publish }
+    : { kind: "plan", scope: "batch", batch_id: batchId, publish };
 }
 
 function reviewedApplyRequest(
   batchId: string | null,
-  target: { listings: string[]; expect: Record<string, string>; reviewed_run_id: string },
+  target: {
+    listings: string[];
+    expect: Record<string, string>;
+    reviewed_run_id: string;
+    publish: boolean;
+  },
 ): CreateRunRequest {
   return batchId === null
     ? { kind: "apply", scope: "workspace", ...target }
@@ -394,13 +400,16 @@ export function BatchDeployPage() {
     [navigate],
   );
 
-  const startFreshPlan = useCallback(async () => {
-    try {
-      await followCreatedRun(await createRun(freshPlanRequest(batchId)));
-    } catch {
-      setStatus(copy.planRefused);
-    }
-  }, [batchId, copy, followCreatedRun]);
+  const startFreshPlan = useCallback(
+    async (publish: boolean) => {
+      try {
+        await followCreatedRun(await createRun(freshPlanRequest(batchId, publish)));
+      } catch {
+        setStatus(copy.planRefused);
+      }
+    },
+    [batchId, copy, followCreatedRun],
+  );
 
   async function handleApply() {
     if (run?.kind !== "plan" || visibleState.phase !== "ready" || !previewsReady) return;
@@ -417,6 +426,7 @@ export function BatchDeployPage() {
               listingsToApply.map((listing) => [listing.listing, listing.fingerprint as string]),
             ),
             reviewed_run_id: run.id,
+            publish: run.publish,
           }),
         );
         await followCreatedRun(created);
@@ -445,6 +455,8 @@ export function BatchDeployPage() {
   }
 
   const phase = visibleState.phase;
+  /** The run's own choice: changing it plans again on a new run's URL. */
+  const publishDrafts = run?.id === runId ? run.publish : false;
   const planning = !visibleState.applyStarted && isPlanning(phase);
   const stage = batchStage({ planning, applying, terminalApply });
   const planTimestamp = formatGeneratedAt(visibleState.generatedAt);
@@ -548,6 +560,14 @@ export function BatchDeployPage() {
         </>
       )}
 
+      {visibleState.phase === "ready" && !visibleState.applyStarted && run !== null && (
+        <PublishDraftsToggle
+          checked={publishDrafts}
+          disabled={applyPending}
+          onChange={(next) => void startFreshPlan(next)}
+        />
+      )}
+
       <div className="dv-foot batch-deploy-footer">
         <p>
           {batchFooterMessage({
@@ -573,7 +593,7 @@ export function BatchDeployPage() {
           }
           runnableCount={runnableCount}
           previewsReady={previewsReady}
-          onPlanAgain={() => void startFreshPlan()}
+          onPlanAgain={() => void startFreshPlan(publishDrafts)}
           onApply={() => void handleApply()}
         />
       </div>
