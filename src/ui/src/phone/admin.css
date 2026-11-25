@@ -4,6 +4,13 @@
    All rules inside the phone query (phone/usePhone.ts). */
 
 @media (max-width: 700px), (pointer: coarse) and (orientation: landscape) and (max-height: 500px) {
+  /* A section slides in and out with a sideways swipe; it must not widen
+     the page. Clipped at the page's padding, not inside it, which the chips
+     bleed into. */
+  .shell__main:has(.adm-page) {
+    overflow-x: clip;
+  }
+
   /* — the sections: a sticky row of chips (PhoneSections) — */
   .adm-chips {
     position: sticky;

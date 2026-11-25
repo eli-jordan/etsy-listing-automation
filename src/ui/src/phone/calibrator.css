@@ -40,11 +40,13 @@
     margin-bottom: var(--space-3);
   }
 
+  /* The name slides out and in with a swipe; it must not widen the page. */
   .tswitch {
     display: grid;
     grid-template-columns: 44px minmax(0, 1fr) 44px;
     align-items: center;
     gap: var(--space-1);
+    overflow-x: clip;
   }
 
   .tswitch__step {
