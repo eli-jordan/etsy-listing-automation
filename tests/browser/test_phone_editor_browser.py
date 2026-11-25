@@ -42,13 +42,24 @@ def _swipe_content(page, dx: float) -> None:
     page.wait_for_timeout(400)
 
 
-def test_the_head_is_two_lines_with_the_other_actions_behind_more(phone_page) -> None:
+def _middle(box: dict) -> float:
+    return box["y"] + box["height"] / 2
+
+
+def test_the_head_is_compact_with_the_other_actions_behind_more(phone_page) -> None:
     page = phone_page
     _open_editor(page)
     head = page.locator(".page-head--editor").bounding_box()
-    # Title line and state line, not a screenful of actions.
-    assert head["height"] < 130
-    page.get_by_role("button", name="Deploy changes →").wait_for(state="visible")
+    # Back and "⋯" on the bar line, the title under them, then the state
+    # line -- not a screenful of actions.
+    assert head["height"] < 190
+    back = page.locator(".page-head--editor .page-head__crumb").bounding_box()
+    more = page.get_by_role("button", name="More actions").bounding_box()
+    title = page.get_by_role("heading", name="take-a-hike").bounding_box()
+    deploy = page.get_by_role("button", name="Deploy changes →").bounding_box()
+    assert abs(_middle(back) - _middle(more)) < 12
+    assert title["y"] >= back["y"] + back["height"] - 2
+    assert deploy["y"] >= title["y"] + title["height"] - 2
     assert not page.get_by_role("button", name="Create listing template").is_visible()
 
     page.get_by_role("button", name="More actions").tap()
