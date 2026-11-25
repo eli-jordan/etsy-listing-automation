@@ -186,8 +186,30 @@
     display: none;
   }
 
-  .head-more__list .action-row__error {
-    padding: var(--space-2) 0;
+  /* An action's error, under the head: the "⋯" sheet that held the action
+     has closed by the time it fails (HeadAlert). */
+  .head-alerts {
+    margin: calc(-1 * var(--space-1)) 0 var(--space-3);
+  }
+
+  .head-alerts:empty {
+    display: none;
+  }
+
+  .head-alerts .action-row__error {
+    display: block;
+    font-size: 14px;
+  }
+
+  /* Its hit area a finger's height, without growing the line it sits in. */
+  .save-chip__trigger {
+    min-height: 44px;
+  }
+
+  .aiflow__node::after {
+    content: "";
+    position: absolute;
+    inset: -12px -8px;
   }
 
   /* The save card's content as a sheet. */
@@ -276,13 +298,20 @@
     box-shadow: 0 0 0 var(--space-3) var(--color-bg);
   }
 
+  /* Four labels and their issue counts in one row down to a 320px screen:
+     the padding and type give way below about 360px. */
   .tabs .seg-opt {
     flex: 1 1 auto;
     justify-content: center;
     min-width: 0;
-    padding-inline: 6px;
-    font-size: 14px;
+    padding-inline: clamp(2px, calc((100vw - 320px) / 10 + 2px), 6px);
+    font-size: clamp(13px, 3.6vw, 14px);
     white-space: nowrap;
+  }
+
+  .tabs .tab-badge {
+    flex: none;
+    margin-left: 3px;
   }
 
   /* "Listing Images" reads "Images" in one row of four. */
@@ -380,6 +409,25 @@
     min-height: 280px;
   }
 
+  /* Listing Images: the stage is as tall as the picture is at the screen's
+     width, not a screen tall, so it starts close under the gallery. Before
+     anything is tapped it is only as tall as what it says. */
+  .images-tab .preview-stage--large {
+    height: auto;
+    min-height: 0;
+    aspect-ratio: 1;
+  }
+
+  .images-tab .preview-stage--large:has(> .image-placeholder) {
+    aspect-ratio: auto;
+    min-height: 96px;
+  }
+
+  .images-tab .preview-stage--large img,
+  .images-tab .preview-stage--large video {
+    max-height: 100%;
+  }
+
   .reel__head {
     align-items: center;
   }
@@ -427,9 +475,25 @@
     border: 1px solid var(--color-divider);
   }
 
+  .reel-moves__head {
+    display: flex;
+    align-items: center;
+    gap: var(--space-1);
+  }
+
+  /* One line, so the bar covers as little of the gallery as it can. */
   .reel-moves__what {
+    flex: 1 1 auto;
+    min-width: 0;
     font-size: 13px;
-    overflow-wrap: anywhere;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .reel-moves__why {
+    font-size: 13px;
+    color: color-mix(in srgb, var(--color-text) 65%, transparent);
   }
 
   .reel-moves__buttons {
@@ -437,12 +501,12 @@
     gap: var(--space-1);
   }
 
-  .reel-moves__buttons .btn svg {
+  .reel-moves .btn svg {
     width: 20px;
     height: 20px;
   }
 
-  .reel-moves__buttons .btn {
+  .reel-moves .btn {
     border: 1px solid var(--color-divider);
     background: var(--color-surface);
     font-family: var(--font-body);
@@ -563,6 +627,7 @@
   }
 
   .chip__x {
+    position: relative;
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -572,9 +637,33 @@
     font-size: 16px;
   }
 
+  /* A 44px hit area round the 26px ×. */
+  .chip__x::after {
+    content: "";
+    position: absolute;
+    inset: -9px;
+  }
+
+  .description-preview-control__link {
+    min-height: 44px;
+  }
+
+  .add-media-sheet .locator__modes .seg-opt {
+    min-height: 44px;
+  }
+
+  /* A tap leaves focus in the anchor, so the hover card would stay over the
+     Brief until something else took focus: on a phone it shows for the
+     keyboard only. */
+  .seo-ai-mode-anchor:not(:has(:focus-visible)) .seo-ai-mode-tip {
+    opacity: 0;
+    visibility: hidden;
+  }
+
   .description-source-picker__menu {
     max-height: 60dvh;
     overflow-y: auto;
+    scroll-margin-bottom: calc(var(--phone-tabbar-h) + var(--space-2));
   }
 
   .description-source-picker__menu [role="option"] {
@@ -623,11 +712,20 @@
     flex: none;
   }
 
+  /* The steps say what is running when tapped; their one-line label has no
+     room beside the title, the save state and Deploy. */
+  .page-head--editor > .aiflow .aiflow__label {
+    display: none;
+  }
+
   /* A long name gives way to the controls, and shows whole once tapped to
-     rename. */
+     rename. It gives way after the save state does, and keeps a few letters
+     however long it is. */
   .page-head--editor > .page-head__title {
     flex: 0 1 auto;
+    /* At most its own width, so a short name leaves no gap after it. */
     min-width: 0;
+    min-width: calc-size(max-content, min(size, 5em));
     font-size: 20px;
     white-space: nowrap;
     overflow: hidden;
@@ -641,13 +739,42 @@
 
   /* The save state takes the slack, so Deploy and "⋯" sit at the right
      whether or not the head has a Deploy (a listing template has none). */
-  .page-head--editor > .page-head__meta {
-    flex: 0 1 auto;
+  .page-head--editor > .page-head__meta,
+  .page-head--editor > .page-head__meta:has(.save-chip) {
+    flex: 0 1000 auto;
     min-width: 0;
     margin-right: auto;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+  }
+
+  /* What is left of the save state ends in an ellipsis, as the sentences
+     before the first save do. */
+  .page-head--editor .save-chip {
+    min-width: 0;
+  }
+
+  .page-head--editor .save-chip__trigger {
+    display: block;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    line-height: 42px;
+  }
+
+  .page-head--editor .save-chip__trigger > * {
+    vertical-align: middle;
+  }
+
+  .page-head--editor .save-chip__trigger > .page-head__dot {
+    display: inline-block;
+    margin-right: 5px;
+  }
+
+  .page-head--editor .save-chip__trigger > .save-chip__caret {
+    margin-left: 5px;
   }
 
   .page-head--editor > .page-head__actions {
@@ -779,10 +906,12 @@
     grid-column: 2;
   }
 
-  .images-tab .preview-stage--large {
+  .images-tab .preview-stage--large,
+  .images-tab .preview-stage--large:has(> .image-placeholder) {
     flex: 0 1 auto;
     height: 320px;
     min-height: 140px;
+    aspect-ratio: auto;
   }
 
   .images-tab .preview-stage--large img,
@@ -798,15 +927,19 @@
      can; the picture beside it already says which one is moving. */
   .reel-moves {
     flex-direction: row;
+    flex-wrap: wrap;
     align-items: center;
   }
 
-  .reel-moves__what {
-    flex: 1 1 auto;
+  .reel-moves__head {
+    flex: 1 1 0;
     min-width: 0;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+  }
+
+  /* Why a video cannot move, under the line rather than squeezing it. */
+  .reel-moves__why {
+    order: 1;
+    flex-basis: 100%;
   }
 
   .reel-moves__buttons {

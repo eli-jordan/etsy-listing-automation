@@ -16,6 +16,7 @@ import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { OpenInMenu } from "../../components/OpenInMenu";
 import { etsyListingUrl, hasOpenTargets, printifyProductUrl } from "../../components/openOn";
 import { useIsPhone } from "../../phone/usePhone";
+import { HeadAlert } from "./HeadAlert";
 import type { Patch } from "../../hooks/listingAutosave";
 import type { Settled } from "../../hooks/writeLoop";
 import type { ListingDetail } from "../../types";
@@ -200,11 +201,7 @@ export function ListingActions({
           </ActionLink>
         ),
       )}
-      {error && (
-        <span className="action-row__error" role="alert">
-          {error}
-        </span>
-      )}
+      {error && <HeadAlert>{error}</HeadAlert>}
       {confirming && (
         <OnBodyOnPhone phone={phone}>
           <ConfirmDialog

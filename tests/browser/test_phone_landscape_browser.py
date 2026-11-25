@@ -8,11 +8,13 @@ A short desktop window (a mouse, not a finger) keeps the desktop layout.
 from __future__ import annotations
 
 import re
+from itertools import pairwise
 
 import pytest
 from playwright.sync_api import expect
 
-from tests.support.mobile import assert_mobile_page_fits, swipe
+from tests.support.ai_runs import serve_running_ai_run
+from tests.support.mobile import PHONE_LANDSCAPE_CONTEXT, assert_mobile_page_fits, swipe
 
 pytestmark = pytest.mark.browser
 
@@ -171,3 +173,40 @@ def test_mockups_keep_the_photo_beside_the_controls(phone_landscape_page) -> Non
     assert corner["y"] >= 0
     assert corner["y"] + corner["height"] <= viewport["height"] + 1
     assert_mobile_page_fits(page)
+
+
+def test_the_editor_head_fits_one_row_with_ai_mode_running(
+    browser_type, calibrator_server: str
+) -> None:
+    context = browser_type.new_context(
+        **{**PHONE_LANDSCAPE_CONTEXT, "viewport": {"width": 667, "height": 375}}
+    )
+    try:
+        page = context.new_page()
+        serve_running_ai_run(page, "take-a-hike", stream_fails=False)
+        page.goto(f"{calibrator_server}/listings/take-a-hike")
+        title = page.get_by_role("heading", name="take-a-hike")
+        title.wait_for(state="visible")
+        page.locator(".aiflow").wait_for(state="visible")
+
+        # Left to right, nothing drawn over its neighbour, and all of it on
+        # the screen: the title keeps its letters, the AI steps keep to their
+        # nodes, and the save state gives way first.
+        parts = [
+            page.locator(".page-head--editor .page-head__crumb"),
+            title,
+            page.locator(".page-head--editor .status-tag"),
+            page.locator(".page-head--editor > .page-head__meta"),
+            page.locator(".page-head--editor > .aiflow"),
+            page.get_by_role("button", name="Deploy changes →"),
+            page.get_by_role("button", name="More actions"),
+        ]
+        boxes = [part.bounding_box() for part in parts]
+        for left, right in pairwise(boxes):
+            assert left["x"] + left["width"] <= right["x"] + 1, (left, right)
+        assert boxes[-1]["x"] + boxes[-1]["width"] <= 667
+        assert boxes[1]["width"] >= 80
+        assert not page.locator(".aiflow__label").is_visible()
+        assert_mobile_page_fits(page)
+    finally:
+        context.close()

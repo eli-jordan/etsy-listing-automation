@@ -74,7 +74,10 @@ export function SavedChip({
         type="button"
         className="save-chip__trigger"
         aria-expanded={open}
-        aria-controls={open ? cardId : undefined}
+        // On a phone the card is a sheet on the page body, which has no id of
+        // its own to point at; it says it opens a dialog instead.
+        aria-controls={open && !phone ? cardId : undefined}
+        {...(phone ? { "aria-haspopup": "dialog" as const } : {})}
         title="Where this is saved"
         onClick={() => setOpen((current) => !current)}
       >

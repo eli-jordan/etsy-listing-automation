@@ -1,4 +1,6 @@
-import { useEffect, useState, type Ref } from "react";
+import { type ReactNode, useEffect, useState, type Ref } from "react";
+import { createPortal } from "react-dom";
+import { useIsPhone } from "../../../phone/usePhone";
 import type { AiSeoMode } from "./useAiSeoMode";
 
 /** The sparkle **AI Mode** control and its hover card.
@@ -22,6 +24,7 @@ export function AiSeoControl({
   const elapsed = useElapsed(loading ? mode.startedAt : null);
   const failure = mode.phase === "failed" ? failureMessage(mode.failure) : null;
   const [dismissed, setDismissed] = useState<string | null>(null);
+  const phone = useIsPhone();
   if (failure === null && dismissed !== null) setDismissed(null);
   return (
     <>
@@ -83,12 +86,14 @@ export function AiSeoControl({
       )}
 
       {failure !== null && failure !== dismissed && (
-        <div className="ai-failure-toast" role="alert">
-          <p>{failure}</p>
-          <button type="button" aria-label="Dismiss" onClick={() => setDismissed(failure)}>
-            ×
-          </button>
-        </div>
+        <OnBodyOnPhone phone={phone}>
+          <div className="ai-failure-toast" role="alert">
+            <p>{failure}</p>
+            <button type="button" aria-label="Dismiss" onClick={() => setDismissed(failure)}>
+              ×
+            </button>
+          </div>
+        </OnBodyOnPhone>
       )}
     </>
   );
@@ -167,4 +172,11 @@ function SparkleIcon() {
       />
     </svg>
   );
+}
+
+/** On a phone the toast goes on the page body: the tab content it is written
+ * in is moved by the tab swipe, whose transform would carry a fixed toast
+ * along with it. */
+function OnBodyOnPhone({ phone, children }: { phone: boolean; children: ReactNode }) {
+  return phone ? createPortal(children, document.body) : children;
 }

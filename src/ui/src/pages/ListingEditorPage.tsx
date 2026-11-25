@@ -22,6 +22,7 @@ import { PricingTab } from "./editor/PricingTab";
 import { IssuesBanner } from "./editor/IssuesBanner";
 import { withoutPosition } from "./editor/positions/document";
 import { BackToBatch, ListingActions } from "./editor/ListingActions";
+import { HeadAlertSlot } from "./editor/headAlertSlot";
 import { HeadMore } from "./editor/HeadMore";
 import { ImagesTab } from "./editor/ImagesTab";
 import { metaFor } from "./editor/saveMeta";
@@ -354,35 +355,41 @@ export function EditorHead({
   const isPhone = useIsPhone();
   // On a phone the action row folds into the "⋯" sheet beside the title.
   const inlineActions = isPhone ? null : actions;
+  /** On a phone, where the actions' errors show: under the head, since the
+   * sheet holding the actions closes once one is picked. */
+  const [alertSlot, setAlertSlot] = useState<HTMLDivElement | null>(null);
 
   return (
-    <div className={inlineActions ? "editor-head editor-head--actions" : "editor-head"}>
-      <div className="page-head page-head--editor">
-        {crumb || (
-          <span className="page-head__crumb" onClick={onBack}>
-            {listing ? "Listings" : "Listing templates"}
-          </span>
-        )}
-        <span className="page-head__sep">/</span>
-        {title}
-        {isPhone && actions && <HeadMore title={detail.name || "Actions"}>{actions}</HeadMore>}
+    <HeadAlertSlot value={isPhone ? alertSlot : null}>
+      <div className={inlineActions ? "editor-head editor-head--actions" : "editor-head"}>
+        <div className="page-head page-head--editor">
+          {crumb || (
+            <span className="page-head__crumb" onClick={onBack}>
+              {listing ? "Listings" : "Listing templates"}
+            </span>
+          )}
+          <span className="page-head__sep">/</span>
+          {title}
+          {isPhone && actions && <HeadMore title={detail.name || "Actions"}>{actions}</HeadMore>}
 
-        {listing && <StatusTag status={detail.status} />}
-        <span className="page-head__meta">{meta}</span>
-        {activity}
+          {listing && <StatusTag status={detail.status} />}
+          <span className="page-head__meta">{meta}</span>
+          {activity}
 
-        {listing && detail.name !== "" && (
-          <div className="page-head__actions dv-head-actions">
-            <DeployControl name={detail.name} flush={flush} />
+          {listing && detail.name !== "" && (
+            <div className="page-head__actions dv-head-actions">
+              <DeployControl name={detail.name} flush={flush} />
+            </div>
+          )}
+        </div>
+        {isPhone && <div className="head-alerts" ref={setAlertSlot} />}
+        {inlineActions && (
+          <div className="action-row" role="group" aria-label="Actions">
+            {inlineActions}
           </div>
         )}
       </div>
-      {inlineActions && (
-        <div className="action-row" role="group" aria-label="Actions">
-          {inlineActions}
-        </div>
-      )}
-    </div>
+    </HeadAlertSlot>
   );
 }
 
@@ -530,6 +537,17 @@ export function ListingEditorShell(props: ShellProps) {
     slideIn(content, enterSide(TAB_IDS, tab, next));
   }
 
+  /** The issues banner's Fix. On a phone, the tab is also scrolled so it
+   * starts right under the tab strip, whichever way that is: the banner sits
+   * above the tabs, so without this a Fix leaves the seller looking at the
+   * banner with the tab they asked for starting near the bottom of the
+   * screen. Run once the banner has folded and the tab has rendered. The
+   * desktop has no pager element, so the scroll does nothing there. */
+  function jumpToIssue(next: Tab) {
+    pickTab(next);
+    requestAnimationFrame(() => scrollUnderStrip(tabStrip.current, pager.current));
+  }
+
   useTabPager(pager, { tabs: TAB_IDS, current: tab, enabled: isPhone, onPick: pickTab });
 
   return (
@@ -555,7 +573,7 @@ export function ListingEditorShell(props: ShellProps) {
         template={template}
         issues={detail.issues}
         tab={tab}
-        onJumpTo={pickTab}
+        onJumpTo={jumpToIssue}
         onRemovePosition={(name, placement) => {
           // An explicit action, so it saves now rather than after the debounce.
           update({
@@ -634,6 +652,19 @@ export function ListingEditorShell(props: ShellProps) {
       </TabPanel>
     </div>
   );
+}
+
+/** Scrolls the page so `content` starts just under the tab strip at its
+ * stuck position, up or down. `content` is the phone's pager: `null` on the
+ * desktop. */
+function scrollUnderStrip(strip: HTMLElement | null, content: HTMLElement | null) {
+  if (strip === null || content === null) return;
+  const style = window.getComputedStyle(strip);
+  const gap = Number.parseFloat(style.marginBottom) || 0;
+  const stuck = Number.parseFloat(style.top) || 0;
+  const top =
+    window.scrollY + content.getBoundingClientRect().top - stuck - strip.offsetHeight - gap;
+  window.scrollTo({ top: Math.max(0, top) });
 }
 
 /** The tab content; on a phone, inside the element the tab swipe moves. */

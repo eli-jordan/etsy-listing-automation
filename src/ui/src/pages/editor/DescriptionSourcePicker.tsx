@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useIsPhone } from "../../phone/usePhone";
 import type { CommonCopySummary } from "../../types";
 
 export function DescriptionSourcePicker({
@@ -11,9 +12,12 @@ export function DescriptionSourcePicker({
   onSelect: (value: string | null) => void;
 }) {
   const [open, setOpen] = useState(false);
+  // A phone's keyboard would cover the options it is there to narrow.
+  const phone = useIsPhone();
   const [query, setQuery] = useState("");
   const root = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
+  const menu = useRef<HTMLDivElement>(null);
   const selected = items.find((item) => item.ref === value);
   const label = value === null ? "Write inline body" : (selected?.title ?? value);
   const term = query.trim().toLowerCase();
@@ -29,6 +33,13 @@ export function DescriptionSourcePicker({
     document.addEventListener("pointerdown", onPointerDown);
     return () => document.removeEventListener("pointerdown", onPointerDown);
   }, [open]);
+
+  // On a phone the menu opens below a field that may sit low on the screen:
+  // scrolled up clear of the tab bar (its scroll margin), so no option is
+  // under it.
+  useEffect(() => {
+    if (open && phone) menu.current?.scrollIntoView({ block: "nearest" });
+  }, [open, phone]);
 
   function choose(next: string | null) {
     onSelect(next);
@@ -55,11 +66,11 @@ export function DescriptionSourcePicker({
         <span aria-hidden="true" className="description-source-picker__chevron" />
       </button>
       {open && (
-        <div className="description-source-picker__menu">
+        <div className="description-source-picker__menu" ref={menu}>
           <input
             className="input"
             type="search"
-            autoFocus
+            autoFocus={!phone}
             aria-label="Search description body sources"
             placeholder="Search common copy..."
             value={query}

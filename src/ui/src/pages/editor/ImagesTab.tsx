@@ -130,6 +130,12 @@ export function ImagesTab({ detail, onUpdate, artwork, owner, onFlush }: Props) 
     setRemembered(focusRef(next));
   }
 
+  /** On a phone: lets go of the selected tile, and with it its moves bar. */
+  const letGo = useCallback(() => {
+    setPointed(null);
+    setRemembered(null);
+  }, [setRemembered]);
+
   useEffect(() => {
     listTemplates()
       .then(setTemplates)
@@ -257,7 +263,9 @@ export function ImagesTab({ detail, onUpdate, artwork, owner, onFlush }: Props) 
           onReorder={(from, to) => apply(edits.reorder(detail, from, to))}
           onFocus={pointAt}
           positioned={new Set(Object.keys(detail.template_positions ?? {}))}
-          {...(phone ? { onAdd: () => setAdding(true) } : {})}
+          {...(phone
+            ? { onAdd: () => setAdding(true), onView: setLightboxIndex, onDeselect: letGo }
+            : {})}
         />
 
         <p role="status" className="app__status">
@@ -355,7 +363,7 @@ function PreviewPane({
           <video
             key={view.picture}
             className="preview-stage__video"
-            data-swipe-ignore=""
+            {...(phone ? { "data-swipe-ignore": "" } : {})}
             src={view.picture}
             aria-label={view.title}
             controls

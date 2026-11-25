@@ -102,6 +102,15 @@ export function IssuesBanner({
   const visible = issues.filter((issue) => issue.severity !== "info");
   if (visible.length === 0) return null;
   const folded = phone && !unfolded;
+  // On a phone a Fix folds the list again on its way to the tab, so the tab
+  // it opens is not pushed below the screen by the list that opened it.
+  const jumpTo =
+    phone && onJumpTo !== undefined
+      ? (tab: IssueTab) => {
+          setUnfolded(false);
+          onJumpTo(tab);
+        }
+      : onJumpTo;
 
   return (
     <div className="issues">
@@ -136,7 +145,7 @@ export function IssuesBanner({
           <RowAction
             issue={issue}
             activeTab={activeTab}
-            onJumpTo={onJumpTo}
+            onJumpTo={jumpTo}
             onRemovePosition={onRemovePosition}
           />
         </div>
