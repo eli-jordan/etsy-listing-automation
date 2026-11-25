@@ -725,6 +725,19 @@ An absent file uses defaults without creating it; invalid files refuse to load
 or dispatch batch work. The page serializes saves and adopts returned revisions;
 a conflict requires reload and never reapplies an old patch automatically.
 
+Every save goes through `core/application/settings_save.py`, which owns what a
+change sets off: it refuses a destination it cannot create and creates the
+added ones after the write, wakes the AI queue when `batch_ai.concurrency`
+changes, wakes backups when any backup key changes, and asks for position
+coverage when the limits widen. It receives these coordinators from the host,
+which keeps owning their lifetimes (ADR-0052): `PATCH /api/admin/settings` only
+translates the body in and the refusal out (412 or 422), and queues the
+coverage jobs after its response. Backup provisioning saves through it with no
+coordinators, since the backup coordinator starts or wakes backups itself.
+`backup_repository.ensure_workspace_id` still writes through
+`workspace_settings.edit_settings` directly: it sits below the save in the
+import graph, and the one key it writes sets nothing off.
+
 Settings has two subsections, AI and Template rendering. Template position
 limits save through the same PATCH, but only from a confirmation, never on
 blur: the page sends the whole `template_positions` section and only the
@@ -1414,7 +1427,7 @@ for the Backup page, the banner and the nav icons. The router also has
 and `backup.retention`. The destinations are known by their path (`ITSELF` in
 `yaml_source`), so a comment stays with its path. A destination folder is
 created only by set-up or by the save that adds it, and only inside a folder
-that exists (`core/application/backup_setup.py`).
+that exists (`core/application/settings_save.py`).
 
 The server also owns the backup's naming conventions, and its responses carry
 what they derive, so the browser never re-implements them. Each destination in
@@ -1481,8 +1494,8 @@ the rest). `provision` refuses everything it can first, writing nothing: a
 storage folder that overlaps, already holds files or has no parent folder, a
 new repository while a destination holds a repository's copy
 (`holds_repository`, with `connect_from` in the refusal), a copy that is not
-a repository, and the `backup:` save itself (`check_settings_edit`: revision
-and validation). Only then is the password asked for. It then stores the
+a repository, and the `backup:` save itself (`settings_save.check_settings_save`:
+revision, destinations and validation). Only then is the password asked for. It then stores the
 password, builds the repository in a `<folder>.provisioning-<hex>` staging
 folder beside the target (`restic init`, or the destinations' own one-way copy
 that the password must open and that must pass a `check`), renames it into

@@ -95,6 +95,12 @@ import names the module it depends on. Public interfaces:
     whole percentages totalling 100 -- against an expected revision, validated
     as a whole ``Settings``, refusing with ``SettingsRevisionConflictError`` /
     ``InvalidSettingsEditError``; ``default_weights`` is what Reset writes.
+``settings_save``
+    ``save_settings`` -> ``SettingsView``: the settings save every owner goes
+    through, which sets off what a change calls for -- destination folders
+    refused or created, the AI-queue and backup wakes, coverage for wider
+    position limits -- telling the ``SettingsCoordinators`` the host hands in;
+    ``check_settings_save`` refuses the same edit without writing.
 ``mockup_templates``
     The calibrator: ``list_templates`` -> ``TemplateOverview``,
     ``colour_report``, ``assign_kind``, ``read_config`` / ``save_config``,

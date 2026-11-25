@@ -62,7 +62,7 @@ from contextlib import ExitStack
 from dataclasses import dataclass, replace
 from pathlib import Path
 
-from etsy_listings.core.application import credentials, workspace_settings
+from etsy_listings.core.application import credentials, settings_save, workspace_settings
 from etsy_listings.core.application.backup_repository import (
     BackupOffError,
     ConfiguredBackup,
@@ -318,7 +318,7 @@ class _Plan:
     def check(self) -> None:
         """The save refused now, as it would be at the end."""
         changes, editable = self.changes(self.workspace_id(()).value)
-        workspace_settings.check_settings_edit(
+        settings_save.check_settings_save(
             self.workspace,
             expected_revision=self.expected_revision,
             changes=changes,
@@ -327,7 +327,7 @@ class _Plan:
 
     def save(self, workspace_id: str) -> None:
         changes, editable = self.changes(workspace_id)
-        workspace_settings.edit_settings(
+        settings_save.save_settings(
             self.workspace,
             expected_revision=self.expected_revision,
             changes=changes,

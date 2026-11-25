@@ -15,7 +15,7 @@ key; nothing here repairs it or falls back to defaults.
 (ADR-0056); ``ai.step_limit_minutes`` and ``ai.run_limit_minutes`` bound them
 (ADR-0057). A running AI job keeps the configuration it captured at start.
 ``batch_ai.concurrency`` is read afresh by the batch queue's next dispatch
-(ADR-0048), so a host wakes the queue after a save. ``market_seo.weights``
+(ADR-0048), so ``settings_save`` wakes the queue after a save. ``market_seo.weights``
 arrives as the page shows it: whole percentages for all six metrics
 totalling exactly 100. The file may still hold relative weights written by
 hand; the page normalises those for display only, and they are rewritten as
