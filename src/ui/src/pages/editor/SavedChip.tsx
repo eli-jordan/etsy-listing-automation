@@ -4,7 +4,7 @@ import { CheckIcon } from "@phosphor-icons/react/dist/csr/Check";
 import { CopyIcon } from "@phosphor-icons/react/dist/csr/Copy";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { useIsPhone } from "../../phone/usePhone";
-import { PhoneSheet } from "./PhoneSheet";
+import { PhoneSheet } from "../../phone/PhoneSheet";
 import { SavedAgo } from "./SavedAgo";
 
 /**

@@ -133,6 +133,16 @@ function NameInput({ row, onCommit }: { row: StagingRow; onCommit: (name: string
   );
 }
 
+/** A row's listing name: the field that edits it, or, for a design that
+ * cannot become a listing, why not. The table and the phone cards share it. */
+function RowName({ row, onRename }: { row: StagingRow; onRename: (name: string) => void }) {
+  return row.state === "invalid" ? (
+    <span className="bc-muted bc-small">{row.name}</span>
+  ) : (
+    <NameInput key={row.name} row={row} onCommit={onRename} />
+  );
+}
+
 /** One staged design as a phone card: the file and Remove on top, the
  * name field full width, then its check. */
 function PhoneStagingCard({
@@ -158,15 +168,7 @@ function PhoneStagingCard({
           <XIcon className="bc-icon" />
         </button>
       </span>
-      {row.state === "invalid" ? (
-        <span className="bc-muted bc-small">{row.name}</span>
-      ) : (
-        <NameInput
-          key={row.name}
-          row={row}
-          onCommit={(name) => onEdit({ names: { [row.id]: name } })}
-        />
-      )}
+      <RowName row={row} onRename={(name) => onEdit({ names: { [row.id]: name } })} />
       <Check row={row} onUse={(name) => onEdit({ names: { [row.id]: name } })} />
     </li>
   );
@@ -384,15 +386,7 @@ export function StagingPage() {
                       </span>
                     </td>
                     <td>
-                      {row.state === "invalid" ? (
-                        <span className="bc-muted bc-small">{row.name}</span>
-                      ) : (
-                        <NameInput
-                          key={row.name}
-                          row={row}
-                          onCommit={(name) => edit({ names: { [row.id]: name } })}
-                        />
-                      )}
+                      <RowName row={row} onRename={(name) => edit({ names: { [row.id]: name } })} />
                     </td>
                     <td>
                       <Check row={row} onUse={(name) => edit({ names: { [row.id]: name } })} />

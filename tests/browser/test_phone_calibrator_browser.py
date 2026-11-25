@@ -128,7 +128,7 @@ def test_the_sheet_renames_the_open_template_and_swipes_away(
     assert not (workspace_root / "mockup-templates" / "colour-chart-01").exists()
 
     page.wait_for_function("() => document.getAnimations().length === 0")
-    grabber = _centre(page.locator(".tsheet .sheet-grabber").bounding_box())
+    grabber = _centre(page.locator(".tsheet__dialog .sheet-grabber").bounding_box())
     swipe(page, grabber, (grabber[0], grabber[1] + 300))
     sheet.wait_for(state="detached")
 

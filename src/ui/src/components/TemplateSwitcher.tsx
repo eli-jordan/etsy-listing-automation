@@ -1,11 +1,10 @@
 import { CaretDownIcon } from "@phosphor-icons/react/dist/csr/CaretDown";
 import { CaretLeftIcon } from "@phosphor-icons/react/dist/csr/CaretLeft";
 import { CaretRightIcon } from "@phosphor-icons/react/dist/csr/CaretRight";
-import { type ReactNode, useEffect, useId, useRef, useState } from "react";
-import { createPortal } from "react-dom";
+import { type ReactNode, useId, useRef, useState } from "react";
 import { templateThumbnailUrl } from "../api/calibrator";
 import type { TemplateRename } from "../hooks/useTemplateRename";
-import { SheetGrabber } from "../phone/SheetGrabber";
+import { PhoneSheet } from "../phone/PhoneSheet";
 import { useSwipe } from "../phone/useSwipe";
 import { adjacentTemplate, stepPosition, type StepDirection } from "./templateStep";
 
@@ -183,38 +182,14 @@ interface SheetProps {
   children: ReactNode;
 }
 
-/** Every template, as a bottom sheet over the page. Portalled to the body so
- * the calibrator's own narrow-width rules (which fold the rail away) do not
- * reach the copy of the rail inside it. */
+/** Every template, as a bottom sheet over the page. A `PhoneSheet`, so it
+ * sits on the body, where the calibrator's own narrow-width rules (which
+ * fold the rail away) do not reach the copy of the rail inside it. */
 export function TemplateSheet({ selected, rename, onClose, children }: SheetProps) {
-  const sheet = useRef<HTMLDivElement>(null);
-  const titleId = useId();
-
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
-
-  return createPortal(
-    <div className="modal-root tsheet" role="dialog" aria-modal="true" aria-labelledby={titleId}>
-      <div className="modal-backdrop" onClick={onClose} aria-hidden="true" />
-      <div ref={sheet} className="modal-dialog tsheet__dialog">
-        <SheetGrabber sheetRef={sheet} onDismiss={onClose} />
-        <div className="tsheet__head">
-          <h2 id={titleId} className="tsheet__title">
-            Templates
-          </h2>
-          <button type="button" className="btn btn-ghost tsheet__close" onClick={onClose}>
-            Done
-          </button>
-        </div>
-        <RenameRow key={selected} name={selected} rename={rename} />
-        {children}
-      </div>
-    </div>,
-    document.body,
+  return (
+    <PhoneSheet title="Templates" onClose={onClose} className="tsheet__dialog">
+      <RenameRow key={selected} name={selected} rename={rename} />
+      {children}
+    </PhoneSheet>
   );
 }

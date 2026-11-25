@@ -15,7 +15,7 @@ import {
 import type { MediaFileSummary, ListingDetail, TemplateSummary } from "../../types";
 import { MediaLocator } from "./MediaLocator";
 import { MediaReel } from "./MediaReel";
-import { PhoneSheet } from "./PhoneSheet";
+import { PhoneSheet } from "../../phone/PhoneSheet";
 import { useIsPhone } from "../../phone/usePhone";
 import { isBoolean, isNullableNumber, useViewState, viewScope } from "./editorView";
 import {

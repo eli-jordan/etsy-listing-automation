@@ -1,6 +1,6 @@
 import { DotsThreeIcon } from "@phosphor-icons/react/dist/csr/DotsThree";
 import { type MouseEvent, type ReactNode, useCallback, useState } from "react";
-import { PhoneSheet } from "./PhoneSheet";
+import { PhoneSheet } from "../../phone/PhoneSheet";
 
 /**
  * The phone editor head's overflow: a "⋯" button beside the title opening a

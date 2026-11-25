@@ -1,29 +1,42 @@
 import { type ReactNode, useEffect, useId, useRef } from "react";
 import { createPortal } from "react-dom";
-import { SheetGrabber } from "../../phone/SheetGrabber";
+import { SheetGrabber } from "./SheetGrabber";
 
 /**
- * A bottom sheet the phone layout opens in place of a desktop popover or
- * side panel: the editor's overflow actions, Add media, the save card.
+ * The phone layout's bottom sheet, for what a desktop shows as a popover, a
+ * side panel or an inline row of actions: the editor's overflow actions and
+ * Add media, a listing row's actions, the template switcher.
  *
- * On `document.body`, never inside the tab content: the tab content swipes
+ * It is the same sheet as `ConfirmDialog` (`.modal-root` / `.modal-dialog`,
+ * drawn as a sheet by `phone/base.css`) with a grab bar that swipes it away,
+ * a title, and Done unless `done` is false (an action sheet ends in its own
+ * Cancel instead).
+ *
+ * On `document.body`, never inside the page: the editor's tab content swipes
  * sideways between tabs, and a sheet's own grab bar must not be read as a
- * swipe of the tab under it.
+ * swipe of the tab under it; the calibrator's narrow-width rules must not
+ * reach a copy of the rail inside one.
  *
  * `open` hides it rather than unmounting it, so what is inside keeps its
  * state while it is closed -- a delete confirmation started from the
- * overflow sheet outlives the sheet closing under it.
+ * overflow sheet outlives the sheet closing under it. A caller that mounts
+ * it only while open leaves `open` at its default.
+ *
+ * Only the phone layout opens one, so its markup has no desktop styles.
  */
 export function PhoneSheet({
-  open,
+  open = true,
   title,
   onClose,
+  done = true,
   className,
   children,
 }: {
-  open: boolean;
+  open?: boolean;
   title: string;
   onClose: () => void;
+  done?: boolean;
+  /** Extra class on the sheet box, for an area's own look. */
   className?: string;
   children: ReactNode;
 }) {
@@ -67,9 +80,11 @@ export function PhoneSheet({
           <h2 id={titleId} className="phone-sheet__title">
             {title}
           </h2>
-          <button type="button" className="phone-sheet__done" onClick={onClose}>
-            Done
-          </button>
+          {done && (
+            <button type="button" className="phone-sheet__done" onClick={onClose}>
+              Done
+            </button>
+          )}
         </div>
         {children}
       </div>

@@ -131,18 +131,12 @@
     background: color-mix(in srgb, var(--color-text) 7%, transparent);
   }
 
-  .m-chevron {
-    flex: none;
-    width: 8px;
-    height: 8px;
-    margin: 0 4px 0 2px;
-    border-top: 2px solid color-mix(in srgb, var(--color-text) 35%, transparent);
-    border-right: 2px solid color-mix(in srgb, var(--color-text) 35%, transparent);
-    transform: rotate(45deg);
-  }
-
   .m-row__main--stack::after {
     content: "";
+  }
+
+  .m-chevron,
+  .m-row__main--stack::after {
     flex: none;
     width: 8px;
     height: 8px;
@@ -334,9 +328,14 @@
     transform: scale(0.94);
   }
 
-  /* — action sheet — */
-  .m-sheet__title {
-    margin: 0 0 var(--space-3);
+  /* — action sheet (a PhoneSheet without Done): a centred, quiet title — */
+  .m-sheet .phone-sheet__head {
+    justify-content: center;
+    margin-bottom: var(--space-3);
+  }
+
+  .m-sheet .phone-sheet__title {
+    margin: 0;
     font-family: var(--font-body);
     font-size: 15px;
     font-weight: 600;

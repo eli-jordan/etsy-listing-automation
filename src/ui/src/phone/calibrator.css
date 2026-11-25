@@ -168,18 +168,6 @@
     height: calc(100dvh - 56px);
   }
 
-  .tsheet__head {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-  }
-
-  .tsheet__title {
-    margin: 0;
-    font-size: 20px;
-  }
-
-  .tsheet__close,
   .tsheet__current .btn,
   .tsheet__rename-actions .btn {
     min-height: 44px;
@@ -226,54 +214,54 @@
     gap: var(--space-2);
   }
 
-  .tsheet .template-rail {
+  .tsheet__dialog .template-rail {
     position: static;
     gap: var(--space-2);
   }
 
-  .tsheet .template-rail__banner .btn {
+  .tsheet__dialog .template-rail__banner .btn {
     min-height: 44px;
   }
 
-  .tsheet .template-rail__filters {
+  .tsheet__dialog .template-rail__filters {
     flex-wrap: wrap;
     gap: var(--space-2);
   }
 
-  .tsheet .template-rail__pill {
+  .tsheet__dialog .template-rail__pill {
     min-height: 36px;
     padding: 0 14px;
     font-size: 13px;
   }
 
-  .tsheet .template-rail__item {
+  .tsheet__dialog .template-rail__item {
     justify-content: flex-start;
     min-height: 64px;
     padding: var(--space-2);
   }
 
-  .tsheet .template-rail__text {
+  .tsheet__dialog .template-rail__text {
     flex: 1;
   }
 
-  .tsheet .template-rail__thumb {
+  .tsheet__dialog .template-rail__thumb {
     width: 52px;
     height: 52px;
   }
 
-  .tsheet .template-rail__name {
+  .tsheet__dialog .template-rail__name {
     font-size: 14px;
     white-space: normal;
     overflow-wrap: anywhere;
   }
 
-  .tsheet .template-rail__meta,
-  .tsheet .template-rail__labels {
+  .tsheet__dialog .template-rail__meta,
+  .tsheet__dialog .template-rail__labels {
     font-size: 12px;
   }
 
-  .tsheet .template-rail__more,
-  .tsheet .mg-queue-entry {
+  .tsheet__dialog .template-rail__more,
+  .tsheet__dialog .mg-queue-entry {
     min-height: 44px;
     font-size: 13px;
   }

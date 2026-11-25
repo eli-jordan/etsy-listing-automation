@@ -6,9 +6,12 @@ import { classifySwipe, lockAxis, type SwipeDirection } from "./swipe";
  * (`pointerType === "touch"`): a mouse drag on the desktop never swipes, so
  * the hook can stay mounted at every width and still change nothing there.
  *
- * A swipe that starts on something that owns its own drag -- a text field, a
- * slider, a horizontally scrolling strip, or anything marked
- * `data-swipe-ignore` -- is left to that thing.
+ * A swipe that starts on something that owns its own drag -- a slider, a
+ * strip that scrolls along the same axis, the text field being typed in, or
+ * anything marked `data-swipe-ignore` -- is left to that thing. A field that
+ * is not focused does not: on a phone a finger moves a caret only once the
+ * field has focus, and a form-heavy page (the editor's Details tab) has
+ * nowhere else to start a swipe.
  */
 
 export interface SwipeOptions {
@@ -22,8 +25,14 @@ export interface SwipeOptions {
   enabled?: boolean;
 }
 
-const OWNS_DRAG =
-  "input, textarea, select, [contenteditable=''], [contenteditable='true'], [data-swipe-ignore], [role='slider']";
+const OWNS_DRAG = "input[type='range'], [role='slider'], [data-swipe-ignore]";
+const TYPED_IN = "input, textarea, [contenteditable=''], [contenteditable='true']";
+
+/** The field the keyboard is typing into, if the touch starts on it. */
+function typingInto(target: Element): boolean {
+  const field = target.closest(TYPED_IN);
+  return field !== null && field === document.activeElement;
+}
 
 function scrollsAlong(element: Element, axis: "x" | "y"): boolean {
   const style = window.getComputedStyle(element);
@@ -42,7 +51,7 @@ export function ownedElsewhere(
   axis: "x" | "y",
 ): boolean {
   if (!(target instanceof Element)) return false;
-  if (target.closest(OWNS_DRAG)) return true;
+  if (target.closest(OWNS_DRAG) || typingInto(target)) return true;
   for (let node: Element | null = target; node && node !== root; node = node.parentElement) {
     if (scrollsAlong(node, axis)) return true;
   }
