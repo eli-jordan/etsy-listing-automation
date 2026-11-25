@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { deleteListing, listListings, patchListing } from "../api/listings";
 import { createRun, currentWorkspaceRun, getRun, isReviewedScope } from "../api/runs";
@@ -166,34 +166,35 @@ export function ListingsPage() {
   const [query, setQuery] = useState(() => (isPhone ? (params.get("q") ?? "") : ""));
   const [desktopFilter, setDesktopFilter] = useState<Filter>("all");
   const filter = isPhone ? filterFrom(params.get("status")) : desktopFilter;
-  const setPhoneFilter = useCallback(
-    (next: Filter) =>
-      setParams(
-        (current) => {
-          const updated = new URLSearchParams(current);
-          if (next === "all") updated.delete("status");
-          else updated.set("status", next);
-          return updated;
-        },
-        { replace: true },
-      ),
+  // Each edit starts from the last address this page asked for, not from
+  // `params`: the router answers a render later, so a chip tapped and a
+  // search typed before it does would each rebuild the address from the old
+  // one, and the second would put the first one's filter back.
+  const latestParams = useRef(params);
+  useLayoutEffect(() => {
+    latestParams.current = params;
+  }, [params]);
+  const replaceParam = useCallback(
+    (name: string, value: string) => {
+      const updated = new URLSearchParams(latestParams.current);
+      if (value === "") updated.delete(name);
+      else updated.set(name, value);
+      latestParams.current = updated;
+      setParams(updated, { replace: true });
+    },
     [setParams],
+  );
+  const setPhoneFilter = useCallback(
+    (next: Filter) => replaceParam("status", next === "all" ? "" : next),
+    [replaceParam],
   );
   // The search box stays local state, since the address answers a step
   // behind each keystroke, and is copied there whenever the two differ.
   const addressQuery = params.get("q") ?? "";
   useEffect(() => {
     if (!isPhone || addressQuery === query) return;
-    setParams(
-      (current) => {
-        const updated = new URLSearchParams(current);
-        if (query === "") updated.delete("q");
-        else updated.set("q", query);
-        return updated;
-      },
-      { replace: true },
-    );
-  }, [isPhone, addressQuery, query, setParams]);
+    replaceParam("q", query);
+  }, [isPhone, addressQuery, query, replaceParam]);
   // New listing floats over the list on a phone held upright. Held sideways
   // the head has room for it, and so few rows show that a floating button
   // would sit on one.
