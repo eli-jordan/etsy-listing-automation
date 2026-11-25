@@ -99,7 +99,11 @@ With the switch on:
 - **Reset to template:** a text link, shown only while editing and only when
   the listing has a position. It removes the listing's entry for that template
   (or placement); it does not write a copy of the template's box. The stage
-  snaps back and the ghost disappears.
+  snaps back and the ghost disappears. On a phone held upright the pane opens
+  full screen from the gallery's Adjust, and its foot stays the same with the
+  switch on or off, so the picture does not move: the note and Reset are
+  always there, Reset disabled while the listing has no position, and Add or
+  Remove from listing is left to the gallery's bar.
 
 **Saving.** There is no Done or Cancel. A position saves through the editor's
 normal save path, once per completed gesture: pointer release after a drag, or

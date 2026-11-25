@@ -55,6 +55,9 @@ interface Props {
    * tap on the tile, the bar's ×, or Escape lets go of it. */
   onView?: (index: number) => void;
   onDeselect?: () => void;
+  /** On a phone, when the selected tile is a template whose design this
+   * listing can position: the bar's Adjust opens the preview to do it in. */
+  onAdjust?: () => void;
 }
 
 export function MediaReel({
@@ -71,6 +74,7 @@ export function MediaReel({
   onAdd,
   onView,
   onDeselect,
+  onAdjust,
 }: Props) {
   const phone = useIsPhone();
   const [dragIndex, setDragIndex] = useState<number | null>(null);
@@ -164,6 +168,7 @@ export function MediaReel({
           onReorder={onReorder}
           onRemove={onRemove}
           onView={onView}
+          onAdjust={onAdjust}
           onDone={onDeselect}
         />
       )}
@@ -176,19 +181,21 @@ function reelHint(images: number, phone: boolean): string {
     return `At Etsy's ${MAX_IMAGES}-image limit — remove one before adding another`;
   }
   return phone
-    ? "Tap an image to move or remove it"
+    ? "Tap an image to view, adjust, move or remove it"
     : "Drag a tile to change the order Etsy shows them in";
 }
 
 /**
- * The phone's way to reorder: a finger cannot carry a tile (HTML5 drag and
- * drop is mouse-only), so the selected tile gets a bar under the reel that
- * moves it one place at a time, or straight to the front, under the same
- * gallery rules a drop obeys. The selection follows the tile, so repeated
- * taps keep moving the same one.
+ * The phone's way to reorder: only some phone browsers let a finger carry a
+ * tile, after a long press, so the selected tile gets a bar under the reel
+ * that moves it one place at a time, or straight to the front, under the
+ * same gallery rules a drop obeys. The selection follows the tile, so
+ * repeated taps keep moving the same one.
  *
- * The stage showing the tile sits under the whole gallery, so the bar also
- * opens it full size (View), and lets go of it (×, or Escape).
+ * The bar is also the tile's way to the larger views: View opens it full
+ * size, and Adjust -- for a template this listing positions its design on --
+ * opens the preview with Position mode. It lets go of the tile on ×, or
+ * Escape.
  */
 function ReelMoves({
   media,
@@ -196,6 +203,7 @@ function ReelMoves({
   onReorder,
   onRemove,
   onView,
+  onAdjust,
   onDone,
 }: {
   media: readonly MediaEntry[];
@@ -203,6 +211,7 @@ function ReelMoves({
   onReorder: (from: number, to: number) => void;
   onRemove: (index: number) => void;
   onView: ((index: number) => void) | undefined;
+  onAdjust: (() => void) | undefined;
   onDone: (() => void) | undefined;
 }) {
   const entry = media[index] as MediaEntry;
@@ -224,6 +233,11 @@ function ReelMoves({
         {onView !== undefined && (
           <button type="button" className="btn btn-ghost" onClick={() => onView(index)}>
             View
+          </button>
+        )}
+        {onAdjust !== undefined && (
+          <button type="button" className="btn btn-ghost" onClick={onAdjust}>
+            Adjust
           </button>
         )}
         {onDone !== undefined && (
@@ -283,12 +297,17 @@ function ReelMoves({
 }
 
 /** Escape lets go of the selected tile -- unless it is closing the full-size
- * view over it, which has its own Escape. */
+ * view, Adjust's screen or a sheet over it, which have their own Escape. */
 function useEscape(onDone: (() => void) | undefined) {
   useEffect(() => {
     if (onDone === undefined) return;
     const onKey = (event: KeyboardEvent) => {
-      if (event.key !== "Escape" || document.querySelector(".lightbox") !== null) return;
+      if (
+        event.key !== "Escape" ||
+        document.querySelector(".lightbox, .phone-screen, .modal-root") !== null
+      ) {
+        return;
+      }
       onDone();
     };
     document.addEventListener("keydown", onKey);
@@ -334,12 +353,28 @@ function ReelTile({
     <div
       className={["rtile", ...state].filter(Boolean).join(" ")}
       draggable
-      onDragStart={onDragStart}
+      onDragStart={(event) => {
+        // A plain-text payload (Firefox starts no drag without one) and a
+        // move, so nothing reads the tile as a picture or a link to open. A
+        // synthetic drag has no `dataTransfer`.
+        const carried = event.dataTransfer as DataTransfer | null | undefined;
+        if (carried) {
+          carried.effectAllowed = "move";
+          carried.setData("text/plain", label);
+        }
+        onDragStart();
+      }}
       onDragOver={(event) => {
         event.preventDefault();
         onDragOver();
       }}
-      onDrop={onDrop}
+      onDrop={(event) => {
+        // The drop is the reorder's, not the browser's: left to it, the
+        // browser opens what was dropped -- on a phone, the tile's small
+        // picture, alone on the page in place of the editor.
+        event.preventDefault();
+        onDrop();
+      }}
       onDragEnd={onDragEnd}
     >
       <div
@@ -359,7 +394,8 @@ function ReelTile({
             </span>
           </>
         ) : (
-          <img src={picture} alt={label} loading="lazy" />
+          // Not draggable itself, so a drag carries the tile, not the picture.
+          <img src={picture} alt={label} loading="lazy" draggable={false} />
         )}
         <span className="rtile__pos">{index + 1}</span>
         {suppliesSwatch && (

@@ -159,6 +159,56 @@
     cursor: pointer;
   }
 
+  /* — PhoneScreen (phone/PhoneScreen.tsx): the whole screen, over the tab
+     bar, with the title and Done in a bar clear of the notch — */
+  .phone-screen {
+    position: fixed;
+    inset: 0;
+    z-index: 65;
+    display: flex;
+    flex-direction: column;
+    background: var(--color-bg);
+  }
+
+  .phone-screen__bar {
+    display: flex;
+    flex: none;
+    align-items: center;
+    gap: var(--space-3);
+    padding: calc(var(--space-2) + env(safe-area-inset-top, 0px))
+      max(var(--space-3), env(safe-area-inset-right, 0px)) var(--space-2)
+      max(var(--space-3), env(safe-area-inset-left, 0px));
+    border-bottom: 1px solid var(--color-divider);
+  }
+
+  .phone-screen__title {
+    flex: 1;
+    min-width: 0;
+    margin: 0;
+    font-size: 18px;
+    overflow-wrap: anywhere;
+  }
+
+  .phone-screen__done {
+    flex: none;
+    min-height: 44px;
+    padding: 0 var(--space-2);
+    border: none;
+    background: none;
+    font-family: var(--font-body);
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--color-accent-700);
+    cursor: pointer;
+  }
+
+  .phone-screen__body {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+  }
+
   /* A sheet takes focus itself when nothing in it asks for it
      (usePhoneModal); that focus is for Tab, not a ring. */
   [data-phone-sheet]:focus {

@@ -15,8 +15,9 @@ import {
 import type { MediaFileSummary, ListingDetail, TemplateSummary } from "../../types";
 import { MediaLocator } from "./MediaLocator";
 import { MediaReel } from "./MediaReel";
+import { PhoneScreen } from "../../phone/PhoneScreen";
 import { PhoneSheet } from "../../phone/PhoneSheet";
-import { useIsPhone } from "../../phone/usePhone";
+import { useIsPhone, useIsPhoneLandscape } from "../../phone/usePhone";
 import { isBoolean, isNullableNumber, useViewState, viewScope } from "./editorView";
 import {
   type Focus,
@@ -66,6 +67,13 @@ import "./positions/positions.css";
  * where arrow keys walk the set and `1:1` stops the browser downsampling it.
  * Comparing neighbours is the point: the fault worth catching is usually "this
  * one colour is wrong".
+ *
+ * On a phone held upright there is no room for the pane under the gallery
+ * (it sat a scroll below the tile that was tapped), so the tab is the gallery
+ * alone. The selected tile's bar opens it full size (View), or, for a
+ * template the listing positions, opens the pane full screen with Position
+ * mode on (Adjust), and Done goes back to the gallery. Held sideways, the
+ * pane sits beside the gallery as on the desktop.
  */
 
 interface Props {
@@ -99,6 +107,7 @@ function ownDirectory(owner: MediaOwner | null): MediaOwner | null {
 export function ImagesTab({ detail, onUpdate, artwork, owner, onFlush }: Props) {
   const [templates, setTemplates] = useState<TemplateSummary[]>([]);
   const [shared, setShared] = useState<MediaFileSummary[]>([]);
+  const landscape = useIsPhoneLandscape();
   const [local, setLocal] = useState<MediaFileSummary[]>([]);
   const [status, setStatus] = useState("");
 
@@ -125,16 +134,20 @@ export function ImagesTab({ detail, onUpdate, artwork, owner, onFlush }: Props) 
   );
   const [actualSize, setActualSize] = useViewState(scope, "actual-size", false, isBoolean);
 
+  const { adjusting, startAdjusting, stopAdjusting } = useAdjustSheet();
+
   function pointAt(next: Focus) {
     setPointed(next);
     setRemembered(focusRef(next));
+    stopAdjusting();
   }
 
   /** On a phone: lets go of the selected tile, and with it its moves bar. */
   const letGo = useCallback(() => {
     setPointed(null);
     setRemembered(null);
-  }, [setRemembered]);
+    stopAdjusting();
+  }, [setRemembered, stopAdjusting]);
 
   useEffect(() => {
     listTemplates()
@@ -188,6 +201,9 @@ export function ImagesTab({ detail, onUpdate, artwork, owner, onFlush }: Props) 
     view?.inListing === true,
     artwork === undefined && owner === undefined && detail.name !== "",
   );
+  const phone = useIsPhone();
+  /** No room for the preview pane under the gallery: it opens full screen. */
+  const upright = isUpright(phone, landscape);
   const positioning = usePositioning({
     detail,
     ...target,
@@ -196,9 +212,11 @@ export function ImagesTab({ detail, onUpdate, artwork, owner, onFlush }: Props) 
     saved,
     onUpdate,
     onFlush,
+    // Only Adjust's screen shows the pane on an upright phone.
+    steady: upright,
   });
 
-  const phone = useIsPhone();
+  const adjustable = adjustTarget(upright, selectedIndex, positioning);
   /** Add media, on a phone: a sheet over the gallery rather than a column. */
   const [adding, setAdding] = useState(false);
   const closeAdding = useCallback(() => setAdding(false), []);
@@ -215,6 +233,18 @@ export function ImagesTab({ detail, onUpdate, artwork, owner, onFlush }: Props) 
       onToggleSwatchSource={(template) => apply(edits.toggleSwatchSource(detail, template))}
       onFocus={pointAt}
       scope={scope}
+    />
+  );
+
+  const pane = (
+    <PreviewPane
+      view={view}
+      positioning={positioning}
+      source={liveSource(detail, focus)}
+      onOpen={setLightboxIndex}
+      onToggle={toggleFocused}
+      phone={phone}
+      steady={upright}
     />
   );
 
@@ -243,14 +273,7 @@ export function ImagesTab({ detail, onUpdate, artwork, owner, onFlush }: Props) 
       )}
 
       <div className="images-right">
-        <PreviewPane
-          view={view}
-          positioning={positioning}
-          source={liveSource(detail, focus)}
-          onOpen={setLightboxIndex}
-          onToggle={toggleFocused}
-          phone={phone}
-        />
+        {upright ? null : pane}
 
         <MediaReel
           media={detail.media}
@@ -263,15 +286,22 @@ export function ImagesTab({ detail, onUpdate, artwork, owner, onFlush }: Props) 
           onReorder={(from, to) => apply(edits.reorder(detail, from, to))}
           onFocus={pointAt}
           positioned={new Set(Object.keys(detail.template_positions ?? {}))}
-          {...(phone
-            ? { onAdd: () => setAdding(true), onView: setLightboxIndex, onDeselect: letGo }
-            : {})}
+          {...phoneReel(phone, {
+            onAdd: () => setAdding(true),
+            onView: setLightboxIndex,
+            onDeselect: letGo,
+            onAdjust: adjustHandler(adjustable, startAdjusting),
+          })}
         />
 
         <p role="status" className="app__status">
           {status}
         </p>
       </div>
+
+      <AdjustScreen open={adjusting} target={adjustable} view={view} onClose={stopAdjusting}>
+        {pane}
+      </AdjustScreen>
 
       {lightboxIndex !== null && lightboxItems[lightboxIndex] !== undefined && (
         <Lightbox
@@ -284,6 +314,78 @@ export function ImagesTab({ detail, onUpdate, artwork, owner, onFlush }: Props) 
         />
       )}
     </div>
+  );
+}
+
+/** Adjust, on an upright phone: whether its screen is open, and its way in
+ * -- straight into Position mode, since adjusting is what it is for. */
+function useAdjustSheet() {
+  const [adjusting, setAdjusting] = useState(false);
+  const stopAdjusting = useCallback(() => setAdjusting(false), []);
+  const startAdjusting = useCallback((positioning: Positioning) => {
+    setAdjusting(true);
+    if (!positioning.on) positioning.toggle();
+  }, []);
+  return { adjusting, startAdjusting, stopAdjusting };
+}
+
+/** A phone held upright, where the preview pane has no room on the page. */
+function isUpright(phone: boolean, landscape: boolean): boolean {
+  return phone && !landscape;
+}
+
+/** What Adjust positions: the selected tile's, on an upright phone only. */
+function adjustTarget(
+  upright: boolean,
+  selectedIndex: number | null,
+  positioning: Positioning | null,
+): Positioning | null {
+  return upright && selectedIndex !== null ? positioning : null;
+}
+
+/** The reel's phone-only handlers: none off the phone, and Adjust only when
+ * there is something to adjust. */
+function phoneReel(
+  phone: boolean,
+  handlers: {
+    onAdd: () => void;
+    onView: (index: number) => void;
+    onDeselect: () => void;
+    onAdjust: (() => void) | undefined;
+  },
+) {
+  if (!phone) return {};
+  const { onAdjust, ...rest } = handlers;
+  return onAdjust === undefined ? rest : { ...rest, onAdjust };
+}
+
+/** The reel bar's Adjust, when there is something to adjust. */
+function adjustHandler(
+  target: Positioning | null,
+  start: (positioning: Positioning) => void,
+): (() => void) | undefined {
+  return target === null ? undefined : () => start(target);
+}
+
+/** The preview pane over the whole screen, named for the picture. */
+function AdjustScreen({
+  open,
+  target,
+  view,
+  onClose,
+  children,
+}: {
+  open: boolean;
+  target: Positioning | null;
+  view: FocusView | null;
+  onClose: () => void;
+  children: ReactNode;
+}) {
+  if (!open || target === null || view === null) return null;
+  return (
+    <PhoneScreen title={view.title} onClose={onClose} className="adjust-screen">
+      {children}
+    </PhoneScreen>
   );
 }
 
@@ -339,6 +441,7 @@ function PreviewPane({
   onOpen,
   onToggle,
   phone,
+  steady,
 }: {
   view: FocusView | null;
   positioning: Positioning | null;
@@ -346,6 +449,9 @@ function PreviewPane({
   onOpen: (index: number) => void;
   onToggle: () => void;
   phone: boolean;
+  /** Adjust's screen: the foot the same with the switch on or off, so no
+   * Add or Remove (the reel's bar removes) appearing as it turns off. */
+  steady: boolean;
 }) {
   const adjusting = positioning?.on === true ? positioning : null;
   return (
@@ -417,7 +523,7 @@ function PreviewPane({
               ))}
               <PositionNote note={positioning?.note ?? null} />
             </span>
-            <FootActions positioning={positioning}>
+            <FootActions positioning={positioning} steady={steady}>
               <button
                 type="button"
                 className={
@@ -459,14 +565,18 @@ function liveSource(detail: ListingDetail, focus: Focus | null): LiveSource | nu
   };
 }
 
-/** The pane's own action, beside the position controls when the entry has them. */
+/** The pane's own action, beside the position controls when the entry has
+ * them -- and on a steady foot, the controls alone. */
 function FootActions({
   positioning,
+  steady,
   children,
 }: {
   positioning: Positioning | null;
+  steady: boolean;
   children: ReactNode;
 }) {
   if (positioning === null) return <span className="preview-actions">{children}</span>;
+  if (steady) return <PositionControls positioning={positioning} />;
   return <PositionControls positioning={positioning}>{children}</PositionControls>;
 }

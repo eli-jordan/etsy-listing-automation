@@ -1,7 +1,7 @@
 """The listing editor on a phone, driven with a finger: the compact head and
-its "⋯" sheet, one sticky row of tabs that also swipes, the gallery first
-with Add media as a sheet, tap-to-move reordering, and the lightbox's
-swipes."""
+its "⋯" sheet, one sticky row of tabs that also swipes, the gallery alone
+with Add media and Adjust as sheets, tap-to-move reordering, and the
+lightbox's swipes."""
 
 from __future__ import annotations
 
@@ -93,12 +93,18 @@ def test_the_tabs_are_one_sticky_row_that_the_content_swipes(phone_page) -> None
     assert_mobile_page_fits(page)
 
 
-def test_the_gallery_comes_first_and_a_tap_reorders_it(phone_page, workspace_root: Path) -> None:
+def _open_full_size(page, tile: int = 0) -> None:
+    """A tile's full-size view, from its bar's View."""
+    page.locator(".rtile__face").nth(tile).tap()
+    page.locator(".reel-moves").get_by_role("button", name="View").tap()
+
+
+def test_the_gallery_stands_alone_and_a_tap_reorders_it(phone_page, workspace_root: Path) -> None:
     page = phone_page
     _open_editor(page, "Listing Images")
-    reel = page.locator(".reel").bounding_box()
-    preview = page.locator(".preview-pane").bounding_box()
-    assert reel["y"] < preview["y"]
+    page.locator(".reel").wait_for(state="visible")
+    # No preview pane a scroll below the gallery: Adjust opens it in a sheet.
+    assert page.locator(".preview-pane").count() == 0
     assert not page.get_by_role("button", name="Files", exact=True).is_visible()
 
     page.get_by_role("button", name="Add media").tap()
@@ -128,17 +134,16 @@ def test_the_gallery_comes_first_and_a_tap_reorders_it(phone_page, workspace_roo
 def test_the_lightbox_swipes_between_images_and_down_to_close(phone_page) -> None:
     page = phone_page
     _open_editor(page, "Listing Images")
-    page.locator(".rtile__face").first.tap()
-    page.locator(".preview-stage__open").tap()
+    _open_full_size(page)
     count = page.locator(".lightbox__count")
     count.wait_for(state="visible")
     assert count.inner_text() == "1 / 4"
 
     swipe(page, (330, 450), (60, 450))
-    page.wait_for_timeout(200)
+    page.wait_for_timeout(400)
     assert count.inner_text() == "2 / 4"
     swipe(page, (60, 450), (330, 450))
-    page.wait_for_timeout(200)
+    page.wait_for_timeout(400)
     assert count.inner_text() == "1 / 4"
 
     swipe(page, (195, 300), (195, 700))
@@ -148,8 +153,7 @@ def test_the_lightbox_swipes_between_images_and_down_to_close(phone_page) -> Non
 def test_a_pinch_zoomed_lightbox_pans_rather_than_paging_or_closing(phone_page) -> None:
     page = phone_page
     _open_editor(page, "Listing Images")
-    page.locator(".rtile__face").first.tap()
-    page.locator(".preview-stage__open").tap()
+    _open_full_size(page)
     count = page.locator(".lightbox__count")
     count.wait_for(state="visible")
 
@@ -171,7 +175,7 @@ def test_a_pinch_zoomed_lightbox_pans_rather_than_paging_or_closing(phone_page) 
         session.send("Emulation.setPageScaleFactor", {"pageScaleFactor": 1})
         page.wait_for_function("() => visualViewport.scale === 1")
         swipe(page, (330, 450), (60, 450))
-        page.wait_for_timeout(200)
+        page.wait_for_timeout(400)
         assert count.inner_text() == "2 / 4"
     finally:
         session.detach()
@@ -243,11 +247,6 @@ def test_a_selected_tile_opens_full_size_and_can_be_let_go(phone_page) -> None:
     tile.tap()
     bar = page.locator(".reel-moves")
     bar.wait_for(state="visible")
-
-    # The stage is as tall as its picture at the screen's width, not a
-    # screen tall.
-    stage = page.locator(".images-tab .preview-stage--large").bounding_box()
-    assert stage["height"] <= stage["width"] + 2
 
     bar.get_by_role("button", name="View").tap()
     count = page.locator(".lightbox__count")
@@ -331,3 +330,23 @@ def test_the_ai_failure_toast_stays_put_while_the_tab_is_swiped(phone_page) -> N
         session.detach()
     assert during["x"] == pytest.approx(before["x"], abs=1)
     assert during["y"] == pytest.approx(before["y"], abs=1)
+
+
+def test_adjust_opens_the_preview_in_a_sheet_ready_to_position(phone_page) -> None:
+    page = phone_page
+    _open_editor(page, "Listing Images")
+    page.locator(".rtile__face").first.tap()
+    page.locator(".reel-moves").get_by_role("button", name="Adjust").tap()
+
+    sheet = page.get_by_role("dialog", name="flat-lay-01 · black")
+    switch = sheet.get_by_role("switch", name="Adjust position")
+    switch.wait_for(state="visible")
+    assert switch.get_attribute("aria-checked") == "true"
+    page.wait_for_timeout(500)  # the sheet's slide up
+    # The whole picture on screen, under the sheet's title.
+    stage = sheet.locator(".preview-stage").bounding_box()
+    assert stage["y"] + stage["height"] <= page.viewport_size["height"]
+
+    sheet.get_by_role("button", name="Done").tap()
+    sheet.wait_for(state="detached")
+    assert page.locator(".reel-moves").is_visible()

@@ -205,6 +205,24 @@ describe("MediaReel's drag", () => {
     expect(props.onReorder).toHaveBeenCalledWith(0, 2);
   });
 
+  it("keeps the drop from the browser, which would open the dropped picture", () => {
+    const props = reel({ media: THREE });
+    const [first, , third] = tiles();
+
+    fireEvent.dragStart(first as HTMLElement);
+    fireEvent.dragOver(third as HTMLElement);
+    // fireEvent answers false when the handler cancelled the default.
+    expect(fireEvent.drop(third as HTMLElement)).toBe(false);
+    expect(props.onReorder).toHaveBeenCalledWith(0, 2);
+  });
+
+  it("carries the tile rather than the picture inside it", () => {
+    reel({ media: THREE });
+    for (const picture of document.querySelectorAll(".rtile img")) {
+      expect(picture).toHaveAttribute("draggable", "false");
+    }
+  });
+
   it("reports nothing for a drop with no drag behind it", () => {
     const props = reel({ media: THREE });
     fireEvent.drop(tiles()[1] as HTMLElement);

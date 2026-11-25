@@ -12,6 +12,7 @@ import { listingDetail } from "../test/listings";
 import { AUTOSAVE_DEBOUNCE_MS } from "../hooks/writeLoop";
 import { controlledClock } from "../test/clock";
 import { type Deferred, deferred, must } from "../test/helpers";
+import { onPhone } from "../test/touch";
 
 function detail(over: Partial<ListingDetail> = {}): ListingDetail {
   return listingDetail(over);
@@ -189,6 +190,40 @@ describe("ListingEditorPage", () => {
       renderAt("/listings/take-a-hike?batch=b1");
 
       expect(await screen.findByRole("button", { name: "Mark reviewed" })).toBeDisabled();
+    });
+
+    it("goes back to the batch, not Listings, after deleting a draft", async () => {
+      vi.spyOn(listingsApi, "getListing").mockResolvedValue(detail({ gestures: ["delete"] }));
+      vi.spyOn(batchesApi, "getListingBatch").mockResolvedValue(MEMBER);
+      const del = vi.spyOn(listingsApi, "deleteListing").mockResolvedValue(null);
+      renderAt("/listings/take-a-hike?batch=b1");
+
+      fireEvent.click(await screen.findByRole("button", { name: "Delete" }));
+      fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Delete" }));
+
+      expect(await screen.findByText("batch summary")).toBeInTheDocument();
+      expect(screen.queryByText("listings page")).toBeNull();
+      expect(del).toHaveBeenCalledWith("take-a-hike");
+    });
+
+    it("puts Mark reviewed beside Deploy on a phone, not behind ⋯", async () => {
+      onPhone();
+      try {
+        vi.spyOn(listingsApi, "getListing").mockResolvedValue(detail());
+        vi.spyOn(batchesApi, "getListingBatch").mockResolvedValue(MEMBER);
+        const { container } = renderAt("/listings/take-a-hike?batch=b1");
+
+        const mark = await screen.findByRole("button", { name: "Mark reviewed" });
+        expect(mark.closest(".page-head__actions")).not.toBeNull();
+        fireEvent.click(screen.getByRole("button", { name: "More actions" }));
+        const sheet = within(
+          must(container.ownerDocument.querySelector<HTMLElement>(".head-more__list")),
+        );
+        expect(sheet.getByRole("button", { name: "Create listing template" })).toBeVisible();
+        expect(sheet.queryByRole("button", { name: "Mark reviewed" })).toBeNull();
+      } finally {
+        vi.unstubAllGlobals();
+      }
     });
 
     it("offers neither for a listing no batch made", async () => {

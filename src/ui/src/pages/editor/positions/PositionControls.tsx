@@ -30,7 +30,12 @@ export function PositionControls({
       )}
       {!positioning.on && children}
       {positioning.reset !== null && (
-        <button type="button" className="tp-link" onClick={positioning.reset.run}>
+        <button
+          type="button"
+          className="tp-link"
+          disabled={positioning.reset.run === null}
+          onClick={positioning.reset.run ?? undefined}
+        >
           {positioning.reset.label}
         </button>
       )}

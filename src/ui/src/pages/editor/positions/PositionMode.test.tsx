@@ -7,6 +7,8 @@ import * as settingsApi from "../../../api/workspaceSettings";
 import { listingDetail } from "../../../test/listings";
 import type { ListingDetail, TemplateConfigState, TemplateSummary } from "../../../types";
 import { must } from "../../../test/helpers";
+import { onPhone } from "../../../test/touch";
+import { PHONE_LANDSCAPE_QUERY, PHONE_QUERY } from "../../../phone/usePhone";
 import { ImagesTab } from "../ImagesTab";
 import { type LiveRenderer, createLiveRenderer } from "./liveRenderer";
 import { type Quad, compose, decompose } from "./pose";
@@ -660,5 +662,133 @@ describe("the gallery", () => {
     expect(screen.getAllByTitle("This listing positions the design on this template")).toHaveLength(
       2,
     );
+  });
+});
+
+describe("on a phone held upright", () => {
+  beforeEach(() => onPhone());
+  afterEach(() => vi.unstubAllGlobals());
+
+  const bar = () => must(document.querySelector<HTMLElement>(".reel-moves"));
+
+  it("shows the gallery alone, with no preview pane under it", async () => {
+    mount();
+    await selectTile("folded · black");
+    expect(within(bar()).getByRole("button", { name: "View" })).toBeInTheDocument();
+    expect(document.querySelector(".preview-pane")).toBeNull();
+  });
+
+  it("opens the preview full screen from Adjust, already adjusting", async () => {
+    mount();
+    await selectTile("folded · black");
+    fireEvent.click(await within(bar()).findByRole("button", { name: "Adjust" }));
+
+    const sheet = await screen.findByRole("dialog", { name: "folded · black" });
+    expect(within(sheet).getByRole("switch", { name: "Adjust position" })).toHaveAttribute(
+      "aria-checked",
+      "true",
+    );
+    expect(
+      await within(sheet).findByRole("button", { name: /position — drag to move/ }),
+    ).toBeInTheDocument();
+
+    expect(sheet).toHaveClass("phone-screen");
+
+    fireEvent.click(within(sheet).getByRole("button", { name: "Done" }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    // Back to the gallery as it was, the tile still selected.
+    expect(within(bar()).getByRole("button", { name: "Adjust" })).toBeInTheDocument();
+  });
+
+  it("closes on Escape too, keeping the tile selected", async () => {
+    mount();
+    await selectTile("folded · black");
+    fireEvent.click(await within(bar()).findByRole("button", { name: "Adjust" }));
+    await screen.findByRole("dialog", { name: "folded · black" });
+
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(document.querySelector(".reel-moves")).not.toBeNull();
+  });
+
+  it("keeps the same foot with the switch off: the note, and Reset, but no Remove", async () => {
+    mount();
+    await selectTile("folded · black");
+    fireEvent.click(await within(bar()).findByRole("button", { name: "Adjust" }));
+    const sheet = await screen.findByRole("dialog", { name: "folded · black" });
+    const foot = () => must(sheet.querySelector<HTMLElement>(".preview-foot"));
+    const note = "Applies to all 2 folded colours in this listing";
+
+    // Nothing moved yet: Reset is there, with nothing to do.
+    expect(within(foot()).getByRole("button", { name: "Reset to template" })).toBeDisabled();
+    expect(within(foot()).getByText(note)).toBeInTheDocument();
+
+    fireEvent.click(within(sheet).getByRole("switch", { name: "Adjust position" }));
+    expect(within(sheet).getByRole("switch", { name: "Adjust position" })).toHaveAttribute(
+      "aria-checked",
+      "false",
+    );
+    expect(within(foot()).getByText(note)).toBeInTheDocument();
+    expect(within(foot()).getByRole("button", { name: "Reset to template" })).toBeDisabled();
+    expect(within(foot()).queryByRole("button", { name: /from listing/ })).toBeNull();
+  });
+
+  it("resets a moved design from the switch off too", async () => {
+    const moved = compose(FOLDED_BOX, { scale: 0.9, offsetX: 0.05, offsetY: 0, rotation: 4 });
+    const { onUpdate } = mount(detail({ template_positions: { folded: { bounding_box: moved } } }));
+    await selectTile("folded · black");
+    fireEvent.click(await within(bar()).findByRole("button", { name: "Adjust" }));
+    const sheet = await screen.findByRole("dialog", { name: "folded · black" });
+    fireEvent.click(within(sheet).getByRole("switch", { name: "Adjust position" }));
+
+    fireEvent.click(within(sheet).getByRole("button", { name: "Reset to template" }));
+    expect(onUpdate).toHaveBeenCalledWith({ template_positions: null });
+  });
+
+  it("closes when the tile is let go, and opens again only on Adjust", async () => {
+    mount();
+    await selectTile("folded · black");
+    fireEvent.click(await within(bar()).findByRole("button", { name: "Adjust" }));
+    await screen.findByRole("dialog", { name: "folded · black" });
+
+    fireEvent.click(within(bar()).getByRole("button", { name: "Done" }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    await selectTile("folded · white");
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("offers no Adjust for a file, which has no design to position", async () => {
+    vi.spyOn(listingsApi, "listCommonMedia").mockResolvedValue([
+      {
+        name: "size-chart.png",
+        file: "common-media/size-chart.png",
+        ref: "common-media/size-chart.png",
+        kind: "image",
+      },
+    ]);
+    mount();
+    await selectTile("size-chart");
+    await within(bar()).findByRole("button", { name: "View" });
+    expect(within(bar()).queryByRole("button", { name: "Adjust" })).toBeNull();
+  });
+});
+
+describe("on a phone held sideways", () => {
+  beforeEach(() => {
+    vi.stubGlobal("matchMedia", (query: string) => ({
+      matches: query === PHONE_QUERY || query === PHONE_LANDSCAPE_QUERY,
+      addEventListener: () => undefined,
+      removeEventListener: () => undefined,
+    }));
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("keeps the preview pane beside the gallery, and no Adjust", async () => {
+    mount();
+    await selectTile("folded · black");
+    expect(await adjustSwitch()).toBeInTheDocument();
+    expect(document.querySelector(".preview-pane")).not.toBeNull();
+    const moves = must(document.querySelector<HTMLElement>(".reel-moves"));
+    expect(within(moves).queryByRole("button", { name: "Adjust" })).toBeNull();
   });
 });
