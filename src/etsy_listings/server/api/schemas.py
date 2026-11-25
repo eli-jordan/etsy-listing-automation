@@ -784,6 +784,10 @@ class ListingBatch(BaseModel):
 class _CreateRunRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    publish: bool = False
+    """Publish new and still-draft listings on Etsy rather than leave drafts.
+    Off unless asked; an apply must repeat what its reviewed plan chose."""
+
 
 class ListingPlanRequest(_CreateRunRequest):
     kind: Literal["plan"]
@@ -851,6 +855,8 @@ class _RunSummary(BaseModel):
     seen: bool
     reviewed_run_id: str | None
     created_at: datetime
+    publish: bool = False
+    """Whether this run publishes new and still-draft listings."""
     waiting_for_backup: bool = False
     """Held by a backup's pause (workspace-backup plan, decision P4): accepted
     and queued, starting once the backup step ends. Never stored."""

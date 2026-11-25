@@ -679,6 +679,11 @@
             "title": "Phase",
             "type": "string"
           },
+          "publish": {
+            "default": false,
+            "title": "Publish",
+            "type": "boolean"
+          },
           "reviewed_run_id": {
             "anyOf": [
               {
@@ -767,6 +772,11 @@
             ],
             "title": "Phase",
             "type": "string"
+          },
+          "publish": {
+            "default": false,
+            "title": "Publish",
+            "type": "boolean"
           },
           "reviewed_run_id": {
             "anyOf": [
@@ -1523,6 +1533,11 @@
             "title": "Listings",
             "type": "array"
           },
+          "publish": {
+            "default": false,
+            "title": "Publish",
+            "type": "boolean"
+          },
           "reviewed_run_id": {
             "title": "Reviewed Run Id",
             "type": "string"
@@ -1717,6 +1732,11 @@
             "const": "plan",
             "title": "Kind",
             "type": "string"
+          },
+          "publish": {
+            "default": false,
+            "title": "Publish",
+            "type": "boolean"
           },
           "scope": {
             "const": "batch",
@@ -2932,6 +2952,68 @@
         "title": "DriftDTO",
         "type": "object"
       },
+      "EtsyActivateStagePlanDTO": {
+        "additionalProperties": false,
+        "description": "Only in a run that asked to publish drafts (``publishing_pipeline``).",
+        "properties": {
+          "drift": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/DriftDTO"
+            },
+            "title": "Drift",
+            "type": "array"
+          },
+          "group": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Group"
+          },
+          "outcome": {
+            "discriminator": {
+              "mapping": {
+                "blocked": "#/components/schemas/BlockedOutcomeDTO",
+                "idle": "#/components/schemas/IdleOutcomeDTO",
+                "work": "#/components/schemas/WorkOutcomeDTO"
+              },
+              "propertyName": "type"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/IdleOutcomeDTO"
+              },
+              {
+                "$ref": "#/components/schemas/WorkOutcomeDTO"
+              },
+              {
+                "$ref": "#/components/schemas/BlockedOutcomeDTO"
+              }
+            ],
+            "title": "Outcome"
+          },
+          "snapshot": {
+            "title": "Snapshot",
+            "type": "null"
+          },
+          "stage": {
+            "const": "etsy_activate",
+            "default": "etsy_activate",
+            "title": "Stage",
+            "type": "string"
+          }
+        },
+        "required": [
+          "outcome"
+        ],
+        "title": "EtsyActivateStagePlanDTO",
+        "type": "object"
+      },
       "EtsyListingConfig": {
         "additionalProperties": false,
         "properties": {
@@ -3765,6 +3847,11 @@
             "title": "Listings",
             "type": "array"
           },
+          "publish": {
+            "default": false,
+            "title": "Publish",
+            "type": "boolean"
+          },
           "scope": {
             "const": "listings",
             "title": "Scope",
@@ -4217,6 +4304,11 @@
             "minItems": 1,
             "title": "Listings",
             "type": "array"
+          },
+          "publish": {
+            "default": false,
+            "title": "Publish",
+            "type": "boolean"
           },
           "scope": {
             "const": "listings",
@@ -5738,6 +5830,7 @@
             "items": {
               "discriminator": {
                 "mapping": {
+                  "etsy_activate": "#/components/schemas/EtsyActivateStagePlanDTO",
                   "etsy_listing": "#/components/schemas/EtsyListingStagePlanDTO",
                   "etsy_media": "#/components/schemas/EtsyMediaStagePlanDTO",
                   "etsy_videos": "#/components/schemas/EtsyVideosStagePlanDTO",
@@ -5769,6 +5862,9 @@
                 },
                 {
                   "$ref": "#/components/schemas/RetractStagePlanDTO"
+                },
+                {
+                  "$ref": "#/components/schemas/EtsyActivateStagePlanDTO"
                 }
               ]
             },
@@ -5885,6 +5981,11 @@
             "title": "Phase",
             "type": "string"
           },
+          "publish": {
+            "default": false,
+            "title": "Publish",
+            "type": "boolean"
+          },
           "reviewed_run_id": {
             "title": "Reviewed Run Id",
             "type": "null"
@@ -5967,6 +6068,11 @@
             ],
             "title": "Phase",
             "type": "string"
+          },
+          "publish": {
+            "default": false,
+            "title": "Publish",
+            "type": "boolean"
           },
           "reviewed_run_id": {
             "title": "Reviewed Run Id",
@@ -8639,6 +8745,7 @@
           "stage_plan": {
             "discriminator": {
               "mapping": {
+                "etsy_activate": "#/components/schemas/EtsyActivateStagePlanDTO",
                 "etsy_listing": "#/components/schemas/EtsyListingStagePlanDTO",
                 "etsy_media": "#/components/schemas/EtsyMediaStagePlanDTO",
                 "etsy_videos": "#/components/schemas/EtsyVideosStagePlanDTO",
@@ -8670,6 +8777,9 @@
               },
               {
                 "$ref": "#/components/schemas/RetractStagePlanDTO"
+              },
+              {
+                "$ref": "#/components/schemas/EtsyActivateStagePlanDTO"
               }
             ],
             "title": "Stage Plan"
@@ -9498,6 +9608,11 @@
             "title": "Listings",
             "type": "array"
           },
+          "publish": {
+            "default": false,
+            "title": "Publish",
+            "type": "boolean"
+          },
           "reviewed_run_id": {
             "title": "Reviewed Run Id",
             "type": "string"
@@ -9525,6 +9640,11 @@
             "const": "plan",
             "title": "Kind",
             "type": "string"
+          },
+          "publish": {
+            "default": false,
+            "title": "Publish",
+            "type": "boolean"
           },
           "scope": {
             "const": "workspace",
@@ -9811,7 +9931,7 @@
         ]
       },
       "patch": {
-        "description": "Save ``changes`` against ``revision``. Wider template position limits\nqueue, after the response, coverage inference for each positioned Marigold\ntemplate whose evidence misses them (option B, ADR-0058); narrowing\nqueues nothing.",
+        "description": "Save ``changes`` against ``revision``: 412 when the file changed since,\n422 for an edit it refuses. What the save sets off is ``settings_save``'s;\nthis hands it the host's coordinators, and coverage jobs it queues are\nqueued after the response.",
         "operationId": "edit_settings_api_admin_settings_patch",
         "requestBody": {
           "content": {

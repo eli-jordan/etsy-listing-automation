@@ -209,6 +209,11 @@ class Stage(Protocol[D, A, L]):
     # each mapped to a file already holding those bytes or `None`. Optional
     # for the same reason, and asked only when the stage will run;
     # `build_plan` hands the answer to later stages as `RunContext.rewrites`.
+    #
+    # A `needs_every_earlier_stage` attribute set to True blocks the stage,
+    # without asking it, while any earlier stage in the walk is blocked.
+    # `etsy_activate` declares it: a listing goes live only once everything
+    # before it can run.
 
 
 AnyStage = Stage[Any, Any, Any]

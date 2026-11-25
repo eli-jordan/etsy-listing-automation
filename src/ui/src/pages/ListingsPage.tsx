@@ -221,7 +221,7 @@ export function ListingsPage() {
   const startBatchPlan = useCallback(async () => {
     setStatus("");
     try {
-      const result = await createRun({ kind: "plan", scope: "workspace" });
+      const result = await createRun({ kind: "plan", scope: "workspace", publish: false });
       if (result.kind === "created") {
         navigate(`/listings/deploy/${encodeURIComponent(result.run.id)}`);
         return;

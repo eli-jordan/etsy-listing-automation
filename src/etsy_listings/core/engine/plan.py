@@ -108,8 +108,15 @@ def build_plan(
             on_event(EngineStageChecking(listing, state.stage.name))
             on_event(EngineStagePlanned(listing, state.stage_plan))
         return planned
-    states = []
+    states: list[StageState] = []
     for stage in decision.stages:
+        held = _held_by_earlier_block(stage, states)
+        if held is not None:
+            state = held
+            on_event(EngineStageChecking(listing, stage.name))
+            on_event(EngineStagePlanned(listing, state.stage_plan))
+            states.append(state)
+            continue
         state = _walk(ctx, listing, lock, stage, on_event=on_event)
         states.append(state)
         rewrites = _rewrites(ctx, state)
@@ -117,6 +124,29 @@ def build_plan(
             ctx = replace(ctx, rewrites={**ctx.rewrites, **rewrites})
 
     return _assemble(listing, lock, tuple(states), published=decision.published)
+
+
+def _held_by_earlier_block(stage: AnyStage, earlier: list[StageState]) -> StageState | None:
+    """A stage that declares ``needs_every_earlier_stage`` is blocked, without
+    being asked, while any stage before it is. ``etsy_activate`` is the one:
+    publishing a listing whose images could not be uploaded would show buyers
+    Printify's mockups. Optional, like ``snapshot``."""
+    if not getattr(stage, "needs_every_earlier_stage", False):
+        return None
+    blocker = next((state for state in earlier if state.stage_plan.blocked is not None), None)
+    if blocker is None:
+        return None
+    message = (
+        f"this listing will stay a draft on Etsy: the {blocker.stage.name} stage is blocked.\n"
+        f"Fix what {blocker.stage.name} reports, then apply again."
+    )
+    return StageState(
+        stage=stage,
+        desired=Blocked(message),
+        applied=None,
+        live=None,
+        stage_plan=StagePlan.block(stage.name, message, group=stage.group),
+    )
 
 
 def _all_blocked(

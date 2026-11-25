@@ -114,6 +114,7 @@ def _summary(run: Run, deployments: Deployments) -> RunSummary:
             phase=run.plan_phase,
             seen=run.seen,
             created_at=run.created_at,
+            publish=run.publish,
             waiting_for_backup=waiting,
         )
     return ApplyRunSummary(
@@ -126,6 +127,7 @@ def _summary(run: Run, deployments: Deployments) -> RunSummary:
         seen=run.seen,
         reviewed_run_id=run.reviewed_run_id,
         created_at=run.created_at,
+        publish=run.publish,
         waiting_for_backup=waiting,
     )
 
@@ -148,21 +150,29 @@ def create_run(request: Request, body: CreateRunRequest) -> RunSummary | JSONRes
     workspace: Workspace = request.app.state.workspace
     command: RunCommand
     if isinstance(body, ListingPlanRequest):
-        command = ListingPlan(tuple(body.listings))
+        command = ListingPlan(tuple(body.listings), publish=body.publish)
     elif isinstance(body, WorkspacePlanRequest):
-        command = WorkspacePlan(tuple(workspace.listing_names()))
+        command = WorkspacePlan(tuple(workspace.listing_names()), publish=body.publish)
     elif isinstance(body, BatchPlanRequest):
         listings = batch_workflow.batch_deploy_listings(
             workspace, app_state.batch_store(request), body.batch_id
         )
-        command = BatchPlan(body.batch_id, listings)
+        command = BatchPlan(body.batch_id, listings, publish=body.publish)
     elif isinstance(body, ListingApplyRequest):
-        command = ListingApply(tuple(body.listings), body.expect)
+        command = ListingApply(tuple(body.listings), body.expect, publish=body.publish)
     elif isinstance(body, BatchApplyRequest):
-        command = BatchApply(body.batch_id, tuple(body.listings), body.expect, body.reviewed_run_id)
+        command = BatchApply(
+            body.batch_id,
+            tuple(body.listings),
+            body.expect,
+            body.reviewed_run_id,
+            publish=body.publish,
+        )
     else:
         assert isinstance(body, WorkspaceApplyRequest)  # closed request union
-        command = WorkspaceApply(tuple(body.listings), body.expect, body.reviewed_run_id)
+        command = WorkspaceApply(
+            tuple(body.listings), body.expect, body.reviewed_run_id, publish=body.publish
+        )
 
     deployments = _deployments(request)
     result = deployments.submit(command)

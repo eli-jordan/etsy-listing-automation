@@ -72,7 +72,7 @@ from etsy_listings.core.engine.run import (
     preview_listing,
 )
 from etsy_listings.core.engine.stage import AnyStage
-from etsy_listings.core.engine.stages import STAGES
+from etsy_listings.core.engine.stages import STAGES, publishing_pipeline
 from etsy_listings.core.errors import INTERNAL_ERROR_MESSAGE
 from etsy_listings.core.workspace.workspace import Workspace
 
@@ -151,6 +151,11 @@ class RunExecutor:
             return self._stop.is_set()
         return run.cancel_requested or self._stop.is_set()
 
+    def _pipeline(self, run: Run) -> list[AnyStage]:
+        """This run's stages: the draft-only pipeline, plus ``etsy_activate``
+        when the run asked to publish."""
+        return publishing_pipeline(self.stages, publish=run.publish)
+
     def _yield_to_deploy(self, listings: Sequence[str]) -> AbstractContextManager[None]:
         return nullcontext() if self.ai is None else self.ai.yield_to_deploy(listings)
 
@@ -197,7 +202,7 @@ class RunExecutor:
             return self._should_stop(run)
 
         report = plan_listings(
-            ctx, run.listings, self.stages, hooks=RunHooks(on_event=emit, should_stop=stop)
+            ctx, run.listings, self._pipeline(run), hooks=RunHooks(on_event=emit, should_stop=stop)
         )
 
         if self._should_stop(run):
@@ -235,7 +240,7 @@ class RunExecutor:
         # image that differs from one that came out identical. The later
         # `listing_planned` supersedes the first, fingerprint included.
         if previewed and not self._should_stop(run):
-            plan_listings(ctx, previewed, self.stages, hooks=hooks)
+            plan_listings(ctx, previewed, self._pipeline(run), hooks=hooks)
 
     # ------------------------------------------------------------- apply runs
 
@@ -249,7 +254,7 @@ class RunExecutor:
         report = apply_listings(
             ctx,
             run.listings,
-            self.stages,
+            self._pipeline(run),
             expect=run.expect,
             hooks=RunHooks(on_event=emit, should_stop=lambda: self._should_stop(run)),
         )

@@ -310,6 +310,13 @@ class RetractStagePlanDTO(_StagePlanDTO):
     snapshot: None = None
 
 
+class EtsyActivateStagePlanDTO(_StagePlanDTO):
+    """Only in a run that asked to publish drafts (``publishing_pipeline``)."""
+
+    stage: Literal["etsy_activate"] = "etsy_activate"
+    snapshot: None = None
+
+
 StagePlanDTO = Annotated[
     RenderStagePlanDTO
     | ProductStagePlanDTO
@@ -317,7 +324,8 @@ StagePlanDTO = Annotated[
     | EtsyListingStagePlanDTO
     | EtsyMediaStagePlanDTO
     | EtsyVideosStagePlanDTO
-    | RetractStagePlanDTO,
+    | RetractStagePlanDTO
+    | EtsyActivateStagePlanDTO,
     Field(discriminator="stage"),
 ]
 
@@ -384,12 +392,15 @@ def stage_plan_dto(
     | EtsyMediaStagePlanDTO
     | EtsyVideosStagePlanDTO
     | RetractStagePlanDTO
+    | EtsyActivateStagePlanDTO
 ):
     fields = _stage_plan_fields(stage_plan)
-    if stage_plan.stage == "retract":
+    if stage_plan.stage in {"retract", "etsy_activate"}:
         if stage_plan.snapshot is not None:
-            raise TypeError("retract does not have a snapshot")
-        return RetractStagePlanDTO(**fields)
+            raise TypeError(f"{stage_plan.stage} does not have a snapshot")
+        if stage_plan.stage == "retract":
+            return RetractStagePlanDTO(**fields)
+        return EtsyActivateStagePlanDTO(**fields)
     if stage_plan.stage not in _SNAPSHOT_STAGES:
         raise ValueError(f"unknown stage {stage_plan.stage!r}")
     dto, expected = _SNAPSHOT_STAGES[stage_plan.stage]

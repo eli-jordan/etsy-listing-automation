@@ -55,17 +55,22 @@ so :meth:`RunRegistry.drain_and_cancel` finds no run for it and skips it."""
 @dataclass(frozen=True)
 class ListingPlan:
     listings: tuple[str, ...]
+    publish: bool = False
+    """Publish new and still-draft listings rather than leave drafts
+    (``publishing_pipeline``). Opt-in; a plan and the apply it reviews agree."""
 
 
 @dataclass(frozen=True)
 class WorkspacePlan:
     listings: tuple[str, ...]
+    publish: bool = False  # as ListingPlan.publish
 
 
 @dataclass(frozen=True)
 class ListingApply:
     listings: tuple[str, ...]
     expect: Mapping[str, str]
+    publish: bool = False  # as ListingPlan.publish
 
 
 @dataclass(frozen=True)
@@ -73,6 +78,7 @@ class WorkspaceApply:
     listings: tuple[str, ...]
     expect: Mapping[str, str]
     reviewed_run_id: str
+    publish: bool = False  # as ListingPlan.publish
 
 
 @dataclass(frozen=True)
@@ -83,6 +89,7 @@ class BatchPlan:
 
     batch_id: str
     listings: tuple[str, ...]
+    publish: bool = False  # as ListingPlan.publish
 
 
 @dataclass(frozen=True)
@@ -91,6 +98,7 @@ class BatchApply:
     listings: tuple[str, ...]
     expect: Mapping[str, str]
     reviewed_run_id: str
+    publish: bool = False  # as ListingPlan.publish
 
 
 RunCommand = ListingPlan | WorkspacePlan | BatchPlan | ListingApply | WorkspaceApply | BatchApply
@@ -174,6 +182,10 @@ class Run:
         if isinstance(self.command, ListingApply | WorkspaceApply | BatchApply):
             return self.command.expect
         return None
+
+    @property
+    def publish(self) -> bool:
+        return self.command.publish
 
     @property
     def reviewed_run_id(self) -> str | None:

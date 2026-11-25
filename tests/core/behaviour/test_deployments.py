@@ -85,10 +85,12 @@ def idle(workspace: Workspace) -> Deployments:
     return Deployments(workspace, _context)
 
 
-def _reviewed_workspace_plan(deployments: Deployments, *listings: str) -> Run:
+def _reviewed_workspace_plan(
+    deployments: Deployments, *listings: str, publish: bool = False
+) -> Run:
     """A ready workspace plan that reviewed ``listings``, each at
     :data:`FINGERPRINT`, without executing it."""
-    run = _run(deployments.submit(WorkspacePlan(listings)))
+    run = _run(deployments.submit(WorkspacePlan(listings, publish=publish)))
     run.transition_plan("planning")
     for name in listings:
         plan = PlanDTO(listing=name, is_live=False, etsy_listing_id=None, stage_plans=())
@@ -190,6 +192,24 @@ def test_a_workspace_apply_differing_from_the_reviewed_set_is_refused(
         idle.submit(WorkspaceApply(listings, expect, reviewed.id))
 
     assert idle.runs(scope="workspace") == [reviewed], "a refusal queues nothing"
+
+
+@pytest.mark.parametrize("planned", [False, True], ids=["apply-adds-publish", "apply-drops-it"])
+def test_a_workspace_apply_must_repeat_its_reviews_publish_choice(
+    idle: Deployments, *, planned: bool
+) -> None:
+    reviewed = _reviewed_workspace_plan(idle, "a", publish=planned)
+
+    with pytest.raises(ReviewedPlanRefusedError, match="publish drafts exactly when"):
+        idle.submit(WorkspaceApply(("a",), {"a": FINGERPRINT}, reviewed.id, publish=not planned))
+
+
+def test_a_workspace_apply_that_publishes_as_reviewed_is_queued(idle: Deployments) -> None:
+    reviewed = _reviewed_workspace_plan(idle, "a", publish=True)
+
+    run = _run(idle.submit(WorkspaceApply(("a",), {"a": FINGERPRINT}, reviewed.id, publish=True)))
+
+    assert run.publish is True
 
 
 def test_a_listing_planned_again_after_its_previews_is_reviewed_at_its_later_fingerprint(

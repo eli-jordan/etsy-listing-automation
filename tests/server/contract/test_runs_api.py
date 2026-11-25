@@ -149,6 +149,30 @@ def test_create_a_plan_run_returns_202_and_a_summary(client: TestClient) -> None
     _wait_until_terminal(client, body["id"])
 
 
+def test_a_run_publishes_drafts_only_when_asked(client: TestClient) -> None:
+    """Opt-in: omitted is today's draft-only run; ``publish`` adds the
+    ``etsy_activate`` stage to the plan the seller reviews."""
+    plain = client.post(
+        "/api/runs", json={"kind": "plan", "scope": "listings", "listings": [LISTING]}
+    ).json()
+    assert plain["publish"] is False
+    plain_detail = _wait_until_terminal(client, plain["id"])
+
+    publishing = client.post(
+        "/api/runs",
+        json={"kind": "plan", "scope": "listings", "listings": [LISTING], "publish": True},
+    ).json()
+    assert publishing["publish"] is True
+    publishing_detail = _wait_until_terminal(client, publishing["id"])
+
+    def stages(detail: dict[str, Any]) -> list[str]:
+        planned = [e for e in detail["events"] if e["type"] == "listing_planned"][-1]
+        return [sp["stage"] for sp in planned["plan"]["stage_plans"]]
+
+    assert "etsy_activate" not in stages(plain_detail)
+    assert stages(publishing_detail)[-1] == "etsy_activate"
+
+
 def test_a_workspace_plan_resolves_sorted_names_on_the_server(
     workspace_root: Path, client: TestClient
 ) -> None:
