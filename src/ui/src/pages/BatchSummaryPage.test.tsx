@@ -467,7 +467,12 @@ describe("BatchSummaryPage, a created listing's name", () => {
 
     fireEvent.click(await screen.findByRole("button", { name: "Deploy reviewed (1)" }));
 
-    expect(create).toHaveBeenCalledWith({ kind: "plan", scope: "batch", batch_id: "b1" });
+    expect(create).toHaveBeenCalledWith({
+      kind: "plan",
+      scope: "batch",
+      batch_id: "b1",
+      publish: false,
+    });
     expect(await screen.findByText("Deploy review page")).toBeInTheDocument();
   });
 

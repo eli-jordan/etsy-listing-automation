@@ -36,7 +36,15 @@ def check_reviewed_apply(reviewed: Run | None, command: ReviewedApply) -> None:
         raise ReviewedPlanRefusedError(f"reviewed_run_id is not a {scope} plan")
     if reviewed.phase != "ready":
         raise ReviewedPlanRefusedError(f"reviewed {scope} plan is not ready")
+    _check_same_listings(reviewed, command, scope)
 
+
+def _check_same_listings(reviewed: Run, command: ReviewedApply, scope: str) -> None:
+    """The publish choice, listings and fingerprints the review showed."""
+    if reviewed.publish != command.publish:
+        raise ReviewedPlanRefusedError(
+            f"apply must publish drafts exactly when the reviewed {scope} plan did"
+        )
     # A listing planned again after its previews rendered has a second event;
     # the later one is what the seller reviewed, in first-planned order.
     fingerprints: dict[str, str] = {}

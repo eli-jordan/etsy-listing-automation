@@ -60,6 +60,7 @@ uv run etsy-listings plan <listing-name>    # diff against live state
 uv run etsy-listings plan --all
 uv run etsy-listings apply <listing-name>   # execute the plan; writes state.lock.json
 uv run etsy-listings apply --all
+uv run etsy-listings apply --all --publish  # also publish new and still-draft listings (opt-in)
 uv run etsy-listings unlock <listing-name>  # clear a stuck Printify publish
 uv run etsy-listings ui --root <workspace>  # serves the UI at :8000
 uv run etsy-listings marigold setup        # explicit native GPU worker + weights

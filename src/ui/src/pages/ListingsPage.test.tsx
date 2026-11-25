@@ -76,6 +76,7 @@ describe("ListingsPage", () => {
         seen: false,
         reviewed_run_id: null,
         created_at: "2026-09-21T10:00:00Z",
+        publish: false,
         waiting_for_backup: false,
       },
     });
@@ -86,7 +87,11 @@ describe("ListingsPage", () => {
     fireEvent.click(deploy);
 
     await waitFor(() =>
-      expect(runsApi.createRun).toHaveBeenCalledWith({ kind: "plan", scope: "workspace" }),
+      expect(runsApi.createRun).toHaveBeenCalledWith({
+        kind: "plan",
+        scope: "workspace",
+        publish: false,
+      }),
     );
     expect(await screen.findByText("batch review route")).toBeInTheDocument();
   });
@@ -103,6 +108,7 @@ describe("ListingsPage", () => {
       seen: false,
       reviewed_run_id: null,
       created_at: "2026-09-21T10:00:00Z",
+      publish: false,
       waiting_for_backup: false,
       events: [],
     });
@@ -149,6 +155,7 @@ describe("ListingsPage", () => {
       seen: false,
       reviewed_run_id: "batch-plan",
       created_at: "2026-09-21T10:00:00Z",
+      publish: false,
       waiting_for_backup: false,
     });
     renderPage();

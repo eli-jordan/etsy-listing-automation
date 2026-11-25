@@ -829,7 +829,9 @@ The video stage follows images because attachment position depends on image
 count. PyAV facts feed shared local video checks before original bytes are
 uploaded; vendor slot/budget refusals remain distinct from local validation.
 Printify creates the Etsy draft; Etsy stages then own copy, image and video
-updates. Selective publish flags and field ownership prevent Printify from
+updates. A run that opts in to publishing appends `etsy_activate`
+last, which activates a new or still-draft listing once no earlier stage is
+blocked (deploy spec §12). Selective publish flags and field ownership prevent Printify from
 overwriting Etsy-owned content (ADR-0001, ADR-0021).
 
 ## Invariants
