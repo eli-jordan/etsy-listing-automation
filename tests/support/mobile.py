@@ -52,6 +52,11 @@ def swipe(page, start: tuple[float, float], end: tuple[float, float], steps: int
     sees ``pointerType == "touch"`` pointers exactly as from a real finger --
     Playwright's own touchscreen only taps. About 16ms a step, so the default
     is a brisk, deliberate swipe.
+
+    After a drag dispatched this way, Chromium's touch emulation drops the
+    ``click`` of the next touch tap about half the time -- on a bare HTML page
+    with no app code too, and still 800ms later -- so a test that taps after a
+    swipe uses ``locator.click()`` for that step, not ``locator.tap()``.
     """
     session = page.context.new_cdp_session(page)
     try:
