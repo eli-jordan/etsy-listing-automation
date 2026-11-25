@@ -236,10 +236,15 @@ export function StagingPage() {
   return (
     <>
       <div className="page-head">
-        <Link className="page-head__crumb" to="/listing-templates">
-          Listing templates
-        </Link>
-        <span className="page-head__sep">/</span>
+        {/* A phone's head carries one way back: the page this one came from. */}
+        {!isPhone && (
+          <>
+            <Link className="page-head__crumb" to="/listing-templates">
+              Listing templates
+            </Link>
+            <span className="page-head__sep">/</span>
+          </>
+        )}
         <Link
           className="page-head__crumb"
           to={`/batches/new?template=${encodeURIComponent(session?.listing_template ?? "")}`}

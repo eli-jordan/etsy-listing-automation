@@ -80,6 +80,7 @@
   }
 
   .adm-chips__page {
+    position: relative;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -91,10 +92,100 @@
     text-decoration: none;
   }
 
+  /* A 44px hit area around the 36px segment. */
+  .adm-chips__page::after {
+    content: "";
+    position: absolute;
+    inset: -4px 0;
+  }
+
   .adm-chips__page.is-active {
     background: var(--color-surface);
     color: var(--color-text);
     box-shadow: 0 1px 2px rgb(40 30 20 / 0.12);
+  }
+
+  /* — info cards: under their button, across the content width (Info's
+     placement), closed by their own ✕; the 22px (i) gets a 44px hit area — */
+  .s-info-btn {
+    position: relative;
+  }
+
+  .s-info-btn::after {
+    content: "";
+    position: absolute;
+    inset: -11px;
+  }
+
+  .sp-info .s-info--popover {
+    top: calc(100% + 10px);
+    z-index: 25;
+    max-width: none;
+    padding-right: 48px;
+  }
+
+  /* Title, explanation, effect and source each on a line of their own. */
+  .sp-info .s-info--popover > span {
+    display: block;
+  }
+
+  .sp-info .s-info--popover::before {
+    left: var(--s-info-arrow, 18px);
+  }
+
+  .s-info__close {
+    position: absolute;
+    top: 2px;
+    right: 2px;
+    display: grid;
+    place-items: center;
+    width: 44px;
+    height: 44px;
+    padding: 0;
+    border: 0;
+    border-radius: 999px;
+    background: none;
+    color: color-mix(in srgb, var(--color-text) 60%, transparent);
+  }
+
+  /* — a field's save: a toast above the tab bar (AdminPage's
+     PhoneSaveToast), since the page head scrolls away under the chips — */
+  .adm-save-toast {
+    position: fixed;
+    right: var(--space-3);
+    bottom: calc(var(--phone-tabbar-h) + var(--space-3));
+    left: var(--space-3);
+    z-index: 40;
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    min-height: 48px;
+    padding: var(--space-2) var(--space-2) var(--space-2) var(--space-4);
+    border: 1px solid var(--color-divider);
+    border-radius: var(--radius-md);
+    background: var(--color-surface);
+    box-shadow: 0 8px 24px rgb(40 30 20 / 0.18);
+  }
+
+  .adm-save-toast .adm-save {
+    flex: 1;
+    min-width: 0;
+    font-size: 14px;
+    white-space: normal;
+  }
+
+  .adm-save-toast .btn {
+    flex: none;
+    min-height: 44px;
+  }
+
+  .adm-save-toast--quiet {
+    min-height: 0;
+    padding: 0;
+    border: 0;
+    background: none;
+    box-shadow: none;
+    pointer-events: none;
   }
 
   /* — the panels: the page's width for the settings, not the card's — */
@@ -135,8 +226,8 @@
   .adm-reorder__btn {
     display: inline-grid;
     place-items: center;
-    width: 40px;
-    height: 36px;
+    width: 44px;
+    height: 44px;
     padding: 0;
     border: 1px solid var(--color-divider);
     border-radius: var(--radius-sm);
@@ -152,6 +243,21 @@
   .b-step__num {
     width: 36px;
     height: 36px;
+  }
+
+  /* A provider's number is a button: a 44px hit area around the circle. */
+  .sp-num::after {
+    content: "";
+    position: absolute;
+    inset: -4px;
+    border-radius: 50%;
+  }
+
+  /* Market SEO: a finger-wide hit area around each 18px divider. */
+  .sp-weights__divider::before {
+    content: "";
+    position: absolute;
+    inset: 0 -13px;
   }
 
   .b-step {
@@ -258,6 +364,13 @@
   .sa-scrim,
   .bk-scrim {
     place-items: end center;
+  }
+
+  /* Clear of the nav rail, at a readable width. */
+  .adm-save-toast {
+    left: calc(var(--phone-rail-w) + var(--space-3));
+    right: max(var(--space-3), env(safe-area-inset-right, 0px));
+    max-width: 600px;
   }
 
   .sa-modal,

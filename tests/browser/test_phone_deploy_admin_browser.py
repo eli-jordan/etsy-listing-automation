@@ -265,7 +265,12 @@ def test_the_listing_drawer_is_a_bottom_sheet(phone_page, expect) -> None:
     page.goto(f"{_origin(page)}/listings/deploy/w1")
     page.get_by_role("heading", name="Review all changes").wait_for(state="visible")
     assert_mobile_page_fits(page)
-    expect(page.get_by_role("button", name="← Back to listings")).to_be_visible()
+    # Back reads as every phone page's: the parent's name over the title.
+    back = page.get_by_role("button", name="Listings", exact=True)
+    expect(back).to_be_visible()
+    expect(page.get_by_role("button", name="← Back to listings")).to_have_count(0)
+    title = page.get_by_role("heading", name="Review all changes").bounding_box()
+    assert back.bounding_box()["y"] + back.bounding_box()["height"] <= title["y"]
 
     page.get_by_text("mushroom-club-tee", exact=True).first.tap()
     dialog = page.locator("dialog.batch-drawer-dialog")
@@ -336,6 +341,98 @@ def test_admin_sections_are_chips_that_a_swipe_walks_through(phone_page, expect)
     swipe(page, (60, 400), (330, 400))
     page.wait_for_timeout(300)
     assert page.url.endswith("/admin")
+
+
+def _hit_area(page, locator) -> dict[str, float]:
+    """The box a finger can hit: where ``elementFromPoint`` still lands on
+    ``locator`` (its pseudo-elements count), probed out from its centre."""
+    return locator.evaluate(
+        """(el) => {
+            const box = el.getBoundingClientRect();
+            const cx = box.left + box.width / 2, cy = box.top + box.height / 2;
+            const on = (x, y) => el.contains(document.elementFromPoint(x, y));
+            let w = 0, h = 0;
+            while (w < 60 && on(cx - w - 1, cy) && on(cx + w + 1, cy)) w += 1;
+            while (h < 60 && on(cx, cy - h - 1) && on(cx, cy + h + 1)) h += 1;
+            return {width: 2 * w + 1, height: 2 * h + 1};
+        }"""
+    )
+
+
+def test_a_failed_shop_save_shows_on_screen_with_retry(phone_page, expect) -> None:
+    page = phone_page
+
+    def fail(route) -> None:
+        if route.request.method == "PATCH":
+            route.abort()
+        else:
+            route.continue_()
+
+    page.route("**/api/admin/shop", fail)
+    page.goto(f"{_origin(page)}/admin?section=defaults")
+    renewal = page.get_by_role("combobox", name="Renewal")
+    # The shop and its lookups load first; a reload would drop the edit.
+    page.wait_for_load_state("networkidle")
+    renewal.scroll_into_view_if_needed()
+    options = renewal.evaluate(
+        "(s) => [...s.options].map((o) => o.value).filter((v) => v !== s.value)"
+    )
+    # A field saves when it loses focus.
+    renewal.focus()
+    renewal.select_option(options[0])
+    renewal.evaluate("(el) => el.blur()")
+
+    # The page head has scrolled away under the chips; the toast has not.
+    toast = page.locator(".adm-save-toast")
+    retry = toast.get_by_role("button", name="Retry save")
+    expect(retry).to_be_in_viewport(ratio=1)
+    assert toast.bounding_box()["y"] + toast.bounding_box()["height"] <= _tab_bar_top(page)
+    expect(page.locator(".page-head").get_by_role("button", name="Retry save")).to_have_count(0)
+
+    page.unroute("**/api/admin/shop")
+    retry.tap()
+    expect(toast.get_by_role("status")).to_have_text("Saved")
+    expect(toast.get_by_role("status")).to_have_text("", timeout=5_000)
+
+
+def test_info_cards_fit_the_phone_and_close(phone_page, expect) -> None:
+    page = phone_page
+    page.goto(f"{_origin(page)}/admin?section=defaults")
+    button = page.get_by_role("button", name="About Renewal")
+    button.scroll_into_view_if_needed()
+    area = _hit_area(page, button)
+    assert area["width"] >= 43, area
+    assert area["height"] >= 43, area
+
+    # A tap just beside the 22px (i) opens it.
+    box = button.bounding_box()
+    page.touchscreen.tap(box["x"] + box["width"] + 8, box["y"] + box["height"] / 2)
+    card = page.get_by_role("note", name="Renewal")
+    expect(card).to_be_visible()
+    card_box = card.bounding_box()
+    width = page.viewport_size["width"]
+    assert card_box["x"] >= 0, card_box
+    assert card_box["x"] + card_box["width"] <= width, card_box
+    assert card_box["y"] >= box["y"] + box["height"], (card_box, box)
+    assert_mobile_page_fits(page)
+
+    card.get_by_role("button", name="Close Renewal").tap()
+    expect(card).to_have_count(0)
+
+
+def test_admin_controls_have_finger_sized_hit_areas(phone_page, expect) -> None:
+    page = phone_page
+    page.goto(f"{_origin(page)}/admin?section=ai")
+    page.locator(".b-chain > li .b-step__name").first.wait_for(state="visible")
+    for locator in (
+        page.locator(".adm-reorder__btn").first,
+        page.locator(".sp-num").first,
+        page.get_by_role("separator").first,
+    ):
+        locator.scroll_into_view_if_needed()
+        area = _hit_area(page, locator)
+        assert area["width"] >= 43, (locator, area)
+        assert area["height"] >= 36, (locator, area)
 
 
 def test_ai_providers_reorder_with_arrows_on_a_phone(phone_page, expect) -> None:

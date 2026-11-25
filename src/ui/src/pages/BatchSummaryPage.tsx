@@ -231,6 +231,26 @@ function ReviewedCell({ row, onReview }: { row: BatchRow; onReview: (next: boole
   );
 }
 
+/** The phone card's Reviewed: a labelled switch, since the desktop's
+ * "✓ Reviewed" reads as a status and only a hover title says a click
+ * clears it. */
+function ReviewedSwitch({ row, onReview }: { row: BatchRow; onReview: (next: boolean) => void }) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={row.reviewed}
+      className="m-switch"
+      onClick={() => onReview(!row.reviewed)}
+    >
+      <span className="m-switch__track" aria-hidden="true">
+        <span className="m-switch__thumb" />
+      </span>
+      <span className="m-switch__label">Reviewed</span>
+    </button>
+  );
+}
+
 /** Where a row's listing opens: the editor, told which batch it came from. */
 /** The Listings table's summary of each of the batch's listings, for the
  * name's hover card (the same one the Listings page shows). Asked once per
@@ -314,12 +334,12 @@ function PhoneRowCard({
       </dl>
       {(row.reviewable || retryable) && (
         <div className="m-card__actions">
+          {row.reviewable && <ReviewedSwitch row={row} onReview={onReview} />}
           {retryable && (
             <button type="button" className="btn btn-secondary" onClick={onRetry}>
               Retry
             </button>
           )}
-          {row.reviewable && <ReviewedCell row={row} onReview={onReview} />}
         </div>
       )}
     </li>

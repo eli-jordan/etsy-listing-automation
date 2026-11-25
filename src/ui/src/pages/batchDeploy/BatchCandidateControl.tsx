@@ -1,4 +1,6 @@
 import { useState, type FocusEvent, type MouseEvent } from "react";
+import { PhoneSheet } from "../../phone/PhoneSheet";
+import { useIsPhone } from "../../phone/usePhone";
 import type { CandidateNames } from "./batchDeployPresentation";
 
 function countDescription(names: CandidateNames): string {
@@ -24,6 +26,71 @@ function CandidateGroup({ label, names }: { label: string; names: readonly strin
   );
 }
 
+function CandidateCounts({ names }: { names: CandidateNames }) {
+  return (
+    <span className="batch-candidate-control__counts" aria-hidden="true">
+      {names.add.length > 0 && <span className="tag tag-accent-2">+{names.add.length}</span>}
+      {names.remove.length > 0 && <span className="tag tag-dirty">−{names.remove.length}</span>}
+      {names.edit.length > 0 && <span className="tag tag-accent">~{names.edit.length}</span>}
+    </span>
+  );
+}
+
+/**
+ * The phone's control. There is no hover, and focus arrives with the very
+ * tap that starts the plan, so the candidate list cannot open as the
+ * desktop's does: the counts are a button of their own that opens it in a
+ * sheet, and Deploy changes only starts the plan.
+ */
+function PhoneBatchCandidateControl({
+  names,
+  description,
+  onDeploy,
+  disabled,
+}: {
+  names: CandidateNames;
+  description: string;
+  onDeploy: () => void;
+  disabled: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="batch-candidate-control">
+      <button
+        type="button"
+        className="btn btn-primary batch-candidate-control__button"
+        disabled={disabled}
+        onClick={onDeploy}
+      >
+        <span aria-hidden="true">↗</span>
+        <span>Deploy changes</span>
+      </button>
+      {description !== "" && (
+        <button
+          type="button"
+          className="btn btn-secondary m-candidates"
+          aria-label={`Candidate changes: ${description}`}
+          aria-haspopup="dialog"
+          aria-expanded={open}
+          onClick={() => setOpen(true)}
+        >
+          <CandidateCounts names={names} />
+        </button>
+      )}
+      {open && (
+        <PhoneSheet title="Candidate changes" onClose={() => setOpen(false)}>
+          <div className="batch-candidate-popover m-candidates__sheet">
+            <CandidateGroup label="Add" names={names.add} />
+            <CandidateGroup label="Edit" names={names.edit} />
+            <CandidateGroup label="Remove" names={names.remove} />
+            <p>Deploy changes generates a fresh plan across all listings.</p>
+          </div>
+        </PhoneSheet>
+      )}
+    </div>
+  );
+}
+
 /** The Listings-page entry point. It is intentionally unaware of navigation or
  * run creation; PR4 supplies that callback while this module owns the compact
  * accessible orientation aid. */
@@ -37,6 +104,7 @@ export function BatchCandidateControl({
   disabled?: boolean;
 }) {
   const [open, setOpen] = useState(false);
+  const isPhone = useIsPhone();
   const description = countDescription(names);
   const popoverId = "batch-candidate-popover";
 
@@ -50,6 +118,17 @@ export function BatchCandidateControl({
   }
 
   const label = description === "" ? "Deploy changes" : `Deploy changes: ${description}`;
+
+  if (isPhone) {
+    return (
+      <PhoneBatchCandidateControl
+        names={names}
+        description={description}
+        onDeploy={onDeploy}
+        disabled={disabled}
+      />
+    );
+  }
 
   return (
     <div
@@ -71,15 +150,7 @@ export function BatchCandidateControl({
       >
         <span aria-hidden="true">↗</span>
         <span>Deploy changes</span>
-        {description !== "" && (
-          <span className="batch-candidate-control__counts" aria-hidden="true">
-            {names.add.length > 0 && <span className="tag tag-accent-2">+{names.add.length}</span>}
-            {names.remove.length > 0 && (
-              <span className="tag tag-dirty">−{names.remove.length}</span>
-            )}
-            {names.edit.length > 0 && <span className="tag tag-accent">~{names.edit.length}</span>}
-          </span>
-        )}
+        {description !== "" && <CandidateCounts names={names} />}
       </button>
       {open && (
         <aside id={popoverId} className="batch-candidate-popover" role="tooltip">
