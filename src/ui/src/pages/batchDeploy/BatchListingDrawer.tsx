@@ -13,8 +13,11 @@ import { ComparisonView } from "../deploy/ComparisonView";
 import { buildComparison, type Comparison } from "../deploy/comparison";
 import { PriceTable } from "../deploy/PriceTable";
 import { StepStrip } from "../deploy/StepStrip";
+import type { DrawerBounds } from "./drawerSheet";
 import { planGroup, type BatchPlanGroup } from "./batchDeployPresentation";
 import type { BatchListingState } from "./batchDeployState";
+import { useDrawerSwipe } from "./useDrawerSwipe";
+import { useIsPhone } from "../../phone/usePhone";
 
 export type BatchDrawerMode = "review" | "applying" | "applied";
 
@@ -43,11 +46,7 @@ function cssPixels(element: HTMLElement, property: string, fallback: number): nu
   return Number.isFinite(value) ? value : fallback;
 }
 
-function drawerBounds(panel: HTMLElement): {
-  minimum: number;
-  collapsed: number;
-  expanded: number;
-} {
+function drawerBounds(panel: HTMLElement): DrawerBounds {
   const viewportHeight = window.innerHeight;
   const collapsedGap = cssPixels(panel, "--space-8", FALLBACK_COLLAPSED_GAP);
   const expandedGap = cssPixels(panel, "--space-4", FALLBACK_EXPANDED_GAP);
@@ -197,6 +196,15 @@ export function BatchListingDrawer({
   const comparison = useMemo(() => (plan === null ? null : buildComparison(plan)), [plan]);
   const category = groupLabel(planGroup(plan, listing?.planFailure ?? null));
   const summaryText = drawerSummary(listing, comparison);
+  const isPhone = useIsPhone();
+  useDrawerSwipe(panelRef, {
+    open,
+    bounds: drawerBounds,
+    onHeight: setDrawerHeight,
+    onDragging: setDragging,
+    onExpanded: setExpanded,
+    onDismiss: onClose,
+  });
 
   useEffect(() => {
     const dialog = dialogRef.current;
@@ -262,6 +270,9 @@ export function BatchListingDrawer({
 
   function handleHandlePointerDown(event: PointerEvent<HTMLButtonElement>) {
     if (event.button !== 0) return;
+    // On a phone a finger drags the whole sheet (useDrawerSwipe); a tap on
+    // the handle still toggles it.
+    if (isPhone && event.pointerType === "touch") return;
     const panel = panelRef.current;
     if (panel === null) return;
     const bounds = drawerBounds(panel);

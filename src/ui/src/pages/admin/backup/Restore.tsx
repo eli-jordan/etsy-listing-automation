@@ -10,6 +10,7 @@ import { type ReactNode, useState } from "react";
 import type { BackupSnapshot, BackupSnapshots, RestoreStatus } from "../../../api/backup";
 import { ago, bytes, joined, restoreFigures, restoreNote, samePath, when } from "./backupText";
 import type { RestoreFlow } from "./useRestore";
+import { BackupDialog } from "./BackupDialog";
 
 export function Progress({ value, label }: { value: number; label: string }) {
   return (
@@ -79,73 +80,71 @@ function RestoreDialog({
   };
 
   return (
-    <div className="bk-scrim">
-      <div className="bk-dialog" role="dialog" aria-modal="true" aria-labelledby="bk-restore-title">
-        <div>
-          <h2 className="bk-dialog__title" id="bk-restore-title">
-            Restore the backup from {snapshot ? when(snapshot.time) : "…"}
-          </h2>
-          <p className="bk-dialog__lede">
-            The whole workspace as it was then, written into a new folder. Your current workspace
-            isn't changed.
-          </p>
-        </div>
-        <dl className="bk-facts">
-          <dt>Backup</dt>
-          <dd>
-            <select
-              className="bk-pick"
-              aria-label="Backup to restore"
-              value={snapshot?.id}
-              onChange={(e) => choose(pick(e.target.value))}
-            >
-              {choices.snapshots.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {when(s.time)} ({ago(s.time, now)})
-                </option>
-              ))}
-            </select>
-          </dd>
-          <dt>Size</dt>
-          <dd>
-            {bytes(snapshot?.size)} · {snapshot?.files?.toLocaleString("en-GB") ?? "—"} files
-          </dd>
-          <dt>Takes</dt>
-          {/* No estimate before it starts: the time left shows once restic reports a rate. */}
-          <dd>A few minutes for a whole workspace. You can keep working while it runs.</dd>
-        </dl>
-        <div className="bk-field__control">
-          <span className="bk-field__label">Restore into</span>
-          <input
-            className="input s-mono"
-            aria-label="Restore into"
-            value={target}
-            onChange={(e) => {
-              setTarget(e.target.value);
-              setRefusal(null);
-            }}
-          />
-          {hint}
-        </div>
-        <p className="bk-note">
-          <InfoIcon size={16} />
-          <span>Read from the backup storage folder on this computer. Nothing is downloaded.</span>
+    <BackupDialog labelledBy="bk-restore-title" onDismiss={onCancel}>
+      <div>
+        <h2 className="bk-dialog__title" id="bk-restore-title">
+          Restore the backup from {snapshot ? when(snapshot.time) : "…"}
+        </h2>
+        <p className="bk-dialog__lede">
+          The whole workspace as it was then, written into a new folder. Your current workspace
+          isn't changed.
         </p>
-        <div className="bk-dialog__foot">
-          <button type="button" className="btn btn-ghost" onClick={onCancel}>
-            Cancel
-          </button>
-          <button
-            type="button"
-            className="btn btn-primary"
-            onClick={() => void submit()}
-            disabled={taken || !snapshot || !target.trim() || starting}
-          >
-            Restore to this folder
-          </button>
-        </div>
       </div>
-    </div>
+      <dl className="bk-facts">
+        <dt>Backup</dt>
+        <dd>
+          <select
+            className="bk-pick"
+            aria-label="Backup to restore"
+            value={snapshot?.id}
+            onChange={(e) => choose(pick(e.target.value))}
+          >
+            {choices.snapshots.map((s) => (
+              <option key={s.id} value={s.id}>
+                {when(s.time)} ({ago(s.time, now)})
+              </option>
+            ))}
+          </select>
+        </dd>
+        <dt>Size</dt>
+        <dd>
+          {bytes(snapshot?.size)} · {snapshot?.files?.toLocaleString("en-GB") ?? "—"} files
+        </dd>
+        <dt>Takes</dt>
+        {/* No estimate before it starts: the time left shows once restic reports a rate. */}
+        <dd>A few minutes for a whole workspace. You can keep working while it runs.</dd>
+      </dl>
+      <div className="bk-field__control">
+        <span className="bk-field__label">Restore into</span>
+        <input
+          className="input s-mono"
+          aria-label="Restore into"
+          value={target}
+          onChange={(e) => {
+            setTarget(e.target.value);
+            setRefusal(null);
+          }}
+        />
+        {hint}
+      </div>
+      <p className="bk-note">
+        <InfoIcon size={16} />
+        <span>Read from the backup storage folder on this computer. Nothing is downloaded.</span>
+      </p>
+      <div className="bk-dialog__foot">
+        <button type="button" className="btn btn-ghost" onClick={onCancel}>
+          Cancel
+        </button>
+        <button
+          type="button"
+          className="btn btn-primary"
+          onClick={() => void submit()}
+          disabled={taken || !snapshot || !target.trim() || starting}
+        >
+          Restore to this folder
+        </button>
+      </div>
+    </BackupDialog>
   );
 }
 
@@ -160,100 +159,91 @@ function RestoringDialog({
 }) {
   const f = restoreFigures(restore);
   return (
-    <div className="bk-scrim">
-      <div
-        className="bk-dialog"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="bk-restoring-title"
-      >
-        <div>
-          <h2 className="bk-dialog__title" id="bk-restoring-title">
-            Restoring the backup from {when(restore.snapshot_time)}
-          </h2>
-          <p className="bk-dialog__lede">
-            Into <span className="s-mono">{restore.target}</span>
-          </p>
-        </div>
-        <div className="bk-progress" role="status" aria-live="polite">
-          <div className="bk-progress__top">
-            <strong className="bk-progress__pct">{f.pctText}</strong>
-            <span className="bk-sub">{f.left}</span>
-          </div>
-          <Progress value={restore.percent} label="Restore progress" />
-          <span className="bk-sub">{joined(f.bytes, f.files)}</span>
-        </div>
-        <p className="bk-note">
-          <InfoIcon size={16} />
-          <span>
-            You can keep working while it runs. Its progress stays on the Backup page, and scheduled
-            backups still run. Closing the app stops the restore.
-          </span>
+    <BackupDialog labelledBy="bk-restoring-title" onDismiss={onHide}>
+      <div>
+        <h2 className="bk-dialog__title" id="bk-restoring-title">
+          Restoring the backup from {when(restore.snapshot_time)}
+        </h2>
+        <p className="bk-dialog__lede">
+          Into <span className="s-mono">{restore.target}</span>
         </p>
-        <div className="bk-dialog__foot">
-          <button type="button" className="btn btn-ghost" onClick={onStop}>
-            Stop restore
-          </button>
-          <button type="button" className="btn btn-primary" onClick={onHide}>
-            Keep working
-          </button>
-        </div>
       </div>
-    </div>
+      <div className="bk-progress" role="status" aria-live="polite">
+        <div className="bk-progress__top">
+          <strong className="bk-progress__pct">{f.pctText}</strong>
+          <span className="bk-sub">{f.left}</span>
+        </div>
+        <Progress value={restore.percent} label="Restore progress" />
+        <span className="bk-sub">{joined(f.bytes, f.files)}</span>
+      </div>
+      <p className="bk-note">
+        <InfoIcon size={16} />
+        <span>
+          You can keep working while it runs. Its progress stays on the Backup page, and scheduled
+          backups still run. Closing the app stops the restore.
+        </span>
+      </p>
+      <div className="bk-dialog__foot">
+        <button type="button" className="btn btn-ghost" onClick={onStop}>
+          Stop restore
+        </button>
+        <button type="button" className="btn btn-primary" onClick={onHide}>
+          Keep working
+        </button>
+      </div>
+    </BackupDialog>
   );
 }
 
 function RestoredDialog({ restore, onDone }: { restore: RestoreStatus; onDone: () => void }) {
   const files = restore.files_done ?? restore.files_total;
   return (
-    <div className="bk-scrim">
-      <div className="bk-dialog" role="dialog" aria-modal="true" aria-labelledby="bk-done-title">
-        <span className="bk-done-icon" aria-hidden="true">
-          <CheckIcon size={24} weight="bold" />
-        </span>
-        <div>
-          <h2 className="bk-dialog__title" id="bk-done-title">
-            {files == null ? "Restored" : `Restored ${files.toLocaleString("en-GB")} files`}
-          </h2>
-          <p className="bk-dialog__lede">
-            The workspace from {when(restore.snapshot_time)} is in this folder:
-          </p>
-        </div>
-        <div className="bk-inline">
-          <input
-            className="input s-mono"
-            aria-label="Restored folder"
-            readOnly
-            value={restore.target}
-          />
-          <button
-            type="button"
-            className="btn btn-secondary"
-            onClick={() => void navigator.clipboard?.writeText(restore.target)}
-          >
-            <CopyIcon size={16} /> Copy path
-          </button>
-        </div>
-        <div>
-          <p className="bk-dialog__lede">To use it, either:</p>
-          <ol className="bk-steps">
-            <li>
-              Copy the files you need back into your workspace, for example one listing's{" "}
-              <code className="s-mono">state.lock.json</code>.
-            </li>
-            <li>
-              Or switch the app to it: set <code className="s-mono">ETSY_LISTINGS_ROOT</code> to
-              this folder and restart the app.
-            </li>
-          </ol>
-        </div>
-        <div className="bk-dialog__foot">
-          <button type="button" className="btn btn-primary" onClick={onDone}>
-            Done
-          </button>
-        </div>
+    <BackupDialog labelledBy="bk-done-title" onDismiss={onDone}>
+      <span className="bk-done-icon" aria-hidden="true">
+        <CheckIcon size={24} weight="bold" />
+      </span>
+      <div>
+        <h2 className="bk-dialog__title" id="bk-done-title">
+          {files == null ? "Restored" : `Restored ${files.toLocaleString("en-GB")} files`}
+        </h2>
+        <p className="bk-dialog__lede">
+          The workspace from {when(restore.snapshot_time)} is in this folder:
+        </p>
       </div>
-    </div>
+      <div className="bk-inline">
+        <input
+          className="input s-mono"
+          aria-label="Restored folder"
+          readOnly
+          value={restore.target}
+        />
+        <button
+          type="button"
+          className="btn btn-secondary"
+          onClick={() => void navigator.clipboard?.writeText(restore.target)}
+        >
+          <CopyIcon size={16} /> Copy path
+        </button>
+      </div>
+      <div>
+        <p className="bk-dialog__lede">To use it, either:</p>
+        <ol className="bk-steps">
+          <li>
+            Copy the files you need back into your workspace, for example one listing's{" "}
+            <code className="s-mono">state.lock.json</code>.
+          </li>
+          <li>
+            Or switch the app to it: set <code className="s-mono">ETSY_LISTINGS_ROOT</code> to this
+            folder and restart the app.
+          </li>
+        </ol>
+      </div>
+      <div className="bk-dialog__foot">
+        <button type="button" className="btn btn-primary" onClick={onDone}>
+          Done
+        </button>
+      </div>
+    </BackupDialog>
   );
 }
 

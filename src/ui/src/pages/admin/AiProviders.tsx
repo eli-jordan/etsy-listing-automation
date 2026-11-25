@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from "react";
+import { CaretDownIcon } from "@phosphor-icons/react/dist/csr/CaretDown";
+import { CaretUpIcon } from "@phosphor-icons/react/dist/csr/CaretUp";
 import { DotsSixVerticalIcon } from "@phosphor-icons/react/dist/csr/DotsSixVertical";
 import { WarningIcon } from "@phosphor-icons/react/dist/csr/Warning";
 import {
@@ -7,6 +9,7 @@ import {
   type ProviderPreference,
 } from "../../api/workspaceSettings";
 import type { components } from "../../api/schema";
+import { useIsPhone } from "../../phone/usePhone";
 
 type ProviderCatalog = components["schemas"]["ProviderCatalog"];
 type ModelChoice = components["schemas"]["ModelChoice"];
@@ -126,11 +129,7 @@ export function AiProviders({
           <h2 className="b-panel__title" id="settings-providers">
             AI providers
           </h2>
-          <p className="b-panel__lede">
-            Each run starts at the top and falls through if a provider is unavailable or rejects its
-            saved model or reasoning. Click a number to turn it off, or a dash to turn it on. Drag a
-            handle or use its Up/Down keys to reorder. Changes start with the next run.
-          </p>
+          <ProvidersLede />
         </div>
       </div>
       <div className="sp-discovery">
@@ -197,6 +196,8 @@ export function AiProviders({
                 },
                 active: () => drag.current !== null,
                 move: (by) => move(index, index + by),
+                first: index === 0,
+                last: index === rows.length - 1,
               }}
             />
           );
@@ -247,7 +248,96 @@ type RowDrag = {
   drop: () => void;
   active: () => boolean;
   move: (by: number) => void;
+  /** At the top or bottom of the chain, where a move that way does nothing. */
+  first: boolean;
+  last: boolean;
 };
+
+/** How the chain is worked: a finger cannot hover, drag a native handle or
+ * press arrow keys, so on a phone it taps and uses arrow buttons. */
+function ProvidersLede() {
+  const isPhone = useIsPhone();
+  if (isPhone) {
+    return (
+      <p className="b-panel__lede">
+        Each run starts at the top and falls through if a provider is unavailable or rejects its
+        saved model or reasoning. Tap a number to turn it off, or a dash to turn it on. Use the
+        arrows to reorder. Changes start with the next run.
+      </p>
+    );
+  }
+  return (
+    <p className="b-panel__lede">
+      Each run starts at the top and falls through if a provider is unavailable or rejects its saved
+      model or reasoning. Click a number to turn it off, or a dash to turn it on. Drag a handle or
+      use its Up/Down keys to reorder. Changes start with the next run.
+    </p>
+  );
+}
+
+/** The row's reorder control: the desktop's drag handle (arrow keys too), or
+ * on a phone, where native drag and drop does not answer a finger, Up and
+ * Down buttons. */
+function ReorderControl({
+  label,
+  dataName,
+  locked,
+  drag,
+}: {
+  label: string;
+  /** What a native drag carries: the provider's name. */
+  dataName: string;
+  locked: boolean;
+  drag: RowDrag;
+}) {
+  const isPhone = useIsPhone();
+  if (isPhone) {
+    return (
+      <span className="adm-reorder">
+        <button
+          type="button"
+          className="adm-reorder__btn"
+          aria-label={`Move ${label} up`}
+          disabled={locked || drag.first}
+          onClick={() => drag.move(-1)}
+        >
+          <CaretUpIcon size={18} weight="bold" />
+        </button>
+        <button
+          type="button"
+          className="adm-reorder__btn"
+          aria-label={`Move ${label} down`}
+          disabled={locked || drag.last}
+          onClick={() => drag.move(1)}
+        >
+          <CaretDownIcon size={18} weight="bold" />
+        </button>
+      </span>
+    );
+  }
+  return (
+    <button
+      type="button"
+      className="adm-handle"
+      draggable={!locked}
+      aria-label={`Move ${label}. Use the up and down arrow keys.`}
+      onDragStart={(event) => {
+        drag.start();
+        event.dataTransfer.effectAllowed = "move";
+        event.dataTransfer.setData("text/plain", dataName);
+      }}
+      onDragEnd={drag.end}
+      onKeyDown={(event) => {
+        if (event.key === "ArrowUp" || event.key === "ArrowDown") {
+          event.preventDefault();
+          drag.move(event.key === "ArrowUp" ? -1 : 1);
+        }
+      }}
+    >
+      <DotsSixVerticalIcon size={18} />
+    </button>
+  );
+}
 
 function ProviderRow({
   preference: p,
@@ -304,26 +394,7 @@ function ProviderRow({
       </button>
       <div className="b-step__body">
         <div className="b-step__top">
-          <button
-            type="button"
-            className="adm-handle"
-            draggable={!locked}
-            aria-label={`Move ${label}. Use the up and down arrow keys.`}
-            onDragStart={(event) => {
-              drag.start();
-              event.dataTransfer.effectAllowed = "move";
-              event.dataTransfer.setData("text/plain", p.name);
-            }}
-            onDragEnd={drag.end}
-            onKeyDown={(event) => {
-              if (event.key === "ArrowUp" || event.key === "ArrowDown") {
-                event.preventDefault();
-                drag.move(event.key === "ArrowUp" ? -1 : 1);
-              }
-            }}
-          >
-            <DotsSixVerticalIcon size={18} />
-          </button>
+          <ReorderControl label={label} dataName={p.name} locked={locked} drag={drag} />
           <span className="b-step__name">{label}</span>
           <span className="b-step__spacer" />
           {!enabled && <span className="b-step__off-note">Off — runs skip it</span>}
