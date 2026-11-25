@@ -122,14 +122,24 @@ def check_backup_paths(
 
 def check_new_storage(folder: Path, password: str) -> None:
     """Refuse a short password, or a new storage folder that holds files."""
+    refuse_short_password(password)
+    refuse_full_storage(folder)
+
+
+def refuse_short_password(password: str) -> None:
+    """A new repository's password: at least :data:`MIN_PASSWORD_LENGTH`."""
     if len(password) < MIN_PASSWORD_LENGTH or not password.strip():
         raise PasswordTooShortError(
             f"The backup password must be at least {MIN_PASSWORD_LENGTH} characters."
         )
+
+
+def refuse_full_storage(folder: Path) -> None:
+    """The one refusal of a backup storage folder that already holds files,
+    whether a repository is to be made or copied into it."""
     if holds_files(folder):
         raise RepositoryNotEmptyError(
-            f"{folder} already holds files. Name an empty or new folder as "
-            "backup.repository in settings.yaml."
+            f"{folder} already holds files. Choose an empty or new folder."
         )
 
 
@@ -329,9 +339,9 @@ def ensure_workspace_id(workspace: Workspace, snapshots: Sequence[Snapshot] = ()
     :func:`workspace_id_for` ``snapshots`` (the repository's, read without
     the lock), written there first.
 
-    Set-up writes the ID with the rest of the block; ``backup init`` and a
-    run call this. Another write that lands first is read again, so two
-    callers end with the one ID."""
+    Provisioning (``backup_provisioning``) writes the ID with the block it
+    saves; a run calls this for a block written by hand. Another write that
+    lands first is read again, so two callers end with the one ID."""
     chosen = workspace_id_for(snapshots)
     for _ in range(3):
         current = workspace_settings.read_settings(workspace)
@@ -359,17 +369,15 @@ def stored_password(workspace: Workspace) -> str | None:
     return credentials.stored(workspace.root, credentials.BACKUP_PASSWORD.variables[0])
 
 
-def create_repository(backup: ConfiguredBackup, password: str, *, store: bool = True) -> str:
+def create_repository(backup: ConfiguredBackup, password: str) -> str:
     """Create the repository in ``backup``'s storage folder; its restic id.
 
-    ``store`` writes ``password`` into ``.env`` first, before restic runs: a
-    repository whose password was never recorded is lost, while a recorded
-    password with no repository is only a retry. Installs the pinned restic
-    when no other is named.
+    Installs the pinned restic when no other is named. It does not store
+    ``password``: ``backup_provisioning`` stores it before this runs and takes
+    it back when a later step fails, so no repository exists whose password
+    was never recorded.
     """
     backup.check_new_storage(password)
-    if store:
-        credentials.store(backup.workspace, credentials.BACKUP_PASSWORD, (password,))
     return backup.open(password=password, install=True).init()
 
 

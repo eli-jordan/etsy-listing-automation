@@ -41,7 +41,6 @@ from pathlib import Path
 from typing import Literal
 
 from etsy_listings.core.application.backup_missing import (
-    Connected,
     Replacement,
     connect_repository,
     create_new_repository,
@@ -57,6 +56,7 @@ from etsy_listings.core.application.backup_overview import (
     last_success,
     next_due,
 )
+from etsy_listings.core.application.backup_provisioning import BackupsSetUpError, Connected
 from etsy_listings.core.application.backup_repository import (
     ConfiguredBackup,
     backup_settings,
@@ -228,7 +228,7 @@ class BackupCoordinator:
         once it is connected and holding the slot meanwhile, as
         :meth:`connect` does. What was connected, or None."""
         if self._settings() is not None:
-            raise ConflictError("Backups are already set up; change them on the Setup page.")
+            raise BackupsSetUpError
         prepared = prepare_set_up(
             self._workspace, answers, binaries=self._binaries, restic=self._env.restic
         )

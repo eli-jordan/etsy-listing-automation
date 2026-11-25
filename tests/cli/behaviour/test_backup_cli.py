@@ -1,6 +1,10 @@
 """``etsy-listings backup init|snapshots|status`` (workspace-backup spec,
 *CLI*; plan, PR 2).
 
+``init`` is checked here for its prompts, output and exit status; what it
+refuses and what a failure leaves behind are
+``tests/core/behaviour/test_backup_provisioning.py``'s.
+
 Refusals run without restic. The journeys that create and read a repository
 are marked ``restic`` and run the pinned binary against folders in
 ``tmp_path`` (plan, P3). ``Path.home`` points under ``tmp_path`` throughout,
@@ -355,14 +359,11 @@ def test_init_connects_the_backup_a_destination_already_holds(
 
     scripted({"password of the existing backup": "not the password at all"})
     wrong, refused = _run(workspace_root, "init")
-    left_behind = sorted(path.name for path in repository.parent.iterdir())
     script = scripted({"password of the existing backup": PASSWORD})
     code, output = _run(workspace_root, "init")
 
     assert wrong == 1, refused
     assert "does not open" in refused
-    assert "backups" not in left_behind
-    assert not any(".connecting-" in name for name in left_behind)
     assert code == 0, output
     assert f"Copying the backup in {cloud} to {repository}..." in output
     assert f"Connected to the backup in {cloud}: 1 snapshots, copied to {repository}." in output
