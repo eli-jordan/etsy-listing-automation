@@ -28,13 +28,6 @@ export function address(section: Section, page?: BackupPage): string {
   return page === "setup" ? `?section=${section}&page=setup` : `?section=${section}`;
 }
 
-/** The section a swipe moves to: left is the next one, right the one
- * before, and nothing past either end. */
-export function adjacentSection(section: Section, direction: "left" | "right"): Section | null {
-  const index = SECTIONS.indexOf(section) + (direction === "left" ? 1 : -1);
-  return SECTIONS[index] ?? null;
-}
-
 /** Backup's two pages once it is set up, nested under it. */
 export const BACKUP_PAGES = [
   ["status", "Status and history"],

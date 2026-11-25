@@ -1,7 +1,8 @@
-import { type RefObject, useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
+import { usePager } from "../phone/usePager";
 import { useIsPhone } from "../phone/usePhone";
-import { useSwipe } from "../phone/useSwipe";
+import { useSheetDrag } from "../phone/useSheetDrag";
 
 /**
  * One preview, as large as the screen allows, over everything else.
@@ -79,8 +80,16 @@ export function Lightbox({
   const isPhone = useIsPhone();
   const root = useRef<HTMLDivElement>(null);
   const stage = useRef<HTMLDivElement>(null);
-  // At 1:1 a finger pans the picture, so neither swipe is armed then.
-  usePhoneSwipes(root, stage, { enabled: isPhone && !actualSize, step, onClose });
+  // On a phone a sideways swipe on the picture pages through the set, and a
+  // swipe down closes. At 1:1 a finger pans the picture, so neither is armed
+  // then.
+  usePager(stage, {
+    items: items.map((_, position) => position),
+    current: index,
+    enabled: !actualSize,
+    onPick: onIndexChange,
+  });
+  useSheetDrag(root, { moves: stage, fade: true, enabled: !actualSize, onDismiss: onClose });
 
   if (!item) return null;
 
@@ -150,57 +159,4 @@ export function Lightbox({
   );
   // On the body on a phone, out of the editor's swiping tab content.
   return isPhone ? createPortal(box, document.body) : box;
-}
-
-function placeStage(
-  stage: HTMLElement | null,
-  transform: string,
-  transition = "none",
-  opacity = "",
-) {
-  if (stage === null) return;
-  stage.style.transition = transition;
-  stage.style.transform = transform;
-  stage.style.opacity = opacity;
-}
-
-const SPRING = "transform 180ms ease-out, opacity 180ms ease-out";
-
-/** The phone's gestures: swipe the picture sideways to the next or previous
- * one, and down to close, the picture following the finger meanwhile. */
-function usePhoneSwipes(
-  root: RefObject<HTMLDivElement | null>,
-  stage: RefObject<HTMLDivElement | null>,
-  {
-    enabled,
-    step,
-    onClose,
-  }: { enabled: boolean; step: (delta: number) => void; onClose: () => void },
-) {
-  useSwipe(stage, {
-    axis: "x",
-    enabled,
-    onDrag: (offset) =>
-      placeStage(stage.current, offset ? `translateX(${offset}px)` : "", offset ? "none" : SPRING),
-    onSwipe: (direction) => {
-      placeStage(stage.current, "");
-      step(direction === "left" ? 1 : -1);
-    },
-  });
-  useSwipe(root, {
-    axis: "y",
-    enabled,
-    onDrag: (offset) => {
-      const down = Math.max(offset, 0);
-      const fade = down ? String(Math.max(0.4, 1 - down / 400)) : "";
-      placeStage(stage.current, down ? `translateY(${down}px)` : "", down ? "none" : SPRING, fade);
-    },
-    onSwipe: (direction) => {
-      if (direction === "down") {
-        onClose();
-        return;
-      }
-      placeStage(stage.current, "", SPRING);
-    },
-  });
 }

@@ -16,7 +16,7 @@ import { ListingDefaults } from "./ListingDefaults";
 import { SettingsPanel } from "./SettingsPanel";
 import { address, BACKUP_PAGES, isSettings, type Section, SECTIONS } from "./adminSections";
 import { PhoneSections } from "./PhoneSections";
-import { useSectionSwipe } from "./useSectionSwipe";
+import { usePager } from "../../phone/usePager";
 import { useIsPhone } from "../../phone/usePhone";
 import { useShopLookups } from "./useShopLookups";
 import { type SaveStatus, useShopSettings } from "./useShopSettings";
@@ -46,7 +46,16 @@ export function AdminPage() {
   const lookups = useShopLookups();
   const isPhone = useIsPhone();
   const content = useRef<HTMLDivElement>(null);
-  useSectionSwipe(content, section, pick);
+  // A sideways swipe on the content moves to the section beside it, which
+  // starts at its top, under the chips (PhoneSections).
+  usePager(content, {
+    items: SECTIONS,
+    current: section,
+    onPick: (next) => {
+      pick(next);
+      window.scrollTo({ top: 0 });
+    },
+  });
 
   useEffect(() => {
     getShopConnections()

@@ -45,12 +45,6 @@ export function PhoneSheet({
 
   useEffect(() => {
     if (!open) return;
-    // A previous swipe-to-dismiss left the sheet translated off screen.
-    const box = sheet.current;
-    if (box) {
-      box.style.transition = "";
-      box.style.transform = "";
-    }
     const onKey = (event: KeyboardEvent) => {
       if (event.key === "Escape") onClose();
     };

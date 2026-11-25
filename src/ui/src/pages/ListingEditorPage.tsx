@@ -5,6 +5,7 @@ import { getListing, getListingDraft } from "../api/listings";
 import { EditableName } from "../components/EditableName";
 import { StatusTag } from "../components/StatusTag";
 import { useAutosave } from "../hooks/useAutosave";
+import { usePager } from "../phone/usePager";
 import { useIsPhone } from "../phone/usePhone";
 import type { Settled } from "../hooks/writeLoop";
 import { type MediaOwner, refName } from "../media";
@@ -27,8 +28,6 @@ import { ImagesTab } from "./editor/ImagesTab";
 import { metaFor } from "./editor/saveMeta";
 import { useListingBatch } from "./editor/useListingBatch";
 import { VariantsTab } from "./editor/VariantsTab";
-import { enterSide } from "./editor/tabSwipe";
-import { slideIn, useTabPager } from "./editor/useTabPager";
 import { isNullableString, useViewScroll, useViewState, viewScope } from "./editor/editorView";
 
 /** Tabs container + issues banner + page head (phase 5).
@@ -506,14 +505,13 @@ export function ListingEditorShell(props: ShellProps) {
 
   function pickTab(next: Tab) {
     flush();
-    if (isPhone && next !== tab) showPhoneTab(next);
+    if (isPhone && next !== tab) toTabTop();
     setTab(next);
   }
 
   /** A phone tab change starts the new tab at its top -- under the stuck tab
-   * strip when the page had scrolled past it -- and slides it in from the
-   * side it lives on. */
-  function showPhoneTab(next: Tab) {
+   * strip when the page had scrolled past it. The pager slides it in. */
+  function toTabTop() {
     const strip = tabStrip.current;
     const content = pager.current;
     if (strip !== null && content !== null) {
@@ -527,10 +525,13 @@ export function ListingEditorShell(props: ShellProps) {
         gap;
       if (top < window.scrollY) window.scrollTo({ top });
     }
-    slideIn(content, enterSide(TAB_IDS, tab, next));
   }
 
-  useTabPager(pager, { tabs: TAB_IDS, current: tab, enabled: isPhone, onPick: pickTab });
+  // A sideways swipe on the tab content moves to the tab beside it, exactly
+  // as tapping that tab does. Anything inside that owns a sideways drag (a
+  // text field, Position mode, a video's scrubber) is marked
+  // `data-swipe-ignore` and keeps it.
+  usePager(pager, { items: TAB_IDS, current: tab, onPick: pickTab });
 
   return (
     <div className="editor">

@@ -5,8 +5,8 @@ import { type ReactNode, useId, useRef, useState } from "react";
 import { templateThumbnailUrl } from "../api/calibrator";
 import type { TemplateRename } from "../hooks/useTemplateRename";
 import { PhoneSheet } from "../phone/PhoneSheet";
-import { useSwipe } from "../phone/useSwipe";
-import { adjacentTemplate, stepPosition, type StepDirection } from "./templateStep";
+import { usePager } from "../phone/usePager";
+import { stepPosition } from "./templateStep";
 
 /**
  * The calibrator's header on a phone, where the template rail has no room:
@@ -19,8 +19,9 @@ import { adjacentTemplate, stepPosition, type StepDirection } from "./templateSt
  * desktop header is untouched.
  */
 
-/** How far the name follows a finger, as a share of the finger's travel: it
- * gives under the thumb without ever looking like it is leaving. */
+/** How far the name follows a finger, as a share of the finger's travel.
+ * The pager's other pages are the width of the screen; this is one button
+ * between two arrows, and at one to one it would slide over them. */
 const DRAG_FOLLOW = 0.35;
 
 interface SwitcherProps {
@@ -50,29 +51,13 @@ function Thumb({ name }: { name: string }) {
 export function TemplateSwitcher({ names, selected, onSelect, onOpen, chip, meta }: SwitcherProps) {
   const zone = useRef<HTMLDivElement>(null);
   const current = useRef<HTMLButtonElement>(null);
-  const previous = adjacentTemplate(names, selected, "previous");
-  const next = adjacentTemplate(names, selected, "next");
-
-  const follow = (offset: number) => {
-    const button = current.current;
-    if (!button) return;
-    button.style.transition = offset ? "none" : "";
-    button.style.transform = offset ? `translateX(${offset * DRAG_FOLLOW}px)` : "";
-  };
-  const step = (direction: StepDirection) => {
-    const target = direction === "next" ? next : previous;
-    if (target) onSelect(target);
-  };
-
-  useSwipe(zone, {
-    axis: "x",
-    onDrag: follow,
-    onSwipe: (direction) => {
-      follow(0);
-      // Swiping left brings the next template in from the right.
-      if (direction === "left") step("next");
-      if (direction === "right") step("previous");
-    },
+  // The catalog's own order, not the rail's grouping (see templateStep).
+  const { previous, next } = usePager(zone, {
+    items: names,
+    current: selected,
+    onPick: onSelect,
+    moves: current,
+    follow: DRAG_FOLLOW,
   });
 
   return (
@@ -82,7 +67,9 @@ export function TemplateSwitcher({ names, selected, onSelect, onOpen, chip, meta
         className="tswitch__step"
         aria-label="Previous template"
         disabled={!previous}
-        onClick={() => step("previous")}
+        onClick={() => {
+          if (previous) onSelect(previous);
+        }}
       >
         <CaretLeftIcon aria-hidden="true" />
       </button>
@@ -111,7 +98,9 @@ export function TemplateSwitcher({ names, selected, onSelect, onOpen, chip, meta
         className="tswitch__step"
         aria-label="Next template"
         disabled={!next}
-        onClick={() => step("next")}
+        onClick={() => {
+          if (next) onSelect(next);
+        }}
       >
         <CaretRightIcon aria-hidden="true" />
       </button>

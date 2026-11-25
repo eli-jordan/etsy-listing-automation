@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { classifySwipe, lockAxis, resist } from "./swipe";
+import { classifySwipe, lockAxis } from "./swipe";
 
 describe("lockAxis", () => {
   it("waits until the finger has really moved", () => {
@@ -37,13 +37,5 @@ describe("classifySwipe", () => {
   it("reads vertical swipes along the vertical axis", () => {
     expect(classifySwipe(3, 100, 300, "y")).toBe("down");
     expect(classifySwipe(3, -100, 300, "y")).toBe("up");
-  });
-});
-
-describe("resist", () => {
-  it("moves less than the finger and stops at a limit", () => {
-    expect(resist(40)).toBe(14);
-    expect(resist(-40)).toBe(-14);
-    expect(resist(1000)).toBe(80);
   });
 });

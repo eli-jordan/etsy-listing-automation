@@ -1,24 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { adjacentTemplate, stepPosition } from "./templateStep";
+import { stepPosition } from "./templateStep";
 
 const names = ["a", "b", "c"];
-
-describe("adjacentTemplate", () => {
-  it("steps forward and back through the catalog order", () => {
-    expect(adjacentTemplate(names, "b", "next")).toBe("c");
-    expect(adjacentTemplate(names, "b", "previous")).toBe("a");
-  });
-
-  it("stops at either end rather than wrapping", () => {
-    expect(adjacentTemplate(names, "c", "next")).toBeNull();
-    expect(adjacentTemplate(names, "a", "previous")).toBeNull();
-  });
-
-  it("has nowhere to go from nothing, or from a name the list lacks", () => {
-    expect(adjacentTemplate(names, null, "next")).toBeNull();
-    expect(adjacentTemplate(names, "z", "next")).toBeNull();
-  });
-});
 
 describe("stepPosition", () => {
   it("counts from one", () => {

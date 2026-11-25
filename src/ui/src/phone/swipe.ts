@@ -44,10 +44,3 @@ export function classifySwipe(
   if (axis === "x") return along < 0 ? "left" : "right";
   return along < 0 ? "up" : "down";
 }
-
-/** Rubber-banding past an edge: the further the drag, the less it moves, the
- * way a native list resists being pulled past its end. */
-export function resist(distance: number): number {
-  const sign = distance < 0 ? -1 : 1;
-  return sign * Math.min(Math.abs(distance) * 0.35, 80);
-}

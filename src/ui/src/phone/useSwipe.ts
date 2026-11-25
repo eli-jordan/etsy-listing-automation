@@ -2,7 +2,9 @@ import { type RefObject, useEffect, useEffectEvent } from "react";
 import { classifySwipe, lockAxis, type SwipeDirection } from "./swipe";
 
 /**
- * Touch swipes on one element, for the phone layout. Only a finger counts
+ * Touch swipes on one element, for the phone layout. Internal to `phone/`:
+ * pages swipe through `usePager` or `useSheetDrag`, which own the motion this
+ * only classifies. Only a finger counts
  * (`pointerType === "touch"`): a mouse drag on the desktop never swipes, so
  * the hook can stay mounted at every width and still change nothing there.
  *
@@ -17,12 +19,13 @@ import { classifySwipe, lockAxis, type SwipeDirection } from "./swipe";
 export interface SwipeOptions {
   /** Which axis the element swipes on. The other axis keeps scrolling. */
   axis: "x" | "y";
-  onSwipe: (direction: SwipeDirection) => void;
-  /** Live offset along the axis while the finger is down, for a drag that
-   * follows the finger. A release that is not a swipe reports 0 (spring
-   * back); a swipe reports nothing more, and `onSwipe` places the element. */
-  onDrag?: (offset: number) => void;
-  enabled?: boolean;
+  /** Live offset along the axis while the finger is down, once the move has
+   * locked onto this axis. */
+  onDrag: (offset: number) => void;
+  /** The finger lifted: the swipe it made, or null for a release short of
+   * one, a cancelled touch, or a move along the other axis. */
+  onEnd: (direction: SwipeDirection | null) => void;
+  enabled: boolean;
 }
 
 const OWNS_DRAG = "input[type='range'], [role='slider'], [data-swipe-ignore]";
@@ -69,10 +72,9 @@ interface Track {
 }
 
 export function useSwipe(ref: RefObject<HTMLElement | null>, options: SwipeOptions): void {
-  const swiped = useEffectEvent((direction: SwipeDirection) => options.onSwipe(direction));
-  const dragged = useEffectEvent((offset: number) => options.onDrag?.(offset));
-  const enabled = options.enabled ?? true;
-  const { axis } = options;
+  const ended = useEffectEvent((direction: SwipeDirection | null) => options.onEnd(direction));
+  const dragged = useEffectEvent((offset: number) => options.onDrag(offset));
+  const { axis, enabled } = options;
 
   useEffect(() => {
     const element = ref.current;
@@ -86,14 +88,13 @@ export function useSwipe(ref: RefObject<HTMLElement | null>, options: SwipeOptio
       if (!track || event.pointerId !== track.id) return;
       const { x, y, at, axis: locked, ignored } = track;
       track = null;
-      const direction =
-        cancelled || ignored
+      // A move along the other axis was never ours, so it has nothing to end.
+      if (ignored) return;
+      ended(
+        cancelled
           ? null
-          : classifySwipe(event.clientX - x, event.clientY - y, event.timeStamp - at, locked);
-      // A swipe hands the element to `onSwipe`, which decides where it ends
-      // up; anything else springs back.
-      if (direction) swiped(direction);
-      else dragged(0);
+          : classifySwipe(event.clientX - x, event.clientY - y, event.timeStamp - at, locked),
+      );
     };
     const onDown = (event: PointerEvent) => {
       if (event.pointerType !== "touch" || !event.isPrimary) return;

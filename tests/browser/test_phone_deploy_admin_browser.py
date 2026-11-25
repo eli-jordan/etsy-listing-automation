@@ -324,6 +324,9 @@ def test_admin_sections_are_chips_that_a_swipe_walks_through(phone_page, expect)
     middle = content.bounding_box()["y"] + 60
     swipe(page, (330, middle), (60, middle))
     page.wait_for_url("**/admin?section=backup")
+    # The new section slides in from the right; the next swipe starts where
+    # it comes to rest.
+    page.wait_for_timeout(300)
     swipe(page, (60, middle), (330, middle))
     page.wait_for_url("**/admin?section=rendering")
     expect(chips.get_by_role("link", name="Template rendering")).to_have_attribute(
