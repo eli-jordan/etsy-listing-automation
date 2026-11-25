@@ -9,7 +9,6 @@ import {
   markRunSeen,
 } from "../api/runs";
 import { getListing, tryGetListing } from "../api/listings";
-import { StatusTag } from "../components/StatusTag";
 import { sceneSource } from "../media";
 import { stageWillRun, type ListingDetail } from "../types";
 import { buildComparison, type DriftedField } from "./deploy/comparison";
@@ -19,6 +18,7 @@ import { Callouts } from "./deploy/Callouts";
 import { PriceTable } from "./deploy/PriceTable";
 import { StepStrip } from "./deploy/StepStrip";
 import { ApplyFooter } from "./deploy/ApplyFooter";
+import { DeployHead } from "./deploy/DeployHead";
 import {
   applyRunEvent,
   controlPhase,
@@ -35,31 +35,6 @@ import { MARK_SEEN_GRACE_MS, TERMINAL_PHASES } from "./deploy/runPhases";
  * starts one -- the composing piece over the pure `deployState` reducer and
  * `comparison` builder, and the presentation modules that draw them.
  */
-
-function metaText(phase: ReturnType<typeof controlPhase>, waitingForBackup: boolean): string {
-  switch (phase) {
-    case "queued":
-      return waitingForBackup ? "Waiting for backup…" : "Waiting for another run…";
-    case "planning":
-      return "Planning…";
-    case "previewing":
-      return "Rendering previews…";
-    case "ready-work":
-    case "ready-blocked":
-    case "ready-clean":
-      return "Planned just now";
-    case "applying":
-      return "Applying…";
-    case "applied":
-      return "Applied just now";
-    case "failed":
-      return "The plan couldn’t be built. See the message above.";
-    case "stale":
-      return "This listing changed after it was planned.";
-    case "cancelled":
-      return "";
-  }
-}
 
 function stepStripHeading(phase: ReturnType<typeof controlPhase>): string {
   if (phase === "queued" || phase === "planning" || phase === "previewing")
@@ -334,38 +309,16 @@ export function DeployPage() {
 
   return (
     <div className="editor">
-      <div className="page-head">
-        <button
-          type="button"
-          className="btn btn-secondary dv-back"
-          disabled={false}
-          onClick={() => void handleBack()}
-        >
-          &larr; Back
-        </button>
-        <span className="page-head__crumb" onClick={() => void handleBack()}>
-          Listings
-        </span>
-        <span className="page-head__sep">/</span>
-        <span className="page-head__crumb" onClick={() => void handleBack()}>
-          {name}
-        </span>
-        <span className="page-head__sep">/</span>
-        <h1 className="page-head__title">Deploy</h1>
-        {detail && <StatusTag status={detail.status} />}
-        <span className="page-head__meta">{metaText(phase, heldForBackup)}</span>
-        {showPlanAgain && (
-          <div className="page-head__actions dv-head-actions">
-            <button
-              type="button"
-              className={phase === "stale" ? "btn btn-primary" : "btn btn-ghost"}
-              onClick={() => void startFreshPlan()}
-            >
-              Plan again
-            </button>
-          </div>
-        )}
-      </div>
+      <DeployHead
+        name={name}
+        status={detail?.status ?? null}
+        phase={phase}
+        waitingForBackup={heldForBackup}
+        backToListings={deletedAfterApply}
+        showPlanAgain={showPlanAgain}
+        onBack={() => void handleBack()}
+        onPlanAgain={() => void startFreshPlan()}
+      />
 
       {status !== "" && (
         <p className="app__status" role="status">

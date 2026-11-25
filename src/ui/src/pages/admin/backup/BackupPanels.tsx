@@ -1,6 +1,7 @@
 // The Backup section's panels, from the approved `workspace-backup` mockup
 // (`design/scenes/workspace-backup/_parts.tsx` and `_prototype.tsx`), fed by
 // `GET /api/backup` and its history instead of fixtures.
+import { BackupDialog } from "./BackupDialog";
 import { ArrowCounterClockwiseIcon } from "@phosphor-icons/react/dist/csr/ArrowCounterClockwise";
 import { ArrowRightIcon } from "@phosphor-icons/react/dist/csr/ArrowRight";
 import { CheckCircleIcon } from "@phosphor-icons/react/dist/csr/CheckCircle";
@@ -455,46 +456,44 @@ export function RepairDialog({
   const { name } = destination;
   const count = destination.changed.length + destination.unexpected.length;
   return (
-    <div className="bk-scrim">
-      <div className="bk-dialog" role="dialog" aria-modal="true" aria-labelledby="bk-repair-title">
-        <div>
-          <h2 className="bk-dialog__title" id="bk-repair-title">
-            Repair the {name} copy
-          </h2>
-          <p className="bk-dialog__lede">
-            The {count} file{count === 1 ? "" : "s"} move out of the copy into a folder beside it,
-            so you can look at them. Nothing is deleted. Then the copy runs again from the backup
-            storage folder on this computer.
-          </p>
-        </div>
-        <dl className="bk-facts">
-          <dt>Set aside in</dt>
-          <dd className="s-mono">{lastPart(destination.set_aside ?? "")}</dd>
-          <dt>Copied again</dt>
-          <dd>
-            {destination.changed.length} file{destination.changed.length === 1 ? "" : "s"},{" "}
-            {bytes(destination.changed.reduce((sum, f) => sum + f.expected_size, 0))}
-          </dd>
-        </dl>
-        {working && (
-          <p className="bk-status__running" role="status">
-            <CircleNotchIcon size={14} className="adm-spin" /> Setting files aside and copying…
-          </p>
-        )}
-        {error && (
-          <p className="adm-error-text" role="alert">
-            {error}
-          </p>
-        )}
-        <div className="bk-dialog__foot">
-          <button type="button" className="btn btn-ghost" onClick={onCancel} disabled={working}>
-            Cancel
-          </button>
-          <button type="button" className="btn btn-primary" onClick={onRepair} disabled={working}>
-            Set aside and copy again
-          </button>
-        </div>
+    <BackupDialog labelledBy="bk-repair-title" onDismiss={working ? null : onCancel}>
+      <div>
+        <h2 className="bk-dialog__title" id="bk-repair-title">
+          Repair the {name} copy
+        </h2>
+        <p className="bk-dialog__lede">
+          The {count} file{count === 1 ? "" : "s"} move out of the copy into a folder beside it, so
+          you can look at them. Nothing is deleted. Then the copy runs again from the backup storage
+          folder on this computer.
+        </p>
       </div>
-    </div>
+      <dl className="bk-facts">
+        <dt>Set aside in</dt>
+        <dd className="s-mono">{lastPart(destination.set_aside ?? "")}</dd>
+        <dt>Copied again</dt>
+        <dd>
+          {destination.changed.length} file{destination.changed.length === 1 ? "" : "s"},{" "}
+          {bytes(destination.changed.reduce((sum, f) => sum + f.expected_size, 0))}
+        </dd>
+      </dl>
+      {working && (
+        <p className="bk-status__running" role="status">
+          <CircleNotchIcon size={14} className="adm-spin" /> Setting files aside and copying…
+        </p>
+      )}
+      {error && (
+        <p className="adm-error-text" role="alert">
+          {error}
+        </p>
+      )}
+      <div className="bk-dialog__foot">
+        <button type="button" className="btn btn-ghost" onClick={onCancel} disabled={working}>
+          Cancel
+        </button>
+        <button type="button" className="btn btn-primary" onClick={onRepair} disabled={working}>
+          Set aside and copy again
+        </button>
+      </div>
+    </BackupDialog>
   );
 }

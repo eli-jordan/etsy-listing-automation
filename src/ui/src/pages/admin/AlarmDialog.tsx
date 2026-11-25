@@ -1,12 +1,14 @@
 import { WarningOctagonIcon } from "@phosphor-icons/react/dist/csr/WarningOctagon";
 import { XIcon } from "@phosphor-icons/react/dist/csr/X";
 import { type ReactNode, useRef } from "react";
+import { SheetGrabber } from "../../phone/SheetGrabber";
 import { useModalKeys } from "./useModalKeys";
 
 /**
  * Admin's alarm-header modal, shared by the currency and template-limits
  * confirmations: the backdrop, the close button and Escape cancel, and Tab
- * stays inside. The caller moves focus in and renders the body and foot.
+ * stays inside; on a phone it is a bottom sheet a swipe down cancels. The
+ * caller moves focus in and renders the body and foot.
  */
 export function AlarmDialog({
   titleId,
@@ -32,6 +34,7 @@ export function AlarmDialog({
         aria-modal="true"
         aria-labelledby={titleId}
       >
+        <SheetGrabber sheetRef={dialog} onDismiss={onCancel} />
         <div className="sp-modal__alarm">
           <WarningOctagonIcon size={40} weight="fill" />
           <div>
