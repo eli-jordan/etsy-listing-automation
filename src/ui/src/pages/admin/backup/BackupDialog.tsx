@@ -4,8 +4,9 @@ import { SheetGrabber } from "../../../phone/SheetGrabber";
 /**
  * The backup pages' modal frame: the scrim and the dialog box every repair,
  * restore and repository dialog shares. On a phone it is a bottom sheet
- * (phone/admin.css), and one with `onDismiss` gets a grab bar that swipes
- * it away; off the phone the grab bar renders nothing.
+ * (phone/admin.css), modal like every sheet (`SheetGrabber`), and one with
+ * `onDismiss` gets a grab bar that swipes it away; off the phone the grab
+ * bar renders nothing.
  */
 export function BackupDialog({
   labelledBy,
@@ -28,7 +29,7 @@ export function BackupDialog({
         aria-modal="true"
         aria-labelledby={labelledBy}
       >
-        {onDismiss && <SheetGrabber sheetRef={sheet} onDismiss={onDismiss} />}
+        <SheetGrabber sheetRef={sheet} onDismiss={onDismiss} />
         {children}
       </div>
     </div>

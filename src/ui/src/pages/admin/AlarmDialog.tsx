@@ -24,6 +24,7 @@ export function AlarmDialog({
   children: ReactNode;
 }) {
   const dialog = useRef<HTMLDivElement>(null);
+  const head = useRef<HTMLDivElement>(null);
   useModalKeys(dialog, onCancel);
   return (
     <div className="sa-scrim" onClick={(e) => e.target === e.currentTarget && onCancel()}>
@@ -34,8 +35,8 @@ export function AlarmDialog({
         aria-modal="true"
         aria-labelledby={titleId}
       >
-        <SheetGrabber sheetRef={dialog} onDismiss={onCancel} />
-        <div className="sp-modal__alarm">
+        <SheetGrabber sheetRef={dialog} onDismiss={onCancel} head={head} />
+        <div ref={head} className="sp-modal__alarm">
           <WarningOctagonIcon size={40} weight="fill" />
           <div>
             <h2 id={titleId}>{title}</h2>

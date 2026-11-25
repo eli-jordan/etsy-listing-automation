@@ -148,6 +148,12 @@
     cursor: pointer;
   }
 
+  /* A sheet takes focus itself when nothing in it asks for it
+     (usePhoneModal); that focus is for Tab, not a ring. */
+  [data-phone-sheet]:focus {
+    outline: none;
+  }
+
   .sheet-grabber {
     position: sticky;
     top: 0;

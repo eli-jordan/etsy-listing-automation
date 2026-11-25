@@ -9,7 +9,7 @@ import { SheetGrabber } from "./SheetGrabber";
  *
  * It is the same sheet as `ConfirmDialog` (`.modal-root` / `.modal-dialog`,
  * drawn as a sheet by `phone/base.css`) with a grab bar that swipes it away,
- * a title, and Done unless `done` is false (an action sheet ends in its own
+ * a title (the grab bar and the title row both drag it), and Done unless `done` is false (an action sheet ends in its own
  * Cancel instead).
  *
  * On `document.body`, never inside the page: the editor's tab content swipes
@@ -41,6 +41,7 @@ export function PhoneSheet({
   children: ReactNode;
 }) {
   const sheet = useRef<HTMLDivElement>(null);
+  const head = useRef<HTMLDivElement>(null);
   const titleId = useId();
 
   useEffect(() => {
@@ -69,8 +70,8 @@ export function PhoneSheet({
           .filter(Boolean)
           .join(" ")}
       >
-        {open && <SheetGrabber sheetRef={sheet} onDismiss={onClose} />}
-        <div className="phone-sheet__head">
+        {open && <SheetGrabber sheetRef={sheet} onDismiss={onClose} head={head} />}
+        <div ref={head} className="phone-sheet__head">
           <h2 id={titleId} className="phone-sheet__title">
             {title}
           </h2>

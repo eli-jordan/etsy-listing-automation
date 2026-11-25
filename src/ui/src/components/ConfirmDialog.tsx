@@ -39,6 +39,7 @@ export function ConfirmDialog({
 }: Props) {
   const titleId = useId();
   const sheet = useRef<HTMLDivElement>(null);
+  const head = useRef<HTMLHeadingElement>(null);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -58,8 +59,8 @@ export function ConfirmDialog({
         ref={sheet}
         className={["modal-dialog confirm-dialog", className].filter(Boolean).join(" ")}
       >
-        <SheetGrabber sheetRef={sheet} onDismiss={onCancel} />
-        <h2 id={titleId} className="confirm-dialog__title">
+        <SheetGrabber sheetRef={sheet} onDismiss={onCancel} head={head} />
+        <h2 ref={head} id={titleId} className="confirm-dialog__title">
           {title}
         </h2>
         {children}
