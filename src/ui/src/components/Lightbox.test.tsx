@@ -95,6 +95,25 @@ describe("Lightbox", () => {
   });
 });
 
+describe("Lightbox's preloading", () => {
+  it("loads the pictures either side ahead of a step, wrapping, and skips videos", () => {
+    const src = vi.spyOn(HTMLImageElement.prototype, "src", "set");
+    try {
+      setup({
+        items: [...ITEMS, { id: "intro", label: "intro", url: "/intro.mp4", kind: "video" }],
+        index: 0,
+      });
+      // Every image src set but the shown one's (black) is a preload. Two
+      // either side of black: intro (a video, skipped) and moss behind, ivory
+      // and moss ahead -- each fetched once.
+      const preloads = src.mock.calls.map(([url]) => url).filter((url) => url !== "blob:black");
+      expect(preloads.sort()).toEqual(["blob:ivory", "blob:moss"]);
+    } finally {
+      src.mockRestore();
+    }
+  });
+});
+
 describe("Lightbox, for a video", () => {
   it("plays a video item with the browser's own controls instead of drawing a picture", () => {
     setup({

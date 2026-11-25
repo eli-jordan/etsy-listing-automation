@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
-import { usePager } from "../phone/usePager";
+import { useCarousel } from "../phone/useCarousel";
 import { useIsPhone } from "../phone/usePhone";
 import { useSheetDrag } from "../phone/useSheetDrag";
 
@@ -83,15 +83,23 @@ export function Lightbox({
   // On a phone a sideways swipe on the picture pages through the set, and a
   // swipe down closes. At 1:1 a finger pans the picture, so neither is armed
   // then.
-  usePager(stage, {
-    items: items.map((_, position) => position),
-    current: index,
-    enabled: !actualSize,
-    onPick: onIndexChange,
+  const carousel = isPhone && !actualSize;
+  const track = useCarousel(stage, {
+    count: items.length,
+    index,
+    enabled: carousel,
+    onIndexChange,
   });
   useSheetDrag(root, { moves: stage, fade: true, enabled: !actualSize, onDismiss: onClose });
+  usePreloadNeighbours(items, index);
 
   if (!item) return null;
+
+  // The neighbours sit either side of the picture, so a swipe drags the next
+  // one in beside it. Off the phone, and at 1:1, there is only the one.
+  const slides: { at: SlidePlace; position: number }[] = [{ at: "current", position: index }];
+  if (carousel && index > 0) slides.unshift({ at: "previous", position: index - 1 });
+  if (carousel && index < items.length - 1) slides.push({ at: "next", position: index + 1 });
 
   const box = (
     <div
@@ -141,22 +149,80 @@ export function Lightbox({
         ref={stage}
         className={actualSize ? "lightbox__stage lightbox__stage--actual" : "lightbox__stage"}
       >
-        {item.kind === "video" ? (
-          <video
-            key={item.id}
-            src={item.url}
-            aria-label={item.label}
-            className="lightbox__image"
-            controls
-            playsInline
-            preload="metadata"
-          />
+        {carousel ? (
+          <div ref={track} className="lightbox__track">
+            {slides.map(({ at, position }) => {
+              const slide = items[position] as LightboxItem;
+              return (
+                // Keyed by item, so the picture that slid in keeps its loaded
+                // element when it becomes the current one.
+                <div
+                  key={slide.id}
+                  className={`lightbox__slide lightbox__slide--${at}`}
+                  aria-hidden={at === "current" ? undefined : true}
+                  inert={at !== "current"}
+                >
+                  <Picture item={slide} />
+                </div>
+              );
+            })}
+          </div>
         ) : (
-          <img src={item.url} alt={item.label} className="lightbox__image" />
+          <Picture key={item.id} item={item} />
         )}
       </div>
     </div>
   );
   // On the body on a phone, out of the editor's swiping tab content.
   return isPhone ? createPortal(box, document.body) : box;
+}
+
+type SlidePlace = "previous" | "current" | "next";
+
+/** Keyed by its caller, so a step swaps in a fresh element: reusing one keeps
+ * painting the old picture until the new one arrives. */
+function Picture({ item }: { item: LightboxItem }) {
+  return item.kind === "video" ? (
+    <video
+      src={item.url}
+      aria-label={item.label}
+      className="lightbox__image"
+      controls
+      playsInline
+      preload="metadata"
+    />
+  ) : (
+    <img src={item.url} alt={item.label} className="lightbox__image" />
+  );
+}
+
+/** How many pictures either side of the shown one load ahead of a step. */
+const PRELOAD_REACH = 2;
+
+/**
+ * Fetches and decodes the pictures a step or a swipe could land on next, so
+ * the one that slides in is already there. Full renders are large and can take
+ * a while, and a swipe settles in a fifth of a second. The browser cache is
+ * what serves them to the `<img>`; the elements are kept so it holds them
+ * while the box is open.
+ * Videos are left alone, because their element loads only metadata anyway.
+ */
+function usePreloadNeighbours(items: readonly LightboxItem[], index: number) {
+  const loaded = useRef(new Map<string, HTMLImageElement>());
+  useEffect(() => {
+    if (items.length < 2) return;
+    for (let delta = -PRELOAD_REACH; delta <= PRELOAD_REACH; delta += 1) {
+      if (delta === 0) continue;
+      const item = items[(((index + delta) % items.length) + items.length) % items.length];
+      if (item === undefined || item.kind === "video" || loaded.current.has(item.url)) continue;
+      const image = new Image();
+      image.decoding = "async";
+      image.src = item.url;
+      // Decoding ahead too, so the swap does not wait on it; a failure here
+      // is the visible <img>'s to show, not this one's.
+      // (jsdom has no decode.)
+      if (typeof image.decode === "function") image.decode().catch(() => {});
+      loaded.current.set(item.url, image);
+    }
+  }, [items, index]);
 }

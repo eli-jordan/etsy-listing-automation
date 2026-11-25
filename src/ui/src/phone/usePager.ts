@@ -8,8 +8,8 @@ import { useSwipe } from "./useSwipe";
  * A sideways pager for the phone layout: a swipe left on `zone` picks the
  * item after `current`, a swipe right the one before, the way a native pager
  * reads. Every phone pager -- the editor's tabs, Admin's sections, the
- * template switcher, the Lightbox's pictures -- goes through here, so they
- * all feel the same:
+ * template switcher -- goes through here, so they all feel the same (the
+ * Lightbox's pictures sit side by side instead, through `useCarousel`):
  *
  * - The moving element follows the finger one to one while there is an item
  *   to go to, and resists past the first or the last (no wrap-around, so the

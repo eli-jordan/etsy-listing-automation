@@ -1064,6 +1064,37 @@ button:not([class]):active:not(:disabled) {
   object-fit: contain;
 }
 
+/* The phone's carousel (phone/useCarousel.ts): the neighbours wait a track's
+   width plus a gap either side, and the finger drags the whole strip, so a
+   part-swipe shows both pictures. */
+.lightbox__stage:has(> .lightbox__track) {
+  overflow: hidden;
+}
+
+.lightbox__track {
+  --lightbox-gap: var(--space-4);
+  position: relative;
+  align-self: stretch;
+  flex: 1;
+  will-change: transform;
+}
+
+.lightbox__slide {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.lightbox__slide--previous {
+  transform: translateX(calc(-100% - var(--lightbox-gap)));
+}
+
+.lightbox__slide--next {
+  transform: translateX(calc(100% + var(--lightbox-gap)));
+}
+
 /* 1:1. Fit-to-screen has the browser downsampling a 4000px render, which is
    the one thing guaranteed to hide a resampling artefact -- so the true-pixel
    view scrolls rather than shrinking. */
