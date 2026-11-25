@@ -52,7 +52,7 @@ function reel(selectedIndex: number | null) {
 describe("the phone reel", () => {
   it("says a tap moves a tile, and offers Add media", () => {
     const props = reel(null);
-    expect(screen.getByText("Tap an image to move or remove it")).toBeInTheDocument();
+    expect(screen.getByText("Tap an image to view, adjust, move or remove it")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Add media" }));
     expect(props.onAdd).toHaveBeenCalled();
     expect(screen.queryByRole("group", { name: /^Move / })).not.toBeInTheDocument();

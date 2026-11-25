@@ -70,7 +70,9 @@ export interface Positioning {
   selected: string;
   select: (id: string) => void;
   note: { text: string; warn: boolean } | null;
-  reset: { label: string; run: () => void } | null;
+  /** `run` is null when there is nothing to reset: shown anyway, disabled,
+   * only on a steady foot. */
+  reset: { label: string; run: (() => void) | null } | null;
   fit: (() => void) | null;
   ghost: boolean;
   /** The position is ahead of the composite, so the stage draws it live. */
@@ -97,6 +99,12 @@ interface Args {
   saved: Positions | null | undefined;
   onUpdate: (patch: Record<string, unknown>) => void;
   onFlush: (() => void) | undefined;
+  /** A foot that keeps the same lines whether the switch is on or off --
+   * the note, Fit within limits when it applies, and Reset, disabled while
+   * there is nothing to reset -- so turning the switch changes only the
+   * handles on the picture. The phone's Adjust screen, where the foot
+   * moving would move the picture with it. */
+  steady?: boolean;
 }
 
 /** Which template entry the pane may position, and which pane it is. Only
@@ -361,12 +369,16 @@ function lookOf({ renderer }: TemplateConfigState): LiveLook {
   return { kind: "photo-warp", blend, opacity: enabled ? opacity : 0 };
 }
 
-function resetOf(layer: Layer, on: boolean, run: () => void): Positioning["reset"] {
-  if (!on || (layer.stored === null && isIdentity(layer.pose))) return null;
-  return {
-    label: layer.placement === null ? "Reset to template" : `Reset ${layer.placement}`,
-    run,
-  };
+function resetOf(
+  layer: Layer,
+  editing: boolean,
+  steady: boolean,
+  run: () => void,
+): Positioning["reset"] {
+  const label = layer.placement === null ? "Reset to template" : `Reset ${layer.placement}`;
+  const positioned = layer.stored !== null || !isIdentity(layer.pose);
+  if (steady) return { label, run: positioned ? run : null };
+  return editing && positioned ? { label, run } : null;
 }
 
 /** The switch turns off freely, and on only for a template that is ready. */
@@ -381,6 +393,7 @@ function refusal(readiness: PositionReadiness): Positioning["note"] {
 
 export function usePositioning(args: Args): Positioning | null {
   const { detail, template, pane, summary, picture, saved, onUpdate, onFlush } = args;
+  const steady = args.steady === true;
   const limits = useLimits();
   const config = useConfig(template);
   const readiness = usePositionReadiness(config?.renderer.type === "marigold" ? template : null);
@@ -402,6 +415,8 @@ export function usePositioning(args: Args): Positioning | null {
   // Opened on by a refused *stored* box: a draft that looks valid must not
   // switch the mode off under the pointer or the keyboard.
   const on = adjust?.pane === pane ? adjust.on : stored.some((l) => l.invalid !== null);
+  /** Whether the foot reads as it does while adjusting. */
+  const editing = on || steady;
 
   // `detail` as of this render. A nudge's save runs from the render of its
   // last key press, so it builds on the positions shown then.
@@ -436,13 +451,13 @@ export function usePositioning(args: Args): Positioning | null {
     layers,
     selected: layer.id,
     select,
-    note: refusal(readiness) ?? noteFor(layer, on, layers, ready.config, colours, name),
-    reset: resetOf(layer, on, () => {
+    note: refusal(readiness) ?? noteFor(layer, editing, layers, ready.config, colours, name),
+    reset: resetOf(layer, editing, steady, () => {
       gestures.clear();
       write(withoutPosition(detail.template_positions, name, layer.placement));
     }),
     fit:
-      on && refused !== null
+      editing && refused !== null
         ? () => {
             commit(layer, nearestAllowedPose(layer.box, refused, bounds));
           }

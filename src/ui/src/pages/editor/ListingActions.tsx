@@ -112,16 +112,7 @@ export function ListingActions({
   const name = detail.name;
   const phone = useIsPhone();
 
-  function review(next: boolean) {
-    if (member === null) return;
-    setReviewed(member.batch_id, member.row_id, next)
-      .then((batch) => {
-        setError("");
-        const row = batch.rows.find((r) => r.id === member.row_id);
-        setMember({ ...member, reviewed: row?.reviewed ?? next });
-      })
-      .catch((exc: Error) => setError(exc.message));
-  }
+  const review = useReview(member, setMember, setError);
 
   function runGesture(gesture: Exclude<Gesture, "delete">) {
     setError("");
@@ -166,8 +157,9 @@ export function ListingActions({
       <ActionLink icon={<StackPlusIcon aria-hidden="true" />} onClick={onCreateTemplate}>
         Create listing template
       </ActionLink>
-      {(member !== null || detail.gestures.length > 0) && <ActionDivider />}
-      {member !== null && (
+      {((member !== null && !phone) || detail.gestures.length > 0) && <ActionDivider />}
+      {/* On a phone it sits beside Deploy instead (ReviewButton). */}
+      {member !== null && !phone && (
         <ActionLink
           icon={
             <CheckCircleIcon weight={member.reviewed ? "fill" : "regular"} aria-hidden="true" />
@@ -213,6 +205,64 @@ export function ListingActions({
           />
         </OnBodyOnPhone>
       )}
+    </>
+  );
+}
+
+/** Sends Mark reviewed / Mark needs review, and keeps `member` in step with
+ * what the batch answered. */
+function useReview(
+  member: ListingBatch | null,
+  setMember: (member: ListingBatch) => void,
+  setError: (error: string) => void,
+) {
+  return (next: boolean) => {
+    if (member === null) return;
+    setReviewed(member.batch_id, member.row_id, next)
+      .then((batch) => {
+        setError("");
+        const row = batch.rows.find((r) => r.id === member.row_id);
+        setMember({ ...member, reviewed: row?.reviewed ?? next });
+      })
+      .catch((exc: Error) => setError(exc.message));
+  };
+}
+
+/**
+ * Mark reviewed on a phone: a button beside Deploy rather than a row of the
+ * "⋯" sheet, because reviewing is what a batch's listing is opened for, and
+ * the two are the head's next steps. Pressed, it reads Reviewed, and a
+ * second press marks it as needing review again.
+ */
+export function ReviewButton({
+  member,
+  setMember,
+}: {
+  member: ListingBatch;
+  setMember: (member: ListingBatch) => void;
+}) {
+  const [error, setError] = useState("");
+  const review = useReview(member, setMember, setError);
+  const label = member.reviewed ? "Reviewed" : "Mark reviewed";
+  return (
+    <>
+      <button
+        type="button"
+        className={
+          member.reviewed
+            ? "btn btn-secondary review-btn review-btn--done"
+            : "btn btn-secondary review-btn"
+        }
+        aria-label={label}
+        aria-pressed={member.reviewed}
+        title={reviewTitle(member)}
+        disabled={!member.reviewable}
+        onClick={() => review(!member.reviewed)}
+      >
+        <CheckCircleIcon weight={member.reviewed ? "fill" : "regular"} aria-hidden="true" />
+        <span className="review-btn__label">{label}</span>
+      </button>
+      {error && <HeadAlert>{error}</HeadAlert>}
     </>
   );
 }

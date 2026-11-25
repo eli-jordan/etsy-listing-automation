@@ -39,8 +39,19 @@
      them in its bar, and the title gets a line of its own under them: a long
      listing name then wraps on its own words instead of squeezing between
      the two and pushing its rename pencil onto a line by itself. */
-  .page-head--editor > .page-head__crumb {
+  .page-head--editor > .page-head__crumb,
+  .page-head--editor > .back-crumb {
     order: -3;
+  }
+
+  /* Back to batch reads as the way back, like the crumb it replaces: no
+     outline, a finger's height without growing the line. */
+  .page-head--editor > .back-crumb {
+    min-height: 40px;
+    margin: -4px 0 -4px -6px;
+    padding: 0 6px;
+    border: none;
+    font-size: 14px;
   }
 
   .page-head--editor > .head-more {
@@ -48,29 +59,16 @@
     margin-left: auto;
   }
 
-  .page-head--editor::before {
-    content: "";
-    order: -1;
-    flex-basis: 100%;
-    height: 0;
-  }
-
-  /* The line break between the identity line and the state line. */
-  .page-head--editor::after {
-    content: "";
-    order: 1;
-    flex-basis: 100%;
-    height: 0;
-  }
-
+  /* The title fills a line of its own, between the top line and the state
+     line, without empty break lines (and the row gaps they would bring). */
   .page-head--editor > .page-head__title {
-    flex: 1 1 0;
+    flex: 1 1 100%;
     white-space: normal;
     overflow-wrap: anywhere;
   }
 
   .page-head--editor > .page-head__name-edit {
-    flex: 1 1 0;
+    flex: 1 1 100%;
     min-width: 0;
     flex-wrap: wrap;
   }
@@ -103,6 +101,25 @@
     min-height: 38px;
     padding: 6px 14px;
     font-size: 14px;
+  }
+
+  /* Mark reviewed, beside Deploy (ReviewButton). */
+  .review-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    white-space: nowrap;
+  }
+
+  .review-btn svg {
+    flex: none;
+    width: 18px;
+    height: 18px;
+  }
+
+  .review-btn--done {
+    color: var(--color-accent-2-700);
   }
 
   .head-more {
@@ -204,6 +221,7 @@
   /* Its hit area a finger's height, without growing the line it sits in. */
   .save-chip__trigger {
     min-height: 44px;
+    margin-block: -10px;
   }
 
   .aiflow__node::after {
@@ -526,6 +544,84 @@
     margin-left: auto;
   }
 
+  /* A long press on a tile starts a drag, not the picture's own menu. */
+  .rtile__face img {
+    -webkit-touch-callout: none;
+    user-select: none;
+  }
+
+  /* — Adjust's screen (ImagesTab): the picture takes all the height the
+     note and the controls leave it — */
+  .adjust-screen .phone-screen__body {
+    padding: var(--space-3) var(--space-3) calc(var(--space-3) + env(safe-area-inset-bottom, 0px));
+  }
+
+  .adjust-screen .preview-pane {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+  }
+
+  /* No card around it: the picture sits on the screen itself, with no
+     bands of card above and below a square photo. */
+  .adjust-screen .preview-stage--large {
+    flex: 1 1 0;
+    min-height: 0;
+    height: auto;
+    padding: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  /* Placed by the stage's own box, which is always a definite size: Safari
+     draws a picture sized by a percentage of a flexible height at 0x0. The
+     drawing keeps its proportions inside it, and the drag maths reads it so
+     (PositionStage). */
+  .adjust-screen .preview-stage--large > .tp-stage,
+  .adjust-screen .preview-stage--large > .preview-stage__open {
+    position: absolute;
+    top: var(--space-2);
+    left: var(--space-2);
+    width: calc(100% - 2 * var(--space-2));
+    height: calc(100% - 2 * var(--space-2));
+    max-width: none;
+  }
+
+  .adjust-screen .preview-stage__open {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .adjust-screen .preview-stage__open img {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+  }
+
+  .adjust-screen .preview-foot {
+    flex: none;
+  }
+
+  /* Reset is a finger's height, and the switch keeps to the right of it. */
+  .adjust-screen .tp-controls {
+    justify-content: space-between;
+  }
+
+  .adjust-screen .tp-link {
+    min-height: 44px;
+    font-size: 15px;
+  }
+
+  /* The bar already names the picture, and its file path is no help to a
+     finger adjusting it. */
+  .adjust-screen .preview-meta__title,
+  .adjust-screen .preview-meta__path {
+    display: none;
+  }
+
   .add-media-sheet .locator {
     padding: 0;
     border: none;
@@ -701,15 +797,21 @@
     padding-bottom: var(--space-2);
   }
 
-  .page-head--editor::before,
-  .page-head--editor::after {
-    display: none;
-  }
-
   .page-head--editor > .page-head__crumb,
+  .page-head--editor > .back-crumb,
   .page-head--editor > .status-tag,
   .page-head--editor > .aiflow {
     flex: none;
+  }
+
+  /* One line has no room for Mark reviewed's words: its tick says it, and
+     its name is still read out. */
+  .review-btn__label {
+    display: none;
+  }
+
+  .page-head--editor > .page-head__actions .review-btn {
+    padding-inline: 10px;
   }
 
   /* The steps say what is running when tapped; their one-line label has no
@@ -960,5 +1062,25 @@
     padding: 0 max(var(--space-3), env(safe-area-inset-right, 0px))
       max(var(--space-2), env(safe-area-inset-bottom, 0px))
       max(var(--space-3), env(safe-area-inset-left, 0px));
+  }
+}
+
+/* — Portrait phone: Mark reviewed and Deploy as a pair —
+   With Mark reviewed beside it, Deploy has no room left on the state line, so
+   the two get a line of their own and share it, the next steps under the
+   listing's state. */
+@media (max-width: 700px) and (orientation: portrait) {
+  .page-head--editor > .page-head__actions:has(.review-btn) {
+    flex-basis: 100%;
+    margin-left: 0;
+  }
+
+  .page-head--editor > .page-head__actions:has(.review-btn) > * {
+    flex: 1 1 0;
+    min-width: 0;
+  }
+
+  .page-head--editor > .page-head__actions:has(.review-btn) .btn {
+    width: 100%;
   }
 }

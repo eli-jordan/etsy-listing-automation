@@ -22,7 +22,7 @@ import { DetailsTab } from "./editor/DetailsTab";
 import { PricingTab } from "./editor/PricingTab";
 import { IssuesBanner } from "./editor/IssuesBanner";
 import { withoutPosition } from "./editor/positions/document";
-import { BackToBatch, ListingActions } from "./editor/ListingActions";
+import { BackToBatch, ListingActions, ReviewButton } from "./editor/ListingActions";
 import { HeadAlertSlot } from "./editor/headAlertSlot";
 import { HeadMore } from "./editor/HeadMore";
 import { ImagesTab } from "./editor/ImagesTab";
@@ -275,9 +275,16 @@ function ListingEditorPageContent({
                 adopt={adopt}
                 flush={flush}
                 onCreateTemplate={() => whenWritten(saveAsUrl(detail.name))}
-                onDeleted={() => navigate("/listings", { replace: true })}
+                // Back where the seller came from: a batch's listing opened
+                // from its summary returns to it, as Back to batch does.
+                onDeleted={() => navigate(afterDelete(fromBatch), { replace: true })}
               />
             )
+          }
+          review={
+            phone &&
+            member !== null &&
+            detail.name !== "" && <ReviewButton member={member} setMember={setMember} />
           }
           activity={<AiWorkflowIndicator steps={aiSeo.run.steps} running={aiSeo.run.busy} />}
           title={
@@ -298,6 +305,12 @@ function ListingEditorPageContent({
       }
     />
   );
+}
+
+/** Where the editor goes once its listing is deleted: the batch it was
+ * opened from (`?batch=`), else Listings. */
+function afterDelete(fromBatch: string | null): string {
+  return fromBatch === null ? "/listings" : `/batches/${encodeURIComponent(fromBatch)}`;
 }
 
 /** Where Create listing template opens the unsaved template (UI doc §1). */
@@ -331,6 +344,7 @@ export function EditorHead({
   activity,
   crumb,
   actions,
+  review,
   kind = "listing",
 }: {
   detail: ListingDetail;
@@ -346,6 +360,9 @@ export function EditorHead({
   crumb?: ReactNode;
   /** The action row's contents, when there are any. */
   actions?: ReactNode;
+  /** Mark reviewed, beside Deploy, on a phone (`ReviewButton`); the desktop
+   * keeps it in the action row. */
+  review?: ReactNode;
   /** A listing template's head has no status and no Deploy (UI doc §3): a
    * template never deploys. Its actions are its caller's. */
   kind?: "listing" | "listing-template";
@@ -377,6 +394,7 @@ export function EditorHead({
 
           {listing && detail.name !== "" && (
             <div className="page-head__actions dv-head-actions">
+              {review}
               <DeployControl name={detail.name} flush={flush} />
             </div>
           )}
