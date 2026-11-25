@@ -3,6 +3,11 @@ that copy instead of creating a repository (workspace-backup spec, *Set-up*),
 through ``POST /api/backup/setup`` with the app's lifespan running. restic is
 the by-command fake unless a test is marked ``restic``; every folder is under
 ``tmp_path`` (plan, P2).
+
+These check status codes, the answer's shape and the coordinator's slot.
+Which destinations set-up may connect, what it refuses, the workspace ID
+it chooses and that a refusal leaves nothing behind are
+``tests/core/behaviour/test_backup_provisioning.py``'s.
 """
 
 from __future__ import annotations
@@ -200,7 +205,7 @@ def test_a_password_that_does_not_open_the_backup_is_refused_on_the_password(
 ) -> None:
     cloud = _copy(tmp_path / "cloud", "first").root
     restic.password = "the old machine's password"
-    before = _untouched(workspace_root, storage) | {"cloud": files(cloud)}
+    before = _untouched(workspace_root, storage)
 
     refused = _set_up(client, storage, [cloud])
 
@@ -208,51 +213,20 @@ def test_a_password_that_does_not_open_the_backup_is_refused_on_the_password(
     body = refused.json()
     assert f"{cloud} already holds a backup" in body["field_errors"]["password"]
     assert body["message"] == body["field_errors"]["password"]
-    assert _untouched(workspace_root, storage) | {"cloud": files(cloud)} == before
-
-
-def test_part_of_a_copy_without_config_is_refused(
-    client: TestClient, workspace_root: Path, storage: Path, tmp_path: Path
-) -> None:
-    cloud = _copy(tmp_path / "cloud", "first")
-    cloud.remove("config")
-    before = _untouched(workspace_root, storage)
-
-    refused = _set_up(client, storage, [cloud.root])
-
-    assert refused.status_code == 422, refused.text
-    assert "no config file" in refused.json()["message"]
     assert _untouched(workspace_root, storage) == before
 
 
-def test_two_different_repositories_are_refused(
-    client: TestClient, workspace_root: Path, storage: Path, tmp_path: Path
+def test_destinations_set_up_must_not_choose_between_are_a_422(
+    client: TestClient, storage: Path, tmp_path: Path
 ) -> None:
     icloud = _copy(tmp_path / "icloud", "first").root
     nas = _copy(tmp_path / "nas", "other", repository_id="another").root
-    before = _untouched(workspace_root, storage)
 
     refused = _set_up(client, storage, [icloud, nas])
 
     assert refused.status_code == 422, refused.text
+    assert refused.json()["kind"] == "invalid"
     assert "two different backup repositories" in refused.json()["message"]
-    assert _untouched(workspace_root, storage) == before
-
-
-def test_copies_that_each_lack_files_the_other_has_are_refused(
-    client: TestClient, workspace_root: Path, storage: Path, tmp_path: Path
-) -> None:
-    icloud = _copy(tmp_path / "icloud", "first")
-    nas = _copy(tmp_path / "nas", "first")
-    icloud.backup("only in icloud")
-    nas.backup("only on the nas")
-    before = _untouched(workspace_root, storage)
-
-    refused = _set_up(client, storage, [icloud.root, nas.root])
-
-    assert refused.status_code == 422, refused.text
-    assert "each has files the other lacks" in refused.json()["message"]
-    assert _untouched(workspace_root, storage) == before
 
 
 def test_of_several_copies_it_connects_the_complete_one_that_passes_a_check(
@@ -292,13 +266,12 @@ def test_a_storage_folder_that_holds_files_is_refused(
     cloud = _copy(tmp_path / "cloud", "first").root
     storage.mkdir()
     (storage / "notes.txt").write_text("mine", encoding="utf-8")
-    before = _untouched(workspace_root, storage)
 
     refused = _set_up(client, storage, [cloud])
 
     assert refused.status_code == 409, refused.text
     assert "already holds files" in refused.json()["message"]
-    assert _untouched(workspace_root, storage) == before
+    assert _ok(client.get("/api/backup"), 200)["running"] is None, "the slot is released"
 
 
 @pytest.mark.parametrize("destination", ["new", "empty"])
@@ -355,19 +328,6 @@ def test_set_up_connects_a_real_repository_and_the_next_backup_adds_to_it(
     assert status["connected"] == {"destination": str(cloud), "snapshots": 1, "notice": None}
     assert entry["run"]["outcome"] == "succeeded", entry
     assert after["repository"]["snapshots"] == 2
-
-
-def test_set_up_adopts_the_workspace_id_the_connected_backup_carries(
-    client: TestClient, workspace_root: Path, storage: Path, restic: InMemoryRestic, tmp_path: Path
-) -> None:
-    """Its snapshots' schedule carries on; untagged ones are not counted."""
-    cloud = _copy(tmp_path / "cloud", "first").root
-    restic.snapshots[:] = [NOW - timedelta(days=30), MemorySnapshot(NOW - timedelta(days=1), OURS)]
-
-    status = _ok(_set_up(client, storage, [cloud]))
-
-    assert status["connected"]["notice"] is None
-    assert _workspace_id(workspace_root) == OURS
 
 
 def test_set_up_starts_its_own_retention_beside_several_workspaces_and_says_so(

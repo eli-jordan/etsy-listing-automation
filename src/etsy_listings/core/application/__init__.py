@@ -57,6 +57,13 @@ import names the module it depends on. Public interfaces:
     ``overlaps``, ``holds_files``, ``has_repository`` and
     ``check_backup_paths``; ``create_repository``, ``repository_at``, and
     ``backup_status`` -> ``BackupStatus``, read without a lock.
+``backup_provisioning``
+    ``provision`` -> ``Provisioned``: the one way the backup storage folder
+    gets its repository, for Setup, Create, Connect and ``backup init``. A
+    caller passes ``Provisioning``: the folder, a ``NewRepository`` or
+    ``DestinationCopy`` (``source_for`` picks from the destinations), a
+    ``PasswordSource`` and, for set-up, a ``NewBlock``. Refuses before it
+    writes, and undoes every step when one fails.
 ``backup_run``
     ``BackupRunner``: ``run`` (one backup, paused through an optional
     ``JobGate``, then forget and the weekly prune and check) -> ``RunRecord``,

@@ -56,6 +56,13 @@ The local restic repository the app backs the workspace up into, named by
 stops backups until the seller creates or connects one.
 _Avoid_: backup folder, repository (restic's word, and the code's)
 
+**Provisioning**:
+Giving the backup storage folder its repository, new or copied from a
+destination, then saving the `backup:` block that names it. Set-up, Create,
+Connect and `backup init` all provision the same way, and a provisioning that
+is refused or fails leaves the workspace as it was.
+_Avoid_: initialising (restic's `init` is only one way), adopting
+
 **Destination**:
 A folder the backup storage folder is copied to one way after each backup, such
 as a folder in iCloud Drive. Each is a complete restic repository by itself.

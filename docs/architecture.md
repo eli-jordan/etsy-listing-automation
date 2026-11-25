@@ -1472,32 +1472,43 @@ snapshots for the restore dialog, including ones made by hand. The CLI's
 `backup restore` prepares and runs the same restore in the foreground and only
 prints.
 
+Every way a backup storage folder gets its repository goes through
+`core/application/backup_provisioning.py`: Setup, the missing banner's Create
+and Connect, and `backup init`. Each caller says only where the repository
+comes from (`NewRepository`, or a `DestinationCopy`) and how the password is
+got (`PasswordSource.typed` for Setup's form, `PasswordSource.stored_or` for
+the rest). `provision` refuses everything it can first, writing nothing: a
+storage folder that overlaps, already holds files or has no parent folder, a
+new repository while a destination holds a repository's copy
+(`holds_repository`, with `connect_from` in the refusal), a copy that is not
+a repository, and the `backup:` save itself (`check_settings_edit`: revision
+and validation). Only then is the password asked for. It then stores the
+password, builds the repository in a `<folder>.provisioning-<hex>` staging
+folder beside the target (`restic init`, or the destinations' own one-way copy
+that the password must open and that must pass a `check`), renames it into
+place, chooses the workspace ID (ADR-0061) and saves the block last. A failure
+at any step undoes the ones before it, so the workspace is left as it was: no
+password, no block, no repository and no staging folder. The module docstring
+gives the reasons for the order.
+
 A missing repository has two ways back, in `core/application/backup_missing.py`,
 both refused while the configured folder holds restic's `config`.
 `POST /api/backup/repository` creates one in a new or empty folder and starts
 the first backup. `POST /api/backup/connect` copies an existing one, usually a
-destination, with the destinations' own one-way copy into a
-`<folder>.connecting-<hex>` staging folder beside the target. The password
-must open the staging copy (`verify_password`) and the copy must pass a
-`check` before it takes the target's name, and only then are
-`backup.repository` (when the folder changed) and the password written. A
-wrong password deletes the staging folder and writes nothing. Connect holds
-the backup slot while it copies. The status's `repository.password_stored`
-tells the page whether to ask for a password. Create is refused while a
-destination holds a repository's copy (`holds_repository`), with
-`connect_from` in the refusal, and `repair_destination` refuses a destination
-whose `config` differs or is missing while restic files remain
-(`ForeignCopyError`). The ordinary copy also stops in these cases.
+destination. Connect holds the backup slot while it copies. The status's
+`repository.password_stored` tells the page whether to ask for a password.
+`repair_destination` refuses a destination whose `config` differs or is
+missing while restic files remain (`ForeignCopyError`). The ordinary copy also
+stops in these cases.
 
-First-time set-up uses the same connect. `backup_setup.prepare_set_up`
-checks every refusal before writing, and asks `backup_missing.existing_copies`
-whether the destinations hold a repository: copies of one repository share
-`config`'s bytes, and only a copy holding every file the others hold may be
-the source. When one does, `POST /api/backup/setup` and `backup init`
-connect it with `connect_existing` (Connect's own staging copy, the first
-copy that opens and passes a check) instead of creating, and the coordinator
-holds the `connect` slot meanwhile. The answer's `connected` names the
-destination and the snapshot count.
+First-time set-up connects too. `backup_setup.prepare_set_up` refuses what
+only set-up refuses, and asks `backup_provisioning.source_for` whether the
+destinations hold a repository: copies of one repository share `config`'s
+bytes, and only a copy holding every file the others hold may be the source.
+When one does, `POST /api/backup/setup` and `backup init` connect it (the
+first copy that opens and passes a check) instead of creating, and the
+coordinator holds the `connect` slot meanwhile. The answer's `connected` names
+the destination and the snapshot count.
 
 ## Durable Marigold maps and CPU composition
 
