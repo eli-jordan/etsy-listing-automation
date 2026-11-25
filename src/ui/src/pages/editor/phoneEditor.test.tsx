@@ -3,6 +3,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ActionLink } from "../../components/ActionLink";
 import { PHONE_QUERY } from "../../phone/usePhone";
 import type { Issue, MediaEntry } from "../../types";
+import { HeadAlert } from "./HeadAlert";
+import { HeadAlertSlot } from "./headAlertSlot";
 import { HeadMore } from "./HeadMore";
 import { IssuesBanner } from "./IssuesBanner";
 import { MediaReel } from "./MediaReel";
@@ -78,6 +80,63 @@ describe("the phone reel", () => {
   });
 });
 
+describe("the phone reel's selected tile", () => {
+  function selected(media: MediaEntry[], index: number) {
+    const props = {
+      media,
+      scene: null,
+      swatchTemplate: null,
+      selectedIndex: index,
+      listing: "take-a-hike",
+      files: [],
+      onRemove: vi.fn(),
+      onReorder: vi.fn(),
+      onFocus: vi.fn(),
+      onView: vi.fn(),
+      onDeselect: vi.fn(),
+    };
+    const { container } = render(<MediaReel {...props} />);
+    const faces = container.querySelectorAll(".rtile__face");
+    return { props, faces };
+  }
+
+  it("opens full size from its bar", () => {
+    const { props } = selected(MEDIA, 2);
+    const bar = screen.getByRole("group", { name: "Move fence-01 · black" });
+    fireEvent.click(within(bar).getByRole("button", { name: "View" }));
+    expect(props.onView).toHaveBeenCalledWith(2);
+  });
+
+  it("lets go on the bar's Done, a second tap or Escape", () => {
+    const { props, faces } = selected(MEDIA, 2);
+    const bar = screen.getByRole("group", { name: "Move fence-01 · black" });
+    fireEvent.click(within(bar).getByRole("button", { name: "Done" }));
+    expect(props.onDeselect).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(faces[2] as Element);
+    expect(props.onDeselect).toHaveBeenCalledTimes(2);
+    expect(props.onFocus).not.toHaveBeenCalled();
+
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(props.onDeselect).toHaveBeenCalledTimes(3);
+  });
+
+  it("calls a video a video, and says why it cannot move", () => {
+    selected(["./front.png", "./spin.mp4", "./back.png"], 1);
+    const bar = screen.getByRole("group", { name: /^Move .*spin/ });
+    expect(bar).toHaveTextContent("Video 2:");
+    expect(bar).toHaveTextContent("Etsy shows a listing’s video second");
+    expect(within(bar).getByRole("button", { name: "Move later" })).toBeDisabled();
+  });
+
+  it("says nothing about staying put for an image that can move", () => {
+    selected(MEDIA, 1);
+    const bar = screen.getByRole("group", { name: /^Move / });
+    expect(bar).toHaveTextContent("Image 2:");
+    expect(bar).not.toHaveTextContent("stays in that place");
+  });
+});
+
 const ISSUES: Issue[] = [
   { severity: "block", tab: "pricing", where: "Pricing", message: "No pricing plan" },
   { severity: "warn", tab: "details", where: "Listing Details › Tags", message: "No tags" },
@@ -93,6 +152,42 @@ describe("the phone issues banner", () => {
     expect(screen.getByText("No pricing plan")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Hide" }));
     expect(screen.queryByText("No pricing plan")).not.toBeInTheDocument();
+  });
+
+  it("folds again on a Fix, on its way to the tab", () => {
+    const jump = vi.fn();
+    render(<IssuesBanner issues={ISSUES} activeTab="variants" onJumpTo={jump} />);
+    fireEvent.click(screen.getByRole("button", { name: "Show" }));
+    fireEvent.click(screen.getByRole("button", { name: "Fix: No tags" }));
+    expect(jump).toHaveBeenCalledWith("details");
+    expect(screen.queryByText("No pricing plan")).not.toBeInTheDocument();
+  });
+});
+
+describe("an action's error", () => {
+  it("shows under the phone head rather than in the closed sheet", () => {
+    const slot = document.createElement("div");
+    document.body.append(slot);
+    render(
+      <HeadAlertSlot value={slot}>
+        <div data-testid="sheet">
+          <HeadAlert>Could not delete x</HeadAlert>
+        </div>
+      </HeadAlertSlot>,
+    );
+    expect(slot).toHaveTextContent("Could not delete x");
+    expect(screen.getByTestId("sheet")).toBeEmptyDOMElement();
+    slot.remove();
+  });
+
+  it("stays beside its action without a slot", () => {
+    render(
+      <div data-testid="row">
+        <HeadAlert>Could not delete x</HeadAlert>
+      </div>,
+    );
+    expect(screen.getByTestId("row")).toHaveTextContent("Could not delete x");
+    expect(screen.getByRole("alert")).toHaveClass("action-row__error");
   });
 });
 

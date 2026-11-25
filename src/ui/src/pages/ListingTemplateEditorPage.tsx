@@ -15,6 +15,7 @@ import { useUnsavedWarning } from "../hooks/useUnsavedWarning";
 import type { MediaOwner } from "../media";
 import type { ListingDetail, ListingTemplateDetail, ListingTemplateSource } from "../types";
 import { EditorHead, ListingEditorShell } from "./ListingEditorPage";
+import { HeadAlert } from "./editor/HeadAlert";
 import { listingTemplateTransport, templateAsListing } from "./editor/listingTemplateDocument";
 import { metaFor } from "./editor/saveMeta";
 import { TEMPLATE_DELETE_DETAILS, templateDeleteTitle } from "./listingTemplateDelete";
@@ -234,11 +235,7 @@ function ListingTemplateEditor({
                   >
                     Delete
                   </ActionLink>
-                  {actionError && (
-                    <span className="action-row__error" role="alert">
-                      {actionError}
-                    </span>
-                  )}
+                  {actionError && <HeadAlert>{actionError}</HeadAlert>}
                 </>
               )
             }

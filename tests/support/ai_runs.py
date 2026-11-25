@@ -325,3 +325,42 @@ def seed_snapshot(
     taken = MarketSnapshot.of(result, searched_at=searched_at)
     market_snapshot.save(Workspace.discover(root_override=root), listing, taken)
     return taken
+
+
+def _running_ai_run(listing: str) -> dict:
+    """A run of AI Mode in progress, as `GET /api/ai/runs` answers for it."""
+    return {
+        "id": "run-1",
+        "listing": listing,
+        "origin": "manual",
+        "phase": "running",
+        "draft_brief": False,
+        "waiting_for_backup": False,
+        "created_at": "2026-11-25T10:00:00Z",
+        "started_at": "2026-11-25T10:00:00Z",
+        "finished_at": None,
+        "steps": [
+            {"id": "brief", "state": "done"},
+            {"id": "market", "state": "active"},
+            {"id": "seo", "state": "pending"},
+        ],
+    }
+
+
+def serve_running_ai_run(page, listing: str, *, stream_fails: bool) -> None:
+    """Serves a run in progress for ``listing`` to a Playwright ``page``, for a
+    browser test of how the editor shows one. Its event stream either stays
+    open quietly or fails, which the editor reports as AI Mode not finishing."""
+
+    def handle(route) -> None:
+        if "/events" in route.request.url:
+            if stream_fails:
+                route.fulfill(status=500, body="")
+            else:
+                route.fulfill(
+                    status=200, headers={"content-type": "text/event-stream"}, body=": idle\n\n"
+                )
+            return
+        route.fulfill(status=200, json=_running_ai_run(listing))
+
+    page.route("**/api/ai/runs**", handle)

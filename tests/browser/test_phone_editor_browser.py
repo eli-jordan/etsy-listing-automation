@@ -10,7 +10,8 @@ from pathlib import Path
 import pytest
 import yaml
 
-from tests.support.mobile import assert_mobile_page_fits, swipe
+from tests.support.ai_runs import serve_running_ai_run
+from tests.support.mobile import PHONE_CONTEXT, assert_mobile_page_fits, swipe
 
 pytestmark = pytest.mark.browser
 
@@ -157,3 +158,144 @@ def test_details_fields_are_full_width_under_their_labels(phone_page) -> None:
     ai = page.locator(".seo-ai-mode-anchor").bounding_box()
     assert ai["y"] >= brief["y"] + brief["height"]
     assert_mobile_page_fits(page)
+
+
+def test_a_failed_action_from_the_more_sheet_shows_under_the_head(phone_page) -> None:
+    page = phone_page
+
+    def refuse_delete(route) -> None:
+        if route.request.method == "DELETE":
+            route.fulfill(status=500, json={"detail": "no"})
+        else:
+            route.fallback()
+
+    page.route("**/api/listings/take-a-hike", refuse_delete)
+    _open_editor(page)
+    page.get_by_role("button", name="More actions").tap()
+    sheet = page.get_by_role("dialog", name="take-a-hike", exact=True)
+    sheet.locator(".action-link--danger").tap()
+    sheet.wait_for(state="hidden")
+    confirm = page.get_by_role("dialog")
+    confirm.get_by_role("button").filter(has_text="elet").last.tap()
+
+    alert = page.get_by_role("alert").filter(has_text="Could not")
+    alert.wait_for(state="visible")
+    head = page.locator(".page-head--editor").bounding_box()
+    box = alert.bounding_box()
+    assert box["y"] >= head["y"] + head["height"] - 1
+    assert box["y"] + box["height"] <= page.viewport_size["height"]
+
+
+def test_fix_opens_its_tab_right_under_the_tab_strip(phone_page) -> None:
+    page = phone_page
+    page.goto(f"{page.url.rstrip('/')}/listings/new")
+    page.locator(".issues").wait_for(state="visible")
+    page.get_by_role("button", name="Show").tap()
+    page.locator(".issue__fix", has_text="Fix").last.tap()
+    page.wait_for_timeout(500)
+
+    assert _active_tab(page) == "Details"
+    # The list folded again, and the tab starts right under the strip.
+    assert page.locator(".issue").count() == 0
+    tabs = page.locator(".tabs").bounding_box()
+    content = page.locator(".editor-pager").bounding_box()
+    assert tabs["y"] >= 0
+    assert content["y"] - (tabs["y"] + tabs["height"]) < 24
+    assert_mobile_page_fits(page)
+
+
+def test_a_selected_tile_opens_full_size_and_can_be_let_go(phone_page) -> None:
+    page = phone_page
+    _open_editor(page, "Listing Images")
+    tile = page.locator(".rtile__face").nth(2)
+    tile.tap()
+    bar = page.locator(".reel-moves")
+    bar.wait_for(state="visible")
+
+    # The stage is as tall as its picture at the screen's width, not a
+    # screen tall.
+    stage = page.locator(".images-tab .preview-stage--large").bounding_box()
+    assert stage["height"] <= stage["width"] + 2
+
+    bar.get_by_role("button", name="View").tap()
+    count = page.locator(".lightbox__count")
+    count.wait_for(state="visible")
+    assert count.inner_text() == "3 / 4"
+    page.keyboard.press("Escape")
+    page.locator(".lightbox").wait_for(state="detached")
+    # Escape closed the full-size view, not the selection under it.
+    assert bar.is_visible()
+
+    bar.get_by_role("button", name="Done").tap()
+    bar.wait_for(state="detached")
+    tile.tap()
+    bar.wait_for(state="visible")
+    tile.tap()
+    bar.wait_for(state="detached")
+    tile.tap()
+    bar.wait_for(state="visible")
+    page.keyboard.press("Escape")
+    bar.wait_for(state="detached")
+
+
+def test_the_tabs_and_their_issue_counts_fit_a_320px_screen(
+    browser_type, calibrator_server: str
+) -> None:
+    context = browser_type.new_context(
+        **{**PHONE_CONTEXT, "viewport": {"width": 320, "height": 568}}
+    )
+    try:
+        page = context.new_page()
+        page.goto(f"{calibrator_server}/listings/new")
+        page.locator(".tabs .tab-badge").first.wait_for(state="visible")
+        layout = page.evaluate(
+            """() => [...document.querySelectorAll('.tabs .seg-opt')].map((tab) => {
+              const range = document.createRange();
+              range.selectNodeContents(tab);
+              const text = range.getBoundingClientRect();
+              const box = tab.getBoundingClientRect();
+              return {left: box.left, right: box.right, textLeft: text.left, textRight: text.right};
+            })"""
+        )
+        assert len(layout) == 4
+        assert layout[-1]["right"] <= 320
+        for tab in layout:
+            # Each label and its count inside its own tab, clear of the
+            # next one's label.
+            assert tab["textLeft"] >= tab["left"] + 1
+            assert tab["textRight"] <= tab["right"] - 1
+        assert page.locator(".tabs .tab-badge").count() >= 2
+        assert_mobile_page_fits(page)
+    finally:
+        context.close()
+
+
+def test_the_ai_failure_toast_stays_put_while_the_tab_is_swiped(phone_page) -> None:
+    page = phone_page
+    serve_running_ai_run(page, "take-a-hike", stream_fails=True)
+    _open_editor(page, "Listing Details")
+    toast = page.locator(".ai-failure-toast")
+    toast.wait_for(state="visible")
+    page.wait_for_timeout(400)  # its slide in
+    before = toast.bounding_box()
+
+    box = page.locator(".editor-pager").bounding_box()
+    y = box["y"] + 14
+    session = page.context.new_cdp_session(page)
+    try:
+        session.send(
+            "Input.dispatchTouchEvent", {"type": "touchStart", "touchPoints": [{"x": 330, "y": y}]}
+        )
+        for step in range(1, 7):
+            point = {"x": 330 - step * 15, "y": y}
+            session.send("Input.dispatchTouchEvent", {"type": "touchMove", "touchPoints": [point]})
+            page.wait_for_timeout(16)
+        page.wait_for_timeout(100)
+        # The tab content is mid-drag; the toast is not part of it.
+        assert page.evaluate("document.querySelector('.editor-pager').style.transform") != ""
+        during = toast.bounding_box()
+        session.send("Input.dispatchTouchEvent", {"type": "touchEnd", "touchPoints": []})
+    finally:
+        session.detach()
+    assert during["x"] == pytest.approx(before["x"], abs=1)
+    assert during["y"] == pytest.approx(before["y"], abs=1)

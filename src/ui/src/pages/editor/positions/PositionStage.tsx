@@ -1,4 +1,5 @@
 import { type KeyboardEvent, type PointerEvent, useLayoutEffect, useRef, useState } from "react";
+import { useIsPhone } from "../../../phone/usePhone";
 import { type Point, type Quad, compose, homography, toPhoto } from "./pose";
 import { type LiveSource, useLiveScene } from "./useLiveScene";
 import type { Gesture, Layer, Positioning } from "./usePositioning";
@@ -64,6 +65,7 @@ function stemOf(layer: Layer, corners: Quad, k: number) {
 export function PositionStage({ positioning, picture, title, source }: Props) {
   const { size, layers, selected, live } = positioning;
   const svg = useRef<SVGSVGElement>(null);
+  const phone = useIsPhone();
   const canvas = useRef<HTMLCanvasElement>(null);
   /** Photo pixels per screen pixel, so handles keep their screen size. */
   const [k, setK] = useState(size.w / 480);
@@ -119,7 +121,7 @@ export function PositionStage({ positioning, picture, title, source }: Props) {
     <svg
       ref={svg}
       // Its drags move the design; the phone's tab swipe must leave them be.
-      data-swipe-ignore=""
+      {...(phone ? { "data-swipe-ignore": "" } : {})}
       className="tp-stage"
       viewBox={`0 0 ${size.w} ${size.h}`}
       onPointerMove={(event) => positioning.move(photoPoint(event))}
