@@ -1,0 +1,388 @@
+/* — Phone: Admin (settings and backup) —
+   The section-specific phone rules from before this folder existed stay in
+   pages/admin/admin.css and pages/admin/backup/backup.css.
+   All rules inside the phone query (phone/usePhone.ts). */
+
+@media (max-width: 700px), (pointer: coarse) and (orientation: landscape) and (max-height: 500px) {
+  /* A section slides in and out with a sideways swipe; it must not widen
+     the page. Clipped at the page's padding, not inside it, which the chips
+     bleed into. */
+  .shell__main:has(.adm-page) {
+    overflow-x: clip;
+  }
+
+  /* — the sections: a sticky row of chips (PhoneSections) — */
+  .adm-chips {
+    position: sticky;
+    top: 0;
+    z-index: 15;
+    display: grid;
+    gap: var(--space-2);
+    margin: calc(-1 * var(--space-2)) calc(-1 * var(--space-3)) 0;
+    padding: var(--space-2) 0;
+    border-bottom: 1px solid var(--color-divider);
+    background: color-mix(in srgb, var(--color-bg) 94%, transparent);
+    -webkit-backdrop-filter: saturate(1.4) blur(14px);
+    backdrop-filter: saturate(1.4) blur(14px);
+  }
+
+  .adm-chips__row {
+    position: relative;
+    display: flex;
+    gap: var(--space-2);
+    padding: 0 var(--space-3);
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scroll-padding-inline: var(--space-3);
+    scrollbar-width: none;
+  }
+
+  .adm-chips__row::-webkit-scrollbar {
+    display: none;
+  }
+
+  .adm-chip {
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 40px;
+    padding: 0 14px;
+    border: 1px solid var(--color-divider);
+    border-radius: 999px;
+    background: var(--color-surface);
+    color: color-mix(in srgb, var(--color-text) 78%, transparent);
+    font-size: 14px;
+    font-weight: 600;
+    text-decoration: none;
+    white-space: nowrap;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .adm-chip.is-active {
+    border-color: var(--color-accent-300);
+    background: var(--color-accent-200);
+    color: var(--color-accent-800);
+  }
+
+  .adm-chip__hint {
+    color: color-mix(in srgb, var(--color-text) 50%, transparent);
+    font-size: 12px;
+    font-weight: 500;
+  }
+
+  .adm-chip__warn {
+    display: inline-flex;
+    color: var(--color-warning-600, var(--color-accent-700));
+  }
+
+  /* Backup's two pages, a segmented pair under the chips. */
+  .adm-chips__pages {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    margin: 0 var(--space-3);
+    padding: 3px;
+    border-radius: var(--radius-md);
+    background: color-mix(in srgb, var(--color-text) 7%, transparent);
+  }
+
+  .adm-chips__page {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 36px;
+    border-radius: calc(var(--radius-md) - 2px);
+    color: color-mix(in srgb, var(--color-text) 70%, transparent);
+    font-size: 13.5px;
+    font-weight: 600;
+    text-decoration: none;
+  }
+
+  /* A 44px hit area around the 36px segment. */
+  .adm-chips__page::after {
+    content: "";
+    position: absolute;
+    inset: -4px 0;
+  }
+
+  .adm-chips__page.is-active {
+    background: var(--color-surface);
+    color: var(--color-text);
+    box-shadow: 0 1px 2px rgb(40 30 20 / 0.12);
+  }
+
+  /* — info cards: under their button, across the content width (Info's
+     placement), closed by their own ✕; the 22px (i) gets a 44px hit area — */
+  .s-info-btn {
+    position: relative;
+  }
+
+  .s-info-btn::after {
+    content: "";
+    position: absolute;
+    inset: -11px;
+  }
+
+  .sp-info .s-info--popover {
+    top: calc(100% + 10px);
+    z-index: 25;
+    max-width: none;
+    padding-right: 48px;
+  }
+
+  /* Title, explanation, effect and source each on a line of their own. */
+  .sp-info .s-info--popover > span {
+    display: block;
+  }
+
+  .sp-info .s-info--popover::before {
+    left: var(--s-info-arrow, 18px);
+  }
+
+  .s-info__close {
+    position: absolute;
+    top: 2px;
+    right: 2px;
+    display: grid;
+    place-items: center;
+    width: 44px;
+    height: 44px;
+    padding: 0;
+    border: 0;
+    border-radius: 999px;
+    background: none;
+    color: color-mix(in srgb, var(--color-text) 60%, transparent);
+  }
+
+  /* — a field's save: a toast above the tab bar (AdminPage's
+     PhoneSaveToast), since the page head scrolls away under the chips — */
+  .adm-save-toast {
+    position: fixed;
+    right: var(--space-3);
+    bottom: calc(var(--phone-tabbar-h) + var(--space-3));
+    left: var(--space-3);
+    z-index: 40;
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    min-height: 48px;
+    padding: var(--space-2) var(--space-2) var(--space-2) var(--space-4);
+    border: 1px solid var(--color-divider);
+    border-radius: var(--radius-md);
+    background: var(--color-surface);
+    box-shadow: 0 8px 24px rgb(40 30 20 / 0.18);
+  }
+
+  .adm-save-toast .adm-save {
+    flex: 1;
+    min-width: 0;
+    font-size: 14px;
+    white-space: normal;
+  }
+
+  .adm-save-toast .btn {
+    flex: none;
+    min-height: 44px;
+  }
+
+  .adm-save-toast--quiet {
+    min-height: 0;
+    padding: 0;
+    border: 0;
+    background: none;
+    box-shadow: none;
+    pointer-events: none;
+  }
+
+  /* — the panels: the page's width for the settings, not the card's — */
+  .adm-page .page-head {
+    margin-bottom: var(--space-2);
+  }
+
+  .adm-body {
+    gap: var(--space-3);
+  }
+
+  .b-panel {
+    padding: var(--space-4) var(--space-4) var(--space-5, 20px);
+    border-radius: var(--radius-md);
+    margin-bottom: var(--space-4);
+  }
+
+  .b-panel__head {
+    flex-wrap: wrap;
+    gap: var(--space-2) var(--space-3);
+  }
+
+  .b-panel__head > :first-child {
+    flex: 1 1 260px;
+    min-width: 0;
+  }
+
+  .b-panel__title {
+    font-size: 19px;
+  }
+
+  /* AI providers: arrow buttons stand in for the drag handle. */
+  .adm-reorder {
+    display: inline-flex;
+    gap: 2px;
+  }
+
+  .adm-reorder__btn {
+    display: inline-grid;
+    place-items: center;
+    width: 44px;
+    height: 44px;
+    padding: 0;
+    border: 1px solid var(--color-divider);
+    border-radius: var(--radius-sm);
+    background: var(--color-bg);
+    color: color-mix(in srgb, var(--color-text) 70%, transparent);
+  }
+
+  .adm-reorder__btn:disabled {
+    opacity: 0.35;
+  }
+
+  .sp-num,
+  .b-step__num {
+    width: 36px;
+    height: 36px;
+  }
+
+  /* A provider's number is a button: a 44px hit area around the circle. */
+  .sp-num::after {
+    content: "";
+    position: absolute;
+    inset: -4px;
+    border-radius: 50%;
+  }
+
+  /* Market SEO: a finger-wide hit area around each 18px divider. */
+  .sp-weights__divider::before {
+    content: "";
+    position: absolute;
+    inset: 0 -13px;
+  }
+
+  .b-step {
+    grid-template-columns: 36px minmax(0, 1fr);
+    gap: var(--space-2);
+  }
+
+  /* Template rendering: each limit's label over a full-width slider. */
+  .tl-row {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-1);
+    padding: var(--space-3) 0;
+  }
+
+  .tl-row__label {
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: baseline;
+    column-gap: var(--space-2);
+  }
+
+  .sp-slider {
+    max-width: none;
+  }
+
+  /* A thumb a finger can find. */
+  .sp-slider input[type="range"] {
+    height: 36px;
+  }
+
+  .tl-foot .btn {
+    flex: 1 1 0;
+    min-height: 44px;
+    justify-content: center;
+  }
+
+  /* — dialogs: bottom sheets over the tab bar — */
+  .sa-scrim,
+  .bk-scrim {
+    z-index: 70;
+    place-items: end stretch;
+  }
+
+  .sa-modal,
+  .bk-dialog {
+    width: 100%;
+    max-width: 100%;
+    max-height: calc(100dvh - 40px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    border-radius: 18px 18px 0 0;
+  }
+
+  .sa-modal {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+
+  .sa-modal .sheet-grabber {
+    margin: 0;
+  }
+
+  .bk-dialog {
+    padding: 0 var(--space-4) calc(var(--space-4) + env(safe-area-inset-bottom, 0px));
+  }
+
+  .bk-dialog > :first-child:not(.sheet-grabber) {
+    margin-top: var(--space-4);
+  }
+
+  .bk-dialog .sheet-grabber {
+    margin-bottom: calc(-1 * var(--space-4));
+  }
+
+  .bk-dialog__foot,
+  .sa-modal__foot {
+    flex-direction: column-reverse;
+    align-items: stretch;
+  }
+
+  .bk-dialog__foot .btn,
+  .sa-modal__foot .btn {
+    width: 100%;
+    min-height: 46px;
+    justify-content: center;
+  }
+}
+
+@media (max-width: 700px) and (prefers-reduced-motion: no-preference),
+  (pointer: coarse) and (orientation: landscape) and (max-height: 500px) and (prefers-reduced-motion: no-preference) {
+  .sa-modal,
+  .bk-dialog {
+    animation: phone-admin-sheet-in 0.24s cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+
+  @keyframes phone-admin-sheet-in {
+    from {
+      transform: translateY(100%);
+    }
+  }
+}
+
+/* — A phone on its side: the dialogs rise at a readable width in the
+   middle, like every other sheet (phone/base.css). — */
+@media (pointer: coarse) and (orientation: landscape) and (max-height: 500px) {
+  .sa-scrim,
+  .bk-scrim {
+    place-items: end center;
+  }
+
+  /* Clear of the nav rail, at a readable width. */
+  .adm-save-toast {
+    left: calc(var(--phone-rail-w) + var(--space-3));
+    right: max(var(--space-3), env(safe-area-inset-right, 0px));
+    max-width: 600px;
+  }
+
+  .sa-modal,
+  .bk-dialog {
+    width: min(100%, 600px);
+    max-height: calc(100dvh - 12px);
+  }
+}

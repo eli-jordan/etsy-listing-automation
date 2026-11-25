@@ -1,4 +1,8 @@
 import { useCallback, useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
+import { usePager } from "../phone/usePager";
+import { useIsPhone } from "../phone/usePhone";
+import { useSheetDrag } from "../phone/useSheetDrag";
 
 /**
  * One preview, as large as the screen allows, over everything else.
@@ -73,10 +77,25 @@ export function Lightbox({
     closeRef.current?.focus();
   }, []);
 
+  const isPhone = useIsPhone();
+  const root = useRef<HTMLDivElement>(null);
+  const stage = useRef<HTMLDivElement>(null);
+  // On a phone a sideways swipe on the picture pages through the set, and a
+  // swipe down closes. At 1:1 a finger pans the picture, so neither is armed
+  // then.
+  usePager(stage, {
+    items: items.map((_, position) => position),
+    current: index,
+    enabled: !actualSize,
+    onPick: onIndexChange,
+  });
+  useSheetDrag(root, { moves: stage, fade: true, enabled: !actualSize, onDismiss: onClose });
+
   if (!item) return null;
 
-  return (
+  const box = (
     <div
+      ref={root}
       className="lightbox"
       role="dialog"
       aria-modal="true"
@@ -118,7 +137,10 @@ export function Lightbox({
         </div>
       </div>
 
-      <div className={actualSize ? "lightbox__stage lightbox__stage--actual" : "lightbox__stage"}>
+      <div
+        ref={stage}
+        className={actualSize ? "lightbox__stage lightbox__stage--actual" : "lightbox__stage"}
+      >
         {item.kind === "video" ? (
           <video
             key={item.id}
@@ -135,4 +157,6 @@ export function Lightbox({
       </div>
     </div>
   );
+  // On the body on a phone, out of the editor's swiping tab content.
+  return isPhone ? createPortal(box, document.body) : box;
 }

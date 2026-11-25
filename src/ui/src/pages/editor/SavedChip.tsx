@@ -2,7 +2,9 @@ import { useMenuDismiss } from "../../hooks/useMenuDismiss";
 import { CaretDownIcon } from "@phosphor-icons/react/dist/csr/CaretDown";
 import { CheckIcon } from "@phosphor-icons/react/dist/csr/Check";
 import { CopyIcon } from "@phosphor-icons/react/dist/csr/Copy";
-import { useEffect, useId, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { useIsPhone } from "../../phone/usePhone";
+import { PhoneSheet } from "../../phone/PhoneSheet";
 import { SavedAgo } from "./SavedAgo";
 
 /**
@@ -29,8 +31,12 @@ export function SavedChip({
   const rootRef = useRef<HTMLDivElement>(null);
   const cardId = useId();
   const title = subject === "listing-template" ? "Listing template file" : "Listing file";
+  const close = useCallback(() => setOpen(false), []);
 
-  useMenuDismiss(open, rootRef, setOpen);
+  const phone = useIsPhone();
+  // A phone shows the card as a bottom sheet on the page body, which closes
+  // itself: an outside-press check would read a tap on its Copy as outside.
+  useMenuDismiss(open && !phone, rootRef, setOpen);
 
   useEffect(() => {
     if (!copied) return;
@@ -47,13 +53,31 @@ export function SavedChip({
       .catch(() => undefined);
   }
 
+  const card = (
+    <>
+      <div className="save-card__path">
+        <span className="page-head__path">{path}</span>
+        <button type="button" className="save-card__copy" onClick={copy}>
+          {copied ? <CheckIcon aria-hidden="true" /> : <CopyIcon aria-hidden="true" />}
+          {copied ? "Copied" : "Copy"}
+        </button>
+      </div>
+      <div className="save-card__when">
+        <SavedAgo savedAt={savedAt} />, automatically
+      </div>
+    </>
+  );
+
   return (
     <div className="save-chip" ref={rootRef}>
       <button
         type="button"
         className="save-chip__trigger"
         aria-expanded={open}
-        aria-controls={open ? cardId : undefined}
+        // On a phone the card is a sheet on the page body, which has no id of
+        // its own to point at; it says it opens a dialog instead.
+        aria-controls={open && !phone ? cardId : undefined}
+        {...(phone ? { "aria-haspopup": "dialog" as const } : {})}
         title="Where this is saved"
         onClick={() => setOpen((current) => !current)}
       >
@@ -61,19 +85,15 @@ export function SavedChip({
         <SavedAgo savedAt={savedAt} />
         <CaretDownIcon className="save-chip__caret" aria-hidden="true" />
       </button>
-      {open && (
+      {phone && (
+        <PhoneSheet open={open} title={title} onClose={close}>
+          {card}
+        </PhoneSheet>
+      )}
+      {open && !phone && (
         <div className="save-card" id={cardId} role="dialog" aria-label={title}>
           <div className="save-card__title">{title}</div>
-          <div className="save-card__path">
-            <span className="page-head__path">{path}</span>
-            <button type="button" className="save-card__copy" onClick={copy}>
-              {copied ? <CheckIcon aria-hidden="true" /> : <CopyIcon aria-hidden="true" />}
-              {copied ? "Copied" : "Copy"}
-            </button>
-          </div>
-          <div className="save-card__when">
-            <SavedAgo savedAt={savedAt} />, automatically
-          </div>
+          {card}
         </div>
       )}
     </div>

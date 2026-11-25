@@ -29,7 +29,9 @@ import {
   batchStageTitle,
   scopeCopy,
   type BatchStage,
+  type ScopeCopy,
 } from "./batchDeploy/batchDeployView";
+import { useIsPhone } from "../phone/usePhone";
 import { openRunStream, type RunStreamHandle } from "./deploy/runStream";
 import { MARK_SEEN_GRACE_MS, TERMINAL_PHASES } from "./deploy/runPhases";
 
@@ -152,6 +154,35 @@ function exitPath(batchId: string | null): string {
 }
 
 /** The batch's label, for a batch run, beside when the plan was made. */
+/** The way back to the Listings page or the batch: the desktop's button
+ * and separator, or the phone's crumb over the title. */
+function BatchDeployBack({
+  copy,
+  batchLabel,
+  onBack,
+}: {
+  copy: ScopeCopy;
+  batchLabel: string | null;
+  onBack: () => void;
+}) {
+  const isPhone = useIsPhone();
+  if (isPhone) {
+    return (
+      <button type="button" className="page-head__crumb dv-back-link" onClick={onBack}>
+        {copy.scope === "workspace" ? "Listings" : batchLabel || "Batch"}
+      </button>
+    );
+  }
+  return (
+    <>
+      <button type="button" className="btn btn-secondary dv-back" onClick={onBack}>
+        {copy.back}
+      </button>
+      <span className="page-head__sep">/</span>
+    </>
+  );
+}
+
 function pageMeta(batchId: string | null, batchLabel: string | null, planTimestamp: string) {
   const label = batchId === null ? "" : (batchLabel ?? "");
   return [label, planTimestamp].filter((part) => part !== "").join(" · ");
@@ -428,14 +459,7 @@ export function BatchDeployPage() {
   return (
     <div className="editor batch-deploy-page">
       <div className="page-head">
-        <button
-          type="button"
-          className="btn btn-secondary dv-back"
-          onClick={() => void handleBack()}
-        >
-          {copy.back}
-        </button>
-        <span className="page-head__sep">/</span>
+        <BatchDeployBack copy={copy} batchLabel={batchLabel} onBack={() => void handleBack()} />
         <h1 className="page-head__title">{batchStageTitle(stage, copy)}</h1>
         <span className="page-head__meta">{pageMeta(batchId, batchLabel, planTimestamp)}</span>
       </div>

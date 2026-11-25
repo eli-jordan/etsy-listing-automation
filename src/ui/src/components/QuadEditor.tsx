@@ -1,6 +1,23 @@
-import { type ReactNode, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import {
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import type { BoundingBox, Point } from "../types";
-import { cornerDragged, labelAnchor, menuPlacement, moved, nudged } from "./quadGeometry";
+import { useIsPhone } from "../phone/usePhone";
+import {
+  cornerDragged,
+  gripCentre,
+  gripRadius,
+  labelAnchor,
+  menuPlacement,
+  moved,
+  nudged,
+} from "./quadGeometry";
 
 interface Props {
   overlay?: ReactNode;
@@ -102,9 +119,55 @@ interface Menu {
  * it because scaling is defined against the *original* offsets: derived from
  * the live box instead, every mouse move would compound on the last one and
  * the box would race away from the pointer. */
-type Drag =
+type Drag = { pointerId: number } & (
   | { kind: "corner"; pointIndex: number; start: BoundingBox }
-  | { kind: "box"; boxIndex: number; origin: Point; start: BoundingBox };
+  | { kind: "box"; boxIndex: number; origin: Point; start: BoundingBox }
+);
+
+/** What a finger lands on when it means to drag rather than scroll. */
+const DRAG_TARGETS = ".quad-editor__polygon, .quad-editor__handle, .quad-editor__grip";
+
+/** On a phone, a finger that lands on a box or a corner keeps the whole touch.
+ *
+ * The overlay lets a finger elsewhere on the photo scroll the page
+ * (`touch-action: pan-y` in phone/calibrator.css), and Chromium ignores the
+ * `touch-action: none` the box and its corners ask for, since they are SVG
+ * shapes: the drag followed for a few pixels, then the browser cancelled it
+ * and scrolled instead. Cancelling the touchstart is the one signal it
+ * honours. Not passive, so React's own touch listeners cannot do this. A
+ * second finger landing mid-drag is held too, so it cannot pinch the page
+ * under the box being dragged. */
+function useTouchClaim(
+  svg: SVGSVGElement | null,
+  enabled: boolean,
+  dragging: { current: boolean },
+): void {
+  useEffect(() => {
+    if (!svg || !enabled) return;
+    const claim = (event: TouchEvent) => {
+      const target = event.target as Element | null;
+      if (dragging.current || target?.closest?.(DRAG_TARGETS)) event.preventDefault();
+    };
+    svg.addEventListener("touchstart", claim, { passive: false });
+    return () => svg.removeEventListener("touchstart", claim);
+  }, [svg, enabled, dragging]);
+}
+
+/** The phone grip's radius in image units, kept at a finger's width on screen
+ * as the photo resizes. */
+function useGripRadius(svg: SVGSVGElement | null, imageWidth: number, dotRadius: number): number {
+  const [shownWidth, setShownWidth] = useState(0);
+  useLayoutEffect(() => {
+    if (!svg) return;
+    const measure = () => setShownWidth(svg.getBoundingClientRect().width);
+    measure();
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(measure);
+    observer.observe(svg);
+    return () => observer.disconnect();
+  }, [svg]);
+  return gripRadius(shownWidth, imageWidth, dotRadius);
+}
 
 function menuAnchor(clientX: number, clientY: number, svg: SVGSVGElement | null): Menu {
   const host = svg?.getBoundingClientRect();
@@ -147,6 +210,49 @@ function positionMenu(el: HTMLElement, menu: Menu): void {
   Object.assign(el.style, { left: `${placed.x}px`, top: `${placed.y}px` });
 }
 
+/** The right-click menu's actions as a row under the photo, on a phone: a
+ * finger has no right button, and a long press is the browser's own. */
+function BoxActions({
+  onAdd,
+  onDuplicate,
+  onBringToFront,
+  onDelete,
+}: {
+  onAdd: (() => void) | undefined;
+  onDuplicate: (() => void) | undefined;
+  onBringToFront: (() => void) | undefined;
+  onDelete: (() => void) | undefined;
+}) {
+  return (
+    <div className="quad-editor__phone-actions" role="toolbar" aria-label="Boxes">
+      {onAdd && (
+        <button type="button" className="btn btn-primary" onClick={onAdd}>
+          + Add box
+        </button>
+      )}
+      {onDuplicate && (
+        <button type="button" className="btn btn-secondary" onClick={onDuplicate}>
+          Duplicate
+        </button>
+      )}
+      {onBringToFront && (
+        <button type="button" className="btn btn-secondary" onClick={onBringToFront}>
+          Bring to front
+        </button>
+      )}
+      {onDelete && (
+        <button
+          type="button"
+          className="btn btn-secondary quad-editor__phone-danger"
+          onClick={onDelete}
+        >
+          Delete
+        </button>
+      )}
+    </div>
+  );
+}
+
 export function QuadEditor({
   overlay,
   interactive = true,
@@ -166,7 +272,15 @@ export function QuadEditor({
   labelPlaceholder,
   labelSuggestions,
 }: Props) {
-  const svgRef = useRef<SVGSVGElement>(null);
+  const svgRef = useRef<SVGSVGElement | null>(null);
+  // The overlay mounts only once the image has loaded, so the phone's touch
+  // claim and grip measuring need to hear when it does.
+  const [svgNode, setSvgNode] = useState<SVGSVGElement | null>(null);
+  const attachSvg = useCallback((node: SVGSVGElement | null) => {
+    svgRef.current = node;
+    setSvgNode(node);
+  }, []);
+  const phone = useIsPhone();
   // Purely a gate on drawing the overlay: the SVG is stretched over the image,
   // so it has no size of its own until the image has laid out. Deliberately
   // not a measurement -- `space` is where coordinates come from.
@@ -201,12 +315,22 @@ export function QuadEditor({
     return { x: transformed.x, y: transformed.y };
   }
 
+  // Mirrors `drag` for the phone's touchstart listener, which outlives renders.
+  const dragging = useRef(false);
+  useEffect(() => {
+    dragging.current = drag !== null;
+  }, [drag]);
+  useTouchClaim(svgNode, phone && interactive, dragging);
+  const dotRadius = Math.max(space[0], space[1]) * 0.015;
+  const gripR = useGripRadius(phone ? svgNode : null, space[0], dotRadius);
+
   function handleCornerPointerDown(pointIndex: number) {
     return (event: React.PointerEvent<SVGCircleElement>) => {
       const start = boxes[selectedIndex];
-      if (!start || !interactive) return;
+      // One finger drags; a second one landing meanwhile is not a new drag.
+      if (!start || !interactive || drag) return;
       event.currentTarget.setPointerCapture(event.pointerId);
-      setDrag({ kind: "corner", pointIndex, start });
+      setDrag({ kind: "corner", pointIndex, start, pointerId: event.pointerId });
     };
   }
 
@@ -214,18 +338,18 @@ export function QuadEditor({
    * moves; the corners keep their offsets, so a skewed quad stays skewed. */
   function handleBoxPointerDown(boxIndex: number) {
     return (event: React.PointerEvent<SVGPolygonElement>) => {
-      if (event.button !== 0 || !interactive) return;
+      if (event.button !== 0 || !interactive || drag) return;
       const origin = toImageSpace(event.clientX, event.clientY);
       const start = boxes[boxIndex];
       if (!origin || !start) return;
       event.currentTarget.setPointerCapture(event.pointerId);
       onSelect(boxIndex);
-      setDrag({ kind: "box", boxIndex, origin, start });
+      setDrag({ kind: "box", boxIndex, origin, start, pointerId: event.pointerId });
     };
   }
 
   function handlePointerMove(event: React.PointerEvent<SVGSVGElement>) {
-    if (!drag || !interactive) return;
+    if (!drag || !interactive || event.pointerId !== drag.pointerId) return;
     const point = toImageSpace(event.clientX, event.clientY);
     if (!point) return;
     if (drag.kind === "box") {
@@ -244,7 +368,12 @@ export function QuadEditor({
     );
   }
 
-  function handlePointerUp() {
+  /** The drag ends when its own pointer lifts, or when the browser takes it
+   * away: a cancelled touch (the page rotating, a gesture the browser claims)
+   * sends no pointerup, and a drag left behind would move the box under the
+   * next touch anywhere on the photo. */
+  function handlePointerEnd(event: React.PointerEvent<SVGSVGElement>) {
+    if (drag && event.pointerId !== drag.pointerId) return;
     setDrag(null);
   }
 
@@ -273,7 +402,7 @@ export function QuadEditor({
   const chromeVisible = (index: number): boolean =>
     outlines === "all" || (outlines === "selected" && index === selectedIndex);
 
-  return (
+  const canvas = (
     <div
       className="quad-editor"
       tabIndex={0}
@@ -288,11 +417,13 @@ export function QuadEditor({
       />
       {loaded && (
         <svg
-          ref={svgRef}
+          ref={attachSvg}
           className="quad-editor__overlay"
           viewBox={`0 0 ${space[0]} ${space[1]}`}
           onPointerMove={handlePointerMove}
-          onPointerUp={handlePointerUp}
+          onPointerUp={handlePointerEnd}
+          onPointerCancel={handlePointerEnd}
+          onLostPointerCapture={handlePointerEnd}
         >
           {overlay}
           {boxes.map((box, boxIndex) => {
@@ -332,6 +463,28 @@ export function QuadEditor({
                       onPointerDown={handleCornerPointerDown(pointIndex)}
                     />
                   ))}
+                {/* A finger-sized grip over each drawn dot, phone only: an
+                    invisible filled circle 22 screen pixels in radius at
+                    the photo's current scale, so it stays ~44px across at
+                    any photo size while the dot keeps its look. Pulled in
+                    from the photo's edge so it is never clipped to half. */}
+                {active &&
+                  phone &&
+                  interactive &&
+                  box.map((p, pointIndex) => {
+                    const at = gripCentre(p, gripR, space);
+                    return (
+                      <circle
+                        key={pointIndex}
+                        cx={at.x}
+                        cy={at.y}
+                        r={gripR}
+                        className="quad-editor__grip"
+                        data-corner={pointIndex}
+                        onPointerDown={handleCornerPointerDown(pointIndex)}
+                      />
+                    );
+                  })}
               </g>
             );
           })}
@@ -399,7 +552,7 @@ export function QuadEditor({
         </div>
       )}
 
-      {onAddBox && interactive && (
+      {onAddBox && interactive && !phone && (
         <button type="button" className="btn btn-primary quad-editor__add" onClick={onAddBox}>
           + Add box
         </button>
@@ -430,5 +583,19 @@ export function QuadEditor({
         </div>
       )}
     </div>
+  );
+  // On a phone the box actions sit under the photo, outside the canvas: the
+  // overlay stretches over everything inside it.
+  if (!phone || !interactive || !(onAddBox || hasBoxMenu)) return canvas;
+  return (
+    <>
+      {canvas}
+      <BoxActions
+        onAdd={onAddBox}
+        onDuplicate={boxes[selectedIndex] ? onDuplicateSelected : undefined}
+        onBringToFront={boxes[selectedIndex] ? onBringSelectedToFront : undefined}
+        onDelete={boxes[selectedIndex] ? onDeleteSelected : undefined}
+      />
+    </>
   );
 }

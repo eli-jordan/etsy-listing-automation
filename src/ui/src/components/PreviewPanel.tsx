@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { renderPreview } from "../api/calibrator";
+import { useIsPhone } from "../phone/usePhone";
 import { Lightbox } from "./Lightbox";
 import { previewProgress, type PreviewResult } from "./previewProgress";
 
@@ -212,6 +213,8 @@ export function PreviewPanel({
   const [open, setOpen] = useState<string | null>(null);
   const [actualSize, setActualSize] = useState(false);
   const urlsRef = useRef<string[]>([]);
+  // A finger taps; the copy says so on a phone.
+  const verb = useIsPhone() ? "Tap" : "Click";
 
   // Every blob this panel has made. Revoked wholesale when a run is replaced
   // or the tab goes away -- never per tile, which would pull an image out from
@@ -316,8 +319,10 @@ export function PreviewPanel({
 
       {request === null ? (
         <p className="preview-grid__empty">
-          Full-size renders, through the same pipeline <code>apply</code> uses — a few seconds each,
-          which is why they are asked for rather than assumed. Click one to see it large.
+          Full-size renders, through the same pipeline <code>apply</code>
+          {/* One text node, as before the phone layout: node boundaries
+              decide kerning, and the desktop sentence stays pixel-equal. */}
+          {` uses — a few seconds each, which is why they are asked for rather than assumed. ${verb} one to see it large.`}
         </p>
       ) : (
         <div className="preview-grid__tiles">
@@ -334,7 +339,7 @@ export function PreviewPanel({
 
       {fullQuality && request !== null && (
         <>
-          <p className="mg-help">Full-size renders. Click an image to see it large.</p>
+          <p className="mg-help">{`Full-size renders. ${verb} an image to see it large.`}</p>
           {reference && <p className="mg-help">{reference}</p>}
         </>
       )}

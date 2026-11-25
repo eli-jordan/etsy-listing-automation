@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { listPricingPlans } from "../../api/listings";
+import { useIsPhone } from "../../phone/usePhone";
 import type { ListingDetail, PricingPlanSummary } from "../../types";
 
 /** Plan picker and per-size prices (phase 5).
@@ -26,6 +27,7 @@ interface Props {
 
 export function PricingTab({ detail, onUpdate, onFlush }: Props) {
   const [plans, setPlans] = useState<PricingPlanSummary[]>([]);
+  const phone = useIsPhone();
 
   useEffect(() => {
     listPricingPlans(detail.garment_profile)
@@ -77,6 +79,9 @@ export function PricingTab({ detail, onUpdate, onFlush }: Props) {
                   <input
                     className="input price-table__input"
                     type="number"
+                    // A phone's keyboard with the decimal point, not the
+                    // full one a number field gets on iOS.
+                    {...(phone ? { inputMode: "decimal" as const } : {})}
                     step="0.01"
                     aria-label={`Price for size ${price.size}`}
                     value={amount}

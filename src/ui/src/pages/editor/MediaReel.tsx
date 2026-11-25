@@ -1,6 +1,12 @@
-import { useState } from "react";
+import { ArrowLeftIcon } from "@phosphor-icons/react/dist/csr/ArrowLeft";
+import { ArrowRightIcon } from "@phosphor-icons/react/dist/csr/ArrowRight";
+import { PlusIcon } from "@phosphor-icons/react/dist/csr/Plus";
+import { TrashIcon } from "@phosphor-icons/react/dist/csr/Trash";
+import { XIcon } from "@phosphor-icons/react/dist/csr/X";
+import { useEffect, useState } from "react";
 import { MutedClip } from "../../components/MutedClip";
 import { useHoverPlay } from "../../hooks/useHoverPlay";
+import { useIsPhone } from "../../phone/usePhone";
 import { type Artwork, type MediaOwner, mediaKind, mediaLabel, pictureFor } from "../../media";
 import type { MediaFileSummary, MediaEntry } from "../../types";
 import { MAX_IMAGES, MAX_VIDEOS, canReorder } from "./mediaEdits";
@@ -42,6 +48,13 @@ interface Props {
   /** Templates this listing positions (`template_positions:`): their tiles
    * wear the badge, every colour of a colour-matrix one included. */
   positioned?: ReadonlySet<string>;
+  /** Opens Add media, when the reel carries the button for it: on a phone,
+   * where the locator is a sheet rather than a column beside the reel. */
+  onAdd?: () => void;
+  /** On a phone: the selected tile's bar opens it full size, and a second
+   * tap on the tile, the bar's ×, or Escape lets go of it. */
+  onView?: (index: number) => void;
+  onDeselect?: () => void;
 }
 
 export function MediaReel({
@@ -55,7 +68,11 @@ export function MediaReel({
   onReorder,
   onFocus,
   positioned,
+  onAdd,
+  onView,
+  onDeselect,
 }: Props) {
+  const phone = useIsPhone();
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
   // Images are what Etsy caps at twenty; videos are counted apart.
@@ -84,11 +101,13 @@ export function MediaReel({
         <span className="reel__count">
           {videos} of {MAX_VIDEOS} videos
         </span>
-        <span className="reel__hint">
-          {images >= MAX_IMAGES
-            ? `At Etsy's ${MAX_IMAGES}-image limit — remove one before adding another`
-            : "Drag a tile to change the order Etsy shows them in"}
-        </span>
+        <span className="reel__hint">{reelHint(images, phone)}</span>
+        {onAdd !== undefined && (
+          <button type="button" className="btn btn-primary reel__add" onClick={onAdd}>
+            <PlusIcon weight="bold" aria-hidden="true" />
+            Add media
+          </button>
+        )}
       </div>
       <div className="reel__track">
         {media.map((entry, index) => {
@@ -123,17 +142,158 @@ export function MediaReel({
                 setDragIndex(null);
                 setDragOverIndex(null);
               }}
-              onFocus={() => focusFor(entry)}
+              onFocus={() =>
+                selectedIndex === index && onDeselect !== undefined ? onDeselect() : focusFor(entry)
+              }
               onRemove={() => onRemove(index)}
             />
           );
         })}
         {media.length === 0 && (
-          <p className="reel__empty">Nothing here yet — add a mockup template from the left.</p>
+          <p className="reel__empty">
+            {phone
+              ? "Nothing here yet — tap Add media to add a mockup template."
+              : "Nothing here yet — add a mockup template from the left."}
+          </p>
         )}
+      </div>
+      {phone && selectedIndex !== null && media[selectedIndex] !== undefined && (
+        <ReelMoves
+          media={media}
+          index={selectedIndex}
+          onReorder={onReorder}
+          onRemove={onRemove}
+          onView={onView}
+          onDone={onDeselect}
+        />
+      )}
+    </div>
+  );
+}
+
+function reelHint(images: number, phone: boolean): string {
+  if (images >= MAX_IMAGES) {
+    return `At Etsy's ${MAX_IMAGES}-image limit — remove one before adding another`;
+  }
+  return phone
+    ? "Tap an image to move or remove it"
+    : "Drag a tile to change the order Etsy shows them in";
+}
+
+/**
+ * The phone's way to reorder: a finger cannot carry a tile (HTML5 drag and
+ * drop is mouse-only), so the selected tile gets a bar under the reel that
+ * moves it one place at a time, or straight to the front, under the same
+ * gallery rules a drop obeys. The selection follows the tile, so repeated
+ * taps keep moving the same one.
+ *
+ * The stage showing the tile sits under the whole gallery, so the bar also
+ * opens it full size (View), and lets go of it (×, or Escape).
+ */
+function ReelMoves({
+  media,
+  index,
+  onReorder,
+  onRemove,
+  onView,
+  onDone,
+}: {
+  media: readonly MediaEntry[];
+  index: number;
+  onReorder: (from: number, to: number) => void;
+  onRemove: (index: number) => void;
+  onView: ((index: number) => void) | undefined;
+  onDone: (() => void) | undefined;
+}) {
+  const entry = media[index] as MediaEntry;
+  const label = mediaLabel(entry);
+  const video = mediaKind(entry) === "video";
+  const move = (to: number) => (canReorder(media, index, to) ? () => onReorder(index, to) : null);
+  const earlier = index > 0 ? move(index - 1) : null;
+  const later = index < media.length - 1 ? move(index + 1) : null;
+  const first = index === 0 ? null : move(0);
+  const stuck = earlier === null && later === null && first === null;
+  useEscape(onDone);
+  return (
+    <div className="reel-moves" role="group" aria-label={`Move ${label}`}>
+      <div className="reel-moves__head">
+        <span className="reel-moves__what">
+          {`${video ? "Video" : "Image"} ${index + 1}: `}
+          <strong>{label}</strong>
+        </span>
+        {onView !== undefined && (
+          <button type="button" className="btn btn-ghost" onClick={() => onView(index)}>
+            View
+          </button>
+        )}
+        {onDone !== undefined && (
+          <button
+            type="button"
+            className="btn btn-ghost reel-moves__done"
+            aria-label="Done"
+            onClick={onDone}
+          >
+            <XIcon aria-hidden="true" />
+          </button>
+        )}
+      </div>
+      {video && stuck && (
+        <span className="reel-moves__why">
+          Etsy shows a listing&rsquo;s video second, so it stays in that place
+        </span>
+      )}
+      <div className="reel-moves__buttons">
+        <button
+          type="button"
+          className="btn btn-ghost"
+          aria-label="Move earlier"
+          disabled={earlier === null}
+          onClick={earlier ?? undefined}
+        >
+          <ArrowLeftIcon aria-hidden="true" />
+        </button>
+        <button
+          type="button"
+          className="btn btn-ghost"
+          aria-label="Move later"
+          disabled={later === null}
+          onClick={later ?? undefined}
+        >
+          <ArrowRightIcon aria-hidden="true" />
+        </button>
+        <button
+          type="button"
+          className="btn btn-ghost"
+          disabled={first === null}
+          onClick={first ?? undefined}
+        >
+          Make thumbnail
+        </button>
+        <button
+          type="button"
+          className="btn btn-ghost reel-moves__remove"
+          aria-label={`Remove ${label}`}
+          onClick={() => onRemove(index)}
+        >
+          <TrashIcon aria-hidden="true" />
+        </button>
       </div>
     </div>
   );
+}
+
+/** Escape lets go of the selected tile -- unless it is closing the full-size
+ * view over it, which has its own Escape. */
+function useEscape(onDone: (() => void) | undefined) {
+  useEffect(() => {
+    if (onDone === undefined) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || document.querySelector(".lightbox") !== null) return;
+      onDone();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [onDone]);
 }
 
 interface TileProps {

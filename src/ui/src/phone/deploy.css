@@ -1,0 +1,294 @@
+/* — Phone: Deploy (one listing) and Deploy reviewed (a batch) —
+   All rules inside the phone query (phone/usePhone.ts). */
+
+@media (max-width: 700px), (pointer: coarse) and (orientation: landscape) and (max-height: 500px) {
+  .dv-cell {
+    padding-inline: var(--space-3);
+  }
+
+  /* — page head: one back link (DeployHead), then the title — */
+  .dv-back-link {
+    flex-basis: 100%;
+    min-height: 40px;
+    margin: -8px 0 -6px;
+    padding: 0;
+    border: 0;
+    background: none;
+    font-family: inherit;
+    justify-content: flex-start;
+    text-align: left;
+  }
+
+  /* A blocked step's remedy can carry a long path or a variable name. */
+  .dv-callout {
+    overflow-wrap: anywhere;
+  }
+
+  .dv-callout > * {
+    min-width: 0;
+  }
+
+  /* — comparison —
+     Below 820px each row stacks its two sides (index.css). On a phone the
+     column heads stay side by side as a legend, and every field says which
+     side it is, so a stacked pair never reads as two copies of one field. */
+  .dv-compare:not(.dv-compare--single) > .dv-row--head {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+
+  .dv-compare:not(.dv-compare--single) > .dv-row--head .dv-cell + .dv-cell {
+    border-top: 0;
+    border-left: 1px solid var(--color-divider);
+  }
+
+  .dv-row--head .dv-col__head {
+    display: grid;
+    gap: 2px;
+  }
+
+  .dv-row--head .dv-col__head h3 {
+    font-size: 15px;
+  }
+
+  .dv-row--head .dv-col__head .dv-eyebrow {
+    font-size: 10px;
+    overflow-wrap: anywhere;
+  }
+
+  .dv-compare:not(.dv-compare--single) > .dv-row:not(.dv-row--head) .dv-block__label {
+    justify-content: flex-start;
+  }
+
+  .dv-compare:not(.dv-compare--single) > .dv-row:not(.dv-row--head) .dv-block__label::before {
+    content: "Now";
+    flex: none;
+    padding: 1px 6px;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--color-text) 9%, transparent);
+    color: color-mix(in srgb, var(--color-text) 70%, transparent);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+
+  .dv-compare:not(.dv-compare--single)
+    > .dv-row:not(.dv-row--head)
+    > .dv-cell
+    + .dv-cell
+    .dv-block__label::before {
+    content: "After";
+    background: var(--color-accent-2-200);
+    color: var(--color-accent-2-800);
+  }
+
+  .dv-block__label > :last-child:not(:first-child) {
+    margin-left: auto;
+  }
+
+  /* The opened lens stacks Etsy's paragraph over this plan's. */
+  .dv-lens__band {
+    padding-inline: var(--space-3);
+  }
+
+  .dv-lens__verdict {
+    flex-basis: 100%;
+    order: 1;
+    min-width: 0;
+  }
+
+  .dv-lens__band .dv-textbtn {
+    min-height: 36px;
+    margin-left: auto;
+  }
+
+  .dv-row--text:not(.dv-row--quiet) > .dv-cell::before {
+    content: "On Etsy now";
+    display: block;
+    margin-bottom: 4px;
+    color: color-mix(in srgb, var(--color-text) 58%, transparent);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    white-space: normal;
+  }
+
+  .dv-row--text:not(.dv-row--quiet) > .dv-cell + .dv-cell::before {
+    content: "After apply";
+    color: var(--color-accent-2-800);
+  }
+
+  .dv-drift-toggle,
+  .dv-fold {
+    min-height: 40px;
+  }
+
+  /* — price table: four columns that fit, no sideways scroll — */
+  .dv-prices table {
+    min-width: 0;
+    font-size: 13px;
+  }
+
+  .dv-prices th,
+  .dv-prices td {
+    padding: 9px 8px;
+  }
+
+  .dv-prices th:first-child,
+  .dv-prices td:first-child {
+    padding-left: var(--space-3);
+  }
+
+  .dv-prices thead th {
+    font-size: 10px;
+    letter-spacing: 0.04em;
+    line-height: 1.25;
+    vertical-align: bottom;
+  }
+
+  .dv-prices td:not(:nth-child(3)) {
+    white-space: nowrap;
+  }
+
+  /* — the step strip: room for a finger on its expanders — */
+  .dv-steps summary {
+    min-height: 32px;
+    display: flex;
+    align-items: center;
+  }
+
+  /* — Apply: a bar on the tab bar, always in thumb reach —
+     Sticky rather than fixed, so it rests in place at the end of the page
+     and nothing below it is ever covered. */
+  .dv-foot {
+    position: sticky;
+    bottom: var(--phone-tabbar-h);
+    z-index: 20;
+    flex-wrap: nowrap;
+    gap: var(--space-3);
+    margin: 0 calc(-1 * var(--space-3));
+    padding: 10px var(--space-3);
+    border-top: 1px solid var(--color-divider);
+    background: color-mix(in srgb, var(--color-bg) 92%, transparent);
+    -webkit-backdrop-filter: saturate(1.4) blur(14px);
+    backdrop-filter: saturate(1.4) blur(14px);
+  }
+
+  .dv-foot p {
+    flex: 1 1 auto;
+    min-width: 0;
+    font-size: 12px;
+    line-height: 1.35;
+  }
+
+  .dv-foot .btn {
+    flex: none;
+    min-height: 46px;
+    justify-content: center;
+  }
+
+  /* Two actions (after apply: Back and Open on Etsy) share the bar's
+     width under the sentence. */
+  .dv-foot:has(> .btn + .btn) {
+    flex-wrap: wrap;
+  }
+
+  .dv-foot:has(> .btn + .btn) p {
+    flex-basis: 100%;
+  }
+
+  .dv-foot:has(> .btn + .btn) .btn {
+    flex: 1 1 0;
+    min-width: 0;
+    padding-inline: var(--space-2);
+  }
+
+  /* — Deploy reviewed (a workspace or batch run) — */
+
+  /* Back reads as a link above the title, like every phone page head. */
+  .batch-deploy-page .dv-back {
+    flex-basis: 100%;
+    justify-content: flex-start;
+    min-height: 40px;
+    margin: -8px 0 -6px;
+    padding: 0;
+    border: 0;
+    background: none;
+    box-shadow: none;
+    color: color-mix(in srgb, var(--color-text) 65%, transparent);
+    font-family: var(--font-body);
+    font-size: 14px;
+    font-weight: 600;
+  }
+
+  .batch-review-summary {
+    padding: var(--space-3);
+  }
+
+  /* Stage tiles: the count beside the name, two to a row, so six stages
+     take half the height. */
+  .batch-aggregate__steps {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .batch-stage {
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    column-gap: var(--space-2);
+    padding: 10px;
+  }
+
+  .batch-stage > .dv-step__top {
+    min-width: 0;
+  }
+
+  .batch-stage > .batch-stage__count {
+    font-size: 16px;
+  }
+
+  .batch-stage > :nth-child(n + 3) {
+    grid-column: 1 / -1;
+  }
+
+  .batch-listing-row {
+    min-height: 56px;
+  }
+
+  /* The listing drawer is a bottom sheet (useDrawerSwipe): the handle reads
+     as its grab bar, and the sheet clears the home indicator. */
+  .batch-drawer-panel {
+    border-radius: 18px 18px 0 0;
+  }
+
+  .batch-drawer__handle {
+    width: 100%;
+    height: 22px;
+    margin: 0;
+  }
+
+  .batch-drawer__handle span {
+    width: 40px;
+    height: 5px;
+    background: color-mix(in srgb, var(--color-text) 22%, transparent);
+  }
+
+  .batch-drawer__head {
+    padding-top: 26px;
+  }
+
+  /* A summary can be one long path or URL; it wraps rather than widening
+     the head past the screen. */
+  .batch-drawer__head > div {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .batch-drawer__head .btn {
+    min-height: 40px;
+  }
+
+  .batch-drawer__body {
+    padding-bottom: calc(var(--space-6) + env(safe-area-inset-bottom, 0px));
+  }
+}

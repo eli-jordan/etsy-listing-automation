@@ -112,6 +112,6 @@ def test_backup_pages_fit_a_phone_through_set_up_history_and_restore(
     dialog.get_by_role("button", name="Cancel").click()
     expect(dialog).to_be_hidden()
 
-    page.locator(".adm-sections").get_by_role("link", name="Setup").click()
+    page.get_by_role("navigation", name="Admin sections").get_by_role("link", name="Setup").click()
     page.get_by_role("heading", name="Backup settings").wait_for(state="visible")
     assert_mobile_page_fits(page)

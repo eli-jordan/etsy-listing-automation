@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { deleteListing, listListings, patchListing } from "../api/listings";
 import { createRun, currentWorkspaceRun, getRun, isReviewedScope } from "../api/runs";
 import { reviewRunAction } from "./batchDeploy/reviewRunAction";
@@ -8,6 +8,7 @@ import { ListingHover } from "../components/ListingHover";
 import { OpenInMenu } from "../components/OpenInMenu";
 import { hasOpenTargets } from "../components/openOn";
 import { STATUS_LABELS, StatusTag } from "../components/StatusTag";
+import { useIsPhone, useIsPhoneLandscape } from "../phone/usePhone";
 import type { ListingStatus, ListingSummary } from "../types";
 import { BatchCandidateControl } from "./batchDeploy/BatchCandidateControl";
 import { candidateNames } from "./batchDeploy/batchDeployPresentation";
@@ -21,6 +22,8 @@ import {
   type Gesture,
   LIFECYCLE_OF,
 } from "./listingLifecycle";
+import { useFabHiddenOnScroll } from "./phoneLists/fabScroll";
+import { PhoneListingList, PhoneStatusChips } from "./phoneLists/PhoneListingList";
 
 /** The listings list (phase 5): table + search + status filter, from
  * the design mockup's listings section, backed by `GET /api/listings`. */
@@ -33,6 +36,11 @@ type Filter = "all" | ListingStatus;
 const FILTERS: Filter[] = ["all", ...(Object.keys(STATUS_LABELS) as ListingStatus[])];
 
 const FILTER_LABELS: Record<Filter, string> = { all: "All statuses", ...STATUS_LABELS };
+
+/** `?status=`, which the phone Dashboard's counts link to; anything else is All. */
+function filterFrom(param: string | null): Filter {
+  return FILTERS.find((f) => f === param) ?? "all";
+}
 
 function gestureLabel(row: ListingSummary, gesture: Gesture): string {
   return gesture === "delete" ? deleteLabel(row) : GESTURE_LABELS[gesture];
@@ -53,6 +61,95 @@ function UndoMarkIcon() {
   );
 }
 
+/** The desktop layout's listings table. */
+function ListingsTable({
+  rows,
+  onGesture,
+}: {
+  rows: ListingSummary[];
+  onGesture: (row: ListingSummary, gesture: Gesture) => void;
+}) {
+  const navigate = useNavigate();
+  return (
+    <table className="listings">
+      <thead>
+        <tr>
+          <th>Listing</th>
+          <th>Garment</th>
+          <th>Status</th>
+          <th className="listings__actions"> </th>
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map((row) => (
+          <tr key={row.name}>
+            <td>
+              <div className="listing-cell">
+                <ListingHover listing={row}>
+                  <button
+                    type="button"
+                    className="listing-row__link"
+                    onClick={() => navigate(`/listings/${encodeURIComponent(row.name)}`)}
+                  >
+                    {row.name}
+                  </button>
+                </ListingHover>
+                {hasOpenTargets(row.etsy_listing_id, row.printify_product_id) && (
+                  <OpenInMenu
+                    etsyListingId={row.etsy_listing_id}
+                    printifyProductId={row.printify_product_id}
+                  />
+                )}
+                {row.issue_counts.block > 0 && (
+                  <span className="tab-badge tab-badge--block">{row.issue_counts.block}</span>
+                )}
+                {row.issue_counts.block === 0 && row.issue_counts.warn > 0 && (
+                  <span className="tab-badge tab-badge--warn">{row.issue_counts.warn}</span>
+                )}
+              </div>
+            </td>
+            <td className="listing-row__garment">{row.garment_profile}</td>
+            <td>
+              <span className="listings__status">
+                <StatusTag status={row.status} />
+                {(row.gestures ?? []).includes("cancel") && (
+                  <span className="status-tag">
+                    <button
+                      type="button"
+                      className="listings__undo"
+                      aria-label="Undo mark for delete"
+                      onClick={() => onGesture(row, "cancel")}
+                    >
+                      <UndoMarkIcon />
+                    </button>
+                    <span className="status-tag__hint" role="tooltip">
+                      Undo mark for delete
+                    </span>
+                  </span>
+                )}
+              </span>
+            </td>
+            <td className="listings__actions">
+              {(row.gestures ?? [])
+                .filter((gesture) => gesture !== "cancel")
+                .map((gesture) => (
+                  <button
+                    key={gesture}
+                    type="button"
+                    className={gesture === "delete" ? "listings__quiet" : "btn btn-ghost"}
+                    onClick={() => onGesture(row, gesture)}
+                  >
+                    {gestureLabel(row, gesture)}
+                  </button>
+                ))}
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}
+
 export function ListingsPage() {
   /** `null` until the first load answers, so the empty-table message cannot
    * flash before there is anything to say it about. */
@@ -60,8 +157,51 @@ export function ListingsPage() {
   const [workspaceRun, setWorkspaceRun] =
     useState<Awaited<ReturnType<typeof currentWorkspaceRun>>>(null);
   const [status, setStatus] = useState("");
-  const [query, setQuery] = useState("");
-  const [filter, setFilter] = useState<Filter>("all");
+  const isPhone = useIsPhone();
+  // On a phone the filter and the search live in the address (`?status=`,
+  // `?q=`, both replaced rather than pushed), so Back from a listing comes
+  // back to the same list, and a Dashboard count or the Listings tab (which
+  // drops `?status=`) chooses the filter. The desktop keeps both in state.
+  const [params, setParams] = useSearchParams();
+  const [query, setQuery] = useState(() => (isPhone ? (params.get("q") ?? "") : ""));
+  const [desktopFilter, setDesktopFilter] = useState<Filter>("all");
+  const filter = isPhone ? filterFrom(params.get("status")) : desktopFilter;
+  // Each edit starts from the last address this page asked for, not from
+  // `params`: the router answers a render later, so a chip tapped and a
+  // search typed before it does would each rebuild the address from the old
+  // one, and the second would put the first one's filter back.
+  const latestParams = useRef(params);
+  useLayoutEffect(() => {
+    latestParams.current = params;
+  }, [params]);
+  const replaceParam = useCallback(
+    (name: string, value: string) => {
+      const updated = new URLSearchParams(latestParams.current);
+      if (value === "") updated.delete(name);
+      else updated.set(name, value);
+      latestParams.current = updated;
+      setParams(updated, { replace: true });
+    },
+    [setParams],
+  );
+  const setPhoneFilter = useCallback(
+    (next: Filter) => replaceParam("status", next === "all" ? "" : next),
+    [replaceParam],
+  );
+  // The search box stays local state, since the address answers a step
+  // behind each keystroke, and is copied there whenever the two differ.
+  const addressQuery = params.get("q") ?? "";
+  useEffect(() => {
+    if (!isPhone || addressQuery === query) return;
+    replaceParam("q", query);
+  }, [isPhone, addressQuery, query, replaceParam]);
+  // New listing floats over the list on a phone held upright. Held sideways
+  // the head has room for it, and so few rows show that a floating button
+  // would sit on one.
+  const isPhoneSideways = useIsPhoneLandscape();
+  const floatingNew = isPhone && !isPhoneSideways;
+  // It steps aside while the list scrolls down, off the rows' ⋯ buttons.
+  const fabHidden = useFabHiddenOnScroll(floatingNew);
   const [pendingDelete, setPendingDelete] = useState<ListingSummary | null>(null);
   const navigate = useNavigate();
 
@@ -164,13 +304,15 @@ export function ListingsPage() {
             names={candidateNames(listings ?? [])}
             onDeploy={() => void startBatchPlan()}
           />
-          <button
-            type="button"
-            className="btn btn-primary"
-            onClick={() => navigate("/listings/new")}
-          >
-            + New listing
-          </button>
+          {!floatingNew && (
+            <button
+              type="button"
+              className="btn btn-primary"
+              onClick={() => navigate("/listings/new")}
+            >
+              + New listing
+            </button>
+          )}
         </div>
       </div>
 
@@ -182,105 +324,55 @@ export function ListingsPage() {
           value={query}
           onChange={(event) => setQuery(event.target.value)}
         />
-        <label className="toolbar__filter">
-          <span className="toolbar__filter-label">Status</span>
-          <select
-            className="input"
-            value={filter}
-            onChange={(event) => setFilter(event.target.value as Filter)}
-          >
-            {FILTERS.map((f) => (
-              <option key={f} value={f}>
-                {FILTER_LABELS[f]}
-              </option>
-            ))}
-          </select>
-        </label>
+        {isPhone ? (
+          listings !== null && (
+            <PhoneStatusChips listings={listings} value={filter} onChange={setPhoneFilter} />
+          )
+        ) : (
+          <label className="toolbar__filter">
+            <span className="toolbar__filter-label">Status</span>
+            <select
+              className="input"
+              value={filter}
+              onChange={(event) => setDesktopFilter(event.target.value as Filter)}
+            >
+              {FILTERS.map((f) => (
+                <option key={f} value={f}>
+                  {FILTER_LABELS[f]}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
       </div>
 
       <p className="app__status" role="status">
         {status}
       </p>
 
-      <table className="listings">
-        <thead>
-          <tr>
-            <th>Listing</th>
-            <th>Garment</th>
-            <th>Status</th>
-            <th className="listings__actions"> </th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row) => (
-            <tr key={row.name}>
-              <td>
-                <div className="listing-cell">
-                  <ListingHover listing={row}>
-                    <button
-                      type="button"
-                      className="listing-row__link"
-                      onClick={() => navigate(`/listings/${encodeURIComponent(row.name)}`)}
-                    >
-                      {row.name}
-                    </button>
-                  </ListingHover>
-                  {hasOpenTargets(row.etsy_listing_id, row.printify_product_id) && (
-                    <OpenInMenu
-                      etsyListingId={row.etsy_listing_id}
-                      printifyProductId={row.printify_product_id}
-                    />
-                  )}
-                  {row.issue_counts.block > 0 && (
-                    <span className="tab-badge tab-badge--block">{row.issue_counts.block}</span>
-                  )}
-                  {row.issue_counts.block === 0 && row.issue_counts.warn > 0 && (
-                    <span className="tab-badge tab-badge--warn">{row.issue_counts.warn}</span>
-                  )}
-                </div>
-              </td>
-              <td className="listing-row__garment">{row.garment_profile}</td>
-              <td>
-                <span className="listings__status">
-                  <StatusTag status={row.status} />
-                  {(row.gestures ?? []).includes("cancel") && (
-                    <span className="status-tag">
-                      <button
-                        type="button"
-                        className="listings__undo"
-                        aria-label="Undo mark for delete"
-                        onClick={() => void runGesture(row, "cancel")}
-                      >
-                        <UndoMarkIcon />
-                      </button>
-                      <span className="status-tag__hint" role="tooltip">
-                        Undo mark for delete
-                      </span>
-                    </span>
-                  )}
-                </span>
-              </td>
-              <td className="listings__actions">
-                {(row.gestures ?? [])
-                  .filter((gesture) => gesture !== "cancel")
-                  .map((gesture) => (
-                    <button
-                      key={gesture}
-                      type="button"
-                      className={gesture === "delete" ? "listings__quiet" : "btn btn-ghost"}
-                      onClick={() => void runGesture(row, gesture)}
-                    >
-                      {gestureLabel(row, gesture)}
-                    </button>
-                  ))}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      {isPhone ? (
+        <PhoneListingList
+          rows={rows}
+          onOpen={(row) => navigate(`/listings/${encodeURIComponent(row.name)}`)}
+          onGesture={(row, gesture) => void runGesture(row, gesture)}
+        />
+      ) : (
+        <ListingsTable rows={rows} onGesture={(row, gesture) => void runGesture(row, gesture)} />
+      )}
 
       {listings !== null && rows.length === 0 && !status && (
         <p className="text-muted">No listings match.</p>
+      )}
+
+      {floatingNew && (
+        <button
+          type="button"
+          className={fabHidden ? "m-fab m-fab--hidden" : "m-fab"}
+          aria-label="New listing"
+          onClick={() => navigate("/listings/new")}
+        >
+          <span aria-hidden="true">+</span>
+        </button>
       )}
 
       {pendingDelete !== null && (

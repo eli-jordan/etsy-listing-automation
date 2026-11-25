@@ -33,6 +33,13 @@ export default tseslint.config(
               message: 'Import the icon from "@phosphor-icons/react/dist/csr/<Name>" instead.',
             },
           ],
+          patterns: [
+            {
+              group: ["**/phone/useSwipe"],
+              message:
+                "Swipe through usePager or useSheetDrag, which own the motion (src/ui/AGENTS.md).",
+            },
+          ],
         },
       ],
     },

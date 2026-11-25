@@ -1,0 +1,861 @@
+/* — Phone: Mockup Templates (the calibrator) —
+   All rules inside the phone query (phone/usePhone.ts).
+
+   What a phone user does here: pick a template, look at it, nudge its box
+   with a finger, judge the preview. So the header is a template switcher
+   (components/TemplateSwitcher.tsx), the photo gets the width, and every
+   control under it is a finger-sized row. */
+
+@media (max-width: 700px), (pointer: coarse) and (orientation: landscape) and (max-height: 500px) {
+  /* The shell already gutters the page; the calibrator's own padding on top
+     of it left the photo 300px wide. */
+  .app {
+    padding: 0;
+  }
+
+  .app__workbench,
+  .mg-frame .app__workbench {
+    display: block;
+  }
+
+  .app__main,
+  .mg-frame .app__main {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-3);
+  }
+
+  .app__workspace {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+  }
+
+  /* — header: the template switcher — */
+  .app__header--phone {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--space-1);
+    padding-bottom: var(--space-2);
+    margin-bottom: var(--space-3);
+  }
+
+  /* The name slides out and in with a swipe; it must not widen the page. */
+  .tswitch {
+    display: grid;
+    grid-template-columns: 44px minmax(0, 1fr) 44px;
+    align-items: center;
+    gap: var(--space-1);
+    overflow-x: clip;
+  }
+
+  .tswitch__step {
+    display: grid;
+    place-items: center;
+    width: 44px;
+    height: 44px;
+    padding: 0;
+    border: 0;
+    border-radius: 999px;
+    background: transparent;
+    color: var(--color-text);
+  }
+
+  .tswitch__step svg {
+    width: 20px;
+    height: 20px;
+  }
+
+  .tswitch__step:disabled {
+    opacity: 0.25;
+  }
+
+  .tswitch__current {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    min-width: 0;
+    min-height: 56px;
+    padding: 6px 10px 6px 6px;
+    border: 1px solid var(--color-divider);
+    border-radius: var(--radius-lg);
+    background: var(--color-surface);
+    color: var(--color-text);
+    text-align: left;
+    transition: transform 0.18s ease-out;
+  }
+
+  .tswitch__thumb {
+    flex: none;
+    width: 44px;
+    height: 44px;
+    border-radius: var(--radius-md);
+    object-fit: cover;
+    background: var(--color-neutral-200);
+  }
+
+  .tswitch__text {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    min-width: 0;
+    flex: 1;
+  }
+
+  .tswitch__name-row {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    min-width: 0;
+  }
+
+  /* Two lines before it gives up: template names are long slugs whose
+     telling part is often the end. */
+  .tswitch__name {
+    display: -webkit-box;
+    min-width: 0;
+    overflow: hidden;
+    overflow-wrap: anywhere;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    font-family: var(--font-body);
+    font-weight: 600;
+    font-size: 14px;
+    line-height: 1.25;
+  }
+
+  .tswitch__caret {
+    flex: none;
+    width: 14px;
+    height: 14px;
+    opacity: 0.6;
+  }
+
+  .tswitch__meta {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    font-size: 12px;
+  }
+
+  .tswitch__meta .tag {
+    padding: 1px 8px;
+    font-size: 11px;
+  }
+
+  .tswitch__position {
+    color: color-mix(in srgb, var(--color-text) 55%, transparent);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+
+  .tswitch__status {
+    grid-column: 1 / -1;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 2px var(--space-2);
+    font-size: 12px;
+  }
+
+  .tswitch__status .app__meta,
+  .tswitch__status .app__status {
+    min-height: 0;
+    margin: 0;
+    font-size: 12px;
+  }
+
+  /* — the templates sheet — */
+  .tsheet__dialog {
+    gap: var(--space-2);
+    height: calc(100dvh - 56px);
+  }
+
+  .tsheet__current .btn,
+  .tsheet__rename-actions .btn {
+    min-height: 44px;
+  }
+
+  .tsheet__current {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-2) 0;
+    border-bottom: 1px solid var(--color-divider);
+  }
+
+  .tsheet__current-name {
+    flex: 1;
+    min-width: 0;
+    overflow-wrap: anywhere;
+    font-weight: 600;
+    font-size: 14px;
+  }
+
+  .tsheet__rename {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    padding-bottom: var(--space-2);
+    border-bottom: 1px solid var(--color-divider);
+  }
+
+  .tsheet__rename-label {
+    font-size: 12px;
+    font-weight: 600;
+  }
+
+  .tsheet__rename-error {
+    margin: 0;
+    color: var(--color-danger, #b3261e);
+    font-size: 13px;
+  }
+
+  .tsheet__rename-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--space-2);
+  }
+
+  .tsheet__dialog .template-rail {
+    position: static;
+    gap: var(--space-2);
+  }
+
+  .tsheet__dialog .template-rail__banner .btn {
+    min-height: 44px;
+  }
+
+  .tsheet__dialog .template-rail__filters {
+    flex-wrap: wrap;
+    gap: var(--space-2);
+  }
+
+  .tsheet__dialog .template-rail__pill {
+    min-height: 36px;
+    padding: 0 14px;
+    font-size: 13px;
+  }
+
+  .tsheet__dialog .template-rail__item {
+    justify-content: flex-start;
+    min-height: 64px;
+    padding: var(--space-2);
+  }
+
+  .tsheet__dialog .template-rail__text {
+    flex: 1;
+  }
+
+  .tsheet__dialog .template-rail__thumb {
+    width: 52px;
+    height: 52px;
+  }
+
+  .tsheet__dialog .template-rail__name {
+    font-size: 14px;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  .tsheet__dialog .template-rail__meta,
+  .tsheet__dialog .template-rail__labels {
+    font-size: 12px;
+  }
+
+  .tsheet__dialog .template-rail__more,
+  .tsheet__dialog .mg-queue-entry {
+    min-height: 44px;
+    font-size: 13px;
+  }
+
+  /* — labels bar and the positioned-listings note — */
+  .label-bar {
+    flex-wrap: wrap;
+    row-gap: var(--space-2);
+  }
+
+  .label-bar__chip,
+  .label-bar__add {
+    min-height: 40px;
+  }
+
+  /* 44px to a finger; the negative margin keeps the chip the size the 32px
+     button gave it. */
+  .label-bar__remove {
+    width: 44px;
+    height: 44px;
+    margin: -6px;
+    padding: 15px;
+  }
+
+  .app__positions-note {
+    margin: 0;
+    font-size: 13px;
+    overflow-wrap: anywhere;
+  }
+
+  .app__positions-note--phone summary {
+    min-height: 24px;
+    cursor: pointer;
+  }
+
+  .app__positions-note--phone p {
+    margin: var(--space-2) 0 0;
+  }
+
+  /* — the view bar: tabs, then the design and colour, each its own row — */
+  .app__preview-bar {
+    padding: var(--space-2);
+    gap: var(--space-2);
+  }
+
+  .app__preview-bar > .seg {
+    display: flex;
+    flex: 1 1 100%;
+  }
+
+  .app__preview-bar > .seg .seg-opt {
+    flex: 1;
+    min-height: 44px;
+    font-size: 15px;
+  }
+
+  .app__preview-bar .design-picker {
+    flex: 1 1 100%;
+    min-width: 0;
+  }
+
+  .app__preview-bar .design-picker__heading,
+  .app__bar-field > span {
+    flex: none;
+    width: 56px;
+    font-size: 10px;
+  }
+
+  .app__preview-bar .design-picker__select,
+  .app__bar-field select {
+    flex: 1;
+    width: auto;
+    min-width: 0;
+    min-height: 44px;
+    padding: 4px 8px;
+    text-overflow: ellipsis;
+  }
+
+  .app__preview-bar .design-picker__upload {
+    display: grid;
+    place-items: center;
+    flex: none;
+    min-height: 44px;
+    padding: 0 var(--space-2);
+    font-size: 13px;
+  }
+
+  .app__bar-field {
+    flex: 1 1 100%;
+    min-width: 0;
+  }
+
+  /* The box switch's icon alone said nothing to a thumb. On a phone it
+     reads its own label, and the row is the target's height. */
+  .app__outline-toggle {
+    flex: 1 1 100%;
+    margin-left: 0;
+  }
+
+  .box-toggle {
+    width: 100%;
+    min-height: 40px;
+    justify-content: space-between;
+    font-size: 14px;
+  }
+
+  .box-toggle::before {
+    content: attr(title);
+    order: 1;
+    flex: 1;
+  }
+
+  .box-toggle svg {
+    order: 0;
+  }
+
+  .box-toggle .box-toggle__switch,
+  .box-toggle .box-toggle__switch:hover {
+    order: 2;
+    transform: scale(1.3);
+    transform-origin: right center;
+  }
+
+  /* — the photo: a finger drags corners and the box, and scrolls the rest —
+
+     The overlay stops refusing touch scrolling as a whole (index.css gives
+     it touch-action: none for the desktop's pen and touchpads), so a thumb
+     on the photo outside the box still scrolls the page. The box, its
+     corners and the mask brush keep every touch for themselves. */
+  .quad-editor__overlay {
+    touch-action: pan-y pinch-zoom;
+  }
+
+  .quad-editor__polygon,
+  .quad-editor__handle,
+  .quad-editor__grip {
+    touch-action: none;
+  }
+
+  /* While the mask brush is out the whole photo is the drawing surface, and
+     Chrome does not honour the brush rect's own touch-action through the
+     masked layers around it: without this a stroke scrolled the page. */
+  .quad-editor__overlay:has([aria-label="Mask drawing area"]) {
+    touch-action: none;
+  }
+
+  /* The grip is a real filled circle, sized in QuadEditor to 22 screen
+     pixels at the photo's scale: a wide invisible stroke instead left a
+     dead ring between it and the dot, where a touch hit the box. */
+  .quad-editor__grip {
+    fill: transparent;
+    stroke: none;
+    pointer-events: all;
+  }
+
+  /* The caption keeps its 32px look; a transparent border above and below
+     makes the target 44px (the caption clips its overflow, so a pseudo-
+     element cannot), and the margin keeps the chip where it was drawn. */
+  .quad-editor__label {
+    min-height: 44px;
+    margin-top: -6px;
+    border-block: 6px solid transparent;
+    /* 16px round the drawn 32px pill once the 6px borders are taken off. */
+    border-radius: 16px / 22px;
+    background-clip: padding-box;
+    font-size: 13px;
+  }
+
+  .quad-editor__menu button {
+    min-height: 44px;
+    font-size: 15px;
+  }
+
+  /* — the Marigold mask dock — */
+  .mg-mask-dock {
+    flex-wrap: wrap;
+    gap: var(--space-2);
+  }
+
+  .mg-mask-dock button {
+    min-height: 44px;
+  }
+
+  .mg-mask-size {
+    flex: 1 1 100%;
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+  }
+
+  .mg-mask-size input[type="range"] {
+    flex: 1;
+  }
+
+  .mg-mask-divider {
+    display: none;
+  }
+
+  /* — the panels under the photo — */
+  .app__controls .realism,
+  .app__controls fieldset {
+    padding: var(--space-3);
+  }
+
+  .app__controls select {
+    min-height: 44px;
+  }
+
+  .app__controls .btn,
+  .realism__presets button,
+  .realism summary {
+    min-height: 40px;
+  }
+
+  /* Print realism's Reset: Marigold's frame strips the ghost button to its
+     text (components/marigold.css), which left a 16px-tall target. */
+  .app__controls .realism__head .btn,
+  .mg-frame .realism__head .btn-ghost {
+    min-height: 44px;
+    padding: 0 var(--space-3);
+  }
+
+  .realism summary {
+    display: list-item;
+    padding: 10px 0;
+  }
+
+  .realism__presets button {
+    padding: 0 16px;
+  }
+
+  .realism input[type="checkbox"] {
+    width: 24px;
+    height: 24px;
+  }
+
+  /* A range thumb is ~16px by default: too small to find with a thumb, and
+     a near miss scrolled the page instead. */
+  .realism input[type="range"],
+  .mg-mask-size input[type="range"] {
+    height: 36px;
+  }
+
+  .realism input[type="range"]::-webkit-slider-thumb {
+    width: 26px;
+    height: 26px;
+  }
+
+  .realism input[type="range"]::-moz-range-thumb {
+    width: 26px;
+    height: 26px;
+  }
+
+  /* — preview tab — */
+  .preview-grid__head {
+    flex-wrap: wrap;
+  }
+
+  .preview-grid__actions {
+    flex: 1 1 100%;
+    display: flex;
+    gap: var(--space-2);
+  }
+
+  .preview-grid__actions .btn {
+    flex: 1;
+    min-height: 44px;
+  }
+
+  .preview-grid__tiles {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--space-2);
+  }
+
+  .preview-grid--single .preview-grid__tiles {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .preview-grid__tiles .gallery__item {
+    width: auto;
+  }
+
+  .preview-grid__tiles figcaption {
+    overflow-wrap: anywhere;
+    font-size: 12px;
+  }
+
+  /* — kind picker — */
+  .kind-picker {
+    padding: var(--space-3);
+  }
+
+  .kind-picker__option {
+    min-height: 56px;
+  }
+
+  .kind-picker__option input {
+    width: 22px;
+    height: 22px;
+  }
+
+  .kind-picker__actions .btn {
+    flex: 1;
+    min-height: 46px;
+  }
+
+  .kind-picker__filename,
+  .kind-picker__file {
+    overflow-wrap: anywhere;
+  }
+
+  /* — Marigold inference settings: a bottom sheet like every other dialog — */
+  .mi-dialog {
+    align-items: flex-end;
+    padding: 0;
+  }
+
+  .mi-dialog .mi-sheet {
+    width: 100%;
+    max-height: calc(100dvh - 40px);
+    border-radius: 18px 18px 0 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+
+  .mi-dialog-body {
+    grid-template-columns: 1fr;
+    gap: 0;
+    padding: 8px 18px 18px;
+    overflow: visible;
+  }
+
+  .mi-sheet header {
+    padding: 0 18px 14px;
+  }
+
+  .mi-sheet footer {
+    position: sticky;
+    bottom: 0;
+    background: var(--color-bg);
+    padding: 12px 18px calc(12px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .mi-sheet footer .btn,
+  .mi-reset,
+  .mi-launch {
+    min-height: 44px;
+  }
+
+  .mi-close,
+  .mi-info-button {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  .mi-field input {
+    min-height: 44px;
+  }
+}
+
+@media (max-width: 700px) and (prefers-reduced-motion: no-preference),
+  (pointer: coarse) and (orientation: landscape) and (max-height: 500px) and (prefers-reduced-motion: no-preference) {
+  .mi-dialog .mi-sheet {
+    animation: phone-sheet-in 0.24s cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+}
+
+@media (max-width: 700px), (pointer: coarse) and (orientation: landscape) and (max-height: 500px) {
+  /* The settings sheet has no side padding for the grab bar to reach past. */
+  .mi-sheet > .sheet-grabber {
+    margin: 0;
+  }
+}
+
+@media (max-width: 700px), (pointer: coarse) and (orientation: landscape) and (max-height: 500px) {
+  .mi-sheet h2 {
+    font-size: 20px;
+  }
+
+  /* The (i) beside each Marigold setting: the drawn circle stays, the
+     target grows. */
+  .mg-info {
+    width: 40px;
+    height: 40px;
+    margin: -8px;
+  }
+
+  .quad-editor__phone-actions {
+    display: flex;
+    gap: var(--space-2);
+    padding: var(--space-2);
+    line-height: 1.2;
+  }
+
+  .quad-editor__phone-actions .btn {
+    flex: 1;
+    min-height: 44px;
+    padding: 0 var(--space-2);
+    font-size: 13px;
+  }
+
+  /* Its own danger style: the desktop menu's carries a dashed separator. */
+  .quad-editor__phone-actions .quad-editor__phone-danger {
+    color: var(--color-accent-700);
+  }
+}
+
+/* — A phone on its side —
+   Portrait stacks the switcher, the bar and the controls above and below the
+   photo; sideways that left the photo a screen and a half tall and below the
+   fold, so dragging a corner meant scrolling to find it. Here the photo takes
+   a left column sized to the screen's height and stays put while everything
+   else -- switcher, labels, tabs, pickers, controls -- scrolls beside it.
+
+   The parts sit in four nested wrappers (workbench, workspace, main,
+   preview); `display: contents` lifts their children into one grid on
+   `.app`, the stage spans every row of the left column, and the rest fill
+   the right one row by row. The last row is `1fr`, so a photo taller than
+   the controls grows that row alone instead of spacing the controls out.
+   What stands in for the photo while a template loads, or while it still
+   needs a kind, takes the stage too, so switching templates never drops
+   the page back to the stacked layout for a frame. */
+@media (pointer: coarse) and (orientation: landscape) and (max-height: 500px) {
+  .app {
+    --cal-stage-h: calc(100dvh - 2 * var(--space-3));
+    display: grid;
+    grid-template-columns: min(var(--cal-stage-h), 52%) minmax(0, 1fr);
+    grid-template-rows: repeat(8, auto) 1fr;
+    gap: var(--space-3) var(--space-4);
+    align-items: start;
+  }
+
+  .app__workbench,
+  .mg-frame .app__workbench,
+  .app__workspace,
+  .app__main,
+  .mg-frame .app__main,
+  .app__preview {
+    display: contents;
+  }
+
+  .app > *,
+  .app__workspace > *,
+  .app__main > *,
+  .app__preview > * {
+    grid-column: 2;
+    min-width: 0;
+  }
+
+  /* Grid gaps space the right column now. */
+  .app__header--phone,
+  .app__preview-bar {
+    margin: 0;
+  }
+
+  /* The bar lost the card it sat in (.app__preview's box is gone). */
+  .app__preview-bar {
+    border-radius: var(--radius-lg);
+    background: var(--color-surface);
+    box-shadow: var(--shadow-sm);
+  }
+
+  /* — the stage — */
+  .app__workspace > :is(p, .kind-picker),
+  .app__preview > :is(.quad-editor, .quad-editor__empty, .app__loading, .preview-grid),
+  .mg-stage > :is(.quad-editor, .app__loading) {
+    grid-column: 1;
+    grid-row: 1 / -1;
+  }
+
+  .app__preview > .quad-editor,
+  .mg-stage > .quad-editor {
+    position: sticky;
+    top: var(--space-3);
+  }
+
+  /* Marigold's stage is the photo plus its mask dock. The dock comes out to
+     the right column, under the bar, so the photo keeps the full height and
+     the brushes, Undo and Done sit beside the photo being painted rather
+     than under it and off the screen. */
+  .mg-stage {
+    display: contents;
+  }
+
+  .mg-stage > .mg-mask-dock {
+    grid-column: 2;
+    justify-content: flex-start;
+    width: auto;
+    max-width: none;
+    margin: 0;
+    padding: var(--space-2);
+    border-radius: var(--radius-lg);
+    background: var(--color-surface);
+  }
+
+  .mg-stage > .mg-mask-dock .mg-mask-legend {
+    justify-content: flex-start;
+  }
+
+  .mg-stage > .mg-mask-dock .mg-mask-edit {
+    flex: 1;
+  }
+
+  /* The photo fits the screen's height whatever its shape: the canvas
+     shrinks to the image, so the overlay drawn over it still matches. */
+  .app__preview > .quad-editor,
+  .mg-stage > .quad-editor {
+    width: fit-content;
+    max-width: 100%;
+    margin-inline: auto;
+    border-radius: var(--radius-md);
+    overflow: hidden;
+  }
+
+  .app__preview > .quad-editor .quad-editor__image,
+  .mg-stage > .quad-editor .quad-editor__image {
+    width: auto;
+    max-width: 100%;
+    max-height: var(--cal-stage-h);
+  }
+
+  .app__preview > .preview-grid {
+    padding: 0;
+  }
+
+  .app__preview > .preview-grid .preview-grid__head {
+    margin-top: 0;
+  }
+
+  /* The sheets: as wide as every other sheet sideways (base.css), and as
+     tall as the screen allows, since height is the short side. */
+  .tsheet__dialog {
+    height: calc(100dvh - 12px);
+  }
+
+  /* Stacked, the rename row, the banner, the search and two rows of filter
+     chips filled the screen, and the first template started below it. Here
+     the banner, search and filters float into a narrow left column and the
+     list runs beside them from the top, with compact rows, so three or four
+     templates show at once. Floats rather than a grid: the list is any
+     number of groups plus the queue, with no wrapper to place as one. */
+  .tsheet__current {
+    padding: 2px 0;
+  }
+
+  .tsheet__dialog .template-rail {
+    display: block;
+  }
+
+  .tsheet__dialog
+    .template-rail
+    > :is(.template-rail__banner, .label-search, .template-rail__filters) {
+    float: left;
+    clear: left;
+    width: 190px;
+    margin-bottom: var(--space-2);
+  }
+
+  .tsheet__dialog .template-rail__banner {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .tsheet__dialog .template-rail > :is(.template-rail__group, .template-rail__empty, .mg-queue) {
+    margin: 0 0 var(--space-2) calc(190px + var(--space-3));
+  }
+
+  .tsheet__dialog .template-rail__item {
+    min-height: 56px;
+    padding: 4px var(--space-2);
+  }
+
+  .tsheet__dialog .template-rail__thumb {
+    width: 44px;
+    height: 44px;
+  }
+
+  /* The Boxes row's four buttons overflowed the narrow right column: two
+     by two instead. */
+  .quad-editor__phone-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .mi-dialog {
+    justify-content: center;
+  }
+
+  .mi-dialog .mi-sheet {
+    width: min(100%, 600px);
+    max-height: calc(100dvh - 12px);
+  }
+}

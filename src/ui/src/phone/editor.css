@@ -1,0 +1,964 @@
+/* — Phone: the listing editor and the listing-template editor —
+   All rules inside the phone query (phone/usePhone.ts).
+
+   The phone editor is the desktop one re-stacked for a thumb: a two-line
+   head with the other actions behind "⋯", the artwork as one tappable card,
+   one sticky row of tabs whose content also swipes sideways, and sheets in
+   place of side panels and popovers. */
+
+@media (max-width: 700px), (pointer: coarse) and (orientation: landscape) and (max-height: 500px) {
+  :root {
+    /* Where the stuck tab strip sits, and where what sticks under it starts. */
+    --editor-tabs-top: 6px;
+    --editor-tabs-h: 42px;
+    --editor-under-tabs: calc(var(--editor-tabs-top) + var(--editor-tabs-h) + var(--space-2));
+  }
+
+  /* The tab content follows a sideways swipe; it must not widen the page. */
+  .editor {
+    overflow-x: clip;
+  }
+
+  /* Tall enough that a tab change can always start the new tab right under
+     the stuck tab strip, however short the tab is. */
+  .editor-pager {
+    min-height: calc(100dvh - var(--phone-tabbar-h) - var(--editor-under-tabs));
+  }
+
+  /* — the head: title and "⋯" over status, save state and Deploy — */
+  .page-head--editor {
+    flex-wrap: wrap;
+    align-items: center;
+    row-gap: var(--space-2);
+    column-gap: var(--space-2);
+    margin-bottom: var(--space-3);
+    padding-bottom: var(--space-3);
+  }
+
+  /* The back link and "⋯" share the top line, the way a native screen puts
+     them in its bar, and the title gets a line of its own under them: a long
+     listing name then wraps on its own words instead of squeezing between
+     the two and pushing its rename pencil onto a line by itself. */
+  .page-head--editor > .page-head__crumb {
+    order: -3;
+  }
+
+  .page-head--editor > .head-more {
+    order: -2;
+    margin-left: auto;
+  }
+
+  .page-head--editor::before {
+    content: "";
+    order: -1;
+    flex-basis: 100%;
+    height: 0;
+  }
+
+  /* The line break between the identity line and the state line. */
+  .page-head--editor::after {
+    content: "";
+    order: 1;
+    flex-basis: 100%;
+    height: 0;
+  }
+
+  .page-head--editor > .page-head__title {
+    flex: 1 1 0;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  .page-head--editor > .page-head__name-edit {
+    flex: 1 1 0;
+    min-width: 0;
+    flex-wrap: wrap;
+  }
+
+  .page-head__name {
+    width: 100%;
+    min-width: 0;
+    font-size: 18px;
+  }
+
+  .page-head--editor > .status-tag,
+  .page-head--editor > .page-head__meta,
+  .page-head--editor > .aiflow,
+  .page-head--editor > .page-head__actions {
+    order: 2;
+  }
+
+  .page-head--editor > .page-head__meta {
+    flex: 1 1 auto;
+    white-space: normal;
+  }
+
+  .page-head--editor > .page-head__actions {
+    width: auto;
+    margin-left: auto;
+    flex-wrap: nowrap;
+  }
+
+  .page-head--editor > .page-head__actions .btn {
+    min-height: 38px;
+    padding: 6px 14px;
+    font-size: 14px;
+  }
+
+  .head-more {
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    margin: -4px -8px -4px 0;
+    padding: 0;
+    border: none;
+    border-radius: 999px;
+    background: transparent;
+    color: var(--color-text);
+    font-size: 24px;
+    cursor: pointer;
+  }
+
+  .head-more:active,
+  .head-more[aria-expanded="true"] {
+    background: var(--color-neutral-200);
+  }
+
+  /* — the issues banner: a one-line summary that unfolds — */
+  .issues__head {
+    align-items: center;
+    flex-wrap: nowrap;
+    margin-bottom: 0;
+  }
+
+  .issues__when {
+    display: none;
+  }
+
+  .issues__toggle {
+    flex: none;
+    min-height: 36px;
+    margin: -6px 0 -6px auto;
+    padding: 0 var(--space-2);
+    border: none;
+    background: none;
+    font-family: var(--font-body);
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--color-accent-700);
+    cursor: pointer;
+  }
+
+  .issues__toggle[aria-expanded="true"] {
+    margin-bottom: var(--space-1);
+  }
+
+  .issue__fix {
+    min-height: 36px;
+  }
+
+  .head-more__list {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .head-more__list .action-link {
+    display: flex;
+    justify-content: flex-start;
+    width: 100%;
+    min-height: 50px;
+    gap: var(--space-3);
+    padding: 0 var(--space-1);
+    border-bottom: 1px solid var(--color-divider);
+    font-size: 16px;
+    text-decoration: none;
+  }
+
+  .head-more__list .action-link svg {
+    width: 22px;
+    height: 22px;
+  }
+
+  .head-more__list .action-row__divider {
+    display: none;
+  }
+
+  /* An action's error, under the head: the "⋯" sheet that held the action
+     has closed by the time it fails (HeadAlert). */
+  .head-alerts {
+    margin: calc(-1 * var(--space-1)) 0 var(--space-3);
+  }
+
+  .head-alerts:empty {
+    display: none;
+  }
+
+  .head-alerts .action-row__error {
+    display: block;
+    font-size: 14px;
+  }
+
+  /* Its hit area a finger's height, without growing the line it sits in. */
+  .save-chip__trigger {
+    min-height: 44px;
+  }
+
+  .aiflow__node::after {
+    content: "";
+    position: absolute;
+    inset: -12px -8px;
+  }
+
+  /* The save card's content as a sheet. */
+  .phone-sheet .save-card__path {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    overflow-wrap: anywhere;
+  }
+
+  .phone-sheet .save-card__copy {
+    min-height: 40px;
+    padding-inline: var(--space-3);
+    font-size: 14px;
+  }
+
+  .phone-sheet .save-card__when {
+    margin-top: var(--space-2);
+  }
+
+  /* — the artwork card: compact, and tapped anywhere to change — */
+  .design-strip__shirts {
+    padding: 4px;
+  }
+
+  .design-strip .shirt-thumb {
+    width: 52px;
+  }
+
+  .design-row--slot {
+    gap: var(--space-2);
+    padding: 4px 8px 4px 4px;
+  }
+
+  /* The Change button's tap area covers its whole slot, which opens the
+     recent designs, Find a design and Upload a PNG. */
+  .design-row--slot .design-row__change::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+  }
+
+  .design-row--slot .design-row__change {
+    min-height: 28px;
+  }
+
+  /* Dropping a file is a desktop gesture: upload is in the slot's panel. */
+  .design-strip__hint {
+    display: none;
+  }
+
+  .design-strip__foot {
+    justify-content: flex-start;
+    padding: 2px 6px 0;
+  }
+
+  .design-strip__mode {
+    min-height: 36px;
+    text-align: left;
+  }
+
+  /* The split strip stacks. */
+  .design-strip__slots--split {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .design-strip .template-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .design-strip__panel-actions .btn-like {
+    min-height: 40px;
+  }
+
+  /* — the tabs: one row, stuck to the top while the tab scrolls — */
+  .tabs {
+    position: sticky;
+    top: var(--editor-tabs-top);
+    z-index: 30;
+    display: flex;
+    width: 100%;
+    height: var(--editor-tabs-h);
+    margin-top: var(--space-3);
+    background: var(--color-surface);
+    /* Covers what scrolls past around the strip while it is stuck. */
+    box-shadow: 0 0 0 var(--space-3) var(--color-bg);
+  }
+
+  /* Four labels and their issue counts in one row down to a 320px screen:
+     the padding and type give way below about 360px. */
+  .tabs .seg-opt {
+    flex: 1 1 auto;
+    justify-content: center;
+    min-width: 0;
+    padding-inline: clamp(2px, calc((100vw - 320px) / 10 + 2px), 6px);
+    font-size: clamp(13px, 3.6vw, 14px);
+    white-space: nowrap;
+  }
+
+  .tabs .tab-badge {
+    flex: none;
+    margin-left: 3px;
+  }
+
+  /* "Listing Images" reads "Images" in one row of four. */
+  .seg-opt__lead {
+    display: none;
+  }
+
+  /* — Variants: the preview sticks under the tabs while the colours scroll,
+     so tapping a colour shows it — */
+  .layout--variants,
+  .images-tab {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .layout--variants {
+    gap: var(--space-3);
+  }
+
+  .layout--variants > .variants-preview {
+    display: contents;
+  }
+
+  .layout--variants .preview-stage--large {
+    position: sticky;
+    top: var(--editor-under-tabs);
+    z-index: 5;
+    order: -1;
+    height: 190px;
+    min-height: 0;
+    padding: 4px;
+  }
+
+  .layout--variants .preview-stage--large img {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+  }
+
+  .layout--variants .variants-preview__hint {
+    order: -1;
+    margin: calc(-1 * var(--space-2)) 0 0;
+  }
+
+  .color-row {
+    min-height: 46px;
+    padding-block: 4px;
+  }
+
+  .color-row__text {
+    align-self: stretch;
+  }
+
+  .color-row__chip {
+    width: 34px;
+    height: 34px;
+  }
+
+  /* A bigger switch, with a tap area past its edges. */
+  .switch {
+    position: relative;
+    width: 42px;
+    height: 24px;
+  }
+
+  .switch::after {
+    content: "";
+    position: absolute;
+    inset: -10px -6px;
+  }
+
+  .switch__knob {
+    width: 20px;
+    height: 20px;
+  }
+
+  .switch--on .switch__knob {
+    transform: translateX(18px);
+  }
+
+  .shade-picker .btn-like {
+    min-height: 36px;
+  }
+
+  /* — Pricing — */
+  .price-table__input {
+    min-height: 44px;
+  }
+
+  /* — Listing Images: the gallery first, Add media a sheet — */
+  .images-right > .reel {
+    order: -1;
+  }
+
+  .preview-stage--large {
+    min-height: 280px;
+  }
+
+  /* Listing Images: the stage is as tall as the picture is at the screen's
+     width, not a screen tall, so it starts close under the gallery. Before
+     anything is tapped it is only as tall as what it says. */
+  .images-tab .preview-stage--large {
+    height: auto;
+    min-height: 0;
+    aspect-ratio: 1;
+  }
+
+  .images-tab .preview-stage--large:has(> .image-placeholder) {
+    aspect-ratio: auto;
+    min-height: 96px;
+  }
+
+  .images-tab .preview-stage--large img,
+  .images-tab .preview-stage--large video {
+    max-height: 100%;
+  }
+
+  .reel__head {
+    align-items: center;
+  }
+
+  .reel__hint {
+    flex-basis: 100%;
+    order: 5;
+  }
+
+  .reel__add {
+    margin-left: auto;
+    min-height: 40px;
+  }
+
+  .rtile {
+    width: calc((100% - 2 * var(--space-2)) / 3);
+  }
+
+  .rtile__face {
+    width: 100%;
+    height: auto;
+    aspect-ratio: 1;
+  }
+
+  /* Too small for a finger, and under the tile's labels: a phone removes
+     from the selected tile's bar under the reel. */
+  .rtile__x {
+    display: none;
+  }
+
+  /* Stays on screen above the tab bar while the reel scrolls, so the tile
+     being moved and its buttons are in view together. */
+  .reel-moves {
+    position: sticky;
+    bottom: calc(var(--phone-tabbar-h) + var(--space-2));
+    z-index: 6;
+    box-shadow: var(--shadow-md);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    margin-top: var(--space-3);
+    padding: var(--space-2) var(--space-3);
+    border-radius: var(--radius-md);
+    background: var(--color-neutral-100);
+    border: 1px solid var(--color-divider);
+  }
+
+  .reel-moves__head {
+    display: flex;
+    align-items: center;
+    gap: var(--space-1);
+  }
+
+  /* One line, so the bar covers as little of the gallery as it can. */
+  .reel-moves__what {
+    flex: 1 1 auto;
+    min-width: 0;
+    font-size: 13px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .reel-moves__why {
+    font-size: 13px;
+    color: color-mix(in srgb, var(--color-text) 65%, transparent);
+  }
+
+  .reel-moves__buttons {
+    display: flex;
+    gap: var(--space-1);
+  }
+
+  .reel-moves .btn svg {
+    width: 20px;
+    height: 20px;
+  }
+
+  .reel-moves .btn {
+    border: 1px solid var(--color-divider);
+    background: var(--color-surface);
+    font-family: var(--font-body);
+    font-weight: 600;
+    color: var(--color-text);
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    justify-content: center;
+    min-width: 44px;
+    min-height: 44px;
+    padding-inline: 10px;
+    font-size: 14px;
+  }
+
+  .reel-moves__remove {
+    margin-left: auto;
+  }
+
+  .add-media-sheet .locator {
+    padding: 0;
+    border: none;
+    background: transparent;
+  }
+
+  .add-media-sheet .locator__title {
+    display: none;
+  }
+
+  .add-media-sheet .locator__list {
+    min-height: 0;
+    overflow: visible;
+  }
+
+  .add-media-sheet .loc-tmpl__head {
+    min-height: 52px;
+  }
+
+  .preview-foot {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .preview-meta {
+    flex: none;
+  }
+
+  .preview-actions .btn-like {
+    min-height: 40px;
+  }
+
+  .cchip {
+    min-height: 36px;
+    padding-inline: 12px;
+    font-size: 14px;
+  }
+
+  .add-media-sheet .loc-tmpl .btn-like {
+    min-height: 40px;
+  }
+
+  .design-picker .modal-dialog__close {
+    width: 40px;
+    height: 40px;
+    font-size: 22px;
+  }
+
+  .tp-stage {
+    touch-action: none;
+  }
+
+  /* — Listing Details: each label and counter over a full-width field — */
+  .seo-brief-row {
+    grid-template-columns: minmax(0, 1fr);
+    row-gap: var(--space-2);
+  }
+
+  /* AI Mode under the brief rather than squeezing it from the side. */
+  .seo-ai-mode-anchor {
+    grid-column: 1;
+    grid-row: 3;
+    justify-self: end;
+  }
+
+  .seo-brief-row > .seo-ai-mode-progress {
+    grid-row: 4;
+  }
+
+  /* AI notices sit over the tab bar, clear of the head and its Deploy. */
+  .ai-failure-toast,
+  .ai-auto-toast {
+    top: auto;
+    right: var(--space-3);
+    bottom: calc(var(--phone-tabbar-h) + var(--space-2));
+    left: var(--space-3);
+    width: auto;
+  }
+
+  .details-tab .field:has(> .field__line) {
+    position: relative;
+  }
+
+  .details-tab .field__line {
+    display: block;
+  }
+
+  .details-tab .field__count {
+    position: absolute;
+    top: 0;
+    right: 0;
+    margin-top: 0;
+    font-size: 12px;
+  }
+
+  .chip {
+    font-size: 13px;
+    padding: 6px 4px 6px 12px;
+  }
+
+  .chip__x {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 26px;
+    min-height: 26px;
+    margin: -6px 0 -6px 0;
+    font-size: 16px;
+  }
+
+  /* A 44px hit area round the 26px ×. */
+  .chip__x::after {
+    content: "";
+    position: absolute;
+    inset: -9px;
+  }
+
+  .description-preview-control__link {
+    min-height: 44px;
+  }
+
+  .add-media-sheet .locator__modes .seg-opt {
+    min-height: 44px;
+  }
+
+  /* A tap leaves focus in the anchor, so the hover card would stay over the
+     Brief until something else took focus: on a phone it shows for the
+     keyboard only. */
+  .seo-ai-mode-anchor:not(:has(:focus-visible)) .seo-ai-mode-tip {
+    opacity: 0;
+    visibility: hidden;
+  }
+
+  .description-source-picker__menu {
+    max-height: 60dvh;
+    overflow-y: auto;
+    scroll-margin-bottom: calc(var(--phone-tabbar-h) + var(--space-2));
+  }
+
+  .description-source-picker__menu [role="option"] {
+    min-height: 44px;
+  }
+
+  /* — the lightbox: over the tab bar — */
+  .lightbox {
+    z-index: 70;
+  }
+
+  .lightbox__bar {
+    flex-wrap: wrap;
+    row-gap: var(--space-1);
+    padding-top: calc(var(--space-2) + env(safe-area-inset-top, 0px));
+  }
+
+  .lightbox__actions button {
+    min-width: 40px;
+    min-height: 40px;
+  }
+}
+
+/* — A phone on its side —
+   Height is what a sideways phone lacks, and width is what it has. The head
+   folds into one bar, the artwork card into one line, and Variants puts the
+   shirt beside its colours instead of over them, so the tabs and what they
+   hold start on the first screen. Inside PHONE_LANDSCAPE_QUERY
+   (phone/usePhone.ts): portrait and the desktop never see these. */
+@media (pointer: coarse) and (orientation: landscape) and (max-height: 500px) {
+  /* — the head: back, title, state, Deploy and "⋯" on one line — */
+  .page-head--editor {
+    flex-wrap: nowrap;
+    margin-bottom: var(--space-2);
+    padding-bottom: var(--space-2);
+  }
+
+  .page-head--editor::before,
+  .page-head--editor::after {
+    display: none;
+  }
+
+  .page-head--editor > .page-head__crumb,
+  .page-head--editor > .status-tag,
+  .page-head--editor > .aiflow {
+    flex: none;
+  }
+
+  /* The steps say what is running when tapped; their one-line label has no
+     room beside the title, the save state and Deploy. */
+  .page-head--editor > .aiflow .aiflow__label {
+    display: none;
+  }
+
+  /* A long name gives way to the controls, and shows whole once tapped to
+     rename. It gives way after the save state does, and keeps a few letters
+     however long it is. */
+  .page-head--editor > .page-head__title {
+    flex: 0 1 auto;
+    /* At most its own width, so a short name leaves no gap after it. */
+    min-width: 0;
+    min-width: calc-size(max-content, min(size, 5em));
+    font-size: 20px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .page-head--editor > .page-head__name-edit {
+    flex: 1 1 0;
+    flex-wrap: nowrap;
+  }
+
+  /* The save state takes the slack, so Deploy and "⋯" sit at the right
+     whether or not the head has a Deploy (a listing template has none). */
+  .page-head--editor > .page-head__meta,
+  .page-head--editor > .page-head__meta:has(.save-chip) {
+    flex: 0 1000 auto;
+    min-width: 0;
+    margin-right: auto;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* What is left of the save state ends in an ellipsis, as the sentences
+     before the first save do. */
+  .page-head--editor .save-chip {
+    min-width: 0;
+  }
+
+  .page-head--editor .save-chip__trigger {
+    display: block;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    line-height: 42px;
+  }
+
+  .page-head--editor .save-chip__trigger > * {
+    vertical-align: middle;
+  }
+
+  .page-head--editor .save-chip__trigger > .page-head__dot {
+    display: inline-block;
+    margin-right: 5px;
+  }
+
+  .page-head--editor .save-chip__trigger > .save-chip__caret {
+    margin-left: 5px;
+  }
+
+  .page-head--editor > .page-head__actions {
+    margin-left: 0;
+  }
+
+  .page-head--editor > .head-more {
+    order: 3;
+    margin-left: 0;
+  }
+
+  /* — the artwork card: its slots and the light/dark switch on one line — */
+  .design-strip__card {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+
+  .design-strip__slots {
+    flex: 1 1 360px;
+    min-width: 0;
+  }
+
+  .design-strip__slots--split {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .design-strip__foot {
+    flex: 0 1 auto;
+    padding: 0 8px;
+    border-top: none;
+  }
+
+  .design-strip .template-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .tabs {
+    margin-top: var(--space-2);
+  }
+
+  /* — Variants: the shirt beside its colours, held in view while they
+     scroll — */
+  .layout--variants {
+    grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+    align-items: start;
+  }
+
+  /* One screen tall at most: the photo gives up height to what the colour
+     prints, so both stay in view however far the colours scroll. */
+  .layout--variants > .variants-preview {
+    display: flex;
+    grid-row: 1;
+    grid-column: 1;
+    position: sticky;
+    top: var(--editor-under-tabs);
+    max-height: calc(100dvh - var(--editor-under-tabs) - var(--space-2));
+    /* Should what sits under the photo outgrow the screen, it scrolls
+       rather than hang out of reach below it. */
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+
+  .layout--variants > fieldset {
+    grid-row: 1;
+    grid-column: 2;
+  }
+
+  .layout--variants .preview-stage--large {
+    position: static;
+    flex: 0 1 auto;
+    height: 320px;
+    min-height: 140px;
+  }
+
+  /* With the shirt beside the colours, tapping one plainly shows it. */
+  .layout--variants .variants-preview__hint,
+  .layout--variants .app__status:empty {
+    display: none;
+  }
+
+  .layout--variants .color-prints {
+    flex: none;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    padding: var(--space-2);
+  }
+
+  .layout--variants .color-prints__thumb {
+    width: 40px;
+    height: 40px;
+  }
+
+  .layout--variants .color-prints__actions {
+    flex-direction: row;
+    flex-wrap: wrap;
+    flex-basis: 100%;
+  }
+
+  .layout--variants .color-prints__btn {
+    min-height: 36px;
+  }
+
+  /* — Listing Images: the picture beside the gallery, the same way, so a
+     tapped tile shows large without scrolling away from it — */
+  .images-right {
+    display: grid;
+    grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+    align-items: start;
+  }
+
+  .images-right > .preview-pane {
+    grid-row: 1 / span 2;
+    grid-column: 1;
+    position: sticky;
+    top: var(--editor-under-tabs);
+    max-height: calc(100dvh - var(--editor-under-tabs) - var(--space-2));
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+
+  .images-right > .reel {
+    grid-row: 1;
+    grid-column: 2;
+  }
+
+  .images-right > .app__status {
+    grid-row: 2;
+    grid-column: 2;
+  }
+
+  .images-tab .preview-stage--large,
+  .images-tab .preview-stage--large:has(> .image-placeholder) {
+    flex: 0 1 auto;
+    height: 320px;
+    min-height: 140px;
+    aspect-ratio: auto;
+  }
+
+  .images-tab .preview-stage--large img,
+  .images-tab .preview-stage--large video {
+    max-height: 100%;
+  }
+
+  .images-tab .preview-foot {
+    flex: none;
+  }
+
+  /* The move bar in one line, so it covers as little of the gallery as it
+     can; the picture beside it already says which one is moving. */
+  .reel-moves {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+
+  .reel-moves__head {
+    flex: 1 1 0;
+    min-width: 0;
+  }
+
+  /* Why a video cannot move, under the line rather than squeezing it. */
+  .reel-moves__why {
+    order: 1;
+    flex-basis: 100%;
+  }
+
+  .reel-moves__buttons {
+    flex: none;
+  }
+
+  .reel-moves__remove {
+    margin-left: 0;
+  }
+
+  /* — the lightbox: a slimmer bar, and both kept clear of the notch — */
+  .lightbox__bar {
+    padding: var(--space-1) max(var(--space-3), env(safe-area-inset-right, 0px)) var(--space-1)
+      max(var(--space-3), env(safe-area-inset-left, 0px));
+  }
+
+  .lightbox__stage {
+    padding: 0 max(var(--space-3), env(safe-area-inset-right, 0px))
+      max(var(--space-2), env(safe-area-inset-bottom, 0px))
+      max(var(--space-3), env(safe-area-inset-left, 0px));
+  }
+}

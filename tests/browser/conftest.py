@@ -17,6 +17,7 @@ import uvicorn
 from etsy_listings.core.workspace.workspace import Workspace
 from etsy_listings.server.api.app import FRONTEND_DIST, create_app
 
+from tests.support.mobile import PHONE_CONTEXT, PHONE_LANDSCAPE_CONTEXT
 from tests.support.server import stop_server
 
 STARTUP_TIMEOUT_SECONDS = 30
@@ -156,3 +157,26 @@ def page(browser_type, calibrator_server: str):
     page.goto(f"{calibrator_server}/templates")
     yield page
     context.close()
+
+
+def _phone_page(browser_type, url: str, device: dict):
+    context = browser_type.new_context(**device)
+    context.set_default_timeout(DEFAULT_TIMEOUT_MS)
+    context.set_default_navigation_timeout(DEFAULT_TIMEOUT_MS)
+    page = context.new_page()
+    page.goto(url)
+    yield page
+    context.close()
+
+
+@pytest.fixture
+def phone_page(browser_type, calibrator_server: str):
+    """``page`` on a phone: touch input, the mobile viewport, at the Dashboard.
+    Swipe on it with ``tests.support.mobile.swipe``."""
+    yield from _phone_page(browser_type, calibrator_server, PHONE_CONTEXT)
+
+
+@pytest.fixture
+def phone_landscape_page(browser_type, calibrator_server: str):
+    """``phone_page`` with the phone held sideways."""
+    yield from _phone_page(browser_type, calibrator_server, PHONE_LANDSCAPE_CONTEXT)

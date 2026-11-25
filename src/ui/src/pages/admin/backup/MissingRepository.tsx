@@ -2,6 +2,7 @@
 // *Missing repository*; plan, PR 8). Never mocked: the interactions doc's
 // *Warnings* table names the actions, and the dialog follows the repair and
 // restore dialogs' layout.
+import { BackupDialog } from "./BackupDialog";
 import { CircleNotchIcon } from "@phosphor-icons/react/dist/csr/CircleNotch";
 import { InfoIcon } from "@phosphor-icons/react/dist/csr/Info";
 import { LockKeyIcon } from "@phosphor-icons/react/dist/csr/LockKey";
@@ -116,108 +117,104 @@ export function RepositoryDialog({
   };
 
   return (
-    <div className="bk-scrim">
-      <div className="bk-dialog" role="dialog" aria-modal="true" aria-labelledby="bk-repo-title">
-        <div>
-          <h2 className="bk-dialog__title" id="bk-repo-title">
-            {text.title}
-          </h2>
-          <p className="bk-dialog__lede">{text.lede}</p>
-        </div>
-        {mode === "connect" && (
-          <div className="bk-field__control">
-            <span className="bk-field__label">Copy from</span>
-            <input
-              className="input s-mono"
-              aria-label="Copy from"
-              placeholder="The folder that holds config, data, index, keys and snapshots"
-              value={source}
-              onChange={(e) => edit(setSource)(e.target.value)}
-            />
-          </div>
-        )}
+    <BackupDialog labelledBy="bk-repo-title" onDismiss={working ? null : onCancel}>
+      <div>
+        <h2 className="bk-dialog__title" id="bk-repo-title">
+          {text.title}
+        </h2>
+        <p className="bk-dialog__lede">{text.lede}</p>
+      </div>
+      {mode === "connect" && (
         <div className="bk-field__control">
-          <span className="bk-field__label">{text.folder}</span>
+          <span className="bk-field__label">Copy from</span>
           <input
             className="input s-mono"
-            aria-label={text.folder}
-            value={folder}
-            onChange={(e) => edit(setFolder)(e.target.value)}
+            aria-label="Copy from"
+            placeholder="The folder that holds config, data, index, keys and snapshots"
+            value={source}
+            onChange={(e) => edit(setSource)(e.target.value)}
           />
-          <span className="bk-sub">
-            On this computer. A new folder, or an empty one; saved as the backup storage folder.
-          </span>
         </div>
-        <div className="bk-field__control">
-          <span className="bk-field__label">Password</span>
-          {passwordStored && (
-            <span className="bk-readonly">
-              <LockKeyIcon size={16} /> Set, in .env
-            </span>
-          )}
-          {!passwordStored && mode === "create" && (
-            <PasswordFields
-              value={password}
-              minLength={passwordMinLength}
-              onChange={edit(setPassword)}
-            />
-          )}
-          {!passwordStored && mode === "connect" && (
-            <input
-              className="input"
-              type="password"
-              aria-label="Password"
-              placeholder="The repository's password"
-              value={password.pw}
-              onChange={(e) => edit(setPassword)({ ...password, pw: e.target.value })}
-            />
-          )}
-        </div>
-        {mode === "connect" && (
-          <p className="bk-note">
-            <InfoIcon size={16} />
-            <span>
-              Nothing is saved until the password opens the copy. Then it is saved in .env.
-            </span>
-          </p>
-        )}
-        {working && (
-          <p className="bk-status__running" role="status">
-            <CircleNotchIcon size={14} className="adm-spin" /> {text.working}
-          </p>
-        )}
-        {error && (
-          <p className="adm-error-text" role="alert">
-            {error.message}
-          </p>
-        )}
-        {error?.connectFrom && (
-          <button
-            type="button"
-            className="btn btn-secondary"
-            onClick={() => {
-              setMode("connect");
-              setSource(error.connectFrom ?? "");
-              setError(null);
-            }}
-          >
-            Connect this copy instead
-          </button>
-        )}
-        <div className="bk-dialog__foot">
-          <button type="button" className="btn btn-ghost" onClick={onCancel} disabled={working}>
-            Cancel
-          </button>
-          <button
-            type="button"
-            className="btn btn-primary"
-            onClick={() => void submit()}
-            disabled={!ready || working}
-          >
-            {text.submit}
-          </button>
-        </div>
+      )}
+      <div className="bk-field__control">
+        <span className="bk-field__label">{text.folder}</span>
+        <input
+          className="input s-mono"
+          aria-label={text.folder}
+          value={folder}
+          onChange={(e) => edit(setFolder)(e.target.value)}
+        />
+        <span className="bk-sub">
+          On this computer. A new folder, or an empty one; saved as the backup storage folder.
+        </span>
       </div>
-    </div>
+      <div className="bk-field__control">
+        <span className="bk-field__label">Password</span>
+        {passwordStored && (
+          <span className="bk-readonly">
+            <LockKeyIcon size={16} /> Set, in .env
+          </span>
+        )}
+        {!passwordStored && mode === "create" && (
+          <PasswordFields
+            value={password}
+            minLength={passwordMinLength}
+            onChange={edit(setPassword)}
+          />
+        )}
+        {!passwordStored && mode === "connect" && (
+          <input
+            className="input"
+            type="password"
+            aria-label="Password"
+            placeholder="The repository's password"
+            value={password.pw}
+            onChange={(e) => edit(setPassword)({ ...password, pw: e.target.value })}
+          />
+        )}
+      </div>
+      {mode === "connect" && (
+        <p className="bk-note">
+          <InfoIcon size={16} />
+          <span>Nothing is saved until the password opens the copy. Then it is saved in .env.</span>
+        </p>
+      )}
+      {working && (
+        <p className="bk-status__running" role="status">
+          <CircleNotchIcon size={14} className="adm-spin" /> {text.working}
+        </p>
+      )}
+      {error && (
+        <p className="adm-error-text" role="alert">
+          {error.message}
+        </p>
+      )}
+      {error?.connectFrom && (
+        <button
+          type="button"
+          className="btn btn-secondary"
+          onClick={() => {
+            setMode("connect");
+            setSource(error.connectFrom ?? "");
+            setError(null);
+          }}
+        >
+          Connect this copy instead
+        </button>
+      )}
+      <div className="bk-dialog__foot">
+        <button type="button" className="btn btn-ghost" onClick={onCancel} disabled={working}>
+          Cancel
+        </button>
+        <button
+          type="button"
+          className="btn btn-primary"
+          onClick={() => void submit()}
+          disabled={!ready || working}
+        >
+          {text.submit}
+        </button>
+      </div>
+    </BackupDialog>
   );
 }

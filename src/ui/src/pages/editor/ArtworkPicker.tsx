@@ -1,7 +1,10 @@
 import { CheckIcon } from "@phosphor-icons/react/dist/csr/Check";
 import { MagnifyingGlassIcon } from "@phosphor-icons/react/dist/csr/MagnifyingGlass";
-import { useState } from "react";
+import { useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { listingDesignThumbnailUrl } from "../../api/listings";
+import { SheetGrabber } from "../../phone/SheetGrabber";
+import { useIsPhone } from "../../phone/usePhone";
 import type { ListingDesignSummary } from "../../types";
 
 /**
@@ -28,12 +31,15 @@ interface Props {
 
 export function ArtworkPicker({ title, hint, tile, current, library, onPick, onClose }: Props) {
   const [query, setQuery] = useState("");
+  const sheet = useRef<HTMLDivElement>(null);
+  const phone = useIsPhone();
   const matches = library.filter((d) => d.name.toLowerCase().includes(query.toLowerCase()));
 
-  return (
+  const dialog = (
     <div className="modal-root" role="dialog" aria-modal="true" aria-label={title}>
       <div className="modal-backdrop" onClick={onClose} aria-hidden="true" />
-      <div className="modal-dialog design-picker">
+      <div ref={sheet} className="modal-dialog design-picker">
+        <SheetGrabber sheetRef={sheet} onDismiss={onClose} />
         <div className="modal-dialog__head">
           <h2 className="modal-dialog__title">{title}</h2>
           <button
@@ -53,7 +59,9 @@ export function ArtworkPicker({ title, hint, tile, current, library, onPick, onC
             type="text"
             placeholder="Search your designs…"
             value={query}
-            autoFocus
+            // A phone opening the keyboard over half the sheet before
+            // anything is chosen hides the list being chosen from.
+            autoFocus={!phone}
             onChange={(event) => setQuery(event.target.value)}
           />
         </div>
@@ -91,4 +99,7 @@ export function ArtworkPicker({ title, hint, tile, current, library, onPick, onC
       </div>
     </div>
   );
+  // On the body on a phone: inside the Variants tab the picker would sit in
+  // the tab swipe's element, and its grab bar must not swipe the tab.
+  return phone ? createPortal(dialog, document.body) : dialog;
 }

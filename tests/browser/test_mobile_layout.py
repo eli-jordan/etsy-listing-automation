@@ -42,15 +42,18 @@ def test_mobile_shell_keeps_listing_workflows_usable_without_page_overflow(
 
     page.get_by_role("navigation").get_by_role("link", name="Listings").click()
     page.get_by_role("heading", name="Listings").wait_for(state="visible")
-    page.get_by_role("button", name="+ New listing").wait_for(state="visible")
+    page.get_by_role("button", name="New listing").wait_for(state="visible")
     assert_mobile_page_fits(page)
 
     page.goto(f"{origin}/listings/take-a-hike")
     page.get_by_role("heading", name="take-a-hike").wait_for(state="visible")
     page.locator(".tabs .seg-opt", has_text="Listing Images").click()
     page.locator(".rtile video").wait_for(state="visible")
+    # On a phone the locator is a sheet behind Add media.
+    page.get_by_role("button", name="Add media").click()
     page.get_by_role("button", name="Files", exact=True).wait_for(state="visible")
     assert_mobile_page_fits(page)
+    page.get_by_role("button", name="Done").click()
 
     page.get_by_role("button", name="Deploy changes →").click()
     page.wait_for_url("**/listings/take-a-hike/deploy")

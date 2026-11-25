@@ -1,0 +1,746 @@
+/* — Phone: Dashboard, Listings, Listing templates and batches —
+   All rules inside the phone query (phone/usePhone.ts). The `m-*` classes
+   belong to markup only the phone layout renders (pages/phoneLists/ and the
+   phone branches of these pages): native-style list rows, cards, chips, a
+   floating action button and the action sheet. */
+
+@media (max-width: 700px), (pointer: coarse) and (orientation: landscape) and (max-height: 500px) {
+  .design-row__file,
+  .preview-meta__path {
+    overflow-wrap: anywhere;
+  }
+
+  /* The hover card has no hover to wait for on a touch screen: a tap would
+     flash it on the way to the listing. */
+  .listing-popup {
+    display: none !important;
+  }
+
+  /* — list rows — */
+  .m-list {
+    margin: 0 calc(-1 * var(--space-3));
+    padding: 0;
+    list-style: none;
+    border-top: 1px solid var(--color-divider);
+  }
+
+  /* Room under the last row for the floating New listing button (56px and
+     its gap), and for the small scroll back up that brings it back: with
+     only the button's own height here, the last row's ⋯ slid under it as
+     soon as it reappeared. */
+  .m-list:has(+ .m-fab),
+  .m-list:has(~ .m-fab) {
+    margin-bottom: 128px;
+  }
+
+  .m-row {
+    display: flex;
+    align-items: stretch;
+    border-bottom: 1px solid var(--color-divider);
+  }
+
+  .m-row__main {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    min-height: 64px;
+    padding: 10px var(--space-3);
+    border: 0;
+    /* A full-width row, not the global button's rounded box. */
+    border-radius: 0;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    text-decoration: none;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .m-row__main:active,
+  .m-card__head:is(a):active {
+    background: color-mix(in srgb, var(--color-text) 7%, transparent);
+  }
+
+  .m-row__main .listing-thumb {
+    width: 44px;
+    height: 44px;
+  }
+
+  .m-row__text {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+  }
+
+  .m-row__top {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--space-2);
+  }
+
+  /* At most two lines, broken at the name's own hyphens rather than inside
+     a word. */
+  .m-row__name {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    overflow: hidden;
+    min-width: 0;
+    font-weight: 600;
+    font-size: 15px;
+    line-height: 1.3;
+    overflow-wrap: break-word;
+  }
+
+  .m-row__name--file {
+    flex: 1;
+    font-family: var(--font-mono, ui-monospace, monospace);
+    font-size: 13px;
+    font-weight: 500;
+    overflow-wrap: anywhere;
+  }
+
+  .m-row__sub {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    font-size: 12.5px;
+    line-height: 1.35;
+    color: color-mix(in srgb, var(--color-text) 60%, transparent);
+  }
+
+  .m-row__main > .tag {
+    flex: none;
+  }
+
+  .m-row__more {
+    flex: none;
+    width: 48px;
+    border: 0;
+    background: transparent;
+    color: color-mix(in srgb, var(--color-text) 60%, transparent);
+    font-size: 22px;
+    line-height: 1;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .m-row__more:active {
+    background: color-mix(in srgb, var(--color-text) 7%, transparent);
+  }
+
+  .m-row__main--stack::after {
+    content: "";
+  }
+
+  .m-chevron,
+  .m-row__main--stack::after {
+    flex: none;
+    width: 8px;
+    height: 8px;
+    margin: 0 4px 0 2px;
+    border-top: 2px solid color-mix(in srgb, var(--color-text) 35%, transparent);
+    border-right: 2px solid color-mix(in srgb, var(--color-text) 35%, transparent);
+    transform: rotate(45deg);
+  }
+
+  /* — cards (batch summary and staging rows) — */
+  .m-cards {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .m-card {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    padding: var(--space-3);
+    border: 1px solid var(--color-divider);
+    border-radius: var(--radius-md);
+    background: var(--color-surface);
+  }
+
+  .m-card--muted {
+    opacity: 0.7;
+  }
+
+  .m-card__head {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    min-height: 44px;
+    margin: calc(-1 * var(--space-2));
+    padding: var(--space-2);
+    border-radius: var(--radius-sm);
+    color: inherit;
+    text-decoration: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .m-card__head .m-row__name {
+    flex: 1;
+  }
+
+  .m-card__head .listing-thumb {
+    width: 40px;
+    height: 40px;
+  }
+
+  .m-card__facts {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 6px var(--space-3);
+    margin: 0;
+    font-size: 13px;
+  }
+
+  .m-card__facts dt {
+    font-size: 10.5px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: color-mix(in srgb, var(--color-text) 50%, transparent);
+    padding-top: 2px;
+  }
+
+  .m-card__facts dd {
+    margin: 0;
+    min-width: 0;
+  }
+
+  .m-card__actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--space-2);
+  }
+
+  .m-card__actions .bc-quiet,
+  .m-card__actions .btn {
+    min-height: 40px;
+    padding: 0 var(--space-4);
+    font-size: 14px;
+  }
+
+  /* — a labelled on/off switch (the batch card's Reviewed) — */
+  .m-card__actions .m-switch {
+    margin-right: auto;
+  }
+
+  .m-switch {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    min-height: 44px;
+    padding: 0 var(--space-2) 0 0;
+    border: 0;
+    border-radius: 0;
+    background: none;
+    color: inherit;
+    font: inherit;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .m-switch__track {
+    position: relative;
+    flex: none;
+    width: 46px;
+    height: 28px;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--color-text) 22%, transparent);
+  }
+
+  .m-switch__thumb {
+    position: absolute;
+    top: 3px;
+    left: 3px;
+    width: 22px;
+    height: 22px;
+    border-radius: 999px;
+    background: #fff;
+    box-shadow: 0 1px 3px rgb(40 30 20 / 0.3);
+  }
+
+  .m-switch[aria-checked="true"] .m-switch__track {
+    background: var(--color-accent-2-600, var(--color-accent));
+  }
+
+  .m-switch[aria-checked="true"] .m-switch__thumb {
+    transform: translateX(18px);
+  }
+
+  .m-switch:focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+  }
+
+  .m-card__remove {
+    flex: none;
+    display: grid;
+    place-items: center;
+    width: 40px;
+    height: 40px;
+    margin: -6px -6px -6px 0;
+    border: 0;
+    border-radius: 999px;
+    background: transparent;
+    color: color-mix(in srgb, var(--color-text) 60%, transparent);
+    cursor: pointer;
+  }
+
+  .m-card__remove .bc-icon {
+    width: 16px;
+    height: 16px;
+  }
+
+  /* The desktop field is a compact 13px; at 16px iOS does not zoom in on
+     focus, and the !important matches the desktop rule's. */
+  .m-card .bc-name-input {
+    width: 100%;
+    max-width: none;
+    min-height: 44px !important;
+    padding: 8px 12px !important;
+    font-size: 16px !important;
+  }
+
+  /* — status chips — */
+  .m-chips {
+    display: flex;
+    gap: var(--space-2);
+    width: calc(100% + 2 * var(--space-3));
+    margin: -3px calc(-1 * var(--space-3));
+    /* Room inside the scroller for each chip's 44px hit area. */
+    padding: 5px var(--space-3);
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .m-chips::-webkit-scrollbar {
+    display: none;
+  }
+
+  .m-chip {
+    position: relative;
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 36px;
+    padding: 0 14px;
+    border: 1px solid var(--color-divider);
+    border-radius: 999px;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    font-size: 14px;
+    font-weight: 600;
+    white-space: nowrap;
+    cursor: pointer;
+  }
+
+  /* A 44px hit area around the 36px pill (inset from inside its border). */
+  .m-chip::after {
+    content: "";
+    position: absolute;
+    inset: -5px -1px;
+  }
+
+  .m-chip--on {
+    border-color: var(--color-accent);
+    background: var(--color-accent);
+    color: #fff;
+  }
+
+  .m-chip__count {
+    font-weight: 500;
+    opacity: 0.7;
+  }
+
+  /* — floating New listing, above the tab bar — */
+  .m-fab {
+    position: fixed;
+    right: var(--space-4);
+    bottom: calc(var(--phone-tabbar-h) + var(--space-4));
+    z-index: 50;
+    display: grid;
+    place-items: center;
+    width: 56px;
+    height: 56px;
+    border: 0;
+    border-radius: 999px;
+    background: var(--color-accent);
+    color: #fff;
+    font-size: 30px;
+    font-weight: 400;
+    line-height: 1;
+    box-shadow:
+      0 6px 16px color-mix(in srgb, var(--color-text) 25%, transparent),
+      0 1px 3px color-mix(in srgb, var(--color-text) 20%, transparent);
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .m-fab:active {
+    transform: scale(0.94);
+  }
+
+  /* Scrolling down, it steps off the rows it would cover (fabScroll.ts). */
+  .m-fab--hidden {
+    opacity: 0;
+    transform: translateY(calc(100% + var(--space-4)));
+    pointer-events: none;
+  }
+
+  /* — action sheet (a PhoneSheet without Done): a centred, quiet title — */
+  .m-sheet .phone-sheet__head {
+    justify-content: center;
+    margin-bottom: var(--space-3);
+  }
+
+  .m-sheet .phone-sheet__title {
+    margin: 0;
+    font-family: var(--font-body);
+    font-size: 15px;
+    font-weight: 600;
+    text-align: center;
+    overflow-wrap: anywhere;
+    color: color-mix(in srgb, var(--color-text) 70%, transparent);
+  }
+
+  .m-sheet__actions {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    border: 1px solid var(--color-divider);
+    border-radius: var(--radius-md);
+  }
+
+  .m-sheet__action {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 52px;
+    padding: 0 var(--space-3);
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    color: var(--color-accent-700);
+    font: inherit;
+    font-size: 16px;
+    font-weight: 600;
+    text-decoration: none;
+    cursor: pointer;
+  }
+
+  .m-sheet__actions .m-sheet__action + .m-sheet__action {
+    border-top: 1px solid var(--color-divider);
+  }
+
+  .m-sheet__action:active {
+    background: color-mix(in srgb, var(--color-text) 7%, transparent);
+  }
+
+  .m-sheet__action--danger {
+    color: var(--color-danger);
+  }
+
+  .m-sheet__cancel {
+    width: 100%;
+    margin-top: var(--space-2);
+    border: 1px solid var(--color-divider);
+    border-radius: var(--radius-md);
+    color: var(--color-text);
+  }
+
+  /* — Listings — */
+  .toolbar {
+    gap: var(--space-2);
+    margin-bottom: var(--space-2);
+  }
+
+  .toolbar__search {
+    width: 100%;
+  }
+
+  .app__status:empty {
+    margin: 0;
+  }
+
+  .page-head__actions .batch-candidate-control,
+  .page-head__actions .batch-candidate-control__button {
+    width: 100%;
+  }
+
+  .page-head__actions .batch-candidate-control__button {
+    justify-content: center;
+    min-height: 44px;
+  }
+
+  /* Deploy changes, then its counts: a button that opens the candidate
+     list in a sheet (BatchCandidateControl's phone control). */
+  .page-head__actions .batch-candidate-control {
+    display: flex;
+    gap: var(--space-2);
+  }
+
+  .page-head__actions .batch-candidate-control:has(.m-candidates) .batch-candidate-control__button {
+    flex: 1 1 auto;
+    width: auto;
+    min-width: 0;
+  }
+
+  .m-candidates {
+    flex: none;
+    min-height: 44px;
+    padding: 0 var(--space-3);
+  }
+
+  .m-candidates .batch-candidate-control__counts {
+    padding-left: 0;
+    border-left: 0;
+  }
+
+  .m-candidates .tag {
+    font-size: 12px;
+  }
+
+  .m-candidates__sheet {
+    position: static;
+    width: auto;
+    padding: 0;
+    border: 0;
+    background: none;
+    box-shadow: none;
+  }
+
+  .m-candidates__sheet strong {
+    font-size: 14px;
+  }
+
+  .m-candidates__sheet .batch-candidate-popover__group span,
+  .m-candidates__sheet p {
+    font-size: 13.5px;
+  }
+
+  table.listings {
+    display: block;
+    max-width: 100%;
+    overflow-x: auto;
+  }
+
+  /* — Dashboard — */
+  .stat-row {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--space-2);
+  }
+
+  .stat-card--link {
+    position: relative;
+    color: inherit;
+    text-decoration: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .stat-card--link:active {
+    background: color-mix(in srgb, var(--color-text) 7%, var(--color-surface));
+  }
+
+  .stat-card--link::after {
+    content: "";
+    position: absolute;
+    top: 18px;
+    right: 16px;
+    width: 7px;
+    height: 7px;
+    border-top: 2px solid color-mix(in srgb, var(--color-text) 35%, transparent);
+    border-right: 2px solid color-mix(in srgb, var(--color-text) 35%, transparent);
+    transform: rotate(45deg);
+  }
+
+  /* — Listing templates — */
+  .bc-card__drop-hint {
+    display: none;
+  }
+
+  .bc-card__foot .btn {
+    min-height: 44px;
+  }
+
+  .bc-card__foot .bc-quiet {
+    display: grid;
+    place-items: center;
+    width: 44px;
+    height: 44px;
+    padding: 0;
+  }
+
+  .bc-card__foot .bc-quiet .bc-icon {
+    width: 18px !important;
+    height: 18px !important;
+  }
+
+  .bc-section .m-list {
+    margin-top: var(--space-2);
+  }
+
+  /* — New batch — */
+  .bc-picks {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .bc-pick {
+    min-height: 64px;
+    text-align: left;
+  }
+
+  .bc-reqs {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-2);
+  }
+
+  .bc-req {
+    font-size: 13.5px;
+  }
+
+  .bc-drop {
+    min-height: 0;
+    padding: var(--space-5) var(--space-4);
+  }
+
+  .bc-drop .btn {
+    min-height: 48px;
+    padding: 0 var(--space-6);
+    font-size: 16px;
+  }
+
+  /* — Staging and batch summary — */
+  .bc-counts {
+    flex-wrap: wrap;
+    row-gap: var(--space-2);
+  }
+
+  .bc-counts .btn,
+  .bc-counts .bc-deploy-reviewed {
+    min-height: 44px;
+  }
+
+  .bc-staging-label {
+    flex-wrap: wrap;
+  }
+
+  .bc-staging-label .toolbar__filter {
+    width: 100%;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 4px;
+  }
+
+  .bc-staging-label .toolbar__filter .input {
+    width: 100% !important;
+  }
+
+  .bc-delete-record {
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--space-2);
+  }
+
+  .bc-delete-record .bc-quiet {
+    min-height: 44px;
+    font-size: 14px;
+  }
+
+  /* — EditableName: the pencil that says a tap renames — */
+  .editable-name__pencil {
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    margin-left: 8px;
+    vertical-align: 0.05em;
+    background-color: color-mix(in srgb, var(--color-text) 45%, transparent);
+    -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 256 256'%3E%3Cpath d='M227.3 73.4 182.6 28.7a16 16 0 0 0-22.6 0L36.7 152A15.9 15.9 0 0 0 32 163.3V208a16 16 0 0 0 16 16h44.7a15.9 15.9 0 0 0 11.3-4.7L227.3 96a16 16 0 0 0 0-22.6ZM92.7 208H48v-44.7l88-88L180.7 120ZM192 108.7 147.3 64l24-24L216 84.7Z'/%3E%3C/svg%3E")
+      center / contain no-repeat;
+    mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 256 256'%3E%3Cpath d='M227.3 73.4 182.6 28.7a16 16 0 0 0-22.6 0L36.7 152A15.9 15.9 0 0 0 32 163.3V208a16 16 0 0 0 16 16h44.7a15.9 15.9 0 0 0 11.3-4.7L227.3 96a16 16 0 0 0 0-22.6ZM92.7 208H48v-44.7l88-88L180.7 120ZM192 108.7 147.3 64l24-24L216 84.7Z'/%3E%3C/svg%3E")
+      center / contain no-repeat;
+  }
+}
+
+@media (max-width: 700px) and (prefers-reduced-motion: no-preference),
+  (pointer: coarse) and (orientation: landscape) and (max-height: 500px) and (prefers-reduced-motion: no-preference) {
+  .m-switch__thumb {
+    transition: transform 0.15s;
+  }
+
+  .m-fab {
+    transition:
+      transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1),
+      opacity 0.2s;
+  }
+}
+
+/* — A phone on its side —
+   The same lists, using the width a sideways phone has instead of its
+   height: the search and the status chips share a row, the dashboard's
+   four counts sit in one, and the floating button keeps clear of the
+   camera island on the right. */
+@media (pointer: coarse) and (orientation: landscape) and (max-height: 500px) {
+  .toolbar {
+    flex-wrap: nowrap;
+    align-items: center;
+  }
+
+  .toolbar__search {
+    flex: 1 1 200px;
+    width: auto;
+    min-width: 0;
+  }
+
+  .toolbar .m-chips {
+    flex: 0 1 auto;
+    width: auto;
+    min-width: 0;
+    margin: -3px 0;
+    padding: 5px 0;
+  }
+
+  /* Deploy changes and New listing share the head's row. */
+  .page-head__actions {
+    flex-wrap: nowrap;
+  }
+
+  .page-head__actions .batch-candidate-control,
+  .page-head__actions .batch-candidate-control__button {
+    width: auto;
+  }
+
+  .m-fab {
+    right: max(var(--space-4), env(safe-area-inset-right, 0px));
+    bottom: calc(var(--phone-tabbar-h) + var(--space-3));
+  }
+
+  .stat-row {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .bc-picks {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .bc-reqs {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
