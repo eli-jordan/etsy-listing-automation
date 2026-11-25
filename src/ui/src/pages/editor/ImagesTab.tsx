@@ -1,4 +1,4 @@
-import { type ReactNode, useEffect, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useState } from "react";
 import { listTemplates, templatePhotoUrl } from "../../api/calibrator";
 import { listCommonMedia, listListingMediaFiles, listingSceneArtworkUrl } from "../../api/listings";
 import { listListingTemplateMediaFiles } from "../../api/listingTemplates";
@@ -15,6 +15,8 @@ import {
 import type { MediaFileSummary, ListingDetail, TemplateSummary } from "../../types";
 import { MediaLocator } from "./MediaLocator";
 import { MediaReel } from "./MediaReel";
+import { PhoneSheet } from "./PhoneSheet";
+import { useIsPhone } from "../../phone/usePhone";
 import { isBoolean, isNullableNumber, useViewState, viewScope } from "./editorView";
 import {
   type Focus,
@@ -190,6 +192,26 @@ export function ImagesTab({ detail, onUpdate, artwork, owner, onFlush }: Props) 
     onFlush,
   });
 
+  const phone = useIsPhone();
+  /** Add media, on a phone: a sheet over the gallery rather than a column. */
+  const [adding, setAdding] = useState(false);
+  const closeAdding = useCallback(() => setAdding(false), []);
+  const locator = (
+    <MediaLocator
+      detail={detail}
+      templates={templates}
+      local={directory === null ? null : local}
+      owner={listing}
+      shared={shared}
+      onToggleTemplate={(template, colour) => apply(edits.toggleEntry(detail, template, colour))}
+      onToggleFile={(ref) => apply(edits.toggleFile(detail, ref))}
+      onAddMissingColours={(template) => apply(edits.addEveryMissingColour(detail, template))}
+      onToggleSwatchSource={(template) => apply(edits.toggleSwatchSource(detail, template))}
+      onFocus={pointAt}
+      scope={scope}
+    />
+  );
+
   function toggleFocused() {
     if (focus === null) return;
     apply(
@@ -201,19 +223,18 @@ export function ImagesTab({ detail, onUpdate, artwork, owner, onFlush }: Props) 
 
   return (
     <div className="images-tab">
-      <MediaLocator
-        detail={detail}
-        templates={templates}
-        local={directory === null ? null : local}
-        owner={listing}
-        shared={shared}
-        onToggleTemplate={(template, colour) => apply(edits.toggleEntry(detail, template, colour))}
-        onToggleFile={(ref) => apply(edits.toggleFile(detail, ref))}
-        onAddMissingColours={(template) => apply(edits.addEveryMissingColour(detail, template))}
-        onToggleSwatchSource={(template) => apply(edits.toggleSwatchSource(detail, template))}
-        onFocus={pointAt}
-        scope={scope}
-      />
+      {phone ? (
+        <PhoneSheet
+          open={adding}
+          title="Add media"
+          onClose={closeAdding}
+          className="add-media-sheet"
+        >
+          {locator}
+        </PhoneSheet>
+      ) : (
+        locator
+      )}
 
       <div className="images-right">
         <PreviewPane
@@ -235,6 +256,7 @@ export function ImagesTab({ detail, onUpdate, artwork, owner, onFlush }: Props) 
           onReorder={(from, to) => apply(edits.reorder(detail, from, to))}
           onFocus={pointAt}
           positioned={new Set(Object.keys(detail.template_positions ?? {}))}
+          {...(phone ? { onAdd: () => setAdding(true) } : {})}
         />
 
         <p role="status" className="app__status">
@@ -323,6 +345,7 @@ function PreviewPane({
           <video
             key={view.picture}
             className="preview-stage__video"
+            data-swipe-ignore=""
             src={view.picture}
             aria-label={view.title}
             controls

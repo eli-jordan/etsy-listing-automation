@@ -1,5 +1,7 @@
 import type { Issue, IssueTab } from "../../types";
 import { removablePosition } from "./positions/document";
+import { useState } from "react";
+import { useIsPhone } from "../../phone/usePhone";
 
 /**
  * The validation banner above the tab strip (phase 5), from the mockup's
@@ -93,16 +95,31 @@ export function IssuesBanner({
   when = "Checked against this listing’s own configuration",
   onRemovePosition,
 }: Props) {
+  const phone = useIsPhone();
+  // On a phone the list starts folded to its one-line summary: a new listing
+  // has seven of them, which would fill the first screen.
+  const [unfolded, setUnfolded] = useState(false);
   const visible = issues.filter((issue) => issue.severity !== "info");
   if (visible.length === 0) return null;
+  const folded = phone && !unfolded;
 
   return (
     <div className="issues">
       <div className="issues__head">
         <span className="issues__summary issues__summary--warn">{summarise(visible, subject)}</span>
         <span className="issues__when">{when}</span>
+        {phone && (
+          <button
+            type="button"
+            className="issues__toggle"
+            aria-expanded={!folded}
+            onClick={() => setUnfolded(folded)}
+          >
+            {folded ? "Show" : "Hide"}
+          </button>
+        )}
       </div>
-      {visible.map((issue, index) => (
+      {(folded ? [] : visible).map((issue, index) => (
         <div key={`${issue.tab}-${issue.where}-${index}`} className="issue issue--warn">
           <span className="issue__icon" aria-hidden="true">
             <WarnIcon />

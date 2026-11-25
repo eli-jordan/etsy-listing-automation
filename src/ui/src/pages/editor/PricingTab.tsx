@@ -77,6 +77,9 @@ export function PricingTab({ detail, onUpdate, onFlush }: Props) {
                   <input
                     className="input price-table__input"
                     type="number"
+                    // A phone's keyboard with the decimal point, not the
+                    // full one a number field gets on iOS.
+                    inputMode="decimal"
                     step="0.01"
                     aria-label={`Price for size ${price.size}`}
                     value={amount}

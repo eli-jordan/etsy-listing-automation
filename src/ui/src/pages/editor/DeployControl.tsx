@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { currentRun } from "../../api/runs";
 import type { RunSummary } from "../../types";
 import type { Settled } from "../../hooks/writeLoop";
+import { useIsPhone } from "../../phone/usePhone";
 
 /**
  * The editor page-head's own control (docs/features/deploy-20260917/spec.md decision 8):
@@ -48,6 +49,8 @@ export function DeployControl({
 }) {
   const navigate = useNavigate();
   const [run, setRun] = useState<RunSummary | null>(null);
+  // The phone head has the status, the save chip and this on one line.
+  const phone = useIsPhone();
 
   useEffect(() => {
     let current = true;
@@ -76,13 +79,13 @@ export function DeployControl({
     case "progress":
       return (
         <button type="button" className="btn btn-secondary" onClick={() => navigate(deployUrl)}>
-          Deploying&hellip; View progress &rarr;
+          {phone ? <>Deploying&hellip; &rarr;</> : <>Deploying&hellip; View progress &rarr;</>}
         </button>
       );
     case "deployed":
       return (
         <button type="button" className="btn btn-secondary" onClick={() => navigate(deployUrl)}>
-          Deployed &#10003; View result &rarr;
+          {phone ? <>Deployed &#10003; &rarr;</> : <>Deployed &#10003; View result &rarr;</>}
         </button>
       );
     case "failed":
@@ -93,8 +96,14 @@ export function DeployControl({
       );
     case "deploy":
       return (
-        <button type="button" className="btn btn-primary" onClick={() => void startDeploy()}>
-          Deploy changes &rarr;
+        <button
+          type="button"
+          className="btn btn-primary"
+          // The phone's shorter label still names the action in full.
+          aria-label={phone ? "Deploy changes →" : undefined}
+          onClick={() => void startDeploy()}
+        >
+          {phone ? <>Deploy &rarr;</> : <>Deploy changes &rarr;</>}
         </button>
       );
   }

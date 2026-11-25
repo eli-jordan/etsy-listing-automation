@@ -22,13 +22,14 @@ export function metaFor(
   save: SaveState,
   name: string | null,
   subject: "listing" | "listing-template" = "listing",
+  /** The phone layout, where nobody double-clicks: its name field is
+   * tapped. */
+  phone = false,
 ): ReactNode {
   const template = subject === "listing-template";
   switch (save.kind) {
     case "unnamed":
-      return template
-        ? "Not saved — name this template to save it"
-        : "Not saved — double-click the name above to name this listing";
+      return unnamed(template, phone);
     case "name-taken":
       return `There is already a ${template ? "listing template" : "listing"} called “${save.name}” — pick another name`;
     case "save-failed":
@@ -52,4 +53,10 @@ export function metaFor(
         />
       );
   }
+}
+
+function unnamed(template: boolean, phone: boolean): string {
+  if (template) return "Not saved — name this template to save it";
+  const gesture = phone ? "tap" : "double-click";
+  return `Not saved — ${gesture} the name above to name this listing`;
 }

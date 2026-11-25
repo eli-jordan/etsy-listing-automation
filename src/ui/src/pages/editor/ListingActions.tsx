@@ -1,5 +1,6 @@
 import { ArrowCounterClockwiseIcon } from "@phosphor-icons/react/dist/csr/ArrowCounterClockwise";
 import { ArrowLeftIcon } from "@phosphor-icons/react/dist/csr/ArrowLeft";
+import { ArrowSquareOutIcon } from "@phosphor-icons/react/dist/csr/ArrowSquareOut";
 import { ArrowsClockwiseIcon } from "@phosphor-icons/react/dist/csr/ArrowsClockwise";
 import { CheckCircleIcon } from "@phosphor-icons/react/dist/csr/CheckCircle";
 import { PauseCircleIcon } from "@phosphor-icons/react/dist/csr/PauseCircle";
@@ -7,12 +8,14 @@ import { PlayCircleIcon } from "@phosphor-icons/react/dist/csr/PlayCircle";
 import { StackPlusIcon } from "@phosphor-icons/react/dist/csr/StackPlus";
 import { TrashIcon } from "@phosphor-icons/react/dist/csr/Trash";
 import { type ReactNode, useState } from "react";
+import { createPortal } from "react-dom";
 import { setReviewed, type ListingBatch } from "../../api/batches";
 import { deleteListing } from "../../api/listings";
 import { ActionDivider, ActionLink } from "../../components/ActionLink";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { OpenInMenu } from "../../components/OpenInMenu";
-import { hasOpenTargets } from "../../components/openOn";
+import { etsyListingUrl, hasOpenTargets, printifyProductUrl } from "../../components/openOn";
+import { useIsPhone } from "../../phone/usePhone";
 import type { Patch } from "../../hooks/listingAutosave";
 import type { Settled } from "../../hooks/writeLoop";
 import type { ListingDetail } from "../../types";
@@ -106,6 +109,7 @@ export function ListingActions({
   const [confirming, setConfirming] = useState(false);
   const [error, setError] = useState("");
   const name = detail.name;
+  const phone = useIsPhone();
 
   function review(next: boolean) {
     if (member === null) return;
@@ -145,13 +149,19 @@ export function ListingActions({
 
   return (
     <>
-      {hasOpenTargets(detail.etsy_listing_id, detail.printify_product_id) && (
-        <OpenInMenu
-          variant="action"
-          etsyListingId={detail.etsy_listing_id}
-          printifyProductId={detail.printify_product_id}
-        />
-      )}
+      {hasOpenTargets(detail.etsy_listing_id, detail.printify_product_id) &&
+        (phone ? (
+          <OpenInLinks
+            etsyListingId={detail.etsy_listing_id}
+            printifyProductId={detail.printify_product_id}
+          />
+        ) : (
+          <OpenInMenu
+            variant="action"
+            etsyListingId={detail.etsy_listing_id}
+            printifyProductId={detail.printify_product_id}
+          />
+        ))}
       <ActionLink icon={<StackPlusIcon aria-hidden="true" />} onClick={onCreateTemplate}>
         Create listing template
       </ActionLink>
@@ -196,13 +206,59 @@ export function ListingActions({
         </span>
       )}
       {confirming && (
-        <ConfirmDialog
-          title={deleteTitle(detail)}
-          confirmLabel={deleteLabel(detail)}
-          details={deleteDetails(detail)}
-          onConfirm={() => void confirmDelete()}
-          onCancel={() => setConfirming(false)}
-        />
+        <OnBodyOnPhone phone={phone}>
+          <ConfirmDialog
+            title={deleteTitle(detail)}
+            confirmLabel={deleteLabel(detail)}
+            details={deleteDetails(detail)}
+            onConfirm={() => void confirmDelete()}
+            onCancel={() => setConfirming(false)}
+          />
+        </OnBodyOnPhone>
+      )}
+    </>
+  );
+}
+
+/** On a phone the actions live in the head's "⋯" sheet, which closes as
+ * soon as one is picked; the delete confirmation goes on the page body so it
+ * stays on screen after the sheet holding its trigger is hidden. */
+function OnBodyOnPhone({ phone, children }: { phone: boolean; children: ReactNode }) {
+  return phone ? createPortal(children, document.body) : children;
+}
+
+/** Open in, on a phone: the two destinations as rows of the "⋯" sheet
+ * rather than a dropdown inside it. */
+function OpenInLinks({
+  etsyListingId,
+  printifyProductId,
+}: {
+  etsyListingId: number | null | undefined;
+  printifyProductId: string | null | undefined;
+}) {
+  return (
+    <>
+      {etsyListingId !== null && etsyListingId !== undefined && (
+        <a
+          className="action-link"
+          href={etsyListingUrl(etsyListingId)}
+          target="_blank"
+          rel="noreferrer"
+        >
+          <ArrowSquareOutIcon aria-hidden="true" />
+          Open in Etsy
+        </a>
+      )}
+      {printifyProductId !== null && printifyProductId !== undefined && (
+        <a
+          className="action-link"
+          href={printifyProductUrl(printifyProductId)}
+          target="_blank"
+          rel="noreferrer"
+        >
+          <ArrowSquareOutIcon aria-hidden="true" />
+          Open in Printify
+        </a>
       )}
     </>
   );

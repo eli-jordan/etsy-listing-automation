@@ -29,6 +29,7 @@ import {
 } from "./artwork";
 import { mediaLostBy, selectColours, selectGarmentProfile } from "./colourSelection";
 import { PrintsCard } from "./PrintsCard";
+import { useIsPhone } from "../../phone/usePhone";
 
 /**
  * Garment dropdown, sizes, colour list, and a preview of the colour under the
@@ -120,6 +121,7 @@ export function VariantsTab({
   const [status, setStatus] = useState("");
   /** The colour whose own-design picker is open. */
   const [picking, setPicking] = useState<string | null>(null);
+  const phone = useIsPhone();
 
   useEffect(() => {
     listListingDesigns()
@@ -420,7 +422,9 @@ export function VariantsTab({
           />
         )}
         <p className="variants-preview__hint">
-          Click a colour to preview it — helps judge whether it suits the design.
+          {phone
+            ? "Tap a colour to preview it — helps judge whether it suits the design."
+            : "Click a colour to preview it — helps judge whether it suits the design."}
         </p>
         <p role="status" className="app__status">
           {status}
