@@ -508,7 +508,7 @@ def _into_place[T](storage: Path, bring: Callable[[Path], T]) -> T:
 def _initialised(backup: ConfiguredBackup, password: str) -> Callable[[Path], str]:
     def bring(staging: Path) -> str:
         settings = backup.settings.model_copy(update={"repository": staging})
-        return create_repository(replace(backup, settings=settings), password, store=False)
+        return create_repository(replace(backup, settings=settings), password)
 
     return bring
 

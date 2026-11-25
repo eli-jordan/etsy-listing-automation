@@ -369,19 +369,15 @@ def stored_password(workspace: Workspace) -> str | None:
     return credentials.stored(workspace.root, credentials.BACKUP_PASSWORD.variables[0])
 
 
-def create_repository(backup: ConfiguredBackup, password: str, *, store: bool = True) -> str:
+def create_repository(backup: ConfiguredBackup, password: str) -> str:
     """Create the repository in ``backup``'s storage folder; its restic id.
 
-    ``store`` writes ``password`` into ``.env`` first, before restic runs: a
-    repository whose password was never recorded is lost, while a recorded
-    password with no repository is only a retry. Installs the pinned restic
-    when no other is named. ``backup_provisioning`` stores the password
-    itself, so it can take it back when a later step fails, and passes
-    ``store=False``.
+    Installs the pinned restic when no other is named. It does not store
+    ``password``: ``backup_provisioning`` stores it before this runs and takes
+    it back when a later step fails, so no repository exists whose password
+    was never recorded.
     """
     backup.check_new_storage(password)
-    if store:
-        credentials.store(backup.workspace, credentials.BACKUP_PASSWORD, (password,))
     return backup.open(password=password, install=True).init()
 
 

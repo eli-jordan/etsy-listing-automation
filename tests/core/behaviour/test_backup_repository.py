@@ -22,7 +22,7 @@ from etsy_listings.core.application.backup_repository import (
     create_repository,
 )
 from etsy_listings.core.backup.binary import RESTIC_BINARY_ENV_VAR, ResticBinaries
-from etsy_listings.core.backup.repository import ResticError, WrongPasswordError
+from etsy_listings.core.backup.repository import WrongPasswordError
 from etsy_listings.core.config.secrets import BACKUP_PASSWORD_VAR, MissingCredentialError
 from etsy_listings.core.workspace import layout
 from etsy_listings.core.workspace.workspace import Workspace
@@ -71,11 +71,9 @@ def _create(
     binaries: ResticBinaries,
     restic: InMemoryRestic,
     password: str = PASSWORD,
-    *,
-    store: bool = True,
 ) -> str:
     backup = configured_backup(workspace, binaries=binaries, restic=restic)
-    return create_repository(backup, password, store=store)
+    return create_repository(backup, password)
 
 
 def test_without_a_backup_block_there_is_nothing_to_create(
@@ -85,44 +83,21 @@ def test_without_a_backup_block_there_is_nothing_to_create(
         configured_backup(workspace, binaries=binaries, restic=_restic())
 
 
-def test_creating_stores_the_password_then_initialises(
+def test_creating_initialises_without_storing_the_password(
     workspace: Workspace, repository: Path, binaries: ResticBinaries
 ) -> None:
+    """Storing it, and taking it back on failure, is provisioning's
+    (test_backup_provisioning.py)."""
     restic = _restic()
     restic.password = PASSWORD
 
     created = _create(workspace, binaries, restic)
 
     assert created == "f00d"
-    assert f"{BACKUP_PASSWORD_VAR}={PASSWORD}" in _env(workspace)
+    env = workspace.root / layout.ENV_FILE
+    assert not env.exists() or BACKUP_PASSWORD_VAR not in _env(workspace)
     assert restic.operations == ["init"]
     assert (repository / "config").is_file()
-
-
-def test_a_failed_init_keeps_the_stored_password(
-    workspace: Workspace, repository: Path, binaries: ResticBinaries
-) -> None:
-    """Stored before restic runs, so no repository can exist whose password
-    this machine never recorded."""
-    restic = _restic()
-    restic.fail("init", ResticError("restic: Fatal: disk full", exit_code=1))
-
-    with pytest.raises(ResticError, match="disk full"):
-        _create(workspace, binaries, restic)
-
-    assert f"{BACKUP_PASSWORD_VAR}={PASSWORD}" in _env(workspace)
-
-
-def test_a_password_already_stored_is_not_written_again(
-    workspace: Workspace, repository: Path, binaries: ResticBinaries
-) -> None:
-    (workspace.root / layout.ENV_FILE).write_text(
-        f"# mine\n{BACKUP_PASSWORD_VAR}={PASSWORD}\n", encoding="utf-8"
-    )
-
-    _create(workspace, binaries, _restic(), store=False)
-
-    assert _env(workspace) == f"# mine\n{BACKUP_PASSWORD_VAR}={PASSWORD}\n"
 
 
 def test_a_short_password_is_refused_before_anything_is_written(
