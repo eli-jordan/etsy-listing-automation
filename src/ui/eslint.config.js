@@ -36,7 +36,8 @@ export default tseslint.config(
           patterns: [
             {
               group: ["**/phone/useSwipe"],
-              message: "Swipe through usePager or useSheetDrag, which own the motion (src/ui/AGENTS.md).",
+              message:
+                "Swipe through usePager or useSheetDrag, which own the motion (src/ui/AGENTS.md).",
             },
           ],
         },
