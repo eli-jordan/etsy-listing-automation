@@ -8,6 +8,7 @@ import { AiSeoControl } from "./aiSeo/AiSeoControl";
 import { AiTagsDrawer } from "./aiSeo/AiTagsDrawer";
 import type { AiSeoMode } from "./aiSeo/useAiSeoMode";
 import { useDrawerMotion } from "./useDrawerMotion";
+import { useIsPhone } from "../../phone/usePhone";
 
 /** Title/tags/description/section (phase 5).
  *
@@ -59,6 +60,7 @@ type Props = {
 export function DetailsTab(props: Props) {
   const { detail, onUpdate, onFlush } = props;
   const aiSeo = props.kind === "listing-template" ? null : props.aiSeo;
+  const phone = useIsPhone();
   const [tagDraft, setTagDraft] = useState("");
   const [sections, setSections] = useState<EtsySectionSummary[]>([]);
   const [sectionsAvailable, setSectionsAvailable] = useState(false);
@@ -252,7 +254,11 @@ export function DetailsTab(props: Props) {
                     id="details-tag-draft"
                     className="input tag-paste"
                     type="text"
-                    placeholder="Type or paste tags, comma separated — press Enter to add"
+                    placeholder={
+                      phone
+                        ? "Add tags, comma separated"
+                        : "Type or paste tags, comma separated — press Enter to add"
+                    }
                     value={tagDraft}
                     onChange={(event) => setTagDraft(event.target.value)}
                     onKeyDown={(event) => {

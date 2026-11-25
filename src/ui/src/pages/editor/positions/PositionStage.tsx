@@ -118,6 +118,8 @@ export function PositionStage({ positioning, picture, title, source }: Props) {
   return (
     <svg
       ref={svg}
+      // Its drags move the design; the phone's tab swipe must leave them be.
+      data-swipe-ignore=""
       className="tp-stage"
       viewBox={`0 0 ${size.w} ${size.h}`}
       onPointerMove={(event) => positioning.move(photoPoint(event))}

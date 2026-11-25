@@ -1,10 +1,11 @@
-import { type ReactNode, useEffect, useState } from "react";
+import { type ReactNode, type RefObject, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { getListing, getListingDraft } from "../api/listings";
 import { EditableName } from "../components/EditableName";
 import { StatusTag } from "../components/StatusTag";
 import { useAutosave } from "../hooks/useAutosave";
+import { useIsPhone } from "../phone/usePhone";
 import type { Settled } from "../hooks/writeLoop";
 import { type MediaOwner, refName } from "../media";
 import type { DesignMap, Issue, IssueTab, ListingDetail } from "../types";
@@ -21,10 +22,13 @@ import { PricingTab } from "./editor/PricingTab";
 import { IssuesBanner } from "./editor/IssuesBanner";
 import { withoutPosition } from "./editor/positions/document";
 import { BackToBatch, ListingActions } from "./editor/ListingActions";
+import { HeadMore } from "./editor/HeadMore";
 import { ImagesTab } from "./editor/ImagesTab";
 import { metaFor } from "./editor/saveMeta";
 import { useListingBatch } from "./editor/useListingBatch";
 import { VariantsTab } from "./editor/VariantsTab";
+import { enterSide } from "./editor/tabSwipe";
+import { slideIn, useTabPager } from "./editor/useTabPager";
 import { isNullableString, useViewScroll, useViewState, viewScope } from "./editor/editorView";
 
 /** Tabs container + issues banner + page head (phase 5).
@@ -40,12 +44,16 @@ import { isNullableString, useViewScroll, useViewState, viewScope } from "./edit
 
 type Tab = IssueTab;
 
-const TABS: { id: Tab; label: string }[] = [
+/** `lead` is the part of a label the phone's one-row tab strip drops
+ * ("Listing Images" reads "Images" there); the desktop shows it all. */
+const TABS: { id: Tab; lead?: string; label: string }[] = [
   { id: "variants", label: "Variants" },
   { id: "pricing", label: "Pricing" },
-  { id: "images", label: "Listing Images" },
-  { id: "details", label: "Listing Details" },
+  { id: "images", lead: "Listing ", label: "Images" },
+  { id: "details", lead: "Listing ", label: "Details" },
 ];
+
+const TAB_IDS = TABS.map((t) => t.id);
 
 function isTab(value: unknown): value is Tab {
   return TABS.some((t) => t.id === value);
@@ -178,6 +186,7 @@ function ListingEditorPageContent({
    * -- so without this a design pick would overwrite what they were typing. */
   const [typedName, setTypedName] = useState("");
   const aiSeo = useAiSeoMode(detail, update, flush, save, adopt);
+  const phone = useIsPhone();
 
   /** Everything a design strip change sets off, in the one handler. Only a
    * change to the **representative** artwork -- the first non-null of
@@ -284,7 +293,7 @@ function ListingEditorPageContent({
               busy={save.kind === "saving"}
             />
           }
-          meta={metaFor(save, name)}
+          meta={metaFor(save, name, "listing", phone)}
         />
       }
     />
@@ -342,9 +351,12 @@ export function EditorHead({
   kind?: "listing" | "listing-template";
 }) {
   const listing = kind === "listing";
+  const isPhone = useIsPhone();
+  // On a phone the action row folds into the "⋯" sheet beside the title.
+  const inlineActions = isPhone ? null : actions;
 
   return (
-    <div className={actions ? "editor-head editor-head--actions" : "editor-head"}>
+    <div className={inlineActions ? "editor-head editor-head--actions" : "editor-head"}>
       <div className="page-head page-head--editor">
         {crumb || (
           <span className="page-head__crumb" onClick={onBack}>
@@ -353,6 +365,7 @@ export function EditorHead({
         )}
         <span className="page-head__sep">/</span>
         {title}
+        {isPhone && actions && <HeadMore title={detail.name || "Actions"}>{actions}</HeadMore>}
 
         {listing && <StatusTag status={detail.status} />}
         <span className="page-head__meta">{meta}</span>
@@ -364,9 +377,9 @@ export function EditorHead({
           </div>
         )}
       </div>
-      {actions && (
+      {inlineActions && (
         <div className="action-row" role="group" aria-label="Actions">
-          {actions}
+          {inlineActions}
         </div>
       )}
     </div>
@@ -487,10 +500,37 @@ export function ListingEditorShell(props: ShellProps) {
   const artwork = template ? previewArtwork(preview) : undefined;
   const owner = props.kind === "listing-template" ? props.owner : undefined;
 
+  const isPhone = useIsPhone();
+  const tabStrip = useRef<HTMLDivElement>(null);
+  const pager = useRef<HTMLDivElement>(null);
+
   function pickTab(next: Tab) {
     flush();
+    if (isPhone && next !== tab) showPhoneTab(next);
     setTab(next);
   }
+
+  /** A phone tab change starts the new tab at its top -- under the stuck tab
+   * strip when the page had scrolled past it -- and slides it in from the
+   * side it lives on. */
+  function showPhoneTab(next: Tab) {
+    const strip = tabStrip.current;
+    const content = pager.current;
+    if (strip !== null && content !== null) {
+      // Where the content starts once it sits just under the strip: the
+      // strip's own position says nothing while it is stuck.
+      const gap = Number.parseFloat(window.getComputedStyle(strip).marginBottom) || 0;
+      const top =
+        window.scrollY +
+        content.getBoundingClientRect().top -
+        strip.getBoundingClientRect().bottom -
+        gap;
+      if (top < window.scrollY) window.scrollTo({ top });
+    }
+    slideIn(content, enterSide(TAB_IDS, tab, next));
+  }
+
+  useTabPager(pager, { tabs: TAB_IDS, current: tab, enabled: isPhone, onPick: pickTab });
 
   return (
     <div className="editor">
@@ -542,7 +582,7 @@ export function ListingEditorShell(props: ShellProps) {
         />
       )}
 
-      <div className="tabs seg">
+      <div className="tabs seg" ref={tabStrip}>
         {TABS.map((t) => {
           const badge = badgeFor(detail.issues, t.id);
           return (
@@ -551,7 +591,7 @@ export function ListingEditorShell(props: ShellProps) {
               className={tab === t.id ? "seg-opt seg-opt--on" : "seg-opt"}
               onClick={() => pickTab(t.id)}
             >
-              {t.label}
+              <TabLabel tab={t} phone={isPhone} />
               {/* One warning-coloured count, however many of them stop a
                   deploy: none of them stops the save (ADR-0043), and the tab
                   is only saying there is something to look at. The banner
@@ -564,32 +604,65 @@ export function ListingEditorShell(props: ShellProps) {
         })}
       </div>
 
-      {tab === "variants" && (
-        <VariantsTab
-          detail={detail}
-          onUpdate={update}
-          previewed={previewed}
-          onPreview={setPreviewed}
-          onChooseSlot={chooseSlot}
-          {...(artwork === undefined ? {} : { artwork })}
-        />
-      )}
-      {tab === "pricing" && <PricingTab detail={detail} onUpdate={update} onFlush={flush} />}
-      {tab === "images" && (
-        <ImagesTab
-          detail={detail}
-          onUpdate={update}
-          onFlush={flush}
-          {...(artwork === undefined ? {} : { artwork })}
-          {...(owner === undefined ? {} : { owner })}
-        />
-      )}
-      {tab === "details" &&
-        (aiSeo === null ? (
-          <DetailsTab kind="listing-template" detail={detail} onUpdate={update} onFlush={flush} />
-        ) : (
-          <DetailsTab detail={detail} onUpdate={update} onFlush={flush} aiSeo={aiSeo} />
-        ))}
+      <TabPanel phone={isPhone} pager={pager}>
+        {tab === "variants" && (
+          <VariantsTab
+            detail={detail}
+            onUpdate={update}
+            previewed={previewed}
+            onPreview={setPreviewed}
+            onChooseSlot={chooseSlot}
+            {...(artwork === undefined ? {} : { artwork })}
+          />
+        )}
+        {tab === "pricing" && <PricingTab detail={detail} onUpdate={update} onFlush={flush} />}
+        {tab === "images" && (
+          <ImagesTab
+            detail={detail}
+            onUpdate={update}
+            onFlush={flush}
+            {...(artwork === undefined ? {} : { artwork })}
+            {...(owner === undefined ? {} : { owner })}
+          />
+        )}
+        {tab === "details" &&
+          (aiSeo === null ? (
+            <DetailsTab kind="listing-template" detail={detail} onUpdate={update} onFlush={flush} />
+          ) : (
+            <DetailsTab detail={detail} onUpdate={update} onFlush={flush} aiSeo={aiSeo} />
+          ))}
+      </TabPanel>
     </div>
+  );
+}
+
+/** The tab content; on a phone, inside the element the tab swipe moves. */
+function TabPanel({
+  phone,
+  pager,
+  children,
+}: {
+  phone: boolean;
+  pager: RefObject<HTMLDivElement | null>;
+  children: ReactNode;
+}) {
+  if (!phone) return children;
+  return (
+    <div ref={pager} className="editor-pager">
+      {children}
+    </div>
+  );
+}
+
+/** A tab's label: whole on the desktop; on a phone with its lead in a span
+ * the one-row strip hides, so the text is still the whole label. */
+function TabLabel({ tab, phone }: { tab: (typeof TABS)[number]; phone: boolean }) {
+  if (tab.lead === undefined) return tab.label;
+  if (!phone) return `${tab.lead}${tab.label}`;
+  return (
+    <>
+      <span className="seg-opt__lead">{tab.lead}</span>
+      {tab.label}
+    </>
   );
 }

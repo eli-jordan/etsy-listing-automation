@@ -4,6 +4,7 @@ import { holdsLabels } from "../../components/labelRules";
 import { LabelSearch } from "../../components/LabelSearch";
 import { MutedClip } from "../../components/MutedClip";
 import { useHoverPlay } from "../../hooks/useHoverPlay";
+import { useIsPhone } from "../../phone/usePhone";
 import { mediaKind, pictureFor, type MediaOwner } from "../../media";
 import type { ListingDetail, MediaFileSummary, TemplateSummary } from "../../types";
 import {
@@ -138,6 +139,7 @@ export function MediaLocator({
   owner,
   scope = null,
 }: Props) {
+  const phone = useIsPhone();
   const [mode, setMode] = useViewState<LocatorMode>(
     scope,
     "locator-mode",
@@ -191,7 +193,9 @@ export function MediaLocator({
     <div className="locator">
       <div className="locator__head">
         <span className="locator__title">Add media</span>
-        <span className="locator__hint">Hover to preview · click to add</span>
+        <span className="locator__hint">
+          {phone ? "Tap a template for its colours" : "Hover to preview · click to add"}
+        </span>
       </div>
 
       <div className="seg locator__modes">

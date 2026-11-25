@@ -1,4 +1,7 @@
-import { useCallback, useEffect, useRef } from "react";
+import { type RefObject, useCallback, useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
+import { useIsPhone } from "../phone/usePhone";
+import { useSwipe } from "../phone/useSwipe";
 
 /**
  * One preview, as large as the screen allows, over everything else.
@@ -73,10 +76,17 @@ export function Lightbox({
     closeRef.current?.focus();
   }, []);
 
+  const isPhone = useIsPhone();
+  const root = useRef<HTMLDivElement>(null);
+  const stage = useRef<HTMLDivElement>(null);
+  // At 1:1 a finger pans the picture, so neither swipe is armed then.
+  usePhoneSwipes(root, stage, { enabled: isPhone && !actualSize, step, onClose });
+
   if (!item) return null;
 
-  return (
+  const box = (
     <div
+      ref={root}
       className="lightbox"
       role="dialog"
       aria-modal="true"
@@ -118,7 +128,10 @@ export function Lightbox({
         </div>
       </div>
 
-      <div className={actualSize ? "lightbox__stage lightbox__stage--actual" : "lightbox__stage"}>
+      <div
+        ref={stage}
+        className={actualSize ? "lightbox__stage lightbox__stage--actual" : "lightbox__stage"}
+      >
         {item.kind === "video" ? (
           <video
             key={item.id}
@@ -135,4 +148,59 @@ export function Lightbox({
       </div>
     </div>
   );
+  // On the body on a phone, out of the editor's swiping tab content.
+  return isPhone ? createPortal(box, document.body) : box;
+}
+
+function placeStage(
+  stage: HTMLElement | null,
+  transform: string,
+  transition = "none",
+  opacity = "",
+) {
+  if (stage === null) return;
+  stage.style.transition = transition;
+  stage.style.transform = transform;
+  stage.style.opacity = opacity;
+}
+
+const SPRING = "transform 180ms ease-out, opacity 180ms ease-out";
+
+/** The phone's gestures: swipe the picture sideways to the next or previous
+ * one, and down to close, the picture following the finger meanwhile. */
+function usePhoneSwipes(
+  root: RefObject<HTMLDivElement | null>,
+  stage: RefObject<HTMLDivElement | null>,
+  {
+    enabled,
+    step,
+    onClose,
+  }: { enabled: boolean; step: (delta: number) => void; onClose: () => void },
+) {
+  useSwipe(stage, {
+    axis: "x",
+    enabled,
+    onDrag: (offset) =>
+      placeStage(stage.current, offset ? `translateX(${offset}px)` : "", offset ? "none" : SPRING),
+    onSwipe: (direction) => {
+      placeStage(stage.current, "");
+      step(direction === "left" ? 1 : -1);
+    },
+  });
+  useSwipe(root, {
+    axis: "y",
+    enabled,
+    onDrag: (offset) => {
+      const down = Math.max(offset, 0);
+      const fade = down ? String(Math.max(0.4, 1 - down / 400)) : "";
+      placeStage(stage.current, down ? `translateY(${down}px)` : "", down ? "none" : SPRING, fade);
+    },
+    onSwipe: (direction) => {
+      if (direction === "down") {
+        onClose();
+        return;
+      }
+      placeStage(stage.current, "", SPRING);
+    },
+  });
 }

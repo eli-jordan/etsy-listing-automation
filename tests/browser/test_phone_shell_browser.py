@@ -48,6 +48,8 @@ def test_a_confirm_is_a_bottom_sheet_that_a_swipe_down_dismisses(phone_page) -> 
     page.goto(f"{origin}/listings/take-a-hike")
     page.get_by_role("heading", name="take-a-hike").wait_for(state="visible")
 
+    # The editor's actions are behind its "⋯" on a phone.
+    page.get_by_role("button", name="More actions").click()
     page.get_by_role("button", name="Delete", exact=True).click()
     dialog = page.get_by_role("dialog")
     dialog.wait_for(state="visible")
@@ -66,4 +68,5 @@ def test_a_confirm_is_a_bottom_sheet_that_a_swipe_down_dismisses(phone_page) -> 
     dialog.wait_for(state="detached")
 
     # Dismissed, not confirmed: the listing is still there to delete.
+    page.get_by_role("button", name="More actions").click()
     page.get_by_role("button", name="Delete", exact=True).wait_for(state="visible")
