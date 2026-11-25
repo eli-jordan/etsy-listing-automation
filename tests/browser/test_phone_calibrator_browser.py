@@ -11,7 +11,7 @@ import pytest
 import yaml
 
 from tests.support.marigold import PreparationRuntime, marigold_template
-from tests.support.mobile import assert_mobile_page_fits, swipe
+from tests.support.mobile import assert_mobile_page_fits, pinch, swipe
 
 pytestmark = pytest.mark.browser
 
@@ -133,26 +133,43 @@ def test_the_sheet_renames_the_open_template_and_swipes_away(
     sheet.wait_for(state="detached")
 
 
+def _dot(page, corner: int = 0) -> tuple[float, float]:
+    """The centre of a corner's drawn dot, on screen."""
+    return _centre(page.locator(".quad-editor__handle").nth(corner).bounding_box())
+
+
+def _polygon(page) -> str:
+    return page.locator(".quad-editor__polygon").first.get_attribute("points")
+
+
+@pytest.mark.parametrize("held", ["upright", "sideways"])
 def test_a_finger_drags_a_corner_without_scrolling_and_the_save_writes_it(
-    phone_page, workspace_root: Path
+    held: str, request: pytest.FixtureRequest, workspace_root: Path
 ) -> None:
-    page = phone_page
+    page = request.getfixturevalue("phone_page" if held == "upright" else "phone_landscape_page")
     _open_calibrator(page)
     _pick(page, "flat-lay-01")
     before = _template_config(workspace_root, "flat-lay-01")["bounding_box"]
 
     grip = page.locator(".quad-editor__grip[data-corner='0']")
     grip.scroll_into_view_if_needed()
+    # Scrolled a little, so the page could scroll either way: Chromium takes a
+    # touch with any vertical travel for a scroll unless the box claims it.
+    page.evaluate("scrollBy(0, 40)")
+    page.wait_for_function("() => scrollY > 0")
     box = grip.bounding_box()
     # The grip is finger-sized although the dot drawn under it is small.
     assert box["width"] >= 40
     assert box["height"] >= 40
-    x, y = _centre(box)
+    x, y = _dot(page)
     scrolled = page.evaluate("scrollY")
     with _config_saved(page):
-        # Start off the dot's centre, inside the grip: a finger is imprecise.
-        swipe(page, (x + 12, y + 12), (x + 60, y + 70))
+        swipe(page, (x, y), (x + 40, y + 50))
     assert page.evaluate("scrollY") == scrolled
+    # The corner went the whole way with the finger, not a few pixels.
+    moved = _dot(page)
+    assert moved[0] - x == pytest.approx(40, abs=2)
+    assert moved[1] - y == pytest.approx(50, abs=2)
 
     after = _template_config(workspace_root, "flat-lay-01")["bounding_box"]
     assert after[0] != before[0]
@@ -163,6 +180,61 @@ def test_a_finger_drags_a_corner_without_scrolling_and_the_save_writes_it(
     start = (image["x"] + 6, image["y"] + image["height"] - 8)
     swipe(page, start, (start[0], start[1] - 150))
     page.wait_for_function("(y) => scrollY > y", arg=scrolled)
+
+
+def _drag_then_cancel(page, start: tuple[float, float], end: tuple[float, float]) -> None:
+    """A finger drags, then the browser cancels the touch (the phone turning,
+    a system gesture) instead of the finger lifting."""
+    session = page.context.new_cdp_session(page)
+    try:
+        for kind, (x, y) in (("touchStart", start), ("touchMove", end)):
+            point = {"x": x, "y": y}
+            session.send("Input.dispatchTouchEvent", {"type": kind, "touchPoints": [point]})
+        page.wait_for_timeout(50)
+        session.send("Input.dispatchTouchEvent", {"type": "touchCancel", "touchPoints": []})
+    finally:
+        session.detach()
+
+
+def test_a_cancelled_drag_leaves_nothing_behind_for_the_next_touch(phone_page) -> None:
+    page = phone_page
+    _open_calibrator(page)
+    _pick(page, "flat-lay-01")
+    page.locator(".quad-editor__image").scroll_into_view_if_needed()
+    x, y = _dot(page)
+    _drag_then_cancel(page, (x + 30, y + 30), (x + 40, y + 30))
+    placed = _polygon(page)
+
+    # A touch on the photo outside the box: before, the stuck drag moved the
+    # box under it, off the photo, and saved that.
+    image = page.locator(".quad-editor__image").bounding_box()
+    start = (image["x"] + 6, image["y"] + 8)
+    swipe(page, start, (start[0] + 60, start[1]))
+    page.wait_for_timeout(300)
+    assert _polygon(page) == placed
+
+
+def test_every_touch_within_a_finger_of_a_corner_takes_the_corner(phone_page) -> None:
+    page = phone_page
+    _open_calibrator(page)
+    _pick(page, "flat-lay-01")
+    page.locator(".quad-editor__image").scroll_into_view_if_needed()
+    x, y = _dot(page)
+    # The old grip was a wide invisible stroke round the dot, with a dead
+    # ring 10-14px out where a touch hit the box or nothing.
+    missed = page.evaluate(
+        """([x, y]) => {
+            const out = [];
+            for (const r of [0, 6, 10, 12, 14, 18])
+              for (const [dx, dy] of [[1, 0], [0, 1], [-1, 0], [0, -1], [0.7, 0.7]]) {
+                const hit = document.elementFromPoint(x + dx * r, y + dy * r);
+                if (!hit?.classList.contains('quad-editor__grip')) out.push([r, dx, dy]);
+              }
+            return out;
+        }""",
+        [x, y],
+    )
+    assert missed == []
 
 
 def test_a_multiple_template_adds_and_deletes_boxes_with_buttons(
@@ -207,6 +279,12 @@ def test_the_mask_brush_paints_with_a_finger(phone_page) -> None:
     area = page.get_by_label("Mask drawing area")
     area.scroll_into_view_if_needed()
     bounds = area.bounding_box()
+    undo = dock.get_by_role("button", name="Undo brush stroke", exact=True)
+    # Two fingers pinching on the mask paint nothing: before, both fingers'
+    # moves went into one stroke, a line drawn between them.
+    pinch(page, (bounds["x"] + bounds["width"] * 0.5, bounds["y"] + bounds["height"] * 0.6))
+    page.wait_for_timeout(300)
+    assert undo.is_disabled()
     scrolled = page.evaluate("scrollY")
     start = (bounds["x"] + bounds["width"] * 0.3, bounds["y"] + bounds["height"] * 0.3)
     end = (bounds["x"] + bounds["width"] * 0.6, bounds["y"] + bounds["height"] * 0.7)

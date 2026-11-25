@@ -116,3 +116,30 @@ export function menuPlacement(
     y: host.y + at.y + size.height > clip.bottom ? Math.max(0, at.y - size.height) : at.y,
   };
 }
+
+/** A finger's reach on a phone corner grip, in screen pixels: half the 44px
+ * a touch target needs. */
+export const GRIP_RADIUS_PX = 22;
+
+/** The phone grip's radius in image units, so it covers `GRIP_RADIUS_PX` on
+ * screen whatever the photo's size and however far it is scaled down.
+ *
+ * `shownWidth` is the overlay's width on screen and `imageWidth` the photo's
+ * true width (the viewBox's). Before the overlay has a width there is no
+ * scale to convert by, so it falls back to the drawn dot's own radius. */
+export function gripRadius(shownWidth: number, imageWidth: number, dotRadius: number): number {
+  if (shownWidth <= 0 || imageWidth <= 0) return dotRadius;
+  return Math.max(dotRadius, (GRIP_RADIUS_PX * imageWidth) / shownWidth);
+}
+
+/** Where a phone grip of radius `r` sits for the corner at `p`: on the corner,
+ * pulled just far enough inside the photo to be whole.
+ *
+ * The overlay clips at the photo's edge (and the cards round it clip too), so
+ * a grip centred on a corner at the edge was half a target. Pulled in, it
+ * still covers the corner's dot and every point of it is on the photo. */
+export function gripCentre(p: Point, r: number, space: [number, number]): Point {
+  const clamp = (v: number, size: number) =>
+    size > 2 * r ? Math.min(Math.max(v, r), size - r) : size / 2;
+  return { x: clamp(p.x, space[0]), y: clamp(p.y, space[1]) };
+}
