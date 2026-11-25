@@ -319,8 +319,10 @@ export function PreviewPanel({
 
       {request === null ? (
         <p className="preview-grid__empty">
-          Full-size renders, through the same pipeline <code>apply</code> uses — a few seconds each,
-          which is why they are asked for rather than assumed. {verb} one to see it large.
+          Full-size renders, through the same pipeline <code>apply</code>
+          {/* One text node, as before the phone layout: node boundaries
+              decide kerning, and the desktop sentence stays pixel-equal. */}
+          {` uses — a few seconds each, which is why they are asked for rather than assumed. ${verb} one to see it large.`}
         </p>
       ) : (
         <div className="preview-grid__tiles">

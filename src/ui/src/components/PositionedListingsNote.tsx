@@ -60,9 +60,12 @@ export function PositionedListingsNote({
     );
   }
   return (
+    // Exactly the markup from before the phone layout: the text's node
+    // boundaries decide its kerning, and the desktop note stays pixel-equal.
     <p className="app__warn app__positions-note" role="note">
-      {lead} own position on this template: {names}. Changing the box does not move {them}; the next
-      plan re-checks {them} against the position limits.
+      {count === 1 ? "1 listing holds its" : `${count} listings hold their`} own position on this
+      template: {names}. Changing the box does not move {them}; the next plan re-checks {them}{" "}
+      against the position limits.
     </p>
   );
 }
