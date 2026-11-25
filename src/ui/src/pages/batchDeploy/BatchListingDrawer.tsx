@@ -1,5 +1,6 @@
 import {
   useEffect,
+  useEffectEvent,
   useMemo,
   useRef,
   useState,
@@ -197,6 +198,10 @@ export function BatchListingDrawer({
   const category = groupLabel(planGroup(plan, listing?.planFailure ?? null));
   const summaryText = drawerSummary(listing, comparison);
   const isPhone = useIsPhone();
+  // A phone may have scrolled the dialog sideways to show the focused Close.
+  const resetSideways = useEffectEvent((dialog: HTMLDialogElement) => {
+    if (isPhone) dialog.scrollLeft = 0;
+  });
   useDrawerSwipe(panelRef, {
     open,
     bounds: drawerBounds,
@@ -216,6 +221,7 @@ export function BatchListingDrawer({
       openNativeDialog(dialog);
       // showModal() focuses the first control and scrolls the translated panel into view.
       dialog.scrollTop = 0;
+      resetSideways(dialog);
       closeRef.current?.focus({ preventScroll: true });
       const frame = window.requestAnimationFrame(() => setEntered(true));
       return () => window.cancelAnimationFrame(frame);

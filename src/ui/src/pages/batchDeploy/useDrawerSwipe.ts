@@ -1,12 +1,15 @@
-import { type RefObject, useRef } from "react";
+import { type RefObject, useEffect, useEffectEvent, useRef } from "react";
+import { useIsPhone } from "../../phone/usePhone";
 import { useSheetDrag } from "../../phone/useSheetDrag";
-import { type DrawerBounds, grownHeight, isExpandedHeight } from "./drawerSheet";
+import { type DrawerBounds, fittedHeight, grownHeight, isExpandedHeight } from "./drawerSheet";
 
 /**
  * The listing drawer as a phone bottom sheet: a finger on the sheet (outside
  * its scrolling body, which keeps native scrolling) drags it. Down is the
  * phone's one sheet drag (`useSheetDrag`): it follows the finger, and a
- * swipe down dismisses. Up grows it and a swipe up expands it. Off the
+ * swipe down dismisses. Up grows it and a swipe up expands it. A height it
+ * grew to is fitted to the screen again when the screen changes size (the
+ * phone turned on its side), so the sheet never rises past the top. Off the
  * phone, and for a mouse anywhere, nothing here runs: the desktop handle
  * keeps its own resize.
  */
@@ -29,6 +32,23 @@ export function useDrawerSwipe(
   },
 ): void {
   const startHeight = useRef<number | null>(null);
+  const isPhone = useIsPhone();
+
+  const refit = useEffectEvent(() => {
+    const panel = panelRef.current;
+    if (!panel || panel.style.height === "") return;
+    const limits = bounds(panel);
+    const height = fittedHeight(Number.parseFloat(panel.style.height), limits);
+    onHeight(height);
+    onExpanded(isExpandedHeight(height, limits));
+  });
+
+  useEffect(() => {
+    if (!open || !isPhone) return;
+    refit();
+    window.addEventListener("resize", refit);
+    return () => window.removeEventListener("resize", refit);
+  }, [open, isPhone]);
 
   useSheetDrag(panelRef, {
     enabled: open,

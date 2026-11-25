@@ -46,6 +46,15 @@ export function drag(
   if (lift) send(element, "pointerup", to[0], to[1], id);
 }
 
+/** The page pinch-zoomed to `scale` (1 is not zoomed). */
+export function zoomedTo(scale: number) {
+  vi.stubGlobal("visualViewport", {
+    scale,
+    addEventListener: () => undefined,
+    removeEventListener: () => undefined,
+  });
+}
+
 /** The phone layout showing, and the seller's motion preference. */
 export function onPhone({ reducedMotion = false, phone = true } = {}) {
   vi.stubGlobal("matchMedia", (query: string) => ({

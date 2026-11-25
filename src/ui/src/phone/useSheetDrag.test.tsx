@@ -1,7 +1,7 @@
 import { act, render, screen } from "@testing-library/react";
 import { useRef } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { drag, onPhone } from "../test/touch";
+import { drag, onPhone, zoomedTo } from "../test/touch";
 import { type SheetGrow, useSheetDrag } from "./useSheetDrag";
 
 function Sheet({
@@ -96,6 +96,22 @@ describe("useSheetDrag on a phone", () => {
     act(() => vi.advanceTimersByTime(180));
     expect(sheet().style.transform).toBe("translateY(100%)");
     rerender(<Sheet onDismiss={vi.fn()} enabled={false} />);
+    expect(sheet().style.transform).toBe("");
+  });
+});
+
+describe("useSheetDrag on a pinch-zoomed page", () => {
+  beforeEach(() => {
+    onPhone();
+    zoomedTo(2.5);
+  });
+
+  it("leaves the finger to pan the page", () => {
+    const onDismiss = vi.fn();
+    render(<Sheet onDismiss={onDismiss} />);
+    drag(grabber(), [100, 100], [100, 300]);
+    act(() => vi.advanceTimersByTime(500));
+    expect(onDismiss).not.toHaveBeenCalled();
     expect(sheet().style.transform).toBe("");
   });
 });

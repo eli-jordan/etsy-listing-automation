@@ -277,6 +277,13 @@
     padding-top: 26px;
   }
 
+  /* A summary can be one long path or URL; it wraps rather than widening
+     the head past the screen. */
+  .batch-drawer__head > div {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
   .batch-drawer__head .btn {
     min-height: 40px;
   }

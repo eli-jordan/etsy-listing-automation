@@ -113,6 +113,99 @@ def test_a_rows_actions_are_a_bottom_sheet(phone_page) -> None:
     expect(page.get_by_role("list", name="Listings").get_by_role("listitem")).to_have_count(1)
 
 
+def _tall_page(page) -> None:
+    """Room to scroll: the fixture has one listing, so the page is short."""
+    page.evaluate(
+        """() => {
+            const spacer = document.createElement('div');
+            spacer.style.height = '2000px';
+            document.querySelector('main').append(spacer);
+        }"""
+    )
+
+
+def test_a_sheet_is_modal_and_keeps_the_page_still(phone_page) -> None:
+    page = phone_page
+    page.goto(f"{_origin(page)}/listings")
+    more = page.get_by_role("button", name="More actions for take-a-hike")
+    more.wait_for(state="visible")
+    _tall_page(page)
+    page.evaluate("window.scrollTo(0, 120)")
+    page.wait_for_function("() => window.scrollY === 120")
+    more.click()
+    sheet = page.get_by_role("dialog", name="take-a-hike", exact=True)
+    sheet.wait_for(state="visible")
+    page.wait_for_function("() => document.getAnimations().length === 0")
+
+    # A drag on the dimmed page behind it does not scroll that page.
+    swipe(page, (195, 120), (195, 20), steps=6)
+    page.wait_for_timeout(300)
+    assert page.evaluate("window.scrollY") == 120
+
+    # Focus is in the sheet, and Tab keeps it there.
+    inside = "() => document.querySelector('[role=dialog]').contains(document.activeElement)"
+    assert page.evaluate(inside)
+    for _ in range(8):
+        page.keyboard.press("Tab")
+        assert page.evaluate(inside)
+
+    # Escape closes it, hands focus back to the ⋯ and leaves the page where it was.
+    page.keyboard.press("Escape")
+    sheet.wait_for(state="detached")
+    expect(more).to_be_focused()
+    assert page.evaluate("window.scrollY") == 120
+
+
+def test_a_sheet_drags_away_by_its_title(phone_page) -> None:
+    page = phone_page
+    page.goto(f"{_origin(page)}/listings")
+    page.get_by_role("button", name="More actions for take-a-hike").tap()
+    sheet = page.get_by_role("dialog", name="take-a-hike", exact=True)
+    sheet.wait_for(state="visible")
+    page.wait_for_function("() => document.getAnimations().length === 0")
+    title = page.locator(".phone-sheet__title").bounding_box()
+    x, y = title["x"] + 20, title["y"] + title["height"] / 2
+    swipe(page, (x, y), (x, y + 250))
+    sheet.wait_for(state="detached")
+
+
+def test_back_closes_a_sheet_and_not_the_page(phone_page) -> None:
+    page = phone_page
+    page.get_by_role("navigation").get_by_role("link", name="Listings", exact=True).tap()
+    page.wait_for_url("**/listings")
+    more = page.get_by_role("button", name="More actions for take-a-hike")
+    sheet = page.get_by_role("dialog", name="take-a-hike", exact=True)
+
+    more.tap()
+    sheet.wait_for(state="visible")
+    page.go_back()
+    sheet.wait_for(state="detached")
+    assert page.url.endswith("/listings")
+
+    # A sheet that hands over to a confirm: Back closes the confirm, and
+    # the next Back still leaves in one press.
+    more.tap()
+    sheet.get_by_role("button", name=re.compile("^(Delete|Mark for deletion)$")).tap()
+    confirm = page.get_by_role("dialog", name=re.compile("^Are you sure"))
+    confirm.wait_for(state="visible")
+    page.go_back()
+    confirm.wait_for(state="detached")
+    assert page.url.endswith("/listings")
+    page.go_back()
+    page.get_by_role("heading", name="Dashboard").wait_for(state="visible")
+
+    # Closed some other way, its history entry goes too: one Back leaves.
+    page.get_by_role("navigation").get_by_role("link", name="Listings", exact=True).tap()
+    page.wait_for_url("**/listings")
+    more.tap()
+    sheet.get_by_role("button", name="Cancel").tap()
+    sheet.wait_for(state="detached")
+    page.wait_for_timeout(200)
+    assert page.url.endswith("/listings")
+    page.go_back()
+    page.get_by_role("heading", name="Dashboard").wait_for(state="visible")
+
+
 def test_new_listing_floats_above_the_tab_bar(phone_page) -> None:
     page = phone_page
     page.goto(f"{_origin(page)}/listings")
