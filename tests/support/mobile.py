@@ -77,3 +77,30 @@ def swipe(page, start: tuple[float, float], end: tuple[float, float], steps: int
         session.send("Input.dispatchTouchEvent", {"type": "touchEnd", "touchPoints": []})
     finally:
         session.detach()
+
+
+def pinch(page, centre: tuple[float, float], spread: float = 80, steps: int = 10) -> None:
+    """Two fingers land a little apart around ``centre`` (the second just
+    after the first, as a hand does) and spread ``spread`` pixels further
+    apart along the diagonal, then lift."""
+    session = page.context.new_cdp_session(page)
+    try:
+        x, y = centre
+
+        def fingers(apart: float) -> list[dict]:
+            return [
+                {"x": x - 15 - apart, "y": y - apart, "id": 1},
+                {"x": x + 15 + apart, "y": y + apart, "id": 2},
+            ]
+
+        first = fingers(0)[:1]
+        session.send("Input.dispatchTouchEvent", {"type": "touchStart", "touchPoints": first})
+        page.wait_for_timeout(16)
+        session.send("Input.dispatchTouchEvent", {"type": "touchStart", "touchPoints": fingers(0)})
+        for step in range(1, steps + 1):
+            points = fingers(spread / 2 * step / steps)
+            session.send("Input.dispatchTouchEvent", {"type": "touchMove", "touchPoints": points})
+            page.wait_for_timeout(16)
+        session.send("Input.dispatchTouchEvent", {"type": "touchEnd", "touchPoints": []})
+    finally:
+        session.detach()

@@ -372,7 +372,7 @@ describe("sliding a whole box", () => {
     const onChangeBox = vi.fn();
     const container = renderDraggable(onChangeBox);
     press(must(container.querySelector(".quad-editor__polygon")), 10, 10);
-    fireEvent.pointerMove(overlay(container), { clientX: 40, clientY: 25 });
+    fireEvent.pointerMove(overlay(container), { pointerId: 1, clientX: 40, clientY: 25 });
 
     expect(onChangeBox).toHaveBeenCalledWith(0, [
       { x: 30, y: 15 },
@@ -389,7 +389,7 @@ describe("sliding a whole box", () => {
     press(must(container.querySelectorAll(".quad-editor__polygon")[1]), 0, 0);
     expect(onSelect).toHaveBeenCalledWith(1);
 
-    fireEvent.pointerMove(overlay(container), { clientX: 5, clientY: 0 });
+    fireEvent.pointerMove(overlay(container), { pointerId: 1, clientX: 5, clientY: 0 });
     const [index] = must(onChangeBox.mock.calls[0]);
     expect(index).toBe(1);
   });
@@ -398,8 +398,8 @@ describe("sliding a whole box", () => {
     const onChangeBox = vi.fn();
     const container = renderDraggable(onChangeBox);
     press(must(container.querySelector(".quad-editor__polygon")), 0, 0);
-    fireEvent.pointerUp(overlay(container));
-    fireEvent.pointerMove(overlay(container), { clientX: 90, clientY: 90 });
+    fireEvent.pointerUp(overlay(container), { pointerId: 1 });
+    fireEvent.pointerMove(overlay(container), { pointerId: 1, clientX: 90, clientY: 90 });
     expect(onChangeBox).not.toHaveBeenCalled();
   });
 
@@ -411,9 +411,9 @@ describe("sliding a whole box", () => {
     const { container } = render(<ControlledQuad onChangeBox={onChangeBox} />);
     loadImage();
     press(must(container.querySelector(".quad-editor__polygon")), 10, 10);
-    fireEvent.pointerMove(overlay(container), { clientX: 40, clientY: 25 });
-    fireEvent.pointerMove(overlay(container), { clientX: 40, clientY: 25 });
-    fireEvent.pointerUp(overlay(container));
+    fireEvent.pointerMove(overlay(container), { pointerId: 1, clientX: 40, clientY: 25 });
+    fireEvent.pointerMove(overlay(container), { pointerId: 1, clientX: 40, clientY: 25 });
+    fireEvent.pointerUp(overlay(container), { pointerId: 1 });
 
     const slid = [
       { x: 30, y: 15 },
@@ -431,8 +431,48 @@ describe("sliding a whole box", () => {
     const onChangeBox = vi.fn();
     const container = renderDraggable(onChangeBox);
     press(must(container.querySelector(".quad-editor__polygon")), 0, 0, 2);
-    fireEvent.pointerMove(overlay(container), { clientX: 90, clientY: 90 });
+    fireEvent.pointerMove(overlay(container), { pointerId: 1, clientX: 90, clientY: 90 });
     expect(onChangeBox).not.toHaveBeenCalled();
+  });
+
+  // A cancelled touch sends no pointerup. A drag left behind moved the box
+  // under the next touch anywhere on the photo.
+  it.each([
+    [
+      "the browser cancels the pointer",
+      (el: Element) => fireEvent.pointerCancel(el, { pointerId: 1 }),
+    ],
+    [
+      "the pointer loses capture",
+      (el: Element) => fireEvent.lostPointerCapture(el, { pointerId: 1 }),
+    ],
+  ])("ends the drag when %s", (_, end) => {
+    const onChangeBox = vi.fn();
+    const container = renderDraggable(onChangeBox);
+    press(must(container.querySelector(".quad-editor__polygon")), 0, 0);
+    end(overlay(container));
+    fireEvent.pointerMove(overlay(container), { pointerId: 1, clientX: 90, clientY: 90 });
+    expect(onChangeBox).not.toHaveBeenCalled();
+  });
+
+  it("follows only the finger that started the drag", () => {
+    const onChangeBox = vi.fn();
+    const container = renderDraggable(onChangeBox);
+    press(must(container.querySelector(".quad-editor__polygon")), 0, 0);
+    // A second finger lands on the other box: no new drag, and its moves and
+    // release leave the first finger's drag alone.
+    fireEvent.pointerDown(must(container.querySelectorAll(".quad-editor__polygon")[1]), {
+      button: 0,
+      clientX: 0,
+      clientY: 0,
+      pointerId: 2,
+    });
+    fireEvent.pointerMove(overlay(container), { pointerId: 2, clientX: 90, clientY: 90 });
+    fireEvent.pointerUp(overlay(container), { pointerId: 2 });
+    expect(onChangeBox).not.toHaveBeenCalled();
+
+    fireEvent.pointerMove(overlay(container), { pointerId: 1, clientX: 5, clientY: 0 });
+    expect(must(onChangeBox.mock.calls[0])[0]).toBe(0);
   });
 });
 
@@ -554,7 +594,7 @@ describe("resizing a box from a corner", () => {
     const onChangeBox = vi.fn();
     const container = renderResizable(onChangeBox);
     grabBottomRight(container);
-    fireEvent.pointerMove(overlay(container), { clientX: 160, clientY: 40 });
+    fireEvent.pointerMove(overlay(container), { pointerId: 1, clientX: 160, clientY: 40 });
 
     expect(onChangeBox).toHaveBeenLastCalledWith(0, [
       { x: 0, y: 0 },
@@ -570,7 +610,12 @@ describe("resizing a box from a corner", () => {
     grabBottomRight(container);
     // Straight out along the diagonal to (200, 200): twice as far from the
     // anchor at the origin, so every corner doubles.
-    fireEvent.pointerMove(overlay(container), { clientX: 200, clientY: 200, shiftKey: true });
+    fireEvent.pointerMove(overlay(container), {
+      pointerId: 1,
+      clientX: 200,
+      clientY: 200,
+      shiftKey: true,
+    });
 
     expect(onChangeBox).toHaveBeenLastCalledWith(0, [
       { x: 0, y: 0 },
@@ -587,7 +632,12 @@ describe("resizing a box from a corner", () => {
     // The centre is (50,50) and the grabbed corner is 50 away on each axis;
     // dragging to (150,150) doubles that distance, so the box doubles around
     // the centre and its top-left goes negative.
-    fireEvent.pointerMove(overlay(container), { clientX: 150, clientY: 150, altKey: true });
+    fireEvent.pointerMove(overlay(container), {
+      pointerId: 1,
+      clientX: 150,
+      clientY: 150,
+      altKey: true,
+    });
 
     expect(onChangeBox).toHaveBeenLastCalledWith(0, [
       { x: -50, y: -50 },
@@ -604,8 +654,18 @@ describe("resizing a box from a corner", () => {
     const { container } = render(<ControlledQuad onChangeBox={onChangeBox} />);
     loadImage();
     grabBottomRight(container);
-    fireEvent.pointerMove(overlay(container), { clientX: 200, clientY: 200, shiftKey: true });
-    fireEvent.pointerMove(overlay(container), { clientX: 200, clientY: 200, shiftKey: true });
+    fireEvent.pointerMove(overlay(container), {
+      pointerId: 1,
+      clientX: 200,
+      clientY: 200,
+      shiftKey: true,
+    });
+    fireEvent.pointerMove(overlay(container), {
+      pointerId: 1,
+      clientX: 200,
+      clientY: 200,
+      shiftKey: true,
+    });
 
     // Same pointer position twice means the same doubled box twice. A
     // projection about a fixed anchor happens to land in the same place from

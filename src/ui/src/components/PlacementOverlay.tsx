@@ -65,11 +65,28 @@ export function PlacementOverlay({
       Math.max(0, Math.min(space[1] - 1, result.y)),
     ];
   }
+  // The finger (or mouse) painting the stroke. Only its moves extend the
+  // stroke, and only its release or cancel ends it.
+  const owner = useRef<number | null>(null);
   function finish() {
     const next = current.current;
     current.current = null;
+    owner.current = null;
     setStroke(null);
     if (next) onStroke(next);
+  }
+  /** The stroke's own pointer ended; any other pointer's end is ignored. */
+  function finishFrom(event: React.PointerEvent<SVGRectElement>) {
+    if (owner.current !== null && event.pointerId !== owner.current) return;
+    finish();
+  }
+  /** A second finger landing means a pinch, not paint: the stroke so far is
+   * dropped, not committed, and nothing paints until every finger lifts and
+   * a new one lands. Painting both fingers' moves into one stroke drew a
+   * line between them. */
+  function drop() {
+    current.current = null;
+    setStroke(null);
   }
   // Leaving mask mode commits an active gesture once, including Escape while
   // the pointer is still held. The effect event uses the latest draft callback.
@@ -172,16 +189,21 @@ export function PlacementOverlay({
             onPointerDown={(event) => {
               if (event.button !== 0) return;
               event.stopPropagation();
+              if (owner.current !== null) {
+                if (event.pointerId !== owner.current) drop();
+                return;
+              }
               const p = point(event);
               if (!p) return;
               event.currentTarget.setPointerCapture(event.pointerId);
+              owner.current = event.pointerId;
               const next: Stroke = { type: "stroke", mode, diameter_px: diameter, points: [p] };
               current.current = next;
               setStroke(next);
             }}
             onPointerMove={(event) => {
               const p = point(event);
-              if (!current.current) return;
+              if (!current.current || event.pointerId !== owner.current) return;
               event.stopPropagation();
               if (p) {
                 const next = { ...current.current, points: [...current.current.points, p] };
@@ -191,13 +213,13 @@ export function PlacementOverlay({
             }}
             onPointerUp={(event) => {
               event.stopPropagation();
-              finish();
+              finishFrom(event);
             }}
-            onPointerCancel={() => {
-              finish();
+            onPointerCancel={(event) => {
+              finishFrom(event);
               hideCursor();
             }}
-            onLostPointerCapture={finish}
+            onLostPointerCapture={finishFrom}
           />
           <g
             ref={cursor}

@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import type { BoundingBox } from "../types";
 import {
   cornerDragged,
+  gripCentre,
+  gripRadius,
   labelAnchor,
   menuPlacement,
   MIN_SCALE,
@@ -156,5 +158,35 @@ describe("menuPlacement", () => {
     ],
   ])("%s", (_, at, clipBox, expected) => {
     expect(menuPlacement(at, host, size, clipBox)).toEqual(expected);
+  });
+});
+
+describe("gripRadius", () => {
+  it("is 22 screen pixels in image units", () => {
+    // A 4000px photo shown 400px wide: one screen pixel is ten image pixels.
+    expect(gripRadius(400, 4000, 60)).toBe(220);
+  });
+
+  it("never shrinks below the dot it sits over", () => {
+    expect(gripRadius(4000, 400, 6)).toBe(6);
+  });
+
+  it("falls back to the dot before the overlay has a width", () => {
+    expect(gripRadius(0, 4000, 60)).toBe(60);
+  });
+});
+
+describe("gripCentre", () => {
+  it("sits on a corner well inside the photo", () => {
+    expect(gripCentre({ x: 300, y: 400 }, 50, [1000, 800])).toEqual({ x: 300, y: 400 });
+  });
+
+  it("is pulled inside so a corner at the edge gets a whole grip", () => {
+    expect(gripCentre({ x: 0, y: 0 }, 50, [1000, 800])).toEqual({ x: 50, y: 50 });
+    expect(gripCentre({ x: 1000, y: 790 }, 50, [1000, 800])).toEqual({ x: 950, y: 750 });
+  });
+
+  it("brings a corner dragged off the photo back within reach", () => {
+    expect(gripCentre({ x: -200, y: 900 }, 50, [1000, 800])).toEqual({ x: 50, y: 750 });
   });
 });

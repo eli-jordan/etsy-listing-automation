@@ -146,6 +146,7 @@
   .tswitch__position {
     color: color-mix(in srgb, var(--color-text) 55%, transparent);
     font-variant-numeric: tabular-nums;
+    white-space: nowrap;
   }
 
   .tswitch__status {
@@ -279,10 +280,13 @@
     min-height: 40px;
   }
 
+  /* 44px to a finger; the negative margin keeps the chip the size the 32px
+     button gave it. */
   .label-bar__remove {
-    width: 32px;
-    height: 32px;
-    padding: 9px;
+    width: 44px;
+    height: 44px;
+    margin: -6px;
+    padding: 15px;
   }
 
   .app__positions-note {
@@ -407,16 +411,25 @@
     touch-action: none;
   }
 
+  /* The grip is a real filled circle, sized in QuadEditor to 22 screen
+     pixels at the photo's scale: a wide invisible stroke instead left a
+     dead ring between it and the dot, where a touch hit the box. */
   .quad-editor__grip {
     fill: transparent;
-    stroke: transparent;
-    stroke-width: 44px;
-    vector-effect: non-scaling-stroke;
+    stroke: none;
     pointer-events: all;
   }
 
+  /* The caption keeps its 32px look; a transparent border above and below
+     makes the target 44px (the caption clips its overflow, so a pseudo-
+     element cannot), and the margin keeps the chip where it was drawn. */
   .quad-editor__label {
-    min-height: 32px;
+    min-height: 44px;
+    margin-top: -6px;
+    border-block: 6px solid transparent;
+    /* 16px round the drawn 32px pill once the 6px borders are taken off. */
+    border-radius: 16px / 22px;
+    background-clip: padding-box;
     font-size: 13px;
   }
 
@@ -464,6 +477,14 @@
   .realism__presets button,
   .realism summary {
     min-height: 40px;
+  }
+
+  /* Print realism's Reset: Marigold's frame strips the ghost button to its
+     text (components/marigold.css), which left a 16px-tall target. */
+  .app__controls .realism__head .btn,
+  .mg-frame .realism__head .btn-ghost {
+    min-height: 44px;
+    padding: 0 var(--space-3);
   }
 
   .realism summary {
@@ -645,6 +666,11 @@
     padding: 0 var(--space-2);
     font-size: 13px;
   }
+
+  /* Its own danger style: the desktop menu's carries a dashed separator. */
+  .quad-editor__phone-actions .quad-editor__phone-danger {
+    color: var(--color-accent-700);
+  }
 }
 
 /* — A phone on its side —
@@ -773,6 +799,55 @@
      tall as the screen allows, since height is the short side. */
   .tsheet__dialog {
     height: calc(100dvh - 12px);
+  }
+
+  /* Stacked, the rename row, the banner, the search and two rows of filter
+     chips filled the screen, and the first template started below it. Here
+     the banner, search and filters float into a narrow left column and the
+     list runs beside them from the top, with compact rows, so three or four
+     templates show at once. Floats rather than a grid: the list is any
+     number of groups plus the queue, with no wrapper to place as one. */
+  .tsheet__current {
+    padding: 2px 0;
+  }
+
+  .tsheet__dialog .template-rail {
+    display: block;
+  }
+
+  .tsheet__dialog
+    .template-rail
+    > :is(.template-rail__banner, .label-search, .template-rail__filters) {
+    float: left;
+    clear: left;
+    width: 190px;
+    margin-bottom: var(--space-2);
+  }
+
+  .tsheet__dialog .template-rail__banner {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .tsheet__dialog .template-rail > :is(.template-rail__group, .template-rail__empty, .mg-queue) {
+    margin: 0 0 var(--space-2) calc(190px + var(--space-3));
+  }
+
+  .tsheet__dialog .template-rail__item {
+    min-height: 56px;
+    padding: 4px var(--space-2);
+  }
+
+  .tsheet__dialog .template-rail__thumb {
+    width: 44px;
+    height: 44px;
+  }
+
+  /* The Boxes row's four buttons overflowed the narrow right column: two
+     by two instead. */
+  .quad-editor__phone-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .mi-dialog {
