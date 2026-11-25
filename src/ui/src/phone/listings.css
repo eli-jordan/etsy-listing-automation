@@ -24,10 +24,13 @@
     border-top: 1px solid var(--color-divider);
   }
 
-  /* Room under the last row for the floating New listing button. */
+  /* Room under the last row for the floating New listing button (56px and
+     its gap), and for the small scroll back up that brings it back: with
+     only the button's own height here, the last row's ⋯ slid under it as
+     soon as it reappeared. */
   .m-list:has(+ .m-fab),
   .m-list:has(~ .m-fab) {
-    margin-bottom: 80px;
+    margin-bottom: 128px;
   }
 
   .m-row {
