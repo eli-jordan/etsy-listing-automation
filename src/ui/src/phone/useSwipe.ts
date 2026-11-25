@@ -14,6 +14,10 @@ import { classifySwipe, lockAxis, type SwipeDirection } from "./swipe";
  * is not focused does not: on a phone a finger moves a caret only once the
  * field has focus, and a form-heavy page (the editor's Details tab) has
  * nowhere else to start a swipe.
+ *
+ * While the page is pinch-zoomed nothing swipes: a finger then pans the
+ * zoomed page, as it does everywhere else on a phone, so a drag that means
+ * "look over there" never pages or dismisses.
  */
 
 export interface SwipeOptions {
@@ -28,13 +32,19 @@ export interface SwipeOptions {
   enabled: boolean;
 }
 
-const OWNS_DRAG = "input[type='range'], [role='slider'], [data-swipe-ignore]";
+const OWNS_DRAG = "input[type='range'], [role='slider'], [role='separator'], [data-swipe-ignore]";
 const TYPED_IN = "input, textarea, [contenteditable=''], [contenteditable='true']";
 
 /** The field the keyboard is typing into, if the touch starts on it. */
 function typingInto(target: Element): boolean {
   const field = target.closest(TYPED_IN);
   return field !== null && field === document.activeElement;
+}
+
+/** Whether the page is pinch-zoomed in. */
+export function pinchZoomed(): boolean {
+  const viewport = window.visualViewport;
+  return viewport != null && viewport.scale > 1.01;
 }
 
 function scrollsAlong(element: Element, axis: "x" | "y"): boolean {
@@ -80,9 +90,16 @@ export function useSwipe(ref: RefObject<HTMLElement | null>, options: SwipeOptio
     const element = ref.current;
     if (!element || !enabled) return;
     let track: Track | null = null;
-    // The browser keeps the other axis's scrolling; this element takes ours.
+    // The browser keeps the other axis's scrolling; this element takes ours,
+    // unless the page is zoomed in, when the browser pans on both.
     const previousTouchAction = element.style.touchAction;
-    element.style.touchAction = axis === "x" ? "pan-y pinch-zoom" : "pan-x pinch-zoom";
+    const ours = axis === "x" ? "pan-y pinch-zoom" : "pan-x pinch-zoom";
+    const claim = () => {
+      element.style.touchAction = pinchZoomed() ? previousTouchAction : ours;
+    };
+    claim();
+    const viewport = window.visualViewport;
+    viewport?.addEventListener("resize", claim);
 
     const end = (event: PointerEvent, cancelled: boolean) => {
       if (!track || event.pointerId !== track.id) return;
@@ -98,6 +115,11 @@ export function useSwipe(ref: RefObject<HTMLElement | null>, options: SwipeOptio
     };
     const onDown = (event: PointerEvent) => {
       if (event.pointerType !== "touch" || !event.isPrimary) return;
+      if (pinchZoomed()) {
+        // A pinch that ended without a resize event still hands the pan back.
+        claim();
+        return;
+      }
       if (ownedElsewhere(event.target, element, axis)) return;
       track = {
         id: event.pointerId,
@@ -129,6 +151,7 @@ export function useSwipe(ref: RefObject<HTMLElement | null>, options: SwipeOptio
     element.addEventListener("pointerup", onUp);
     element.addEventListener("pointercancel", onCancel);
     return () => {
+      viewport?.removeEventListener("resize", claim);
       element.style.touchAction = previousTouchAction;
       element.removeEventListener("pointerdown", onDown);
       element.removeEventListener("pointermove", onMove);

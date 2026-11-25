@@ -1,7 +1,7 @@
 import { act, render, screen } from "@testing-library/react";
 import { useRef, useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { drag, onPhone } from "../test/touch";
+import { drag, onPhone, zoomedTo } from "../test/touch";
 import { usePager } from "./usePager";
 
 const TABS = ["variants", "pricing", "images", "details"];
@@ -147,6 +147,22 @@ describe("usePager on a phone", () => {
     drag(zone(), [200, 100], [140, 100], { lift: false });
     expect(page().style.transform).toBe("translateX(-30px)");
     expect(zone().style.transform).toBe("");
+  });
+});
+
+describe("usePager on a pinch-zoomed page", () => {
+  beforeEach(() => {
+    onPhone();
+    zoomedTo(2.5);
+  });
+
+  it("leaves the finger to pan the page", () => {
+    const onPick = vi.fn();
+    render(<Pages start="pricing" onPick={onPick} />);
+    drag(zone(), [300, 100], [60, 100]);
+    act(() => vi.advanceTimersByTime(500));
+    expect(onPick).not.toHaveBeenCalled();
+    expect(page().style.transform).toBe("");
   });
 });
 

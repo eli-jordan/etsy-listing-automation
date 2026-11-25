@@ -144,6 +144,38 @@ def test_the_lightbox_swipes_between_images_and_down_to_close(phone_page) -> Non
     page.locator(".lightbox").wait_for(state="detached")
 
 
+def test_a_pinch_zoomed_lightbox_pans_rather_than_paging_or_closing(phone_page) -> None:
+    page = phone_page
+    _open_editor(page, "Listing Images")
+    page.locator(".rtile__face").first.tap()
+    page.locator(".preview-stage__open").tap()
+    count = page.locator(".lightbox__count")
+    count.wait_for(state="visible")
+
+    session = page.context.new_cdp_session(page)
+    try:
+        session.send("Emulation.setPageScaleFactor", {"pageScaleFactor": 2.5})
+        page.wait_for_function("() => visualViewport.scale > 2")
+        swipe(page, (330, 450), (60, 450))
+        page.wait_for_timeout(400)
+        # The finger panned the zoomed view instead of turning the page.
+        assert page.evaluate("visualViewport.offsetLeft") > 50
+        assert count.inner_text() == "1 / 4"
+        page.evaluate("window.scrollTo(0, 0)")
+        swipe(page, (195, 300), (195, 700))
+        page.wait_for_timeout(400)
+        assert page.locator(".lightbox").count() == 1
+
+        # Zoomed out again, the swipes work as before.
+        session.send("Emulation.setPageScaleFactor", {"pageScaleFactor": 1})
+        page.wait_for_function("() => visualViewport.scale === 1")
+        swipe(page, (330, 450), (60, 450))
+        page.wait_for_timeout(200)
+        assert count.inner_text() == "2 / 4"
+    finally:
+        session.detach()
+
+
 def test_details_fields_are_full_width_under_their_labels(phone_page) -> None:
     page = phone_page
     _open_editor(page, "Listing Details")

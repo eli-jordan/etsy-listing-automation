@@ -39,4 +39,9 @@ describe("ownedElsewhere", () => {
     expect(ownedElsewhere(root.querySelector("[role=slider]"), root, "x")).toBe(true);
     expect(ownedElsewhere(root.querySelector("span"), root, "x")).toBe(true);
   });
+
+  it("leaves a draggable divider to its own drag", () => {
+    const root = mount('<div role="separator" tabindex="0"><span>edge</span></div>');
+    expect(ownedElsewhere(root.querySelector("span"), root, "x")).toBe(true);
+  });
 });
