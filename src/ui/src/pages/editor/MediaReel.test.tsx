@@ -216,6 +216,17 @@ describe("MediaReel's drag", () => {
     expect(props.onReorder).toHaveBeenCalledWith(0, 2);
   });
 
+  it("gives a carried tile a plain-text payload and a move, which Firefox needs to start a drag", () => {
+    reel({ media: THREE });
+    const [first] = tiles();
+    const dataTransfer = { effectAllowed: "all", setData: vi.fn() };
+
+    fireEvent.dragStart(first as HTMLElement, { dataTransfer });
+
+    expect(dataTransfer.setData).toHaveBeenCalledWith("text/plain", expect.any(String));
+    expect(dataTransfer.effectAllowed).toBe("move");
+  });
+
   it("carries the tile rather than the picture inside it", () => {
     reel({ media: THREE });
     for (const picture of document.querySelectorAll(".rtile img")) {
