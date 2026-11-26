@@ -81,7 +81,7 @@ class JobGate:
         with self._condition:
             if self._paused or self._line:
                 return None
-            return self._ticket(job)
+            return self._ticket_locked(job)
 
     def hold(self, job: str, start: Callable[[Ticket], object]) -> None:
         """Call ``start`` with a ticket for ``job`` now, or -- while paused
@@ -161,7 +161,7 @@ class JobGate:
                     if self._paused or not self._line:
                         return
                     place = self._line.popleft()
-                    ticket = self._ticket(place.job)
+                    ticket = self._ticket_locked(place.job)
                     if place.start is None:
                         place.ticket = ticket
                         self._condition.notify_all()
@@ -172,8 +172,7 @@ class JobGate:
                     ticket.release()
                     logger.exception("held work for %r could not start", place.job)
 
-    def _ticket(self, job: str) -> Ticket:
-        """Under the lock: count ``job`` in flight."""
+    def _ticket_locked(self, job: str) -> Ticket:
         number = next(self._numbers)
         self._in_flight[number] = job
         return Ticket(job, lambda: self._release(number))

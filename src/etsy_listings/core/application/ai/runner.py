@@ -69,8 +69,7 @@ class _Captured:
     weights: MarketWeights
 
 
-class _StoppedError(Exception):
-    """The run's cancel event was seen between steps."""
+class _CancelledBetweenStepsError(Exception): ...
 
 
 def _read_prompt(path: Path) -> str:
@@ -146,7 +145,7 @@ class AiRunner:
         budget = captured.budget
         try:
             self._chain(run, captured)
-        except (_StoppedError, ProviderCancelledError, ResearchCancelledError):
+        except (_CancelledBetweenStepsError, ProviderCancelledError, ResearchCancelledError):
             self._end_stopped(run, budget)
         except Exception as exc:
             if run.cancel_event.is_set():
@@ -185,7 +184,7 @@ class AiRunner:
 
     def _check(self, run: AiRun) -> None:
         if run.cancel_event.is_set():
-            raise _StoppedError
+            raise _CancelledBetweenStepsError
 
     def _load(self, run: AiRun, *, market_block: str = "") -> PreparedSeo:
         return ListingAiInputs.read(self.workspace, run.listing).prepare(market_block=market_block)

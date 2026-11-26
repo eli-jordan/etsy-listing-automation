@@ -99,7 +99,7 @@ class RunExecutor:
         run = self.registry.get(run_id)
         if run is None or run.phase in TERMINAL_PHASES:
             return
-        ticket = self.gate.wait_admit(_job(run))
+        ticket = self.gate.wait_admit(_backup_wait_label(run))
         if ticket is None:
             abandon(run)
             return
@@ -304,8 +304,7 @@ def _stage_applied(event: EngineStageApplied) -> _EventFactory:
     return lambda i: StageAppliedEvent(id=i, listing=event.listing, stage=event.stage)
 
 
-def _job(run: Run) -> str:
-    """What a backup waiting for ``run`` names."""
+def _backup_wait_label(run: Run) -> str:
     if run.scope == "workspace":
         return f"Workspace {run.kind}"
     if run.scope == "batch":

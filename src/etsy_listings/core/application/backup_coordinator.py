@@ -148,15 +148,14 @@ class BackupCoordinator:
     def _schedule(self) -> None:
         while not self._stopping.is_set():
             try:
-                self.check()
+                self.start_if_due()
             except Exception:
                 # A defect in one check must not end the schedule for good.
                 logger.exception("backup scheduler check failed")
             self._wake.wait(self._check_every)
             self._wake.clear()
 
-    def check(self) -> bool:
-        """Start a backup if one is due; whether it did."""
+    def start_if_due(self) -> bool:
         settings = self._settings()
         if settings is None or self._stopping.is_set() or self.running is not None:
             return False
@@ -267,7 +266,7 @@ class BackupCoordinator:
         with self._lock:
             self._claim_locked("backup", None)
             try:
-                self._launch_backup()
+                self._launch_backup_locked()
             except BaseException:
                 self._running = None
                 raise
@@ -277,13 +276,12 @@ class BackupCoordinator:
         try:
             prepare()
             with self._lock:
-                self._launch_backup()
+                self._launch_backup_locked()
         except BaseException:
             self._release()
             raise
 
-    def _launch_backup(self) -> None:
-        """Under the coordinator lock, hand the claimed slot to the worker."""
+    def _launch_backup_locked(self) -> None:
         if self._stopping.is_set():
             raise ConflictError("The app is shutting down.")
         worker = threading.Thread(target=self._back_up, name="backup-run", daemon=True)

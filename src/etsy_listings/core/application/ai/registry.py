@@ -223,7 +223,7 @@ class AiRunRegistry:
         gate's ``ticket`` until it finishes; a refusal releases it."""
         key = listing.casefold()
         with self._lock:
-            refused = self._refusal(key)
+            refused = self._refusal_locked(key)
             if refused is not None:
                 if ticket is not None:
                     ticket.release()
@@ -244,8 +244,7 @@ class AiRunRegistry:
             self._latest[key] = run.id
             return run
 
-    def _refusal(self, key: str) -> Conflict | Deploying | None:
-        """Under the lock: why no new run may hold ``key`` now."""
+    def _refusal_locked(self, key: str) -> Conflict | Deploying | None:
         if self._deploying[key]:
             return Deploying()
         previous = self._runs.get(self._latest.get(key, ""))

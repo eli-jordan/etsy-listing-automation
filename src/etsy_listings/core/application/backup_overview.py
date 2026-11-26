@@ -122,15 +122,14 @@ def next_due(
     settings: BackupSettings, success: datetime | None, runs: Sequence[RunRecord], now: datetime
 ) -> datetime:
     due = now if success is None else success + timedelta(hours=settings.interval_hours)
-    latest = _latest_attempt(runs)
+    latest = _latest_run_not_stopped(runs)
     failed_since = latest is not None and latest.outcome == "failed"
     if latest is not None and failed_since and (success is None or latest.started_at > success):
         due = max(due, latest.finished_at + RETRY_AFTER)
     return due
 
 
-def _latest_attempt(runs: Sequence[RunRecord]) -> RunRecord | None:
-    """The newest run that was not stopped by the app shutting down."""
+def _latest_run_not_stopped(runs: Sequence[RunRecord]) -> RunRecord | None:
     return next((run for run in reversed(runs) if run.outcome != "stopped"), None)
 
 
@@ -197,8 +196,9 @@ def _destination(facts: BackupFacts, path: Path) -> DestinationOverview:
     recorded = facts.state.destination(path)
     copied = recorded.last_copy
     snapshots = facts.reading.snapshots or ()
-    # The oldest snapshot the destination has not had yet.
-    pending = min((s.time for s in snapshots if copied is None or s.time > copied), default=None)
+    oldest_uncopied = min(
+        (s.time for s in snapshots if copied is None or s.time > copied), default=None
+    )
     # The same day as the repair takes: the seller's, not UTC's.
     today = facts.now.astimezone().date()
     to_repair = recorded.changed or recorded.unexpected
@@ -212,7 +212,7 @@ def _destination(facts: BackupFacts, path: Path) -> DestinationOverview:
         last_check=recorded.last_check,
         changed=recorded.changed,
         unexpected=recorded.unexpected,
-        behind=pending is not None and facts.now - pending > WARN_AFTER,
+        behind=oldest_uncopied is not None and facts.now - oldest_uncopied > WARN_AFTER,
         set_aside=str(planned_set_aside(path, today)) if to_repair else None,
     )
 
@@ -258,7 +258,7 @@ def _destination_warnings(destination: DestinationOverview) -> list[BackupWarnin
 
 
 def _failure(facts: BackupFacts) -> str | None:
-    latest = _latest_attempt(facts.runs)
+    latest = _latest_run_not_stopped(facts.runs)
     check = facts.state.last_check
     if latest is not None and latest.outcome == "failed":
         return f"The last backup failed: {latest.message or 'no reason was given'}"

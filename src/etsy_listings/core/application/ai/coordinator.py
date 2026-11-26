@@ -105,7 +105,7 @@ class AiCoordinator:
         on. Admitted before the run exists, so a backup waiting for quiet
         counts it from the moment anyone can see it; the run owns the
         ticket from then on."""
-        ticket = self._gate.admit(_job(listing))
+        ticket = self._gate.admit(_backup_wait_label(listing))
         # The registry refuses a held listing again here, which is what
         # closes the race with a deploy taking it since the check above.
         run = self._registry.create(
@@ -116,7 +116,9 @@ class AiCoordinator:
         if isinstance(run, Conflict):
             return run
         if ticket is None:
-            self._gate.hold(_job(listing), lambda admitted: self._begin(run, admitted))
+            self._gate.hold(
+                _backup_wait_label(listing), lambda admitted: self._begin(run, admitted)
+            )
         else:
             self._runner.start(run)
         return run
@@ -164,6 +166,5 @@ class AiCoordinator:
             yield
 
 
-def _job(listing: str) -> str:
-    """What a backup waiting for this run names."""
+def _backup_wait_label(listing: str) -> str:
     return f"AI run for {listing}"
