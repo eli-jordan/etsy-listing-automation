@@ -124,39 +124,30 @@ class Preparations:
             return tuple(e for e in job.events if e.sequence > after)
 
     def submit(self, template: str, request: PreparationRequest) -> Job:
+        _refuse_malformed(request)
         submission = _Submission.of(
-            template, request, reset_masks_for_photo=self._checked_reset(request)
+            template, request, reset_masks_for_photo=self._mask_reset(request)
         )
         with self.calibration.lock(template), self.store.condition:
             existing = self._admit(submission)
         if existing is not None:
             return existing
-        # Deep inspection may take 25 seconds. Never hold a journal or template
-        # lock while probing packages/models; unrelated status and Cancel stay live.
-        selected = self.runtime.inspect()
+        selected = self._inspect_unlocked()
         with self.calibration.lock(template), self.store.condition:
             job, created = self._enqueue(submission, selected)
         if created:
             self._schedule()
         return job
 
-    def _checked_reset(self, request: PreparationRequest) -> bool:
-        """Refuse a malformed request; the photo mask reset it runs with. A
-        Retry repeats its previous job's reset."""
-        action, request_id = request.action, request.request_id
-        if (
-            action not in ("prepare", "prepare_again", "retry")
-            or not request_id
-            or len(request_id) > MAX_REQUEST_ID_LENGTH
-        ):
-            raise PreparationRefusedError("Invalid preparation action or request ID")
-        if (action == "retry") != (request.previous_job is not None):
-            raise PreparationRefusedError("Retry requires a previous job")
-        if request.reset_masks_for_photo and action != "prepare_again":
-            raise PreparationRefusedError("Photo mask reset requires explicit Prepare again")
+    def _mask_reset(self, request: PreparationRequest) -> bool:
         if request.previous_job is not None:
             return self.status(request.previous_job).reset_masks_for_photo
         return request.reset_masks_for_photo
+
+    def _inspect_unlocked(self) -> Capability:
+        """Deep inspection may take 25 seconds. Call it holding no journal or
+        template lock, so unrelated status and Cancel stay live."""
+        return self.runtime.inspect()
 
     def _admit(self, submission: _Submission) -> Job | None:
         """Under the template and journal locks, before runtime inspection:
@@ -367,8 +358,7 @@ class Preparations:
             planned = self._planned_coverage(template, limits)
             if planned is None or isinstance(planned, Job):
                 return planned
-        # Never hold a template or journal lock while inspecting the runtime.
-        selected = self.runtime.inspect()
+        selected = self._inspect_unlocked()
         if not selected.available or not selected.engine_version or not selected.installation_id:
             return None
         with self.calibration.lock(template), self.store.condition:
@@ -715,6 +705,20 @@ class _Submission:
             )
         ).hexdigest()
         return cls(template, request, reset_masks_for_photo, digest)
+
+
+def _refuse_malformed(request: PreparationRequest) -> None:
+    action, request_id = request.action, request.request_id
+    if (
+        action not in ("prepare", "prepare_again", "retry")
+        or not request_id
+        or len(request_id) > MAX_REQUEST_ID_LENGTH
+    ):
+        raise PreparationRefusedError("Invalid preparation action or request ID")
+    if (action == "retry") != (request.previous_job is not None):
+        raise PreparationRefusedError("Retry requires a previous job")
+    if request.reset_masks_for_photo and action != "prepare_again":
+        raise PreparationRefusedError("Photo mask reset requires explicit Prepare again")
 
 
 def _check_capability(selected: Capability, snapshot: PreparationInputs) -> None:
