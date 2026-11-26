@@ -209,15 +209,7 @@ class PrintifyProductStage(Stage[PrintifyProductDesired, AppliedProduct, Product
         applied: AppliedProduct | None,
         live: Product | None,
     ) -> Verdict:
-        comparison = compare(desired, applied, live)
-        if comparison.reason is None:
-            return Verdict.no_work(drift=comparison.drift)
-        return Verdict.work(
-            comparison.reason,
-            changes=comparison.changes,
-            drift=comparison.drift,
-            actions=comparison.actions,
-        )
+        return compare(desired, applied, live)
 
     @override
     def snapshot(self, desired: PrintifyProductDesired, live: Product | None) -> ProductSnapshot:

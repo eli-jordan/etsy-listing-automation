@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-
 from etsy_listings.core.clients.printify.models import Product
 from etsy_listings.core.engine.change import (
     Action,
@@ -11,8 +9,7 @@ from etsy_listings.core.engine.change import (
     Drift,
     FieldChange,
     PriceChange,
-    StageIdle,
-    StageWork,
+    Verdict,
     drift,
     scalar,
     sequence,
@@ -24,55 +21,26 @@ from etsy_listings.core.engine.stages.product_document import (
     money,
 )
 
-__all__ = ["ProductComparison", "compare"]
-
-
-@dataclass(frozen=True)
-class ProductComparison:
-    """What a run would do about this product, and why.
-
-    The fields map one-to-one onto the :class:`~etsy_listings.core.engine.change.StagePlan`
-    the stage returns, so the stage assembles rather than decides.
-    """
-
-    outcome: StageIdle | StageWork
-    drift: tuple[Drift, ...]
-
-    @property
-    def will_run(self) -> bool:
-        return isinstance(self.outcome, StageWork)
-
-    @property
-    def reason(self) -> str | None:
-        return self.outcome.reason if isinstance(self.outcome, StageWork) else None
-
-    @property
-    def changes(self) -> tuple[Change, ...]:
-        return self.outcome.changes if isinstance(self.outcome, StageWork) else ()
-
-    @property
-    def actions(self) -> tuple[Action, ...]:
-        return self.outcome.actions if isinstance(self.outcome, StageWork) else ()
+__all__ = ["compare"]
 
 
 def compare(
     desired: PrintifyProductDesired,
     was: AppliedProduct | None,
     live: Product | None,
-) -> ProductComparison:
+) -> Verdict:
     wanted = desired.applied()
     changes = _changes(desired, wanted, was)
     reason = _reason(was, live, changes)
-    outcome: StageIdle | StageWork
+    drift_found = _drift(was, live)
     if reason is None:
-        outcome = StageIdle()
-    else:
-        outcome = StageWork(
-            reason=reason,
-            changes=changes,
-            actions=_actions(desired, creating=was is None or live is None),
-        )
-    return ProductComparison(outcome=outcome, drift=_drift(was, live))
+        return Verdict.no_work(drift=drift_found)
+    return Verdict.work(
+        reason,
+        changes=changes,
+        drift=drift_found,
+        actions=_actions(desired, creating=was is None or live is None),
+    )
 
 
 def _reason(
