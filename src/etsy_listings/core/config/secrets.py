@@ -35,15 +35,14 @@ another in a password manager, because the ``.env`` inside a backup is
 encrypted with it."""
 
 
-class MissingCredentialError(UserFacingError, RuntimeError):
+class MissingCredentialError(UserFacingError):
     """A credential this run needs is not set anywhere.
 
     A :class:`~etsy_listings.core.errors.UserFacingError`, because the message
     below *is* the whole useful output -- it names the variable, the file and
     the way to get one. Typed as anything else it reaches ``--all`` as a
     traceback that ends the batch on its first unconfigured listing, which is
-    the outcome continue-on-error exists to prevent. ``RuntimeError`` is kept alongside
-    it so the type it has always been stays catchable.
+    the outcome continue-on-error exists to prevent.
     """
 
     def __init__(self, variable: str, env_file: Path, needed_for: str, how_to_get: str) -> None:
@@ -134,23 +133,21 @@ class Secrets:
         the keystring is plainly present, and the shared secret sits behind a
         visibility toggle they may never have clicked.
         """
-        for variable, value in (
-            (ETSY_KEYSTRING_VAR, self.etsy_keystring),
-            (ETSY_SHARED_SECRET_VAR, self.etsy_shared_secret),
-        ):
-            if not value:
-                raise MissingCredentialError(
-                    variable,
-                    self.env_file,
-                    "identify this application to Etsy (every v3 request carries it)",
-                    "Both halves are on your app's page at "
-                    "etsy.com/developers/your-apps -- the shared secret behind the "
-                    "visibility icon. `etsy-listings auth` captures and verifies them.",
-                )
-        # Narrowing for mypy: the loop above proved both are non-empty.
-        assert self.etsy_keystring is not None
-        assert self.etsy_shared_secret is not None
-        return EtsyAppKey(self.etsy_keystring, self.etsy_shared_secret)
+        keystring = self._require_etsy_half(ETSY_KEYSTRING_VAR, self.etsy_keystring)
+        shared_secret = self._require_etsy_half(ETSY_SHARED_SECRET_VAR, self.etsy_shared_secret)
+        return EtsyAppKey(keystring, shared_secret)
+
+    def _require_etsy_half(self, variable: str, value: str | None) -> str:
+        if not value:
+            raise MissingCredentialError(
+                variable,
+                self.env_file,
+                "identify this application to Etsy (every v3 request carries it)",
+                "Both halves are on your app's page at "
+                "etsy.com/developers/your-apps -- the shared secret behind the "
+                "visibility icon. `etsy-listings auth` captures and verifies them.",
+            )
+        return value
 
     def require_anthropic_api_key(self) -> str:
         if not self.anthropic_api_key:
