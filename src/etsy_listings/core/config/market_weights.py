@@ -23,13 +23,6 @@ METRICS: tuple[Metric, ...] = (
 
 
 class MarketWeights(BaseModel):
-    """How much each metric counts, relative to the others -- the spec's
-    starting values, expected to be tuned through ``settings.yaml`` (PR 3).
-
-    Relative, so they need not sum to 100; but not all zero, since a score
-    divided by a total weight of nothing is not a score.
-    """
-
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     reviews: float = Field(default=30, ge=0)

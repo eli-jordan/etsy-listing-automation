@@ -1,22 +1,9 @@
-"""What a `media:` entry is: the gallery's two shapes and two kinds.
+"""What a `media:` entry is: a rendered ``{template, colour}`` or a file ref,
+and whether it is an image or a video.
 
-`media:` is the listing's Etsy gallery, in the order a buyer sees it. It holds
-two *shapes* -- a ``{template, colour}`` entry the tool renders, and a bare
-file ref (ADR-0046's two roots) uploaded as-is -- and two *kinds*, image and
-video. The shape is the model's; the kind is answered here, once, because the
-gallery rules in `Listing`, the video gate in `listing_validation` and the
-Etsy media stage all start from it.
-
-A template entry is always an image: a render is a PNG. A file ref is an image
-or a video by its extension alone -- no file is opened, so this stays pure and
-answers the same for a draft that is on disk nowhere. An extension outside the
-two lists is refused rather than guessed at, since Etsy's help page names
-exactly these formats and anything else would be discovered as a failed upload.
-
-The *facts* a probe reads off a video file are plain data here too:
-`listing_validation.check_videos` is pure and takes no workspace, so the types
-it checks belong on this side of the dependency, as `TemplateInfo` does.
-Reading them off disk is `workspace/video.py`'s job.
+A file ref's kind is read from its extension alone, so the answer is pure. An
+extension outside the two lists is refused: Etsy accepts exactly these formats,
+and anything else would surface only as a failed upload.
 """
 
 from __future__ import annotations
@@ -82,8 +69,7 @@ def media_kind(entry: MediaEntry) -> MediaKind:
 
 @dataclass(frozen=True)
 class VideoFacts:
-    """What a probe read off one video file -- the five facts Etsy's help
-    page sets limits on."""
+    """The facts Etsy's help page sets video limits on."""
 
     size_bytes: int
     duration_seconds: float
@@ -94,8 +80,6 @@ class VideoFacts:
 
 @dataclass(frozen=True)
 class ProbeFailure:
-    """A video file that could not be read as one: missing, not a container
-    FFmpeg recognises, or holding no picture to show. ``reason`` finishes a
-    sentence that begins with the file's name."""
+    """``reason`` follows the file's name in a sentence."""
 
     reason: str
