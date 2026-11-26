@@ -45,7 +45,7 @@ from etsy_listings.core.workspace.locks import LockDomain
 from etsy_listings.core.workspace.workspace import InvalidNameError, Workspace
 
 from tests.support.batches import png, small_print_area, uploads
-from tests.support.builders import FIXTURE_LISTING, edit_listing
+from tests.support.builders import FIXTURE_LISTING, edit_listing, garment_profile_file
 from tests.support.gates import LockGate, workers
 from tests.support.source_files import crlf, identity
 
@@ -246,6 +246,16 @@ class TestDraftAndRead:
         assert view.pricing_plan_name is None
         with pytest.raises(ListingTemplateMissingError):
             read_listing_template(workspace, "nothing-here")
+
+    def test_a_saved_template_reads_back_with_the_issues_its_shared_refs_have_now(
+        self, workspace: Workspace
+    ) -> None:
+        assert _create(workspace).saved
+        garment_profile_file(workspace.root, "comfort-colors-1717").unlink()
+
+        view = read_listing_template(workspace, NAME)
+
+        assert any(issue.severity == "block" for issue in view.issues)
 
     def test_the_index_has_what_a_card_shows_and_counts_batches_made_from_it(
         self, workspace: Workspace

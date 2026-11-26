@@ -55,14 +55,6 @@ class TemplateSource:
 
 @dataclass(frozen=True)
 class ListingTemplateView:
-    """A listing template as its pages read it, saved or not -- the document,
-    its issues, and what the listing editor's tabs compute for a listing by
-    the listing's own rules, since the template editor mounts those tabs
-    unchanged (UI doc §3).
-
-    A draft has ``name`` ``""``, no ``modified_at``, and says where it came
-    from in ``source`` and the files it will copy in ``assets``."""
-
     name: str
     template: ListingTemplate
     issues: list[Issue]
@@ -139,8 +131,6 @@ def list_listing_templates(
 
 
 def read_listing_template(workspace: Workspace, name: str) -> ListingTemplateView:
-    """Listing template ``name``, with the issues it has now -- its shared
-    refs can have changed under it since it was saved complete."""
     _require(workspace, name)
     return _saved_view(workspace, WorkspaceFacts.gather(workspace), name)
 
@@ -181,18 +171,6 @@ def create_listing_template(
     *,
     document: Mapping[str, Any] | None = None,
 ) -> TemplateSave:
-    """Naming the draft is what writes it (UI doc §1).
-
-    The name is checked first, so an unusable one (``InvalidNameError``) or
-    ``draft`` (:class:`ReservedListingTemplateNameError`) is refused before any
-    source is read. Then the source: exactly one, existing
-    (:class:`ListingMissingError`, :class:`ListingTemplateMissingError`), and able to
-    become a template (:class:`ListingTemplateSourceRefusedError`). ``document``
-    is the seller's edit made before naming: it replaces the source's, and
-    only the files it still names are copied. Under the name's write lock, a
-    name already taken -- the *directory*, even half-written -- raises
-    ``ListingTemplateExistsError`` and is never suffixed.
-    """
     _check_name(workspace, name)
     _, draft = _draft(workspace, origin)
     if document is not None:
@@ -211,9 +189,6 @@ def create_listing_template(
 def edit_listing_template(
     workspace: Workspace, name: str, document: Mapping[str, Any]
 ) -> TemplateSave:
-    """Write the whole ``document`` as listing template ``name``, only if it
-    is complete (template completeness). :class:`ListingTemplateMissingError`
-    when there is none, before or after waiting for its lock."""
     facts = WorkspaceFacts.gather(workspace)
     with locks.hold(workspace, "listing-template", name):
         _require(workspace, name)
@@ -237,18 +212,6 @@ def rename_listing_template(
     *,
     records: BatchRecords,
 ) -> None:
-    """Move a listing template, whole, to ``new``. Its name is its
-    directory, so its ``./`` refs need no rewrite.
-
-    Staging sessions and batch records made from it follow it by *name* --
-    the card's *Used by N batches*, the staging page's *Using X* -- while the
-    frozen copy each keeps is untouched. They are rewritten after the move,
-    each under its own lock; a crash between leaves records naming a
-    template that is gone, which is what a delete leaves too. Renaming to
-    the same name changes nothing. Refusals: ``InvalidNameError``,
-    :class:`ReservedListingTemplateNameError`, :class:`ListingTemplateMissingError`,
-    ``ListingTemplateExistsError``.
-    """
     destination = workspace.listing_template_dir(new)
     if new == RESERVED_NAME:
         raise ReservedListingTemplateNameError(new)
@@ -259,6 +222,7 @@ def rename_listing_template(
         if destination.exists():
             raise ListingTemplateExistsError(new)
         workspace.listing_template_dir(old).rename(destination)
+        # Not atomic with the move: a crash between leaves records naming a gone template.
         records.rename_listing_template(old, new)
 
 
@@ -318,10 +282,6 @@ def _draft(
 def _edited(
     draft: ListingTemplateDraft, document: Mapping[str, Any], *, currency: str
 ) -> ListingTemplateDraft:
-    """``draft`` with the seller's edited document in place of the source's.
-    Only the files the edit still names are copied, and a ``./`` ref it does
-    not plan to copy is refused: the draft has no directory yet, so such a
-    ref could only name a file that will never be there."""
     template = ListingTemplate.model_validate(dict(document), context={"currency": currency})
     planned = {asset.ref for asset in draft.assets}
     unplanned = [ref for ref in conversion.owned_refs(template) if ref not in planned]
@@ -353,10 +313,6 @@ def _saved_view(workspace: Workspace, facts: WorkspaceFacts, name: str) -> Listi
 
 @dataclass(frozen=True)
 class _TemplateContext:
-    """What the caller of :func:`_view` knows that the template does not say.
-    ``resolve`` finds a ``./`` ref wherever the template's files are: its own
-    directory once saved, the files it will copy while a draft."""
-
     name: str
     resolve: Callable[[str], Path]
     modified_at: datetime | None = None
