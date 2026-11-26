@@ -26,6 +26,15 @@ class ProviderCancelledError(SeoGenerationError):
 class SeoTryAgainError(SeoGenerationError): ...
 
 
+class OutputValidationError(ValueError):
+    """A provider's output could not become its task's result. Carries every
+    reason, because the one repair call resends them all."""
+
+    def __init__(self, *reasons: str) -> None:
+        self.reasons: tuple[str, ...] = reasons
+        super().__init__("; ".join(reasons))
+
+
 class SeoDeadlineExceededError(SeoTryAgainError):
     """A step or run limit (ADR-0057) ran out before a validated result
     was produced. The message names the configured limit."""

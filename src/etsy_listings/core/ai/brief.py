@@ -10,6 +10,7 @@ from importlib import resources
 from pathlib import Path
 from typing import Any, Final
 
+from etsy_listings.core.ai.errors import OutputValidationError
 from etsy_listings.core.ai.models import ProviderTask
 from etsy_listings.core.ai.prompt import build_task_prompt
 
@@ -45,10 +46,7 @@ provider ignores or only partially honours must never reach the editor
 unchecked."""
 
 
-class BriefValidationError(Exception):
-    def __init__(self, *reasons: str) -> None:
-        self.reasons: tuple[str, ...] = reasons
-        super().__init__("; ".join(reasons))
+class BriefValidationError(OutputValidationError): ...
 
 
 def default_brief_prompt_text() -> str:

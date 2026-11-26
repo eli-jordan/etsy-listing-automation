@@ -11,12 +11,12 @@ from dataclasses import dataclass
 
 from etsy_listings.core.ai.brief import (
     BriefRequest,
-    BriefValidationError,
     DesignBrief,
     build_brief_task,
     validate_brief,
 )
 from etsy_listings.core.ai.errors import (
+    OutputValidationError,
     ProviderTimeoutError,
     ProviderUnavailableError,
     SeoAllProvidersUnavailableError,
@@ -26,7 +26,6 @@ from etsy_listings.core.ai.errors import (
 from etsy_listings.core.ai.market_queries import (
     MarketQueries,
     MarketQueriesRequest,
-    MarketQueriesValidationError,
     build_market_queries_task,
     validate_market_queries,
 )
@@ -41,44 +40,29 @@ from etsy_listings.core.ai.models import (
 )
 from etsy_listings.core.ai.prompt import build_seo_task
 from etsy_listings.core.ai.providers import AiProvider
-from etsy_listings.core.ai.validation import ProposalValidationError, validate_proposal
-
-
-class _MalformedError(Exception):
-    def __init__(self, reasons: Sequence[str]) -> None:
-        self.reasons: tuple[str, ...] = tuple(reasons)
-        super().__init__("; ".join(self.reasons))
+from etsy_listings.core.ai.validation import validate_proposal
 
 
 def _decoded(raw_output: str) -> Mapping[str, object]:
     try:
         parsed = json.loads(raw_output)
     except json.JSONDecodeError as exc:
-        raise _MalformedError((f"response was not valid JSON: {exc}",)) from exc
+        raise OutputValidationError(f"response was not valid JSON: {exc}") from exc
     if not isinstance(parsed, Mapping):
-        raise _MalformedError(("response: expected a JSON object",)) from None
+        raise OutputValidationError("response: expected a JSON object") from None
     return parsed
 
 
 def _seo_decoder(raw_output: str) -> SeoProposal:
-    try:
-        return validate_proposal(_decoded(raw_output))
-    except ProposalValidationError as exc:
-        raise _MalformedError(exc.reasons) from exc
+    return validate_proposal(_decoded(raw_output))
 
 
 def _brief_decoder(raw_output: str) -> DesignBrief:
-    try:
-        return validate_brief(dict(_decoded(raw_output)))
-    except BriefValidationError as exc:
-        raise _MalformedError(exc.reasons) from exc
+    return validate_brief(dict(_decoded(raw_output)))
 
 
 def _market_queries_decoder(raw_output: str) -> MarketQueries:
-    try:
-        return validate_market_queries(dict(_decoded(raw_output)))
-    except MarketQueriesValidationError as exc:
-        raise _MalformedError(exc.reasons) from exc
+    return validate_market_queries(dict(_decoded(raw_output)))
 
 
 def _out_of_time(provider_name: str, budget: RunBudget, what: str) -> SeoDeadlineExceededError:
@@ -104,7 +88,7 @@ class _Run[Result]:
         """``raw`` decoded, or decoded after one same-provider repair within ``step``."""
         try:
             return self.decode(raw.raw_output)
-        except _MalformedError as first_error:
+        except OutputValidationError as first_error:
             if step.expired:
                 raise _out_of_time(
                     raw.provider, self.budget, "no time was left for a repair within"
@@ -131,7 +115,7 @@ class _Run[Result]:
 
             try:
                 return self.decode(repaired.raw_output)
-            except _MalformedError as second_error:
+            except OutputValidationError as second_error:
                 raise SeoTryAgainError(
                     f"{raw.provider}: the repaired response was still invalid: {second_error}"
                 ) from second_error

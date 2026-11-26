@@ -13,6 +13,7 @@ import re
 from collections.abc import Mapping, Sequence
 from typing import Any, get_args
 
+from etsy_listings.core.ai.errors import OutputValidationError
 from etsy_listings.core.ai.models import (
     RATIONALE_ENTRIES,
     PhraseRationale,
@@ -84,10 +85,7 @@ _WRAPPING_QUOTE_PAIRS: dict[str, str] = {
 _QUOTE_PAIR_LENGTH = 2
 
 
-class ProposalValidationError(ValueError):
-    def __init__(self, reasons: Sequence[str]) -> None:
-        self.reasons: tuple[str, ...] = tuple(reasons)
-        super().__init__("; ".join(self.reasons))
+class ProposalValidationError(OutputValidationError): ...
 
 
 def _normalize_text(value: str) -> str:
@@ -354,5 +352,5 @@ def validate_proposal(raw: Mapping[str, Any]) -> SeoProposal:
     normalized = normalize_raw_proposal(raw)
     reasons = _hard_validation_reasons(normalized)
     if reasons:
-        raise ProposalValidationError(reasons)
+        raise ProposalValidationError(*reasons)
     return _build_proposal(normalized)

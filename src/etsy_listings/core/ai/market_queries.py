@@ -5,6 +5,7 @@ from importlib import resources
 from pathlib import Path
 from typing import Any, Final
 
+from etsy_listings.core.ai import errors
 from etsy_listings.core.ai.models import ProviderTask
 from etsy_listings.core.ai.prompt import build_task_prompt
 
@@ -50,10 +51,7 @@ MARKET_QUERIES_RESPONSE_SCHEMA: Final[dict[str, Any]] = {
 task's schema follows (`ai/prompt.py.RESPONSE_SCHEMA`)."""
 
 
-class MarketQueriesValidationError(Exception):
-    def __init__(self, *reasons: str) -> None:
-        self.reasons: tuple[str, ...] = reasons
-        super().__init__("; ".join(reasons))
+class MarketQueriesValidationError(errors.OutputValidationError): ...
 
 
 def default_market_queries_prompt_text() -> str:
