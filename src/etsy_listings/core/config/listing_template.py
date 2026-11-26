@@ -57,6 +57,8 @@ class TemplateDescriptionConfig(BaseModel):
 
 
 class TemplateEtsyConfig(BaseModel):
+    """`EtsyListingConfig` without the copy an instance writes for itself."""
+
     model_config = ConfigDict(extra="forbid")
 
     description: TemplateDescriptionConfig = TemplateDescriptionConfig()

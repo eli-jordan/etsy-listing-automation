@@ -64,6 +64,8 @@ PROVIDER_NAMES: tuple[ProviderName, ...] = ("codex", "claude", "grok")
 
 
 class AiProviderSettings(BaseModel):
+    """One provider's preferences for every task."""
+
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     name: ProviderName
