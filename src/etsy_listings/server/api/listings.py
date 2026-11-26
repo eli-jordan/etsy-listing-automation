@@ -105,10 +105,7 @@ def _warm_scenes(request: Request, name: str) -> None:
 
 
 def _etsy_states(request: Request, *, stale_ok: bool = False) -> EtsyStates:
-    """Etsy's listing states through the process's short memo
-    (``etsystate.py``), so an autosave burst costs one round trip.
-    ``stale_ok`` is for a read that only draws the states -- the table --
-    never one that decides on them."""
+    """Etsy's listing states through the process's short memo (``etsystate.py``)."""
     workspace = app_state.workspace(request)
     client_for = app_state.clients(request).etsy_listing
 
@@ -116,6 +113,11 @@ def _etsy_states(request: Request, *, stale_ok: bool = False) -> EtsyStates:
         return etsy_states(workspace.root, listing_ids, client_for=client_for, stale_ok=stale_ok)
 
     return lookup
+
+
+def _etsy_states_to_draw(request: Request) -> EtsyStates:
+    """For a read that only draws the states, never one that decides on them."""
+    return _etsy_states(request, stale_ok=True)
 
 
 @dataclass(frozen=True)
@@ -130,8 +132,7 @@ def _require_listing(workspace: Workspace, name: str) -> None:
 
 
 def target(request: Request, name: str) -> Target:
-    """404 before the handler runs for a listing that is not there. The
-    operations re-check under the listing's lock once they hold it."""
+    """404 early; the operations re-check under the listing's lock."""
     workspace = app_state.workspace(request)
     _require_listing(workspace, name)
     return Target(workspace=workspace, name=name)
@@ -214,9 +215,7 @@ def list_listings(request: Request, response: Response) -> list[ListingSummary]:
     workspace = app_state.workspace(request)
     timer = PhaseTimer()
     with timer.phase("total"):
-        rows = listing_rows(
-            workspace, etsy_states=_etsy_states(request, stale_ok=True), timer=timer
-        )
+        rows = listing_rows(workspace, etsy_states=_etsy_states_to_draw(request), timer=timer)
         summaries = [_summary(row) for row in rows]
     response.headers["Server-Timing"] = server_timing(timer.seconds)
     return summaries

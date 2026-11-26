@@ -111,8 +111,7 @@ def list_templates(request: Request) -> list[TemplateSummary]:
         summary = _summary(overview)
         if overview.config is not None:
             summary.renderer = overview.config.renderer.type
-            # Catalog reads metadata only. The selected status endpoint validates
-            # maps; background client reads fill the other rows without blocking entry.
+            # Metadata only: the per-template status endpoint validates the maps.
             known = catalog_readiness(overview.config)
             if known is not None:
                 summary.maps = MapReadinessResponse(**asdict(known), can_render=known.can_render)
@@ -325,12 +324,11 @@ def design_preview(
     prints another.
     """
     workspace, colour, scale = template.workspace, query.colour, query.scale
-    # Every layer shows the one file, resolved (and refused) once.
-    one_design = cache(_preview_design(workspace, design, test_design))
+    design_resolved_once = cache(_preview_design(workspace, design, test_design))
     picture = saved_scene(
         workspace,
         template.name,
-        SceneLayers(colour, lambda _colour: one_design()),
+        SceneLayers(colour, lambda _colour: design_resolved_once()),
         size=scale,
         images=PREVIEW_IMAGES,
     )

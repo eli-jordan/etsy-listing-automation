@@ -199,8 +199,6 @@ def submit(request: Request, body: CreatePreparationRequest) -> PreparationJobRe
             ),
         )
     except ConflictError as exc:
-        # PreparationRefusedError and the mask refusals: the 409 the refusal
-        # table gives a conflict, with a reason beside the sentence.
         raise HTTPException(
             status_code=409, detail={"reason": "preparation_refused", "message": str(exc)}
         ) from exc
