@@ -27,8 +27,8 @@ Confirm it's on your PATH:
 uv run etsy-listings --help
 ```
 
-This guide uses `plan`, `apply`, `new` and `ui`. Commands that are designed
-but not built are listed in "What's not here yet" at the bottom.
+This guide uses `setup`, `new`, `plan`, `apply` and `ui`; `--help` lists the
+rest.
 
 Node is only needed if you want to run the calibrator's frontend in dev mode
 (§5) — skip it for now.
@@ -503,9 +503,8 @@ uv run etsy-listings plan take-a-hike # or --all for every listing
 uv run etsy-listings apply take-a-hike # runs whatever plan identified
 ```
 
-`plan` does a three-way diff — desired config vs. last-applied vs. (in later
-phases) live remote state — and prints what would happen without changing
-anything:
+`plan` does a three-way diff (desired config, last applied, live Printify and
+Etsy state) and prints what would happen without changing anything:
 
 ```
 take-a-hike
@@ -651,19 +650,11 @@ signed-in CLI the way you'd treat any other local tool with shell access to
 this workspace, and keep secrets out of files an SEO assistant would have no
 reason to open.
 
-## What's not here yet
+## Other commands
 
-The historical plans describe commands that are not registered in the current CLI:
-
-| Command | Will do |
-|---|---|
-| `catalog refresh` | Force-refresh the cached Printify catalog |
-| `status [<listing>]` | Run history from the SQLite recorder |
-| `render` | Force the local render stage in isolation (today, it runs as part of `apply`) |
-
-`auth` captures credentials and `unlock` clears a stuck Printify publish.
-`ui` serves the dashboard, calibrator, listing and template editors, batch
-creation, AI Mode and reviewed deployment runs.
+`auth` stores the Printify and Etsy credentials, `unlock` clears a Printify
+product stuck publishing, `backup` backs the workspace up with restic, and
+`marigold` installs the Windows worker that prepares mockup templates.
 
 ## Where things live, quick reference
 

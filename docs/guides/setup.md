@@ -2,8 +2,7 @@
 
 Connect Printify to Etsy, capture credentials, then initialise a separate data
 workspace. Local rendering needs no remote credentials; deploying a connected
-product needs both integrations. These steps follow the current `auth` and
-`setup` commands rather than the original implementation phases.
+product needs both integrations.
 
 ## Connect the accounts
 
@@ -46,11 +45,10 @@ You can manage one credential independently:
 ```bash
 uv run etsy-listings auth printify --root ~/etsy-listings
 uv run etsy-listings auth etsy --root ~/etsy-listings
-uv run etsy-listings auth anthropic --root ~/etsy-listings
 ```
 
-Local AI Mode uses the signed-in provider CLIs. Capturing an Anthropic API key
-is a separate optional credential flow; it does not sign those CLIs in.
+Local AI Mode uses the provider CLIs you have signed in to; `auth` does not
+sign them in.
 
 ## Workspace files
 

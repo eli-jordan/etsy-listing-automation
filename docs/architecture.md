@@ -1426,9 +1426,9 @@ dependency instead of giving everything jsdom. Prototype tests stay required
 prototype frame exercising production components is not production coverage.
 Real-API E2E stays in its separate main/manual workflow.
 
-The CLI currently exposes `setup`, `auth`, `new`, `plan`, `apply`, `unlock` and
-`ui`. Dedicated `render`, `generate`, `catalog refresh`, `status`, a persisted
-run-history recorder and a general persisted rate-budget module are absent.
+The CLI exposes `auth`, `setup`, `new`, `plan`, `apply`, `unlock`, `ui`, `backup`
+and `marigold`. A persisted run-history recorder and a general persisted
+rate-budget module are absent.
 Current transports already share retries, and Etsy has a per-transport,
 header-driven `RateGate`; their existence does not imply those future modules.
 
