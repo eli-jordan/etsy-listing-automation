@@ -24,6 +24,7 @@ from etsy_listings.core.clients.etsy.fakes import FakeEtsyShopClient
 from etsy_listings.core.clients.etsy.models import ReturnPolicy
 from etsy_listings.core.clients.etsy.models import Shop as EtsyShop
 from etsy_listings.core.clients.etsy.tokens import EtsyRefreshBusyError
+from etsy_listings.core.clients.etsy.transport import EtsyApiError
 from etsy_listings.core.clients.printify.fakes import FakePrintifyClient
 from etsy_listings.core.clients.printify.models import Shop
 from etsy_listings.core.config.secrets import PRINTIFY_TOKEN_VAR
@@ -470,6 +471,26 @@ def test_refresh_busy_discovery_keeps_setup_usable_without_asking_to_sign_in(
     assert "Refresh still running" in out
     assert "Try `setup` again shortly" in out
     assert "`auth` then `setup` fixes this" not in out
+
+
+def test_an_etsy_refusal_during_discovery_is_never_fatal_to_setup(
+    tmp_path: Path, scripted, capsys
+) -> None:
+    class RefusingShop(FakeEtsyShopClient):
+        def shop_by_owner(self, user_id: int) -> EtsyShop | None:
+            raise EtsyApiError(503, error="upstream unavailable")
+
+    scripted(HAPPY_PATH)
+    run_setup(
+        tmp_path,
+        client_factory=_factory(FakePrintifyClient(ONE_SHOP)),
+        etsy_access=_etsy(RefusingShop()),
+    )
+
+    workspace = Workspace.discover(root_override=tmp_path)
+    assert workspace.defaults.printify.shop_id == ONE_SHOP[0].id
+    assert workspace.defaults.etsy.shop_id is None
+    assert "Could not read the Etsy shop" in capsys.readouterr().out
 
 
 def test_declining_the_defaults_asks_for_each_etsy_field(tmp_path: Path, scripted) -> None:

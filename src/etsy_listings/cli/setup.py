@@ -148,12 +148,7 @@ def _discover_etsy(
     existing_etsy: dict[str, Any],
     existing_listing_defaults: dict[str, Any],
 ) -> EtsyFindings:
-    """Find the Etsy shop and its return policy.
-
-    Never fatal. `setup`'s job is to leave a usable workspace, and everything
-    it learns here is optional to that: a failure reports what it could not
-    reach and keeps whatever the file already said.
-    """
+    """Find the Etsy shop and its return policy; a failure keeps what the file says."""
     if access is None:
         typer.echo("")
         typer.echo("No Etsy credentials stored yet, so the Etsy shop cannot be looked up.")
@@ -199,11 +194,7 @@ def _find_etsy_shop(
 
 
 def _ask_for_etsy_shop(access: EtsyAccess, existing_etsy: dict[str, Any]) -> EtsyShop | None:
-    """The fallback: a name, resolved to an id by searching for it.
-
-    Blank is a real answer -- a workspace with no Etsy shop yet is a workspace
-    that can still render and create products.
-    """
+    """The fallback: a name, resolved to an id by searching for it."""
     default = str(existing_etsy.get("shop_name") or "")
     answer = prompts.ask_text("Etsy shop name (blank to skip):", default=default, allow_blank=True)
     name = answer.strip()

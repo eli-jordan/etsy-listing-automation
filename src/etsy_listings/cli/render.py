@@ -36,9 +36,6 @@ class _Sections:
 
 
 def _body(plan: Plan, sections: _Sections) -> list[str]:
-    # Blocked stages lead. What a run will *not* do is the more surprising
-    # half, and burying it under "No changes." is exactly how a listing goes
-    # un-uploaded without anyone noticing.
     lines = [line for stage_plan in sections.blocked for line in format_blocked(stage_plan)]
     lines.extend(line for stage_plan in sections.runs for line in _run_lines(stage_plan))
     lines.extend(f"  ~ {_name(stage_plan)}: {change}" for stage_plan, change in sections.changes)
@@ -64,18 +61,8 @@ def _drift_line(stage_plan: StagePlan, drift: Drift) -> str:
 
 
 def format_blocked(stage_plan: StagePlan) -> list[str]:
-    """A stage that cannot run, as a warning rather than a footnote.
-
-    The first line is the consequence in the user's terms -- what will not
-    happen to their listing -- and any further lines are the remedy, indented
-    under it. The stage supplies both, because *why* a stage is blocked is
-    engine knowledge; only the shape of it belongs here.
-
-    Public because ``apply`` shows these too. A blocked stage is the one thing
-    ``apply`` must not stay quiet about: it is doing less than it was asked
-    to, and the whole point of the ``blocked`` vocabulary is that both routes
-    say so in the same words.
-    """
+    """A stage that cannot run: the stage's first line is the consequence, the
+    rest its remedy, indented. ``apply`` prints these too."""
     message = (stage_plan.blocked or "").splitlines()
     head, *rest = message or [""]
     lines = [f"  ! {head}"]
