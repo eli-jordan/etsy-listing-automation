@@ -96,9 +96,6 @@ class CalibrationDesignMissingError(MissingError):
         self.design = design
 
 
-# A taken name is ``listing_templates.ListingTemplateExistsError``.
-
-
 class ListingTemplateMissingError(MissingError):
     def __init__(self, name: str) -> None:
         super().__init__(f"no listing template {name!r}")
@@ -114,12 +111,8 @@ class ReservedListingTemplateNameError(UserFacingError, InvalidNameError):
 class ListingTemplateSourceRefusedError(RefusedError): ...
 
 
-# ``batches.StagingRefusedError`` and ``ConfirmRefusedError`` stay in ``batches``.
-
-
 class StagingMissingError(MissingError):
-    """No staging session by this id: never staged, cancelled, confirmed and
-    materialised, or swept
+    """Also a session confirmed, or swept
     :data:`~etsy_listings.core.batches.records.STAGING_LIFETIME` after its
     last edit."""
 

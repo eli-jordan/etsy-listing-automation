@@ -83,9 +83,8 @@ def _shop(shop_id: int, title: str = "s") -> Shop:
 def test_a_single_shop_needs_no_question() -> None:
     selection = shop_discovery.select_shop([_shop(28819281)])
 
-    assert selection.shop is not None
-    assert selection.shop.id == 28819281
-    assert selection.needs_choice is False
+    assert isinstance(selection, Shop)
+    assert selection.id == 28819281
 
 
 def test_several_shops_are_a_question_rather_than_a_guess() -> None:
@@ -93,16 +92,13 @@ def test_several_shops_are_a_question_rather_than_a_guess() -> None:
     to save one prompt."""
     selection = shop_discovery.select_shop([_shop(1, "a"), _shop(2, "b")])
 
-    assert selection.shop is None
-    assert selection.needs_choice is True
+    assert selection == shop_discovery.NeedsChoice()
 
 
 def test_no_shops_at_all_is_an_error_naming_what_to_do() -> None:
     selection = shop_discovery.select_shop([])
 
-    assert selection.shop is None
-    assert selection.needs_choice is False
-    assert selection.problem is not None
+    assert isinstance(selection, shop_discovery.NoShops)
     assert "printify.com" in selection.problem
 
 

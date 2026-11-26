@@ -96,12 +96,12 @@ def _verified_token(root: Path, factory: ClientFactory) -> tuple[str, list[Shop]
 
 def _pick_shop(shops: list[Shop]) -> Shop:
     selection = shop_discovery.select_shop(shops)
-    if selection.problem is not None:
-        typer.echo(f"{selection.problem}", err=True)
+    if isinstance(selection, shop_discovery.NoShops):
+        typer.echo(selection.problem, err=True)
         raise typer.Exit(code=1)
-    if selection.shop is not None:
-        typer.echo(f"Printify shop: {selection.shop.title} ({selection.shop.id})")
-        return selection.shop
+    if isinstance(selection, Shop):
+        typer.echo(f"Printify shop: {selection.title} ({selection.id})")
+        return selection
 
     return prompts.pick(
         "Which Printify shop?", shops, label=lambda shop: f"{shop.title}  ({shop.id})"

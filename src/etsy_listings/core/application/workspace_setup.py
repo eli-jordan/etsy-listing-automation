@@ -79,13 +79,10 @@ class SetupAnswers:
     etsy_shop_name: str | None = None
     etsy_shop_id: int | None = None
     etsy_shipping_profile: str | None = None
-    """By name. Free text: resolving it against the shop's live list
-    needs `shops_r` and a bearer, which `setup` may not have -- that
-    resolution happens once per run in `EtsyShopCatalog`, at plan time."""
+    """Free text: resolving the name needs `shops_r` and a bearer, which
+    `setup` may not have, so `EtsyShopCatalog` resolves it at plan time."""
     etsy_return_policy: dict[str, Any] | None = None
-    """The three terms (`accepts_returns`, `accepts_exchanges`,
-    `within_days`), since Etsy gives the resource no title. Built
-    from a live pick when the discovery step can reach the Etsy API."""
+    """The three terms, since Etsy gives a policy no title."""
     etsy_production_partner: str | None = None
     """By name; omitted when the shop has exactly one, and free text as
     ``etsy_shipping_profile`` is."""
@@ -235,21 +232,8 @@ A comment costs a line and saves a trip to the documentation."""
 
 
 def render_shop_yaml(document: dict[str, Any]) -> str:
-    """A new file as written: header, then the document with a comment per
-    field. An existing ``shop.yaml`` is never re-rendered (:func:`save_setup`).
-
-    Comments are woven into `safe_dump`'s output rather than templated around
-    it, because the document's shape is not fixed -- optional keys come and go
-    -- and a template would have to know every one of them twice.
-    ``sort_keys=False`` keeps the order the document was built in, with the
-    shop identifiers before the long tail of Etsy defaults.
-
-    The dotted path a line maps to is tracked by indentation depth rather than
-    by a single top-level "section", so a field nested two deep --
-    ``etsy.listing_defaults.shipping_profile`` -- resolves as reliably as a
-    top-level one. A stack of ``(indent, key)`` ancestors is popped back to
-    whatever level the current line sits at, exactly like matching brackets.
-    """
+    """Comments are woven into ``safe_dump``'s output because optional keys
+    come and go. An existing ``shop.yaml`` is never re-rendered."""
     dumped = yaml.safe_dump(document, sort_keys=False, allow_unicode=True)
     lines: list[str] = []
     ancestors: list[tuple[int, str]] = []

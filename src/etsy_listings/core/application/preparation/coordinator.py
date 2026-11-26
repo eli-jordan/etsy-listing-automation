@@ -49,11 +49,7 @@ class PreparationRefusedError(ConflictError, ValueError):
 
 @dataclass(frozen=True)
 class PreparationRequest:
-    """One explicit Prepare, Prepare again or Retry, against the calibration
-    ``config_revision`` it was asked for. ``request_id`` makes a repeated
-    submission idempotent; ``previous_job`` names the job a Retry repeats, and
-    ``reset_masks_for_photo`` is Prepare again's choice to start the masks
-    over."""
+    """``request_id`` makes a repeated submission idempotent."""
 
     config_revision: str
     request_id: str
@@ -145,8 +141,8 @@ class Preparations:
         return request.reset_masks_for_photo
 
     def _inspect_unlocked(self) -> Capability:
-        """Deep inspection may take 25 seconds. Call it holding no journal or
-        template lock, so unrelated status and Cancel stay live."""
+        """Deep inspection may take 25 seconds: holding no lock keeps status
+        and Cancel live."""
         return self.runtime.inspect()
 
     def _admit_locked(self, submission: _Submission) -> Job | None:
